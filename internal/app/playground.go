@@ -1200,7 +1200,7 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// library's sibling: ctrl+l is where *your* programs live, ctrl+g
 		// where the language does. Opening it leaves the playground mounted,
 		// so esc comes back to the query line untouched.
-		m.openPlayCheatsheet(s.dialect)
+		m.openPlayCheatsheet(s.dialect, "")
 		return m, nil
 	}
 	out, pos, handled, changed := ui.EditKey(msg, s.program, s.pos)
@@ -1283,7 +1283,7 @@ func (m Model) updatePlayBufferKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+g":
 		// The cheatsheet is reachable from both focuses (#2382): looking the
 		// language up is not something to have to tab back for.
-		m.openPlayCheatsheet(s.dialect)
+		m.openPlayCheatsheet(s.dialect, "")
 		return m, nil
 	case "esc":
 		// A search the find chord opened from the query line hands the
@@ -1789,9 +1789,16 @@ func (m Model) playHints() []string {
 	if s.expanded {
 		hist = []string{"↑/↓ lines", "alt+↑/↓ history"}
 	}
-	out := []string{"tab result", "enter run", view}
+	// The cheatsheet hint sits third (#2482), ahead of the view toggle. The
+	// hints drop from the right on a narrow pane, and at the widths a
+	// playground is actually opened at — a pane beside an explorer — every
+	// segment from the view toggle on was being cut, so the one chord that
+	// answers "I do not know how to write this query" was the one never on
+	// screen. The toggle it displaces still advertises itself when it
+	// matters: a program too wide for the row raises the "query cut" marker.
+	out := []string{"tab result", "enter run", "ctrl+g cheatsheet", view}
 	out = append(out, hist...)
-	return append(out, "ctrl+s save filter", "ctrl+l filters", "ctrl+g cheatsheet", "ctrl+y copy", "ctrl+o scratch", "esc close", playHelpHint)
+	return append(out, "ctrl+s save filter", "ctrl+l filters", "ctrl+y copy", "ctrl+o scratch", "esc close", playHelpHint)
 }
 
 // playHelpHint is the hint tail's last segment (#2237): the one key that lists

@@ -131,16 +131,151 @@ func TestCheatsheetCoversTheIssuesOperations(t *testing.T) {
 func TestCheatsheetEntriesAreOneLine(t *testing.T) {
 	for _, d := range []Dialect{DialectJQ, DialectYQ} {
 		for _, e := range Cheatsheet(d) {
-			if strings.ContainsAny(e.Program+e.Doc+e.Title, "\n\r") {
+			if strings.ContainsAny(e.Program+e.Doc+e.Title+e.Output+e.Usage, "\n\r") {
 				t.Errorf("%s cheatsheet %q spans more than one line", d.Name(), e.Title)
 			}
-			if e.Title == "" || e.Program == "" {
+			if e.Title == "" {
+				t.Errorf("%s cheatsheet entry %+v has no title", d.Name(), e)
+			}
+			if e.Kind.Insertable() && e.Program == "" {
 				t.Errorf("%s cheatsheet entry %+v is incomplete", d.Name(), e)
 			}
 			if e.Kind.Complete() && e.Doc == "" {
 				t.Errorf("%s cheatsheet %q has no description", d.Name(), e.Title)
 			}
 		}
+	}
+}
+
+// TestCheatsheetExamplesShowTheirOutput is #2482's first content case: a row
+// that only names a program leaves the reader to guess what applying it does.
+// Every runnable row carries what it actually printed against the sample —
+// computed from the same evaluation the sheet's own test checks, so the two
+// cannot drift — and it has to be one line.
+func TestCheatsheetExamplesShowTheirOutput(t *testing.T) {
+	for _, d := range []Dialect{DialectJQ, DialectYQ} {
+		for _, e := range Cheatsheet(d) {
+			if !e.Kind.Complete() {
+				continue
+			}
+			if e.Output == "" {
+				t.Errorf("%s cheatsheet %q (%s) shows no output", d.Name(), e.Title, e.Program)
+			}
+		}
+	}
+	// The jq sheet's own arithmetic: the output beside the row is what the
+	// program prints, not a hand-written promise.
+	var found bool
+	for _, e := range Cheatsheet(DialectJQ) {
+		if e.Program == ".users | map(.name)" {
+			found = true
+			if !strings.Contains(e.Output, "ada") || !strings.Contains(e.Output, "grace") {
+				t.Errorf(`map(.name) output = %q, want the sample's names`, e.Output)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("the map(.name) example is gone — the assertion above tests nothing")
+	}
+}
+
+// TestCheatsheetBuiltinsShowAUsageForm: `/1` says a function takes one
+// argument, not what the call looks like. Every builtin row carries the shape
+// it is written in, curated where a parameter name says more than a letter.
+func TestCheatsheetBuiltinsShowAUsageForm(t *testing.T) {
+	usage := map[string]string{}
+	for _, e := range Cheatsheet(DialectJQ) {
+		if e.Kind != CheatBuiltin {
+			continue
+		}
+		if e.Usage == "" {
+			t.Errorf("builtin %q has no usage form", e.Title)
+		}
+		usage[e.Title] = e.Usage
+	}
+	for name, want := range map[string]string{
+		"map":    "map(f)",
+		"select": "select(cond)",
+		"length": "length",
+		"test":   "test(regex)",
+	} {
+		if got := usage[name]; got != want {
+			t.Errorf("usage of %s = %q, want %q", name, got, want)
+		}
+	}
+}
+
+// TestCheatsheetLeadsWithTheGuideRows: the sheet's first two rows say what
+// enter does and where the sample document is — the two things #2482 found a
+// reader had to guess. Both are inert to insert: they are text about the
+// sheet, not language to pick up.
+func TestCheatsheetLeadsWithTheGuideRows(t *testing.T) {
+	for _, d := range []Dialect{DialectJQ, DialectYQ, DialectXMQ} {
+		sheet := Cheatsheet(d)
+		if len(sheet) < 2 || sheet[0].Kind != CheatGuide {
+			t.Fatalf("%s sheet does not lead with a guide row", d.Name())
+		}
+		var guide []string
+		var sampleRow bool
+		for _, e := range sheet {
+			if e.Kind != CheatGuide {
+				break // the guide block is contiguous and first
+			}
+			if e.Kind.Insertable() {
+				t.Errorf("%s guide row %q would insert something", d.Name(), e.Title)
+			}
+			guide = append(guide, e.Title+" "+e.Doc)
+			sampleRow = sampleRow || e.Title == CheatSampleTag
+		}
+		if !sampleRow {
+			t.Errorf("%s sheet has no %q guide row", d.Name(), CheatSampleTag)
+		}
+		// The block must name both insertion shapes, and both come from
+		// Complete() rather than being written out twice.
+		joined := strings.Join(guide, "\n")
+		for _, want := range []string{"⏎", "esc", "replaces the program; ↑ restores it", "inserts the name at the caret"} {
+			if !strings.Contains(joined, want) {
+				t.Errorf("%s guide block does not mention %q:\n%s", d.Name(), want, joined)
+			}
+		}
+	}
+}
+
+// TestCheatsheetListsTheSampleDocument: the sample is viewable from the sheet
+// itself, line by line, so `.users[]` means something before it is inserted.
+func TestCheatsheetListsTheSampleDocument(t *testing.T) {
+	for _, d := range []Dialect{DialectJQ, DialectYQ, DialectXMQ} {
+		var got []string
+		for _, e := range Cheatsheet(d) {
+			if e.Kind == CheatSample {
+				got = append(got, e.Title)
+			}
+		}
+		if len(got) == 0 {
+			t.Fatalf("%s sheet lists no sample rows", d.Name())
+		}
+		joined := strings.Join(got, "\n")
+		for _, line := range strings.Split(Sample(d), "\n") {
+			line = strings.TrimRight(line, " \t")
+			if line == "" {
+				continue
+			}
+			if !strings.Contains(joined, line) {
+				t.Errorf("%s sample line %q is not listed", d.Name(), line)
+			}
+		}
+	}
+}
+
+// TestCheatsheetIsMemoized: building the sheet now runs every example, so it
+// must happen once per dialect rather than on every palette open.
+func TestCheatsheetIsMemoized(t *testing.T) {
+	a, b := Cheatsheet(DialectJQ), Cheatsheet(DialectJQ)
+	if len(a) == 0 || len(a) != len(b) {
+		t.Fatalf("sheet lengths %d and %d", len(a), len(b))
+	}
+	if &a[0] != &b[0] {
+		t.Error("Cheatsheet rebuilds the sheet on every call")
 	}
 }
 

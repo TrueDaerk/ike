@@ -8,8 +8,12 @@ package jqplay
 // only offers what you have already half-typed, so it finds what you know and
 // nothing else.
 //
-// The sheet is three sections, and the split is deliberate:
+// The sheet is five sections, and the split is deliberate:
 //
+//   - **guide** (#2482) — four short rows leading the sheet: what enter does
+//     with the row under the cursor, one sentence per kind, and the doorway to
+//     the sample document. The first version listed what exists and left how
+//     to *use* it to be guessed, which is half a reference.
 //   - **syntax** — the parts of the language that are *not* functions and
 //     therefore appear in no builtin list: the pipe, `.[]`, `.[]?`, slices,
 //     object and array construction, `//`, string interpolation, `as`,
@@ -18,8 +22,12 @@ package jqplay
 //     people actually open a playground for: pick a field, iterate, filter,
 //     map, sort, group, rebuild an object, count, walk nested paths, default
 //     a missing value, interpolate a string.
-//   - **builtins** — every function gojq accepts, with its arities and, where
-//     one is curated, its one-line description.
+//   - **builtins** — every function gojq accepts, with its arities, its call
+//     form (`map(f)`, `select(cond)`, #2482) and, where one is curated, its
+//     one-line description.
+//   - **sample** (#2482) — the sample document itself, one row per line, last
+//     in the list and lifted to the top by the guide row above it. Before it
+//     the examples' `.users` and `.meta.page` were fields out of nowhere.
 //
 // The builtin section is **generated from Builtins()/builtinDocs**, never
 // hand-listed here: a second list would drift from the engine's the first
@@ -31,7 +39,10 @@ package jqplay
 // commonly reached-for names it was missing, so the blanks are rare.
 //
 // Every entry with a program is checked by cheatsheet_test.go against
-// Sample(d), the sample document that lives next to it in this package: a
+// Sample(d) — and, since #2482, *evaluated* against it when the sheet is
+// built, so a row shows what it prints and not only what it is. Building the
+// sheet therefore costs a run of every example, which is why Cheatsheet is
+// memoized per dialect. Sample(d) is the sample document in this package: a
 // program in the sheet that does not compile — or that errors on a document
 // of exactly the shape the sheet describes — fails the build. That is what
 // keeps a typo here from becoming permanent, and it is why the examples are
@@ -48,6 +59,7 @@ package jqplay
 import (
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // CheatKind classifies one cheatsheet row. It is what decides how the row is
@@ -55,9 +67,11 @@ import (
 // the same thing to insert — what accepting the row does to the query line.
 type CheatKind int
 
-// The three kinds. The order is the order the sheet lists them in: the
-// syntax first (it is the part no completion popup can offer), then the
-// programs, then the reference.
+// The kinds. The sheet lists them in reading order: the guide rows first (they
+// say what pressing enter does and where the examples' field names come from),
+// then the syntax (the part no completion popup can offer), the programs, the
+// reference, and the sample document last — reachable from its guide row, and
+// out of the way of anyone browsing for language.
 const (
 	// CheatSyntax is a language construct that is not a function.
 	CheatSyntax CheatKind = iota
@@ -65,6 +79,12 @@ const (
 	CheatExample
 	// CheatBuiltin is one function of the engine's own builtin list.
 	CheatBuiltin
+	// CheatGuide is a row about the sheet rather than about the language
+	// (#2482): how a picked row is applied, and where the sample document is.
+	CheatGuide
+	// CheatSample is one line of the sample document every example is
+	// written against (#2482) — the sheet showing its own input.
+	CheatSample
 )
 
 // String is the kind's badge in the picker — the short word that tells a
@@ -75,6 +95,10 @@ func (k CheatKind) String() string {
 		return "syntax"
 	case CheatExample:
 		return "example"
+	case CheatGuide:
+		return "guide"
+	case CheatSample:
+		return "sample"
 	default:
 		return "builtin"
 	}
@@ -83,8 +107,15 @@ func (k CheatKind) String() string {
 // Complete reports whether the entry's Program is a whole program rather than
 // a fragment. A syntax entry and an example are written to be *run*; a
 // builtin row carries only its name, which belongs at the caret of whatever
-// program is already on the query line.
-func (k CheatKind) Complete() bool { return k != CheatBuiltin }
+// program is already on the query line. The guide and sample rows carry no
+// program at all, so they are neither — Insertable is the predicate that
+// tells those apart.
+func (k CheatKind) Complete() bool { return k == CheatSyntax || k == CheatExample }
+
+// Insertable reports whether enter on the row writes anything into the query
+// line. The guide and sample rows are text about the sheet, not language to
+// pick up; every other kind carries something to insert.
+func (k CheatKind) Insertable() bool { return k != CheatGuide && k != CheatSample }
 
 // CheatEntry is one row of the sheet. Title is what the row is searched by —
 // the operation for a syntax or example row ("sort an array by a field"), the
@@ -92,27 +123,63 @@ func (k CheatKind) Complete() bool { return k != CheatBuiltin }
 // in each case. Program is the one-liner (the function's bare name for a
 // builtin), Doc the one-line explanation, Arity the `/1 /2` note builtins
 // carry and nothing else does.
+//
+// Output and Usage are what #2482 added so the sheet says how to *apply* a
+// row and not only that it exists: Output is what running Program against
+// Sample(d) actually prints, flattened onto one line, and Usage is a
+// builtin's call form (`map(f)`, `select(cond)`) — the shape a reader needs
+// before the bare name is worth inserting.
 type CheatEntry struct {
 	Kind    CheatKind
 	Title   string
 	Program string
 	Doc     string
 	Arity   string
+	Output  string
+	Usage   string
 }
 
-// Cheatsheet returns the whole sheet for one dialect: syntax, then the
-// everyday programs, then every builtin the engine accepts. The rows are in
-// reading order — a caller that ranks them (the picker fuzzy-matches) may
-// reorder freely; a caller that just prints them gets a sheet.
+// CheatSampleTag is the phrase the sample-document rows are found by. The
+// guide row that heads them re-opens the sheet with it as the query, so
+// "show me the document" is one keypress rather than a scroll to the end —
+// and typing it by hand does the same thing.
+const CheatSampleTag = "sample document"
+
+// Cheatsheet returns the whole sheet for one dialect: the guide rows, the
+// syntax, the everyday programs, every builtin the engine accepts, and the
+// sample document's own lines last. The rows are in reading order — a caller
+// that ranks them (the picker fuzzy-matches) may reorder freely; a caller
+// that just prints them gets a sheet.
+//
+// The result is built once per dialect and memoized, like Builtins(): the
+// sheet is static, and #2482 made building it run every example against the
+// sample document — work worth doing once, not on every palette open.
 func Cheatsheet(d Dialect) []CheatEntry {
+	if build, ok := cheatSheets[d]; ok {
+		return build()
+	}
+	return buildCheatsheet(d)
+}
+
+// cheatSheets memoizes one built sheet per dialect.
+var cheatSheets = map[Dialect]func() []CheatEntry{
+	DialectJQ:  sync.OnceValue(func() []CheatEntry { return buildCheatsheet(DialectJQ) }),
+	DialectYQ:  sync.OnceValue(func() []CheatEntry { return buildCheatsheet(DialectYQ) }),
+	DialectXMQ: sync.OnceValue(func() []CheatEntry { return buildCheatsheet(DialectXMQ) }),
+}
+
+// buildCheatsheet assembles one dialect's sheet.
+func buildCheatsheet(d Dialect) []CheatEntry {
+	out := cheatGuideRows()
 	if d == DialectXMQ {
 		// The xmq sheet is authored (#2414): the engine is an external CLI
 		// with no machine-readable builtin list, and its query line holds a
 		// command line rather than a jq program — none of the rows below
-		// apply to it.
-		return xmqCheatsheet()
+		// apply to it. Its outputs are authored too: running them would mean
+		// shelling out to a binary that may not even be installed.
+		out = append(out, xmqCheatsheet()...)
+		return append(out, cheatSampleRows(d)...)
 	}
-	out := make([]CheatEntry, 0, len(cheatSyntax)+len(cheatExamples)+len(Builtins()))
 	out = append(out, cheatRows(d, cheatSyntax)...)
 	out = append(out, cheatRows(d, cheatExamples)...)
 	for _, b := range Builtins() {
@@ -122,9 +189,209 @@ func Cheatsheet(d Dialect) []CheatEntry {
 			Program: b.Name,
 			Doc:     b.Doc,
 			Arity:   arityNote(b.Arities),
+			Usage:   cheatUsage(b.Name, b.Arities),
 		})
 	}
+	// Every authored program is run once here, against the same sample the
+	// sheet's test evaluates them over — so what a row *yields* is on screen
+	// beside what it says, and the two can never disagree.
+	sample := Sample(d)
+	for i := range out {
+		if out[i].Kind.Complete() {
+			out[i].Output = cheatOutput(d, out[i].Program, sample)
+		}
+	}
+	return append(out, cheatSampleRows(d)...)
+}
+
+// cheatOutput runs one sheet program against the sample document and flattens
+// what it printed onto a single line — the picker has one row per entry, and
+// a pretty-printed object over six lines is not something a row can hold. A
+// program that errors or prints nothing gets no output chip rather than a red
+// one: the sheet's own test is what fails on those.
+func cheatOutput(d Dialect, program, sample string) string {
+	res := EvaluateWith(d, program, sample)
+	if res.Err != "" || len(res.Outputs) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(res.Outputs))
+	for _, o := range res.Outputs {
+		if d == DialectJQ {
+			// JSON has a canonical one-line form, so an array of three names
+			// reads as `["ada","linus","grace"]` rather than as the pretty
+			// printer's spread-out spelling — the difference between fitting
+			// beside the program and not. YAML has no such form (its
+			// indentation *is* the syntax), so a yq output is only flattened.
+			parts = append(parts, compactJSON(o))
+			continue
+		}
+		parts = append(parts, strings.Join(strings.Fields(o), " "))
+	}
+	// One space between values, which is what the engine's own one-value-per
+	// -line stdout flattens to. A wider separator would push the everyday
+	// three-name results past the width a row can spend on them.
+	out := strings.Join(parts, " ")
+	if res.Truncated {
+		out += " …"
+	}
 	return out
+}
+
+// compactJSON drops the pretty printer's whitespace and keeps every string
+// literal's own — the compact spelling of the same value. It walks the text
+// rather than re-encoding it because the encoder's output is what the
+// playground shows, and a second encoder could disagree with the first about
+// a number's spelling, which is exactly what the jq dialect is careful about.
+func compactJSON(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	var inStr, esc bool
+	for _, r := range s {
+		switch {
+		case esc:
+			esc = false
+		case inStr && r == '\\':
+			esc = true
+		case r == '"':
+			inStr = !inStr
+		case !inStr && (r == ' ' || r == '\t' || r == '\n' || r == '\r'):
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
+}
+
+// cheatGuideRows are the two rows the sheet leads with (#2482). Before them
+// the sheet listed *what exists* and left the reader to guess what enter did
+// with it; a reference whose own operation has to be discovered by trial is
+// half a reference. Both rows are inert to insert — they are text about the
+// sheet, not language — and the second one is the doorway to the sample.
+// One row per sentence, and each sentence short enough to survive the width a
+// palette row actually has: a single long paragraph would be truncated in the
+// middle, which is where the part about builtins lives.
+func cheatGuideRows() []CheatEntry {
+	return []CheatEntry{
+		{Kind: CheatGuide, Title: "how to apply a row", Doc: "⏎ inserts it, esc returns to the query line"},
+		{Kind: CheatGuide, Title: "⏎ on syntax & example rows", Doc: cheatApplyDoc(CheatExample)},
+		{Kind: CheatGuide, Title: "⏎ on a builtin row", Doc: cheatApplyDoc(CheatBuiltin)},
+		{Kind: CheatGuide, Title: CheatSampleTag, Doc: "⏎ lists the document the examples use"},
+	}
+}
+
+// cheatApplyDoc is what enter does with a row of kind k, *derived* from
+// Kind.Complete() — the same predicate insertPlayCheat branches on — so the
+// sheet cannot end up describing an insertion rule the code no longer follows.
+func cheatApplyDoc(k CheatKind) string {
+	if k.Complete() {
+		return "replaces the program; ↑ restores it"
+	}
+	return "inserts the name at the caret"
+}
+
+// cheatSampleRows lists the sample document line by line, so the reader can
+// see where `.users[]` comes from without leaving the sheet. They sit at the
+// *end* of the list: with an empty query the sheet is browsed for its
+// language, and a yq sample is twenty rows the browser would have to page
+// past. The guide row above re-opens the sheet on CheatSampleTag, which is
+// what brings them to the top.
+func cheatSampleRows(d Dialect) []CheatEntry {
+	lines := strings.Split(Sample(d), "\n")
+	out := make([]CheatEntry, 0, len(lines))
+	for _, line := range lines {
+		line = strings.TrimRight(line, " \t")
+		if line == "" {
+			continue
+		}
+		out = append(out, CheatEntry{Kind: CheatSample, Title: line})
+	}
+	return out
+}
+
+// cheatUsage is a builtin's call form: `map(f)`, `select(cond)` — the shape
+// the name is used in, which the arity note alone (`/1`) leaves the reader to
+// reconstruct. Curated where a real parameter name says more than a letter,
+// generated from the arities otherwise, so every function the engine gains
+// has one without anyone editing a list.
+func cheatUsage(name string, arities []int) string {
+	if u, ok := builtinUsage[name]; ok {
+		return u
+	}
+	n := -1
+	for _, a := range arities {
+		if n < 0 || a < n {
+			n = a
+		}
+	}
+	switch n {
+	case 1:
+		return name + "(f)"
+	case 2:
+		return name + "(a; b)"
+	case 3:
+		return name + "(a; b; c)"
+	}
+	if n > 3 {
+		return name + "(…)"
+	}
+	return name
+}
+
+// builtinUsage names the parameters of the functions whose call form is worth
+// spelling out — a regex, a separator, a key — where the generated `(f)` of
+// the long tail would say less than nothing.
+var builtinUsage = map[string]string{
+	"map":          "map(f)",
+	"map_values":   "map_values(f)",
+	"with_entries": "with_entries(f)",
+	"select":       "select(cond)",
+	"sort_by":      "sort_by(f)",
+	"group_by":     "group_by(f)",
+	"unique_by":    "unique_by(f)",
+	"min_by":       "min_by(f)",
+	"max_by":       "max_by(f)",
+	"walk":         "walk(f)",
+	"del":          "del(path)",
+	"getpath":      "getpath(path)",
+	"setpath":      "setpath(path; value)",
+	"delpaths":     "delpaths(paths)",
+	"paths":        "paths(filter)",
+	"path":         "path(f)",
+	"has":          "has(key)",
+	"in":           "in(object)",
+	"contains":     "contains(value)",
+	"inside":       "inside(value)",
+	"index":        "index(value)",
+	"rindex":       "rindex(value)",
+	"indices":      "indices(value)",
+	"join":         "join(separator)",
+	"split":        "split(separator)",
+	"splits":       "splits(regex)",
+	"ltrimstr":     "ltrimstr(prefix)",
+	"rtrimstr":     "rtrimstr(suffix)",
+	"startswith":   "startswith(prefix)",
+	"endswith":     "endswith(suffix)",
+	"test":         "test(regex)",
+	"match":        "match(regex)",
+	"capture":      "capture(regex)",
+	"scan":         "scan(regex)",
+	"sub":          "sub(regex; replacement)",
+	"gsub":         "gsub(regex; replacement)",
+	"range":        "range(from; to)",
+	"limit":        "limit(n; f)",
+	"first":        "first(f)",
+	"last":         "last(f)",
+	"nth":          "nth(n; f)",
+	"until":        "until(cond; update)",
+	"while":        "while(cond; update)",
+	"repeat":       "repeat(f)",
+	"error":        "error(message)",
+	"strftime":     "strftime(format)",
+	"strptime":     "strptime(format)",
+	"flatten":      "flatten(depth)",
+	"ascii":        "ascii(codepoint)",
+	"tojson":       "tojson",
+	"fromjson":     "fromjson",
 }
 
 // cheatRow is one authored row before the dialect filter is applied. only
@@ -255,9 +522,9 @@ var cheatExamples = []cheatRow{
 // entry, and every entry only uses fields it has.
 const cheatSampleJSON = `{
   "users": [
-    {"name": "ada",   "age": 36, "tags": ["math", "eng"],  "active": true},
-    {"name": "linus", "age": 54, "tags": ["kernel"],       "active": false},
-    {"name": "grace", "age": 45, "tags": ["navy", "eng"],  "active": true}
+    {"name": "ada", "age": 36, "tags": ["math","eng"], "active": true},
+    {"name": "linus", "age": 54, "tags": ["kernel"], "active": false},
+    {"name": "grace", "age": 45, "tags": ["navy","eng"], "active": true}
   ],
   "meta": {"page": 1, "total": 3, "id": 9007199254740993, "raw": "{\"ok\": true}"},
   "counts": {"eng": 2, "kernel": 1, "math": 1, "navy": 1}
