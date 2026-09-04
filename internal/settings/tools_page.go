@@ -115,14 +115,12 @@ func (t *ToolsPage) Update(key tea.KeyPressMsg) tea.Cmd {
 				return t.deleteEntry(idx)
 			}))
 		}
-	case "s":
-		return t.openSuggestions()
 	}
 	return nil
 }
 
 // openSuggestions opens the curated-suggestions picker (#759); reachable via
-// the visible action row and the "s" shortcut.
+// the visible "+ Suggestions…" action row.
 func (t *ToolsPage) openSuggestions() tea.Cmd {
 	if len(t.suggestions()) == 0 {
 		t.note = "no suggestions — every catalog tool is already configured"
@@ -138,14 +136,13 @@ func (t *ToolsPage) Actions() []Action {
 	return []Action{
 		{Key: "a", Verb: "Add", Hint: "a new tool pane"},
 		{Key: "enter", Verb: "Edit", Hint: "the selected tool, or open the action row"},
-		{Key: "d", Verb: "Delete"},
-		{Key: "s", Verb: "Suggestions", Hint: "curated tools to add in one step"},
+		{Key: "d", Verb: "Delete", Enabled: func() bool { return t.sel >= 0 && t.sel < len(t.entries()) }},
 	}
 }
 
 // KeyHelp adds the note the keys do not carry.
 func (t *ToolsPage) KeyHelp() []string {
-	return []string{"each tool is a tool.<name> palette command"}
+	return []string{"each tool is a tool.<name> palette command · the “+ Suggestions…” row offers curated tools"}
 }
 
 // updateSuggest handles keys while the suggestion picker is open: j/k move,

@@ -600,9 +600,30 @@ func TestToolchainOnboardingOffersAcceptAll(t *testing.T) {
 	p.sel = -1
 	p.selKey = ""
 	v := p.renderDetail(70, 12)
-	for _, want := range []string{"What is Toolchain?", "accept all", "do not have to type"} {
+	for _, want := range []string{"What is Toolchain?", "Accept all detected", "do not have to type"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("onboarding detail missing %q:\n%s", want, v)
 		}
+	}
+}
+
+// TestToolchainActionRowsReplaceLetters: accepting every detection and the
+// uv Python install are rows in the list (enter runs them), not the bare
+// letters a and u they used to be — and the letters no longer act.
+func TestToolchainActionRowsReplaceLetters(t *testing.T) {
+	p := gridToolchain(t)
+	rows := p.rows()
+	if len(rows) == 0 || rows[0].action != "acceptall" {
+		t.Fatalf("with detections pending the first row must be the accept-all action, rows = %+v", rows)
+	}
+	if v := stripANSI(p.View(120, 20)); !strings.Contains(v, "Accept all detected") {
+		t.Fatalf("the accept-all row must render:\n%s", v)
+	}
+	if cmd := p.Update(key("a")); cmd != nil || p.envState != "" {
+		t.Fatal("a must no longer accept the detections")
+	}
+	p.sel = 0
+	if cmd := p.Update(key("enter")); cmd == nil || !strings.HasPrefix(p.envState, "accepted ") {
+		t.Fatalf("enter on the row must accept every detection, state = %q", p.envState)
 	}
 }

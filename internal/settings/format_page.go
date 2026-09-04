@@ -228,7 +228,8 @@ func (p *FormatPage) Update(key tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	switch key.String() {
-	case "e":
+	case "space":
+		// Toggle external formatting — space is the panel-wide toggle.
 		if hasRow {
 			return p.write(row.lang, "enabled", !row.enabled)
 		}
@@ -372,7 +373,7 @@ func (p *FormatPage) View(width, height int) string {
 func (p *FormatPage) Actions() []Action {
 	return []Action{
 		{Key: "enter", Verb: "Edit", Hint: "the language's [format.*] override"},
-		{Key: "e", Verb: "External", Hint: "external formatting on/off"},
+		{Key: "space", Verb: "Toggle", Hint: "external formatting on/off"},
 		{Key: "b", Verb: "Built-in", Hint: "built-in formatter on/off"},
 		{Key: "r", Verb: "Reset", Hint: "back to the plugin default"},
 		{Key: "s", Verb: "Scope: " + p.scopeLabel(), Hint: "write layer: project ↔ user"},
