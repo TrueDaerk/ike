@@ -3465,6 +3465,8 @@ var terminalGlobalCommands = map[string]bool{
 	// #2150: a terminal pane is resized by keyboard like any other, and the
 	// shell never meaningfully sees the mode chord.
 	"pane.resizeMode": true,
+	// The digit families of panenumbers.go (#2493) and project_mru.go (#2489)
+	// join from their own files' init.
 }
 
 // terminalShellChords are chords that stay with the shell even when they
