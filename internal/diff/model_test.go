@@ -90,16 +90,14 @@ func TestHunkNavigation(t *testing.T) {
 	if m.HunkCount() != 2 {
 		t.Fatalf("want 2 hunks, got %d", m.HunkCount())
 	}
-	if m.CurrentHunk() != -1 {
-		t.Fatalf("current hunk should start at -1, got %d", m.CurrentHunk())
-	}
-	m.Update(key("n"))
+	// The current hunk syncs to the viewport (#2494): a fresh view at the
+	// top starts on hunk 0.
 	if m.CurrentHunk() != 0 {
-		t.Fatalf("n should land on hunk 0, got %d", m.CurrentHunk())
+		t.Fatalf("current hunk should sync to the view, got %d", m.CurrentHunk())
 	}
 	m.Update(key("n"))
 	if m.CurrentHunk() != 1 {
-		t.Fatalf("second n should land on hunk 1, got %d", m.CurrentHunk())
+		t.Fatalf("n should step to hunk 1, got %d", m.CurrentHunk())
 	}
 	if !strings.Contains(plainView(m), "y2") {
 		t.Fatalf("view should have scrolled to the second hunk:\n%s", plainView(m))

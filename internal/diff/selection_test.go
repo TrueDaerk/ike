@@ -40,7 +40,7 @@ func selModel(t *testing.T) *Model {
 // in unified layout: two 3-digit gutters plus their trailing spaces.
 func (m *Model) uniCell(line, col int) (x, y int) {
 	lw, rw := m.gutterWidths()
-	return (lw + 1 + rw + 1) + col - m.hoff, line - m.top
+	return (lw + 2 + rw + 2) + col - m.hoff, line - m.top
 }
 
 func uniPress(m *Model, line, col int) {
@@ -177,9 +177,9 @@ func TestCopyEmptyDiffEmitsNothing(t *testing.T) {
 func (m *Model) sbsCell(line, col int, right bool) (x, y int) {
 	lw, rw := m.gutterWidths()
 	colL, _ := m.columnWidths()
-	x0 := lw + 1
+	x0 := lw + 2
 	if right {
-		x0 = lw + 1 + colL + 3 + rw + 1
+		x0 = lw + 2 + colL + 3 + rw + 2
 	}
 	return x0 + col - m.hoff, line - m.top
 }

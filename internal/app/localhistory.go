@@ -391,9 +391,16 @@ func (m *Model) openLocalHistoryDiffPane(path string, at time.Time, snapshot str
 // right column (language for highlighting, and the write target while the
 // right side is the working tree — editable).
 func (m *Model) openDiffTexts(path, leftTitle, rightTitle, left, right string, editable bool) {
+	// An editable right side is the live working copy — say so in the side
+	// labels (#2494); a read-only right keeps its own title as the label.
+	rightLabel := rightTitle
+	if editable {
+		rightLabel = "working copy"
+	}
 	if inst, hostKey, tabIdx, ok := m.diffSlot(); ok {
 		inst.StopDiffEdit()
 		inst.Diff().Retarget(leftTitle, rightTitle, "", path, "", "", editable)
+		inst.Diff().SetSideLabels(leftTitle, rightLabel)
 		inst.Diff().SetContents(left, right)
 		m.focusContentAt(hostKey, tabIdx)
 		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
@@ -404,6 +411,7 @@ func (m *Model) openDiffTexts(path, leftTitle, rightTitle, left, right string, e
 		return
 	}
 	inst := m.activeWS().Panes.Get(key)
+	inst.Diff().SetSideLabels(leftTitle, rightLabel)
 	inst.Diff().SetEditable(editable)
 	inst.Diff().SetContents(left, right)
 	m.setFocus(key)

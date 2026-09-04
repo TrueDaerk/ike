@@ -504,7 +504,7 @@ func (m Model) statusLine() string {
 				left += " │ ✓ all resolved — vcs.mergeApply to finish"
 			}
 		case inst.Kind() == pane.KindDiff:
-			l, r := inst.Diff().Titles()
+			l, r := inst.Diff().SideLabels() // what each side is (#2494)
 			left += "DIFF │ " + l + " ⇄ " + r
 			if inst.Diff().IgnoreWhitespace() {
 				// The ignore-whitespace toggle (#2170) is state the reader has

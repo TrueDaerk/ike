@@ -56,6 +56,7 @@ type UI struct {
 	DiffChanged        string // diff viewer: intra-line changed-range background
 	DiffAddedEmph      string // diff viewer: intra-line changed range inside an added line (#2170)
 	DiffRemovedEmph    string // diff viewer: intra-line changed range inside a removed line (#2170)
+	DiffMarker         string // diff viewer: current-hunk gutter marker and targeted collapsed gap (#2494)
 	VCSModified        string // vcs status foreground: modified/renamed files (Roadmap 0320)
 	VCSAdded           string // vcs status foreground: added files
 	VCSUntracked       string // vcs status foreground: untracked files
@@ -125,6 +126,7 @@ type Palette struct {
 	DiffChanged        color.Color
 	DiffAddedEmph      color.Color
 	DiffRemovedEmph    color.Color
+	DiffMarker         color.Color
 	VCSModified        color.Color
 	VCSAdded           color.Color
 	VCSUntracked       color.Color
@@ -232,6 +234,10 @@ func NewPalette(t Theme) *Palette {
 	// backgrounds resolved just above, so the pair always agrees.
 	p.DiffAddedEmph = emphSlot(t.UI.DiffAddedEmph, p.Success, p.DiffAdded, p.Surface)
 	p.DiffRemovedEmph = emphSlot(t.UI.DiffRemovedEmph, p.Error, p.DiffRemoved, p.Surface)
+	// The current-hunk gutter marker and the targeted collapsed-context gap
+	// (#2494) fall back to the theme's own accent: a foreground mark, so the
+	// accent's legibility guarantees carry over without a declared slot.
+	p.DiffMarker = slot(t.UI.DiffMarker, firstNonEmpty(t.UI.Accent, def.UI.Accent))
 	// The pane-number badge (#2496) is an inverted pill, so it needs a
 	// background of its own on both sides of the focus split: the accent for
 	// the focused pane, and for the rest a tone mixed from the theme's own

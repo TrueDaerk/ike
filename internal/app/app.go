@@ -3872,6 +3872,11 @@ func (m *Model) openDiffPane(leftPath, rightPath string) {
 	if inst, hostKey, tabIdx, ok := m.diffSlot(); ok {
 		inst.StopDiffEdit()
 		inst.Diff().Retarget(baseName(leftPath), baseName(rightPath), leftPath, rightPath, "", "", true)
+		if baseName(leftPath) == baseName(rightPath) {
+			// Same-named files: the full paths are what tells the sides
+			// apart (#2494), matching diff.NewFiles.
+			inst.Diff().SetSideLabels(leftPath, rightPath)
+		}
 		inst.Diff().SetContents(readFileOrEmpty(leftPath), readFileOrEmpty(rightPath))
 		m.focusContentAt(hostKey, tabIdx)
 		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
@@ -13655,7 +13660,9 @@ func contentPaneTitle(inst *pane.Instance) string {
 	case pane.KindRemote:
 		return "SFTP " + inst.Remote().Alias()
 	case pane.KindDiff:
-		l, r := inst.Diff().Titles()
+		// The side labels name what each side is (#2494) — "HEAD",
+		// "working copy", a rev — falling back to the column titles.
+		l, r := inst.Diff().SideLabels()
 		title := "DIFF " + l + " ⇄ " + r
 		if inst.Diff().IgnoreWhitespace() {
 			title += " [-w]" // ignore-whitespace is on (#2170)

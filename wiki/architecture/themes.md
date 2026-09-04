@@ -31,7 +31,7 @@ set of **semantic color slots**, not a per-widget sheet. The IKE slot set
 `Success`, `Warning`, `Error`, `Info`, `Hint`, `MoveSource`, `DropTarget`,
 `Ghost`, `ScrollbarTrack`, `ScrollbarThumb`, `PaneBadge`, `PaneBadgeText`,
 `PaneBadgeMuted`, `PaneBadgeMutedText`, `DiffAdded`, `DiffRemoved`,
-`DiffChanged`, `DiffAddedEmph`, `DiffRemovedEmph`. The occurrence slots back the LSP
+`DiffChanged`, `DiffAddedEmph`, `DiffRemovedEmph`, `DiffMarker`. The occurrence slots back the LSP
 document-highlight marks (#172); left empty they fall back to the theme's own
 `SelectionMuted` before the default theme's, so occurrences stay in-palette
 for sparse themes. `InlayHint` colours the inline LSP inlay-hint text (#171);
@@ -59,7 +59,10 @@ per side, so an emphasized range stays in the colour of the line carrying it;
 left empty they derive from that theme's own `DiffAdded`/`DiffRemoved` pushed
 toward `Success`/`Error` and pulled back until they sit within `emphHeadroom`
 of the line background's own drift from `Surface` — the readability envelope
-the contrast audit holds every overlay to.
+the contrast audit holds every overlay to. `DiffMarker` (#2494) is the diff
+viewer's current-hunk gutter marker and the highlight of the collapsed-gap
+separator the `o` key targets — a foreground mark; left empty it falls back
+to the theme's own `Accent`.
 
 ## Model
 

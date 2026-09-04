@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Diff Viewer
-description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, an ignore-whitespace mode (w, persisted as diff.ignore_whitespace, #2170), side-by-side or unified rendering with per-side theme diff slots including bold/underlined intra-line emphasis and tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, hunk navigation (n/N, enter jumps the editor), mouse text selection with y/ctrl+c/cmd+c copy (#2070) painted as a per-frame overlay so a drag stays cheap (#2495), diff.files palette command, layout persistence."
+description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, an ignore-whitespace mode (w, persisted as diff.ignore_whitespace, #2170), side-by-side or unified rendering with per-side theme diff slots including bold/underlined intra-line emphasis and tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, scroll-aware hunk navigation with a current-hunk gutter marker, side-label headers and a hunk/progress footer (#2494), mouse text selection with y/ctrl+c/cmd+c copy (#2070) painted as a per-frame overlay so a drag stays cheap (#2495), clickable collapsed-context separators, diff.files palette command, layout persistence."
 resource: internal/diff
 tags: [architecture, diff, pane, vcs]
 timestamp: 2026-09-04T00:00:00Z
@@ -107,14 +107,60 @@ and page keys page, `g`/`G` jump to the ends, the mouse wheel scrolls.
 half a column; `0` jumps back to column 0 and `$` to the widest line's end.
 The horizontal wheel and `shift`+wheel do the same through `ScrollXBy` — all
 of it moves both sides at once (#1700). `n`/`N`
-step through hunks (scrolling the hunk a third down the view) — unless a
-search is open, when they step its matches instead (see below); `w` toggles
+step through hunks — unless a search is open, when they step its matches
+instead (see below); `w` toggles
 ignore-whitespace on the open diff (see below); `enter`
 dispatches `diff.JumpMsg` and the root model opens the right-hand file with
 the cursor on the hunk's first line. The view is read-only; hunk-level "take
 left/right" staging is a later increment for #28. The status line shows
 `DIFF │ left ⇄ right │ -w │ hunk i/n` (the `-w` segment only while whitespace
-is ignored) and the pane's title band `DIFF left ⇄ right [-w]`.
+is ignored, the sides being the side labels below) and the pane's title band
+`DIFF left ⇄ right [-w]`.
+
+### Scroll-aware hunk stepping & the current-hunk marker (#2494)
+
+Hunk stepping is anchored to the **viewport**, not to a private counter. The
+anchor row is the visual line a third down the view — the same place a step
+scrolls its target hunk to. Every vertical scroll (keys, wheel, `g`/`G`,
+search jumps — everything funnels through `scrollTo`) re-syncs the current
+hunk (`syncCurrentHunk`) to the hunk covering or nearest the anchor, so after
+scrolling anywhere, `F7`/`n` steps to the **first hunk starting below the
+anchor** and `shift+F7`/`N` to the **last one starting above it** — never
+back to hunk 1. Only while the current hunk was itself placed by a step (no
+scroll in between, `curStepped`) does a step walk the plain `cur±1` sequence,
+which keeps repeated `F7` progressing when the viewport is clamped at the
+document end. `CurrentHunk` is therefore always the on-screen hunk (−1 only
+for an empty diff), and the pane paints it with a `▎` **gutter marker** on
+every row of the hunk, both sides, in the `DiffMarker` theme slot (falls back
+to the theme's `Accent`). The marker is a View-time overlay like the
+selection (#2495): the cached lines never carry it, so a scroll costs a
+viewport, not a re-render.
+
+### Header & footer (#2494)
+
+The pane spends its top row on the **side labels** and its last row on a
+**footer**: ` hunk i/n · p% · o expands ▸ marked gap · c shows all` — the
+current hunk, the scroll progress (`Progress()`: 0 at the top, 100 when the
+end is visible), and the collapsed-gap hint while separators are on screen
+(`no changes` replaces the hunk part on an empty diff). The in-pane search
+prompt (#2409) takes over the footer row while a search lives instead of
+costing the body an extra line. Panes under three rows shed the header,
+under two also the footer.
+
+### Side labels (#2494)
+
+Every diff has two named sides and the caller opening it knows them:
+`SetSideLabels(left, right)` records what each side *is* — `HEAD` diffs pass
+`name @ HEAD` / `working copy`, revision diffs the `name @ rev` pair (or
+`working copy` for an unversioned right side), the clipboard diff
+`clipboard` / `name (buffer)`, local history / external-change / timeline
+diffs their snapshot title against `working copy`, `diff.files` the two base
+names (the full paths when the bases collide, `diff.NewFiles`). The labels
+render as **column headers** over the two sides (side-by-side) or as one
+`left → right` line (unified), and replace the generic sides in the title
+band and status line (`SideLabels()` falls back to the column titles where
+no label was set — also the header-row trigger: no labels, no header row).
+`Retarget` clears them; the retargeting call sites re-label.
 
 ## In-pane search (#2409)
 
@@ -136,8 +182,17 @@ pattern folds case, any uppercase rune makes it exact.
 While a search is open `n`/`N` walk its matches (wrapping at both ends,
 scrolling the match a third down the view like the hunk steps do); with no
 search open they keep their hunk meaning — a diff without a query is still
-navigated by change, which is what the pane is for. The prompt costs one row
-of the diff body while it is up (`viewHeight`), and `esc` gives it back.
+navigated by change, which is what the pane is for. The prompt shares the
+footer row (#2494) while the search lives, and `esc` gives the footer back.
+
+Search landings always resolve against the **current** visual-row layout
+(#2494): a match hidden inside a collapsed gap expands that gap first
+(`revealRow` in `scrollToMatch`), so the jump lands on the match row itself,
+never on the separator standing in for it — before and after `o`, a
+separator click, or a `c` toggle, whose renders rebuild the row→line map the
+landing reads. The match rows themselves are row indices into `res.Rows`,
+so `SetContents` and every re-diff (`w`, edit-mode keystrokes) rebuild the
+match list of a surviving query rather than stepping stale positions.
 
 `OpenSearch` is the pane's `pane.Searchable` implementation, which is how the
 Global `search.open` command reaches the prompt (see
@@ -342,13 +397,22 @@ than breaking the layout).
 
 ## Diff viewer v2 (Epic 0340)
 
-- **Collapsed context** — unchanged runs fold into `··· N unchanged lines ···`
+- **Collapsed context** — unchanged runs fold into `▸ ··· N unchanged lines ···`
   separators around a context budget (default 3, config `diff.context`;
-  negative disables). `c` toggles collapsed/full, `o` expands the gap nearest
-  the viewport center; expansions reset with new contents. Hunk navigation
+  negative disables). `c` toggles collapsed/full (keeping the row at the top
+  of the view in place, like the layout toggle), `o` expands the gap nearest
+  the viewport center; expansions reset with new contents. Every separator
+  carries a `▸` **expand button** on its left edge (#2494) — a mouse press on
+  it (`sepButtonWidth`, checked in `MousePress` before the selection) expands
+  that gap; presses past the button still select the row (fold copy, #1741).
+  The separator `o` would expand renders whole in the `DiffMarker` colour
+  (the `targetGap` overlay, painted per frame like the selection), the others
+  stay dim but keep the accent-coloured button; the footer hint reads
+  `o expands ▸ marked gap · c shows all`. Hunk navigation
   and jumps work over collapsed maps.
 - **F7 / shift+F7** — next/previous change via the diff-scoped default
-  bindings (`diff.nextChange`/`diff.prevChange`); `n`/`N` stay.
+  bindings (`diff.nextChange`/`diff.prevChange`); `n`/`N` stay. Both are
+  scroll-aware (#2494, see § Scroll-aware hunk stepping above).
 - **Editable current side** — `e` on a worktree-backed diff (diff.files,
   vcs.diff, the changes view) mounts a live editor as the right column: full
   vim editing, `:w` saves, shared document with open tabs, the left column

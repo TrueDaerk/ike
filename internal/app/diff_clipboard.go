@@ -1,6 +1,8 @@
 package app
 
 import (
+	"strings"
+
 	"ike/internal/host"
 )
 
@@ -45,9 +47,16 @@ func (m *Model) compareWithClipboard() {
 // beside the editor.
 func (m *Model) openClipboardDiffPane(rightTitle, rightPath, clip, right string, editable bool) {
 	const leftTitle = "Clipboard"
+	// Side labels (#2494): the clipboard against the buffer it is compared
+	// with — the right title already names a narrowed selection.
+	rightLabel := rightTitle + " (buffer)"
+	if strings.HasSuffix(rightTitle, "(selection)") {
+		rightLabel = rightTitle
+	}
 	if inst, hostKey, tabIdx, ok := m.diffSlot(); ok {
 		inst.StopDiffEdit()
 		inst.Diff().Retarget(leftTitle, rightTitle, "", rightPath, "", "", editable)
+		inst.Diff().SetSideLabels("clipboard", rightLabel)
 		inst.Diff().SetContents(clip, right)
 		m.focusContentAt(hostKey, tabIdx)
 		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
@@ -60,6 +69,7 @@ func (m *Model) openClipboardDiffPane(rightTitle, rightPath, clip, right string,
 	if editable {
 		m.activeWS().Panes.Get(key).Diff().SetEditable(true)
 	}
+	m.activeWS().Panes.Get(key).Diff().SetSideLabels("clipboard", rightLabel)
 	m.activeWS().Panes.Get(key).Diff().SetContents(clip, right)
 	m.setFocus(key)
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
