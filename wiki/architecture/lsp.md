@@ -272,7 +272,14 @@ workspace-diagnostic server (pyright over a populated `.venv`) publishes for
 hundreds of library files, and one `tea.Msg` per file would mean one Update pass
 + re-render per file, starving keystrokes. Publishes accumulate in the bridge
 (latest per path) over a 50ms `diagCoalesce` window and flush as a single
-`DiagnosticsBatchMsg`, so the storm costs one re-render. In the app every
+`DiagnosticsBatchMsg`, so the storm costs one re-render. A publish whose
+converted set equals the last one delivered for the path is dropped before
+any message exists (#2402) — except the first publish after a `didOpen`
+(#2492), which is always delivered: `fileOpened` arms a one-shot
+`deliverDiags` marker before the didOpen goes out, because the model
+listening may have been rebuilt with an empty Problems store (a project
+switch) and the suppression would otherwise starve it — and the switch op's
+warm-up telemetry phase — forever. In the app every
 published set first passes the **diagnostic ignore filter** (#1259,
 `internal/app/diag_ignore.go`): the raw set is cached per path, the
 `lsp.diagnostics_ignore` rules (`internal/lsp/ignore.go` — `source=`/`code=`

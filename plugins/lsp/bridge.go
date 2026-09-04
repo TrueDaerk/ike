@@ -52,6 +52,13 @@ type bridge struct {
 	// publish equal to what the app already holds is dropped here; retractions
 	// for paths that were never delivered (or already retracted) likewise.
 	sentDiags map[string][]ilsp.Diagnostic
+	// deliverDiags marks paths whose next publish must reach the app even when
+	// it equals the last delivered set (#2492): a didOpen means some model is
+	// (re)building its diagnostics view — after a project switch the fresh
+	// model's Problems store is empty while sentDiags still remembers the set
+	// delivered before the park, so the #2402 suppression would starve it
+	// forever. One delivery per didOpen, then the suppression resumes.
+	deliverDiags map[string]bool
 	// rgate is the prepareRename verdict the intention popup's rename entry
 	// is gated on (renamegate.go, #2025).
 	rgate renameGate
@@ -291,6 +298,16 @@ func (b *bridge) fileOpened(h host.API, path string) {
 			// the override set.
 			return
 		}
+		// Armed before the didOpen goes out: the server's first publish may
+		// arrive on its read loop before Open even returns, and it must not be
+		// suppressed as a no-change republish (#2492) — the model listening
+		// now may have started from an empty diagnostics view.
+		b.mu.Lock()
+		if b.deliverDiags == nil {
+			b.deliverDiags = map[string]bool{}
+		}
+		b.deliverDiags[path] = true
+		b.mu.Unlock()
 		err = mgr.Open(path, l.ID, string(data))
 		if err != nil && errors.Is(err, transport.ErrNotFound) {
 			// Missing binary on first use: activation implies installation
@@ -384,6 +401,7 @@ func (b *bridge) fileClosed(path string) {
 	// diagnostics with the buffer, so a republish after a reopen must be
 	// treated as new even when the server's set never changed.
 	delete(b.sentDiags, path)
+	delete(b.deliverDiags, path)
 	delete(b.sigActive, path)
 	delete(b.semInFlight, path)
 	delete(b.semPending, path)
@@ -1765,12 +1783,18 @@ func (b *bridge) onDiagnostics(path string, p protocol.PublishDiagnosticsParams,
 	b.mu.Lock()
 	// No-change republishes stop here (#2402): equal to the last delivered set
 	// — including "still empty" for a path never delivered — means the app has
-	// nothing to redraw, so no message and no render pass.
-	if last, sent := b.sentDiags[path]; len(msg.Diagnostics) == 0 && !sent ||
-		sent && diagsEqual(last, msg.Diagnostics) {
-		b.mu.Unlock()
-		return
+	// nothing to redraw, so no message and no render pass. Except the first
+	// publish after a didOpen (#2492): the listening model may have rebuilt
+	// its diagnostics view from nothing (a project switch's fresh Problems
+	// store), so that one is delivered even when the set never changed.
+	if !b.deliverDiags[path] {
+		if last, sent := b.sentDiags[path]; len(msg.Diagnostics) == 0 && !sent ||
+			sent && diagsEqual(last, msg.Diagnostics) {
+			b.mu.Unlock()
+			return
+		}
 	}
+	delete(b.deliverDiags, path)
 	if len(msg.Diagnostics) == 0 {
 		delete(b.sentDiags, path)
 	} else {
@@ -1899,6 +1923,7 @@ func (b *bridge) closeRootState(root string) tea.Cmd {
 	prunePaths(b.pendingChange, root)
 	prunePaths(b.diags, root)
 	prunePaths(b.sentDiags, root)
+	prunePaths(b.deliverDiags, root)
 	prunePaths(b.sigActive, root)
 	prunePaths(b.semInFlight, root)
 	prunePaths(b.semPending, root)

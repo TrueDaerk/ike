@@ -56,7 +56,16 @@ import (
 // (foreground time spent in a project). The recent-files dismissal that v3
 // recorded as the pseudo-command "palette.recentFiles.dismiss" is gone: every
 // mode now reports its dismissals under "palette.dismiss".
-const SchemaVersion = 4
+//
+// v5 (#2492): the "project.switch" op's warm-up phase becomes total — every
+// "ok" is now followed by exactly one "lsp" phase. When no publishDiagnostics
+// measurement exists the phase carries "skipped" naming why: "no_server_docs"
+// (the switched-to model opened no server-language document), "quiet" (armed
+// but nothing published within the fallback window), "superseded" (the next
+// switch started first) or "quit" (the session ended first). A v4 log's
+// missing "lsp" phase is ambiguous — server silence or lost event — a v5
+// reader can treat absence as a bug.
+const SchemaVersion = 5
 
 // defaultFlushInterval is how often the writer goroutine flushes the
 // bufio.Writer on its own, independent of buffer fill or explicit Flush
