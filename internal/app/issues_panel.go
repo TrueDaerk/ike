@@ -60,6 +60,11 @@ func (m *Model) openIssuesPanel() tea.Cmd {
 		return nil
 	}
 	if !p.Loaded() {
+		// The pane's own on-open fetch counts as the last fetch for the
+		// poller's staleness check (#2488), so opening the window does not
+		// dispatch the very same listing twice — once here and once as the
+		// immediate poll the pane gate would otherwise ask for.
+		m.forgePoller().Refreshed()
 		// The persisted snapshot (#2108) renders while the fetch runs: the
 		// seed resolves off the Update loop (it reads a file and the remote
 		// key) and lands as a forge.CachedListingMsg; SetCached drops it if

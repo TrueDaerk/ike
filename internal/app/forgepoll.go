@@ -8,6 +8,7 @@ import (
 
 	"ike/internal/forge"
 	"ike/internal/host"
+	"ike/internal/pane"
 )
 
 // forgepoll.go is the app half of background forge polling (#2085): one
@@ -71,6 +72,17 @@ func forgeCacheEnabled(cfg host.Config) bool {
 	return !ok || v != "false"
 }
 
+// forgePausePollOnBlur reads forge.poll_pause_on_blur (#2488): the poll
+// pauses while the terminal has no focus unless it is explicitly switched
+// off, which restores the always-polling behaviour of #2085.
+func forgePausePollOnBlur(cfg host.Config) bool {
+	if cfg == nil {
+		return true
+	}
+	v, ok := cfg.Get("forge.poll_pause_on_blur")
+	return !ok || v != "false"
+}
+
 // forgePoller resolves the active poller, nil in models built without one
 // (bare test literals).
 func (m Model) forgePoller() *forge.Poller {
@@ -111,32 +123,85 @@ func (m Model) StartForgePoll() {
 	}()
 }
 
-// armForgePoll is the settled-pass hook, and it only fires on the one edge the
+// armForgePoll is the settled-pass hook, and it only fires on edges the
 // self-sustaining chain cannot cover itself: a config reload that turned
-// polling back on. Everything else re-arms where it belongs — Init at the
-// start, applyForgeListing after each finished fetch — so an ordinary Update
-// pass adds no pending command.
+// polling back on, and the Issues tool window opening, which supersedes the
+// slow-cadence deadline it was running on (#2488). Everything else re-arms
+// where it belongs — Init at the start, applyForgeListing after each finished
+// fetch — so an ordinary Update pass adds no pending command. The pane edge
+// adds none either: its deadline goes out through sendForgeRearm.
 func (m *Model) armForgePoll() tea.Cmd {
-	if m.forgePoll == nil || !m.forgePoll.rearm {
+	if m.forgePoll == nil {
+		return nil
+	}
+	// The pane gate (#2488) is read here rather than pushed from every place
+	// a tool window can appear or vanish (toggle, layout restore, project
+	// switch, pane close): Has() is a map lookup, and SetPaneOpen only reports
+	// work on the edge, so an ordinary pass costs nothing.
+	if m.forgePoller().SetPaneOpen(m.activeWS().Panes.Has(pane.IssuesKey)) {
+		m.sendForgeRearm()
+	}
+	if !m.forgePoll.rearm {
 		return nil
 	}
 	m.forgePoll.rearm = false
 	return m.forgePoller().Arm()
 }
 
+// sendForgeRearm supersedes the pending deadline with one at the cadence the
+// pane just restored, and — the load-bearing part — delivers it through the
+// host's Send on its own goroutine instead of returning it as a command.
+//
+// A settled pass may not hand a poll deadline back to Update: the app test
+// helpers drain Update's commands *synchronously*, and the poll chain is
+// self-sustaining, so a drainer that enters it never comes back out (it waits
+// out a deadline, dispatches the fetch, waits out the next one, forever).
+// StartForgePoll's first deadline rides the same goroutine for the same
+// reason.
+func (m *Model) sendForgeRearm() {
+	cmd := m.forgePoller().Rearm()
+	if cmd == nil {
+		return
+	}
+	h := m.host
+	go func() {
+		if msg := cmd(); msg != nil {
+			h.Send(msg)
+		}
+	}()
+}
+
 // forgePollTick handles one deadline: dispatch the fetch (never wait on it)
 // and, when the tick was dropped because a fetch is still in flight, let the
-// settled pass re-arm once that one lands. A tick for another root is a
-// leftover from the project switched away from — drop it.
+// settled pass re-arm once that one lands. The Poller does the dropping — a
+// tick for another root is a leftover from the project switched away from, a
+// tick for a superseded arm or one arriving while the terminal is blurred
+// (#2488) is spent — so all this has to decide is whether to fetch.
 func (m *Model) forgePollTick(msg forge.PollTickMsg) tea.Cmd {
 	p := m.forgePoller()
-	if p == nil || p.Root() != msg.Root {
-		return nil
-	}
-	if !p.Tick() {
+	if !p.Tick(msg) {
 		return nil
 	}
 	return forge.PollCmd(msg.Root)
+}
+
+// forgeFocus and forgeBlur ride the terminal's focus reports (#2488). The
+// blurred half of that pair only sets a flag — the pending deadline is
+// dropped when it fires, and no new one is armed — while the focused half
+// re-opens the chain, immediately when the pause outlasted one interval.
+// A terminal that never reports focus never calls either, so it polls exactly
+// as it did before.
+func (m *Model) forgeFocus() tea.Cmd {
+	p := m.forgePoller()
+	if p == nil {
+		return nil
+	}
+	p.Focus()
+	return p.Arm()
+}
+
+func (m *Model) forgeBlur() {
+	m.forgePoller().Blur()
 }
 
 // applyForgeListing routes one finished listing — background poll or the
@@ -154,6 +219,10 @@ func (m *Model) applyForgeListing(msg forge.IssuesMsg) tea.Cmd {
 		// chain, stopped since the setup problem, has to be reopened here.
 		if msg.Setup == "" && msg.Err == nil {
 			p.Resume()
+			// A fresh listing is a fresh listing whoever asked for it: it
+			// counts for the staleness check (#2488), so returning to the
+			// window right after pressing 'r' does not re-fetch it.
+			p.Refreshed()
 			return p.Arm()
 		}
 		return nil
@@ -194,6 +263,7 @@ func (m *Model) reconfigureForgePoll(cfg host.Config) {
 	}
 	was := p.Enabled()
 	p.SetInterval(forgePollInterval(cfg))
+	p.SetPauseOnBlur(forgePausePollOnBlur(cfg))
 	if !was && p.Enabled() {
 		m.forgePoll.rearm = true
 	}

@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-09-03T12:00:00Z
+timestamp: 2026-09-04T12:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -236,7 +236,10 @@ any entry whose key the typed schema does not expose (no dead keys).
   hole — 0, then 10 and up — so it carries the `Entry.ValidateInt` hook: a
   typed value inside the hole is **rejected in the form** naming the floor
   (the config validator has to be lenient and snaps instead), while the
-  steppers jump the hole rather than stopping in it. See
+  steppers jump the hole rather than stopping in it.
+  `forge.poll_pause_on_blur` (#2488) is the plain Bool beside it: the poll
+  stops arming deadlines while the terminal window has no focus, and `false`
+  restores the always-polling behaviour. See
   [Forge Layer](./forge.md).
 - **Diff Viewer** (#2170) — `diff.context`, the unchanged lines kept around a
   change before the rest folds into a separator (`-1` never folds), and

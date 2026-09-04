@@ -30,6 +30,15 @@ const (
 	// failures: an offline laptop retries every five minutes, not every 20
 	// seconds, and recovers on the first success.
 	MaxPollBackoff = 5 * time.Minute
+	// SlowPollFactor stretches the interval while no Issues tool window is
+	// open (#2488). Nobody is reading the listing then — only the status-line
+	// unread badge depends on it — so the poll keeps running, just far less
+	// often.
+	SlowPollFactor = 5
+	// MinSlowPollInterval is the floor of that stretched cadence: even the
+	// smallest configured interval drops to at most one poll a minute while
+	// the pane is closed.
+	MinSlowPollInterval = 60 * time.Second
 )
 
 // Snapshot is one observed listing state: the open issues and every pull
@@ -117,6 +126,13 @@ func Diff(prev, next Snapshot) []Event {
 // handler only dispatches PollCmd — it never waits on it.
 type PollTickMsg struct {
 	Root string
+	// Seq identifies the Arm that scheduled this deadline. A deadline can be
+	// superseded — opening the Issues pane replaces a slow-cadence one with a
+	// normal-cadence one (#2488) — and the timer behind the old one keeps
+	// running either way, so the stale message has to be recognizable. Tick
+	// drops one whose Seq is no longer the current arm; without that the
+	// superseded tick would open a second, parallel chain.
+	Seq int
 }
 
 // PollResult is what one finished background fetch means for the app: the
@@ -150,8 +166,21 @@ type Poller struct {
 	root     string
 	interval time.Duration // 0 = polling off
 	armed    bool          // a PollTickMsg is pending
+	seq      int           // arm generation, carried by PollTickMsg
 	inFlight bool          // a fetch is running
 	stopped  string        // setup message; polling off until Resume
+
+	// Visibility gates (#2488). Neither is a *reason* to poll — they only say
+	// how much of the configured cadence is worth spending on data nobody is
+	// looking at. Both default to "visible", so a caller that never reports
+	// either (a terminal without focus events, a bare test poller) polls
+	// exactly as it did before.
+	pauseOnBlur bool      // forge.poll_pause_on_blur
+	blurred     bool      // the terminal reported blur and no focus since
+	paneOpen    bool      // an Issues tool window is open in this project
+	due         bool      // the next deadline is immediate (focus / pane open)
+	lastFetch   time.Time // when the last fetch was dispatched
+	now         func() time.Time
 
 	snap      *Snapshot // nil until the first successful fetch seeds it
 	prsSeeded bool      // the snapshot's PRs came from a real listing, not a PRErr
@@ -163,9 +192,18 @@ type Poller struct {
 // of 0 means polling off; anything between 0 and MinPollInterval is raised to
 // the floor, mirroring the config validator.
 func NewPoller(root string, interval time.Duration) *Poller {
-	p := &Poller{root: root}
+	p := &Poller{root: root, pauseOnBlur: true, paneOpen: true}
 	p.SetInterval(interval)
 	return p
+}
+
+// clock is the poller's time source, overridable in tests so the staleness
+// check can be driven without sleeping.
+func (p *Poller) clock() time.Time {
+	if p.now != nil {
+		return p.now()
+	}
+	return time.Now()
 }
 
 // Root is the workspace root this poller polls (message routing, tests).
@@ -215,6 +253,102 @@ func (p *Poller) Stopped() string {
 	return p.stopped
 }
 
+// SetPauseOnBlur applies forge.poll_pause_on_blur (#2488). Switching it off
+// restores the pre-#2488 behaviour immediately, blur report or not.
+func (p *Poller) SetPauseOnBlur(on bool) {
+	if p == nil {
+		return
+	}
+	p.pauseOnBlur = on
+}
+
+// paused reports whether the terminal is blurred and the pause is armed. It
+// gates Arm and Tick rather than Enabled: polling is still *configured* on,
+// it just has nobody to render for.
+func (p *Poller) paused() bool { return p != nil && p.pauseOnBlur && p.blurred }
+
+// Paused reports the blur pause (perf HUD, tests).
+func (p *Poller) Paused() bool { return p.paused() }
+
+// Blur records that the terminal lost focus (tea.BlurMsg): no further
+// deadline is armed, and the one still pending is dropped when its timer
+// fires. A terminal that never reports focus never blurs, so it polls exactly
+// as it did before.
+func (p *Poller) Blur() {
+	if p == nil {
+		return
+	}
+	p.blurred = true
+}
+
+// Focus records that the terminal regained focus (tea.FocusMsg) and lifts the
+// pause. A poll whose deadline passed unnoticed is due at once — the point of
+// coming back to the window is seeing current data — so the deadline the
+// caller arms next fires immediately rather than a whole interval later.
+func (p *Poller) Focus() {
+	if p == nil {
+		return
+	}
+	p.blurred = false
+	if p.stale() {
+		p.due = true
+		// A deadline armed before the pause may sit at the slow cadence;
+		// dropping the flag lets the caller's Arm supersede it, and Seq
+		// invalidates the old message when its timer fires.
+		p.armed = false
+	}
+}
+
+// SetPaneOpen reports whether an Issues tool window is open in the current
+// project (#2488). While none is, the cadence stretches to SlowPollFactor ×
+// the interval so the unread badge still moves without re-reading the forge
+// three times a minute. It returns whether the caller must Rearm: the pending
+// deadline sits at the slow cadence and has to be superseded, and the listing
+// is refetched at once when that cadence let it go stale.
+func (p *Poller) SetPaneOpen(open bool) bool {
+	if p == nil || p.paneOpen == open {
+		return false
+	}
+	p.paneOpen = open
+	if !open {
+		// Closing the pane only stretches the *next* deadline; the pending one
+		// is already no later than the slow cadence, so it stands.
+		return false
+	}
+	if p.stale() {
+		p.due = true
+	}
+	return true
+}
+
+// PaneOpen reports the pane gate's state (tests).
+func (p *Poller) PaneOpen() bool { return p != nil && p.paneOpen }
+
+// Refreshed records a listing fetch dispatched outside the poll chain — the
+// pane's own 'r' or its on-open load. It counts for staleness, so returning
+// to a window whose pane just refreshed does not fetch the same listing twice.
+func (p *Poller) Refreshed() {
+	if p == nil {
+		return
+	}
+	p.lastFetch = p.clock()
+	p.due = false
+}
+
+// stale reports whether the last fetch is older than the configured interval
+// — the "is it worth fetching right now" question the focus and pane-open
+// edges ask. It deliberately measures against the interval and not against
+// the stretched cadence: the user just said they are looking.
+func (p *Poller) stale() bool {
+	if !p.Enabled() {
+		return false
+	}
+	if p.lastFetch.IsZero() {
+		return true
+	}
+	return p.clock().Sub(p.lastFetch) >= p.interval
+}
+
 // Resume clears a setup stop so polling starts over — the recovery path for
 // "install gh, press r, it works now". Callers hand it a successful
 // foreground refresh; it is a no-op when polling was never stopped.
@@ -242,20 +376,27 @@ func (p *Poller) Snapshot() *Snapshot {
 	return p.snap
 }
 
-// Delay is the wait before the next fetch: the configured interval, doubled
-// per consecutive failure and capped at MaxPollBackoff. A success resets the
-// count, so recovery is immediate rather than gradual. An interval already
-// longer than the cap is its own ceiling — backing off must never poll more
-// often than the user asked for.
+// Delay is the wait before the next fetch: the current cadence (the
+// configured interval, or the stretched one while the Issues pane is closed),
+// doubled per consecutive failure and capped at MaxPollBackoff. It is 0 when
+// a fetch is due at once — focus or pane-open found the listing stale. A
+// success resets the failure count, so recovery is immediate rather than
+// gradual. A cadence already longer than the cap is its own ceiling —
+// backing off must never poll more often than the user asked for.
 func (p *Poller) Delay() time.Duration {
 	if p == nil || p.interval <= 0 {
 		return 0
 	}
-	limit := MaxPollBackoff
-	if p.interval > limit {
-		limit = p.interval
+	if p.due {
+		// Focus or a freshly opened pane: fetch now, not one cadence from now.
+		return 0
 	}
-	d := p.interval
+	base := p.cadence()
+	limit := MaxPollBackoff
+	if base > limit {
+		limit = base
+	}
+	d := base
 	for i := 0; i < p.failures; i++ {
 		if d >= limit/2 {
 			return limit
@@ -265,23 +406,69 @@ func (p *Poller) Delay() time.Duration {
 	return d
 }
 
+// cadence is the un-backed-off wait: the configured interval while an Issues
+// pane is open, the stretched one while none is (#2488). The stretch can only
+// ever slow polling down — it multiplies the interval and the floor it is
+// raised to is a minute, which the smallest configured interval (10 s) is well
+// below — so a closed pane never costs the forge more requests.
+func (p *Poller) cadence() time.Duration {
+	if p.paneOpen {
+		return p.interval
+	}
+	d := SlowPollFactor * p.interval
+	if d < MinSlowPollInterval {
+		d = MinSlowPollInterval
+	}
+	return d
+}
+
+// Cadence is the current un-backed-off wait between polls (tests, HUD).
+func (p *Poller) Cadence() time.Duration {
+	if p == nil || p.interval <= 0 {
+		return 0
+	}
+	return p.cadence()
+}
+
 // Arm schedules the next deadline, or returns nil when there is nothing to
 // schedule: polling off, a tick already pending, or a fetch still in flight
 // (Apply re-arms once it lands). Callers may call it after every message —
 // it is idempotent by design, which is what makes "start polling again after
 // a settings change" a one-liner.
 func (p *Poller) Arm() tea.Cmd {
-	if !p.Enabled() || p.armed || p.inFlight {
+	if !p.Enabled() || p.paused() || p.armed || p.inFlight {
 		return nil
 	}
 	p.armed = true
-	root, delay := p.root, p.Delay()
-	return tea.Tick(delay, func(time.Time) tea.Msg { return PollTickMsg{Root: root} })
+	p.seq++
+	root, seq, delay := p.root, p.seq, p.Delay()
+	return tea.Tick(delay, func(time.Time) tea.Msg { return PollTickMsg{Root: root, Seq: seq} })
+}
+
+// Rearm replaces the pending deadline with one at the current cadence: it
+// forgets the pending arm and schedules afresh, which bumps Seq and so makes
+// Tick drop the superseded message when its timer finally fires. Arm alone
+// cannot do this — it is idempotent on purpose.
+func (p *Poller) Rearm() tea.Cmd {
+	if p == nil {
+		return nil
+	}
+	p.armed = false
+	return p.Arm()
 }
 
 // Armed reports whether a deadline is pending (the performance HUD's armed
 // ticker count, tests).
 func (p *Poller) Armed() bool { return p != nil && p.armed }
+
+// Seq is the current arm generation — the value the pending PollTickMsg
+// carries, so a test can deliver the deadline the poller actually armed.
+func (p *Poller) Seq() int {
+	if p == nil {
+		return 0
+	}
+	return p.seq
+}
 
 // InFlight reports whether a fetch is running (tests).
 func (p *Poller) InFlight() bool { return p != nil && p.inFlight }
@@ -289,16 +476,23 @@ func (p *Poller) InFlight() bool { return p != nil && p.inFlight }
 // Tick handles one deadline and reports whether the caller should dispatch
 // PollCmd now. A tick that arrives while the previous fetch is still running
 // is dropped rather than queued — a forge slower than the interval must not
-// build a backlog of subprocesses.
-func (p *Poller) Tick() bool {
-	if p == nil {
+// build a backlog of subprocesses. A tick for another root, for a superseded
+// arm, or one arriving while the terminal is blurred (#2488) is dropped too.
+func (p *Poller) Tick(msg PollTickMsg) bool {
+	if p == nil || msg.Root != p.root || msg.Seq != p.seq {
+		// Another project's leftover, or a deadline superseded by an
+		// immediate one — either way it must not open a second chain.
 		return false
 	}
 	p.armed = false
-	if !p.Enabled() || p.inFlight {
+	if !p.Enabled() || p.paused() || p.inFlight {
+		// While blurred the deadline is simply dropped; Focus re-arms the
+		// chain, which is why nothing here re-schedules.
 		return false
 	}
+	p.due = false
 	p.inFlight = true
+	p.lastFetch = p.clock()
 	return true
 }
 
