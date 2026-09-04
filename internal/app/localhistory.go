@@ -391,6 +391,13 @@ func (m *Model) openLocalHistoryDiffPane(path string, at time.Time, snapshot str
 // backs the right column (language for highlighting, and the write target
 // while the right side is the working tree — editable).
 func (m *Model) openDiffTexts(path, leftTitle, rightTitle, left, right string, editable bool) {
+	if diff.TooLarge(left, right) {
+		// The engine refuses oversized input outright (#2505) — say so with
+		// the limit instead of opening a pane the refusal would leave empty.
+		m.host.Notify(host.Warn, fmt.Sprintf("diff: refused — a side exceeds the %d MiB budget (left %s, right %s)",
+			diff.MaxDiffBytes>>20, byteCountLabel(int64(len(left))), byteCountLabel(int64(len(right)))))
+		return
+	}
 	if inst, hostKey, tabIdx, ok := m.diffSlot(); ok {
 		inst.StopDiffEdit()
 		inst.Diff().Retarget(leftTitle, rightTitle, "", path, "", "", editable)

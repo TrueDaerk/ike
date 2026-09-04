@@ -79,11 +79,38 @@ type Hunk struct {
 type Result struct {
 	Rows  []Row
 	Hunks []Hunk
+	// TooLarge marks a refused comparison (#2505): a side was over
+	// MaxDiffBytes, so Rows is empty and nothing was computed.
+	TooLarge bool
 }
 
 // maxRefineRunes bounds intra-line refinement: rune-level Myers is quadratic
 // in the worst case, and emphasis inside very long lines is unreadable anyway.
 const maxRefineRunes = 400
+
+// maxRefineBytes rejects a line pair before the []rune conversion (#2505): a
+// multi-megabyte single line (minified JSON, a spooled body) would allocate
+// four bytes per rune just to learn it is over maxRefineRunes anyway — any
+// line over 4 KiB has more than maxRefineRunes runes, so the byte length
+// decides without allocating.
+const maxRefineBytes = 4 << 10
+
+// MaxDiffBytes is the hard per-side input budget of the engine (#2505):
+// ComputeWith refuses anything larger outright (Result.TooLarge) instead of
+// diffing it, and openers surface the refusal as a notice. Even with the
+// bounded Myers core below, a giant side still costs seconds of comparison
+// and a full syntax re-parse — past this budget the answer is "no", not
+// "slower". A constant, not a setting: no input is allowed to grow past what
+// the IDE survives.
+const MaxDiffBytes = 2 << 20
+
+// maxMyersRounds caps the Myers D loop (#2505): each round widens the search
+// band by one diagonal, so memory and time grow with D — two sides divergent
+// beyond this budget fall back to a plain delete-all/insert-all script for
+// the (prefix/suffix-trimmed) middle, which buildRows still pairs into
+// changed rows. The optimal alignment of 20k+ differing lines is not worth
+// gigabytes; before this cap two ~600 KiB responses allocated ~25 GiB.
+const maxMyersRounds = 1024
 
 // Lines computes the line-level edit script turning a into b, using Myers'
 // greedy O(ND) algorithm with common prefix/suffix trimming.
@@ -105,12 +132,24 @@ type Options struct {
 // the default (whitespace-significant) options.
 func Compute(left, right string) Result { return ComputeWith(left, right, Options{}) }
 
-// ComputeWith diffs two texts under opts.
+// ComputeWith diffs two texts under opts. Oversized input is refused rather
+// than diffed (#2505): the caller gets Result.TooLarge and explains, instead
+// of the engine burning seconds and memory on a comparison nobody can read.
 func ComputeWith(left, right string, opts Options) Result {
+	if TooLarge(left, right) {
+		return Result{TooLarge: true}
+	}
 	a := splitLines(left)
 	b := splitLines(right)
 	rows := buildRows(pairScript(a, b, opts), opts)
 	return Result{Rows: rows, Hunks: hunksOf(rows)}
+}
+
+// TooLarge reports whether a side is over the engine's MaxDiffBytes budget
+// (#2505) — the check openers run before opening a pane, so the refusal is a
+// notice naming the limit instead of an empty diff.
+func TooLarge(left, right string) bool {
+	return len(left) > MaxDiffBytes || len(right) > MaxDiffBytes
 }
 
 // lineKey is the comparison key of one line: the line itself, or — ignoring
@@ -298,6 +337,11 @@ func trimSpaceSpans(line string, spans []Span) []Span {
 // changed spans on each side. Oversized lines skip refinement (whole-line
 // emphasis reads better than quadratic work).
 func refine(left, right string) (ls, rs []Span) {
+	if len(left) > maxRefineBytes || len(right) > maxRefineBytes {
+		// Over 4 KiB the line is over maxRefineRunes for sure (#2505) — skip
+		// before the []rune conversion would allocate a rune per byte of it.
+		return nil, nil
+	}
 	lr := []rune(left)
 	rr := []rune(right)
 	if len(lr) > maxRefineRunes || len(rr) > maxRefineRunes {
@@ -451,7 +495,11 @@ func (q runeSeq) Eq(other seq, i, j int) bool {
 // myersTrace is the greedy O(ND) Myers diff (An O(ND) Difference Algorithm,
 // Myers 1986) returning the per-element op sequence turning a into b. The
 // D-round snapshots of the furthest-reaching x per diagonal are kept for the
-// backtrack.
+// backtrack; each snapshot holds only the round's reachable band -d..d, not
+// the full diagonal range (#2505) — the full-width copies made the memory
+// O(D·(N+M)), gigabytes for two divergent multi-thousand-line sides. Rounds
+// past maxMyersRounds abandon the optimal alignment for a plain replace-all
+// script, keeping the worst case bounded.
 func myersTrace(a, b seq) []Op {
 	n, m := a.Len(), b.Len()
 	switch {
@@ -465,10 +513,17 @@ func myersTrace(a, b seq) []Op {
 	max := n + m
 	// v[k+max] is the furthest x on diagonal k.
 	v := make([]int, 2*max+1)
+	// snapshots[d][k+d] is round d's furthest x on diagonal k, |k| <= d.
 	var snapshots [][]int
 	var dFound = -1
 outer:
 	for d := 0; d <= max; d++ {
+		if d > maxMyersRounds {
+			// Too divergent for the budget (#2505): a delete-all/insert-all
+			// script over the trimmed middle, which buildRows pairs into
+			// changed rows positionally — coarser, but bounded.
+			return append(repeatOp(OpDelete, n), repeatOp(OpInsert, m)...)
+		}
 		for k := -d; k <= d; k += 2 {
 			var x int
 			if k == -d || (k != d && v[k-1+max] < v[k+1+max]) {
@@ -483,30 +538,27 @@ outer:
 			}
 			v[k+max] = x
 			if x >= n && y >= m {
-				snap := make([]int, len(v))
-				copy(snap, v)
-				snapshots = append(snapshots, snap)
+				snapshots = append(snapshots, bandSnapshot(v, d, max))
 				dFound = d
 				break outer
 			}
 		}
-		snap := make([]int, len(v))
-		copy(snap, v)
-		snapshots = append(snapshots, snap)
+		snapshots = append(snapshots, bandSnapshot(v, d, max))
 	}
 	// Backtrack from (n, m) through the D-round snapshots.
 	var rev []Op
 	x, y := n, m
 	for d := dFound; d > 0; d-- {
 		vPrev := snapshots[d-1]
+		off := d - 1 // vPrev[k+off] is round d-1's x on diagonal k
 		k := x - y
 		var prevK int
-		if k == -d || (k != d && vPrev[k-1+max] < vPrev[k+1+max]) {
+		if k == -d || (k != d && vPrev[k-1+off] < vPrev[k+1+off]) {
 			prevK = k + 1
 		} else {
 			prevK = k - 1
 		}
-		prevX := vPrev[prevK+max]
+		prevX := vPrev[prevK+off]
 		prevY := prevX - prevK
 		for x > prevX && y > prevY {
 			rev = append(rev, OpEqual)
@@ -537,6 +589,16 @@ outer:
 		rev[i], rev[j] = rev[j], rev[i]
 	}
 	return rev
+}
+
+// bandSnapshot copies round d's reachable diagonals -d..d out of the
+// full-width v (indexed k+max) into a 2d+1 slice (indexed k+d) — the only
+// part of v the backtrack ever reads, and the difference between O(D²) and
+// O(D·(N+M)) total snapshot memory (#2505).
+func bandSnapshot(v []int, d, max int) []int {
+	snap := make([]int, 2*d+1)
+	copy(snap, v[max-d:max+d+1])
+	return snap
 }
 
 func repeatOp(op Op, n int) []Op {
