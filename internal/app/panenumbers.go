@@ -1,7 +1,6 @@
 package app
 
 import (
-	"image/color"
 	"sort"
 	"strconv"
 	"time"
@@ -10,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/host"
+	"ike/internal/theme"
 	"ike/internal/ui"
 )
 
@@ -18,8 +18,9 @@ import (
 // event and, before this, the keyboard could only *cycle* through the panes
 // (pane.switcher): reaching the third pane of four meant pressing ctrl+tab
 // until it happened. The panes are numbered in layout reading order and drawn
-// lazygit style in the title bar ("[1] EDITOR"), so the number a chord
-// addresses is on screen next to the pane it means.
+// lazygit style in the title bar as an inverted pill (" 1 EDITOR", #2496), so
+// the number a chord addresses is on screen next to the pane it means — and
+// visible enough to find without reading every title row.
 //
 // The numbering is derived, never stored: it is recomputed from the live
 // layout rectangles on every read, so a split, move, close or zoom renumbers
@@ -123,9 +124,15 @@ func (m *Model) raisePaneNumberHint() tea.Cmd {
 	})
 }
 
-// paneNumberBadgeText is the plain "[n] " prefix a pane's title carries, or ""
-// when the pane has no number or the badges are hidden. It is uncolored so the
-// caller can measure it before the chrome's colors are resolved.
+// paneNumberBadgeWidth is how many cells a drawn badge takes: the digit with
+// one space of pill padding on each side. It is a constant because the pill is
+// single-digit by construction (paneNumberMax), and the title row's other
+// tenant — the tab bar — is measured against it.
+const paneNumberBadgeWidth = 3
+
+// paneNumberBadgeText is the plain " n " pill body a pane's title carries, or
+// "" when the pane has no number or the badges are hidden. It is uncolored so
+// the caller can measure it before the chrome's colors are resolved.
 func (m Model) paneNumberBadgeText(key string) string {
 	if !m.paneNumbersShown() {
 		return ""
@@ -134,18 +141,24 @@ func (m Model) paneNumberBadgeText(key string) string {
 	if n == 0 {
 		return ""
 	}
-	return "[" + strconv.Itoa(n) + "] "
+	return " " + strconv.Itoa(n) + " "
 }
 
-// paneNumberBadge colors that prefix in the pane's own border color: dim on an
-// unfocused pane, and on the focused one whatever the border currently says —
-// the focus color, the editor's input mode (#1353), the drag colors. The badge
-// is chrome, so it must never contradict the frame it sits in.
-func paneNumberBadge(text string, border color.Color) string {
+// paneNumberBadge draws that pill inverted (#2496): a bold digit on a filled
+// background, the accent on the focused pane and a muted-but-visibly-filled
+// tone on every other one. It deliberately does *not* take the border color
+// the way the old bracketed `[n]` did — a dim digit in the dim border tone is
+// exactly what made the badges unfindable, and the badge's whole job is to be
+// the thing you spot when choosing a ctrl+N target.
+func paneNumberBadge(text string, focused bool, pal *theme.Palette) string {
 	if text == "" {
 		return ""
 	}
-	return lipgloss.NewStyle().Foreground(border).Render(text)
+	bg, fg := pal.PaneBadgeMuted, pal.PaneBadgeMutedText
+	if focused {
+		bg, fg = pal.PaneBadge, pal.PaneBadgeText
+	}
+	return lipgloss.NewStyle().Bold(true).Foreground(fg).Background(bg).Render(text)
 }
 
 // focusPaneNumber handles pane.focus1…9: it moves focus to the pane carrying

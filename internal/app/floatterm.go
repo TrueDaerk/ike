@@ -494,7 +494,7 @@ func (m Model) renderFloatTerm(f *floatTerm) string {
 	if m.popupLayerFocused() && m.floatFocused() == f {
 		border = m.pal().BorderFocus
 	}
-	return paneBox(marker+title, f.inst.View(), f.w, f.h, border)
+	return paneBox("", marker+title, f.inst.View(), f.w, f.h, border)
 }
 
 // popupLayerMouse routes a mouse event over the popup layer while no drag is

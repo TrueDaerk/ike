@@ -29,7 +29,8 @@ set of **semantic color slots**, not a per-widget sheet. The IKE slot set
 `OccurrenceRead`, `OccurrenceWrite`, `InlayHint`, `Whitespace`, `IndentGuide`,
 `Ruler`, `Primary`, `Secondary`,
 `Success`, `Warning`, `Error`, `Info`, `Hint`, `MoveSource`, `DropTarget`,
-`Ghost`, `ScrollbarTrack`, `ScrollbarThumb`, `DiffAdded`, `DiffRemoved`,
+`Ghost`, `ScrollbarTrack`, `ScrollbarThumb`, `PaneBadge`, `PaneBadgeText`,
+`PaneBadgeMuted`, `PaneBadgeMutedText`, `DiffAdded`, `DiffRemoved`,
 `DiffChanged`, `DiffAddedEmph`, `DiffRemovedEmph`. The occurrence slots back the LSP
 document-highlight marks (#172); left empty they fall back to the theme's own
 `SelectionMuted` before the default theme's, so occurrences stay in-palette
@@ -39,7 +40,16 @@ legible-but-dim foreground in every palette (the builtins set it to their
 comment tone). `Whitespace` and `IndentGuide` colour the visible-whitespace
 glyphs and indent guides (#64), falling back to the theme's own `Border`;
 `Ruler` is the column-ruler background tint, falling back to the theme's own
-`Panel`. `DiffAdded`, `DiffRemoved`, and `DiffChanged` are the diff viewer's
+`Panel`. The four `PaneBadge*` slots are the pane-number pill (#2496), one
+background/digit pair per focus state; they are the **only** slots a built-in
+may leave empty (`derivedUISlots` in `theme_test`), because the derivation
+already lands them well: the focused pill takes the theme's `Accent`, the
+unfocused one `Foreground` mixed `paneBadgeMutedMix` over `Surface` — muted
+but plainly a filled chip rather than the dim border tone the digits used to
+disappear into — and each digit is the first of `Background`/`Surface`/
+`Foreground` clearing 4.5:1 on its pill, falling back to black or white, which
+bounds any hue at 4.58:1. `panebadge_test` audits both pairs for text contrast
+and both pills for standing out from `Surface` in every built-in. `DiffAdded`, `DiffRemoved`, and `DiffChanged` are the diff viewer's
 line backgrounds and the editor's `.diff`/`.patch` word highlight (#60); left
 empty they derive from the theme's own `Success`/`Error`/`Warning` tinted
 toward its `Surface` via `theme.Mix`, so sparse themes get in-palette diff

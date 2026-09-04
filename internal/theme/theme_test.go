@@ -7,6 +7,17 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
+// derivedUISlots are the ui slots a built-in may leave empty because they are
+// computed from the theme's own colours rather than hand-picked: the
+// pane-number pill (#2496) is the accent and a foreground/surface mix, with
+// its digits chosen for contrast against the pill. Their quality is audited by
+// panebadge_test instead of by presence here — hand-tuning four more tokens in
+// every built-in would only restate what the derivation already gets right.
+var derivedUISlots = map[string]bool{
+	"PaneBadge": true, "PaneBadgeText": true,
+	"PaneBadgeMuted": true, "PaneBadgeMutedText": true,
+}
+
 // TestBuiltinsComplete: every built-in defines every ui slot, a non-empty
 // captures map covering the default capture set, and the required file keys.
 func TestBuiltinsComplete(t *testing.T) {
@@ -14,8 +25,9 @@ func TestBuiltinsComplete(t *testing.T) {
 	for _, th := range Builtins() {
 		ui := reflect.ValueOf(th.UI)
 		for i := 0; i < ui.NumField(); i++ {
-			if ui.Field(i).String() == "" {
-				t.Errorf("%s: ui slot %s is empty", th.Name, ui.Type().Field(i).Name)
+			name := ui.Type().Field(i).Name
+			if ui.Field(i).String() == "" && !derivedUISlots[name] {
+				t.Errorf("%s: ui slot %s is empty", th.Name, name)
 			}
 		}
 		for capture := range def.Captures {

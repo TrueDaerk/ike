@@ -380,7 +380,18 @@ func (m Model) tabBarHit(x, y int) (string, int, bool, bool) {
 		if inst.TabCount() < 2 && !m.tabsAlwaysShow() {
 			continue // the row shows the plain title, not a bar
 		}
-		idx, onClose := tabHit(tabLabels(inst), inst.ActiveTab(), r.W-paneChromeW, x-(r.X+paneContentX))
+		// The pane-number badge (#2407) takes the first cells of the row and
+		// the bar was rendered into what it left (renderPaneBox), so the hit
+		// test starts where the bar does — otherwise every click lands one
+		// segment boundary off on a numbered pane.
+		badgeW := 0
+		if m.paneNumberBadgeText(key) != "" {
+			badgeW = paneNumberBadgeWidth
+		}
+		if x < r.X+paneContentX+badgeW {
+			return "", 0, false, false
+		}
+		idx, onClose := tabHit(tabLabels(inst), inst.ActiveTab(), r.W-paneChromeW-badgeW, x-(r.X+paneContentX+badgeW))
 		if idx < 0 {
 			return "", 0, false, false
 		}
