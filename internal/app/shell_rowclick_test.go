@@ -104,9 +104,9 @@ func TestLocalHistoryRowClickSelectsThenOpens(t *testing.T) {
 	if m.localHistoryOpen() {
 		t.Fatal("a click on the selected snapshot must open the diff pane and close")
 	}
-	inst := m.activeWS().Panes.FocusedInstance()
+	inst := m.focusedContent() // the diff is a tab of the file's pane (#2507)
 	if inst == nil || inst.Kind() != pane.KindDiff {
-		t.Fatal("the activation must focus a diff pane")
+		t.Fatal("the activation must focus a diff")
 	}
 }
 

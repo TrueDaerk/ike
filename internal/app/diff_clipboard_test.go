@@ -69,7 +69,7 @@ func TestCompareClipboardSelection(t *testing.T) {
 	if !strings.Contains(ansi.Strip(m.render()), "(selection)") {
 		t.Fatal("the right column should be marked as a selection")
 	}
-	v := ansi.Strip(m.activeWS().Panes.Get(key).Diff().View())
+	v := ansi.Strip(diffViewerOf(m).Diff().View())
 	if !strings.Contains(v, "keep") || !strings.Contains(v, "done") {
 		t.Fatal("the diff should show the selection against the clipboard")
 	}

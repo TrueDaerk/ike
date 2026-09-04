@@ -78,6 +78,23 @@ func openTimelineWithGit(t *testing.T, m Model) Model {
 	return step(m, msg)
 }
 
+// focusFileTab returns the focused pane to its first file-backed editor tab.
+// A diff opens as a content tab of that very pane since #2507, so a command
+// that acts on "the focused file" needs the file tab active again.
+func focusFileTab(m Model) Model {
+	inst := m.activeWS().Panes.FocusedInstance()
+	if inst == nil {
+		return m
+	}
+	for i := 0; i < inst.TabCount(); i++ {
+		if inst.TabEditor(i) != nil {
+			m.switchTab(inst, i)
+			break
+		}
+	}
+	return m
+}
+
 // replaceBuffer overwrites a buffer through the normal edit path, so the
 // change is one undoable unit like a restore.
 func replaceBuffer(ed *editor.Model, text string) {
@@ -237,8 +254,9 @@ func TestTimelineDiffAgainstBufferBothSources(t *testing.T) {
 	}
 
 	// enter on the oldest commit: its blob (left) vs the buffer. The picker
-	// closed with the diff (the modal shell is shared state), so re-open it.
-	m = openTimelineWithGit(t, m2)
+	// closed with the diff (the modal shell is shared state), so re-open it —
+	// over the file tab the diff tab now sits beside (#2507).
+	m = openTimelineWithGit(t, focusFileTab(m2))
 	m, _ = pressTimeline(m, "G") // jump to the oldest entry ("init")
 	if got := m.tl.merged[m.tl.sel]; got.Source != timeline.Git || got.Subject != "init" {
 		t.Fatalf("selected %+v, want the init commit", got)
