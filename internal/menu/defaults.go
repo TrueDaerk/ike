@@ -59,6 +59,7 @@ func Defaults() []Menu {
 		}},
 		{Title: "Navigate", Items: []Item{
 			{Title: "Go to File", Command: "project.goToFile"},
+			{Title: "Go to Line…", Command: "editor.goToLine"},
 			{Title: "Recent Files", Command: "palette.recentFiles"},
 			{Title: "Pinned Files", Command: "nav.pins"},
 			{Title: "Bookmarks", Command: "nav.bookmarks"},

@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-09-02T00:00:00Z
+timestamp: 2026-09-04T00:00:00Z
 ---
 
 # Editor
@@ -1090,6 +1090,32 @@ a `change n/m (wrapped)` notice, the diagnostic/conflict jump family; lands
 on the first non-blank column. Registered as `vcs.nextChange`/`prevChange`
 with the vim sequences as cheatsheet doc hints; motion only — no undo, no
 nav-history entries.
+
+## Go to Line (#2486)
+
+`editor.goToLine` (`cmd+l`, JetBrains' *Go to Line:Column*) opens a single-line
+shell prompt — one `ui.Field`, like the debugger's run-to-line prompt it sits
+next to — and moves the caret in the current buffer. `internal/app/gotoline.go`
+owns the prompt; the caret move is `editor.Model.JumpTo`, so the landing is
+framed like every other navigation jump (#996) instead of arriving at the
+viewport edge, and the departure point is recorded in the navigation history —
+`nav.back` is the way home.
+
+The target grammar is `line[:column]`, both 1-based (what the status line
+shows):
+
+| target | meaning |
+|---|---|
+| `42` | line 42, column 1 |
+| `42:7` | line 42, column 7 |
+| `+5` / `-5` | five lines below / above the caret |
+| `+5:3` | relative line with a column |
+
+Out-of-range values **clamp** to the buffer bounds rather than being rejected:
+`99999` is an honest "take me to the end", and the column's upper bound is the
+line's, enforced by `SetCursor`'s clamp. Only non-numeric input is refused —
+`abc` leaves the prompt open with the reason under the input, so a typo is
+corrected in place. An empty target closes without moving, as does `esc`.
 
 ## Multi-caret editing (#145)
 

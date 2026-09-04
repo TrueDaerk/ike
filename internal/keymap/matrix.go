@@ -149,6 +149,7 @@ var reachableAlternatives = map[string]string{
 	"lsp.format":                       "palette",
 	"lsp.codeAction":                   "palette",
 	"lsp.callHierarchy":                "palette",
+	"editor.goToLine":                  "palette / Navigate menu",
 	"nav.back":                         "palette",
 	"nav.forward":                      "palette",
 	"settings.open":                    "palette",

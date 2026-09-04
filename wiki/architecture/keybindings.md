@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts plus language-scoped editor bindings, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-09-03T18:00:00Z
+timestamp: 2026-09-04T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -1138,6 +1138,26 @@ none open the chord stays with the child, which may own its own find. `ctrl+g`
 is deliberately *not* reserved there: it is a real control character the shell
 expects.
 
+## Go to Line (#2486)
+
+Telemetry recorded `cmd+l` pressed in an editor with status `unbound`: it is
+JetBrains' *Go to Line:Column* on macOS and IKE had no such command. It is now
+`editor.goToLine`, bound in the `Editor` context:
+
+| chord | context | command |
+|---|---|---|
+| `cmd+l` (`ctrl+l` off macOS, via the `Cmd`→`Ctrl` fold) | Editor | `editor.goToLine` |
+
+JetBrains' Linux chord for the action is `ctrl+g`, which is deliberately *not*
+bound here: `editor.caret.addNext` already owns it in the `Editor` context
+(#145, and the section above), and one everyday command per chord is the rule
+for the default table. Off macOS the fold puts Go to Line on `ctrl+l`, which no
+other default claims. The chord is fragile like every `Cmd`-modified JetBrains
+binding, so the palette and the **Navigate** menu are the recorded fallback.
+
+See [editor.md](editor.md#go-to-line-2486) for the prompt and its target
+grammar.
+
 ## The line-editing family and the pane chords (#2400)
 
 A second telemetry export (two sessions, ~9,900 events) left 37 presses on
@@ -1190,6 +1210,7 @@ JetBrains is:
 | `editor.duplicateLine` | `cmd+d` | fragile | `vim yyp` | live via vim yyp |
 | `editor.escapeSelection` | `cmd+alt+shift+e` | fragile | `palette` | live via palette |
 | `editor.find` | `cmd+f` | fragile | `vim /` | live via vim / |
+| `editor.goToLine` | `cmd+l` | fragile | `palette / Navigate menu` | live via palette / Navigate menu |
 | `editor.lineEnd` | `cmd+right` | fragile | `vim $` | live via vim $ |
 | `editor.lineStart` | `cmd+left` | fragile | `home` | live via home |
 | `editor.moveLineDown` | `cmd+shift+down` | fragile | `ctrl+shift+down` | live via ctrl+shift+down |
