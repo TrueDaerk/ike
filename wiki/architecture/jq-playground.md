@@ -1,10 +1,10 @@
 ---
 type: concept
 title: jq, yq & xmq Playground
-description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; three dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers and a focused YAML response, xmq for XML/HTML buffers and a focused XML/HTML response — the one external-engine dialect, shelling out to the xmq CLI with the buffer on stdin, the query line split into shell words, the output language named per command for the result's highlighting and scratch extension, a missing binary answered at open with a centered install-hint dialog and configurable via playground.xmq.path, and the at-path open seeding a select over the caret element's XPath), one chord dispatching over the three dialects from the focused editor's language or the focused HTTP response's content type, gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors that leave the last successful result in the buffer under a stale banner instead of clearing it, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, and inserting a picked row into the query line — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing, while the find chord opens the result buffer's search from either focus with `esc` handing the keyboard back to the query line — its program and caret untouched, the matches left highlighted until the next query re-renders the result — and the match-step chords walk those matches from either focus; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace.
+description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; three dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers and a focused YAML response, xmq for XML/HTML buffers and a focused XML/HTML response — the one external-engine dialect, shelling out to the xmq CLI with the buffer on stdin, the query line split into shell words, the output language named per command for the result's highlighting and scratch extension, a missing binary answered at open with a centered install-hint dialog and configurable via playground.xmq.path, and the at-path open seeding a select over the caret element's XPath), one chord dispatching over the three dialects from the focused editor's language or the focused HTTP response's content type, gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors that leave the last successful result in the buffer under a stale banner instead of clearing it, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, inserting a picked row into the query line, and leading with guide rows that say what enter does with each kind of row, showing every example's actual output beside its program, every builtin's call form beside its arity, and the sample document the examples are written against as rows of the sheet itself; it opens from the query line while a query is being written, dismissing the completion popup rather than letting it cover the sheet, and its chord is named early enough in the info row's hint tail to survive a narrow pane — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing, while the find chord opens the result buffer's search from either focus with `esc` handing the keyboard back to the query line — its program and caret untouched, the matches left highlighted until the next query re-renders the result — and the match-step chords walk those matches from either focus; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace.
 resource: internal/jqplay/jqplay.go
 tags: [architecture, json, yaml, xml, html, jq, yq, xmq, tools, inline, editor, http, completion, folding]
-timestamp: 2026-09-03T21:00:00Z
+timestamp: 2026-09-04T12:00:00Z
 ---
 
 # jq, yq & xmq Playground
@@ -48,13 +48,15 @@ internal/jqplay/
   highlight.go   the query line's jq scanner: Tokens/KindAt, single pass, never fails
   complete.go    the typing aid: Complete — snapshot keys at a path, gojq's builtin list
   library.go     the named saved-filter store: Library, Filter, Scope — path-agnostic, one type for every store
-  cheatsheet.go  the language sheet (#2382): Cheatsheet, CheatEntry, Sample — syntax, one-line examples, every builtin
+  cheatsheet.go  the language sheet (#2382): Cheatsheet, CheatEntry, Sample — the guide rows, syntax, one-line
+                 examples with their outputs, every builtin with its call form, and the sample document's own rows (#2482)
   wrap.go        the multi-line view's line breaking and caret coordinates: Wrap/LineAt/RowCol/PosAt
 internal/app/
   playground.go   the inline mode: query header, result buffer, key routing, debounce and async eval
   playcomplete.go the completion popup: state, keys, rendering and compositing
   playfilters.go  the filter library's UI: the store paths, the name prompt, the palette picker
-  playcheat.go    the language cheatsheet's UI: the locked palette mode, the search, the two insertions (#2382)
+  playcheat.go    the language cheatsheet's UI: the locked palette mode, the search, the two insertions (#2382),
+                  the program → output chip and the seeded re-open of the sample rows (#2482)
   playhelp.go     the mode's key inventory for the cheatsheet: query line, result buffer, keymap chords (#2237)
   playground_xmq.go the xmq glue (#2414): the dispatcher hook, the binary gate with the missing-binary
                   dialog, the configured path hand-over and the XPath seed of the at-path open
@@ -848,7 +850,7 @@ above win):
 | `pgup` / `pgdn` | page the result buffer without leaving the query line |
 | `ctrl+s` | save the program as a **named filter** (`json.jqSaveFilter`) |
 | `ctrl+l` | open the **saved-filter picker** over this playground's library (`json.jqFilters` / `yaml.yqFilters`) |
-| `ctrl+g` | open the **[language cheatsheet](#the-language-cheatsheet)** of this playground's dialect (`json.jqCheatsheet` / `yaml.yqCheatsheet`) |
+| `ctrl+g` | open the **[language cheatsheet](#the-language-cheatsheet)** of this playground's dialect (`json.jqCheatsheet` / `yaml.yqCheatsheet`) — also with the completion popup open, which it dismisses on the way (#2482) |
 | `ctrl+y` | copy the **whole** result (not just the visible part) |
 | `ctrl+o` | open the result as a fresh scratch in the dialect's extension (`.json` / `.yaml`) |
 | `esc` | close (recording the program in the history) |
@@ -1014,6 +1016,17 @@ The info row's hint tail ends in `f1 keys`, last so it is the first segment a
 narrow pane drops: the row can only ever name a handful of keys, and the one
 worth naming last is the one that lists all of them.
 
+**`ctrl+g cheatsheet` sits third**, right after `tab result` and `enter run`
+and *ahead* of the view toggle (#2482). The order is what decides which hints a
+narrow pane keeps, and the chord used to be seventh — past the cut at every
+width a playground is actually opened at, a pane beside an explorer on a normal
+terminal. That made the reported bug: the sheet was reachable the whole time,
+but the one key that answers *I do not know how to write this query* was the
+one never on screen, and the palette's `esc esc` doorway is closed from the
+query line because `esc` there closes the mode. The toggle it displaces still
+announces itself when it matters — a program too wide for the row raises the
+`· query cut` marker.
+
 **Global-scope chords keep working** (#1983): a key the playground leaves over
 resolves against the Global scope of the live binding table and dispatches its
 command — `cmd+shift+a` opens Search Everywhere, `cmd+e` opens Recent Files,
@@ -1164,13 +1177,25 @@ have already half-typed, so it finds what you know and nothing else.
 
 `ctrl+g` from either focus (or `json.jqCheatsheet` / `yaml.yqCheatsheet` from
 the palette and the Tools menu) opens a **locked palette mode** listing the
-whole language of the open playground's dialect, in three sections:
+whole language of the open playground's dialect.
+
+It opens **while a query is being written**, which is the state it is most
+wanted in: the completion popup does not shadow the chord (`playCompletionKey`
+never claimed it), and since #2482 opening the sheet **dismisses** the popup
+rather than leaving it drawn on top of the sheet's first rows. Closing it costs
+nothing — the popup is derived state, re-opened by the next typed rune — and
+the program and caret it was computed for are untouched, so `esc` still comes
+back to exactly the half-written query.
+
+The sections, in the order the sheet lists them:
 
 | Badge | What | Where it comes from |
 | --- | --- | --- |
+| `guide` | the four rows the sheet **leads with** (#2482): what `enter` does with the row under the cursor, split into one short sentence per kind, and the doorway to the sample document | derived in `cheatsheet.go` from `Kind.Complete()` |
 | `syntax` | the parts of the language that are **not** functions: the pipe, `.[]`, `.[]?`, slices, `,`, object and array construction, `//`, string interpolation, `as`, `reduce`, `if`, `try`, `=` / `\|=`, `..` | authored in `cheatsheet.go` |
 | `example` | complete **one-line programs** for the everyday operations: pick a field, iterate, filter, map, sort, group, count per group, rebuild an object, walk nested paths, deduplicate, default a missing value, interpolate | authored in `cheatsheet.go` |
-| `builtin` | **every** function the engine accepts, with its arities and, where one is curated, its one-line description | `jqplay.Builtins()` + `builtinDocs` |
+| `builtin` | **every** function the engine accepts, with its arities, its call form and, where one is curated, its one-line description | `jqplay.Builtins()` + `builtinDocs` + `builtinUsage` |
+| `sample` | the **sample document** itself, one row per line, listed last and lifted to the top by the guide row above (#2482) | `jqplay.Sample(d)` |
 
 The builtin section is **generated, never hand-listed**. A second copy of the
 function list would drift from the engine's the first time gojq gained one, and
@@ -1184,6 +1209,57 @@ go, and the arity note still marks it as a function. #2382 also **grew
 (`ceil`, `walk`, `objects`, `setpath`, `strftime`, the type filters, …), which
 the completion popup gets for free.
 
+### The sheet says how to apply a row, not only that it exists
+
+#2482. The first version listed *what exists* — a title, a description, the
+program, a kind badge — and left everything about **using** it to be guessed:
+that `enter` inserts the row at all, that a builtin lands at the caret while an
+example replaces the program, what the `.users / .meta / .counts` document the
+examples are written against actually looks like, and what a given example
+yields. A reference whose own operation has to be discovered by trial is half a
+reference.
+
+Four things changed, all inside the one palette mode:
+
+- **A guide block leads the sheet.** Four `guide` rows, one short sentence
+  each: *how to apply a row — ⏎ inserts it, esc returns to the query line*,
+  then what `⏎` does on a syntax-or-example row and on a builtin row, then
+  *sample document*. One long paragraph was tried first and truncated in the
+  middle — which is exactly where the sentence about builtins lived. The two
+  insertion sentences are **derived from `Kind.Complete()`**, the same
+  predicate `insertPlayCheat` branches on, so the sheet cannot describe a rule
+  the code no longer follows. Guide rows carry no program (`Kind.Insertable()`
+  is false), so `enter` on one re-opens the sheet instead of writing anything.
+- **The sample document is in the sheet.** Its lines are `sample` rows, listed
+  **last** — with an empty query the sheet is browsed for its language, and a
+  yq sample is twenty rows nobody wants to page past — and the `sample
+  document` guide row re-opens the sheet with `CheatSampleTag` as the query,
+  which is what lifts them to the top (`ShowCheatsheetMsg.Query` →
+  `palette.OpenLockedWith`). A sample row renders the line verbatim but is
+  *matched* against the tag plus the line, so both the seeded query and a
+  search for a value in the document find it.
+- **Example rows show what they print.** `CheatEntry.Output` is filled at build
+  time by running the program against `Sample(d)` through the ordinary engine —
+  the same evaluation the sheet's test checks, so the two cannot disagree —
+  flattened to one line, and for jq compacted to JSON's canonical spelling
+  (`["ada","linus","grace"]`, not the pretty printer's). It is shown as
+  `program → output` only when **both** fit whole inside the chip width a row
+  already had: an output truncated to `{"counts":{"eng":2,…` teaches nothing
+  and costs the title the width it is read by. What survives the rule is the
+  set worth the room — `3`, `"page 1 of 3"`, `9007199254740993` beside *a
+  number keeps its exact spelling*, which is the claim demonstrating itself.
+- **Builtin rows show a call form.** `map(f)`, `select(cond)`, `test(regex)`
+  beside the `/1` arity note — curated in `builtinUsage` where a real parameter
+  name says more than a letter, generated from the arities otherwise, so a gojq
+  version with a new function gets one without anyone editing a list. The xmq
+  commands get the same treatment from `xmqUsage` (`select <xpath>`).
+
+Building the sheet now runs every example, so `Cheatsheet(d)` is **memoized per
+dialect** (`sync.OnceValue`, like `Builtins()`) instead of rebuilt on every
+palette open. The xmq sheet's outputs are **authored, never run**: its engine is
+an external binary that may not be installed, and building a reference must not
+depend on shelling out.
+
 ### Every example is a tested program
 
 `cheatsheet_test.go` evaluates **every authored program against a sample
@@ -1192,8 +1268,9 @@ error, a runtime error or an empty result. A typo in an example would otherwise
 sit in the reference forever, teaching the language wrong to exactly the reader
 who cannot tell — and prose about `map` is much easier to keep honest than a
 program is. The sample is a small `{users, meta, counts}` document in both
-languages, so a single list of programs serves both dialects; the placeholder
-line names it, so `.users[]` is not a field out of nowhere.
+languages, so a single list of programs serves both dialects; since #2482 the
+sheet **shows** it rather than only naming it, so `.users[]` is not a field out
+of nowhere.
 
 ### The dialect decides, and shows only one side
 
@@ -1223,6 +1300,11 @@ dialect:
 - a **builtin** row is half a program, so its **name lands at the caret**,
   exactly like accepting a completion. Replacing `.users | ` with `group_by`
   would be the wrong half.
+- a **guide** or **sample** row carries no language at all (`Kind.Insertable()`
+  is false), so `enter` re-opens the sheet instead of writing anything — on the
+  `sample document` row with the query that lists the document, on the others
+  unchanged. A heading is not an action, and closing the sheet on one would be
+  a dead end.
 
 Unlike the filter picker the sheet never *opens* a playground: a saved filter
 is written against the user's own documents and inserting one is a complete
@@ -1249,7 +1331,14 @@ Rows are matched over the **title plus its description**, because the sheet is
 browsed by what one wants to do ("sort an array by a field"), not by the name
 of a function one does not know yet. A query matching no label is retried
 against the **program**, ranked below every title hit, so half-remembering
-`from_entries` still finds the example that uses it.
+`from_entries` still finds the example that uses it. Neither the output nor the
+usage form is part of the matched text (#2482): they are what a row *shows*,
+and folding them into the ranking would make `["ada","linus","grace"]` a
+searchable phrase and pull unrelated rows up on a query for a name. A `sample`
+row is the one exception to "match the label": it renders the document's line
+verbatim but is matched against `CheatSampleTag` plus that line, because
+prefixing every one of them with "sample document" would eat the width the line
+itself needs.
 
 `ctrl+l` and `ctrl+g` stay **disjoint on purpose**: the library is where the
 user's *own* programs live, the sheet is where the *language* lives. Neither
@@ -1291,7 +1380,11 @@ unbound-command audit ledger (`cmd/ike/keybind_audit_test.go`, #2305).
   has none either: it is data the user creates, not a preference to configure —
   the only knob is a `MaxFilters` runaway guard nobody should ever feel.
 - **The cheatsheet is a reference, not a tutorial.** It says what a construct
-  does in one line and shows one program that uses it; it does not explain jq.
+  does in one line, shows one program that uses it and — since #2482 — what
+  that program prints against the sample; it does not explain jq. The output
+  chip is a *preview*, not a second result buffer: an output that does not fit
+  the row whole is left off rather than shown as a truncated fragment, and
+  nothing on a row is ever truncated to make room for one.
   Nor does it document `jq -r`, `--slurp` or `--arg`, which the playground does
   not have — a sheet listing what the tool cannot do would be worse than none.
 - **No second builtin list, ever.** The function rows are `Builtins()`; the

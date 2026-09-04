@@ -309,17 +309,48 @@ func xmqWordRune(c rune) bool {
 // command reference plus a few complete example lines. No builtin section —
 // the CLI has no machine-readable builtin list to mirror.
 func xmqCheatsheet() []CheatEntry {
+	// The outputs are authored rather than run (#2482): the engine is an
+	// external binary that may not be installed at all, and building the
+	// sheet must never depend on shelling out. They are what the command
+	// prints over cheatSampleXML, shortened to the one line a row holds.
 	out := []CheatEntry{
-		{Kind: CheatExample, Title: "keep the nodes matching an XPath", Program: "select //user[@id='2']", Doc: "select keeps only the matched nodes (and their ancestors)"},
-		{Kind: CheatExample, Title: "print the document as JSON", Program: "to-json", Doc: "the result buffer highlights per output language"},
-		{Kind: CheatExample, Title: "print the document as XML", Program: "to-xml", Doc: "without a to-* command xmq prints its own compact notation"},
-		{Kind: CheatExample, Title: "drop nodes and print the rest", Program: "delete //password to-xml", Doc: "commands chain left to right"},
-		{Kind: CheatExample, Title: "extract the text content", Program: "select //name to-text", Doc: "to-text prints the text nodes only"},
+		{Kind: CheatExample, Title: "keep the nodes matching an XPath", Program: "select //user[@id='2']", Doc: "select keeps only the matched nodes (and their ancestors)", Output: `report { users { user(id=2 active=false){ name = Grace } } }`},
+		{Kind: CheatExample, Title: "print the document as JSON", Program: "to-json", Doc: "the result buffer highlights per output language", Output: `{"report":{"meta":{"page":"1","total":"2"},"users":{ … }}}`},
+		{Kind: CheatExample, Title: "print the document as XML", Program: "to-xml", Doc: "without a to-* command xmq prints its own compact notation", Output: `<report><meta page="1" total="2"/><users> … </users></report>`},
+		{Kind: CheatExample, Title: "drop nodes and print the rest", Program: "delete //meta to-xml", Doc: "commands chain left to right", Output: `<report><users> … </users></report>`},
+		{Kind: CheatExample, Title: "extract the text content", Program: "select //name to-text", Doc: "to-text prints the text nodes only", Output: "Ada Grace"},
 	}
 	for _, c := range XMQCommands() {
-		out = append(out, CheatEntry{Kind: CheatBuiltin, Title: c.Name, Program: c.Name, Doc: c.Doc})
+		out = append(out, CheatEntry{
+			Kind:    CheatBuiltin,
+			Title:   c.Name,
+			Program: c.Name,
+			Doc:     c.Doc,
+			Usage:   xmqUsage(c.Name),
+		})
 	}
 	return out
+}
+
+// xmqUsage is the command's call form for the sheet's detail chip — what the
+// word is followed by on the query line. The commands that take an XPath or a
+// file argument say so; the rest are bare verbs.
+func xmqUsage(name string) string {
+	switch name {
+	case "select", "delete", "sort":
+		return name + " <xpath>"
+	case "replace", "substitute":
+		return name + " <xpath> --with-…"
+	case "transform":
+		return name + " <file.xslt>"
+	case "for-each":
+		return name + " <xpath> --shell='…'"
+	case "add-root":
+		return name + " <element>"
+	case "validate":
+		return name + " --xsd=<file>"
+	}
+	return name
 }
 
 // cheatSampleXML is the xmq sheet's example document — the users/meta shape

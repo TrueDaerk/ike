@@ -1,5 +1,37 @@
 # Log
 
+## 2026-09-04 (cheatsheet opens while writing a query, and explains how to apply rows, #2482)
+
+- **The chord was reachable; the *hint* was not.** `ctrl+g` on the playground's
+  query line always opened the language cheatsheet — with the completion popup
+  up too, since `playCompletionKey` never claimed the chord — but
+  `ctrl+g cheatsheet` sat seventh in the info row's hint tail, past the cut at
+  every width a playground is actually opened at. It now sits third, ahead of
+  the view toggle, which keeps its own `· query cut` marker for the case that
+  matters. The palette's `esc esc` doorway stays closed from the query line
+  (`esc` there closes the mode), so the named chord is what has to be visible.
+- **The sheet no longer opens under the completion popup.** `openPlayCheatsheet`
+  dismisses it: the popup is anchored on the caret and drawn above the palette,
+  so a sheet opened mid-query came up with a box of candidates over its first
+  rows. The popup is derived state, and the program and caret are untouched.
+- **Guide rows lead the sheet.** Four short `guide` rows say that `enter`
+  inserts the highlighted row, that a syntax or example row replaces the
+  program (`↑` brings it back) while a builtin lands at the caret, that `esc`
+  returns to the query line, and where the sample document is. The two
+  insertion sentences are *derived from* `CheatKind.Complete()` — the predicate
+  `insertPlayCheat` branches on — rather than written out a second time.
+- **The sample document is viewable from the sheet.** Its lines are `sample`
+  rows listed last; the `sample document` guide row re-opens the sheet with
+  `jqplay.CheatSampleTag` seeded as the query (`ShowCheatsheetMsg.Query` →
+  `palette.OpenLockedWith`), which lifts them to the top.
+- **Rows show what applying them does.** `CheatEntry.Output` is the program's
+  real output against `Sample(d)`, computed once per dialect at build time and
+  rendered as `program → output` whenever both fit whole inside the chip width
+  the row already had; `CheatEntry.Usage` is a builtin's call form (`map(f)`,
+  `select(cond)`) beside its `/1` arity. Building the sheet now evaluates, so
+  `Cheatsheet(d)` is memoized per dialect like `Builtins()`. The xmq sheet's
+  outputs are authored — its engine is a binary that may not be installed.
+
 ## 2026-09-03 (shared building blocks catalog, #2479)
 
 - **One catalog for the 0500 sweep.** `wiki/architecture/shared-building-blocks.md`

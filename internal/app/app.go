@@ -6697,7 +6697,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// json.jqCheatsheet / yaml.yqCheatsheet (ctrl+g in the playground,
 		// palette / Tools menu, #2382): the language cheatsheet — syntax,
 		// one-line examples and every builtin of one dialect.
-		m.openPlayCheatsheet(msg.Dialect)
+		m.openPlayCheatsheet(msg.Dialect, msg.Query)
 		return m, nil
 
 	case InsertCheatMsg:

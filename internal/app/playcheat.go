@@ -64,15 +64,29 @@ const playCheatPrefix = ']'
 // pipeline would crowd out the thing the row is searched by.
 const playCheatDetailWidth = 48
 
+// playCheatOutputWidth is the longest output a row shows beside its program
+// (#2482). It is a *threshold*, not a truncation: an output that does not fit
+// whole — beside a program that also fits whole, inside the same chip width a
+// row had before — is left off rather than shown as `{"counts":{"eng":2,…`,
+// which teaches nothing and costs the title the width it is read by. What is
+// left are the outputs worth the room — `3`, `["ada","linus","grace"]`,
+// `"page 1 of 3"` — the ones that answer "what does applying this row yield"
+// at a glance. Nothing on the row is ever truncated *by* the output.
+const playCheatOutputWidth = 30
+
 // playCheatFallbackPenalty is what a row scores when the query matched its
 // *program* rather than its title. Title matches are what the sheet is meant
 // to be read by ("sort an array by a field"), but someone who half-remembers
 // `group_by` should still find the example using it, one rank below.
 const playCheatFallbackPenalty = 1000
 
-// ShowCheatsheetMsg opens the language cheatsheet over one dialect.
+// ShowCheatsheetMsg opens the language cheatsheet over one dialect. Query
+// seeds the palette's own filter line (#2482): the sheet's "sample document"
+// guide row re-opens it with jqplay.CheatSampleTag, which is what lifts the
+// document's rows out of the tail they are listed in.
 type ShowCheatsheetMsg struct {
 	Dialect jqplay.Dialect
+	Query   string
 }
 
 // InsertCheatMsg puts a picked cheatsheet row onto the query line. AtCaret
@@ -103,11 +117,14 @@ func (c *playCheatMode) Prefix() rune { return playCheatPrefix }
 // with whatever dialect was just flipped in.
 func (c *playCheatMode) Refresh() { c.entries = jqplay.Cheatsheet(c.dialect) }
 
-// Placeholder implements palette.Mode. It names the dialect (#2039) and the
-// document the examples are written against, which is the one thing a reader
-// has to know before `.users[]` means anything.
+// Placeholder implements palette.Mode. It names the dialect (#2039), what
+// enter does with a row and where the sample document is (#2482) — the two
+// things a reader had to guess when the sheet only listed what exists. The
+// sheet's first two rows say the same in full; the placeholder is what is on
+// screen before the eye reaches them.
 func (c *playCheatMode) Placeholder() string {
-	return c.dialect.Name() + " cheatsheet — syntax, examples, builtins (examples use a sample .users / .meta / .counts document)…"
+	return c.dialect.Name() + " cheatsheet — search, ⏎ inserts the row into the query line, first row says how; “" +
+		jqplay.CheatSampleTag + "” shows the document the examples use…"
 }
 
 // Results implements palette.Mode. Rows are fuzzy-matched over the **label** —
@@ -121,12 +138,31 @@ func (c *playCheatMode) Placeholder() string {
 func (c *playCheatMode) Results(query string, _ palette.Context) []palette.Item {
 	var items []palette.Item
 	for _, e := range c.entries {
+		if e.Kind == jqplay.CheatSample {
+			// A sample row renders the document's line verbatim — prefixing
+			// every one of them with "sample document" would eat the width
+			// the line needs. It is matched against the tag *plus* the line
+			// instead, so the guide row's seeded query finds all of them and
+			// searching for a value in the document finds the line it is on.
+			// The spans are dropped with the prefix they were measured in.
+			res, ok := fuzzy.Match(query, jqplay.CheatSampleTag+" "+e.Title)
+			if !ok {
+				continue
+			}
+			items = append(items, palette.Item{
+				Title: e.Title,
+				Badge: e.Kind.String(),
+				Score: res.Score,
+				Msg:   ShowCheatsheetMsg{Dialect: c.dialect, Query: jqplay.CheatSampleTag},
+			})
+			continue
+		}
 		label := playCheatLabel(e)
 		it := palette.Item{
 			Title:  label,
 			Badge:  e.Kind.String(),
 			Detail: playCheatDetail(e),
-			Msg:    InsertCheatMsg{Dialect: c.dialect, Program: e.Program, AtCaret: !e.Kind.Complete()},
+			Msg:    playCheatMsg(c.dialect, e),
 		}
 		switch res, ok := fuzzy.Match(query, label); {
 		case ok:
@@ -143,6 +179,21 @@ func (c *playCheatMode) Results(query string, _ palette.Context) []palette.Item 
 	return items
 }
 
+// playCheatMsg is what enter on a row emits. A row carrying language emits the
+// insertion; the guide rows carry none, so they re-open the sheet instead —
+// the "sample document" one on the query that lists the document, the other on
+// nothing, which is the honest answer for a row that is a sentence to read.
+func playCheatMsg(d jqplay.Dialect, e jqplay.CheatEntry) tea.Msg {
+	if !e.Kind.Insertable() {
+		seed := ""
+		if e.Title == jqplay.CheatSampleTag {
+			seed = jqplay.CheatSampleTag
+		}
+		return ShowCheatsheetMsg{Dialect: d, Query: seed}
+	}
+	return InsertCheatMsg{Dialect: d, Program: e.Program, AtCaret: !e.Kind.Complete()}
+}
+
 // playCheatLabel is the row's searchable text: the title, and the description
 // after it where the two are not the same thing. A builtin's title is its
 // name, so `map — apply f to every element of the array` reads as one line and
@@ -154,14 +205,31 @@ func playCheatLabel(e jqplay.CheatEntry) string {
 	return e.Title + " — " + e.Doc
 }
 
-// playCheatDetail is the row's right-hand chip: the program for a syntax or
-// example row (what you came for), the arity note for a builtin (`/1 /2`, the
-// same notation the completion popup shows).
+// playCheatDetail is the row's right-hand chip: the program *and what it
+// prints* for a syntax or example row (#2482 — seeing `["ada","linus"]` beside
+// `.users | map(.name)` is the difference between knowing the function exists
+// and knowing what applying it does), and for a builtin its call form beside
+// the arity note (`map(f)  /1`, the same `/n` notation the completion popup
+// shows). A guide row's sentence is the whole row, so it carries no chip.
 func playCheatDetail(e jqplay.CheatEntry) string {
-	if !e.Kind.Complete() {
-		return e.Arity
+	if !e.Kind.Insertable() {
+		return ""
 	}
-	return jqplay.Preview(e.Program, playCheatDetailWidth)
+	if !e.Kind.Complete() {
+		switch {
+		case e.Usage == "":
+			return e.Arity
+		case e.Arity == "":
+			return e.Usage
+		}
+		return e.Usage + "  " + e.Arity
+	}
+	prog, out := jqplay.Preview(e.Program, playCheatDetailWidth), e.Output
+	if out == "" || len([]rune(out)) > playCheatOutputWidth ||
+		len([]rune(prog))+len([]rune(out))+3 > playCheatDetailWidth {
+		return prog
+	}
+	return prog + " → " + out
 }
 
 // openPlayCheatsheet fills and opens the sheet locked to the cheatsheet mode.
@@ -169,11 +237,21 @@ func playCheatDetail(e jqplay.CheatEntry) string {
 // commands their own — so the sheet is reachable from the palette and the
 // Tools menu as a reference even with no playground up, and inserting from it
 // then simply says there is no query line to insert into.
-func (m *Model) openPlayCheatsheet(d jqplay.Dialect) {
+func (m *Model) openPlayCheatsheet(d jqplay.Dialect, query string) {
+	// The completion popup is dismissed first (#2482): it is anchored on the
+	// caret and drawn above the palette, so a sheet opened *while writing a
+	// query* — the state the chord is most wanted in — came up with a box of
+	// candidates sitting on top of its first rows. Closing it costs nothing:
+	// the popup is derived state, re-opened by the next typed rune, and the
+	// program and the caret it was computed for are untouched.
+	if s := m.play; s != nil {
+		s.comp = nil
+	}
 	m.playCheat.dialect = d
 	m.playCheat.Refresh()
 	m.palette.SetSize(m.width, m.height)
-	m.palette.OpenLocked(palette.Context{ContextID: m.focusContext(), Root: "."}, playCheatPrefix)
+	cx := palette.Context{ContextID: m.focusContext(), Root: "."}
+	m.palette.OpenLockedWith(cx, playCheatPrefix, query)
 }
 
 // insertPlayCheat puts a picked row onto the query line of the open
