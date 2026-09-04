@@ -247,6 +247,15 @@ func (m *Model) renderTitleRow(pal *theme.Palette, innerW int) string {
 		chipStyle = lipgloss.NewStyle().Foreground(pal.Info).Bold(true)
 	}
 	chip := "scope: " + m.scopeLabel()
+	direct := m.customPage() != nil && m.filter == ""
+	if direct {
+		// A custom page writes on every change — installing a plugin or
+		// toggling a conceal family is judged by looking at it — while schema
+		// pages stage until ctrl+s. The chip says which model the page is on,
+		// so the unsaved counter (which belongs to the schema pages) cannot
+		// suggest a custom page's edits are still pending.
+		chip = "writes immediately"
+	}
 	count := ""
 	if m.Dirty() {
 		// The counter is the mouse's apply button (#1296).
@@ -271,6 +280,9 @@ func (m *Model) renderTitleRow(pal *theme.Palette, innerW int) string {
 		x += lipgloss.Width(count) + 3
 	}
 	m.chipSpan = span{start: x, end: x + lipgloss.Width(chip)}
+	if direct {
+		m.chipSpan = span{} // nothing to cycle on a page without a scope
+	}
 	right += chipStyle.Render(chip)
 	return lipgloss.NewStyle().MaxWidth(innerW).Render(left + gap + right)
 }

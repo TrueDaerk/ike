@@ -85,3 +85,26 @@ func TestRailHeaderNotRepeated(t *testing.T) {
 		t.Fatalf("CORE header rendered %d times, want 1:\n%s", n, m.View())
 	}
 }
+
+// TestCustomPageSaysItWritesImmediately: a custom page writes on every
+// change, so its title chip says so instead of offering a write scope, and
+// the chip is not a click target.
+func TestCustomPageSaysItWritesImmediately(t *testing.T) {
+	restoreConfig(t)
+	pages := append(testPages(), Page{Title: "Keymap", Custom: &stubPage{}})
+	m := New(pages, testOpts(t))
+	m.SetSize(100, 20)
+	m.Open()
+	m.cat = len(pages) - 1
+	v := stripANSI(m.View())
+	if !strings.Contains(v, "writes immediately") || strings.Contains(v, "scope:") {
+		t.Fatalf("custom page must say it writes immediately, not offer a scope:\n%s", v)
+	}
+	if m.chipSpan.end != 0 {
+		t.Fatal("the chip must not be clickable on a custom page")
+	}
+	m.cat = 0
+	if v := stripANSI(m.View()); !strings.Contains(v, "scope: auto") {
+		t.Fatalf("schema page keeps the scope chip:\n%s", v)
+	}
+}
