@@ -167,7 +167,7 @@ func TestSchemaRendersValuesAndLayer(t *testing.T) {
 	v := m.View()
 	// The value marker replaced the [x] affordance and the @-column (#1295):
 	// provenance moved into the detail column.
-	for _, want := range []string{"Interface", "Appearance", "Menu bar", "true ◉", "4 ‹›", "SETTINGS"} {
+	for _, want := range []string{"Interface", "Appearance", "Menu bar", " on", "SETTINGS"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("view missing %q:\n%s", want, v)
 		}

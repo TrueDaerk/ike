@@ -572,10 +572,13 @@ panel accepts typing. See [Single-Line Text Input](/architecture/text-input.md).
 
 ## Widget affordances (0420, #889)
 
-Every schema row announces how it edits before enter is pressed. The glyphs
-were unified into the wireframes' **value markers** in 0460 (#1295): `◉`
-toggle · `‹›` stepper · `▸` list · `⌨` capture · `≡` multi-value list · `✎`
-free text. The row still carries `←/→` cycling for enums (← on other rows
+Every schema row shows its value the way a reader would say it. The 0460
+type glyphs (`◉ ‹› ▸ ⌨ ≡ ✎`, #1295) were retired in the 2026-09 settings
+overhaul: they encoded the *type* of a row but read as state — `true ◉` and
+`false ◉` looked alike, and `▸` doubled as the focus caret. A bool renders
+`on` / `off`, a chord as a keycap `[cmd+k]`, an empty list or text as `—`, and
+only an enum keeps a glyph, the `▾` that says there are options behind it. The
+detail column's typed editor still announces how a value edits. The row still carries `←/→` cycling for enums (← on other rows
 returns to the rail, #533) and `+/−/←/→` stepping for ints, range-clamped.
 Range clamps are never silent: stepping or typing past Min/Max shows an
 `ℹ clamped to N` notice in the detail column.

@@ -130,26 +130,17 @@ func typeName(t EntryType) string {
 	}
 }
 
-// marker is the value marker rendered after a value in the settings column
-// (#1295): it announces which editor the detail column opens, so the row says
-// how it is edited before enter is pressed.
-//
-//	▸ list · ‹› stepper · ◉ toggle · ⌨ capture · ≡ multi-list · ✎ free text
+// marker is the value marker rendered after a value in the settings column.
+// The 0460 glyph set (◉ ‹› ▸ ⌨ ≡ ✎) encoded the *type* of every row, but read
+// as state: "true ◉" and "false ◉" looked the same, and ▸ doubled as the
+// focus caret. A value's type is not news — "on", "4" and "~/bin" say it
+// themselves — so only the one row whose value is a choice keeps a glyph: ▾,
+// the universal "there is a list here".
 func marker(t EntryType) string {
-	switch t {
-	case Bool:
-		return "◉"
-	case Int:
-		return "‹›"
-	case Enum:
-		return "▸"
-	case Chord:
-		return "⌨"
-	case List, IntList:
-		return "≡"
-	default: // String, Path
-		return "✎"
+	if t == Enum {
+		return " ▾"
 	}
+	return ""
 }
 
 // InsertAfter puts page directly behind the page titled after, so a custom

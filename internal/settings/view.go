@@ -761,22 +761,28 @@ func (m *Model) renderPageDetail(w, h int, wrap func(string, lipgloss.Style) []s
 	return out
 }
 
-// affordanceValue renders a value with its type's marker (#1295): the suffix
-// says what enter will open — ▸ a list, ‹› a stepper, ◉ a toggle, ⌨ a capture,
-// ≡ a multi-value list, ✎ free text — so beginners do not have to guess and
-// power users read it peripherally.
+// affordanceValue renders a row's value the way a reader would say it: a
+// toggle is "on" or "off", a chord sits in a keycap, an empty list or text
+// is "—", and an enum carries the ▾ that says there are options behind it.
 func affordanceValue(e Entry, val string) string {
-	if e.Type == List || e.Type == IntList {
-		val = strings.Trim(val, "[]")
-		val = strings.Join(splitList(val), ", ")
-		if val == "" {
-			val = "(empty)"
+	switch e.Type {
+	case Bool:
+		if val == "true" {
+			val = "on"
+		} else {
+			val = "off"
+		}
+	case List, IntList:
+		val = strings.Join(splitList(strings.Trim(val, "[]")), ", ")
+	case Chord:
+		if val != "" {
+			val = "[" + val + "]"
 		}
 	}
-	if e.Type == Chord && val == "" {
-		val = "(unbound)"
+	if val == "" {
+		val = "—"
 	}
-	return val + " " + marker(e.Type)
+	return val + marker(e.Type)
 }
 
 // customPagesNote names the custom pages the filter cannot search (the ones
