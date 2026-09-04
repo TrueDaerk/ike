@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Diff Viewer
-description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, an ignore-whitespace mode (w, persisted as diff.ignore_whitespace, #2170), side-by-side or unified rendering with per-side theme diff slots including bold/underlined intra-line emphasis and tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, hunk navigation (n/N, enter jumps the editor), mouse text selection with y/ctrl+c/cmd+c copy (#2070) painted as a per-frame overlay so a drag stays cheap (#2495), diff.files palette command, layout persistence."
+description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, an ignore-whitespace mode (w, persisted as diff.ignore_whitespace, #2170), side-by-side or unified rendering with per-side theme diff slots including bold/underlined intra-line emphasis and tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, hunk navigation (n/N, enter jumps the editor), mouse text selection with y/ctrl+c/cmd+c copy (#2070) painted as a per-frame overlay so a drag stays cheap (#2495), a hard 2 MiB/side input budget with a bounded Myers core (#2505), diff.files palette command, layout persistence."
 resource: internal/diff
 tags: [architecture, diff, pane, vcs]
 timestamp: 2026-09-04T00:00:00Z
@@ -37,6 +37,23 @@ a `RowSame` row (each side keeping its own **raw** text — the option changes
 what is compared, never what is shown), and intra-line refinement trims each
 span to its non-whitespace core, dropping the ones left empty. A hunk whose
 lines only moved sideways therefore disappears from the hunk list entirely.
+
+**Size budget** (#2505): the engine refuses oversized input instead of diffing
+it. A side over `MaxDiffBytes` (2 MiB, a constant — deliberately not a
+setting) makes `ComputeWith` return `Result{TooLarge: true}` with no rows;
+`TooLarge(left, right)` exposes the same check so openers
+(`openDiffTexts` in `internal/app`) can toast the refusal with the limit
+instead of opening an empty pane. Below the budget the Myers core itself is
+bounded: each D-round snapshots only its reachable diagonal band (`-d..d`,
+`bandSnapshot`) rather than the full diagonal array — the full-width copies
+made backtrack memory O(D·(N+M)), which turned two ~600 KiB divergent
+responses into ~25 GiB of allocation and an OOM kill — and rounds past
+`maxMyersRounds` (1024) abandon the optimal alignment for a plain
+delete-all/insert-all script over the trimmed middle, which `buildRows` still
+pairs positionally into changed rows. Intra-line refinement additionally skips
+line pairs over 4 KiB (`maxRefineBytes`) *before* the `[]rune` conversion, so
+a multi-megabyte single line (minified JSON) never allocates a rune per byte
+just to learn it is over the 400-rune cap anyway.
 
 ## Pane model (`model.go`)
 
