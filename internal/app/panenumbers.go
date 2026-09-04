@@ -31,6 +31,19 @@ import (
 // it stay unnumbered and are reached with the switcher or the mouse.
 const paneNumberMax = 9
 
+// The digit chords join the terminal allowlist (#805, #2493). A badge in a
+// pane's title bar promises that ctrl+N goes there from wherever the keyboard
+// currently is, and a focused terminal used to forward them to the shell
+// instead: no focus change, and not even the out-of-range notification #275
+// requires. ctrl+digit is not a sequence shells or common TUI children rely
+// on, so the IDE takes it here like the other navigation chords. Registered in
+// a loop so the allowlist cannot drift from the commands this file mints.
+func init() {
+	for i := 1; i <= paneNumberMax; i++ {
+		terminalGlobalCommands["pane.focus"+strconv.Itoa(i)] = true
+	}
+}
+
 // paneNumberHintTTL is how long a pane switch keeps the which-pane hint up in
 // focus-only mode — long enough to read the badges after a switcher step,
 // short enough that the chrome is quiet again by the next glance.

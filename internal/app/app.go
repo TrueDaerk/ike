@@ -3014,12 +3014,19 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	projPeek.SetOpen(openInMemory)
 	projPeek.SetGitCache(projGit)
 	mru.SetProjects(func() []palette.Item {
-		cur, _ := os.Getwd()
+		cur := currentProjectRoot()
 		var items []palette.Item
+		// The MRU rank (#2489) counts the entries this column lists, in
+		// history order: it is the digit of the ctrl+alt+N chord that
+		// switches there, and stays with the project however the column's
+		// frecency ranking or a typed query reorders the rows.
+		rank := 0
 		for _, e := range project.History(config.Get()) {
-			if e.Path == cur {
+			if cur != "" && filepath.Clean(e.Path) == cur {
 				continue
 			}
+			hint := project.MRUHint(rank)
+			rank++
 			it := palette.Item{
 				Title: e.Name,
 				Msg:   project.PickedMsg{Path: e.Path},
@@ -3030,6 +3037,8 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 				// travels with the item.
 				Key:  frecency.Key(e.Path),
 				Rank: projFrec.Score(frecency.Key(e.Path)),
+				// The project's MRU digit (#2489), "" past the ninth.
+				Hint: hint,
 			}
 			if openInMemory(e.Path) {
 				it.Badge = "●"
@@ -3456,21 +3465,8 @@ var terminalGlobalCommands = map[string]bool{
 	// #2150: a terminal pane is resized by keyboard like any other, and the
 	// shell never meaningfully sees the mode chord.
 	"pane.resizeMode": true,
-	// pane.focus1…9 join it in the init below.
-}
-
-// The focus-by-number chords (#2493) are global for a reason: the badge in a
-// pane's title bar promises that ctrl+N goes there from wherever the keyboard
-// currently is. A focused terminal used to forward them to the shell, so the
-// chord died silently — no focus change and not even the out-of-range
-// notification, which #275 forbids. ctrl+digit is not a sequence shells or
-// common TUI children rely on, so the IDE takes it here like the other
-// navigation chords. Registered in a loop so the allowlist cannot drift from
-// the commands panenumbers.go mints.
-func init() {
-	for i := 1; i <= paneNumberMax; i++ {
-		terminalGlobalCommands["pane.focus"+strconv.Itoa(i)] = true
-	}
+	// The digit families of panenumbers.go (#2493) and project_mru.go (#2489)
+	// join from their own files' init.
 }
 
 // terminalShellChords are chords that stay with the shell even when they
@@ -6800,6 +6796,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// project.switchLast (#2398): resume the MRU background workspace as a
 		// normal switch; a notification when there is no previous project.
 		return m.handleSwitchLastProject()
+
+	case SwitchProjectMRUMsg:
+		// project.switchMRU1…9 (#2489): the digit chords onto the recent
+		// projects, switchLast generalized past the last one.
+		return m.handleSwitchMRUProject(msg.Index)
 
 	case project.CloseProjectMsg:
 		// project.close (#1355): close the current project and resume the MRU

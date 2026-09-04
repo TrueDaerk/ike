@@ -203,6 +203,15 @@ bring their own.
 | Find in Path | `project.findInPath` | `cmd+shift+f` | — | everywhere |
 | Go to File | `project.goToFile` | `cmd+shift+o` | — | everywhere |
 | Replace in Path | `project.replaceInPath` | `cmd+shift+r` | — | everywhere |
+| Switch to Recent Project 1 | `project.switchMRU1` | `ctrl+alt+1` | — | everywhere |
+| Switch to Recent Project 2 | `project.switchMRU2` | `ctrl+alt+2` | — | everywhere |
+| Switch to Recent Project 3 | `project.switchMRU3` | `ctrl+alt+3` | — | everywhere |
+| Switch to Recent Project 4 | `project.switchMRU4` | `ctrl+alt+4` | — | everywhere |
+| Switch to Recent Project 5 | `project.switchMRU5` | `ctrl+alt+5` | — | everywhere |
+| Switch to Recent Project 6 | `project.switchMRU6` | `ctrl+alt+6` | — | everywhere |
+| Switch to Recent Project 7 | `project.switchMRU7` | `ctrl+alt+7` | — | everywhere |
+| Switch to Recent Project 8 | `project.switchMRU8` | `ctrl+alt+8` | — | everywhere |
+| Switch to Recent Project 9 | `project.switchMRU9` | `ctrl+alt+9` | — | everywhere |
 | New Python Environment… | `python.newEnvironment` | — | — | everywhere |
 | Browse SSH Host (SFTP)… | `remote.browse` | — | — | everywhere |
 | Edit Run Configuration… | `run.editConfig` | — | — | everywhere |
