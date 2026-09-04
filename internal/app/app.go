@@ -6121,6 +6121,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// verifies fixes against the previous run's failure classes.
 		return m, m.runLSPDoctor()
 
+	case LSPDoctorCopyMsg:
+		// lsp.doctor.copy (cmd+c in the LSP Doctor, #2487): the whole
+		// report as plain text, with a short notice while there is
+		// nothing to copy yet.
+		return m, m.copyLSPDoctorReport()
+
+	case lspdoctor.CopyMsg:
+		// The pane's own 'c' (#2487) — the host owns the clipboard seam
+		// and the confirmation toast, like every other pane copy.
+		return m.copyPanelRow(msg.Text, msg.What)
+
 	case lspdoctor.ResultsMsg:
 		// A finished check run (#2164): store it and compute the
 		// resolved/unresolved verdicts.

@@ -251,6 +251,9 @@ var reachableAlternatives = map[string]string{
 	// additionally keeps its own "y" for the mouse selection.
 	"debug.copy":  "palette",
 	"issues.copy": "issues pane \"y\" / palette",
+	// #2487: the LSP Doctor's copy joins that family — same reasoning, and
+	// the pane's own "c" is the escape next to the palette.
+	"lsp.doctor.copy": "LSP Doctor pane \"c\" / palette",
 }
 
 // StatusMatrix builds the ledger over the default table. commandExists
