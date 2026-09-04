@@ -290,6 +290,11 @@ type Model struct {
 	// constructed with the model (so save epochs record from the start) but
 	// only started by main.go via StartWatcher, keeping tests watcher-free.
 	watcher *watch.Service
+	// diffWatched is the set of paths the open file-vs-file diffs currently
+	// hold a per-path watch for (#2506, diffwatch.go). Reconciled once per
+	// settled Update pass against the panes actually open, so a closed or
+	// retargeted diff never leaks its registration.
+	diffWatched map[string]bool
 	// menu is the menu bar (Roadmap 0160, #90), rendered above the panes when
 	// ui.menu_bar is enabled.
 	menu *menu.Model
@@ -4136,6 +4141,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// the pass that closed it — the event-driven replacement for the old 2s
 	// retry tick.
 	mm.drainTermCheck()
+	// The per-path watches the open file diffs need (#2506) settle here too:
+	// opening, closing, retargeting and restoring a diff all land in this
+	// pass, and a single reconcile against the panes that are actually open
+	// beats hooking every one of those sites.
+	mm.syncDiffWatches()
 	return mm, cmd
 }
 

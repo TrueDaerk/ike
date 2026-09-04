@@ -152,3 +152,13 @@ func (m *Model) recomputeMatches() {
 // searchLine renders the prompt row — the shared shape (#2461): the slash
 // prefix, the query with its text cursor while typing, and the match counter.
 func (m Model) searchLine() string { return m.search.Line() }
+
+// footerLine renders the pane's last row: the search prompt while one is open
+// — it holds the keyboard, so it outranks everything — else the live-reload
+// notice (#2506), dimmed like the collapsed-context separators.
+func (m Model) footerLine() string {
+	if m.search != nil {
+		return m.searchLine()
+	}
+	return m.styles().gutter.Render(m.notice)
+}

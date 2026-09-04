@@ -87,6 +87,14 @@ type Service struct {
 	w       *fsnotify.Watcher
 	root    string
 
+	// Per-path watches (#2506, extra.go): files outside the recursive root a
+	// consumer asked for by name, reference-counted, plus the fsnotify
+	// registrations currently backing them (the file itself, or its parent
+	// directory while the file is missing).
+	extras     map[string]int
+	extraFiles map[string]bool
+	extraDirs  map[string]bool
+
 	debounce time.Duration
 	maxWait  time.Duration    // flush-deferral ceiling (#2163); tests shrink it
 	now      func() time.Time // injectable clock for tests
@@ -117,13 +125,16 @@ type fileStamp struct {
 // host.Send, which is a no-op until the program runs).
 func New(send func(tea.Msg)) *Service {
 	return &Service{
-		send:     send,
-		epochs:   map[string]time.Time{},
-		pending:  map[string]Kind{},
-		tracked:  map[string]fileStamp{},
-		debounce: debounceWindow,
-		maxWait:  maxDebounceWait,
-		now:      time.Now,
+		send:       send,
+		epochs:     map[string]time.Time{},
+		pending:    map[string]Kind{},
+		tracked:    map[string]fileStamp{},
+		extras:     map[string]int{},
+		extraFiles: map[string]bool{},
+		extraDirs:  map[string]bool{},
+		debounce:   debounceWindow,
+		maxWait:    maxDebounceWait,
+		now:        time.Now,
 	}
 }
 
@@ -259,6 +270,10 @@ func (s *Service) Start(root string) error {
 	}
 	s.watchGitDir(root)
 	s.watchConfigDir(root)
+	// The per-path watches (#2506) survive a restart — a project switch must
+	// not silently stop reporting the files an open diff is following — so
+	// they re-register on the fresh watcher.
+	s.armExtras()
 	go s.loop(w)
 	return nil
 }
@@ -321,6 +336,9 @@ func (s *Service) Stop() {
 		s.timer.Stop()
 		s.timer = nil
 	}
+	// The closed watcher holds no registrations; the per-path *requests*
+	// (s.extras) stay, so a later Start re-arms them (#2506).
+	s.extraFiles, s.extraDirs = map[string]bool{}, map[string]bool{}
 	s.mu.Unlock()
 	if w != nil {
 		_ = w.Close()
@@ -384,6 +402,13 @@ func (s *Service) ingest(ev fsnotify.Event) {
 			(ev.Has(fsnotify.Write) || ev.Has(fsnotify.Create) || ev.Has(fsnotify.Remove) || ev.Has(fsnotify.Rename)) {
 			s.note(path, ConfigChanged)
 		}
+		return
+	}
+	if !covered(s.rootDir(), path) {
+		// Not something the recursive root walk registered: either a
+		// per-path watch (#2506) or a neighbour caught by one of its
+		// directory fallbacks. ingestExtra decides and filters.
+		s.ingestExtra(ev, path)
 		return
 	}
 	switch {
@@ -575,6 +600,9 @@ func (s *Service) flush() {
 		}
 	}
 	s.mu.Unlock()
+	// A per-path watch whose file was just replaced or re-created re-arms
+	// here (#2506): the flush is the one point every event kind passes.
+	s.armExtras()
 	if send == nil || len(batch) == 0 {
 		return
 	}
