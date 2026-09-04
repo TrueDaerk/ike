@@ -145,6 +145,15 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Switch tab (recent tabs) | `alt+e` | `alt+e` | `editor.tab.picker` |
 | Switch to last project | `cmd+shift+e` | `ctrl+shift+e` | `project.switchLast` |
 | Switch to last project | `ctrl+shift+e` | `ctrl+shift+e` | `project.switchLast` |
+| Switch to recent project 1 | `ctrl+alt+1` | `ctrl+alt+1` | `project.switchMRU1` |
+| Switch to recent project 2 | `ctrl+alt+2` | `ctrl+alt+2` | `project.switchMRU2` |
+| Switch to recent project 3 | `ctrl+alt+3` | `ctrl+alt+3` | `project.switchMRU3` |
+| Switch to recent project 4 | `ctrl+alt+4` | `ctrl+alt+4` | `project.switchMRU4` |
+| Switch to recent project 5 | `ctrl+alt+5` | `ctrl+alt+5` | `project.switchMRU5` |
+| Switch to recent project 6 | `ctrl+alt+6` | `ctrl+alt+6` | `project.switchMRU6` |
+| Switch to recent project 7 | `ctrl+alt+7` | `ctrl+alt+7` | `project.switchMRU7` |
+| Switch to recent project 8 | `ctrl+alt+8` | `ctrl+alt+8` | `project.switchMRU8` |
+| Switch to recent project 9 | `ctrl+alt+9` | `ctrl+alt+9` | `project.switchMRU9` |
 | TODO index | `cmd+6` | `ctrl+6` | `todo.list` |
 | Test results tool window | `cmd+4` | `ctrl+4` | `tests.toggle` |
 | Toggle VCS tool window | `cmd+9` | `ctrl+9` | `vcs.panel` |

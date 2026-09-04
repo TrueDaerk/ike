@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked and frecency-boosted, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-09-03T12:00:00Z
+timestamp: 2026-09-04T12:00:00Z
 ---
 
 # Command Palette
@@ -115,6 +115,14 @@ last row is swallowed. Any other mode (or a non-empty query) keeps the digit
 as query text. Rows advertise their number via `Item.Hint`, a dim leading
 column rendered before the title. Only the intention popup opts in — see
 [intention actions](./intention-actions.md).
+
+`Item.Hint` is *not* limited to that fast path. Since #2489 the project lists
+use it for a number the palette itself does not handle: the recent-projects
+rows carry their MRU digit, the `ctrl+alt+N` chord that switches there
+(see [project switching](./project-switching.md)). The side column renders the
+hint the same way the main list does — it silently dropped it before — and
+because those numbers name a global chord rather than a row position, they
+stay with their project while a query re-sorts the list.
 
 ## Command mode (`:`)
 

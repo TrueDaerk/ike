@@ -1177,15 +1177,19 @@ const timeSepW = 2
 // column (#1114): below it the time drops so the name stays readable.
 const minRowTitleW = 8
 
-// sideRow renders one left-column line: marker + highlighted title, an
-// optional Badge (#820, dim accent), the right-aligned Time column (#1114)
-// and the right-pinned "✕" for rows with an Aux action, truncated to the
-// column width. The narrow side column drops the time before the name.
+// sideRow renders one left-column line: marker + optional Hint + highlighted
+// title, an optional Badge (#820, dim accent), the right-aligned Time column
+// (#1114) and the right-pinned "✕" for rows with an Aux action, truncated to
+// the column width. The narrow side column drops the time before the name.
 // focused dims the selection marker when the column lacks the focus (#1532).
+// The Hint column (#2023, in this column since #2489: the Recent Projects
+// entries carry their project.switchMRU digit) is rendered like the main
+// list's, in front of the title.
 func (p *Palette) sideRow(it Item, selected, focused bool, width int) string {
 	const markerW = 2
 	marker := p.rowMarker(selected, focused)
 	badge, badgeW := p.badgeView(it)
+	hint, hintW := p.hintView(it)
 	timeStr, timeW := p.timeView(it)
 	auxW := 0
 	if it.Aux != nil {
@@ -1201,7 +1205,7 @@ func (p *Palette) sideRow(it Item, selected, focused bool, width int) string {
 	if rightW > 0 {
 		sep = 1
 	}
-	titleMax := width - markerW - badgeW - rightW - sep
+	titleMax := width - markerW - hintW - badgeW - rightW - sep
 	if timeW > 0 && titleMax < minRowTitleW {
 		// Too narrow for both (#1114): the time drops, the name stays.
 		timeStr, timeW = "", 0
@@ -1210,12 +1214,12 @@ func (p *Palette) sideRow(it Item, selected, focused bool, width int) string {
 		if rightW > 0 {
 			sep = 1
 		}
-		titleMax = width - markerW - badgeW - rightW - sep
+		titleMax = width - markerW - hintW - badgeW - rightW - sep
 	}
 	title, titleW := highlight(it.Title, it.Spans, p.accentColor(), titleMax)
-	line := marker + title + badge
+	line := marker + hint + title + badge
 	if timeW > 0 || it.Aux != nil {
-		gap := width - markerW - titleW - badgeW - rightW
+		gap := width - markerW - hintW - titleW - badgeW - rightW
 		if gap < 1 {
 			gap = 1
 		}

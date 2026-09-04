@@ -136,3 +136,23 @@ func TestDigitHintRendered(t *testing.T) {
 		t.Fatalf("hint missing from row %q", plain)
 	}
 }
+
+// TestSideRowHintRendered (#2489): the side column renders an Item.Hint the
+// same way the main list does — the Recent Projects entries carry their
+// project.switchMRU digit there, and being visible is the whole point.
+func TestSideRowHintRendered(t *testing.T) {
+	p := New(Config{}, stubMode{prefix: '!'})
+	p.SetSize(80, 24)
+	row := p.sideRow(Item{Title: "ike", Hint: "2", Time: "5m ago"}, false, false, 30)
+	plain := ansi.Strip(row)
+	if !strings.Contains(plain, "2 ike") {
+		t.Fatalf("hint missing from side row %q", plain)
+	}
+	if !strings.Contains(plain, "5m ago") {
+		t.Fatalf("the hint must not crowd out the time column: %q", plain)
+	}
+	// The hint costs width like any other column: a hinted row still fits.
+	if w := ansi.StringWidth(plain); w > 30 {
+		t.Fatalf("side row width = %d, want at most 30: %q", w, plain)
+	}
+}

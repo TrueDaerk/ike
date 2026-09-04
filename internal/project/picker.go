@@ -155,26 +155,38 @@ func (m *PickerMode) Placeholder() string {
 // only answers "already in …" on top. Without it the first row is the
 // *previous* project, and the switch chord plus enter bounces between the two
 // projects you alternate between.
+//
+// Each of the first nine remaining entries carries its MRU digit as the row's
+// Hint (#2489): the `ctrl+alt+N` chord that switches there without the picker
+// at all. The digit is the entry's rank in the history, not its row number,
+// so a typed query re-sorting the list never renumbers a project.
 func (m *PickerMode) Results(query string, cx palette.Context) []palette.Item {
 	type scored struct {
 		entry Entry
 		score int
 		spans []int
+		hint  string
 	}
 	var out []scored
 	cur := m.currentRoot(cx)
+	// The MRU digit (#2489) is the entry's rank in the *unfiltered* list, not
+	// its row number: ctrl+alt+4 always means the same project, whatever the
+	// query sorted to the top.
+	rank := 0
 	for _, e := range m.history() {
 		if cur != "" && filepath.Clean(e.Path) == cur {
 			continue
 		}
+		hint := MRUHint(rank)
+		rank++
 		if r, ok := fuzzy.Match(query, e.Name); ok {
-			out = append(out, scored{entry: e, score: r.Score, spans: r.Positions})
+			out = append(out, scored{entry: e, score: r.Score, spans: r.Positions, hint: hint})
 			continue
 		}
 		// Fall back to the path so "code/ike" style queries hit too; spans
 		// index the name (the rendered title), so a path match highlights nothing.
 		if r, ok := fuzzy.Match(query, e.Path); ok {
-			out = append(out, scored{entry: e, score: r.Score})
+			out = append(out, scored{entry: e, score: r.Score, hint: hint})
 		}
 	}
 	// Stable on score only: equal scores keep the history's newest-first order.
@@ -196,6 +208,10 @@ func (m *PickerMode) Results(query string, cx palette.Context) []palette.Item {
 			// The last-opened time (#842), right-aligned in its own column
 			// since #1114; "" for legacy entries without a timestamp.
 			Time: RelTime(s.entry.LastOpened, now),
+			// The project's MRU digit (#2489): the ctrl+alt+N chord that
+			// switches straight here, so the numbers are learned from the
+			// list one already looks at. "" past the ninth entry.
+			Hint: s.hint,
 		}
 		if m.open != nil && m.open(s.entry.Path) {
 			// Loaded in memory (#820): dot badge + close-in-place aux action,

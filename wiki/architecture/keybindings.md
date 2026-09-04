@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts plus language-scoped editor bindings, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-09-04T00:00:00Z
+timestamp: 2026-09-04T12:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -1138,6 +1138,28 @@ none open the chord stays with the child, which may own its own find. `ctrl+g`
 is deliberately *not* reserved there: it is a real control character the shell
 expects.
 
+## The digit chord families (#2489)
+
+Four families now share the number row, one modifier each, and the split is
+what makes them all fit:
+
+| chords | family | notes |
+|---|---|---|
+| `cmd+0` … `cmd+9` | tool windows | explorer, pins, structure, run, debug, TODO, problems, VCS, dependencies |
+| `alt+1` … `alt+9` | editor tabs (`editor.tab.selectN`) | |
+| `ctrl+1` … `ctrl+9` | pane numbers (`pane.focusN`, #2407) | **macOS only** — off macOS the Cmd→Ctrl fold puts the tool windows here, so `pane.focusByIndex` is the doorway there |
+| `ctrl+alt+1` … `ctrl+alt+9` | recent projects (`project.switchMRUN`, #2489) | the only digit family free on *both* platforms |
+
+`project.switchMRU1…9` therefore ships one table (`jetbrainsRows`), not a
+platform pair: the chords are spelled with a literal Ctrl, so no fold moves
+them, and the only `cmd+alt+digit` default — `cmd+alt+0`, the time report
+(#2426) — folds onto `ctrl+alt+0`, which is not one of the nine. Like the
+other project entry points they sit on the terminal global-command allowlist
+(`terminalGlobalCommands`), so the hop also works from a focused shell; the
+digits themselves are learned from the picker and the Recent Projects column,
+which render each project's number in front of its name. See
+[Project Switching](/architecture/project-switching.md).
+
 ## Go to Line (#2486)
 
 Telemetry recorded `cmd+l` pressed in an editor with status `unbound`: it is
@@ -1332,6 +1354,15 @@ JetBrains is:
 | `project.replaceInPath` | `cmd+shift+r` | fragile | `palette` | live via palette |
 | `project.switch` | `cmd+shift+p` | fragile | `palette` | live via palette |
 | `project.switchLast` | `cmd+shift+e` | fragile | `palette` | live via palette |
+| `project.switchMRU1` | `ctrl+alt+1` | fragile | `palette (or the cmd+e recent-projects column)` | live via palette (or the cmd+e recent-projects column) |
+| `project.switchMRU2` | `ctrl+alt+2` | fragile | `palette (or the cmd+e recent-projects column)` | live via palette (or the cmd+e recent-projects column) |
+| `project.switchMRU3` | `ctrl+alt+3` | fragile | `palette (or the cmd+e recent-projects column)` | live via palette (or the cmd+e recent-projects column) |
+| `project.switchMRU4` | `ctrl+alt+4` | fragile | `palette (or the cmd+e recent-projects column)` | live via palette (or the cmd+e recent-projects column) |
+| `project.switchMRU5` | `ctrl+alt+5` | fragile | `palette (or the cmd+e recent-projects column)` | live via palette (or the cmd+e recent-projects column) |
+| `project.switchMRU6` | `ctrl+alt+6` | fragile | `palette (or the cmd+e recent-projects column)` | live via palette (or the cmd+e recent-projects column) |
+| `project.switchMRU7` | `ctrl+alt+7` | fragile | `palette (or the cmd+e recent-projects column)` | live via palette (or the cmd+e recent-projects column) |
+| `project.switchMRU8` | `ctrl+alt+8` | fragile | `palette (or the cmd+e recent-projects column)` | live via palette (or the cmd+e recent-projects column) |
+| `project.switchMRU9` | `ctrl+alt+9` | fragile | `palette (or the cmd+e recent-projects column)` | live via palette (or the cmd+e recent-projects column) |
 | `run.file` | `shift+f10` | delivered | `—` | live |
 | `run.rerun` | `cmd+f5` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `run.select` | `alt+shift+f10` | fragile | `palette / Run menu` | live via palette / Run menu |
@@ -1363,4 +1394,5 @@ JetBrains is:
 | `window.hideAllTools` | `cmd+shift+f12` | fragile | `palette` | live via palette |
 | `window.layouts` | `alt+shift+f12` | fragile | `palette` | live via palette |
 | `window.restoreLayout` | `shift+f12` | delivered | `—` | live |
+| `xml.xmqPlayground` | `ctrl+alt+x` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `yaml.yqPlayground` | `ctrl+alt+y` | fragile | `palette / Tools menu` | live via palette / Tools menu |
