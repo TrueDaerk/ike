@@ -215,7 +215,7 @@ func (t *ToolchainPage) languages() []lang.Language {
 // create-environment entry point lives in the list, not behind a letter).
 type tcRow struct {
 	lang   lang.Language
-	action string // "" = language row; "newenv" = create environment
+	action string // "" = language row; "newenv" = create environment; "acceptall" = take every detection; "uvinstall" = install a Python via uv
 	// header is a non-selectable group caption (#1299): "configured",
 	// "detected · not configured", "not installed · 12  (z)".
 	header string
@@ -232,6 +232,10 @@ func (t *ToolchainPage) rows() []tcRow {
 		byState[st] = append(byState[st], l)
 	}
 	var out []tcRow
+	if len(t.detectedUnconfigured()) > 0 {
+		// The first run in one row: every detected interpreter at once.
+		out = append(out, tcRow{action: "acceptall"})
+	}
 	for _, st := range []tcState{tcConfigured, tcDetected, tcMissing} {
 		langs := byState[st]
 		if len(langs) == 0 {
@@ -249,7 +253,7 @@ func (t *ToolchainPage) rows() []tcRow {
 		for _, l := range langs {
 			out = append(out, tcRow{lang: l})
 			if l.ID == "python" {
-				out = append(out, tcRow{action: "newenv"})
+				out = append(out, tcRow{action: "newenv"}, tcRow{action: "uvinstall"})
 			}
 		}
 	}
@@ -389,13 +393,9 @@ func (t *ToolchainPage) update(key tea.KeyPressMsg) tea.Cmd {
 		t.sel = clamp(t.sel, 0, len(t.rows())-1)
 		t.skipHeader("down")
 		return nil
-	case "a":
-		// Take every detected toolchain at once — the first run in one key.
-		return t.acceptAll()
 	case "enter":
-		if rows := t.rows(); t.sel >= 0 && t.sel < len(rows) && rows[t.sel].action == "newenv" {
-			t.pushWizard()
-			return nil
+		if rows := t.rows(); t.sel >= 0 && t.sel < len(rows) && rows[t.sel].action != "" {
+			return t.runAction(rows[t.sel].action)
 		}
 		if l, ok := t.current(); ok {
 			return t.openPicker(l)
@@ -416,8 +416,8 @@ func (t *ToolchainPage) update(key tea.KeyPressMsg) tea.Cmd {
 		if l, ok := t.current(); ok && l.ID == "python" {
 			t.pushWizard()
 		}
-	case "i":
-		// List the effective interpreter's installed packages (#569) plus
+	case "m":
+		// Manage the effective interpreter's installed packages (#569) plus
 		// the available upgrades for the latest column (#571).
 		if l, ok := t.current(); ok && l.ID == "python" {
 			if path, _ := t.interpreter(l.ID); path != "" {
@@ -429,22 +429,38 @@ func (t *ToolchainPage) update(key tea.KeyPressMsg) tea.Cmd {
 				)
 			}
 		}
-	case "u":
-		// Install a managed Python via uv (#132) — the picker is a sub-panel
-		// now (#892).
-		if l, ok := t.current(); ok && l.ID == "python" && t.host != nil {
-			if t.look("uv") == "" {
-				t.envState = "✗ uv not found on PATH"
-				return nil
-			}
-			versions := uvInstallable(t.run("uv", "python", "list"))
-			if len(versions) == 0 {
-				t.envState = "✗ uv offers no downloadable versions"
-				return nil
-			}
-			t.host.Push(newUvPicker(t, t.host, versions))
-		}
 	}
+	return nil
+}
+
+// runAction runs one of the list's action rows (enter or a click on it).
+func (t *ToolchainPage) runAction(action string) tea.Cmd {
+	switch action {
+	case "newenv":
+		t.pushWizard()
+	case "acceptall":
+		return t.acceptAll()
+	case "uvinstall":
+		return t.openUvPicker()
+	}
+	return nil
+}
+
+// openUvPicker pushes the uv Python-install picker (#132, #892).
+func (t *ToolchainPage) openUvPicker() tea.Cmd {
+	if t.host == nil {
+		return nil
+	}
+	if t.look("uv") == "" {
+		t.envState = "✗ uv not found on PATH"
+		return nil
+	}
+	versions := uvInstallable(t.run("uv", "python", "list"))
+	if len(versions) == 0 {
+		t.envState = "✗ uv offers no downloadable versions"
+		return nil
+	}
+	t.host.Push(newUvPicker(t, t.host, versions))
 	return nil
 }
 
@@ -465,7 +481,7 @@ func (t *ToolchainPage) updatePkgView(key tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	switch key.String() {
-	case "esc", "i", "q":
+	case "esc", "m", "q":
 		t.pkgViewing = false
 	case "+":
 		if t.pkgBusy == "" {
@@ -476,7 +492,7 @@ func (t *ToolchainPage) updatePkgView(key tea.KeyPressMsg) tea.Cmd {
 		if t.pkgBusy == "" && t.selectedPkg() != "" {
 			t.pkgMode = "confirm"
 		}
-	case "u":
+	case "U":
 		if t.pkgBusy == "" {
 			if name := t.selectedPkg(); name != "" {
 				return t.pkgAction(pkgUpgrade, name)
@@ -740,7 +756,7 @@ func (t *ToolchainPage) renderList(w, h int) string {
 		case r.header != "":
 			list = append(list, clip.Render(sec.Faint(true).Render(" "+r.header)))
 		case r.action != "":
-			list = append(list, clip.Render(t.renderAction(i == t.sel)))
+			list = append(list, clip.Render(t.renderAction(r.action, i == t.sel)))
 		default:
 			list = append(list, clip.Render(t.renderLang(r.lang, i == t.sel, w)))
 			// The package view is the one flow that still expands inline; the
@@ -826,9 +842,8 @@ func (t *ToolchainPage) Click(x, y int) tea.Cmd {
 		return nil // group captions are structure, not targets
 	}
 	if idx == t.sel {
-		if rows := t.rows(); rows[idx].action == "newenv" {
-			t.pushWizard()
-			return nil
+		if rows := t.rows(); rows[idx].action != "" {
+			return t.runAction(rows[idx].action)
 		}
 		if l, hit := t.current(); hit {
 			return t.openPicker(l)
@@ -863,8 +878,8 @@ func (t *ToolchainPage) Wheel(delta int) {
 // to the column width over up to two lines, #553) plus the python
 // environment status — a constant three lines so the list never shifts.
 func (t *ToolchainPage) footer(sec lipgloss.Style, w int) []string {
-	if rows := t.rows(); t.sel >= 0 && t.sel < len(rows) && rows[t.sel].action == "newenv" {
-		out := wrapFooter([]footerLine{{text: " enter/click opens the guided create wizard", style: sec}}, w, 2)
+	if rows := t.rows(); t.sel >= 0 && t.sel < len(rows) && rows[t.sel].action != "" {
+		out := wrapFooter([]footerLine{{text: " " + actionRowHints[rows[t.sel].action], style: sec}}, w, 2)
 		status := ""
 		if t.envState != "" {
 			status = " " + t.envState
@@ -963,10 +978,25 @@ func (t *ToolchainPage) renderPackages() []string {
 	return out
 }
 
-// renderAction renders the create-environment action row (#884).
-func (t *ToolchainPage) renderAction(selected bool) string {
+// actionRowLabels / actionRowHints name the list's action rows: entry
+// points that used to be bare letters (a accept all, u uv install) and are
+// now rows a reader can see and click.
+var actionRowLabels = map[string]string{
+	"newenv":    "   + New environment…",
+	"acceptall": "   ✓ Accept all detected interpreters",
+	"uvinstall": "   + Install a Python via uv…",
+}
+
+var actionRowHints = map[string]string{
+	"newenv":    "enter/click opens the guided create wizard",
+	"acceptall": "enter/click writes every detected interpreter to the project config",
+	"uvinstall": "enter/click lists the Python versions uv can download",
+}
+
+// renderAction renders an action row (#884).
+func (t *ToolchainPage) renderAction(action string, selected bool) string {
 	pal := t.theme()
-	label := "   + New environment…"
+	label := actionRowLabels[action]
 	style := lipgloss.NewStyle().Foreground(pal.Info)
 	if selected {
 		style = lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
@@ -1040,19 +1070,37 @@ func fileExists(p string) bool {
 // KeyHelp implements KeyHelper (#887).
 // Actions lists the page's verbs for the action bar and the "?" overlay.
 func (t *ToolchainPage) Actions() []Action {
+	switch {
+	case t.custom:
+		return []Action{{Key: "tab", Verb: "Complete", Hint: "the path"}, {Key: "enter", Verb: "Apply"}, {Key: "esc", Verb: "Cancel"}}
+	case t.pkgViewing && t.pkgMode == "input":
+		return []Action{{Key: "enter", Verb: "Install", Hint: "name or name==version"}, {Key: "esc", Verb: "Cancel"}}
+	case t.pkgViewing && t.pkgMode == "confirm":
+		return []Action{{Key: "y", Verb: "Confirm", Hint: "uninstall the package"}, {Key: "esc", Verb: "Cancel"}}
+	case t.pkgViewing:
+		return []Action{
+			{Key: "+", Verb: "Install", Hint: "a package"},
+			{Key: "-", Verb: "Uninstall", Hint: "the selected package"},
+			{Key: "U", Verb: "Upgrade", Hint: "the selected package"},
+			{Key: "esc", Verb: "Close", Hint: "the package view"},
+		}
+	case t.picking:
+		return []Action{{Key: "↑↓", Verb: "Choose"}, {Key: "enter", Verb: "Pick", Hint: "the highlighted interpreter"}, {Key: "esc", Verb: "Cancel"}}
+	}
+	l, ok := t.current()
+	python := func() bool { return ok && l.ID == "python" }
+	row := func() bool { return ok }
 	return []Action{
-		{Key: "enter", Verb: "Pick", Hint: "the interpreter"},
-		{Key: "p", Verb: "Probe", Hint: "the version"},
-		{Key: "r", Verb: "Reset", Hint: "to detection"},
-		{Key: "a", Verb: "Accept all", Hint: "every detected toolchain"},
+		{Key: "enter", Verb: "Pick", Hint: "the interpreter, or run the selected action row"},
+		{Key: "p", Verb: "Probe", Hint: "the version", Enabled: row},
+		{Key: "r", Verb: "Reset", Hint: "to detection", Enabled: row},
 		{Key: "z", Verb: "Fold", Hint: "the not-installed group"},
-		{Key: "n", Verb: "New env", Hint: "guided Python environment"},
-		{Key: "i", Verb: "Packages", Hint: "of the Python environment"},
-		{Key: "u", Verb: "Install Python", Hint: "through uv"},
+		{Key: "n", Verb: "New env", Hint: "guided Python environment", Enabled: python},
+		{Key: "m", Verb: "Packages", Hint: "manage the Python environment's packages", Enabled: python},
 	}
 }
 
-// KeyHelp adds the packages view's own keys.
+// KeyHelp adds the note the keys do not carry.
 func (t *ToolchainPage) KeyHelp() []string {
-	return []string{"packages view: +  install · -  uninstall · u  upgrade selection"}
+	return []string{"accepting all detections and installing a Python via uv are rows in the list"}
 }

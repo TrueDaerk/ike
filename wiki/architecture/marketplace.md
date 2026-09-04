@@ -116,9 +116,9 @@ detail: the review is structurally in front of the action. `x` removes, `g`
 re-fetches the catalog.
 
 When updates are pending the header counts them ("2 plugin updates available —
-press u to update all") and `u` installs them all in one batch. An update whose
+press U to update all") and `U` installs them all in one batch. An update whose
 capability list grew is badged `⚠ new capabilities`, named in the detail, and
-**held back** from `u` with an inline note; `i` on it opens a confirmation
+**held back** from `U` with an inline note; `i` on it opens a confirmation
 listing the added capabilities.
 
 All network and disk work happens inside `tea.Cmd`s; results return as

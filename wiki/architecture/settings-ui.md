@@ -114,8 +114,9 @@ box capped at ~110×32 cells above the workspace, laid out as the
   overridden per project (`.ike/settings.toml` is created on the first
   project write) and a project override removed with `r` falls straight
   back to the user/global value on the reload. Custom pages keep their own
-  keys (`s` on the Tools page still opens suggestions — the panel's
-  selector only applies to schema rows).
+  keys (the panel's selector only applies to schema rows; a custom page
+  that has a layer of its own — Formatters, Elasticsearch — binds `s` to
+  it, and no page binds `s` to anything else).
 - **Filter.** `/` — or the shared find chord `cmd+f` / `ctrl+f` (#2409),
   answered by the panel itself because it owns the keyboard ahead of the
   keymap layer — starts a fuzzy search across all schema pages (keys, titles,
@@ -370,10 +371,14 @@ path input with tab completion and a live suggestion list (#541, same
 the **project** config and triggers `lsp.restart`
 so servers respawn against the new interpreter; `r` resets to detection.
 Python rows additionally show an environment **provenance** column
-(`uv venv`/`venv`/`uv managed`/`pyenv`/`system`), `i` opens an inline
-installed-packages view (async) and `n` runs
+(`uv venv`/`venv`/`uv managed`/`pyenv`/`system`), `m` opens an inline
+installed-packages view (async, "manage") and `n` runs
 the guided environment-creation wizard (tool → Python → target directory) —
-see [Language Registry](./languages.md) (#569).
+see [Language Registry](./languages.md) (#569). Two former letters are
+**action rows** in the list since the 2026-09 overhaul: `✓ Accept all
+detected interpreters` (was `a`) sits at the top while detections are
+pending, and `+ Install a Python via uv…` (was `u`) follows the Python row
+beside `+ New environment…`; enter or a click runs them.
 
 The package view manages packages too (#571, PyCharm-style): `j`/`k` move a
 row selection, `+` opens an install input (`name` or `name==version`), `-`
@@ -398,21 +403,21 @@ per registered language carrying a server — live status (`ready` / `idle` /
 `ServerStatusMsg`s the root model forwards via `Model.Deliver` plus the
 manager's `RunningLangs`), the effective command line (config overlay over the
 plugin baseline, mirroring the launch path) and the layer supplying it
-(`@project`/`@user`/`@built-in`). Controls: `E` flips the `lsp.enabled` master
-switch, `e` the per-server `lsp.servers.<id>.enabled`, `c`/`a`/`s` edit
-command / args / settings (JSON object) overrides inline — written to the
-**project** config via write-back, empty input resets the key — `x` clears all
-of a server's overrides, `r` restarts one server (`Manager.StopLang`, async
-per #123: work inside the returned `tea.Cmd`), `R` restarts all. A missing
-binary renders the launch-failure reason; `i` runs the plugin's install
-recipe manually and `A` toggles `lsp.auto_install` (#131 — the automatic
-install on first use, with the manual action as fallback/retry). `I` toggles
-`lsp.inlay_hints` (default off, #523), `S` toggles `lsp.signature_auto`
-(the automatic signature popup on trigger characters; the manual
-`lsp.parameterInfo` command works regardless) and `C` toggles
-`lsp.completion_auto` (the as-you-type completion popup on identifier
-characters, #527; server trigger characters and `ctrl+space` work
-regardless), all shown in the header row.
+(`@project`/`@user`/`@built-in`). Controls follow the panel's canonical
+letters: **enter** opens the server's override form
+(`internal/settings/lsp_override.go`) — command, args and settings JSON as
+three fields of one dialog, written to the **project** config in one batch
+with a single reload, an emptied field removing its key; **space** toggles
+the per-server `lsp.servers.<id>.enabled`; `r` resets every override of the
+server; `R` restarts it (`Manager.StopLang`, async per #123: work inside the
+returned `tea.Cmd`) and `ctrl+r` restarts all; `i` runs the plugin's install
+recipe manually (#131 — the automatic install on first use, with the manual
+action as fallback/retry) and a missing binary renders the launch-failure
+reason. The subsystem switches — `lsp.enabled`, `lsp.auto_install`,
+`lsp.inlay_hints` (#523), `lsp.signature_auto`, `lsp.completion_auto` (#527)
+— are schema rows on the **Language Support** page; this page's header only
+reports their state. (Until the 2026-09 overhaul they were the page letters
+`E`/`A`/`I`/`S`/`C`, and the three override fields were `c`/`a`/`o`.)
 
 ## Marketplace page (0310, #446)
 
@@ -420,7 +425,8 @@ A custom `PageModel` (`internal/settings/marketplace_page.go`) over
 `internal/market`: browse the plugin catalog, review a plugin's requested
 capabilities, install/update/remove. Install (`i`) is only reachable from the
 expanded detail (`enter`) where the full capability list renders — the trust
-model's review step; `x` removes, `r` re-fetches. Async results arrive as
+model's review step; `U` updates every pending plugin, `x` removes, `g`
+re-fetches. Async results arrive as
 `MarketCatalogMsg`/`MarketActionMsg` through `Model.Deliver`; opening the
 panel prefetches the catalog once. See
 [Plugin Marketplace](./marketplace.md).
@@ -535,9 +541,20 @@ sub-panel migrations (#892).
 One table across the panel and every page: **enter** activates, **space**
 toggles booleans, **r** always means reset (LSP server overrides included —
 restart moved to **R** selected / **ctrl+r** all; the marketplace refresh
-moved to **g**), **s** is reserved for the write scope everywhere (the LSP
-options JSON edit moved to **o**; the Tools suggestions gained a visible
-`+ Suggestions…` action row next to the `s` shortcut). Every list understands
+moved to **g**), **s** is reserved for the write scope everywhere (the Tools
+suggestions are the visible `+ Suggestions…` action row). The table became
+code in the 2026-09 overhaul: `canonicalVerbs` in
+`internal/settings/actions.go` maps every letter to its one meaning
+(`a` Add · `d` Delete · `e` Edit raw · `r` Reset · `R` Restart · `g` Refresh
+· `p` Probe · `i` Install/Import · `x` Remove · `n` New · `m` Manage · `u`
+Unbind · `U` Update/Upgrade · `z` Fold · `s` Scope · `space` Toggle), and
+`TestActionsFollowTheCanonicalTable` fails on a page whose `Actions()` binds a
+letter outside it or with another verb. The migration that made every page
+pass: the Language Servers page lost `E/A/I/S/C` (schema rows on Language
+Support) and folded `c/a/o` into one form behind enter, its `e` became
+space; Toolchain's `a` (accept all) and `u` (uv install) became list rows and
+its packages view is `m`, with `U` upgrading a package; Marketplace's update
+all is `U`; Plugins and Formatters toggle with space; Tools dropped its `s`. Every list understands
 **pgup/pgdn/home/end** through the shared `listNav` helper, which since #1666
 delegates to the app-wide [`ui.ListNav`](/architecture/list-navigation.md):
 single steps (`↑`/`↓`, `j`/`k`) **wrap** at both ends, page keys **clamp** and
@@ -562,8 +579,12 @@ discoverable through `?` alone, and staging a change replaced `r reset` with
 
 - **One source of truth.** A custom page describes its verbs through the
   `ActionLister` seam (`internal/settings/actions.go`):
-  `Actions() []Action` with `Key`, `Verb` and an optional `Hint`, in bar
-  order — most-used first. The bar, the `?` overlay and the mouse hit map all
+  `Actions() []Action` with `Key`, `Verb`, an optional `Hint` and an optional
+  `Enabled` hook, in bar order — most-used first. A disabled verb (Delete on
+  an empty list, Install without the details open) renders dimmed and is not
+  clickable. A page in a mode of its own — the toolchain picker or package
+  view — returns that mode's verbs, so the bar always says what the next key
+  does. The bar, the `?` overlay and the mouse hit map all
   derive from that list; nothing is written twice. Every custom page
   implements it. The older `KeyHelper` seam is now for **notes** the keys do
   not carry ("a pattern matches the base name", "the page edits the config
@@ -574,8 +595,11 @@ discoverable through `?` alone, and staging a change replaced `r reset` with
   first six actions; search → `Set here`, `Open page`, `Clear`. Then the
   chrome: `[s] Scope: …` (schema pages — the selector only routes schema
   writes), `[ctrl+s] Apply n` while a batch is pending, and always `[?] Keys`.
-  What does not fit the width is dropped from the right; `[?]` always stays,
-  because the overlay lists everything the bar could not.
+  A page with more than six verbs shows five and `[…] More`, which opens the
+  **action menu** — a sub-panel listing every verb as a row; enter, the
+  letter, or a click runs it (the key is forwarded to the page). What does
+  not fit the width is dropped from the right; `[?]` always stays, because
+  the overlay lists everything the bar could not.
 - **Clickable.** Each keycap is a hit span (the `hintHits` mechanism of #885):
   the panel's own verbs run their action, a page verb is forwarded to the page
   as the key it names (`keyPress`), so the mouse reaches every action without

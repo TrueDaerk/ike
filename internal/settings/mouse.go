@@ -128,6 +128,8 @@ func (m *Model) runHintAction(action string) tea.Cmd {
 		return m.openApply()
 	case "openpage":
 		m.openHitPage()
+	case "more":
+		m.openActionMenu()
 	case "toggle":
 		if r, ok := m.current(); ok && m.focus == formColumn && r.kind == rowEntry && r.entry.Type == Bool {
 			return m.writeValue(r.entry, m.value(r.entry.Key) != "true")

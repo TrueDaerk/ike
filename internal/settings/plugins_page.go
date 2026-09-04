@@ -93,11 +93,11 @@ func (p *PluginsPage) Update(key tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	switch key.String() {
-	case "e", " ":
+	case "space":
 		if hasRow && p.onToggle != nil {
 			return p.onToggle(row.ID, !row.Enabled)
 		}
-	case "enter", "i":
+	case "enter":
 		if hasRow {
 			p.expanded[row.ID] = !p.expanded[row.ID]
 		}
@@ -305,7 +305,7 @@ func padCol(s string, width int) string {
 // Actions lists the page's verbs for the action bar and the "?" overlay.
 func (p *PluginsPage) Actions() []Action {
 	return []Action{
-		{Key: "space", Verb: "Toggle", Hint: "enable or disable the plugin (e too)"},
+		{Key: "space", Verb: "Toggle", Hint: "enable or disable the plugin"},
 		{Key: "enter", Verb: "Inspect", Hint: "its capabilities"},
 	}
 }

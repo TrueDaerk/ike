@@ -58,15 +58,15 @@ func TestPluginsPageToggleRoundTrip(t *testing.T) {
 		gotID, gotEnable = id, enable
 		return nil
 	})
-	// Row 0 is "example" (disabled) after sorting; e should enable it.
-	p.Update(tea.KeyPressMsg{Code: 'e', Text: "e"})
+	// Row 0 is "example" (disabled) after sorting; space should enable it.
+	p.Update(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
 	if gotID != "example" || gotEnable != true {
 		t.Fatalf("toggle = %q %v", gotID, gotEnable)
 	}
 	// Move to zeta (enabled) and toggle off.
 	p.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	p.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
-	p.Update(tea.KeyPressMsg{Code: 'e', Text: "e"})
+	p.Update(tea.KeyPressMsg{Code: tea.KeySpace, Text: " "})
 	if gotID != "zeta" || gotEnable != false {
 		t.Fatalf("toggle = %q %v", gotID, gotEnable)
 	}

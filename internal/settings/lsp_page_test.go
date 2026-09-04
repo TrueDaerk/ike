@@ -91,13 +91,13 @@ func TestLSPPageRendersRowFromConfig(t *testing.T) {
 
 func TestLSPPageCommandOverrideWritesProjectConfig(t *testing.T) {
 	p, opts, _ := lspPageFixture(t)
-	p.Update(key("c"))
+	p.Update(key("enter"))
 	form, ok := p.host.(*stubHost).top().(*lspOverrideForm)
 	if !ok {
-		t.Fatal("c must push the override form")
+		t.Fatal("enter must push the override form")
 	}
-	// Prefilled with the baseline; replace it wholesale.
-	form.input = newTextField("custom-ls")
+	// Prefilled with the baseline; replace the command wholesale.
+	form.form[0] = "custom-ls"
 	drainLSP(t, p, form.Update(key("enter")))
 
 	if got := config.Get().LSP.Servers["lsptest"]["command"]; got != "custom-ls" {
@@ -122,17 +122,17 @@ func lspForm(t *testing.T, p *LSPPage) *lspOverrideForm {
 
 func TestLSPPageArgsAndSettingsOverrides(t *testing.T) {
 	p, _, _ := lspPageFixture(t)
-	p.Update(key("a"))
+	p.Update(key("enter"))
 	f := lspForm(t, p)
-	f.input = newTextField("--stdio --verbose")
+	f.form[1] = "--stdio --verbose"
 	drainLSP(t, p, f.Update(key("enter")))
 	if v := p.View(120, 40); !strings.Contains(v, "--verbose") {
 		t.Fatalf("args override must reach the effective command line:\n%s", v)
 	}
 
-	p.Update(key("o"))
+	p.Update(key("enter"))
 	f = lspForm(t, p)
-	f.input = newTextField(`{"telemetry":false}`)
+	f.form[2] = `{"telemetry":false}`
 	drainLSP(t, p, f.Update(key("enter")))
 	m, ok := config.Get().LSP.Servers["lsptest"]["settings"].(map[string]any)
 	if !ok || m["telemetry"] != false {
@@ -140,9 +140,9 @@ func TestLSPPageArgsAndSettingsOverrides(t *testing.T) {
 	}
 
 	// Invalid JSON is rejected without leaving the form.
-	p.Update(key("o"))
+	p.Update(key("enter"))
 	f = lspForm(t, p)
-	f.input = newTextField("not-json")
+	f.form[2] = "not-json"
 	f.Update(key("enter"))
 	if p.host.(*stubHost).top() == nil || f.note == "" {
 		t.Fatal("invalid JSON must be rejected in place")
@@ -152,22 +152,21 @@ func TestLSPPageArgsAndSettingsOverrides(t *testing.T) {
 
 func TestLSPPageEnableTogglesAndReset(t *testing.T) {
 	p, _, _ := lspPageFixture(t)
-	drainLSP(t, p, p.Update(key("e")))
+	drainLSP(t, p, p.Update(key("space")))
 	if serverOn("lsptest") {
-		t.Fatal("e must disable the selected server")
+		t.Fatal("space must disable the selected server")
 	}
 	if v := p.View(120, 40); !strings.Contains(v, "disabled") {
 		t.Fatalf("a disabled server must render as disabled:\n%s", v)
 	}
 
-	drainLSP(t, p, p.Update(key("E")))
-	if masterEnabled() {
-		t.Fatal("E must flip the master switch")
-	}
+	// The master switch is a schema row on Language Support, not a page
+	// letter any more; the page still reports its state.
+	drainLSP(t, p, config.WriteAndReload(p.opts, config.DefaultScope("lsp.enabled"), "lsp.enabled", false))
 	if v := p.View(120, 40); !strings.Contains(v, "off (master)") {
 		t.Fatalf("rows must show the master off state:\n%s", v)
 	}
-	drainLSP(t, p, p.Update(key("E"))) // back on
+	drainLSP(t, p, config.WriteAndReload(p.opts, config.DefaultScope("lsp.enabled"), "lsp.enabled", true)) // back on
 
 	// r resets every override (#887); the per-server disable goes with it.
 	drainLSP(t, p, p.Update(key("r")))
@@ -194,10 +193,11 @@ func TestLSPPageInstallDispatchAndAutoToggle(t *testing.T) {
 	if len(*restarts) != 1 || (*restarts)[0] != "install:lsptest" {
 		t.Fatalf("i must dispatch the manual install, got %v", *restarts)
 	}
+	// A is no longer a page letter: lsp.auto_install is a schema row.
 	before := config.Get().LSP.AutoInstall
 	drainLSP(t, p, p.Update(tea.KeyPressMsg{Text: "A", Code: 'A', Mod: tea.ModShift}))
-	if config.Get().LSP.AutoInstall == before {
-		t.Fatal("A must flip lsp.auto_install")
+	if config.Get().LSP.AutoInstall != before {
+		t.Fatal("A must not flip lsp.auto_install from the page")
 	}
 }
 
@@ -228,9 +228,9 @@ func TestLSPFooterPinned(t *testing.T) {
 	if strings.Contains(strings.Join(lines, "\n"), "e enable") {
 		t.Fatalf("key hints belong on the action bar, not the page footer:\n%s", strings.Join(lines, "\n"))
 	}
-	// The override editor is a sub-panel now (#892).
-	p.Update(key("c"))
+	// The override editor is a sub-panel now (#892), behind enter.
+	p.Update(key("enter"))
 	if _, ok := p.host.(*stubHost).top().(*lspOverrideForm); !ok {
-		t.Fatal("c must push the override form")
+		t.Fatal("enter must push the override form")
 	}
 }

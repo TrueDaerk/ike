@@ -28,6 +28,50 @@ type Action struct {
 	Verb string
 	// Hint explains the verb in the "?" overlay; optional.
 	Hint string
+	// Enabled reports whether the verb applies right now (nil = always). A
+	// disabled verb renders dimmed on the bar and is not clickable, so an
+	// empty list does not offer "Delete" and a plugin row without an
+	// expanded detail does not offer "Install".
+	Enabled func() bool
+}
+
+// enabled resolves the Enabled hook.
+func (a Action) enabled() bool { return a.Enabled == nil || a.Enabled() }
+
+// canonicalVerbs is the one-letter-one-meaning table every page's Actions()
+// must follow (guarded by TestActionsFollowTheCanonicalTable). A key maps to
+// the verbs it may carry, matched as a case-insensitive prefix of Action.Verb.
+// "enter" is the row's primary action and free-form; everything else has one
+// meaning across the whole panel, so a letter learned on one page holds on
+// every other.
+var canonicalVerbs = map[string][]string{
+	"enter":  nil, // primary: Edit, Open, Pick, Rebind, Details, …
+	"space":  {"Toggle"},
+	"←→":     {"Adjust"},
+	"↑↓":     {"Choose", "Select"},
+	"tab":    {"Complete"},
+	"esc":    {"Cancel", "Close", "Back", "Clear"},
+	"a":      {"Add"},
+	"d":      {"Delete"},
+	"e":      {"Edit", "Type"}, // edit raw: the free-text form of the value
+	"r":      {"Reset"},
+	"R":      {"Restart"},
+	"ctrl+r": {"Restart all"},
+	"g":      {"Refresh"},
+	"p":      {"Probe", "Doctor"},
+	"i":      {"Install", "Import"},
+	"x":      {"Remove", "Uninstall"},
+	"n":      {"New"},
+	"m":      {"Manage", "Packages"},
+	"u":      {"Unbind", "Unset"},
+	"U":      {"Update", "Upgrade"},
+	"z":      {"Fold", "Unfold"},
+	"s":      {"Scope"},
+	"b":      {"Built-in"},
+	"/":      {"Filter", "Search"},
+	"+":      {"Install"},
+	"-":      {"Uninstall"},
+	"y":      {"Confirm", "Yes"},
 }
 
 // ActionLister is an optional PageModel extension: the page's verbs, in
@@ -88,11 +132,20 @@ func (m *Model) barItems() []barItem {
 		}
 	case m.customPage() != nil:
 		acts := m.pageActions()
-		if len(acts) > maxBarActions {
-			acts = acts[:maxBarActions]
+		more := len(acts) > maxBarActions
+		if more {
+			acts = acts[:maxBarActions-1]
 		}
 		for _, a := range acts {
-			add(a.Key, a.Verb, "key:"+a.Key)
+			it := barItem{a, "key:" + a.Key}
+			if !a.enabled() {
+				it.click = ""
+			}
+			items = append(items, it)
+		}
+		if more {
+			// The rest is one press away as a runnable menu, not a cheatsheet.
+			add("…", "More", "more")
 		}
 	default:
 		add("enter", "Edit", "edit")
@@ -129,6 +182,7 @@ func (m *Model) renderActionBar(pal *theme.Palette, innerW int) string {
 	keyStyle := lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
 	verbStyle := lipgloss.NewStyle().Foreground(pal.Secondary)
 	sepStyle := lipgloss.NewStyle().Foreground(pal.Secondary).Faint(true)
+	offStyle := lipgloss.NewStyle().Foreground(pal.Secondary).Faint(true)
 
 	items := m.barItems()
 	// Measure first: every item costs "[key] verb" plus a " · " separator.
@@ -169,9 +223,13 @@ func (m *Model) renderActionBar(pal *theme.Palette, innerW int) string {
 		if it.click != "" {
 			m.hintHits = append(m.hintHits, hintAction{start: x, end: x + w, action: it.click})
 		}
-		b.WriteString(keyStyle.Render("[" + it.Key + "]"))
-		b.WriteString(" ")
-		b.WriteString(verbStyle.Render(it.Verb))
+		if it.enabled() {
+			b.WriteString(keyStyle.Render("[" + it.Key + "]"))
+			b.WriteString(" ")
+			b.WriteString(verbStyle.Render(it.Verb))
+		} else {
+			b.WriteString(offStyle.Render(text))
+		}
 		x += w
 	}
 	return b.String()
@@ -226,4 +284,102 @@ func keyPress(s string) tea.KeyPressMsg {
 			return tea.KeyPressMsg{Code: r[0], Mod: mod}
 		}
 	}
+}
+
+// --- the "[…] More" menu ---
+
+// actionMenu is the overflow of the action bar: every page verb as a row,
+// arrow-navigable, enter or a click runs it (the key is forwarded to the
+// page exactly as the bar does), esc closes.
+type actionMenu struct {
+	host  SubPanelHost
+	m     *Model
+	items []Action
+	sel   int
+	navRows
+}
+
+// openActionMenu pushes the overflow menu for the active page.
+func (m *Model) openActionMenu() {
+	acts := m.pageActions()
+	if len(acts) == 0 {
+		return
+	}
+	m.Push(&actionMenu{host: m, m: m, items: acts})
+}
+
+func (a *actionMenu) Title() string   { return "Actions" }
+func (a *actionMenu) Capturing() bool { return false }
+func (a *actionMenu) Buttons() []Button {
+	return []Button{{Label: "Close", Do: func() tea.Cmd { a.host.Pop(); return nil }}}
+}
+
+func (a *actionMenu) Update(key tea.KeyPressMsg) tea.Cmd {
+	if listNav(key.String(), &a.sel, len(a.items), a.navPageSize()) {
+		return nil
+	}
+	switch key.String() {
+	case "esc":
+		a.host.Pop()
+	case "enter":
+		return a.run(a.sel)
+	default:
+		// The letter itself works from inside the menu too.
+		for i, it := range a.items {
+			if it.Key == key.String() {
+				return a.run(i)
+			}
+		}
+	}
+	return nil
+}
+
+// run closes the menu and forwards the chosen action's key to the page.
+func (a *actionMenu) run(i int) tea.Cmd {
+	if i < 0 || i >= len(a.items) || !a.items[i].enabled() {
+		return nil
+	}
+	a.host.Pop()
+	return a.m.runHintAction("key:" + a.items[i].Key)
+}
+
+// Click runs the row under the pointer (content-local coordinates).
+func (a *actionMenu) Click(x, y int) tea.Cmd {
+	if y >= 0 && y < len(a.items) {
+		if y == a.sel {
+			return a.run(y)
+		}
+		a.sel = y
+	}
+	return nil
+}
+
+func (a *actionMenu) Wheel(delta int) { a.sel = clamp(a.sel+delta, 0, len(a.items)-1) }
+
+func (a *actionMenu) View(w, h int) string {
+	a.setRows(h)
+	pal := a.m.theme()
+	key := lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
+	verb := lipgloss.NewStyle()
+	hint := lipgloss.NewStyle().Foreground(pal.Secondary)
+	off := lipgloss.NewStyle().Foreground(pal.Secondary).Faint(true)
+	sel := lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
+	clip := lipgloss.NewStyle().MaxWidth(w)
+	lines := make([]string, 0, len(a.items))
+	for i, it := range a.items {
+		line := " " + padRight("["+it.Key+"]", 9) + padRight(it.Verb, 18)
+		if it.Hint != "" {
+			line += it.Hint
+		}
+		switch {
+		case i == a.sel:
+			lines = append(lines, clip.Render(sel.Render(line)))
+		case !it.enabled():
+			lines = append(lines, clip.Render(off.Render(line)))
+		default:
+			styled := " " + key.Render(padRight("["+it.Key+"]", 9)) + verb.Render(padRight(it.Verb, 18)) + hint.Render(it.Hint)
+			lines = append(lines, clip.Render(styled))
+		}
+	}
+	return strings.Join(lines, "\n")
 }
