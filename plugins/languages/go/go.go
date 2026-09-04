@@ -8,10 +8,12 @@ import (
 	_ "embed"
 
 	"ike/internal/consthint"
+	"ike/internal/cronhint"
 	"ike/internal/escapes"
 	"ike/internal/lang"
 	"ike/internal/nethint"
 	"ike/internal/permhint"
+	"ike/internal/secret"
 	"ike/plugins/languages/register"
 )
 
@@ -157,14 +159,21 @@ func init() {
 	})
 }
 
-// goSpans is the lang.Language.Spans hook: the unicode-escape stand-ins
-// (#1620), the network-literal hints (#1653), the permission hints (#1656)
-// and the constant conceals (#1701) on `const` declarations. The network scan
-// is restricted to string literals — in source, a bare `10.0.0.0/8` would be
-// arithmetic, not a prefix — and the permission scan to the argument lists of
-// the mode APIs, where an octal literal is a file mode.
+// goSpans is the lang.Language.Spans hook: the secret masks (#2345) on
+// suspect assignments, the unicode-escape stand-ins (#1620), the
+// network-literal hints (#1653), the permission hints (#1656), the cron
+// hints on quoted schedules (robfig/cron and friends, #2345) and the
+// constant conceals (#1701) on `const` declarations. The masks come first —
+// overlapping spans resolve first-covering-wins, so the mask must precede
+// any decode that would render a piece of the credential. The network and
+// cron scans are restricted to string literals — in source, a bare
+// `10.0.0.0/8` would be arithmetic, not a prefix — and the permission scan
+// to the argument lists of the mode APIs, where an octal literal is a file
+// mode.
 func goSpans(lines []string) []lang.Span {
-	out := append(escapes.UnicodeSpansIn(lines, escapes.UnicodeGo), nethint.QuotedSpans(lines)...)
+	out := append(secret.AssignSpans(lines), escapes.UnicodeSpansIn(lines, escapes.UnicodeGo)...)
+	out = append(out, nethint.QuotedSpans(lines)...)
 	out = append(out, permhint.GoSpans(lines)...)
+	out = append(out, cronhint.QuotedSpans(lines)...)
 	return append(out, consthint.GoSpans(lines)...)
 }

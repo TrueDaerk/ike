@@ -42,6 +42,11 @@ const (
 	FlavorPython Flavor = iota
 	FlavorGo
 	FlavorPHP
+	// FlavorScript is JS/TS (#2345). Its integer literals and precedence are
+	// PHP's exactly — the C ladder, `0x`/`0o`/`0b` with underscores, and the
+	// legacy leading-zero octal — so every flavor switch below treats it by
+	// the same default branch PHP takes.
+	FlavorScript
 )
 
 // Result is a successful evaluation. Single marks a right-hand side that is

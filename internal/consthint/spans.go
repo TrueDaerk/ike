@@ -117,6 +117,81 @@ func PHPSpans(lines []string) []lang.Span {
 	return out
 }
 
+// ScriptSpans produces the constant conceals for a JS/TS buffer (#2345).
+// `const` is JS's constant keyword, but it binds every local — `const el =
+// document…` is idiomatic — so the keyword alone is no marker the way Go's
+// is; the Python gate applies instead: a CONST_CASE name or a recognised
+// unit context, with `export`/`const`/`let`/`var` skipped in front and an
+// optional TS type annotation between name and `=`.
+func ScriptSpans(lines []string) []lang.Span {
+	var out []lang.Span
+	for li, line := range lines {
+		if s, ok := scriptLine(li, []rune(line)); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// scriptKeywords are the declaration words that may precede the name.
+var scriptKeywords = map[string]bool{
+	"export": true, "const": true, "let": true, "var": true,
+}
+
+// scriptLine reads one `[export] [const|let|var] NAME[: type] = expr[;]`
+// line under the Python gate.
+func scriptLine(li int, runes []rune) (lang.Span, bool) {
+	i := skipSpace(runes, 0)
+	var name string
+	for {
+		w, j := identAt(runes, i)
+		if w == "" {
+			return lang.Span{}, false
+		}
+		if scriptKeywords[w] {
+			i = skipSpace(runes, j)
+			continue
+		}
+		name, i = w, skipSpace(runes, j)
+		break
+	}
+	if !pythonConstName(name) && !unitContextName(name) {
+		return lang.Span{}, false
+	}
+	if i < len(runes) && runes[i] == ':' {
+		// A TS annotation: skipped, not parsed. Generics and unions widen the
+		// rune set beyond Python's; anything else means the line is not the
+		// assignment it looked like.
+		for i++; i < len(runes) && runes[i] != '='; i++ {
+			if !scriptAnnotationRune(runes[i]) {
+				return lang.Span{}, false
+			}
+		}
+	}
+	if i >= len(runes) || runes[i] != '=' ||
+		(i+1 < len(runes) && (runes[i+1] == '=' || runes[i+1] == '>')) {
+		return lang.Span{}, false
+	}
+	start := skipSpace(runes, i+1)
+	end := trimEnd(runes, start, cutAtSlashes(runes, start))
+	for end > start && runes[end-1] == ';' {
+		end = trimEnd(runes, start, end-1)
+	}
+	if start >= end {
+		return lang.Span{}, false
+	}
+	return hintSpan(li, start, end, string(runes[start:end]), name, FlavorScript)
+}
+
+// scriptAnnotationRune is the rune set a skipped TS annotation may hold.
+func scriptAnnotationRune(r rune) bool {
+	switch r {
+	case '<', '>', '|', '&', '?':
+		return true
+	}
+	return annotationRune(r)
+}
+
 // --- Python ------------------------------------------------------------------
 
 // pythonLine reads one `NAME = expr` / `NAME: annotation = expr` line. The

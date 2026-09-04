@@ -12,6 +12,7 @@ import (
 	"ike/internal/lang"
 	"ike/internal/nethint"
 	"ike/internal/numhint"
+	"ike/internal/secret"
 	"ike/plugins/languages/register"
 )
 
@@ -30,7 +31,9 @@ func init() {
 // password must not be half-greyed. Columns are rune columns, matching the
 // lang.Span contract.
 func iniSpans(lines []string) []lang.Span {
-	var out []lang.Span
+	// The secret masks (#2345) come first: overlapping spans resolve
+	// first-covering-wins, so the mask must precede the value styling below.
+	out := secret.PairSpans(lines, "=:")
 	for li, line := range lines {
 		runes := []rune(line)
 		start, end := trimIndex(runes)

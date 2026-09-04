@@ -14,6 +14,7 @@ package langcrontab
 import (
 	"ike/internal/cronhint"
 	"ike/internal/lang"
+	"ike/internal/secret"
 	"ike/plugins/languages/register"
 )
 
@@ -31,11 +32,12 @@ func init() {
 
 // crontabSpans emits the highlight spans for a crontab buffer: comments,
 // environment assignments, the schedule fields and the command, plus the
-// schedule hints (#1624). The hint spans come first — overlapping spans
-// resolve first-covering-wins, so a hint must precede the field styling it
-// sits on.
+// schedule hints (#1624). The secret masks on suspect environment
+// assignments (`DB_PASSWORD=…`, #2345) come first of all, then the hint
+// spans — overlapping spans resolve first-covering-wins, so a mask or hint
+// must precede the field styling it sits on.
 func crontabSpans(lines []string) []lang.Span {
-	out := cronhint.CrontabSpans(lines)
+	out := append(secret.PairSpans(lines, "="), cronhint.CrontabSpans(lines)...)
 	for li, line := range lines {
 		out = append(out, lineSpans(li, []rune(line))...)
 	}

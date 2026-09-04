@@ -759,7 +759,15 @@ never the expression around them — `token = item["token"]` and
 `token = get_token()` mask nothing, and
 `PROXY_API_KEY = os.environ.get("PROXY_API_KEY", "8479…")` masks the fallback
 alone, since a literal that is not the whole value, is identifier-shaped and is
-itself secret-suspect names a key rather than holding one. No producer duplicates the pattern logic — they all ask
+itself secret-suspect names a key rather than holding one. The #2345
+capability-audit sweep extended the family to every remaining producer: two
+shared recognisers in `internal/secret` — `PairSpans` for the
+`key = value`/`key: value` config lines (toml, ini, crontab) and
+`AssignSpans` for the C-family assignments of go, php and js/ts — plus
+per-plugin producers for yaml/ansible mapping pairs and `stringData:`
+blocks, shell `export`s, Dockerfile `ENV`/`ARG` operands and `.http`
+credential headers (see `/architecture/editor.md`, secret masking). No
+producer duplicates the pattern logic — they all ask
 `internal/secret`, so the built-in tables and `editor.secret_masking_keys`
 hold identically in each. The ini-style config
 language (`plugins/languages/ini`, #1595) follows the same recipe for `.ini`
@@ -773,7 +781,9 @@ the `crontab` base names, styling `#` comments, `NAME=value` environment
 assignments, the five schedule fields and the command, and carrying the
 schedule hints of `internal/cronhint` (see `/architecture/editor.md`, cron
 schedule hints) — which the `yaml`, `json` and `toml` producers share for the
-`cron:` values and quoted expressions in their own buffers. The number hints
+`cron:` values and quoted expressions in their own buffers, and — since
+#2345 — the `go`, `python`, `php` and `typescript` producers for the quoted
+schedules scheduler libraries take. The number hints
 of `internal/numhint` (#1627) ride the same seam in every value position
 (#1684) — `json`, `yaml`, `toml`, `ini` and `dotenv` append them per buffer,
 `.http` per collected value range (query parameters, folded query lines,
@@ -784,15 +794,15 @@ does (#1685) (see
 `/architecture/editor.md`, number-readability hints). The network-literal
 hints of `internal/nethint` (#1653) ride it too, in two shapes: `Spans` scans
 whole lines for the config formats and `.http`, `QuotedSpans` scans string
-literals only for `go`, the `javascript`/`typescript` pair and `python` —
-where a bare `10.0.0.0/8` would be arithmetic (see
+literals only for `go`, the `javascript`/`typescript` pair, `python` and —
+since #2345 — `php`, where a bare `10.0.0.0/8` would be arithmetic (see
 `/architecture/editor.md`, network-literal hints). The permission hints of
 `internal/permhint` (#1656) ride it with one producer per carrying context —
-`ShellSpans` for `shell`, `DockerfileSpans` for `dockerfile`, `GoSpans` and
-`PythonSpans` for the mode APIs in code, `YAMLSpans` for the `mode:` keys of
-`yaml` and `ansible`, which is what first gave `shell`, `dockerfile` and
-`ansible` a `Spans` hook at all (see `/architecture/editor.md`, permission
-hints). The `yaml` producer also
+`ShellSpans` for `shell`, `DockerfileSpans` for `dockerfile`, `GoSpans`,
+`PythonSpans`, `PHPSpans` and `ScriptSpans` (#2345) for the mode APIs in
+code, `YAMLSpans` for the `mode:` keys of `yaml` and `ansible`, which is
+what first gave `shell`, `dockerfile` and `ansible` a `Spans` hook at all
+(see `/architecture/editor.md`, permission hints). The `yaml` producer also
 appends the anchor/alias pair coloring of `internal/yamlanchor` (#1629): every
 `&name` and its `*name` aliases share one name-hashed rainbow slot, an alias
 no anchor defines carries `anchor.unresolved` (rendered as an error, see

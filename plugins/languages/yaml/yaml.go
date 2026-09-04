@@ -74,8 +74,12 @@ func init() {
 // the symbolic `rw-r--r--` is the reading, not the radix conversion. A decimal
 // `mode: 644` carries no permission hint by construction, so the number hints
 // keep it and still warn with `= 01204`.
+// The secret masks (#2345) come first of all: overlapping spans resolve
+// first-covering-wins, so the mask must precede any decode that would
+// otherwise render a piece of the credential.
 func yamlSpans(lines []string) []lang.Span {
-	out := append(escapes.Base64YAMLSpans(lines), escapes.UnicodeSpansIn(lines, escapes.UnicodeYAML)...)
+	out := append(maskSpans(lines), escapes.Base64YAMLSpans(lines)...)
+	out = append(out, escapes.UnicodeSpansIn(lines, escapes.UnicodeYAML)...)
 	out = append(out, cronhint.YAMLSpans(lines)...)
 	perms := permhint.YAMLSpans(lines)
 	out = append(out, perms...)

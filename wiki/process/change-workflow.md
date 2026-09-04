@@ -99,4 +99,5 @@ Concretely: a **new language** fails the build until its row is filled in; **wir
 family** means moving its cell to `offeredSpanFamilies` (and extending the family's probe if
 the new producer needs a shape the probe lacks); a reason entry for a family the language
 has since started offering is **stale and fails**. Real gaps are never recorded as a bare
-reason — they are closed or linked as a follow-up issue (`reasonGap`, currently #2345).
+reason — they are closed or linked as a follow-up issue (`reasonGap`; the initial set the
+audit surfaced was closed wholesale in #2345, so the ledger currently carries none).

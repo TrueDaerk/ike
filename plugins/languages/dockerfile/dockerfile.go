@@ -32,8 +32,16 @@ func init() {
 			Install:     []string{"npm", "install", "-g", "dockerfile-language-server-nodejs"},
 		},
 		// Permission hints (#1656): the `--chmod=` flag of COPY/ADD and the
-		// `chmod` calls inside RUN lines draw their symbolic rwx form.
-		Spans:       permhint.DockerfileSpans,
+		// `chmod` calls inside RUN lines draw their symbolic rwx form. The
+		// secret masks on ENV/ARG values (#2345) come first: overlapping
+		// spans resolve first-covering-wins.
+		Spans:       dockerfileSpans,
 		LineComment: "#",
 	})
+}
+
+// dockerfileSpans is the lang.Language.Spans hook: the secret masks on
+// ENV/ARG values (#2345), then the permission hints (#1656).
+func dockerfileSpans(lines []string) []lang.Span {
+	return append(maskSpans(lines), permhint.DockerfileSpans(lines)...)
 }

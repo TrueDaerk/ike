@@ -50,6 +50,9 @@ func init() {
 		// plus content, so headings pin while their section scrolls.
 		ScopeNodes: []string{"section"},
 		FoldNodes:  []string{"section", "fenced_code_block", "list", "block_quote", "pipe_table"},
+		// Entity decoding (#2345): CommonMark resolves HTML character
+		// references in prose; code spans and code blocks keep them literal.
+		Spans: entitySpans,
 	})
 
 	// The inline grammar registers as its own (extension-less, server-less)

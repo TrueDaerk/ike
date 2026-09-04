@@ -16,6 +16,8 @@ func FlavorForLang(id string) (Flavor, bool) {
 		return FlavorGo, true
 	case "php":
 		return FlavorPHP, true
+	case "typescript":
+		return FlavorScript, true
 	}
 	return 0, false
 }
