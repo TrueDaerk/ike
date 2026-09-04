@@ -313,6 +313,40 @@ func TestDismissalCarriesOpenDuration(t *testing.T) {
 	}
 }
 
+// TestDismissalCarriesResultCount is the #2490 addition: a dismissal reports
+// how many rows the list was showing, so an export can tell a query that
+// matched nothing ("typed a command name that does not exist") from one that
+// matched and was abandoned — the query length alone cannot.
+func TestDismissalCarriesResultCount(t *testing.T) {
+	src := fakeSource{cmds: []registry.OwnedCommand{
+		owned("a", "Alpha", plugin.GlobalScope()),
+		owned("b", "Bravo", plugin.GlobalScope()),
+	}}
+	p := New(Config{}, NewCommandMode(src, nil, false), fileMode())
+	p.SetSize(80, 24)
+
+	// A query nobody matches: zero rows on a non-empty query.
+	p.Open(Context{})
+	p.Update(runes(":zzzznope"))
+	p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	d, ok := p.TakeDismissal()
+	if !ok || d.QueryLen == 0 || d.Results != 0 {
+		t.Fatalf("dismissal = (%+v, %v), want a typed query with 0 results", d, ok)
+	}
+
+	// A matching query reports the match count.
+	p.Open(Context{})
+	p.Update(runes(":Alpha"))
+	want := len(p.items)
+	if want == 0 {
+		t.Fatal("fixture must match at least one command")
+	}
+	p.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if d, _ := p.TakeDismissal(); d.Results != want {
+		t.Fatalf("results = %d, want %d", d.Results, want)
+	}
+}
+
 func TestNavigation(t *testing.T) {
 	src := fakeSource{cmds: []registry.OwnedCommand{
 		owned("a", "Alpha", plugin.GlobalScope()),

@@ -49,6 +49,7 @@ currently 5); readers must tolerate unknown fields and filter on `v`.
 | 3 | #2348 | The diagnostic types `session`, `heartbeat` and `op` join; no existing field changes meaning. A v3 log ending without heartbeats is evidence of a hard stop, a v2 log ending simply predates them. |
 | 4 | #2408 | Heartbeats slow from 10s to 60s (any per-hour rate must branch on `v`); `command`/`internal` events gain `ok` and `ms` when the dispatch failed or was slow; the types `palette.dismiss` and `project.leave` join; the v3 pseudo-command `palette.recentFiles.dismiss` (#2399, `data.qlen`) is gone — its successor is `palette.dismiss` with `data.query_len`. |
 | 5 | #2492 | The `project.switch` op's warm-up phase becomes total: every `ok` is followed by exactly one `lsp` phase. A phase without a publish measurement carries `skipped` (`no_server_docs`, `quiet`, `superseded`, `quit`); its `ms` still counts from the switch's start. On v4 a missing `lsp` phase was ambiguous (server silence or lost event); on v5 absence is a bug. |
+| 6 | #2490 | `palette.dismiss` events gain `results` — how many rows the palette was listing when esc was pressed. It separates "typed a name that does not exist" (`query_len > 0`, `results == 0`) from "found it, changed my mind", which `query_len` alone cannot. Additive: every v5 field keeps its meaning, and a missing `results` on v5 and below means "not recorded", not zero. |
 
 An export spanning versions therefore needs three guards: filter v1 `command`
 events on `data.source != "internal"`, treat a missing `ok`/`ms` on v4 as
@@ -167,8 +168,10 @@ counts by the version's interval before comparing sessions.
   - `palette.dismiss` (#2408) — a palette mode closed with esc instead of a
     pick, the one palette outcome that otherwise leaves no trace at all.
     `mode` is the mode's prefix rune (`":"`, `"@"`, `"%"`, …), `query_len` the
-    number of runes typed — **never the query itself** — and `ms` how long the
-    box stood open. Picks keep going through the ordinary command funnel, so
+    number of runes typed — **never the query itself** — `ms` how long the box
+    stood open, and (since v6, #2490) `results` how many rows the list was
+    showing at that moment: a count, never content, so a dismissal off a query
+    that matched nothing is distinguishable from one off a full list. Picks keep going through the ordinary command funnel, so
     the dismissal rate per mode is `palette.dismiss` over its opens. A mode
     that re-opens itself with a seeded query (the directory descend) starts a
     new open and is timed on its own.
@@ -323,6 +326,8 @@ jq -r 'select(.data.status=="unbound") | .data.chord' ~/.ike/telemetry/*.jsonl |
 jq -r 'select(.type=="command" and .data.ms) | [.data.id, .data.ok, .data.ms] | @tsv' ~/.ike/telemetry/*.jsonl
 # dismissals per palette mode (v4+)
 jq -r 'select(.type=="palette.dismiss") | .data.mode' ~/.ike/telemetry/*.jsonl | sort | uniq -c | sort -rn
+# fruitless searches: typed something, matched nothing, gave up (v6+)
+jq -r 'select(.type=="palette.dismiss" and .data.results != null and (.data.query_len|tonumber) > 0 and (.data.results|tonumber) == 0) | [.data.mode, .data.query_len, .data.ms] | @tsv' ~/.ike/telemetry/*.jsonl
 # minutes per project (v4+)
 jq -r 'select(.type=="project.leave") | [.data.project, (.data.ms|tonumber/60000|floor)] | @tsv' ~/.ike/telemetry/*.jsonl
 ```

@@ -100,6 +100,30 @@ func TestReportV4UsesRecordedActiveTime(t *testing.T) {
 	}
 }
 
+// A mixed-version log parses: the v5 palette.dismiss without "results" and the
+// v6 one with it are both read, and neither disturbs the aggregation — the
+// field is additive, so older readers and older files keep working (#2490).
+func TestReportParsesV5AndV6DismissLines(t *testing.T) {
+	dir := t.TempDir()
+	v5 := ev(at(2*time.Minute), TypePaletteDismiss, map[string]string{
+		"mode": ":", "query_len": "6", "ms": "3000",
+	})
+	v5.V = 5
+	v6 := ev(at(3*time.Minute), TypePaletteDismiss, map[string]string{
+		"mode": ":", "query_len": "6", "results": "0", "ms": "3000",
+	})
+	writeLog(t, dir, "a.jsonl",
+		session(at(0), "aaa"),
+		cmd(at(time.Minute), "editor.save"),
+		v5, v6,
+		leave(at(2*time.Hour), "aaa", 25*time.Minute),
+	)
+	rows := today(read(t, dir))
+	if len(rows) != 1 || rows[0].Active != 25*time.Minute {
+		t.Fatalf("rows = %v, want one row with 25m active", rows)
+	}
+}
+
 func TestReportV3SingleSessionCountsWallTime(t *testing.T) {
 	dir := t.TempDir()
 	// No project.leave: the span is measured from its own marks. Every gap
