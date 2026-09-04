@@ -1,5 +1,37 @@
 # Log
 
+## 2026-09-04 (diff viewer: mouse selection lag while dragging, #2495)
+
+- **The drag was re-rendering the whole diff.** Mouse text selection (#2070)
+  called `render()` on every `MouseMotion` event, so each pointer cell restyled
+  every row of the document — gutters, tab expansion, intra-line spans, syntax
+  captures, the lot. On a 3000-row syntax-highlighted side-by-side diff that is
+  **69 ms per motion event**, past the input coalescer's 66 ms back-off ceiling,
+  and the highlight visibly trailed the pointer (reported on 0.5.150, macOS).
+- **The highlight moved out of the cache and into the frame.** `render()` now
+  builds every visual line selection-free and `View` paints the selection over
+  the at-most-viewport lines it actually covers (`selectedLines` bounds the
+  span, `renderVLine` re-paints one line). `MouseDrag` is now exactly
+  `textsel.Selection.Drag` — no re-render, no re-diff, no re-parse, and no
+  `SelectionText`, which runs only when the selection is copied. Drag events
+  keep riding the existing `coalescedInputMsg` coalescing; no pane-local
+  throttle was added.
+- **One line painter, so the overlay cannot drift.** `renderSideBySide` /
+  `renderUnified` became `renderSideLine` / `renderUnifiedLine` behind
+  `renderVLine`, which both the full render and the overlay go through — an
+  overlaid line is byte-identical to the rendered one. `buildVRows` became the
+  layout pass (it fills `rowStarts` and `sepLines` too), and the gutter widths,
+  which scan every row and are asked for by every mouse-cell mapping, are
+  cached per render pass.
+- **Measured and pinned.** `BenchmarkDragMotion` (3000 rows, side-by-side,
+  syntax highlighted): **68.6 ms → 0.79 ms/op**; `BenchmarkDragMotionOnly` (the
+  motion event without the frame) **69.3 ms → 150 ns/op**, constant in the
+  document size. `internal/diff/selcache_test.go` asserts the caching rule
+  deterministically — a drag leaves the line cache's backing array untouched,
+  the cache stays selection-free, the overlay only restyles, and a line
+  scrolled into view under a live selection renders selected. Selection
+  semantics (#2070 side pinning, #1741 fold copy, unified pairs) are unchanged.
+
 ## 2026-09-04 (focus-by-number chords work from tool windows, #2493)
 
 - **`ctrl+1`…`ctrl+9` no longer die in a terminal.** A pane's number badge

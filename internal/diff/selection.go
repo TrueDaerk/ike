@@ -50,13 +50,25 @@ type vrow struct {
 
 // buildVRows records the visual-line map the render pass is about to paint,
 // so selection positions resolve to row text without re-deriving the layout.
+// It is also the layout pass proper (#2495): the render loop paints one vrow
+// per line, so the row→line index (rowStarts, for hunk navigation) and the
+// separator map fall out here, before a single line is styled.
 func (m *Model) buildVRows(items []displayItem) {
 	m.vrows = m.vrows[:0]
 	for _, it := range items {
+		line := len(m.vrows)
 		if it.row < 0 {
+			// The rows behind a fold point at their separator, so hunk
+			// navigation and jumps stay well-defined.
+			g := m.gaps[it.gi]
+			for r := g.start; r < g.end; r++ {
+				m.rowStarts[r] = line
+			}
+			m.sepLines[line] = it.gi
 			m.vrows = append(m.vrows, vrow{row: -1, gi: it.gi})
 			continue
 		}
+		m.rowStarts[it.row] = line
 		if !m.unified {
 			m.vrows = append(m.vrows, vrow{row: it.row})
 			continue
@@ -66,7 +78,7 @@ func (m *Model) buildVRows(items []displayItem) {
 			m.vrows = append(m.vrows, vrow{row: it.row}, vrow{row: it.row, right: true})
 		case RowAdded:
 			m.vrows = append(m.vrows, vrow{row: it.row, right: true})
-		default: // RowSame renders its Left text, like renderUnified
+		default: // RowSame renders its Left text, like renderUnifiedLine
 			m.vrows = append(m.vrows, vrow{row: it.row})
 		}
 	}
@@ -88,17 +100,20 @@ func (m *Model) MousePress(x, y int) {
 	}
 	m.selRight = right
 	m.sel.Press(p, m.selRunes)
-	m.render()
 }
 
 // MouseDrag extends the selection to (x, y), clamped into the column the
 // press chose.
+//
+// A drag moves the anchors and nothing else (#2495): the cached lines carry no
+// selection highlight, so no row needs re-styling, no side re-parsing and no
+// text extracting — View paints the highlight over the visible window on the
+// next frame, and SelectionText runs only when the selection is copied.
 func (m *Model) MouseDrag(x, y int) {
 	if m.editModeOn || len(m.vrows) == 0 {
 		return
 	}
 	m.sel.Drag(m.posAtSide(x, y, m.selRight), m.selRunes)
-	m.render()
 }
 
 // MouseRelease ends the drag; the selection stays visible until it is copied
@@ -108,18 +123,12 @@ func (m *Model) MouseRelease() { m.sel.Release() }
 // HasSelection reports whether a selection exists.
 func (m *Model) HasSelection() bool { return m.sel.Active() }
 
-// ClearSelection drops the selection and re-renders the highlight away.
-func (m *Model) ClearSelection() {
-	if !m.sel.Active() {
-		m.sel.Clear()
-		return
-	}
-	m.sel.Clear()
-	m.render()
-}
+// ClearSelection drops the selection; the highlight lives in View, so the next
+// frame paints it away on its own (#2495).
+func (m *Model) ClearSelection() { m.sel.Clear() }
 
-// clearSelection drops the selection without re-rendering, for mutators whose
-// own render pass follows.
+// clearSelection is the internal spelling, for mutators that drop a selection
+// their own layout change invalidated.
 func (m *Model) clearSelection() { m.sel.Clear() }
 
 // posAt maps a pane-local cell onto a selection position; right reports the
@@ -185,14 +194,26 @@ func (m *Model) sideOf(vr vrow) bool {
 	return m.selRight
 }
 
-// selCols returns the display-column interval [a, b) the selection covers on
-// one visual line; a >= b means none. right names the side-by-side column
-// being painted, so the untouched column never highlights.
-func (m *Model) selCols(line int, right bool) (a, b int) {
+// selColsLen returns the display-column interval [a, b) the selection covers
+// on one visual line; a >= b means none. right names the side-by-side column
+// being painted, so the untouched column never highlights. n is that line's
+// display-rune count, which the render path has just computed — asking for it
+// spares a second tab expansion per line.
+func (m *Model) selColsLen(line int, right bool, n int) (a, b int) {
 	if !m.sel.Active() || (!m.unified && right != m.selRight) {
 		return 0, 0
 	}
-	return m.sel.LineRange(line, len(m.selRunes(line)))
+	return m.sel.LineRange(line, n)
+}
+
+// selectedLines returns the inclusive visual-line span the selection covers,
+// so View re-styles only those lines; ok is false without a selection.
+func (m *Model) selectedLines() (lo, hi int, ok bool) {
+	start, end, ok := m.sel.Range()
+	if !ok {
+		return 0, 0, false
+	}
+	return start.Line, end.Line, true
 }
 
 // SelectionText extracts the selected text: for every covered visual line the

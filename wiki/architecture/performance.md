@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Performance & Diagnostics
-description: Idle-behavior rules (who may wake the render loop, and how often), the render budget and the always-on per-message-type pass accounting, the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, the opt-in update-loop trace log, the freeze-triage procedure, and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
+description: Idle-behavior rules (who may wake the render loop, and how often), the render budget and the always-on per-message-type pass accounting, the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, the opt-in update-loop trace log, the freeze-triage procedure, the selection-overlay rule for drag latency (#2495), and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/perfhud
 tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog, startup, freeze, render-budget]
-timestamp: 2026-09-03T00:00:00Z
+timestamp: 2026-09-04T00:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -570,6 +570,30 @@ an active stripe: 329µs/606 allocs → 234µs/334 (BenchmarkEditorViewWarm).
 The remaining per-row `ansi.Truncate` pass is bounded by the pane width; the
 deeper option (carrying row widths in the line cache) stays open in the issue
 notes if it ever shows up again.
+
+## Selection highlight is a per-frame overlay, never a cached line (#2495)
+
+The rule for read-only viewers with mouse text selection (`internal/diff`, and
+the shape the merge view already had): **a drag moves the selection anchors;
+the highlight is painted by `View` over the visible window.** The cached
+render — the styled line per document row every viewer keeps — stays
+selection-free and therefore stays valid for the whole drag.
+
+The diff viewer broke this rule: `MouseDrag` called `render()`, so every
+motion event restyled all rows of the document. On a 3000-row syntax-
+highlighted side-by-side diff that is **69 ms per motion event**, well past
+the coalescer's 66 ms back-off ceiling, and the highlight visibly trailed the
+pointer. Painting the covered *visible* lines in `View` instead: **0.79 ms**
+per motion event plus frame, and the drag itself (`MouseDrag` alone) 150 ns —
+constant in the document size. `BenchmarkDragMotion` / `BenchmarkDragMotionOnly`
+in `internal/diff` keep it measurable.
+
+What a drag must therefore *not* do: re-run the diff, re-parse either side for
+syntax, or extract the selected text. `SelectionText` runs when the selection
+is copied (`y` / `ctrl+c` / `cmd+c`), not per frame. Drag events already ride
+the adaptive input coalescer above (`coalescedInputMsg`); a pane that feels
+slow under a drag needs a cheaper frame, not a second throttle. See the
+caching rule in [diff viewer](diff-viewer.md).
 
 ## Large-file keystroke latency (#2159)
 

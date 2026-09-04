@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Diff Viewer
-description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, an ignore-whitespace mode (w, persisted as diff.ignore_whitespace, #2170), side-by-side or unified rendering with per-side theme diff slots including bold/underlined intra-line emphasis and tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, hunk navigation (n/N, enter jumps the editor), mouse text selection with y/ctrl+c/cmd+c copy (#2070), diff.files palette command, layout persistence."
+description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, an ignore-whitespace mode (w, persisted as diff.ignore_whitespace, #2170), side-by-side or unified rendering with per-side theme diff slots including bold/underlined intra-line emphasis and tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, hunk navigation (n/N, enter jumps the editor), mouse text selection with y/ctrl+c/cmd+c copy (#2070) painted as a per-frame overlay so a drag stays cheap (#2495), diff.files palette command, layout persistence."
 resource: internal/diff
 tags: [architecture, diff, pane, vcs]
-timestamp: 2026-09-03T00:00:00Z
+timestamp: 2026-09-04T00:00:00Z
 ---
 
 # Diff Viewer (#60)
@@ -185,6 +185,37 @@ a selection touching a collapsed-context separator copies the gap's hidden
 rows in full — never the placeholder label (the fold-copy rule from #1741). A
 covered separator label and content cells render with the theme's
 `Selection`/`SelectionText` colours, outranking diff backgrounds and syntax.
+
+### The caching rule: the drag moves anchors, `View` paints (#2495)
+
+The selection highlight is **not** baked into the cached lines. `render()`
+builds every visual line selection-free, once per content/layout/size/theme
+change; `View` re-styles only the visible lines the selection actually covers
+(`selectedLines` gives the covered span, `renderVLine` re-paints one line), so
+a frame with a selection costs a viewport, never a document.
+
+This is the rule to keep: **a mouse motion event during a drag must only move
+the selection anchors**. `MouseDrag` does exactly `textsel.Selection.Drag` —
+no re-render, no re-diff, no re-parse, and no `SelectionText`, which runs only
+when the selection is copied. Before #2495 the drag called `render()`, so
+every pointer cell restyled all rows of the diff — 69 ms per motion event on a
+3000-row syntax-highlighted side-by-side diff, and the highlight visibly
+trailed the pointer. Drag events already ride the app's input coalescing
+(`coalescedInputMsg`, see [performance](performance.md)); no pane-local
+throttle exists or should be added.
+
+Two consequences hold the design together. `renderVLine` is the *only* line
+painter — `render()` loops it and `View` calls it for covered lines, so an
+overlaid line is byte-identical to the one a full render would have produced.
+And it must stay read-only: `View` has a value receiver, so its copy shares
+these slices. `buildVRows` is the layout pass proper (it also fills
+`rowStarts` and `sepLines`), and the gutter widths, which scan every row, are
+cached per render pass (`gutL`/`gutR`) because every mouse-cell mapping asks
+for them.
+
+`BenchmarkDragMotion` in `internal/diff` measures one motion event plus the
+frame it causes over 3000 rows; anything that scales with the document size
+there is the regression this section exists to prevent.
 
 The copy chords without a selection copy the current hunk (the first before
 any `n`/`N`) as a minimal unified patch (`HunkPatchText`), analog to the
