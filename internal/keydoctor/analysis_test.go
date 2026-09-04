@@ -62,7 +62,7 @@ func TestAnalyzeReportsDeadAndAtRisk(t *testing.T) {
 func TestEveryDeadBindingGetsASuggestion(t *testing.T) {
 	pinGOOS(t, "darwin")
 	env := darwinEnv()
-	bindings := keymap.BuildTable(keymap.Defaults(keymap.PresetJetBrains), nil, "darwin").Bindings()
+	bindings := keymap.BuildTable(keymap.DefaultsFor(keymap.PresetJetBrains, "darwin"), nil, "darwin").Bindings()
 	findings := Analyze(env, bindings)
 	dead := 0
 	for _, f := range findings {

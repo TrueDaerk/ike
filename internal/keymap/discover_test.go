@@ -53,7 +53,7 @@ func TestLiveBindingsHonestLabels(t *testing.T) {
 func TestLiveBindingsFollowReloads(t *testing.T) {
 	l := liveTable(t)
 	before, _ := l.Binding("project.goToFile")
-	l.Set(BuildTable(Defaults(PresetJetBrains), map[string]string{"f9": "project.goToFile"}, "darwin"))
+	l.Set(BuildTable(DefaultsFor(PresetJetBrains, "darwin"), map[string]string{"f9": "project.goToFile"}, "darwin"))
 	after, _ := l.Binding("project.goToFile")
 	if before == after || after != "f9" {
 		t.Fatalf("reload should re-resolve: before=%q after=%q", before, after)

@@ -61,7 +61,7 @@ func TestCopyChordDefaultsBound(t *testing.T) {
 		{keymap.Explorer, "file.copyPath", "cmd+c"},
 	}
 	for _, goos := range []string{"darwin", "linux"} {
-		table := keymap.BuildTable(keymap.Defaults(keymap.PresetJetBrains), nil, goos)
+		table := keymap.BuildTable(keymap.DefaultsFor(keymap.PresetJetBrains, goos), nil, goos)
 		for _, c := range cases {
 			chord := keymap.NormalizeChord(keymap.MustParseChord(c.want), goos)
 			b, ok := table.Lookup(chord, c.ctx)
@@ -71,7 +71,7 @@ func TestCopyChordDefaultsBound(t *testing.T) {
 		}
 	}
 	// The editor keeps its own copy, and the global path chord is untouched.
-	table := keymap.BuildTable(keymap.Defaults(keymap.PresetJetBrains), nil, "darwin")
+	table := keymap.BuildTable(keymap.DefaultsFor(keymap.PresetJetBrains, "darwin"), nil, "darwin")
 	if b, ok := table.Lookup(keymap.MustParseChord("cmd+c"), keymap.Editor); !ok || b.Command != "editor.copy" {
 		t.Errorf("cmd+c in the editor = %+v ok=%v, want editor.copy", b, ok)
 	}
@@ -83,7 +83,7 @@ func TestCopyChordDefaultsBound(t *testing.T) {
 // TestCopyChordNoCtrlSecondary: ctrl+c stays unbound in both contexts on
 // darwin, so a selection-less press keeps its global quit meaning (#2062).
 func TestCopyChordNoCtrlSecondary(t *testing.T) {
-	table := keymap.BuildTable(keymap.Defaults(keymap.PresetJetBrains), nil, "darwin")
+	table := keymap.BuildTable(keymap.DefaultsFor(keymap.PresetJetBrains, "darwin"), nil, "darwin")
 	for _, ctx := range []keymap.Context{keymap.HTTP, keymap.Explorer} {
 		if b, ok := table.Lookup(keymap.MustParseChord("ctrl+c"), ctx); ok {
 			t.Errorf("ctrl+c in %s must stay unbound, got %s", ctx, b.Command)

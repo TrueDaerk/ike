@@ -185,7 +185,7 @@ func TestPlanRejectsNonKeymapXML(t *testing.T) {
 // are gone.
 func TestApplyEndToEnd(t *testing.T) {
 	opts := config.Options{UserPath: filepath.Join(t.TempDir(), "settings.toml")}
-	defaults := keymap.Defaults(keymap.PresetJetBrains)
+	defaults := keymap.DefaultsFor(keymap.PresetJetBrains, "darwin")
 	res, err := Apply(strings.NewReader(macFixture), defaults, func(key, value string) error {
 		return config.WriteKey(opts, config.UserScope, key, value)
 	})
