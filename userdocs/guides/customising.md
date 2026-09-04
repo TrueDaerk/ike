@@ -7,8 +7,9 @@ write it by hand.
 ## Settings
 
 ++cmd+comma++ opens the settings panel. It is a **three-column grid**:
-categories on the left, the settings of the selected page in the middle with
-their current values, and a detail column on the right that
+categories on the left (grouped, with only the current group unfolded), the
+settings of the selected page in the middle with their current values, and a
+detail column on the right that
 explains the selected setting *and* holds its editor.
 
 ```

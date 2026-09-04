@@ -378,7 +378,18 @@ func (m *Model) renderCategories(h int) string {
 	for i := m.catOff; i < len(rows) && len(lines) < h; i++ {
 		r := rows[i]
 		if r.header != "" {
-			lines = append(lines, header.Render(" "+r.header))
+			// Accordion headers: the open group in accent with ▾, the
+			// folded ones dim with ▸ and their page count. Both are click
+			// targets (a press opens the group on its first page).
+			if r.collapsed {
+				text := " ▸ " + r.header
+				if w := lipgloss.Width(text) + 4; w <= catWidth {
+					text += strings.Repeat(" ", catWidth-w) + strconv.Itoa(r.count)
+				}
+				lines = append(lines, header.Render(text))
+			} else {
+				lines = append(lines, base.Foreground(pal.BorderFocus).Bold(true).Render(" ▾ "+r.header))
+			}
 			continue
 		}
 		p := m.pages[r.page]
