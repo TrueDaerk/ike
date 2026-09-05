@@ -1,0 +1,5156 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A JetBrains-inspired terminal IDE with vim-like editing.">
+      
+      
+      
+        <link rel="canonical" href="https://truedaerk.github.io/ike/reference/commands/">
+      
+      
+        <link rel="prev" href="../settings/">
+      
+      
+        <link rel="next" href="../../troubleshooting/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Commands - IKE</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#commands" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="IKE" class="md-header__button md-logo" aria-label="IKE" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 19V7H4v12zm0-16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm-7 14v-2h5v2zm-3.42-4L5.57 9H8.4l3.3 3.3c.39.39.39 1.03 0 1.42L8.42 17H5.59z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            IKE
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Commands
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/TrueDaerk/ike" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    TrueDaerk/ike
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="IKE" class="md-nav__button md-logo" aria-label="IKE" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 19V7H4v12zm0-16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm-7 14v-2h5v2zm-3.42-4L5.57 9H8.4l3.3 3.3c.39.39.39 1.03 0 1.42L8.42 17H5.59z"/></svg>
+
+    </a>
+    IKE
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/TrueDaerk/ike" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    TrueDaerk/ike
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/terminal-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Terminal setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/desktop-launcher/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Desktop launcher
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/first-project/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Your first project
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/command-line/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command line
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/panes-and-layout/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Panes, tabs and layouts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/modal-editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The modal editor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/projects-and-sessions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Projects and sessions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/commands-and-palette/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Commands and the palette
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/navigation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting around
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/search/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Search and replace
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/file-rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How files are rendered
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/conceal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conceal and decoded values
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/code-intelligence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/terminal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The integrated terminal
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/git/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Git
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependencies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/project-time/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project time
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/run-and-debug/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running and debugging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/http-client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The HTTP client
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/scratch-and-snippets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scratch files and snippets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/customising/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Customising IKE
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../keybindings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Keybindings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../settings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Settings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Commands
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Commands
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        app
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#editor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        editor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#explorer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        explorer
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#format" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        format
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#lsp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        lsp
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#project" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        project
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#themes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        themes
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    About & contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#app" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        app
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#editor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        editor
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#explorer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        explorer
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#format" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        format
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#lsp" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        lsp
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#project" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        project
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#themes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        themes
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/TrueDaerk/ike/edit/main/userdocs/reference/commands.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<!--
+Generated by cmd/docgen. Do not edit this file by hand — your changes will be
+overwritten and CI will fail on the drift. Change the source instead and run:
+
+    go run ./cmd/docgen
+-->
+
+<h1 id="commands">Commands<a class="headerlink" href="#commands" title="Permanent link">&para;</a></h1>
+<p>Every command registered in this build, as the command palette sees them.</p>
+<p>Open the palette with <strong>Search everywhere</strong> and type <code>:</code> to filter commands.
+The <strong>Chord</strong> column is the default keybinding, where one exists; see
+<a href="../keybindings/">Keybindings</a> for the full table and how to rebind.</p>
+<p><strong>Available in</strong> is the pane a command is scoped to — a scoped command only
+shows up, and only runs, while that pane has focus.</p>
+<p><strong>In the editor</strong> lists the vim key or ex-command that does the same thing.
+Those are handled by the editor directly rather than through the keymap layer,
+so they work regardless of what the chord table says.</p>
+<p>Your own configuration adds to this list: every tool pane you define under
+<code>[[tools.custom]]</code> gets a <code>tool.&lt;name&gt;</code> command, and plugins you install
+bring their own.</p>
+<h2 id="app">app<a class="headerlink" href="#app" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>ID</th>
+<th>Chord</th>
+<th>In the editor</th>
+<th>Available in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Extract Whole Archive…</td>
+<td><code>archive.extractAll</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Extract Selected Archive Entry…</td>
+<td><code>archive.extractEntry</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Reload Archive Listing</td>
+<td><code>archive.reload</code></td>
+<td><code>ctrl+r</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Edit Bookmark Note</td>
+<td><code>bookmark.annotate</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Go to Bookmark by Mnemonic</td>
+<td><code>bookmark.jumpMnemonic</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Next Bookmark</td>
+<td><code>bookmark.next</code></td>
+<td><code>shift+f11</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Bookmarks Overview</td>
+<td><code>bookmark.overview</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Previous Bookmark</td>
+<td><code>bookmark.previous</code></td>
+<td><code>ctrl+shift+f11</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Toggle Bookmark</td>
+<td><code>bookmark.toggle</code></td>
+<td><code>f11</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Toggle Bookmark with Mnemonic</td>
+<td><code>bookmark.toggleMnemonic</code></td>
+<td><code>alt+f3</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Toggle Coverage Marks</td>
+<td><code>coverage.toggle</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>CSV: Column Profile</td>
+<td><code>csv.columnProfile</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Data: Column Profile</td>
+<td><code>data.columnProfile</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>data</code> pane</td>
+</tr>
+<tr>
+<td>Data: Export Rows…</td>
+<td><code>data.export</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>data</code> pane</td>
+</tr>
+<tr>
+<td>Data: Sort Column</td>
+<td><code>data.sortColumn</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>data</code> pane</td>
+</tr>
+<tr>
+<td>Breakpoint Properties…</td>
+<td><code>debug.breakpointProperties</code></td>
+<td><code>cmd+alt+f8</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Breakpoints</td>
+<td><code>debug.breakpoints</code></td>
+<td><code>cmd+shift+f8</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Debug: Toggle Console/Variables View</td>
+<td><code>debug.console</code></td>
+<td><code>cmd+5</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Continue</td>
+<td><code>debug.continue</code></td>
+<td><code>f9</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Debug: Copy Selected Value</td>
+<td><code>debug.copy</code></td>
+<td><code>cmd+c</code></td>
+<td>—</td>
+<td><code>debug</code> pane</td>
+</tr>
+<tr>
+<td>Xdebug Doctor</td>
+<td><code>debug.doctor</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Evaluate Expression</td>
+<td><code>debug.evaluate</code></td>
+<td><code>alt+f8</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Listen for PHP Debug Connections</td>
+<td><code>debug.listen</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Run to Cursor</td>
+<td><code>debug.runToCursor</code></td>
+<td><code>alt+f9</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Run to Line…</td>
+<td><code>debug.runToLine</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Debug File</td>
+<td><code>debug.start</code></td>
+<td><code>shift+f9</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Step Into</td>
+<td><code>debug.stepInto</code></td>
+<td><code>f7</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Step Out</td>
+<td><code>debug.stepOut</code></td>
+<td><code>shift+f8</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Step Over</td>
+<td><code>debug.stepOver</code></td>
+<td><code>f8</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Stop Debug Session</td>
+<td><code>debug.stop</code></td>
+<td><code>cmd+f2</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Debug Test at Cursor</td>
+<td><code>debug.testAtCursor</code></td>
+<td><code>alt+shift+f9</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Toggle Breakpoint</td>
+<td><code>debug.toggleBreakpoint</code></td>
+<td><code>cmd+f8</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Dependencies: Audit Vulnerabilities</td>
+<td><code>deps.audit</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Dependencies: Refresh Scan</td>
+<td><code>deps.refresh</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Dependencies</td>
+<td><code>deps.toggle</code></td>
+<td><code>cmd+0</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Update Dependency to Latest</td>
+<td><code>deps.updateLatest</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Write Heap Dump</td>
+<td><code>diag.heapDump</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Memory Statistics</td>
+<td><code>diag.memoryStats</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Compare with Clipboard</td>
+<td><code>diff.compareWithClipboard</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Diff Two Files…</td>
+<td><code>diff.files</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Next Change (Diff)</td>
+<td><code>diff.nextChange</code></td>
+<td><code>f7</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Previous Change (Diff)</td>
+<td><code>diff.prevChange</code></td>
+<td><code>shift+f7</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>DOM Inspector</td>
+<td><code>dom.toggle</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Close Tab</td>
+<td><code>editor.closeTab</code></td>
+<td><code>cmd+w</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Force Code Insight (Large File)</td>
+<td><code>editor.forceCodeInsight</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Go to Line…</td>
+<td><code>editor.goToLine</code></td>
+<td><code>cmd+l</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Large File Details</td>
+<td><code>editor.largeFileDetails</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Materialize Buffer to File</td>
+<td><code>editor.materializeBuffer</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Paste from History</td>
+<td><code>editor.pasteFromHistory</code></td>
+<td><code>cmd+shift+v</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Save All</td>
+<td><code>editor.saveAll</code></td>
+<td><code>cmd+shift+s</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Treat Buffer as…</td>
+<td><code>editor.setBufferLanguage</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Split View Down</td>
+<td><code>editor.splitViewDown</code></td>
+<td><code>cmd+alt+shift+down</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Split View Right</td>
+<td><code>editor.splitViewRight</code></td>
+<td><code>cmd+alt+shift+right</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Close Other Tabs</td>
+<td><code>editor.tab.closeOthers</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Move Tab Left</td>
+<td><code>editor.tab.moveLeft</code></td>
+<td><code>ctrl+shift+pgup</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Move Tab Right</td>
+<td><code>editor.tab.moveRight</code></td>
+<td><code>ctrl+shift+pgdown</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Empty Editor Tab</td>
+<td><code>editor.tab.new</code></td>
+<td><code>ctrl+t</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Next Tab</td>
+<td><code>editor.tab.next</code></td>
+<td><code>cmd+ctrl+right</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Switch Tab…</td>
+<td><code>editor.tab.picker</code></td>
+<td><code>alt+e</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Previous Tab</td>
+<td><code>editor.tab.prev</code></td>
+<td><code>cmd+ctrl+left</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Reopen Closed Tab</td>
+<td><code>editor.tab.reopenClosed</code></td>
+<td><code>cmd+shift+t</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Go to Tab 1</td>
+<td><code>editor.tab.select1</code></td>
+<td><code>alt+1</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Go to Tab 2</td>
+<td><code>editor.tab.select2</code></td>
+<td><code>alt+2</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Go to Tab 3</td>
+<td><code>editor.tab.select3</code></td>
+<td><code>alt+3</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Go to Tab 4</td>
+<td><code>editor.tab.select4</code></td>
+<td><code>alt+4</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Go to Tab 5</td>
+<td><code>editor.tab.select5</code></td>
+<td><code>alt+5</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Go to Tab 6</td>
+<td><code>editor.tab.select6</code></td>
+<td><code>alt+6</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Go to Tab 7</td>
+<td><code>editor.tab.select7</code></td>
+<td><code>alt+7</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Go to Tab 8</td>
+<td><code>editor.tab.select8</code></td>
+<td><code>alt+8</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Go to Tab 9</td>
+<td><code>editor.tab.select9</code></td>
+<td><code>alt+9</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Pin/Unpin Tab</td>
+<td><code>editor.tab.togglePin</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>ES: Run Query Buffer</td>
+<td><code>es.run</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Focus Explorer / Editor</td>
+<td><code>explorer.toggle</code></td>
+<td><code>cmd+1</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Copy Path</td>
+<td><code>file.copyPath</code></td>
+<td><code>cmd+shift+c</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Copy Reference</td>
+<td><code>file.copyReference</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Copy Relative Path</td>
+<td><code>file.copyRelPath</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Show Local History</td>
+<td><code>file.localHistory</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Move File</td>
+<td><code>file.move</code></td>
+<td><code>f6</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Open File As…</td>
+<td><code>file.openAs</code></td>
+<td><code>cmd+alt+shift+o</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Open in Browser</td>
+<td><code>file.openInBrowser</code></td>
+<td><code>alt+f2</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Open File…</td>
+<td><code>file.openPath</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Rename File</td>
+<td><code>file.rename</code></td>
+<td><code>shift+f6</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Show Timeline</td>
+<td><code>file.timeline</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Open Results in Find Window</td>
+<td><code>find.openInPanel</code></td>
+<td><code>cmd+enter</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Welcome Tour</td>
+<td><code>help.welcomeTour</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Show Project History Timeline</td>
+<td><code>history.projectTimeline</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Cancel Running HTTP Request</td>
+<td><code>http.cancel</code></td>
+<td><code>cmd+.</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Copy HTTP Request as curl</td>
+<td><code>http.copyAsCurl</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Copy HTTP Request as httpie</td>
+<td><code>http.copyAsHttpie</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Copy HTTP Response Body</td>
+<td><code>http.copyBody</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Copy Folded Range (HTTP Response)</td>
+<td><code>http.copyFold</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Copy HTTP Response Headers</td>
+<td><code>http.copyHeaders</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Copy HTTP Response Selection or Body</td>
+<td><code>http.copyResponse</code></td>
+<td><code>cmd+c</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Copy Shown HTTP Request as curl</td>
+<td><code>http.copyShownAsCurl</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Copy Shown HTTP Request as httpie</td>
+<td><code>http.copyShownAsHttpie</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Diff HTTP Response Against Previous Run</td>
+<td><code>http.diffPreviousRun</code></td>
+<td><code>cmd+shift+d</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Compare Stored HTTP Responses</td>
+<td><code>http.diffResponses</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Introspect GraphQL Schema</td>
+<td><code>http.graphqlIntrospect</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Open Cached GraphQL Schema (SDL)</td>
+<td><code>http.graphqlSchema</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Import curl Command…</td>
+<td><code>http.importCurl</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Import OpenAPI Spec…</td>
+<td><code>http.importOpenAPI</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Insert curl as HTTP Request</td>
+<td><code>http.insertCurlAsRequest</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Open jq Playground on HTTP Response</td>
+<td><code>http.jqPlayground</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Load More of the HTTP Response Body</td>
+<td><code>http.loadMoreBody</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Open Full HTTP Response Body as File</td>
+<td><code>http.openBodyFile</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Re-run HTTP Request from History</td>
+<td><code>http.rerun</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Re-send Stored HTTP Request</td>
+<td><code>http.resend</code></td>
+<td><code>ctrl+r</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Browse HTTP Response History</td>
+<td><code>http.responseHistory</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Run HTTP Request</td>
+<td><code>http.run</code></td>
+<td><code>ctrl+f9</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Save HTTP Response Body to File…</td>
+<td><code>http.saveResponse</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Search in HTTP Response</td>
+<td><code>http.search</code></td>
+<td><code>cmd+f</code></td>
+<td>—</td>
+<td><code>http</code> pane</td>
+</tr>
+<tr>
+<td>Select HTTP Environment</td>
+<td><code>http.selectEnvironment</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Show Stored HTTP Response</td>
+<td><code>http.showResponse</code></td>
+<td><code>ctrl+shift+f9</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Toggle Raw / Pretty HTTP Response Body</td>
+<td><code>http.toggleRawBody</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Issues: Copy Issue Reference</td>
+<td><code>issues.copy</code></td>
+<td><code>cmd+c</code></td>
+<td>—</td>
+<td><code>issues</code> pane</td>
+</tr>
+<tr>
+<td>Issues: Next Issue</td>
+<td><code>issues.selectNext</code></td>
+<td><code>ctrl+down</code></td>
+<td>—</td>
+<td><code>issues</code> pane</td>
+</tr>
+<tr>
+<td>Issues: Previous Issue</td>
+<td><code>issues.selectPrev</code></td>
+<td><code>ctrl+up</code></td>
+<td>—</td>
+<td><code>issues</code> pane</td>
+</tr>
+<tr>
+<td>GitHub Issues</td>
+<td><code>issues.toggle</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>jq Cheatsheet…</td>
+<td><code>json.jqCheatsheet</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Saved jq Filters…</td>
+<td><code>json.jqFilters</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>jq Playground…</td>
+<td><code>json.jqPlayground</code></td>
+<td><code>ctrl+alt+j</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>jq Playground at Cursor Path…</td>
+<td><code>json.jqPlaygroundAtPath</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Toggle Full Query View</td>
+<td><code>json.jqQueryView</code></td>
+<td><code>ctrl+alt+e</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Rename Saved jq Filter…</td>
+<td><code>json.jqRenameFilter</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Save Playground Filter…</td>
+<td><code>json.jqSaveFilter</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Keymap Doctor: Dead Bindings</td>
+<td><code>keymap.deadBindings</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Keymap Doctor: Probe Chord Delivery</td>
+<td><code>keymap.doctor</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Import JetBrains Keymap XML…</td>
+<td><code>keymap.importJetBrains</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Open Rotated Log Set (Merged Timeline)</td>
+<td><code>log.openRotatedSet</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>LSP Doctor: Copy Report</td>
+<td><code>lsp.doctor.copy</code></td>
+<td><code>cmd+c</code></td>
+<td>—</td>
+<td><code>lspdoctor</code> pane</td>
+</tr>
+<tr>
+<td>Markdown Preview</td>
+<td><code>markdown.preview</code></td>
+<td><code>cmd+alt+m</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Open Menu Bar</td>
+<td><code>menu.open</code></td>
+<td><code>f10</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Navigate Back</td>
+<td><code>nav.back</code></td>
+<td><code>mouse-back</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Bookmarks</td>
+<td><code>nav.bookmarks</code></td>
+<td><code>cmd+f3</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Navigate Forward</td>
+<td><code>nav.forward</code></td>
+<td><code>mouse-forward</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Go to Pinned File 1</td>
+<td><code>nav.pinGoto1</code></td>
+<td><code>ctrl+shift+1</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Go to Pinned File 2</td>
+<td><code>nav.pinGoto2</code></td>
+<td><code>ctrl+shift+2</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Go to Pinned File 3</td>
+<td><code>nav.pinGoto3</code></td>
+<td><code>ctrl+shift+3</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Go to Pinned File 4</td>
+<td><code>nav.pinGoto4</code></td>
+<td><code>ctrl+shift+4</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Pin File to Slot 1</td>
+<td><code>nav.pinSlot1</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Pin File to Slot 2</td>
+<td><code>nav.pinSlot2</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Pin File to Slot 3</td>
+<td><code>nav.pinSlot3</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Pin File to Slot 4</td>
+<td><code>nav.pinSlot4</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Pinned Files</td>
+<td><code>nav.pins</code></td>
+<td><code>cmd+2</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Forget Paired Network Clients</td>
+<td><code>network.forgetClients</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Notification History</td>
+<td><code>notifications.history</code></td>
+<td><code>cmd+alt+n</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Keymap Cheatsheet</td>
+<td><code>palette.keymapHelp</code></td>
+<td><code>f1</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Recent Files</td>
+<td><code>palette.recentFiles</code></td>
+<td><code>cmd+e</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Search Everywhere</td>
+<td><code>palette.searchEverywhere</code></td>
+<td><code>cmd+shift+a</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Close Pane</td>
+<td><code>pane.close</code></td>
+<td><code>ctrl+alt+w</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Focus Pane 1</td>
+<td><code>pane.focus1</code></td>
+<td><code>ctrl+1</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Focus Pane 2</td>
+<td><code>pane.focus2</code></td>
+<td><code>ctrl+2</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Focus Pane 3</td>
+<td><code>pane.focus3</code></td>
+<td><code>ctrl+3</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Focus Pane 4</td>
+<td><code>pane.focus4</code></td>
+<td><code>ctrl+4</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Focus Pane 5</td>
+<td><code>pane.focus5</code></td>
+<td><code>ctrl+5</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Focus Pane 6</td>
+<td><code>pane.focus6</code></td>
+<td><code>ctrl+6</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Focus Pane 7</td>
+<td><code>pane.focus7</code></td>
+<td><code>ctrl+7</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Focus Pane 8</td>
+<td><code>pane.focus8</code></td>
+<td><code>ctrl+8</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Focus Pane 9</td>
+<td><code>pane.focus9</code></td>
+<td><code>ctrl+9</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Focus Pane by Number…</td>
+<td><code>pane.focusByIndex</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Maximize Pane</td>
+<td><code>pane.maximize</code></td>
+<td><code>cmd+k z</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Resize Pane (Keyboard Mode)</td>
+<td><code>pane.resizeMode</code></td>
+<td><code>ctrl+alt+r</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Split Down</td>
+<td><code>pane.splitDown</code></td>
+<td><code>cmd+k down</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Split Left</td>
+<td><code>pane.splitLeft</code></td>
+<td><code>cmd+k left</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Split Right</td>
+<td><code>pane.splitRight</code></td>
+<td><code>cmd+k right</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Split Up</td>
+<td><code>pane.splitUp</code></td>
+<td><code>cmd+k up</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Switch Pane Focus</td>
+<td><code>pane.switcher</code></td>
+<td><code>ctrl+tab</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Performance HUD</td>
+<td><code>perf.hud</code></td>
+<td><code>ctrl+alt+p</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Copy Performance Snapshot</td>
+<td><code>perf.snapshot</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Open Playground for This File</td>
+<td><code>playground.open</code></td>
+<td><code>cmd+shift+j</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Re-render Preview Diagrams</td>
+<td><code>preview.rerenderDiagrams</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Problems</td>
+<td><code>problems.toggle</code></td>
+<td><code>cmd+8</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Find in All Projects</td>
+<td><code>project.findInAllProjects</code></td>
+<td><code>cmd+alt+shift+f</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Show All-Projects Search Results</td>
+<td><code>project.findInAllProjectsResults</code></td>
+<td><code>cmd+alt+shift+r</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Find in Path</td>
+<td><code>project.findInPath</code></td>
+<td><code>cmd+shift+f</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Go to File</td>
+<td><code>project.goToFile</code></td>
+<td><code>cmd+shift+o</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Replace in Path</td>
+<td><code>project.replaceInPath</code></td>
+<td><code>cmd+shift+r</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Switch to Recent Project 1</td>
+<td><code>project.switchMRU1</code></td>
+<td><code>ctrl+alt+1</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Switch to Recent Project 2</td>
+<td><code>project.switchMRU2</code></td>
+<td><code>ctrl+alt+2</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Switch to Recent Project 3</td>
+<td><code>project.switchMRU3</code></td>
+<td><code>ctrl+alt+3</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Switch to Recent Project 4</td>
+<td><code>project.switchMRU4</code></td>
+<td><code>ctrl+alt+4</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Switch to Recent Project 5</td>
+<td><code>project.switchMRU5</code></td>
+<td><code>ctrl+alt+5</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Switch to Recent Project 6</td>
+<td><code>project.switchMRU6</code></td>
+<td><code>ctrl+alt+6</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Switch to Recent Project 7</td>
+<td><code>project.switchMRU7</code></td>
+<td><code>ctrl+alt+7</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Switch to Recent Project 8</td>
+<td><code>project.switchMRU8</code></td>
+<td><code>ctrl+alt+8</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Switch to Recent Project 9</td>
+<td><code>project.switchMRU9</code></td>
+<td><code>ctrl+alt+9</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Python Environment…</td>
+<td><code>python.newEnvironment</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Browse SSH Host (SFTP)…</td>
+<td><code>remote.browse</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Edit Run Configuration…</td>
+<td><code>run.editConfig</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Run File</td>
+<td><code>run.file</code></td>
+<td><code>shift+f10</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Rerun Last</td>
+<td><code>run.rerun</code></td>
+<td><code>cmd+f5</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Run/Debug Configurations…</td>
+<td><code>run.select</code></td>
+<td><code>alt+shift+f10</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Run Task…</td>
+<td><code>run.task</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Promote Task to Run Configuration…</td>
+<td><code>run.taskPromote</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Run Test at Cursor</td>
+<td><code>run.testAtCursor</code></td>
+<td><code>ctrl+shift+f10</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Run Tests in File</td>
+<td><code>run.testsInFile</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Run Tests in File with Coverage</td>
+<td><code>run.testsWithCoverage</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Generate Test Data…</td>
+<td><code>scratch.generate</code></td>
+<td><code>cmd+alt+shift+n</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Open Scratch File…</td>
+<td><code>scratch.list</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Manage Scratch Files…</td>
+<td><code>scratch.manage</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File…</td>
+<td><code>scratch.new</code></td>
+<td><code>cmd+shift+n</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: CSS</td>
+<td><code>scratch.new.css</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: Less</td>
+<td><code>scratch.new.css.less</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: SCSS</td>
+<td><code>scratch.new.css.scss</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: CSV</td>
+<td><code>scratch.new.csv</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: Dockerfile</td>
+<td><code>scratch.new.dockerfile</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: GO</td>
+<td><code>scratch.new.go</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: Html</td>
+<td><code>scratch.new.html</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: Http</td>
+<td><code>scratch.new.http</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: Json</td>
+<td><code>scratch.new.json</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: Make</td>
+<td><code>scratch.new.make</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: Markdown</td>
+<td><code>scratch.new.markdown</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: Ndjson</td>
+<td><code>scratch.new.ndjson</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: PHP</td>
+<td><code>scratch.new.php</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: PSV</td>
+<td><code>scratch.new.psv</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: Python</td>
+<td><code>scratch.new.python</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: Shell</td>
+<td><code>scratch.new.shell</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: SQL</td>
+<td><code>scratch.new.sql</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: Plain Text</td>
+<td><code>scratch.new.text</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: Toml</td>
+<td><code>scratch.new.toml</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: TSV</td>
+<td><code>scratch.new.tsv</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: Typescript</td>
+<td><code>scratch.new.typescript</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: JavaScript</td>
+<td><code>scratch.new.typescript.js</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: JSX</td>
+<td><code>scratch.new.typescript.jsx</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: TSX</td>
+<td><code>scratch.new.typescript.tsx</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: XML</td>
+<td><code>scratch.new.xml</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch File: Yaml</td>
+<td><code>scratch.new.yaml</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Scratch from Selection</td>
+<td><code>scratch.newFromSelection</code></td>
+<td><code>cmd+alt+shift+s</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Scratch Files</td>
+<td><code>scratch.panel</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Promote Scratch to File…</td>
+<td><code>scratch.promote</code></td>
+<td><code>cmd+alt+shift+p</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Next Search Match</td>
+<td><code>search.nextMatch</code></td>
+<td><code>f3</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Find in Pane</td>
+<td><code>search.open</code></td>
+<td><code>cmd+f</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Previous Search Match</td>
+<td><code>search.prevMatch</code></td>
+<td><code>shift+f3</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Settings</td>
+<td><code>settings.open</code></td>
+<td><code>cmd+,</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Structure</td>
+<td><code>structure.toggle</code></td>
+<td><code>cmd+3</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Clear Terminal</td>
+<td><code>terminal.clear</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Terminal</td>
+<td><code>terminal.new</code></td>
+<td><code>cmd+alt+shift+t</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Terminal Tab</td>
+<td><code>terminal.newTab</code></td>
+<td><code>ctrl+t</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Popup Terminal</td>
+<td><code>terminal.popup</code></td>
+<td><code>cmd+alt+t</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Pin Popup Terminal</td>
+<td><code>terminal.popup.pin</code></td>
+<td><code>cmd+alt+shift+k</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>SSH Host…</td>
+<td><code>terminal.ssh</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Toggle Terminal</td>
+<td><code>terminal.toggle</code></td>
+<td><code>alt+f12</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Test Results</td>
+<td><code>tests.toggle</code></td>
+<td><code>cmd+4</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Project Time: Reload Usage Log</td>
+<td><code>time.refresh</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Project Time Report</td>
+<td><code>time.toggle</code></td>
+<td><code>cmd+alt+0</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>TODO Index</td>
+<td><code>todo.list</code></td>
+<td><code>cmd+6</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Regex Tester…</td>
+<td><code>tools.regexTester</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Set Up Tool Panes</td>
+<td><code>tools.setup</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Usages</td>
+<td><code>usages.toggle</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Treat as Vault File</td>
+<td><code>vault.treatAsFile</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Toggle Inline Blame</td>
+<td><code>vcs.blameLine</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Diff File Against HEAD</td>
+<td><code>vcs.diff</code></td>
+<td><code>cmd+alt+d</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Show History for Selection</td>
+<td><code>vcs.historyForSelection</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Merge: Save Result and Stage</td>
+<td><code>vcs.mergeApply</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Resolve Conflicts in Merge View</td>
+<td><code>vcs.mergeFile</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Toggle VCS Tool Window</td>
+<td><code>vcs.panel</code></td>
+<td><code>cmd+9</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Revert File</td>
+<td><code>vcs.revertFile</code></td>
+<td><code>cmd+alt+z</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Revert Hunk Under Caret</td>
+<td><code>vcs.revertHunk</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Undo Revert…</td>
+<td><code>vcs.undoRevert</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Export Screenshot (Pane)</td>
+<td><code>view.exportScreenshot</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Export Screenshot (Window)</td>
+<td><code>view.exportWindowScreenshot</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Zen Mode</td>
+<td><code>view.zenMode</code></td>
+<td><code>ctrl+alt+f</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Show External Changes</td>
+<td><code>watch.changeFeed</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Hide All Tool Windows</td>
+<td><code>window.hideAllTools</code></td>
+<td><code>cmd+shift+f12</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Window Layouts…</td>
+<td><code>window.layouts</code></td>
+<td><code>alt+shift+f12</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Restore Default Layout</td>
+<td><code>window.restoreLayout</code></td>
+<td><code>shift+f12</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Save Window Layout…</td>
+<td><code>window.saveLayout</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Set Default Window Layout…</td>
+<td><code>window.setDefaultLayout</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>xmq Cheatsheet…</td>
+<td><code>xml.xmqCheatsheet</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Saved xmq Filters…</td>
+<td><code>xml.xmqFilters</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>xmq Playground…</td>
+<td><code>xml.xmqPlayground</code></td>
+<td><code>ctrl+alt+x</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>xmq Playground at Element XPath…</td>
+<td><code>xml.xmqPlaygroundAtPath</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Rename Saved xmq Filter…</td>
+<td><code>xml.xmqRenameFilter</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>yq Cheatsheet…</td>
+<td><code>yaml.yqCheatsheet</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Saved yq Filters…</td>
+<td><code>yaml.yqFilters</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>yq Playground…</td>
+<td><code>yaml.yqPlayground</code></td>
+<td><code>ctrl+alt+y</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>yq Playground at Cursor Path…</td>
+<td><code>yaml.yqPlaygroundAtPath</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Rename Saved yq Filter…</td>
+<td><code>yaml.yqRenameFilter</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+</tbody>
+</table>
+<h2 id="editor">editor<a class="headerlink" href="#editor" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>ID</th>
+<th>Chord</th>
+<th>In the editor</th>
+<th>Available in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Clone Caret Above</td>
+<td><code>editor.caret.addAbove</code></td>
+<td><code>alt+shift+up</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Add Carets at All Occurrences</td>
+<td><code>editor.caret.addAll</code></td>
+<td><code>ctrl+shift+g</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Clone Caret Below</td>
+<td><code>editor.caret.addBelow</code></td>
+<td><code>alt+shift+down</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Add Caret at Next Occurrence</td>
+<td><code>editor.caret.addNext</code></td>
+<td><code>ctrl+g</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Cycle Case (camel/snake/kebab)</td>
+<td><code>editor.case.cycle</code></td>
+<td><code>alt+shift+u</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Lower Case</td>
+<td><code>editor.case.lower</code></td>
+<td>—</td>
+<td><code>gu</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Case</td>
+<td><code>editor.case.toggle</code></td>
+<td><code>cmd+shift+u</code></td>
+<td><code>g~</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Upper Case</td>
+<td><code>editor.case.upper</code></td>
+<td>—</td>
+<td><code>gU</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Block Comment</td>
+<td><code>editor.commentBlock</code></td>
+<td><code>cmd+shift+7</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Line Comment</td>
+<td><code>editor.commentLine</code></td>
+<td><code>cmd+7</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Copy</td>
+<td><code>editor.copy</code></td>
+<td><code>cmd+c</code></td>
+<td><code>y</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Copy JSON/YAML Path</td>
+<td><code>editor.copyDocPath</code></td>
+<td><code>cmd+alt+shift+c</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Copy JSON/YAML Path as jq Expression</td>
+<td><code>editor.copyDocPathJQ</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Copy JSON/YAML Path as yq Expression</td>
+<td><code>editor.copyDocPathYQ</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Cut</td>
+<td><code>editor.cut</code></td>
+<td><code>cmd+x</code></td>
+<td><code>d</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Decode JWT at Caret</td>
+<td><code>editor.decodeJWT</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Decrement Number</td>
+<td><code>editor.decrement</code></td>
+<td>—</td>
+<td><code>ctrl+x</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Delete Line</td>
+<td><code>editor.deleteLine</code></td>
+<td><code>cmd+backspace</code></td>
+<td><code>dd</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Delete Word Backward</td>
+<td><code>editor.deleteWordBackward</code></td>
+<td><code>alt+backspace</code></td>
+<td><code>db</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Go to Document End</td>
+<td><code>editor.docEnd</code></td>
+<td><code>cmd+end</code></td>
+<td><code>G</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Go to Document Start</td>
+<td><code>editor.docStart</code></td>
+<td><code>cmd+home</code></td>
+<td><code>gg</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Duplicate Line</td>
+<td><code>editor.duplicateLine</code></td>
+<td><code>cmd+d</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Escape Selection as Unicode</td>
+<td><code>editor.escapeSelection</code></td>
+<td><code>cmd+alt+shift+e</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Explain Concealed Value</td>
+<td><code>editor.explainConceal</code></td>
+<td>—</td>
+<td><code>g?</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Find in File</td>
+<td><code>editor.find</code></td>
+<td><code>cmd+f</code></td>
+<td><code>/</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Close Fold</td>
+<td><code>editor.fold.close</code></td>
+<td>—</td>
+<td><code>zc</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Close All Folds</td>
+<td><code>editor.fold.closeAll</code></td>
+<td>—</td>
+<td><code>zM</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Copy Folded Range</td>
+<td><code>editor.fold.copy</code></td>
+<td>—</td>
+<td><code>zy</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Open Fold</td>
+<td><code>editor.fold.open</code></td>
+<td>—</td>
+<td><code>zo</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Open All Folds</td>
+<td><code>editor.fold.openAll</code></td>
+<td>—</td>
+<td><code>zR</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Fold</td>
+<td><code>editor.fold.toggle</code></td>
+<td>—</td>
+<td><code>za</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Increment Number</td>
+<td><code>editor.increment</code></td>
+<td>—</td>
+<td><code>ctrl+a</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Jump to Visible Text (Label Jump)</td>
+<td><code>editor.labelJump</code></td>
+<td>—</td>
+<td><code>gs</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Move to Line End</td>
+<td><code>editor.lineEnd</code></td>
+<td><code>cmd+right</code></td>
+<td><code>$</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Move to Line Start</td>
+<td><code>editor.lineStart</code></td>
+<td><code>home</code></td>
+<td><code>0</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Move Line Down</td>
+<td><code>editor.moveLineDown</code></td>
+<td><code>cmd+shift+down</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Move Line Up</td>
+<td><code>editor.moveLineUp</code></td>
+<td><code>cmd+shift+up</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Paste</td>
+<td><code>editor.paste</code></td>
+<td><code>cmd+v</code></td>
+<td><code>p</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Close Editor</td>
+<td><code>editor.quit</code></td>
+<td>—</td>
+<td><code>:q</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Redo</td>
+<td><code>editor.redo</code></td>
+<td><code>cmd+shift+z</code></td>
+<td><code>ctrl+r</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Redo (Chronological)</td>
+<td><code>editor.redoChrono</code></td>
+<td>—</td>
+<td><code>g+</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Replace in File</td>
+<td><code>editor.replace</code></td>
+<td><code>cmd+r</code></td>
+<td><code>:s</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Reverse Lines</td>
+<td><code>editor.reverseLines</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Select All</td>
+<td><code>editor.selectAll</code></td>
+<td><code>cmd+a</code></td>
+<td><code>ggVG</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Select to Line End</td>
+<td><code>editor.selectLineEnd</code></td>
+<td><code>shift+end</code></td>
+<td><code>v$</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Select to Line Start</td>
+<td><code>editor.selectLineStart</code></td>
+<td><code>shift+home</code></td>
+<td><code>v0</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Extend Selection</td>
+<td><code>editor.selection.extend</code></td>
+<td><code>alt+up</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Shrink Selection</td>
+<td><code>editor.selection.shrink</code></td>
+<td><code>alt+down</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Shuffle Lines</td>
+<td><code>editor.shuffleLines</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Sort Lines</td>
+<td><code>editor.sortLines</code></td>
+<td><code>alt+shift+s</code></td>
+<td><code>:sort</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Sort Lines by Length</td>
+<td><code>editor.sortLinesByLength</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Sort Lines (Descending)</td>
+<td><code>editor.sortLinesDescending</code></td>
+<td>—</td>
+<td><code>:sort!</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Sort Lines (Ignore Case)</td>
+<td><code>editor.sortLinesIgnoreCase</code></td>
+<td>—</td>
+<td><code>:sort i</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Sort Lines (Natural Order)</td>
+<td><code>editor.sortLinesNatural</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Value Under Caret</td>
+<td><code>editor.toggleValue</code></td>
+<td>—</td>
+<td><code>g!</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Undo</td>
+<td><code>editor.undo</code></td>
+<td><code>cmd+z</code></td>
+<td><code>u</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Undo (Chronological)</td>
+<td><code>editor.undoChrono</code></td>
+<td>—</td>
+<td><code>g-</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Undo Tree</td>
+<td><code>editor.undoTree</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Unescape Selection</td>
+<td><code>editor.unescapeSelection</code></td>
+<td><code>cmd+alt+shift+u</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Remove Duplicate Lines</td>
+<td><code>editor.uniqueLines</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Save File</td>
+<td><code>editor.write</code></td>
+<td><code>cmd+s</code></td>
+<td><code>:w</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Save and Close</td>
+<td><code>editor.write_quit</code></td>
+<td>—</td>
+<td><code>:wq</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Copy Value Under Caret</td>
+<td><code>editor.yankValue</code></td>
+<td>—</td>
+<td><code>gy</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Copy Key and Value Under Caret</td>
+<td><code>editor.yankValueOuter</code></td>
+<td>—</td>
+<td><code>gY</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Encoding: ISO 8859-1</td>
+<td><code>file.setEncoding.latin1</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Encoding: UTF-16 BE</td>
+<td><code>file.setEncoding.utf16be</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Encoding: UTF-16 LE</td>
+<td><code>file.setEncoding.utf16le</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Encoding: UTF-8</td>
+<td><code>file.setEncoding.utf8</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Encoding: UTF-8 BOM</td>
+<td><code>file.setEncoding.utf8bom</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Encoding: Windows-1252</td>
+<td><code>file.setEncoding.windows1252</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Line Endings: CRLF</td>
+<td><code>file.setLineEndings.crlf</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Line Endings: LF</td>
+<td><code>file.setLineEndings.lf</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Ignore Diagnostic Under Caret</td>
+<td><code>lsp.ignoreDiagnostic</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Next Diagnostic</td>
+<td><code>lsp.nextDiagnostic</code></td>
+<td><code>f2</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Previous Diagnostic</td>
+<td><code>lsp.prevDiagnostic</code></td>
+<td><code>shift+f2</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Merge: Accept Both</td>
+<td><code>merge.acceptBoth</code></td>
+<td>—</td>
+<td><code>gb</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Merge: Accept Ours</td>
+<td><code>merge.acceptOurs</code></td>
+<td>—</td>
+<td><code>go</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Merge: Accept Theirs</td>
+<td><code>merge.acceptTheirs</code></td>
+<td>—</td>
+<td><code>gt</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Merge: Keep Manual Edit</td>
+<td><code>merge.keepManual</code></td>
+<td>—</td>
+<td><code>gm</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Merge: Next Conflict</td>
+<td><code>merge.nextConflict</code></td>
+<td>—</td>
+<td><code>]n</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Merge: Previous Conflict</td>
+<td><code>merge.prevConflict</code></td>
+<td>—</td>
+<td><code>[n</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Next Change (Editor)</td>
+<td><code>vcs.nextChange</code></td>
+<td>—</td>
+<td><code>]c</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Previous Change (Editor)</td>
+<td><code>vcs.prevChange</code></td>
+<td>—</td>
+<td><code>[c</code></td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Clear Follow Filter</td>
+<td><code>view.clearFollowFilter</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Filter Followed Output</td>
+<td><code>view.followFilter</code></td>
+<td><code>alt+shift+g</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Highlight in Followed Output</td>
+<td><code>view.followHighlight</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Base64 Decoding</td>
+<td><code>view.toggleBase64Decoding</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Byte Size Hints</td>
+<td><code>view.toggleByteSizeHints</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle CIDR Hints</td>
+<td><code>view.toggleCIDRHints</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Color Preview</td>
+<td><code>view.toggleColorPreview</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Cron Hints</td>
+<td><code>view.toggleCronHints</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Digit Grouping</td>
+<td><code>view.toggleDigitGrouping</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Duration Hints</td>
+<td><code>view.toggleDurationHints</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Entity Decoding</td>
+<td><code>view.toggleEntityDecoding</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Follow (Tail -f)</td>
+<td><code>view.toggleFollow</code></td>
+<td><code>alt+shift+f</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle IDN Hints</td>
+<td><code>view.toggleIDNHints</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Identifier Colors</td>
+<td><code>view.toggleIdentifierColors</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Indent Guides</td>
+<td><code>view.toggleIndentGuides</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Log Rendering</td>
+<td><code>view.toggleLogRendering</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Markdown Rendering</td>
+<td><code>view.toggleMarkdownRendering</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle PEM Summary</td>
+<td><code>view.togglePemSummary</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Permission Hints</td>
+<td><code>view.togglePermissionHints</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Radix Hints</td>
+<td><code>view.toggleRadixHints</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Secret Masking</td>
+<td><code>view.toggleSecretMasking</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Timestamp Decoding</td>
+<td><code>view.toggleTimestampDecoding</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Unicode Escape Decoding</td>
+<td><code>view.toggleUnicodeEscapeDecoding</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Whitespace Rendering</td>
+<td><code>view.toggleWhitespace</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Toggle Soft Wrap</td>
+<td><code>view.toggleWrap</code></td>
+<td><code>alt+shift+w</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+</tbody>
+</table>
+<h2 id="explorer">explorer<a class="headerlink" href="#explorer" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>ID</th>
+<th>Chord</th>
+<th>In the editor</th>
+<th>Available in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Explorer: Jump to Bottom</td>
+<td><code>explorer.bottom</code></td>
+<td>—</td>
+<td><code>G</code></td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Clear Selection Marks</td>
+<td><code>explorer.clearMarks</code></td>
+<td>—</td>
+<td><code>esc</code></td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Collapse All</td>
+<td><code>explorer.collapseAll</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Collapse or Go to Parent</td>
+<td><code>explorer.collapseOrParent</code></td>
+<td>—</td>
+<td><code>h / left</code></td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Copy Selection To…</td>
+<td><code>explorer.copy</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Cursor Down</td>
+<td><code>explorer.cursorDown</code></td>
+<td>—</td>
+<td><code>j / down</code></td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Cursor Up</td>
+<td><code>explorer.cursorUp</code></td>
+<td>—</td>
+<td><code>k / up</code></td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Delete</td>
+<td><code>explorer.delete</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Expand All</td>
+<td><code>explorer.expandAll</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Expand or Open</td>
+<td><code>explorer.expandOrOpen</code></td>
+<td>—</td>
+<td><code>l / right</code></td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Move Selection To…</td>
+<td><code>explorer.move</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: New File</td>
+<td><code>explorer.newFile</code></td>
+<td><code>cmd+n</code></td>
+<td>—</td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: New Folder</td>
+<td><code>explorer.newFolder</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Open / Toggle</td>
+<td><code>explorer.open</code></td>
+<td>—</td>
+<td><code>enter</code></td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Open in Split</td>
+<td><code>explorer.openInSplit</code></td>
+<td>—</td>
+<td><code>o</code></td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Page Down</td>
+<td><code>explorer.pageDown</code></td>
+<td>—</td>
+<td><code>pgdn / ctrl+d</code></td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Page Up</td>
+<td><code>explorer.pageUp</code></td>
+<td>—</td>
+<td><code>pgup / ctrl+u</code></td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Redo File Operation</td>
+<td><code>explorer.redo</code></td>
+<td><code>cmd+shift+z</code></td>
+<td>—</td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Refresh</td>
+<td><code>explorer.refresh</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Rename</td>
+<td><code>explorer.rename</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Reveal Open File</td>
+<td><code>explorer.reveal</code></td>
+<td><code>alt+f1</code></td>
+<td>—</td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Speed Search</td>
+<td><code>explorer.search</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Toggle Hidden Files</td>
+<td><code>explorer.toggleHidden</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Toggle Selection Mark</td>
+<td><code>explorer.toggleMark</code></td>
+<td>—</td>
+<td><code>space</code></td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Jump to Top</td>
+<td><code>explorer.top</code></td>
+<td>—</td>
+<td><code>gg</code></td>
+<td><code>explorer</code> pane</td>
+</tr>
+<tr>
+<td>Explorer: Undo File Operation</td>
+<td><code>explorer.undo</code></td>
+<td><code>cmd+z</code></td>
+<td>—</td>
+<td><code>explorer</code> pane</td>
+</tr>
+</tbody>
+</table>
+<h2 id="format">format<a class="headerlink" href="#format" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>ID</th>
+<th>Chord</th>
+<th>In the editor</th>
+<th>Available in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Reformat File</td>
+<td><code>lsp.format</code></td>
+<td><code>cmd+alt+l</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Reformat Selection</td>
+<td><code>lsp.formatRange</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+</tbody>
+</table>
+<h2 id="lsp">lsp<a class="headerlink" href="#lsp" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>ID</th>
+<th>Chord</th>
+<th>In the editor</th>
+<th>Available in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LSP: Call Hierarchy</td>
+<td><code>lsp.callHierarchy</code></td>
+<td><code>ctrl+alt+h</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Show Intention Actions</td>
+<td><code>lsp.codeAction</code></td>
+<td><code>alt+enter</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>LSP: Run Code Lens</td>
+<td><code>lsp.codeLens</code></td>
+<td>—</td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>LSP: Go to Definition</td>
+<td><code>lsp.definition</code></td>
+<td><code>f4</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>LSP: Diagnostic Under Caret</td>
+<td><code>lsp.diagnosticInfo</code></td>
+<td><code>cmd+f1</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>LSP: Doctor</td>
+<td><code>lsp.doctor</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>LSP: Document Symbols</td>
+<td><code>lsp.documentSymbols</code></td>
+<td><code>cmd+f12</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>LSP: Go to Super</td>
+<td><code>lsp.goToSuper</code></td>
+<td><code>cmd+u</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>LSP: Hover</td>
+<td><code>lsp.hover</code></td>
+<td><code>ctrl+q</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>LSP: Go to Implementations</td>
+<td><code>lsp.implementations</code></td>
+<td><code>cmd+alt+b</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>LSP: Install Missing Servers</td>
+<td><code>lsp.installMissing</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>LSP: Organize Imports</td>
+<td><code>lsp.organizeImports</code></td>
+<td><code>ctrl+alt+o</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>LSP: Parameter Info</td>
+<td><code>lsp.parameterInfo</code></td>
+<td><code>cmd+p</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>LSP: Peek Definition</td>
+<td><code>lsp.peekDefinition</code></td>
+<td><code>cmd+y</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>LSP: Quick-Fix Marked Problem</td>
+<td><code>lsp.quickFixProblem</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>LSP: Find Usages</td>
+<td><code>lsp.references</code></td>
+<td><code>alt+f7</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>LSP: Find Usages (Panel)</td>
+<td><code>lsp.referencesPanel</code></td>
+<td><code>cmd+alt+f7</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>LSP: Rename Symbol</td>
+<td><code>lsp.rename</code></td>
+<td><code>shift+f6</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>LSP: Restart Servers</td>
+<td><code>lsp.restart</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>LSP: Show Server Log</td>
+<td><code>lsp.showLog</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>LSP: Type Hierarchy</td>
+<td><code>lsp.typeHierarchy</code></td>
+<td><code>ctrl+h</code></td>
+<td>—</td>
+<td><code>editor</code> pane</td>
+</tr>
+<tr>
+<td>Go to Symbol</td>
+<td><code>project.goToClass</code></td>
+<td><code>cmd+o</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+</tbody>
+</table>
+<h2 id="project">project<a class="headerlink" href="#project" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>ID</th>
+<th>Chord</th>
+<th>In the editor</th>
+<th>Available in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Clone Repository…</td>
+<td><code>project.clone</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Close Project</td>
+<td><code>project.close</code></td>
+<td><code>cmd+shift+w</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>New Project…</td>
+<td><code>project.new</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Open ike:// Link…</td>
+<td><code>project.open_link</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Peek Project…</td>
+<td><code>project.peek</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Keep Peeked Project</td>
+<td><code>project.peek.keep</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Return From Peek</td>
+<td><code>project.peek.return</code></td>
+<td><code>cmd+shift+b</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Switch Project…</td>
+<td><code>project.switch</code></td>
+<td><code>cmd+shift+p</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Switch to last project</td>
+<td><code>project.switchLast</code></td>
+<td><code>cmd+shift+e</code></td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+</tbody>
+</table>
+<h2 id="themes">themes<a class="headerlink" href="#themes" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>ID</th>
+<th>Chord</th>
+<th>In the editor</th>
+<th>Available in</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Theme: ayu-dark</td>
+<td><code>themes.select.ayu-dark</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: ayu-light</td>
+<td><code>themes.select.ayu-light</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: ayu-mirage</td>
+<td><code>themes.select.ayu-mirage</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: catppuccin-latte</td>
+<td><code>themes.select.catppuccin-latte</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: catppuccin-mocha</td>
+<td><code>themes.select.catppuccin-mocha</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: darcula</td>
+<td><code>themes.select.darcula</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: default</td>
+<td><code>themes.select.default</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: dracula</td>
+<td><code>themes.select.dracula</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: everforest-dark</td>
+<td><code>themes.select.everforest-dark</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: everforest-light</td>
+<td><code>themes.select.everforest-light</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: github-dark</td>
+<td><code>themes.select.github-dark</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: github-light</td>
+<td><code>themes.select.github-light</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: gruvbox</td>
+<td><code>themes.select.gruvbox</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: gruvbox-light</td>
+<td><code>themes.select.gruvbox-light</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: high-contrast-dark</td>
+<td><code>themes.select.high-contrast-dark</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: high-contrast-light</td>
+<td><code>themes.select.high-contrast-light</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: intellij-light</td>
+<td><code>themes.select.intellij-light</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: kanagawa</td>
+<td><code>themes.select.kanagawa</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: monokai-pro</td>
+<td><code>themes.select.monokai-pro</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: nord</td>
+<td><code>themes.select.nord</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: one-dark</td>
+<td><code>themes.select.one-dark</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: oxocarbon</td>
+<td><code>themes.select.oxocarbon</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: rose-pine</td>
+<td><code>themes.select.rose-pine</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: rose-pine-dawn</td>
+<td><code>themes.select.rose-pine-dawn</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: solarized-dark</td>
+<td><code>themes.select.solarized-dark</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: solarized-light</td>
+<td><code>themes.select.solarized-light</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: tokyo-night</td>
+<td><code>themes.select.tokyo-night</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: zenburn</td>
+<td><code>themes.select.zenburn</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+<tr>
+<td>Theme: Sync with Terminal Background</td>
+<td><code>themes.syncTerminal</code></td>
+<td>—</td>
+<td>—</td>
+<td>everywhere</td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Documentation for IKE — a terminal IDE.
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+    <a href="https://github.com/TrueDaerk/ike" target="_blank" rel="noopener" title="IKE on GitHub" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.top", "content.code.copy", "content.action.edit", "search.highlight", "search.suggest", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

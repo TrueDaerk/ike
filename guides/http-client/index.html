@@ -1,0 +1,3307 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A JetBrains-inspired terminal IDE with vim-like editing.">
+      
+      
+      
+        <link rel="canonical" href="https://truedaerk.github.io/ike/guides/http-client/">
+      
+      
+        <link rel="prev" href="../run-and-debug/">
+      
+      
+        <link rel="next" href="../scratch-and-snippets/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>The HTTP client - IKE</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#the-http-client" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="IKE" class="md-header__button md-logo" aria-label="IKE" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 19V7H4v12zm0-16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm-7 14v-2h5v2zm-3.42-4L5.57 9H8.4l3.3 3.3c.39.39.39 1.03 0 1.42L8.42 17H5.59z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            IKE
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              The HTTP client
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/TrueDaerk/ike" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    TrueDaerk/ike
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="IKE" class="md-nav__button md-logo" aria-label="IKE" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 19V7H4v12zm0-16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm-7 14v-2h5v2zm-3.42-4L5.57 9H8.4l3.3 3.3c.39.39.39 1.03 0 1.42L8.42 17H5.59z"/></svg>
+
+    </a>
+    IKE
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/TrueDaerk/ike" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    TrueDaerk/ike
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/terminal-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Terminal setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/desktop-launcher/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Desktop launcher
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/first-project/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Your first project
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/command-line/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command line
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/panes-and-layout/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Panes, tabs and layouts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/modal-editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The modal editor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/projects-and-sessions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Projects and sessions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/commands-and-palette/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Commands and the palette
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../navigation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting around
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../search/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Search and replace
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../file-rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How files are rendered
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../conceal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conceal and decoded values
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code-intelligence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../terminal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The integrated terminal
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../git/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Git
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependencies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../project-time/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project time
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../run-and-debug/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running and debugging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The HTTP client
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The HTTP client
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#a-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A file
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="A file">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#long-query-strings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Long query strings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#placeholders" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Placeholders
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#chaining-requests-capture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chaining requests: # @capture
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-body-from-a-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A body from a file
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multipart-bodies-written-by-hand" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multipart bodies, written by hand
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#starting-from-an-openapi-spec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Starting from an OpenAPI spec
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Starting from an OpenAPI spec">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#from-a-path-or-from-a-url" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From a path or from a URL
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#starting-from-a-curl-command" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Starting from a curl command
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#copying-a-request-out-as-curl" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Copying a request out as curl
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Copying a request out as curl">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#or-as-httpie" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        …or as httpie
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-one" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running one
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Running one">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configuration-ike-picks-up" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration IKE picks up
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#graphql-requests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GraphQL requests
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="GraphQL requests">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#when-the-answer-is-an-error" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When the answer is an error
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#completing-fields-and-arguments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Completing fields and arguments
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#websocket-sessions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        WebSocket sessions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#completion-while-you-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Completion while you type
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bodies-are-their-own-language" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bodies are their own language
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-response-pane" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The response pane
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The response pane">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-request-line" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The request line
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pretty-or-raw" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pretty or raw
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#very-large-responses" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Very large responses
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#into-the-jq-playground" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Into the jq playground
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#copying-the-shown-request-as-curl" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Copying the shown request as curl
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#saving-the-body-to-a-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Saving the body to a file
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#history" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        History
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="History">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#another-requests-responses" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Another request's responses
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#comparing-two-responses" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparing two responses
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sending-the-same-request-again" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sending the same request again
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#re-running-and-comparing-with-the-previous-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Re-running and comparing with the previous run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#related" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Related
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scratch-and-snippets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scratch files and snippets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../customising/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Customising IKE
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/keybindings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Keybindings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/settings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Settings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/commands/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Commands
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    About & contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#a-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A file
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="A file">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#long-query-strings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Long query strings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#placeholders" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Placeholders
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#chaining-requests-capture" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Chaining requests: # @capture
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#a-body-from-a-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        A body from a file
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#multipart-bodies-written-by-hand" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Multipart bodies, written by hand
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#starting-from-an-openapi-spec" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Starting from an OpenAPI spec
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Starting from an OpenAPI spec">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#from-a-path-or-from-a-url" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        From a path or from a URL
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#starting-from-a-curl-command" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Starting from a curl command
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#copying-a-request-out-as-curl" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Copying a request out as curl
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Copying a request out as curl">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#or-as-httpie" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        …or as httpie
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#running-one" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running one
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Running one">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#configuration-ike-picks-up" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Configuration IKE picks up
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#graphql-requests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        GraphQL requests
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="GraphQL requests">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#when-the-answer-is-an-error" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When the answer is an error
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#completing-fields-and-arguments" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Completing fields and arguments
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#websocket-sessions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        WebSocket sessions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#completion-while-you-type" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Completion while you type
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#bodies-are-their-own-language" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Bodies are their own language
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-response-pane" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The response pane
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The response pane">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#the-request-line" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The request line
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#pretty-or-raw" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Pretty or raw
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#very-large-responses" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Very large responses
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#into-the-jq-playground" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Into the jq playground
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#copying-the-shown-request-as-curl" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Copying the shown request as curl
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#saving-the-body-to-a-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Saving the body to a file
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#history" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        History
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="History">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#another-requests-responses" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Another request's responses
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#comparing-two-responses" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Comparing two responses
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#sending-the-same-request-again" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sending the same request again
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#re-running-and-comparing-with-the-previous-run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Re-running and comparing with the previous run
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#commands" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Commands
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#related" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Related
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/TrueDaerk/ike/edit/main/userdocs/guides/http-client.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="the-http-client">The HTTP client<a class="headerlink" href="#the-http-client" title="Permanent link">&para;</a></h1>
+<p>Requests live in plain-text <code>.http</code> files in your repository, next to the code
+they call. You run the one under the cursor and read the answer in a pane —
+no separate tool, nothing to export, and the file is reviewable in a pull
+request like everything else.</p>
+<p>The format is the JetBrains / VS Code REST-client one, so existing <code>.http</code>
+files work as they are.</p>
+<h2 id="a-file">A file<a class="headerlink" href="#a-file" title="Permanent link">&para;</a></h2>
+<div class="highlight"><pre><span></span><code><span class="err">### list indices</span>
+<span class="err">GET https://${HOST}/_cat/indices</span>
+<span class="err">    ? v =</span>
+<span class="err">    &amp; s = i</span>
+
+<span class="err">### create thing</span>
+<span class="nf">POST</span> <span class="nn">https://${HOST}/things</span> <span class="kr">HTTP</span><span class="o">/</span><span class="m">1.1</span>
+<span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
+<span class="na">Authorization</span><span class="o">:</span> <span class="l">Bearer {{$env TOKEN}}</span>
+
+<span class="p">{</span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"example"</span><span class="p">}</span>
+</code></pre></div>
+<ul>
+<li><code>###</code> separates requests; the text after it names the following one.</li>
+<li>The request line is <code>METHOD target [HTTP-version]</code>; the version defaults to
+  <code>HTTP/1.1</code>.</li>
+<li>Headers run until the first empty line, in the order you wrote them.</li>
+<li>The body is everything after that empty line up to the next <code>###</code>.</li>
+<li><code>#</code> and <code>//</code> start a comment outside a body. Inside a body nothing is
+  stripped.</li>
+</ul>
+<p>A malformed request does not break the file: the other blocks still parse and
+still run.</p>
+<h3 id="long-query-strings">Long query strings<a class="headerlink" href="#long-query-strings" title="Permanent link">&para;</a></h3>
+<p>A query may be folded onto indented continuation lines starting with <code>?</code> or
+<code>&amp;</code>, as in the example above — that dispatches as
+<code>GET https://…/_cat/indices?v=&amp;s=i</code>. Whitespace around <code>?</code>, <code>&amp;</code> and <code>=</code> is
+ignored, several parameters can share a line, and a parameter without <code>=</code>
+stays a valueless flag (<code>? pretty</code>).</p>
+<p>The editor makes long queries scannable: the URL path, parameter keys and
+parameter values each get their own color and <code>?</code>, <code>&amp;</code>, <code>=</code> render as dimmed
+separators — on the request line, on folded query lines and in
+<code>application/x-www-form-urlencoded</code> bodies. Percent-encoded characters
+display as the character they encode (<code>%20</code> shows as a space, <code>%C3%A4</code> as
+<code>ä</code>), with a subtle background tint so you can tell a decoded stand-in from
+real text. Move the caret into a sequence — or select across it — and
+exactly that spot shows the raw encoding, so editing stays exact; the file
+itself is never changed.</p>
+<p><img alt="Percent-encoded query parameters drawn decoded" src="../../screenshots/features/conceal-http-percent.png" /></p>
+<p>That is one of several decoding layers that meet in a <code>.http</code> file: epoch
+timestamps in query values and bodies, byte sizes and durations in header
+values, CIDR prefixes and punycode hosts. All of them, and their settings, are
+in <a href="../conceal/">Conceal and decoded values</a>.</p>
+<h3 id="placeholders">Placeholders<a class="headerlink" href="#placeholders" title="Permanent link">&para;</a></h3>
+<p><code>${NAME}</code> and <code>{{$env NAME}}</code> are read from the environment <strong>when the
+request runs</strong>, never from the file. A request with an unresolved variable is
+not sent at all — you get a notification naming every variable that is
+missing.</p>
+<p><code>{{name}}</code> is a variable of your own. It is filled, in this order, from a
+value <a href="#chaining-requests-capture">captured out of a response</a>, from an
+<code>@name = value</code> line in the file, from the environment picked with <strong>Select
+HTTP Environment</strong> (a <code>http-client.env.json</code> next to the file), and finally
+from the process environment.</p>
+<div class="highlight"><pre><span></span><code><span class="err">@host = https://example.com</span>
+
+<span class="err">### thing</span>
+<span class="err">GET {{host}}/my/path</span>
+</code></pre></div>
+<h3 id="chaining-requests-capture">Chaining requests: <code># @capture</code><a class="headerlink" href="#chaining-requests-capture" title="Permanent link">&para;</a></h3>
+<p>Some workflows only make sense as a chain — start an operation, then ask about
+the id the answer contained. A <code># @capture</code> comment on a request stores a
+value out of <strong>its</strong> response under a variable name, and later requests of the
+file use it like any other <code>{{name}}</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="err">### start</span>
+<span class="err"># @capture task = .task</span>
+<span class="err">POST {{host}}/_reindex?wait_for_completion=false</span>
+
+<span class="err">### poll</span>
+<span class="err">GET {{host}}/_tasks/{{task}}</span>
+</code></pre></div>
+<p>Everything right of the <code>=</code> is a <a href="https://jqlang.github.io/jq/">jq</a> expression
+evaluated against the response body — the same language as the jq playground,
+so it is not limited to plain paths:</p>
+<div class="highlight"><pre><span></span><code><span class="err"># @capture id    = .items[] | select(.state=="done") | .id</span>
+<span class="err"># @capture token = .data.access_token</span>
+<span class="err"># @capture where = .task | "\(.node):\(.id)"</span>
+</code></pre></div>
+<p>A string is captured without its quotes (it is going into a URL or a header),
+anything else keeps its JSON spelling. When several values come out, the first
+one is taken. A capture beats an <code>@name =</code> line of the same name, which makes
+<code>@token = fill-me-in</code> a useful placeholder to keep in the file.</p>
+<p>If a capture cannot produce a value — the path matches nothing, the body is
+not JSON, the expression is broken — <strong>the request still completes and its
+response still shows</strong>. The reason appears twice: as a warning row above the
+response, and as a warning marker on the directive line itself, so it is where
+you would fix it. Running the request again once it works clears the marker.</p>
+<p>Captured values are stored with the response, in <code>.ike/http/</code>, so they are
+still there when you reopen the project — and they are gone once that response
+falls out of the five kept per request. Re-sending a stored request
+(<span class="keys"><kbd class="key-control">Ctrl</kbd><span>+</span><kbd class="key-r">R</kbd></span>) captures nothing: it repeats what was sent, it does not re-read
+the file.</p>
+<h3 id="a-body-from-a-file">A body from a file<a class="headerlink" href="#a-body-from-a-file" title="Permanent link">&para;</a></h3>
+<p>When the whole body is a directive line, the payload comes from disk:</p>
+<div class="highlight"><pre><span></span><code><span class="err">POST https://example.com/upload</span>
+<span class="err">Content-Type: application/json</span>
+
+<span class="err">&lt; ./payload.json</span>
+</code></pre></div>
+<p><code>&lt; path</code> sends the file verbatim; <code>&lt;@ path</code> substitutes the placeholders
+inside the file first. Relative paths resolve against the <code>.http</code> file's own
+directory (not your working directory) and <code>~</code> expands. The path takes
+placeholders too: <code>&lt; ./{{$env FIXTURE}}.json</code>. A missing file fails the
+request with a message naming it — an empty body is never sent silently.</p>
+<p>Because the directive only counts when it <em>is</em> the whole body, a lone <code>&lt;</code> in
+an XML payload keeps its literal meaning.</p>
+<h3 id="multipart-bodies-written-by-hand">Multipart bodies, written by hand<a class="headerlink" href="#multipart-bodies-written-by-hand" title="Permanent link">&para;</a></h3>
+<p>A <code>multipart/form-data</code> body is written the JetBrains way — boundary in the
+<code>Content-Type</code>, <code>--boundary</code> lines between the parts — and a part whose
+content is a single <code>&lt; file</code> line embeds that file:</p>
+<div class="highlight"><pre><span></span><code><span class="err">POST https://example.com/import/</span>
+<span class="err">     &amp; tags = my_tag</span>
+<span class="err">Content-Type: multipart/form-data; boundary=bound</span>
+
+<span class="err">--bound</span>
+<span class="err">Content-Disposition: form-data; name="import"; filename="import.csv"</span>
+
+<span class="err">&lt; leads.csv</span>
+<span class="err">--bound</span>
+<span class="err">Content-Disposition: form-data; name="note"</span>
+
+<span class="err">inline text</span>
+<span class="err">--bound--</span>
+</code></pre></div>
+<p>IKE sends the structure with the CRLF line endings multipart servers expect
+and appends the closing <code>--bound--</code> if you leave it off. Part files resolve
+like the whole-body directive — relative to the <code>.http</code> file, <code>~</code> expands,
+placeholders work — and are embedded byte-for-byte, so binary uploads
+survive untouched. A missing file fails the request before anything is sent.</p>
+<p>In the editor, a request file looks like this — request blocks separated by
+<code>###</code>, placeholders highlighted, and the JSON body highlighted as JSON rather
+than as text:</p>
+<p><img alt="An .http file in the editor" src="../../screenshots/features/http-file.png" /></p>
+<h2 id="starting-from-an-openapi-spec">Starting from an OpenAPI spec<a class="headerlink" href="#starting-from-an-openapi-spec" title="Permanent link">&para;</a></h2>
+<p>A new service usually ships an OpenAPI document long before anyone writes a
+request file for it. <strong>Import OpenAPI Spec…</strong> (<code>http.importOpenAPI</code>) asks for
+an OpenAPI 3.x document — JSON or YAML, <span class="keys"><kbd class="key-tab">Tab</kbd></span> completes paths — and writes
+the request file for you.</p>
+<h3 id="from-a-path-or-from-a-url">From a path or from a URL<a class="headerlink" href="#from-a-path-or-from-a-url" title="Permanent link">&para;</a></h3>
+<p>The prompt takes a <strong>path</strong> or an <code>http(s)</code> <strong>URL</strong>, and the two confirm
+differently:</p>
+<ul>
+<li>A <strong>path</strong> imports right away on <span class="keys"><kbd class="key-enter">Enter</kbd></span>.</li>
+<li>
+<p>A <strong>URL</strong> is checked first. <span class="keys"><kbd class="key-enter">Enter</kbd></span> fetches it and reports what it found;
+  only a second <span class="keys"><kbd class="key-enter">Enter</kbd></span> imports. A URL that names the document
+  (<code>https://api.example.com/openapi.json</code>) is fetched as it is, while a plain
+  base URL (<code>https://api.example.com</code>) is resolved by probing the well-known
+  locations <strong>in this order</strong>:</p>
+<p><code>/openapi.json</code> · <code>/openapi.yaml</code> · <code>/openapi.yml</code> · <code>/swagger.json</code> ·
+<code>/swagger.yaml</code> · <code>/v3/api-docs</code> · <code>/api-docs</code> · <code>/api/openapi.json</code> ·
+<code>/api/openapi.yaml</code></p>
+<p>The first one that answers with a parseable document wins, and the prompt
+shows which URL that was before you confirm. A URL with a path prefix that
+is not a document (<code>https://api.example.com/api</code>) is probed <em>under</em> that
+prefix.</p>
+</li>
+</ul>
+<p>If nothing usable is found, the popup turns <strong>red</strong> and tells you why — the
+host is unreachable, the server answered <code>HTTP 404</code>, or the document is not
+OpenAPI 3.x. Nothing is written until a document has been verified. Each
+request has a five second timeout, and an unreachable host stops the probe run
+at the first path instead of waiting nine times over.</p>
+<p>The result lands <strong>next to the spec</strong> — for a URL, in the project directory —
+named after it (<code>petstore.yaml</code> → <code>petstore.http</code>,
+<code>https://api.example.com/v3/api-docs</code> → <code>api-docs.http</code>), and opens in the
+editor. Next to it you get a
+<code>http-client.env.json</code> with the host and every parameter value, and a
+<code>http-client.private.env.json</code> with the credentials left empty for you to fill
+in. Fill those in, pick an environment with <strong>Select HTTP Environment</strong>, and
+the blocks run as they are.</p>
+<div class="highlight"><pre><span></span><code><span class="err">### showPetById</span>
+<span class="err"># Info for a specific pet</span>
+<span class="err">GET {{host}}/pets/{{petId}}</span>
+<span class="err">    ? status = {{status}}</span>
+<span class="err">#   &amp; limit = {{limit}}</span>
+<span class="err">Accept: application/json</span>
+<span class="err">Authorization: Bearer {{bearerAuth}}</span>
+</code></pre></div>
+<p>What you get:</p>
+<ul>
+<li>One block per operation, grouped by tag, named after the <code>operationId</code>,
+  with the summary as a comment above it.</li>
+<li>Everything variable as a <code>{{placeholder}}</code> — the host, path and query
+  parameters, headers, credentials. Change a value once, every block follows.</li>
+<li>Required query parameters live, optional ones as commented <code>#   &amp; key = …</code>
+  lines you uncomment when you need them.</li>
+<li>A JSON body carrying the schema's required fields, with the spec's own
+  examples where it provides them.</li>
+<li>Bearer, basic and apiKey security as <strong>variables</strong>, never as literals — a
+  generated file holds no secret, and only the private environment file (the
+  one you keep out of version control) has a slot for one.</li>
+</ul>
+<p>Existing environment files are never overwritten; if one is already there, the
+notification names the variables you still have to add.</p>
+<p>Anything the importer cannot express — an external <code>$ref</code>, an exotic media
+type, a security scheme with no header spelling — is <strong>skipped and named</strong>: it
+appears as a <code># not generated: …</code> comment at the top of the file and in the
+import notification. The rest is still generated. Only a document that is not
+OpenAPI 3.x at all is refused, and a Swagger 2.0 file is told to convert
+first.</p>
+<p>Re-running the import regenerates the same file byte for byte, so updating a
+spec produces a clean diff. A <code>.http</code> file the importer did <strong>not</strong> write is
+never overwritten — it stops with an error instead.</p>
+<h2 id="starting-from-a-curl-command">Starting from a curl command<a class="headerlink" href="#starting-from-a-curl-command" title="Permanent link">&para;</a></h2>
+<p>A request that reaches you as a curl command — the browser devtools' <strong>Copy as
+cURL</strong>, an API doc, a line out of your shell history — becomes a request block
+without retyping. Copy the command, then run <strong>Import curl Command…</strong>
+(<code>http.importCurl</code>) with the <code>.http</code> file open: the prompt is already filled
+with the command from your clipboard, and <span class="keys"><kbd class="key-enter">Enter</kbd></span> appends the block to the
+end of the file and puts the cursor on it, ready to run.</p>
+<div class="highlight"><pre><span></span><code>curl 'https://api.example.com/v1/things?page=2' \
+  -X POST \
+  -H 'accept: application/json' \
+  -H 'content-type: application/json' \
+  --data-raw '{"name":"thing"}'
+</code></pre></div>
+<p>becomes</p>
+<div class="highlight"><pre><span></span><code><span class="err">### POST /v1/things</span>
+<span class="err">POST https://api.example.com/v1/things?page=2</span>
+<span class="err">accept: application/json</span>
+<span class="err">content-type: application/json</span>
+
+<span class="err">{"name":"thing"}</span>
+</code></pre></div>
+<p>Understood: <code>-X</code>, the URL (and <code>--url</code>), <code>-H</code>, <code>-d</code> / <code>--data*</code> (including
+<code>--data-urlencode</code>, and <code>-d @file</code> as a <code>&lt; file</code> body), <code>--json</code>, <code>-F</code> forms
+(files, <code>;type=</code>, <code>;filename=</code>), <code>-u</code> basic auth, <code>--oauth2-bearer</code>, <code>-A</code>,
+<code>-e</code>, <code>-b</code>, <code>--compressed</code>, <code>-G</code> and <code>-I</code>. Anything else — <code>-L</code>, <code>-k</code>, <code>-s</code>,
+<code>--retry</code>, an output file, a second URL — is <strong>named in the notification</strong>
+rather than quietly dropped, so you can decide whether it mattered.</p>
+<h2 id="copying-a-request-out-as-curl">Copying a request out as curl<a class="headerlink" href="#copying-a-request-out-as-curl" title="Permanent link">&para;</a></h2>
+<p>The way back is <strong>Copy HTTP Request as curl</strong> (<code>http.copyAsCurl</code>): put the
+cursor in a block and the clipboard gets a runnable curl command for it, with
+every <code>{{variable}}</code> already substituted — the same values a real dispatch
+would send. Basic auth comes back as <code>-u</code>, a multipart body as <code>-F</code> parts, a
+<code>&lt; file</code> body as <code>--data-binary @…</code> with the path made relative to where you
+run it.</p>
+<div class="admonition warning">
+<p class="admonition-title">It carries your secrets</p>
+<p>Because the values are substituted, a copied command contains the token or
+password the request would send. That is what makes it runnable — just
+take care where you paste it.</p>
+</div>
+<p>If a variable cannot be resolved, nothing is copied and the notification says
+which one is missing (and which environment you may not have picked yet).</p>
+<h3 id="or-as-httpie">…or as httpie<a class="headerlink" href="#or-as-httpie" title="Permanent link">&para;</a></h3>
+<p><strong>Copy HTTP Request as httpie</strong> (<code>http.copyAsHttpie</code>) does the same job in
+<a href="https://httpie.io/">httpie</a>'s syntax, which is a good deal easier to read in
+a ticket or a chat message. It is not the curl command with renamed flags:
+headers become <code>Name:Value</code>, query parameters <code>param==value</code>, the fields of a
+JSON body <code>field=value</code> (or <code>field:=raw</code> for a number, a boolean, a list or a
+nested object), basic auth <code>-a user:pass</code>, and a form or multipart body rides
+<code>--form</code>. The method is always spelled out.</p>
+<p>Where httpie's field syntax cannot carry a body faithfully — a JSON array, a
+field name containing a separator, a payload that is not JSON — the body goes
+out as <code>--raw</code> instead, which is less pretty but always correct. A <code>&lt; file</code>
+body is redirected on stdin, and a binary body is piped in through <code>base64 -d</code>.</p>
+<p>Both exports resolve variables the same way, carry the same secrets, and are
+offered on <span class="keys"><kbd class="key-alt">Alt</kbd><span>+</span><kbd class="key-enter">Enter</kbd></span> where the cursor sits in a request block, as <strong>Copy as
+curl</strong> and <strong>Copy as httpie</strong>.</p>
+<h2 id="running-one">Running one<a class="headerlink" href="#running-one" title="Permanent link">&para;</a></h2>
+<p>Put the cursor anywhere in a request block and press <span class="keys"><kbd class="key-command">Cmd</kbd><span>+</span><kbd class="key-enter">Enter</kbd></span>
+(<span class="keys"><kbd class="key-control">Ctrl</kbd><span>+</span><kbd class="key-f9">F9</kbd></span> where your terminal will not deliver that), or run <strong>Run HTTP
+Request</strong> from the Run menu or the palette.</p>
+<p>While a request is in flight the status line shows it
+(<code>⟳ http: GET /_cat/indices (1.2s)</code>), and the response pane header counts the
+elapsed time up (<code>⟳ running one (1.2s)</code>). Running the <em>same</em> request again
+while it is still going is refused rather than fired twice.</p>
+<p>To stop one, press <span class="keys"><kbd class="key-command">Cmd</kbd><span>+</span><kbd class="key-period">.</kbd></span> (<span class="keys"><kbd class="key-control">Ctrl</kbd><span>+</span><kbd class="key-period">.</kbd></span> where your terminal will
+not deliver that) — it works both in the <code>.http</code> editor and in the response
+pane — or <code>x</code> inside the response pane, or run <strong>Cancel Running HTTP
+Request</strong> from the palette. Once a request has been out for more than a
+second the pane spells this out for you with a <code>x / ctrl+. cancels</code> line
+under its header.</p>
+<h3 id="configuration-ike-picks-up">Configuration IKE picks up<a class="headerlink" href="#configuration-ike-picks-up" title="Permanent link">&para;</a></h3>
+<p>Before sending, IKE reads two files you probably already have. Anything the
+<code>.http</code> file states explicitly always wins.</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>What is used</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.netrc</code> (<code>$NETRC</code>, else <code>~/.netrc</code>)</td>
+<td>Machine-matched credentials become basic auth — only when the request sets no <code>Authorization</code> header</td>
+</tr>
+<tr>
+<td><code>.curlrc</code> (<code>$CURL_HOME</code>, <code>$XDG_CONFIG_HOME/curlrc</code>, <code>~/.curlrc</code>)</td>
+<td><code>header</code>, <code>user-agent</code>, <code>referer</code>, <code>user</code>, <code>proxy</code>, <code>insecure</code>, <code>location</code>, <code>max-time</code>, <code>connect-timeout</code></td>
+</tr>
+</tbody>
+</table>
+<p>Unsupported <code>.curlrc</code> options are reported as warnings on the response, never
+as errors. Defaults otherwise: redirects followed, TLS verified, a 30 s
+timeout, and bodies capped at 10 MiB with a truncation warning so a huge
+download cannot freeze the UI.</p>
+<h2 id="graphql-requests">GraphQL requests<a class="headerlink" href="#graphql-requests" title="Permanent link">&para;</a></h2>
+<p>A GraphQL call is a <code>POST</code> of one JSON envelope, which means escaping a
+multi-line query into a JSON string by hand. Write <code>GRAPHQL</code> as the method
+instead and IKE builds the envelope for you: the body is the query as you write
+it, and an optional JSON <code>variables</code> object follows it after a blank line.</p>
+<div class="highlight"><pre><span></span><code><span class="err">### hero</span>
+<span class="err">GRAPHQL https://example.com/graphql</span>
+<span class="err">Authorization: Bearer {{token}}</span>
+
+<span class="err">query Hero($episode: Episode) {</span>
+<span class="err">  hero(episode: $episode) {</span>
+<span class="err">    name</span>
+<span class="err">  }</span>
+<span class="err">}</span>
+
+<span class="err">{</span>
+<span class="err">  "episode": "EMPIRE"</span>
+<span class="err">}</span>
+</code></pre></div>
+<p>Running that sends</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span><span class="nt">"query"</span><span class="p">:</span><span class="s2">"query Hero($episode: Episode) {\n  hero(episode: $episode) {\n    name\n  }\n}"</span><span class="p">,</span><span class="nt">"variables"</span><span class="p">:{</span><span class="nt">"episode"</span><span class="p">:</span><span class="s2">"EMPIRE"</span><span class="p">},</span><span class="nt">"operationName"</span><span class="p">:</span><span class="s2">"Hero"</span><span class="p">}</span>
+</code></pre></div>
+<p>as a <code>POST</code> with <code>Content-Type: application/json</code>. The operation name is picked
+up from the first named operation, so a document with several operations still
+selects the right one; an anonymous <code>{ … }</code> query sends no name at all.
+Everything else about the block is an ordinary request: headers, <code>{{variables}}</code>,
+<code># @capture</code> directives and <code>###</code> naming all work as usual, and so do
+<strong>Copy as curl</strong> and <strong>Copy as httpie</strong> — they export the <code>POST</code> that actually
+goes out.</p>
+<p>The variables object is the last blank-line separated <code>{ … }</code> block, so a query
+may hold blank lines of its own without being cut in half. Variables that are
+not valid JSON stop the request with a message instead of being sent.</p>
+<div class="admonition tip">
+<p class="admonition-title">Sending the query without an envelope</p>
+<p>Set <code>Content-Type: application/graphql</code> and the body is the raw query text
+— that media type carries the query itself. Variables then have nowhere to
+travel, and the response pane says so rather than dropping them silently.</p>
+</div>
+<p>Subscriptions are not supported: they are a WebSocket protocol rather than a
+<code>POST</code>.</p>
+<h3 id="when-the-answer-is-an-error">When the answer is an error<a class="headerlink" href="#when-the-answer-is-an-error" title="Permanent link">&para;</a></h3>
+<p>GraphQL servers answer a broken query with <strong>HTTP 200</strong> and an <code>errors</code> array
+in the body, which makes a failure look like a success at a glance. IKE lifts
+those messages out:</p>
+<ul>
+<li>the status row says how many (<code>HTTP/1.1 200 OK (12ms) ✗ 2 errors</code>) and turns
+  the failure colour;</li>
+<li>a red block above the body lists each message with the response path and the
+  <code>line:column</code> in your query, when the server sends them;</li>
+<li>the run counts as <strong>failed</strong> for the "response landed while you were looking
+  elsewhere" notification.</li>
+</ul>
+<p>The <code>data</code> part still pretty-prints as JSON underneath, so a partial answer
+stays readable next to the errors that came with it.</p>
+<h3 id="completing-fields-and-arguments">Completing fields and arguments<a class="headerlink" href="#completing-fields-and-arguments" title="Permanent link">&para;</a></h3>
+<p>The server knows every field, argument and type — ask it once and IKE
+completes them for you. With the caret in a <code>GRAPHQL</code> block, run
+<strong>Introspect GraphQL Schema</strong> (<code>http.graphqlIntrospect</code>) from the command
+palette. It sends the introspection query to that block's URL, with that
+block's headers (so an endpoint behind a login answers), and caches the schema
+per host under <code>.ike/graphql/</code> in your project.</p>
+<p>From then on, inside the query section:</p>
+<ul>
+<li>typing in a selection set offers the <strong>fields</strong> of the type you are in, with
+  each field's own type in the detail column (and a marker on deprecated ones);</li>
+<li>typing inside a field's <code>(</code> offers its <strong>arguments</strong>, inserting the <code>:</code> for
+  you;</li>
+<li>typing after the <code>:</code> of a <code>query Foo($x: …)</code> variable definition, or after
+  <code>... on</code>, offers the schema's <strong>types</strong>.</li>
+</ul>
+<p>Nothing is sent while you type — completion reads the cache only. <code>{{variables}}</code>
+still complete inside a query, so a <code>{{token}}</code> in an argument behaves as it
+does anywhere else.</p>
+<p><strong>Open Cached GraphQL Schema (SDL)</strong> (<code>http.graphqlSchema</code>) opens the cached
+schema as a readable <code>.graphql</code> scratch file — the whole type system, for the
+questions a popup cannot answer. Re-run the introspection whenever the API
+changes.</p>
+<div class="admonition note">
+<p class="admonition-title">One schema per host</p>
+<p>If your request URL is a variable (<code>GRAPHQL {{host}}/graphql</code>) IKE cannot
+tell which endpoint you mean — so when the project has exactly one cached
+schema, that one is used. With two or more, introspect from a block whose
+URL is spelled out, or resolve the variable first.</p>
+</div>
+<h2 id="websocket-sessions">WebSocket sessions<a class="headerlink" href="#websocket-sessions" title="Permanent link">&para;</a></h2>
+<p>A <code>ws://</code> or <code>wss://</code> endpoint is a conversation, not a request. Write
+<code>WEBSOCKET</code> as the method and the body becomes the messages that open it,
+separated by <code>===</code> lines:</p>
+<div class="highlight"><pre><span></span><code><span class="err">### chat</span>
+<span class="err">WEBSOCKET wss://example.com/socket</span>
+<span class="err">Sec-WebSocket-Protocol: chat</span>
+
+<span class="err">{"join": "lobby"}</span>
+<span class="err">=== wait-for-server</span>
+<span class="err">{"say": "hello"}</span>
+</code></pre></div>
+<p>Running it connects, sends the messages in order — <code>=== wait-for-server</code>
+pauses until the server has said something before the next message goes out —
+and streams every frame into the response pane live, one row per frame:
+<code>→</code> for what you sent, <code>←</code> for what arrived, each with a timestamp. Text
+frames show verbatim; binary frames show as <code>(binary N bytes)</code> plus hex.
+Variables and the selected environment resolve in the URL and in every
+message exactly as for an HTTP request.</p>
+<p>While the session is open, the pane header shows <code>⟳ websocket session…</code> and
+you can talk back: press <span class="keys"><kbd class="key-enter">Enter</kbd></span> (or <code>i</code>) to open the input line, type,
+<span class="keys"><kbd class="key-enter">Enter</kbd></span> sends — the line stays open for the next message — and <span class="keys"><kbd class="key-arrow-up">Up</kbd></span> /
+<span class="keys"><kbd class="key-arrow-down">Down</kbd></span> step through what you already sent. <span class="keys"><kbd class="key-escape">Esc</kbd></span> closes the input, <code>x</code>
+(or <strong>Cancel Running HTTP Request</strong>) closes the session.</p>
+<p>The finished transcript is stored as the response body under the <code>101</code>
+status, so history browsing, <strong>Show HTTP Response</strong> and the <code>D</code>/<code>P</code> diffs
+work on sessions like on any response. <span class="keys"><kbd class="key-control">Ctrl</kbd><span>+</span><kbd class="key-r">R</kbd></span> re-send opens the session
+again and replays the same initial messages; <code>R</code> re-runs the block with
+today's variables.</p>
+<h2 id="completion-while-you-type">Completion while you type<a class="headerlink" href="#completion-while-you-type" title="Permanent link">&para;</a></h2>
+<p><code>.http</code> files complete without any language server:</p>
+<ul>
+<li><strong>methods</strong> on the first token of a request line, <code>HTTP/1.1</code> once a target
+  is there;</li>
+<li><strong>header names</strong> — inserting the <code>:</code> for you — and, for headers with a
+  small closed set of values, those values: MIME types for
+  <code>Content-Type</code>/<code>Accept</code>, schemes for <code>Authorization</code>, directives for
+  <code>Cache-Control</code>, and so on;</li>
+<li><strong>file paths</strong> after <code>&lt;</code> (and <code>&lt;@</code>) on a body-file directive line —
+  whole-body or inside a multipart part — relative to the <code>.http</code> file;
+  accepting a directory and completing again descends into it;</li>
+<li><strong>variable names</strong> right after an unclosed <code>{{</code> — in the request line, a
+  header value or a body — from your file's own <code>@name=value</code> definitions and
+  the active environment's variables (whichever <code>http-client.env.json</code>
+  environment you selected, or its only one); accepting closes the braces for
+  you;</li>
+<li><strong>GraphQL fields, arguments and types</strong> inside a <code>GRAPHQL</code> block's query,
+  once the endpoint's schema is cached — see
+  <a href="#completing-fields-and-arguments">GraphQL requests</a>;</li>
+<li><strong>nothing</strong> else inside bodies, comments or <code>###</code> lines — deliberately, so
+  a JSON body does not offer you every word in the file.</li>
+</ul>
+<p>Matching is a case-insensitive subsequence, not a prefix: <code>Cen</code> reaches
+<code>Content-Encoding</code>, <code>ctype</code> reaches <code>Content-Type</code>, <code>jso</code> reaches
+<code>application/json</code>.</p>
+<h2 id="bodies-are-their-own-language">Bodies are their own language<a class="headerlink" href="#bodies-are-their-own-language" title="Permanent link">&para;</a></h2>
+<p>A body is highlighted — and indented — as whatever its <code>Content-Type</code> says it
+is. <code>application/json</code> makes the body JSON, <code>text/xml</code> makes it XML, and
+pressing enter after a <code>{</code> in a JSON body indents like JSON while the request
+and header lines above keep their own rules. Parameters (<code>; charset=utf-8</code>),
+<code>x-</code> prefixes and <code>+json</code>/<code>+xml</code> suffixes are handled, so
+<code>application/vnd.api+json</code> is JSON, and <code>application/graphql</code> highlights as
+GraphQL when your build links that language. A <code>GRAPHQL</code> block is a special
+case: its query is highlighted as GraphQL and its variables object as JSON,
+without needing a <code>Content-Type</code> at all.</p>
+<p>A media type that maps to no language keeps plain styling rather than a guess
+— with two exceptions that get their own treatment instead of a language's:
+an <code>application/x-www-form-urlencoded</code> body gets the same key/value
+highlighting as a request URL's query string, and a <code>multipart/form-data</code>
+body gets its <code>--boundary</code> lines and each part's own header block (but not a
+part's body — it could be text, JSON, or a file's raw bytes) styled.</p>
+<p>Bodies <strong>fold</strong> by their own structure too: <code>zc</code> on a JSON object or array line
+collapses it behind a placeholder with the hidden-line count, <code>zo</code> reopens it,
+<code>zM</code>/<code>zR</code> close and open everything — the same keys as anywhere else in the
+editor. A whole request folds as well: <code>zc</code> on a <code>###</code> line collapses that
+request up to the next separator, so a long file reads as a list of its
+requests.</p>
+<div class="admonition note">
+<p class="admonition-title">Highlighting needs the grammar</p>
+<p>A body only highlights when the matching grammar is in your build — a
+<code>CGO_ENABLED=0</code> build has none. When the content type is recognised but
+the grammar is missing, the viewer says so above the body instead of
+quietly showing plain text.</p>
+</div>
+<h2 id="the-response-pane">The response pane<a class="headerlink" href="#the-response-pane" title="Permanent link">&para;</a></h2>
+<p>The first response opens a read-only pane split off the editor (below, or to
+the right of a wide landscape pane), and every later
+response reuses it. It shows the <strong>request line actually sent</strong> (method +
+final URL, right under the pane title), then the status line and duration,
+the <strong>timing breakdown</strong> of the exchange directly beneath it
+(<code>dns 2ms · connect 11ms · tls 34ms · ttfb 210ms · transfer 4ms</code> — only the
+phases that happened, and <code>conn reused</code> when the connection was already
+open), the headers, any warnings, and the body — JSON pretty-printed, JSON/XML/HTML/CSS/JS
+highlighted, binary bodies collapsed to a notice.</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>j</code> / <code>k</code>, wheel</td>
+<td>Scroll</td>
+</tr>
+<tr>
+<td><code>g</code> / <code>G</code></td>
+<td>Top / bottom (<code>g</code> also resets the horizontal offset)</td>
+</tr>
+<tr>
+<td><span class="keys"><kbd class="key-shift">Shift</kbd><span>+</span><kbd class="key-arrow-left">Left</kbd></span> / <span class="keys"><kbd class="key-shift">Shift</kbd><span>+</span><kbd class="key-arrow-right">Right</kbd></span></td>
+<td>Pan sideways by 8 columns (also shift+wheel)</td>
+</tr>
+<tr>
+<td><code>0</code> / <code>^</code></td>
+<td>Back to column 0</td>
+</tr>
+<tr>
+<td><code>$</code></td>
+<td>Jump to the right edge</td>
+</tr>
+<tr>
+<td><code>/</code>, <span class="keys"><kbd class="key-control">Ctrl</kbd><span>+</span><kbd class="key-f">F</kbd></span> / <span class="keys"><kbd class="key-command">Cmd</kbd><span>+</span><kbd class="key-f">F</kbd></span></td>
+<td>Search the whole view — status line, headers and body</td>
+</tr>
+<tr>
+<td><code>n</code> / <code>N</code></td>
+<td>Next / previous match, wrapping</td>
+</tr>
+<tr>
+<td><code>y</code>, <span class="keys"><kbd class="key-control">Ctrl</kbd><span>+</span><kbd class="key-c">C</kbd></span> / <span class="keys"><kbd class="key-command">Cmd</kbd><span>+</span><kbd class="key-c">C</kbd></span></td>
+<td>Copy the selection, or the whole body when there is none</td>
+</tr>
+<tr>
+<td><code>Y</code></td>
+<td>Copy the status line plus headers</td>
+</tr>
+<tr>
+<td><code>h</code> / <code>l</code>, <span class="keys"><kbd class="key-arrow-left">Left</kbd></span> / <span class="keys"><kbd class="key-arrow-right">Right</kbd></span></td>
+<td>Older / newer response for this request</td>
+</tr>
+<tr>
+<td><span class="keys"><kbd class="key-control">Ctrl</kbd><span>+</span><kbd class="key-r">R</kbd></span></td>
+<td>Send this response's request again, unchanged</td>
+</tr>
+<tr>
+<td><code>R</code></td>
+<td>Re-run this request from its <code>.http</code> file, with today's variables</td>
+</tr>
+<tr>
+<td><code>C</code></td>
+<td>Copy this response's request as a curl command</td>
+</tr>
+<tr>
+<td><code>H</code></td>
+<td>Copy this response's request as an httpie command</td>
+</tr>
+<tr>
+<td><code>S</code></td>
+<td>Save the raw response body to a file</td>
+</tr>
+<tr>
+<td><code>i</code></td>
+<td>Expand/collapse the request line into its headers and (small) body</td>
+</tr>
+<tr>
+<td><code>U</code></td>
+<td>Copy the request line's full, untruncated URL</td>
+</tr>
+<tr>
+<td><code>t</code></td>
+<td>Switch between the pretty-printed and the raw body</td>
+</tr>
+<tr>
+<td><code>q</code></td>
+<td>Open the jq playground on this body</td>
+</tr>
+<tr>
+<td><span class="keys"><kbd class="key-command">Cmd</kbd><span>+</span><kbd class="key-shift">Shift</kbd><span>+</span><kbd class="key-j">J</kbd></span> / <span class="keys"><kbd class="key-control">Ctrl</kbd><span>+</span><kbd class="key-shift">Shift</kbd><span>+</span><kbd class="key-j">J</kbd></span></td>
+<td>Open the playground this body's type speaks — jq, yq or xmq</td>
+</tr>
+<tr>
+<td><code>m</code></td>
+<td>Load the next chunk of a large body</td>
+</tr>
+<tr>
+<td><code>o</code></td>
+<td>Open the whole body as a file</td>
+</tr>
+<tr>
+<td><code>x</code></td>
+<td>Cancel the request that is running (or close the websocket session)</td>
+</tr>
+<tr>
+<td><span class="keys"><kbd class="key-enter">Enter</kbd></span> / <code>i</code> (websocket session)</td>
+<td>Open the input line, then send with <span class="keys"><kbd class="key-enter">Enter</kbd></span>; <span class="keys"><kbd class="key-arrow-up">Up</kbd></span> / <span class="keys"><kbd class="key-arrow-down">Down</kbd></span> recall sent messages</td>
+</tr>
+<tr>
+<td><code>za</code> / <code>zc</code> / <code>zo</code></td>
+<td>Toggle / close / open the fold at the top of the view</td>
+</tr>
+<tr>
+<td><code>zM</code> / <code>zR</code></td>
+<td>Collapse every fold / open them all</td>
+</tr>
+<tr>
+<td><span class="keys"><kbd class="key-escape">Esc</kbd></span></td>
+<td>Clear the search</td>
+</tr>
+</tbody>
+</table>
+<p>Search uses the editor's smartcase rule: an all-lowercase pattern ignores
+case, any uppercase letter makes it exact. The footer shows the position
+(<code>/token  3/17</code>).</p>
+<h3 id="the-request-line">The request line<a class="headerlink" href="#the-request-line" title="Permanent link">&para;</a></h3>
+<p>Right under the status line, the pane shows exactly what went out: the
+method and the final URL, <strong>after</strong> placeholder substitution. This is what
+makes an edited-and-re-run request, or an older history entry, honest about
+which path and query parameters were really used — the status line alone
+never told you that. A URL longer than the pane is shortened in the
+<strong>middle</strong>, not at the end, so both the host and the tail of the query stay
+readable (<code>https://api.example.test/…&amp;filter=active</code> instead of losing the
+query behind a trailing <code>…</code>). <code>U</code> copies the full URL regardless of how much
+of it is showing.</p>
+<p><code>i</code> expands the line into the as-sent request headers and, for a body under
+2 KiB, the body itself — collapsed by default, since the method and URL
+already answer the common question. A response stored before this feature
+existed carries no request snapshot, so its pane shows no request line; only
+<code>ctrl+r</code> re-send is affected the same way (see below).</p>
+<h3 id="pretty-or-raw">Pretty or raw<a class="headerlink" href="#pretty-or-raw" title="Permanent link">&para;</a></h3>
+<p>A JSON body arrives minified far more often than not, so the pane indents it
+before showing it — that is also what gives folding something to fold. <code>t</code>
+(or <strong>Toggle Raw / Pretty HTTP Response Body</strong>) switches to the bytes exactly
+as they arrived and back, for when the formatting itself is the question: a
+payload where whitespace matters, or an answer that is not quite valid JSON.
+Highlighting stays on either way. The choice sticks while you browse history,
+so you are not re-pressing it for every response.</p>
+<p>Very large bodies are shown <strong>raw and unhighlighted</strong> past 2 MiB, with a note
+saying so. Indenting, highlighting and scanning for folds all take time
+proportional to the body, and a pane that freezes for a second on arrival is
+worse than a plain one.</p>
+<p>A JSON, XML or HTML body <strong>folds</strong> like a file in the editor does: foldable
+lines carry a ▾ marker in the left column, clicking it collapses the block to a
+<code>⋯ N lines</code> placeholder, and clicking the ▸ opens it again. The keyboard
+commands act on the fold at the top of the view, since the viewer has no
+cursor; <code>zM</code> and <code>zR</code> fold and unfold everything. Folding is display-only —
+searching still finds text inside a collapsed block (and opens it to show you
+the hit), and copying takes the real content, never the placeholder.</p>
+<p>Selection works with the mouse like the terminal pane does — drag to select,
+double click for a word (ids and dotted tokens select whole), triple click for
+a line. What gets copied is what you see, so a pretty-printed JSON body pastes
+as it reads. <strong>Copy HTTP Response Body</strong> and <strong>Copy HTTP Response Headers</strong> do
+the same from the palette.</p>
+<p>The copy chord always works, whatever else the pane is in the middle of: with
+the search prompt open, after a <code>z</code> that is waiting for its fold key, and —
+over a live selection — instead of <span class="keys"><kbd class="key-control">Ctrl</kbd><span>+</span><kbd class="key-c">C</kbd></span>'s usual "quit IKE". <code>y</code> is the
+exception, because inside the search prompt it is just a letter you typed.</p>
+<h3 id="very-large-responses">Very large responses<a class="headerlink" href="#very-large-responses" title="Permanent link">&para;</a></h3>
+<p>A body over 1 MiB is written to a file on disk while it arrives, and the pane
+shows the <strong>first megabyte</strong> of it instead of holding the whole thing in
+memory. A note above the body says where you are:</p>
+<div class="highlight"><pre><span></span><code>(showing the first 1.0 MiB of 7.3 MiB — m load more · o open as file)
+</code></pre></div>
+<ul>
+<li><code>m</code> (<strong>Load More of the HTTP Response Body</strong>) pulls in the next megabyte.
+  Press it again for the one after that; the note disappears once the whole
+  body is on screen.</li>
+<li><code>o</code> (<strong>Open Full HTTP Response Body as File</strong>) opens the complete body as a
+  normal editor tab, where search, folding and everything else work as usual.</li>
+</ul>
+<p><code>q</code> (below) and <code>S</code> always work on the <strong>whole</strong> body, never on the part you
+happen to be looking at. Responses are still capped at 10 MiB on receipt, with
+a warning when one is cut there.</p>
+<h3 id="into-the-jq-playground">Into the jq playground<a class="headerlink" href="#into-the-jq-playground" title="Permanent link">&para;</a></h3>
+<p><code>q</code> (or <strong>Open jq Playground on HTTP Response</strong>) opens the jq playground right
+in the response pane, with this body as its input — no copying it out first.
+The query line appears at the top of the pane and the body below is replaced
+by the live result until you press <span class="keys"><kbd class="key-escape">Esc</kbd></span>. For a large, partly spooled
+response the playground still gets the whole body.</p>
+<p><span class="keys"><kbd class="key-command">Cmd</kbd><span>+</span><kbd class="key-shift">Shift</kbd><span>+</span><kbd class="key-j">J</kbd></span> (<span class="keys"><kbd class="key-control">Ctrl</kbd><span>+</span><kbd class="key-shift">Shift</kbd><span>+</span><kbd class="key-j">J</kbd></span> off macOS, or <strong>Open Playground for This
+File</strong>) is the same thing for the <em>other</em> body types: it looks at the
+response's content type and opens the playground that speaks it — jq for JSON,
+yq for YAML, xmq for XML and HTML — over this body, in this pane. A body no
+playground speaks (plain text, binary, an empty response) is answered with a
+short "no playground …" notice and nothing opens. The chord works the same way
+on the file in an editor, so it is one key for "query what I am looking at".</p>
+<h3 id="copying-the-shown-request-as-curl">Copying the shown request as curl<a class="headerlink" href="#copying-the-shown-request-as-curl" title="Permanent link">&para;</a></h3>
+<p><code>C</code> in the pane (or <strong>Copy Shown HTTP Request as curl</strong>, <code>http.copyShownAsCurl</code>)
+exports the request <em>behind the response you are looking at</em> — the stored
+snapshot, with the values that actually went out. It is the response-side
+pendant of <strong>Copy HTTP Request as curl</strong>, which exports the block under the
+cursor: use this one when the file has changed since, when the response came
+from a re-send, or when you are browsing an older entry. Headers and body are
+shell-quoted, an <code>Authorization: Basic</code> header becomes <code>-u</code>, and a binary body
+is piped in through <code>base64 -d</code> so the command stays runnable. Nothing is
+masked — a token that went out is a token in the exported command.</p>
+<p><code>H</code> (or <strong>Copy Shown HTTP Request as httpie</strong>, <code>http.copyShownAsHttpie</code>) is the
+same export in httpie's syntax — the format described under
+<a href="#or-as-httpie">Copying a request out as curl</a>, over the same stored snapshot.</p>
+<h3 id="saving-the-body-to-a-file">Saving the body to a file<a class="headerlink" href="#saving-the-body-to-a-file" title="Permanent link">&para;</a></h3>
+<p><code>S</code> in the pane (or <strong>Save HTTP Response Body to File…</strong>, <code>http.saveResponse</code>)
+writes the <strong>raw</strong> body — the bytes as they arrived, not the pretty-printed
+view — to a path you type. The prompt proposes a name built from the request
+URL and the <code>Content-Type</code> (<code>/things/42</code> + <code>application/json</code> → <code>42.json</code>),
+<span class="keys"><kbd class="key-tab">Tab</kbd></span> completes paths, a relative path is resolved against the project root,
+and a directory receives the proposed name. A large body is streamed from its
+spool file, so saving a 9 MiB download costs no memory. Binary bodies (an
+image, a PDF, a zip) save correctly; that is what the command is for, since they have no text
+to copy. The notification names the file and its size, and says so when the
+body had been truncated on receipt.</p>
+<h2 id="history">History<a class="headerlink" href="#history" title="Permanent link">&para;</a></h2>
+<p>The last <strong>5</strong> responses per request are kept in the project under
+<code>.ike/http/</code>, keyed by file plus request name, so every request in a
+multi-request file has its own history. <code>h</code>/<code>l</code> or <span class="keys"><kbd class="key-arrow-left">Left</kbd></span>/<span class="keys"><kbd class="key-arrow-right">Right</kbd></span> walk it;
+the footer shows where you are (<code>←/→ history 2/5</code>) and when the response was
+stored. While an older entry is shown, the pane header also carries a
+<code>⧗ history 2/5 (15:04:05)</code> marker so you can't mistake it for the latest
+response.
+<strong>Browse HTTP Response History</strong> in the palette focuses the viewer and reports
+how many are stored.</p>
+<h3 id="another-requests-responses">Another request's responses<a class="headerlink" href="#another-requests-responses" title="Permanent link">&para;</a></h3>
+<p>The viewer shows one request at a time, but the stored responses of the others
+are a keypress away: press <span class="keys"><kbd class="key-r">R</kbd></span> in the focused pane and pick from the requests
+of the same <code>.http</code> file that have stored responses — the list shows the
+request line, how many responses are stored and when the newest arrived.
+Choosing one loads that request's history into the pane, newest first, with
+<span class="keys"><kbd class="key-arrow-left">Left</kbd></span>/<span class="keys"><kbd class="key-arrow-right">Right</kbd></span> browsing as usual. Requests you never dispatched are not
+listed; a file without any stored response says so instead of opening an empty
+list. The same works from the editor with <strong>Show Stored HTTP Response</strong>
+(<code>http.showResponse</code>), which loads the history of the request block under the
+cursor without sending anything — handy right after a restart, before the pane
+shows anything at all.</p>
+<p>Text bodies are stored as plain text inside the JSON, so <code>.ike/http/*.json</code>
+opens and diffs readably in the editor.</p>
+<h3 id="comparing-two-responses">Comparing two responses<a class="headerlink" href="#comparing-two-responses" title="Permanent link">&para;</a></h3>
+<p>Stepping back and forth between two responses only gets you so far — to see
+<em>what</em> changed, press <span class="keys"><kbd class="key-shift">Shift</kbd><span>+</span><kbd class="key-d">D</kbd></span> in the focused response pane (or run
+<strong>Compare Stored HTTP Responses</strong>, <code>http.diffResponses</code>). A list of the
+request's other stored responses opens; pick one and the two open side by side
+in the normal diff viewer, the older response on the left. Each column is
+labelled with the request, its position in the history and the time it was
+stored.</p>
+<p>Both sides are rendered the same way: status line, headers, then the body — so
+a header that changed shows up next to the payload that did. <strong>JSON bodies are
+normalized first</strong>: keys are sorted and the indentation is unified, so a
+response whose keys come back in a different order, or minified where the
+previous run was pretty-printed, diffs as <em>no change at all</em> and only real
+differences remain. Line-delimited JSON (NDJSON) is normalized the same way;
+everything else — XML, HTML, plain text — is compared exactly as it arrived,
+and a binary body is summarized by its size instead of being compared byte by
+byte.</p>
+<p>The hint <code>D diff</code> appears in the footer as soon as a second response is
+stored; with only one there is nothing to compare it with, and the pane says so
+rather than opening an empty list.</p>
+<h2 id="sending-the-same-request-again">Sending the same request again<a class="headerlink" href="#sending-the-same-request-again" title="Permanent link">&para;</a></h2>
+<p>Every stored response also keeps the <strong>request as it was sent</strong> — method,
+final URL, headers and body, after placeholders were substituted and after
+<code>.netrc</code>/<code>.curlrc</code> had their say. <span class="keys"><kbd class="key-control">Ctrl</kbd><span>+</span><kbd class="key-r">R</kbd></span> in the response pane, or a click
+on the <code>⟳ re-send</code> button in its header, sends exactly that again: the <code>.http</code>
+file is not read, nothing is substituted a second time, so editing the file,
+changing a variable or switching environments in between cannot alter what
+goes out. The answer lands in the pane and in the history like any other
+response. A re-sent streaming endpoint (SSE/NDJSON) opens the stream again and
+renders live, exactly as the first time.</p>
+<p>The button only appears when a stored request exists. Responses stored before
+IKE started capturing requests still open and browse normally; re-send simply
+says there is nothing stored for them — run the request from the <code>.http</code> file
+once and the entry after that is re-sendable.</p>
+<div class="admonition note">
+<p class="admonition-title">What lands on disk</p>
+<p>The stored request holds the <strong>substituted</strong> values, so a token that
+reached the server also sits in <code>.ike/http/</code>, next to the response bodies
+that were already kept there. Keep that directory out of version control
+(and out of backups) if your requests carry secrets.</p>
+</div>
+<h2 id="re-running-and-comparing-with-the-previous-run">Re-running and comparing with the previous run<a class="headerlink" href="#re-running-and-comparing-with-the-previous-run" title="Permanent link">&para;</a></h2>
+<p><span class="keys"><kbd class="key-control">Ctrl</kbd><span>+</span><kbd class="key-r">R</kbd></span> repeats the stored bytes; <code>R</code> <strong>re-runs</strong> the request instead — the
+block is read from the <code>.http</code> file again (from the open buffer, so unsaved
+edits count) and its placeholders are resolved against the variables and the
+environment selected <em>now</em>. That is the one to reach for when the question is
+"does this endpoint still answer the same today?" rather than "what did that
+exact exchange do?". The answer lands in the pane and in the history like any
+other response. If the request block was renamed or deleted since, IKE says so
+and points at <span class="keys"><kbd class="key-control">Ctrl</kbd><span>+</span><kbd class="key-r">R</kbd></span>, which still works.</p>
+<p>The comparison follows by itself: after a re-run (or a re-send) the
+previous-vs-new diff opens in the diff viewer, previous run on the left. A
+first run has nothing to compare with and opens nothing. Turn it off with
+<strong>Diff after re-run</strong> (<code>http.diff_after_rerun</code>) on the <strong>HTTP Client</strong>
+settings page — <code>P</code> in the response pane still opens the same diff whenever
+you want it.</p>
+<p>Response diffs leave the <strong>volatile headers</strong> out, because <code>Date</code>, a freshly
+stamped <code>X-Request-Id</code> and a few timing headers differ on every single run and
+would bury the header that actually changed. <strong>Volatile diff headers</strong>
+(<code>http.diff_ignore_headers</code>) is that list: header names, matched
+case-insensitively, with a trailing <code>*</code> for a whole family (<code>x-amz-*</code>). The
+notice above the diff says how many headers were filtered, so nothing goes
+missing quietly.</p>
+<h2 id="commands">Commands<a class="headerlink" href="#commands" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Id</th>
+<th>Default chord</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Run HTTP Request</td>
+<td><code>http.run</code></td>
+<td><span class="keys"><kbd class="key-command">Cmd</kbd><span>+</span><kbd class="key-enter">Enter</kbd></span>, <span class="keys"><kbd class="key-control">Ctrl</kbd><span>+</span><kbd class="key-f9">F9</kbd></span></td>
+</tr>
+<tr>
+<td>Cancel Running HTTP Request</td>
+<td><code>http.cancel</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Import OpenAPI Spec…</td>
+<td><code>http.importOpenAPI</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Import curl Command…</td>
+<td><code>http.importCurl</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Copy HTTP Request as curl</td>
+<td><code>http.copyAsCurl</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Copy HTTP Request as httpie</td>
+<td><code>http.copyAsHttpie</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Select HTTP Environment</td>
+<td><code>http.selectEnvironment</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Copy HTTP Response Body</td>
+<td><code>http.copyBody</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Copy HTTP Response Headers</td>
+<td><code>http.copyHeaders</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Copy Shown HTTP Request as curl</td>
+<td><code>http.copyShownAsCurl</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Copy Shown HTTP Request as httpie</td>
+<td><code>http.copyShownAsHttpie</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Save HTTP Response Body to File…</td>
+<td><code>http.saveResponse</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Toggle Raw / Pretty HTTP Response Body</td>
+<td><code>http.toggleRawBody</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Open jq Playground on HTTP Response</td>
+<td><code>http.jqPlayground</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Open Playground for This File</td>
+<td><code>playground.open</code></td>
+<td><span class="keys"><kbd class="key-command">Cmd</kbd><span>+</span><kbd class="key-shift">Shift</kbd><span>+</span><kbd class="key-j">J</kbd></span> / <span class="keys"><kbd class="key-control">Ctrl</kbd><span>+</span><kbd class="key-shift">Shift</kbd><span>+</span><kbd class="key-j">J</kbd></span></td>
+</tr>
+<tr>
+<td>Load More of the HTTP Response Body</td>
+<td><code>http.loadMoreBody</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Open Full HTTP Response Body as File</td>
+<td><code>http.openBodyFile</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Browse HTTP Response History</td>
+<td><code>http.responseHistory</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Show Stored HTTP Response</td>
+<td><code>http.showResponse</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Re-send Stored HTTP Request</td>
+<td><code>http.resend</code></td>
+<td><span class="keys"><kbd class="key-control">Ctrl</kbd><span>+</span><kbd class="key-r">R</kbd></span> (response pane)</td>
+</tr>
+<tr>
+<td>Re-run HTTP Request from History</td>
+<td><code>http.rerun</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Compare Stored HTTP Responses</td>
+<td><code>http.diffResponses</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Introspect GraphQL Schema</td>
+<td><code>http.graphqlIntrospect</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Open Cached GraphQL Schema (SDL)</td>
+<td><code>http.graphqlSchema</code></td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>A scratch file is a quick way to try something without adding a file to the
+repository: <strong>New Scratch File: Http</strong> (<code>scratch.new.http</code>).</p>
+<h2 id="related">Related<a class="headerlink" href="#related" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../conceal/">Conceal and decoded values</a> — percent-decoding and the other
+  stand-ins a <code>.http</code> file draws</li>
+<li><a href="../scratch-and-snippets/">Scratch files and snippets</a> — throwaway <code>.http</code> buffers</li>
+<li><a href="../../reference/keybindings/">Keybindings reference</a> — every default binding</li>
+<li><a href="../../reference/commands/">Commands reference</a> — every command id</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Documentation for IKE — a terminal IDE.
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+    <a href="https://github.com/TrueDaerk/ike" target="_blank" rel="noopener" title="IKE on GitHub" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.top", "content.code.copy", "content.action.edit", "search.highlight", "search.suggest", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>

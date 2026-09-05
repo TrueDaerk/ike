@@ -1,0 +1,4948 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A JetBrains-inspired terminal IDE with vim-like editing.">
+      
+      
+      
+        <link rel="canonical" href="https://truedaerk.github.io/ike/reference/settings/">
+      
+      
+        <link rel="prev" href="../keybindings/">
+      
+      
+        <link rel="next" href="../commands/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Settings - IKE</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#settings" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="IKE" class="md-header__button md-logo" aria-label="IKE" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 19V7H4v12zm0-16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm-7 14v-2h5v2zm-3.42-4L5.57 9H8.4l3.3 3.3c.39.39.39 1.03 0 1.42L8.42 17H5.59z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            IKE
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Settings
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/TrueDaerk/ike" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    TrueDaerk/ike
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="IKE" class="md-nav__button md-logo" aria-label="IKE" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 19V7H4v12zm0-16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm-7 14v-2h5v2zm-3.42-4L5.57 9H8.4l3.3 3.3c.39.39.39 1.03 0 1.42L8.42 17H5.59z"/></svg>
+
+    </a>
+    IKE
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/TrueDaerk/ike" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    TrueDaerk/ike
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/terminal-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Terminal setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/desktop-launcher/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Desktop launcher
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/first-project/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Your first project
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/command-line/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command line
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/panes-and-layout/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Panes, tabs and layouts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/modal-editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The modal editor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/projects-and-sessions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Projects and sessions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/commands-and-palette/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Commands and the palette
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/navigation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting around
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/search/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Search and replace
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/file-rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How files are rendered
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/conceal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conceal and decoded values
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/code-intelligence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/terminal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The integrated terminal
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/git/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Git
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependencies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/project-time/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project time
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/run-and-debug/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running and debugging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/http-client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The HTTP client
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/scratch-and-snippets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scratch files and snippets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../guides/customising/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Customising IKE
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../keybindings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Keybindings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Settings
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Settings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#editing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Editing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Editing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#editor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Editor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#typing-assistance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Typing Assistance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conceal-hints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Conceal &amp; Hints
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#diagnostics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diagnostics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#diff-viewer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diff Viewer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#markdown-preview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Markdown Preview
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interface
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Interface">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#appearance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appearance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#notifications" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Notifications
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#command-palette" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Command Palette
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#keymap-hints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keymap Hints
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tool-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool Layout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-hud" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance HUD
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#usage-telemetry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Usage Telemetry
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#files-projects" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Files &amp; Projects
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Files &amp; Projects">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#files-session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Files &amp; Session
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#explorer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Explorer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#backup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#timeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Timeline
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scratch-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scratch Files
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#screenshots" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Screenshots
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#todo-index" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TODO Index
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#languages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Languages
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Languages">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language-support" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Language Support
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#language-servers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Language Servers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#formatters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Formatters
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Formatters">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#shipped-defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shipped defaults
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dependencies
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ansible-vault" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ansible Vault
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#playgrounds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Playgrounds
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#build-run-debug" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build, Run &amp; Debug
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Build, Run &amp; Debug">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tests
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#debug" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Debug
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tools-integrations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tools &amp; Integrations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tools &amp; Integrations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#terminal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Terminal
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#http-client" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HTTP Client
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#remote-browsing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Remote Browsing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#network-links" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network Links
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#elasticsearch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Elasticsearch
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#forge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Forge
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#forge-notifications" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Forge Notifications
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#issues-window" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issues Window
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#plugins" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plugins
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Plugins">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#marketplace-catalog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Marketplace Catalog
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../commands/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Commands
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    About & contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#editing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Editing
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Editing">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#editor" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Editor
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#typing-assistance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Typing Assistance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#conceal-hints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Conceal &amp; Hints
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#diagnostics" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diagnostics
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#diff-viewer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Diff Viewer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#markdown-preview" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Markdown Preview
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interface
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Interface">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#appearance" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Appearance
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#notifications" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Notifications
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#command-palette" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Command Palette
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#keymap-hints" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keymap Hints
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tool-layout" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tool Layout
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#performance-hud" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Performance HUD
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#usage-telemetry" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Usage Telemetry
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#files-projects" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Files &amp; Projects
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Files &amp; Projects">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#files-session" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Files &amp; Session
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#explorer" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Explorer
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#backup" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Backup
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#timeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Timeline
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#scratch-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Scratch Files
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#screenshots" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Screenshots
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#todo-index" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        TODO Index
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#languages" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Languages
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Languages">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#language-support" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Language Support
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#language-servers" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Language Servers
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#formatters" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Formatters
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Formatters">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#shipped-defaults" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Shipped defaults
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dependencies" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dependencies
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#ansible-vault" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Ansible Vault
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#playgrounds" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Playgrounds
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#build-run-debug" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Build, Run &amp; Debug
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Build, Run &amp; Debug">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#run" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Run
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#tests" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tests
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#debug" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Debug
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#tools-integrations" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Tools &amp; Integrations
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Tools &amp; Integrations">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#terminal" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Terminal
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#http-client" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        HTTP Client
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#remote-browsing" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Remote Browsing
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#network-links" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network Links
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#elasticsearch" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Elasticsearch
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#forge" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Forge
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#forge-notifications" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Forge Notifications
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#issues-window" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Issues Window
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#plugins" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plugins
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Plugins">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#marketplace-catalog" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Marketplace Catalog
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/TrueDaerk/ike/edit/main/userdocs/reference/settings.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<!--
+Generated by cmd/docgen. Do not edit this file by hand — your changes will be
+overwritten and CI will fail on the drift. Change the source instead and run:
+
+    go run ./cmd/docgen
+-->
+
+<h1 id="settings">Settings<a class="headerlink" href="#settings" title="Permanent link">&para;</a></h1>
+<p>Every setting IKE understands, in the order the settings panel shows them.</p>
+<p>Settings are TOML and merge across three layers — built-in defaults, then
+<code>~/.ike/settings.toml</code> (or <code>$IKE_CONFIG_DIR/settings.toml</code>), then
+<code>&lt;project&gt;/.ike/settings.toml</code>. Later layers win, and changes are picked up
+live. The <strong>Scope</strong> column is the layer the settings panel writes a change to.</p>
+<p>Everything here can also be edited interactively: open the menu bar and pick
+Settings, or run <code>settings.open</code> from the palette.</p>
+<p>The <code>editor.*</code> keys that decode or hide what a value really says — timestamps,
+byte sizes, escapes, cron and chmod readings, certificate summaries, masked
+secrets — are documented together, with screenshots, in
+<a href="../../guides/conceal/">Conceal and decoded values</a>.</p>
+<h2 id="editing">Editing<a class="headerlink" href="#editing" title="Permanent link">&para;</a></h2>
+<h3 id="editor">Editor<a class="headerlink" href="#editor" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tab width</td>
+<td><code>editor.tab_width</code></td>
+<td>integer (1–16)</td>
+<td><code>4</code></td>
+<td>user</td>
+<td>Columns per indentation step</td>
+</tr>
+<tr>
+<td>Use spaces</td>
+<td><code>editor.use_spaces</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Indent with spaces instead of tab characters</td>
+</tr>
+<tr>
+<td>Auto indent</td>
+<td><code>editor.auto_indent</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Carry the current line's indentation into new lines</td>
+</tr>
+<tr>
+<td>Auto-close brackets</td>
+<td><code>editor.auto_close_pairs</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Insert the matching ), ] or } when typing an opening bracket</td>
+</tr>
+<tr>
+<td>Yank to system clipboard</td>
+<td><code>editor.clipboard_sync</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Mirror yanks (yy, y{motion}, visual y) onto the system clipboard; named registers and deletes stay internal</td>
+</tr>
+<tr>
+<td>Clipboard history size</td>
+<td><code>editor.clipboard_history_size</code></td>
+<td>integer (1–200)</td>
+<td><code>20</code></td>
+<td>user</td>
+<td>How many recent copies Paste from History (cmd+shift+v) keeps: yanks, deletes and pane copy actions, newest first with duplicates collapsed. The ring lives in memory only and starts empty after a restart</td>
+</tr>
+<tr>
+<td>Clipboard entry limit</td>
+<td><code>editor.clipboard_history_max_kb</code></td>
+<td>integer (1–10240)</td>
+<td><code>256</code></td>
+<td>user</td>
+<td>Largest single copy Paste from History keeps, in kilobytes. Bigger yanks, deletes and pane copies are skipped by the ring — never truncated — and still paste in full from the registers</td>
+</tr>
+<tr>
+<td>Auto save</td>
+<td><code>editor.auto_save</code></td>
+<td>enum: <code>focus</code>, <code>idle</code>, <code>off</code></td>
+<td><code>focus</code></td>
+<td>user</td>
+<td>Save a dirty buffer when focus leaves its pane (focus), additionally after an idle delay while editing (idle), or never (off)</td>
+</tr>
+<tr>
+<td>Auto save idle delay</td>
+<td><code>editor.auto_save_idle_ms</code></td>
+<td>integer (100–60000)</td>
+<td><code>2000</code></td>
+<td>user</td>
+<td>Milliseconds a dirty buffer must stay quiet before idle auto save writes it (auto_save = idle)</td>
+</tr>
+<tr>
+<td>Trim trailing whitespace</td>
+<td><code>editor.trim_trailing_whitespace</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Strip line-end whitespace on save</td>
+</tr>
+<tr>
+<td>Format on save</td>
+<td><code>editor.format_on_save</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>user</td>
+<td>Run LSP document formatting before every manual save (autosave stays raw)</td>
+</tr>
+<tr>
+<td>Organize imports on save</td>
+<td><code>editor.organize_imports_on_save</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>user</td>
+<td>Apply the server's organize-imports action before every manual save (autosave stays raw)</td>
+</tr>
+<tr>
+<td>Insert final newline</td>
+<td><code>editor.insert_final_newline</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>End every saved file with a newline</td>
+</tr>
+<tr>
+<td>EditorConfig</td>
+<td><code>editor.editorconfig</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Honour .editorconfig files per buffer</td>
+</tr>
+<tr>
+<td>Line numbers</td>
+<td><code>editor.line_numbers</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Show the line-number gutter</td>
+</tr>
+<tr>
+<td>Relative line numbers</td>
+<td><code>editor.relative_line_numbers</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>user</td>
+<td>Count gutter lines away from the cursor (vim-style)</td>
+</tr>
+<tr>
+<td>Scroll offset</td>
+<td><code>editor.scroll_off</code></td>
+<td>integer (0–50)</td>
+<td><code>3</code></td>
+<td>user</td>
+<td>Minimum lines kept visible above and below the cursor</td>
+</tr>
+<tr>
+<td>Text width</td>
+<td><code>editor.text_width</code></td>
+<td>integer (0–500)</td>
+<td><code>80</code></td>
+<td>user</td>
+<td>Hard-wrap column the gq reflow operator targets (0 = vim's default 79)</td>
+</tr>
+<tr>
+<td>Sticky scroll</td>
+<td><code>editor.sticky_scroll</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Pin enclosing function/class header lines at the top while scrolling</td>
+</tr>
+<tr>
+<td>Toggle pairs</td>
+<td><code>editor.toggle_pairs</code></td>
+<td>list</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>Extra value pairs the Toggle Value Under Caret command (g!) cycles, each written as "a=b"; matching is case-insensitive and the replacement copies the original's capitalization ("True" becomes "False"). Entries here are matched before the built-in pairs true/false, on/off, yes/no, enabled/disabled, ==/!=, &amp;&amp;/</td>
+</tr>
+<tr>
+<td>Follow poll interval</td>
+<td><code>editor.follow_poll_ms</code></td>
+<td>integer (100–10000)</td>
+<td><code>500</code></td>
+<td>user</td>
+<td>Milliseconds between polls of the open files while a view follows its file, tail -f style (Toggle Follow). The poll is the fallback for filesystems where the native watcher under-reports; it runs only while at least one view follows, so there is no idle cost</td>
+</tr>
+<tr>
+<td>Clickable URLs</td>
+<td><code>editor.hyperlinks</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Wrap URLs in OSC 8 hyperlink sequences so supporting terminals (Ghostty, iTerm2, kitty, WezTerm) make them clickable — cmd/ctrl+click opens the browser; Markdown link labels carry their link target; terminals without support ignore the sequences</td>
+</tr>
+<tr>
+<td>Diff word highlighting</td>
+<td><code>editor.diff_word_highlight</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Emphasize the word-level changed range inside paired removed/added lines of .diff/.patch files with the diff viewer's changed-range background; off keeps whole-line coloring only</td>
+</tr>
+<tr>
+<td>Sticky scroll depth</td>
+<td><code>editor.sticky_scroll_depth</code></td>
+<td>integer (1–10)</td>
+<td><code>4</code></td>
+<td>user</td>
+<td>Maximum number of nested header lines pinned at once</td>
+</tr>
+<tr>
+<td>Sticky scroll from symbols</td>
+<td><code>editor.sticky_scroll_symbols</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Let sticky scroll fall back to the language server's document symbols when the language has no Tree-sitter grammar, reusing the tree the Structure view and breadcrumbs already cache (no extra requests); Tree-sitter scopes always win where they exist</td>
+</tr>
+<tr>
+<td>Smart paste</td>
+<td><code>editor.smart_paste</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Re-indent multi-line pastes to the target line's indentation, preserving relative structure</td>
+</tr>
+<tr>
+<td>Case-insensitive search</td>
+<td><code>editor.search_ignore_case</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>user</td>
+<td>Match in-file / and ? searches ignoring case by default; a \C query prefix forces exact case. Off = smartcase: all-lowercase folds, any uppercase matches exactly</td>
+</tr>
+<tr>
+<td>Soft wrap</td>
+<td><code>editor.wrap</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>user</td>
+<td>Wrap long lines at the pane edge</td>
+</tr>
+<tr>
+<td>Show whitespace</td>
+<td><code>editor.show_whitespace</code></td>
+<td>enum: <code>none</code>, <code>trailing</code>, <code>all</code></td>
+<td><code>none</code></td>
+<td>user</td>
+<td>Render spaces and tabs visibly</td>
+</tr>
+<tr>
+<td>Indent guides</td>
+<td><code>editor.indent_guides</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>user</td>
+<td>Draw vertical lines at each indentation level</td>
+</tr>
+<tr>
+<td>Rulers</td>
+<td><code>editor.rulers</code></td>
+<td>list of integers</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>Display columns tinted as vertical margin guides (80, 120); empty draws none. Columns below 1 are clamped to 1</td>
+</tr>
+<tr>
+<td>Rainbow indent guides</td>
+<td><code>editor.rainbow_indent_guides</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Color each indent guide by its depth with the rainbow palette, so nesting reads in files that have no brackets (YAML, Python); only in effect while indent guides are drawn</td>
+</tr>
+<tr>
+<td>Breadcrumbs</td>
+<td><code>editor.breadcrumbs</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Show the enclosing symbol path in a row under the editor's tab bar; segments are clickable</td>
+</tr>
+<tr>
+<td>Always show tab bar</td>
+<td><code>editor.tabs.always_show</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>user</td>
+<td>Render the pane's tab bar even with a single tab</td>
+</tr>
+<tr>
+<td>Tab limit</td>
+<td><code>editor.tabs.limit</code></td>
+<td>integer</td>
+<td><code>5</code></td>
+<td>user</td>
+<td>Max open editor tabs per pane; opening beyond it closes the least recently used non-dirty tab (0 disables)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="typing-assistance">Typing Assistance<a class="headerlink" href="#typing-assistance" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Space after punctuation</td>
+<td><code>editor.typing.space_after_punctuation</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Insert the conventional space after punctuation the language declares — ":" in JSON, so "key": is completed as you type. Suppressed inside strings and comments</td>
+</tr>
+<tr>
+<td>Postfix completion</td>
+<td><code>editor.postfix_completion</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Offer the JetBrains-style postfix templates in the completion popup after a dot: "err.nil" completes to "if err == nil { … }", "foo(bar).if" wraps the whole call, "xs.range" writes a range loop. Accepting one replaces the whole expr.template span and places the caret inside. The templates are the language's (Go and Python ship one set each); languages without any are unaffected, and the items always rank below the language server's members on the same dot</td>
+</tr>
+</tbody>
+</table>
+<h3 id="conceal-hints">Conceal &amp; Hints<a class="headerlink" href="#conceal-hints" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Markdown rendering</td>
+<td><code>editor.markdown_rendering</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Render Markdown inline styles, conceal markers (revealed while the caret is inside the span) and draw pipe tables with box characters, only the caret's cell showing raw source; toggle per view via Toggle Markdown Rendering</td>
+</tr>
+<tr>
+<td>CSV table rendering</td>
+<td><code>editor.csv_rendering</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Render csv/tsv files table-like: rainbow columns, aligned fields, a pinned header row, and separators concealed except under the caret</td>
+</tr>
+<tr>
+<td>Log rendering</td>
+<td><code>editor.log_rendering</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Render .log files readable: severity levels colored, timestamps dimmed, thread/logger names rainbow-colored, and ANSI escapes drawn as their styles with the escape bytes concealed (revealed under the caret); toggle per view via Toggle Log Rendering</td>
+</tr>
+<tr>
+<td>Timestamp decoding</td>
+<td><code>editor.timestamp_decoding</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Show numeric Unix epoch timestamps (seconds and milliseconds, 2001-2100) as their UTC date and time in JSON values, log lines and .http request bodies; the raw number reappears under the caret; toggle per view via Toggle Timestamp Decoding</td>
+</tr>
+<tr>
+<td>Unicode escape decoding</td>
+<td><code>editor.unicode_escape_decoding</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Show unicode escapes inside string literals as the escaped character — \uXXXX (surrogate pairs combined), \UXXXXXXXX, and, in the languages that have them, \u{X…} and \xNN; the raw escape reappears under the caret; toggle per view via Toggle Unicode Escape Decoding</td>
+</tr>
+<tr>
+<td>Entity decoding</td>
+<td><code>editor.entity_decoding</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Show HTML/XML character references (&amp;, &#x2026;) decoded — the full named table in HTML, only the five predefined entities in XML; the raw reference reappears under the caret; toggle per view via Toggle Entity Decoding</td>
+</tr>
+<tr>
+<td>Base64 decoding</td>
+<td><code>editor.base64_decoding</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Show base64 values decoded where base64 is the convention (Kubernetes Secret data: blocks in YAML) and the payload is printable text; the raw value reappears under the caret; toggle per view via Toggle Base64 Decoding</td>
+</tr>
+<tr>
+<td>Cron hints</td>
+<td><code>editor.cron_hints</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Show a cron expression's English reading after it ("*/5 * * * *  every 5 min") in crontab files, CI YAML cron:/schedule: values and quoted expressions in JSON/TOML; the bare expression reappears under the caret; toggle per view via Toggle Cron Hints</td>
+</tr>
+<tr>
+<td>PEM summary</td>
+<td><code>editor.pem_summary</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Collapse a PEM block onto its BEGIN marker plus a decoded one-line summary (certificates: subject CN, validity window, issuer, key type, SANs; everything else a type label), expired or not-yet-valid certificates in the error color and ones expiring within 30 days in the warning color; private keys are never parsed; the raw base64 reappears with the cursor in the block; toggle per view via Toggle PEM Summary</td>
+</tr>
+<tr>
+<td>Byte size hints</td>
+<td><code>editor.byte_size_hints</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Show a byte count as a binary size (10485760 as "10 MiB") where the key names a byte count (<em>size</em>, <em>bytes</em>, <em>memory</em>, …) or the value is a multiple of 1024; the raw number reappears under the caret; toggle per view via Toggle Byte Size Hints</td>
+</tr>
+<tr>
+<td>Duration hints</td>
+<td><code>editor.duration_hints</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Show a millisecond/second count as a duration (86400000 as "24h") where the key names a timeout, TTL or interval, with <em>_ms/</em>_seconds-style words pinning the unit; the raw number reappears under the caret; toggle per view via Toggle Duration Hints</td>
+</tr>
+<tr>
+<td>Digit grouping</td>
+<td><code>editor.digit_grouping</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Show plain integers of five digits or more grouped (1000000 as "1_000_000"); the raw digits reappear under the caret; toggle per view via Toggle Digit Grouping</td>
+</tr>
+<tr>
+<td>Radix hints</td>
+<td><code>editor.radix_hints</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Append a hex literal's decimal reading ("0x1F4  = 500") and a permission/flag value's octal or hex one ("420  = 0o644"); the bare literal reappears under the caret; toggle per view via Toggle Radix Hints</td>
+</tr>
+<tr>
+<td>Permission hints</td>
+<td><code>editor.permission_hints</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Show an octal file mode's symbolic form after it ("0644  rw-r--r--", "4755  rwsr-xr-x") where the context carries a permission: chmod/install -m/mkdir -m in shell, COPY --chmod= in Dockerfiles, the mode arguments of os.Chmod and friends in Go and Python, and mode:/defaultMode: keys in YAML; the bare literal reappears under the caret; toggle per view via Toggle Permission Hints</td>
+</tr>
+<tr>
+<td>CIDR hints</td>
+<td><code>editor.cidr_hints</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Show a CIDR prefix's address range and size after it ("10.0.0.0/8  10.0.0.0–10.255.255.255, 16,777,214 hosts") in config formats, .http files and string literals in code; the bare literal reappears under the caret; toggle per view via Toggle CIDR Hints</td>
+</tr>
+<tr>
+<td>IDN hints</td>
+<td><code>editor.idn_hints</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Show a punycode hostname's decoded Unicode form after it ("xn--mnchen-3ya.de  münchen.de"), with names carrying the homograph shape — mixed scripts in one label, or a whole label of Latin look-alikes — in the warning color; the raw name reappears under the caret; toggle per view via Toggle IDN Hints</td>
+</tr>
+<tr>
+<td>Secret masking</td>
+<td><code>editor.secret_masking</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Mask dotenv values whose key names a secret (<em>_TOKEN, </em>_SECRET, PASSWORD, …) as ••••; the raw value reappears under the caret; toggle per view via Toggle Secret Masking</td>
+</tr>
+<tr>
+<td>Secret masking key patterns</td>
+<td><code>editor.secret_masking_keys</code></td>
+<td>list</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>Extra key patterns whose values secret masking hides, beyond the built-in ones. Each entry is matched case-insensitively over the whole key name with * wildcards ("MY_API_KEY", "<em>_LICENSE", "db_pass</em>"). A pattern prefixed - (or !) exempts instead, so a key the built-in patterns would mask stays readable ("-PUBLIC_TOKEN"). Earlier entries win, and a key no entry matches falls through to the built-in patterns; masking still needs editor.secret_masking on and the file to pass the conceal filters</td>
+</tr>
+<tr>
+<td>Number hint field units</td>
+<td><code>editor.number_hint_units</code></td>
+<td>list</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>Map field names to the unit their numbers are read in, overriding the key heuristics of the byte size, duration, digit grouping and radix hints. Each entry is written "pattern=unit", the pattern matched case-insensitively over the whole field name with * wildcards ("<em>_bytes=bytes", "retention=s", "created_at=timestamp-s", "session_id=none"). Units: bytes, a duration unit (ns, us, ms, s, min, h, d), timestamp-s, timestamp-ms, octal, hex, group, none. A mapped field is read in that unit and no other — a value in a bytes field draws as a byte size even where its digits also read as a timestamp — and none silences every stand-in over the field's values. The unit is the base the raw number is read </em>in*, not just the family it draws as: with "request_timeout=s" the value 1500 is 1500 seconds and draws as "25m"</td>
+</tr>
+<tr>
+<td>Conceal file include patterns</td>
+<td><code>editor.conceal_include</code></td>
+<td>list</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>Restrict every conceal family (timestamps, number hints, secret masking, Markdown/CSV/log rendering, …) to the files matching one of these globs; empty means every file. A pattern without a separator matches the file's base name ("<em>.py", "Makefile"), one with a separator the whole path, anchored at any segment boundary unless it starts with / or ** ("vendor/</em><em>", "</em><em>/config/</em>*"); matching is case-insensitive. Composes with the per-family toggles — a stand-in draws only if its family is on and the file passes the filter — and an explicit per-view toggle still wins</td>
+</tr>
+<tr>
+<td>Conceal file exclude patterns</td>
+<td><code>editor.conceal_exclude</code></td>
+<td>list</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>Switch every conceal family off in the files matching one of these globs, written like the include patterns ("<em>.log", "</em><em>/testdata/</em>*"). Exclude beats include, so a file matching both conceals nothing</td>
+</tr>
+<tr>
+<td>Conceal file rules per family</td>
+<td><code>editor.conceal_file_rules</code></td>
+<td>list</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>Override the include/exclude lists for a single conceal family. Each entry is written "family=pattern", the pattern prefixed - (or !) for an exclude and bare (or +) for an include: "secret_masking=-<strong>/testdata/</strong>", "cron_hints=<em>.log". Families are the editor.</em> toggle keys without their prefix: markdown_rendering, csv_rendering, log_rendering, timestamp_decoding, unicode_escape_decoding, entity_decoding, base64_decoding, cron_hints, pem_summary, byte_size_hints, duration_hints, digit_grouping, radix_hints, permission_hints, cidr_hints, idn_hints, secret_masking. A family whose own rules decide a file never consults the global lists; one with nothing to say follows them</td>
+</tr>
+<tr>
+<td>Rainbow brackets</td>
+<td><code>editor.rainbow_brackets</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Color bracket pairs by nesting depth (theme-derived cycle); brackets left without a partner render underlined in the error color</td>
+</tr>
+<tr>
+<td>Color preview</td>
+<td><code>editor.color_preview</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Tint color literals (#rgb/#rrggbb/#rrggbbaa, rgb(), hsl()) with their own color</td>
+</tr>
+<tr>
+<td>Identifier colors</td>
+<td><code>editor.id_colors</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Color UUIDs and long hex hashes (git SHAs, request/trace IDs) by hashing the identifier into the rainbow palette, so every occurrence of the same identifier shares one color; active in logs, JSON and .http files and response bodies, toggle per view via Toggle Identifier Colors</td>
+</tr>
+<tr>
+<td>Identifier color minimum length</td>
+<td><code>editor.id_color_min_length</code></td>
+<td>integer (6–64)</td>
+<td><code>7</code></td>
+<td>user</td>
+<td>Shortest bare hex run that counts as an identifier (7 = abbreviated git SHA)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="diagnostics">Diagnostics<a class="headerlink" href="#diagnostics" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Error marks</td>
+<td><code>editor.marks.lsp_errors</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Decorate LSP errors (scrollbar stripe, gutter, underline); the Problems window is unaffected</td>
+</tr>
+<tr>
+<td>Warning marks</td>
+<td><code>editor.marks.lsp_warnings</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Decorate LSP warnings (scrollbar stripe, gutter, underline); the Problems window is unaffected</td>
+</tr>
+<tr>
+<td>Info marks</td>
+<td><code>editor.marks.lsp_info</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Decorate LSP information diagnostics (scrollbar stripe, gutter, underline); the Problems window is unaffected</td>
+</tr>
+<tr>
+<td>Hint marks</td>
+<td><code>editor.marks.lsp_hints</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Decorate LSP hints (scrollbar stripe, gutter, underline); the Problems window is unaffected</td>
+</tr>
+<tr>
+<td>Git added marks</td>
+<td><code>editor.marks.git_added</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Mark added lines in the gutter and scrollbar</td>
+</tr>
+<tr>
+<td>Git changed marks</td>
+<td><code>editor.marks.git_changed</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Mark changed lines in the gutter and scrollbar</td>
+</tr>
+<tr>
+<td>Git deleted marks</td>
+<td><code>editor.marks.git_deleted</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Mark deletions in the gutter and scrollbar</td>
+</tr>
+<tr>
+<td>Inheritance marks</td>
+<td><code>editor.marks.inheritance</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Show ↑/↓ gutter arrows on symbols that implement/override a super declaration or have implementations; also gates the LSP probes computing them</td>
+</tr>
+<tr>
+<td>Coverage marks</td>
+<td><code>editor.marks.coverage</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Show per-line test-coverage bars in the gutter after a run-with-coverage (green covered, red uncovered, yellow partial); the coverage.toggle command hides them per session on top of this</td>
+</tr>
+<tr>
+<td>Ignored diagnostics</td>
+<td><code>lsp.diagnostics_ignore</code></td>
+<td>list</td>
+<td><code>source=intelephense code=P1006 msg=*Found 'null'*,source=intelephense code=P1006 msg=*Found 'unset'*</code></td>
+<td>project</td>
+<td>Suppression rules dropped everywhere (editor and Problems window): each rule combines source=<glob> code=<glob> and a trailing msg=<glob>; a bare token means code=. The editor's Ignore Diagnostic Under Caret command appends here</td>
+</tr>
+<tr>
+<td>Diagnostic severity overrides</td>
+<td><code>lsp.diagnostics_severity</code></td>
+<td>list</td>
+<td><em>(empty)</em></td>
+<td>project</td>
+<td>Remap rules applied everywhere (editor and Problems window): the ignore-rule conditions plus a trailing error/warning/info/hint/off — e.g. 'reportArgumentType warning'. First match wins, off drops the diagnostic; syntax errors (codeless diagnostics) always stay errors. The 'partial' keyword restricts a rule to union-partial type mismatches ('str</td>
+</tr>
+</tbody>
+</table>
+<h3 id="diff-viewer">Diff Viewer<a class="headerlink" href="#diff-viewer" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Context lines</td>
+<td><code>diff.context</code></td>
+<td>integer (-1–100)</td>
+<td><code>3</code></td>
+<td>user</td>
+<td>Unchanged lines kept visible on each side of a change before the rest folds into a "··· N unchanged lines ···" separator; o expands the nearest fold and c shows the file in full. -1 never folds</td>
+</tr>
+<tr>
+<td>Diff placement</td>
+<td><code>diff.placement</code></td>
+<td>enum: <code>focused</code>, <code>split</code></td>
+<td><code>focused</code></td>
+<td>user</td>
+<td>Where a diff-open (diff.files, the VCS panel's HEAD and commit diffs, local history, compare-with-clipboard, the HTTP response diff) puts its viewer. "focused" opens it as a tab of the pane you are working in — the focused editor pane, or the most recently focused one when a tool window has the keyboard — so the layout keeps its shape and the diff appears where the eye already is; the pane's file tabs stay, an empty scratch pane is taken over in place, and a second diff from that pane reuses its diff tab. "split" restores the older behaviour: every diff carves off a new pane to the right of the active editor</td>
+</tr>
+<tr>
+<td>Ignore whitespace</td>
+<td><code>diff.ignore_whitespace</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>user</td>
+<td>Compare lines with every whitespace rune removed, the way "git diff -w" does: a re-indented or re-wrapped line counts as unchanged and drops out of the hunk list, and inside a line that really changed the emphasis marks only the non-whitespace ranges. Each column still shows its own raw text. w toggles it on the open diff and stores the choice here, so a reformat-heavy branch stays readable across panes</td>
+</tr>
+</tbody>
+</table>
+<h3 id="markdown-preview">Markdown Preview<a class="headerlink" href="#markdown-preview" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Diagram rendering</td>
+<td><code>preview.diagrams</code></td>
+<td>enum: <code>ascii</code>, <code>image</code>, <code>off</code></td>
+<td><code>ascii</code></td>
+<td>user</td>
+<td>How a fenced diagram block renders in the preview. "ascii" pipes it through the mermaid-ascii renderer and shows its text in place of the code block; "image" renders a PNG with mermaid-cli (mmdc) and embeds it over the Kitty graphics path, falling back to ascii where the terminal cannot show pixels; "off" leaves every fence the syntax-highlighted code block it is. Rendering is asynchronous and cached per fence, so typing around a diagram never re-runs the renderer; a renderer that is not installed leaves the code block with a one-line install hint, and "Re-render Preview Diagrams" retries once it is</td>
+</tr>
+</tbody>
+</table>
+<h2 id="interface">Interface<a class="headerlink" href="#interface" title="Permanent link">&para;</a></h2>
+<h3 id="appearance">Appearance<a class="headerlink" href="#appearance" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Theme</td>
+<td><code>theme.name</code></td>
+<td>enum: <code>default</code>, <code>tokyo-night</code>, <code>nord</code>, <code>gruvbox</code>, <code>gruvbox-light</code>, <code>rose-pine</code>, <code>rose-pine-dawn</code>, <code>catppuccin-mocha</code>, <code>catppuccin-latte</code>, <code>kanagawa</code>, <code>one-dark</code>, <code>solarized-dark</code>, <code>solarized-light</code>, <code>dracula</code>, <code>darcula</code>, <code>intellij-light</code>, <code>everforest-dark</code>, <code>everforest-light</code>, <code>ayu-dark</code>, <code>ayu-mirage</code>, <code>ayu-light</code>, <code>github-dark</code>, <code>github-light</code>, <code>oxocarbon</code>, <code>monokai-pro</code>, <code>zenburn</code>, <code>high-contrast-dark</code>, <code>high-contrast-light</code></td>
+<td><code>default</code></td>
+<td>user</td>
+<td>Color scheme; previews live while you scroll the list, esc restores the previous one (and selecting turns off auto sync)</td>
+</tr>
+<tr>
+<td>Sync with terminal</td>
+<td><code>theme.auto</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>user</td>
+<td>Pick the light or dark theme below from the terminal's background colour (OSC 11); picking a theme explicitly turns this off</td>
+</tr>
+<tr>
+<td>Light theme</td>
+<td><code>theme.light</code></td>
+<td>enum: <code>gruvbox-light</code>, <code>rose-pine-dawn</code>, <code>catppuccin-latte</code>, <code>solarized-light</code>, <code>intellij-light</code>, <code>everforest-light</code>, <code>ayu-light</code>, <code>github-light</code>, <code>high-contrast-light</code></td>
+<td><code>intellij-light</code></td>
+<td>user</td>
+<td>Theme used when auto sync sees a light terminal background</td>
+</tr>
+<tr>
+<td>Dark theme</td>
+<td><code>theme.dark</code></td>
+<td>enum: <code>default</code>, <code>tokyo-night</code>, <code>nord</code>, <code>gruvbox</code>, <code>rose-pine</code>, <code>catppuccin-mocha</code>, <code>kanagawa</code>, <code>one-dark</code>, <code>solarized-dark</code>, <code>dracula</code>, <code>darcula</code>, <code>everforest-dark</code>, <code>ayu-dark</code>, <code>ayu-mirage</code>, <code>github-dark</code>, <code>oxocarbon</code>, <code>monokai-pro</code>, <code>zenburn</code>, <code>high-contrast-dark</code></td>
+<td><code>default</code></td>
+<td>user</td>
+<td>Theme used when auto sync sees a dark terminal background</td>
+</tr>
+<tr>
+<td>Menu bar</td>
+<td><code>ui.menu_bar</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Show the File/Edit/… menu row above the panes</td>
+</tr>
+<tr>
+<td>Horizontal scroll marks</td>
+<td><code>ui.h_scroll_marks</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Mark the edges of a horizontally scrolled view — ‹ where content continues left, › where a line continues right — in the editor, diff, explorer and playground result</td>
+</tr>
+<tr>
+<td>Pane numbers</td>
+<td><code>layout.pane_numbers</code></td>
+<td>enum: <code>on</code>, <code>off</code>, <code>focus-only</code></td>
+<td><code>on</code></td>
+<td>user</td>
+<td>Draw each visible pane's layout-order number in its title bar ("[1] EDITOR"), the number the pane-focus chords (ctrl+1…ctrl+9 on macOS) and Focus Pane by Number address: "on" always, "off" never, "focus-only" only for a moment after a pane switch, when the numbers are actually being used</td>
+</tr>
+<tr>
+<td>Popup max width</td>
+<td><code>ui.popup_max_width</code></td>
+<td>integer</td>
+<td><code>110</code></td>
+<td>user</td>
+<td>Cap centered popups (palette, dialogs, settings) at this width in columns; 0 disables</td>
+</tr>
+<tr>
+<td>Command palette key</td>
+<td><code>palette.toggle_key</code></td>
+<td>key chord</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>Chord that opens the command palette</td>
+</tr>
+</tbody>
+</table>
+<h3 id="notifications">Notifications<a class="headerlink" href="#notifications" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Notification timeout</td>
+<td><code>notifications.timeout_seconds</code></td>
+<td>integer (1–300)</td>
+<td><code>4</code></td>
+<td>user</td>
+<td>Seconds before info/warn toasts expire</td>
+</tr>
+<tr>
+<td>Notification severity floor</td>
+<td><code>notifications.min_severity</code></td>
+<td>enum: <code>info</code>, <code>warn</code>, <code>error</code></td>
+<td><code>info</code></td>
+<td>user</td>
+<td>Below this severity notifications go to the history only</td>
+</tr>
+</tbody>
+</table>
+<h3 id="command-palette">Command Palette<a class="headerlink" href="#command-palette" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Result rows</td>
+<td><code>palette.max_results</code></td>
+<td>integer (1–100)</td>
+<td><code>12</code></td>
+<td>user</td>
+<td>Result rows shown at once; the list still scrolls past it</td>
+</tr>
+<tr>
+<td>Default mode</td>
+<td><code>palette.default_mode</code></td>
+<td>enum: <code>:</code>, <code>@</code></td>
+<td><code>:</code></td>
+<td>user</td>
+<td>Prefix assumed when the query starts with no mode rune: ":" ranks it as a command, "@" as a file name</td>
+</tr>
+<tr>
+<td>Off-context commands</td>
+<td><code>palette.off_context</code></td>
+<td>enum: <code>rank</code>, <code>hide</code></td>
+<td><code>rank</code></td>
+<td>user</td>
+<td>How command mode treats commands scoped to a pane other than the focused one: rank them last, or hide them</td>
+</tr>
+<tr>
+<td>Recent files ranking</td>
+<td><code>palette.recent.ranking</code></td>
+<td>enum: <code>frecency</code>, <code>recency</code></td>
+<td><code>frecency</code></td>
+<td>user</td>
+<td>How the recent-files dialog (cmd+e) orders its files and projects: "frecency" blends how often and how recently each was opened, "recency" keeps the plain most-recently-used order</td>
+</tr>
+</tbody>
+</table>
+<h3 id="keymap-hints">Keymap Hints<a class="headerlink" href="#keymap-hints" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Which-key hints</td>
+<td><code>keymap.which_key</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Show the continuation popup while a chord prefix is pending (cmd+k …); off leaves multi-step sequences unannounced</td>
+</tr>
+<tr>
+<td>Which-key delay</td>
+<td><code>keymap.which_key_delay_ms</code></td>
+<td>integer (0–5000)</td>
+<td><code>300</code></td>
+<td>user</td>
+<td>Milliseconds a chord prefix must stay pending before the popup opens; a sequence finished faster never flashes one. 0 shows it immediately</td>
+</tr>
+</tbody>
+</table>
+<h3 id="tool-layout">Tool Layout<a class="headerlink" href="#tool-layout" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Slot template rows</td>
+<td><code>tools.layout.template</code></td>
+<td>list</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>Grid rows, one entry per row ("XEEH, XEEH, TTZZ"): every cell names a slot by a single letter, E is the editor region, each slot's cells must form a solid rectangle, and row/column counts set the proportions. Empty disables slot placement; a template that cannot be split into straight cuts is rejected with a config diagnostic</td>
+</tr>
+<tr>
+<td>Slot assignments</td>
+<td><code>tools.layout.assign</code></td>
+<td>list</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>SLOT=tool entries pinning tools to template slots ("X=explorer, T=lazygit"): the tool is a custom tool's name or a built-in id (explorer, vcs, debug, problems, structure, usages, http, breakpoints, run, tests, issues, dom, terminal). "terminal" pins fresh terminal panes (not the popup overlay); run and debug place independently. Several tools may share a slot — the first open materializes the pane, later ones join it as tabs; each tool takes at most one slot. While typing, the valid slot letters and tool ids are listed under the input</td>
+</tr>
+</tbody>
+</table>
+<h3 id="performance-hud">Performance HUD<a class="headerlink" href="#performance-hud" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HUD refresh interval</td>
+<td><code>perf.hud_interval_ms</code></td>
+<td>integer (100–10000)</td>
+<td><code>1000</code></td>
+<td>user</td>
+<td>Milliseconds between HUD samples. This is also the wake rate the open HUD costs the program, so a very short interval shows up in the numbers it reports; the HUD counts its own tick either way</td>
+</tr>
+<tr>
+<td>HUD history span</td>
+<td><code>perf.hud_history_seconds</code></td>
+<td>integer (5–600)</td>
+<td><code>60</code></td>
+<td>user</td>
+<td>Seconds of rolling history behind the HUD's sparklines and the min/avg/max block the snapshot copies, so a spike stays readable after it passed</td>
+</tr>
+<tr>
+<td>Stall watchdog threshold</td>
+<td><code>perf.watchdog_seconds</code></td>
+<td>integer (0–600)</td>
+<td><code>15</code></td>
+<td>user</td>
+<td>Seconds a single Update/View pass may stay in flight before the stall watchdog dumps every goroutine's stack to the state directory (.ike, or IKE_CONFIG_DIR) and notes it in debug.log, so a frozen session leaves evidence of what it was stuck on. 0 disables the watchdog</td>
+</tr>
+<tr>
+<td>Update-loop trace log</td>
+<td><code>perf.trace_log</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>user</td>
+<td>While on, every message the update loop processes appends one line — the message type and the number of open HTTP requests, never any content — to trace.log in the state directory (.ike, or IKE_CONFIG_DIR), answering "what is the IDE doing right now" when chasing a freeze or a stall. Off (the default) it costs nothing; leave it off outside a diagnosis, the file grows with every keystroke</td>
+</tr>
+</tbody>
+</table>
+<h3 id="usage-telemetry">Usage Telemetry<a class="headerlink" href="#usage-telemetry" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Local usage telemetry</td>
+<td><code>telemetry.enabled</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Record command, keybinding and layout usage events into per-session JSONL files under ~/.ike/telemetry; off writes nothing. The data stays on this machine</td>
+</tr>
+<tr>
+<td>Project time in the status line</td>
+<td><code>statusline.project_time</code></td>
+<td>enum: <code>off</code>, <code>on</code></td>
+<td><code>off</code></td>
+<td>user</td>
+<td>Show today's active time in the current project as a status-line segment, aggregated from the same local usage log the Time tool window reports on (time.toggle). Needs telemetry.enabled to have anything to read; the segment refreshes about once a minute and clicking it opens the Time window</td>
+</tr>
+</tbody>
+</table>
+<h2 id="files-projects">Files &amp; Projects<a class="headerlink" href="#files-projects" title="Permanent link">&para;</a></h2>
+<h3 id="files-session">Files &amp; Session<a class="headerlink" href="#files-session" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Restore last project</td>
+<td><code>project.restore_last</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>user</td>
+<td>Reopen the previous project's workspace on start</td>
+</tr>
+<tr>
+<td>Project directory</td>
+<td><code>project.directory</code></td>
+<td>path</td>
+<td><code>~/IkeProjects</code></td>
+<td>user</td>
+<td>Default parent for projects IKE creates itself (clone repository); a leading ~ is expanded and the directory is created on first use</td>
+</tr>
+<tr>
+<td>Auto-save on project switch</td>
+<td><code>project.auto_save_on_switch</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Write every dirty file-backed buffer of the departing project before switching projects (format-on-save and the other save hooks run as on a normal save); buffers that cannot be written — untitled, read-only, changed on disk — are collected into one dialog. Off parks dirty buffers unsaved with their workspace</td>
+</tr>
+<tr>
+<td>Recent projects kept</td>
+<td><code>project.max_history</code></td>
+<td>integer (0–200)</td>
+<td><code>20</code></td>
+<td>user</td>
+<td>How many entries the recent-projects list keeps; the oldest fall off</td>
+</tr>
+<tr>
+<td>Background workspaces</td>
+<td><code>project.max_workspaces</code></td>
+<td>integer (0–20)</td>
+<td><code>0</code></td>
+<td>user</td>
+<td>Live background workspaces kept across seamless project switches; exceeding it evicts the least recently used one (confirming first when unsaved buffers or running processes would die). 0 selects the built-in default of 3</td>
+</tr>
+<tr>
+<td>Background LSP timeout</td>
+<td><code>project.background_lsp_timeout</code></td>
+<td>string</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>How long a parked background workspace keeps its language servers alive, as a Go duration ("5m", "90s"); past it they stop and respawn lazily on resume. Empty selects 5m, "off" keeps them running</td>
+</tr>
+<tr>
+<td>Find All: include globs</td>
+<td><code>project.find_all.include</code></td>
+<td>list</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>Default file-name include globs for Find in All Projects (project.findInAllProjects); empty keeps every file. The search form pre-fills and updates this list</td>
+</tr>
+<tr>
+<td>Find All: exclude globs</td>
+<td><code>project.find_all.exclude</code></td>
+<td>list</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>Default file-name exclude globs for Find in All Projects; exclude wins over include. The search form pre-fills and updates this list</td>
+</tr>
+<tr>
+<td>Find All: excluded projects</td>
+<td><code>project.find_all.excluded_roots</code></td>
+<td>list</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>Project roots (absolute paths) left out of Find in All Projects; the search form's project list toggles entries in and out</td>
+</tr>
+<tr>
+<td>Find All: result cap</td>
+<td><code>project.find_all.max_results</code></td>
+<td>integer (1–100000)</td>
+<td><code>2000</code></td>
+<td>user</td>
+<td>Bound on the merged match count across all searched projects; hitting it stops the scan and flags the results as truncated</td>
+</tr>
+<tr>
+<td>Watch files</td>
+<td><code>files.watch</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Report external file changes (fsnotify on the project root)</td>
+</tr>
+<tr>
+<td>Auto reload</td>
+<td><code>files.auto_reload</code></td>
+<td>enum: <code>clean</code>, <code>never</code></td>
+<td><code>clean</code></td>
+<td>user</td>
+<td>Reload clean buffers when their file changes on disk</td>
+</tr>
+<tr>
+<td>Persistent undo</td>
+<td><code>files.persistent_undo</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Keep undo history across restarts while the file is unchanged</td>
+</tr>
+<tr>
+<td>Open binary files as</td>
+<td><code>files.binary_open</code></td>
+<td>enum: <code>hex</code>, <code>editor</code></td>
+<td><code>hex</code></td>
+<td>user</td>
+<td>Where a sniffed binary file (NUL byte in the first 8 KiB, no dedicated viewer) opens: the hex viewer pane, or a text buffer with code insight off. The Open File As… chooser overrides it per open</td>
+</tr>
+<tr>
+<td>Large file threshold (KB)</td>
+<td><code>files.large_file_kb</code></td>
+<td>integer</td>
+<td><code>1024</code></td>
+<td>user</td>
+<td>Above this size, highlighting and language features are disabled for the file; 0 disables the size guard. Applies to subsequently opened or reloaded files</td>
+</tr>
+<tr>
+<td>External-change feed size</td>
+<td><code>files.change_feed_limit</code></td>
+<td>integer (0–5000)</td>
+<td><code>200</code></td>
+<td>user</td>
+<td>How many externally changed files the change feed (watch.changeFeed) keeps for the session, oldest dropped first; 0 turns the feed off. It records writes by other processes — a coding agent, a git checkout, a formatter in a tool pane — never IKE's own saves</td>
+</tr>
+<tr>
+<td>Large file threshold (lines)</td>
+<td><code>files.large_file_lines</code></td>
+<td>integer</td>
+<td><code>100000</code></td>
+<td>user</td>
+<td>Above this line count, highlighting and language features are disabled for the file; 0 disables the line guard. Applies to subsequently opened or reloaded files</td>
+</tr>
+<tr>
+<td>Highlighting off above (KB)</td>
+<td><code>files.large_file_highlight_kb</code></td>
+<td>integer</td>
+<td><code>0</code></td>
+<td>user</td>
+<td>Switch syntax highlighting (and its lint/Unicode scan) off once the file exceeds this size, before the base large-file cliff; 0 follows the base thresholds. The status line badges the degradation</td>
+</tr>
+<tr>
+<td>LSP sync off above (KB)</td>
+<td><code>files.large_file_lsp_kb</code></td>
+<td>integer</td>
+<td><code>0</code></td>
+<td>user</td>
+<td>Stop syncing the document to language servers (didOpen/didChange) once the file exceeds this size; 0 follows the base thresholds. The status line badges the degradation</td>
+</tr>
+<tr>
+<td>VCS gutter off above (KB)</td>
+<td><code>files.large_file_vcs_kb</code></td>
+<td>integer</td>
+<td><code>0</code></td>
+<td>user</td>
+<td>Skip the gutter diff-marker recompute (git show + whole-file diff per refresh) once the file exceeds this size; 0 follows the base thresholds. The status line badges the degradation</td>
+</tr>
+<tr>
+<td>Search counter off above (KB)</td>
+<td><code>files.large_file_search_kb</code></td>
+<td>integer</td>
+<td><code>0</code></td>
+<td>user</td>
+<td>Hide the search match counter (a bounded buffer scan per edit while highlights are armed) once the file exceeds this size; 0 follows the base thresholds. Match highlighting in the viewport stays</td>
+</tr>
+<tr>
+<td>Format on save off above (KB)</td>
+<td><code>files.large_file_format_kb</code></td>
+<td>integer</td>
+<td><code>0</code></td>
+<td>user</td>
+<td>Skip the on-save LSP chain (organize imports, format) once the file exceeds this size; 0 follows the base thresholds. The save itself is unaffected</td>
+</tr>
+</tbody>
+</table>
+<h3 id="explorer">Explorer<a class="headerlink" href="#explorer" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Show hidden files</td>
+<td><code>explorer.show_hidden</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>user</td>
+<td>List dot files and dot directories in the tree; entries matched by the exclude patterns below stay hidden either way</td>
+</tr>
+<tr>
+<td>Git status colors</td>
+<td><code>explorer.git_status</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Tint tree entries by their git status (added, modified, ignored) and roll a directory's status up from its children</td>
+</tr>
+<tr>
+<td>File type icons</td>
+<td><code>explorer.icons</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>user</td>
+<td>Draw a one-cell file-type marker glyph before each name (plain unicode, no nerd font needed)</td>
+</tr>
+<tr>
+<td>Autoscroll from source</td>
+<td><code>explorer.auto_reveal</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>user</td>
+<td>Reveal the focused editor's file in the tree on every focus/tab switch — expand its ancestors, select it and scroll it into view (JetBrains' "autoscroll from source")</td>
+</tr>
+<tr>
+<td>Sort order</td>
+<td><code>explorer.sort</code></td>
+<td>enum: <code>name</code>, <code>type</code>, <code>size</code>, <code>modified</code></td>
+<td><code>name</code></td>
+<td>user</td>
+<td>How entries are ordered inside a directory; directories always come before files</td>
+</tr>
+<tr>
+<td>Tree indent</td>
+<td><code>explorer.tree_indent</code></td>
+<td>integer (0–8)</td>
+<td><code>2</code></td>
+<td>user</td>
+<td>Columns of indentation per nesting level in the tree</td>
+</tr>
+<tr>
+<td>Excluded entries</td>
+<td><code>explorer.exclude</code></td>
+<td>list</td>
+<td><code>.git,.idea,.DS_Store</code></td>
+<td>user</td>
+<td>Comma-separated base-name glob patterns (.git, *.pyc, node_modules) hidden from the file tree at every depth, even with hidden files shown; explorer-only — go-to-file and find-in-path still see them</td>
+</tr>
+</tbody>
+</table>
+<h3 id="backup">Backup<a class="headerlink" href="#backup" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Crash recovery</td>
+<td><code>backup.enable</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Snapshot dirty buffers for recovery; off also purges existing snapshots</td>
+</tr>
+<tr>
+<td>Snapshot debounce</td>
+<td><code>backup.debounce_ms</code></td>
+<td>integer (100–60000)</td>
+<td><code>2000</code></td>
+<td>user</td>
+<td>Milliseconds a dirty buffer must stay quiet before it is snapshotted</td>
+</tr>
+<tr>
+<td>Snapshot max age</td>
+<td><code>backup.max_age_days</code></td>
+<td>integer (1–365)</td>
+<td><code>7</code></td>
+<td>user</td>
+<td>Days before leftover snapshots are pruned at startup (after the restore prompt)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="timeline">Timeline<a class="headerlink" href="#timeline" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Timeline source filter</td>
+<td><code>history.timeline_source</code></td>
+<td>enum: <code>both</code>, <code>local</code>, <code>git</code></td>
+<td><code>both</code></td>
+<td>user</td>
+<td>Which histories the Timeline shows when it opens: both local-history snapshots and git commits, snapshots only, or commits only. The view's f key cycles the filter for the open list without changing this default</td>
+</tr>
+</tbody>
+</table>
+<h3 id="scratch-files">Scratch Files<a class="headerlink" href="#scratch-files" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Show Scratches section</td>
+<td><code>scratch.section</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>List the scratch store as a divider-separated section at the bottom of the explorer; off removes the section entirely (scratches stay reachable through the "Open Scratch File…" command)</td>
+</tr>
+<tr>
+<td>Scratches section height</td>
+<td><code>scratch.section_height</code></td>
+<td>integer (1–30)</td>
+<td><code>5</code></td>
+<td>user</td>
+<td>Rows the Scratches section shows when expanded (it never grows past its content). Dragging the divider resizes it afterwards, and that height persists with the explorer's session state</td>
+</tr>
+<tr>
+<td>Scratches sort order</td>
+<td><code>scratch.sort</code></td>
+<td>enum: <code>name</code>, <code>modified</code></td>
+<td><code>name</code></td>
+<td>user</td>
+<td>How the Scratches section orders its rows: by name like the file tree, or by modification time newest first</td>
+</tr>
+</tbody>
+</table>
+<h3 id="screenshots">Screenshots<a class="headerlink" href="#screenshots" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Screenshot directory</td>
+<td><code>screenshot.directory</code></td>
+<td>path</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>Directory the exported PNGs are written to, created on the first capture; "~" expands and a relative path resolves against the project directory. Empty means the built-in default, ~/.ike/screenshots</td>
+</tr>
+</tbody>
+</table>
+<h3 id="todo-index">TODO Index<a class="headerlink" href="#todo-index" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tag words</td>
+<td><code>todo.patterns</code></td>
+<td>list</td>
+<td><code>TODO,FIXME,HACK,XXX</code></td>
+<td>user</td>
+<td>Comment tag words the project scan matches as whole words, case-insensitively (TODO, FIXME, HACK, XXX); entries are literals, not regexes</td>
+</tr>
+</tbody>
+</table>
+<h2 id="languages">Languages<a class="headerlink" href="#languages" title="Permanent link">&para;</a></h2>
+<h3 id="language-support">Language Support<a class="headerlink" href="#language-support" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Language servers</td>
+<td><code>lsp.enabled</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Run language servers at all; off disables completion, diagnostics, navigation and every other LSP-backed feature</td>
+</tr>
+<tr>
+<td>Auto-install servers</td>
+<td><code>lsp.auto_install</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Install a missing language server automatically when a file of its language opens, instead of only offering it</td>
+</tr>
+<tr>
+<td>Completion while typing</td>
+<td><code>lsp.completion_auto</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Open the completion popup on identifier characters; server trigger characters (".") and the manual ctrl+space request work either way</td>
+</tr>
+<tr>
+<td>Signature help while typing</td>
+<td><code>lsp.signature_auto</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Open the signature-help popup on the server's trigger characters ("(", ","); the manual Parameter Info command works either way</td>
+</tr>
+<tr>
+<td>Inlay hints</td>
+<td><code>lsp.inlay_hints</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>user</td>
+<td>Show inline parameter-name and type hints from the server; off by default — parameter info is available on demand instead</td>
+</tr>
+<tr>
+<td>Code lenses</td>
+<td><code>lsp.code_lens</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Show server code lenses ("run test", reference counts) as annotations on the anchored line; the LSP: Run Code Lens command executes them</td>
+</tr>
+<tr>
+<td>Server folding ranges</td>
+<td><code>lsp.folding</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Fold along the server's folding ranges (import blocks, comments, regions) where available; Tree-sitter folding remains the fallback either way</td>
+</tr>
+<tr>
+<td>Semantic highlighting</td>
+<td><code>lsp.semantic_tokens</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Refine Tree-sitter syntax colors with server semantic tokens (parameters vs locals, constants vs mutable variables)</td>
+</tr>
+<tr>
+<td>Server selection ranges</td>
+<td><code>lsp.selection_range</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Base Extend/Shrink Selection on the server's syntactic ranges; Tree-sitter ranges are used when off or unsupported</td>
+</tr>
+<tr>
+<td>Refactor on file rename</td>
+<td><code>lsp.will_rename</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Ask language servers for refactoring edits (updated import paths) before a rename or move in the explorer and apply them</td>
+</tr>
+<tr>
+<td>Server log level</td>
+<td><code>lsp.log_level</code></td>
+<td>enum: <code>error</code>, <code>warn</code>, <code>info</code>, <code>debug</code></td>
+<td><code>warn</code></td>
+<td>user</td>
+<td>Verbosity of the language-server log the LSP: Show Server Log command opens</td>
+</tr>
+</tbody>
+</table>
+<h3 id="language-servers">Language Servers<a class="headerlink" href="#language-servers" title="Permanent link">&para;</a></h3>
+<p>This page is an interactive editor in the settings panel rather than a
+list of keys.</p>
+<h3 id="formatters">Formatters<a class="headerlink" href="#formatters" title="Permanent link">&para;</a></h3>
+<p>The <strong>Formatters</strong> page lists each language's reformat command, the config
+layer supplying it and whether the binary is installed — and it edits them:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>enter</code></td>
+<td>edit the language's override: <code>command</code> (tab completes a path), <code>args</code>, <code>range_args</code>, <code>temp_file</code>, <code>install</code>, plus the built-in's own keys</td>
+</tr>
+<tr>
+<td><code>e</code></td>
+<td>external formatting on/off for the language (<code>enabled</code>)</td>
+</tr>
+<tr>
+<td><code>b</code></td>
+<td>built-in formatter on/off (<code>builtin</code>), where the language ships one</td>
+</tr>
+<tr>
+<td><code>r</code></td>
+<td>reset: remove the whole override, back to the plugin default</td>
+</tr>
+<tr>
+<td><code>s</code></td>
+<td>the layer writes land in: project ↔ user</td>
+</tr>
+</tbody>
+</table>
+<p>A field left at (or cleared back to) the plugin default is <strong>not</strong> written, so
+the config file only ever holds what actually differs. The same overrides can
+be written by hand as a <code>[format.&lt;languageID&gt;]</code> table, mirroring
+<code>[lsp.servers.*]</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">[format.python]</span>
+<span class="n">command</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"ruff"</span>
+<span class="n">args</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"format"</span><span class="p">,</span><span class="w"> </span><span class="s2">"--stdin-filename"</span><span class="p">,</span><span class="w"> </span><span class="s2">"${FILE}"</span><span class="p">,</span><span class="w"> </span><span class="s2">"-"</span><span class="p">]</span>
+<span class="n">range_args</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"format"</span><span class="p">,</span><span class="w"> </span><span class="s2">"--range"</span><span class="p">,</span><span class="w"> </span><span class="s2">"${START_LINE}-${END_LINE}"</span><span class="p">,</span><span class="w"> </span><span class="s2">"-"</span><span class="p">]</span>
+<span class="n">enabled</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="w">      </span><span class="c1"># false switches external formatting off for the language</span>
+<span class="n">temp_file</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="w">   </span><span class="c1"># true for tools that cannot read stdin</span>
+<span class="n">install</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"pip install ruff"</span>
+</code></pre></div>
+<p>The command reads the buffer on stdin and prints the formatted text on
+stdout (set <code>temp_file = true</code> for in-place-only tools; IKE then formats a
+temp copy and reads it back — your file is never written behind the
+editor's back). Available placeholders: <code>${FILE}</code>, <code>${TAB_WIDTH}</code>,
+<code>${INDENT_STYLE}</code>, <code>${MAX_LINE_LENGTH}</code>, and in <code>range_args</code>
+<code>${START_LINE}</code> / <code>${END_LINE}</code> (1-based). <code>range_args</code> opts into
+<strong>Reformat Selection</strong>; without it the selection command falls back to
+another range-capable source or tells you only whole-file reformat is
+available.</p>
+<p>Languages with a built-in formatter (SQL, XML, <code>.http</code>) accept two extra
+keys: <code>builtin = false</code> disables the built-in (falling back to the language
+server), and for SQL <code>keywords = "upper" | "lower" | "preserve"</code> controls
+keyword casing.</p>
+<h4 id="shipped-defaults">Shipped defaults<a class="headerlink" href="#shipped-defaults" title="Permanent link">&para;</a></h4>
+<p>Without any override these are the formatters IKE reaches for. Chains try
+each tool in order and use the first one installed; nothing is installed for
+you — a missing binary raises the install hint once and the reformat falls
+through to the next source.</p>
+<table>
+<thead>
+<tr>
+<th>Language</th>
+<th>Default formatter</th>
+<th>Install hint</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Python</td>
+<td><code>ruff format</code>, else <code>black</code> (a project <code>.venv/</code> or <code>venv/</code> install wins over PATH)</td>
+<td><code>pip install ruff</code> / <code>pip install black</code></td>
+</tr>
+<tr>
+<td>Markdown</td>
+<td><code>prettier</code>, else <code>mdformat</code></td>
+<td><code>npm install -g prettier</code> / <code>pip install mdformat</code></td>
+</tr>
+<tr>
+<td>Shell</td>
+<td><code>shfmt</code> (indent flag and dialect derived per buffer)</td>
+<td><code>brew install shfmt</code></td>
+</tr>
+<tr>
+<td>Ansible</td>
+<td><code>prettier</code> (YAML parser), else <code>yamlfmt</code></td>
+<td><code>npm install -g prettier</code> / <code>go install github.com/google/yamlfmt/cmd/yamlfmt@latest</code></td>
+</tr>
+<tr>
+<td>SQL</td>
+<td>built-in (<code>keywords</code> casing), above the <code>sqls</code> server</td>
+<td>—</td>
+</tr>
+<tr>
+<td>XML</td>
+<td>built-in pretty-printer</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>.http</code></td>
+<td>built-in request formatter</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>Every other language reformats through its language server when the server
+advertises formatting.</p>
+<h3 id="dependencies">Dependencies<a class="headerlink" href="#dependencies" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Scan dependencies on project open</td>
+<td><code>deps.auto_scan</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Run one background toolchain scan (outdated versions and vulnerability audit) when a project with dependency manifests opens; off leaves scans to the deps.refresh and deps.audit commands</td>
+</tr>
+</tbody>
+</table>
+<h3 id="ansible-vault">Ansible Vault<a class="headerlink" href="#ansible-vault" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Vault password file</td>
+<td><code>ansible.vault_password_file</code></td>
+<td>path</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>File whose first line is the Ansible Vault password; "~" expands. The user-scope value is the global default and a project-scope value overrides it; the ANSIBLE_VAULT_PASSWORD and ANSIBLE_VAULT_PASSWORD_FILE environment variables beat both. Empty (and no variable set) leaves vault files opening as ciphertext</td>
+</tr>
+</tbody>
+</table>
+<h3 id="playgrounds">Playgrounds<a class="headerlink" href="#playgrounds" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>xmq binary</td>
+<td><code>playground.xmq.path</code></td>
+<td>path</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>The xmq executable the XML/HTML playground runs; "~" expands, and a bare name resolves on PATH. Empty resolves "xmq" on PATH. With no resolvable binary the playground answers its open with an install-hint dialog (brew install xmq) instead of opening</td>
+</tr>
+</tbody>
+</table>
+<h2 id="build-run-debug">Build, Run &amp; Debug<a class="headerlink" href="#build-run-debug" title="Permanent link">&para;</a></h2>
+<h3 id="run">Run<a class="headerlink" href="#run" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Run placement</td>
+<td><code>run.placement</code></td>
+<td>enum: <code>bottom</code>, <code>left</code>, <code>right</code>, <code>top</code>, <code>in_pane</code></td>
+<td><code>bottom</code></td>
+<td>user</td>
+<td>Home position of the Run tool pane: docked at the bottom, left, right or top workspace edge, or in_pane for a terminal tab in the focused editor pane. A [tools.layout] slot assigned to "run" overrides it; the legacy value new_terminal reads as bottom</td>
+</tr>
+<tr>
+<td>Import launch.json</td>
+<td><code>run.vscode_launch</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Merge compatible .vscode/launch.json launch configurations into the run-configuration picker (run.select); the .ike/runconfigs.json store wins name collisions and nothing is written back</td>
+</tr>
+</tbody>
+</table>
+<h3 id="tests">Tests<a class="headerlink" href="#tests" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Structured test results</td>
+<td><code>tests.results_window</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Parse test runs into the Test Results tool window (result tree, re-run failed, jump to failure) when the language declares an output parser; off keeps every test run in the raw Run tool terminal</td>
+</tr>
+<tr>
+<td>Open on test run</td>
+<td><code>tests.auto_open</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Open the Test Results tool window when a captured test run starts; off only updates an already open pane</td>
+</tr>
+<tr>
+<td>Coverage in status line</td>
+<td><code>tests.coverage_status</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>user</td>
+<td>Show the focused file's line-coverage percentage in the editor status line after a run with coverage ("cov 82.4%", marked "stale" once the buffer changed since the run); off keeps the figure to the Test Results window, whose detail column lists every covered file under c</td>
+</tr>
+</tbody>
+</table>
+<h3 id="debug">Debug<a class="headerlink" href="#debug" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Inline variable values</td>
+<td><code>debug.inline_values</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>While the debugger is stopped, show the paused frame's local variable values at the end of the lines that mention them; they disappear on resume</td>
+</tr>
+<tr>
+<td>When a session ends</td>
+<td><code>debug.session_end</code></td>
+<td>enum: <code>keep</code>, <code>close</code></td>
+<td><code>keep</code></td>
+<td>user</td>
+<td>What happens to the combined debug area (variables + console) when the session ends: keep leaves it open with the output reviewable until the next launch reuses it, close removes it from the layout</td>
+</tr>
+<tr>
+<td>PHP listen port</td>
+<td><code>debug.php.port</code></td>
+<td>integer (1–65535)</td>
+<td><code>9003</code></td>
+<td>user</td>
+<td>DBGp port debug.listen binds for incoming Xdebug connections (Xdebug's default is 9003)</td>
+</tr>
+<tr>
+<td>PHP hostname filter</td>
+<td><code>debug.php.hostname</code></td>
+<td>string</td>
+<td><em>(empty)</em></td>
+<td>project</td>
+<td>Only accept listen-mode debug sessions whose request HTTP_HOST matches (port suffix ignored); empty accepts all — per project</td>
+</tr>
+</tbody>
+</table>
+<h2 id="tools-integrations">Tools &amp; Integrations<a class="headerlink" href="#tools-integrations" title="Permanent link">&para;</a></h2>
+<h3 id="terminal">Terminal<a class="headerlink" href="#terminal" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Shell</td>
+<td><code>terminal.shell</code></td>
+<td>path</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>Program new terminal sessions spawn; empty follows $SHELL. Applies to sessions started after the change</td>
+</tr>
+<tr>
+<td>Command auto-suggest</td>
+<td><code>terminal.autosuggest</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Popup with command/path/make-target completions while typing at the shell prompt; ctrl+space opens it on demand either way</td>
+</tr>
+<tr>
+<td>Extra SSH hosts</td>
+<td><code>terminal.ssh_hosts</code></td>
+<td>list</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>Additional host aliases the SSH Host picker (terminal.ssh) offers, for machines no ~/.ssh/config entry declares. Each entry is passed to ssh verbatim ("build01", "ops@10.0.0.5"); the aliases parsed from ~/.ssh/config and its Include files are listed either way</td>
+</tr>
+<tr>
+<td>Scrollback lines</td>
+<td><code>terminal.scrollback_lines</code></td>
+<td>integer (100–1000000)</td>
+<td><code>10000</code></td>
+<td>user</td>
+<td>Lines of scrollback each terminal session keeps; the main memory cost per terminal pane. Applies to new sessions and, on lowering, trims live ones forward — already-trimmed history is not restored by raising it</td>
+</tr>
+<tr>
+<td>Popup terminal directory</td>
+<td><code>terminal.popup_cwd</code></td>
+<td>enum: <code>project</code>, <code>file</code></td>
+<td><code>project</code></td>
+<td>user</td>
+<td>Directory new popup-terminal shells start in: the project root, or the focused file's directory (project root when no file is open). Applies when a shell is spawned — the retained popup session keeps its own working directory across hide/show</td>
+</tr>
+<tr>
+<td>Popup terminal on project switch</td>
+<td><code>terminal.popup_on_switch</code></td>
+<td>enum: <code>restore</code>, <code>always-open</code></td>
+<td><code>restore</code></td>
+<td>user</td>
+<td>What the popup terminal does after a project switch: "restore" brings the incoming project's popup back exactly as it was left, "always-open" opens it every time — resuming the parked instance if one exists, spawning a fresh shell otherwise</td>
+</tr>
+<tr>
+<td>Popup terminal scope</td>
+<td><code>terminal.popup_scope</code></td>
+<td>enum: <code>project</code>, <code>global</code></td>
+<td><code>project</code></td>
+<td>user</td>
+<td>Who owns the popup terminal: "project" gives every project its own popup, parked with the project and back exactly as left; "global" keeps one popup shell for the whole app — it follows you across project switches with its scrollback and running processes, and is asked to cd into the new project root whenever its shell sits idle at a prompt</td>
+</tr>
+</tbody>
+</table>
+<h3 id="http-client">HTTP Client<a class="headerlink" href="#http-client" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Diff after re-run</td>
+<td><code>http.diff_after_rerun</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Open the previous-vs-new response diff automatically once a re-run (R in the response pane, http.rerun) or a re-send (ctrl+r, http.resend) has landed in the history — the point of re-running a request is usually the comparison, so it needs no second key. A first-ever run has nothing to compare with and opens nothing; off keeps the pane on the new response, where P ("Diff HTTP Response Against Previous Run") still opens the same diff on demand</td>
+</tr>
+<tr>
+<td>Volatile diff headers</td>
+<td><code>http.diff_ignore_headers</code></td>
+<td>list</td>
+<td><code>date,age,expires,keep-alive,server-timing,x-runtime,x-request-id,request-id,x-correlation-id,x-trace-id,traceparent,cf-ray,x-amzn-requestid,x-amzn-trace-id,x-served-by,x-timer</code></td>
+<td>user</td>
+<td>Response headers left out of every response diff: two runs of one request differ in Date, a freshly stamped request id and a handful of timing headers every single time, and those lines hide the one header that really changed. Each entry is a header name matched case-insensitively, optionally with a trailing * for a whole family ("x-amz-<em>"); a bare "</em>" is ignored, since an empty diff answers nothing. The notice above the diff says how many headers were filtered. Empty compares every header</td>
+</tr>
+<tr>
+<td>Highlight limit</td>
+<td><code>http.highlight_limit_kb</code></td>
+<td>integer (1–65536)</td>
+<td><code>2048</code></td>
+<td>user</td>
+<td>Largest response body the viewer syntax-highlights, in KiB after pretty-printing. The pass runs off the update loop either way — the body always shows immediately and colours in when the parse lands — but a multi-megabyte search dump still costs CPU for colours nobody reads, so past this limit the body stays plain and a notice row in the pane says why</td>
+</tr>
+<tr>
+<td>Slow response notice</td>
+<td><code>http.notify_slow_ms</code></td>
+<td>integer (0–600000)</td>
+<td><code>3000</code></td>
+<td>user</td>
+<td>Milliseconds a dispatch may take before its completion is announced as a notification while the response pane is not on screen. Dispatches are asynchronous and the answer usually lands after the focus has moved on, so a slow request would otherwise report itself only to whoever happens to look at the pane. The notice names method, status and duration and is recorded in the notification history like any other. 0 turns the slow branch off; a non-2xx status always notifies, threshold or not</td>
+</tr>
+</tbody>
+</table>
+<h3 id="remote-browsing">Remote Browsing<a class="headerlink" href="#remote-browsing" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Download size limit</td>
+<td><code>remote.max_fetch_mb</code></td>
+<td>integer (1–4096)</td>
+<td><code>64</code></td>
+<td>user</td>
+<td>Largest remote file the browser downloads into the local cache to preview, in MiB; opening a bigger file is refused with a notice instead of stalling the link</td>
+</tr>
+</tbody>
+</table>
+<h3 id="network-links">Network Links<a class="headerlink" href="#network-links" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Listen for network clients</td>
+<td><code>network.enabled</code></td>
+<td>boolean</td>
+<td><code>false</code></td>
+<td>user</td>
+<td>Start the TCP endpoint. Every client must pair first: IKE shows a one-time six-digit PIN (digits 1-9, no zero) with a countdown, and a wrong or expired code is replaced by a fresh one. Paired devices keep a token stored hashed in the user state dir; "Forget Paired Network Clients" revokes them all</td>
+</tr>
+<tr>
+<td>Port</td>
+<td><code>network.port</code></td>
+<td>integer (1–65535)</td>
+<td><code>4530</code></td>
+<td>user</td>
+<td>TCP port the endpoint listens on (default 4530)</td>
+</tr>
+<tr>
+<td>Bind address</td>
+<td><code>network.bind</code></td>
+<td>string</td>
+<td><code>0.0.0.0</code></td>
+<td>user</td>
+<td>Interface address to listen on: 0.0.0.0 (the default) or empty reaches every interface so phones and laptops on the LAN can connect; 127.0.0.1 keeps the endpoint on this machine. Host names are refused — an IP literal only</td>
+</tr>
+<tr>
+<td>Announce over mDNS</td>
+<td><code>network.mdns</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Advertise the running endpoint on the local network as an _ike._tcp service (Bonjour / Avahi / DNS-SD), so a client browses for IKE instead of typing an address. Only while the endpoint is enabled, and skipped when the bind address is loopback — nothing else could reach it. Off keeps the endpoint silent: clients need the address</td>
+</tr>
+<tr>
+<td>Announced name</td>
+<td><code>network.name</code></td>
+<td>string</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>The instance label other devices see when browsing ("geants-mac"); empty announces the host's short name. One DNS label: no dots, no control characters, at most 63 bytes</td>
+</tr>
+</tbody>
+</table>
+<h3 id="elasticsearch">Elasticsearch<a class="headerlink" href="#elasticsearch" title="Permanent link">&para;</a></h3>
+<p>The <strong>Elasticsearch</strong> page manages the ES console's cluster endpoints
+(#1927), persisted as the <code>[[elasticsearch.endpoints]]</code> table array:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>a</code></td>
+<td>add an endpoint: <code>name</code>, <code>url</code>, optional <code>username</code>/<code>password</code> (basic auth) or <code>api key</code></td>
+</tr>
+<tr>
+<td><code>enter</code></td>
+<td>edit the selected endpoint</td>
+</tr>
+<tr>
+<td><code>d</code></td>
+<td>delete the selected endpoint (confirms)</td>
+</tr>
+<tr>
+<td><code>s</code></td>
+<td>the layer writes land in: user ↔ project</td>
+</tr>
+</tbody>
+</table>
+<p>The form rejects a URL without an http(s) scheme and host, duplicate names,
+and mixing basic auth with an API key. Each configured endpoint appears in
+the command palette as <code>ES Console: &lt;name&gt;</code>, opening a read-only console —
+index sidebar, paged hit grid, per-index Query-DSL buffers with
+mapping-aware completion. The same entries can be written by hand:</p>
+<div class="highlight"><pre><span></span><code><span class="k">[[elasticsearch.endpoints]]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"prod"</span>
+<span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"https://es.example.com:9200"</span>
+<span class="n">api_key</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"..."</span><span class="w">        </span><span class="c1"># or username/password for basic auth</span>
+</code></pre></div>
+<p>Like every TOML list the endpoint list replaces across layers: a
+project-scope <code>[[elasticsearch.endpoints]]</code> table hides the user-scope one.</p>
+<h3 id="forge">Forge<a class="headerlink" href="#forge" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Background poll interval</td>
+<td><code>forge.poll_interval_seconds</code></td>
+<td>integer (0–3600)</td>
+<td><code>20</code></td>
+<td>user</td>
+<td>Seconds between background re-fetches of the repository's issues and pull requests, so new issues, closed issues and PR state changes surface without pressing r. The fetch runs off the UI loop and a tick arriving while the previous one is still running is skipped, so a slow forge never stalls IKE; consecutive failures back off exponentially (up to 5 minutes) and an unavailable forge — no CLI, no matching remote or login — stops polling until a manual refresh succeeds. 0 turns polling off entirely; the lowest interval is 10 seconds</td>
+</tr>
+<tr>
+<td>Pause polling when unfocused</td>
+<td><code>forge.poll_pause_on_blur</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Stop arming poll deadlines while the terminal window has no focus: an IKE sitting in a background tab re-read the forge three times a minute for a listing nobody could see, which is API quota and CPU spent on nothing. Regaining focus fetches immediately when the pause outlasted one interval and resumes the normal chain. Independently of this, the poll slows to five times the interval (at least a minute) while no Issues tool window is open, so the unread badge keeps moving. Terminals that never report focus never pause; off polls regardless, the way it worked before</td>
+</tr>
+<tr>
+<td>Persistent listing cache</td>
+<td><code>forge.cache</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Keep the last successful issue/PR listing in the project's .ike/forgecache.json: a freshly started IKE shows it instantly, marked "cached · updating…" until the real fetch lands, and background polls only ask the forge for issues updated since the snapshot instead of re-listing everything. Manual r always performs a full resync; a repository or backend switch invalidates the snapshot; off never reads or writes the file</td>
+</tr>
+</tbody>
+</table>
+<h3 id="forge-notifications">Forge Notifications<a class="headerlink" href="#forge-notifications" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>New issue</td>
+<td><code>forge.notify.issue_opened</code></td>
+<td>enum: <code>off</code>, <code>toast</code>, <code>badge</code>, <code>dialog</code></td>
+<td><code>dialog</code></td>
+<td>user</td>
+<td>Notification style when an issue appears on the forge</td>
+</tr>
+<tr>
+<td>Issue closed</td>
+<td><code>forge.notify.issue_closed</code></td>
+<td>enum: <code>off</code>, <code>toast</code>, <code>badge</code>, <code>dialog</code></td>
+<td><code>toast</code></td>
+<td>user</td>
+<td>Notification style when an issue disappears from the open listing</td>
+</tr>
+<tr>
+<td>New pull request</td>
+<td><code>forge.notify.pr_opened</code></td>
+<td>enum: <code>off</code>, <code>toast</code>, <code>badge</code>, <code>dialog</code></td>
+<td><code>toast</code></td>
+<td>user</td>
+<td>Notification style when a pull request is opened</td>
+</tr>
+<tr>
+<td>Pull request merged</td>
+<td><code>forge.notify.pr_merged</code></td>
+<td>enum: <code>off</code>, <code>toast</code>, <code>badge</code>, <code>dialog</code></td>
+<td><code>toast</code></td>
+<td>user</td>
+<td>Notification style when a pull request is merged</td>
+</tr>
+<tr>
+<td>Pull request closed</td>
+<td><code>forge.notify.pr_closed</code></td>
+<td>enum: <code>off</code>, <code>toast</code>, <code>badge</code>, <code>dialog</code></td>
+<td><code>toast</code></td>
+<td>user</td>
+<td>Notification style when a pull request is closed without merging</td>
+</tr>
+<tr>
+<td>Checks failing</td>
+<td><code>forge.notify.pr_checks_failing</code></td>
+<td>enum: <code>off</code>, <code>toast</code>, <code>badge</code>, <code>dialog</code></td>
+<td><code>badge</code></td>
+<td>user</td>
+<td>Notification style when an open pull request's CI rollup turns failing</td>
+</tr>
+</tbody>
+</table>
+<h3 id="issues-window">Issues Window<a class="headerlink" href="#issues-window" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Default view</td>
+<td><code>issues.default_tab</code></td>
+<td>enum: <code>issues</code>, <code>prs</code></td>
+<td><code>issues</code></td>
+<td>user</td>
+<td>Which of the pane's two views the issues window opens on: the issue list, or the pull-request list. tab and shift+tab (and a click on the tab bar) switch between them either way</td>
+</tr>
+<tr>
+<td>Default sort order</td>
+<td><code>issues.default_sort</code></td>
+<td>enum: <code>relevance</code>, <code>newest</code>, <code>oldest</code>, <code>updated</code>, <code>number</code></td>
+<td><code>relevance</code></td>
+<td>user</td>
+<td>Order both lists open in: "relevance" ranks by fuzzy score while a filter pattern is typed and falls back to newest without one, "newest"/"oldest" order by creation time, "updated" by last activity, "number" by issue number ascending. The a key cycles the order for the open pane without changing this default</td>
+</tr>
+<tr>
+<td>Default filter</td>
+<td><code>issues.default_filter</code></td>
+<td>string</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>Narrowing a freshly opened issues pane starts with, written in the same qualifier syntax the filter overlay's match input accepts, so an expression can be typed in the pane and pasted here unchanged: "is:open" (alias state:, also closed and all), "label:bug" repeated once per label (a name with spaces is double-quoted), "sort:oldest", and anything else as the fuzzy pattern — a bare word means "match this". A sort: qualifier overrides the default sort order. Every filter change in the pane wins for the rest of the session, so a live config reload never re-narrows a list you are working in. Empty opens the pane unfiltered</td>
+</tr>
+<tr>
+<td>Saved filters</td>
+<td><code>issues.saved_filters</code></td>
+<td>list</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>Named filters the filter overlay's "saved" row cycles through, each written "name=expression" in the default filter's qualifier syntax ("triage=is:open label:bug", "stale=is:all flaky"). Picking one replaces the pane's state, labels and match text at once; picking "(none)" clears them again. Names must be unique, and neither name nor expression may contain a comma — the comma separates the entries of this list</td>
+</tr>
+</tbody>
+</table>
+<h2 id="plugins">Plugins<a class="headerlink" href="#plugins" title="Permanent link">&para;</a></h2>
+<h3 id="marketplace-catalog">Marketplace Catalog<a class="headerlink" href="#marketplace-catalog" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Key</th>
+<th>Type</th>
+<th>Default</th>
+<th>Scope</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Catalog URL</td>
+<td><code>marketplace.catalog_url</code></td>
+<td>string</td>
+<td><em>(empty)</em></td>
+<td>user</td>
+<td>HTTPS location of the marketplace index.json; empty falls back to the built-in default, which may itself be empty — then the marketplace stays disabled</td>
+</tr>
+<tr>
+<td>Check for plugin updates</td>
+<td><code>marketplace.auto_check</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Compare installed plugins against the catalog on IDE start and announce how many updates are available. The check runs in the background at most once a day and stays silent when the catalog cannot be reached; opening the Marketplace page always checks regardless</td>
+</tr>
+</tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Documentation for IKE — a terminal IDE.
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+    <a href="https://github.com/TrueDaerk/ike" target="_blank" rel="noopener" title="IKE on GitHub" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.top", "content.code.copy", "content.action.edit", "search.highlight", "search.suggest", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
