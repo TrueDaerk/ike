@@ -47,14 +47,41 @@ func TestNetworkBindValidates(t *testing.T) {
 	}
 }
 
+// TestNetworkNameValidates: the empty name and printable single labels
+// pass; dots, control characters and over-long names are reset to empty
+// (the host name) with a diagnostic.
+func TestNetworkNameValidates(t *testing.T) {
+	for _, ok := range []string{"", "geants-mac", " ike on the desk ", "Büro"} {
+		if msg := NetworkNameError(ok); msg != "" {
+			t.Errorf("%q must be accepted, got %q", ok, msg)
+		}
+	}
+	for _, bad := range []string{"a.b", "tab\there", strings.Repeat("x", NetworkNameMaxBytes+1)} {
+		if msg := NetworkNameError(bad); msg == "" {
+			t.Errorf("%q must be refused", bad)
+		}
+		c := defaults()
+		c.Network.Name = bad
+		diags := validate(c)
+		if c.Network.Name != "" || !hasDiag(diags, "network.name") {
+			t.Errorf("%q: name %q diags %+v", bad, c.Network.Name, diags)
+		}
+	}
+	c := defaults()
+	c.Network.Name = "desk"
+	if diags := validate(c); c.Network.Name != "desk" || hasDiag(diags, "network.name") {
+		t.Fatalf("a valid name must stand: %q %+v", c.Network.Name, diags)
+	}
+}
+
 // TestNetworkDefaultsOff: the endpoint is opt-in.
 func TestNetworkDefaultsOff(t *testing.T) {
 	c := defaults()
-	if c.Network.Enabled || c.Network.Port != NetworkDefaultPort || c.Network.Bind != NetworkDefaultBind {
+	if c.Network.Enabled || c.Network.Port != NetworkDefaultPort || c.Network.Bind != NetworkDefaultBind || !c.Network.MDNS || c.Network.Name != "" {
 		t.Fatalf("defaults %+v", c.Network)
 	}
 	flat := c.Flat()
-	for _, k := range []string{"network.enabled", "network.port", "network.bind"} {
+	for _, k := range []string{"network.enabled", "network.port", "network.bind", "network.mdns", "network.name"} {
 		if _, ok := flat[k]; !ok {
 			t.Errorf("Flat lacks %s", k)
 		}

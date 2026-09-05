@@ -388,6 +388,8 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "network.enabled", Type: Bool, Title: "Listen for network clients", Description: "Start the TCP endpoint. Every client must pair first: IKE shows a one-time code (six card suits in four colours) with a countdown, and a wrong or expired code is replaced by a fresh one. Paired devices keep a token stored hashed in the user state dir; \"Forget Paired Network Clients\" revokes them all", Scope: config.UserScope},
 			{Key: "network.port", Type: Int, Title: "Port", Description: "TCP port the endpoint listens on (default 4530)", Scope: config.UserScope, Min: 1, Max: 65535},
 			{Key: "network.bind", Type: String, Title: "Bind address", Description: "Interface address to listen on: 0.0.0.0 (the default) or empty reaches every interface so phones and laptops on the LAN can connect; 127.0.0.1 keeps the endpoint on this machine. Host names are refused — an IP literal only", Scope: config.UserScope, ValidateString: networkBindValidate},
+			{Key: "network.mdns", Type: Bool, Title: "Announce over mDNS", Description: "Advertise the running endpoint on the local network as an _ike._tcp service (Bonjour / Avahi / DNS-SD), so a client browses for IKE instead of typing an address. Only while the endpoint is enabled, and skipped when the bind address is loopback — nothing else could reach it. Off keeps the endpoint silent: clients need the address", Scope: config.UserScope},
+			{Key: "network.name", Type: String, Title: "Announced name", Description: "The instance label other devices see when browsing (\"geants-mac\"); empty announces the host's short name. One DNS label: no dots, no control characters, at most 63 bytes", Scope: config.UserScope, ValidateString: networkNameValidate},
 		}},
 		{Title: "Markdown Preview", Description: "The rendered markdown preview pane: how the diagram fences inside a document — ```mermaid blocks in READMEs and design docs — are drawn.", Entries: []Entry{
 			{Key: "preview.diagrams", Type: Enum, Title: "Diagram rendering", Description: "How a fenced diagram block renders in the preview. \"ascii\" pipes it through the mermaid-ascii renderer and shows its text in place of the code block; \"image\" renders a PNG with mermaid-cli (mmdc) and embeds it over the Kitty graphics path, falling back to ascii where the terminal cannot show pixels; \"off\" leaves every fence the syntax-highlighted code block it is. Rendering is asynchronous and cached per fence, so typing around a diagram never re-runs the renderer; a renderer that is not installed leaves the code block with a one-line install hint, and \"Re-render Preview Diagrams\" retries once it is", Scope: config.UserScope, Options: []string{"ascii", "image", "off"}},
@@ -535,6 +537,10 @@ func httpIgnoreHeaderValidate(_ func(key string) string, text string) string {
 // (#2519), with the shared validator's message. Empty means every interface
 // and is fine.
 func networkBindValidate(v string) string { return config.NetworkBindError(v) }
+
+// networkNameValidate refuses an mDNS instance name the announcer could not
+// use as one label (#2522), with the shared validator's message.
+func networkNameValidate(v string) string { return config.NetworkNameError(v) }
 
 // forgePollValidate is the strict form check for forge.poll_interval_seconds
 // (#2085): the config validator has to be lenient with a file on disk and

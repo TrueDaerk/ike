@@ -1,10 +1,10 @@
 ---
 type: architecture
 title: Network Links (TCP endpoint with pairing)
-description: Connecting to IKE over a socket — the [network] TCP endpoint, the newline-delimited JSON protocol, the one-time pairing code (six card suits in four colours, expiring, regenerated on a miss), tokens, the open command that runs the ike:// pipeline, and worked client examples (#2519)
+description: Connecting to IKE over a socket — the [network] TCP endpoint, the newline-delimited JSON protocol, the one-time pairing code (six card suits in four colours, expiring, regenerated on a miss), tokens, the open command that runs the ike:// pipeline, mDNS/DNS-SD discovery of the endpoint (_ike._tcp), and worked client examples (#2519, #2522)
 resource: internal/netlink
-tags: [deeplink, network, socket, pairing, ipc, project-switching]
-timestamp: 2026-09-04T00:00:00Z
+tags: [deeplink, network, socket, pairing, ipc, project-switching, mdns, discovery]
+timestamp: 2026-09-05T00:00:00Z
 ---
 
 # Network Links (TCP endpoint with pairing)
@@ -31,14 +31,58 @@ Settings → **Tools & Integrations → Network Links**, or in `settings.toml`:
   enabled = true      # default false — nothing listens until you opt in
   port = 4530         # 1..65535
   bind = "0.0.0.0"    # IP literal; "" = every interface, "127.0.0.1" = this machine only
+  mdns = true         # announce the endpoint over mDNS/DNS-SD (#2522); default true
+  name = ""           # the announced instance name; "" = the host's short name
 ```
 
 A change applies live: enabling starts the listener, disabling stops it, a
-new port or bind address restarts it (a notification says where it listens
-or why it could not). The configuration validator snaps a bad port or an
-unparseable bind back to the defaults with a diagnostic; the settings form
+new port or bind address — or a change to `mdns` / `name` — restarts it (a
+notification says where it listens, what it is announced as, or why it could
+not). The configuration validator snaps a bad port, an unparseable bind or an
+unusable name back to the defaults with a diagnostic; the settings form
 refuses them outright. Host names are refused on purpose — the listener must
 not depend on a resolver at startup.
+
+## Discovery (mDNS / DNS-SD)
+
+A client should not need IKE's address typed in. While the endpoint is
+enabled (and `mdns` is on), IKE **announces itself on the local link** the
+way printers and AirPlay boxes do (#2522): a multicast-DNS responder answers
+DNS-SD browse and resolve queries for the service type **`_ike._tcp.local`**.
+One instance per running IKE, named by `[network].name` — the host's short
+name by default, so two machines are told apart — with an SRV record to
+`<host>.local` and the configured port, address records for every interface
+(or for the one address of a specific `bind`), and a TXT record:
+
+| TXT key | Value                                   |
+|---------|-----------------------------------------|
+| `v`     | IKE's version (`0.5.171`)               |
+| `proto` | wire-protocol generation, currently `1` |
+| `name`  | `ike`                                   |
+
+Any Bonjour / Avahi / DNS-SD client browses for it:
+
+```sh
+dns-sd -B _ike._tcp                       # macOS: list instances as they appear
+dns-sd -L "geants-mac" _ike._tcp          # resolve one: host, port, TXT
+avahi-browse -r _ike._tcp                 # Linux: browse and resolve in one go
+```
+
+A phone app does the same with `NWBrowser` / `NsdManager` and then speaks the
+line protocol below to the resolved host and port; **discovery grants
+nothing** — the client still has to pair.
+
+The responder is in-process (`internal/mdns`, no daemon needed): it joins
+`224.0.0.251:5353` and `[ff02::fb]:5353`, sends two announcements on start,
+answers PTR / SRV / TXT / A / AAAA questions for its own names (a browse
+answer carries the SRV, TXT and addresses as additionals so one round trip
+resolves), replies unicast to QU questions and to legacy one-shot resolvers
+such as `dig -p 5353 @224.0.0.251 _ike._tcp.local ptr`, and sends a goodbye
+(TTL 0) on stop so browsers drop the instance at once. It does **not** probe
+for name conflicts — a second IKE on the same host names its instance
+differently via `name`. A **loopback bind** is never announced (nothing else
+could reach it), and a failure to join the multicast group is a warning that
+leaves the TCP endpoint running.
 
 The **paired clients** live in `~/.ike/netlink-clients.json`
 (`$IKE_CONFIG_DIR/netlink-clients.json` under the override), 0600, holding
@@ -237,7 +281,10 @@ with socket.create_connection((HOST, PORT)) as s:
 
 ## Security model
 
-- **Off by default.** Nothing listens until `[network].enabled` is set.
+- **Off by default.** Nothing listens until `[network].enabled` is set, and
+  nothing is announced unless it does; the announcement says only that an
+  IKE is here and where — pairing is still required, and `mdns = false`
+  keeps a running endpoint silent.
 - **Pairing is a human act.** A code exists only while a popup shows it; it
   is 16⁶ strong, single-use (a miss regenerates it), 90 seconds long, and
   guessing is throttled and then blocked per address. `esc` refuses.
@@ -269,9 +316,15 @@ with socket.create_connection((HOST, PORT)) as s:
   `LinkFromRequest` (parts → URL → strict parse).
 - `internal/netlink/server.go` — `Serve(Options)`: accept loop, per-connection
   request loop with caps and deadlines, `dispatch`, `pair`.
+- `internal/mdns` — the mDNS/DNS-SD responder (#2522): `Announce(Service)`
+  joins the groups and serves until `Close`; `Records`, `Respond` and
+  `Announcement` are the pure core (record set, query answering, the
+  announcement / goodbye packet), tested without a socket.
 - `internal/app/netlink.go` — lifecycle (`StartNetLink` at launch,
-  `reconfigureNetwork` on every config reload, carried across project
-  switches like the unix socket), the popup (`renderNetPair`: glyph chips on
+  `reconfigureNetwork` on every config reload keyed by the whole `[network]`
+  section, carried across project switches like the unix socket),
+  `startNetDiscovery` / `netService` / `netDiscoverable` for the
+  announcement, the popup (`renderNetPair`: glyph chips on
   a neutral background, position numbers, colour names, `renderNetCountdown`
   bar ticking once a second, generation-guarded), `esc` → `Cancel`, the
   `network.forgetClients` command. Events reach the Update loop through

@@ -1,5 +1,17 @@
 # Log
 
+## 2026-09-05 (network links: mDNS/DNS-SD discovery, #2522)
+
+- **Network links announce themselves over mDNS**: while the `[network]`
+  endpoint is enabled, the new leaf package `internal/mdns` answers DNS-SD
+  browse/resolve queries for `_ike._tcp.local` — one instance per IKE named
+  `[network].name` (default: the host's short name), SRV to the port, TXT
+  `v=<version> proto=1 name=ike`, two announcements on start, goodbye on
+  stop, unicast replies to QU and legacy resolvers; a loopback bind is not
+  announced. Settings `network.mdns` (default on) and `network.name`
+  (validated: one label, no dots, ≤ 63 bytes) on the Network Links page;
+  a change restarts the endpoint. Discovery grants nothing — pairing stays.
+
 ## 2026-09-04 (network links: TCP endpoint with pairing, #2519; ike:// feedback, #2518)
 
 - **Network links**: a new `[network]` endpoint (off by default; port 4530,

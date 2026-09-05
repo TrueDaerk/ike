@@ -41,6 +41,33 @@ func NetworkBindError(raw string) string {
 	return ""
 }
 
+// NetworkNameMaxBytes is the longest announced instance name (#2522): one
+// DNS label.
+const NetworkNameMaxBytes = 63
+
+// NetworkNameError explains why raw cannot serve as the mDNS instance name,
+// or returns "" when it can: empty (the host name), otherwise printable text
+// without dots — a dot would split the label — of at most NetworkNameMaxBytes
+// bytes. Shared by the lenient config validator and the strict settings form.
+func NetworkNameError(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	if len(raw) > NetworkNameMaxBytes {
+		return fmt.Sprintf("name must be at most %d bytes", NetworkNameMaxBytes)
+	}
+	if strings.ContainsRune(raw, '.') {
+		return "name must not contain a dot (it is one DNS label)"
+	}
+	for _, r := range raw {
+		if r < 0x20 || r == 0x7f {
+			return "name must not contain control characters"
+		}
+	}
+	return ""
+}
+
 // ESURLError explains why raw cannot serve as an Elasticsearch endpoint base
 // URL, or returns "" when it can. It is shared between the lenient config
 // validator (which drops the entry with the message as a diagnostic) and the
@@ -188,6 +215,10 @@ func validate(c *Config) []Diagnostic {
 	if msg := NetworkBindError(c.Network.Bind); msg != "" {
 		diags = append(diags, Diagnostic{Field: "network.bind", Message: fmt.Sprintf("%s (got %q, using %q)", msg, c.Network.Bind, NetworkDefaultBind)})
 		c.Network.Bind = NetworkDefaultBind
+	}
+	if msg := NetworkNameError(c.Network.Name); msg != "" {
+		diags = append(diags, Diagnostic{Field: "network.name", Message: fmt.Sprintf("%s (got %q, using the host name)", msg, c.Network.Name)})
+		c.Network.Name = ""
 	}
 
 	// Vault password file (#2293): a missing file would silently leave vault

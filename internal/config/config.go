@@ -352,6 +352,8 @@ func (c *Config) Flat() map[string]string {
 	put("network.enabled", c.Network.Enabled)
 	put("network.port", c.Network.Port)
 	put("network.bind", c.Network.Bind)
+	put("network.mdns", c.Network.MDNS)
+	put("network.name", c.Network.Name)
 
 	put("todo.patterns", strings.Join(c.Todo.Patterns, ","))
 

@@ -13,6 +13,7 @@ import (
 	"ike/internal/config"
 	"ike/internal/deeplink"
 	"ike/internal/netlink"
+	"ike/internal/version"
 )
 
 // notified reports whether a notification containing text was raised —
@@ -287,4 +288,105 @@ func TestNetLinkSurvivesProjectSwitch(t *testing.T) {
 	} else {
 		conn.Close()
 	}
+}
+
+// TestNetDiscoverable: announcing (#2522) needs the endpoint on, the switch
+// on and a bind another device can reach — loopback is skipped, the
+// unspecified and a LAN address pass.
+func TestNetDiscoverable(t *testing.T) {
+	cfg := config.Get()
+	t.Cleanup(netResetConfig(cfg))
+	cfg.Network.Enabled, cfg.Network.MDNS = true, true
+	for bind, want := range map[string]bool{"": true, "0.0.0.0": true, "[::]": true, "192.168.1.20": true, "127.0.0.1": false, "::1": false} {
+		cfg.Network.Bind = bind
+		if got := netDiscoverable(cfg); got != want {
+			t.Errorf("bind %q: discoverable %v, want %v", bind, got, want)
+		}
+	}
+	cfg.Network.Bind = ""
+	cfg.Network.MDNS = false
+	if netDiscoverable(cfg) {
+		t.Error("mdns=false must not announce")
+	}
+	cfg.Network.MDNS, cfg.Network.Enabled = true, false
+	if netDiscoverable(cfg) || netDiscoverable(nil) {
+		t.Error("a disabled endpoint must not announce")
+	}
+}
+
+// TestNetService: the announced instance carries the configured name, the
+// port, the version TXT, and — for a bind to one address — that address
+// only; the unspecified bind leaves the addresses to the interfaces.
+func TestNetService(t *testing.T) {
+	cfg := config.Get()
+	t.Cleanup(netResetConfig(cfg))
+	cfg.Network.Port, cfg.Network.Name, cfg.Network.Bind = 4531, " desk ", "192.168.1.20"
+	svc := netService(cfg)
+	if svc.Instance != "desk" || svc.Type != "_ike._tcp" || svc.Port != 4531 {
+		t.Errorf("service %+v", svc)
+	}
+	if len(svc.IPs) != 1 || !svc.IPs[0].Equal(net.ParseIP("192.168.1.20")) {
+		t.Errorf("a bind to one address must advertise that address: %v", svc.IPs)
+	}
+	if strings.Join(svc.TXT, " ") != "v="+version.Short()+" proto=1 name=ike" {
+		t.Errorf("TXT %v", svc.TXT)
+	}
+	cfg.Network.Bind = "0.0.0.0"
+	if svc = netService(cfg); svc.IPs != nil {
+		t.Errorf("the unspecified bind must leave the addresses to the interfaces: %v", svc.IPs)
+	}
+}
+
+// TestReconfigureNetworkDiscovery: the discovery switch and the announced
+// name are part of the restart key, and a loopback bind runs the listener
+// without an announcer.
+func TestReconfigureNetworkDiscovery(t *testing.T) {
+	m := switchModel(t)
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	cfg := config.Get()
+	t.Cleanup(netResetConfig(cfg))
+	cfg.Network.Name = ""
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	ln.Close()
+	cfg.Network.Enabled, cfg.Network.Bind, cfg.Network.Port, cfg.Network.MDNS = true, "127.0.0.1", port, true
+	m.reconfigureNetwork(cfg)
+	if m.nlServer == nil {
+		t.Fatal("enabling must start the listener")
+	}
+	t.Cleanup(func() { m.CloseNetLink() })
+	if m.nlMDNS != nil {
+		t.Fatal("a loopback bind must not announce")
+	}
+	first := m.nlServer
+	m.reconfigureNetwork(cfg)
+	if m.nlServer != first {
+		t.Fatal("an unchanged config must keep the listener")
+	}
+	cfg.Network.Name = "desk"
+	m.reconfigureNetwork(cfg)
+	if m.nlServer == first || m.nlServer == nil {
+		t.Fatal("a new announced name must restart the endpoint")
+	}
+	second := m.nlServer
+	cfg.Network.MDNS = false
+	m.reconfigureNetwork(cfg)
+	if m.nlServer == second || m.nlServer == nil {
+		t.Fatal("flipping the discovery switch must restart the endpoint")
+	}
+	cfg.Network.Enabled = false
+	m.reconfigureNetwork(cfg)
+	if m.nlServer != nil || m.nlMDNS != nil || m.nlKey != "" {
+		t.Fatal("disabling must clear listener, announcer and key")
+	}
+}
+
+// netResetConfig restores the shared config's [network] section after a
+// test that mutated it — config.Get is one process-wide value.
+func netResetConfig(cfg *config.Config) func() {
+	saved := cfg.Network
+	return func() { cfg.Network = saved }
 }

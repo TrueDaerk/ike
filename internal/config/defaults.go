@@ -284,6 +284,10 @@ func defaults() *Config {
 			// pair.
 			Port: NetworkDefaultPort,
 			Bind: NetworkDefaultBind,
+			// Discovery (#2522) rides on the enabled endpoint: a client
+			// that may connect may as well find it. The instance name is
+			// the host's by default.
+			MDNS: true,
 		},
 		Diff: Diff{
 			Context: 3, // context lines kept around a change (0340, #494)
