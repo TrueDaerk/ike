@@ -1,7 +1,7 @@
 ---
 type: architecture
 title: Network Links (TCP endpoint with pairing)
-description: Connecting to IKE over a socket — the [network] TCP endpoint, the newline-delimited JSON protocol, the one-time pairing code (six card suits in four colours, expiring, regenerated on a miss), tokens, the open command that runs the ike:// pipeline, mDNS/DNS-SD discovery of the endpoint (_ike._tcp), and worked client examples (#2519, #2522)
+description: Connecting to IKE over a socket — the [network] TCP endpoint, the newline-delimited JSON protocol, the one-time pairing PIN (six digits 1-9, expiring, regenerated on a miss), tokens, the open command that runs the ike:// pipeline, mDNS/DNS-SD discovery of the endpoint (_ike._tcp), and worked client examples (#2519, #2522)
 resource: internal/netlink
 tags: [deeplink, network, socket, pairing, ipc, project-switching, mdns, discovery]
 timestamp: 2026-09-05T00:00:00Z
@@ -105,7 +105,7 @@ Every request names its command in `cmd`; every response names its shape in
 | `hello`     | Server identity: `name`, `version`, `authenticated`             |
 | `ok`        | The command succeeded (`open` adds `link`)                      |
 | `error`     | Refused: `error` is a stable code, `message` the human reason   |
-| `challenge` | Pair now: `reason`, `expires_in` (seconds), `alphabet`          |
+| `challenge` | Pair now: `reason`, `expires_in` (seconds), `kind`, `length`, `alphabet` |
 | `paired`    | Pairing succeeded: `token`, `client_id`                         |
 
 Error codes (`error` field): `bad_request` (unparseable line, unknown or
@@ -124,7 +124,7 @@ simultaneous connections.
 |-----------|------|------------------------------------------------------------------------|---------------------------|
 | `hello`   | no   | —                                                                      | `hello`                   |
 | `ping`    | no   | —                                                                      | `ok` (`message: pong`)    |
-| `pair`    | no   | `client` (device name); or `code` / `code_text` (the guess)            | `challenge` or `paired`   |
+| `pair`    | no   | `client` (device name); or `code` (the six-digit guess; `code_text` is an alias) | `challenge` or `paired`   |
 | `auth`    | —    | `token`                                                                | `ok` or `unauthorized`    |
 | `open`    | yes  | `url`; or `project` \| `remote` + optional `file`, `line`, `tool`      | `ok` / `invalid_link`     |
 | `unpair`  | yes  | —                                                                      | `ok` (token revoked)      |
@@ -141,23 +141,24 @@ sends `{"cmd":"pair","client":"<name>"}` explicitly, or it just sends an
 `open` without a token — the server answers that with a `challenge` too,
 rather than a bare refusal, so a client can show its code UI at once.
 
-1. **IKE shows a popup**: "*name* at *addr* wants to connect", the six-glyph
-   code, a countdown bar, and `esc` to refuse. The code is **six glyphs**,
-   each a **card suit** (♠ ♥ ♣ ♦) drawn in one of **four colours** (red,
-   black, blue, green) — 16 possibilities per position, 16⁶ ≈ 16.8 million
-   codes. The colour names are spelled out under the glyphs, so the code can
-   be read without relying on colour vision.
-2. **The client sends the guess** with a second `pair`, either as glyph
-   objects or as compact text:
+1. **IKE shows a popup**: "*name* at *addr* wants to connect", the PIN, a
+   countdown bar, and `esc` to refuse. The code is a **six-digit PIN**, every
+   digit drawn independently from **1 to 9** by a cryptographic RNG — never a
+   0, so a plain 3×3 keypad is enough to enter it; 9⁶ ≈ 531 thousand codes.
+   The popup draws the digits as big block art, grouped `481 · 936` for the
+   eye; the grouping is not part of the code.
+2. **The client sends the guess** with a second `pair`, the digits as one
+   string in `code` (`code_text` is accepted as an alias):
 
    ```json
-   {"cmd":"pair","code":[{"suit":"club","color":"red"},{"suit":"heart","color":"black"},…]}
-   {"cmd":"pair","code_text":"club:red heart:black spade:blue diamond:green spade:black heart:red"}
+   {"cmd":"pair","code":"481936"}
    ```
 
-   Suits are accepted by id (`spade`), glyph (`♠`) or name; colours by id
-   (`red`), hex (`#d62828`) or name. The `client` name given when the code
-   was requested carries over.
+   Exactly `length` digits, each one of the `alphabet` digits; spaces and the
+   middle dot between groups are tolerated. Anything else — too short, too
+   long, a 0, a letter, the deprecated glyph array — is `bad_request` and
+   does **not** count as a miss. The `client` name given when the code was
+   requested carries over.
 3. **Right code** → `paired` with a `token` (256 random bits, base64url).
    Store it; it is the only time it exists outside the client. The popup
    closes and IKE notes "paired with *name*".
@@ -181,29 +182,31 @@ popup is up replaces the code (and the popup).
 
 ### The challenge tells the client how to draw its input
 
-Every `challenge` carries the full alphabet, so a client never hard-codes the
-glyphs or colours:
+Every `challenge` carries the code's shape, so a client never hard-codes it:
 
 ```json
 {
   "type": "challenge",
   "reason": "new",
   "expires_in": 90,
-  "message": "read the code off IKE's popup and send it back with cmd=pair",
-  "alphabet": {
-    "length": 6,
-    "suits":  [{"id":"spade","glyph":"♠","name":"Spade"}, {"id":"heart","glyph":"♥","name":"Heart"},
-               {"id":"club","glyph":"♣","name":"Club"},   {"id":"diamond","glyph":"♦","name":"Diamond"}],
-    "colors": [{"id":"red","hex":"#d62828","name":"Red"},   {"id":"black","hex":"#111111","name":"Black"},
-               {"id":"blue","hex":"#1d6fd6","name":"Blue"}, {"id":"green","hex":"#2a9d3a","name":"Green"}]
-  }
+  "message": "read the PIN off IKE's popup and send it back with cmd=pair",
+  "kind": "pin",
+  "length": 6,
+  "alphabet": {"digits": "123456789"}
 }
 ```
 
-A natural client UI is `length` slots, each a 4×4 picker (suit × colour),
-drawn with the given glyphs and hex colours; the guess is the slots in order.
-The `hex` values are the ones the popup itself uses, so both sides show the
-same thing.
+A natural client UI is `length` slots over a 3×3 keypad of the `alphabet`
+digits; the guess is the slots in order as one string.
+
+**Deprecated — the glyph code.** Until 0.5.172 the challenge described a
+card-suit code instead: `alphabet` held `length`, `suits` (`spade`, `heart`,
+`club`, `diamond` with glyph and name) and `colors` (`red`, `black`, `blue`,
+`green` with hex), and the guess was `code` as an array of
+`{"suit":…,"color":…}` objects or `code_text` as `"club:red heart:black …"`.
+That shape is **no longer issued or accepted**: a challenge without `kind`
+(or `kind` ≠ `"pin"`) marks an old server, and a glyph-array `code` sent to a
+current server is `bad_request`. Clients should switch on `kind`.
 
 ## The `open` command
 
@@ -238,8 +241,8 @@ connection open for the answers):
 ```sh
 # 1. ask for a code — the popup appears in IKE
 (printf '{"cmd":"pair","client":"laptop"}\n'; sleep 1) | nc 192.168.1.20 4530
-# 2. read the six glyphs off the popup and answer
-(printf '{"cmd":"pair","code_text":"club:red heart:black spade:blue diamond:green spade:black heart:red"}\n'; sleep 1) | nc 192.168.1.20 4530
+# 2. read the six digits off the popup and answer
+(printf '{"cmd":"pair","code":"481936"}\n'; sleep 1) | nc 192.168.1.20 4530
 #    → {"type":"paired","token":"rLdRwN…","client_id":"92dcef58",…}
 # 3. from now on
 (printf '{"cmd":"open","token":"rLdRwN…","project":"ike","file":"README.md:1","tool":"terminal"}\n'; sleep 1) | nc 192.168.1.20 4530
@@ -266,11 +269,11 @@ with socket.create_connection((HOST, PORT)) as s:
         ch = rpc(s, cmd="pair", client=socket.gethostname())
         if ch["type"] == "error":
             sys.exit(ch["message"])                  # blocked / refused
-        suits = {x["glyph"]: x["id"] for x in ch["alphabet"]["suits"]}
-        print(f"code expires in {ch['expires_in']}s; type it as suit:color, e.g. ♣:red heart:black …")
-        guess = input("> ")
-        r = rpc(s, cmd="pair", code_text=" ".join(
-            suits.get(g.split(":")[0], g.split(":")[0]) + ":" + g.split(":")[1] for g in guess.split()))
+        if ch.get("kind") != "pin":
+            sys.exit("this IKE speaks the deprecated glyph pairing — update it")
+        print(f"PIN expires in {ch['expires_in']}s; {ch['length']} digits out of {ch['alphabet']['digits']}")
+        guess = input("> ").replace(" ", "").replace("·", "")
+        r = rpc(s, cmd="pair", code=guess)
         if r["type"] == "paired":
             token = r["token"]
             open(TOKFILE, "w").write(token); os.chmod(TOKFILE, 0o600)
@@ -286,8 +289,10 @@ with socket.create_connection((HOST, PORT)) as s:
   IKE is here and where — pairing is still required, and `mdns = false`
   keeps a running endpoint silent.
 - **Pairing is a human act.** A code exists only while a popup shows it; it
-  is 16⁶ strong, single-use (a miss regenerates it), 90 seconds long, and
-  guessing is throttled and then blocked per address. `esc` refuses.
+  is 9⁶ ≈ 531 thousand strong, single-use (a miss regenerates it), 90
+  seconds long, and guessing is throttled (2 s more per consecutive miss) and
+  then blocked per address (five misses, five minutes) — an attacker gets a
+  handful of tries per code lifetime, nowhere near the space. `esc` refuses.
 - **Tokens are bearer credentials.** They are 256-bit random, transmitted in
   the clear over the LAN (the protocol has no TLS — run it on a trusted
   network, or bind to `127.0.0.1` and tunnel over SSH), stored hashed on the
@@ -303,9 +308,10 @@ with socket.create_connection((HOST, PORT)) as s:
 
 ## Implementation map
 
-- `internal/netlink/code.go` — the alphabet (`Suits`, `Colours`), `Code`,
-  `Generate` (crypto/rand), constant-time `Equal`, `ParseCode` /
-  `ParseCodeText`, `DefaultAlphabet`.
+- `internal/netlink/code.go` — the alphabet (`CodeDigits`, `CodeKind`),
+  `Code`, `Generate` (crypto/rand with rejection sampling), constant-time
+  `Equal`, `ParseCode` (digits only, display grouping tolerated),
+  `Grouped`, `DefaultAlphabet`.
 - `internal/netlink/pairing.go` — the state machine: `Begin`, `Attempt`
   (verdicts OK / Wrong / Expired / None / Blocked with the penalty delay),
   `Cancel`, `Expire`, `Current`; per-address failure counts and blocks;
@@ -324,11 +330,11 @@ with socket.create_connection((HOST, PORT)) as s:
   `reconfigureNetwork` on every config reload keyed by the whole `[network]`
   section, carried across project switches like the unix socket),
   `startNetDiscovery` / `netService` / `netDiscoverable` for the
-  announcement, the popup (`renderNetPair`: given the width, every suit is
-  drawn as a 7×5 block-art shape in its colour on a neutral chip so shape and
-  colour survive a tiny terminal font (`netGlyphArt`), on a narrow budget
-  one-cell glyph chips; position numbers, colour names, `renderNetCountdown`
-  bar ticking once a second, generation-guarded), `esc` → `Cancel`, the
+  announcement, the popup (`renderNetPair`: given the width, every digit is
+  drawn as a 3×5 block-art shape in the accent colour (`netDigitArt`), the
+  two groups parted by a middle dot; on a narrow budget one bold
+  `4 8 1 · 9 3 6` line; `renderNetCountdown` bar ticking once a second,
+  generation-guarded), `esc` → `Cancel`, the
   `network.forgetClients` command. Events reach the Update loop through
   `host.Send`; accepted links arrive as `DeepLinkMsg`.
 - Settings page **Network Links** (`internal/settings/schema.go`), config

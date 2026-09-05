@@ -24,10 +24,10 @@ type Request struct {
 	Token string `json:"token,omitempty"`
 	// Client is the self-chosen device name given with pair (and hello).
 	Client string `json:"client,omitempty"`
-	// Code is the pairing guess as glyphs; CodeText is the compact
-	// "spade:red heart:black …" alternative for hand-typed clients.
-	Code     []Glyph `json:"code,omitempty"`
-	CodeText string  `json:"code_text,omitempty"`
+	// Code is the pairing guess, the six digits as a string ("481936");
+	// CodeText is the same thing under the name earlier clients used.
+	Code     string `json:"code,omitempty"`
+	CodeText string `json:"code_text,omitempty"`
 	// URL is a complete ike:// link for open. Alternatively the link's
 	// parts: exactly one of Project / Remote, plus optional File (with or
 	// without ":line"), Line and Tool.
@@ -54,9 +54,12 @@ type Response struct {
 	Version       string `json:"version,omitempty"`
 	Authenticated *bool  `json:"authenticated,omitempty"`
 
-	// challenge
+	// challenge: Kind names the code shape ("pin"), Length the number of
+	// positions, Alphabet the symbols allowed in each.
 	Reason    string    `json:"reason,omitempty"`
 	ExpiresIn int       `json:"expires_in,omitempty"`
+	Kind      string    `json:"kind,omitempty"`
+	Length    int       `json:"length,omitempty"`
 	Alphabet  *Alphabet `json:"alphabet,omitempty"`
 
 	// paired
@@ -84,8 +87,8 @@ func errorResponse(code, msg string) Response {
 }
 
 // challengeResponse renders a live challenge for the client: the reason,
-// the seconds left and the alphabet to build an input UI from. The code
-// itself, naturally, is not part of it.
+// the seconds left and the code shape (kind, length, alphabet) to build an
+// input UI from. The code itself, naturally, is not part of it.
 func challengeResponse(c Challenge, now time.Time) Response {
 	alpha := DefaultAlphabet()
 	left := int(c.Expires.Sub(now).Round(time.Second) / time.Second)
@@ -96,6 +99,8 @@ func challengeResponse(c Challenge, now time.Time) Response {
 		Type:      "challenge",
 		Reason:    c.Reason,
 		ExpiresIn: left,
+		Kind:      CodeKind,
+		Length:    CodeLength,
 		Alphabet:  &alpha,
 		Message:   challengeMessage(c.Reason),
 	}
@@ -109,7 +114,7 @@ func challengeMessage(reason string) string {
 	case "expired":
 		return "the code expired — a new one is shown in IKE"
 	default:
-		return "read the code off IKE's popup and send it back with cmd=pair"
+		return "read the PIN off IKE's popup and send it back with cmd=pair"
 	}
 }
 

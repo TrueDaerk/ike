@@ -12,7 +12,7 @@ import (
 // dies on a correct answer, a wrong answer (which immediately breeds a fresh
 // one), expiry, or the user cancelling the popup.
 //
-// Brute force is hopeless by construction (16^6 ≈ 16.8 million codes, one
+// Brute force is hopeless by construction (9^6 ≈ 531 thousand codes, one
 // guess per code, a few dozen seconds per code) but the machine still slows
 // repeat offenders down: every wrong guess costs a growing delay, and a
 // handful of consecutive misses from one address blocks that address for a
@@ -20,7 +20,7 @@ import (
 
 const (
 	// DefaultCodeTTL is how long a code stays valid — the popup's bar counts
-	// it down. Long enough to read six glyphs off one screen and tap them
+	// it down. Long enough to read six digits off one screen and tap them
 	// into another, short enough that a code seen over a shoulder is useless
 	// minutes later.
 	DefaultCodeTTL = 90 * time.Second

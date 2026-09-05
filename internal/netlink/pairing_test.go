@@ -29,7 +29,7 @@ func newTestPairing(ttl time.Duration) (*Pairing, *recorder, *time.Time) {
 // wrongGuess returns a code that differs from c.
 func wrongGuess(c Code) Code {
 	g := c
-	g[0].Colour = nextColour(g[0].Colour)
+	g[0] = nextDigit(g[0])
 	return g
 }
 

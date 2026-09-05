@@ -240,16 +240,14 @@ func (s *Server) dispatch(sess *session, req Request) (Response, time.Duration) 
 // pair handles the two halves of pairing: a request without a code asks
 // for a challenge; one with a code is a guess.
 func (s *Server) pair(sess *session, req Request) (Response, time.Duration) {
-	if len(req.Code) == 0 && strings.TrimSpace(req.CodeText) == "" {
+	text := strings.TrimSpace(req.Code)
+	if text == "" {
+		text = strings.TrimSpace(req.CodeText)
+	}
+	if text == "" {
 		return s.challengeFor(sess, req.Client)
 	}
-	var guess Code
-	var err error
-	if len(req.Code) > 0 {
-		guess, err = ParseCode(req.Code)
-	} else {
-		guess, err = ParseCodeText(req.CodeText)
-	}
+	guess, err := ParseCode(text)
 	if err != nil {
 		return errorResponse(CodeBadRequest, err.Error()), 0
 	}

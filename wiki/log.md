@@ -1,5 +1,18 @@
 # Log
 
+## 2026-09-05 (network links: pairing code is a six-digit PIN)
+
+- **Pairing PIN replaces the card-suit code**: the popup now shows a
+  six-digit PIN, every digit 1-9 (no zero, so a 3×3 keypad suffices), drawn
+  as block-art digits grouped `481 · 936` for the eye only. On the wire the
+  `challenge` carries `kind: "pin"`, `length: 6` and
+  `alphabet: {"digits": "123456789"}`; the guess is
+  `{"cmd":"pair","code":"481936"}` (or `code_text`), anything but exactly six
+  digits 1-9 is `bad_request` and does not count as a miss. Expiry, the
+  per-miss delay and blocking are unchanged. The glyph variant
+  (`suits` / `colors` alphabet, `code` as an array of suit/color objects) is
+  deprecated and no longer issued.
+
 ## 2026-09-05 (network links: mDNS/DNS-SD discovery, #2522)
 
 - **Network links announce themselves over mDNS**: while the `[network]`

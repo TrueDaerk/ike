@@ -36,56 +36,52 @@ func testChallenge(ttl time.Duration) netlink.Challenge {
 		Client: "phone", Addr: "10.0.0.2:5000", Reason: "new"}
 }
 
-// TestNetCodeLayouts: with room the code is drawn as block art — every suit's
-// shape, netGlyphArtRows rows tall, every row the same width — and a narrow
-// budget falls back to the one-cell glyph chips. Both spell out the colours.
+// TestNetCodeLayouts: with room the PIN is drawn as block art — every digit
+// 1-9 has a shape, netDigitArtRows rows tall, every row the same width, the
+// two groups parted by a middle dot — and a narrow budget falls back to one
+// bold "4 8 1 · 9 3 6" line. Neither layout contains a zero glyph.
 func TestNetCodeLayouts(t *testing.T) {
-	code := netlink.Code{{Suit: "spade", Colour: "red"}, {Suit: "heart", Colour: "black"},
-		{Suit: "club", Colour: "blue"}, {Suit: "diamond", Colour: "green"},
-		{Suit: "heart", Colour: "red"}, {Suit: "club", Colour: "black"}}
-	for _, s := range netlink.Suits {
-		art, ok := netGlyphArt[s.ID]
+	code, err := netlink.ParseCode("481936")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, d := range []byte(netlink.CodeDigits) {
+		art, ok := netDigitArt[d]
 		if !ok {
-			t.Fatalf("suit %s has no block art", s.ID)
+			t.Fatalf("digit %c has no block art", d)
 		}
 		for r, row := range art {
-			if w := lipgloss.Width(row); w != netGlyphArtCols {
-				t.Fatalf("%s art row %d is %d cells wide, want %d", s.ID, r, w, netGlyphArtCols)
+			if w := lipgloss.Width(row); w != netDigitArtCols {
+				t.Fatalf("%c art row %d is %d cells wide, want %d", d, r, w, netDigitArtCols)
 			}
 		}
 	}
-	big := renderNetCode(code, netCodeBigWidth)
+	accent := lipgloss.Color("#ffffff")
+	big := renderNetCode(code, netCodeBigWidth, accent)
 	bigLines := strings.Split(big, "\n")
-	if len(bigLines) != netGlyphArtRows+2 {
-		t.Fatalf("big layout has %d lines, want %d:\n%s", len(bigLines), netGlyphArtRows+2, big)
+	if len(bigLines) != netDigitArtRows {
+		t.Fatalf("big layout has %d lines, want %d:\n%s", len(bigLines), netDigitArtRows, big)
 	}
-	for i, l := range bigLines[:netGlyphArtRows] {
+	for i, l := range bigLines {
 		if w := lipgloss.Width(l); w != netCodeBigWidth {
 			t.Fatalf("big layout row %d is %d cells wide, want %d", i, w, netCodeBigWidth)
 		}
 	}
-	if strings.Contains(big, "♠") {
-		t.Fatalf("big layout must draw block art, not the one-cell glyph:\n%s", big)
+	if !strings.Contains(bigLines[netDigitArtRows/2], "·") || strings.Contains(bigLines[0], "·") {
+		t.Fatalf("the group separator sits on the centre row only:\n%s", big)
 	}
-	compact := renderNetCode(code, netCodeBigWidth-1)
-	if len(strings.Split(compact, "\n")) != 3 || !strings.Contains(compact, "♠") {
-		t.Fatalf("narrow budget must fall back to the compact chips:\n%s", compact)
+	if strings.Contains(big, "4") {
+		t.Fatalf("big layout must draw block art, not the plain digit:\n%s", big)
 	}
-	for _, out := range []string{big, compact} {
-		for _, name := range []string{"Red", "Black", "Blue", "Green"} {
-			if !strings.Contains(out, name) {
-				t.Fatalf("layout must spell out %s:\n%s", name, out)
-			}
-		}
-		if !strings.Contains(out, " 6 ") {
-			t.Fatalf("layout must number the positions:\n%s", out)
-		}
+	compact := renderNetCode(code, netCodeBigWidth-1, accent)
+	if len(strings.Split(compact, "\n")) != 1 || !strings.Contains(compact, "4 8 1 · 9 3 6") {
+		t.Fatalf("narrow budget must fall back to the one-line form:\n%s", compact)
 	}
 }
 
 // TestNetPairPopupShowsCodeAndCounts: a challenge opens the popup with the
-// device, every glyph's colour name and a bar; a tick keeps it open while
-// time remains and closes it (with a notice) once the code expired.
+// device, the PIN and a bar; a tick keeps it open while time remains and
+// closes it (with a notice) once the code expired.
 func TestNetPairPopupShowsCodeAndCounts(t *testing.T) {
 	m := switchModel(t)
 	c := testChallenge(time.Minute)
@@ -95,15 +91,16 @@ func TestNetPairPopupShowsCodeAndCounts(t *testing.T) {
 		t.Fatal("a challenge must open the popup and arm the countdown")
 	}
 	body := m.shell.View()
-	for _, want := range []string{"phone", "10.0.0.2:5000", "refuse"} {
+	for _, want := range []string{"phone", "10.0.0.2:5000", "refuse", "PIN"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("popup lacks %q:\n%s", want, body)
 		}
 	}
-	for _, g := range c.Code {
-		colour, _ := netColour(g.Colour)
-		if !strings.Contains(body, colour.Name) {
-			t.Fatalf("popup must spell out %s:\n%s", colour.Name, body)
+	// The popup is wide enough for the block art, so the digits appear as
+	// shapes; the top row of every digit's art must be present.
+	for _, d := range c.Code {
+		if !strings.Contains(body, netDigitArt[d][0]) {
+			t.Fatalf("popup must draw digit %c:\n%s", d, body)
 		}
 	}
 	if !strings.Contains(body, "█") {

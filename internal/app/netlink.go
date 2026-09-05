@@ -21,8 +21,8 @@ import (
 
 // netlink.go is the root-model side of the network deep-link endpoint
 // (#2519): the TCP listener's lifecycle (start on launch when enabled,
-// restart on a [network] settings change), the pairing popup — six coloured
-// suits as block art with a countdown bar — and the "forget paired clients"
+// restart on a [network] settings change), the pairing popup — a six-digit
+// PIN as block art with a countdown bar — and the "forget paired clients"
 // command. The protocol, the pairing state machine and the token store live
 // in internal/netlink; an accepted link arrives here as a DeepLinkMsg and
 // runs the very same pipeline an OS-delivered ike:// click does.
@@ -57,8 +57,8 @@ type netPairing struct {
 }
 
 // netPairContent is the popup's shell content: unlike ui.ModelContent it
-// honours the width budget, so the code can switch between the big block
-// glyphs and the compact one-line chips.
+// honours the width budget, so the PIN can switch between the big block
+// digits and the compact one-line form.
 type netPairContent struct {
 	heading string
 	body    func(width int) string
@@ -257,7 +257,7 @@ func (m Model) handleNetPairTick(msg netPairTickMsg) (tea.Model, tea.Cmd) {
 			m.nlServer.Pairing().Expire()
 		}
 		m.closeNetPair()
-		m.host.Notify(host.Info, "network links: the pairing code expired — the device can ask for a new one")
+		m.host.Notify(host.Info, "network links: the pairing PIN expired — the device can ask for a new one")
 		return m, nil
 	}
 	m.renderNetPair()
@@ -295,9 +295,8 @@ func (m Model) updateNetPair(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 // renderNetPair (re)fills the shell for the live code: the device asking,
-// the six glyphs in their colours with the colour names spelled out
-// underneath (a colour-blind reader still gets the code), the countdown bar
-// and the esc hint.
+// the six-digit PIN drawn big (grouped 3·3 for the eye only), the countdown
+// bar and the esc hint.
 func (m *Model) renderNetPair() {
 	p := m.nlPair
 	if p == nil {
@@ -316,12 +315,12 @@ func (m *Model) renderNetPair() {
 			fmt.Fprintf(&b, "%s at %s wants to connect.\n", who, c.Addr)
 			switch c.Reason {
 			case "wrong":
-				b.WriteString(lipgloss.NewStyle().Foreground(pal.Warning).Render("The last code was wrong — this is a new one.") + "\n")
+				b.WriteString(lipgloss.NewStyle().Foreground(pal.Warning).Render("The last PIN was wrong — this is a new one.") + "\n")
 			case "expired":
-				b.WriteString(lipgloss.NewStyle().Foreground(pal.Warning).Render("The last code expired — this is a new one.") + "\n")
+				b.WriteString(lipgloss.NewStyle().Foreground(pal.Warning).Render("The last PIN expired — this is a new one.") + "\n")
 			}
-			b.WriteString("\nEnter this code on the device:\n\n")
-			b.WriteString(renderNetCode(c.Code, width))
+			b.WriteString("\nEnter this PIN on the device:\n\n")
+			b.WriteString(renderNetCode(c.Code, width, pal.Accent))
 			b.WriteString("\n\n")
 			b.WriteString(renderNetCountdown(c, time.Now(), 36, pal.Accent, pal.Hint))
 			b.WriteString("\n\n" + guardCancel("refuse — the device is turned away"))
@@ -332,121 +331,87 @@ func (m *Model) renderNetPair() {
 	m.shell.SetContent(content)
 }
 
-// netGlyphChip is the neutral light chip every glyph sits on, so red, black,
-// blue and green all read the same on a dark or a light theme.
-var netGlyphChip = lipgloss.Color("#e8e8e8")
-
-// netGlyphArt is the big block-art shape of each suit: netGlyphArtRows rows
-// of netGlyphArtCols cells drawn with full and half blocks, so the colour
-// fills a solid area instead of a one-cell stroke and the shape survives a
-// tiny terminal font. Spade and club end in a stem, heart and diamond in a
-// point; heart has the notched top, club the knobbly lobes.
+// netDigitArt is the big block-art shape of each digit: netDigitArtRows rows
+// of netDigitArtCols cells, so the PIN reads across a room and survives a
+// tiny terminal font. Only 1-9 exist — a code never holds a zero.
 const (
-	netGlyphArtRows = 5
-	netGlyphArtCols = 7
+	netDigitArtRows = 5
+	netDigitArtCols = 3
 )
 
-var netGlyphArt = map[string][netGlyphArtRows]string{
-	"spade": {
-		"  ▄█▄  ",
-		" █████ ",
-		"███████",
-		"▀▀▀█▀▀▀",
-		"  ███  ",
-	},
-	"heart": {
-		"▄██▄██▄",
-		"███████",
-		"▀█████▀",
-		" ▀███▀ ",
-		"  ▀█▀  ",
-	},
-	"club": {
-		"  ▄█▄  ",
-		"▄▄▀█▀▄▄",
-		"███████",
-		"▀▀▄█▄▀▀",
-		"  ███  ",
-	},
-	"diamond": {
-		"  ▄█▄  ",
-		" ▄███▄ ",
-		"███████",
-		" ▀███▀ ",
-		"  ▀█▀  ",
-	},
+var netDigitArt = map[byte][netDigitArtRows]string{
+	'1': {" █ ", "██ ", " █ ", " █ ", "███"},
+	'2': {"███", "  █", "███", "█  ", "███"},
+	'3': {"███", "  █", "███", "  █", "███"},
+	'4': {"█ █", "█ █", "███", "  █", "  █"},
+	'5': {"███", "█  ", "███", "  █", "███"},
+	'6': {"███", "█  ", "███", "█ █", "███"},
+	'7': {"███", "  █", "  █", "  █", "  █"},
+	'8': {"███", "█ █", "███", "█ █", "███"},
+	'9': {"███", "█ █", "███", "  █", "███"},
 }
 
-// netCodeBigWidth is the width the block-art layout needs: six chips of
-// netGlyphArtCols plus one cell of padding a side, separated by a gap, plus
-// the leading margin.
-const netCodeBigWidth = netlink.CodeLength*(netGlyphArtCols+2) + (netlink.CodeLength - 1) + 1
+// netCodeGroup is how many digits sit together before the visual separator.
+const netCodeGroup = netlink.CodeLength / 2
 
-// renderNetCode draws the six glyphs with their position numbers and colour
-// names underneath. Given the room it uses the big block-art shapes on
-// chips; on a narrow budget it falls back to one-cell suit glyphs.
-func renderNetCode(code netlink.Code, width int) string {
+// netCodeBigWidth is the width the block-art layout needs: six digits of
+// netDigitArtCols, one cell between digits, a three-cell " · " between the
+// two groups, plus the leading margin.
+const netCodeBigWidth = 1 + netlink.CodeLength*netDigitArtCols + (netlink.CodeLength - 2) + 3
+
+// renderNetCode draws the PIN. Given the room it uses the big block-art
+// digits; on a narrow budget it falls back to one bold line, "4 8 1 · 9 3 6".
+// The grouping is optical only — the wire form has no separator.
+func renderNetCode(code netlink.Code, width int, accent color.Color) string {
 	if width >= netCodeBigWidth {
-		return renderNetCodeBig(code)
+		return renderNetCodeBig(code, accent)
 	}
-	return renderNetCodeCompact(code)
+	return renderNetCodeCompact(code, accent)
 }
 
-// renderNetCodeBig is the block-art layout: every glyph is a
-// netGlyphArtCols×netGlyphArtRows block shape in its colour on a light chip,
-// nine cells wide, with the position number and colour name centred under it.
-func renderNetCodeBig(code netlink.Code) string {
-	const pitch = netGlyphArtCols + 2
-	rows := make([]string, netGlyphArtRows)
-	var nums, names []string
-	for i, g := range code {
-		suit, _ := netSuit(g.Suit)
-		colour, _ := netColour(g.Colour)
-		style := lipgloss.NewStyle().Background(netGlyphChip).Foreground(lipgloss.Color(colour.Hex))
-		art, ok := netGlyphArt[suit.ID]
+// renderNetCodeBig is the block-art layout: every digit a
+// netDigitArtCols×netDigitArtRows block shape in the accent colour, the two
+// groups parted by a middle dot on the centre row.
+func renderNetCodeBig(code netlink.Code, accent color.Color) string {
+	style := lipgloss.NewStyle().Foreground(accent)
+	rows := make([]string, netDigitArtRows)
+	for i, d := range code {
+		art, ok := netDigitArt[d]
 		if !ok {
-			art = [netGlyphArtRows]string{}
+			art = [netDigitArtRows]string{}
 			for r := range art {
-				art[r] = strings.Repeat(" ", netGlyphArtCols)
+				art[r] = strings.Repeat(" ", netDigitArtCols)
 			}
-			art[netGlyphArtRows/2] = centerCell(suit.Glyph, netGlyphArtCols)
+			art[netDigitArtRows/2] = centerCell(string(d), netDigitArtCols)
 		}
 		for r := range rows {
-			if i > 0 {
+			switch {
+			case i == 0:
+				rows[r] += " "
+			case i == netCodeGroup && r == netDigitArtRows/2:
+				rows[r] += " · "
+			case i == netCodeGroup:
+				rows[r] += "   "
+			default:
 				rows[r] += " "
 			}
-			rows[r] += style.Render(" " + art[r] + " ")
+			rows[r] += style.Render(art[r])
 		}
-		nums = append(nums, centerCell(strconv.Itoa(i+1), pitch))
-		names = append(names, centerCell(colour.Name, pitch))
 	}
-	for r := range rows {
-		rows[r] = " " + rows[r]
-	}
-	return strings.Join(rows, "\n") + "\n" +
-		" " + strings.Join(nums, " ") + "\n" +
-		" " + strings.Join(names, " ")
+	return strings.Join(rows, "\n")
 }
 
-// renderNetCodeCompact is the narrow-terminal layout: a row of coloured
-// one-cell suits on chips, a row of position numbers, and a row naming each
-// colour.
-func renderNetCodeCompact(code netlink.Code) string {
-	var glyphs, nums, names []string
-	for i, g := range code {
-		suit, _ := netSuit(g.Suit)
-		colour, _ := netColour(g.Colour)
-		chip := lipgloss.NewStyle().Background(netGlyphChip).Foreground(lipgloss.Color(colour.Hex)).Bold(true).
-			Render(" " + suit.Glyph + " ")
-		glyphs = append(glyphs, chip)
-		nums = append(nums, centerCell(strconv.Itoa(i+1), 3))
-		names = append(names, centerCell(colour.Name, 7))
+// renderNetCodeCompact is the narrow-terminal layout: the digits spaced out
+// on one bold line with the group separator.
+func renderNetCodeCompact(code netlink.Code, accent color.Color) string {
+	var parts []string
+	for i, d := range code {
+		if i == netCodeGroup {
+			parts = append(parts, "·")
+		}
+		parts = append(parts, string(d))
 	}
-	// Column pitch is 7 cells: a 3-wide chip plus 4 spaces, so the 7-wide
-	// name cells butt up against each other under the same centres.
-	return "   " + strings.Join(glyphs, "    ") + "\n" +
-		"   " + strings.Join(nums, "    ") + "\n" +
-		" " + strings.Join(names, "")
+	return "   " + lipgloss.NewStyle().Foreground(accent).Bold(true).Render(strings.Join(parts, " "))
 }
 
 // renderNetCountdown draws the remaining-time bar of width cells with the
@@ -479,25 +444,6 @@ func centerCell(s string, width int) string {
 	}
 	left := (width - n) / 2
 	return strings.Repeat(" ", left) + s + strings.Repeat(" ", width-n-left)
-}
-
-// netSuit / netColour look up alphabet entries by ID for rendering.
-func netSuit(id string) (netlink.Suit, bool) {
-	for _, s := range netlink.Suits {
-		if s.ID == id {
-			return s, true
-		}
-	}
-	return netlink.Suit{}, false
-}
-
-func netColour(id string) (netlink.Colour, bool) {
-	for _, c := range netlink.Colours {
-		if c.ID == id {
-			return c, true
-		}
-	}
-	return netlink.Colour{}, false
 }
 
 // handleNetworkForgetClients revokes every paired device. Works with the

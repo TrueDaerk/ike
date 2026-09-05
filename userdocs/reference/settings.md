@@ -432,7 +432,7 @@ advertises formatting.
 
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
-| Listen for network clients | `network.enabled` | boolean | `false` | user | Start the TCP endpoint. Every client must pair first: IKE shows a one-time code (six card suits in four colours) with a countdown, and a wrong or expired code is replaced by a fresh one. Paired devices keep a token stored hashed in the user state dir; "Forget Paired Network Clients" revokes them all |
+| Listen for network clients | `network.enabled` | boolean | `false` | user | Start the TCP endpoint. Every client must pair first: IKE shows a one-time six-digit PIN (digits 1-9, no zero) with a countdown, and a wrong or expired code is replaced by a fresh one. Paired devices keep a token stored hashed in the user state dir; "Forget Paired Network Clients" revokes them all |
 | Port | `network.port` | integer (1–65535) | `4530` | user | TCP port the endpoint listens on (default 4530) |
 | Bind address | `network.bind` | string | `0.0.0.0` | user | Interface address to listen on: 0.0.0.0 (the default) or empty reaches every interface so phones and laptops on the LAN can connect; 127.0.0.1 keeps the endpoint on this machine. Host names are refused — an IP literal only |
 | Announce over mDNS | `network.mdns` | boolean | `true` | user | Advertise the running endpoint on the local network as an _ike._tcp service (Bonjour / Avahi / DNS-SD), so a client browses for IKE instead of typing an address. Only while the endpoint is enabled, and skipped when the bind address is loopback — nothing else could reach it. Off keeps the endpoint silent: clients need the address |

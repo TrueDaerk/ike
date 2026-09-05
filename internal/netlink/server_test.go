@@ -119,8 +119,8 @@ func TestServerPairThenOpen(t *testing.T) {
 	if ch.Type != "challenge" || ch.Reason != "new" || ch.Alphabet == nil || ch.ExpiresIn <= 0 {
 		t.Fatalf("challenge %+v", ch)
 	}
-	if len(ch.Alphabet.Suits) != 4 || len(ch.Alphabet.Colours) != 4 || ch.Alphabet.Length != CodeLength {
-		t.Fatalf("alphabet %+v", ch.Alphabet)
+	if ch.Kind != "pin" || ch.Length != CodeLength || ch.Alphabet.Digits != "123456789" {
+		t.Fatalf("challenge shape kind=%q length=%d alphabet=%+v", ch.Kind, ch.Length, ch.Alphabet)
 	}
 	if len(*delivered) != 0 {
 		t.Fatal("nothing may be delivered before pairing")
@@ -129,7 +129,7 @@ func TestServerPairThenOpen(t *testing.T) {
 	if live.Client != "phone" {
 		t.Fatalf("challenge client %q", live.Client)
 	}
-	paired := c.send(Request{Cmd: "pair", Code: live.Code[:]})
+	paired := c.send(Request{Cmd: "pair", Code: live.Code.String()})
 	if paired.Type != "paired" || paired.Token == "" || paired.ClientID == "" {
 		t.Fatalf("paired %+v", paired)
 	}
@@ -184,7 +184,7 @@ func TestServerWrongCodeRegenerates(t *testing.T) {
 	first := rec.last()
 	started := time.Now()
 	miss := wrongGuess(first.Code)
-	again := c.send(Request{Cmd: "pair", Code: miss[:]})
+	again := c.send(Request{Cmd: "pair", Code: miss.String()})
 	if again.Type != "challenge" || again.Reason != "wrong" {
 		t.Fatalf("after a miss %+v", again)
 	}
@@ -195,8 +195,36 @@ func TestServerWrongCodeRegenerates(t *testing.T) {
 	if second.Code.Equal(first.Code) || second.Client != "laptop" {
 		t.Fatalf("the code must change and keep the client name: %+v", second)
 	}
-	if r := c.send(Request{Cmd: "pair", CodeText: second.Code.String()}); r.Type != "paired" {
-		t.Fatalf("text-form guess %+v", r)
+	if r := c.send(Request{Cmd: "pair", CodeText: second.Code.Grouped()}); r.Type != "paired" {
+		t.Fatalf("code_text guess %+v", r)
+	}
+}
+
+// TestServerRejectsMalformedCode: a guess with the wrong length, a zero, or
+// the deprecated glyph array is bad_request — never counted as a miss.
+func TestServerRejectsMalformedCode(t *testing.T) {
+	srv, rec, _ := testServer(t)
+	c := dial(t, srv)
+	if ch := c.send(Request{Cmd: "pair", Client: "laptop"}); ch.Type != "challenge" {
+		t.Fatalf("challenge %+v", ch)
+	}
+	first := rec.last()
+	for _, line := range []string{
+		`{"cmd":"pair","code":"12345"}`,
+		`{"cmd":"pair","code":"1234567"}`,
+		`{"cmd":"pair","code":"120456"}`,
+		`{"cmd":"pair","code":"12a456"}`,
+		`{"cmd":"pair","code":[{"suit":"spade","color":"red"}]}`,
+	} {
+		if r := c.raw(line); r.Type != "error" || r.Error != CodeBadRequest {
+			t.Fatalf("%s: %+v", line, r)
+		}
+	}
+	if rec.last().Code != first.Code {
+		t.Fatal("a malformed guess must not regenerate the code")
+	}
+	if r := c.send(Request{Cmd: "pair", Code: first.Code.String()}); r.Type != "paired" {
+		t.Fatalf("the code is still live: %+v", r)
 	}
 }
 
@@ -214,7 +242,7 @@ func TestServerRejectsGarbage(t *testing.T) {
 	if r := c.raw(`{}`); r.Error != CodeBadRequest {
 		t.Fatalf("missing cmd %+v", r)
 	}
-	if r := c.send(Request{Cmd: "pair", CodeText: "spade:red spade:red spade:red spade:red spade:red spade:red"}); r.Error != CodeNoChallenge {
+	if r := c.send(Request{Cmd: "pair", Code: "111111"}); r.Error != CodeNoChallenge {
 		t.Fatalf("guess without challenge %+v", r)
 	}
 	if r := c.send(Request{Cmd: "unpair"}); r.Error != CodeUnauthorized {
