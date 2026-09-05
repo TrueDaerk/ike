@@ -324,8 +324,10 @@ with socket.create_connection((HOST, PORT)) as s:
   `reconfigureNetwork` on every config reload keyed by the whole `[network]`
   section, carried across project switches like the unix socket),
   `startNetDiscovery` / `netService` / `netDiscoverable` for the
-  announcement, the popup (`renderNetPair`: glyph chips on
-  a neutral background, position numbers, colour names, `renderNetCountdown`
+  announcement, the popup (`renderNetPair`: given the width, every suit is
+  drawn as a 7×5 block-art shape in its colour on a neutral chip so shape and
+  colour survive a tiny terminal font (`netGlyphArt`), on a narrow budget
+  one-cell glyph chips; position numbers, colour names, `renderNetCountdown`
   bar ticking once a second, generation-guarded), `esc` → `Cancel`, the
   `network.forgetClients` command. Events reach the Update loop through
   `host.Send`; accepted links arrive as `DeepLinkMsg`.

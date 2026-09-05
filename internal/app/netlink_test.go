@@ -9,6 +9,7 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"ike/internal/config"
 	"ike/internal/deeplink"
@@ -33,6 +34,53 @@ func testChallenge(ttl time.Duration) netlink.Challenge {
 	now := time.Now()
 	return netlink.Challenge{Code: netlink.Generate(), Issued: now, Expires: now.Add(ttl),
 		Client: "phone", Addr: "10.0.0.2:5000", Reason: "new"}
+}
+
+// TestNetCodeLayouts: with room the code is drawn as block art — every suit's
+// shape, netGlyphArtRows rows tall, every row the same width — and a narrow
+// budget falls back to the one-cell glyph chips. Both spell out the colours.
+func TestNetCodeLayouts(t *testing.T) {
+	code := netlink.Code{{Suit: "spade", Colour: "red"}, {Suit: "heart", Colour: "black"},
+		{Suit: "club", Colour: "blue"}, {Suit: "diamond", Colour: "green"},
+		{Suit: "heart", Colour: "red"}, {Suit: "club", Colour: "black"}}
+	for _, s := range netlink.Suits {
+		art, ok := netGlyphArt[s.ID]
+		if !ok {
+			t.Fatalf("suit %s has no block art", s.ID)
+		}
+		for r, row := range art {
+			if w := lipgloss.Width(row); w != netGlyphArtCols {
+				t.Fatalf("%s art row %d is %d cells wide, want %d", s.ID, r, w, netGlyphArtCols)
+			}
+		}
+	}
+	big := renderNetCode(code, netCodeBigWidth)
+	bigLines := strings.Split(big, "\n")
+	if len(bigLines) != netGlyphArtRows+2 {
+		t.Fatalf("big layout has %d lines, want %d:\n%s", len(bigLines), netGlyphArtRows+2, big)
+	}
+	for i, l := range bigLines[:netGlyphArtRows] {
+		if w := lipgloss.Width(l); w != netCodeBigWidth {
+			t.Fatalf("big layout row %d is %d cells wide, want %d", i, w, netCodeBigWidth)
+		}
+	}
+	if strings.Contains(big, "♠") {
+		t.Fatalf("big layout must draw block art, not the one-cell glyph:\n%s", big)
+	}
+	compact := renderNetCode(code, netCodeBigWidth-1)
+	if len(strings.Split(compact, "\n")) != 3 || !strings.Contains(compact, "♠") {
+		t.Fatalf("narrow budget must fall back to the compact chips:\n%s", compact)
+	}
+	for _, out := range []string{big, compact} {
+		for _, name := range []string{"Red", "Black", "Blue", "Green"} {
+			if !strings.Contains(out, name) {
+				t.Fatalf("layout must spell out %s:\n%s", name, out)
+			}
+		}
+		if !strings.Contains(out, " 6 ") {
+			t.Fatalf("layout must number the positions:\n%s", out)
+		}
+	}
 }
 
 // TestNetPairPopupShowsCodeAndCounts: a challenge opens the popup with the

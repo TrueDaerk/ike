@@ -22,7 +22,7 @@ import (
 // netlink.go is the root-model side of the network deep-link endpoint
 // (#2519): the TCP listener's lifecycle (start on launch when enabled,
 // restart on a [network] settings change), the pairing popup — six coloured
-// suit glyphs with a countdown bar — and the "forget paired clients"
+// suits as block art with a countdown bar — and the "forget paired clients"
 // command. The protocol, the pairing state machine and the token store live
 // in internal/netlink; an accepted link arrives here as a DeepLinkMsg and
 // runs the very same pipeline an OS-delivered ike:// click does.
@@ -53,8 +53,19 @@ type netPairTickMsg struct{ gen int }
 type netPairing struct {
 	c       netlink.Challenge
 	gen     int
-	content *ui.ModelContent
+	content *netPairContent
 }
+
+// netPairContent is the popup's shell content: unlike ui.ModelContent it
+// honours the width budget, so the code can switch between the big block
+// glyphs and the compact one-line chips.
+type netPairContent struct {
+	heading string
+	body    func(width int) string
+}
+
+func (c *netPairContent) Title() string           { return c.heading }
+func (c *netPairContent) Render(width int) string { return c.body(width) }
 
 // netEvents bridges the server's goroutine-side events into the Update
 // loop through host.Send — the one bridge a background goroutine may use.
@@ -294,9 +305,9 @@ func (m *Model) renderNetPair() {
 	}
 	c := p.c
 	pal := m.pal()
-	content := &ui.ModelContent{
-		Heading: "Pair a network device",
-		Body: func() string {
+	content := &netPairContent{
+		heading: "Pair a network device",
+		body: func(width int) string {
 			who := c.Client
 			if who == "" {
 				who = "a device"
@@ -310,7 +321,7 @@ func (m *Model) renderNetPair() {
 				b.WriteString(lipgloss.NewStyle().Foreground(pal.Warning).Render("The last code expired — this is a new one.") + "\n")
 			}
 			b.WriteString("\nEnter this code on the device:\n\n")
-			b.WriteString(renderNetCode(c.Code))
+			b.WriteString(renderNetCode(c.Code, width))
 			b.WriteString("\n\n")
 			b.WriteString(renderNetCountdown(c, time.Now(), 36, pal.Accent, pal.Hint))
 			b.WriteString("\n\n" + guardCancel("refuse — the device is turned away"))
@@ -325,9 +336,102 @@ func (m *Model) renderNetPair() {
 // blue and green all read the same on a dark or a light theme.
 var netGlyphChip = lipgloss.Color("#e8e8e8")
 
-// renderNetCode draws the six glyphs: a row of coloured suits on chips, a
-// row of position numbers, and a row naming each colour.
-func renderNetCode(code netlink.Code) string {
+// netGlyphArt is the big block-art shape of each suit: netGlyphArtRows rows
+// of netGlyphArtCols cells drawn with full and half blocks, so the colour
+// fills a solid area instead of a one-cell stroke and the shape survives a
+// tiny terminal font. Spade and club end in a stem, heart and diamond in a
+// point; heart has the notched top, club the knobbly lobes.
+const (
+	netGlyphArtRows = 5
+	netGlyphArtCols = 7
+)
+
+var netGlyphArt = map[string][netGlyphArtRows]string{
+	"spade": {
+		"  ▄█▄  ",
+		" █████ ",
+		"███████",
+		"▀▀▀█▀▀▀",
+		"  ███  ",
+	},
+	"heart": {
+		"▄██▄██▄",
+		"███████",
+		"▀█████▀",
+		" ▀███▀ ",
+		"  ▀█▀  ",
+	},
+	"club": {
+		"  ▄█▄  ",
+		"▄▄▀█▀▄▄",
+		"███████",
+		"▀▀▄█▄▀▀",
+		"  ███  ",
+	},
+	"diamond": {
+		"  ▄█▄  ",
+		" ▄███▄ ",
+		"███████",
+		" ▀███▀ ",
+		"  ▀█▀  ",
+	},
+}
+
+// netCodeBigWidth is the width the block-art layout needs: six chips of
+// netGlyphArtCols plus one cell of padding a side, separated by a gap, plus
+// the leading margin.
+const netCodeBigWidth = netlink.CodeLength*(netGlyphArtCols+2) + (netlink.CodeLength - 1) + 1
+
+// renderNetCode draws the six glyphs with their position numbers and colour
+// names underneath. Given the room it uses the big block-art shapes on
+// chips; on a narrow budget it falls back to one-cell suit glyphs.
+func renderNetCode(code netlink.Code, width int) string {
+	if width >= netCodeBigWidth {
+		return renderNetCodeBig(code)
+	}
+	return renderNetCodeCompact(code)
+}
+
+// renderNetCodeBig is the block-art layout: every glyph is a
+// netGlyphArtCols×netGlyphArtRows block shape in its colour on a light chip,
+// nine cells wide, with the position number and colour name centred under it.
+func renderNetCodeBig(code netlink.Code) string {
+	const pitch = netGlyphArtCols + 2
+	rows := make([]string, netGlyphArtRows)
+	var nums, names []string
+	for i, g := range code {
+		suit, _ := netSuit(g.Suit)
+		colour, _ := netColour(g.Colour)
+		style := lipgloss.NewStyle().Background(netGlyphChip).Foreground(lipgloss.Color(colour.Hex))
+		art, ok := netGlyphArt[suit.ID]
+		if !ok {
+			art = [netGlyphArtRows]string{}
+			for r := range art {
+				art[r] = strings.Repeat(" ", netGlyphArtCols)
+			}
+			art[netGlyphArtRows/2] = centerCell(suit.Glyph, netGlyphArtCols)
+		}
+		for r := range rows {
+			if i > 0 {
+				rows[r] += " "
+			}
+			rows[r] += style.Render(" " + art[r] + " ")
+		}
+		nums = append(nums, centerCell(strconv.Itoa(i+1), pitch))
+		names = append(names, centerCell(colour.Name, pitch))
+	}
+	for r := range rows {
+		rows[r] = " " + rows[r]
+	}
+	return strings.Join(rows, "\n") + "\n" +
+		" " + strings.Join(nums, " ") + "\n" +
+		" " + strings.Join(names, " ")
+}
+
+// renderNetCodeCompact is the narrow-terminal layout: a row of coloured
+// one-cell suits on chips, a row of position numbers, and a row naming each
+// colour.
+func renderNetCodeCompact(code netlink.Code) string {
 	var glyphs, nums, names []string
 	for i, g := range code {
 		suit, _ := netSuit(g.Suit)
