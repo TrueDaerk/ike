@@ -60,18 +60,13 @@ which Claude model and reasoning effort to use:
 When creating a new issue, add one `model:*` and one `effort:*` label. If they are missing,
 runners default to **fable / medium**.
 
-## Size labels on issues
+## Priority labels on issues
 
-Every work-item issue should also carry one rough duration-estimate label, in a shared
-purple color family distinct from `model:*` (blue), `effort:*` (orange) and `priority:*`
-(red/green scale):
-
-- **`size:1d`** — roughly one day or less.
-- **`size:1-7d`** — between one and seven days.
-- **`size:7d+`** — more than seven days.
-
-When creating a new issue, add one `size:*` label alongside `model:*`/`effort:*`. If it's
-missing there is no default — the issue is simply untagged for size.
+`priority:*` labels are **opt-in only**: set one only when a priority is explicitly requested
+(e.g. the user names it or the task says `priority:high`). Never infer or default a priority.
+When one is requested, use one of the **existing** labels — `priority:lowest`, `priority:low`,
+`priority:medium`, `priority:high`, `priority:highest` — and never create new `priority:*`
+labels.
 
 ## Change workflow
 

@@ -3,7 +3,7 @@ type: process
 title: GitHub Issue Workflow
 description: How planning is structured on TrueDaerk/ike — epics, sub-issues, milestones, labels, conventions, and the duplicate check.
 tags: [process, github, planning]
-timestamp: 2026-07-29T00:00:00Z
+timestamp: 2026-09-05T00:00:00Z
 ---
 
 # GitHub Issue Workflow
@@ -31,8 +31,7 @@ There is no roadmap directory anymore — the structure is:
 | `documentation` | Wiki / README work only. |
 | `model:opus` / `model:fable` | Which Claude model a runner (e.g. `issue_runner.py`) should use — opus for simple/medium tasks, fable for complex, reasoning-heavy ones. |
 | `effort:low` / `effort:medium` / `effort:high` | Reasoning effort for the runner; `high` is the maximum allowed. |
-| `priority:lowest` … `priority:highest` | Relative priority for picking work. |
-| `size:1d` / `size:1-7d` / `size:7d+` | Rough duration estimate — 1 day or less, 1-7 days, or more than 7 days. Every work-item issue should carry one; no default if missing. |
+| `priority:lowest` … `priority:highest` | Relative priority for picking work. **Opt-in only:** set only when a priority is explicitly requested, never inferred or defaulted. When requested, use one of the five existing labels; never create new `priority:*` labels. |
 
 ## Issue conventions
 
