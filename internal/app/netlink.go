@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"image/color"
+	"net"
 	"strconv"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 
 	"ike/internal/config"
 	"ike/internal/host"
+	"ike/internal/mdns"
 	"ike/internal/netlink"
 	"ike/internal/ui"
 	"ike/internal/version"
@@ -65,9 +67,12 @@ func (e netEvents) Paired(c netlink.Client)             { e.h.Send(netPairedMsg{
 // StartNetLink opens the TCP endpoint when [network].enabled is on and
 // returns the model holding it. A failure to listen (port taken, bad bind)
 // is a notification the model shows once it runs; the rest of the IDE is
-// unaffected.
+// unaffected. The mDNS announcement (#2522) follows the listener; its own
+// failure is a warning that leaves the endpoint up.
 func (m Model) StartNetLink() Model {
 	if err := m.startNetLink(config.Get()); err != nil {
+		m.host.Notify(host.Warn, err.Error())
+	} else if err := m.startNetDiscovery(config.Get()); err != nil {
 		m.host.Notify(host.Warn, err.Error())
 	}
 	return m
@@ -75,6 +80,7 @@ func (m Model) StartNetLink() Model {
 
 // startNetLink starts the listener for cfg (a no-op while disabled).
 func (m *Model) startNetLink(cfg *config.Config) error {
+	m.nlKey = netConfigKey(cfg)
 	if cfg == nil || !cfg.Network.Enabled {
 		return nil
 	}
@@ -98,6 +104,64 @@ func (m *Model) startNetLink(cfg *config.Config) error {
 	return nil
 }
 
+// netServiceType is the DNS-SD service type IKE announces (#2522).
+const netServiceType = "_ike._tcp"
+
+// netDiscoverable reports whether an enabled endpoint is worth announcing:
+// a loopback bind is reachable from this machine only, so a browser on the
+// LAN would find an address it cannot connect to.
+func netDiscoverable(cfg *config.Config) bool {
+	if cfg == nil || !cfg.Network.Enabled || !cfg.Network.MDNS {
+		return false
+	}
+	bind := strings.Trim(strings.TrimSpace(cfg.Network.Bind), "[]")
+	if bind == "" {
+		return true
+	}
+	ip := net.ParseIP(bind)
+	return ip != nil && !ip.IsLoopback()
+}
+
+// netService is the DNS-SD instance the endpoint announces: the configured
+// name (or the host's), the port, a TXT record naming the protocol and the
+// version, and — for a bind to one address — exactly that address, else
+// every interface's.
+func netService(cfg *config.Config) mdns.Service {
+	svc := mdns.Service{
+		Instance: strings.TrimSpace(cfg.Network.Name),
+		Type:     netServiceType,
+		Port:     cfg.Network.Port,
+		TXT:      []string{"v=" + version.Short(), "proto=1", "name=ike"},
+	}
+	if ip := net.ParseIP(strings.Trim(strings.TrimSpace(cfg.Network.Bind), "[]")); ip != nil && !ip.IsUnspecified() {
+		svc.IPs = []net.IP{ip}
+	}
+	return svc
+}
+
+// startNetDiscovery announces the running endpoint (a no-op while not
+// discoverable). The announcer is closed with the listener.
+func (m *Model) startNetDiscovery(cfg *config.Config) error {
+	if !netDiscoverable(cfg) || m.nlServer == nil {
+		return nil
+	}
+	r, err := mdns.Announce(netService(cfg))
+	if err != nil {
+		return fmt.Errorf("network links: cannot announce over mDNS: %v", err)
+	}
+	m.nlMDNS = r
+	return nil
+}
+
+// netConfigKey folds every [network] field the running endpoint and its
+// announcement depend on into one comparable string; "" while disabled.
+func netConfigKey(cfg *config.Config) string {
+	if cfg == nil || !cfg.Network.Enabled {
+		return ""
+	}
+	return netListenAddr(cfg) + "|mdns=" + strconv.FormatBool(cfg.Network.MDNS) + "|name=" + strings.TrimSpace(cfg.Network.Name)
+}
+
 // netListenAddr renders the [network] bind/port pair as a listen address.
 func netListenAddr(cfg *config.Config) string {
 	bind := strings.Trim(strings.TrimSpace(cfg.Network.Bind), "[]")
@@ -107,40 +171,51 @@ func netListenAddr(cfg *config.Config) string {
 	return bind + ":" + strconv.Itoa(cfg.Network.Port)
 }
 
-// CloseNetLink stops the endpoint; cmd/ike defers it around Run.
-func (m Model) CloseNetLink() { m.nlServer.Close() }
+// CloseNetLink stops the endpoint and its announcement (the goodbye goes
+// out first, so browsers drop the instance at once); cmd/ike defers it
+// around Run.
+func (m Model) CloseNetLink() {
+	m.nlMDNS.Close()
+	m.nlServer.Close()
+}
 
 // reconfigureNetwork applies a [network] settings change live: the
-// listener stops when disabled, starts when enabled, and restarts when the
-// address changed. An unchanged configuration leaves a running listener —
-// and its live pairing — alone.
+// listener stops when disabled, starts when enabled, and restarts — with
+// its announcement — when the address, the discovery switch or the
+// announced name changed. An unchanged configuration leaves a running
+// listener — and its live pairing — alone.
 func (m *Model) reconfigureNetwork(cfg *config.Config) {
 	if cfg == nil {
 		return
 	}
-	want := ""
-	if cfg.Network.Enabled {
-		want = netListenAddr(cfg)
-	}
-	if want == m.nlAddr && (want == "" || m.nlServer != nil) {
+	want := netConfigKey(cfg)
+	if want == m.nlKey && (want == "" || m.nlServer != nil) {
 		return
 	}
 	if m.nlServer != nil {
 		m.closeNetPair()
+		m.nlMDNS.Close()
 		m.nlServer.Close()
-		m.nlServer, m.nlAddr = nil, ""
+		m.nlServer, m.nlAddr, m.nlMDNS, m.nlKey = nil, "", nil, ""
 		if want == "" {
 			m.host.Notify(host.Info, "network links: endpoint stopped")
 		}
 	}
 	if want == "" {
+		m.nlKey = ""
 		return
 	}
 	if err := m.startNetLink(cfg); err != nil {
 		m.host.Notify(host.Warn, err.Error())
 		return
 	}
-	m.host.Notify(host.Info, "network links: listening on "+m.nlAddr)
+	note := "network links: listening on " + m.nlAddr
+	if err := m.startNetDiscovery(cfg); err != nil {
+		m.host.Notify(host.Warn, err.Error())
+	} else if m.nlMDNS != nil {
+		note += ", announced as " + m.nlMDNS.Service().Instance + "." + netServiceType + ".local"
+	}
+	m.host.Notify(host.Info, note)
 }
 
 // handleNetChallenge shows (or refreshes) the pairing popup for a code and

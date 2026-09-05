@@ -78,6 +78,7 @@ import (
 	"ike/internal/lspdoctor"
 	"ike/internal/market"
 	"ike/internal/marks"
+	"ike/internal/mdns"
 	"ike/internal/menu"
 	"ike/internal/nav"
 	"ike/internal/nbview"
@@ -896,8 +897,13 @@ type Model struct {
 	// while disabled), nlAddr the address it was started for (the
 	// reconfigure compare key), nlPair the open pairing popup and nlTickGen
 	// the countdown's generation counter.
+	// nlMDNS is the discovery announcer (#2522, nil while off or while
+	// the bind is loopback) and nlKey the whole [network] configuration the
+	// running pair was started for — the reconfigure compare key.
 	nlServer  *netlink.Server
 	nlAddr    string
+	nlMDNS    *mdns.Responder
+	nlKey     string
 	nlPair    *netPairing
 	nlTickGen int
 	// undoTree is the undo-tree overlay (#59): the focused editor's change

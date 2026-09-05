@@ -524,10 +524,19 @@ type Marketplace struct {
 // interface address to listen on ("0.0.0.0" — every interface — by default;
 // "127.0.0.1" keeps it on this machine). Off by default: nothing listens
 // until the user opts in.
+//
+// MDNS (#2522) announces the running endpoint over multicast DNS / DNS-SD as
+// an "_ike._tcp.local" instance, so a client on the LAN finds IKE by
+// browsing instead of by a typed address; it is on by default but only
+// matters while Enabled is, and is skipped for a loopback Bind, which no
+// other device could reach anyway. Name labels the announced instance —
+// empty means the host's short name; a single DNS label of at most 63 bytes.
 type Network struct {
 	Enabled bool   `toml:"enabled"`
 	Port    int    `toml:"port"`
 	Bind    string `toml:"bind"`
+	MDNS    bool   `toml:"mdns"`
+	Name    string `toml:"name"`
 }
 
 // Deps holds Dependencies tool-window settings (#2419). AutoScan runs one
