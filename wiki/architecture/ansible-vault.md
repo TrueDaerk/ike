@@ -71,10 +71,11 @@ the 1.2 label rides along. `diskHash` hashes the **on-disk ciphertext**, not
 the buffer — staleness detection and reconcile compare against what the file
 actually holds. The document announces itself (#2528): the status line's file
 segment carries `[vault]` — `[vault: <id>]` when the 1.2 header names a vault
-id — and the tab shows a 🔒 before the dirty dot, so the plaintext on screen is
-never mistaken for an ordinary file. Both read `VaultState()` / `Vault()`
-live, so "Treat as Vault File" and a shared-document `SyncMsg` flip them at
-once.
+id — and the tab shows a 🔒 before the dirty dot (the single-tab pane title,
+which renders instead of the tab bar, carries the same glyph), so the
+plaintext on screen is never mistaken for an ordinary file. Both read
+`VaultState()` / `Vault()` live, so "Treat as Vault File" and a
+shared-document `SyncMsg` flip them at once.
 
 **Save** — `saveAs` is the single write choke point every save flavor funnels
 through (`:w`, save-as, Save All, focus/idle autosave, the format-on-save

@@ -1823,9 +1823,10 @@ backups are switched off for such a document. Without a source (or with a
 wrong password) the ciphertext opens as before, with the reason on the ex
 line; the "Treat as Vault File" intention covers the files the automatic path
 missed. The status line's file segment shows `[vault]` (or `[vault: <id>]`)
-and the tab a 🔒 while the document is a vault (#2528). The whole concept —
-format, password precedence, leak surfaces, the intention's two branches —
-lives in [ansible-vault](./ansible-vault.md).
+and the tab — or the single-document pane title — a 🔒 while the document is a
+vault (#2528). The whole concept — format, password precedence, leak
+surfaces, the intention's two branches — lives in
+[ansible-vault](./ansible-vault.md).
 
 ## Shared documents (#142)
 

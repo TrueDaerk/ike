@@ -13878,6 +13878,12 @@ func (m Model) editorTitle(ed *editor.Model) string {
 		}
 		name += " [RO]"
 	}
+	if ed.Vault() {
+		// A single-tab pane draws this title instead of the tab bar, so the
+		// vault marker (#2528) has to repeat here — otherwise the one open
+		// document, the common case, shows no lock at all.
+		name += " " + tabVaultGlyph
+	}
 	if ed.Dirty() {
 		name += " *"
 	}
