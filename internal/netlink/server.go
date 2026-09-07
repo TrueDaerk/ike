@@ -43,6 +43,12 @@ type Options struct {
 	// Deliver hands one validated ike:// URL to the IDE. It runs on the
 	// connection goroutine and must not block.
 	Deliver func(url string)
+	// State reports what the IDE currently shows, for the status command
+	// (#2529). It runs on the connection goroutine — concurrently with the
+	// update loop — so it must be safe to call from any goroutine and must
+	// not block; the IDE side answers from a snapshot. nil means "no state
+	// available": status is then answered with unavailable.
+	State func() Status
 	// Events receives pairing state changes (may be nil).
 	Events Events
 	// CodeTTL is the pairing code lifetime; 0 selects DefaultCodeTTL.
@@ -230,6 +236,20 @@ func (s *Server) dispatch(sess *session, req Request) (Response, time.Duration) 
 		}
 		s.opts.Deliver(link)
 		return Response{Type: "ok", Link: link, Message: "link handed to IKE"}, 0
+	case "status":
+		// Unlike open, status never starts pairing implicitly: a device that
+		// cannot open anything has no business making a popup appear either.
+		if !sess.authed {
+			return errorResponse(CodeUnauthorized, "status needs a paired token"), 0
+		}
+		if s.opts.State == nil {
+			return errorResponse(CodeUnavailable, "this IKE does not report its state"), 0
+		}
+		st := s.opts.State()
+		if strings.TrimSpace(st.Root) == "" {
+			return errorResponse(CodeUnavailable, "no project is open"), 0
+		}
+		return statusResponse(st), 0
 	case "":
 		return errorResponse(CodeBadRequest, "missing cmd"), 0
 	default:

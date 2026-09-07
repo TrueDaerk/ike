@@ -12,12 +12,13 @@ import (
 
 // protocol.go is the wire format: one JSON object per line in each
 // direction. Every request names a command in "cmd"; every response names
-// its shape in "type" — "ok", "error", "hello", "challenge" or "paired".
+// its shape in "type" — "ok", "error", "hello", "challenge", "paired" or
+// "status".
 
 // Request is what a client sends. Only cmd is required; the other fields
 // belong to particular commands and are ignored elsewhere.
 type Request struct {
-	// Cmd is the command: hello, ping, pair, auth, open, unpair.
+	// Cmd is the command: hello, ping, pair, auth, open, unpair, status.
 	Cmd string `json:"cmd"`
 	// Token authenticates a paired client. It may ride on any request; once
 	// a connection has presented a valid token it stays authenticated.
@@ -41,7 +42,8 @@ type Request struct {
 
 // Response is what the server answers.
 type Response struct {
-	// Type is the response shape: ok, error, hello, challenge, paired.
+	// Type is the response shape: ok, error, hello, challenge, paired,
+	// status.
 	Type string `json:"type"`
 	// Error is a stable machine-readable code (type error only); Message is
 	// the human-readable detail, present on errors and on informational
@@ -67,7 +69,77 @@ type Response struct {
 	ClientID string `json:"client_id,omitempty"`
 
 	// ok (open): the link as it was handed to the IDE.
+	// status: a ready-to-send ike://open link for what IKE currently shows.
 	Link string `json:"link,omitempty"`
+
+	// status (#2529): what the IDE currently has open. Project and Root
+	// (and Link) are always set; Remote is absent for a project without a
+	// git remote, and File / Line / Col are absent while no editor is
+	// focused.
+	Project string `json:"project,omitempty"`
+	Root    string `json:"root,omitempty"`
+	Remote  string `json:"remote,omitempty"`
+	File    string `json:"file,omitempty"`
+	Line    int    `json:"line,omitempty"`
+	Col     int    `json:"col,omitempty"`
+}
+
+// Status is the IDE state a status request reports. The IDE hands the
+// server a getter (Options.State) that fills it from the live model; an
+// empty Root means "nothing to report" and answers unavailable.
+type Status struct {
+	// Project is the project root's directory name — the plain name
+	// ike://open?project= accepts.
+	Project string
+	// Root is the absolute project root path.
+	Root string
+	// Remote is the normalised key (deeplink.NormalizeRemote) of the root's
+	// origin/first remote; "" when the project has no git remote.
+	Remote string
+	// File is the active editor's path relative to Root; "" when no editor
+	// is focused (or its buffer has no file yet).
+	File string
+	// Line and Col are the active editor's 1-based cursor; 0 with File "".
+	Line, Col int
+}
+
+// statusResponse renders a status snapshot, link included.
+func statusResponse(st Status) Response {
+	return Response{
+		Type:    "status",
+		Project: st.Project,
+		Root:    st.Root,
+		Remote:  st.Remote,
+		File:    st.File,
+		Line:    st.Line,
+		Col:     st.Col,
+		Link:    LinkFromStatus(st),
+	}
+}
+
+// LinkFromStatus renders a status snapshot as the ike://open URL another
+// IKE can consume unchanged: the remote when there is one (the normalised
+// key is spelled as an https:// URL so the strict grammar accepts it and
+// normalises it right back), else the project name, plus file:line when an
+// editor is focused. "" when the snapshot names neither.
+func LinkFromStatus(st Status) string {
+	q := url.Values{}
+	switch {
+	case st.Remote != "":
+		q.Set("remote", "https://"+st.Remote)
+	case st.Project != "":
+		q.Set("project", st.Project)
+	default:
+		return ""
+	}
+	if st.File != "" {
+		file := st.File
+		if st.Line > 0 && !hasLineSuffix(file) {
+			file += ":" + strconv.Itoa(st.Line)
+		}
+		q.Set("file", file)
+	}
+	return "ike://open?" + q.Encode()
 }
 
 // Error codes carried in Response.Error.
@@ -78,6 +150,7 @@ const (
 	CodeBlocked      = "blocked"      // the address is blocked after misses or a refusal
 	CodeNoChallenge  = "no_challenge" // a guess arrived while no code was live
 	CodeTooLarge     = "too_large"    // the line exceeded the size cap
+	CodeUnavailable  = "unavailable"  // the IDE state a command reports is not available
 	CodeInternal     = "internal"     // token store failure and the like
 )
 

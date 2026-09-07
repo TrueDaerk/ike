@@ -1,5 +1,20 @@
 # Log
 
+## 2026-09-07 (network links: status command, #2529)
+
+- **A paired client can ask what IKE is showing**: the new authenticated
+  `status` command answers `{"type":"status", …}` with the open project's
+  name and absolute `root`, its normalised git `remote` (when it has one),
+  the focused editor's project-relative `file` with the 1-based `line` /
+  `col`, and a ready-to-send `link` (`ike://open?remote=…&file=…:…`) another
+  IKE consumes unchanged. The answer comes from a mutex-guarded snapshot the
+  update loop refreshes after every message (the remote read from
+  `.git/config` once per root), so the connection goroutine never reaches
+  into the UI. Unpaired askers get `unauthorized` **without** a pairing
+  popup — only `open` starts pairing implicitly — and a state-less server
+  answers the new `unavailable` code. The mDNS TXT record now says
+  `proto=2`.
+
 ## 2026-09-07 (vault documents announce themselves, #2528)
 
 - **Vault marker**: a decrypted Ansible Vault buffer (#2293) now shows

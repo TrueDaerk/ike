@@ -1,10 +1,10 @@
 ---
 type: architecture
 title: Network Links (TCP endpoint with pairing)
-description: Connecting to IKE over a socket — the [network] TCP endpoint, the newline-delimited JSON protocol, the one-time pairing PIN (six digits 1-9, expiring, regenerated on a miss), tokens, the open command that runs the ike:// pipeline, mDNS/DNS-SD discovery of the endpoint (_ike._tcp), and worked client examples (#2519, #2522)
+description: Connecting to IKE over a socket — the [network] TCP endpoint, the newline-delimited JSON protocol, the one-time pairing PIN (six digits 1-9, expiring, regenerated on a miss), tokens, the open command that runs the ike:// pipeline, the status command reporting the open project, file and cursor, mDNS/DNS-SD discovery of the endpoint (_ike._tcp), and worked client examples (#2519, #2522, #2529)
 resource: internal/netlink
 tags: [deeplink, network, socket, pairing, ipc, project-switching, mdns, discovery]
-timestamp: 2026-09-05T00:00:00Z
+timestamp: 2026-09-07T00:00:00Z
 ---
 
 # Network Links (TCP endpoint with pairing)
@@ -57,7 +57,7 @@ name by default, so two machines are told apart — with an SRV record to
 | TXT key | Value                                   |
 |---------|-----------------------------------------|
 | `v`     | IKE's version (`0.5.171`)               |
-| `proto` | wire-protocol generation, currently `1` |
+| `proto` | wire-protocol generation, currently `2` (`1` before `status`, #2529) |
 | `name`  | `ike`                                   |
 
 Any Bonjour / Avahi / DNS-SD client browses for it:
@@ -107,13 +107,16 @@ Every request names its command in `cmd`; every response names its shape in
 | `error`     | Refused: `error` is a stable code, `message` the human reason   |
 | `challenge` | Pair now: `reason`, `expires_in` (seconds), `kind`, `length`, `alphabet` |
 | `paired`    | Pairing succeeded: `token`, `client_id`                         |
+| `status`    | What IKE shows: `project`, `root`, `link`, plus `remote`, `file`, `line`, `col` when known |
 
 Error codes (`error` field): `bad_request` (unparseable line, unknown or
 missing `cmd`, malformed code), `unauthorized` (a guarded command without a
 valid token), `invalid_link` (the `open` request does not form a valid
 `ike://` link), `blocked` (the address is blocked after repeated misses or a
 refusal), `no_challenge` (a guess arrived while no code was live),
-`too_large` (line over 16 KiB — the connection is closed), `internal`.
+`too_large` (line over 16 KiB — the connection is closed), `unavailable`
+(the IDE state a command reports is not available — `status` with no project
+open), `internal`.
 
 Limits: 16 KiB per line, 5 minutes idle before a connection is cut, 32
 simultaneous connections.
@@ -128,6 +131,7 @@ simultaneous connections.
 | `auth`    | —    | `token`                                                                | `ok` or `unauthorized`    |
 | `open`    | yes  | `url`; or `project` \| `remote` + optional `file`, `line`, `tool`      | `ok` / `invalid_link`     |
 | `unpair`  | yes  | —                                                                      | `ok` (token revoked)      |
+| `status`  | yes  | —                                                                      | `status` / `unauthorized` / `unavailable` |
 
 `token` may ride on **any** request. Once a connection has presented a valid
 token it stays authenticated until it closes, so a client can send the token
@@ -233,6 +237,50 @@ in the IDE, and its outcome — a switch, a chooser, the clone dialog, or a
 "no project named X" notice — shows in IKE, not on the wire. A link to the
 project that is already current says "already in *name*".
 
+## The `status` command
+
+`open` is one-directional; `status` (#2529) is the one question a paired
+client may ask back — *what are you showing right now?*
+
+```json
+{"cmd":"status","token":"…"}
+```
+
+```json
+{
+  "type": "status",
+  "project": "ike",
+  "root": "/Users/dev/Development/ike",
+  "remote": "github.com/truedaerk/ike",
+  "file": "internal/app/app.go",
+  "line": 4211,
+  "col": 3,
+  "link": "ike://open?file=internal%2Fapp%2Fapp.go%3A4211&remote=https%3A%2F%2Fgithub.com%2Ftruedaerk%2Fike"
+}
+```
+
+- `project` is the project root's directory name — the plain name
+  `ike://open?project=` accepts; `root` is its absolute path.
+- `remote` is the normalised key (`host/owner/repo`) of the root's
+  origin/first remote, read straight from `.git/config`; **absent** for a
+  project without one.
+- `file` is the focused editor's path relative to `root`, `line` / `col` its
+  1-based cursor; all three are **absent** while no editor is focused, or
+  while the focused buffer's file lies outside the root.
+- `link` is a ready-to-send `ike://open?…` URL for the same location (the
+  remote when there is one, else the project, plus `file:line`) — a client
+  can hand it to another IKE, or to `open`, unchanged.
+
+The answer comes from a snapshot the update loop refreshes after every
+message, so the reply is immediate and never reaches into the running UI.
+`status` is **guarded**: an unpaired asker gets `unauthorized` and — unlike
+`open` — **no** pairing popup appears; a request answered while no project is
+resolvable is `unavailable`.
+
+Typical uses: label the device in a client's list, offer "open this file in
+the project you are already in", or decide whether an `open` would switch
+projects.
+
 ## Worked examples
 
 Pair and open with `nc` (macOS/BSD `nc` needs the sleeps to keep the
@@ -247,6 +295,11 @@ connection open for the answers):
 # 3. from now on
 (printf '{"cmd":"open","token":"rLdRwN…","project":"ike","file":"README.md:1","tool":"terminal"}\n'; sleep 1) | nc 192.168.1.20 4530
 #    → {"type":"ok","link":"ike://open?file=README.md%3A1&project=ike&tool=terminal",…}
+# 4. ask what IKE is showing
+(printf '{"cmd":"status","token":"rLdRwN…"}\n'; sleep 1) | nc 192.168.1.20 4530
+#    → {"type":"status","project":"ike","root":"/Users/dev/Development/ike",
+#       "remote":"github.com/truedaerk/ike","file":"internal/app/app.go","line":4211,"col":3,
+#       "link":"ike://open?file=internal%2Fapp%2Fapp.go%3A4211&remote=https%3A%2F%2Fgithub.com%2Ftruedaerk%2Fike"}
 ```
 
 A minimal Python client that pairs interactively and stores the token:
@@ -302,7 +355,14 @@ with socket.create_connection((HOST, PORT)) as s:
   re-parsed by the strict grammar; it can switch to a *known* project, open
   a file *inside* it, show a tool window — and at most pre-fill the clone
   dialog, which still needs the user's confirmation. It cannot run commands,
-  write files or read anything back.
+  write files or read buffer contents.
+- **`status` reads back exactly what a link carries** (#2529) — the project
+  name, the focused file's project-relative path, the cursor, the git remote
+  — plus one genuinely new datum: `root`, the absolute path of the open
+  project, which leaks the user's directory layout. That is acceptable only
+  because the asker is *paired*: `status` needs a valid token, never starts
+  pairing itself, and reports nothing else — no buffer contents, no file
+  listings, no environment.
 - **Input is capped**: 16 KiB lines, idle and connection limits, JSON only —
   garbage is answered with `bad_request` and never reaches the IDE.
 
@@ -319,9 +379,11 @@ with socket.create_connection((HOST, PORT)) as s:
 - `internal/netlink/tokens.go` — `Store`: `Issue`, `Verify` (constant-time
   over every hash), `Revoke`, `RevokeAll`, atomic 0600 JSON file.
 - `internal/netlink/protocol.go` — `Request` / `Response`, error codes,
-  `LinkFromRequest` (parts → URL → strict parse).
+  `LinkFromRequest` (parts → URL → strict parse), `Status` /
+  `statusResponse` / `LinkFromStatus` (snapshot → `ike://open` URL).
 - `internal/netlink/server.go` — `Serve(Options)`: accept loop, per-connection
-  request loop with caps and deadlines, `dispatch`, `pair`.
+  request loop with caps and deadlines, `dispatch`, `pair`; `Options.State`
+  is the IDE's status getter, called on the connection goroutine.
 - `internal/mdns` — the mDNS/DNS-SD responder (#2522): `Announce(Service)`
   joins the groups and serves until `Close`; `Records`, `Respond` and
   `Announcement` are the pure core (record set, query answering, the
@@ -335,7 +397,9 @@ with socket.create_connection((HOST, PORT)) as s:
   two groups parted by a middle dot; on a narrow budget one bold
   `4 8 1 · 9 3 6` line; `renderNetCountdown` bar ticking once a second,
   generation-guarded), `esc` → `Cancel`, the
-  `network.forgetClients` command. Events reach the Update loop through
+  `network.forgetClients` command, and the `status` snapshot
+  (`netStatusHolder` / `netState`, refreshed by `refreshNetStatus` at the end
+  of every settled `Update` pass, the git remote cached per root). Events reach the Update loop through
   `host.Send`; accepted links arrive as `DeepLinkMsg`.
 - Settings page **Network Links** (`internal/settings/schema.go`), config
   `Network` struct with `NetworkBindError` shared by validator and form.
