@@ -2,8 +2,8 @@
 // classic "code looks identical but does not compile / string comparison
 // fails" trap. It serves two consumers. The editor's render loop asks
 // Placeholder for a one-cell stand-in so an invisible rune never draws as
-// nothing (and never desyncs the one-rune-one-cell mapping by reaching the
-// terminal as a zero-width glyph). The highlight pass asks Notes for
+// nothing (and never desyncs the column-to-cell mapping by reaching the
+// terminal as a zero-width glyph outside a grapheme cluster). The highlight pass asks Notes for
 // diagnostics — invisible characters, bidi controls (the Trojan-Source attack
 // class), and mixed-script identifiers hiding ASCII look-alikes — so the
 // gutter, underline and Problems flow list every occurrence.
@@ -35,9 +35,9 @@ const (
 
 // invisible describes one invisible/format rune: its Unicode name, the
 // one-cell placeholder glyph the editor renders, the note severity and the
-// message class. Glyphs must measure one display cell — the render loop's
-// one-rune-one-cell invariant (see internal/editor/ansiescape.go) depends on
-// it, and the editor's tests assert it.
+// message class. Glyphs must measure one display cell — the render loop's cell
+// layout (internal/editor/cells.go) budgets exactly one cell for a rune it
+// replaces, and the editor's tests assert it.
 type invisible struct {
 	name  string
 	glyph string
@@ -129,7 +129,7 @@ func invisibleNotes(lineNo int, runes []rune) []lang.Note {
 			end++
 		}
 		sev := iv.sev
-		if (runes[col] == 0x200C || runes[col] == 0x200D) && joiningContext(runes, col, end) {
+		if (runes[col] == 0x200C || runes[col] == 0x200D) && JoiningContext(runes, col, end) {
 			sev = lang.NoteInfo
 		}
 		label := "invisible character"
@@ -149,9 +149,12 @@ func invisibleNotes(lineNo int, runes []rune) []lang.Note {
 	return notes
 }
 
-// joiningContext reports whether the run [start, end) sits between two
-// non-ASCII runes — the shape joiner/non-joiner typography actually uses.
-func joiningContext(runes []rune, start, end int) bool {
+// JoiningContext reports whether the run [start, end) sits between two
+// non-ASCII runes — the shape joiner/non-joiner typography actually uses
+// (Persian ZWNJ, emoji ZWJ sequences). The editor's cell layout (#2526) asks
+// it too: a joiner in this context stays inside its grapheme cluster and
+// renders joined, one anywhere else is torn out and drawn as its placeholder.
+func JoiningContext(runes []rune, start, end int) bool {
 	return start > 0 && runes[start-1] >= 0x80 && end < len(runes) && runes[end] >= 0x80
 }
 

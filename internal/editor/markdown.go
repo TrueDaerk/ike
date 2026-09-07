@@ -263,18 +263,20 @@ func (m *Model) toggleMarkdownRendering() {
 	m.mdRenderSet = true
 }
 
-// concealPrefix returns the display-cell prefix sums of line under its active
-// conceal ranges (#1752): entry i is the cell offset of buffer column i from
-// the line start, with a hidden column contributing nothing, a stand-in range
-// its replacement's cells once at the range start, and a tab tabWidth cells.
-// It returns nil when the line carries no conceal ranges — those lines scroll
-// in raw rune columns, unchanged.
-func (m Model) concealPrefix(line int) []int {
+// displayPrefix returns the display-cell prefix sums of line (#1752/#2526):
+// entry i is the cell offset of buffer column i from the line start, with a
+// concealed column contributing nothing, a stand-in range its replacement's
+// cells once at the range start, a tab tabWidth cells, a wide glyph two and a
+// column absorbed into a grapheme cluster none (cells.go). It returns nil when
+// the line has neither conceal ranges nor a cell layout of its own — those
+// lines scroll and wrap in raw rune columns, unchanged.
+func (m Model) displayPrefix(line int) []int {
 	conceals := m.lineConcealRanges(line)
-	if len(conceals) == 0 {
+	runes := []rune(m.buf.Line(line))
+	cw := m.lineCells(runes)
+	if len(conceals) == 0 && cw == nil {
 		return nil
 	}
-	runes := []rune(m.buf.Line(line))
 	prefix := make([]int, len(runes)+1)
 	for c, disp := 0, 0; c < len(runes); c++ {
 		switch cr, ok := rangeAt(conceals, c); {
@@ -282,10 +284,8 @@ func (m Model) concealPrefix(line int) []int {
 			if cr.repl != "" && c == cr.start {
 				disp += lipgloss.Width(cr.repl)
 			}
-		case runes[c] == '\t':
-			disp += m.tabWidth
 		default:
-			disp++
+			disp += cw.at(runes, c, m.tabWidth)
 		}
 		prefix[c+1] = disp
 	}
@@ -293,7 +293,7 @@ func (m Model) concealPrefix(line int) []int {
 }
 
 // concealDisplayColAt maps a buffer column to its display cell through a
-// prefix built by [Model.concealPrefix]. Columns past the line end map 1:1 —
+// prefix built by [Model.displayPrefix]. Columns past the line end map 1:1 —
 // everything there is one-cell padding.
 func concealDisplayColAt(prefix []int, col int) int {
 	if col < 0 {

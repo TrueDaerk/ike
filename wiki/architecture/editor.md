@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-09-04T13:00:00Z
+timestamp: 2026-09-07T12:00:00Z
 ---
 
 # Editor
@@ -67,6 +67,63 @@ diagnostic/git colouring. A single-cell sign column means a line that is both
 a test and an overriding method shows only the test marker. A plain gutter
 click still toggles the breakpoint on every line; ctrl/cmd+click on a marker
 line runs that test (see /architecture/run-configurations.md).
+
+## Cell layout — wide glyphs & grapheme clusters (#2526)
+
+The render loop, the mouse map, overlay anchoring and soft wrap used to share
+one assumption: **one buffer rune is one display cell** (tabs aside). A terminal
+disagrees for anything wider or narrower than a rune — an emoji or CJK glyph
+takes two cells, a combining mark none, and an emoji ZWJ sequence such as
+`🤷🏼‍♂️` (five runes: base, skin tone, ZWJ, `♂`, VS16) is one glyph. Under the
+old rule every wide glyph shifted the rest of the line one column right, the
+skin tone rendered as a lone swatch, the joiner as a `∅` placeholder and the
+`♂` on its own — even in terminals that draw the joined glyph perfectly.
+
+`cells.go` replaces the assumption with a **per-line cell layout**
+(`Model.lineCells` → `cellWidths`): a width table with one entry per rune
+column, computed from grapheme clusters via `ansi.FirstGraphemeCluster` with
+`ansi.GraphemeWidth` — the same walk the terminal pane's cursor overlay uses
+(#1865), so editor and terminal agree on every width. The head column of a
+cluster carries the cluster's whole width; the columns it absorbs carry `0`
+and render nothing. Pure-ASCII lines take a fast path and return `nil`, which
+every accessor reads as one cell per rune, so the common case costs nothing.
+
+Rules the table encodes:
+
+- A **single rune** is one cell, or its own width when wide (CJK, a lone emoji).
+  A lone combining mark (nothing to combine with) still gets a cell.
+- A **clean multi-rune cluster** — no control rune, no unihint placeholder rune
+  except a ZWJ/ZWNJ in a legitimate joining context (`unihint.JoiningContext`,
+  between two non-ASCII runes) — is one unit at its grapheme width (min 1).
+- A **dirty cluster** falls apart into single-rune cells, so a stray joiner
+  after an ASCII letter still shows as `∅` with its #1654 note, and control
+  bytes keep their #1469 glyphs. The security rendering never relaxes.
+
+Consumers all walk the same table:
+
+- `renderSpanUncached` skips absorbed columns and, at a head column, emits
+  the whole cluster string as one `cell` budgeted at its width. Cursor, carets
+  (`caretOnRange`) and the selection are tested against the cluster's column
+  range, so a caret parked on an absorbed column (h/l still step by rune)
+  highlights the glyph it belongs to; the cursor on a wide glyph covers both
+  cells, never a split (the first-cell-only highlight stays reserved for tabs).
+  A wide glyph straddling the right edge yields to blanks like a clipped tab.
+- `displayClickCol` lets the head consume the cluster's width and absorbed
+  columns nothing, so a click inside a glyph lands on its first rune and a
+  click after it on the clicked character.
+- `DisplayOffset` snaps the column to its cluster head (`cellWidths.head`),
+  then sums cell widths — overlays and the hscroll marks anchor on what was
+  drawn.
+- `displayPrefix` (formerly `concealPrefix`) folds the layout into the
+  per-column prefix sums that `concealScrollFix` (#1752) and
+  `viewport.WrapSegmentsDisplay` (#1756) consume, so horizontal follow-scroll
+  and soft wrap budget wide glyphs at two cells and never break inside a
+  cluster. It returns `nil` only for lines with neither conceal ranges nor a
+  layout of their own.
+
+Cursor *motion* is untouched: `h`/`l` and word motions step by rune, so the
+caret can sit on an absorbed column; visually it stays on the same glyph.
+Cluster-aware motion is a possible follow-up, not part of this change.
 
 ## Sub-packages
 
@@ -333,8 +390,9 @@ line runs that test (see /architecture/run-configurations.md).
   `editor/ansiescape.go`): a raw C0 control or DEL in the buffer (a log file
   with colour escapes) never reaches the terminal — each renders as its
   one-cell Unicode Control Pictures glyph (`␛` for ESC, dimmed with the
-  `Whitespace` slot), so one buffer rune stays one display cell and click
-  mapping, caret and selection stay aligned; tab keeps its expansion. SGR
+  `Whitespace` slot), so a control rune stays one display cell in the cell
+  layout (#2526) and click mapping, caret and selection stay aligned; tab
+  keeps its expansion. SGR
   sequences (`ESC [ … m`) are additionally *interpreted*, per line: the text
   they govern renders with the mapped colour/attributes (basic/bright/256
   palette indices and truecolor) through the normal styling pipeline — the
@@ -1908,21 +1966,23 @@ attributes in `styleAt`):
   outside the sv table path, but the window it opens is measured in display
   cells — and a stand-in rarely has its source's width. `Model.scroll()`
   therefore hands the offset to `concealScrollFix`, which redoes the follow
-  decision through `concealPrefix` (per-column display-cell prefix sums of the
-  line's active conceal ranges): both the caret and the current offset convert
+  decision through `displayPrefix` (per-column display-cell prefix sums of the
+  line's active conceal ranges and, since #2526, its wide glyphs and grapheme
+  clusters): both the caret and the current offset convert
   to display cells, and the smallest offset keeping the caret inside the scroll
   width (the text width, less the scrollbar's column — #1827) wins. Restarting from the pre-`view.Scroll` offset keeps the raw
   comparison from leaving a scroll of its own behind, so a mask *wider* than
   the value scrolls when the caret visually reaches the right edge and a
   *narrower* one never over-scrolls. An offset landing inside a stand-in snaps
   past the range — `renderSpan` emits a replacement only at its range start, so
-  none of it would render from there. Lines without conceal ranges keep the
-  plain rune-column result.
+  none of it would render from there. Lines without conceal ranges or a cell
+  layout of their own keep the plain rune-column result.
 - **Conceal-aware soft wrap** (#1756): under soft wrap the same distortion
   would move to the wrap points — `wrapSegs` used to split on raw rune columns,
   so a stand-in wider than its source overflowed the visual row and a narrower
-  one broke rows early. On a line carrying conceal ranges `wrapSegs` now hands
-  the `concealPrefix` sums to `viewport.WrapSegmentsDisplay`, which budgets
+  one broke rows early. On a line carrying conceal ranges (or wide glyphs /
+  grapheme clusters, #2526) `wrapSegs` now hands
+  the `displayPrefix` sums to `viewport.WrapSegmentsDisplay`, which budgets
   each column's display cells (a stand-in its replacement's width at the range
   start, hidden columns nothing) instead of one cell per rune. Zero-width
   columns never start a row, so a break only lands where something renders and
@@ -3012,8 +3072,12 @@ pure-ASCII buffers.
 **Placeholders** (`unihint.Placeholder`, hooked into `renderSpanUncached`'s
 rune switch next to the #1469 control glyphs): every invisible/format rune
 draws as a one-cell glyph in the theme's `Warning` colour, so nothing renders
-as nothing — and no zero-width rune reaches the terminal raw, which would
-desync the one-rune-one-cell mapping exactly like a raw control byte.
+as nothing — and no zero-width rune reaches the terminal raw outside a grapheme
+cluster, which would desync the column-to-cell mapping exactly like a raw
+control byte. The one exception is a ZWJ/ZWNJ inside a legitimate joining
+context (`unihint.JoiningContext`): the cell layout (#2526) keeps it inside its
+grapheme cluster so emoji sequences and Persian text render joined; a stray
+joiner still falls back to the placeholder.
 
 | Runes | Glyph |
 | --- | --- |
@@ -3084,7 +3148,7 @@ every other per-span computation:
   parser.
 
 The emission shape is the #1469 lesson applied: the sequences are zero-width
-— one buffer rune stays one display cell — so width budgeting, cursor
+— they add nothing to a column's cell width — so width budgeting, cursor
 positioning, `DisplayOffset` and click mapping need no changes at all. Each
 cell carries its *own* complete open/close pair rather than one pair per run:
 a later splice of the rendered row (an overlay float truncating with

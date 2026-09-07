@@ -32,7 +32,7 @@ func standInWrapped(t *testing.T, repl string) Model {
 // segDisplayWidth measures segment si of line in display cells through the
 // conceal expansion — the assertion-side mirror of what the row renders.
 func segDisplayWidth(m Model, line int, segs []int, si int) int {
-	prefix := m.concealPrefix(line)
+	prefix := m.displayPrefix(line)
 	end := viewport.SegmentEnd(segs, si, len([]rune(m.buf.Line(line))))
 	return concealDisplayColAt(prefix, end) - concealDisplayColAt(prefix, segs[si])
 }
