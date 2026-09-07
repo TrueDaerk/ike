@@ -361,6 +361,7 @@ func (m Model) displayClickCol(line, from, offset int) int {
 	}
 	runes := []rune(m.buf.Line(line))
 	conceals := m.lineConcealRanges(line)
+	cw := m.lineCells(runes)
 	col := from
 	for ; col < len(runes); col++ {
 		if cr, ok := rangeAt(conceals, col); ok {
@@ -400,10 +401,10 @@ func (m Model) displayClickCol(line, from, offset int) int {
 			}
 			continue
 		}
-		cells := 1
-		if runes[col] == '\t' {
-			cells = m.tabWidth
-		}
+		// A cluster's cells all belong to its head column (#2526): the head
+		// consumes the whole width, the absorbed columns consume nothing, so
+		// a click inside a wide glyph lands on the glyph's first rune.
+		cells := cw.at(runes, col, m.tabWidth)
 		if offset < cells {
 			return col
 		}
@@ -1041,8 +1042,8 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	// Invisible/deceptive Unicode (#1654): zero-width characters, NBSP, the
 	// soft hyphen and every bidi control render as a one-cell warn-coloured
 	// placeholder — the editor never draws a character as nothing, and a
-	// zero-width rune reaching the terminal raw would desync the
-	// one-rune-one-cell mapping exactly like a raw control byte (#1469).
+	// zero-width rune reaching the terminal raw outside a grapheme cluster
+	// would desync the column-to-cell mapping like a raw control byte (#1469).
 	invisStyle := lipgloss.NewStyle().Foreground(m.theme().Warning)
 	var sgrSpans []sgrSpan
 	if hasCtrlRune(runes) {
@@ -1057,17 +1058,17 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 		}
 		return false
 	}
+	// Cell layout (#2526, cells.go): the display width of every column —
+	// wide glyphs take two cells, the columns a grapheme cluster absorbs take
+	// none. The loop, the click map and DisplayOffset all read this table.
+	cw := m.lineCells(runes)
 	startCells := 0
 	if left != from || padSkip > 0 {
 		// sv display slice (#1724): from already is the display width shed.
 		startCells = from
 	} else {
 		for c := 0; c < from && c < len(runes); c++ {
-			if runes[c] == '\t' {
-				startCells += m.tabWidth
-			} else {
-				startCells++
-			}
+			startCells += cw.at(runes, c, m.tabWidth)
 		}
 	}
 
@@ -1083,9 +1084,18 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 		if disp >= width {
 			break
 		}
-		cursorHere := isCursorLine && col == m.cursor.Col
-		caretHere := m.focused && m.caretOnLine(line, col)
-		selected := hasSel && col >= selStart && col <= selEnd
+		if col < len(runes) && cw.at(runes, col, m.tabWidth) == 0 {
+			// A column absorbed into the cluster before it (#2526): the head
+			// column drew the whole glyph and carried every overlay for it.
+			continue
+		}
+		// The cluster this column heads: [col, end). Cursor, carets and the
+		// selection are tested against the whole range, since the caret may
+		// sit on an absorbed column and a selection may start inside one.
+		end := cw.clusterEnd(runes, col)
+		cursorHere := isCursorLine && col <= m.cursor.Col && m.cursor.Col < end
+		caretHere := m.focused && m.caretOnRange(line, col, end)
+		selected := hasSel && end-1 >= selStart && col <= selEnd
 		var leapRune rune
 		leapHere, leapMatch := false, false
 		if leapActive {
@@ -1136,11 +1146,7 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 						disp += w
 					}
 				}
-				if runes[col] == '\t' {
-					contentCells += m.tabWidth
-				} else {
-					contentCells++
-				}
+				contentCells += cw.at(runes, col, m.tabWidth)
 				continue
 			}
 		}
@@ -1155,11 +1161,13 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 		}
 
 		cell, cells := " ", 1
+		isTab := false
 		var overlay *lipgloss.Style // whitespace/guide foreground for this cell (#64)
 		abs := startCells + contentCells
 		if col < len(runes) {
 			switch r := runes[col]; {
 			case r == '\t':
+				isTab = true
 				cell, cells = strings.Repeat(" ", m.tabWidth), m.tabWidth
 				if m.wsVisible(col, trailStart) {
 					cell = "→" + strings.Repeat(" ", cells-1)
@@ -1180,18 +1188,25 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 				// click mapping and caret rendering stay aligned.
 				cell = ctrlGlyph(r)
 				overlay = &ctrlStyle
-			default:
+			case end == col+1:
 				if g, ok := unihint.Placeholder(r); ok {
 					// Invisible/format rune (#1654): the one-cell placeholder,
 					// never the raw (zero-width) rune.
 					cell = g
 					overlay = &invisStyle
 				} else {
-					cell = string(r)
+					// A lone rune, possibly double-width (#2526).
+					cell, cells = string(r), cw.at(runes, col, m.tabWidth)
 				}
+			default:
+				// A grapheme cluster (#2526): the whole sequence — base, skin
+				// tone, joiners, combining marks — goes to the terminal as one
+				// string, budgeted at the cluster's width. cleanCluster already
+				// kept placeholder runes out of here.
+				cell, cells = string(runes[col:end]), cw.at(runes, col, m.tabWidth)
 			}
 		}
-		if disp+cells > width { // clamp a tab straddling the right edge
+		if disp+cells > width { // clamp a tab or wide glyph straddling the right edge
 			cells = width - disp
 			cell = strings.Repeat(" ", cells)
 			overlay = nil
@@ -1247,14 +1262,15 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 			if cells > 1 {
 				b.WriteString(strings.Repeat(" ", cells-1))
 			}
-		case cursorHere && cells > 1:
+		case cursorHere && isTab && cells > 1:
 			// Cursor on a tab: highlight only the first cell (which may carry
-			// a whitespace/guide glyph), leave the rest plain.
+			// a whitespace/guide glyph), leave the rest plain. A wide glyph
+			// (#2526) instead highlights whole — it is one glyph, both cells.
 			b.WriteString(cursorStyle.Render(string([]rune(cell)[0])))
 			b.WriteString(strings.Repeat(" ", cells-1))
 		case cursorHere:
 			b.WriteString(cursorStyle.Render(cell))
-		case caretHere && cells > 1:
+		case caretHere && isTab && cells > 1:
 			b.WriteString(caretStyle.Render(string([]rune(cell)[0])))
 			b.WriteString(strings.Repeat(" ", cells-1))
 		case caretHere:
@@ -1465,6 +1481,9 @@ func (m Model) DisplayOffset(line, col int) int {
 		return m.svDisplayCol(line, col) - from
 	}
 	conceals := m.lineConcealRanges(line)
+	cw := m.lineCells(runes)
+	// A caret on an absorbed column anchors on the glyph it belongs to (#2526).
+	col = cw.head(runes, col)
 	disp := 0
 	for c := from; c < col; c++ {
 		if cr, ok := rangeAt(conceals, c); ok {
@@ -1475,11 +1494,10 @@ func (m Model) DisplayOffset(line, col int) int {
 			}
 			continue
 		}
-		if c < len(runes) && runes[c] == '\t' {
-			disp += m.tabWidth
-		} else {
-			disp++
-		}
+		// Cell layout (#2526): a wide glyph counts two, a column absorbed
+		// into a cluster none — so a caret on an absorbed column anchors on
+		// the glyph it belongs to.
+		disp += cw.at(runes, c, m.tabWidth)
 	}
 	for _, h := range m.lineInlayHints(line) {
 		// A hint anchored exactly at col renders before that cell, so it

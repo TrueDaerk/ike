@@ -30,7 +30,7 @@ func TestWrapSegments(t *testing.T) {
 }
 
 // prefixFor builds display-cell prefix sums from per-column widths — the
-// shape the editor's concealPrefix produces (#1756).
+// shape the editor's displayPrefix produces (#1756).
 func prefixFor(widths ...int) []int {
 	prefix := make([]int, len(widths)+1)
 	for i, w := range widths {

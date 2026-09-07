@@ -123,6 +123,17 @@ func (m Model) caretOnLine(line, col int) bool {
 	return false
 }
 
+// caretOnRange reports whether a secondary caret sits on any column of
+// [start, end) of line — the cluster a display cell covers (#2526).
+func (m Model) caretOnRange(line, start, end int) bool {
+	for _, c := range m.carets {
+		if c.pos.Line == line && c.pos.Col >= start && c.pos.Col < end {
+			return true
+		}
+	}
+	return false
+}
+
 // bufSize returns the buffer length in caret-offset space: runes plus one per
 // line break.
 func (m Model) bufSize() int {

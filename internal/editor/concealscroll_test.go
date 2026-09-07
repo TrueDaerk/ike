@@ -30,7 +30,7 @@ func standInScroll(t *testing.T, repl string) Model {
 // displayCol is the assertion-side mirror of the expansion: the display cell
 // of a buffer column on the caret's line.
 func displayCol(m Model, col int) int {
-	return concealDisplayColAt(m.concealPrefix(m.cursor.Line), col)
+	return concealDisplayColAt(m.displayPrefix(m.cursor.Line), col)
 }
 
 // TestConcealScrollWideStandInFollowsRight: a mask wider than the value pushes

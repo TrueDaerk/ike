@@ -1,5 +1,20 @@
 # Log
 
+## 2026-09-07 (editor: cell layout for wide glyphs & grapheme clusters, #2526)
+
+- **Emoji and wide glyphs render at their real width**: the editor's render
+  loop, click map (`displayClickCol`), overlay anchoring (`DisplayOffset`),
+  horizontal follow-scroll and soft wrap now share a per-line **cell layout**
+  (`internal/editor/cells.go`) computed from grapheme clusters instead of the
+  one-rune-one-cell assumption. An emoji ZWJ sequence such as `🤷🏼‍♂️` reaches
+  the terminal as one string budgeted at two cells — no more lone skin-tone
+  swatch, `∅` joiner placeholder or detached `♂` — CJK text no longer shifts
+  what follows it, the cursor on a wide glyph covers the whole glyph, and a
+  click after one lands on the clicked character. A stray joiner outside an
+  emoji/joining context (`unihint.JoiningContext`, now exported) still shows
+  its `∅` placeholder and #1654 note. `concealPrefix` became `displayPrefix`.
+  Pure-ASCII lines take a nil fast path and render byte-for-byte as before.
+
 ## 2026-09-05 (network links: pairing code is a six-digit PIN)
 
 - **Pairing PIN replaces the card-suit code**: the popup now shows a

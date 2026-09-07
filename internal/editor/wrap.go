@@ -15,10 +15,11 @@ import (
 // toggles the palette commands flip.
 
 // wrapSegs returns the wrap segments of line at the current text width. On a
-// line carrying conceal ranges the rows break on the display cells of the
-// concealed expansion (#1756) — a stand-in budgets its replacement's width,
-// hidden columns nothing — via the same prefix sums the unwrapped path scrolls
-// by (#1752). Lines without ranges wrap on raw rune columns, unchanged.
+// line carrying conceal ranges (#1756) or wide glyphs / grapheme clusters
+// (#2526) the rows break on display cells — a stand-in budgets its
+// replacement's width, hidden and absorbed columns nothing, an emoji two —
+// via the same prefix sums the unwrapped path scrolls by (#1752). Other lines
+// wrap on raw rune columns, unchanged.
 //
 // The width is the scroll width, not the raw text width: a segment filling the
 // pane's last column would put its final cell — and a caret on it — under the
@@ -26,7 +27,7 @@ import (
 // the bar is visible (#1827).
 func (m Model) wrapSegs(line int) []int {
 	tw := m.scrollTextWidth()
-	if prefix := m.concealPrefix(line); prefix != nil {
+	if prefix := m.displayPrefix(line); prefix != nil {
 		return viewport.WrapSegmentsDisplay(prefix, tw)
 	}
 	return viewport.WrapSegments([]rune(m.buf.Line(line)), tw, m.tabWidth)

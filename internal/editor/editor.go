@@ -1909,20 +1909,21 @@ func (m Model) scrollTextWidth() int {
 	return w
 }
 
-// concealScrollFix re-derives the horizontal offset on a cursor line carrying
-// conceal ranges (#1752). view.Left stays a buffer rune column there — that is
-// what renderSpan slices from — but the window it opens is measured in display
-// cells, and a stand-in (secret mask #1623, decoded timestamp #1618, …) rarely
-// has its source's width. Comparing raw columns therefore holds the caret
-// visible while it has already run off the right edge (mask wider than the
-// value) or scrolls too eagerly (mask narrower). Both sides are measured
-// through the conceal expansion instead, so the smallest offset that keeps the
-// caret's cell inside the text width wins. Lines without conceal ranges keep
-// view.Scroll's raw-column result untouched; on the others the offset restarts
-// from prev — what it was before view.Scroll ran — so the raw comparison
-// cannot leave a scroll of its own behind.
+// concealScrollFix re-derives the horizontal offset on a cursor line whose
+// columns render at display widths of their own: conceal ranges (#1752) and
+// wide glyphs or grapheme clusters (#2526). view.Left stays a buffer rune
+// column there — that is what renderSpan slices from — but the window it opens
+// is measured in display cells, and a stand-in (secret mask #1623, decoded
+// timestamp #1618, …) rarely has its source's width, nor does an emoji. Comparing
+// raw columns therefore holds the caret visible while it has already run off
+// the right edge (mask wider than the value) or scrolls too eagerly (mask
+// narrower). Both sides are measured through the display expansion instead, so
+// the smallest offset that keeps the caret's cell inside the text width wins.
+// Lines without such columns keep view.Scroll's raw-column result untouched; on
+// the others the offset restarts from prev — what it was before view.Scroll ran
+// — so the raw comparison cannot leave a scroll of its own behind.
 func (m *Model) concealScrollFix(prev int) {
-	prefix := m.concealPrefix(m.cursor.Line)
+	prefix := m.displayPrefix(m.cursor.Line)
 	if prefix == nil {
 		return
 	}
