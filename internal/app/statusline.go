@@ -208,6 +208,16 @@ func fileSegment(_ Model, ed *editor.Model) string {
 	if ed.Stale() {
 		file += " [disk changed]"
 	}
+	if on, _, label := ed.VaultState(); on {
+		// An Ansible Vault document (#2293) holds decrypted plaintext that
+		// re-encrypts on save; the marker (#2528) is the only on-screen sign
+		// of that, so it names the vault-id when the header carried one.
+		if label != "" {
+			file += " [vault: " + label + "]"
+		} else {
+			file += " [vault]"
+		}
+	}
 	return file
 }
 

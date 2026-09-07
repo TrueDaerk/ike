@@ -1,5 +1,13 @@
 # Log
 
+## 2026-09-07 (vault documents announce themselves, #2528)
+
+- **Vault marker**: a decrypted Ansible Vault buffer (#2293) now shows
+  `[vault]` — `[vault: <id>]` with a 1.2 vault-id — in the status line's file
+  segment next to `[+]` / `[disk changed]`, and a 🔒 on its tab between `[RO]`
+  and the dirty dot. Pure display, no setting; "Treat as Vault File" and the
+  shared-document sync flip both markers immediately.
+
 ## 2026-09-07 (editor: cell layout for wide glyphs & grapheme clusters, #2526)
 
 - **Emoji and wide glyphs render at their real width**: the editor's render

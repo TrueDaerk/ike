@@ -51,6 +51,12 @@ const tabPinPrefix = "• "
 // themselves with nothing else.
 const termExitedGlyph = "✗"
 
+// tabVaultGlyph marks the tab of an Ansible Vault document (#2293/#2528): the
+// buffer shows decrypted plaintext that re-encrypts on save, which nothing
+// else in the chrome reveals. Two cells wide; the strip measures labels by
+// display width, so it lays out like any other marker.
+const tabVaultGlyph = "🔒"
+
 // termExitedTitle is the title-row suffix for a finished terminal, "" while
 // the session runs: the marker plus the word (and the exit code when the
 // session recorded one). Pane titles have room for it; tab segments use the
@@ -86,9 +92,9 @@ func (m Model) tabsAlwaysShow() bool {
 }
 
 // tabLabels builds one display label per tab: the file basename, a directory
-// suffix when another tab shares that basename ("main.go — cmd/ike"), a dirty
-// marker (●), a stale marker (!, file changed on disk while dirty, 0140) and
-// a pin prefix (•, #1172) on pinned tabs.
+// suffix when another tab shares that basename ("main.go — cmd/ike"), a vault
+// marker (🔒, #2528), a dirty marker (●), a stale marker (!, file changed on
+// disk while dirty, 0140) and a pin prefix (•, #1172) on pinned tabs.
 func tabLabels(inst *pane.Instance) []string {
 	n := inst.TabCount()
 	names := make([]string, n)
@@ -153,6 +159,9 @@ func tabLabels(inst *pane.Instance) []string {
 		}
 		if ed.ReadOnly() {
 			label += " [RO]" // an archive-entry preview cannot be saved (#1762)
+		}
+		if ed.Vault() {
+			label += " " + tabVaultGlyph // decrypted Ansible Vault document (#2528)
 		}
 		if ed.Dirty() {
 			label += " ●"
