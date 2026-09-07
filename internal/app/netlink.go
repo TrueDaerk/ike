@@ -4,14 +4,17 @@ import (
 	"fmt"
 	"image/color"
 	"net"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/config"
+	"ike/internal/deeplink"
 	"ike/internal/host"
 	"ike/internal/mdns"
 	"ike/internal/netlink"
@@ -26,6 +29,98 @@ import (
 // command. The protocol, the pairing state machine and the token store live
 // in internal/netlink; an accepted link arrives here as a DeepLinkMsg and
 // runs the very same pipeline an OS-delivered ike:// click does.
+
+// netStatus is the snapshot the status command (#2529) answers from. It
+// cannot live on the Model — that is a value, copied on every Update pass
+// and replaced wholesale by a project switch — so the netlink glue owns it
+// package-side, guarded by a mutex: the connection goroutine reads it while
+// the update loop writes it.
+//
+// The git remote is the one part that costs a file read, so it is cached
+// per root and only recomputed when the root changes.
+type netStatusHolder struct {
+	mu         sync.RWMutex
+	s          netlink.Status
+	remoteRoot string // the root Remote was read for ("" = never read)
+}
+
+// netState is the process-wide snapshot the running endpoint reports.
+var netState netStatusHolder
+
+// set stores a snapshot, filling in the remote for the root (from cache
+// unless the root changed).
+func (h *netStatusHolder) set(s netlink.Status) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if s.Root != h.remoteRoot {
+		h.remoteRoot = s.Root
+		h.s.Remote = ""
+		if s.Root != "" {
+			if remotes := deeplink.Remotes(s.Root); len(remotes) > 0 {
+				h.s.Remote = remotes[0]
+			}
+		}
+	}
+	remote := h.s.Remote
+	h.s = s
+	h.s.Remote = remote
+}
+
+// get returns the current snapshot; it is what Options.State hands the
+// server.
+func (h *netStatusHolder) get() netlink.Status {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.s
+}
+
+// refreshNetStatus updates the snapshot from the settled model. It runs at
+// the end of every Update pass while the endpoint is up, so it stays a few
+// string compares: the project root comes from the active workspace (the
+// authoritative source after a switch, #777), the file and cursor from the
+// active editor. Nothing is stored that an ike:// link does not already
+// carry — no buffer contents, no file listings.
+func (m *Model) refreshNetStatus() {
+	if m.nlServer == nil {
+		return
+	}
+	root := ""
+	if ws := m.activeWS(); ws != nil {
+		root = strings.TrimSpace(ws.Root)
+	}
+	if root == "" {
+		root = currentProjectRoot()
+	}
+	st := netlink.Status{Root: root}
+	if root != "" {
+		st.Project = filepath.Base(root)
+	}
+	if ed := m.activeEditor(); ed != nil && ed.HasFile() {
+		if rel, ok := netRelFile(root, ed.Path()); ok {
+			st.File = rel
+			st.Line, st.Col = ed.Cursor()
+		}
+	}
+	cur := netState.get()
+	cur.Remote = st.Remote // derived from the root, not read off the model
+	if st == cur {
+		return // the common case: nothing the snapshot shows moved
+	}
+	netState.set(st)
+}
+
+// netRelFile renders path relative to root, refusing anything outside it —
+// a file opened from elsewhere is no part of the project a link addresses.
+func netRelFile(root, path string) (string, bool) {
+	if root == "" || path == "" {
+		return "", false
+	}
+	rel, err := filepath.Rel(root, path)
+	if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return filepath.ToSlash(rel), true
+}
 
 // NetworkForgetClientsMsg runs network.forgetClients: every paired device
 // loses its token and has to pair again.
@@ -86,6 +181,8 @@ func (m Model) StartNetLink() Model {
 	} else if err := m.startNetDiscovery(config.Get()); err != nil {
 		m.host.Notify(host.Warn, err.Error())
 	}
+	// A client may ask for the status before the first Update pass settles.
+	m.refreshNetStatus()
 	return m
 }
 
@@ -105,6 +202,7 @@ func (m *Model) startNetLink(cfg *config.Config) error {
 		Store:   store,
 		Version: version.Short(),
 		Deliver: func(url string) { h.Send(DeepLinkMsg{URL: url}) },
+		State:   netState.get,
 		Events:  netEvents{h: h},
 	})
 	if err != nil {
@@ -142,7 +240,9 @@ func netService(cfg *config.Config) mdns.Service {
 		Instance: strings.TrimSpace(cfg.Network.Name),
 		Type:     netServiceType,
 		Port:     cfg.Network.Port,
-		TXT:      []string{"v=" + version.Short(), "proto=1", "name=ike"},
+		// proto is the wire-protocol generation: 2 since the status command
+		// (#2529) joined the set a client may count on.
+		TXT: []string{"v=" + version.Short(), "proto=2", "name=ike"},
 	}
 	if ip := net.ParseIP(strings.Trim(strings.TrimSpace(cfg.Network.Bind), "[]")); ip != nil && !ip.IsUnspecified() {
 		svc.IPs = []net.IP{ip}

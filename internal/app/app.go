@@ -4217,6 +4217,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// pass, and a single reconcile against the panes that are actually open
 	// beats hooking every one of those sites.
 	mm.syncDiffWatches()
+	// The network endpoint's status snapshot (#2529) follows the settled
+	// pass: any message may have switched the project or moved the cursor,
+	// and a paired client asks over its own goroutine, which cannot look
+	// into the model. A no-op — a few string compares — while the endpoint
+	// is off or nothing moved.
+	mm.refreshNetStatus()
 	return mm, cmd
 }
 

@@ -39,20 +39,25 @@ func (r *syncRecorder) last() Challenge {
 	return r.issued[len(r.issued)-1]
 }
 
-// testServer starts a loopback server on a free port.
-func testServer(t *testing.T) (*Server, *syncRecorder, *[]string) {
+// testServer starts a loopback server on a free port; each mut may adjust
+// the options before it listens (the status state getter, say).
+func testServer(t *testing.T, mut ...func(*Options)) (*Server, *syncRecorder, *[]string) {
 	t.Helper()
 	rec := &syncRecorder{}
 	var delivered []string
 	var mu sync.Mutex
 	store, _ := OpenStore(filepath.Join(t.TempDir(), "clients.json"))
-	srv, err := Serve(Options{
+	opts := Options{
 		Addr:    "127.0.0.1:0",
 		Store:   store,
 		Version: "test",
 		Events:  rec,
 		Deliver: func(url string) { mu.Lock(); delivered = append(delivered, url); mu.Unlock() },
-	})
+	}
+	for _, f := range mut {
+		f(&opts)
+	}
+	srv, err := Serve(opts)
 	if err != nil {
 		t.Fatal(err)
 	}

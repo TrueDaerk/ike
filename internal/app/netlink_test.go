@@ -373,7 +373,7 @@ func TestNetService(t *testing.T) {
 	if len(svc.IPs) != 1 || !svc.IPs[0].Equal(net.ParseIP("192.168.1.20")) {
 		t.Errorf("a bind to one address must advertise that address: %v", svc.IPs)
 	}
-	if strings.Join(svc.TXT, " ") != "v="+version.Short()+" proto=1 name=ike" {
+	if strings.Join(svc.TXT, " ") != "v="+version.Short()+" proto=2 name=ike" {
 		t.Errorf("TXT %v", svc.TXT)
 	}
 	cfg.Network.Bind = "0.0.0.0"
