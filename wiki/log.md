@@ -21,7 +21,10 @@
   `[vault]` — `[vault: <id>]` with a 1.2 vault-id — in the status line's file
   segment next to `[+]` / `[disk changed]`, and a 🔒 on its tab between `[RO]`
   and the dirty dot. Pure display, no setting; "Treat as Vault File" and the
-  shared-document sync flip both markers immediately.
+  shared-document sync flip both markers immediately. The single-document
+  pane title (drawn instead of the tab bar while a pane holds one tab, the
+  common case) carries the same 🔒 — without it the marker stayed invisible
+  until a second file was open.
 
 ## 2026-09-07 (editor: cell layout for wide glyphs & grapheme clusters, #2526)
 
