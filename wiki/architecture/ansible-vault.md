@@ -4,7 +4,7 @@ title: Ansible Vault Editing
 description: Transparent editing of $ANSIBLE_VAULT; files — decrypted into the buffer on open when a password source is configured, re-encrypted on save so the plaintext never lands on disk, with a "Treat as Vault File" intention for the files the automatic path did not cover.
 resource: internal/ansiblevault
 tags: [architecture, editor, vault, ansible, security, intentions, settings]
-timestamp: 2026-08-28T00:00:00Z
+timestamp: 2026-09-07T14:00:00Z
 ---
 
 # Ansible Vault Editing
@@ -69,7 +69,12 @@ decrypts before the text decode. The password is captured on the document
 (`vaultPass`), so a config change mid-session cannot strand an open buffer;
 the 1.2 label rides along. `diskHash` hashes the **on-disk ciphertext**, not
 the buffer — staleness detection and reconcile compare against what the file
-actually holds.
+actually holds. The document announces itself (#2528): the status line's file
+segment carries `[vault]` — `[vault: <id>]` when the 1.2 header names a vault
+id — and the tab shows a 🔒 before the dirty dot, so the plaintext on screen is
+never mistaken for an ordinary file. Both read `VaultState()` / `Vault()`
+live, so "Treat as Vault File" and a shared-document `SyncMsg` flip them at
+once.
 
 **Save** — `saveAs` is the single write choke point every save flavor funnels
 through (`:w`, save-as, Save All, focus/idle autosave, the format-on-save

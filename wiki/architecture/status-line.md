@@ -4,7 +4,7 @@ title: Status Line Segments
 description: Extensible left/right slot model behind the bottom status bar — mode, file, buffer language, diagnostics, host/LSP status, toolchain interpreter, csv column, json/yaml path, search match counter, notification counter, forge unread badge.
 resource: internal/app/statusline.go
 tags: [architecture, ui, status-line, toolchain, notifications]
-timestamp: 2026-08-28T00:00:00Z
+timestamp: 2026-09-07T14:00:00Z
 ---
 
 # Status Line Segments
@@ -24,7 +24,7 @@ segments.
 |---|---|---|
 | `mode` | editor input mode (`NORMAL`, `INSERT`, …) | never |
 | `macro` | `recording @x` while a macro recording is active (#58) | idle |
-| `file` | project-relative path + `[+]` / `[disk changed]` markers | never (`no file`) |
+| `file` | project-relative path + `[+]` / `[disk changed]` markers, plus `[vault]` / `[vault: <id>]` on a decrypted Ansible Vault document (#2528) | never (`no file`) |
 | `largefile` | large-file degradation badge (#2159): `[large file]` past the base cliff, `[large: <feature> off]` / `[large: N features off]` for per-feature thresholds; clicking opens the detail popup | nothing degraded |
 | `buflang` | chosen buffer language of a file-less buffer, `as Markdown` (#2033, see [Language Registry](/architecture/languages.md)) | the buffer has a file, or no type was chosen |
 | `hint` | empty-editor discovery hint, `? help · shift shift find` (#659); the search chord renders resolver-truth (a remap outside the known defaults shows the live chord) | a file is open, or the terminal is narrower than ~70 columns |

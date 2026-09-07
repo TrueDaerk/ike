@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-09-07T12:00:00Z
+timestamp: 2026-09-07T14:00:00Z
 ---
 
 # Editor
@@ -1822,8 +1822,10 @@ the password captured at decrypt time; persistent undo and crash-recovery
 backups are switched off for such a document. Without a source (or with a
 wrong password) the ciphertext opens as before, with the reason on the ex
 line; the "Treat as Vault File" intention covers the files the automatic path
-missed. The whole concept — format, password precedence, leak surfaces, the
-intention's two branches — lives in [ansible-vault](./ansible-vault.md).
+missed. The status line's file segment shows `[vault]` (or `[vault: <id>]`)
+and the tab a 🔒 while the document is a vault (#2528). The whole concept —
+format, password precedence, leak surfaces, the intention's two branches —
+lives in [ansible-vault](./ansible-vault.md).
 
 ## Shared documents (#142)
 
