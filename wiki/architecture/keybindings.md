@@ -1447,6 +1447,7 @@ JetBrains is:
 | `terminal.popup` | `cmd+alt+t` | fragile | `palette` | live via palette |
 | `terminal.popup.pin` | `cmd+alt+shift+k` | fragile | `palette` | live via palette |
 | `terminal.sendSelection` | `cmd+alt+shift+enter` | fragile | `palette / editor context menu` | live via palette / editor context menu |
+| `terminal.rerunLast` | `alt+shift+r` | fragile | `palette` | live via palette |
 | `terminal.sendSelectionRun` | `cmd+alt+enter` | fragile | `palette / editor context menu` | live via palette / editor context menu |
 | `terminal.toggle` | `alt+f12` | fragile | `palette` | live via palette |
 | `tests.toggle` | `cmd+4` | fragile | `palette / View menu` | live via palette / View menu |

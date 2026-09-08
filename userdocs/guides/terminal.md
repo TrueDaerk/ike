@@ -14,6 +14,7 @@ IKE.
 | ++cmd+w++ | Close the terminal |
 | ++cmd+alt+enter++ | Send the editor selection (or the current line) to a shell and run it |
 | ++cmd+alt+shift+enter++ | Send it without running it |
+| ++alt+shift+r++ | Re-run the last shell command, from anywhere |
 
 For a quick command the **popup terminal** (++cmd+alt+t++) is the everyday
 flow — see below. ++alt+f12++ toggles a docked terminal *pane* instead; note
@@ -84,6 +85,24 @@ already visible leaves the keyboard in the editor, so select → send → keep
 editing is one gesture.
 
 Both commands are also in the editor's right-click menu.
+
+## Re-running the last command
+
+++alt+shift+r++ repeats the previous shell command — it presses Up and Enter
+in the shell for you — from wherever you are, without opening the popup or
+moving the keyboard. The typical loop is edit → ++alt+shift+r++ → look at
+the output, with the popup staying hidden.
+
+It goes to the same shell the send commands would: the popup's focused tab
+when the popup is on screen, otherwise the focused terminal pane, otherwise
+the popup's shell even while the popup is hidden. In that last case the
+statusbar's `popup ●` indicator lights up so you can tell it ran; click it or
+press ++cmd+alt+t++ to look. With no shell around at all, the popup opens
+with a fresh one.
+
+Only a shell sitting at its prompt is typed into. If a program is running in
+it — a build, `vim`, a REPL — nothing is sent and a notice says the shell is
+busy.
 
 ![A terminal pane below the editor, its title bar naming the shell and the working directory, with a command and its output](../screenshots/features/terminal-pane.png)
 

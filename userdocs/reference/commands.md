@@ -277,6 +277,7 @@ bring their own.
 | New Terminal Tab | `terminal.newTab` | `ctrl+t` | — | everywhere |
 | Popup Terminal | `terminal.popup` | `cmd+alt+t` | — | everywhere |
 | Pin Popup Terminal | `terminal.popup.pin` | `cmd+alt+shift+k` | — | everywhere |
+| Re-run Last Shell Command | `terminal.rerunLast` | `alt+shift+r` | — | everywhere |
 | Send Selection to Terminal | `terminal.sendSelection` | `cmd+alt+shift+enter` | — | everywhere |
 | Send Selection to Terminal and Run | `terminal.sendSelectionRun` | `cmd+alt+enter` | — | everywhere |
 | SSH Host… | `terminal.ssh` | — | — | everywhere |

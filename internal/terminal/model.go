@@ -297,6 +297,39 @@ func (m *Model) PasteToShell(text string, submit bool) bool {
 	return true
 }
 
+// AtPrompt reports whether the session's interactive shell sits at its
+// prompt (#1340): a live shell session whose foreground process group is the
+// shell's own, and not on the alternate screen. Command sessions (0350) and
+// exited or absent sessions are never at a prompt.
+func (m Model) AtPrompt() bool {
+	return m.sess != nil && m.sess.Running() && !m.sess.AltScreen() && m.sess.AtPrompt()
+}
+
+// RerunLast re-runs the shell's previous command line (#2543,
+// terminal.rerunLast): an Up key press recalls the last history entry, an
+// Enter press submits it. The keys go through the session's encoder, so a
+// shell in application-cursor mode gets the sequence it expects.
+//
+// Up + Enter rather than a remembered command line: the emulator does not
+// track what the shell last ran (no OSC 133 integration), and the shell's own
+// history is the truthful source anyway — it already holds the line the user
+// wants, edited or not, and a history recall beats a re-typed copy under
+// `setopt histignoredups` and friends.
+//
+// Gated on AtPrompt: with a foreground job (a build, vim, a REPL) owning the
+// terminal the two keys would land in that program, where Up + Enter means
+// whatever it means there. Returns false, sending nothing, when the shell is
+// absent or not at its prompt.
+func (m *Model) RerunLast() bool {
+	if !m.AtPrompt() {
+		return false
+	}
+	m.occupied = true
+	m.sess.SendKey(vt.KeyPressEvent{Code: vt.KeyUp})
+	m.sess.SendKey(vt.KeyPressEvent{Code: vt.KeyEnter})
+	return true
+}
+
 // SessionKey returns the underlying session's routing key ("" for a failed
 // spawn) — output/exit messages carry it.
 func (m Model) SessionKey() string {

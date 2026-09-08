@@ -1,5 +1,17 @@
 # Log
 
+## 2026-09-08 (re-run the last shell command from anywhere, #2543)
+
+- **`terminal.rerunLast`** (`alt+shift+r`, Global) presses Up + Enter in a
+  shell without moving the keyboard: the popup's focused tab when the popup
+  is on screen, else the focused terminal pane, else the popup's shell even
+  while the popup is hidden — the statusbar activity indicator (#2309) is
+  armed so the re-run leaves a trace. With no shell at all the popup opens
+  with a fresh one.
+- **Prompt-gated** with #1340's `Session.AtPrompt`: a shell with a foreground
+  job (or a command session) gets a "shell is busy" toast and nothing typed.
+  Docs: [Integrated Terminal → Commands](/architecture/terminal.md#commands-97).
+
 ## 2026-09-08 (assertions in .http files, #2546)
 
 - **`# @assert` directives** check a response: `status == 200`, `header
