@@ -227,6 +227,18 @@ any entry whose key the typed schema does not expose (no dead keys).
   `files.watch`, `files.auto_reload` (clean|never, #81),
   `files.persistent_undo` (undo survives restarts, #148),
   `files.binary_open` (hex|editor, #2420: where sniffed binaries open).
+- **Project Groups** (0510, #2573) — a custom page holding the
+  `[[project.groups]]` list: `a` adds, enter edits, `d` deletes behind the
+  shared confirm and `o` opens the selected group (`project.group.open`,
+  #2571). Rows read `name · N roots · <first root>`; the add/edit form is a
+  sub-panel with one field for the name and one per root (`+` / `alt+enter`
+  add a row, `-` / `alt+backspace` remove an **empty** one — so `+` and `-`
+  stay typable inside a path). A relative root resolves against the project
+  directory (the clone/new-project rule), `~` expands, and validation runs the
+  data layer's `project.ValidateGroup`, reporting one message per failure
+  (`name already used by "web"`, `root 2: … does not exist — check the path`).
+  Writes always land at **user scope**, with no scope toggle: a group spans
+  projects. See [Project Groups](./project-groups.md).
 - **Backup** — crash recovery on/off (`backup.enable`; disabling purges existing
   snapshots), snapshot debounce (`backup.debounce_ms`), snapshot max age
   (`backup.max_age_days`) (#167, see [crash recovery](./crash-recovery.md)).
@@ -555,7 +567,8 @@ suggestions are the visible `+ Suggestions…` action row). The table became
 code in the 2026-09 overhaul: `canonicalVerbs` in
 `internal/settings/actions.go` maps every letter to its one meaning
 (`a` Add · `d` Delete · `e` Edit raw · `r` Reset · `R` Restart · `g` Refresh
-· `p` Probe · `i` Install/Import · `x` Remove · `n` New · `m` Manage · `u`
+· `p` Probe · `i` Install/Import · `x` Remove · `n` New · `m` Manage · `o`
+Open (act on the row outside the panel, #2573) · `u`
 Unbind · `U` Update/Upgrade · `z` Fold · `s` Scope · `space` Toggle), and
 `TestActionsFollowTheCanonicalTable` fails on a page whose `Actions()` binds a
 letter outside it or with another verb. The migration that made every page

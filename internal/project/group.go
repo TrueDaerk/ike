@@ -243,6 +243,51 @@ func RemoveGroup(opts config.Options, name string) error {
 	return nil
 }
 
+// WriteGroups persists a whole persisted-shape list at user scope after
+// validating every entry — the settings list editor's write path (#2573),
+// which edits the list *as a list*: a rename keeps the group's position, where
+// an UpsertGroup of the new name would append a second entry. An invalid entry
+// leaves the stored list untouched.
+func WriteGroups(opts config.Options, groups []config.ProjectGroup) error {
+	valid := make([]Group, 0, len(groups))
+	for _, cg := range groups {
+		// Validate against the list being written, not the stored one: a
+		// rename must not collide with the entry it replaces.
+		v, err := ValidateGroup(nil, fromConfigGroup(cg))
+		if err != nil {
+			return err
+		}
+		for _, seen := range valid {
+			if strings.EqualFold(seen.Name, v.Name) {
+				return fmt.Errorf("group %q is listed twice — names are unique regardless of case", v.Name)
+			}
+		}
+		valid = append(valid, v)
+	}
+	return writeGroups(opts, valid)
+}
+
+// ValidateGroupRoot resolves one root as typed into the settings form and
+// checks it (#2573): a leading `~` expands, an absolute path stands, and a
+// bare name is a project inside the project directory — the clone/new-project
+// rule (ProjectsDir, `project.directory`). The returned path is absolute and
+// cleaned; the error is project.Validate's, naming what is wrong with it.
+func ValidateGroupRoot(text string) (string, error) {
+	p := strings.TrimSpace(text)
+	if p == "" {
+		return "", fmt.Errorf("project path is empty — enter a directory path")
+	}
+	abs := p
+	if !filepath.IsAbs(p) && p != "~" && !strings.HasPrefix(p, "~"+string(filepath.Separator)) {
+		dir, err := ProjectsDir()
+		if err != nil {
+			return "", err
+		}
+		abs = filepath.Join(dir, p)
+	}
+	return Validate(abs)
+}
+
 // writeGroups persists the whole list through config's typed setter (list
 // semantics: replace) at user scope.
 func writeGroups(opts config.Options, groups []Group) error {

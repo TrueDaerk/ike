@@ -1623,6 +1623,16 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		Title:  "File Associations",
 		Custom: settings.NewAssocPage(m.cfgOpts),
 	})
+	// The [[project.groups]] list editor (0510, #2573) sits next to the file
+	// and session settings; its "o" verb asks the root model to open a group.
+	groupsPage := settings.NewProjectGroupsPage(m.cfgOpts, projectGroupOps(m.cfgOpts))
+	groupsPage.SetGroupOpen(func(name string) tea.Cmd {
+		return func() tea.Msg { return OpenProjectGroupMsg{Name: name} }
+	})
+	pages = settings.InsertAfter(pages, "Files & Session", settings.Page{
+		Title:  settings.ProjectGroupsPageTitle,
+		Custom: groupsPage,
+	})
 	keymapPage := settings.NewKeymapPage(m.cfgOpts, func(id string) bool {
 		_, ok := reg.Command(id)
 		return ok
@@ -4958,6 +4968,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ShowKeymapHelpMsg:
 		// palette.keymapHelp (f1, cmd+k cmd+s / palette): the cheatsheet overlay.
 		m.openHelp()
+		return m, nil
+
+	case OpenProjectGroupMsg:
+		// The settings page's "o" verb (0510, #2573). project.group.open —
+		// the chain that parks every member and lands on the first — arrives
+		// with #2571; until then the request says so instead of half-opening
+		// the group.
+		m.host.Notify(host.Info, "opening the group "+msg.Name+" is not available yet — project.group.open lands with #2571")
 		return m, nil
 
 	case KeymapDoctorMsg:

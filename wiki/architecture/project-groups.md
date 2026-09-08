@@ -102,13 +102,41 @@ deduped.
 
 ## Settings UI
 
-- `[[project.groups]]` is edited on the **Project Groups** page
-  (`internal/settings/projectgroups_page.go`, #2573), the `tools_page.go` list-editor shape, writing
-  at user scope only.
-- `project.active_group` is **read-only session state, not a form field**: IKE writes it
-  (`project.group.open` / `project.group.close`) and drops it at startup when the process root is
-  not a member. It is listed in the settings coverage guard's `internalKeys`
-  (`internal/settings/coverage_test.go`) with that reason.
+`[[project.groups]]` is edited on the **Project Groups** page
+(`internal/settings/projectgroups_page.go`, #2573), in the rail next to *Files & Session*. It is the
+`tools_page.go` list-editor shape: rows read `name · N roots · <first root>` (compacted), `a` adds,
+enter edits, `d` deletes behind the shared confirm sub-panel and `o` opens the selected group —
+`project.group.open` (#2571), which the app dispatches for the row's name. An empty page says how to
+add the first group.
+
+The add/edit form (`projectgroups_form.go`) is a sub-panel with one `ui.Field` for the **name** and
+one per **root**, because a group's roots are paths and a comma-joined line cannot hold them:
+
+- `+` / `alt+enter` add a root row, `-` / `alt+backspace` remove an **empty** one. Both plain keys
+  act only on an empty row, so `+` and `-` stay typable inside a path (a directory may be named
+  `c++`); `alt+enter` adds from anywhere. Tab cycles every field, and a bracketed paste / Cmd+V
+  lands in the focused one.
+- A root resolves the way a newly created project does: `~` expands, an absolute path stands, and a
+  bare name is a project inside the project directory (`ValidateGroupRoot` → `ProjectsDir`,
+  `project.directory`).
+- Validation reports **one clear message per failure** and keeps the panel open — `name is
+  required`, `name already used by "web"`, `add at least one project root`,
+  `root 2: … does not exist — check the path` — with `ValidateGroup` as the final gate for the
+  remaining rules (path separators, case-collisions, dedupe).
+- Saving writes the **whole list** (`WriteGroups`), so a rename keeps the group's list position
+  where an `UpsertGroup` of the new name would append a second entry. Deleting goes through
+  `RemoveGroup`, which clears the active-group marker with it. Every write is at **user scope**,
+  with no scope toggle, and the normal reload re-shapes the group picker live.
+
+The page reaches the data layer through injected functions (`settings.ProjectGroupOps`, wired in
+`internal/app/projectgroups_settings.go`) rather than an import: `internal/project` imports the
+palette, which imports the registry, which imports `internal/settings`, so importing it back would
+close the cycle.
+
+`project.active_group` is **read-only session state, not a form field**: IKE writes it
+(`project.group.open` / `project.group.close`) and drops it at startup when the process root is not
+a member. It is listed in the settings coverage guard's `internalKeys`
+(`internal/settings/coverage_test.go`) with that reason.
 
 ## See also
 

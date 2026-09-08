@@ -37,7 +37,7 @@ var pageGroups = []pageGroup{
 	}},
 	{"Keymap", []string{"Keymap"}},
 	{"Files & Projects", []string{
-		"Files & Session", "File Associations", "Explorer", "Backup", "Timeline",
+		"Files & Session", "Project Groups", "File Associations", "Explorer", "Backup", "Timeline",
 		"Scratch Files", "Screenshots", "TODO Index",
 	}},
 	{"Languages", []string{
