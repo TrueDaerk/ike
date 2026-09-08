@@ -88,6 +88,9 @@ type Palette struct {
 	// dismissed holds the esc-without-a-pick the host has not taken yet
 	// (#2399, TakeDismissal). Nil means the palette did not just get dismissed.
 	dismissed *Dismissal
+	// picked holds the row activation the host has not taken yet (#2551,
+	// TakePick). Nil means the palette did not just get picked from.
+	picked *Pick
 	// openedAt stamps the current open, so a dismissal can report how long the
 	// box stood (#2408). now is the clock seam tests drive.
 	openedAt time.Time
@@ -585,6 +588,7 @@ func (p *Palette) activate() tea.Cmd {
 		msg = of
 	}
 	p.recordPick(it, false)
+	p.notePick(p.selected, len(p.items))
 	p.Close()
 	if msg == nil {
 		return nil
@@ -616,6 +620,42 @@ type Dismissal struct {
 	QueryLen int
 	Results  int
 	Open     time.Duration
+}
+
+// Pick describes a row activated out of the palette (#2551): the mode that was
+// listing (its prefix rune), how many runes of query body were typed, the
+// 0-based index of the chosen row and how many rows the list held. It is the
+// counterpart of Dismissal and is pulled the same way, in the Update pass that
+// closed the overlay. It carries a *length* and a *position*, never the query
+// and never the picked item's identity: telemetry records structure only, and
+// a picked command's id already travels in the command event that follows.
+type Pick struct {
+	Prefix   rune
+	QueryLen int
+	Rank     int
+	Results  int
+}
+
+// notePick records the activation of the row at rank out of results rows
+// (#2551). It must run before Close drops the per-open state; a palette with
+// no resolvable mode records nothing, like dismiss.
+func (p *Palette) notePick(rank, results int) {
+	m, body := p.mode()
+	if m == nil {
+		return
+	}
+	p.picked = &Pick{Prefix: m.Prefix(), QueryLen: len([]rune(body)), Rank: rank, Results: results}
+}
+
+// TakePick reports and clears a pending row activation (#2551); ok is false
+// when the last Update did not activate a row.
+func (p *Palette) TakePick() (Pick, bool) {
+	if p.picked == nil {
+		return Pick{}, false
+	}
+	d := *p.picked
+	p.picked = nil
+	return d, true
 }
 
 // dismiss closes the palette on esc and records the dismissal (#2399). The
@@ -674,6 +714,8 @@ func (p *Palette) altActivate() tea.Cmd {
 		return p.activate()
 	}
 	msg := it.Alt
+	// An alt activation is a pick too (#2551): same row, same rank.
+	p.notePick(p.selected, len(p.items))
 	p.Close()
 	return func() tea.Msg { return msg }
 }
@@ -704,6 +746,7 @@ func (p *Palette) activateSide() tea.Cmd {
 	it := p.sideItems[p.sideSel]
 	msg := it.Msg
 	p.recordPick(it, true)
+	p.notePick(p.sideSel, len(p.sideItems))
 	p.Close()
 	if msg == nil {
 		return nil
