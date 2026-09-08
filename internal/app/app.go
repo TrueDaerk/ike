@@ -6105,6 +6105,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case IssuesTabMsg:
+		// issues.prevTab / issues.nextTab (left / right, #2537).
+		if p := m.issuesPanel(); p != nil {
+			return m, p.SwitchTabCmd(msg.Delta)
+		}
+		return m, nil
+
 	case ghissues.CopyMsg:
 		// A mouse selection in an Issues detail view (#2374) — the pane asks
 		// the host for the clipboard, like the response and diff viewers.

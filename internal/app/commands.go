@@ -279,6 +279,10 @@ type LSPDoctorCopyMsg struct{}
 // ctrl+down, #2400): walk the issues window's selection.
 type IssuesStepMsg struct{ Delta int }
 
+// IssuesTabMsg runs issues.prevTab / issues.nextTab (left / right, #2537):
+// walk the issues window's two tabs, Issues and Pull Requests.
+type IssuesTabMsg struct{ Delta int }
+
 // HTTPSearchMsg runs http.search (cmd+f / ctrl+f in the response viewer,
 // #2400): open the pane's in-pane search prompt.
 type HTTPSearchMsg struct{}
@@ -738,6 +742,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			paneCommand("issues.copy", "Issues: Copy Issue Reference", "issues", IssuesCopyMsg{}),
 			paneCommand("issues.selectNext", "Issues: Next Issue", "issues", IssuesStepMsg{Delta: 1}),
 			paneCommand("issues.selectPrev", "Issues: Previous Issue", "issues", IssuesStepMsg{Delta: -1}),
+			paneCommand("issues.nextTab", "Issues: Next Tab", "issues", IssuesTabMsg{Delta: 1}),
+			paneCommand("issues.prevTab", "Issues: Previous Tab", "issues", IssuesTabMsg{Delta: -1}),
 			paneCommand("lsp.doctor.copy", "LSP Doctor: Copy Report", "lspdoctor", LSPDoctorCopyMsg{}),
 			paneCommand("http.search", "Search in HTTP Response", "http", HTTPSearchMsg{}),
 			appCommand("terminal.toggle", "Toggle Terminal", TerminalToggleMsg{}),
