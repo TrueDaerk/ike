@@ -295,8 +295,11 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	// project's file paths, so parking it lets a resumed project refeed the
 	// Structure panel, breadcrumbs and sticky scopes from memory instead of
 	// re-asking the language server for every unchanged buffer.
+	// The inline playground parks with the document it queries (#2535): the
+	// document survives the switch in this workspace, so the mode does too.
 	m.activeWS().Aux = wsExtras{dbg: m.dbg, dbgLaunching: m.dbgLaunching, dbgLaunchGen: m.dbgLaunchGen,
-		popup: m.popup, floats: projectFloatTerms(m.floatTerms), docSymbols: m.docSymbols}
+		popup: m.popup, floats: projectFloatTerms(m.floatTerms), docSymbols: m.docSymbols,
+		play: m.parkPlayground()}
 	parkedRoot := m.activeWS().Root
 	m.ws.Park()
 	// Arm the background LSP idle shutdown for the workspace just parked
@@ -356,6 +359,12 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	// history view can label foreign ones), as does the unseen counter.
 	fresh.history = m.history
 	fresh.notifUnseen = m.notifUnseen
+	// The playground's program history and per-file recall are session state
+	// too (#1977, #1982, #2535): one list for the whole run, and the very
+	// object a parked playground's state points at — carrying it is what
+	// keeps that pointer the live list after a resume.
+	fresh.playHistory = m.playHistory
+	fresh.playLastProgram = m.playLastProgram
 	// The all-projects search (#2394) is session state on the same terms: its
 	// scan spans projects, so the service (an in-flight scan keeps streaming
 	// into the same host), the results overlay — the result set outlives the
@@ -434,6 +443,10 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	// never produced events. Reconcile every resumed buffer against disk:
 	// clean buffers reload in place, dirty ones arm the conflict guard.
 	reconcile := sized.reconcileEditors()
+	// A playground resumed with the workspace (#2535) re-drives what the park
+	// interrupted, after the reconcile so a followed file reloaded just now is
+	// re-read too.
+	playResume := sized.resumePlayRun()
 	// A resumed workspace's terminals go live again (#1522): the parked flag
 	// drops and each session with pending output delivers its one owed
 	// repaint. The resumed popup moved into the model (Aux is consumed), so
@@ -546,6 +559,7 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 		imgCmd,
 		capCmd,
 		reconcile,
+		playResume,
 		resync,
 		idleCmd,
 		lspQuietCmd,
