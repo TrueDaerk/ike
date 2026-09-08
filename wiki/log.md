@@ -1,5 +1,23 @@
 # Log
 
+## 2026-09-08 (jq/yq playground history: per user, not per file or session, #2536)
+
+- **The program history's lifetime is now stated and pinned.** The report
+  was a history that read as empty after the source file was overwritten
+  behind the editor. The in-memory list was already the root model's one
+  shared pointer (#1977) and the overwrite path never touched it — the
+  regression tests now say so end to end: an external overwrite, a removal
+  that ends the mode, a reopen on the same or another file, the other
+  dialect, the HTTP response pane.
+- **The list is persisted per user.** `jqplay.History` takes a file
+  (`jqplay.HistoryFile`: `$IKE_CONFIG_DIR/playground-history.json`, else
+  `~/.ike/playground-history.json`); every `enter` and close writes it, a
+  fresh IKE reads it lazily on the first `↑`. User state, not the project's
+  `.ike`, so the objection to persisting half-typed experiments into the
+  project does not apply — and only committed programs are recorded anyway.
+  Missing, malformed or unwritable files degrade to the memory-only list;
+  the zero value never writes.
+
 ## 2026-09-08 (branch issue on the status line, #2544)
 
 - **The issue behind the current branch, on the bar.** Work runs on

@@ -29,7 +29,8 @@ import (
 //     the model, and the incoming project's settings layer may differ, so
 //     the resume re-threads both the way the pane registry's editors are.
 //
-// The history the parked state points at is session state (#1977): it rides
+// The history the parked state points at is the one per-user list (#1977,
+// persisted since #2536): it rides
 // model-to-model with performSwitch, so the pointer stays the one live list.
 
 // parkPlayground detaches the open playground for the workspace's Aux: the
