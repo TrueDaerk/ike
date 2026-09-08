@@ -11,6 +11,7 @@ import (
 	"ike/internal/jqplay"
 	"ike/internal/layout"
 	"ike/internal/plugin"
+	"ike/internal/project"
 	"ike/internal/registry"
 	"ike/internal/settings"
 )
@@ -100,9 +101,9 @@ type OpenSearchMsg struct{}
 type ShowKeymapHelpMsg struct{}
 
 // OpenProjectGroupMsg asks the root model to open a project group by name
-// (0510, #2573): the settings Project Groups page's "o" verb. The open chain
-// itself is project.group.open (#2571) — until it lands the root model
-// reports the request instead of acting on it.
+// (0510): the Settings ▸ Project Groups page's "o" verb (#2573) dispatches
+// it, and it runs the same warm-up chain as a picker pick (#2571,
+// project_group.go).
 type OpenProjectGroupMsg struct{ Name string }
 
 // KeymapDoctorMsg asks the root model to open the keymap doctor (#2080): the
@@ -630,6 +631,9 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("pane.switcher", "Switch Pane Focus", CyclePaneFocusMsg{}),
 			appCommand("pane.focusByIndex", "Focus Pane by Number…", PaneFocusByIndexMsg{}),
 			appCommand("project.goToFile", "Go to File", GoToFileMsg{}),
+			// Open a project group (0510, #2571): the picker over
+			// [[project.groups]]; the root model runs the warm-up chain.
+			appCommand("project.group.open", "Open Project Group…", project.OpenGroupPickerMsg{}),
 			// Revoke every paired network device (#2519). No default chord:
 			// a rare, deliberate act — the palette is its doorway.
 			appCommand("network.forgetClients", "Forget Paired Network Clients", NetworkForgetClientsMsg{}),

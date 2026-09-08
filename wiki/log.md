@@ -1,5 +1,26 @@
 # Log
 
+## 2026-09-08 (project.group.open: group picker, warm-up switch chain, active-group marker, status segment, #2571)
+
+- **`project.group.open`** ("Open Project Group…", `cmd+alt+shift+g` / `ctrl+alt+shift+g`,
+  File menu, #805 terminal allowlist) opens the palette locked to the new group picker
+  (`internal/project/grouppicker.go`: name, `N projects · members` detail, fuzzy on the
+  name, `⦿` on the active group, an inert `no project groups · Settings → Project Groups`
+  empty state). A pick runs the **warm-up chain** (`internal/app/project_group.go`): the
+  members resolved through `ResolveGroupRoots` (missing ones reported once), hops for
+  members N…2 in reverse then member 1, each an ordinary `handleSwitchProject` /
+  `performSwitch` (auto-save gate, history record, seamless resume), the remainder riding
+  every rebuild in the `groupOpening` carry-over; a failed hop is skipped with one
+  notification and the landing is the first available member. The status line's new
+  `group` slot reads `opening web 2/3` meanwhile and `⦿ web/api` afterwards; the landing
+  toast is `group web open · 3 projects` and `project.active_group` is written. The model
+  carries the `activeGroup` marker across every switch and seeds it from the config at
+  startup. `enforceWorkspaceCap` now protects the group being opened before its marker is
+  persisted (`capGroup`, canonical root comparison), so a group larger than
+  `project.max_workspaces` never evicts its own members.
+  Docs: [Project Groups](/architecture/project-groups.md),
+  [Status Line](/architecture/status-line.md), [Keybindings](/architecture/keybindings.md).
+
 ## 2026-09-08 (Settings UI Project Groups page: list editor + name/roots form, #2573)
 
 - **Settings ▸ Files & Projects ▸ Project Groups** edits `[[project.groups]]`

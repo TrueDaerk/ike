@@ -30,12 +30,20 @@ const defaultMaxWorkspaces = 3
 // moment the last is opened. Memory stays bounded by the background LSP idle
 // shutdown (#1521), which applies to parked members unchanged.
 func maxWorkspaces() int {
+	return maxWorkspacesFor(project.ActiveGroup(config.Get()))
+}
+
+// maxWorkspacesFor is maxWorkspaces for an explicit group: the model passes
+// the group it carries (project_group.go capGroup) — the one being opened
+// while the chain runs, or the marker it holds before the write landed — so
+// the protection never waits for the persisted marker.
+func maxWorkspacesFor(g project.Group, ok bool) int {
 	c := config.Get()
 	cap := defaultMaxWorkspaces
 	if c != nil && c.Project.MaxWorkspaces > 0 {
 		cap = c.Project.MaxWorkspaces
 	}
-	if g, ok := project.ActiveGroup(c); ok && len(g.Roots) > cap {
+	if ok && len(g.Roots) > cap {
 		cap = len(g.Roots)
 	}
 	return cap
@@ -44,13 +52,19 @@ func maxWorkspaces() int {
 // activeGroupMembers returns the member roots of the active project group as a
 // set, keyed by the workspace roots the manager uses. Empty without a group.
 func activeGroupMembers() map[string]bool {
-	g, ok := project.ActiveGroup(config.Get())
+	return groupMembers(project.ActiveGroup(config.Get()))
+}
+
+// groupMembers is the member set of an explicit group, keyed by canonical
+// root (symlinks resolved) so it matches the roots os.Getwd hands the
+// manager; nil when there is no group.
+func groupMembers(g project.Group, ok bool) map[string]bool {
 	if !ok {
 		return nil
 	}
 	members := make(map[string]bool, len(g.Roots))
 	for _, r := range g.Roots {
-		members[r] = true
+		members[canonicalRoot(r)] = true
 	}
 	return members
 }
@@ -256,11 +270,12 @@ func (m Model) closeWorkspace(w *workspace.Workspace) tea.Cmd {
 // the busy workspaces go idle. The returned cmd carries the evicted
 // workspaces' close hooks (#825).
 func (m *Model) enforceWorkspaceCap() tea.Cmd {
-	cap := maxWorkspaces()
+	g, ok := m.capGroup()
+	cap := maxWorkspacesFor(g, ok)
 	var cmds []tea.Cmd
 	bg := m.ws.Background()
 	over := len(bg) - cap
-	for _, root := range evictionOrder(bg) {
+	for _, root := range evictionOrderFor(bg, groupMembers(g, ok)) {
 		if over <= 0 {
 			break
 		}
@@ -281,18 +296,23 @@ func (m *Model) enforceWorkspaceCap() tea.Cmd {
 // non-member is dropped before any of them, and a member only goes when the
 // cap is still exceeded after every non-member is gone.
 func evictionOrder(bg []string) []string {
-	members := activeGroupMembers()
+	return evictionOrderFor(bg, activeGroupMembers())
+}
+
+// evictionOrderFor is evictionOrder over an explicit member set (keys are
+// canonical roots, see groupMembers).
+func evictionOrderFor(bg []string, members map[string]bool) []string {
 	if len(members) == 0 {
 		return bg
 	}
 	out := make([]string, 0, len(bg))
 	for _, root := range bg {
-		if !members[root] {
+		if !members[canonicalRoot(root)] {
 			out = append(out, root)
 		}
 	}
 	for _, root := range bg {
-		if members[root] {
+		if members[canonicalRoot(root)] {
 			out = append(out, root)
 		}
 	}

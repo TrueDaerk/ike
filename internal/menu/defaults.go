@@ -48,6 +48,7 @@ func Defaults() []Menu {
 			{Title: "Switch Tab…", Command: "editor.tab.picker"},
 			{Title: "Reopen Closed Tab", Command: "editor.tab.reopenClosed"},
 			{Title: "Switch Project", Command: "project.switch"},
+			{Title: "Open Project Group…", Command: "project.group.open"},
 			{Title: "Close Project", Command: "project.close"},
 			{Title: "Clone Repository…", Command: "project.clone"},
 		}},

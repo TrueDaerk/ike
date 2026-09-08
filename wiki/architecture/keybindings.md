@@ -1418,6 +1418,7 @@ JetBrains is:
 | `project.findInPath` | `cmd+shift+f` | fragile | `palette` | live via palette |
 | `project.goToClass` | `cmd+o` | fragile | `palette` | live via palette |
 | `project.goToFile` | `cmd+shift+o` | fragile | `palette` | live via palette |
+| `project.group.open` | `cmd+alt+shift+g` | fragile | `palette / File menu` | live via palette / File menu |
 | `project.peek.return` | `cmd+shift+b` | fragile | `palette` | live via palette |
 | `project.replaceInPath` | `cmd+shift+r` | fragile | `palette` | live via palette |
 | `project.switch` | `cmd+shift+p` | fragile | `palette` | live via palette |

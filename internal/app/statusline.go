@@ -38,6 +38,7 @@ var statusLeft = []statusSegment{
 	{id: "follow", render: followSegment},
 	{id: "followfilter", render: followFilterSegment},
 	{id: "file", render: fileSegment},
+	{id: "group", render: groupStatusSegment},
 	{id: "largefile", render: largeFileSegment},
 	{id: "buflang", render: bufferLangSegment},
 	{id: "hint", render: emptyHintSegment},
@@ -672,7 +673,9 @@ func renderParts(m Model, ed *editor.Model, segs []statusSegment) []renderedSeg 
 // overflows (#471): cosmetic hints first, diagnostics/LSP last; mode, the
 // (already shrunken) file segment and the cursor never drop.
 var statusDropOrder = []string{
-	"hint", "eol", "encoding", "indent", "svcolumn", "docpath", "logspan", "toolchain", "todo",
+	// The project-group slot (#2571) is orientation, not state one acts on
+	// this second — it goes with the hint.
+	"hint", "group", "eol", "encoding", "indent", "svcolumn", "docpath", "logspan", "toolchain", "todo",
 	"host", "notifications", "popupterm", "macro", "branchissue", "branch", "buflang", "forge", "diagnostics", "lsp",
 	// The search counter (#2145) shows only during an active search and is
 	// what the user is watching then, so it drops last of all.
@@ -825,6 +828,9 @@ var statusSegmentCommands = map[string]string{
 	"deps": "deps.toggle",
 	// The project-time segment (#2426) opens the report it summarises.
 	"projecttime": "time.toggle",
+	// The project-group slot (#2571) steps to the next member; until
+	// project.group.next lands (#2572) the click notifies instead.
+	"group": "project.group.next",
 }
 
 // statusSegmentAt returns the id of the segment rendered at cell x of the
