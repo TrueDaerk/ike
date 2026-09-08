@@ -6,6 +6,8 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+
+	"ike/internal/telemetry"
 )
 
 // playkeys_test.go covers the playground's keyboard usability round (#2237):
@@ -214,4 +216,43 @@ func hasHint(hints []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// TestPlaygroundRecordsUnboundUnderOwnContext (#2539): a recordable chord the
+// playground swallows — its own keys, the Global scope and the result buffer
+// all declined — lands in the usage log as unbound under the playground's own
+// context, not the hosting editor's. The mode owns the keyboard ahead of the
+// keymap layer, so before this its misses left no trace at all.
+func TestPlaygroundRecordsUnboundUnderOwnContext(t *testing.T) {
+	m := openJQ(t, playApp(t, `{"foo":1}`))
+	if m.onboardingOpen() { // the first-start LSP dialog eats keys on hosts missing a server
+		m = m.closeOnboarding().(Model)
+	}
+	// ctrl+alt+0 is bound to nothing in any preset and means nothing to the
+	// query line or the result buffer.
+	m = drainKey(m, tea.KeyPressMsg{Code: '0', Mod: tea.ModCtrl | tea.ModAlt})
+	m.play.setBufFocus(true)
+	m = drainKey(m, tea.KeyPressMsg{Code: '0', Mod: tea.ModCtrl | tea.ModAlt})
+	// Plain typing into the query line is never recorded.
+	m.play.setBufFocus(false)
+	m = drainKey(m, tea.KeyPressMsg{Code: 'x', Text: "x"})
+	// A chord the result buffer handles (a word motion) is bound after all.
+	m.play.setBufFocus(true)
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyRight, Mod: tea.ModAlt})
+
+	var chords, contexts []string
+	for _, ev := range eventsOf(usageEvents(t, m), telemetry.TypeKey) {
+		if ev.Data["status"] == "unbound" {
+			chords = append(chords, ev.Data["chord"])
+			contexts = append(contexts, ev.Data["context"])
+		}
+	}
+	if len(chords) != 2 || chords[0] != "ctrl+alt+0" || chords[1] != "ctrl+alt+0" {
+		t.Fatalf("want ctrl+alt+0 unbound from the query line and the result buffer, got %v", chords)
+	}
+	for _, c := range contexts {
+		if c != ctxPlayground {
+			t.Fatalf("want the playground context, got %v", contexts)
+		}
+	}
 }

@@ -2966,11 +2966,12 @@ func (m *Model) resolveKeymap(k keymap.Key) (tea.Cmd, bool) {
 			// (alt+delete, alt+backspace, ctrl+u, …), and reporting those as
 			// unbound buried the genuinely missing keybinds in noise.
 			// routeKey logs the event only if the editor ignored the key too.
+			ev := unboundKey{chord: k.String(), context: string(m.keyContext()), command: m.droppedDefault(k)}
 			if m.focusedEditor() != nil {
-				m.pendUnbound = &unboundKey{chord: k.String(), context: string(m.keyContext())}
+				m.pendUnbound = &ev
 				break
 			}
-			m.usage.Key(k.String(), string(m.keyContext()), "", "unbound")
+			m.usage.Key(ev.chord, ev.context, ev.command, "unbound")
 		}
 	}
 	return nil, false
@@ -9748,10 +9749,30 @@ func (m Model) routeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 // unboundKey is a chord the keymap layer found no binding for, held back until
-// the focused editor has had its say (#2303).
+// the focused editor has had its say (#2303). command names the default the
+// user's config unbound for the chord, "" when no default ever claimed it
+// (#2539) — the usage log carries it so a missing-keybind report can tell
+// "never bound" from "removed by an override".
 type unboundKey struct {
 	chord   string
 	context string
+	command string
+}
+
+// droppedDefault names the default command an unbind override removed for k
+// in the current key context, "" when there was none (#2539). The #2539
+// telemetry showed editor.caret.addAbove's chord recorded unbound in an
+// editor although the default table binds it there in every language scope;
+// the resolver could not have said why, and this field is how it does now.
+func (m Model) droppedDefault(k keymap.Key) string {
+	if m.bindings == nil || m.bindings.Table() == nil {
+		return ""
+	}
+	chord := keymap.Chord{Steps: []keymap.Key{k}}
+	if b, ok := m.bindings.Table().Dropped(chord, m.keyContext()); ok {
+		return b.Command
+	}
+	return ""
 }
 
 // flushUnbound records the held-back unbound chord once the pane has seen the
@@ -9768,7 +9789,7 @@ func (m *Model) flushUnbound(inst *pane.Instance) {
 	if ed := inst.Editor(); ed != nil && ed.HandledLastKey() {
 		return
 	}
-	m.usage.Key(ev.chord, ev.context, "", "unbound")
+	m.usage.Key(ev.chord, ev.context, ev.command, "unbound")
 }
 
 // activeEditorKey returns the editor that should receive a Replace open or an
