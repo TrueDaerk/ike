@@ -141,18 +141,25 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	{"editor.shuffleLines", reasonOccasional},
 	// #2418's case family: cmd+shift+u toggles and alt+shift+u cycles; the
 	// one-directional pair is the gu/gU gesture users already have.
-	{"editor.case.lower", reasonVimKey},           // gu
-	{"editor.case.upper", reasonVimKey},           // gU
-	{"editor.increment", reasonVimKey},            // ctrl+a
-	{"editor.decrement", reasonVimKey},            // ctrl+x
-	{"editor.toggleValue", reasonVimKey},          // g!
-	{"editor.explainConceal", reasonVimKey},       // g?
-	{"editor.labelJump", reasonVimKey},            // gs
-	{"editor.yankValue", reasonVimKey},            // gy
-	{"editor.yankValueOuter", reasonVimKey},       // gY
-	{"editor.quit", reasonVimKey},                 // :q
-	{"editor.write_quit", reasonVimKey},           // :wq
-	{"editor.tab.closeOthers", reasonMenu},        // the tab context menu
+	{"editor.case.lower", reasonVimKey},             // gu
+	{"editor.case.upper", reasonVimKey},             // gU
+	{"editor.increment", reasonVimKey},              // ctrl+a
+	{"editor.decrement", reasonVimKey},              // ctrl+x
+	{"editor.toggleValue", reasonVimKey},            // g!
+	{"editor.explainConceal", reasonVimKey},         // g?
+	{"editor.labelJump", reasonVimKey},              // gs
+	{"editor.yankValue", reasonVimKey},              // gy
+	{"editor.yankValueOuter", reasonVimKey},         // gY
+	{"editor.quit", reasonVimKey},                   // :q
+	{"editor.write_quit", reasonVimKey},             // :wq
+	{"editor.tab.closeOthers", reasonPlatformChord}, // cmd+alt+w on macOS (#2538)
+	// #2538's remaining batch closes: the tab context menu and the File menu
+	// are where they are discovered, and cmd+w's neighbourhood has room for
+	// exactly one of them (Close Others took it).
+	{"editor.tab.closeLeft", reasonMenu},          //
+	{"editor.tab.closeRight", reasonMenu},         //
+	{"editor.tab.closeUnmodified", reasonMenu},    //
+	{"editor.tab.closeAll", reasonMenu},           //
 	{"editor.tab.togglePin", reasonMenu},          //
 	{"editor.forceCodeInsight", reasonMenu},       // the status line's large-file badge
 	{"editor.largeFileDetails", reasonMenu},       //

@@ -34,6 +34,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Breakpoint properties | `ctrl+alt+f8` | `ctrl+alt+f8` | `debug.breakpointProperties` |
 | Breakpoints | `cmd+shift+f8` | `ctrl+shift+f8` | `debug.breakpoints` |
 | Close active tab | `cmd+w` | `ctrl+w` | `editor.closeTab` |
+| Close other tabs | `cmd+alt+w` | — | `editor.tab.closeOthers` |
 | Close pane | `ctrl+alt+w` | `ctrl+alt+w` | `pane.close` |
 | Close project | `cmd+shift+w` | `ctrl+shift+w` | `project.close` |
 | Close project | `ctrl+shift+w` | `ctrl+shift+w` | `project.close` |

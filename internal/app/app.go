@@ -4769,6 +4769,25 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// only the active tab; dirty tabs stay open.
 		m.closeOtherTabs()
 		return m, nil
+	case TabCloseSideMsg:
+		// editor.tab.closeLeft / editor.tab.closeRight (#2538): drop the tabs
+		// on one side of the active one.
+		if msg.Delta < 0 {
+			m.closeTabScope(closeScopeLeft)
+		} else {
+			m.closeTabScope(closeScopeRight)
+		}
+		return m, nil
+	case TabCloseUnmodifiedMsg:
+		// editor.tab.closeUnmodified (#2538): keep only what is still being
+		// edited (and the pinned tabs).
+		m.closeTabScope(closeScopeUnmodified)
+		return m, nil
+	case TabCloseAllMsg:
+		// editor.tab.closeAll (#2538): the whole pane's tabs; the pane goes
+		// with them unless a pinned tab holds it open.
+		m.closeTabScope(closeScopeAll)
+		return m, nil
 	case TabTogglePinMsg:
 		// editor.tab.togglePin (tab context menu / palette, #1172): flip the
 		// active tab's pin, exempting it from LRU eviction and Close Others.
@@ -12589,8 +12608,10 @@ func editorContextItems(conflict bool) []menu.Item {
 	return items
 }
 
-// tabContextItems is the tab segment's right-click menu (#1128). The clicked
-// tab was selected on open, so Close, Close Others and Pin target it; entries
+// tabContextItems is the tab segment's right-click menu (#1128, #2538). The
+// clicked tab was selected on open, so Close, the batch closes and Pin all
+// resolve against it — "to the Left" / "to the Right" are the sides of the
+// clicked segment; entries
 // resolve through the same InfoFunc as the menu bar. The menu is built per
 // open, so the pin entry's label reflects the clicked tab's state (#1172).
 func tabContextItems(pinned bool) []menu.Item {
@@ -12601,6 +12622,10 @@ func tabContextItems(pinned bool) []menu.Item {
 	return []menu.Item{
 		{Title: "Close", Command: "editor.closeTab"},
 		{Title: "Close Others", Command: "editor.tab.closeOthers"},
+		{Title: "Close Tabs to the Left", Command: "editor.tab.closeLeft"},
+		{Title: "Close Tabs to the Right", Command: "editor.tab.closeRight"},
+		{Title: "Close Unmodified Tabs", Command: "editor.tab.closeUnmodified"},
+		{Title: "Close All Tabs", Command: "editor.tab.closeAll"},
 		{Title: pinTitle, Command: "editor.tab.togglePin"},
 		{Title: "Reopen Closed", Command: "editor.tab.reopenClosed"},
 		{Title: "Open File As…", Command: "file.openAs"},

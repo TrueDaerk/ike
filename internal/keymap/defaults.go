@@ -721,6 +721,11 @@ var darwinRows = []row{
 	// explorer.toggle (cmd+1), nav.pins (cmd+2) and vcs.panel (cmd+9) on
 	// exactly these chords, which is why ctrl+digit stays free there and
 	// pane.focusByIndex ("Focus Pane by Number…") is the doorway instead.
+	// JetBrains' Close Others on the editor tabs (#2538): cmd+w's neighbour,
+	// so the everyday tab cleanup sits next to the everyday tab close. macOS
+	// only — the Cmd→Ctrl fold would land it on ctrl+alt+w, which pane.close
+	// already owns; the other batch closes stay palette/menu-only.
+	{"cmd+alt+w", "editor.tab.closeOthers", "Close other tabs", Global, "Editor tabs (#2538)"},
 	{"ctrl+1", "pane.focus1", "Focus pane 1", Global, "Pane numbers (#2407)"},
 	{"ctrl+2", "pane.focus2", "Focus pane 2", Global, "Pane numbers (#2407)"},
 	{"ctrl+3", "pane.focus3", "Focus pane 3", Global, "Pane numbers (#2407)"},

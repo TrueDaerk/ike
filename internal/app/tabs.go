@@ -3,7 +3,6 @@ package app
 import (
 	"os"
 	"strconv"
-	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -69,45 +68,103 @@ func (m *Model) closeBarTab(key string, idx int) {
 	m.closeFocused()
 }
 
-// closeOtherTabs closes every tab of the active editor pane except the active
-// one (#1128, "Close Others"). Tabs whose close would drop unsaved changes
-// stay open — the close-guard prompt handles one pending close, not a batch —
-// pinned tabs stay open too (#1172), and a notification counts the survivors.
-func (m *Model) closeOtherTabs() {
+// tabCloseScope names one of the batch tab-close commands (#1128, #2538).
+// They differ only in which tabs they pick; pinned tabs (#1172), the guard and
+// the pane bookkeeping are shared.
+type tabCloseScope int
+
+const (
+	closeScopeOthers     tabCloseScope = iota // every tab but the active one
+	closeScopeLeft                            // every tab before the active one
+	closeScopeRight                           // every tab after the active one
+	closeScopeUnmodified                      // every tab without unsaved changes
+	closeScopeAll                             // every tab; the pane goes with them
+)
+
+// closeTabScope runs one of the batch tab closes on the active editor pane.
+// Pinned tabs (#1172) are never picked — pinning is the way to hold a tab
+// through a Close Others / Close All — and tabs whose close would drop unsaved
+// changes route the whole batch through the guard prompt first (#259), which
+// answers for all of them at once instead of once per file.
+func (m *Model) closeTabScope(scope tabCloseScope) {
 	inst := m.tabPane()
 	if inst == nil {
 		return
 	}
-	keptDirty, keptPinned := 0, 0
-	for i := inst.TabCount() - 1; i >= 0; i-- {
-		if i == inst.ActiveTab() {
+	victims, pinned := tabCloseVictims(inst, scope)
+	if pinned > 0 {
+		noun := " pinned tabs kept"
+		if pinned == 1 {
+			noun = " pinned tab kept"
+		}
+		m.host.Notify(host.Info, strconv.Itoa(pinned)+noun)
+	}
+	if len(victims) == 0 {
+		return
+	}
+	// Nothing would be left behind: the pane closes with its last tab, the
+	// way cmd+w on a single-tab pane already behaves (#156).
+	whole := len(victims) == inst.TabCount()
+	if dirty := m.dirtyInTabs(inst, victims); len(dirty) > 0 {
+		m.openBatchClosePrompt(inst.Key(), victims, dirty, whole)
+		return
+	}
+	m.closeTabSet(inst, victims, whole)
+}
+
+// tabCloseVictims picks the tabs scope selects, in ascending order, and counts
+// the pinned ones it skipped so the caller can report them.
+func tabCloseVictims(inst *pane.Instance, scope tabCloseScope) (victims []int, pinned int) {
+	active := inst.ActiveTab()
+	for i := 0; i < inst.TabCount(); i++ {
+		var want bool
+		switch scope {
+		case closeScopeOthers:
+			want = i != active
+		case closeScopeLeft:
+			want = i < active
+		case closeScopeRight:
+			want = i > active
+		case closeScopeUnmodified:
+			// A tab restored but never activated (#2177) has no editor yet,
+			// so it cannot hold unsaved changes.
+			ed := inst.TabEditor(i)
+			want = ed == nil || !ed.Dirty()
+		case closeScopeAll:
+			want = true
+		}
+		if !want {
 			continue
 		}
 		if inst.TabPinned(i) {
-			keptPinned++
+			pinned++
 			continue
 		}
-		if len(m.dirtyOnClose(inst, i)) > 0 {
-			keptDirty++
-			continue
+		victims = append(victims, i)
+	}
+	return victims, pinned
+}
+
+// closeTabSet closes the given tab indexes of inst, highest first so the lower
+// ones stay valid. closeTab never empties a pane (#156), so when the batch
+// covers every tab the last one rides out on the pane close instead; a pane
+// that cannot close (the workspace's last leaf) keeps that one tab.
+func (m *Model) closeTabSet(inst *pane.Instance, idxs []int, whole bool) {
+	for n := len(idxs) - 1; n >= 0; n-- {
+		if inst.TabCount() <= 1 {
+			break
 		}
-		m.closeTab(inst, i)
+		m.closeTab(inst, idxs[n])
 	}
-	var reasons []string
-	if keptPinned > 0 {
-		reasons = append(reasons, "pinned")
-	}
-	if keptDirty > 0 {
-		reasons = append(reasons, "unsaved changes")
-	}
-	if kept := keptDirty + keptPinned; kept > 0 {
-		noun := " tabs kept: "
-		if kept == 1 {
-			noun = " tab kept: "
-		}
-		m.host.Notify(host.Info, strconv.Itoa(kept)+noun+strings.Join(reasons, ", "))
+	if whole && inst.TabCount() == 1 {
+		m.setFocus(inst.Key())
+		m.closeFocused()
 	}
 }
+
+// closeOtherTabs closes every tab of the active editor pane except the active
+// one (#1128, "Close Others").
+func (m *Model) closeOtherTabs() { m.closeTabScope(closeScopeOthers) }
 
 // togglePinTab flips the active tab's pin (#1172) and persists it with the
 // layout, so pins survive restarts like the tab list itself.

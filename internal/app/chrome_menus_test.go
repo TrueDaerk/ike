@@ -71,21 +71,33 @@ func TestCloseOtherTabs(t *testing.T) {
 	}
 }
 
-// TestCloseOtherTabsKeepsDirty guards #1128: a tab with unsaved changes
-// survives Close Others instead of silently losing the edits.
-func TestCloseOtherTabsKeepsDirty(t *testing.T) {
+// TestCloseOtherTabsGuardsDirty guards #1128/#2538: a tab with unsaved
+// changes no longer silently survives Close Others — the whole batch waits
+// behind the unsaved-changes guard, cancelling keeps every tab open, and one
+// answer settles all of them.
+func TestCloseOtherTabsGuardsDirty(t *testing.T) {
 	m, paths := tabApp(t) // third active
 	inst := m.activeWS().Panes.FocusedInstance()
 	inst.TabEditor(0).RestoreText("dirty now") // a.txt dirty
 	m = dispatch(t, m, TabCloseOthersMsg{})
-	if inst.TabCount() != 2 {
-		t.Fatalf("the dirty tab must survive closeOthers, got %d tabs", inst.TabCount())
+	if m.closePending == nil || len(m.closePending.tabs) != 2 {
+		t.Fatal("closeOthers over a dirty tab must queue one guarded batch close")
 	}
-	if inst.EditorForPath(paths[0]) == nil {
-		t.Fatal("the dirty tab must stay open")
+	if inst.TabCount() != 3 {
+		t.Fatalf("no tab may close while the guard prompts, got %d", inst.TabCount())
 	}
-	if inst.EditorForPath(paths[1]) != nil {
-		t.Fatal("the clean other tab must close")
+	m = answerCloseGuard(t, m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	if inst.TabCount() != 3 {
+		t.Fatalf("cancelling the guard must keep every tab, got %d", inst.TabCount())
+	}
+	// Discarding closes the whole batch, the dirty tab included.
+	m = dispatch(t, m, TabCloseOthersMsg{})
+	m = answerCloseGuard(t, m, tea.KeyPressMsg{Code: 'd', Text: "d"})
+	if inst.TabCount() != 1 || inst.Editor().Path() != paths[2] {
+		t.Fatalf("discarding must leave only the active tab, got %d", inst.TabCount())
+	}
+	if inst.EditorForPath(paths[0]) != nil {
+		t.Fatal("the dirty tab must close once the guard was answered")
 	}
 }
 
