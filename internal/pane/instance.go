@@ -38,6 +38,7 @@ import (
 	"ike/internal/testresults"
 	"ike/internal/theme"
 	"ike/internal/timepanel"
+	"ike/internal/usagepanel"
 	"ike/internal/usages"
 	"ike/internal/vcspanel"
 )
@@ -146,6 +147,10 @@ const (
 	// panel reporting per-project active time from the local usage log,
 	// under key "time".
 	KindTime
+	// KindUsage is the Usage tool window (#2552): a singleton bottom-split
+	// panel reporting top commands, unbound chords, palette dismissal rates
+	// and slow operations from the local usage log, under key "usage".
+	KindUsage
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -174,6 +179,7 @@ const (
 	ctxLSPDoc   = "lspdoctor"
 	ctxDeps     = "deps"
 	ctxTime     = "time"
+	ctxUsage    = "usage"
 	ctxHex      = "hex"
 	ctxNotebook = "notebook"
 )
@@ -213,6 +219,7 @@ type Instance struct {
 	ld   lspdoctor.Model
 	dep  depspanel.Model
 	tp   timepanel.Model
+	usg  usagepanel.Model
 	rm   remote.Model
 	// dfEdit is the diff pane's edit-mode editor (0340, #496): non-nil while
 	// the right column is a live editor of the underlying file.
@@ -351,6 +358,8 @@ func (i *Instance) ContextID() string {
 		return ctxDeps
 	case KindTime:
 		return ctxTime
+	case KindUsage:
+		return ctxUsage
 	case KindRemote:
 		return ctxRemote
 	case KindHex:
@@ -436,6 +445,10 @@ func (i *Instance) Deps() *depspanel.Model { return &i.dep }
 // Time returns the Time tool window model (#2426). It is only meaningful for
 // KindTime instances.
 func (i *Instance) Time() *timepanel.Model { return &i.tp }
+
+// Usage returns the Usage tool window model (#2552). It is only meaningful
+// for KindUsage instances.
+func (i *Instance) Usage() *usagepanel.Model { return &i.usg }
 
 // Remote returns the underlying SFTP remote browser model (#1997). It is
 // only valid for a remote instance; callers gate on Kind first.
@@ -1276,6 +1289,8 @@ func (i *Instance) SetSize(w, h int) {
 		i.dep.SetSize(w, h)
 	case KindTime:
 		i.tp.SetSize(w, h)
+	case KindUsage:
+		i.usg.SetSize(w, h)
 	case KindRemote:
 		i.rm.SetSize(w, h)
 	}
@@ -1344,6 +1359,8 @@ func (i *Instance) SetFocused(f bool) {
 		i.dep.SetFocused(f)
 	case KindTime:
 		i.tp.SetFocused(f)
+	case KindUsage:
+		i.usg.SetFocused(f)
 	case KindRemote:
 		i.rm.SetFocused(f)
 	}
@@ -1427,6 +1444,8 @@ func (i *Instance) View() string {
 		return i.dep.View()
 	case KindTime:
 		return i.tp.View()
+	case KindUsage:
+		return i.usg.View()
 	case KindRemote:
 		return i.rm.View()
 	}
@@ -1503,6 +1522,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		cmd = i.dep.Update(msg)
 	case KindTime:
 		cmd = i.tp.Update(msg)
+	case KindUsage:
+		cmd = i.usg.Update(msg)
 	case KindRemote:
 		cmd = i.rm.Update(msg)
 	}
@@ -1698,6 +1719,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		i.dep.SetPalette(p)
 	case KindTime:
 		i.tp.SetPalette(p)
+	case KindUsage:
+		i.usg.SetPalette(p)
 	case KindRemote:
 		i.rm.SetPalette(p)
 	}

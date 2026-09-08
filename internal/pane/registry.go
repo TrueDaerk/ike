@@ -33,6 +33,7 @@ import (
 	"ike/internal/testresults"
 	"ike/internal/theme"
 	"ike/internal/timepanel"
+	"ike/internal/usagepanel"
 	"ike/internal/usages"
 	"ike/internal/vcspanel"
 )
@@ -126,6 +127,9 @@ const DepsKey = "deps"
 
 // TimeKey is the stable key of the singleton Time tool window (#2426).
 const TimeKey = "time"
+
+// UsageKey is the stable key of the singleton Usage tool window (#2552).
+const UsageKey = "usage"
 
 // Registry maps stable instance keys to live pane components and tracks which
 // key currently holds focus. The explorer is a singleton under ExplorerKey;
@@ -873,6 +877,18 @@ func (r *Registry) AddTime() string {
 	inst.tp = timepanel.New(r.pal)
 	r.put(inst)
 	return TimeKey
+}
+
+// AddUsage creates the singleton Usage tool window under UsageKey (#2552),
+// returning the existing key when it is already open.
+func (r *Registry) AddUsage() string {
+	if _, ok := r.instances[UsageKey]; ok {
+		return UsageKey
+	}
+	inst := &Instance{key: UsageKey, kind: KindUsage, cfg: r.cfg, pal: r.pal}
+	inst.usg = usagepanel.New(r.pal)
+	r.put(inst)
+	return UsageKey
 }
 
 // AddBreakpoints creates the singleton Breakpoints tool window under

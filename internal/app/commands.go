@@ -835,6 +835,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("deps.toggle", "Dependencies", DepsToggleMsg{}),
 			appCommand("time.toggle", "Project Time Report", TimeToggleMsg{}),
 			appCommand("time.refresh", "Project Time: Reload Usage Log", TimeRefreshMsg{}),
+			appCommand("usage.toggle", "Usage Report", UsageToggleMsg{}),
+			appCommand("usage.refresh", "Usage Report: Reload Usage Log", UsageRefreshMsg{}),
 			appCommand("deps.refresh", "Dependencies: Refresh Scan", DepsRefreshMsg{}),
 			appCommand("deps.audit", "Dependencies: Audit Vulnerabilities", DepsAuditMsg{}),
 			appCommand("deps.updateLatest", "Update Dependency to Latest", DepsUpdateLatestMsg{}),

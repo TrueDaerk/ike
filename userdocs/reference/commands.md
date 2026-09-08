@@ -288,6 +288,8 @@ bring their own.
 | TODO Index | `todo.list` | `cmd+6` | — | everywhere |
 | Regex Tester… | `tools.regexTester` | — | — | everywhere |
 | Set Up Tool Panes | `tools.setup` | — | — | everywhere |
+| Usage Report: Reload Usage Log | `usage.refresh` | — | — | everywhere |
+| Usage Report | `usage.toggle` | `cmd+alt+u` | — | everywhere |
 | Usages | `usages.toggle` | — | — | everywhere |
 | Treat as Vault File | `vault.treatAsFile` | — | — | everywhere |
 | Toggle Inline Blame | `vcs.blameLine` | — | — | everywhere |

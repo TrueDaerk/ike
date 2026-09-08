@@ -44,6 +44,7 @@ func toolWindowKinds() map[string]toolWindowKind {
 		"lspdoctor":   {pane.KindLSPDoctor, func(m *Model) string { return m.activeWS().Panes.AddLSPDoctor() }},
 		"deps":        {pane.KindDeps, func(m *Model) string { return m.activeWS().Panes.AddDeps() }},
 		"time":        {pane.KindTime, func(m *Model) string { return m.activeWS().Panes.AddTime() }},
+		"usage":       {pane.KindUsage, func(m *Model) string { return m.activeWS().Panes.AddUsage() }},
 	}
 }
 

@@ -4,7 +4,7 @@ title: Usage Telemetry
 description: Local-only usage recording — command (with outcome), keybinding, layout, session, heartbeat, operation-lifecycle, palette-pick, palette-dismissal and project-time events appended as per-session JSONL under ~/.ike/telemetry, asynchronous and content-free, switched by telemetry.enabled.
 resource: internal/telemetry/telemetry.go
 tags: [architecture, telemetry, usage, jsonl, privacy, diagnostics]
-timestamp: 2026-09-08T16:00:00Z
+timestamp: 2026-09-08T18:00:00Z
 ---
 
 # Usage Telemetry
@@ -339,6 +339,46 @@ opt-in `statusline.project_time` segment.
 
 The tool window itself is [Project Time Report](/architecture/project-time.md).
 
+### Usage aggregates: what did I do (#2552)
+
+The same scan fills a second aggregate, `internal/telemetry/usage.go`, behind
+the **Usage** tool window (`usage.toggle`, default `cmd+alt+u`, Tools menu):
+the questions that until then needed the jq one-liners below. It rides on the
+same `Reader` and the same per-file mtime cache — one background read fills
+both the time report and the usage report, and opening both windows costs one
+directory scan.
+
+- **Unit**: every event is bucketed by its **own** local calendar day
+  (`Report.Usage`), independent of the project span it falls into — a
+  pre-v3 file with no session marker still counts, and "which commands did I
+  run this week" is not a per-project question. `Report.UsageRange(from, to)`
+  folds the days into one `UsageSummary`, every slice most-frequent (or
+  slowest) first with name-ordered ties.
+- **Commands by source** (`CommandUsage`): dispatches per command id, split
+  into keybind / palette / menu / mouse. `internal` events are a separate type
+  since v2; on v1 files the same filter runs on `data.source`, so a poller
+  never dominates the top list.
+- **Unbound chords by context** (`UnboundUsage`): `key` events with
+  `status == "unbound"`, per (`context`, `chord`). `Removed` carries the
+  `command` a user unbind override took away (#2539), so "never bound" and
+  "removed by config" stay distinguishable.
+- **Palette dismissals per mode** (`PaletteUsage`): `palette.dismiss` over
+  opens, where opens are picks (`palette.pick`, v7+) plus dismissals — so the
+  rate is only meaningful on v7+ logs and reads as 100% on older ones. The
+  dismissals split by `query_len` (typed something / nothing), and
+  `NoResults` counts the fruitless searches (`query_len > 0`, `results ==
+  0`, v6+; a missing `results` never counts). `AvgOpen` is the mean `ms` of
+  the dismissed boxes.
+- **Ops and slow dispatches** (`OpUsage`, `SlowCommand`): `op` events by id —
+  starts, ok / error / canceled ends, and mean / max `ms` over the ends that
+  carried one, so a start that never came back shows as a start surplus. The
+  `project.switch` `lsp` warm-up phase (#2492) is neither a start nor an end
+  and is skipped. `command` events that carry `ok`/`ms` (a failed dispatch or
+  one at or above `CommandSlowThreshold`) are listed next to the ops as
+  *dispatches*, with their failure count.
+
+The tool window itself is [Usage Report](/architecture/usage-report.md).
+
 ## Analysis examples
 
 ```sh
@@ -361,11 +401,12 @@ jq -r 'select(.type=="op" and .data.id=="http.flight" and .data.ttfb_ms != null 
 jq -r 'select(.type=="project.leave") | [.data.project, (.data.ms|tonumber/60000|floor)] | @tsv' ~/.ike/telemetry/*.jsonl
 ```
 
-The JSONL schema above stays the stable interface. The one evaluation UI IKE
-ships is the project time report (#2426) described above — everything else an
-analysis wants is a jq one-liner away.
+The JSONL schema above stays the stable interface. The two evaluation UIs IKE
+ships are the project time report (#2426) and the usage report (#2552)
+described above — everything else an analysis wants is a jq one-liner away.
 
 Related: [Project Time Report](/architecture/project-time.md),
+[Usage Report](/architecture/usage-report.md),
 [Configuration System](/architecture/config.md),
 [Settings UI & Menu Bar](/architecture/settings-ui.md),
 [Keybindings](/architecture/keybindings.md).

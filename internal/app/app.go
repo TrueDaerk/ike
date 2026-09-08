@@ -113,6 +113,7 @@ import (
 	"ike/internal/ui"
 	"ike/internal/undotree"
 	"ike/internal/unidiff"
+	"ike/internal/usagepanel"
 	"ike/internal/usages"
 	"ike/internal/vcs"
 	"ike/internal/vcspanel"
@@ -2227,6 +2228,12 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			// The Time panel restores empty in its saved slot (#2426): the
 			// aggregate is re-read from the usage log in the background.
 			panes.Get(panes.AddTime()).Time().SetLoading(true)
+			continue
+		}
+		if id := ids[key]; id.Kind == "usage" {
+			// The Usage panel restores empty in its saved slot (#2552): the
+			// aggregate is re-read from the usage log in the background.
+			panes.Get(panes.AddUsage()).Usage().SetLoading(true)
 			continue
 		}
 		if id := ids[key]; id.Kind == "deps" {
@@ -6146,6 +6153,19 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// 'e' in the Time pane (#2426): the current view as a CSV scratch.
 		return m.handleTimeExport(msg)
 
+	case UsageToggleMsg:
+		// usage.toggle (#2552): the tool-window state machine over the same
+		// background read the Time window uses.
+		return m, m.toggleUsagePanel()
+
+	case UsageRefreshMsg, usagepanel.RefreshMsg:
+		// usage.refresh (#2552), also 'r' in the pane.
+		return m, m.timeReadCmd()
+
+	case usagepanel.ExportMsg:
+		// 'e' in the Usage pane (#2552): the current tab as a CSV scratch.
+		return m.handleUsageExport(msg)
+
 	case TestsToggleMsg:
 		// tests.toggle (#1911): same state machine for the Test Results pane.
 		m.toggleTestsPanel()
@@ -9937,7 +9957,7 @@ func (m Model) viewerSplitTarget() string {
 		case pane.KindExplorer, pane.KindVCS, pane.KindDebug, pane.KindProblems,
 			pane.KindStructure, pane.KindUsages, pane.KindHTTP, pane.KindBreakpoints,
 			pane.KindTests, pane.KindIssues, pane.KindDOM, pane.KindDoctor, pane.KindDeps,
-			pane.KindTime:
+			pane.KindTime, pane.KindUsage:
 			return false
 		}
 		return true
@@ -11323,6 +11343,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.Time().Wheel(lines)
 			}
+		case pane.KindUsage:
+			// The wheel scrolls the Usage list (#2552).
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Usage().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.Usage().Wheel(lines)
+			}
 		case pane.KindTests:
 			// The wheel scrolls the Test Results tree or detail (#1911).
 			switch msg.Button {
@@ -12512,6 +12540,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// on the header's tab bar switches the range.
 		if msg.Button == tea.MouseLeft {
 			return m, inst.Time().Click(localX, localY)
+		}
+	case pane.KindUsage:
+		// Usage-window clicks (#2552): a click selects a row, a click on the
+		// header's tab bar or period selector switches the view.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.Usage().Click(localX, localY)
 		}
 	case pane.KindTests:
 		// Test-tree clicks (#1911): a click selects (a detail-column click
@@ -13830,6 +13864,8 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 			title = "DEPENDENCIES"
 		case pane.KindTime:
 			title = "TIME"
+		case pane.KindUsage:
+			title = "USAGE"
 		case pane.KindTests:
 			title = "TESTS"
 		case pane.KindIssues:

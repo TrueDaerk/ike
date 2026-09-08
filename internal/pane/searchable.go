@@ -79,6 +79,8 @@ func (i *Instance) Searchable() Searchable {
 		return &i.dep
 	case KindTime:
 		return &i.tp
+	case KindUsage:
+		return &i.usg
 	case KindMarkdown:
 		// The image viewer shares the "preview" context but has no text to
 		// search, so only the markdown half is Searchable.

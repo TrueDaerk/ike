@@ -245,6 +245,8 @@ func (st *snapState) leafIdentity(key string) (string, paneIdentity, bool) {
 		return singleton(pane.DepsKey, "deps")
 	case pane.KindTime:
 		return singleton(pane.TimeKey, "time")
+	case pane.KindUsage:
+		return singleton(pane.UsageKey, "usage")
 	case pane.KindTests:
 		return singleton(pane.TestsKey, "tests")
 	case pane.KindIssues:
@@ -814,6 +816,13 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 		if ok {
 			// A restored pane comes up empty (#2426); the next read fills it.
 			reg.Get(key).Time().SetLoading(true)
+		}
+		return key, ok
+	case "usage":
+		key, ok := singleton(reg.AddUsage)
+		if ok {
+			// A restored pane comes up empty (#2552); the next read fills it.
+			reg.Get(key).Usage().SetLoading(true)
 		}
 		return key, ok
 	case "deps":

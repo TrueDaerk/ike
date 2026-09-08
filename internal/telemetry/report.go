@@ -81,6 +81,9 @@ type Report struct {
 	// Names maps a project token to a human name, filled by Resolve; an
 	// unresolved token renders as UnknownName.
 	Names map[string]string
+	// Usage maps a local calendar day to its usage aggregate (#2552):
+	// commands by source, unbound chords, palette outcomes, ops.
+	Usage map[string]*UsageDay
 }
 
 // UnknownName labels a token no known project path hashes to — a project that
@@ -89,7 +92,7 @@ const UnknownName = "(unknown)"
 
 // newReport returns an empty report.
 func newReport() *Report {
-	return &Report{Projects: map[string]*ProjectStat{}, Names: map[string]string{}}
+	return &Report{Projects: map[string]*ProjectStat{}, Names: map[string]string{}, Usage: map[string]*UsageDay{}}
 }
 
 // Resolve joins tokens to project names by hashing every known project path
@@ -272,7 +275,14 @@ type Reader struct {
 type cacheEntry struct {
 	mod   time.Time
 	size  int64
-	stats map[string]*ProjectStat
+	stats *fileStats
+}
+
+// fileStats is one session file's complete aggregate: the per-project time
+// split and the per-day usage split (#2552).
+type fileStats struct {
+	projects map[string]*ProjectStat
+	usage    map[string]*UsageDay
 }
 
 // NewReader returns a reader over dir. An empty dir yields a reader that
@@ -318,7 +328,8 @@ func (r *Reader) Read() *Report {
 			continue
 		}
 		rep.Files++
-		mergeStats(rep, stats)
+		mergeStats(rep, stats.projects)
+		mergeUsage(rep, stats.usage)
 	}
 	r.evict(seen)
 	return rep
@@ -326,7 +337,7 @@ func (r *Reader) Read() *Report {
 
 // fileStats returns one file's aggregate, from the cache when the file has
 // not changed since it was last read.
-func (r *Reader) fileStats(path string, info os.FileInfo) map[string]*ProjectStat {
+func (r *Reader) fileStats(path string, info os.FileInfo) *fileStats {
 	r.mu.Lock()
 	if c, ok := r.cache[path]; ok && c.mod.Equal(info.ModTime()) && c.size == info.Size() {
 		r.mu.Unlock()
@@ -395,9 +406,10 @@ type span struct {
 // structural records; anything longer is a corrupted file, not a bigger event.
 const maxLineBytes = 1 << 20
 
-// scanFile streams one session file into a per-project aggregate. It returns
-// nil only when the file cannot be opened at all.
-func scanFile(path string) map[string]*ProjectStat {
+// scanFile streams one session file into a per-project time aggregate and a
+// per-day usage aggregate (#2552). It returns nil only when the file cannot
+// be opened at all.
+func scanFile(path string) *fileStats {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil
@@ -405,6 +417,7 @@ func scanFile(path string) map[string]*ProjectStat {
 	defer f.Close()
 
 	stats := map[string]*ProjectStat{}
+	usage := map[string]*UsageDay{}
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), maxLineBytes)
 
@@ -423,6 +436,7 @@ func scanFile(path string) map[string]*ProjectStat {
 			continue
 		}
 		ts = ts.Local()
+		addUsage(usageDay(usage, dayOf(ts)), &ev)
 		if cur != nil && ts.After(cur.last) {
 			cur.last = ts
 		}
@@ -459,7 +473,7 @@ func scanFile(path string) map[string]*ProjectStat {
 		}
 	}
 	closeSpan(stats, cur, -1)
-	return stats
+	return &fileStats{projects: stats, usage: usage}
 }
 
 // closeSpan books a finished span. active >= 0 is the authoritative
