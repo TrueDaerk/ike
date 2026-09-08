@@ -345,7 +345,9 @@ func TestTelemetryHTTPFlightLifecycle(t *testing.T) {
 	}
 
 	tm, _ := m.Update(HTTPResponseMsg{Source: "a.http", Request: "GET /x",
-		Resp: &httpclient.Response{Status: "200 OK", StatusCode: 200}})
+		Resp: &httpclient.Response{Status: "200 OK", StatusCode: 200,
+			Timing: &httpclient.Timing{DNS: 2 * time.Millisecond, Connect: 11 * time.Millisecond,
+				TLS: 34 * time.Millisecond, TTFB: 210 * time.Millisecond, Transfer: 4 * time.Millisecond}}})
 	m = tm.(Model)
 
 	// Only this flight's ops: the launch also records its session.restore span
@@ -361,6 +363,18 @@ func TestTelemetryHTTPFlightLifecycle(t *testing.T) {
 	}
 	if _, err := strconv.Atoi(end.Data["ms"]); err != nil {
 		t.Fatalf("end op ms %q is not a number", end.Data["ms"])
+	}
+	// The phase breakdown (#2404, schema v8 since #2547) rides on the end
+	// op as whole milliseconds, so a slow flight is attributable after the
+	// fact.
+	for k, want := range map[string]string{"dns_ms": "2", "connect_ms": "11", "tls_ms": "34",
+		"ttfb_ms": "210", "transfer_ms": "4", "reused": "false"} {
+		if got := end.Data[k]; got != want {
+			t.Errorf("end op %s = %q, want %q", k, got, want)
+		}
+	}
+	if end.V != telemetry.SchemaVersion || end.V < 8 {
+		t.Errorf("end op schema v%d, want v%d (>= 8)", end.V, telemetry.SchemaVersion)
 	}
 	for _, ev := range ops {
 		for k, v := range ev.Data {

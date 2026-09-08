@@ -540,6 +540,14 @@ func (m *Model) notifyHTTPCompletion(e *httpFlightEntry, msg HTTPResponseMsg, vi
 	if slow {
 		tail = fmt.Sprintf(", slower than %s", formatElapsed(time.Duration(limit)*time.Millisecond))
 	}
+	if slowLimit := config.Get().HTTP.SlowThresholdMs; slowLimit > 0 && msg.Resp.Duration >= time.Duration(slowLimit)*time.Millisecond {
+		// Past http.slow_threshold_ms (#2547) the notice says where the time
+		// went, so a 14 s answer reads as "the server sat on it" or "the
+		// resolver did" without opening the pane.
+		if label, span := msg.Resp.Timing.Dominant(); label != "" {
+			tail += fmt.Sprintf(", mostly %s (%s)", label, httpclient.FormatPhase(span))
+		}
+	}
 	if n := len(gqlErrors); n > 0 {
 		// The status is 200: without naming the GraphQL errors the notice
 		// would read as a success that merely took a while.

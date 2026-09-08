@@ -108,3 +108,32 @@ func TestValidateHTTPNotifySlowMs(t *testing.T) {
 		t.Errorf("http.notify_slow_ms = %q", got)
 	}
 }
+
+// The slow-flight highlight threshold (#2547) defaults to 2 s, keeps 0 as
+// its off switch and refuses values outside the accepted window.
+func TestValidateHTTPSlowThresholdMs(t *testing.T) {
+	if c := defaults(); c.HTTP.SlowThresholdMs != 2000 {
+		t.Errorf("default threshold = %d, want 2000", c.HTTP.SlowThresholdMs)
+	}
+	for _, bad := range []int{-1, -2000, 600001} {
+		c := defaults()
+		c.HTTP.SlowThresholdMs = bad
+		diags := validate(c)
+		if c.HTTP.SlowThresholdMs != 2000 {
+			t.Errorf("threshold %d validated to %d, want the 2000 fallback", bad, c.HTTP.SlowThresholdMs)
+		}
+		if len(diagsFor(diags, "http.slow_threshold_ms")) != 1 {
+			t.Errorf("threshold %d must be reported once, got %v", bad, diags)
+		}
+	}
+	for _, good := range []int{0, 1, 5000, 600000} {
+		c := defaults()
+		c.HTTP.SlowThresholdMs = good
+		if diags := validate(c); len(diagsFor(diags, "http.slow_threshold_ms")) != 0 || c.HTTP.SlowThresholdMs != good {
+			t.Errorf("threshold %d is valid: %d, %v", good, c.HTTP.SlowThresholdMs, diags)
+		}
+	}
+	if got := defaults().Flat()["http.slow_threshold_ms"]; got != "2000" {
+		t.Errorf("http.slow_threshold_ms = %q", got)
+	}
+}

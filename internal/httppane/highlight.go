@@ -17,6 +17,7 @@ package httppane
 import (
 	"fmt"
 	"sync/atomic"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -46,6 +47,28 @@ func SetHighlightLimit(kb int) {
 
 // HighlightLimit is the active cap in bytes.
 func HighlightLimit() int { return int(hlLimitBytes.Load()) }
+
+// slowThresholdNs is http.slow_threshold_ms (#2547) in nanoseconds — the
+// same package-global arrangement as the highlight cap. 0 turns the
+// slow-flight header marker off.
+var slowThresholdNs atomic.Int64
+
+func init() { slowThresholdNs.Store(int64(DefaultSlowThreshold)) }
+
+// DefaultSlowThreshold mirrors the config default of http.slow_threshold_ms.
+const DefaultSlowThreshold = 2 * time.Second
+
+// SetSlowThreshold pushes http.slow_threshold_ms into the pane (#2547);
+// negative values count as off, like 0.
+func SetSlowThreshold(ms int) {
+	if ms < 0 {
+		ms = 0
+	}
+	slowThresholdNs.Store(int64(ms) * int64(time.Millisecond))
+}
+
+// SlowThreshold is the active slow-flight threshold; 0 when off.
+func SlowThreshold() time.Duration { return time.Duration(slowThresholdNs.Load()) }
 
 // pendingHighlight is one scheduled syntax pass: the composed body lines, the
 // fence tag to parse them under, where the body starts in row coordinates and

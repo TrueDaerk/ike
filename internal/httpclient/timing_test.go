@@ -180,3 +180,31 @@ func TestTimingStringSkipsMissingPhases(t *testing.T) {
 		t.Fatalf("String() = %q, want %q", got, want)
 	}
 }
+
+// TestTimingDominant: the largest phase wins, the wait for the first byte
+// competes with its setup subtracted (it contains DNS/connect/TLS), and the
+// reported span is still the phase's own displayed value.
+func TestTimingDominant(t *testing.T) {
+	cases := []struct {
+		name  string
+		in    *Timing
+		label string
+		span  time.Duration
+	}{
+		{"nil", nil, "", 0},
+		{"empty", &Timing{}, "", 0},
+		{"reused only", &Timing{Reused: true}, "", 0},
+		{"server wait", &Timing{DNS: 2 * time.Millisecond, Connect: 11 * time.Millisecond, TLS: 34 * time.Millisecond,
+			TTFB: 13900 * time.Millisecond, Transfer: 200 * time.Millisecond}, "ttfb", 13900 * time.Millisecond},
+		{"handshake inside ttfb", &Timing{TLS: 1900 * time.Millisecond, TTFB: 2000 * time.Millisecond, Transfer: 50 * time.Millisecond}, "tls", 1900 * time.Millisecond},
+		{"resolver", &Timing{DNS: 3 * time.Second, Connect: 20 * time.Millisecond, TTFB: 3100 * time.Millisecond}, "dns", 3 * time.Second},
+		{"download", &Timing{TTFB: 300 * time.Millisecond, Transfer: 9 * time.Second, Reused: true}, "transfer", 9 * time.Second},
+		{"tie goes to the earlier phase", &Timing{Connect: time.Second, TTFB: 2 * time.Second}, "connect", time.Second},
+	}
+	for _, c := range cases {
+		label, span := c.in.Dominant()
+		if label != c.label || span != c.span {
+			t.Errorf("%s: Dominant() = %q, %s; want %q, %s", c.name, label, span, c.label, c.span)
+		}
+	}
+}

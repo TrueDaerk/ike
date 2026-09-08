@@ -354,6 +354,11 @@ func defaults() *Config {
 			// covers on its own, and telemetry puts ordinary flights well
 			// below it, so the notice stays rare enough to mean something.
 			NotifySlowMs: 3000,
+			// A flight past 2 s is flagged in the pane header with its
+			// dominating phase (#2547): the local telemetry puts the median
+			// flight near 230 ms and the outliers in the double-digit
+			// seconds, so 2 s separates the two without noise.
+			SlowThresholdMs: 2000,
 		},
 		Issues: Issues{
 			// The issues window opens on its issue list, ordered the way the

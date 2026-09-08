@@ -52,6 +52,20 @@ func TestHTTPClientPageEntries(t *testing.T) {
 	if !strings.Contains(n.Description, "0 turns") {
 		t.Errorf("the description must document the off value: %q", n.Description)
 	}
+	// The slow-flight highlight threshold (#2547) sits next to it with the
+	// same window and off value, and its description names the phases.
+	s, ok := byKey["http.slow_threshold_ms"]
+	if !ok || s.Type != Int {
+		t.Fatalf("http.slow_threshold_ms entry = %+v", s)
+	}
+	if s.Min != 0 || s.Max != 600000 {
+		t.Errorf("http.slow_threshold_ms bounds = %d–%d, want 0–600000", s.Min, s.Max)
+	}
+	for _, want := range []string{"0 turns", "ttfb"} {
+		if !strings.Contains(s.Description, want) {
+			t.Errorf("the description must mention %q: %q", want, s.Description)
+		}
+	}
 }
 
 // The header-list element check (#2247) accepts header names and wildcards,

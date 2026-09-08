@@ -1,5 +1,20 @@
 # Log
 
+## 2026-09-08 (slow HTTP flights flag their dominating phase, #2547)
+
+- **`http.slow_threshold_ms`** (default 2000, `0` = off, Settings UI "HTTP
+  Client"): past it the response pane's header carries `⚠ slow 14.1s · ttfb
+  13.9s` in the warning slot, and the off-screen completion notice (#2364)
+  adds `mostly ttfb (13.9s)`. `httpclient.Timing.Dominant` picks the phase —
+  the server wait competes with its setup subtracted, since TTFB contains
+  DNS/connect/TLS.
+- **Telemetry schema v8**: the `http.flight` end event's phase breakdown
+  (`dns_ms` … `transfer_ms`, `reused`, written since #2404) is now part of
+  the documented schema with an allowlist entry, so a slow flight in the log
+  is attributable after the fact.
+  Docs: [HTTP client](/architecture/http-client.md#the-slow-flight-flags-itself-2547),
+  [Usage Telemetry](/architecture/usage-telemetry.md#version-history-what-an-analysis-script-must-branch-on).
+
 ## 2026-09-08 (re-run the last shell command from anywhere, #2543)
 
 - **`terminal.rerunLast`** (`alt+shift+r`, Global) presses Up + Enter in a

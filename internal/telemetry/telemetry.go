@@ -81,7 +81,19 @@ import (
 // "tabs" (file tabs that came back) and "missing" (files that no longer
 // existed), next to the "panes" it already carried. Both additions are
 // additive: their absence on a v6 log means "not recorded", not zero.
-const SchemaVersion = 7
+//
+// v8 (#2547): the "http.flight" end phases carry the timing breakdown the
+// response pane shows — "dns_ms", "connect_ms", "tls_ms", "ttfb_ms",
+// "transfer_ms" (each the milliseconds spent *in* that phase, so they read as
+// a sum; "ttfb_ms" counts from the start of the exchange and therefore
+// contains the setup phases) and "reused" ("true" when the request went out
+// on a kept-alive connection, which is why its setup phases are 0). The
+// numbers are structural, never the URL or a header. They were first
+// recorded by builds since #2404 without a bump; a v8 reader can rely on
+// them for every flight that produced a response, and their absence on an
+// "ok" means the capture measured nothing (a history restore), never a lost
+// field. Below v8 absence means "not recorded".
+const SchemaVersion = 8
 
 // defaultFlushInterval is how often the writer goroutine flushes the
 // bufio.Writer on its own, independent of buffer fill or explicit Flush

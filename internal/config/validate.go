@@ -631,6 +631,12 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "http.notify_slow_ms", Message: fmt.Sprintf("threshold %d out of range (0–600000 ms, 0 = off), using 3000", c.HTTP.NotifySlowMs)})
 		c.HTTP.NotifySlowMs = 3000
 	}
+	// The slow-flight highlight threshold (#2547) has the same window and
+	// the same off switch as the notice threshold above.
+	if c.HTTP.SlowThresholdMs < 0 || c.HTTP.SlowThresholdMs > 600000 {
+		diags = append(diags, Diagnostic{Field: "http.slow_threshold_ms", Message: fmt.Sprintf("threshold %d out of range (0–600000 ms, 0 = off), using 2000", c.HTTP.SlowThresholdMs)})
+		c.HTTP.SlowThresholdMs = 2000
+	}
 	// Issues window (#2090): both defaults are fixed vocabularies; an unknown
 	// value falls back rather than opening the pane in an undefined state.
 	switch c.Issues.DefaultTab {

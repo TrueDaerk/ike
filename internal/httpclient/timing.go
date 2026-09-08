@@ -69,6 +69,49 @@ func (t *Timing) String() string {
 	return strings.Join(parts, " · ")
 }
 
+// Dominant names the phase that took the longest and how long it took
+// (#2547) — the "slow where?" answer in two words, for the header's warning
+// slot and the completion notice. Setup phases are counted on their own;
+// TTFB is compared with the setup subtracted, since it already contains
+// DNS/connect/TLS, so a 2 s wait for the server is not reported as "ttfb"
+// when 1.9 s of it was the handshake. The returned duration is nonetheless
+// the phase's own span as displayed elsewhere. Ties go to the earlier
+// phase; a nil or empty breakdown reports "".
+func (t *Timing) Dominant() (string, time.Duration) {
+	if t.IsZero() {
+		return "", 0
+	}
+	setup := t.DNS + t.Connect + t.TLS
+	wait := t.TTFB - setup
+	if wait < 0 {
+		wait = 0
+	}
+	phases := []struct {
+		label string
+		weigh time.Duration // what competes
+		span  time.Duration // what is displayed
+	}{
+		{"dns", t.DNS, t.DNS},
+		{"connect", t.Connect, t.Connect},
+		{"tls", t.TLS, t.TLS},
+		{"ttfb", wait, t.TTFB},
+		{"transfer", t.Transfer, t.Transfer},
+	}
+	best := -1
+	for i, p := range phases {
+		if p.weigh <= 0 {
+			continue
+		}
+		if best < 0 || p.weigh > phases[best].weigh {
+			best = i
+		}
+	}
+	if best < 0 {
+		return "", 0
+	}
+	return phases[best].label, phases[best].span
+}
+
 // FormatPhase spells one phase duration: whole milliseconds below a second,
 // one decimal of seconds above it — the spelling the in-flight indicator
 // already uses, so a phase and a total read alike.

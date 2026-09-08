@@ -263,7 +263,10 @@ any entry whose key the typed schema does not expose (no dead keys).
   plain with a notice row in the pane. `http.notify_slow_ms` (#2364) is the
   wall clock past which a finished dispatch announces itself as a notification
   while the response pane is not on screen (0–600000 ms, default 3000, `0` =
-  off); a non-2xx answer notifies regardless of it.
+  off); a non-2xx answer notifies regardless of it. `http.slow_threshold_ms`
+  (#2547) is the wall clock past which the response pane's header flags a
+  flight with its duration and dominating timing phase, and the off-screen
+  notice names that phase (0–600000 ms, default 2000, `0` = off).
   See [HTTP client](./http-client.md).
 - **Ansible Vault** (#2293) — `ansible.vault_password_file`, the `Path` entry
   (existence-checked in the form) naming the file whose first line decrypts

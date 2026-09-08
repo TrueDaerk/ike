@@ -1274,6 +1274,14 @@ func (m *Model) headerSegs(pal *theme.Palette) []headerSeg {
 			text:  fmt.Sprintf("   ⟳ running %s (%s)", m.pending, runningFor(m.pendingSince)),
 			style: lipgloss.NewStyle().Foreground(pal.Warning)})
 	}
+	if mark := m.slowMarker(); mark != "" {
+		// A slow flight (#2547) is flagged where the eye rests, in the
+		// warning slot next to the status, with the phase that ate the time:
+		// "was it slow?" and "slow where?" answered before the body is read.
+		segs = append(segs, headerSeg{
+			text:  "   " + mark,
+			style: lipgloss.NewStyle().Foreground(pal.Warning)})
+	}
 	if m.histIdx > 0 {
 		// An older history entry is on show (#1473): the footer hint alone is
 		// easy to miss while reading the body, so the header carries the
@@ -1292,6 +1300,27 @@ func (m *Model) headerSegs(pal *theme.Palette) []headerSeg {
 	}
 	return segs
 }
+
+// slowMarker composes the header's slow-flight marker (#2547) for the
+// response on show: "⚠ slow 14.1s · ttfb 13.9s", or "⚠ slow 14.1s" alone
+// when no breakdown was captured. Empty below http.slow_threshold_ms, when
+// the threshold is off, or while a stream is still open (its duration is
+// not final).
+func (m *Model) slowMarker() string {
+	limit := SlowThreshold()
+	resp := m.CurrentResponse()
+	if limit <= 0 || resp == nil || resp.Duration < limit {
+		return ""
+	}
+	mark := "⚠ slow " + httpclient.FormatPhase(resp.Duration)
+	if label, span := resp.Timing.Dominant(); label != "" {
+		mark += " · " + label + " " + httpclient.FormatPhase(span)
+	}
+	return mark
+}
+
+// SlowMarker reports the header's slow-flight marker (tests).
+func (m *Model) SlowMarker() string { return m.slowMarker() }
 
 // ResendHit reports whether the pane-local cell (x, y) sits on the header's
 // re-send affordance (#1832). Like the fold's copy glyph (#1787) it is tested
