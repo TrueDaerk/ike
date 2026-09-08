@@ -45,9 +45,20 @@ func currentProjectRoot() string {
 }
 
 // mruProjectTargets is the digit chords' target list: the recent projects in
-// MRU order, the current one dropped.
+// MRU order, the current one dropped and the active group's members first
+// (0510, #2574) — the very order the picker and the Recent Projects column
+// render, so a digit still names the N-th row.
 func mruProjectTargets() []string {
-	return project.MRUTargets(project.History(config.Get()), currentProjectRoot())
+	return project.MRUTargets(project.History(config.Get()), currentProjectRoot(), activeProjectGroup())
+}
+
+// activeProjectGroup resolves the persisted active-group marker to its group,
+// the zero Group when there is none. It reads the config rather than the root
+// model's marker so every list — picker, column, chords — resolves it the same
+// way, config being the single writer of the marker (#2571).
+func activeProjectGroup() project.Group {
+	g, _ := project.ActiveGroup(config.Get())
+	return g
 }
 
 // handleSwitchMRUProject routes project.switchMRU1…9 (#2489): switch to the

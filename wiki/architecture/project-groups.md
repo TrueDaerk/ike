@@ -50,7 +50,10 @@ it never mutates a subsystem.
 
 - **Lookups**: `Groups(cfg)` returns the stored list in order; `FindGroup(cfg, name)` matches
   case-insensitively; `GroupContaining(cfg, root)` returns the **first** group in list order that
-  has `root` among its members (roots compared as cleaned absolute paths).
+  has `root` among its members (roots compared as cleaned absolute paths), built on
+  `g.Contains(root)` — the membership test the MRU ordering and the row badge share.
+  `GroupBadge(g, root)` renders a member's marker, `⦿ web`, and `""` for a non-member or the zero
+  group, so a caller can hand it every row unconditionally.
 - **`ValidateGroup(cfg, g)`** is the write-time gate and returns the normalised group: the name
   trimmed, non-empty, free of path separators and not colliding case-insensitively with a
   *different* stored group (the same name is the group being edited, which upsert replaces); the
@@ -244,6 +247,28 @@ hop **back to the current root** — flagged `groupOpen.warm`: the segment reads
 `warming web 1/2`, the landing neither moves the marker nor writes it and toasts
 `group web warm · re-parked 2 projects`. Skipped hops are reported like the open's. With every
 member already in memory nothing runs: `group web is warm · every project is parked`.
+
+## MRU integration (#2574)
+
+While a group is active, **every** recent-projects list puts its members first and marks them —
+one function does it, so all of them agree:
+
+- **`project.MRUOrder(history, current, group)`** (`internal/project/mru.go`) drops the project one
+  is standing in and hoists the group's members to the front, keeping *their* MRU order among
+  themselves; the rest of the history follows, newest first. `MRUTargets` is its roots. The picker
+  (`#`), the peek flavour (`_`), the Recent Projects column of the recent-files dialog and
+  `project.switchMRU1…9` all read it, so the N-th digit chord is the N-th row. A zero `Group` — no
+  marker — leaves the plain MRU order untouched.
+- **Member rows carry `⦿ <group>`** in the existing badge column, joined with the in-memory dot and
+  the git context by `project.JoinBadge`: `● ⦿ web ⎇ main*`. The badge is rebuilt on every
+  `Results` call, so the asynchronous git enrichment's `RefreshRows` (#2178) keeps it.
+- **No digits return to the rows** (#2532): the digit means "N-th row of the picker", which is
+  exactly what makes the reordering useful.
+- **`project.switchLast` is not reordered**: it stays the MRU parked workspace, group or not —
+  the toggle back to where one just was must not depend on the group one happens to be in.
+
+Standing in `api` of `web = {api, ui, infra}`, the picker lists `ui`, `infra` (MRU order among
+them) and then the non-members, and `ctrl+alt+1` switches to the first member row.
 
 ## Validation diagnostics
 

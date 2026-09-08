@@ -87,19 +87,43 @@ func FindGroup(cfg *config.Config, name string) (Group, bool) {
 	return Group{}, false
 }
 
+// Contains reports whether root is one of the group's members. Roots are
+// compared as cleaned absolute paths, so the caller may pass an unnormalised
+// one; the zero Group (no group active) contains nothing.
+func (g Group) Contains(root string) bool {
+	key := cleanRoot(root)
+	if key == "" {
+		return false
+	}
+	for _, r := range g.Roots {
+		if cleanRoot(r) == key {
+			return true
+		}
+	}
+	return false
+}
+
+// GroupBadge is the marker a member row carries in the badge column of every
+// recent-projects list (0510, #2574): `⦿ web`, the same glyph the status
+// line's group slot and the group picker use. It is "" for a non-member and
+// for a zero Group, so a caller can hand it every row unconditionally.
+func GroupBadge(g Group, root string) string {
+	if g.Name == "" || !g.Contains(root) {
+		return ""
+	}
+	return "⦿ " + g.Name
+}
+
 // GroupContaining returns the first group — in list order — that has root
 // among its members. Roots are compared as cleaned absolute paths, so the
 // caller may pass an unnormalised one.
 func GroupContaining(cfg *config.Config, root string) (Group, bool) {
-	root = cleanRoot(root)
-	if root == "" {
+	if cleanRoot(root) == "" {
 		return Group{}, false
 	}
 	for _, g := range Groups(cfg) {
-		for _, r := range g.Roots {
-			if cleanRoot(r) == root {
-				return g, true
-			}
+		if g.Contains(root) {
+			return g, true
 		}
 	}
 	return Group{}, false

@@ -17,7 +17,7 @@ import (
 // project one came from, project.switchLast's pick.
 func TestMRUTargetsDropsCurrentProject(t *testing.T) {
 	history := fixedHistory()
-	got := MRUTargets(history, "/code/website")
+	got := MRUTargets(history, "/code/website", Group{})
 	want := []string{"/code/ike", "/work/intra"}
 	if len(got) != len(want) {
 		t.Fatalf("targets = %v, want %v", got, want)
@@ -28,12 +28,12 @@ func TestMRUTargetsDropsCurrentProject(t *testing.T) {
 		}
 	}
 	// An unresolvable current project filters nothing out.
-	if all := MRUTargets(history, ""); len(all) != len(history) {
+	if all := MRUTargets(history, "", Group{}); len(all) != len(history) {
 		t.Errorf("no current project must keep every entry, got %v", all)
 	}
 	// The comparison is on cleaned paths, so a trailing-slash spelling of the
 	// current root still drops its own row.
-	if got := MRUTargets(history, filepath.Clean("/code/ike/")); len(got) != 2 || got[0] != "/code/website" {
+	if got := MRUTargets(history, filepath.Clean("/code/ike/"), Group{}); len(got) != 2 || got[0] != "/code/website" {
 		t.Errorf("cleaned current root mismatch: %v", got)
 	}
 }
