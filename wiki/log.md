@@ -1,5 +1,24 @@
 # Log
 
+## 2026-09-08 (project group data layer: [[project.groups]], active-group marker, cap protection, #2570)
+
+- **`[[project.groups]]`** and **`project.active_group`** (Epic 0510, #2569 §1)
+  persist in the **user** layer like `project.history`: a group is a name plus
+  an ordered list of roots plus a `created` stamp. `internal/project/group.go`
+  owns the semantics — `Groups` / `FindGroup` / `GroupContaining` (first match
+  in list order), `ValidateGroup` (name unique case-insensitively and free of
+  path separators, roots `~`-expanded, deduped and validated at write time),
+  `UpsertGroup` / `RemoveGroup` and the `tea.Cmd` wrappers, plus
+  `ResolveGroupRoots` splitting present from missing members without touching
+  the stored entry. `SetActiveGroup` / `ClearActiveGroup` write the marker;
+  `ReconcileActiveGroup` at startup keeps it only when the process root is a
+  member. While a group is active the background workspace cap is
+  `max(project.max_workspaces, len(members))` and eviction prefers
+  non-members. The config validator reports a broken entry as
+  `project.groups[2]: root "…" is not a directory`; `project.active_group` is
+  read-only state, never a settings form field.
+  Docs: [Project Groups](/architecture/project-groups.md).
+
 ## 2026-09-08 (palette pick hints its chord, offers a key for unbound commands, #2549)
 
 - After a palette pick of a command bound in the focused context a toast

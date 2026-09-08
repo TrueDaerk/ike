@@ -166,6 +166,13 @@ func main() {
 	// configuration (Roadmap 0090: the initial open counts as an open). A
 	// failure is non-fatal — history is a convenience, not a startup gate.
 	_ = project.RecordOpen(config.Discover("."), ".", time.Now())
+	// The active-group marker (0510, #2570) survives a restart only when the
+	// process root is a member of that group: it re-establishes the status
+	// segment, the MRU ordering and find-in-group for the set one is standing
+	// in, and it must not claim a session that has moved elsewhere. Run before
+	// the model loads config, like the history record; a failed write is
+	// non-fatal — the marker is state, not a startup gate.
+	_, _ = project.ReconcileActiveGroup(config.Discover("."), mustGetwd())
 	perfhud.RecordStartupPhase("project-history", time.Since(phase))
 	// Under bubbletea v2 the alternate screen and mouse cell-motion reporting
 	// (which drives the pane drag/resize layout, Roadmap 0036) are declared on the

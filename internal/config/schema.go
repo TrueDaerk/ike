@@ -1119,6 +1119,17 @@ type Project struct {
 	History     []ProjectHistoryEntry `toml:"history"`
 	MaxHistory  int                   `toml:"max_history"`
 	RestoreLast bool                  `toml:"restore_last"`
+	// Groups are the named project groups (0510, #2570): a replace-by-default
+	// list of [[project.groups]] entries, each a name plus an ordered list of
+	// roots. Like History it lives in the *user* layer — a group spans
+	// projects on this machine. Content rules (validation, upsert, removal)
+	// live in internal/project/group.go.
+	Groups []ProjectGroup `toml:"groups"`
+	// ActiveGroup marks the group the session is currently working in
+	// (0510, #2570), by name; empty means none. It is IKE's own state, not a
+	// setting: group.open writes it, group.close clears it, and startup drops
+	// it when the process root is not a member of that group.
+	ActiveGroup string `toml:"active_group"`
 	// MaxWorkspaces caps the live background workspaces kept across seamless
 	// project switches (0370, #780); exceeding it evicts the
 	// least-recently-used one (with a confirm when unsaved buffers or
@@ -1177,6 +1188,18 @@ type ProjectHistoryEntry struct {
 	Name       string   `toml:"name"`
 	LastOpened string   `toml:"last_opened"`
 	Remotes    []string `toml:"remotes"`
+}
+
+// ProjectGroup is one named project group as persisted in [[project.groups]]
+// (0510, #2570). Name is the display name and the key groups are addressed by
+// (unique case-insensitively, no path separators), Roots is the ordered list
+// of member roots (absolute and cleaned; the order is the open order and the
+// group.next/prev cycle order), Created is RFC3339 UTC and informational.
+// internal/project owns the semantics; this struct only fixes the TOML shape.
+type ProjectGroup struct {
+	Name    string   `toml:"name"`
+	Roots   []string `toml:"roots"`
+	Created string   `toml:"created"`
 }
 
 // Notifications tunes the toast system (Roadmap 0130). TimeoutSeconds is the

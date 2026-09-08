@@ -6,6 +6,7 @@ import (
 	"ike/internal/config"
 	"ike/internal/pane"
 	"ike/internal/plugin"
+	"ike/internal/project"
 	"ike/internal/workspace"
 
 	tea "charm.land/bubbletea/v2"
@@ -22,13 +23,36 @@ import (
 // unset or invalid.
 const defaultMaxWorkspaces = 3
 
-// maxWorkspaces reads the configured background cap, floored at 1.
+// maxWorkspaces reads the effective background cap. It is
+// project.max_workspaces (the built-in default when unset or invalid), raised
+// to the member count while a project group is active (0510, #2570): a group
+// parks all of its members, so a cap below len(members) would evict one the
+// moment the last is opened. Memory stays bounded by the background LSP idle
+// shutdown (#1521), which applies to parked members unchanged.
 func maxWorkspaces() int {
 	c := config.Get()
-	if c == nil || c.Project.MaxWorkspaces <= 0 {
-		return defaultMaxWorkspaces
+	cap := defaultMaxWorkspaces
+	if c != nil && c.Project.MaxWorkspaces > 0 {
+		cap = c.Project.MaxWorkspaces
 	}
-	return c.Project.MaxWorkspaces
+	if g, ok := project.ActiveGroup(c); ok && len(g.Roots) > cap {
+		cap = len(g.Roots)
+	}
+	return cap
+}
+
+// activeGroupMembers returns the member roots of the active project group as a
+// set, keyed by the workspace roots the manager uses. Empty without a group.
+func activeGroupMembers() map[string]bool {
+	g, ok := project.ActiveGroup(config.Get())
+	if !ok {
+		return nil
+	}
+	members := make(map[string]bool, len(g.Roots))
+	for _, r := range g.Roots {
+		members[r] = true
+	}
+	return members
 }
 
 // workspaceBusy reports whether evicting w would lose live state: a dirty
@@ -236,7 +260,7 @@ func (m *Model) enforceWorkspaceCap() tea.Cmd {
 	var cmds []tea.Cmd
 	bg := m.ws.Background()
 	over := len(bg) - cap
-	for _, root := range bg { // LRU-first order
+	for _, root := range evictionOrder(bg) {
 		if over <= 0 {
 			break
 		}
@@ -249,4 +273,28 @@ func (m *Model) enforceWorkspaceCap() tea.Cmd {
 		over--
 	}
 	return tea.Batch(cmds...)
+}
+
+// evictionOrder ranks the background roots for the cap sweep: LRU-first as the
+// manager reports them, but members of the active project group last (0510,
+// #2570). A group's members are the set the user is working in — a parked
+// non-member is dropped before any of them, and a member only goes when the
+// cap is still exceeded after every non-member is gone.
+func evictionOrder(bg []string) []string {
+	members := activeGroupMembers()
+	if len(members) == 0 {
+		return bg
+	}
+	out := make([]string, 0, len(bg))
+	for _, root := range bg {
+		if !members[root] {
+			out = append(out, root)
+		}
+	}
+	for _, root := range bg {
+		if members[root] {
+			out = append(out, root)
+		}
+	}
+	return out
 }
