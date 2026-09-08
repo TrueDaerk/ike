@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Integrated Terminal
-description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); pinned mode docking the popup to the bottom edge with the toggle chord as a focus switch, plus a project/global popup scope that carries one shell across projects (#2406); popup focus loss blurs instead of hiding, with a statusbar activity indicator for the hidden layer (#2309), and the wheel outside the layer's boxes scrolls the pane below while the layer keeps focus (#2343); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192).
+description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); pinned mode docking the popup to the bottom edge with the toggle chord as a focus switch, plus a project/global popup scope that carries one shell across projects (#2406); popup focus loss blurs instead of hiding, with a statusbar activity indicator for the hidden layer (#2309), and the wheel outside the layer's boxes scrolls the pane below while the layer keeps focus (#2343); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); sending the editor's selection (else the caret's line) to a shell as a bracketed paste, optionally submitted (#2542); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-09-08T12:00:00Z
+timestamp: 2026-09-08T18:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -1022,6 +1022,36 @@ path — super is not xterm-encodable.
   pushes the visible lines *into* the scrollback — the xterm behaviour) and
   asks the shell to repaint its prompt with the ctrl+l convention.
 - **`terminal.ssh`** opens the SSH host picker (see below).
+- **`terminal.sendSelection`** (default `cmd+alt+shift+enter`) and
+  **`terminal.sendSelectionRun`** (default `cmd+alt+enter`), both Editor
+  context, hand the editor's text to a shell (`internal/app/termsend.go`,
+  #2542) — the last manual step of the select → copy → focus a shell → paste
+  loop the popup terminal was already the other half of.
+  - **Payload**: the active editor's visual selection, or — with nothing
+    selected — the whole line the caret sits on, trailing whitespace trimmed
+    and indentation kept (a shell ignores leading blanks; a here-doc body does
+    not). A payload that is blank after trimming is refused with a notice
+    rather than waking a shell with an empty paste.
+  - **Target order** (`terminalSendTarget`) — the shell the user is looking
+    at, else give them one: (1) the popup terminal's focused tab while the
+    popup layer is *open*, blurred included (#2309 — visible with the keyboard
+    in the editor, which is the state the command is used from); (2) the
+    focused terminal pane, custom tool panes excluded (#741/#772 — that shell
+    belongs to the tool); (3) otherwise the popup is opened, spawning its first
+    shell, and the payload goes there. Only the third case moves the keyboard;
+    the first two leave the editor with it, so select → send → keep editing is
+    one gesture.
+  - **Delivery**: `terminal.Model.PasteToShell` sends the text as a
+    **bracketed paste**, never as key presses — a selection is arbitrary,
+    possibly multi-line text, and typed newlines would make the shell run each
+    fragment as its own command. It also bypasses the scrollback search and
+    copy-mode overlays `PasteText` routes to: the payload was aimed at the
+    shell. The `Run` flavour's newline is therefore a *separate* Enter key
+    press after the paste — inside the brackets a trailing `\n` is inserted
+    literally instead of submitting.
+  - Both commands sit in the **editor context menu** next to "Run Test at
+    Cursor", and are palette-reachable (the Cmd/Alt chords are fragile, so the
+    palette is their recorded escape route in `reachableAlternatives`).
 - The Tools menu carries "Terminal" (toggle), "New Terminal", "New Terminal
   Tab" and "SSH Host…"; all commands are palette-reachable.
 - **Titles**: the shell's OSC 0/2 reports (the running command) append to

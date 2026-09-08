@@ -6407,6 +6407,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.togglePopupPin()
 		return m, nil
 
+	case TerminalSendSelectionMsg:
+		// terminal.sendSelection / terminal.sendSelectionRun (#2542): the
+		// editor's selection (else the caret's line) goes to a shell as a
+		// bracketed paste, Run submitting it.
+		m.sendSelectionToTerminal(msg.Run)
+		return m, nil
+
 	case TerminalClearMsg:
 		// terminal.clear: scrollback gone, screen repainted via ctrl+l.
 		if inst := m.currentTerminal(); inst != nil {
@@ -12632,6 +12639,8 @@ func editorContextItems(conflict bool) []menu.Item {
 		{Title: "Reformat File", Command: "lsp.format"},
 		{Title: "Organize Imports", Command: "lsp.organizeImports"},
 		{Title: "Run Test at Cursor", Command: "run.testAtCursor"},
+		{Title: "Send Selection to Terminal", Command: "terminal.sendSelection"},
+		{Title: "Send Selection to Terminal and Run", Command: "terminal.sendSelectionRun"},
 	}
 	if conflict {
 		items = append(items,

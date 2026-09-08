@@ -246,6 +246,8 @@ Active when an editor pane has focus.
 | Select All | `cmd+a` | `ctrl+a` | `editor.selectAll` |
 | Select to line end | `shift+end` | `shift+end` | `editor.selectLineEnd` |
 | Select to line start | `shift+home` | `shift+home` | `editor.selectLineStart` |
+| Send selection to terminal | `cmd+alt+shift+enter` | `ctrl+alt+shift+enter` | `terminal.sendSelection` |
+| Send selection to terminal and run | `cmd+alt+enter` | `ctrl+alt+enter` | `terminal.sendSelectionRun` |
 | Show intention actions | `alt+enter` | `alt+enter` | `lsp.codeAction` |
 | Show stored HTTP response | `cmd+shift+enter` | `ctrl+shift+enter` | `http.showResponse` |
 | Show stored HTTP response | `ctrl+shift+f9` | `ctrl+shift+f9` | `http.showResponse` |
