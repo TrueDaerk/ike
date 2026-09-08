@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
+	"ike/internal/keymap"
 	"ike/internal/telemetry"
 )
 
@@ -127,5 +128,77 @@ func TestTelemetryUnboundChordInEditorStillRecorded(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("unbound chord not recorded in an editor; got %v", unboundChords(t, m))
+	}
+}
+
+// TestTelemetryUnboundNamesDroppedDefault (#2539): a default chord the user's
+// config unbound still records as unbound — the key did nothing — but the
+// event names the default that used to own it, so a missing-keybind report
+// can tell "never bound" from "removed by an override". The #2539 telemetry
+// had editor.caret.addAbove's chord unbound in editor[json] while the default
+// table binds it there in every language scope, and this is the one way the
+// resolver can produce that.
+func TestTelemetryUnboundNamesDroppedDefault(t *testing.T) {
+	m := telemetryModel(t, host.MapConfig{"keymap.bindings.alt+shift+up": ""})
+	path := filepath.Join(t.TempDir(), "a.json")
+	if err := os.WriteFile(path, []byte("{\"a\": 1}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tm, cmd := m.openPath(path, false)
+	m = drainCmd(tm.(Model), cmd)
+	if m.onboardingOpen() { // the first-start LSP dialog eats keys on hosts missing a server
+		m = m.closeOnboarding().(Model)
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModAlt | tea.ModShift})
+
+	var got []telemetry.Event
+	for _, ev := range eventsOf(usageEvents(t, m), telemetry.TypeKey) {
+		if ev.Data["chord"] == "alt+shift+up" {
+			got = append(got, ev)
+		}
+	}
+	if len(got) != 1 {
+		t.Fatalf("want one alt+shift+up key event, got %v", got)
+	}
+	ev := got[0]
+	if ev.Data["status"] != "unbound" || ev.Data["command"] != "editor.caret.addAbove" {
+		t.Fatalf("want unbound naming the dropped default, got %v", ev.Data)
+	}
+	if ev.Data["context"] != "editor[json]" {
+		t.Fatalf("want the language-scoped editor context, got %q", ev.Data["context"])
+	}
+
+	// A chord no default ever bound keeps a bare unbound event.
+	m = drainKey(m, tea.KeyPressMsg{Code: '0', Mod: tea.ModCtrl | tea.ModAlt})
+	for _, ev := range eventsOf(usageEvents(t, m), telemetry.TypeKey) {
+		if ev.Data["chord"] == "ctrl+alt+0" && ev.Data["command"] != "" {
+			t.Fatalf("a never-bound chord must not name a command, got %v", ev.Data)
+		}
+	}
+}
+
+// TestEditorDefaultResolvesInLanguageScope pins the #2539 baseline: with no
+// override, the Editor-context default is found under the language-scoped
+// key context of a classified buffer — the resolver, not a host, is what the
+// telemetry's editor[json] names. (The test registry carries no editor
+// commands, so the lookup is asserted on the table rather than via dispatch.)
+func TestEditorDefaultResolvesInLanguageScope(t *testing.T) {
+	m := telemetryModel(t, host.MapConfig{})
+	path := filepath.Join(t.TempDir(), "a.json")
+	if err := os.WriteFile(path, []byte("{\"a\": 1}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tm, cmd := m.openPath(path, false)
+	m = drainCmd(tm.(Model), cmd)
+	if got := m.keyContext(); got != keymap.WithLang(keymap.Editor, "json") {
+		t.Fatalf("key context = %q, want editor[json]", got)
+	}
+	chord := keymap.MustParseChord("alt+shift+up")
+	b, ok := m.bindings.Table().Lookup(chord, m.keyContext())
+	if !ok || b.Command != "editor.caret.addAbove" {
+		t.Fatalf("alt+shift+up in editor[json] = %+v, %v; want editor.caret.addAbove", b, ok)
+	}
+	if m.droppedDefault(chord.Steps[0]) != "" {
+		t.Fatal("nothing is dropped without an override")
 	}
 }

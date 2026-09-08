@@ -28,6 +28,17 @@ import (
 // JetBrains' "move to next method": there is no symbol-stepping command to
 // bind it to (only `lsp.documentSymbols`' popup), so the chord stays unbound
 // until one lands rather than being aliased onto something adjacent.
+//
+// #2539's telemetry added two more of the kind, both left unbound on purpose:
+//   - `f12` — JetBrains' "Jump to Last Tool Window". IKE keeps no memory of
+//     the last tool window a user was in (the tool windows are toggled by
+//     their own cmd+digit chords, and window.* only saves/restores whole
+//     layouts), so there is nothing honest to bind the key to yet.
+//   - `cmd+alt+up` — JetBrains' "Previous Occurrence" (the Find/Usages result
+//     walk, with cmd+alt+down as "Next Occurrence"). The usages window has no
+//     step-to-previous/next command; binding the pair to an adjacent
+//     navigation would teach the wrong muscle memory.
+// Both stay unbound until the command they name exists.
 
 // The reasons, grouped so the ledger reads as an audit rather than as an
 // opt-out list.
