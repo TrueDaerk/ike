@@ -1,10 +1,10 @@
 ---
 type: concept
 title: jq, yq & xmq Playground
-description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; three dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers and a focused YAML response, xmq for XML/HTML buffers and a focused XML/HTML response — the one external-engine dialect, shelling out to the xmq CLI with the buffer on stdin, the query line split into shell words, the output language named per command for the result's highlighting and scratch extension, a missing binary answered at open with a centered install-hint dialog and configurable via playground.xmq.path, and the at-path open seeding a select over the caret element's XPath), one chord dispatching over the three dialects from the focused editor's language or the focused HTTP response's content type, gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors that leave the last successful result in the buffer under a stale banner instead of clearing it, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one session-wide program history shared by every buffer and both dialects, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, inserting a picked row into the query line, and leading with guide rows that say what enter does with each kind of row, showing every example's actual output beside its program, every builtin's call form beside its arity, and the sample document the examples are written against as rows of the sheet itself; it opens from the query line while a query is being written, dismissing the completion popup rather than letting it cover the sheet, and its chord is named early enough in the info row's hint tail to survive a narrow pane — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing, while the find chord opens the result buffer's search from either focus with `esc` handing the keyboard back to the query line — its program and caret untouched, the matches left highlighted until the next query re-renders the result — and the match-step chords walk those matches from either focus; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace.
+description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; three dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers and a focused YAML response, xmq for XML/HTML buffers and a focused XML/HTML response — the one external-engine dialect, shelling out to the xmq CLI with the buffer on stdin, the query line split into shell words, the output language named per command for the result's highlighting and scratch extension, a missing binary answered at open with a centered install-hint dialog and configurable via playground.xmq.path, and the at-path open seeding a select over the caret element's XPath), one chord dispatching over the three dialects from the focused editor's language or the focused HTTP response's content type, gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors that leave the last successful result in the buffer under a stale banner instead of clearing it, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one per-user program history shared by every buffer and every dialect and persisted across restarts, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, inserting a picked row into the query line, and leading with guide rows that say what enter does with each kind of row, showing every example's actual output beside its program, every builtin's call form beside its arity, and the sample document the examples are written against as rows of the sheet itself; it opens from the query line while a query is being written, dismissing the completion popup rather than letting it cover the sheet, and its chord is named early enough in the info row's hint tail to survive a narrow pane — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing, while the find chord opens the result buffer's search from either focus with `esc` handing the keyboard back to the query line — its program and caret untouched, the matches left highlighted until the next query re-renders the result — and the match-step chords walk those matches from either focus; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace.
 resource: internal/jqplay/jqplay.go
 tags: [architecture, json, yaml, xml, html, jq, yq, xmq, tools, inline, editor, http, completion, folding]
-timestamp: 2026-09-04T12:00:00Z
+timestamp: 2026-09-08T12:00:00Z
 ---
 
 # jq, yq & xmq Playground
@@ -269,7 +269,7 @@ Everything not in the table above, which is the point of the issue:
   candidates come from the parsed snapshot whatever decoded it;
 - the debounce, the generation stamping and the cancellation;
 - the read-only result buffer, its folding keys and the copy / scratch actions;
-- the session program history — **one list for both dialects**: a yq program
+- the program history — **one list for both dialects**: a yq program
   *is* a jq program here, and the list was already deliberately promiscuous
   across buffers and response panes;
 - the saved-filter *store* (`jqplay.Library`), the name prompt and the picker,
@@ -506,7 +506,7 @@ Two things override the identity:
   back without an error records its program under the input's key — the file
   path, the unsaved buffer's editor key, the response pane's key — and the
   next open over that same input starts on it. Reopening a file therefore
-  resumes the look that was interrupted, which the session program **history**
+  resumes the look that was interrupted, which the program **history**
   cannot express: that list is deliberately one shared, buffer-agnostic
   sequence, so its newest entry is whatever was run last *anywhere*. A
   program that failed to compile or raised at runtime is not recorded, so a
@@ -520,8 +520,9 @@ Two things override the identity:
   name a location the input does not contain — and falls back to `.` when the
   caret has no path.
 
-The memory is in-memory for the session, like the history: a jq program is
-scratch work, and persisting it into the project state would be noise.
+The per-file recall is in-memory for the session, unlike the [history](#history),
+which is per user and persisted: the recall is a bookmark into one file of one
+project, and persisting it into the project state would be noise.
 
 ## Debounce, generations, cancellation
 
@@ -678,7 +679,7 @@ line — it is one query line with more rows, never a second editor.
 | Key | Effect in the multi-line view |
 | --- | --- |
 | `↑` / `↓` | move the caret one row up / down, keeping its **goal column** |
-| `alt+↑` / `alt+↓` | walk the session program history |
+| `alt+↑` / `alt+↓` | walk the program history |
 | `home` / `end` | start / end of the **caret's row** |
 | `ctrl+home` / `ctrl+end` | start / end of the whole program |
 | *click* | put the caret on the clicked cell of any query row |
@@ -840,7 +841,7 @@ above win):
 | *(typing)* | edit the program; each change re-evaluates, debounced, and re-filters or opens the completion popup |
 | `ctrl+space` | open the completion popup explicitly (the full builtin list on an empty line) |
 | `enter` | record the program in the history and run it now |
-| `↑` / `↓` | walk the session program history (`↓` past the newest restores the draft) — the program's rows in the [multi-line view](#editing-across-the-rows) |
+| `↑` / `↓` | walk the program history (`↓` past the newest restores the draft) — the program's rows in the [multi-line view](#editing-across-the-rows) |
 | `alt+↑` / `alt+↓` | walk the history from any row of the multi-line view |
 | `home` / `end` | ends of the program — of the caret's **row** in the multi-line view |
 | `tab` | move the keyboard into the result buffer |
@@ -1057,14 +1058,38 @@ run again over the result. That is how a multi-step jq session actually goes.
 
 ## History
 
-Programs are remembered **per session, in memory only** (newest first, repeats
-moved to the front, capped at 50), like the regex tester's patterns: a jq
-program under construction is scratch work, and persisting it into the project
-state would be noise. The program that *is* worth keeping gets a name instead —
-see [the saved-filter library](#the-saved-filter-library) below. The history lives on the root model, not on the mode
-state, so it survives closing and reopening the playground.
+Programs are remembered **per user** (newest first, repeats moved to the
+front, capped at 50). The list's lifetime, precisely (#2536):
 
-It is **one session-wide list, shared by every playground and both dialects**
+- **It is one list.** The root model holds a single `jqplay.History`; every
+  open playground — jq, yq or xmq, over an editor buffer, a selection or an
+  HTTP response — writes into that same instance. Nothing about the list is
+  keyed by file, dialect or source.
+- **It outlives the mode.** The history lives on the root model, not on the
+  mode state, so it survives closing and reopening the playground — on the
+  same file or any other.
+- **It ignores what happens to the source.** An external overwrite of the
+  followed file [renews the input](#following-the-source-file), a removal
+  ends the mode by the ordinary close (which records the query line like
+  `esc` does); neither path touches the list. A history that emptied when a
+  file was regenerated behind the editor would read as per-file, which it
+  never was.
+- **It outlives the process.** Every `enter` and every close persists the
+  list to `~/.ike/playground-history.json` (`$IKE_CONFIG_DIR/…` when the
+  override is set), and a fresh IKE reads it lazily on the first `↑`. It is
+  *user* state, deliberately not the project's `.ike`: the history answers
+  "what did I run recently, anywhere", and a per-user file is where
+  "anywhere" already pointed. Persistence never disrupts the mode — a
+  missing, unreadable or malformed file reads as empty, a failed write is
+  swallowed, and a memory-only zero value (tests, hand-built models) never
+  writes at all.
+
+A program under construction is still scratch work: only committed programs
+(`enter`) and the query line at close are recorded, never every debounced
+keystroke. The program that *is* worth keeping gets a name instead — see
+[the saved-filter library](#the-saved-filter-library) below.
+
+It is **one list, shared by every playground and every dialect**
 (#2039) — a program run over a `.http` response is offered by `↑` in a `.json`
 buffer, and a yq program by `↑` in the jq playground, because the mode was
 never the thing that owned it and the language is the same one either way. That
@@ -1390,7 +1415,8 @@ unbound-command audit ledger (`cmd/ike/keybind_audit_test.go`, #2305).
 - **No second builtin list, ever.** The function rows are `Builtins()`; the
   descriptions are `builtinDocs`, the map the completion popup already reads.
   Anything else would be a copy with its own decay schedule.
-- **The history is still not persisted.** #1995 gives the durable programs a
-  *name* and a file; the anonymous ones stay in memory. Persisting the history
-  too would put every half-typed experiment into the project state, which is
-  exactly the noise the library exists to separate out.
+- **The history is per user, not per project.** #1995 gives the durable
+  programs a *name* and a project (or global) file; the anonymous ones are
+  persisted too since #2536, but as user state under `~/.ike` and only at
+  `enter` and close — never per keystroke — so no half-typed experiment lands
+  in the project state the library exists to keep clean.

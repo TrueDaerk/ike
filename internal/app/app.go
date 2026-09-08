@@ -487,9 +487,11 @@ type Model struct {
 	// since #1970; nil when it is closed. playHistory outlives the mode for
 	// the same reason regexHistory does, and is a *shared pointer* (#1977):
 	// every open playground writes its programs straight into this one
-	// session-wide list, so the history is the same whichever buffer or
-	// response pane the mode was opened over — and no exit path can drop
-	// entries by failing to copy them back.
+	// list, so the history is the same whichever buffer or response pane the
+	// mode was opened over, whichever dialect, and whatever happened to the
+	// source file meanwhile — and no exit path can drop entries by failing to
+	// copy them back. Since #2536 the list is also persisted per user
+	// (jqplay.HistoryFile), so it outlives the process too.
 	// playLastProgram remembers, per queried input (file path, unsaved buffer,
 	// response pane), the last program that ran against it without an error
 	// (#1982). The ordinary open prefills it instead of `.`, so reopening a
@@ -1457,8 +1459,8 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		liveImages:      map[int]bool{},
 		navHist:         &nav.History{},
 		previewBound:    new(atomic.Bool),
-		playHistory:     &jqplay.History{},   // one session-wide program list (#1977)
-		playLastProgram: map[string]string{}, // per-file last valid program (#1982)
+		playHistory:     jqplay.NewHistory(jqplay.HistoryFile()), // one per-user program list (#1977, persisted since #2536)
+		playLastProgram: map[string]string{},                     // per-file last valid program (#1982)
 		compMRU:         mru.Load(mru.DefaultFile()),
 		bpts:            debug.Load(),
 		watches:         debug.LoadWatches(), // per-project watch expressions (#2174)
