@@ -3213,10 +3213,12 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 		// ctrl+alt+N rank as a leading hint here and in the picker, which
 		// read as noise in front of every project name. The chords are
 		// unchanged; their palette command titles carry the numbers.
-		for _, e := range project.History(config.Get()) {
-			if cur != "" && filepath.Clean(e.Path) == cur {
-				continue
-			}
+		//
+		// The order is project.MRUOrder's, the one the picker and the digit
+		// chords use (0510, #2574): current project dropped, the active
+		// group's members first in their MRU order, each badged `⦿ <group>`.
+		group := activeProjectGroup()
+		for _, e := range project.MRUOrder(project.History(config.Get()), cur, group) {
 			it := palette.Item{
 				Title: e.Name,
 				Msg:   project.PickedMsg{Path: e.Path},
@@ -3237,6 +3239,8 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 				// the project picker.
 				it.Aux = project.RemoveFromHistoryMsg{Path: e.Path}
 			}
+			// Same badge column as the picker's rows (#2574): "● ⦿ web".
+			it.Badge = project.JoinBadge(it.Badge, project.GroupBadge(group, e.Path))
 			items = append(items, it)
 		}
 		return items

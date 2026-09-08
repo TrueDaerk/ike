@@ -54,6 +54,10 @@ type PickerMode struct {
 	// root (#2178), shared with the peek flavour. Nil — or a root not probed
 	// yet — simply renders the row as it always was.
 	git *GitCache
+	// group supplies the active project group (0510, #2574) whose members
+	// sort to the front of the list and carry the `⦿ <group>` badge. It
+	// defaults to the persisted marker; nil orders and marks nothing.
+	group func() Group
 }
 
 // SetGitCache installs the shared branch/dirty cache (#2178); the app injects
@@ -78,7 +82,27 @@ func NewPickerMode(history func() []Entry) *PickerMode {
 	if history == nil {
 		history = func() []Entry { return History(config.Get()) }
 	}
-	return &PickerMode{history: history, projectsDir: ProjectsDir}
+	// The persisted marker is the default group source, like the group
+	// picker's badge (#2571): the root model reloads the config as soon as
+	// the write lands, so the list is only ever a beat behind its marker.
+	group := func() Group {
+		g, _ := ActiveGroup(config.Get())
+		return g
+	}
+	return &PickerMode{history: history, projectsDir: ProjectsDir, group: group}
+}
+
+// SetGroup installs the active-group source (0510, #2574), so the app can
+// hand both flavours the model's own marker instead of the persisted one.
+func (m *PickerMode) SetGroup(group func() Group) { m.group = group }
+
+// activeGroup resolves the group whose members lead the list; the zero Group
+// when there is none.
+func (m *PickerMode) activeGroup() Group {
+	if m.group == nil {
+		return Group{}
+	}
+	return m.group()
 }
 
 // NewPeekPickerMode builds the picker's peek flavour (#2136) behind
@@ -156,6 +180,10 @@ func (m *PickerMode) Placeholder() string {
 // *previous* project, and the switch chord plus enter bounces between the two
 // projects you alternate between.
 //
+// While a project group is active (0510, #2574) its members lead the list in
+// their MRU order and carry a `⦿ <group>` badge: the projects one is working
+// across sit under the first digit chords, and the badge says why they moved.
+//
 // The rows carry no MRU digit since #2532: between #2489 and it, the first
 // nine rows rendered their `ctrl+alt+N` rank as a leading Hint, which turned
 // out to be noise in front of every project name rather than a teaching aid.
@@ -169,10 +197,12 @@ func (m *PickerMode) Results(query string, cx palette.Context) []palette.Item {
 	}
 	var out []scored
 	cur := m.currentRoot(cx)
-	for _, e := range m.history() {
-		if cur != "" && filepath.Clean(e.Path) == cur {
-			continue
-		}
+	// One order for every list (0510, #2574): the current project dropped,
+	// the active group's members hoisted to the front in their MRU order.
+	// The score sort below is stable, so an empty query renders exactly this
+	// order and the digit chords address the same rows.
+	group := m.activeGroup()
+	for _, e := range MRUOrder(m.history(), cur, group) {
 		if r, ok := fuzzy.Match(query, e.Name); ok {
 			out = append(out, scored{entry: e, score: r.Score, spans: r.Positions})
 			continue
@@ -213,10 +243,12 @@ func (m *PickerMode) Results(query string, cx palette.Context) []palette.Item {
 			// Unloaded entries prune from the history instead (#842).
 			it.Aux = RemoveFromHistoryMsg{Path: s.entry.Path}
 		}
-		// The git context (#2178) shares the badge column with the dot:
-		// "● ⎇ main*". It is empty until the row's probe answers, so the
-		// list is complete the moment the picker opens and fills in after.
-		it.Badge = joinBadge(it.Badge, m.gitBadge(s.entry.Path))
+		// The group marker (#2574) and the git context (#2178) share the
+		// badge column with the dot: "● ⦿ web ⎇ main*". The git half is
+		// empty until the row's probe answers, so the list is complete the
+		// moment the picker opens and fills in after — and since the badge
+		// is rebuilt here, RefreshRows keeps the group marker.
+		it.Badge = JoinBadge(it.Badge, GroupBadge(group, s.entry.Path), m.gitBadge(s.entry.Path))
 		items = append(items, it)
 	}
 	if q := strings.TrimSpace(query); q != "" {
@@ -255,9 +287,11 @@ func (m *PickerMode) gitBadge(path string) string {
 	return info.Badge()
 }
 
-// joinBadge merges the in-memory dot (#820) and the git badge (#2178) into
-// the single Badge column, one space apart; either half may be empty.
-func joinBadge(parts ...string) string {
+// JoinBadge merges the in-memory dot (#820), the group marker (#2574) and the
+// git badge (#2178) into the single Badge column, one space apart; any part
+// may be empty. Exported for the Recent Projects column (#778), which builds
+// its rows outside this package from the same three sources.
+func JoinBadge(parts ...string) string {
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {
 		if p != "" {

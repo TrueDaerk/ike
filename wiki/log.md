@@ -1,5 +1,22 @@
 # Log
 
+## 2026-09-08 (MRU integration: group members first, `⦿ <group>` badge, #2574)
+
+- **One order for every recent-projects list**: `project.MRUOrder(history, current, group)`
+  (`internal/project/mru.go`, `MRUTargets` on top of it) drops the current project and
+  hoists the active group's members to the front in *their* MRU order, the rest of the
+  history following. The picker (`#`), the peek flavour (`_`), the Recent Projects column
+  of the recent-files dialog and `project.switchMRU1…9` all read it, so a digit still
+  names the N-th row: standing in `api` of `web = {api, ui, infra}`, `ctrl+alt+1` is `ui`.
+  Without a group the order is unchanged, and `project.switchLast` stays the MRU parked
+  workspace either way.
+- **Member rows carry `⦿ <group>`** in the existing badge column
+  (`project.GroupBadge` + the now exported `project.JoinBadge`): `● ⦿ web ⎇ main*`. The
+  badge is rebuilt on every `Results` call, so the async git enrichment's `RefreshRows`
+  (#2178) keeps it. No MRU digits return to the rows (#2532).
+  Docs: [Project Switching](/architecture/project-switching.md),
+  [Project Groups](/architecture/project-groups.md).
+
 ## 2026-09-08 (project.group.close with aggregated busy guard, group.next/prev cycling, group.warm, #2572)
 
 - **`project.group.close`** ("Close Project Group", `cmd+alt+shift+w` / `ctrl+alt+shift+w`,

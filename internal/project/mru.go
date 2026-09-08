@@ -15,22 +15,48 @@ import "path/filepath"
 // Entry number one is therefore the project one came from, i.e. the same
 // target project.switchLast resumes; the digits generalize that toggle to the
 // rest of the list.
+//
+// An active project group (0510, #2574) bends that one list rather than
+// forking it: the group's members sort to the front, keeping their MRU order
+// among themselves, and the rest of the history follows. Every consumer of
+// MRUOrder / MRUTargets — both picker flavours, the Recent Projects column
+// and the digit chords — therefore still agrees on which project is number 4,
+// and inside a group the digits reach the projects one is actually working
+// across. project.switchLast is deliberately *not* reordered: it stays the
+// MRU parked workspace, group or not.
 
 // MaxMRU is how many recent projects the digit chords reach: one per digit
 // key.
 const MaxMRU = 9
 
-// MRUTargets returns the recent-project roots in MRU order (newest first),
-// with the currently open project dropped — cur is its absolute, cleaned path
-// ("" drops nothing). It is the digit chords' target list.
-func MRUTargets(history []Entry, cur string) []string {
-	out := make([]string, 0, len(history))
+// MRUOrder returns the recent-project entries in the order every project list
+// renders them: the active group's members first, in their MRU order, then
+// the rest of the history, newest first. The currently open project is
+// dropped — cur is its absolute, cleaned path ("" drops nothing). A zero
+// Group (no group active) leaves the plain MRU order untouched.
+func MRUOrder(history []Entry, cur string, group Group) []Entry {
+	members := make([]Entry, 0, len(history))
+	rest := make([]Entry, 0, len(history))
 	for _, e := range history {
 		if cur != "" && filepath.Clean(e.Path) == cur {
 			continue
 		}
+		if group.Contains(e.Path) {
+			members = append(members, e)
+			continue
+		}
+		rest = append(rest, e)
+	}
+	return append(members, rest...)
+}
+
+// MRUTargets returns the roots of MRUOrder's entries: the digit chords' target
+// list.
+func MRUTargets(history []Entry, cur string, group Group) []string {
+	entries := MRUOrder(history, cur, group)
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
 		out = append(out, e.Path)
 	}
 	return out
 }
-

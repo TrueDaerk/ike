@@ -188,16 +188,28 @@ it for the nine most recent ones.
   they are on the #805 terminal allowlist like the other project entry points:
   the hop is usually made while looking at a shell.
 - **One numbering, no rendering** (`internal/project/mru.go`):
-  `MRUTargets(history, current)` is the recent-projects history in MRU order
-  with the project one is standing in dropped, capped for the chords at
-  `MaxMRU` (9). The handler resolves against that list — and *only* the
-  handler. Between #2489 and #2532 both project lists rendered the matching
+  `MRUOrder(history, current, group)` is the recent-projects history in MRU
+  order with the project one is standing in dropped, and `MRUTargets` is its
+  roots, capped for the chords at `MaxMRU` (9). Every project list resolves
+  through it — both picker flavours, the Recent Projects column and the
+  handler — so the N-th target is the N-th row. Between #2489 and #2532 both
+  project lists rendered the matching
   digit as the row's `Item.Hint` (the picker's rows in `picker.go` and the
   Recent Projects column of the recent-files dialog, `app.go`'s injected
   items) to teach the chords from the lists one already opens; in practice a
   number in front of every project name was visual noise, so #2532 dropped it
   along with `MRUHint`. The chords are unchanged, and their palette command
   titles ("Switch to Recent Project N") are where they are discoverable.
+- **An active project group bends the list** (0510, #2574, see
+  [Project Groups](/architecture/project-groups.md)): `MRUOrder` takes the
+  active `project.Group` and puts its members first, in *their* MRU order,
+  before the rest of the history. Standing in `api` of group
+  `web = {api, ui, infra}`, `ctrl+alt+1` is `ui` and `ctrl+alt+2` is `infra`,
+  the projects one is actually working across, and every list shows the same
+  two rows on top with a `⦿ web` badge (`project.GroupBadge`). Without a
+  group the zero `Group` leaves the order and the rows untouched.
+  `project.switchLast` is deliberately *not* reordered: it stays the MRU
+  parked workspace, group or not.
 - **Number one is `project.switchLast`'s target**: the history's newest entry
   after the current project is dropped is the project one came from, which is
   also the MRU parked workspace. The digits simply generalize that toggle.
@@ -372,6 +384,14 @@ one action that also unloads it.
   an unreadable path — degrades to the plain row: the badge stays empty and
   nothing is toasted. A cached result survives the palette closing, so a
   re-open starts from the last known state and re-probes on top of it.
+- **Group marker per row (0510, #2574)**: while a group is active its member
+  rows carry `⦿ <group>` in that same badge column, between the in-memory dot
+  and the git context — `● ⦿ web ⎇ main*`, joined by `project.JoinBadge`. The
+  badge is rebuilt from the active group on every `Results` call, so
+  `RefreshRows` after a `GitInfoMsg` keeps it; the Recent Projects column
+  builds its rows from the same two helpers (`GroupBadge`, `JoinBadge`). Both
+  picker flavours read the group through an injectable source defaulting to
+  the persisted `project.active_group` marker, like the group picker's badge.
 
 ## Switch orchestration (#3)
 
