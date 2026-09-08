@@ -330,6 +330,9 @@ func (m Model) handlePaste(text string) (tea.Model, tea.Cmd) {
 	case pane.KindTime:
 		inst.Time().PasteText(text)
 		return m, nil
+	case pane.KindUsage:
+		inst.Usage().PasteText(text)
+		return m, nil
 	case pane.KindArchive:
 		// The archive viewer's filter row (#2409, #2460): archview.PasteText,
 		// not archive.go's own extract-target prompt.

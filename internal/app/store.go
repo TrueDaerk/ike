@@ -403,6 +403,10 @@ func encodeLayoutState(root layout.Node, reg *pane.Registry) ([]byte, bool) {
 			// The panel restores empty (#2426): the aggregate is re-read
 			// from the usage log in the background.
 			ids[key] = paneIdentity{Kind: "time"}
+		case pane.KindUsage:
+			// The panel restores empty (#2552): the aggregate is re-read
+			// from the usage log in the background.
+			ids[key] = paneIdentity{Kind: "usage"}
 		case pane.KindTests:
 			// The panel restores empty (#1911): test results are session state.
 			ids[key] = paneIdentity{Kind: "tests"}

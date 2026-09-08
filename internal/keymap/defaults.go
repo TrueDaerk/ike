@@ -591,6 +591,10 @@ var jetbrainsRows = []row{
 	// is full, so the project time report takes the family's free
 	// alt-neighbour rather than shipping palette-only.
 	{"cmd+alt+0", "time.toggle", "Project time report", Global, "Time report (#2426)"},
+	// Usage tool window (#2552): the second reader of the same log sits next
+	// to the time report in the alt layer; cmd+alt+u is free on both
+	// platforms (ctrl+alt+u off macOS).
+	{"cmd+alt+u", "usage.toggle", "Usage report", Global, "Usage report (#2552)"},
 	// The issue behind the current issue/<n> branch (#2544). It is a doorway
 	// into the same Issues window, so it sits next to it in the alt layer;
 	// cmd+alt+i is free on both platforms (ctrl+alt+i off macOS).

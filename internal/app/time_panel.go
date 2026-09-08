@@ -107,6 +107,9 @@ func (m Model) timeReadCmd() tea.Cmd {
 	if p := m.timePanel(); p != nil {
 		p.SetLoading(true)
 	}
+	if p := m.usagePanel(); p != nil {
+		p.SetLoading(true)
+	}
 	return func() tea.Msg {
 		rep := reader.Read()
 		rep.Resolve(paths)
@@ -132,12 +135,15 @@ func projectNamesByPath() map[string]string {
 	return out
 }
 
-// handleTimeReport lands a finished background read on the model, the panel
-// and the status-line segment.
+// handleTimeReport lands a finished background read on the model, the Time
+// and Usage panels (#2552: one read feeds both) and the status-line segment.
 func (m Model) handleTimeReport(msg timeReportMsg) (tea.Model, tea.Cmd) {
 	m.timeReport = msg.Report
 	m.timeToken = msg.Token
 	if p := m.timePanel(); p != nil {
+		p.Set(msg.Report)
+	}
+	if p := m.usagePanel(); p != nil {
 		p.Set(msg.Report)
 	}
 	return m, nil

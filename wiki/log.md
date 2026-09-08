@@ -1,5 +1,20 @@
 # Log
 
+## 2026-09-08 (usage tool window over the local telemetry log, #2552)
+
+- **`usage.toggle`** (`cmd+alt+u`, Tools ▸ Usage Report) opens the singleton
+  **Usage** pane: Commands (top commands split by keybind / palette / menu /
+  mouse), Keys (unbound chords per focus context, with the removed default
+  named), Palette (dismissal rate per mode with the query / no-results
+  split) and Ops (op lifecycles plus slow or failed dispatches) over a
+  Today / Week / Month period; `/` filters, `e` exports the tab as a CSV
+  scratch, `r` re-reads. Read-only, nothing leaves the machine.
+- **`telemetry.Report.Usage` / `UsageRange`** (`internal/telemetry/usage.go`):
+  per-day usage aggregates filled by the same cached reader as the time
+  report, so one background read feeds both windows.
+  Docs: [Usage Report](/architecture/usage-report.md),
+  [Usage Telemetry](/architecture/usage-telemetry.md#usage-aggregates-what-did-i-do-2552).
+
 ## 2026-09-08 (slow HTTP flights flag their dominating phase, #2547)
 
 - **`http.slow_threshold_ms`** (default 2000, `0` = off, Settings UI "HTTP

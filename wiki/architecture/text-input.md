@@ -217,7 +217,7 @@ close a gap the survey found without changing the storage shape.
 | Debug variables inline editor | `internal/debugpanel/debugpanel.go`, `watches.go` | `ui.Field` (#2460) — dropped the `[]rune(editBuf)` round-trip |
 | Breakpoint refinement inline editor | `internal/breakpanel/meta.go` | `ui.Field` (#2460) — dropped the `[]rune(editBuf)` round-trip |
 | Undo-tree time-jump age prompt | `internal/undotree/timejump.go` | `ui.Field` (#2460) with a digit-only guard in front of `Key` |
-| List-pane filter rows (Usages, Problems, TODO index, Dependencies, Archive viewer, Time machine) | `internal/usages`, `internal/problems`, `internal/todoindex`, `internal/depspanel`, `internal/archview`, `internal/timepanel` | shared via `internal/filterbar.Model` (on `ui.Field`); **paste routed (#2460)** — none of the six wired `PasteText`, so a paste into any of their filter rows silently did nothing; wired through `app/inputcoalesce.go`'s pane-kind switch (five pane-hosted panels) and `app/overlaypaste.go` (the TODO index, an app-level overlay, not a pane) |
+| List-pane filter rows (Usages, Problems, TODO index, Dependencies, Archive viewer, Time report, Usage report) | `internal/usages`, `internal/problems`, `internal/todoindex`, `internal/depspanel`, `internal/archview`, `internal/timepanel`, `internal/usagepanel` | shared via `internal/filterbar.Model` (on `ui.Field`); **paste routed (#2460)** — none of the six wired `PasteText`, so a paste into any of their filter rows silently did nothing; wired through `app/inputcoalesce.go`'s pane-kind switch (five pane-hosted panels) and `app/overlaypaste.go` (the TODO index, an app-level overlay, not a pane) |
 
 ### Settings
 

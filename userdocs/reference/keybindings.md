@@ -167,6 +167,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Toggle breakpoint | `ctrl+f8` | `ctrl+f8` | `debug.toggleBreakpoint` |
 | Toggle project tree | `cmd+1` | `ctrl+1` | `explorer.toggle` |
 | Toggle terminal | `alt+f12` | `alt+f12` | `terminal.toggle` |
+| Usage report | `cmd+alt+u` | `ctrl+alt+u` | `usage.toggle` |
 | Window layouts | `alt+shift+f12` | `alt+shift+f12` | `window.layouts` |
 | Zen mode | `ctrl+alt+f` | `ctrl+alt+f` | `view.zenMode` |
 | jq playground | `ctrl+alt+j` | `ctrl+alt+j` | `json.jqPlayground` |
