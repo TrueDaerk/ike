@@ -76,6 +76,8 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Go to tab 9 | `alt+9` | `alt+9` | `editor.tab.select9` |
 | Help / cheatsheet | `f1` | `f1` | `palette.keymapHelp` |
 | Hide all tool windows | `cmd+shift+f12` | `ctrl+shift+f12` | `window.hideAllTools` |
+| Last edit location | `cmd+shift+backspace` | `ctrl+shift+backspace` | `nav.lastEdit` |
+| Last edit location | `ctrl+shift+backspace` | `ctrl+shift+backspace` | `nav.lastEdit` |
 | Maximize pane | `cmd+k z` | `ctrl+k z` | `pane.maximize` |
 | Move file | `f6` | `f6` | `file.move` |
 | Move tab left | `ctrl+shift+pgup` | `ctrl+shift+pgup` | `editor.tab.moveLeft` |
@@ -111,6 +113,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Project time report | `cmd+alt+0` | `ctrl+alt+0` | `time.toggle` |
 | Promote scratch to file | `cmd+alt+shift+p` | `ctrl+alt+shift+p` | `scratch.promote` |
 | Recent files | `cmd+e` | `ctrl+e` | `palette.recentFiles` |
+| Recent locations | `alt+shift+e` | `alt+shift+e` | `nav.recentLocations` |
 | Rename file | `shift+f6` | `shift+f6` | `file.rename` |
 | Reopen closed tab | `alt+shift+t` | `alt+shift+t` | `editor.tab.reopenClosed` |
 | Reopen closed tab | `cmd+shift+t` | `ctrl+shift+t` | `editor.tab.reopenClosed` |

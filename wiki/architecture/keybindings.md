@@ -1379,11 +1379,13 @@ JetBrains is:
 | `nav.back` | `cmd+alt+left` | fragile | `mouse-back` | live via mouse-back |
 | `nav.bookmarks` | `cmd+f3` | fragile | `palette` | live via palette |
 | `nav.forward` | `cmd+alt+right` | fragile | `mouse-forward` | live via mouse-forward |
+| `nav.lastEdit` | `cmd+shift+backspace` | fragile | `palette / Navigate menu` | live via palette / Navigate menu |
 | `nav.pinGoto1` | `ctrl+shift+1` | fragile | `palette (or the cmd+2 picker)` | live via palette (or the cmd+2 picker) |
 | `nav.pinGoto2` | `ctrl+shift+2` | fragile | `palette (or the cmd+2 picker)` | live via palette (or the cmd+2 picker) |
 | `nav.pinGoto3` | `ctrl+shift+3` | fragile | `palette (or the cmd+2 picker)` | live via palette (or the cmd+2 picker) |
 | `nav.pinGoto4` | `ctrl+shift+4` | fragile | `palette (or the cmd+2 picker)` | live via palette (or the cmd+2 picker) |
 | `nav.pins` | `cmd+2` | fragile | `palette` | live via palette |
+| `nav.recentLocations` | `alt+shift+e` | fragile | `palette / Navigate menu` | live via palette / Navigate menu |
 | `notifications.history` | `cmd+alt+n` | fragile | `palette` | live via palette |
 | `palette.keymapHelp` | `f1` | delivered | `—` | live |
 | `palette.recentFiles` | `cmd+e` | fragile | `palette` | live via palette |

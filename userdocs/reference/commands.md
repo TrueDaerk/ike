@@ -170,6 +170,7 @@ bring their own.
 | Navigate Back | `nav.back` | `mouse-back` | — | everywhere |
 | Bookmarks | `nav.bookmarks` | `cmd+f3` | — | everywhere |
 | Navigate Forward | `nav.forward` | `mouse-forward` | — | everywhere |
+| Last Edit Location | `nav.lastEdit` | `cmd+shift+backspace` | — | everywhere |
 | Go to Pinned File 1 | `nav.pinGoto1` | `ctrl+shift+1` | — | everywhere |
 | Go to Pinned File 2 | `nav.pinGoto2` | `ctrl+shift+2` | — | everywhere |
 | Go to Pinned File 3 | `nav.pinGoto3` | `ctrl+shift+3` | — | everywhere |
@@ -179,6 +180,7 @@ bring their own.
 | Pin File to Slot 3 | `nav.pinSlot3` | — | — | everywhere |
 | Pin File to Slot 4 | `nav.pinSlot4` | — | — | everywhere |
 | Pinned Files | `nav.pins` | `cmd+2` | — | everywhere |
+| Recent Locations | `nav.recentLocations` | `alt+shift+e` | — | everywhere |
 | Forget Paired Network Clients | `network.forgetClients` | — | — | everywhere |
 | Notification History | `notifications.history` | `cmd+alt+n` | — | everywhere |
 | Keymap Cheatsheet | `palette.keymapHelp` | `f1` | — | everywhere |

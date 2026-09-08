@@ -192,6 +192,8 @@ var reachableAlternatives = map[string]string{
 	"lsp.peekDefinition":  "palette",
 	"lsp.referencesPanel": "palette",
 	"nav.bookmarks":       "palette",
+	"nav.lastEdit":        "palette / Navigate menu",
+	"nav.recentLocations": "palette / Navigate menu",
 	// Bookmarks (#55): alt+f3 needs a modifier the terminal may swallow;
 	// f11/shift+f11/alt+f11 deliver, so only the mnemonic flavour and the
 	// palette-only commands need an escape route.

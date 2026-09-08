@@ -84,6 +84,8 @@ func Defaults() []Menu {
 			{Title: "Type Hierarchy", Command: "lsp.typeHierarchy"},
 			{Title: "Back", Command: "nav.back"},
 			{Title: "Forward", Command: "nav.forward"},
+			{Title: "Last Edit Location", Command: "nav.lastEdit"},
+			{Title: "Recent Locations", Command: "nav.recentLocations"},
 		}},
 		{Title: "Run", Items: []Item{
 			{Title: "Run File", Command: "run.file"},
