@@ -111,6 +111,12 @@ func (s *httpSource) Complete(_ context.Context, req complete.Request) ([]ilsp.C
 		return graphQLItems(block, lines, req.Line, before), nil
 	}
 
+	// A comment line completes nothing — except the directives that live on
+	// one (#2546): the `@assert` / `@capture` marker after `# @`, and the
+	// subject, header name and operator of an assertion.
+	if isCommentLine(line) {
+		return directiveItems(before), nil
+	}
 	switch classify(lines, req.Line, before) {
 	case ctxMethod:
 		return fuzzyItems(methods, strings.TrimLeft(before, " \t"), "method"), nil

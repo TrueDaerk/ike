@@ -1,10 +1,10 @@
 ---
 type: concept
 title: HTTP Client (.http files)
-description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, WEBSOCKET session blocks with ===-separated initial messages, a live frame transcript and an interactive send line in the response pane, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, and GraphQL errors lifted out of a 200 answer into a red block above the body.
+description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, WEBSOCKET session blocks with ===-separated initial messages, a live frame transcript and an interactive send line in the response pane, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, GraphQL errors lifted out of a 200 answer into a red block above the body, and @assert directives checked against every response with a pass/fail block above the body, a run in the Test Results window and a failure notice.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-09-03T18:00:00Z
+timestamp: 2026-09-08T12:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -131,6 +131,11 @@ Authorization: Bearer {{$env TOKEN}}
   inside a request block store a value out of *its response* under `name`, for
   the `{{name}}` placeholders of later requests — see
   [capturing values from a response](#capturing-values-from-a-response-1993).
+- **Assertion directives** (#2546): `# @assert status == 200`, `# @assert
+  jsonpath $.items[0].id == 42`, `# @assert time < 500ms` comment lines inside a
+  request block are checked against *its response*, with a pass/fail block
+  above the body, a run in the Test Results window and a failure notice —
+  see [assertions](#assertions-2546).
 - **GraphQL blocks** (#2423): a request line spelled `GRAPHQL <url>` takes the
   query as its body and an optional JSON `variables` object after a blank line,
   and sends the `POST` envelope for both — see
@@ -309,6 +314,109 @@ GET https://example.com/_tasks/{{task}}
   expression through the jq playground's own tokenizer, so a path, a string
   literal and a builtin read exactly as they do in the playground's query
   line.
+
+### Assertions (#2546)
+
+A request file is re-run far more often than it is written — the local
+telemetry counted 66 `http.run` and 11 `http.resend` in four days, most of
+them the same requests, each answer eyeballed for the same thing. The
+`# @assert` directive writes that thing down once, so the answer *checks*
+itself:
+
+```
+### things
+# @assert status == 200
+# @assert header Content-Type contains json
+# @assert jsonpath $.items[0].id == 42
+# @assert body matches /"total":\s*\d+/
+# @assert time < 500ms
+GET https://example.com/things
+```
+
+- **Syntax**: `# @assert <subject> [argument] <operator> [expected]`, also
+  spelled `##` or `//` — never `###`, which opens a block. A directive
+  belongs to the request block it sits in, anywhere a comment is allowed and
+  not inside a body, exactly like a capture. Parsing lives in
+  `httpfile.AssertDirective` / `httpfile.Assertion`; the highlighter and the
+  completion source read the same function.
+
+  | subject | argument | what is compared |
+  |---|---|---|
+  | `status` | — | the status code, as a number |
+  | `header` | the header name (case-insensitive) | the header's value(s), joined with `, ` |
+  | `jsonpath` | a JSONPath (`$.items[0].id`, `$[0]`, `$`) | the first non-null value the path selects, in `jq -r` spelling |
+  | `body` | — | the whole body text |
+  | `time` | — | the wall clock of the exchange (`Response.Duration`) |
+
+  Operators: `==`, `!=`, `<`, `<=`, `>`, `>=`, `contains`, `matches` (a Go
+  regex, `/…/` delimiters optional) and the unary `exists` (a header that is
+  present, a path that selects a value). The expected value is everything
+  after the operator, trimmed, with one pair of surrounding quotes stripped —
+  so `header Content-Type == application/json; charset=utf-8` keeps its
+  spaces. `==` and `!=` compare numerically when both sides are numbers (a
+  JSON `42` against a typed `42`) and as text otherwise; the ordering
+  operators need numbers, or — for `time` — durations (`500ms`, `1.5s`; a
+  bare number is milliseconds).
+- **The JSONPath is jq underneath.** `$.items[0].id` becomes `.items[0].id`
+  and runs through the same `jqplay.EvaluateRaw` a capture uses, so the
+  dotted-and-bracketed subset every JSONPath reader agrees on works, and
+  anything past it (`$.items | length`) is simply jq. Nulls are skipped like
+  in a capture, so `== null` cannot be asserted; `exists` is the test for
+  "the path selects something".
+- **A broken directive is a failed assertion, not a lost line.** `# @assert
+  status equals 200` keeps its place in the pass/fail block with
+  `unknown operator "equals": want one of == …` as the reason, so a typo is
+  read where the outcome is read rather than silently ignored.
+- **Evaluation** (`internal/httpclient/assert.go`) runs after the response is
+  complete — for a stream, after it ended — over the full body (a spooled
+  body is pulled back for it, like for a capture), right after the captures.
+  Every directive runs; one failure never stops the others, so a run reports
+  every broken expectation at once. `Response.Assertions` carries one
+  `AssertResult` per directive: pass/fail, the actual value, and the reason
+  (`got 404`, `got "text/html"`, `header X-Trace is not present`,
+  `$.nope matched no value in the response body`), with a long actual value
+  clipped to one line. A re-send (#1832) repeats a stored snapshot and has no
+  directives, so it asserts nothing; `http.rerun` re-parses the file and
+  therefore does.
+- **The pane** puts the outcome where the eye is, the GraphQL lift's shape:
+  the status row gains the summary and turns the failure colour when any
+  directive failed (`HTTP/1.1 200 OK   (12ms)   ✗ 1 of 3 assertions failed`;
+  a green `✓ 3 assertions passed` says the run needs no eyeballing), and a
+  block above the body lists one row per directive — `✓ status == 200`,
+  `✗ jsonpath $.items[0].id == 42 — got 41` — passed rows in the success
+  colour, failed ones in red. The results are **stored with the history
+  entry** (`assertions` in `.ike/http/*.json`), so a browsed entry shows the
+  block the fresh answer did.
+- **A failed assertion is a failed run** for the completion notice (#2364):
+  a 200 whose directives failed announces itself while the pane is away —
+  `http: GET /things → 200 OK (12ms, 1 of 3 assertions failed)` — with the
+  warning severity a non-2xx gets. A run whose directives all passed is as
+  quiet as any success.
+- **The Test Results window** (`internal/app/http_assert.go`, see
+  [Test Results](/architecture/test-results.md)) receives the run, named
+  `http: <METHOD /path>`: the `.http` file is the group, the request the
+  test, each directive a subtest with its outcome, and the detail column
+  shows the directive, the reason and the actual value. Enter on a failed row
+  opens the directive's line in the file. The window fills whenever it is
+  open; a **failing** run opens it when `tests.auto_open` is on, the way a
+  captured test run does, with the focus left where it was — a passing run
+  never pushes a second tool window onto the screen, since the response pane
+  already says so. `r`, `f` and `t` all dispatch the request again (the
+  response is one exchange; there is no "failed subset" to run), and a
+  captured test run takes the re-run actions back the moment it starts.
+- **The directive line is marked** (source `http assert`), the capture
+  pattern: a failed directive carries a warning diagnostic with the reason on
+  its own line, so it lands in the Problems window and in the popup, and a
+  dispatch whose directives all passed clears the file's set again.
+- **Highlighting and completion** (`plugins/languages/http/assert.go`): the
+  line is a comment to the grammar, so Go-computed spans lift the parts out —
+  `@assert` as a keyword, the subject as a type, the header name or JSONPath
+  as a property, the operator as an operator, the expected value as a number
+  or string. On a `# @` line completion offers `@assert` and `@capture` (with
+  the trailing space); inside an assertion it offers the subjects, then the
+  header names after `header`, then the operators — and nothing once the
+  operator is typed, since the expected value is the author's.
+
 
 ## Importing an OpenAPI spec (`internal/openapi`, #1939)
 

@@ -58,6 +58,9 @@ func querySpans(lines []string) []lang.Span {
 	// comment to the grammar, and its parts must read as the structure they
 	// are (capture.go).
 	out = append(out, captureSpans(lines)...)
+	// Assertion directives (#2546) likewise: marker, subject, operator and
+	// expected value lifted out of the comment colour (assert.go).
+	out = append(out, assertSpans(lines)...)
 	// JWTs (#1619) are scanned over the whole buffer, not per request region:
 	// they show up in an Authorization header, in a body, in a @token variable
 	// and in a pasted response block alike. Detection is structural — three

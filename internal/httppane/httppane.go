@@ -45,6 +45,10 @@ const (
 	// alone says nothing: the messages are lifted out of the body into a red
 	// block right above it.
 	kindError
+	// kindPass is a passed assertion row (#2546): the pass/fail block above the
+	// body lists every `# @assert` directive, the passed ones in the success
+	// colour, the failed ones as kindError rows.
+	kindPass
 )
 
 // row is one pre-composed display line.
@@ -165,6 +169,12 @@ type Model struct {
 	// green its status code is: the status row turns red and says how many,
 	// and the messages render as their own block above the body.
 	gqlErrors []httpclient.GraphQLError
+
+	// asserts holds the assertion outcomes of the response on show (#2546).
+	// A failed one means the run failed however green its status code is,
+	// exactly like a GraphQL error: the status row turns red and says how
+	// many, and the block above the body lists them with their reasons.
+	asserts []httpclient.AssertResult
 
 	// Streaming (#1776): while a recognized stream is live the viewer shows
 	// status, headers and the body lines received so far — plaintext, no
@@ -390,6 +400,7 @@ func (m *Model) StartStream(request, proto, status string, headers http.Header) 
 	m.hlPending = nil
 	m.folds, m.folded, m.visible = nil, nil, nil
 	m.gqlErrors = nil // the previous response's, and a stream is never GraphQL
+	m.asserts = nil   // evaluated once the stream ends, shown by Set
 	m.streaming = true
 	m.streamTail = ""
 	m.streamBody = 0
@@ -541,6 +552,7 @@ func (m *Model) recompose(resp *httpclient.Response) {
 	m.hlPending = nil
 	m.folds, m.folded, m.visible = nil, nil, nil
 	m.gqlErrors = nil
+	m.asserts = nil
 	if resp == nil {
 		m.research()
 		return
@@ -554,6 +566,13 @@ func (m *Model) recompose(resp *httpclient.Response) {
 		// count goes where the eye already is rather than only into the block
 		// below.
 		status += fmt.Sprintf("   %s %s", gqlErrorGlyph, pluralErrors(n))
+	}
+	m.asserts = resp.Assertions
+	if len(m.asserts) > 0 {
+		// The assertion summary (#2546) sits on the status row too: a red
+		// "1 of 3 assertions failed" is the first thing read, a green "3
+		// assertions passed" says the run needs no eyeballing at all.
+		status += fmt.Sprintf("   %s %s", assertGlyph(resp.AssertionsFailed() == 0), resp.AssertionSummary())
 	}
 	m.rows = append(m.rows, row{kind: kindStatus, text: status})
 	if line := resp.Timing.String(); line != "" {
@@ -587,6 +606,13 @@ func (m *Model) recompose(resp *httpclient.Response) {
 		for _, e := range m.gqlErrors {
 			m.rows = append(m.rows, row{kind: kindError, text: "  " + e.String()})
 		}
+		m.rows = append(m.rows, row{kind: kindBlank})
+	}
+	if len(m.asserts) > 0 {
+		// The pass/fail block above the body (#2546), the GraphQL lift's
+		// shape: one row per directive, its outcome glyph first, the reason
+		// of a failure after the directive text.
+		m.rows = append(m.rows, m.assertRows()...)
 		m.rows = append(m.rows, row{kind: kindBlank})
 	}
 
@@ -1709,7 +1735,7 @@ func (m *Model) baseStyle(pal *theme.Palette, i, from, to int) styleFn {
 		// A GraphQL run with errors failed however green its status code is
 		// (#2423), so the status row carries the failure colour.
 		colour := pal.Accent
-		if len(m.gqlErrors) > 0 {
+		if len(m.gqlErrors) > 0 || m.AssertionsFailed() > 0 {
 			colour = pal.Error
 		}
 		st := lipgloss.NewStyle().Foreground(colour).Bold(true)
@@ -1717,6 +1743,9 @@ func (m *Model) baseStyle(pal *theme.Palette, i, from, to int) styleFn {
 	case kindError:
 		st := lipgloss.NewStyle().Foreground(pal.Error)
 		return func(int) (lipgloss.Style, string) { return st, "error" }
+	case kindPass:
+		st := lipgloss.NewStyle().Foreground(pal.Success)
+		return func(int) (lipgloss.Style, string) { return st, "pass" }
 	case kindWarn:
 		st := lipgloss.NewStyle().Foreground(pal.Warning)
 		return func(int) (lipgloss.Style, string) { return st, "warn" }
@@ -1886,3 +1915,48 @@ func pluralErrors(n int) string {
 // nil when there are none. The host reads it to decide whether a finished
 // dispatch counts as failed.
 func (m *Model) GraphQLErrors() []httpclient.GraphQLError { return m.gqlErrors }
+
+// assertGlyph is the outcome mark of an assertion row (#2546): the GraphQL
+// failure glyph for a failed one, a check mark for a passed one.
+func assertGlyph(pass bool) string {
+	if pass {
+		return "✓"
+	}
+	return gqlErrorGlyph
+}
+
+// assertRows composes the pass/fail block (#2546): a heading with the
+// summary, then one row per directive. A failed row carries the reason —
+// what the response actually gave — so the fix needs no second look.
+func (m *Model) assertRows() []row {
+	failed := m.AssertionsFailed()
+	kind := kindPass
+	if failed > 0 {
+		kind = kindError
+	}
+	summary := (&httpclient.Response{Assertions: m.asserts}).AssertionSummary()
+	rows := []row{{kind: kind, text: fmt.Sprintf("%s assertions: %s", assertGlyph(failed == 0), summary)}}
+	for _, a := range m.asserts {
+		k := kindPass
+		if !a.Pass {
+			k = kindError
+		}
+		rows = append(rows, row{kind: k, text: "  " + assertGlyph(a.Pass) + " " + a.Describe()})
+	}
+	return rows
+}
+
+// Assertions returns the assertion outcomes of the response on show (#2546),
+// nil when it declared none.
+func (m *Model) Assertions() []httpclient.AssertResult { return m.asserts }
+
+// AssertionsFailed counts the failed assertions of the response on show.
+func (m *Model) AssertionsFailed() int {
+	n := 0
+	for _, a := range m.asserts {
+		if !a.Pass {
+			n++
+		}
+	}
+	return n
+}

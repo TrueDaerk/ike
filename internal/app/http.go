@@ -512,7 +512,10 @@ func (m *Model) notifyHTTPCompletion(e *httpFlightEntry, msg HTTPResponseMsg, vi
 	// A GraphQL operation that failed answers with HTTP 200 and an `errors`
 	// array (#2423), so the status code alone would report it as a success.
 	gqlErrors := msg.Resp.GraphQLErrors()
-	failed := msg.Resp.StatusCode < 200 || msg.Resp.StatusCode >= 300 || len(gqlErrors) > 0
+	// A failed `# @assert` directive (#2546) fails the run the same way: the
+	// expectation the author wrote down was not met, whatever the status.
+	assertsFailed := msg.Resp.AssertionsFailed()
+	failed := msg.Resp.StatusCode < 200 || msg.Resp.StatusCode >= 300 || len(gqlErrors) > 0 || assertsFailed > 0
 	if msg.Resp.StatusCode == http.StatusSwitchingProtocols {
 		// A finished websocket session (#2422) ends on its 101 handshake
 		// status — a success, not a 1xx failure.
@@ -541,6 +544,9 @@ func (m *Model) notifyHTTPCompletion(e *httpFlightEntry, msg HTTPResponseMsg, vi
 		// The status is 200: without naming the GraphQL errors the notice
 		// would read as a success that merely took a while.
 		tail += fmt.Sprintf(", %d GraphQL error(s)", n)
+	}
+	if assertsFailed > 0 {
+		tail += ", " + msg.Resp.AssertionSummary()
 	}
 	m.host.Notify(sev, fmt.Sprintf("http: %s → %s (%s%s)",
 		what, msg.Resp.Status, formatElapsed(msg.Resp.Duration), tail))
@@ -670,6 +676,11 @@ func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) tea.Cmd {
 	// A failed capture (#1993) is reported on its own directive line, whether
 	// or not the viewer opens — the next request depends on the value.
 	report := m.reportHTTPCaptures(msg.Source, msg.Resp)
+	// A failed assertion (#2546) lands on its directive line and in the Test
+	// Results window, whether or not the viewer opens.
+	if cmd := m.reportHTTPAssertions(msg.Source, flight, msg); cmd != nil {
+		report = tea.Batch(report, cmd)
+	}
 	if m.httpPanel() == nil {
 		m.openHTTPPanel()
 	}

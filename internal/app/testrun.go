@@ -103,6 +103,11 @@ func (m *Model) launchCoverageRun(root string, store run.Store, cfg *run.Config,
 func (m *Model) rerunTests(msg testresults.RerunMsg) tea.Cmd {
 	st := m.lastTestRun
 	if st == nil {
+		if m.httpAssertRun != nil {
+			// The window shows an .http request's assertions (#2546): every
+			// re-run action dispatches that request again.
+			return m.rerunHTTPAssertions()
+		}
 		m.host.Notify(host.Info, "tests: nothing to re-run yet")
 		return nil
 	}
@@ -139,6 +144,7 @@ func (m *Model) rerunTests(msg testresults.RerunMsg) tea.Cmd {
 func (m *Model) startCapturedRun(cfg *run.Config, argv []string, dir string) tea.Cmd {
 	m.testRunSeq++
 	seq := m.testRunSeq
+	m.httpAssertRun = nil // a captured test run owns the window's re-run actions again
 	if m.testsPanel() == nil && config.Get().Tests.AutoOpen {
 		m.ensurePanel(pane.TestsKey, func() tea.Cmd { m.openTestsPanel(); return nil })
 		// A run started from the editor keeps the editor focused — the pane
