@@ -82,6 +82,43 @@ func TestRecentRecencyFallback(t *testing.T) {
 	}
 }
 
+// TestRecentRecencyIsStrictMRUForBothLists is the #2532 acceptance criterion:
+// with palette.recent.ranking = "recency" — the default — neither list looks
+// at the frecency data at all, so an empty query is strict newest-first for
+// the files *and* the projects column, and a typed query that scores two rows
+// alike keeps that order too.
+func TestRecentRecencyIsStrictMRUForBothLists(t *testing.T) {
+	base := time.Unix(1_700_000_000, 0)
+	m, f := recentFrecMode([]string{"fresh.go", "hot.go"}, base)
+	m.SetProjects(projectItems([]string{"newest", "hot"}, map[string]float64{"hot": 5}))
+	// Enough history on "hot.go" that the frecency ranking would lift it.
+	for i := 0; i < 6; i++ {
+		f.SetNow(fixedClock(base, time.Duration(i)*time.Hour))
+		f.Record(frecency.Key("hot.go"))
+	}
+	f.SetNow(fixedClock(base, time.Duration(7)*time.Hour))
+	m.SetRanking(func() bool { return false })
+
+	if got := titles(m.Results("", Context{Root: "."})); got[0] != "fresh.go" || got[1] != "hot.go" {
+		t.Fatalf("file order = %v, want strict newest-first", got)
+	}
+	if got := titles(m.SideResults("", Context{})); got[0] != "newest" || got[1] != "hot" {
+		t.Fatalf("projects order = %v, want strict newest-first", got)
+	}
+	// A typed query the two rows match equally well must not renumber them:
+	// two equally long names score the ".go" suffix alike.
+	tied, _ := recentFrecMode([]string{"newer.go", "older.go"}, base)
+	tied.SetRanking(func() bool { return false })
+	if got := titles(tied.Results(".go", Context{Root: "."})); len(got) != 2 || got[0] != "newer.go" {
+		t.Fatalf("tied query order = %v, want the newest file kept on top", got)
+	}
+	// The projects column likewise: "hot" alone matches only one row, so an
+	// equally-scoring query is the empty one plus its prefix form.
+	if got := titles(m.SideResults("p:", Context{})); got[0] != "newest" {
+		t.Fatalf("projects-only order = %v, want strict newest-first", got)
+	}
+}
+
 // TestRecentFrecencyYieldsToTypedQuery guards the blend policy: history leads
 // an empty query, but a typed one hands the lead back to match quality.
 func TestRecentFrecencyYieldsToTypedQuery(t *testing.T) {

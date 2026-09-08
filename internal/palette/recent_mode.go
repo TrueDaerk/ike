@@ -37,10 +37,12 @@ type SideMode interface {
 // is always excluded, so opening the mode and pressing enter jumps away from
 // where one is; a query fuzzy-matches the project-relative path.
 //
-// Ranking is frecency since #2399 — how often *and* how recently an entry was
-// opened, from the same store the '@' finder ranks with — with plain MRU order
-// as the fallback for entries (and projects) that carry no history, and as the
-// whole listing's order under palette.recent.ranking = "recency". The dialog
+// Ranking is plain MRU order — newest first — under the default
+// palette.recent.ranking = "recency" (#2532); #2399's frecency blend (how
+// often *and* how recently an entry was opened, from the same store the '@'
+// finder ranks with) is still there under "frecency", and is what the setting
+// gates. A typed query fuzzy-sorts either way, ties keeping the MRU order.
+// The dialog
 // also reopens on the row it was last used to activate (PreselectMode) and
 // narrows to its projects column on a "p:" query.
 type RecentMode struct {
@@ -60,9 +62,10 @@ type RecentMode struct {
 	// the two windows agree on what this project actually works on. Nil (or
 	// ranking turned off) falls back to plain MRU order.
 	frec *Frecency
-	// frecencyRanking gates the blend, so palette.recent.ranking = "recency"
-	// restores the pre-#2399 pure-MRU listing without a restart. Nil counts
-	// as enabled.
+	// frecencyRanking gates the blend: palette.recent.ranking = "recency" —
+	// the default since #2532 — keeps the pure-MRU listing, and a flip to
+	// "frecency" applies without a restart. Nil counts as enabled, which is
+	// what the frecency-focused tests build on; the app always wires it.
 	frecencyRanking func() bool
 	// lastPick returns the Key of the row picked the last time this dialog
 	// was used in this project, and whether it was a project row (#2399).
@@ -207,8 +210,10 @@ func (r *RecentMode) Hint(query string) string {
 func (r *RecentMode) SideTitle() string { return "Recent Projects" }
 
 // SideResults implements SideMode: the injected recent projects, filtered by
-// the query (fuzzy on the title, frecency blended in like the file list —
-// #2399 — and ties keeping recency order). A "p:" prefix (ProjectsOnlyPrefix)
+// the query (fuzzy on the title, ties keeping the injected newest-first
+// order). Under the opt-in "frecency" ranking (#2399) the item's Rank is
+// blended in like the file list's; under the default "recency" (#2532) the
+// column is strict MRU for an empty query. A "p:" prefix (ProjectsOnlyPrefix)
 // filters projects alone and is stripped before matching.
 func (r *RecentMode) SideResults(query string, _ Context) []Item {
 	if r.projects == nil {
@@ -255,13 +260,14 @@ func (r *RecentMode) Prefix() rune { return RecentPrefix }
 func (r *RecentMode) Placeholder() string { return "Recent files…" }
 
 // Results implements Mode. Vanished files and the active file are dropped;
-// the query fuzzy-matches the display path. Ranking is frecency (#2399) — the
-// file-open history the '@' finder ranks with, blended into the fuzzy score by
-// the shared frecencyBoost policy, so an empty query lists what this project
-// actually keeps coming back to and a typed query hands the lead to match
-// quality. Files with no recorded history score 0 and therefore keep plain MRU
-// order among themselves, which is also the whole listing's shape on a fresh
-// project (the pure-recency fallback) and with the setting on "recency".
+// the query fuzzy-matches the display path. Ranking is plain MRU under the
+// default "recency" (#2532): the injected list arrives newest first and the
+// sort below is stable, so an empty query lists it verbatim. Under the opt-in
+// "frecency" (#2399) the file-open history the '@' finder ranks with is
+// blended into the fuzzy score by the shared frecencyBoost policy, so an empty
+// query lists what this project keeps coming back to and a typed query hands
+// the lead to match quality; files with no recorded history score 0 and keep
+// MRU order among themselves.
 // A "p:" query (ProjectsOnlyPrefix) lists no files at all: it belongs to the
 // Recent Projects column, and the empty file list hands it the focus.
 func (r *RecentMode) Results(query string, cx Context) []Item {

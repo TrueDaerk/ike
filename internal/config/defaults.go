@@ -212,10 +212,13 @@ func defaults() *Config {
 			// No default toggle chord: the palette opens via esc-esc, "@" and
 			// searchEverywhere; ctrl+p belongs to lsp.parameterInfo (#523).
 			ToggleKey: "",
-			// The recent-files dialog ranks by frecency (#2399): the telemetry
-			// behind it showed cmd+e re-opened in streaks because plain MRU
-			// order rarely had the wanted file on top.
-			Recent: RecentPalette{Ranking: "frecency"},
+			// The recent-files dialog lists what was opened last, newest
+			// first (#2532). #2399 made frecency — open count decayed over
+			// time — the default, which buried a file opened a minute ago
+			// under ones merely opened often before; JetBrains' Recent Files
+			// popup is plain MRU and that is what the dialog is read as.
+			// Frecency stays available as the opt-in "frecency".
+			Recent: RecentPalette{Ranking: "recency"},
 		},
 		Notifications: Notifications{
 			TimeoutSeconds: 4,

@@ -116,13 +116,15 @@ as query text. Rows advertise their number via `Item.Hint`, a dim leading
 column rendered before the title. Only the intention popup opts in — see
 [intention actions](./intention-actions.md).
 
-`Item.Hint` is *not* limited to that fast path. Since #2489 the project lists
-use it for a number the palette itself does not handle: the recent-projects
-rows carry their MRU digit, the `ctrl+alt+N` chord that switches there
-(see [project switching](./project-switching.md)). The side column renders the
-hint the same way the main list does — it silently dropped it before — and
-because those numbers name a global chord rather than a row position, they
-stay with their project while a query re-sorts the list.
+`Item.Hint` is *not* limited to that fast path — the side column renders it
+the same way the main list does (it silently dropped it before #2489). Between
+#2489 and #2532 the project lists used it for a number the palette itself does
+not handle: every recent-projects row carried its MRU digit, the `ctrl+alt+N`
+chord that switches there. #2532 took the digits back out — a number in front
+of each project name was noise, not a teaching aid — so both project lists
+render **no hint at all** today; the chords are unchanged and are discoverable
+through the `project.switchMRU1` … `project.switchMRU9` command titles (see
+[project switching](./project-switching.md)).
 
 ## Command mode (`:`)
 
@@ -347,15 +349,27 @@ its right-pinned `✕` zone emits `RemoveRecentFileMsg{Path}` — the root model
 removes the entry from the MRU, persists the session immediately and
 refreshes the still-open palette.
 
-### Frecency ranking, preselection and the projects filter (#2399)
+### Ranking, preselection and the projects filter (#2399, #2532)
 
 `palette.recentFiles` is the most-used command in the usage export, and it was
 being opened in streaks of six to ten, re-opened within ten seconds forty-two
-times — the shape of "wrong entry, esc, try again". Plain MRU order is the
-reason: the file one wants next is the one worked on *often*, not the one
-touched most recently. Three changes address it.
+times — the shape of "wrong entry, esc, try again". #2399 read that as an
+ordering problem and made frecency the default; #2532 reverted that part (the
+streaks turned out to be better answered by the preselection below), and the
+ranking is a setting either way. Three mechanisms came out of it.
 
-**Ranking is frecency.** Both lists blend frequency with a recency decay, the
+**Ranking is plain recency again (#2532).** #2399 made frecency the default;
+in daily use that buried a file opened a minute ago under ones merely opened
+often before, which is the opposite of what a *Recent* Files popup is read as
+— JetBrains' is strict MRU. `palette.recent.ranking` therefore defaults to
+`recency`: with an empty query the file list, the Recent Projects column and
+the `project.switch` picker all list their source newest first, verbatim (the
+sorts below are stable and every fuzzy score is 0), with the currently open
+file / project dropped. A typed query still fuzzy-sorts, and equal scores keep
+the newest-first order. Frecency stays as the opt-in `frecency`, described
+next.
+
+**The `frecency` blend.** Both lists blend frequency with a recency decay, the
 `internal/frecency` store the `'@'` finder ranks with (#2155) and command mode
 before it (#2153). The file list reads that same file-open history — the two
 windows agree on what the project works on — keyed by `frecency.Key` of the
@@ -373,9 +387,10 @@ the item as `Item.Rank` and the mode blends it exactly like a file's. Its store
 is `~/.ike/projfrecency.json` — **user-scoped, not per project**: a per-project
 copy would forget every switch the moment it was made.
 
-`palette.recent.ranking = frecency|recency` turns the blend off for both lists,
-restoring the pre-#2399 listing. The gate is a func consulted per listing, so a
-settings flip applies to the very next open.
+`palette.recent.ranking = recency|frecency` (default `recency` since #2532)
+gates the blend for both lists. The gate is a func consulted per listing, so a
+settings flip applies to the very next open, and only an explicit `frecency`
+turns it on — an unknown value validates back to `recency`.
 
 **The previous pick is preselected.** `PreselectMode` is a generic Mode
 extension: a locked mode names the `Item.Key` the selection should start on

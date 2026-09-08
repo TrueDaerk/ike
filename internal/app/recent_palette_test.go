@@ -116,15 +116,19 @@ func TestRecentPickPersists(t *testing.T) {
 }
 
 // TestRecentRankingSetting covers the settings gate's reader, including the
-// documented default and the unknown-value fallback validation applies.
+// documented default — plain recency since #2532 — and the unknown-value
+// fallback validation applies.
 func TestRecentRankingSetting(t *testing.T) {
-	if !recentRankingFrecency(nil) {
-		t.Fatal("no config must default to frecency ranking")
+	if recentRankingFrecency(nil) {
+		t.Fatal("no config must default to plain recency ranking")
+	}
+	if got := config.Defaults()["palette.recent.ranking"]; got != "recency" {
+		t.Fatalf("default ranking = %q, want \"recency\"", got)
 	}
 	for _, c := range []struct {
 		value string
 		want  bool
-	}{{"frecency", true}, {"recency", false}, {" Recency ", false}, {"", true}} {
+	}{{"frecency", true}, {" Frecency ", true}, {"recency", false}, {" Recency ", false}, {"", false}} {
 		cfg := &config.Config{}
 		cfg.Palette.Recent.Ranking = c.value
 		if got := recentRankingFrecency(cfg); got != c.want {

@@ -182,16 +182,17 @@ it for the nine most recent ones.
   are spelled with a literal Ctrl, so they ship identically everywhere, and
   they are on the #805 terminal allowlist like the other project entry points:
   the hop is usually made while looking at a shell.
-- **One numbering, three renderings** (`internal/project/mru.go`):
+- **One numbering, no rendering** (`internal/project/mru.go`):
   `MRUTargets(history, current)` is the recent-projects history in MRU order
-  with the project one is standing in dropped, and `MRUHint(i)` labels its
-  first `MaxMRU` (9) entries "1"…"9". The handler resolves against that list,
-  and both project lists render the same digit as the row's `Item.Hint` — the
-  picker's rows (`picker.go`) and the Recent Projects column of the
-  recent-files dialog (`app.go`'s injected items). The digit is the entry's
-  rank in the *unfiltered* history, not its row number, so neither a typed
-  query nor the column's frecency ranking (#2399) ever renumbers a project:
-  `ctrl+alt+4` always means the same one.
+  with the project one is standing in dropped, capped for the chords at
+  `MaxMRU` (9). The handler resolves against that list — and *only* the
+  handler. Between #2489 and #2532 both project lists rendered the matching
+  digit as the row's `Item.Hint` (the picker's rows in `picker.go` and the
+  Recent Projects column of the recent-files dialog, `app.go`'s injected
+  items) to teach the chords from the lists one already opens; in practice a
+  number in front of every project name was visual noise, so #2532 dropped it
+  along with `MRUHint`. The chords are unchanged, and their palette command
+  titles ("Switch to Recent Project N") are where they are discoverable.
 - **Number one is `project.switchLast`'s target**: the history's newest entry
   after the current project is dropped is the project one came from, which is
   also the MRU parked workspace. The digits simply generalize that toggle.
@@ -335,11 +336,11 @@ one action that also unloads it.
   removal) closes the workspace; unloaded entries' aux action instead
   **removes the entry from the history** (`RemoveFromHistoryMsg` → off-loop
   `RemoveFromHistory` write-back at user scope → config reload → the
-  still-open palette re-lists). Since #2489 each of the first nine rows also
-  carries its **MRU digit** as a leading hint — the `ctrl+alt+N` chord that
-  switches there without the picker. The Recent Projects column of the Recent
-  Files dialog (#778) carries the same time column, removal action and digit
-  hints, and the Recent Files rows themselves gained the matching layout and
+  still-open palette re-lists). The rows carry **no leading digit**: #2489 put
+  the `ctrl+alt+N` chord number in front of the first nine names and #2532
+  took it back out as noise. The Recent Projects column of the Recent
+  Files dialog (#778) carries the same time column and removal action, and
+  the Recent Files rows themselves gained the matching layout and
   prune action in #1113. `cmd+shift+p` is also in the JetBrains chord table
   (`internal/keymap/defaults.go`): the chord layer resolves modified chords
   even in a capturing editor, which the registry keymap layer does not.
