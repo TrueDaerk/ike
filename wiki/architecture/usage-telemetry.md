@@ -83,7 +83,12 @@ counts by the version's interval before comparing sessions.
     (`"cmd+k cmd+c"`), `context` the focus context it resolved in
     (`"editor[go]"`), `status` one of `resolved` (plus `command`), `blocked`
     (a documented blocked default) or `unbound` (no binding matched — the
-    expected-but-missing-keybind signal, modifier/function keys only).
+    expected-but-missing-keybind signal, modifier/function keys only). An
+    `unbound` event carries `command` only when a user unbind override removed
+    a default for the chord in that context (#2539): it names the default,
+    so a report can tell "never bound" from "removed by config". The jq/yq
+    playground records the chords it swallows under its own `playground`
+    context rather than the hosting editor's.
   - `layout` — a structural operation. `op` is one of `split`, `pane.move`,
     `pane.focus`, `resize`, `tab.switch`, `tab.move`, `project.switch`;
     `zone`/`direction` name an edge (`left`/`right`/`top`/`bottom`/`center`)

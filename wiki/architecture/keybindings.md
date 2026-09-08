@@ -1206,6 +1206,40 @@ binding, so the palette and the **Navigate** menu are the recorded fallback.
 See [editor.md](editor.md#go-to-line-2486) for the prompt and its target
 grammar.
 
+## Unbound chords that name a removed default (#2539)
+
+Telemetry recorded `alt+shift+up` / `alt+shift+down` — the Editor-context
+defaults for `editor.caret.addAbove` / `addBelow` — as `unbound` in the
+`editor[json]` context. That combination was not supposed to exist: an
+Editor binding matches every `editor[<lang>]` narrowing (`Context.Matches`),
+and the audit reproduced the chords resolving in a plain JSON editor, in the
+legacy CSI, ESC-prefixed and Kitty event-typed terminal encodings alike. The
+one code path that yields exactly that record is an **unbind override**
+(`keymap.bindings.alt+shift+up = ""`, written by the keymap page or the
+JetBrains import's unbind pass): the default is dropped from the table, the
+resolver misses, and the log said only `unbound` — indistinguishable from a
+chord no default ever claimed.
+
+The table now remembers what an unbind removed. `BuildTable` keeps the
+defaults an `""` override filtered out, and `BindingTable.Dropped(chord,
+context)` answers Lookup-shaped for them. `resolveKeymap` puts the dropped
+default's id into the unbound event's `command` field (status stays
+`unbound` — the key did nothing), so a report can split the unbound chords
+into *never bound* and *bound by default, removed by config*; the deferred
+editor verdict (#2303) carries the id through `pendUnbound` the same way.
+
+The audit also found the jq/yq playground **silent**: the mode owns the
+keyboard ahead of the keymap layer, and a modified chord it, the Global scope
+and the result buffer all declined left no trace at all. `recordPlayUnbound`
+now writes the event under the playground's own `playground` context (the id
+the cheatsheet already reports under), not the hosting editor's
+`editor[json]`, so the signal names the pane that dropped the key.
+
+The two genuinely unbound chords of the same export, `f12` (JetBrains' jump
+to last tool window) and `cmd+alt+up` (previous occurrence), stay unbound:
+neither command exists, and the reason is recorded in the chord ledger of
+`cmd/ike/keybind_audit_test.go`.
+
 ## The line-editing family and the pane chords (#2400)
 
 A second telemetry export (two sessions, ~9,900 events) left 37 presses on
@@ -1276,6 +1310,7 @@ JetBrains is:
 | `editor.sortLines` | `alt+shift+s` | fragile | `vim :sort / Edit menu` | live via vim :sort / Edit menu |
 | `editor.splitViewDown` | `cmd+alt+shift+down` | fragile | `palette` | live via palette |
 | `editor.splitViewRight` | `cmd+alt+shift+right` | fragile | `palette` | live via palette |
+| `editor.tab.closeOthers` | `cmd+alt+w` | fragile | `palette / File menu / tab context menu` | live via palette / File menu / tab context menu |
 | `editor.tab.moveLeft` | `ctrl+shift+pgup` | delivered | `—` | live |
 | `editor.tab.moveRight` | `ctrl+shift+pgdown` | delivered | `—` | live |
 | `editor.tab.new` | `ctrl+t` | delivered | `—` | live |

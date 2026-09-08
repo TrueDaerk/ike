@@ -2978,11 +2978,12 @@ func (m *Model) resolveKeymap(k keymap.Key) (tea.Cmd, bool) {
 			// (alt+delete, alt+backspace, ctrl+u, …), and reporting those as
 			// unbound buried the genuinely missing keybinds in noise.
 			// routeKey logs the event only if the editor ignored the key too.
+			ev := unboundKey{chord: k.String(), context: string(m.keyContext()), command: m.droppedDefault(k)}
 			if m.focusedEditor() != nil {
-				m.pendUnbound = &unboundKey{chord: k.String(), context: string(m.keyContext())}
+				m.pendUnbound = &ev
 				break
 			}
-			m.usage.Key(k.String(), string(m.keyContext()), "", "unbound")
+			m.usage.Key(ev.chord, ev.context, ev.command, "unbound")
 		}
 	}
 	return nil, false
@@ -4791,6 +4792,25 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// editor.tab.closeOthers (tab context menu / palette, #1128): keep
 		// only the active tab; dirty tabs stay open.
 		m.closeOtherTabs()
+		return m, nil
+	case TabCloseSideMsg:
+		// editor.tab.closeLeft / editor.tab.closeRight (#2538): drop the tabs
+		// on one side of the active one.
+		if msg.Delta < 0 {
+			m.closeTabScope(closeScopeLeft)
+		} else {
+			m.closeTabScope(closeScopeRight)
+		}
+		return m, nil
+	case TabCloseUnmodifiedMsg:
+		// editor.tab.closeUnmodified (#2538): keep only what is still being
+		// edited (and the pinned tabs).
+		m.closeTabScope(closeScopeUnmodified)
+		return m, nil
+	case TabCloseAllMsg:
+		// editor.tab.closeAll (#2538): the whole pane's tabs; the pane goes
+		// with them unless a pinned tab holds it open.
+		m.closeTabScope(closeScopeAll)
 		return m, nil
 	case TabTogglePinMsg:
 		// editor.tab.togglePin (tab context menu / palette, #1172): flip the
@@ -9744,10 +9764,30 @@ func (m Model) routeKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 // unboundKey is a chord the keymap layer found no binding for, held back until
-// the focused editor has had its say (#2303).
+// the focused editor has had its say (#2303). command names the default the
+// user's config unbound for the chord, "" when no default ever claimed it
+// (#2539) — the usage log carries it so a missing-keybind report can tell
+// "never bound" from "removed by an override".
 type unboundKey struct {
 	chord   string
 	context string
+	command string
+}
+
+// droppedDefault names the default command an unbind override removed for k
+// in the current key context, "" when there was none (#2539). The #2539
+// telemetry showed editor.caret.addAbove's chord recorded unbound in an
+// editor although the default table binds it there in every language scope;
+// the resolver could not have said why, and this field is how it does now.
+func (m Model) droppedDefault(k keymap.Key) string {
+	if m.bindings == nil || m.bindings.Table() == nil {
+		return ""
+	}
+	chord := keymap.Chord{Steps: []keymap.Key{k}}
+	if b, ok := m.bindings.Table().Dropped(chord, m.keyContext()); ok {
+		return b.Command
+	}
+	return ""
 }
 
 // flushUnbound records the held-back unbound chord once the pane has seen the
@@ -9764,7 +9804,7 @@ func (m *Model) flushUnbound(inst *pane.Instance) {
 	if ed := inst.Editor(); ed != nil && ed.HandledLastKey() {
 		return
 	}
-	m.usage.Key(ev.chord, ev.context, "", "unbound")
+	m.usage.Key(ev.chord, ev.context, ev.command, "unbound")
 }
 
 // activeEditorKey returns the editor that should receive a Replace open or an
@@ -12604,8 +12644,10 @@ func editorContextItems(conflict bool) []menu.Item {
 	return items
 }
 
-// tabContextItems is the tab segment's right-click menu (#1128). The clicked
-// tab was selected on open, so Close, Close Others and Pin target it; entries
+// tabContextItems is the tab segment's right-click menu (#1128, #2538). The
+// clicked tab was selected on open, so Close, the batch closes and Pin all
+// resolve against it — "to the Left" / "to the Right" are the sides of the
+// clicked segment; entries
 // resolve through the same InfoFunc as the menu bar. The menu is built per
 // open, so the pin entry's label reflects the clicked tab's state (#1172).
 func tabContextItems(pinned bool) []menu.Item {
@@ -12616,6 +12658,10 @@ func tabContextItems(pinned bool) []menu.Item {
 	return []menu.Item{
 		{Title: "Close", Command: "editor.closeTab"},
 		{Title: "Close Others", Command: "editor.tab.closeOthers"},
+		{Title: "Close Tabs to the Left", Command: "editor.tab.closeLeft"},
+		{Title: "Close Tabs to the Right", Command: "editor.tab.closeRight"},
+		{Title: "Close Unmodified Tabs", Command: "editor.tab.closeUnmodified"},
+		{Title: "Close All Tabs", Command: "editor.tab.closeAll"},
 		{Title: pinTitle, Command: "editor.tab.togglePin"},
 		{Title: "Reopen Closed", Command: "editor.tab.reopenClosed"},
 		{Title: "Open File As…", Command: "file.openAs"},

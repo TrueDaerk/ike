@@ -13,6 +13,12 @@ type BindingTable struct {
 	conflicts   []Conflict
 	shadows     []Shadow
 	diagnostics []string
+	// dropped holds the defaults an unbind override ("" value) removed
+	// (#2539): the resolver reports a chord unbound the same way whether no
+	// default ever claimed it or a user override took the default away, and
+	// the usage log could not tell the two apart. Lookup-shaped access via
+	// Dropped keeps the telemetry honest without changing resolution.
+	dropped []Binding
 }
 
 // BuildTable builds the effective table from a default set and a merged override
@@ -31,6 +37,7 @@ type BindingTable struct {
 // narrower statement wins whatever the map order was.
 func BuildTable(defaults []Binding, overrides map[string]string, goos string) *BindingTable {
 	var diags []string
+	var dropped []Binding
 	// Start from normalised defaults.
 	bindings := make([]Binding, 0, len(defaults))
 	for _, b := range defaults {
@@ -63,11 +70,14 @@ func BuildTable(defaults []Binding, overrides map[string]string, goos string) *B
 			return b.Chord.String() == cs && (!key.Qualified || b.Context == key.Context)
 		}
 		if cmd == "" {
-			// Unbind: drop the matching bindings.
+			// Unbind: drop the matching bindings, remembering the defaults
+			// among them for Dropped (#2539).
 			filtered := bindings[:0:0]
 			for _, b := range bindings {
 				if !matches(b) {
 					filtered = append(filtered, b)
+				} else if b.Layer == LayerDefault {
+					dropped = append(dropped, b)
 				}
 			}
 			bindings = filtered
@@ -106,7 +116,27 @@ func BuildTable(defaults []Binding, overrides map[string]string, goos string) *B
 	for _, s := range shadows {
 		diags = append(diags, s.String())
 	}
-	return &BindingTable{bindings: kept, conflicts: conflicts, shadows: shadows, diagnostics: diags}
+	return &BindingTable{bindings: kept, conflicts: conflicts, shadows: shadows, diagnostics: diags, dropped: dropped}
+}
+
+// Dropped returns the default binding an unbind override removed for chord c
+// in the focus context active (#2539), preferring the most specific the way
+// Lookup does. It reports ok=false when no default ever bound c there — the
+// two reasons a Lookup misses, told apart so a missing-keybind report can say
+// "never bound" versus "bound by default, removed by the user's config".
+func (t *BindingTable) Dropped(c Chord, active Context) (Binding, bool) {
+	cs := c.String()
+	var best Binding
+	found := false
+	for _, b := range t.dropped {
+		if b.Chord.String() != cs || !b.Context.Matches(active) {
+			continue
+		}
+		if !found || b.Context.MoreSpecific(best.Context) {
+			best, found = b, true
+		}
+	}
+	return best, found
 }
 
 // Bindings returns the effective bindings (post conflict resolution).

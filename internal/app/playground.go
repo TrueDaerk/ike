@@ -1220,6 +1220,7 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if ok, cmd := m.playGlobalChord(msg); ok {
 			return m, cmd
 		}
+		m.recordPlayUnbound(msg)
 		return m, nil
 	}
 	if !changed {
@@ -1315,7 +1316,25 @@ func (m Model) updatePlayBufferKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	var cmd tea.Cmd
 	*s.resultEd, cmd = s.resultEd.Update(msg)
+	if !s.resultEd.HandledLastKey() {
+		m.recordPlayUnbound(msg)
+	}
 	return m, cmd
+}
+
+// recordPlayUnbound writes the usage log's unbound-chord event for a
+// recordable chord the playground swallowed (#2539): neither the mode's own
+// keys, the Global scope nor (in the result buffer) the editor took it. The
+// mode owns the keyboard ahead of resolveKeymap, so without this its misses
+// left no trace at all — and the context is the playground's own, not the
+// hosting editor's editor[json], so the signal names the pane that actually
+// dropped the key (the cheatsheet already reports under the same id).
+func (m Model) recordPlayUnbound(msg tea.KeyPressMsg) {
+	k, ok := keymap.FromKeyMsg(msg)
+	if !ok || !recordableUnbound(k) {
+		return
+	}
+	m.usage.Key(k.String(), ctxPlayground, "", "unbound")
 }
 
 // playCopyChord reports whether msg is the app keymap's editor.copy binding in

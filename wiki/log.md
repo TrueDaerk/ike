@@ -36,6 +36,31 @@
   `top` fields — the first quiet heartbeats the #2402 telemetry ever saw.
   The idle model is written up in `performance.md`.
 
+## 2026-09-08 (editor tabs: the batch closes, #2538)
+
+- **Four new ways to close tabs**, JetBrains' Window → Editor Tabs set:
+  `editor.tab.closeLeft`, `editor.tab.closeRight`, `editor.tab.closeUnmodified`
+  and `editor.tab.closeAll` join the older `editor.tab.closeOthers`.
+  `editor.closeTab` was the sixth most dispatched command of the telemetry
+  window (65 dispatches in four days, in bursts) precisely because closing was
+  one tab at a time.
+- **One implementation behind all five.** `closeTabScope` (`internal/app/tabs.go`)
+  takes a `tabCloseScope` that picks the victims; pinned tabs (#1172) are never
+  picked and are reported instead, and `closeTabSet` closes the set highest
+  index first, taking the pane with the last tab when the batch empties it.
+- **The unsaved-changes guard answers for the batch, not per file.** A batch
+  holding dirty documents opens one prompt naming them all
+  (`dirtyInTabs` / `openBatchClosePrompt`): `s` writes every dirty victim then
+  closes the set, `d` discards and closes, `esc` closes nothing. `pendingClose`
+  carries the victim list, so nothing shifts between prompt and close. Close
+  Others therefore no longer silently leaves dirty tabs behind.
+- **Surfaced where tabs are.** All five sit in the tab context menu (#1128) and
+  in the **File** menu. Close Others takes `cmd+alt+w`, `cmd+w`'s neighbour, on
+  macOS only — off macOS the `Cmd`→`Ctrl` fold would collide with
+  `pane.close`'s `ctrl+alt+w`; the other three are menu/palette commands with
+  audit-ledger entries. The JetBrains keymap import maps `CloseAllToTheLeft`,
+  `CloseAllToTheRight`, `CloseAllUnmodifiedEditors`, `CloseAllEditors` and
+  `CloseAllEditorsButActive`/`ButPinned` onto them.
 ## 2026-09-08 (issues window: the plain arrows navigate, #2537)
 
 - **Arrows in the issues window**: `up` / `down` now walk the selection —
