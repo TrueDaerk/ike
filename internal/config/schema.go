@@ -154,8 +154,15 @@ type Telemetry struct {
 // window's aggregator (#2426). It is opt-in because a permanent clock on the
 // status line is a working-hours display, and whether that reads as
 // motivating or as oppressive is not something IKE gets to decide for anyone.
+// BranchIssue ("on"/"off", default "off") shows the issue behind the current
+// issue/<number> branch — "#2544 status line: …" — from the forge listing
+// cache (#2544); BranchIssuePattern is the branch-name regexp whose first
+// capture group holds the number, so a repository with another branch naming
+// convention ("feature/ISSUE-12-…") gets the segment too.
 type StatusLine struct {
-	ProjectTime string `toml:"project_time"`
+	ProjectTime        string `toml:"project_time"`
+	BranchIssue        string `toml:"branch_issue"`
+	BranchIssuePattern string `toml:"branch_issue_pattern"`
 }
 
 // HTTP holds the HTTP client's re-run/compare settings (#2247).

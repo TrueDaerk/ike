@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Status Line Segments
-description: Extensible left/right slot model behind the bottom status bar — mode, file, buffer language, diagnostics, host/LSP status, toolchain interpreter, csv column, json/yaml path, search match counter, notification counter, forge unread badge.
+description: Extensible left/right slot model behind the bottom status bar — mode, file, buffer language, diagnostics, host/LSP status, toolchain interpreter, csv column, json/yaml path, search match counter, notification counter, forge unread badge, branch issue.
 resource: internal/app/statusline.go
 tags: [architecture, ui, status-line, toolchain, notifications]
-timestamp: 2026-09-07T14:00:00Z
+timestamp: 2026-09-08T12:00:00Z
 ---
 
 # Status Line Segments
@@ -65,7 +65,7 @@ priority-aware (#471, `composeStatus`): first the file segment shortens by
 exactly the overflow with a JetBrains-style middle ellipsis (floor 16
 cells), then low-priority segments drop in a defined order (hint, eol,
 encoding, indent, svcolumn, docpath, toolchain, todo, host, notifications, macro,
-branch, buflang, forge, diagnostics, lsp, search — mode, file and the cursor never drop), and only as a
+branchissue, branch, buflang, forge, diagnostics, lsp, search — mode, file and the cursor never drop), and only as a
 last resort the bar hard-clips on the right.
 
 ## Mode badge (#1323)
@@ -118,6 +118,36 @@ the upstream. It renders from the vcs status snapshot rather than shelling out
 per frame, and hides entirely outside a git repository. See
 [VCS / Git Integration](/architecture/vcs.md).
 
+## Branch issue segment (#2544)
+
+An **opt-in** `branchissue` slot sits on the **right** list ahead of `branch`:
+`#2544 status line: show the issue behind…` — the issue the checked-out branch
+belongs to, title truncated at 34 cells. It is off by default
+(`statusline.branch_issue`, Settings → Forge) and hidden on every branch whose
+name the pattern misses.
+
+The number comes from `statusline.branch_issue_pattern`, a regexp whose **first
+capture group** is read as the issue number; the default `^issue/(\d+)` is the
+[change workflow](/process/change-workflow.md)'s own branch naming, and another
+convention configures its own (`^feature/ISSUE-(\d+)`). A pattern that does not
+compile, or that captures nothing, is rejected by the settings form and reset by
+the config validator — the segment never falls back to matching something else.
+
+The title costs the forge nothing: every listing the app routes — background
+poll, the Issues window's own fetch, the persisted snapshot (#2085, #2108) —
+folds its titles into `Model.forgeTitles`, so the label refreshes on the poll's
+cadence. A session that never opened the Issues window reads the persisted
+snapshot once per issue branch from the settled pass; until a listing carries
+the issue the segment renders the bare `#2544`, which is still the honest
+answer. See [Issues Tool Window](/architecture/github-issues.md).
+
+Clicking the segment — or `issues.openCurrentBranch` (`cmd+alt+i`) — opens that
+issue's **detail** in the Issues window, revealing it right away when the pane
+already holds the listing and as soon as the first fetch lands otherwise (the
+same reveal path the forge event dialog uses). The command works whether or not
+the segment is switched on; on a branch the pattern misses it says so instead of
+opening an arbitrary issue.
+
 ## Notification counter
 
 `Model.notifUnseen` counts history-ring entries recorded since the
@@ -145,6 +175,7 @@ router dispatches a left press through `statusSegmentCommands`:
 | `todo` (TODO count) | `todo.list` |
 | `notifications` (`● N` counter) | `notifications.history` |
 | `forge` (unread forge events) | `issues.toggle` |
+| `branchissue` (the current branch's issue, #2544) | `issues.openCurrentBranch` |
 | `lsp` (server state) | `lsp.doctor` (#2164) |
 
 Only segments with one clear, obvious target are wired; every other press on

@@ -370,6 +370,12 @@ type TerminalPopupPinMsg struct{}
 // repaints its screen (#97). Dispatched by terminal.clear.
 type TerminalClearMsg struct{}
 
+// TerminalSendSelectionMsg hands the editor's selection — or the caret's line
+// when nothing is selected — to a terminal as a bracketed paste (#2542). Run
+// follows the paste with Enter, so the payload is executed. Dispatched by
+// terminal.sendSelection and terminal.sendSelectionRun.
+type TerminalSendSelectionMsg struct{ Run bool }
+
 // DiffFilesMsg asks the root model to compare two files (#60): it opens the
 // "@" file picker twice — left (old) side, then right (new) side — and splits
 // the focused leaf with a read-only diff viewer pane over the two picks.
@@ -769,6 +775,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("terminal.popup", "Popup Terminal", TerminalPopupMsg{}),
 			appCommand("terminal.popup.pin", "Pin Popup Terminal", TerminalPopupPinMsg{}),
 			appCommand("terminal.clear", "Clear Terminal", TerminalClearMsg{}),
+			appCommand("terminal.sendSelection", "Send Selection to Terminal", TerminalSendSelectionMsg{}),
+			appCommand("terminal.sendSelectionRun", "Send Selection to Terminal and Run", TerminalSendSelectionMsg{Run: true}),
 			appCommand("notifications.history", "Notification History", ShowNotificationHistoryMsg{}),
 			appCommand("menu.open", "Open Menu Bar", ToggleMenuMsg{}),
 			appCommand("settings.open", "Settings", OpenSettingsMsg{}),
@@ -820,6 +828,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand(findPanelCommand, "Open Results in Find Window", OpenInFindPanelMsg{}),
 			appCommand("tests.toggle", "Test Results", TestsToggleMsg{}),
 			appCommand("issues.toggle", "GitHub Issues", IssuesToggleMsg{}),
+			appCommand("issues.openCurrentBranch", "Open Current Branch Issue", IssuesOpenCurrentBranchMsg{}),
 			paneCommand("data.columnProfile", "Data: Column Profile", "data", DataColumnProfileMsg{}),
 			paneCommand("data.sortColumn", "Data: Sort Column", "data", DataSortColumnMsg{}),
 			paneCommand("data.export", "Data: Export Rows…", "data", DataExportMsg{}),

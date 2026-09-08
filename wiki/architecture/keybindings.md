@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts plus language-scoped editor bindings, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-09-04T13:00:00Z
+timestamp: 2026-09-08T18:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -1444,6 +1444,8 @@ JetBrains is:
 | `terminal.newTab` | `ctrl+t` | delivered | `—` | live |
 | `terminal.popup` | `cmd+alt+t` | fragile | `palette` | live via palette |
 | `terminal.popup.pin` | `cmd+alt+shift+k` | fragile | `palette` | live via palette |
+| `terminal.sendSelection` | `cmd+alt+shift+enter` | fragile | `palette / editor context menu` | live via palette / editor context menu |
+| `terminal.sendSelectionRun` | `cmd+alt+enter` | fragile | `palette / editor context menu` | live via palette / editor context menu |
 | `terminal.toggle` | `alt+f12` | fragile | `palette` | live via palette |
 | `tests.toggle` | `cmd+4` | fragile | `palette / View menu` | live via palette / View menu |
 | `time.toggle` | `cmd+alt+0` | fragile | `palette / Tools menu` | live via palette / Tools menu |

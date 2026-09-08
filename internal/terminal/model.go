@@ -270,6 +270,33 @@ func (m *Model) SendLine(line string) {
 	m.sess.SendKey(vt.KeyPressEvent{Code: vt.KeyEnter})
 }
 
+// PasteToShell hands text to the child as a **bracketed paste** and, with
+// submit set, follows it with Enter (#2542, the editor's "send selection to
+// the terminal"). Two deliberate differences to its neighbours above:
+//
+//   - unlike Model.PasteText it bypasses the scrollback search and copy-mode
+//     overlays — the payload was aimed at the shell, and an overlay that
+//     happens to be open must not swallow it;
+//   - unlike SendLine it pastes instead of typing. A selection is arbitrary
+//     text, possibly multi-line, and only the bracketed-paste framing keeps a
+//     shell from acting on the embedded newlines line by line. The submit
+//     newline is therefore a *separate* Enter key press after the paste:
+//     inside the brackets a trailing "\n" would be inserted literally, not
+//     run.
+//
+// Returns false when there is no live child to send to.
+func (m *Model) PasteToShell(text string, submit bool) bool {
+	if m.sess == nil || !m.sess.Running() {
+		return false
+	}
+	m.occupied = true
+	m.sess.Paste(text)
+	if submit {
+		m.sess.SendKey(vt.KeyPressEvent{Code: vt.KeyEnter})
+	}
+	return true
+}
+
 // SessionKey returns the underlying session's routing key ("" for a failed
 // spawn) — output/exit messages carry it.
 func (m Model) SessionKey() string {

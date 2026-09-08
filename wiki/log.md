@@ -18,6 +18,25 @@
   Missing, malformed or unwritable files degrade to the memory-only list;
   the zero value never writes.
 
+## 2026-09-08 (branch issue on the status line, #2544)
+
+- **The issue behind the current branch, on the bar.** Work runs on
+  `issue/<number>` branches, and reading the title behind that number meant
+  opening the Issues window for a lookup and closing it again — the telemetry
+  counted 47 `issues.copy` runs and 107 key events in the issues context over
+  five days. The opt-in `statusline.branch_issue` segment shows `#2544 <title>`
+  instead, with `statusline.branch_issue_pattern` (first capture group = the
+  number, default `^issue/(\d+)`) for repositories that name branches
+  differently; both live on the Settings UI's Forge page and the pattern is
+  refused in the form when it does not compile or captures nothing.
+- **No request of its own.** The title comes out of the listings the app
+  already routes — background poll, the pane's own fetch, the persisted
+  snapshot, which an opted-in session reads once per issue branch even with the
+  window never opened. An issue no listing carries renders as the bare `#2544`.
+- **One click into the detail.** Clicking the segment or running
+  `issues.openCurrentBranch` (`cmd+alt+i`) opens the Issues window on that
+  issue's detail, through the same reveal path the forge event dialog uses, so
+  it works for GitHub and Gitea/Forgejo alike.
 
 ## 2026-09-08 (idle wake-up churn: quiet heartbeats, #2540)
 

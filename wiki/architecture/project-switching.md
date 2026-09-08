@@ -4,7 +4,7 @@ title: Project Switching
 description: Roadmap 0090 — internal/project owns the switch flow end to end; recent-projects history, project.switch command, palette picker and the msg-driven re-root orchestration with an unsaved-changes guard.
 resource: internal/project
 tags: [architecture, project, history, switching, palette]
-timestamp: 2026-09-04T00:00:00Z
+timestamp: 2026-09-08T12:00:00Z
 ---
 
 # Project Switching (Roadmap 0090)
@@ -471,6 +471,18 @@ buffer whose file changed on disk reloads in place (identical content is a
 no-op, undo history survives), a dirty buffer whose file provably changed
 (disk hash differs) is marked stale so the next save runs the conflict
 guard; a deleted file leaves the buffer untouched — it is the only copy.
+
+**The playground parks with its document (#2535).** The inline jq/yq/xmq
+playground is bound to the document it queries (#2355), and that document —
+an editor buffer or an HTTP response pane — survives the switch parked in
+its workspace. So the mode parks in `wsExtras` too (`parkPlayground`, the
+run in flight abandoned) and `buildModel` mounts it back on resume, with
+query, result, history position and multi-line state intact; after the
+buffer reconcile, `resumePlayRun` re-runs what was pending and re-reads a
+followed file that changed while parked. The fresh model of the incoming
+project starts with no playground. The program history and the per-file
+recall ride across as session state (#1977, #1982). Details:
+[jq-playground](jq-playground.md#across-a-project-switch).
 
 **Explorer resync on resume (#1520).** The same catch-up covers the tree:
 `performSwitch` sends the resumed explorer one `explorer.ResyncMsg`, which

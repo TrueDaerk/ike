@@ -418,6 +418,15 @@ var jetbrainsRows = []row{
 	// ctrl+alt+shift+t the same binding on Linux — so the pin takes the free
 	// k ("keep it on screen"), unclaimed on both platforms.
 	{"cmd+alt+shift+k", "terminal.popup.pin", "Pin popup terminal", Global, "Terminal (#2406)"},
+	// Send the selection (else the caret's line) to a shell (#2542). Editor
+	// context: the payload comes from a buffer, so the chords mean nothing in
+	// any other pane. The enter key is the mnemonic — "hand this line over" —
+	// and the run flavour earns the shorter chord, being the common one; the
+	// whole cmd+alt+enter family was free on both platforms (plain alt+enter
+	// is the intention popup and stays untouched, and the cmd→ctrl fold lands
+	// on ctrl+alt+(shift+)enter, which no default owns).
+	{"cmd+alt+enter", "terminal.sendSelectionRun", "Send selection to terminal and run", Editor, "Terminal (#2542)"},
+	{"cmd+alt+shift+enter", "terminal.sendSelection", "Send selection to terminal", Editor, "Terminal (#2542)"},
 	// Per-context ctrl+t (#1794), the showcase of one chord doing the
 	// pane-appropriate thing per context: a new terminal tab with a terminal
 	// focused, a new empty editor tab with an editor focused. Disjoint
@@ -566,6 +575,10 @@ var jetbrainsRows = []row{
 	// is full, so the project time report takes the family's free
 	// alt-neighbour rather than shipping palette-only.
 	{"cmd+alt+0", "time.toggle", "Project time report", Global, "Time report (#2426)"},
+	// The issue behind the current issue/<n> branch (#2544). It is a doorway
+	// into the same Issues window, so it sits next to it in the alt layer;
+	// cmd+alt+i is free on both platforms (ctrl+alt+i off macOS).
+	{"cmd+alt+i", "issues.openCurrentBranch", "Open current branch issue", Global, "GitHub issues (#2544)"},
 	{"f10", "menu.open", "Open menu bar", Global, "Menu (0160)"},
 	{"cmd+,", "settings.open", "Settings", Global, "Menu (0160)"},
 	// Unbound-command audit (#1378): JetBrains chords for palette-only
