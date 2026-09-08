@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Integrated Terminal
-description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); pinned mode docking the popup to the bottom edge with the toggle chord as a focus switch, plus a project/global popup scope that carries one shell across projects (#2406); popup focus loss blurs instead of hiding, with a statusbar activity indicator for the hidden layer (#2309), and the wheel outside the layer's boxes scrolls the pane below while the layer keeps focus (#2343); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); sending the editor's selection (else the caret's line) to a shell as a bracketed paste, optionally submitted (#2542); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192).
+description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); pinned mode docking the popup to the bottom edge with the toggle chord as a focus switch, plus a project/global popup scope that carries one shell across projects (#2406); popup focus loss blurs instead of hiding, with a statusbar activity indicator for the hidden layer (#2309), and the wheel outside the layer's boxes scrolls the pane below while the layer keeps focus (#2343); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); sending the editor's selection (else the caret's line) to a shell as a bracketed paste, optionally submitted (#2542); re-running the last shell command from anywhere, prompt-gated and without moving the keyboard (#2543); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-09-08T18:00:00Z
+timestamp: 2026-09-08T21:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -1052,6 +1052,44 @@ path — super is not xterm-encodable.
   - Both commands sit in the **editor context menu** next to "Run Test at
     Cursor", and are palette-reachable (the Cmd/Alt chords are fragile, so the
     palette is their recorded escape route in `reachableAlternatives`).
+- **`terminal.rerunLast`** (default `alt+shift+r`, Global) repeats the
+  previous shell command from wherever the keyboard is
+  (`internal/app/termrerun.go`, #2543). The telemetry behind it: the popup
+  terminal was opened 137 times in four days, a good share of them for
+  nothing but `up`, `enter`, close — a round trip whose only variable part is
+  the two keys; run configurations cover file runs, not the ad-hoc command
+  the user last typed.
+  - **Delivery**: `terminal.Model.RerunLast` presses **Up + Enter** through
+    the session's key encoder (so a shell in application-cursor mode gets the
+    sequence it expects). Not a remembered command line: the emulator tracks
+    no OSC 133 command marks, and the shell's own history is the truthful
+    source anyway — it already holds the line the user wants.
+  - **Prompt gating**: only a shell that sits at its prompt is typed into —
+    `Session.AtPrompt` (#1340: the PTY's foreground process group is the
+    shell's own, not on the alternate screen), the same gate the completion
+    popup uses. A foreground job (a build, vim, a REPL) would receive Up +
+    Enter as its own input, so a busy shell gets a toast and nothing is sent;
+    command sessions (0350) and exited shells count as busy / absent.
+  - **Target order** (`terminalRerunTarget`) extends `terminalSendTarget` by
+    one step for the popup's retained state: (1) the popup terminal's focused
+    tab while the layer is open, blurred included (#2309); (2) the focused
+    terminal pane, custom tool panes excluded (#741/#772); (3) the popup's
+    focused tab while the layer is **hidden but retained** — that shell is the
+    one the user last worked in, and not having to bring it up is the point;
+    (4) otherwise the popup is opened, spawning its first shell (which inherits
+    the history file, so Up still recalls the last command run in one). Only
+    the fourth case moves the keyboard.
+  - **The hidden case leaves a trace**: after a re-run in the hidden popup the
+    statusbar activity indicator (#2309, `popupUnseen`) is armed by hand. The
+    output that follows would arm it anyway, but a command that prints nothing
+    (a `make` with nothing to do, a redeploy) would otherwise leave no sign
+    that anything happened; the indicator's `⚙` half then shows the job for as
+    long as it runs.
+  - Global, so it works from the editor, the explorer, a tool window — the
+    chord is `alt+shift+r` ("re-run", next to the other Global alt+shift
+    mnemonics); the `cmd+alt+r` family was not free, its cmd→ctrl fold landing
+    on `pane.resizeMode` off macOS. Palette-reachable as the recorded escape
+    route.
 - The Tools menu carries "Terminal" (toggle), "New Terminal", "New Terminal
   Tab" and "SSH Host…"; all commands are palette-reachable.
 - **Titles**: the shell's OSC 0/2 reports (the running command) append to

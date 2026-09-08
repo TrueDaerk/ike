@@ -6525,6 +6525,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.sendSelectionToTerminal(msg.Run)
 		return m, nil
 
+	case TerminalRerunLastMsg:
+		// terminal.rerunLast (#2543): Up + Enter into the shell the user is
+		// looking at (or the hidden popup's), only while it sits at a prompt.
+		m.rerunLastInTerminal()
+		return m, nil
+
 	case TerminalClearMsg:
 		// terminal.clear: scrollback gone, screen repainted via ctrl+l.
 		if inst := m.currentTerminal(); inst != nil {

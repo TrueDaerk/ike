@@ -376,6 +376,12 @@ type TerminalClearMsg struct{}
 // terminal.sendSelection and terminal.sendSelectionRun.
 type TerminalSendSelectionMsg struct{ Run bool }
 
+// TerminalRerunLastMsg re-runs the previous shell command — Up + Enter — in
+// the popup terminal's focused tab or the focused terminal pane, without
+// moving the keyboard (#2543). Only a shell at its prompt is typed into.
+// Dispatched by terminal.rerunLast.
+type TerminalRerunLastMsg struct{}
+
 // DiffFilesMsg asks the root model to compare two files (#60): it opens the
 // "@" file picker twice — left (old) side, then right (new) side — and splits
 // the focused leaf with a read-only diff viewer pane over the two picks.
@@ -779,6 +785,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("terminal.clear", "Clear Terminal", TerminalClearMsg{}),
 			appCommand("terminal.sendSelection", "Send Selection to Terminal", TerminalSendSelectionMsg{}),
 			appCommand("terminal.sendSelectionRun", "Send Selection to Terminal and Run", TerminalSendSelectionMsg{Run: true}),
+			appCommand("terminal.rerunLast", "Re-run Last Shell Command", TerminalRerunLastMsg{}),
 			appCommand("notifications.history", "Notification History", ShowNotificationHistoryMsg{}),
 			appCommand("menu.open", "Open Menu Bar", ToggleMenuMsg{}),
 			appCommand("settings.open", "Settings", OpenSettingsMsg{}),

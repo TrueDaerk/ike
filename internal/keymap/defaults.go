@@ -436,6 +436,13 @@ var jetbrainsRows = []row{
 	// on ctrl+alt+(shift+)enter, which no default owns).
 	{"cmd+alt+enter", "terminal.sendSelectionRun", "Send selection to terminal and run", Editor, "Terminal (#2542)"},
 	{"cmd+alt+shift+enter", "terminal.sendSelection", "Send selection to terminal", Editor, "Terminal (#2542)"},
+	// Re-run the last shell command from anywhere (#2543). Global: the whole
+	// point is not having to open the popup first. alt+shift+r ("re-run")
+	// sits next to the other Global alt+shift mnemonics (alt+shift+e recent
+	// locations, alt+shift+t reopen tab) and is free in every context on both
+	// platforms; the cmd+alt+r family was not — its cmd→ctrl fold lands on
+	// ctrl+alt+r, pane.resizeMode, off macOS.
+	{"alt+shift+r", "terminal.rerunLast", "Re-run last shell command", Global, "Terminal (#2543)"},
 	// Per-context ctrl+t (#1794), the showcase of one chord doing the
 	// pane-appropriate thing per context: a new terminal tab with a terminal
 	// focused, a new empty editor tab with an editor focused. Disjoint
