@@ -39,6 +39,8 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Close pane | `ctrl+alt+w` | `ctrl+alt+w` | `pane.close` |
 | Close project | `cmd+shift+w` | `ctrl+shift+w` | `project.close` |
 | Close project | `ctrl+shift+w` | `ctrl+shift+w` | `project.close` |
+| Close project group | `cmd+alt+shift+w` | `ctrl+alt+shift+w` | `project.group.close` |
+| Close project group | `ctrl+alt+shift+w` | `ctrl+alt+shift+w` | `project.group.close` |
 | Continue (debug) | `f9` | `f9` | `debug.continue` |
 | Copy path | `cmd+shift+c` | `ctrl+shift+c` | `file.copyPath` |
 | Debug console tool window | `cmd+5` | `ctrl+5` | `debug.console` |
@@ -93,6 +95,8 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | New scratch file | `cmd+shift+n` | `ctrl+shift+n` | `scratch.new` |
 | New scratch from selection | `cmd+alt+shift+s` | `ctrl+alt+shift+s` | `scratch.newFromSelection` |
 | New terminal | `cmd+alt+shift+t` | `ctrl+alt+shift+t` | `terminal.new` |
+| Next project in group | `cmd+alt+right-bracket` | `ctrl+alt+right-bracket` | `project.group.next` |
+| Next project in group | `ctrl+alt+right-bracket` | `ctrl+alt+right-bracket` | `project.group.next` |
 | Next search match | `cmd+g` | `ctrl+g` | `search.nextMatch` |
 | Next search match | `f3` | `f3` | `search.nextMatch` |
 | Next tab | `cmd+ctrl+right` | `ctrl+right` | `editor.tab.next` |
@@ -102,10 +106,14 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Open file as… | `cmd+alt+shift+o` | `ctrl+alt+shift+o` | `file.openAs` |
 | Open in browser | `alt+f2` | `alt+f2` | `file.openInBrowser` |
 | Open menu bar | `f10` | `f10` | `menu.open` |
+| Open project group | `cmd+alt+shift+g` | `ctrl+alt+shift+g` | `project.group.open` |
+| Open project group | `ctrl+alt+shift+g` | `ctrl+alt+shift+g` | `project.group.open` |
 | Performance HUD | `ctrl+alt+p` | `ctrl+alt+p` | `perf.hud` |
 | Pin popup terminal | `cmd+alt+shift+k` | `ctrl+alt+shift+k` | `terminal.popup.pin` |
 | Pinned files | `cmd+2` | `ctrl+2` | `nav.pins` |
 | Popup terminal | `cmd+alt+t` | `ctrl+alt+t` | `terminal.popup` |
+| Previous project in group | `cmd+alt+left-bracket` | `ctrl+alt+left-bracket` | `project.group.prev` |
+| Previous project in group | `ctrl+alt+left-bracket` | `ctrl+alt+left-bracket` | `project.group.prev` |
 | Previous search match | `cmd+shift+g` | `ctrl+shift+g` | `search.prevMatch` |
 | Previous search match | `shift+f3` | `shift+f3` | `search.prevMatch` |
 | Previous tab | `cmd+ctrl+left` | `ctrl+left` | `editor.tab.prev` |

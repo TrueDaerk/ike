@@ -34,6 +34,10 @@ type pendingClose struct {
 	// with its last tab.
 	tabs  []int
 	whole bool
+	// groupClose names the project group whose close degraded into this quit
+	// (#2572: no non-member workspace to land on); the marker clears when
+	// the quit goes through, and stays on cancel.
+	groupClose string
 }
 
 // guardedCloseFocused closes the focused pane's active tab (the pane on its
@@ -293,6 +297,9 @@ func (m Model) updateQuitPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if len(m.closePending.dirty) == 0 {
 		primary = "d"
 	}
+	// A group close that degraded into this quit (#2572) clears its marker
+	// on the way out — synchronously, since no cmd runs after a quit.
+	groupClose := m.closePending.groupClose
 	switch guardAnswer(msg, primary) {
 	case "s":
 		if len(m.closePending.dirty) == 0 {
@@ -312,10 +319,16 @@ func (m Model) updateQuitPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.host.Notify(host.Error, "not quit: save failed")
 			return m, tea.Batch(cmds...)
 		}
+		if groupClose != "" {
+			m.clearGroupMarkerNow()
+		}
 		return m.quit()
 	case "d":
 		m.closePending = nil
 		m.shell.Close()
+		if groupClose != "" {
+			m.clearGroupMarkerNow()
+		}
 		return m.quit()
 	case "esc":
 		m.closePending = nil

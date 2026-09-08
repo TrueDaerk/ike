@@ -204,6 +204,7 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	{"project.open_link", reasonOccasional},       // links normally arrive via the OS ike:// handler
 	{"network.forgetClients", reasonOccasional},   // revoking every paired device is a deliberate rarity
 	{"project.peek", reasonOccasional},            // cmd+shift+b returns from a peek
+	{"project.group.warm", reasonOccasional},      // #2572: group.open is the everyday entry point
 	{"run.editConfig", reasonMenu},                // reached from alt+shift+f10's picker
 	{"run.task", reasonMenu},                      // Run menu
 	{"run.taskPromote", reasonOccasional},         //

@@ -634,6 +634,14 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			// Open a project group (0510, #2571): the picker over
 			// [[project.groups]]; the root model runs the warm-up chain.
 			appCommand("project.group.open", "Open Project Group…", project.OpenGroupPickerMsg{}),
+			// Leave and move within the group (0510, #2572): close every
+			// member behind one aggregated guard, cycle the members in list
+			// order, re-park the ones that dropped out (palette only — the
+			// open is the everyday entry point).
+			appCommand("project.group.close", "Close Project Group", project.CloseGroupMsg{}),
+			appCommand("project.group.next", "Next Project in Group", project.CycleGroupMsg{Delta: 1}),
+			appCommand("project.group.prev", "Previous Project in Group", project.CycleGroupMsg{Delta: -1}),
+			appCommand("project.group.warm", "Warm Project Group", project.WarmGroupMsg{}),
 			// Revoke every paired network device (#2519). No default chord:
 			// a rare, deliberate act — the palette is its doorway.
 			appCommand("network.forgetClients", "Forget Paired Network Clients", NetworkForgetClientsMsg{}),

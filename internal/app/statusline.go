@@ -828,8 +828,7 @@ var statusSegmentCommands = map[string]string{
 	"deps": "deps.toggle",
 	// The project-time segment (#2426) opens the report it summarises.
 	"projecttime": "time.toggle",
-	// The project-group slot (#2571) steps to the next member; until
-	// project.group.next lands (#2572) the click notifies instead.
+	// The project-group slot (#2571) steps to the next member (#2572).
 	"group": "project.group.next",
 }
 
