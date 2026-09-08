@@ -67,6 +67,23 @@ func (l *LiveBindings) Binding(id string) (string, bool) {
 	return fragileChords[0], true
 }
 
+// BindingTitle implements the palette's BindingTitler (#2548): the label the
+// table gives a command's binding ("Last edit location"), which the command
+// palette's "did you mean" tier matches when the command Title does not name
+// the action the way the user typed it. The first binding for the id wins —
+// every row bound to one command carries the same label in the default set.
+func (l *LiveBindings) BindingTitle(id string) (string, bool) {
+	if id == "" || l.table == nil {
+		return "", false
+	}
+	for _, b := range l.table.Bindings() {
+		if b.Command == id && b.Title != "" {
+			return b.Title, true
+		}
+	}
+	return "", false
+}
+
 // shorterThen orders chord labels fewest-steps-first, then short-first, then
 // lexically, so single-step delivered chords beat multi-step sequences in the
 // primary slot. Pure string length is not enough for the step rule: "cmd+k z"

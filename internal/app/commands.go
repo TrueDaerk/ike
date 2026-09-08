@@ -546,6 +546,14 @@ func appCommand(id, title string, msg tea.Msg) plugin.Command {
 	}
 }
 
+// withAliases attaches palette synonyms to a command (#2548): the words a user
+// types into ":" that the title does not contain. The palette's "did you mean"
+// tier matches them once the title match comes up short.
+func withAliases(c plugin.Command, aliases ...string) plugin.Command {
+	c.Aliases = aliases
+	return c
+}
+
 // paneCommand is appCommand scoped to one pane context: the command only
 // exists while a pane advertising ctxID has the focus, which is what keeps a
 // grid action like the column profile (#1940) out of the palette everywhere
@@ -780,7 +788,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			paneCommand("lsp.doctor.copy", "LSP Doctor: Copy Report", "lspdoctor", LSPDoctorCopyMsg{}),
 			paneCommand("http.search", "Search in HTTP Response", "http", HTTPSearchMsg{}),
 			appCommand("terminal.toggle", "Toggle Terminal", TerminalToggleMsg{}),
-			appCommand("terminal.popup", "Popup Terminal", TerminalPopupMsg{}),
+			withAliases(appCommand("terminal.popup", "Popup Terminal", TerminalPopupMsg{}), "terminal", "shell"),
 			appCommand("terminal.popup.pin", "Pin Popup Terminal", TerminalPopupPinMsg{}),
 			appCommand("terminal.clear", "Clear Terminal", TerminalClearMsg{}),
 			appCommand("terminal.sendSelection", "Send Selection to Terminal", TerminalSendSelectionMsg{}),

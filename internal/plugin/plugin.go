@@ -91,6 +91,14 @@ type Command struct {
 	// listed; an empty list applies everywhere. The first entry is the family's
 	// canonical name, shown as the badge in the help sheet.
 	Languages []string
+	// Aliases are synonyms the command palette's "did you mean" tier matches
+	// (#2548) when the fuzzy match over titles comes up nearly empty: the words
+	// a user reaches for that the Title does not contain ("quit" for the
+	// close-project command that exits the app, "shell" for the popup
+	// terminal). They are never shown as the row's label and never take part
+	// in the primary ranking; the synonym table lives here, with the command,
+	// instead of in a palette-side lookup.
+	Aliases []string
 	// Run produces the tea.Cmd to execute when the command is invoked.
 	Run func(h host.API) tea.Cmd
 }

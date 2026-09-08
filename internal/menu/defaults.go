@@ -1,5 +1,28 @@
 package menu
 
+// PathSeparator joins a menu title and its entry title in CommandPaths.
+const PathSeparator = " › "
+
+// CommandPaths maps every referenced command id to its menu-bar path ("File ›
+// Switch Project", #2548), so the command palette's "did you mean" tier can
+// match a query against the words the menus use. An id listed under several
+// menus keeps the first path.
+func CommandPaths(menus []Menu) map[string]string {
+	out := make(map[string]string)
+	for _, m := range menus {
+		for _, it := range m.Items {
+			if it.Command == "" {
+				continue
+			}
+			if _, dup := out[it.Command]; dup {
+				continue
+			}
+			out[it.Command] = m.Title + PathSeparator + it.Title
+		}
+	}
+	return out
+}
+
 // Defaults is the built-in menu content (spec #90). Entries reference registry
 // command ids; ids that are not registered yet (future roadmaps, blocked
 // ledger) render disabled with their dependency hint until they land.

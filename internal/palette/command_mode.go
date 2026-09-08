@@ -2,6 +2,7 @@ package palette
 
 import (
 	"sort"
+	"strings"
 
 	"ike/internal/fuzzy"
 	"ike/internal/registry"
@@ -19,6 +20,32 @@ type CommandSource interface {
 type BindingResolver interface {
 	Binding(id string) (string, bool)
 }
+
+// BindingTitler is an optional BindingResolver extension (#2548): the label
+// the keymap table gives a command's default binding ("Last edit location",
+// "Go to declaration"), which often names the action the way a user would
+// where the command Title does not. The "did you mean" tier matches it.
+// *keymap.LiveBindings satisfies it.
+type BindingTitler interface {
+	BindingTitle(id string) (string, bool)
+}
+
+// DidYouMeanBelow is the primary-tier size under which the command mode
+// appends the "did you mean" tier (#2548): with this many or more title
+// matches the user is narrowing a real list; with fewer, the fuzzy title match
+// has probably failed to name what they want.
+const DidYouMeanBelow = 5
+
+// didYouMeanMax caps the second tier so a short query cannot flood the list
+// with weak alias and menu-path matches.
+const didYouMeanMax = 8
+
+// DidYouMeanSeparator is the inert row heading the second tier (#2548).
+const DidYouMeanSeparator = "did you mean"
+
+// NoMatchHint is the inert row listed when neither tier matched (#2548), so
+// an unknown query lands on a way forward instead of an empty box.
+const NoMatchHint = "no command matches — press ? for the cheatsheet"
 
 // relevance tiers rank a command against the focused context: an in-context
 // (pane-scoped, matching) command outranks a global one, which outranks an
@@ -39,6 +66,9 @@ type CommandMode struct {
 	frec    *Frecency // optional execution-history boost (#2153); nil-safe
 	hideOff bool      // drop off-context commands instead of ranking them last
 	prefix  rune
+	// menuPaths maps a command id to its menu-bar path ("File › Switch
+	// Project", #2548), one more surface the "did you mean" tier matches.
+	menuPaths map[string]string
 }
 
 // NewCommandMode builds the ":" mode. When hideOff is true, commands scoped to a
@@ -57,6 +87,11 @@ func (c *CommandMode) SetUsage(u *Usage) { c.usage = u }
 // empty query and halved per typed rune, so a longer query's match quality
 // dominates and history only breaks near-ties.
 func (c *CommandMode) SetFrecency(f *Frecency) { c.frec = f }
+
+// SetMenuPaths installs the menu-bar paths per command id (#2548), built by
+// the root model from the menu definitions. The "did you mean" tier matches
+// them, so ":switch" surfaces "File › Switch Project".
+func (c *CommandMode) SetMenuPaths(paths map[string]string) { c.menuPaths = paths }
 
 // Prefix implements Mode.
 func (c *CommandMode) Prefix() rune { return c.prefix }
@@ -79,8 +114,41 @@ type rankedCommand struct {
 // whose Title (or id) fuzzy-matches the query, and orders them by (tier,
 // score+frecency boost, usage, title). An empty query lists every command in
 // tier order, most-recently/often-executed first.
+//
+// When that primary tier comes up short (#2548 — fewer than DidYouMeanBelow
+// rows on a non-empty query) a second tier follows under an inert "did you
+// mean" separator: the commands whose aliases, binding label, chord text or
+// menu path match the query, best match first. The primary tier's ranking is
+// never touched by it. With no match in either tier the single row is the
+// NoMatchHint, so the list never goes blank.
 func (c *CommandMode) Results(query string, cx Context) []Item {
 	cmds := c.src.Commands()
+	items, listed := c.primary(query, cx, cmds)
+	if query == "" || len(items) >= DidYouMeanBelow {
+		return items
+	}
+	if alt := c.didYouMean(query, cx, cmds, listed); len(alt) > 0 {
+		items = append(items, Item{Title: DidYouMeanSeparator, Inert: true})
+		items = append(items, alt...)
+	}
+	if len(items) == 0 {
+		items = append(items, Item{Title: NoMatchHint, Inert: true})
+	}
+	return items
+}
+
+// PrimaryResults is Results without the second tier and the hint row (#2548):
+// the plain title/id ranking a composing mode wants — search everywhere
+// interleaves command rows with files and symbols and has no place for a
+// command-only separator.
+func (c *CommandMode) PrimaryResults(query string, cx Context) []Item {
+	items, _ := c.primary(query, cx, c.src.Commands())
+	return items
+}
+
+// primary ranks the title/id matches and reports the ids it listed.
+func (c *CommandMode) primary(query string, cx Context, cmds []registry.OwnedCommand) ([]Item, map[string]bool) {
+	listed := make(map[string]bool, len(cmds))
 	qlen := len([]rune(query))
 	ranked := make([]rankedCommand, 0, len(cmds))
 	for _, cmd := range cmds {
@@ -98,6 +166,7 @@ func (c *CommandMode) Results(query string, cx Context) []Item {
 			}
 			m = fuzzy.Result{Score: im.Score} // id match: score only, no Title spans
 		}
+		listed[cmd.ID] = true
 		ranked = append(ranked, rankedCommand{
 			tier:  tier,
 			key:   float64(m.Score) + frecencyBoost(c.frec.Score(cmd.ID), qlen),
@@ -126,6 +195,103 @@ func (c *CommandMode) Results(query string, cx Context) []Item {
 	out := make([]Item, len(ranked))
 	for i, r := range ranked {
 		out[i] = r.item
+	}
+	return out, listed
+}
+
+// didYouMean builds the second tier (#2548): every command the primary tier
+// skipped whose alternate surfaces — Aliases, the keymap's binding label, the
+// resolved chord text, the menu-bar path — fuzzy-match the query. The best
+// surface's score ranks the row; the surface itself is shown as the row's
+// badge, so the user sees why a title that says nothing of the sort was
+// suggested. Context tiers still break score ties, and hideOff still drops
+// off-context commands, exactly as in the primary tier.
+func (c *CommandMode) didYouMean(query string, cx Context, cmds []registry.OwnedCommand, listed map[string]bool) []Item {
+	var ranked []rankedCommand
+	for _, cmd := range cmds {
+		if listed[cmd.ID] {
+			continue
+		}
+		tier := c.tier(cmd, cx)
+		if tier == tierOff && c.hideOff {
+			continue
+		}
+		score, via, ok := c.bestSurface(query, cmd)
+		if !ok {
+			continue
+		}
+		ranked = append(ranked, rankedCommand{
+			tier: tier,
+			key:  float64(score),
+			item: Item{
+				Title:  cmd.Title,
+				Detail: c.detail(cmd),
+				Badge:  via,
+				Score:  score,
+				Msg:    RunCommandMsg{ID: cmd.ID},
+			},
+		})
+	}
+	sort.SliceStable(ranked, func(i, j int) bool {
+		if ranked[i].key != ranked[j].key {
+			return ranked[i].key > ranked[j].key
+		}
+		if ranked[i].tier != ranked[j].tier {
+			return ranked[i].tier < ranked[j].tier
+		}
+		return ranked[i].item.Title < ranked[j].item.Title
+	})
+	if len(ranked) > didYouMeanMax {
+		ranked = ranked[:didYouMeanMax]
+	}
+	out := make([]Item, len(ranked))
+	for i, r := range ranked {
+		out[i] = r.item
+	}
+	return out
+}
+
+// bestSurface fuzzy-matches the query against a command's alternate surfaces
+// and returns the strongest score with the surface text that produced it.
+func (c *CommandMode) bestSurface(query string, cmd registry.OwnedCommand) (score int, via string, ok bool) {
+	for _, s := range c.surfaces(cmd) {
+		if s == "" {
+			continue
+		}
+		m, matched := fuzzy.Match(query, s)
+		if !matched {
+			continue
+		}
+		if !ok || m.Score > score {
+			score, via, ok = m.Score, s, true
+		}
+	}
+	return score, via, ok
+}
+
+// surfaces lists a command's alternate match surfaces in display priority:
+// its aliases, the keymap's label for its binding, the chord text, its
+// documentation-only shortcut and its menu-bar path.
+func (c *CommandMode) surfaces(cmd registry.OwnedCommand) []string {
+	out := make([]string, 0, len(cmd.Aliases)+4)
+	for _, a := range cmd.Aliases {
+		out = append(out, strings.TrimSpace(a))
+	}
+	if t, isTitler := c.res.(BindingTitler); isTitler {
+		if title, found := t.BindingTitle(cmd.ID); found {
+			out = append(out, title)
+		}
+	}
+	if c.res != nil {
+		if key, found := c.res.Binding(cmd.ID); found {
+			out = append(out, key)
+		}
+	}
+	if cmd.Shortcut != "" {
+		out = append(out, cmd.Shortcut)
+	}
+	if path, found := c.menuPaths[cmd.ID]; found {
+		out = append(out, path)
 	}
 	return out
 }

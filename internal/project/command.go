@@ -34,14 +34,20 @@ func (commands) Capabilities() plugin.Capabilities {
 			ID:    "project.switch",
 			Title: "Switch Project…",
 			Scope: plugin.GlobalScope(),
-			Run:   open,
+			// Palette synonyms (#2548): what users typed when the title's
+			// "switch" and "project" were not the words they reached for.
+			Aliases: []string{"switch", "open project", "recent projects", "workspace"},
+			Run:     open,
 		}, {
 			// The root model resumes the MRU background workspace, or quits
 			// when none is open (#1355). Default chord cmd+shift+w (#1358).
 			ID:    "project.close",
 			Title: "Close Project",
 			Scope: plugin.GlobalScope(),
-			Run:   func(h host.API) tea.Cmd { return h.Dispatch(CloseProjectMsg{}) },
+			// It is also the way out of the app when no other workspace is
+			// open, which is what "quit" / "exit" typed into the palette mean.
+			Aliases: []string{"quit", "exit"},
+			Run:     func(h host.API) tea.Cmd { return h.Dispatch(CloseProjectMsg{}) },
 		}, {
 			// Alt+tab between the two projects you actually work in (#2398):
 			// resume the MRU background workspace without the picker detour.
