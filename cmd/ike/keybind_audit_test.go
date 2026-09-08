@@ -205,6 +205,7 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	{"network.forgetClients", reasonOccasional},   // revoking every paired device is a deliberate rarity
 	{"project.peek", reasonOccasional},            // cmd+shift+b returns from a peek
 	{"project.group.warm", reasonOccasional},      // #2572: group.open is the everyday entry point
+	{"project.group.saveOpen", reasonOccasional},  // #2577: File menu, once per group
 	{"run.editConfig", reasonMenu},                // reached from alt+shift+f10's picker
 	{"run.task", reasonMenu},                      // Run menu
 	{"run.taskPromote", reasonOccasional},         //

@@ -1,5 +1,24 @@
 # Log
 
+## 2026-09-08 (project.group.saveOpen — name the open workspace set as a group, #2577)
+
+- **`project.group.saveOpen`** ("Save Open Projects as Group…", global, palette only —
+  audit ledger `reasonOccasional` — plus the **File menu** entry) is the onboarding path
+  into project groups: the roots are already parked from ordinary switching, and one
+  command names them (`internal/app/project_group_save.go`).
+- **The set**: the active workspace first, then the parked ones in MRU order (most recent
+  first), deduped. A **peeked** workspace (#2136) is left out; its parked origin is not.
+  With nothing parked a **one-member** group is still saved, as a seed to extend in
+  Settings → Project Groups.
+- **The prompt** is the one-field shell dialog of the clone / new-project prompts
+  (`ui.Field`, paste-capable) listing the roots it would save; the name goes through
+  `project.ValidateGroup`, and a name already in use asks `replace group "web"? [y/n]`
+  instead of failing.
+- **On success** the toast reads `group web saved · 3 projects` and the group becomes the
+  **active** one (model marker plus `project.active_group`), so the status segment, the MRU
+  ordering and `project.findInGroup` work without re-opening anything.
+- Docs: [Project Groups](/architecture/project-groups.md).
+
 ## 2026-09-08 (Find in Project Group: the all-projects search restricted to the members, #2575)
 
 - **`project.findInGroup`** ("Find in Project Group…", `cmd+alt+shift+d` /

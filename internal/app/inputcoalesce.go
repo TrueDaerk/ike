@@ -222,7 +222,7 @@ func (m Model) overlayCapturesAbovePopup() bool {
 // case that bit: it stays mounted while another surface has the focus, and may
 // only consume a paste when its own pane holds it.
 func (m Model) overlayCapturesBelowPopup() bool {
-	return m.renameOpen() || m.clonePromptOpen() || m.regexTesterOpen() ||
+	return m.renameOpen() || m.clonePromptOpen() || m.groupSavePromptOpen() || m.regexTesterOpen() ||
 		m.playNamePromptOpen() || m.playFocused() ||
 		m.newProjectPromptOpen() || m.generateScratchOpen() ||
 		m.scratchManagerOpen() || m.saveAsOpen() || m.promoteScratchOpen() ||

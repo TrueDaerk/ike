@@ -644,6 +644,10 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			// order, re-park the ones that dropped out (palette only — the
 			// open is the everyday entry point).
 			appCommand("project.group.close", "Close Project Group", project.CloseGroupMsg{}),
+			// Name the open workspace set as a group (0510, #2577): the
+			// onboarding path — the roots are already parked, one command
+			// names them (palette / File menu, once per group).
+			appCommand("project.group.saveOpen", "Save Open Projects as Group…", project.SaveOpenGroupMsg{}),
 			appCommand("project.group.next", "Next Project in Group", project.CycleGroupMsg{Delta: 1}),
 			appCommand("project.group.prev", "Previous Project in Group", project.CycleGroupMsg{Delta: -1}),
 			appCommand("project.group.warm", "Warm Project Group", project.WarmGroupMsg{}),

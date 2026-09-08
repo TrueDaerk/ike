@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Project Groups
-description: Epic 0510 — named sets of project roots opened, parked and closed as one; the [[project.groups]] data layer, the project.active_group marker, the group-aware background workspace cap, the project.group.open picker and warm-up chain, the status-line group segment, project.group.close with the aggregated busy guard, group.next/prev cycling, group.warm and the group-restricted Find in Project Group.
+description: Epic 0510 — named sets of project roots opened, parked and closed as one; the [[project.groups]] data layer, the project.active_group marker, the group-aware background workspace cap, the project.group.open picker and warm-up chain, the status-line group segment, project.group.close with the aggregated busy guard, group.next/prev cycling, group.warm, the group-restricted Find in Project Group and project.group.saveOpen, which names the open workspace set.
 resource: internal/app/project_group.go
 tags: [architecture, project, groups, workspace, config, palette, status-line]
-timestamp: 2026-09-08T22:00:00Z
+timestamp: 2026-09-08T23:00:00Z
 ---
 
 # Project Groups (Epic 0510)
@@ -17,8 +17,8 @@ group is nothing more than **a set of ordinary workspaces plus a marker**.
 Spec: epic #2569. This page grows with each sub-issue; today it documents the data layer (#2570),
 the open entry point — picker, warm-up chain, marker, status segment (#2571) — and leaving and
 moving within a group: the close with its aggregated busy guard, `next` / `prev` cycling and
-`warm` (#2572), the MRU integration (#2574) and the group-restricted `project.findInGroup`
-(#2575).
+`warm` (#2572), the MRU integration (#2574), the group-restricted `project.findInGroup`
+(#2575) and `project.group.saveOpen`, which names the open workspace set (#2577).
 
 ## Persisted shape
 
@@ -284,6 +284,36 @@ result cap) but its root selection is the group's, so a group run never writes
 and opens nothing. Full mechanics:
 [Search → Find in All Projects → the group variant](search.md).
 
+## Saving the open set (`project.group.saveOpen`, #2577)
+
+`project.group.saveOpen` ("Save Open Projects as Group…", global) is the **onboarding path** into
+groups: the roots are already parked from ordinary switching, and one command names them. It is
+**palette only** by default — audit ledger entry `reasonOccasional`, with the **File menu** entry
+as the second discoverable route.
+
+**The set it saves** (`openWorkspaceRoots`, `internal/app/project_group_save.go`): the **active
+workspace first**, then the parked ones in **MRU order** (most recent first — `Manager.Background`
+lists them least-recently-used first, so the slice is walked backwards), deduped by canonical path.
+A **peeked** active workspace (#2136) is left out: a peek is a look, not a project one chose to
+keep open — its origin is parked and comes along with the rest. With nothing parked the command
+still saves a **one-member group**, a seed to extend in Settings → Project Groups.
+
+**The prompt** is the one-field shell dialog of the clone / new-project prompts (`ui.Field`,
+paste-capable through the shared overlay-paste seam): a group name, the roots the save would store
+listed below it, `enter` saves, `esc` cancels. The name goes through `project.ValidateGroup`, so an
+empty name or one carrying a path separator keeps the dialog open with the reason attached.
+
+**A name already in use** turns the dialog into the replace confirmation —
+`replace group "web"? [y/n]` — rather than failing: re-saving the open set under the same name is
+the natural way to extend a group. `y` replaces the stored roots in place (`UpsertGroup` keeps the
+list position), `n` returns to editing, `esc` cancels.
+
+**On success** the write runs off the loop (`UpsertGroupCmd`) and `GroupSavedMsg` lands the toast
+`group web saved · 3 projects` and makes the fresh group the **active** one — `m.activeGroup` right
+away plus `project.active_group` on disk — so the status segment, the MRU ordering and
+`project.findInGroup` work immediately, without re-opening what is already open. The group shows up
+in Settings → Project Groups and in the `project.group.open` picker on the next reload.
+
 ## Validation diagnostics
 
 The config validator (`validateProjectGroups`, `internal/config/validate.go`) reports per-entry
@@ -332,8 +362,8 @@ palette, which imports the registry, which imports `internal/settings`, so impor
 close the cycle.
 
 `project.active_group` is **read-only session state, not a form field**: IKE writes it
-(`project.group.open` / `project.group.close`) and drops it at startup when the process root is not
-a member. It is listed in the settings coverage guard's `internalKeys`
+(`project.group.open` / `project.group.close` / `project.group.saveOpen`) and drops it at startup
+when the process root is not a member. It is listed in the settings coverage guard's `internalKeys`
 (`internal/settings/coverage_test.go`) with that reason.
 
 ## See also
@@ -342,7 +372,7 @@ a member. It is listed in the settings coverage guard's `internalKeys`
   is a chain of.
 - [Status Line](/architecture/status-line.md) — the segment model the `group` slot plugs into.
 - [Keybindings](/architecture/keybindings.md) — the default chord table and the reachability matrix
-  rows for `project.group.open`, `project.group.close`, `project.group.next` and
-  `project.group.prev`.
+  rows for `project.group.open`, `project.group.close`, `project.group.saveOpen`,
+  `project.group.next` and `project.group.prev`.
 - [Workspace](/architecture/workspace.md) — the parked-workspace manager and the background cap.
 - [Configuration](/architecture/config.md) — the layered config the groups persist through.
