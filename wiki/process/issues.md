@@ -3,7 +3,7 @@ type: process
 title: GitHub Issue Workflow
 description: How planning is structured on TrueDaerk/ike — epics, sub-issues, milestones, labels, conventions, and the duplicate check.
 tags: [process, github, planning]
-timestamp: 2026-09-05T00:00:00Z
+timestamp: 2026-09-08T00:00:00Z
 ---
 
 # GitHub Issue Workflow
@@ -13,8 +13,8 @@ There is no roadmap directory anymore — the structure is:
 
 - **Epic issue** (label `epic` + `roadmap:NNNN`): holds the full spec verbatim (architecture,
   design rules, milestones) and a `- [ ] #N` task list of its sub-issues. One epic per work stream.
-  Current epics: #37 (0090 Project Switching), #38 (0100 LSP deferred), #39 (0081 Keybinding Audit),
-  #40 (0082 Usability Review), #41 (9900 WASM Plugins).
+  Open epics: #40 (0082 Per-Keybinding Usability Review), #908 (0430 Build-time plugin selection),
+  #2569 (0510 Project groups); closed ones stay searchable under the `epic` label.
 - **Sub-issue**: one independently completable, reviewable task, linked from its epic's task list.
 - **GitHub milestone** (one per epic): assigned to the epic and all its sub-issues; its progress
   bar is the progress tracking. Close the milestone when the epic is done.
