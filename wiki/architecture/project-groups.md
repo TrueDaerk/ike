@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Project Groups
-description: Epic 0510 — named sets of project roots opened, parked and closed as one; the [[project.groups]] data layer, the project.active_group marker, the group-aware background workspace cap, the project.group.open picker and warm-up chain, the status-line group segment, project.group.close with the aggregated busy guard, group.next/prev cycling, group.warm, the group-restricted Find in Project Group and project.group.saveOpen, which names the open workspace set.
+description: Epic 0510 — named sets of project roots opened, parked and closed as one; the [[project.groups]] data layer, the project.active_group marker, the group-aware background workspace cap, the project.group.open picker and warm-up chain, the status-line group segment, project.group.close with the aggregated busy guard, group.next/prev cycling, group.warm, the group-restricted Find in Project Group and project.group.saveOpen, which names the open workspace set, and the ike://open?group= deep link.
 resource: internal/app/project_group.go
 tags: [architecture, project, groups, workspace, config, palette, status-line]
-timestamp: 2026-09-08T23:00:00Z
+timestamp: 2026-09-08T23:30:00Z
 ---
 
 # Project Groups (Epic 0510)
@@ -18,7 +18,8 @@ Spec: epic #2569. This page grows with each sub-issue; today it documents the da
 the open entry point — picker, warm-up chain, marker, status segment (#2571) — and leaving and
 moving within a group: the close with its aggregated busy guard, `next` / `prev` cycling and
 `warm` (#2572), the MRU integration (#2574), the group-restricted `project.findInGroup`
-(#2575) and `project.group.saveOpen`, which names the open workspace set (#2577).
+(#2575), `project.group.saveOpen`, which names the open workspace set (#2577), and the
+`ike://open?group=` deep link (#2576).
 
 ## Persisted shape
 
@@ -118,7 +119,9 @@ switches**. The model rebuild is chdir-based, so the members are warmed by *visi
 1. `handleOpenGroup` resolves the members through `ResolveGroupRoots`. The missing ones are
    reported once — `group "web": 1 of 3 roots missing` — and the stored group is left untouched;
    with no member on disk the open only notifies.
-2. The hops run for members **N…2 in reverse, then member 1**, each through
+2. The hops run for members **N…2 in reverse, then member 1** — or, when a caller names a
+   landing member (the `ike://open?group=` link, #2576), every other member in reverse and the
+   landing one last — each through
    `handleSwitchProject` / `performSwitch` — the auto-save gate (#2186), the history record, the
    seamless resume of an already-parked member (`m.ws.Peek`), and every `project.switch`
    telemetry op exactly as for a palette-driven switch. A hop onto the root one is already
@@ -314,6 +317,17 @@ away plus `project.active_group` on disk — so the status segment, the MRU orde
 `project.findInGroup` work immediately, without re-opening what is already open. The group shows up
 in Settings → Project Groups and in the `project.group.open` picker on the next reload.
 
+## Opening a group from a link (`ike://open?group=`, #2576)
+
+`ike://open?group=<name>[&project=<dir>|&remote=<url>][&file=<path>[:<line>]][&tool=<name>]` opens a
+group from outside the IDE — a browser, a chat message, an OSC 8 hyperlink. The group is matched by
+name **case-insensitively**; a `project` / `remote` beside it must resolve to a **member** (the
+#2396 pipeline, restricted to the members and extended by the group's own roots), which becomes the
+**landing** — otherwise the link is refused with `ike link: "api" is not in group "web"`. A group
+link **never clones**. Execution is this very open chain with the selected member last
+(`openGroupChain`), and the link's file/tool payload applies in the landing member once the chain
+finishes. Full grammar and the socket hand-off: [Deep Links](./deep-links.md).
+
 ## Validation diagnostics
 
 The config validator (`validateProjectGroups`, `internal/config/validate.go`) reports per-entry
@@ -374,5 +388,6 @@ when the process root is not a member. It is listed in the settings coverage gua
 - [Keybindings](/architecture/keybindings.md) — the default chord table and the reachability matrix
   rows for `project.group.open`, `project.group.close`, `project.group.saveOpen`,
   `project.group.next` and `project.group.prev`.
+- [Deep Links](/architecture/deep-links.md) — the `ike://` scheme the `group=` form belongs to.
 - [Workspace](/architecture/workspace.md) — the parked-workspace manager and the background cap.
 - [Configuration](/architecture/config.md) — the layered config the groups persist through.

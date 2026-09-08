@@ -1,10 +1,10 @@
 ---
 type: architecture
 title: Deep Links (ike:// URL scheme)
-description: The ike:// URL scheme — parse/normalise/resolve in internal/deeplink, per-instance socket hand-off, history→projects-dir→clone resolution, file/tool payload after the switch, OS registration per platform (#2396)
+description: The ike:// URL scheme — parse/normalise/resolve in internal/deeplink, per-instance socket hand-off, history→projects-dir→clone resolution, file/tool payload after the switch, the group= form that opens a project group and lands on a member (#2576), OS registration per platform (#2396)
 resource: internal/deeplink
 tags: [deeplink, url-scheme, ipc, project-switching]
-timestamp: 2026-09-04T00:00:00Z
+timestamp: 2026-09-08T23:30:00Z
 ---
 
 # Deep Links (ike:// URL scheme)
@@ -19,6 +19,7 @@ optionally opens a file at a line and shows a tool window.
 ```
 ike://open?remote=<git remote url>[&file=<path>[:<line>]][&tool=<tool name>]
 ike://open?project=<directory name>[&file=<path>[:<line>]][&tool=<tool name>]
+ike://open?group=<name>[&project=<directory name>|&remote=<git remote url>][&file=<path>[:<line>]][&tool=<tool name>]
 ```
 
 - `remote` — any spelling of a git remote (`git@github.com:a/b.git`,
@@ -28,6 +29,10 @@ ike://open?project=<directory name>[&file=<path>[:<line>]][&tool=<tool name>]
   one `ParseRemote` implementation `internal/forge` now delegates to).
 - `project` — the project's directory name (basename of its root); plain name
   only, separators are rejected.
+- `group` — the name of a stored [project group](./project-groups.md), matched
+  case-insensitively; plain name only. Alone it opens the group and lands on
+  member 1; with `project` / `remote` beside it, that one names the **member**
+  the chain lands on (#2576).
 - `file` — path relative to the project root, optional 1-based `:<line>`
   suffix, percent-encoded. Absolute paths and any `..` traversal are refused —
   a link must not address files outside the project.
@@ -35,10 +40,12 @@ ike://open?project=<directory name>[&file=<path>[:<line>]][&tool=<tool name>]
   `usages`, `http`, `debug`, `breakpoints`, `explorer`, or a `[[tools.custom]]`
   name).
 
-Exactly one of `remote` / `project` is required. Unknown parameters are
-ignored; a malformed URL produces one notification and nothing else. Parser,
-matcher and resolution pipeline live in **`internal/deeplink`** — a pure leaf
-package (no bubbletea) with full unit tests.
+Exactly one of `remote` / `project` / `group` is required, or `group` plus one
+of the other two. `remote` + `project` without a group, a second `group`
+parameter and a `group` carrying a path separator are refused. Unknown
+parameters are ignored; a malformed URL produces one notification and nothing
+else. Parser, matcher and resolution pipeline live in **`internal/deeplink`** —
+a pure leaf package (no bubbletea) with full unit tests.
 
 ## Hand-off to the running instance
 
@@ -80,6 +87,31 @@ Only switching to an already known local project runs without a prompt. A
 link that resolves to the **already current** project with no file/tool
 payload notifies "already in project X" instead of doing nothing (#2518) —
 otherwise the user cannot tell whether the click arrived at all.
+
+## Group links (`group=`, #2576)
+
+A `group=` link addresses a **set**: `deeplink.ResolveIn` runs the very same
+pipeline restricted to the group's members, and the app hands the verdict to
+the [project group](./project-groups.md) open chain (#2571) instead of a plain
+switch (`resolveGroupLink` / `deepLinkOpenGroup`, `internal/app/deeplink.go`).
+
+- The group is looked up by name **case-insensitively** (`project.FindGroup`);
+  an unknown name is refused with `ike link: no group named "web"`.
+- A `project` / `remote` beside it must resolve to a **member**: history →
+  projects directory → the group's own roots (the last source makes a member
+  addressable before it has ever been opened), every hit filtered to the
+  members, canonically compared. Nothing member-side matches → the link is
+  refused with `ike link: "api" is not in group "web"`. Several members match
+  (clones, worktrees) → the usual chooser, whose pick becomes the landing.
+- **No clone fallback**: a group names checkouts the user already has.
+- Execution is the open chain: every present member is warmed, the hops run in
+  reverse with the **selected member last** (`openGroupChain(name, landing,
+  pending)`; an empty landing is the picker's member 1), the marker moves and
+  the landing toast counts the members. The link's `file` / `tool` payload
+  parks in `dlPending` for the landing member and is applied by the chain's
+  **finish** (`applyGroupLinkPayload`) — the per-hop `SwitchedMsg` is consumed
+  by the chain, so a group link waits for the last one. A cancelled or fully
+  failed chain drops the payload with one notification.
 
 ## What the switch does
 

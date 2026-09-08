@@ -142,6 +142,73 @@ func scanProjectsDir(link Link, dir string) []Candidate {
 	return hits
 }
 
+// ResolveIn is Resolve restricted to a project group's members (0510, #2576):
+// the same history → projects-directory pipeline, extended by the group's own
+// roots as a last source (a member that was never opened and does not live in
+// the projects directory still answers its own link), with every hit filtered
+// to the members. Nothing that matches is a member → KindNotFound; a group
+// link never falls back to a clone, because the set it addresses is the
+// user's own, already checked-out projects.
+func ResolveIn(link Link, history []Candidate, projectsDir string, members []string) Resolution {
+	sources := [][]Candidate{
+		matchHistory(link, history),
+		scanProjectsDir(link, projectsDir),
+		matchMembers(link, members),
+	}
+	for _, hits := range sources {
+		if kept := keepMembers(hits, members); len(kept) > 0 {
+			return verdict(kept)
+		}
+	}
+	return Resolution{Kind: KindNotFound}
+}
+
+// matchMembers matches the link against the group's own roots, in group
+// order — the source that makes a member addressable before it has ever been
+// opened. Roots that are gone are skipped like every other stale path.
+func matchMembers(link Link, members []string) []Candidate {
+	var hits []Candidate
+	for _, root := range members {
+		if !dirExists(root) {
+			continue
+		}
+		c := Candidate{Path: root, Name: filepath.Base(root)}
+		if matches(link, c) {
+			hits = append(hits, c)
+		}
+	}
+	return hits
+}
+
+// keepMembers drops the hits that are not members of the group. Paths are
+// compared canonically (symlinks resolved), because a history entry is
+// spelled as os.Getwd reports it while a group stores its roots as typed.
+func keepMembers(hits []Candidate, members []string) []Candidate {
+	keys := make(map[string]bool, len(members))
+	for _, r := range members {
+		keys[canonicalPath(r)] = true
+	}
+	var kept []Candidate
+	for _, c := range hits {
+		if keys[canonicalPath(c.Path)] {
+			kept = append(kept, c)
+		}
+	}
+	return kept
+}
+
+// canonicalPath is the identity key of a project root: symlinks resolved
+// where the path exists, cleaned otherwise.
+func canonicalPath(path string) string {
+	if path == "" {
+		return ""
+	}
+	if r, err := filepath.EvalSymlinks(path); err == nil {
+		return filepath.Clean(r)
+	}
+	return filepath.Clean(path)
+}
+
 // dirExists reports whether path is (or resolves to) a directory.
 func dirExists(path string) bool {
 	fi, err := os.Stat(path)
