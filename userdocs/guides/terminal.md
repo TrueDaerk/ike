@@ -12,6 +12,8 @@ IKE.
 | ++cmd+t++ | New terminal tab, in the focused terminal's pane |
 | ++cmd+d++ | Split a fresh terminal to the right |
 | ++cmd+w++ | Close the terminal |
+| ++cmd+alt+enter++ | Send the editor selection (or the current line) to a shell and run it |
+| ++cmd+alt+shift+enter++ | Send it without running it |
 
 For a quick command the **popup terminal** (++cmd+alt+t++) is the everyday
 flow — see below. ++alt+f12++ toggles a docked terminal *pane* instead; note
@@ -63,6 +65,25 @@ where it is and catches up on the next switch it is idle for. The default,
 
 A terminal can be a pane of its own or a tab inside an editor pane, so a pane
 can hold a mix of files and shells.
+
+## Sending code from the editor to the shell
+
+From an editor, ++cmd+alt+enter++ sends the **selection** to a shell and runs
+it; ++cmd+alt+shift+enter++ sends it without pressing Enter, so you can edit
+the command first. With nothing selected both send the **line the caret is
+on** — "run the line I am looking at" is the common case, and it needs no
+visual mode.
+
+The text arrives as a paste, so multi-line selections stay one command
+instead of being executed line by line.
+
+Where it lands, in order: the popup terminal's focused tab if the popup is on
+screen (even with the keyboard still in the editor), otherwise the focused
+terminal pane, otherwise the popup opens for it. Sending into a shell that is
+already visible leaves the keyboard in the editor, so select → send → keep
+editing is one gesture.
+
+Both commands are also in the editor's right-click menu.
 
 ![A terminal pane below the editor, its title bar naming the shell and the working directory, with a command and its output](../screenshots/features/terminal-pane.png)
 

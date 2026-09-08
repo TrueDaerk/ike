@@ -274,6 +274,8 @@ bring their own.
 | New Terminal Tab | `terminal.newTab` | `ctrl+t` | — | everywhere |
 | Popup Terminal | `terminal.popup` | `cmd+alt+t` | — | everywhere |
 | Pin Popup Terminal | `terminal.popup.pin` | `cmd+alt+shift+k` | — | everywhere |
+| Send Selection to Terminal | `terminal.sendSelection` | `cmd+alt+shift+enter` | — | everywhere |
+| Send Selection to Terminal and Run | `terminal.sendSelectionRun` | `cmd+alt+enter` | — | everywhere |
 | SSH Host… | `terminal.ssh` | — | — | everywhere |
 | Toggle Terminal | `terminal.toggle` | `alt+f12` | — | everywhere |
 | Test Results | `tests.toggle` | `cmd+4` | — | everywhere |
