@@ -383,6 +383,14 @@ func (m Model) SetParked(parked bool) {
 // Parked reports the session's parked flag (#1522); false for a failed spawn.
 func (m Model) Parked() bool { return m.sess != nil && m.sess.Parked() }
 
+// SetHidden forwards the visibility park (#2540) to the live session; a
+// no-op for a failed spawn.
+func (m Model) SetHidden(hidden bool) {
+	if m.sess != nil {
+		m.sess.SetHidden(hidden)
+	}
+}
+
 // ScrollbackLen reports the history length (0 for a failed spawn).
 func (m Model) ScrollbackLen() int {
 	if m.sess == nil {

@@ -116,6 +116,13 @@ type Session struct {
 	// feed loop batches spool chunks into fewer emulator passes.
 	parked       atomic.Bool
 	notifyMissed atomic.Bool
+	// hiddenWake (#2540) is the one OutputMsg a *hidden* session may still
+	// send: hidden means parked because nothing renders the grid right now
+	// (an inactive tab, the closed popup layer) rather than because the
+	// workspace is backgrounded, and the app wants a single wake for the
+	// first output of such a stretch — the popup's activity indicator, a
+	// tab title — after which every burst folds into the owed repaint.
+	hiddenWake atomic.Bool
 
 	// version counts grid mutations (feed writes, resizes, clears); the View
 	// render cache is keyed by it (#803), so an unchanged grid never pays a
@@ -507,13 +514,26 @@ func (s *Session) SetParked(parked bool) {
 // Parked reports whether the session currently carries the parked flag.
 func (s *Session) Parked() bool { return s.parked.Load() }
 
+// SetHidden parks or un-parks a session on the strength of its visibility
+// alone (#2540): the app calls it once per settled pass edge for every
+// session it does not render — an inactive terminal tab, a shell of the
+// closed popup layer. A hidden session behaves like a parked one (no
+// OutputMsg per burst, batched feed), except that the first output of the
+// hidden stretch still wakes the program once, so the activity indicators
+// that ride on OutputMsg keep working; un-hiding delivers the owed repaint.
+func (s *Session) SetHidden(hidden bool) {
+	s.hiddenWake.Store(hidden)
+	s.SetParked(hidden)
+}
+
 // notify schedules one OutputMsg per quiet interval; a parked session only
-// records that output happened (#1522).
+// records that output happened (#1522) — unless it is a hidden one still
+// owing its single wake (#2540).
 func (s *Session) notify() {
 	if s.send == nil {
 		return
 	}
-	if s.parked.Load() {
+	if s.parked.Load() && !s.hiddenWake.Swap(false) {
 		s.notifyMissed.Store(true)
 		return
 	}

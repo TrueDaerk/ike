@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-09-03T00:00:00Z
+timestamp: 2026-09-08T12:00:00Z
 ---
 
 # File Explorer
@@ -49,14 +49,24 @@ in which case it survives, marked stale (see [editor](./editor.md)).
 
 **mtime polling (fallback).** For filesystems where fsnotify under-reports:
 each scan records the directory's mtime on its node; a poll loop (`schedulePoll`)
-snapshots the mtimes of every visible loaded directory, sleeps
-`pollEvery` (2s) off-thread, re-stats them, and reports drift as a `pollMsg`.
-`applyPoll` re-scans only the changed directories (merging in place) and
-schedules the next tick. A vanished directory reports its parent instead, so
-external deletes fold away cleanly. The loop starts on the first `ScanDoneMsg`
-(`startPoll`, guarded by `polling` so only one loop ever runs) — or is armed by
-`Restore`, whose synchronous load means no scan message would ever arrive, and
-started by `Init`. `explorer.auto_refresh = "false"` disables it.
+sleeps `pollEvery` (2s) off-thread, re-stats every visible loaded directory,
+and reports drift as a `pollMsg`. The stamp set it re-stats is **published by
+the model** (#2540): `rebuild` — every expand, collapse, scan and filter
+toggle — writes the current `(path, mtime)` list into the `pollShared` struct
+the goroutine reads each round, so a newly expanded directory joins
+monitoring without any wake and the goroutine returns *only* for a real
+change (before #2540 it woke the app every 30 quiet rounds to refresh a
+private snapshot — the one wake a minute that kept idle sessions from ever
+being quiet). `applyPoll` re-scans only the changed directories (merging in
+place) and schedules the next tick. A vanished directory reports its parent
+instead, so external deletes fold away cleanly. The loop starts on the first
+`ScanDoneMsg` (`startPoll`, guarded by `polling` so only one loop ever runs)
+— or is armed by `Restore`, whose synchronous load means no scan message
+would ever arrive, and started by `Init`. `explorer.auto_refresh = "false"`
+disables it. Chains are identified by `pollID` (#2163) and the id the model
+currently owns is mirrored in `pollShared.live`: `RetirePoll` (a project
+switch, a parked workspace, auto-refresh switched off) clears it and the
+goroutine returns nil on its next round — no stale `pollMsg`, no pass.
 
 **Resync (#1520).** `ResyncMsg` re-scans every expanded, loaded directory from
 the root (`rescanSubtree(root)`) — the one-shot catch-up a workspace resume

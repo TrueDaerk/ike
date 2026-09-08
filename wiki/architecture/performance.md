@@ -4,7 +4,7 @@ title: Performance & Diagnostics
 description: Idle-behavior rules (who may wake the render loop, and how often), the render budget and the always-on per-message-type pass accounting, the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, the opt-in update-loop trace log, the freeze-triage procedure, the selection-overlay rule for drag latency (#2495), and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/perfhud
 tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog, startup, freeze, render-budget]
-timestamp: 2026-09-04T00:00:00Z
+timestamp: 2026-09-08T12:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -30,17 +30,38 @@ so with many panes each unnecessary wake is expensive. The standing rules:
   `forge.poll_interval_seconds` is non-zero — a standing 1 in the armed-ticker
   count, one wake per interval (default 20s), and `0` is the opt-out. It stops
   on its own while the forge is unavailable and backs off exponentially while
-  fetches fail. Its handler only dispatches the fetch `Cmd`, so the wake stays
-  a wake and never becomes a stall; see [Forge Layer](/architecture/forge.md).
-- **The explorer auto-refresh poll loops off-loop** (#1001): the 2s directory
-  mtime comparison runs inside its own Cmd goroutine and only returns a
-  `pollMsg` when something actually changed — or after `pollIdleRounds` (30)
-  quiet intervals, so the stamp snapshot refreshes about once a minute and
-  newly expanded directories join monitoring on that wake.
+  fetches fail — and, since #2540, while the user is idle: two minutes without
+  a key press, click, wheel notch or paste double the cadence, every further
+  two minutes double it again, up to ten minutes (see the idle model below).
+  Its handler only dispatches the fetch `Cmd`, so the wake stays a wake and
+  never becomes a stall; see [Forge Layer](/architecture/forge.md).
+- **The explorer auto-refresh poll loops off-loop and never wakes for
+  itself** (#1001, #2540): the 2s directory mtime comparison runs inside its
+  own Cmd goroutine over a stamp set the model *publishes* on every tree
+  rebuild (`pollShared`), so a newly expanded directory joins monitoring
+  without a wake, and the goroutine returns only for a real change. Before
+  #2540 it returned an empty `pollMsg` every 30 quiet rounds to refresh a
+  private snapshot — one wake a minute, enough on its own to keep every
+  60-second heartbeat from ever being quiet. A retired chain (project
+  switch, parked workspace, auto-refresh off — `RetirePoll`) returns nil,
+  which costs no pass at all.
 - **Terminal output** wakes are bounded by the per-session quiet interval
   (8ms, CAS-guarded single timer) and folded across sessions by the adaptive
   input coalescer (#803). Shell prompts that redraw on their own (clocks, git
   polling) still cost one wake per burst — that part is the shell's choice.
+  Since #2540 that applies to **rendered** sessions only: a session nothing
+  draws — an inactive terminal tab, a shell of the closed popup layer, a pane
+  behind a zoom — is parked on the settled pass (`syncTerminalVisibility` →
+  `Session.SetHidden`) and folds its bursts into the one repaint owed when it
+  is shown again, keeping a single wake per hidden stretch for the popup's
+  activity indicator. A spinner in a hidden tab used to cost ~270 passes a
+  minute; it now costs one.
+- **Caret moves send no preview message without a preview** (#2540): the
+  editor emitter used to send a `preview.CursorMsg` on every cursor move for
+  the markdown previews to follow — one Update+View pass per keystroke with
+  no consumer in the common no-preview session. The settled pass publishes
+  whether any preview pane is open (`previewBound`, an atomic the emitters
+  read), and the message is sent only then.
 - **Single-shot debounce timers die with their owner** (#1001): a terminal
   session cancels its pending trailing resize on Close, the watch service its
   debounce flush on Stop, the LSP bridge its highlight/resolve/completion/
@@ -94,6 +115,49 @@ so with many panes each unnecessary wake is expensive. The standing rules:
   files — `index`, `HEAD`, `packed-refs`, `logs/HEAD` — carry every real
   change). Regression tests: `TestGitStatusEchoesStaySilent`,
   `TestRelativeRootClassifiesGitDir`.
+
+## The idle model (#2540)
+
+The rules above add up to one model of what an IKE nobody is typing into may
+do, measured in the heartbeat's `top` field (below). Four days of telemetry
+before #2540 held 1,515 heartbeats and not one quiet minute: the 375
+one-minute intervals without a single key press still averaged 216
+`view/render` and 186 `app.coalescedInputMsg` passes, plus a forge fetch
+every 20 seconds. The passes came from four places, in this order of weight:
+
+| Source | Before | After | Mechanism |
+| --- | --- | --- | --- |
+| Terminal output in sessions nothing renders (a hidden tab running a 5 Hz spinner) | ~271 `coalescedInputMsg` + ~277 renders / min | 1 wake per hidden stretch | visibility park on the settled pass, `Session.SetHidden` |
+| Forge poll while the window is focused but idle (Issues pane open) | 3 fetches / min | 3 → 1.5 → 0.75 → … → 0.1 / min | idle backoff: ×2 per two idle minutes, capped at 10 min, reset by the next input |
+| Explorer stamp-snapshot refresh | 1 `explorer.pollMsg` + 1 render / min | 0 | published stamp set, goroutine returns only for a change |
+| `preview.CursorMsg` per caret move without a preview pane | 1 message per cursor move | 0 | `previewBound` gate in the emitter |
+
+Measured in a tmux session on this branch (issues pane open, a spinner loop
+in a hidden terminal tab, terminal focused, no input): the last five
+heartbeats of the baseline read `view/render:277,app.coalescedInputMsg:271,
+forge.IssuesMsg:3`; on the fix the same setup reads `view/render:2,
+forge.IssuesMsg:1,forge.PollTickMsg:1` for the first minutes and then an
+empty `top` — the quiet heartbeat the #2402 target was about — for every
+minute the backed-off forge deadline is not due.
+
+Three things define "idle" here, and they are deliberately different clocks:
+
+- **User input** is a key press, mouse click, wheel notch, drag step or
+  paste — every one funnels through `forgeInput` in `app.Update`. Terminal
+  output is *not* input: a build printing for an hour must not keep the forge
+  polling at full rate.
+- **Visibility** is what the frame draws: the active tab of each terminal
+  host, the popup layer's active tabs while the layer is open, nothing
+  behind a zoom. It is recomputed on every settled pass, so it follows every
+  message that can change it without a hook per site.
+- **Focus** (`tea.BlurMsg`/`tea.FocusMsg`, #2488) is a third, coarser gate
+  that already pauses the forge poll outright; the idle backoff covers the
+  focused-but-idle window that blur cannot see.
+
+What still wakes an idle session, by design: a rendered terminal whose
+content changes (a visible spinner is worth drawing), the forge deadline when
+it is due, file changes reported by the watcher, and an LSP publishing
+changed diagnostics.
 
 ## The render budget & the idle pass count (#2402)
 

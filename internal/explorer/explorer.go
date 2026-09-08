@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -90,6 +91,10 @@ type Model struct {
 	// stat-walker (one more per switch). The id is drawn from a process-wide
 	// counter so a stale chain can never collide with a fresh model's.
 	pollID int64
+	// poll is the state the chain's goroutine shares with the model that
+	// owns it (#2540): the live stamp set and the id currently owned. See
+	// pollShared.
+	poll *pollShared
 
 	showHidden bool // render dot-entries; toggled by explorer.toggleHidden
 	// hiddenCfg is the last explorer.show_hidden config string actually applied
@@ -524,8 +529,9 @@ func (m *Model) expand(n *node) tea.Cmd {
 // selection (set by a file op before its re-scan) snaps the cursor onto the new
 // or restored entry once it becomes visible.
 func (m *Model) rebuild() {
-	m.invalidateWidth() // any row-set change can change the content width (#1096)
-	m.rowsEpoch++       // and invalidates the speed search's match memo (#2187)
+	m.invalidateWidth()   // any row-set change can change the content width (#1096)
+	m.rowsEpoch++         // and invalidates the speed search's match memo (#2187)
+	m.publishPollStamps() // the auto-refresh chain watches the tree as it is now (#2540)
 	m.rows = m.rows[:0]
 	m.appendVisible(m.root)
 	snapped := false
@@ -655,11 +661,11 @@ func (m *Model) Init() tea.Cmd {
 			m.rebuild()
 		}
 		if !m.autoRefresh {
-			m.polling = false
+			m.RetirePoll()
 			return tea.Batch(cmds...)
 		}
 		m.polling = true
-		m.pollID = pollSeq.Add(1)
+		m.rotatePollID()
 		cmds = append(cmds, m.schedulePoll())
 		return tea.Batch(cmds...)
 	}
@@ -1314,42 +1320,56 @@ type pollMsg struct {
 	id int64
 }
 
-func (pollMsg) explorerMsg() {}
+// pollShared is what the auto-refresh chain's goroutine shares with the
+// model that owns it (#2540). Before it, the goroutine ran on a snapshot of
+// the directory stamps taken when it was scheduled and had to wake the whole
+// program once a minute (pollIdleRounds) just to refresh that snapshot, so
+// a newly expanded directory would join monitoring — the one wake that kept
+// every idle heartbeat from ever being quiet. Now the model publishes the
+// stamp set into this struct on every tree rebuild (expand, collapse, scan,
+// filter toggle), the goroutine reads the current set each round, and it
+// returns only for a real change or not at all. live is the chain id the
+// model currently owns: a goroutine whose id differs — a project switch, a
+// parked workspace, auto-refresh switched off — retires silently on its next
+// round, without the wake a stale pollMsg used to cost.
+type pollShared struct {
+	mu     sync.Mutex
+	stamps []dirStamp
+	live   atomic.Int64
+}
 
-// startPoll begins the auto-refresh loop once, on the first completed scan.
-// Later scans see the polling flag set and return nil, so only one loop runs.
-func (m *Model) startPoll() tea.Cmd {
-	if !m.autoRefresh || m.polling {
-		return nil
+// pollState returns the shared poll state, allocating it lazily so a Model
+// literal (tests) can poll like one built by New.
+func (m *Model) pollState() *pollShared {
+	if m.poll == nil {
+		m.poll = &pollShared{}
 	}
-	m.polling = true
+	return m.poll
+}
+
+// rotatePollID mints a fresh chain id (#2163) and publishes it as the live
+// one (#2540): whatever goroutine still runs under the previous id retires
+// on its next round.
+func (m *Model) rotatePollID() {
 	m.pollID = pollSeq.Add(1)
-	return m.schedulePoll()
+	m.pollState().live.Store(m.pollID)
 }
 
-// pollSeq mints process-wide poll-chain ids (#2163): model rebuilds (project
-// switch, workspace resume) must never reuse an id a still-sleeping chain
-// carries.
-var pollSeq atomic.Int64
-
-// RearmPoll restarts the auto-refresh chain after a live config re-enable
-// (#2163): flipping explorer.auto_refresh off retires the chain, and nothing
-// else would start a new one until the next full scan. A no-op while a chain
-// is already running or while auto-refresh stays off.
-func (m *Model) RearmPoll() tea.Cmd {
-	if !m.root.loaded {
-		return nil // the pending scan's ScanDoneMsg arms via startPoll
-	}
-	return m.startPoll()
+// RetirePoll ends the chain this model owns without starting another
+// (#2540): a parked workspace (its explorer is not rendered and its tree is
+// reconciled on resume anyway), a project switched away from, auto-refresh
+// switched off. The goroutine exits on its next round; Init or RearmPoll
+// starts a fresh chain later. Idempotent.
+func (m *Model) RetirePoll() {
+	m.polling = false
+	m.pollState().live.Store(0) // ids start at 1, so nothing matches
 }
 
-// schedulePoll snapshots the mtimes of every visible loaded directory and
-// returns a Cmd that re-checks them after the poll interval. Returns nil when
-// auto-refresh is disabled.
-func (m *Model) schedulePoll() tea.Cmd {
-	if !m.autoRefresh {
-		return nil
-	}
+// publishPollStamps hands the chain the stamp set of the tree as it stands:
+// every loaded directory reachable through expanded ones, plus the scratch
+// dir once it was seen to exist. Called from rebuild, so the goroutine's
+// next round sees each expand, collapse and scan without a wake.
+func (m *Model) publishPollStamps() {
 	var stamps []dirStamp
 	var walk func(n *node)
 	walk = func(n *node) {
@@ -1372,16 +1392,66 @@ func (m *Model) schedulePoll() tea.Cmd {
 	if m.scratchShown() && m.scrDir != "" && !m.scrDirMod.IsZero() {
 		stamps = append(stamps, dirStamp{path: m.scrDir, mod: m.scrDirMod})
 	}
-	interval := m.pollEvery
-	id := m.pollID
+	ps := m.pollState()
+	ps.mu.Lock()
+	ps.stamps = stamps
+	ps.mu.Unlock()
+}
+
+func (pollMsg) explorerMsg() {}
+
+// startPoll begins the auto-refresh loop once, on the first completed scan.
+// Later scans see the polling flag set and return nil, so only one loop runs.
+func (m *Model) startPoll() tea.Cmd {
+	if !m.autoRefresh || m.polling {
+		return nil
+	}
+	m.polling = true
+	m.rotatePollID()
+	return m.schedulePoll()
+}
+
+// pollSeq mints process-wide poll-chain ids (#2163): model rebuilds (project
+// switch, workspace resume) must never reuse an id a still-sleeping chain
+// carries.
+var pollSeq atomic.Int64
+
+// RearmPoll restarts the auto-refresh chain after a live config re-enable
+// (#2163): flipping explorer.auto_refresh off retires the chain, and nothing
+// else would start a new one until the next full scan. A no-op while a chain
+// is already running or while auto-refresh stays off.
+func (m *Model) RearmPoll() tea.Cmd {
+	if !m.root.loaded {
+		return nil // the pending scan's ScanDoneMsg arms via startPoll
+	}
+	return m.startPoll()
+}
+
+// schedulePoll returns the Cmd that watches the published stamp set (#2540)
+// and wakes the app only when a directory's mtime moved (or the directory
+// vanished, which changes its parent). Returns nil when auto-refresh is
+// disabled.
+func (m *Model) schedulePoll() tea.Cmd {
+	if !m.autoRefresh {
+		return nil
+	}
+	m.publishPollStamps()
+	shared, id, interval := m.pollState(), m.pollID, m.pollEvery
 	return func() tea.Msg {
-		// Idle-friendly loop (#1001): an unchanged tree re-checks in place
-		// instead of waking the program's whole Update/View cycle every
-		// interval — with many panes those idle repaints add up. At most one
-		// wake per pollIdleRounds intervals refreshes the stamp set, so
-		// newly expanded directories join monitoring on that wake.
-		for i := 0; i < pollIdleRounds; i++ {
+		// Idle-friendly loop (#1001, #2540): an unchanged tree re-checks in
+		// place, round after round, and never wakes the program's whole
+		// Update/View cycle — with many panes those idle repaints add up,
+		// and one wake a minute was enough to keep every heartbeat noisy. A
+		// retired chain (the model rotated or dropped its id) returns nil,
+		// which bubbletea discards before Update: no pass at all.
+		for {
 			time.Sleep(interval)
+			if shared.live.Load() != id {
+				return nil
+			}
+			shared.mu.Lock()
+			stamps := shared.stamps
+			shared.mu.Unlock()
 			var changed []string
 			for _, s := range stamps {
 				fi, err := os.Stat(s.path)
@@ -1398,15 +1468,8 @@ func (m *Model) schedulePoll() tea.Cmd {
 				return pollMsg{changed: changed, id: id}
 			}
 		}
-		return pollMsg{id: id}
 	}
 }
-
-// pollIdleRounds is how many quiet poll intervals run inside one Cmd before
-// the loop wakes the app anyway to refresh its directory-stamp snapshot
-// (#1001): 30 × the 2s default ≈ one idle wake per minute instead of one
-// per interval.
-const pollIdleRounds = 30
 
 // applyPoll re-scans every changed directory still present in the tree and
 // schedules the next poll tick.

@@ -112,6 +112,9 @@ func (m Model) forgeRoot() string { return m.forgePoller().Root() }
 // on the chain sustains itself inside Update: each finished fetch arms the
 // next deadline as an ordinary returned command.
 func (m Model) StartForgePoll() {
+	// The idle clock (#2540) starts with the session: a project opened and
+	// then left alone backs off like one typed into and then left alone.
+	m.forgePoller().Input()
 	cmd := m.forgePoller().Arm()
 	if cmd == nil {
 		return
@@ -202,6 +205,22 @@ func (m *Model) forgeFocus() tea.Cmd {
 
 func (m *Model) forgeBlur() {
 	m.forgePoller().Blur()
+}
+
+// forgeInput restarts the poller's idle clock on user input (#2540) — every
+// key press, click, wheel notch, drag step and paste funnels through here.
+// Almost always that is one clock stamp and nothing else; only when the
+// pending deadline was armed at an idle-stretched cadence does the poller
+// ask for it to be superseded, through the same goroutine-delivered rearm
+// the pane edge uses (a settled pass must not return a poll deadline).
+func (m *Model) forgeInput() {
+	p := m.forgePoller()
+	if p == nil {
+		return
+	}
+	if p.Input() {
+		m.sendForgeRearm()
+	}
 }
 
 // applyForgeListing routes one finished listing — background poll or the

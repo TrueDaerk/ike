@@ -954,6 +954,10 @@ func TestPollDetectsExternalChanges(t *testing.T) {
 	if !found {
 		t.Fatalf("poll missed the root change: %v", msg.changed)
 	}
+	// applyPoll re-arms the chain alongside the rescan, and a chain only
+	// returns for a change (#2540) — pumpScans would wait on it forever, so
+	// switch auto-refresh off for the synchronous drain.
+	m.autoRefresh = false
 	m, cmd = m.Update(msg)
 	m, _ = pumpScans(m, cmd)
 	for _, n := range names(m) {

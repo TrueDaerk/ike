@@ -4,7 +4,7 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); pinned mode docking the popup to the bottom edge with the toggle chord as a focus switch, plus a project/global popup scope that carries one shell across projects (#2406); popup focus loss blurs instead of hiding, with a statusbar activity indicator for the hidden layer (#2309), and the wheel outside the layer's boxes scrolls the pane below while the layer keeps focus (#2343); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-09-03T00:00:00Z
+timestamp: 2026-09-08T12:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -93,6 +93,17 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
   concurrent OutputMsgs **across sessions** into one batch per adaptive flush
   (#803) — so `yes`, a build log, or eight busy TUI panes at once cannot
   flood the render loop or starve input handling.
+- **Hidden sessions park** (#2540): a session the frame does not draw — an
+  inactive tab of a terminal host, a shell of the closed popup layer, a pane
+  behind a zoom — is parked like a backgrounded workspace's (#1522) through
+  `Session.SetHidden`, applied on Update's settled pass
+  (`syncTerminalVisibility`, edge-only). It keeps ingesting into its grid and
+  batches its feed, sends **one** `OutputMsg` for the first output of the
+  hidden stretch (the popup's activity indicator #2309 rides on it — and since
+  #2540 that indicator arms through the coalesced path a running program
+  actually takes), folds every later burst, and delivers the one owed repaint
+  when it is shown again. A spinner in a hidden tab used to cost the loop
+  ~270 passes a minute; it now costs one.
 - **Width reflow** (#935): any width change on the primary screen rewraps the
   whole history — scrollback and screen — at the new width, as if the terminal
   had always been that size (iTerm2/kitty behaviour): shrink rewraps overlong

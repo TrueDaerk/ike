@@ -4,7 +4,7 @@ title: Forge Layer
 description: The Forge interface behind the issues tooling — gh binding for GitHub, tea/REST binding for Gitea/Forgejo, backend detection by remote host with a per-workspace cache, the capability model (triage vs push, plus the authenticated login) both bindings probe, the issue mutations (labels, assignees, state, comments), the editable-text layer with its stale-base check, the PR detail/action layer (full PR fetch with per-check CI, merge/close with a comment, post-merge branch cleanup), and the background poll service that diffs snapshots into typed events, pausing while the terminal is blurred and slowing down while the Issues pane is closed, plus the persistent listing cache with incremental updated-since refresh, and the tea binding's two transports (direct REST for a token login, `tea api` for an OAuth one) (#2083, #2088, #2087, #2089, #2085, #2108, #2118, #2488).
 resource: internal/forge/backend.go
 tags: [architecture, vcs, forge, github, gitea, forgejo, issues, oauth]
-timestamp: 2026-09-04T12:00:00Z
+timestamp: 2026-09-08T12:00:00Z
 ---
 
 # Forge Layer (#1934, #2083, #2088, #2087, #2085)
@@ -313,7 +313,9 @@ that resumed a stopped poller, and `tea.FocusMsg` lifting the blur pause
 cover — a config reload that turned polling back on, since `reloadConfig` has
 no command to return (behind a one-shot flag), and the Issues tool window
 appearing, which supersedes the slow-cadence deadline. Both are edges, so an
-ordinary pass still adds no pending command.
+ordinary pass still adds no pending command. User input after an idle
+stretch (#2540) supersedes the stretched deadline the same goroutine-delivered
+way (`forgeInput` → `sendForgeRearm`).
 
 `StartForgePoll` rides the **`StartWatcher` lifecycle** (`cmd/ike/main.go` at
 startup, `switch.go` per project switch) and waits out the first deadline on
@@ -347,11 +349,28 @@ chain:
 | --- | --- | --- |
 | **Blur pause** | `tea.BlurMsg` / `tea.FocusMsg` (`forgeBlur` / `forgeFocus`) | while blurred no deadline is armed and a deadline that still lands is dropped; focus lifts the pause and re-arms |
 | **Pane cadence** | `SetPaneOpen`, read on the settled pass from `Panes.Has(pane.IssuesKey)` | with no Issues tool window open the wait stretches to `SlowPollFactor` × the interval, at least `MinSlowPollInterval` (5×, ≥ 60 s) |
+| **Idle backoff** (#2540) | `Input()`, called by `forgeInput` on every key press, click, wheel notch, drag step and paste, and once by `StartForgePoll` | after `IdleBackoffAfter` (2 min) without input the cadence doubles, and again per further two minutes, capped at `MaxIdlePollInterval` (10 min); the cap never shortens a longer configured interval |
 
-Both **default to "visible"**, so a caller that never reports either — a
-terminal without focus reporting, a bare test poller — polls exactly as it did
-before #2488. That is the compatibility promise: no blur ever arrives, no
-pause ever happens.
+All three **default to "visible"**, so a caller that never reports any of
+them — a terminal without focus reporting, a bare test poller that never calls
+`Input` — polls exactly as it did before #2488. That is the compatibility
+promise: no blur ever arrives, no pause ever happens; no input is ever
+reported, no idle stretch ever applies.
+
+**The idle backoff** (#2540) fills the gap the blur pause cannot see: a
+window that stays focused while its user reads, thinks or watches a build.
+The telemetry behind it found the forge fetched three times a minute through
+133 of 375 key-less minutes. `Input` restarts the idle clock; almost always
+that is one timestamp and nothing else. Only when the pending deadline was
+armed at a stretched cadence (`idleArmed`) does it ask the app to `Rearm`,
+through `sendForgeRearm` like the pane edge: a listing that went stale
+meanwhile is `due` at once (the first key press after a long pause gets fresh
+data), a fresh one simply gets a plain-cadence deadline instead of one
+minutes away. The stretch stacks on the pane cadence — a closed pane in an
+idle window climbs from 100 s to the 10-minute cap — and the failure backoff
+computes from the stretched value, so a failing forge is never retried faster
+than the idle cadence allows. Terminal output is not input: a build printing
+for an hour must not keep the forge at full rate.
 
 **Coming back is immediate.** `Focus()` and `SetPaneOpen(true)` ask `stale()`
 whether the last fetch is older than the *configured* interval (not the
