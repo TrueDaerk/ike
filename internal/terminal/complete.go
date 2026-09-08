@@ -109,7 +109,9 @@ func (m *Model) exeNames() ([]string, bool) {
 // focused (#1432) gates enter-accept: an auto-suggest popup was never asked
 // for, so enter keeps meaning "run the typed line" and passes through to the
 // shell until the user engages the popup — via up/down, or by opening it
-// explicitly with ctrl+space. Tab accepts regardless of focus.
+// explicitly with ctrl+space. Tab accepts a focused selection; unfocused, it
+// inserts the candidates' common prefix first (#2534) and only accepts the
+// first row when there is nothing to extend by.
 type completion struct {
 	open    bool
 	items   []candidate
@@ -208,10 +210,79 @@ func (m *Model) completionKey(msg string) bool {
 		m.acceptCompletion()
 		return true
 	case "tab":
+		// No row selected (unfocused, #2534): behave like the shell's own tab
+		// and extend the word by the candidates' common prefix, leaving the
+		// choice open. Nothing to extend by (or a lone candidate) falls back
+		// to accepting the first row — the historical behaviour.
+		if !m.comp.focused && m.insertCommonPrefix() {
+			return true
+		}
 		m.acceptCompletion()
 		return true
 	}
 	return false
+}
+
+// insertCommonPrefix types the remainder of the longest common prefix of all
+// popup candidates (#2534) — the shell rule for tab on an ambiguous word:
+// `a` with candidates `abc_x`, `abc_y`, `abc_z` becomes `abc_`, the popup
+// stays open and refilters on the echo of the inserted text. The prefix is
+// computed on the canonical spellings, case-sensitively: candidates that
+// differ in case only within the shared part (`Abc_x` / `abc_y`) share no
+// extension. A typed word matching the prefix only case-insensitively (#968)
+// is erased and retyped in canonical case, the way accept does. It reports
+// whether anything was inserted; false means the prefix adds nothing beyond
+// the word already on the line (or only one candidate exists, which accept
+// handles as a finished token), so the caller falls back to accepting.
+func (m *Model) insertCommonPrefix() bool {
+	if len(m.comp.items) < 2 {
+		return false
+	}
+	prefix := commonPrefix(m.comp.items)
+	// Complete against the live word (#1538), not the snapshot; a word that
+	// moved away from the candidates has nothing in common with them.
+	_, word := parseCmdline(m.lineBeforeCursor())
+	if word == "" && m.comp.word != "" {
+		return false
+	}
+	uword := unescapeShellWord(word)
+	if len([]rune(prefix)) <= len([]rune(uword)) || !hasFoldPrefix(prefix, uword) {
+		return false
+	}
+	m.pendingSuggest, m.pendingManual = true, false
+	if strings.HasPrefix(prefix, uword) {
+		if hasDanglingEscape(word) {
+			m.sess.SendKey(vt.KeyPressEvent{Code: vt.KeyBackspace})
+		}
+		m.sess.SendText(escapeShellWord(strings.TrimPrefix(prefix, uword)))
+		return true
+	}
+	for range []rune(word) {
+		m.sess.SendKey(vt.KeyPressEvent{Code: vt.KeyBackspace})
+	}
+	m.sess.SendText(escapeShellWord(prefix))
+	return true
+}
+
+// commonPrefix returns the longest common prefix of the candidates' texts,
+// compared rune by rune and case-sensitively (#2534).
+func commonPrefix(items []candidate) string {
+	if len(items) == 0 {
+		return ""
+	}
+	prefix := []rune(items[0].text)
+	for _, it := range items[1:] {
+		r := []rune(it.text)
+		n := 0
+		for n < len(prefix) && n < len(r) && prefix[n] == r[n] {
+			n++
+		}
+		prefix = prefix[:n]
+		if n == 0 {
+			break
+		}
+	}
+	return string(prefix)
 }
 
 // completionTyped is the post-forward hook of the raw route: a printable rune

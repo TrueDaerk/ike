@@ -583,10 +583,20 @@ func TestEnterFocusRule(t *testing.T) {
 	})
 	clearLine()
 
-	// Tab accepts even unfocused.
+	// Tab works even unfocused: it accepts the first row, or extends by the
+	// common prefix (#2534) when the candidates share one beyond "ec".
 	openAuto()
 	if !m.completionKey("tab") {
-		t.Fatal("tab must accept regardless of focus")
+		t.Fatal("tab must be consumed regardless of focus")
+	}
+	if m.comp.open {
+		// Candidates on this PATH share an extension: tab inserted it and
+		// the popup stays open. Accept explicitly to reach the same state.
+		waitFor(t, "common prefix inserted by tab", func() bool {
+			_, word := parseCmdline(m.lineBeforeCursor())
+			return len(word) > 2 && strings.HasPrefix(strings.ToLower(word), "ec")
+		})
+		m.acceptCompletion()
 	}
 	waitFor(t, "candidate inserted by tab", func() bool {
 		cmd, word := parseCmdline(m.lineBeforeCursor())
