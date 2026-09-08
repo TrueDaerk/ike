@@ -214,6 +214,11 @@ bring their own.
 | Show All-Projects Search Results | `project.findInAllProjectsResults` | `cmd+alt+shift+r` | — | everywhere |
 | Find in Path | `project.findInPath` | `cmd+shift+f` | — | everywhere |
 | Go to File | `project.goToFile` | `cmd+shift+o` | — | everywhere |
+| Close Project Group | `project.group.close` | `cmd+alt+shift+w` | — | everywhere |
+| Next Project in Group | `project.group.next` | `cmd+alt+right-bracket` | — | everywhere |
+| Open Project Group… | `project.group.open` | `cmd+alt+shift+g` | — | everywhere |
+| Previous Project in Group | `project.group.prev` | `cmd+alt+left-bracket` | — | everywhere |
+| Warm Project Group | `project.group.warm` | — | — | everywhere |
 | Replace in Path | `project.replaceInPath` | `cmd+shift+r` | — | everywhere |
 | Switch to Recent Project 1 | `project.switchMRU1` | `ctrl+alt+1` | — | everywhere |
 | Switch to Recent Project 2 | `project.switchMRU2` | `ctrl+alt+2` | — | everywhere |

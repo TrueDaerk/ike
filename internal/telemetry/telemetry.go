@@ -119,10 +119,13 @@ const (
 // Operation ids for the op lifecycle events (#2348, #2403). Callers outside
 // this package use them so the export's vocabulary stays in one place.
 const (
-	OpHTTPFlight     = "http.flight"     // one .http request dispatch (#2348)
-	OpProjectSwitch  = "project.switch"  // the seamless project switch transaction (#2403)
-	OpProjectClose   = "project.close"   // closing a project and resuming the MRU one (#2403)
-	OpSessionRestore = "session.restore" // the startup layout/session restore (#2403)
+	OpHTTPFlight    = "http.flight"    // one .http request dispatch (#2348)
+	OpProjectSwitch = "project.switch" // the seamless project switch transaction (#2403)
+	OpProjectClose  = "project.close"  // closing a project and resuming the MRU one (#2403)
+	// Closing a project group: the switch away plus every member's teardown
+	// (0510, #2572); the nested project.switch op is the switch's own share.
+	OpProjectGroupClose = "project.group.close"
+	OpSessionRestore    = "session.restore" // the startup layout/session restore (#2403)
 )
 
 // CommandSlowThreshold is the dispatch duration from which a command event

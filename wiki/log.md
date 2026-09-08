@@ -1,5 +1,36 @@
 # Log
 
+## 2026-09-08 (project.group.close with aggregated busy guard, group.next/prev cycling, group.warm, #2572)
+
+- **`project.group.close`** ("Close Project Group", `cmd+alt+shift+w` / `ctrl+alt+shift+w`,
+  File menu, #805 terminal allowlist; `internal/app/project_group_close.go`) tears every
+  member down in one action. The busy guard aggregates the `project.close` probe (active
+  member: panes, popup terminal, project floating panels) and the #820 close-from-list
+  probe (parked members) into **one** #821-shaped prompt whose body lists the busy
+  members (`api — 1 running shell terminal`, `ui — unsaved: f.txt`): `s` saves every
+  member's dirty buffers then closes (a failed write names the member and closes
+  nothing), `d` closes discarding, `esc` keeps everything; enter takes the primary. The
+  close switches away from the active member to the MRU **non-member** parked workspace
+  (session + layout persisted, leave reason `close`), then `Drop` + `closeWorkspace` for
+  every parked member; with no non-member parked it degrades to the quit guard, whose
+  confirm clears the marker synchronously. History entries stay; `project.active_group`
+  and `Model.activeGroup` clear; toast `closed group web · 2 projects`; op
+  `project.group.close` in telemetry.
+- **`project.group.next` / `.prev`** ("Next / Previous Project in Group",
+  `cmd+alt+]` / `cmd+alt+[` with `ctrl+alt+]` / `ctrl+alt+[` secondaries;
+  `project_group_cycle.go`) step through the members present on disk in list order with
+  wrap — a missing member is skipped, an unparked one is a cold first visit, a parked one
+  resumes; from a non-member root next lands on member 1 and prev on the last. Without a
+  group they notify `no project group open`. The status line's `group` segment click now
+  really runs `next`.
+- **`project.group.warm`** ("Warm Project Group", palette only — audit ledger
+  `reasonOccasional`) runs the open chain for the members that are neither active nor
+  parked and returns to the current root; the segment reads `warming web 1/2` meanwhile
+  and the toast `group web warm · re-parked 2 projects`. An already warm group only
+  notifies.
+  Docs: [Project Groups](/architecture/project-groups.md),
+  [Status Line](/architecture/status-line.md), [Keybindings](/architecture/keybindings.md).
+
 ## 2026-09-08 (project.group.open: group picker, warm-up switch chain, active-group marker, status segment, #2571)
 
 - **`project.group.open`** ("Open Project Group…", `cmd+alt+shift+g` / `ctrl+alt+shift+g`,

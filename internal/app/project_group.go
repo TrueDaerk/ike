@@ -43,6 +43,19 @@ type groupOpen struct {
 	done int
 	// skipped lists the members whose hop failed (root gone, chdir error).
 	skipped []string
+	// warm marks a project.group.warm chain (#2572): the hops re-park the
+	// cold members and the last one returns to the root the warm started
+	// from; the landing neither moves the marker nor announces an open.
+	warm bool
+}
+
+// verb is the chain's word for notifications and the status segment:
+// "open" for group.open, "warm" for group.warm.
+func (o *groupOpen) verb() string {
+	if o.warm {
+		return "warm"
+	}
+	return "open"
 }
 
 // handleOpenGroupPicker routes project.group.open: the palette locked to the
@@ -145,6 +158,16 @@ func (m Model) finishGroupOpen() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	opened := o.total - len(o.skipped)
+	if o.warm {
+		// A warm (#2572) only re-parks: the marker already names the group,
+		// and the return hop put the starting root back in front.
+		if opened <= 0 {
+			m.host.Notify(host.Error, "group \""+o.name+"\": no member could be warmed")
+			return m, nil
+		}
+		m.host.Notify(host.Info, "group "+o.name+" warm · re-parked "+pluralProjects(opened))
+		return m, nil
+	}
 	if opened == 0 {
 		m.host.Notify(host.Error, "group \""+o.name+"\": no member could be opened")
 		return m, nil
@@ -163,7 +186,7 @@ func (m *Model) abortGroupOpen() {
 		return
 	}
 	m.groupOpening = nil
-	m.host.Notify(host.Info, "group "+o.name+" open cancelled after "+strconv.Itoa(o.done)+"/"+strconv.Itoa(o.total))
+	m.host.Notify(host.Info, "group "+o.name+" "+o.verb()+" cancelled after "+strconv.Itoa(o.done)+"/"+strconv.Itoa(o.total))
 }
 
 // handleActiveGroupWritten is the ActiveGroupMsg handler: a failed marker
@@ -197,15 +220,15 @@ func (m Model) capGroup() (project.Group, bool) {
 }
 
 // groupSegment is the status line's group slot: `⦿ web/api` (group / current
-// root name) while a group is active, `opening web 2/3` while the chain runs,
-// nothing without a group.
+// root name) while a group is active, `opening web 2/3` while the chain runs
+// (`warming web 1/2` for a group.warm chain, #2572), nothing without a group.
 func (m Model) groupSegment() string {
 	if o := m.groupOpening; o != nil {
 		hop := o.done + 1
 		if hop > o.total {
 			hop = o.total
 		}
-		return "opening " + o.name + " " + strconv.Itoa(hop) + "/" + strconv.Itoa(o.total)
+		return o.verb() + "ing " + o.name + " " + strconv.Itoa(hop) + "/" + strconv.Itoa(o.total)
 	}
 	if m.activeGroup == "" {
 		return ""

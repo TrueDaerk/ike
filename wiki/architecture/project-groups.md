@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Project Groups
-description: Epic 0510 — named sets of project roots opened, parked and closed as one; the [[project.groups]] data layer, the project.active_group marker, the group-aware background workspace cap, the project.group.open picker and warm-up chain, and the status-line group segment.
+description: Epic 0510 — named sets of project roots opened, parked and closed as one; the [[project.groups]] data layer, the project.active_group marker, the group-aware background workspace cap, the project.group.open picker and warm-up chain, the status-line group segment, project.group.close with the aggregated busy guard, group.next/prev cycling and group.warm.
 resource: internal/app/project_group.go
 tags: [architecture, project, groups, workspace, config, palette, status-line]
-timestamp: 2026-09-08T18:00:00Z
+timestamp: 2026-09-08T21:00:00Z
 ---
 
 # Project Groups (Epic 0510)
@@ -14,8 +14,10 @@ live workspace and lands on the first one; closing it tears all of them down in 
 single-root model is untouched: exactly one root is active, the IDE is still anchored at `.`, and a
 group is nothing more than **a set of ordinary workspaces plus a marker**.
 
-Spec: epic #2569. This page grows with each sub-issue; today it documents the data layer (#2570)
-and the open entry point — picker, warm-up chain, marker, status segment (#2571).
+Spec: epic #2569. This page grows with each sub-issue; today it documents the data layer (#2570),
+the open entry point — picker, warm-up chain, marker, status segment (#2571) — and leaving and
+moving within a group: the close with its aggregated busy guard, `next` / `prev` cycling and
+`warm` (#2572).
 
 ## Persisted shape
 
@@ -160,11 +162,88 @@ keeps it — the marker names the set one is working in, not the current root.
 
 The `group` slot (`internal/app/statusline.go`, left list, right after `file`) renders
 `⦿ web/api` — the group's name / the current root's directory name — while a group is active,
-`opening web 2/3` while the chain runs (hop in progress / present members), and nothing without
-a group. It drops with the other low-priority segments under width pressure (right after
-`hint` in `statusDropOrder`). A click is wired to `project.group.next` in
-`statusSegmentCommands`; until #2572 registers that command the click notifies that it is not
-available yet. See [Status Line](/architecture/status-line.md).
+`opening web 2/3` while the open chain runs (hop in progress / present members),
+`warming web 1/2` while a `project.group.warm` chain runs, and nothing without a group. It drops
+with the other low-priority segments under width pressure (right after `hint` in
+`statusDropOrder`). A click runs `project.group.next` (`statusSegmentCommands`) — the next
+member in list order. See [Status Line](/architecture/status-line.md).
+
+## Closing a group (`project.group.close`, #2572)
+
+**Command**: `project.group.close` ("Close Project Group", global, `internal/app/commands.go`),
+default chords `cmd+alt+shift+w` with the delivered `ctrl+alt+shift+w` secondary —
+`project.close`'s `cmd+shift+w` with `alt` added, the group flavour of the close. On the #805
+terminal allowlist and in the File menu ("Close Project Group"). Without an active group it
+notifies `no project group open`; while an open/warm chain runs it notifies and does nothing.
+
+**Aggregated busy guard** (`internal/app/project_group_close.go`, `collectGroupActivity`): the
+close would kill live state in *several* workspaces, so the probes of the two single-workspace
+closes run over every in-memory member and are folded into **one** prompt in the #821 shape:
+
+- the **active member** is probed like `project.close` — `collectActivity` over its panes plus
+  the popup terminal (unless the popup scope is global, #2406) and the project-owned floating
+  panels (#1793), which live on the model rather than in `Aux`;
+- every **parked member** is probed like the close-from-list (#820): `collectActivity` over the
+  parked workspace, whose popup shells sit in `Aux`.
+
+Idle members are left out. The prompt (`Close project group?`) lists the busy members one line
+each — `api — 1 running shell terminal`, `ui — unsaved: f.txt` — followed by `[s]` *save all,
+then close the group* (offered only when some member is dirty), `[d]` *close the group — stop
+processes, discard unsaved changes* and `[esc]` *cancel — keep the group open*; enter takes
+the primary (#1356). `s` writes the active member's buffers through `saveAllDirty` and each
+parked member's through `saveWorkspaceDirty`, then re-probes: a member still dirty after the
+write **stays open and cancels the rest** (`group not closed: save failed in ui`) — nothing
+closes. `esc` leaves every member, the shell and the marker untouched.
+
+**Order** (`performCloseGroup`):
+
+1. With the active workspace a member, the seamless switch runs first to the **MRU
+   non-member** parked workspace — the last non-member in `m.ws.Background()` — through
+   `performSwitchOpts` with `record` and `closing` set, exactly `project.close`'s transaction:
+   the member's session and layout persist, its `project.leave` reason is `close`, its
+   workspace parks. A failed switch (chdir error) closes nothing; the `SwitchFailedMsg` toast
+   names the reason. Standing in a non-member root needs no switch.
+2. Every parked member — the one just parked included — is `Drop`ped from the manager and
+   torn down through `closeWorkspace` (#820/#825): terminals, runs and the debug session end,
+   the LSP bridge releases the root through the workspace-closed hook, the crash snapshots and
+   poll-watches go, memory is handed back. Recent-projects **history entries stay**.
+3. The marker clears: `Model.activeGroup` at once, `project.active_group` off the loop through
+   `ClearActiveGroupCmd` (the `ActiveGroupMsg` reloads the config). The toast reads
+   `closed group web · 2 projects`; telemetry brackets the whole close as the
+   `project.group.close` op, with the nested `project.switch` op as the switch's own share.
+
+**Degrading to the quit guard**: with the active workspace a member and **no non-member**
+parked, closing the group would empty the IDE, so the close becomes a quit — `quitActivity`
+aggregates the same probes over every workspace and the #287/#821 quit prompt (or a clean
+`quit`) runs, exactly like `project.close` on the last project. The marker clears
+**synchronously** when the quit goes through (`pendingClose.groupClose`, `clearGroupMarkerNow`:
+no cmd runs after a quit) and stays on `esc`.
+
+## Cycling (`project.group.next` / `project.group.prev`, #2572)
+
+`project.group.next` / `project.group.prev` ("Next / Previous Project in Group", global),
+default chords `cmd+alt+]` / `cmd+alt+[` with the delivered `ctrl+alt+]` / `ctrl+alt+[`
+secondaries (spelled `right-bracket` / `left-bracket` in the table; `nav.back` / `nav.forward`
+own the plain `cmd+bracket`), on the #805 terminal allowlist. `handleCycleGroup`
+(`internal/app/project_group_cycle.go`) resolves the members through `ResolveGroupRoots` — a
+member **missing on disk is skipped** — finds the current root among them (canonical
+comparison) and steps `±1` **in list order with wrap**. From a non-member root `next` lands on
+member 1 and `prev` on the last member; a single-member group only notifies. The step is an
+ordinary `handleSwitchProject`: a parked member **resumes**, an unparked one is a **cold first
+visit** (built from its saved layout), history records the open, the auto-save gate runs, the
+marker rides the rebuild. Without an active group both notify `no project group open`. The
+status line's `group` segment click runs `next`.
+
+## Warming (`project.group.warm`, #2572)
+
+`project.group.warm` ("Warm Project Group") is **palette only** — `group.open` is the entry
+point that warms a group, so the audit ledger (`cmd/ike/keybind_audit_test.go`) carries it as
+`reasonOccasional`. `handleWarmGroup` lists the members present on disk that are **neither
+active nor parked** and runs the open chain over them — the cold members N…1, then one final
+hop **back to the current root** — flagged `groupOpen.warm`: the segment reads
+`warming web 1/2`, the landing neither moves the marker nor writes it and toasts
+`group web warm · re-parked 2 projects`. Skipped hops are reported like the open's. With every
+member already in memory nothing runs: `group web is warm · every project is parked`.
 
 ## Validation diagnostics
 
@@ -224,6 +303,7 @@ a member. It is listed in the settings coverage guard's `internalKeys`
   is a chain of.
 - [Status Line](/architecture/status-line.md) — the segment model the `group` slot plugs into.
 - [Keybindings](/architecture/keybindings.md) — the default chord table and the reachability matrix
-  row for `project.group.open`.
+  rows for `project.group.open`, `project.group.close`, `project.group.next` and
+  `project.group.prev`.
 - [Workspace](/architecture/workspace.md) — the parked-workspace manager and the background cap.
 - [Configuration](/architecture/config.md) — the layered config the groups persist through.

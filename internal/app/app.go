@@ -826,6 +826,10 @@ type Model struct {
 	// projectClosePending is the busy close-current guard state (#1355): the
 	// MRU background root to resume once the user confirms the close.
 	projectClosePending *pendingProjectClose
+	// groupClosePending is the aggregated busy guard state of a project group
+	// close (0510, #2572): the busy members and the non-member root to land
+	// on once the user confirms.
+	groupClosePending *pendingGroupClose
 	// peek marks the active workspace as a quick-peek (#2136): the origin
 	// root project.peek.return goes back to, plus the state snapshot the
 	// return's unchanged check compares against. Nil while not peeking; a
@@ -3621,6 +3625,11 @@ var terminalGlobalCommands = map[string]bool{
 	"project.close":      true,
 	// #2571: opening a group is a project entry point like the picker.
 	"project.group.open": true,
+	// #2572: closing the group and cycling its members are project entry
+	// points too — a member is often left from a shell.
+	"project.group.close": true,
+	"project.group.next":  true,
+	"project.group.prev":  true,
 	// #2136: the one-key way back from a peek must work with a terminal
 	// focused too — a peek often ends while looking at a shell.
 	"project.peek.return": true,
@@ -6938,6 +6947,21 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case project.ActiveGroupMsg:
 		return m.handleActiveGroupWritten(msg)
 
+	case project.CloseGroupMsg:
+		// project.group.close (0510, #2572): every member down in one action
+		// behind the aggregated busy guard; the marker clears.
+		return m.handleCloseGroup()
+
+	case project.CycleGroupMsg:
+		// project.group.next / .prev (#2572): step through the members in
+		// list order with wrap.
+		return m.handleCycleGroup(msg.Delta)
+
+	case project.WarmGroupMsg:
+		// project.group.warm (#2572): re-park the members that dropped out
+		// of the background set, then return to the current root.
+		return m.handleWarmGroup()
+
 	case project.GitInfoMsg:
 		// One finished picker probe (#2178): file it and re-list, so the row
 		// grows its branch badge without the palette losing its query. A
@@ -8619,6 +8643,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The busy close-current-project guard (#1355): s / d / esc answer it.
 		if m.projectClosePromptOpen() {
 			return m.updateProjectClosePrompt(msg)
+		}
+		// The aggregated busy close-group guard (#2572): s / d / esc answer it.
+		if m.groupClosePromptOpen() {
+			return m.updateGroupClosePrompt(msg)
 		}
 		// The busy peek-return guard (#2136): s / d / esc answer it.
 		if m.peekReturnPromptOpen() {

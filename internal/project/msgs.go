@@ -44,6 +44,23 @@ type PeekReturnMsg struct{}
 // marker. Dispatched by project.peek.keep.
 type PeekKeepMsg struct{}
 
+// CloseGroupMsg asks the root model to close the active project group (0510,
+// #2572): tear every member workspace down — the active one and the parked
+// ones — behind one aggregated busy guard, land on the MRU non-member
+// workspace (or quit when none is parked), and clear the active-group marker.
+// Dispatched by project.group.close.
+type CloseGroupMsg struct{}
+
+// CycleGroupMsg asks the root model to step to the next (Delta +1) or the
+// previous (Delta -1) member of the active project group in list order, with
+// wrap (0510, #2572). Dispatched by project.group.next / project.group.prev.
+type CycleGroupMsg struct{ Delta int }
+
+// WarmGroupMsg asks the root model to re-park every member of the active
+// project group that is not in the background set (0510, #2572), returning to
+// the current member afterwards. Dispatched by project.group.warm.
+type WarmGroupMsg struct{}
+
 // SwitchLastMsg asks the root model to switch to the most recently used
 // background workspace (#2398): the alt+tab of project switching — pressing it
 // again comes back, since the project just left becomes the MRU parked one.

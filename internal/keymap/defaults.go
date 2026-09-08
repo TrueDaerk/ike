@@ -41,6 +41,17 @@ var jetbrainsRows = []row{
 	// with the delivered ctrl secondary like project.switch above.
 	{"cmd+alt+shift+g", "project.group.open", "Open project group", Global, "Project groups (#2571)"},
 	{"ctrl+alt+shift+g", "project.group.open", "Open project group", Global, "Project groups (#2571)"},
+	// Close Project Group (0510, #2572): project.close's cmd+shift+w with
+	// alt added — the group flavour of the close — with the delivered ctrl
+	// secondary. Next / previous member: the bracket pair on the cmd+alt
+	// layer (nav.back/forward own the plain cmd+bracket), ctrl+alt secondary;
+	// off macOS both fold onto the ctrl form, which no default owns.
+	{"cmd+alt+shift+w", "project.group.close", "Close project group", Global, "Project groups (#2572)"},
+	{"ctrl+alt+shift+w", "project.group.close", "Close project group", Global, "Project groups (#2572)"},
+	{"cmd+alt+right-bracket", "project.group.next", "Next project in group", Global, "Project groups (#2572)"},
+	{"ctrl+alt+right-bracket", "project.group.next", "Next project in group", Global, "Project groups (#2572)"},
+	{"cmd+alt+left-bracket", "project.group.prev", "Previous project in group", Global, "Project groups (#2572)"},
+	{"ctrl+alt+left-bracket", "project.group.prev", "Previous project in group", Global, "Project groups (#2572)"},
 	// Direct MRU project switching (#2489): switchLast generalized to the
 	// nine most recent projects, numbered the way the picker and the Recent
 	// Projects column show it. ctrl+alt+digit is the only free digit family

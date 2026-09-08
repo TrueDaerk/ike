@@ -178,7 +178,7 @@ router dispatches a left press through `statusSegmentCommands`:
 | `forge` (unread forge events) | `issues.toggle` |
 | `branchissue` (the current branch's issue, #2544) | `issues.openCurrentBranch` |
 | `lsp` (server state) | `lsp.doctor` (#2164) |
-| `group` (project-group marker, #2571) | `project.group.next` — registered ahead of #2572; until that command lands the click notifies that it is not available yet |
+| `group` (project-group marker, #2571) | `project.group.next` (#2572) — the next member in list order, with wrap |
 
 Only segments with one clear, obvious target are wired; every other press on
 the status row is swallowed (the row sits outside the layout tree, so nothing
