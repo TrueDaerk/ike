@@ -131,7 +131,8 @@ var (
 	binaryOpenModes = map[string]bool{"hex": true, "editor": true}
 	saveModes       = map[string]bool{"off": true, "focus": true, "idle": true}
 	severities      = map[string]bool{"info": true, "warn": true, "error": true}
-	// recentRankings are the palette.recent.ranking values (#2399).
+	// recentRankings are the palette.recent.ranking values (#2399); the
+	// default is "recency" since #2532.
 	recentRankings = map[string]bool{"frecency": true, "recency": true}
 	// whitespaceModes are the editor.show_whitespace values (#64).
 	whitespaceModes = map[string]bool{"none": true, "trailing": true, "all": true}
@@ -430,8 +431,8 @@ func validate(c *Config) []Diagnostic {
 	}
 	// palette.recent.ranking (#2399) orders the recent-files dialog.
 	if !recentRankings[c.Palette.Recent.Ranking] {
-		diags = append(diags, Diagnostic{Field: "palette.recent.ranking", Message: fmt.Sprintf("unknown ranking %q, using \"frecency\"", c.Palette.Recent.Ranking)})
-		c.Palette.Recent.Ranking = "frecency"
+		diags = append(diags, Diagnostic{Field: "palette.recent.ranking", Message: fmt.Sprintf("unknown ranking %q, using \"recency\"", c.Palette.Recent.Ranking)})
+		c.Palette.Recent.Ranking = "recency"
 	}
 	if !saveModes[c.Editor.AutoSave] {
 		diags = append(diags, Diagnostic{Field: "editor.auto_save", Message: fmt.Sprintf("unknown mode %q, using \"focus\"", c.Editor.AutoSave)})

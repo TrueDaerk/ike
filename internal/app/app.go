@@ -3076,17 +3076,14 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	mru.SetProjects(func() []palette.Item {
 		cur := currentProjectRoot()
 		var items []palette.Item
-		// The MRU rank (#2489) counts the entries this column lists, in
-		// history order: it is the digit of the ctrl+alt+N chord that
-		// switches there, and stays with the project however the column's
-		// frecency ranking or a typed query reorders the rows.
-		rank := 0
+		// No MRU digit on the rows since #2532: #2489 rendered the
+		// ctrl+alt+N rank as a leading hint here and in the picker, which
+		// read as noise in front of every project name. The chords are
+		// unchanged; their palette command titles carry the numbers.
 		for _, e := range project.History(config.Get()) {
 			if cur != "" && filepath.Clean(e.Path) == cur {
 				continue
 			}
-			hint := project.MRUHint(rank)
-			rank++
 			it := palette.Item{
 				Title: e.Name,
 				Msg:   project.PickedMsg{Path: e.Path},
@@ -3097,8 +3094,6 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 				// travels with the item.
 				Key:  frecency.Key(e.Path),
 				Rank: projFrec.Score(frecency.Key(e.Path)),
-				// The project's MRU digit (#2489), "" past the ninth.
-				Hint: hint,
 			}
 			if openInMemory(e.Path) {
 				it.Badge = "●"
@@ -3190,13 +3185,14 @@ func (m Model) recordPaletteDismissal() {
 // recentRankingFrecency reads palette.recent.ranking (#2399): whether the
 // recent-files dialog blends frecency into its two lists or keeps plain MRU
 // order. It reads the live config (not the build-time host.Config) so a
-// settings flip applies to the very next open, and defaults to frecency —
-// which is also what validation rewrites an unknown value to.
+// settings flip applies to the very next open. Only an explicit "frecency"
+// turns the blend on since #2532: the default — and what validation rewrites
+// an unknown value to — is "recency", newest first.
 func recentRankingFrecency(c *config.Config) bool {
 	if c == nil {
-		return true
+		return false
 	}
-	return !strings.EqualFold(strings.TrimSpace(c.Palette.Recent.Ranking), "recency")
+	return strings.EqualFold(strings.TrimSpace(c.Palette.Recent.Ranking), "frecency")
 }
 
 // paletteToggleKey reads palette.toggle_key. Empty means no toggle chord: the
