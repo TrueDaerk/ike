@@ -93,7 +93,18 @@ import (
 // them for every flight that produced a response, and their absence on an
 // "ok" means the capture measured nothing (a history restore), never a lost
 // field. Below v8 absence means "not recorded".
-const SchemaVersion = 8
+//
+// v9 (#2578): two group-level ops join — "project.group.open" (the whole
+// warm-up switch chain behind project.group.open: "members" present members,
+// "skipped" hops that failed, "landed_on" the 12-hex project token of the
+// member the chain ended on, "ms" the chain's total) and "project.group.close"
+// (the switch away plus every member teardown: "members" the member
+// workspaces that were closed, "ms" the total). Each hop keeps recording its
+// own "project.switch" op, so the chain and its parts nest.
+// "project.group.close" was already emitted without "members" since #2572;
+// from v9 a reader may rely on the field, and its absence below v9 means
+// "not recorded", not zero.
+const SchemaVersion = 9
 
 // defaultFlushInterval is how often the writer goroutine flushes the
 // bufio.Writer on its own, independent of buffer fill or explicit Flush
@@ -122,6 +133,10 @@ const (
 	OpHTTPFlight    = "http.flight"    // one .http request dispatch (#2348)
 	OpProjectSwitch = "project.switch" // the seamless project switch transaction (#2403)
 	OpProjectClose  = "project.close"  // closing a project and resuming the MRU one (#2403)
+	// Opening a project group: the whole warm-up switch chain (0510, #2571),
+	// from the picked group to the landing member; the per-hop project.switch
+	// ops nest inside it.
+	OpProjectGroupOpen = "project.group.open"
 	// Closing a project group: the switch away plus every member's teardown
 	// (0510, #2572); the nested project.switch op is the switch's own share.
 	OpProjectGroupClose = "project.group.close"

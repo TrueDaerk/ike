@@ -2,6 +2,7 @@ package app
 
 import (
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -266,12 +267,12 @@ func (m Model) performCloseGroup(name, target string) (tea.Model, tea.Cmd) {
 		next, cmd := m.performSwitchOpts(target, switchOpts{record: true, closing: true})
 		s, ok := next.(Model)
 		if !ok {
-			endOp("error", nil)
+			endOp("error", map[string]string{"members": "0"})
 			return next, cmd
 		}
 		cmds = append(cmds, cmd)
 		if s.activeWS() != nil && s.activeWS().Root == oldRoot {
-			endOp("error", nil)
+			endOp("error", map[string]string{"members": "0"})
 			return s, cmd // switch failed; nothing parked, nothing closed
 		}
 		sized = s
@@ -287,7 +288,10 @@ func (m Model) performCloseGroup(name, target string) (tea.Model, tea.Cmd) {
 		}
 	}
 	sized.activeGroup = ""
-	endOp("ok", nil)
+	// members counts the member workspaces the close actually tore down — the
+	// one switched away from included, as the switch parks it into the
+	// background set the loop above drains (#2578).
+	endOp("ok", map[string]string{"members": strconv.Itoa(closed)})
 	sized.host.Notify(host.Info, "closed group "+name+" · "+pluralProjects(closed))
 	cmds = append(cmds, project.ClearActiveGroupCmd(sized.cfgOpts))
 	return sized, tea.Batch(cmds...)
