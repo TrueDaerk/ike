@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Issues Tool Window
-description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, a unified filter overlay (fuzzy match, state radio, sort, grouping, label multi-select with an any-of/all-of switch) with a permanent chip row whose chips clear individually and a structured qualifier layer in the match input (label:/is:/sort: with inline tab completion) writing the same filter model, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), a full-area PR detail with per-check CI status and merge/close-with-comment behind a confirm dialog plus an offered post-merge branch cleanup, an action menu with type-ahead speed search in every picker, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, a consolidated key table with one meaning per letter family across all modes, and the start-work action branching issue/<number> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087, #2089, #2111, #2114, #2112, #2110, #2376).
+description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, a unified filter overlay (fuzzy match, state radio, sort, grouping, label multi-select with an any-of/all-of switch) with a permanent chip row whose chips clear individually and a structured qualifier layer in the match input (label:/is:/sort: with inline tab completion) writing the same filter model, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), a full-area PR detail with per-check CI status and merge/close-with-comment behind a confirm dialog plus an offered post-merge branch cleanup, an action menu with type-ahead speed search in every picker, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, a consolidated key table with one meaning per letter and arrow family across all modes, and the start-work action branching issue/<number> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087, #2089, #2111, #2114, #2112, #2110, #2376, #2537).
 resource: internal/ghissues/ghissues.go
 tags: [architecture, vcs, github, gitea, issues, forge, tool-window, pane, keymap]
 timestamp: 2026-09-04T12:00:00Z
@@ -102,15 +102,26 @@ per-mode drift the earlier sub-issues had accumulated ('e' labels vs 'E'
 texts, 'l' labels vs 'L' load-more, 'g' grouping vs 'g' top). All keys stay
 QWERTZ-safe (#48): plain letters and delivered `ctrl+letter` chords only.
 
+The **arrow families each carry one meaning** (#2537), because the plain
+arrows are bound commands in the `issues` context and therefore resolve before
+the pane sees them: vertical walks the *selection* (`issues.selectPrev` /
+`issues.selectNext`, the ctrl forms are aliases), horizontal walks the *tabs*
+(`issues.prevTab` / `issues.nextTab`). Line-by-line detail scrolling stays on
+`j`/`k` and the paging keys. While an overlay is open the two commands hand
+the arrow straight back to it, so the filter overlay's match input keeps its
+`left`/`right` caret motion and the pickers keep their `up`/`down`.
+
 | Key | Meaning | Where |
 | --- | --- | --- |
 | `enter` | open the selected row's detail | lists |
 | `esc` | back off one level: close overlay → leave detail → peel one filter | everywhere |
 | `tab` / `shift+tab` | switch the Issues/PRs view | everywhere |
-| `j`/`k`, arrows, paging | shared list navigation / detail scrolling (#1666) | everywhere |
+| `j`/`k`, paging | shared list navigation / detail scrolling (#1666) | everywhere |
 | `g` / `G` | jump to the first / last row (list) or top / bottom (detail) | everywhere |
 | `ctrl+j` / `ctrl+k` | walk to the next / previous issue or PR | details |
 | `ctrl+up` / `ctrl+down` | walk the selection — the list cursor, or the shown detail (#2400) | everywhere |
+| `up` / `down` | the same selection walk, on the plain arrows (#2537) | everywhere |
+| `left` / `right` | walk the Issues/PRs views, like `shift+tab` / `tab` (#2537) | everywhere |
 | `r` | refresh (the listing, plus the open detail's data) | everywhere |
 | `f` (aliases `/`, `cmd+f` / `ctrl+f`) | the filter overlay, on the match input | lists |
 | `l` | the filter overlay's **label** section | issue list |

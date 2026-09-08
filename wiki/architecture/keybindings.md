@@ -1315,8 +1315,10 @@ JetBrains is:
 | `http.search` | `cmd+f` | fragile | `ctrl+f` | live via ctrl+f |
 | `http.showResponse` | `cmd+shift+enter` | fragile | `ctrl+shift+f9` | live via ctrl+shift+f9 |
 | `issues.copy` | `cmd+c` | fragile | `issues pane "y" / palette` | live via issues pane "y" / palette |
-| `issues.selectNext` | `ctrl+down` | delivered | `—` | live |
-| `issues.selectPrev` | `ctrl+up` | delivered | `—` | live |
+| `issues.nextTab` | `right` | delivered | `—` | live |
+| `issues.prevTab` | `left` | delivered | `—` | live |
+| `issues.selectNext` | `down` | delivered | `—` | live |
+| `issues.selectPrev` | `up` | delivered | `—` | live |
 | `json.jqPlayground` | `ctrl+alt+j` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `json.jqQueryView` | `ctrl+alt+e` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `lsp.callHierarchy` | `ctrl+alt+h` | fragile | `palette` | live via palette |

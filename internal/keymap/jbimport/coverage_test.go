@@ -32,6 +32,8 @@ var noCounterpart = map[string]string{
 	"lsp.doctor.copy":                  "IKE-only concept (#2487): the LSP Doctor tool window has no JetBrains counterpart",
 	"issues.selectPrev":                "IKE-only concept (#2400): the issues window has no JetBrains counterpart",
 	"issues.selectNext":                "IKE-only concept (#2400): the issues window has no JetBrains counterpart",
+	"issues.nextTab":                   "IKE-only concept (#2537): the issues window's tab walk has no JetBrains counterpart",
+	"issues.prevTab":                   "IKE-only concept (#2537): the issues window's tab walk has no JetBrains counterpart",
 	"editor.copyDocPath":               "JetBrains copies file references, not a path inside a JSON/YAML document",
 	"editor.sortLines":                 "IntelliJ ships no Sort Lines keymap action (#2417); it lives in the String Manipulation plugin, which an exported keymap does not carry",
 	"editor.case.cycle":                "IKE-only concept (#2418): IntelliJ toggles case but never rotates identifier styles; that lives in the String Manipulation plugin, which an exported keymap does not carry",

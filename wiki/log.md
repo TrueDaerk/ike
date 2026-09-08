@@ -25,6 +25,19 @@
   audit-ledger entries. The JetBrains keymap import maps `CloseAllToTheLeft`,
   `CloseAllToTheRight`, `CloseAllUnmodifiedEditors`, `CloseAllEditors` and
   `CloseAllEditorsButActive`/`ButPinned` onto them.
+## 2026-09-08 (issues window: the plain arrows navigate, #2537)
+
+- **Arrows in the issues window**: `up` / `down` now walk the selection —
+  the list cursor, or the shown item with a detail view open — and `left` /
+  `right` walk the Issues/PRs views, the two new `issues.prevTab` /
+  `issues.nextTab` commands. The telemetry had recorded two dozen unbound
+  presses there in four days (`ctrl+j`, `ctrl+k`, `ctrl+left`, …): the only
+  bound motions were `ctrl+up` / `ctrl+down`, which stay as aliases. One
+  meaning per arrow family, matching the pane's one-meaning-per-letter table;
+  line-by-line detail scrolling stays on `j`/`k` and the paging keys. Because
+  the keymap layer resolves the arrows before the pane sees them, both
+  commands hand the key straight back to an open overlay, so the filter
+  overlay's match input keeps its caret motion and the pickers keep theirs.
 
 ## 2026-09-08 (recent files & projects: no digits, newest first, #2532)
 

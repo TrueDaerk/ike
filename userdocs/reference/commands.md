@@ -147,8 +147,10 @@ bring their own.
 | Show Stored HTTP Response | `http.showResponse` | `ctrl+shift+f9` | — | everywhere |
 | Toggle Raw / Pretty HTTP Response Body | `http.toggleRawBody` | — | — | everywhere |
 | Issues: Copy Issue Reference | `issues.copy` | `cmd+c` | — | `issues` pane |
-| Issues: Next Issue | `issues.selectNext` | `ctrl+down` | — | `issues` pane |
-| Issues: Previous Issue | `issues.selectPrev` | `ctrl+up` | — | `issues` pane |
+| Issues: Next Tab | `issues.nextTab` | `right` | — | `issues` pane |
+| Issues: Previous Tab | `issues.prevTab` | `left` | — | `issues` pane |
+| Issues: Next Issue | `issues.selectNext` | `down` | — | `issues` pane |
+| Issues: Previous Issue | `issues.selectPrev` | `up` | — | `issues` pane |
 | GitHub Issues | `issues.toggle` | — | — | everywhere |
 | jq Cheatsheet… | `json.jqCheatsheet` | — | — | everywhere |
 | Saved jq Filters… | `json.jqFilters` | — | — | everywhere |

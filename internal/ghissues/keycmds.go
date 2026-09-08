@@ -53,10 +53,14 @@ func (m *Model) selectedRef() (text, what string) {
 	return "#" + strconv.Itoa(is.Number) + " " + is.Title, "issue title"
 }
 
-// StepSelection is issues.selectPrev / issues.selectNext (ctrl+up /
-// ctrl+down): it walks the list cursor, or — with a detail view open — the
-// shown item, which is what ctrl+j / ctrl+k already do there.
+// StepSelection is issues.selectPrev / issues.selectNext (up / down and the
+// ctrl+up / ctrl+down aliases, #2400, #2537): it walks the list cursor, or —
+// with a detail view open — the shown item, which is what ctrl+j / ctrl+k
+// already do there.
 func (m *Model) StepSelection(delta int) tea.Cmd {
+	if cmd, ok := m.arrowToOverlay(delta, false); ok {
+		return cmd
+	}
 	switch {
 	case m.detail && m.tab == TabIssues:
 		return m.stepIssue(delta)
@@ -69,4 +73,35 @@ func (m *Model) StepSelection(delta int) tea.Cmd {
 	}
 	m.navList(key)
 	return nil
+}
+
+// SwitchTabCmd is issues.nextTab / issues.prevTab (right / left, #2537): the
+// plain horizontal arrows walk the pane's two tabs, exactly like tab /
+// shift+tab, from the list and from a detail view alike.
+func (m *Model) SwitchTabCmd(delta int) tea.Cmd {
+	if cmd, ok := m.arrowToOverlay(delta, true); ok {
+		return cmd
+	}
+	m.switchTab(delta)
+	return nil
+}
+
+// arrowToOverlay hands a bound arrow back to an open overlay (#2537). The
+// keymap layer resolves the arrows before the pane sees them, so without this
+// the filter overlay's match input and the pickers would lose their arrows to
+// the list walk. horizontal picks left/right over up/down.
+func (m *Model) arrowToOverlay(delta int, horizontal bool) (tea.Cmd, bool) {
+	if m.ov == ovNone {
+		return nil, false
+	}
+	code := tea.KeyUp
+	switch {
+	case horizontal && delta < 0:
+		code = tea.KeyLeft
+	case horizontal:
+		code = tea.KeyRight
+	case delta > 0:
+		code = tea.KeyDown
+	}
+	return m.overlayKey(tea.KeyPressMsg{Code: code}), true
 }
