@@ -95,6 +95,28 @@ func TestLargeFileThresholdsExposed(t *testing.T) {
 	}
 }
 
+// TestProjectGroupsPageInRail guards #2573: the [[project.groups]] editor is a
+// custom page — it carries no schema entries, so its coverage is its place in
+// the rail, next to Files & Session in the Files & Projects group.
+func TestProjectGroupsPageInRail(t *testing.T) {
+	if g := GroupOf(ProjectGroupsPageTitle); g != "Files & Projects" {
+		t.Fatalf("%s group = %q, want Files & Projects", ProjectGroupsPageTitle, g)
+	}
+	pages := Regroup(append(BasePages([]string{"default"}, nil, nil),
+		Page{Title: ProjectGroupsPageTitle, Custom: NewProjectGroupsPage(config.Options{}, ProjectGroupOps{})}))
+	titles := titlesOf(pages)
+	for i, title := range titles {
+		if title != "Files & Session" {
+			continue
+		}
+		if i+1 >= len(titles) || titles[i+1] != ProjectGroupsPageTitle {
+			t.Fatalf("%s must follow Files & Session, rail = %v", ProjectGroupsPageTitle, titles)
+		}
+		return
+	}
+	t.Fatal("no Files & Session page")
+}
+
 // TestPaletteHintKeybindExposed guards #2549: the post-pick keybind hint is a
 // boolean entry on the Command Palette page.
 func TestPaletteHintKeybindExposed(t *testing.T) {

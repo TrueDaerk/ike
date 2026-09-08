@@ -63,6 +63,7 @@ var canonicalVerbs = map[string][]string{
 	"x":      {"Remove", "Uninstall"},
 	"n":      {"New"},
 	"m":      {"Manage", "Packages"},
+	"o":      {"Open"}, // act on the row outside the panel (#2573: open a group)
 	"u":      {"Unbind", "Unset"},
 	"U":      {"Update", "Upgrade"},
 	"z":      {"Fold", "Unfold"},

@@ -99,6 +99,12 @@ type OpenSearchMsg struct{}
 // the same view the hardcoded "?" opens. Dispatched by palette.keymapHelp.
 type ShowKeymapHelpMsg struct{}
 
+// OpenProjectGroupMsg asks the root model to open a project group by name
+// (0510, #2573): the settings Project Groups page's "o" verb. The open chain
+// itself is project.group.open (#2571) — until it lands the root model
+// reports the request instead of acting on it.
+type OpenProjectGroupMsg struct{ Name string }
+
 // KeymapDoctorMsg asks the root model to open the keymap doctor (#2080): the
 // terminal reality probe run inside the session, whose saved verdicts become
 // this terminal's reachability overrides. Dispatched by keymap.doctor.
