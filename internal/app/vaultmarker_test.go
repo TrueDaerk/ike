@@ -86,6 +86,26 @@ func TestVaultMarkerOnTab(t *testing.T) {
 	}
 }
 
+// TestVaultMarkerInSingleTabTitle: with one open document the pane draws the
+// plain title instead of the tab bar, so the lock has to show up there too.
+func TestVaultMarkerInSingleTabTitle(t *testing.T) {
+	t.Setenv(ansiblevault.EnvPasswordFile, "")
+	t.Setenv(ansiblevault.EnvPassword, vaultMarkerPassword)
+	dir := t.TempDir()
+	m := openApp(t, writeVault(t, dir, "secrets.yml", ""))
+	ed := m.focusedEditor()
+	if ed == nil || !ed.Vault() {
+		t.Fatal("focused buffer must be the decrypted vault document")
+	}
+	if got := m.editorTitle(ed); !strings.HasSuffix(got, "secrets.yml "+tabVaultGlyph) {
+		t.Fatalf("pane title = %q, want the %s marker", got, tabVaultGlyph)
+	}
+	plain := openApp(t, writeTemp(t, dir, "plain.yml", "a: 1\n"))
+	if got := plain.editorTitle(plain.focusedEditor()); strings.Contains(got, tabVaultGlyph) {
+		t.Fatalf("plain pane title = %q carries the vault glyph", got)
+	}
+}
+
 func TestPlainBufferHasNoVaultMarker(t *testing.T) {
 	dir := t.TempDir()
 	m := openApp(t, writeTemp(t, dir, "plain.yml", "a: 1\n"))

@@ -14,6 +14,23 @@
   commands hand the key straight back to an open overlay, so the filter
   overlay's match input keeps its caret motion and the pickers keep theirs.
 
+## 2026-09-08 (recent files & projects: no digits, newest first, #2532)
+
+- **The MRU digits are gone from the lists.** #2489 rendered each of the first
+  nine recent-projects rows with its `ctrl+alt+N` chord number as a leading
+  `Item.Hint`, in the `project.switch` picker and in the Recent Projects column
+  of the `cmd+e` dialog. Read as a teaching aid it never paid for itself: a
+  number in front of every project name is noise. `MRUHint` is gone with it;
+  `MRUTargets` still resolves the chords, whose titles in the palette
+  ("Switch to Recent Project N") are now the place the numbers are learned.
+- **Recent means recent again.** `palette.recent.ranking` defaults to
+  `recency`, not #2399's `frecency`: with an empty query the recent-files list,
+  the Recent Projects column and the project picker list their source strictly
+  newest first (stable sorts over a zero fuzzy score), current file / project
+  dropped as before. A typed query still ranks by match quality, ties keeping
+  the newest-first order. Frecency stays as the opt-in `frecency` value, and an
+  unknown value validates back to `recency`.
+
 ## 2026-09-07 (network links: status command, #2529)
 
 - **A paired client can ask what IKE is showing**: the new authenticated
@@ -35,7 +52,10 @@
   `[vault]` — `[vault: <id>]` with a 1.2 vault-id — in the status line's file
   segment next to `[+]` / `[disk changed]`, and a 🔒 on its tab between `[RO]`
   and the dirty dot. Pure display, no setting; "Treat as Vault File" and the
-  shared-document sync flip both markers immediately.
+  shared-document sync flip both markers immediately. The single-document
+  pane title (drawn instead of the tab bar while a pane holds one tab, the
+  common case) carries the same 🔒 — without it the marker stayed invisible
+  until a second file was open.
 
 ## 2026-09-07 (editor: cell layout for wide glyphs & grapheme clusters, #2526)
 

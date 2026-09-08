@@ -125,11 +125,11 @@ func TestSwitchMRUBeyondListNotifies(t *testing.T) {
 	}
 }
 
-// TestRecentProjectsColumnShowsMRUDigits is the palette half of #2489: the
-// Recent Projects column of the recent-files dialog renders each project's
-// chord digit in front of its name, so the numbers are learned from the list
-// the user already opens.
-func TestRecentProjectsColumnShowsMRUDigits(t *testing.T) {
+// TestRecentProjectsColumnHasNoMRUDigits is the palette half of #2532: the
+// Recent Projects column of the recent-files dialog lists the projects newest
+// first and *without* the chord digit #2489 used to render in front of every
+// name — the chords stay, only the number goes.
+func TestRecentProjectsColumnHasNoMRUDigits(t *testing.T) {
 	base := t.TempDir()
 	alpha, beta := filepath.Join(base, "alpha"), filepath.Join(base, "beta")
 	here := filepath.Join(base, "here")
@@ -145,10 +145,20 @@ func TestRecentProjectsColumnShowsMRUDigits(t *testing.T) {
 	out, _ := m.Update(ShowRecentFilesMsg{})
 	m = out.(Model)
 	view := ansi.Strip(m.View().Content)
-	for _, want := range []string{"1 alpha", "2 beta"} {
+	for _, want := range []string{"alpha", "beta"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("recent-projects column is missing %q:\n%s", want, view)
 		}
+	}
+	for _, bad := range []string{"1 alpha", "2 beta"} {
+		if strings.Contains(view, bad) {
+			t.Errorf("recent-projects column still renders the MRU digit %q:\n%s", bad, view)
+		}
+	}
+	// The column is plain MRU (#2532): the project one came from leads, the
+	// one before it follows, and the project one stands in is dropped.
+	if i, j := strings.Index(view, "alpha"), strings.Index(view, "beta"); i < 0 || j < 0 || i > j {
+		t.Errorf("column order = alpha@%d beta@%d, want alpha first:\n%s", i, j, view)
 	}
 }
 
