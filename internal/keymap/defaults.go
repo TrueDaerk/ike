@@ -530,6 +530,17 @@ var jetbrainsRows = []row{
 	// issues window, so the editor's ctrl+arrow paragraph jumps are untouched.
 	{"ctrl+up", "issues.selectPrev", "Previous issue", Issues, "GitHub issues (#2400)"},
 	{"ctrl+down", "issues.selectNext", "Next issue", Issues, "GitHub issues (#2400)"},
+	// The plain arrows do the same walking (#2537): the telemetry kept seeing
+	// ctrl+j / ctrl+k / ctrl+left in the issues window, i.e. people reaching
+	// for "move" without the ctrl form. One meaning per arrow family —
+	// up/down walk the selection (the list cursor, or the shown item with a
+	// detail view open), left/right walk the pane's two tabs — and the ctrl
+	// forms stay as aliases. Both commands hand the key back to an open
+	// overlay, so the filter overlay's match input keeps its arrows.
+	{"up", "issues.selectPrev", "Previous issue", Issues, "GitHub issues (#2537)"},
+	{"down", "issues.selectNext", "Next issue", Issues, "GitHub issues (#2537)"},
+	{"left", "issues.prevTab", "Previous tab (Issues/PRs)", Issues, "GitHub issues (#2537)"},
+	{"right", "issues.nextTab", "Next tab (Issues/PRs)", Issues, "GitHub issues (#2537)"},
 	// The same muscle memory in the archive viewer (#2314): "rerun" reads as
 	// "read the archive again" there, which is the listing reload.
 	{"ctrl+r", "archive.reload", "Reload archive listing", Archive, "Archive viewer (#1762)"},
