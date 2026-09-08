@@ -183,6 +183,7 @@ bring their own.
 | Recent Locations | `nav.recentLocations` | `alt+shift+e` | — | everywhere |
 | Forget Paired Network Clients | `network.forgetClients` | — | — | everywhere |
 | Notification History | `notifications.history` | `cmd+alt+n` | — | everywhere |
+| Bind a Key for the Last Palette Command | `palette.bindLastPick` | `cmd+alt+k` | — | everywhere |
 | Keymap Cheatsheet | `palette.keymapHelp` | `f1` | — | everywhere |
 | Recent Files | `palette.recentFiles` | `cmd+e` | — | everywhere |
 | Search Everywhere | `palette.searchEverywhere` | `cmd+shift+a` | — | everywhere |

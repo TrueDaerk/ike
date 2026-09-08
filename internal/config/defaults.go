@@ -215,6 +215,9 @@ func defaults() *Config {
 			// No default toggle chord: the palette opens via esc-esc, "@" and
 			// searchEverywhere; ctrl+p belongs to lsp.parameterInfo (#523).
 			ToggleKey: "",
+			// Learnable shortcuts (#2549): a palette pick of a bound command
+			// toasts its chord; off silences the hint and the bind-a-key offer.
+			HintKeybind: true,
 			// The recent-files dialog lists what was opened last, newest
 			// first (#2532). #2399 made frecency — open count decayed over
 			// time — the default, which buried a file opened a minute ago

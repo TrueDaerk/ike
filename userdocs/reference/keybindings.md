@@ -29,6 +29,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|
+| Bind key for last palette command | `cmd+alt+k` | `ctrl+alt+k` | `palette.bindLastPick` |
 | Bookmarks | `cmd+f3` | `ctrl+f3` | `nav.bookmarks` |
 | Breakpoint properties | `cmd+alt+f8` | `ctrl+alt+f8` | `debug.breakpointProperties` |
 | Breakpoint properties | `ctrl+alt+f8` | `ctrl+alt+f8` | `debug.breakpointProperties` |

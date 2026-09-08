@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Command Palette
-description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked and frecency-boosted with a "did you mean" fallback over aliases, keybind labels and menu paths, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
+description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked and frecency-boosted with a "did you mean" fallback over aliases, keybind labels and menu paths, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself; a pick of a bound command toasts its chord, a third pick of an unbound one offers a key.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-09-08T12:00:00Z
+timestamp: 2026-09-08T16:00:00Z
 ---
 
 # Command Palette
@@ -225,6 +225,46 @@ hint-only list keeps the palette open, and the pick/dismissal telemetry
 (`resultCount`, `pickRank`) counts real rows only — a query nothing matched
 still reports `0 results`. Search everywhere composes the command source
 through `PrimaryResults`, so the separator never appears between file rows.
+
+### Learnable shortcuts: the keybind hint after a pick (#2549)
+
+The usage log put 1,276 of 1,293 command runs on keybinds and 13 on the
+palette — and several of the 13 (`lsp.doctor`, `diff.files`,
+`scratch.new.http`) were picked repeatedly although a chord existed or could
+have. The palette therefore teaches the chord it just stood in for. The root
+model's `paletteKeybindHint` (`internal/app/palette_hint.go`) runs on every
+`RunCommandMsg` — a palette pick, never a keybind or menu invocation — and
+raises one of two toasts:
+
+- **`also: <chord>`** when the command is bound *in the focused context*.
+  `keymap.LiveBindings.BindingIn(id, active)` is `Binding` narrowed to chords
+  the user could actually have pressed: the binding's context must match the
+  focus (`Context.Matches`) and the chord must still resolve to that command
+  there (`BindingTable.Lookup`), so a chord shadowed by a more specific
+  binding, or bound only in another pane, is never named. A blocked command
+  reports nothing rather than its `✗ blocked` label.
+- **`<Title>: picked 3× from the palette without a key — bind one: <chord>`**
+  on exactly the **third** pick, per session, of a command bound *nowhere*
+  (`Binding` false). The chord is `palette.bindLastPick`'s own
+  (`cmd+alt+k` by default), so the offer is itself a learnable shortcut; the
+  count lives in the root model (`unboundPicks`), never on disk, and the toast
+  does not repeat on later picks. A command bound only in another context gets
+  neither toast: it is not usable from here, and it is not unbound either.
+
+**`palette.bindLastPick`** (`cmd+alt+k`, palette "Bind a Key for the Last
+Palette Command") opens the settings panel on the **Keymap** page narrowed to
+the command last run from the palette: `settings.Model.OpenKeymapOn(id)`
+selects the page, focuses the form column and calls
+`KeymapPage.ShowCommand(id)`, which installs the id as the page's ordinary
+list filter (visible, editable, `esc` clears it) and selects the command's
+first row — `enter` then captures a chord for exactly that command through the
+page's usual rebind flow. Running the bind command itself from the palette
+never makes it the "last pick"; before any pick in the session it explains
+itself in a toast instead of opening an empty list.
+
+Both toasts are gated by **`palette.hint_keybind`** (default on, Settings ▸
+Command Palette ▸ "Keybind hint after a pick"); the bind command works either
+way.
 
 ## File mode (`@`)
 
@@ -775,7 +815,10 @@ until it is closed.
 - `max_results` — result rows shown (default 12; the list scrolls past it),
 - `default_mode` — prefix used when none is typed (default `:`),
 - `off_context` — `"rank"` (last) or `"hide"` for off-context commands,
-- `toggle_key` — dedicated open key (default empty since #523; esc-esc stays).
+- `toggle_key` — dedicated open key (default empty since #523; esc-esc stays),
+- `hint_keybind` — toast the chord of a command just picked from the palette,
+  and offer `palette.bindLastPick` on the third pick of an unbound one
+  (default on, #2549).
 
 The toggle key is a binding-agnostic default; the final keymap (and the `:`/`@`
 discoverability, the project-switch command's appearance) is owned by roadmaps

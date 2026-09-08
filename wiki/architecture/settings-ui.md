@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-09-08T14:00:00Z
+timestamp: 2026-09-08T16:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -214,7 +214,9 @@ any entry whose key the typed schema does not expose (no dead keys).
   overrides; see below.
 - **Command Palette** (#1663) — result rows, default mode and the off-context
   ranking (`palette.max_results`, `palette.default_mode`,
-  `palette.off_context`).
+  `palette.off_context`), the recent-files ranking (`palette.recent.ranking`)
+  and the post-pick keybind hint (`palette.hint_keybind`, #2549 — see
+  [Command Palette](./command-palette.md#learnable-shortcuts-the-keybind-hint-after-a-pick-2549)).
 - **Keymap Hints** (#1909) — the which-key popup: `keymap.which_key` on/off and
   `keymap.which_key_delay_ms`, the pending time before it opens (see
   [keybindings](./keybindings.md)). The bindings themselves stay on the custom

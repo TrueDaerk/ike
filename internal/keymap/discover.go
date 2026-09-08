@@ -41,9 +41,37 @@ func (l *LiveBindings) Binding(id string) (string, bool) {
 	if reason, blocked := BlockedReason(id); blocked {
 		return "✗ blocked: " + reason, true
 	}
+	return l.shortestChord(id, func(Binding) bool { return true })
+}
+
+// BindingIn is Binding narrowed to the chords that actually fire the command
+// while active is the focused context (#2549): the binding's own context must
+// match and the chord must resolve to the command there — a chord shadowed by
+// a more specific binding is not a shortcut the user could have pressed. A
+// blocked command reports nothing rather than the "✗ blocked" label: the
+// palette's post-pick hint names keys to press, not reasons.
+func (l *LiveBindings) BindingIn(id string, active Context) (string, bool) {
+	if id == "" || l.table == nil {
+		return "", false
+	}
+	if _, blocked := BlockedReason(id); blocked {
+		return "", false
+	}
+	return l.shortestChord(id, func(b Binding) bool {
+		if !b.Context.Matches(active) {
+			return false
+		}
+		got, ok := l.table.Lookup(b.Chord, active)
+		return ok && got.Command == id
+	})
+}
+
+// shortestChord picks the label among the command's bindings accepted by keep:
+// delivered chords first, then fragile ones, each fewest-steps-then-shortest.
+func (l *LiveBindings) shortestChord(id string, keep func(Binding) bool) (string, bool) {
 	var deliveredChords, fragileChords []string
 	for _, b := range l.table.Bindings() {
-		if b.Command != id {
+		if b.Command != id || !keep(b) {
 			continue
 		}
 		if Classify(b.Chord) == Delivered {

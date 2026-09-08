@@ -383,6 +383,7 @@ func (c *Config) Flat() map[string]string {
 	put("palette.default_mode", c.Palette.DefaultMode)
 	put("palette.off_context", c.Palette.OffContext)
 	put("palette.toggle_key", c.Palette.ToggleKey)
+	put("palette.hint_keybind", c.Palette.HintKeybind)
 	put("palette.recent.ranking", c.Palette.Recent.Ranking)
 
 	return m
