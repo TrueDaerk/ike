@@ -50,6 +50,7 @@ func Defaults() []Menu {
 			{Title: "Switch Project", Command: "project.switch"},
 			{Title: "Open Project Group…", Command: "project.group.open"},
 			{Title: "Close Project Group", Command: "project.group.close"},
+			{Title: "Save Open Projects as Group…", Command: "project.group.saveOpen"},
 			{Title: "Close Project", Command: "project.close"},
 			{Title: "Clone Repository…", Command: "project.clone"},
 		}},

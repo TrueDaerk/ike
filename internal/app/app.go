@@ -846,6 +846,11 @@ type Model struct {
 	// groupOpening is the in-flight group open chain (#2571); nil while no
 	// group is being opened. Carried across the rebuild each hop causes.
 	groupOpening *groupOpen
+	// groupSave is the project.group.saveOpen name prompt (#2577) while the
+	// shell shows it; groupSavePending is the write it started, waiting for
+	// project.GroupSavedMsg to land the toast and the active marker.
+	groupSave        *groupSavePrompt
+	groupSavePending *groupSavePending
 
 	// closePending is the close request awaiting the unsaved-changes guard
 	// (#259); nil when no guard is open.
@@ -6965,6 +6970,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// behind the aggregated busy guard; the marker clears.
 		return m.handleCloseGroup()
 
+	case project.SaveOpenGroupMsg:
+		// project.group.saveOpen (0510, #2577): name the open workspace set
+		// and it becomes a group — and the active one.
+		return m.handleSaveOpenGroup()
+
+	case project.GroupSavedMsg:
+		return m.handleGroupSaved(msg)
+
 	case project.CycleGroupMsg:
 		// project.group.next / .prev (#2572): step through the members in
 		// list order with wrap.
@@ -8816,6 +8829,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// between the URL and the directory-name field.
 		if m.clonePromptOpen() {
 			return m.updateClonePrompt(msg)
+		}
+		// The save-open-projects-as-group dialog (0510, #2577): one name
+		// field, with a y/n replace stage when the name is already in use.
+		if m.groupSavePromptOpen() {
+			return m.updateGroupSavePrompt(msg)
 		}
 		// The regex tester (#1937) owns the keyboard the same way: the
 		// pattern line and the test-text area, with tab between them.

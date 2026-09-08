@@ -144,6 +144,7 @@ var reachableAlternatives = map[string]string{
 	"project.switchLast":               "palette",
 	"project.group.open":               "palette / File menu",
 	"project.group.close":              "palette / File menu",
+	"project.group.saveOpen":           "palette / File menu",
 	"project.group.next":               "palette (or the status line's group segment)",
 	"project.group.prev":               "palette",
 	"project.switchMRU1":               "palette (or the cmd+e recent-projects column)",

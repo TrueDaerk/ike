@@ -59,6 +59,9 @@ func (m *Model) routeOverlayPaste(text string) (cmd tea.Cmd, handled bool) {
 		return nil, m.pasteRenamePrompt(text)
 	case m.clonePromptOpen():
 		return nil, m.pasteClonePrompt(text)
+	case m.groupSavePromptOpen():
+		// The group name prompt (#2577) takes a pasted name like any field.
+		return nil, m.pasteGroupSavePrompt(text)
 	case m.openLinkPromptOpen():
 		// The ike:// paste prompt (#2396) — pasting is its whole point.
 		return nil, m.pasteOpenLinkPrompt(text)

@@ -51,6 +51,12 @@ type PeekKeepMsg struct{}
 // Dispatched by project.group.close.
 type CloseGroupMsg struct{}
 
+// SaveOpenGroupMsg asks the root model to open the name prompt that saves the
+// currently open workspace set as a named group (0510, #2577): the active
+// workspace followed by the parked ones in MRU order, a peeked workspace
+// (#2136) left out. Dispatched by project.group.saveOpen.
+type SaveOpenGroupMsg struct{}
+
 // CycleGroupMsg asks the root model to step to the next (Delta +1) or the
 // previous (Delta -1) member of the active project group in list order, with
 // wrap (0510, #2572). Dispatched by project.group.next / project.group.prev.
