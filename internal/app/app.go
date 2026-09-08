@@ -3111,6 +3111,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	cmd := palette.NewCommandMode(reg, bindings, paletteHideOff(cfg))
 	cmd.SetUsage(usage)
 	cmd.SetFrecency(cmdFrec)
+	cmd.SetMenuPaths(menu.CommandPaths(menu.Defaults()))
 	file := palette.NewFileMode()
 	file.SetUsage(fileUsage)
 	file.SetFrecency(fileFrec)

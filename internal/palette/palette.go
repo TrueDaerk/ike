@@ -582,13 +582,16 @@ func (p *Palette) activate() tea.Cmd {
 		return nil
 	}
 	it := p.items[p.selected]
+	if it.Inert {
+		return nil // chrome row (#2548): nothing to run, the palette stays open
+	}
 	msg := it.Msg
 	if of, ok := msg.(OpenFileMsg); ok && p.fileUsageEligible() {
 		of.CountUsage = true
 		msg = of
 	}
 	p.recordPick(it, false)
-	p.notePick(p.selected, len(p.items))
+	p.notePick(p.pickRank(), p.resultCount())
 	p.Close()
 	if msg == nil {
 		return nil
@@ -647,6 +650,33 @@ func (p *Palette) notePick(rank, results int) {
 	p.picked = &Pick{Prefix: m.Prefix(), QueryLen: len([]rune(body)), Rank: rank, Results: results}
 }
 
+// resultCount is the number of real result rows listed (#2548): the "did you
+// mean" separator and the no-match hint are chrome, not results, so the
+// dismissal and pick records keep reporting "0 results" for a query nothing
+// matched — the signal the fallback tier was built on.
+func (p *Palette) resultCount() int {
+	n := 0
+	for _, it := range p.items {
+		if !it.Inert {
+			n++
+		}
+	}
+	return n
+}
+
+// pickRank is the selected row's rank among the real result rows (#2548):
+// chrome rows above it do not count, so a pick of the first suggestion under
+// a separator on an otherwise empty list reports rank 0.
+func (p *Palette) pickRank() int {
+	rank := 0
+	for i := 0; i < p.selected && i < len(p.items); i++ {
+		if !p.items[i].Inert {
+			rank++
+		}
+	}
+	return rank
+}
+
 // TakePick reports and clears a pending row activation (#2551); ok is false
 // when the last Update did not activate a row.
 func (p *Palette) TakePick() (Pick, bool) {
@@ -666,7 +696,7 @@ func (p *Palette) TakePick() (Pick, bool) {
 func (p *Palette) dismiss() tea.Cmd {
 	m, body := p.mode()
 	opened := p.openedAt
-	results := len(p.items) // read before Close drops the list (#2490)
+	results := p.resultCount() // read before Close drops the list (#2490)
 	p.Close()
 	if m != nil {
 		d := &Dismissal{Prefix: m.Prefix(), QueryLen: len([]rune(body)), Results: results}
@@ -715,7 +745,7 @@ func (p *Palette) altActivate() tea.Cmd {
 	}
 	msg := it.Alt
 	// An alt activation is a pick too (#2551): same row, same rank.
-	p.notePick(p.selected, len(p.items))
+	p.notePick(p.pickRank(), p.resultCount())
 	p.Close()
 	return func() tea.Msg { return msg }
 }
@@ -761,6 +791,7 @@ func (p *Palette) move(delta int) {
 		return
 	}
 	p.selected = ui.StepIndex(p.selected, delta, len(p.items))
+	p.settle(delta)
 	p.scrollToSelected()
 }
 
@@ -771,7 +802,31 @@ func (p *Palette) movePage(delta int) {
 		return
 	}
 	p.selected = ui.PageIndex(p.selected, delta, len(p.items), p.visibleRows())
+	p.settle(delta)
 	p.scrollToSelected()
+}
+
+// settle moves the selection off an inert row (#2548) in the direction of
+// travel — the "did you mean" separator is stepped over, never landed on —
+// wrapping the way single steps do. A list of inert rows only (the no-match
+// hint) keeps the selection where it is; activate refuses it anyway. dir is
+// the sign of the move that brought the selection here; 0 counts as forward.
+func (p *Palette) settle(dir int) {
+	if len(p.items) == 0 || !p.items[p.selected].Inert {
+		return
+	}
+	step := 1
+	if dir < 0 {
+		step = -1
+	}
+	next := p.selected
+	for i := 0; i < len(p.items); i++ {
+		next = ui.StepIndex(next, step, len(p.items))
+		if !p.items[next].Inert {
+			p.selected = next
+			return
+		}
+	}
 }
 
 // moveSide steps the left column's selection with wrap-around (#1666).
@@ -848,6 +903,9 @@ func (p *Palette) Click(x, y int) tea.Cmd {
 	if idx < 0 || idx >= len(p.items) || y-2 >= p.visibleRows() {
 		return nil
 	}
+	if p.items[idx].Inert {
+		return nil // the "did you mean" separator / no-match hint (#2548)
+	}
 	p.sideFocus = false
 	p.sideManual = true
 	p.selected = idx
@@ -913,6 +971,7 @@ func (p *Palette) recompute() {
 		p.items = m.Results(body, p.cx)
 	}
 	p.selected = 0
+	p.settle(1)
 	p.top = 0
 	if s := p.side(); s != nil {
 		p.sideItems = s.SideResults(body, p.cx)
@@ -1040,6 +1099,7 @@ func (p *Palette) Wheel(x, y, delta int) {
 		return
 	}
 	p.selected = ui.ClampIndex(p.selected+delta, len(p.items))
+	p.settle(delta)
 	if len(p.sideItems) > 0 {
 		p.sideFocus, p.sideManual = false, true
 	}
@@ -1321,6 +1381,9 @@ func (p *Palette) timeView(it Item) (string, int) {
 // marker when another column holds the focus (#1532).
 func (p *Palette) row(it Item, selected, focused bool, width int) string {
 	const markerW = 2
+	if it.Inert {
+		return p.inertRow(it, width)
+	}
 	marker := p.rowMarker(selected, focused)
 
 	detail, detailW := "", 0
@@ -1371,6 +1434,23 @@ func (p *Palette) row(it Item, selected, focused bool, width int) string {
 	line += aux
 
 	return clipRow(line, width, selected, p.theme().Panel)
+}
+
+// inertRow renders a chrome row (#2548): a dim label in the marker gutter's
+// indent with a dim rule filling the rest of the line — a separator rather
+// than a result, so the eye reads the rows beneath it as a second group. The
+// no-match hint uses the same style without the rule (it is the only row).
+func (p *Palette) inertRow(it Item, width int) string {
+	dim := lipgloss.NewStyle().Foreground(p.theme().Border)
+	label := "  " + it.Title
+	if it.Title != DidYouMeanSeparator {
+		return clipRow(dim.Render(label), width, false, p.theme().Panel)
+	}
+	rest := width - ansi.StringWidth(label) - 1
+	if rest > 0 {
+		label += " " + strings.Repeat("─", rest)
+	}
+	return clipRow(dim.Render(label), width, false, p.theme().Panel)
 }
 
 // clipRow bounds a result row to exactly one line: hard-truncate at width

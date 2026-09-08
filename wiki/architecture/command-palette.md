@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Command Palette
-description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked and frecency-boosted, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
+description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked and frecency-boosted with a "did you mean" fallback over aliases, keybind labels and menu paths, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-09-04T12:00:00Z
+timestamp: 2026-09-08T12:00:00Z
 ---
 
 # Command Palette
@@ -182,6 +182,49 @@ command's resolved key binding (`registry.Binding`), else its documentation-only
 `Shortcut`, else its owner. Context-aware filtering relies on the additive
 `Scope` field on `plugin.Command` (`plugin.GlobalScope()` / `PaneScope(ctxID)`),
 the same field [help](/architecture/help-overlay.md) groups by.
+
+### "Did you mean" tier and the no-match hint (#2548)
+
+Telemetry showed `:` dismissals after 4–15 typed characters with 0–7 rows:
+the user knew the action and could not name it the way the title does. So when
+the primary tier above yields **fewer than `DidYouMeanBelow` (5) rows on a
+non-empty query**, command mode appends a second tier under an inert
+**`did you mean`** separator — every command the primary tier skipped whose
+*alternate surfaces* fuzzy-match the query:
+
+1. the command's **`Aliases`** (`plugin.Command.Aliases`, #2548) — the synonym
+   table lives with the command in the registry, not in a palette-side lookup:
+   `project.close` carries `quit`/`exit` (it exits the app when no other
+   workspace is open), `terminal.popup` carries `terminal`/`shell`,
+   `project.switch` carries `switch`/`open project`/`recent projects`/
+   `workspace`; the app's `withAliases` helper attaches them to an `appCommand`;
+2. the **keybind label** the keymap table gives the command's binding
+   ("Last edit location") — the optional `BindingTitler` extension of the
+   `BindingResolver`, which `keymap.LiveBindings.BindingTitle` implements;
+3. the **chord text** (`registry.Binding`, the same string the detail chip
+   shows) and the documentation-only `Shortcut`;
+4. the **menu path** ("File › Switch Project") — `menu.CommandPaths` flattens
+   the menu definitions into an id → path map the root model installs with
+   `CommandMode.SetMenuPaths`.
+
+The best surface's fuzzy score ranks the row; the surface text is shown as the
+row's accent **badge**, so a title that says nothing of the sort explains why
+it is listed. The tier is capped at eight rows, respects `hideOff` and the
+context tiers exactly like the primary tier, and never re-lists a row the
+primary tier already holds. **The primary tier's ranking is untouched**: the
+fallback only ever appends below it.
+
+When neither tier matches, the list holds one inert row — `no command matches
+— press ? for the cheatsheet` — instead of the dim `no results` line, so an
+unknown query lands on a way forward.
+
+Both chrome rows are `Item.Inert`: the palette renders them dim and unmarked
+(the separator with a rule filling the line), navigation steps over them in
+the direction of travel (`settle`), a click on them does nothing, enter on a
+hint-only list keeps the palette open, and the pick/dismissal telemetry
+(`resultCount`, `pickRank`) counts real rows only — a query nothing matched
+still reports `0 results`. Search everywhere composes the command source
+through `PrimaryResults`, so the separator never appears between file rows.
 
 ## File mode (`@`)
 

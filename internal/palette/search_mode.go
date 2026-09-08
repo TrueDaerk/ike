@@ -81,7 +81,7 @@ func (s *SearchAllMode) PanelTitle(query string) string {
 // list, uncapped and unmerged.
 func (s *SearchAllMode) Results(query string, cx Context) []Item {
 	if src, body, ok := s.scoped(query); ok {
-		return glyphed(src, src.Results(body, cx))
+		return glyphed(src, primaryResults(src, body, cx))
 	}
 	if query == "" && s.recents != nil {
 		if rec := capped(s.recents, "", cx); len(rec) > 0 {
@@ -143,11 +143,27 @@ func (s *SearchAllMode) scoped(query string) (Mode, string, bool) {
 // others in the composed list, so prefix-scoped results skip it and call
 // glyphed directly.
 func capped(src Mode, query string, cx Context) []Item {
-	items := src.Results(query, cx)
+	items := primaryResults(src, query, cx)
 	if len(items) > searchAllPerKind {
 		items = items[:searchAllPerKind]
 	}
 	return glyphed(src, items)
+}
+
+// primaryLister is the composition seam a tiered source offers (#2548): its
+// plain ranking without the chrome rows — the command mode's "did you mean"
+// separator and no-match hint — that only make sense in its own list.
+type primaryLister interface {
+	PrimaryResults(query string, cx Context) []Item
+}
+
+// primaryResults returns src's rows for composition: the primary tier alone
+// for a primaryLister, else the full Results.
+func primaryResults(src Mode, query string, cx Context) []Item {
+	if p, ok := src.(primaryLister); ok {
+		return p.PrimaryResults(query, cx)
+	}
+	return src.Results(query, cx)
 }
 
 // glyphed retitles items with their source's prefix glyph so each row shows its

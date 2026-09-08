@@ -12,6 +12,26 @@ func liveTable(t *testing.T) *LiveBindings {
 	return l
 }
 
+// TestLiveBindingsBindingTitle (#2548): the palette's "did you mean" tier
+// reads the table's label for a command's binding; unbound ids, the empty id
+// and an unset table report nothing.
+func TestLiveBindingsBindingTitle(t *testing.T) {
+	l := liveTable(t)
+	title, ok := l.BindingTitle("nav.lastEdit")
+	if !ok || title != "Last edit location" {
+		t.Fatalf("BindingTitle(nav.lastEdit) = (%q, %v), want the table's label", title, ok)
+	}
+	if _, ok := l.BindingTitle("no.such.command"); ok {
+		t.Fatal("an unbound id must report no title")
+	}
+	if _, ok := l.BindingTitle(""); ok {
+		t.Fatal("the empty id must report no title")
+	}
+	if _, ok := (&LiveBindings{}).BindingTitle("nav.lastEdit"); ok {
+		t.Fatal("an unset table must report no title")
+	}
+}
+
 func TestLiveBindingsHonestLabels(t *testing.T) {
 	l := liveTable(t)
 

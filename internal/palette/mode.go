@@ -66,6 +66,11 @@ type Item struct {
 	// is built by the root model). A mode blends it into its own ordering; 0
 	// means "no usage history", which falls back to the input order.
 	Rank float64
+	// Inert marks a chrome row (#2548): the "did you mean" separator and the
+	// no-match hint the command mode lists among its results. The palette
+	// renders it dim and full-width, never selects it — navigation steps
+	// over it, a click on it does nothing — and never activates it.
+	Inert bool
 }
 
 // PreviewTarget is a row's source location for the palette's code-preview
