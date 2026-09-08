@@ -36,6 +36,12 @@ type DeepLinkMsg struct{ URL string }
 type deepLinkResolvedMsg struct {
 	link deeplink.Link
 	res  deeplink.Resolution
+	// group is the group a `group=` link addresses (0510, #2576); the zero
+	// Group for a single-project link.
+	group project.Group
+	// err refuses the link off the loop — an unknown group, a landing that
+	// is not a member. The handler only notifies it.
+	err string
 }
 
 // deepLinkPending is a link's payload parked until the switch it caused
@@ -52,6 +58,9 @@ type deepLinkPending struct {
 type deepLinkChooser struct {
 	link    deeplink.Link
 	choices []deeplink.Candidate
+	// group is set for a `group=` link (0510, #2576): the pick is the
+	// member the group's open chain lands on, not a plain switch target.
+	group project.Group
 }
 
 // pendingFor extracts a link's post-switch payload for root.
@@ -89,25 +98,74 @@ func (m Model) handleDeepLink(url string) (tea.Model, tea.Cmd) {
 	return m, func() tea.Msg {
 		// History and projects-dir matching stat directories and read git
 		// configs — off the Update loop like every other disk walk.
+		cfg := config.Get()
 		var candidates []deeplink.Candidate
-		for _, e := range project.History(config.Get()) {
+		for _, e := range project.History(cfg) {
 			candidates = append(candidates, deeplink.Candidate{
 				Path: e.Path, Name: e.Name, LastOpened: e.LastOpened, Remotes: e.Remotes,
 			})
 		}
 		dir, _ := project.ProjectsDir()
+		if link.Group != "" {
+			return resolveGroupLink(link, cfg, candidates, dir)
+		}
 		return deepLinkResolvedMsg{link: link, res: deeplink.Resolve(link, candidates, dir)}
 	}
+}
+
+// resolveGroupLink resolves an `ike://open?group=` link (0510, #2576): the
+// group is looked up by name (case-insensitively), and a `project`/`remote`
+// beside it must resolve to one of its members — the landing. A group alone
+// leaves the landing to the chain (member 1). Nothing is ever cloned for a
+// group link: the set it addresses is checkouts the user already has.
+func resolveGroupLink(link deeplink.Link, cfg *config.Config, candidates []deeplink.Candidate, dir string) deepLinkResolvedMsg {
+	g, ok := project.FindGroup(cfg, link.Group)
+	if !ok {
+		return deepLinkResolvedMsg{link: link, err: "no group named \"" + link.Group + "\""}
+	}
+	if link.Project == "" && link.RemoteKey == "" {
+		return deepLinkResolvedMsg{link: link, group: g}
+	}
+	present, _ := project.ResolveGroupRoots(g)
+	res := deeplink.ResolveIn(link, candidates, dir, present)
+	if res.Kind == deeplink.KindNotFound {
+		return deepLinkResolvedMsg{link: link,
+			err: "\"" + deepLinkTarget(link) + "\" is not in group \"" + g.Name + "\""}
+	}
+	return deepLinkResolvedMsg{link: link, group: g, res: res}
+}
+
+// deepLinkTarget names the link's landing target the way the user wrote it —
+// the project name, else the remote verbatim — for the refusal notification.
+func deepLinkTarget(link deeplink.Link) string {
+	if link.Project != "" {
+		return link.Project
+	}
+	return link.RemoteRaw
 }
 
 // handleDeepLinkResolved acts on the pipeline's verdict.
 func (m Model) handleDeepLinkResolved(msg deepLinkResolvedMsg) (tea.Model, tea.Cmd) {
 	link := msg.link
+	if msg.err != "" {
+		m.host.Notify(host.Warn, "ike link: "+msg.err)
+		return m, nil
+	}
+	if link.Group != "" {
+		// A group link (0510, #2576): several members answering the landing
+		// still ask; everything else runs the open chain straight away, with
+		// an empty landing meaning "member 1".
+		if msg.res.Kind == deeplink.KindChoose {
+			m.openDeepLinkChooser(link, msg.res.Choices, msg.group)
+			return m, nil
+		}
+		return m.deepLinkOpenGroup(link, msg.group, msg.res.Path)
+	}
 	switch msg.res.Kind {
 	case deeplink.KindSwitch:
 		return m.deepLinkSwitch(link, msg.res.Path)
 	case deeplink.KindChoose:
-		m.openDeepLinkChooser(link, msg.res.Choices)
+		m.openDeepLinkChooser(link, msg.res.Choices, project.Group{})
 		return m, nil
 	case deeplink.KindClone:
 		// Nothing local: the clone dialog, pre-filled with the linked URL
@@ -137,6 +195,36 @@ func (m Model) deepLinkSwitch(link deeplink.Link, root string) (tea.Model, tea.C
 	}
 	m.dlPending = pendingFor(link, root)
 	return m, project.SwitchTo(root)
+}
+
+// deepLinkOpenGroup runs a group link's open chain (0510, #2576): every
+// member is warmed, the chain lands on landing ("" — member 1), and the
+// link's file/tool payload parks for that landing, applied by the chain's
+// finish exactly as a single-project link's SwitchedMsg applies it.
+func (m Model) deepLinkOpenGroup(link deeplink.Link, g project.Group, landing string) (tea.Model, tea.Cmd) {
+	var pending *deepLinkPending
+	if link.File != "" || link.Tool != "" {
+		pending = pendingFor(link, landing)
+	}
+	return m.openGroupChain(g.Name, landing, pending)
+}
+
+// applyGroupLinkPayload finishes a group link when its chain lands: the
+// parked payload applies in the landing member. A chain that never reached
+// the landing (its hop failed) drops the payload with one notification —
+// the file it names lives in a member that is not open.
+func (m Model) applyGroupLinkPayload() (Model, tea.Cmd) {
+	dp := m.dlPending
+	if dp == nil {
+		return m, nil
+	}
+	m.dlPending = nil
+	if !sameGroupRoot(dp.root, m.currentRoot()) {
+		m.host.Notify(host.Warn, "ike link: "+filepath.Base(dp.root)+" did not open — nothing to show")
+		return m, nil
+	}
+	next, cmd := m.finishDeepLink(*dp)
+	return next.(Model), cmd
 }
 
 // finishDeepLink applies a link's payload in the (now current) project: the
@@ -233,11 +321,11 @@ func (m Model) shellTerminalOpen() bool {
 
 // openDeepLinkChooser shows the multiple-matches dialog: several clones or
 // worktrees answer the link; the most recently opened one is the default.
-func (m *Model) openDeepLinkChooser(link deeplink.Link, choices []deeplink.Candidate) {
+func (m *Model) openDeepLinkChooser(link deeplink.Link, choices []deeplink.Candidate, g project.Group) {
 	if len(choices) > 9 {
 		choices = choices[:9] // one digit each; more clones than that is noise
 	}
-	m.dlChoose = &deepLinkChooser{link: link, choices: choices}
+	m.dlChoose = &deepLinkChooser{link: link, choices: choices, group: g}
 	m.shell.SetContent(ui.ModelContent{
 		Heading: "Several projects match the link",
 		Body: func() string {
@@ -334,6 +422,11 @@ func (m Model) updateDeepLinkChooser(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		}
 		m.dlChoose = nil
 		m.shell.Close()
+		if ch.group.Name != "" {
+			// A group link's chooser picks the landing member (#2576); the
+			// open chain still warms the whole group.
+			return m.deepLinkOpenGroup(ch.link, ch.group, ch.choices[n-1].Path)
+		}
 		return m.deepLinkSwitch(ch.link, ch.choices[n-1].Path)
 	}
 }

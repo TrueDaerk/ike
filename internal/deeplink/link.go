@@ -5,6 +5,7 @@
 //
 //	ike://open?remote=<git remote url>[&file=<path>[:<line>]][&tool=<name>]
 //	ike://open?project=<directory name>[&file=<path>[:<line>]][&tool=<name>]
+//	ike://open?group=<name>[&project=…|&remote=…][&file=<path>[:<line>]][&tool=<name>]
 //
 // The package is a pure leaf — no bubbletea, no app imports — so the grammar,
 // the remote normalisation and the resolution pipeline are fully unit-testable.
@@ -21,7 +22,9 @@ import (
 	"strings"
 )
 
-// Link is one parsed ike:// URL. Exactly one of RemoteKey / Project is set.
+// Link is one parsed ike:// URL. Exactly one of RemoteKey / Project / Group
+// is set, or Group plus one of the other two — the member of the group the
+// open chain lands on (0510, #2576).
 type Link struct {
 	// RemoteKey is the canonical repository key ("host/owner/repo",
 	// lower-case, no .git) when the link addresses by remote; "" otherwise.
@@ -33,6 +36,10 @@ type Link struct {
 	// Project is the target's directory name (basename of its root) when the
 	// link addresses by name; "" otherwise.
 	Project string
+	// Group is the name of the project group to open (0510, #2576); ""
+	// otherwise. With RemoteKey or Project beside it, that one names the
+	// member of the group the chain lands on — it must be a member.
+	Group string
 	// File is the project-root-relative path to open, cleaned, guaranteed not
 	// to escape the root; "" when the link opens no file.
 	File string
@@ -69,6 +76,20 @@ func Parse(raw string) (Link, error) {
 	var l Link
 	remote := strings.TrimSpace(q.Get("remote"))
 	project := strings.TrimSpace(q.Get("project"))
+	group := strings.TrimSpace(q.Get("group"))
+	// A group link addresses a set (0510, #2576): group= alone opens it on
+	// member 1, group= plus remote=/project= lands on that member. Two
+	// group parameters would silently pick the first — refuse instead.
+	if len(q["group"]) > 1 {
+		return Link{}, fmt.Errorf("group is given twice — a link opens one group")
+	}
+	if group != "" {
+		// A group name, like the stored ones: no path separators.
+		if strings.ContainsAny(group, `/\`) {
+			return Link{}, fmt.Errorf("group must be a plain name without path separators, got %q", group)
+		}
+		l.Group = group
+	}
 	switch {
 	case remote != "" && project != "":
 		return Link{}, fmt.Errorf("remote and project are mutually exclusive — give one")
@@ -85,8 +106,8 @@ func Parse(raw string) (Link, error) {
 			return Link{}, fmt.Errorf("project must be a plain directory name, got %q", project)
 		}
 		l.Project = project
-	default:
-		return Link{}, fmt.Errorf("an ike://open link needs remote= or project=")
+	case group == "":
+		return Link{}, fmt.Errorf("an ike://open link needs remote=, project= or group=")
 	}
 
 	if f := q.Get("file"); f != "" {

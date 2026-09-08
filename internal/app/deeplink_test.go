@@ -150,7 +150,7 @@ func TestDeepLinkChooserSwitchesToPick(t *testing.T) {
 		t.Fatal("esc must cancel the chooser and stay put")
 	}
 	// Re-open and pick entry 1 (the default, also answered by enter).
-	m.openDeepLinkChooser(link, choices)
+	m.openDeepLinkChooser(link, choices, project.Group{})
 	out, cmd := m.updateDeepLinkChooser(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = stepCmd(out.(Model), cmd)
 	if !sameDir(t, cwd(t), dst) {

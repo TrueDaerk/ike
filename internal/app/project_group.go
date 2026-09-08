@@ -43,6 +43,11 @@ type groupOpen struct {
 	done int
 	// skipped lists the members whose hop failed (root gone, chdir error).
 	skipped []string
+	// link marks a chain started by an ike://open?group= link (#2576): the
+	// landing member carries the link's parked payload (dlPending), which
+	// the finish applies — the chain's SwitchedMsg handling swallows the
+	// per-hop finish the single-project link relies on.
+	link bool
 	// warm marks a project.group.warm chain (#2572): the hops re-park the
 	// cold members and the last one returns to the root the warm started
 	// from; the landing neither moves the marker nor announces an open.
@@ -75,9 +80,19 @@ func (m Model) handleOpenGroupPicker() (tea.Model, tea.Cmd) {
 // escalates it — the first hop is a normal switch away from the peek, which
 // records the peeked root (#2136), the existing rule.
 func (m Model) handleOpenGroup(msg project.OpenGroupMsg) (tea.Model, tea.Cmd) {
-	g, ok := project.FindGroup(config.Get(), msg.Name)
+	return m.openGroupChain(msg.Name, "", nil)
+}
+
+// openGroupChain is the open chain itself, shared by the picker, the settings
+// page and the deep link (#2576). landing names the member the chain ends on;
+// "" is the picker's rule, member 1. A landing that is not available falls
+// back to member 1 with one notification. pending, when given, is the link
+// payload the landing carries: it parks in dlPending and the chain's finish
+// applies it.
+func (m Model) openGroupChain(name, landing string, pending *deepLinkPending) (tea.Model, tea.Cmd) {
+	g, ok := project.FindGroup(config.Get(), name)
 	if !ok {
-		m.host.Notify(host.Warn, "group \""+msg.Name+"\" not found")
+		m.host.Notify(host.Warn, "group \""+name+"\" not found")
 		return m, nil
 	}
 	present, missing := project.ResolveGroupRoots(g)
@@ -89,14 +104,42 @@ func (m Model) handleOpenGroup(msg project.OpenGroupMsg) (tea.Model, tea.Cmd) {
 		m.host.Notify(host.Error, "group \""+g.Name+"\": no member exists on disk")
 		return m, nil
 	}
-	// Members N…2 in reverse, then member 1 — the landing.
-	queue := make([]string, 0, len(present))
-	for i := len(present) - 1; i >= 1; i-- {
-		queue = append(queue, present[i])
+	land := landingIndex(present, landing)
+	if land < 0 {
+		m.host.Notify(host.Warn, "group \""+g.Name+"\": "+filepath.Base(landing)+
+			" is not available — landing on "+filepath.Base(present[0]))
+		land = 0
 	}
-	queue = append(queue, present[0])
-	m.groupOpening = &groupOpen{name: g.Name, total: len(present), queue: queue}
+	// Every other member in reverse, then the landing one — for the default
+	// landing this is the plain "members N…2, then member 1".
+	queue := make([]string, 0, len(present))
+	for i := len(present) - 1; i >= 0; i-- {
+		if i != land {
+			queue = append(queue, present[i])
+		}
+	}
+	queue = append(queue, present[land])
+	m.groupOpening = &groupOpen{name: g.Name, total: len(present), queue: queue, link: pending != nil}
+	if pending != nil {
+		pending.root = present[land]
+		m.dlPending = pending
+	}
 	return m.advanceGroupOpen()
+}
+
+// landingIndex locates the member the chain must end on: member 1 for an
+// empty landing, the matching present member otherwise (canonically
+// compared), and -1 when the landing is not among the present members.
+func landingIndex(present []string, landing string) int {
+	if landing == "" {
+		return 0
+	}
+	for i, r := range present {
+		if sameGroupRoot(r, landing) {
+			return i
+		}
+	}
+	return -1
 }
 
 // advanceGroupOpen runs the next hop of the chain, or finishes it when none is
@@ -169,12 +212,22 @@ func (m Model) finishGroupOpen() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if opened == 0 {
+		if o.link {
+			m.dlPending = nil // nothing opened: the link's payload has no home
+		}
 		m.host.Notify(host.Error, "group \""+o.name+"\": no member could be opened")
 		return m, nil
 	}
 	m.activeGroup = o.name
 	m.host.Notify(host.Info, "group "+o.name+" open · "+pluralProjects(opened))
-	return m, project.SetActiveGroupCmd(m.cfgOpts, o.name)
+	cmd := project.SetActiveGroupCmd(m.cfgOpts, o.name)
+	if o.link {
+		// The link's payload (#2576) belongs to the landing member, which is
+		// where the chain now stands.
+		next, payload := m.applyGroupLinkPayload()
+		return next, tea.Batch(cmd, payload)
+	}
+	return m, cmd
 }
 
 // abortGroupOpen drops a chain whose hop was cancelled by the user (the
@@ -186,6 +239,9 @@ func (m *Model) abortGroupOpen() {
 		return
 	}
 	m.groupOpening = nil
+	if o.link {
+		m.dlPending = nil // the landing is never reached; drop the payload
+	}
 	m.host.Notify(host.Info, "group "+o.name+" "+o.verb()+" cancelled after "+strconv.Itoa(o.done)+"/"+strconv.Itoa(o.total))
 }
 
