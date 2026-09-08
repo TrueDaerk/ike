@@ -10,7 +10,7 @@ import (
 // table has to know every one of them; a new custom page extends this list
 // and the table together.
 var customPageTitles = []string{
-	"Syntax Colors", "File Associations", "Keymap", "Tools", "PHP Debug Mappings",
+	"Syntax Colors", "File Associations", ProjectGroupsPageTitle, "Keymap", "Tools", "PHP Debug Mappings",
 	"Toolchain", "Plugins", "Marketplace", "Language Servers", "Formatters",
 	"Elasticsearch",
 }

@@ -290,6 +290,87 @@ func TestReconcileActiveGroupAtStartup(t *testing.T) {
 	}
 }
 
+// TestWriteGroupsEditsTheListAsAList guards the settings editor's write path
+// (#2573): the whole list is replaced, so a rename keeps the group's position
+// where an upsert of the new name would append a second entry.
+func TestWriteGroupsEditsTheListAsAList(t *testing.T) {
+	opts := testOpts(t)
+	rootA, rootB := t.TempDir(), t.TempDir()
+	if err := WriteGroups(opts, []config.ProjectGroup{
+		{Name: "web", Roots: []string{rootA}},
+		{Name: "api", Roots: []string{rootB}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ := config.Load(opts)
+	if groups := Groups(cfg); len(groups) != 2 || groups[0].Name != "web" {
+		t.Fatalf("groups = %+v", groups)
+	}
+	// A rename in place.
+	if err := WriteGroups(opts, []config.ProjectGroup{
+		{Name: "frontend", Roots: []string{rootA}},
+		{Name: "api", Roots: []string{rootB}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, _ = config.Load(opts)
+	groups := Groups(cfg)
+	if len(groups) != 2 || groups[0].Name != "frontend" || groups[1].Name != "api" {
+		t.Fatalf("a rename must keep the position, got %+v", groups)
+	}
+	if groups[0].Created.IsZero() {
+		t.Error("a written group should carry a created timestamp")
+	}
+	// A duplicate inside the written list, and an invalid entry, are refused
+	// whole — the stored list is left untouched.
+	if err := WriteGroups(opts, []config.ProjectGroup{
+		{Name: "dup", Roots: []string{rootA}},
+		{Name: "DUP", Roots: []string{rootB}},
+	}); err == nil {
+		t.Error("a duplicate name in one list must be refused")
+	}
+	if err := WriteGroups(opts, []config.ProjectGroup{{Name: "none"}}); err == nil {
+		t.Error("a group without roots must be refused")
+	}
+	cfg, _ = config.Load(opts)
+	if len(Groups(cfg)) != 2 {
+		t.Errorf("a rejected write must not change the list, got %+v", Groups(cfg))
+	}
+}
+
+// TestValidateGroupRootResolvesLikeANewProject guards the form's path rule
+// (#2573): a bare name is a project inside the project directory, "~" expands
+// and an absolute path stands; a missing directory is refused.
+func TestValidateGroupRootResolvesLikeANewProject(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "api"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	prev := config.Get()
+	c := &config.Config{}
+	c.Project.Directory = dir
+	config.Set(c)
+	t.Cleanup(func() { config.Set(prev) })
+
+	if got, err := ValidateGroupRoot("api"); err != nil || got != filepath.Join(dir, "api") {
+		t.Fatalf("relative root = %q, %v", got, err)
+	}
+	if got, err := ValidateGroupRoot(dir); err != nil || got != dir {
+		t.Fatalf("absolute root = %q, %v", got, err)
+	}
+	if home, err := os.UserHomeDir(); err == nil {
+		if got, err := ValidateGroupRoot("~"); err != nil || got != filepath.Clean(home) {
+			t.Fatalf("~ root = %q, %v", got, err)
+		}
+	}
+	if _, err := ValidateGroupRoot("gone"); err == nil {
+		t.Fatal("a missing directory must be refused")
+	}
+	if _, err := ValidateGroupRoot("  "); err == nil {
+		t.Fatal("an empty root must be refused")
+	}
+}
+
 func TestGroupCmdsReportTheirOutcome(t *testing.T) {
 	opts := testOpts(t)
 	root := t.TempDir()

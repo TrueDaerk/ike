@@ -21,6 +21,26 @@
   Docs: [Project Groups](/architecture/project-groups.md),
   [Status Line](/architecture/status-line.md), [Keybindings](/architecture/keybindings.md).
 
+## 2026-09-08 (Settings UI Project Groups page: list editor + name/roots form, #2573)
+
+- **Settings ▸ Files & Projects ▸ Project Groups** edits `[[project.groups]]`
+  without touching `settings.toml`: rows read `name · N roots · <first root>`,
+  `a` adds, enter edits, `d` deletes behind the shared confirm and **`o`**
+  opens the selected group (`project.group.open`, #2571 — until it lands the
+  request reports itself). The add/edit sub-panel has one field for the name
+  and **one per root**: `+` / `alt+enter` add a row, `-` / `alt+backspace`
+  remove an empty one (the plain keys act on empty rows only, so both stay
+  typable inside a path), tab cycles and a paste lands in the focused field.
+  A relative root resolves against the project directory
+  (`project.ValidateGroupRoot`, the clone/new-project rule), `~` expands, and
+  `ValidateGroup` gates the save with one message per failure
+  (`name already used by "web"`, `root 2: … does not exist`). Writes go
+  through the new `project.WriteGroups` — the list edited *as a list*, so a
+  rename keeps its position — always at **user scope**. `o` joined the
+  canonical verb table as *Open*.
+  Docs: [Project Groups](/architecture/project-groups.md),
+  [Settings UI](/architecture/settings-ui.md).
+
 ## 2026-09-08 (project group data layer: [[project.groups]], active-group marker, cap protection, #2570)
 
 - **`[[project.groups]]`** and **`project.active_group`** (Epic 0510, #2569 §1)

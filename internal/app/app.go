@@ -1638,6 +1638,16 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		Title:  "File Associations",
 		Custom: settings.NewAssocPage(m.cfgOpts),
 	})
+	// The [[project.groups]] list editor (0510, #2573) sits next to the file
+	// and session settings; its "o" verb asks the root model to open a group.
+	groupsPage := settings.NewProjectGroupsPage(m.cfgOpts, projectGroupOps(m.cfgOpts))
+	groupsPage.SetGroupOpen(func(name string) tea.Cmd {
+		return func() tea.Msg { return OpenProjectGroupMsg{Name: name} }
+	})
+	pages = settings.InsertAfter(pages, "Files & Session", settings.Page{
+		Title:  settings.ProjectGroupsPageTitle,
+		Custom: groupsPage,
+	})
 	keymapPage := settings.NewKeymapPage(m.cfgOpts, func(id string) bool {
 		_, ok := reg.Command(id)
 		return ok
@@ -4979,6 +4989,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// palette.keymapHelp (f1, cmd+k cmd+s / palette): the cheatsheet overlay.
 		m.openHelp()
 		return m, nil
+
+	case OpenProjectGroupMsg:
+		// The settings page's "o" verb (0510, #2573): the same chain the
+		// picker runs (#2571). The settings panel closes first — the hops
+		// rebuild the model, and the group is what the user asked to look
+		// at next.
+		if m.settings.IsOpen() {
+			m.cancelSettingsPreview()
+			m.settings.Close()
+		}
+		return m.handleOpenGroup(project.OpenGroupMsg{Name: msg.Name})
 
 	case KeymapDoctorMsg:
 		// keymap.doctor (palette / settings): the in-app probe overlay
