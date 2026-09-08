@@ -1709,6 +1709,9 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		// refeeds the Structure panel, breadcrumbs and sticky scopes from it,
 		// and only a buffer edited past its cached version re-requests.
 		m.docSymbols = extras.docSymbols
+		// The playground parked over one of this workspace's documents comes
+		// back mounted (#2535); the layout pass sizes its result buffer.
+		m.resumePlayground(extras.play, themePal, cfg)
 		for _, inst := range m.popupLayerInstances() {
 			inst.SetPalette(themePal)
 		}
@@ -1760,6 +1763,10 @@ type wsExtras struct {
 	// dying with the model performSwitch discards — coming back to a project
 	// re-requested every resumed file's tree for nothing.
 	docSymbols map[string]docSymEntry
+	// play is the inline jq/yq/xmq playground (#2535): bound to a document of
+	// this workspace (#2355), it parks and resumes with the document instead of
+	// dying with the model performSwitch discards.
+	play *playState
 }
 
 // SetSender wires the program's Send into the host so background workers (the LSP
