@@ -222,6 +222,15 @@ var jetbrainsRows = []row{
 	// Terminals without SGR extended buttons simply never deliver them.
 	{"mouse-back", "nav.back", "Navigate back (mouse button 4)", Global, "Editor (06)/app (01)"},
 	{"mouse-forward", "nav.forward", "Navigate forward (mouse button 5)", Global, "Editor (06)/app (01)"},
+	// Last Edit Location and Recent Locations (#2545). cmd+shift+backspace is
+	// JetBrains' chord; ctrl+shift+backspace is its Windows/Linux form and
+	// the cmd-to-ctrl fold off macOS. JetBrains' cmd+shift+e is
+	// project.switchLast here (#2398), so the picker takes alt+shift+e (same
+	// mnemonic, free on both platforms); cmd+alt+e stays free, since it folds
+	// onto ctrl+alt+e, the jq/yq query view.
+	{"cmd+shift+backspace", "nav.lastEdit", "Last edit location", Global, "Navigation (#2545)"},
+	{"ctrl+shift+backspace", "nav.lastEdit", "Last edit location", Global, "Navigation (#2545)"},
+	{"alt+shift+e", "nav.recentLocations", "Recent locations", Global, "Navigation (#2545)"},
 	// Reconciled (0081/20): the LSP plugin registers goto-definition as
 	// lsp.definition; the table uses the registered id rather than forking an
 	// editor.gotoDeclaration alias. f4 — JetBrains' jump-to-source — is the

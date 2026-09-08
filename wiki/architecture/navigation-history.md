@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Navigation History (Back/Forward)
-description: Cursor-position history across jumps — per-jump entries with JetBrains Back/Forward semantics, recorded at the open funnel, traversed by nav.back / nav.forward.
+description: Cursor-position history across jumps — per-jump entries with JetBrains Back/Forward semantics, recorded at the open funnel, traversed by nav.back / nav.forward — plus the edit-location ring behind nav.lastEdit and the Recent Locations picker.
 resource: internal/nav/history.go
 tags: [architecture, navigation, editor, keybindings]
-timestamp: 2026-08-18T00:00:00Z
+timestamp: 2026-09-08T00:00:00Z
 ---
 
 # Navigation History (Back/Forward)
@@ -60,6 +60,11 @@ internal/app/nav.go  integration: currentNavPos (active editor file+caret),
                      navPosOfPane (a given pane's, for tab switches),
                      NavBackMsg/NavForwardMsg handling, navigateHistory
 internal/app/tabs.go switchTab records the departure on a tab change (#816)
+internal/nav/edits.go       EditRing{Record, Step, Recent} + Location{Position,Root},
+                            History.Recent — the edit-location ring (#2545)
+internal/app/recentlocations.go  nav.lastEdit / nav.recentLocations integration:
+                            NavLastEditMsg, the recentLocationsMode palette mode,
+                            jumpToLocation (cross-project switch via allPendingOpen)
 ```
 
 - Recording sits at the root model's open funnel: `openPath` records when
@@ -100,6 +105,53 @@ internal/app/tabs.go switchTab records the departure on a tab change (#816)
 - `nav.back` / `nav.forward` are `appCommand`s (compile-in `app` plugin)
   dispatching `NavBackMsg` / `NavForwardMsg`; the Navigate menu was already
   wired to these ids.
+
+## Last Edit Location and Recent Locations (#2545)
+
+The jump history tracks jumps, not edits: after a terminal or issue detour the
+way back to the code was `nav.back` ×10. JetBrains' *Last Edit Location* and
+*Recent Locations* close that gap with an **edit-location ring** beside the
+history.
+
+- **Ring** (`internal/nav/edits.go`, `EditRing`): every buffer mutation
+  records the caret's file+position (`Location` = `Position` + project
+  `Root`) from the editor emitter's `EventChange` — the same seam the LSP
+  sync rides — so every edit path (insert, delete, paste, substitute,
+  multi-caret, reload) records at one choke point. Newest last, **deduped by
+  line proximity**: an edit within 3 lines of an existing entry in the same
+  file replaces it (moved to the newest slot), so typing across a few
+  adjacent lines is one place; **capped** at 50, oldest fall off. Pathless
+  scratch buffers record nothing.
+- **`nav.lastEdit`** (`cmd+shift+backspace`, JetBrains' chord;
+  `ctrl+shift+backspace` as its Windows/Linux form and the cmd→ctrl fold)
+  jumps to the newest edit site; a **repeat walks back** through the ring
+  (`EditRing.Step` keeps the walk index and continues from it while the
+  caret still sits where the previous step landed — any edit or move
+  elsewhere restarts from the newest). Entries on the caret's own line are
+  skipped, so invoking it at the edit site goes to the previous edit; a
+  deleted or renamed file is walked past like a stale history entry.
+  Exhausted → info toast, no-op. The jump goes through `openPathAt`
+  *with recording*, so `nav.back` returns to where the detour ended.
+- **`nav.recentLocations`** (`alt+shift+e`: JetBrains' `cmd+shift+e` is
+  `project.switchLast` here, #2398, and `cmd+alt+e` folds onto the jq/yq
+  query view) opens a locked palette mode (`recentLocationsMode`,
+  `internal/app/recentlocations.go`) listing the ring newest first (rows
+  marked `✎`), then the jump history's positions newest first (`↷`,
+  `History.Recent`: back stack then forward tail), each file+line once —
+  an edit site that was also a jump departure keeps its edit row. Every row
+  carries a one-line **code preview** chip (the open buffer's line when the
+  file is loaded, disk otherwise) plus the palette's code column (#2053).
+  An empty query keeps the recency order; typing fuzzy-filters on path and
+  preview text. Both commands sit in the Navigate menu.
+- **Cross-project entries**: the ring is **session state** — it rides across
+  project switches (the carry-over block in `performSwitchOpts`, which also
+  re-wires the fresh model's emitters onto the carried ring) — so a
+  location recorded in another project stays reachable. Activating one
+  parks the open on `allPendingOpen` and runs the standard switch
+  transaction (`project.SwitchTo`); the `SwitchedMsg` handler finishes the
+  open, exactly the all-projects search's path (#2394). The jump history
+  itself stays per-project (fresh on switch), so its rows never carry a
+  root.
 
 ## Diagnosing the mouse buttons
 

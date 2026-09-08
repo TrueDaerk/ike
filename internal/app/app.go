@@ -151,6 +151,12 @@ type Model struct {
 	// by pointer across the value-model copies. navSkip suppresses recording
 	// while nav.back/nav.forward themselves drive the open funnel.
 	navHist *nav.History
+	// editRing is the edit-location ring (#2545) behind nav.lastEdit and
+	// nav.recentLocations: shared by pointer with every editor emitter, and
+	// session state — it rides across project switches so an entry can lead
+	// back into another project. recentLocs is the picker's palette mode.
+	editRing   *nav.EditRing
+	recentLocs *recentLocationsMode
 	// previewBound says whether any markdown preview pane is open (#2540);
 	// the editor emitters read it off the update loop's goroutine before
 	// sending a preview.CursorMsg, so a caret move in a session without a
@@ -1395,6 +1401,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	symbols := &symbolMode{}
 	pasteHist := &pasteHistMode{}
 	bookmarksPicker := &bookmarksMode{}
+	recentLocsPicker := &recentLocationsMode{} // nav.recentLocations (#2545)
 	bindings := &keymap.LiveBindings{}
 	recent := &recentFiles{}
 	vcsSt := &vcsState{}                                     // shared before the literal: the reverts picker mode reads it
@@ -1493,7 +1500,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		shell:           ui.New(shellConfig(cfg)),
 		vcs:             vcsSt,
 		forgePoll:       forgeSt,
-		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, vcsSt, cmdUsage, fileUsage, cmdFrec, fileFrec, projFrec, pick, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, tabPicker, sshPicker, remotePicker, playFilters, playCheat, projGit),
+		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, recentLocsPicker, vcsSt, cmdUsage, fileUsage, cmdFrec, fileFrec, projFrec, pick, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, tabPicker, sshPicker, remotePicker, playFilters, playCheat, projGit),
 		projGit:         projGit,
 		layoutsPicker:   layoutsPicker,
 		httpRequests:    httpRequests,
@@ -1514,6 +1521,8 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		actions:         actions,
 		pasteHist:       pasteHist,
 		bookmarks:       bookmarksPicker,
+		recentLocs:      recentLocsPicker,
+		editRing:        &nav.EditRing{},
 		gmarks:          &marks.Store{},
 		bmarks:          bookmarks.Load(), // project bookmarks (#55)
 		qhist:           &histories.Store{},
@@ -1836,7 +1845,11 @@ type editorEmitter struct {
 	host    *host.Host
 	watcher *watch.Service
 	nav     *nav.History // navigation history (Roadmap 0220); shared pointer
-	key     string       // pane key of the editor this emitter is installed on
+	// edits is the edit-location ring (#2545), root the project the editor
+	// belongs to — an entry carries it so the picker can switch back.
+	edits *nav.EditRing
+	root  string
+	key   string // pane key of the editor this emitter is installed on
 	// previews is the model's previewBound flag (#2540); nil (a bare test
 	// emitter) sends the cursor message unconditionally, as before.
 	previews *atomic.Bool
@@ -1892,6 +1905,12 @@ func (e editorEmitter) Emit(ev editor.Event) {
 		// caret move must not cost an Update+View pass for nobody.
 		go e.host.Send(preview.CursorMsg{Path: ev.Path, Line: ev.Line})
 	}
+	if ev.Kind == editor.EventChange && ev.Path != "" && e.edits != nil {
+		// The edit-location ring (#2545): a buffer change leaves the caret
+		// at the edit site. Direct mutation of the shared ring, like nav
+		// above — no message round trip needed.
+		e.edits.Record(nav.Location{Position: nav.Position{Path: ev.Path, Line: ev.Line, Col: ev.Col}, Root: e.root})
+	}
 	if ev.Kind == editor.EventChange || ev.Kind == editor.EventSave {
 		// Shared documents (#142): tell the other views of this file that the
 		// document changed. Emit runs synchronously inside Update, so the
@@ -1943,7 +1962,7 @@ func (m *Model) installEmitter(key string) {
 		mkSet, mkLines, mkAdjust := markHooks(m.gmarks)
 		bmSigns, bmAdjust := bookmarkHooks(m.bmarks)
 		for _, ed := range inst.Editors() {
-			ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, key: key, previews: m.previewBound, syncs: m.editorSyncs})
+			ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, edits: m.editRing, root: m.activeWS().Root, key: key, previews: m.previewBound, syncs: m.editorSyncs})
 			ed.SetBreakpointSource(bph.source)
 			ed.SetBreakpointDisabledSource(bph.disabled)
 			ed.SetBreakpointConditionalSource(bph.conditional)
@@ -3066,7 +3085,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, cmdFrec, fileFrec, projFrec *frecency.Store, pick *recentPick, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, tabs *tabPickerMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode, playCheat *playCheatMode, projGit *project.GitCache) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, recentLocs *recentLocationsMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, cmdFrec, fileFrec, projFrec *frecency.Store, pick *recentPick, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, tabs *tabPickerMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode, playCheat *playCheatMode, projGit *project.GitCache) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -3171,7 +3190,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, projPeek, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, tabs, ssh, remoteHosts, playFilters, playCheat, bufLang, openAs)
+	return palette.New(pcfg, cmd, file, dir, proj, projPeek, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, recentLocs, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, tabs, ssh, remoteHosts, playFilters, playCheat, bufLang, openAs)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -6400,7 +6419,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.host.Notify(host.Error, "edit: "+err.Error())
 			return m, nil
 		}
-		ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, key: msg.Key, previews: m.previewBound, syncs: m.editorSyncs})
+		ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, edits: m.editRing, root: m.activeWS().Root, key: msg.Key, previews: m.previewBound, syncs: m.editorSyncs})
 		inst.StartDiffEdit(&ed)
 		m.host.Notify(host.Info, "editing "+displayPath(msg.Path)+" — ctrl+e returns to the diff")
 		return m, ed.Reparse()
@@ -7583,6 +7602,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.navigateHistory(m.navHist.BackWhere, "no earlier position in the navigation history")
 	case NavForwardMsg:
 		return m.navigateHistory(m.navHist.ForwardWhere, "no later position in the navigation history")
+	case NavLastEditMsg:
+		// nav.lastEdit (#2545): the most recent edit site; repeats walk back.
+		return m.navigateLastEdit()
+	case ShowRecentLocationsMsg:
+		// nav.recentLocations (#2545): edit and jump locations, newest first.
+		return m.showRecentLocations()
+	case RecentLocationJumpMsg:
+		return m.jumpToLocation(nav.Location{Position: nav.Position{Path: msg.Path, Line: msg.Line, Col: msg.Col}, Root: msg.Root})
 
 	case ilsp.CodeActionsMsg:
 		// lsp.codeAction (#2020): the offer merges with the built-in
