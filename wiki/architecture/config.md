@@ -4,7 +4,7 @@ title: Configuration System
 description: Single typed configuration package — TOML files merged across defaults < user < project, clamp-and-warn validation, an extension hook for downstream sections, and a flat read-only view backing the plugin host API.
 resource: internal/config/config.go
 tags: [architecture, config, toml, merge, precedence, validation, plugins]
-timestamp: 2026-09-08T14:00:00Z
+timestamp: 2026-09-08T16:00:00Z
 ---
 
 # Configuration System
@@ -113,7 +113,16 @@ Sections and their default-bearing slots (`schema.go`):
   `EnsureDirectory`), plus `auto_save_on_switch` (#2186, default `true`: an
   orderly project switch writes the departing project's dirty file-backed
   buffers first, collecting the unsaveable ones into one dialog — see
-  [project switching](./project-switching.md)). The entry semantics —
+  [project switching](./project-switching.md)), plus the project groups
+  (Epic 0510, #2569): `[[project.groups]]` entries (`name` unique
+  case-insensitively and free of path separators, `roots` an ordered list of
+  absolute roots, `created` RFC3339 UTC) and `active_group` (the group the
+  session is working in, by name; empty means none — IKE's own state, written
+  by `project.group.open` / `project.group.close` and dropped at startup when
+  the process root is not a member). Both live in the **user** layer like the
+  history; broken group entries are dropped with a `project.groups[<index>]`
+  diagnostic while a missing root is only reported — see
+  [project groups](./project-groups.md). The entry semantics —
   validation, upsert, dedupe, cap — live in `internal/project` (Roadmap
   0090); config only fixes the persisted shape.
 - `[ui]` — `menu_bar`, `onboarded`, `popup_max_width` (#932), and

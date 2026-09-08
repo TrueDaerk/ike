@@ -886,6 +886,8 @@ func validate(c *Config) []Diagnostic {
 		c.Project.History = c.Project.History[:n]
 	}
 
+	diags = append(diags, validateProjectGroups(c)...)
+
 	for _, e := range registered() {
 		if e.Validate != nil {
 			diags = append(diags, e.Validate(c)...)
@@ -932,4 +934,78 @@ func validTerminalSlot(name string) bool {
 		}
 	}
 	return false
+}
+
+// validateProjectGroups checks the [[project.groups]] entries (0510, #2570).
+// Structurally broken entries — no name, a name carrying a path separator, a
+// name colliding case-insensitively with an earlier one, or no roots at all —
+// are dropped with a diagnostic: they can never be opened. A root that is
+// merely missing or not a directory is *reported* but kept: a checkout can be
+// back tomorrow, and the open chain skips missing members with one
+// notification rather than editing the stored group (epic #2569 §1).
+func validateProjectGroups(c *Config) []Diagnostic {
+	if len(c.Project.Groups) == 0 {
+		return nil
+	}
+	var diags []Diagnostic
+	seen := map[string]bool{}
+	kept := make([]ProjectGroup, 0, len(c.Project.Groups))
+	for i, g := range c.Project.Groups {
+		field := fmt.Sprintf("project.groups[%d]", i)
+		name := strings.TrimSpace(g.Name)
+		switch {
+		case name == "":
+			diags = append(diags, Diagnostic{Field: field, Message: "name is empty — dropping the entry"})
+			continue
+		case strings.ContainsAny(name, `/\`):
+			diags = append(diags, Diagnostic{Field: field, Message: fmt.Sprintf("name %q contains a path separator — dropping the entry", name)})
+			continue
+		case seen[strings.ToLower(name)]:
+			diags = append(diags, Diagnostic{Field: field, Message: fmt.Sprintf("duplicate group name %q — dropping the later entry", name)})
+			continue
+		}
+		roots := make([]string, 0, len(g.Roots))
+		rootSeen := map[string]bool{}
+		for _, r := range g.Roots {
+			abs := expandRoot(r)
+			if abs == "" || rootSeen[abs] {
+				continue
+			}
+			rootSeen[abs] = true
+			roots = append(roots, abs)
+			if info, err := os.Stat(abs); err != nil || !info.IsDir() {
+				diags = append(diags, Diagnostic{Field: field, Message: fmt.Sprintf("root %q is not a directory — it is skipped when the group opens", abs)})
+			}
+		}
+		if len(roots) == 0 {
+			diags = append(diags, Diagnostic{Field: field, Message: fmt.Sprintf("group %q has no roots — dropping the entry", name)})
+			continue
+		}
+		seen[strings.ToLower(name)] = true
+		kept = append(kept, ProjectGroup{Name: name, Roots: roots, Created: g.Created})
+	}
+	c.Project.Groups = kept
+	return diags
+}
+
+// expandRoot resolves a stored group root the way project.Validate does
+// without the existence checks: a leading `~` expands, the rest is made
+// absolute and cleaned. An unresolvable path yields "".
+func expandRoot(root string) string {
+	p := strings.TrimSpace(root)
+	if p == "" {
+		return ""
+	}
+	if p == "~" || strings.HasPrefix(p, "~"+string(filepath.Separator)) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		p = filepath.Join(home, p[1:])
+	}
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return ""
+	}
+	return filepath.Clean(abs)
 }

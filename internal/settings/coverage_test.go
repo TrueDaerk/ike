@@ -33,6 +33,7 @@ var pagedKeys = map[string]string{
 	"debug.php.path_mappings": "PHP Debug Mappings page (debugmap_page.go)",
 	"snippets":                "live templates, edited as TOML (#1152)",
 	"tasks.matcher":           "custom problem matchers, edited as TOML like snippets; validation reports broken entries (#1915)",
+	"project.groups":          "Project Groups page (projectgroups_page.go, #2573)",
 }
 
 // internalKeys are the keys intentionally kept out of the UI: state IKE writes
@@ -41,6 +42,10 @@ var internalKeys = map[string]string{
 	"lsp.onboarded":   "records that the first-start install dialog had its say",
 	"ui.onboarded":    "records that the welcome tour was shown",
 	"project.history": "the recent-projects list, maintained by internal/project",
+	// The active-group marker (0510, #2570) is read-only session state:
+	// project.group.open writes it, project.group.close clears it, startup
+	// drops it when the process root is not a member. Never a form field.
+	"project.active_group": "the active project group, maintained by project.group.open/close",
 	// The all-projects search form's last-used state (#2394): remembered
 	// values, not settings a user tunes — the form itself is the surface.
 	"project.find_all.query":          "last-used search text, maintained by the Find in All Projects form",

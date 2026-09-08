@@ -192,6 +192,7 @@ func defaults() *Config {
 		Plugins: map[string]map[string]any{},
 		Project: Project{
 			History:     []ProjectHistoryEntry{},
+			Groups:      []ProjectGroup{},
 			MaxHistory:  20,
 			RestoreLast: false,
 			// JetBrains' behaviour: leaving a project writes its edits (#2186).

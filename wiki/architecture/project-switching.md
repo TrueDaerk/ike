@@ -4,13 +4,18 @@ title: Project Switching
 description: Roadmap 0090 — internal/project owns the switch flow end to end; recent-projects history, project.switch command, palette picker and the msg-driven re-root orchestration with an unsaved-changes guard.
 resource: internal/project
 tags: [architecture, project, history, switching, palette]
-timestamp: 2026-09-08T12:00:00Z
+timestamp: 2026-09-08T16:00:00Z
 ---
 
 # Project Switching (Roadmap 0090)
 
 `internal/project` owns the "Switch Project" flow (spec: epic #37): the data
 layer (#2), the command + picker (#12) and the switch orchestration (#3).
+
+Several roots opened, parked and closed as one named set are
+[Project Groups](/architecture/project-groups.md) (Epic 0510, #2569): a group is a
+set of ordinary workspaces plus a marker, built on the switch flow described
+here — a group open is a chain of ordinary switches.
 
 ## Recent-projects history
 
