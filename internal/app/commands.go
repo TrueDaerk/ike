@@ -622,6 +622,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("nav.forward", "Navigate Forward", NavForwardMsg{}),
 			appCommand("nav.pins", "Pinned Files", PinPickerMsg{}),
 			appCommand("nav.bookmarks", "Bookmarks", ShowBookmarksMsg{}),
+			appCommand("nav.lastEdit", "Last Edit Location", NavLastEditMsg{}),
+			appCommand("nav.recentLocations", "Recent Locations", ShowRecentLocationsMsg{}),
 			appCommand("bookmark.toggle", "Toggle Bookmark", BookmarkToggleMsg{}),
 			appCommand("bookmark.toggleMnemonic", "Toggle Bookmark with Mnemonic", BookmarkMnemonicMsg{}),
 			appCommand("bookmark.jumpMnemonic", "Go to Bookmark by Mnemonic", BookmarkMnemonicMsg{Jump: true}),

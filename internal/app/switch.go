@@ -378,6 +378,12 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	fresh.allResults.SetPalette(fresh.pal())
 	fresh.allFindGen = m.allFindGen
 	fresh.allPendingOpen = m.allPendingOpen
+	// The edit-location ring (#2545) is session state too: its entries carry
+	// their project root so the picker can lead back into another project.
+	// buildModel wired the fresh emitters to its own empty ring, so they are
+	// re-wired (idempotently) onto the carried one.
+	fresh.editRing = m.editRing
+	fresh.wireEditorEmitters()
 	fresh.allFindRecent = m.allFindRecent
 	// Deep-link state (#2396) is session state on the same terms: the socket
 	// endpoint serves the whole run, and a link's parked payload — the very
