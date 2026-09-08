@@ -1,5 +1,31 @@
 # Log
 
+## 2026-09-08 (assertions in .http files, #2546)
+
+- **`# @assert` directives** check a response: `status == 200`, `header
+  Content-Type contains json`, `jsonpath $.items[0].id == 42`, `body matches
+  /…/`, `time < 500ms` — operators `==` `!=` `<` `<=` `>` `>=` `contains`
+  `matches` `exists`. Parsed by `httpfile.AssertDirective`, evaluated in
+  `internal/httpclient/assert.go` after the captures (the JSONPath runs as
+  jq); a broken directive is a failed assertion with the reason, never a
+  dropped line.
+- **Pass/fail where the eye is.** The response pane's status row carries the
+  summary and turns red on a failure; a block above the body lists every
+  directive with its outcome and, for a failure, what the response gave.
+  Results are stored with the history entry.
+- **A failed assertion fails the run**: the off-screen notice (#2364) reports
+  a 200 with `1 of 3 assertions failed`; the directive's line gets a warning
+  diagnostic (source `http assert`).
+- **Test Results window** receives the run as `http: <METHOD /path>` — file →
+  request → one subtest per directive, jump-to-directive on Enter, re-run
+  actions dispatching the request again; a failing run opens the window
+  under `tests.auto_open`, a passing one only fills an open window.
+- **Editor**: the directive's parts are highlighted, and completion offers
+  `@assert`/`@capture` on a `# @` line, then the subjects, header names and
+  operators.
+  Docs: [HTTP client → Assertions](/architecture/http-client.md#assertions-2546),
+  [Test Results](/architecture/test-results.md#http-assertion-runs-2546).
+
 ## 2026-09-08 (the typing fan-out: 8.45 → 2.45 passes per key, #2541)
 
 - **Measured, not inferred.** The four-day ratio (six input passes and ten

@@ -748,6 +748,7 @@ type Model struct {
 	domHLPath     string
 	domHLRev      int
 	lastTestRun   *testRunState
+	httpAssertRun *httpAssertRun // the request whose assertions filled the window last (#2546)
 	testRunSeq    int
 	// testWatch drives watch mode of the Test Results pane (#2172,
 	// testwatch.go): the debounce generation, the scope the pending timer

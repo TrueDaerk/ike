@@ -61,6 +61,10 @@ type Entry struct {
 	// came from: re-opening the project restores both, and pruning the entry
 	// drops the value with it.
 	Captured map[string]string `json:"captured,omitempty"`
+	// Assertions holds the outcome of this response's `# @assert` directives
+	// (#2546), stored with the entry so a browsed history response shows the
+	// pass/fail block the fresh one did. nil for a response without any.
+	Assertions []httpclient.AssertResult `json:"assertions,omitempty"`
 	// Request is the request as it was sent (#1832), so this very exchange can
 	// be repeated without re-reading the .http file. nil for entries written
 	// before the capture existed — those load fine and only lose re-send.
@@ -73,21 +77,22 @@ type Entry struct {
 // encoding/json base64-encodes. Readers accept both, so files written before
 // this split keep loading.
 type wireEntry struct {
-	Time       time.Time          `json:"time"`
-	Status     string             `json:"status"`
-	StatusCode int                `json:"statusCode"`
-	Proto      string             `json:"proto"`
-	Headers    http.Header        `json:"headers,omitempty"`
-	BodyText   *string            `json:"bodyText,omitempty"`
-	Body       []byte             `json:"body,omitempty"`     // base64, binary bodies only
-	BodyFile   string             `json:"bodyFile,omitempty"` // spooled body, relative to the store dir (#2157)
-	BodySize   int                `json:"bodySize,omitempty"` // total body size when spooled (#2157)
-	Truncated  bool               `json:"truncated,omitempty"`
-	Duration   time.Duration      `json:"duration"`
-	Timing     *httpclient.Timing `json:"timing,omitempty"` // phase breakdown (#2404)
-	Warnings   []string           `json:"warnings,omitempty"`
-	Captured   map[string]string  `json:"captured,omitempty"` // capture directives (#1993)
-	Request    *wireRequest       `json:"request,omitempty"`  // as-sent snapshot (#1832)
+	Time       time.Time                 `json:"time"`
+	Status     string                    `json:"status"`
+	StatusCode int                       `json:"statusCode"`
+	Proto      string                    `json:"proto"`
+	Headers    http.Header               `json:"headers,omitempty"`
+	BodyText   *string                   `json:"bodyText,omitempty"`
+	Body       []byte                    `json:"body,omitempty"`     // base64, binary bodies only
+	BodyFile   string                    `json:"bodyFile,omitempty"` // spooled body, relative to the store dir (#2157)
+	BodySize   int                       `json:"bodySize,omitempty"` // total body size when spooled (#2157)
+	Truncated  bool                      `json:"truncated,omitempty"`
+	Duration   time.Duration             `json:"duration"`
+	Timing     *httpclient.Timing        `json:"timing,omitempty"` // phase breakdown (#2404)
+	Warnings   []string                  `json:"warnings,omitempty"`
+	Captured   map[string]string         `json:"captured,omitempty"`   // capture directives (#1993)
+	Assertions []httpclient.AssertResult `json:"assertions,omitempty"` // assertion outcomes (#2546)
+	Request    *wireRequest              `json:"request,omitempty"`    // as-sent snapshot (#1832)
 }
 
 // wireRequest is the on-disk shape of the as-sent request snapshot (#1832).
@@ -147,7 +152,7 @@ func (e Entry) MarshalJSON() ([]byte, error) {
 	w := wireEntry{
 		Time: e.Time, Status: e.Status, StatusCode: e.StatusCode, Proto: e.Proto,
 		Headers: e.Headers, Truncated: e.Truncated, Duration: e.Duration, Timing: e.Timing,
-		Warnings: e.Warnings, Captured: e.Captured, Request: toWire(e.Request),
+		Warnings: e.Warnings, Captured: e.Captured, Assertions: e.Assertions, Request: toWire(e.Request),
 		BodyFile: e.BodyFile, BodySize: e.BodySize,
 	}
 	switch {
@@ -171,7 +176,7 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 	*e = Entry{
 		Time: w.Time, Status: w.Status, StatusCode: w.StatusCode, Proto: w.Proto,
 		Headers: w.Headers, Truncated: w.Truncated, Duration: w.Duration, Timing: w.Timing,
-		Warnings: w.Warnings, Captured: w.Captured, Request: fromWire(w.Request),
+		Warnings: w.Warnings, Captured: w.Captured, Assertions: w.Assertions, Request: fromWire(w.Request),
 		BodyFile: w.BodyFile, BodySize: w.BodySize,
 	}
 	switch {
@@ -223,6 +228,7 @@ func (e Entry) Response(requestKey string) *httpclient.Response {
 		Timing:     e.Timing,
 		RequestKey: requestKey,
 		Warnings:   e.Warnings,
+		Assertions: e.Assertions,
 		Request:    e.Request,
 	}
 }
@@ -243,6 +249,7 @@ func FromResponse(resp *httpclient.Response, at time.Time) Entry {
 		Timing:     resp.Timing,
 		Warnings:   resp.Warnings,
 		Captured:   resp.CapturedValues(),
+		Assertions: resp.Assertions,
 		Request:    resp.Request,
 	}
 }

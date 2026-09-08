@@ -4,7 +4,7 @@ title: Test Results Tool Window
 description: Singleton bottom-split pane showing a captured test run as a structured tree — group → test → subtest with pass/fail/skip glyphs, durations and a summary line, a detail column with the selected test's output, jump-to-failure, and re-run all / failed / single actions and a save-triggered watch mode; fed by a per-language output-parser seam on lang.TestSpec — Go, pytest and PHPUnit (#1911, #1926, #2172).
 resource: internal/testresults/testresults.go
 tags: [architecture, tests, run, tool-window, pane, languages]
-timestamp: 2026-08-27T00:00:00Z
+timestamp: 2026-09-08T12:00:00Z
 ---
 
 # Test Results Tool Window (#1911)
@@ -104,6 +104,20 @@ Re-runs go the other way: the pane emits `testresults.RerunMsg` (all /
 failed-only / single), the app resolves the RerunIDs against the remembered
 last run (`run.FailedArgv`) and starts another captured run — "re-run failed"
 re-runs only the tests whose last status was fail.
+
+## HTTP assertion runs (#2546)
+
+The window has a second feeder besides the captured test run: an `.http`
+request whose `# @assert` directives were evaluated
+(`internal/app/http_assert.go`, see
+[assertions](/architecture/http-client.md#assertions-2546)). The run is
+named `http: <METHOD /path>`, the `.http` file is the group, the request the
+test and each directive a pass/fail subtest whose detail shows the reason and
+the actual value; Enter on a row opens the directive's line. The window fills
+whenever it is open, and a *failing* run opens it under `tests.auto_open` with
+the focus left where it was. While it shows such a run, `r`, `f` and `t` all
+dispatch the request again (`lastTestRun` is cleared, `httpAssertRun` set);
+a captured test run starting takes the re-run actions back.
 
 ## The pane
 

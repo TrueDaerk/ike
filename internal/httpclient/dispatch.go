@@ -87,6 +87,11 @@ type Response struct {
 	// nil when the request declared none (and for a re-send, which repeats a
 	// snapshot rather than a parsed request).
 	Captures []CaptureResult
+	// Assertions holds the outcome of the request's `# @assert` directives
+	// (#2546), passes and failures alike. nil when the request declared none
+	// (and for a re-send, which repeats a snapshot rather than a parsed
+	// request).
+	Assertions []AssertResult
 	// Frames counts the transcript frames of a WebSocket session (#2422), sent
 	// and received together; 0 for every plain HTTP exchange. The flight-end
 	// telemetry event carries it.
@@ -392,6 +397,7 @@ func Dispatch(ctx context.Context, req *httpfile.Request, opts Options) (*Respon
 		return nil, err
 	}
 	applyCaptures(resp, req)
+	applyAssertions(resp, req)
 	return resp, nil
 }
 
@@ -497,6 +503,7 @@ func DispatchStream(ctx context.Context, req *httpfile.Request, opts Options, cb
 	// Captures (#1993) run once the body is complete — for a stream that is
 	// when it ended, so a partial NDJSON body still yields what it holds.
 	applyCaptures(resp, req)
+	applyAssertions(resp, req)
 	return resp, nil
 }
 

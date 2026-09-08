@@ -65,6 +65,10 @@ type Request struct {
 	// (#1993), in file order. They are evaluated against the response after
 	// dispatch; the parser only collects them.
 	Captures []Capture
+	// Assertions are the request's `# @assert <subject> <op> <expected>` directives
+	// (#2546), in file order. Like Captures they are evaluated against the
+	// response after dispatch; the parser only collects them.
+	Assertions []Assertion
 	// GraphQL is the split of a `GRAPHQL <url>` block's body (#2423) — query,
 	// variables, operation name and their line ranges. nil for every other
 	// method, so `req.GraphQL != nil` is the test for "this is a GraphQL
@@ -219,9 +223,14 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 	// folded query lines, in the header block. They belong to the block's
 	// request, which does not exist yet at the first of those places.
 	var captures []Capture
+	var assertions []Assertion
 	noteCapture := func(idx int) {
 		if c, ok := captureAt(lines[idx], idx); ok {
 			captures = append(captures, c)
+		}
+		// Assertion directives (#2546) are comment lines in the same places.
+		if a, ok := assertAt(lines[idx], idx); ok {
+			assertions = append(assertions, a)
 		}
 	}
 
@@ -350,6 +359,7 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 	}
 
 	req.Captures = captures
+	req.Assertions = assertions
 	f.Requests = append(f.Requests, req)
 }
 
