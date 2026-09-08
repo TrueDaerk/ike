@@ -10,6 +10,7 @@ import (
 	"ike/internal/editor"
 	"ike/internal/host"
 	"ike/internal/project"
+	"ike/internal/telemetry"
 )
 
 // project_group.go is the root-model side of project groups (Epic 0510,
@@ -52,6 +53,29 @@ type groupOpen struct {
 	// cold members and the last one returns to the root the warm started
 	// from; the landing neither moves the marker nor announces an open.
 	warm bool
+	// endOp closes the project.group.open op timing the whole chain (#2578);
+	// nil for a warm chain, which is not an open. Called exactly once, on the
+	// landing or on the abort.
+	endOp func(phase string, detail map[string]string)
+}
+
+// finishOp closes the chain's op with the tally the analysis reads: how many
+// members the chain ran, how many hops were skipped, and the 12-hex project
+// token of the member it ended on (#2578). The token is the same one the
+// session marker carries, so a landing can be attributed to a project.
+func (o *groupOpen) finishOp(phase, landedOn string) {
+	if o.endOp == nil {
+		return
+	}
+	d := map[string]string{
+		"members": strconv.Itoa(o.total),
+		"skipped": strconv.Itoa(len(o.skipped)),
+	}
+	if landedOn != "" {
+		d["landed_on"] = landedOn
+	}
+	o.endOp(phase, d)
+	o.endOp = nil
 }
 
 // verb is the chain's word for notifications and the status segment:
@@ -119,7 +143,15 @@ func (m Model) openGroupChain(name, landing string, pending *deepLinkPending) (t
 		}
 	}
 	queue = append(queue, present[land])
-	m.groupOpening = &groupOpen{name: g.Name, total: len(present), queue: queue, link: pending != nil}
+	m.groupOpening = &groupOpen{
+		name:  g.Name,
+		total: len(present),
+		queue: queue,
+		link:  pending != nil,
+		// The whole chain is one op (#2578); every hop still records its own
+		// project.switch op inside it, so the two nest.
+		endOp: m.usage.OpTimer(telemetry.OpProjectGroupOpen),
+	}
 	if pending != nil {
 		pending.root = present[land]
 		m.dlPending = pending
@@ -201,6 +233,13 @@ func (m Model) finishGroupOpen() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	opened := o.total - len(o.skipped)
+	if opened > 0 {
+		// The landing member is where the chain now stands, so the token in
+		// effect is the one the session marker just recorded.
+		o.finishOp("ok", telemetryProjectToken())
+	} else {
+		o.finishOp("error", "")
+	}
 	if o.warm {
 		// A warm (#2572) only re-parks: the marker already names the group,
 		// and the return hop put the starting root back in front.
@@ -239,6 +278,7 @@ func (m *Model) abortGroupOpen() {
 		return
 	}
 	m.groupOpening = nil
+	o.finishOp("canceled", "")
 	if o.link {
 		m.dlPending = nil // the landing is never reached; drop the payload
 	}

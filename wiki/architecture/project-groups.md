@@ -380,6 +380,29 @@ close the cycle.
 when the process root is not a member. It is listed in the settings coverage guard's `internalKeys`
 (`internal/settings/coverage_test.go`) with that reason.
 
+## Measurement (#2578)
+
+Groups were motivated by a number out of the local usage log — switches cluster, one following
+another within half a minute — so they are measured from the same log. Two ops carry the tally
+(schema **v9**, [Usage Telemetry](/architecture/usage-telemetry.md)):
+
+- **`project.group.open`** spans the whole warm-up chain, from the picked group to the landing
+  member. `members` is how many members were present on disk (the hops the chain ran, not the
+  stored roots), `skipped` how many failed their hop, `landed_on` the 12-hex project token of the
+  member the chain ended on, `ms` the chain's total. It ends `ok` with at least one member open,
+  `error` when every hop failed and `canceled` when the user escaped a hop's unsaved-changes
+  prompt. A `project.group.warm` chain is not an open and records nothing here.
+- **`project.group.close`** spans the switch away plus every member teardown: `members` is how many
+  member workspaces went down (the switched-away one included), `ms` the total.
+
+Every hop keeps recording its own `project.switch` op inside the group op, so the chain and its
+parts nest and the difference is the chain's own overhead. The commands themselves stay ordinary
+`command` events with `ok`/`ms`. Nothing is recorded at all with `telemetry.enabled = false`.
+
+The two epic success metrics — the share of switches that follow another within 30 s, and the share
+of switch triggers that are `project.group.next`/`prev` rather than the picker — are jq/awk recipes
+in [Usage Telemetry § The 0510 success metrics](/architecture/usage-telemetry.md).
+
 ## See also
 
 - [Project Switching](/architecture/project-switching.md) — the single-root switch flow a group open
@@ -391,3 +414,4 @@ when the process root is not a member. It is listed in the settings coverage gua
 - [Deep Links](/architecture/deep-links.md) — the `ike://` scheme the `group=` form belongs to.
 - [Workspace](/architecture/workspace.md) — the parked-workspace manager and the background cap.
 - [Configuration](/architecture/config.md) — the layered config the groups persist through.
+- [Usage Telemetry](/architecture/usage-telemetry.md) — the group ops and the success-metric recipes.

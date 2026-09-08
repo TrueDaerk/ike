@@ -33,11 +33,11 @@ paths.** Two guards enforce it:
 ## Event schema (the analysis interface)
 
 One JSON object per line. `v` is the schema version (`telemetry.SchemaVersion`,
-currently 8); readers must tolerate unknown fields and filter on `v`.
+currently 9); readers must tolerate unknown fields and filter on `v`.
 
 ```json
-{"v":8,"ts":"2026-08-27T10:15:30.123Z","sid":"a1b2c3d4e5f6","type":"command","data":{"id":"editor.save","source":"keybind"}}
-{"v":8,"ts":"2026-08-27T10:15:31.456Z","sid":"a1b2c3d4e5f6","type":"internal","data":{"id":"lsp.documentSymbols","source":"internal"}}
+{"v":9,"ts":"2026-08-27T10:15:30.123Z","sid":"a1b2c3d4e5f6","type":"command","data":{"id":"editor.save","source":"keybind"}}
+{"v":9,"ts":"2026-08-27T10:15:31.456Z","sid":"a1b2c3d4e5f6","type":"internal","data":{"id":"lsp.documentSymbols","source":"internal"}}
 ```
 
 ### Version history (what an analysis script must branch on)
@@ -52,6 +52,7 @@ currently 8); readers must tolerate unknown fields and filter on `v`.
 | 6 | #2490 | `palette.dismiss` events gain `results` — how many rows the palette was listing when esc was pressed. It separates "typed a name that does not exist" (`query_len > 0`, `results == 0`) from "found it, changed my mind", which `query_len` alone cannot. Additive: every v5 field keeps its meaning, and a missing `results` on v5 and below means "not recorded", not zero. |
 | 7 | #2551 | The type `palette.pick` joins — the counterpart of `palette.dismiss`, carrying `mode`, `query_len`, `rank` (the 0-based index of the chosen row) and `results`, so ranking quality (#2399, #2155) becomes measurable; it never carries the query or a file id, and a picked command's id follows in the next `command` event. The `session.restore` op's `ok` phase gains `tabs` (file tabs that came back) and `missing` (files gone since the save) next to `panes`. Additive: a missing `rank`/`tabs`/`missing` on v6 and below means "not recorded", not zero. |
 | 8 | #2547 | The `http.flight` end phases carry the timing breakdown the response pane shows: `dns_ms`, `connect_ms`, `tls_ms`, `ttfb_ms`, `transfer_ms` (milliseconds spent *in* each phase; `ttfb_ms` counts from the start of the exchange and so contains the setup phases) and `reused` (`true` when the request went out on a kept-alive connection, which is why its setup phases read 0). Builds since #2404 already wrote the fields without a bump; from v8 a reader may rely on them for every flight that produced a response — their absence on an `ok` means nothing was measured (a history restore), never a lost field. Below v8 absence means "not recorded". Structural numbers only, never a host or URL. |
+| 9 | #2578 | The group-level ops join: `project.group.open` (the whole warm-up switch chain — `members` present members, `skipped` hops that failed, `landed_on` the 12-hex project token of the member the chain ended on, `ms` the chain's total) and `project.group.close` (`members` the member workspaces torn down, `ms` the total). Each hop keeps recording its own `project.switch` op, so chain and parts nest. `project.group.close` was already emitted without `members` since #2572; from v9 a reader may rely on the field, and its absence below v9 means "not recorded", not zero. |
 
 An export spanning versions therefore needs three guards: filter v1 `command`
 events on `data.source != "internal"`, treat a missing `ok`/`ms` on v4 as
@@ -169,6 +170,30 @@ counts by the version's interval before comparing sessions.
       (`performCloseAndSwitch`, `internal/app/project_close.go`). Its span
       wraps a whole `project.switch` plus the departing workspace's teardown,
       so the two nest and the difference is what the teardown cost.
+    - `project.group.open` (v9, #2578) — the whole warm-up switch chain
+      behind `project.group.open` (`openGroupChain`,
+      `internal/app/project_group.go`): from the picked group to the landing
+      member, one op spanning every hop. `members` is how many members were
+      present on disk — the hops the chain ran, not the stored roots —
+      `skipped` how many of them failed their hop (root gone, chdir error),
+      `landed_on` the 12-hex project token of the member the chain ended on
+      (the same token the session marker carries, so a landing is
+      attributable), and `ms` the chain's total. It ends `ok` when at least
+      one member opened, `error` when every hop failed, `canceled` when the
+      user escaped an unsaved-changes prompt mid-chain — `members` and
+      `skipped` ride every end phase, `landed_on` only the `ok`. Each hop
+      still records its own `project.switch` op inside the span, so the two
+      nest and the difference is the chain's own overhead. A
+      `project.group.warm` chain is **not** an open and records nothing here;
+      its hops remain visible as plain switches.
+    - `project.group.close` (v9, #2578; emitted since #2572) — closing the
+      active group (`performCloseGroup`,
+      `internal/app/project_group_close.go`): the switch away from the active
+      member plus every parked member's teardown. `members` counts the member
+      workspaces actually torn down — the switched-away one included, since
+      the switch parks it into the background set the teardown loop drains —
+      and is `0` on the `error` end of a failed switch, which closes nothing.
+      Like the open it wraps the hop's `project.switch` op.
     - `session.restore` (#2403) — the startup layout/session restore
       (`restoreLayout` + `restoreSession` in `buildModel`), the one startup
       phase whose cost scales with what the user left open; `panes` is what
@@ -399,7 +424,49 @@ jq -r 'select(.type=="op" and .data.id=="session.restore" and .data.phase=="ok" 
 jq -r 'select(.type=="op" and .data.id=="http.flight" and .data.ttfb_ms != null and (.data.ms|tonumber) >= 2000) | [.data.ms, .data.dns_ms, .data.connect_ms, .data.tls_ms, .data.ttfb_ms, .data.transfer_ms, .data.reused] | @tsv' ~/.ike/telemetry/*.jsonl
 # minutes per project (v4+)
 jq -r 'select(.type=="project.leave") | [.data.project, (.data.ms|tonumber/60000|floor)] | @tsv' ~/.ike/telemetry/*.jsonl
+# group opens: members, skipped hops, landing token, total ms (v9+)
+jq -r 'select(.type=="op" and .data.id=="project.group.open" and .data.phase!="start") | [.data.phase, .data.members, .data.skipped, .data.landed_on, .data.ms] | @tsv' ~/.ike/telemetry/*.jsonl
+# group closes: how many members went down and what it cost (v9+)
+jq -r 'select(.type=="op" and .data.id=="project.group.close" and .data.phase!="start") | [.data.phase, .data.members, .data.ms] | @tsv' ~/.ike/telemetry/*.jsonl
 ```
+
+### The 0510 success metrics (project groups)
+
+The epic's premise (#2550) came out of this log: project switches cluster —
+one switch is followed by another within half a minute, because the switch
+landed on the wrong project or because the work needs two. Both numbers below
+are measured from the *same* log, so the effect of project groups is visible
+as a shift in them rather than as an impression.
+
+**1. Clustered switches — the share of `project.switch` ops that start within
+30 s of the previous one.** The premise metric: high means switching is a
+search, not a decision. Grouped per session (`sid`), so the gap across a
+restart never counts.
+
+```sh
+jq -r 'select(.type=="op" and .data.id=="project.switch" and .data.phase=="start") | [.sid, (.ts[0:19]+"Z"|fromdateiso8601)] | @tsv' ~/.ike/telemetry/*.jsonl \
+  | sort -k1,1 -k2,2n \
+  | awk -F'\t' '$1==s && $2-p<=30 {c++} $1==s {n++} {s=$1; p=$2} END {if (n) printf "%d of %d switches within 30 s of the previous one (%.0f%%)\n", c, n, 100*c/n}'
+```
+
+**2. Cycling versus the picker — which command triggers a switch.** The
+command event always precedes the switch it causes, so counting the triggering
+ids is enough. `project.group.next`/`prev` are the group's cheap hop; the
+picker (`project.switch`) is the expensive one the epic wants to replace.
+A rising `next`/`prev` share is the epic working.
+
+```sh
+jq -r 'select(.type=="command") | .data.id | select(. == "project.group.next" or . == "project.group.prev" or . == "project.switch" or . == "project.switchLast" or startswith("project.switchMRU"))' ~/.ike/telemetry/*.jsonl \
+  | sort | uniq -c | sort -rn
+# the share as one number
+jq -r 'select(.type=="command") | .data.id | select(. == "project.group.next" or . == "project.group.prev" or . == "project.switch")' ~/.ike/telemetry/*.jsonl \
+  | awk '/^project\.group\./ {g++} {n++} END {if (n) printf "%d of %d switch triggers were group cycling (%.0f%%)\n", g, n, 100*g/n}'
+```
+
+Two supporting numbers come straight from the group ops: the cost of an open
+(`project.group.open`'s `ms` against its `members`) and how often a group is
+incomplete on disk (`skipped > 0`) — a group that keeps skipping members is a
+stale group, not a slow one.
 
 The JSONL schema above stays the stable interface. The two evaluation UIs IKE
 ships are the project time report (#2426) and the usage report (#2552)
