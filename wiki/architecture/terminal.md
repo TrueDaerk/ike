@@ -849,7 +849,20 @@ accepts it; the selection highlight appears once the popup is focused.
 up/down focus the popup; once
 focused, enter accepts the selection, and an auto refresh from typing on
 keeps the focus. `ctrl+space` opens the popup focused, so enter accepts
-right away. **Tab accepts in both states**, esc closes in both states. The popup is
+right away. **Tab is state-dependent** (#2534): on a focused popup it accepts
+the selected row; on an unfocused one — no row selected — it behaves like the
+shell's own tab and **inserts the longest common prefix** of all current
+candidates (remainder only, `a` with `abc_x`/`abc_y`/`abc_z` becomes `abc_`),
+the popup **stays open** and refilters on the echo of the inserted text, and
+remains fully operable (up/down select, tab/enter on a selected row accept as
+usual). The prefix is computed on the canonical spellings, case-sensitively:
+candidates that differ in case only within the shared part (`Abc_x`/`abc_y`)
+share no extension; a typed word matching the prefix only case-insensitively
+is retyped in canonical case (#968). When the prefix adds nothing to the typed
+word — no common extension, or only one candidate — tab falls back to
+**accepting the first row** (the pre-#2534 behaviour; a lone candidate is its
+own prefix and gets the finished-token treatment). esc closes in both states.
+The popup is
 inactive on the alternate screen (vim/htop), in command sessions, while
 paging scrollback, and **whenever the shell is not at its prompt** (#1340);
 it renders as a bordered list composited over the grid at
