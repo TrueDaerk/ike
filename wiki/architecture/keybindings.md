@@ -1415,6 +1415,7 @@ JetBrains is:
 | `project.close` | `cmd+shift+w` | fragile | `palette / File menu` | live via palette / File menu |
 | `project.findInAllProjects` | `cmd+alt+shift+f` | fragile | `palette` | live via palette |
 | `project.findInAllProjectsResults` | `cmd+alt+shift+r` | fragile | `palette` | live via palette |
+| `project.findInGroup` | `cmd+alt+shift+d` | fragile | `palette` | live via palette |
 | `project.findInPath` | `cmd+shift+f` | fragile | `palette` | live via palette |
 | `project.goToClass` | `cmd+o` | fragile | `palette` | live via palette |
 | `project.goToFile` | `cmd+shift+o` | fragile | `palette` | live via palette |

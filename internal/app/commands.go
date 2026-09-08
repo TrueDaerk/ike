@@ -211,6 +211,11 @@ type OpenReplaceInPathMsg struct{}
 // (cmd+alt+shift+f / palette).
 type OpenFindInAllProjectsMsg struct{}
 
+// OpenFindInProjectGroupMsg asks the root model to open the all-projects
+// search form restricted to the active project group's members (0510, #2575).
+// Dispatched by project.findInGroup (cmd+alt+shift+d / palette).
+type OpenFindInProjectGroupMsg struct{}
+
 // ShowAllFindResultsMsg asks the root model to open the all-projects search
 // results overlay (#2394, #2413). Dispatched by
 // project.findInAllProjectsResults (cmd+alt+shift+r / palette).
@@ -651,6 +656,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("project.replaceInPath", "Replace in Path", OpenReplaceInPathMsg{}),
 			appCommand("project.findInAllProjects", "Find in All Projects", OpenFindInAllProjectsMsg{}),
 			appCommand("project.findInAllProjectsResults", "Show All-Projects Search Results", ShowAllFindResultsMsg{}),
+			appCommand("project.findInGroup", "Find in Project Group…", OpenFindInProjectGroupMsg{}),
 			appCommand("todo.list", "TODO Index", OpenTodoIndexMsg{}),
 			appCommand("search.nextMatch", "Next Search Match", MatchStepMsg{Delta: 1}),
 			appCommand("search.prevMatch", "Previous Search Match", MatchStepMsg{Delta: -1}),

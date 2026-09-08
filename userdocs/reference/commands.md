@@ -212,6 +212,7 @@ bring their own.
 | Problems | `problems.toggle` | `cmd+8` | — | everywhere |
 | Find in All Projects | `project.findInAllProjects` | `cmd+alt+shift+f` | — | everywhere |
 | Show All-Projects Search Results | `project.findInAllProjectsResults` | `cmd+alt+shift+r` | — | everywhere |
+| Find in Project Group… | `project.findInGroup` | `cmd+alt+shift+d` | — | everywhere |
 | Find in Path | `project.findInPath` | `cmd+shift+f` | — | everywhere |
 | Go to File | `project.goToFile` | `cmd+shift+o` | — | everywhere |
 | Close Project Group | `project.group.close` | `cmd+alt+shift+w` | — | everywhere |

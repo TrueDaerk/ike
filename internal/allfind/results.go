@@ -48,6 +48,7 @@ type Results struct {
 
 	scanning  bool
 	query     string
+	group     string            // active project group, for a group run (#2575)
 	roots     []string          // scan order, for the progress counter
 	names     map[string]string // root → display name, seeded by Begin
 	scanned   int               // roots the running scan has finished
@@ -92,6 +93,18 @@ func (r *Results) SetSize(w, h int) { r.width, r.height = w, h }
 // progress — so the previous result set is dropped only here, on the first
 // message of the new one.
 func (r *Results) Begin(query string, roots []Project) {
+	r.begin(query, roots, "")
+}
+
+// BeginGroup resets the overlay for a scan restricted to the named project
+// group (project.findInGroup, #2575). Everything below is the all-projects
+// path unchanged — only the header and the progress segment name the group.
+func (r *Results) BeginGroup(query string, roots []Project, group string) {
+	r.begin(query, roots, group)
+}
+
+// begin is the shared body of Begin and BeginGroup.
+func (r *Results) begin(query string, roots []Project, group string) {
 	r.list.Reset()
 	r.prev.Reset()
 	r.names = map[string]string{}
@@ -101,6 +114,7 @@ func (r *Results) Begin(query string, roots []Project) {
 		r.roots = append(r.roots, p.Root)
 	}
 	r.query = query
+	r.group = group
 	r.scanning = true
 	r.scanned = 0
 	r.truncated = false
@@ -182,7 +196,11 @@ func (r *Results) ProgressLabel() string {
 	if !r.scanning || len(r.roots) == 0 {
 		return ""
 	}
-	s := "⌕ all projects " + strconv.Itoa(r.scanned) + "/" + strconv.Itoa(len(r.roots))
+	s := "⌕ all projects "
+	if r.group != "" {
+		s = "⌕ group " + r.group + " "
+	}
+	s += strconv.Itoa(r.scanned) + "/" + strconv.Itoa(len(r.roots))
 	if n := r.list.Total(); n > 0 {
 		s += " · " + plural(n, "hit", "hits")
 	}
@@ -355,7 +373,7 @@ func (r *Results) View() string {
 	boxW := r.boxWidth()
 	innerW := boxW - 6 // border + padding
 
-	title := lipgloss.NewStyle().Bold(true).Underline(true).Render("Find in All Projects")
+	title := lipgloss.NewStyle().Bold(true).Underline(true).Render(r.title())
 	if r.query != "" {
 		title += lipgloss.NewStyle().Faint(true).Render("  " + r.query)
 	}
@@ -377,6 +395,18 @@ func (r *Results) View() string {
 		Width(boxW - 2).
 		Render(strings.Join(rows, "\n"))
 }
+
+// title names the overlay: the all-projects one, or the group variant (#2575).
+func (r *Results) title() string {
+	if r.group != "" {
+		return "Find in Project Group"
+	}
+	return "Find in All Projects"
+}
+
+// Group returns the project group the current result set was searched in, or
+// "" when it came from an all-projects run.
+func (r *Results) Group() string { return r.group }
 
 // resultsBody is the finder's two-column body: the sectioned match list on
 // the left, the selected hit's file excerpt on the right (#2047, #2053).
@@ -440,7 +470,13 @@ func (r *Results) displayPath(p string) string {
 // and the number of roots that failed.
 func (r *Results) summaryRow(width int) string {
 	pal := r.theme()
-	s := plural(r.list.Total(), "match", "matches") + " in " + plural(len(r.roots), "project", "projects")
+	// The header names the set that was searched: every history root, or the
+	// group and how many members it had (#2575).
+	set := plural(len(r.roots), "project", "projects")
+	if r.group != "" {
+		set = "group " + r.group + " · " + set
+	}
+	s := plural(r.list.Total(), "match", "matches") + " in " + set
 	if r.truncated {
 		s += " (truncated)"
 	}

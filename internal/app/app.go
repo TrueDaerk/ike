@@ -3645,26 +3645,29 @@ var terminalGlobalCommands = map[string]bool{
 	"project.replaceInPath":            true,
 	"project.findInAllProjects":        true,
 	"project.findInAllProjectsResults": true,
-	"explorer.toggle":                  true,
-	"window.hideAllTools":              true,
-	"nav.pins":                         true,
-	"nav.pinGoto1":                     true,
-	"nav.pinGoto2":                     true,
-	"nav.pinGoto3":                     true,
-	"nav.pinGoto4":                     true,
-	"todo.list":                        true,
-	"vcs.panel":                        true,
-	"problems.toggle":                  true,
-	"deps.toggle":                      true,
-	"time.toggle":                      true,
-	"tests.toggle":                     true,
-	"issues.toggle":                    true,
-	"structure.toggle":                 true,
-	"dom.toggle":                       true,
-	"debug.doctor":                     true,
-	"lsp.doctor":                       true,
-	"scratch.panel":                    true,
-	"notifications.history":            true,
+	// #2575: the group-restricted search is a project entry point like the
+	// all-projects one.
+	"project.findInGroup":   true,
+	"explorer.toggle":       true,
+	"window.hideAllTools":   true,
+	"nav.pins":              true,
+	"nav.pinGoto1":          true,
+	"nav.pinGoto2":          true,
+	"nav.pinGoto3":          true,
+	"nav.pinGoto4":          true,
+	"todo.list":             true,
+	"vcs.panel":             true,
+	"problems.toggle":       true,
+	"deps.toggle":           true,
+	"time.toggle":           true,
+	"tests.toggle":          true,
+	"issues.toggle":         true,
+	"structure.toggle":      true,
+	"dom.toggle":            true,
+	"debug.doctor":          true,
+	"lsp.doctor":            true,
+	"scratch.panel":         true,
+	"notifications.history": true,
 	// #997: tab switching stays reachable from a focused terminal/tool pane
 	// (the shell never meaningfully sees ctrl+cmd+arrows). The secondary
 	// ctrl+alt+arrow bindings stay with the shell — see terminalShellChords.
@@ -4727,6 +4730,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// project.findInAllProjects (cmd+alt+shift+f / palette): the
 		// all-projects search form (#2394), over every history root.
 		m.openAllFind()
+		return m, nil
+
+	case OpenFindInProjectGroupMsg:
+		// project.findInGroup (cmd+alt+shift+d / palette): the same form over
+		// the active group's members only (0510, #2575).
+		m.openAllFindGroup()
 		return m, nil
 
 	case allfind.ConfirmMsg:
