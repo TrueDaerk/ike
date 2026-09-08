@@ -693,6 +693,13 @@ type Model struct {
 	// jump to, and lastInputAt is the guard's "user is typing" stamp.
 	forgeQueue  []forge.Event
 	forgeUnread []forge.Event
+	// forgeTitles is the branch-issue segment's title lookup (#2544): issue
+	// number → title, folded in from every listing that passes through the
+	// app (poll, pane fetch, persisted snapshot). Shared by pointer across
+	// the value-model copies, like toolchainSeg. branchIssueSeeded is the
+	// issue number the one-shot cache seed already ran for.
+	forgeTitles       map[int]string
+	branchIssueSeeded int
 
 	// Forge edit buffers (#2087, forgeedit.go): markdown scratch buffers
 	// bound to a forge text, keyed by path; forgeEditKey names the buffer the
@@ -1454,6 +1461,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		mergeOffered:    map[string]bool{},
 		mergeUnresolved: map[string]int{},
 		toolchainSeg:    map[string]string{},
+		forgeTitles:     map[int]string{},
 		liveImages:      map[int]bool{},
 		navHist:         &nav.History{},
 		previewBound:    new(atomic.Bool),
@@ -4209,6 +4217,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if poll := mm.armForgePoll(); poll != nil {
 		cmd = tea.Batch(cmd, poll)
 	}
+	// The branch-issue segment (#2544) reads the persisted listing snapshot
+	// once per issue branch here: a checkout is a vcs refresh landing in some
+	// pass, not an event the segment could hook, and the read is a file plus
+	// a git call — too much for a render. Off, or on a branch already
+	// resolved, this is two map lookups.
+	if seed := mm.branchIssueSeedCmd(); seed != nil {
+		cmd = tea.Batch(cmd, seed)
+	}
 	// A playground whose queried document left the workspace closes here
 	// (#2355): tab closes, pane closes and explorer deletions all settle in
 	// this pass, so no mounted mode is left pointing at a gone document.
@@ -6054,6 +6070,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// pane; opening returns the first fetch command.
 		return m, m.toggleIssuesPanel()
 
+	case IssuesOpenCurrentBranchMsg:
+		// issues.openCurrentBranch (#2544): the issue behind the checked-out
+		// issue/<n> branch, opened on its detail — also what a click on the
+		// status line's branch-issue segment dispatches.
+		return m, m.openCurrentBranchIssue()
+
 	case forge.IssuesMsg:
 		// A finished issue/PR fetch (#1934) lands in the pane; a background
 		// poll's result (#2085) also folds into the poll service, which turns
@@ -6070,6 +6092,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if p := m.issuesPanel(); p != nil {
 			p.SetCached(msg.Issues, msg.PRs)
 		}
+		// The snapshot is also what the branch-issue segment (#2544) reads
+		// its title from — including in a session that never opened the pane,
+		// which is what branchIssueSeedCmd loads it for.
+		m.rememberIssueTitles(msg.Issues)
 		return m, nil
 
 	case forge.PollTickMsg:

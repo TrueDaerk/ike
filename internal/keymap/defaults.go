@@ -575,6 +575,10 @@ var jetbrainsRows = []row{
 	// is full, so the project time report takes the family's free
 	// alt-neighbour rather than shipping palette-only.
 	{"cmd+alt+0", "time.toggle", "Project time report", Global, "Time report (#2426)"},
+	// The issue behind the current issue/<n> branch (#2544). It is a doorway
+	// into the same Issues window, so it sits next to it in the alt layer;
+	// cmd+alt+i is free on both platforms (ctrl+alt+i off macOS).
+	{"cmd+alt+i", "issues.openCurrentBranch", "Open current branch issue", Global, "GitHub issues (#2544)"},
 	{"f10", "menu.open", "Open menu bar", Global, "Menu (0160)"},
 	{"cmd+,", "settings.open", "Settings", Global, "Menu (0160)"},
 	// Unbound-command audit (#1378): JetBrains chords for palette-only

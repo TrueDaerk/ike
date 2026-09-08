@@ -433,6 +433,11 @@ func defaults() *Config {
 			// and look at, and a permanent clock on the status line is a
 			// choice rather than a default.
 			ProjectTime: "off",
+			// Off by default (#2544): the segment costs a slot on the bar
+			// for a repository convention not every project follows. The
+			// pattern is IKE's own branch naming (see the change workflow).
+			BranchIssue:        "off",
+			BranchIssuePattern: DefaultBranchIssuePattern,
 		},
 		// No vault password file by default (#2293): vault files open as
 		// ciphertext until a source is configured.

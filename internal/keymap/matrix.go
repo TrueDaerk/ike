@@ -179,6 +179,7 @@ var reachableAlternatives = map[string]string{
 	"problems.toggle":                  "palette",
 	"deps.toggle":                      "palette",
 	"time.toggle":                      "palette / Tools menu",
+	"issues.openCurrentBranch":         "palette / click the status line's branch-issue segment",
 	"lsp.ignoreDiagnostic":             "palette",
 	"structure.toggle":                 "palette",
 	"dom.toggle":                       "palette",

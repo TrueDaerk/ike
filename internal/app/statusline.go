@@ -111,6 +111,7 @@ func (m Model) todoSegment() string {
 
 var statusRight = []statusSegment{
 	{id: "search", render: searchSegment},
+	{id: "branchissue", render: func(m Model, _ *editor.Model) string { return m.branchIssueSegment() }},
 	{id: "branch", render: func(m Model, _ *editor.Model) string { return m.branchSegment() }},
 	{id: "cursor", render: cursorSegment},
 }
@@ -670,7 +671,7 @@ func renderParts(m Model, ed *editor.Model, segs []statusSegment) []renderedSeg 
 // (already shrunken) file segment and the cursor never drop.
 var statusDropOrder = []string{
 	"hint", "eol", "encoding", "indent", "svcolumn", "docpath", "logspan", "toolchain", "todo",
-	"host", "notifications", "popupterm", "macro", "branch", "buflang", "forge", "diagnostics", "lsp",
+	"host", "notifications", "popupterm", "macro", "branchissue", "branch", "buflang", "forge", "diagnostics", "lsp",
 	// The search counter (#2145) shows only during an active search and is
 	// what the user is watching then, so it drops last of all.
 	"search",
@@ -813,6 +814,9 @@ var statusSegmentCommands = map[string]string{
 	"lsp":       "lsp.doctor",
 	// The forge unread badge (#2086) opens what it announces.
 	"forge": "issues.toggle",
+	// The branch-issue segment (#2544) opens the issue it names, on its
+	// detail — the lookup the segment exists to save.
+	"branchissue": "issues.openCurrentBranch",
 	// The all-projects scan progress (#2413) opens the results it counts.
 	"allfind": "project.findInAllProjectsResults",
 	// The dependency scan indicator (#2419) opens the pane it fills.
