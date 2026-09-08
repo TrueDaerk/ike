@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, WEBSOCKET session blocks with ===-separated initial messages, a live frame transcript and an interactive send line in the response pane, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, GraphQL errors lifted out of a 200 answer into a red block above the body, and @assert directives checked against every response with a pass/fail block above the body, a run in the Test Results window and a failure notice.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-09-08T12:00:00Z
+timestamp: 2026-09-08T16:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -925,6 +925,30 @@ a browsed entry and `http.showResponse` render the same breakdown the fresh
 answer did: one `kindTiming` row under the status line,
 `dns 2ms · connect 11ms · tls 34ms · ttfb 210ms · transfer 4ms`, only the
 phases that happened.
+
+#### The slow flight flags itself (#2547)
+
+A 14 s answer used to wear the same neutral header as a 200 ms one; the
+breakdown row said where the time went, but only to whoever read it. Past
+**`http.slow_threshold_ms`** (default 2000, `0` = off, 0–600000, Settings UI
+"HTTP Client" page) the pane header's warning slot — the segment the
+in-flight and history markers use — carries the duration and the phase that
+dominated: `⚠ slow 14.1s · ttfb 13.9s`. The marker belongs to the entry on
+show, so browsing to a fast older response drops it; a slow entry restored
+from a pre-#2404 history file flags its duration alone. The threshold is
+independent of `http.notify_slow_ms`: that one decides whether the
+[off-screen notice](#the-answer-reports-itself-when-nobody-is-watching-2364)
+is sent at all, this one decides what counts as slow enough to explain. The
+pane reads it through the same package global as the highlight cap
+(`httppane.SetSlowThreshold`, installed at startup and on every config
+reload).
+
+`Timing.Dominant` picks the phase: the largest of `DNS`, `Connect`, `TLS`,
+`Transfer` and the *server wait* — `TTFB` with the setup phases subtracted,
+since `TTFB` already contains them and a 2 s handshake would otherwise be
+reported as "ttfb". The label is the phase's name as the breakdown row
+spells it, the span the phase's own displayed value (the full `TTFB` for
+the wait). Ties go to the earlier phase; an empty breakdown names nothing.
 
 The `D`/`P` **diff text** deliberately leaves it out, for the same reason
 `Duration` and the volatile headers are already filtered there (#2247): every
@@ -1883,6 +1907,13 @@ the ordinary notification channel (`host.Notify`, so it toasts *and* lands in
   branch off; the failure branch is not configurable, since an unnoticed
   failure is never wanted. The default is 3000 ms — past the window the
   statusline indicator covers on its own.
+- **Which phase dominated** (#2547): a notice for a flight past
+  `http.slow_threshold_ms` — slow success or slow failure alike — names the
+  phase that ate the time, `http: GET /report → 200 OK (14.1s, slower than
+  3.0s, mostly ttfb (13.9s))`, so the toast alone separates "the server sat
+  on it" from "the resolver did". `Timing.Dominant` picks it (see
+  [the slow-flight marker](#the-slow-flight-flags-itself-2547)); a response
+  without a breakdown, or a threshold of `0`, adds nothing.
 
 The gate is `httpResponseVisible`: the viewer must be registered *and* under a
 visible layout leaf, which is exactly what `httpPanel` resolves. It is read
@@ -1900,10 +1931,12 @@ to report. Severity is `Warn` for a non-2xx and `Info` for a slow success, so
 Every flight also leaves a lifecycle trail in the local usage telemetry
 (#2348): an `op`/`http.flight` `start` event — flushed to disk before the
 exchange departs — and a matching `ok`/`error`/`canceled` end event carrying
-duration, status class, the streaming flag and — since #2404 — the phase
-breakdown (`dns_ms`, `connect_ms`, `tls_ms`, `ttfb_ms`, `transfer_ms`,
-`reused`); structural only, never the URL, key, headers or body. A start without an end is the "dispatch never came
-back" marker a freeze investigation looks for (see
+duration, status class, the streaming flag and — since #2404, schema v8
+since #2547 — the phase breakdown (`dns_ms`, `connect_ms`, `tls_ms`,
+`ttfb_ms`, `transfer_ms`, `reused`), so a slow flight is attributable after
+the fact; structural only, never the URL, key, headers or body. A start
+without an end is the "dispatch never came back" marker a freeze
+investigation looks for (see
 [Usage Telemetry](/architecture/usage-telemetry.md)).
 
 ## Response history (#1251)

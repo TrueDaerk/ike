@@ -181,12 +181,17 @@ type StatusLine struct {
 // NotifySlowMs is the wall-clock threshold in milliseconds past which a
 // finished dispatch announces itself through the notification channel while
 // the response pane is not on screen (#2364); 0 turns that slow branch off,
-// whereas a non-2xx answer always notifies.
+// whereas a non-2xx answer always notifies. SlowThresholdMs (#2547) is the
+// wall clock past which a flight counts as slow for the response pane: its
+// header then carries the duration and the dominating timing phase in the
+// warning slot, and the off-screen completion notice names that phase; 0
+// turns the highlight off.
 type HTTP struct {
 	DiffIgnoreHeaders []string `toml:"diff_ignore_headers"`
 	DiffAfterRerun    bool     `toml:"diff_after_rerun"`
 	HighlightLimitKB  int      `toml:"highlight_limit_kb"`
 	NotifySlowMs      int      `toml:"notify_slow_ms"`
+	SlowThresholdMs   int      `toml:"slow_threshold_ms"`
 }
 
 // Forge holds the code-forge settings (#2085, #2086). PollIntervalSeconds is

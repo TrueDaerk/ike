@@ -85,6 +85,107 @@ func TestTimingSurvivesHistoryBrowsing(t *testing.T) {
 	}
 }
 
+// slow returns a 14.1 s response whose time went into the server wait, the
+// 2026-09-03 outlier the threshold exists for (#2547).
+func slow() *httpclient.Response {
+	resp := sample()
+	resp.Duration = 14100 * time.Millisecond
+	resp.Timing = &httpclient.Timing{
+		DNS:      2 * time.Millisecond,
+		Connect:  11 * time.Millisecond,
+		TLS:      34 * time.Millisecond,
+		TTFB:     13900 * time.Millisecond,
+		Transfer: 200 * time.Millisecond,
+	}
+	return resp
+}
+
+// withSlowThreshold installs a threshold for the test and restores the
+// default afterwards.
+func withSlowThreshold(t *testing.T, ms int) {
+	t.Helper()
+	old := SlowThreshold()
+	SetSlowThreshold(ms)
+	t.Cleanup(func() { SetSlowThreshold(int(old / time.Millisecond)) })
+}
+
+// TestSlowMarkerInHeader: past http.slow_threshold_ms the header's warning
+// slot carries the duration and the dominating phase; a fast flight shows
+// nothing there.
+func TestSlowMarkerInHeader(t *testing.T) {
+	withSlowThreshold(t, 2000)
+	m := New(nil)
+	m.SetSize(120, 24)
+	m.Set("create", slow())
+	if got, want := m.SlowMarker(), "⚠ slow 14.1s · ttfb 13.9s"; got != want {
+		t.Fatalf("marker = %q, want %q", got, want)
+	}
+	if view := m.View(); !strings.Contains(strings.SplitN(view, "\n", 2)[0], "⚠ slow 14.1s · ttfb 13.9s") {
+		t.Fatalf("marker missing from the header line:\n%s", view)
+	}
+
+	m.Set("create", timed())
+	if got := m.SlowMarker(); got != "" {
+		t.Fatalf("a fast flight must not be flagged: %q", got)
+	}
+	if view := m.View(); strings.Contains(view, "⚠ slow") {
+		t.Fatalf("marker left over for a fast flight:\n%s", view)
+	}
+}
+
+// TestSlowMarkerWithoutBreakdown: a slow response restored from a history
+// file written before #2404 still flags its duration, just without a phase.
+func TestSlowMarkerWithoutBreakdown(t *testing.T) {
+	withSlowThreshold(t, 2000)
+	resp := slow()
+	resp.Timing = nil
+	m := New(nil)
+	m.SetSize(120, 24)
+	m.Set("create", resp)
+	if got, want := m.SlowMarker(), "⚠ slow 14.1s"; got != want {
+		t.Fatalf("marker = %q, want %q", got, want)
+	}
+}
+
+// TestSlowMarkerThresholdOff: 0 switches the marker off, whatever the
+// duration; the threshold is inclusive at its edge.
+func TestSlowMarkerThresholdOff(t *testing.T) {
+	withSlowThreshold(t, 0)
+	m := New(nil)
+	m.SetSize(120, 24)
+	m.Set("create", slow())
+	if got := m.SlowMarker(); got != "" {
+		t.Fatalf("threshold 0 must switch the marker off: %q", got)
+	}
+	withSlowThreshold(t, 14100)
+	if got := m.SlowMarker(); got == "" {
+		t.Fatal("a flight exactly at the threshold counts as slow")
+	}
+	withSlowThreshold(t, 14101)
+	if got := m.SlowMarker(); got != "" {
+		t.Fatalf("a flight below the threshold is not slow: %q", got)
+	}
+}
+
+// TestSlowMarkerFollowsHistory: the marker belongs to the entry on show, so
+// browsing from a slow answer to a fast older one drops it and back again
+// restores it.
+func TestSlowMarkerFollowsHistory(t *testing.T) {
+	withSlowThreshold(t, 2000)
+	m := New(nil)
+	m.SetSize(120, 24)
+	m.Set("create", slow())
+	m.SetHistory([]HistoryItem{{Resp: slow()}, {Resp: timed()}})
+	m.showHistory(1)
+	if got := m.SlowMarker(); got != "" {
+		t.Fatalf("the fast older entry must not be flagged: %q", got)
+	}
+	m.showHistory(0)
+	if got := m.SlowMarker(); got == "" {
+		t.Fatal("the slow entry lost its marker after browsing")
+	}
+}
+
 // TestCancelHintAppearsAfterOneSecond: a young flight shows no hint (the
 // median request is gone before it would help), a second-old one names both
 // the pane key and the bound chord.

@@ -4,7 +4,7 @@ title: Usage Telemetry
 description: Local-only usage recording — command (with outcome), keybinding, layout, session, heartbeat, operation-lifecycle, palette-pick, palette-dismissal and project-time events appended as per-session JSONL under ~/.ike/telemetry, asynchronous and content-free, switched by telemetry.enabled.
 resource: internal/telemetry/telemetry.go
 tags: [architecture, telemetry, usage, jsonl, privacy, diagnostics]
-timestamp: 2026-09-03T00:00:00Z
+timestamp: 2026-09-08T16:00:00Z
 ---
 
 # Usage Telemetry
@@ -33,11 +33,11 @@ paths.** Two guards enforce it:
 ## Event schema (the analysis interface)
 
 One JSON object per line. `v` is the schema version (`telemetry.SchemaVersion`,
-currently 5); readers must tolerate unknown fields and filter on `v`.
+currently 8); readers must tolerate unknown fields and filter on `v`.
 
 ```json
-{"v":5,"ts":"2026-08-27T10:15:30.123Z","sid":"a1b2c3d4e5f6","type":"command","data":{"id":"editor.save","source":"keybind"}}
-{"v":5,"ts":"2026-08-27T10:15:31.456Z","sid":"a1b2c3d4e5f6","type":"internal","data":{"id":"lsp.documentSymbols","source":"internal"}}
+{"v":8,"ts":"2026-08-27T10:15:30.123Z","sid":"a1b2c3d4e5f6","type":"command","data":{"id":"editor.save","source":"keybind"}}
+{"v":8,"ts":"2026-08-27T10:15:31.456Z","sid":"a1b2c3d4e5f6","type":"internal","data":{"id":"lsp.documentSymbols","source":"internal"}}
 ```
 
 ### Version history (what an analysis script must branch on)
@@ -51,6 +51,7 @@ currently 5); readers must tolerate unknown fields and filter on `v`.
 | 5 | #2492 | The `project.switch` op's warm-up phase becomes total: every `ok` is followed by exactly one `lsp` phase. A phase without a publish measurement carries `skipped` (`no_server_docs`, `quiet`, `superseded`, `quit`); its `ms` still counts from the switch's start. On v4 a missing `lsp` phase was ambiguous (server silence or lost event); on v5 absence is a bug. |
 | 6 | #2490 | `palette.dismiss` events gain `results` — how many rows the palette was listing when esc was pressed. It separates "typed a name that does not exist" (`query_len > 0`, `results == 0`) from "found it, changed my mind", which `query_len` alone cannot. Additive: every v5 field keeps its meaning, and a missing `results` on v5 and below means "not recorded", not zero. |
 | 7 | #2551 | The type `palette.pick` joins — the counterpart of `palette.dismiss`, carrying `mode`, `query_len`, `rank` (the 0-based index of the chosen row) and `results`, so ranking quality (#2399, #2155) becomes measurable; it never carries the query or a file id, and a picked command's id follows in the next `command` event. The `session.restore` op's `ok` phase gains `tabs` (file tabs that came back) and `missing` (files gone since the save) next to `panes`. Additive: a missing `rank`/`tabs`/`missing` on v6 and below means "not recorded", not zero. |
+| 8 | #2547 | The `http.flight` end phases carry the timing breakdown the response pane shows: `dns_ms`, `connect_ms`, `tls_ms`, `ttfb_ms`, `transfer_ms` (milliseconds spent *in* each phase; `ttfb_ms` counts from the start of the exchange and so contains the setup phases) and `reused` (`true` when the request went out on a kept-alive connection, which is why its setup phases read 0). Builds since #2404 already wrote the fields without a bump; from v8 a reader may rely on them for every flight that produced a response — their absence on an `ok` means nothing was measured (a history restore), never a lost field. Below v8 absence means "not recorded". Structural numbers only, never a host or URL. |
 
 An export spanning versions therefore needs three guards: filter v1 `command`
 events on `data.source != "internal"`, treat a missing `ok`/`ms` on v4 as
@@ -129,7 +130,11 @@ counts by the version's interval before comparing sessions.
     "it never came back" signal and is kept as exactly that. The ids:
     - `http.flight` — one HTTP dispatch (run, re-send, re-run). The end
       phases add `class` (`2xx`…`5xx`, when a response arrived) and `stream`
-      (`true`/`false`). No URL, request key, header or body.
+      (`true`/`false`), and — v8 (#2547), captured since #2404 — the phase
+      breakdown `dns_ms`, `connect_ms`, `tls_ms`, `ttfb_ms`, `transfer_ms`
+      plus the `reused` flag, so a slow flight is attributable after the
+      fact: a `ttfb_ms` near the total is the server's wait, a large
+      `dns_ms` the resolver's. No URL, request key, header or body.
     - `project.switch` (#2403) — the seamless switch transaction
       (`performSwitchOpts`, `internal/app/switch.go`): persisting the
       departing project's session and layout, the chdir, parking the old
@@ -350,6 +355,8 @@ jq -r 'select(.type=="palette.dismiss" and .data.results != null and (.data.quer
 jq -r 'select(.type=="palette.pick") | [.data.mode, .data.rank] | @tsv' ~/.ike/telemetry/*.jsonl | sort | uniq -c | sort -rn
 # restores that lost files (v7+)
 jq -r 'select(.type=="op" and .data.id=="session.restore" and .data.phase=="ok" and .data.missing != null and (.data.missing|tonumber) > 0) | [.data.panes, .data.tabs, .data.missing] | @tsv' ~/.ike/telemetry/*.jsonl
+# slow HTTP flights and where the time went (v8+)
+jq -r 'select(.type=="op" and .data.id=="http.flight" and .data.ttfb_ms != null and (.data.ms|tonumber) >= 2000) | [.data.ms, .data.dns_ms, .data.connect_ms, .data.tls_ms, .data.ttfb_ms, .data.transfer_ms, .data.reused] | @tsv' ~/.ike/telemetry/*.jsonl
 # minutes per project (v4+)
 jq -r 'select(.type=="project.leave") | [.data.project, (.data.ms|tonumber/60000|floor)] | @tsv' ~/.ike/telemetry/*.jsonl
 ```

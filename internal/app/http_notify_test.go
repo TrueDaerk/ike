@@ -135,6 +135,62 @@ func TestHTTPNotifySlowOff(t *testing.T) {
 	}
 }
 
+// Past http.slow_threshold_ms (#2547) the notice names the phase the time
+// went into, so the toast alone says whether the server or the network sat
+// on the answer.
+func TestHTTPNoticeNamesDominantPhase(t *testing.T) {
+	m := httpNotifyApp(t, 3000)
+	resp := httpNotifyResponse("slow", 200, "200 OK", 14100*time.Millisecond)
+	resp.Timing = &httpclient.Timing{DNS: 2 * time.Millisecond, Connect: 11 * time.Millisecond,
+		TLS: 34 * time.Millisecond, TTFB: 13900 * time.Millisecond, Transfer: 200 * time.Millisecond}
+	m = landHTTPResponse(t, m, "GET /report", resp)
+	notice := httpNotice(m)
+	for _, want := range []string{"GET /report", "14.1s", "slower than 3.0s", "mostly ttfb (13.9s)"} {
+		if !strings.Contains(notice, want) {
+			t.Errorf("notice %q must mention %q", notice, want)
+		}
+	}
+
+	// A failure below the highlight threshold names no phase: the time was
+	// not the news.
+	m = httpNotifyApp(t, 3000)
+	resp = httpNotifyResponse("fail", 500, "500 Internal Server Error", 800*time.Millisecond)
+	resp.Timing = &httpclient.Timing{TTFB: 700 * time.Millisecond, Transfer: 100 * time.Millisecond}
+	m = landHTTPResponse(t, m, "GET /report", resp)
+	if notice := httpNotice(m); strings.Contains(notice, "mostly") {
+		t.Errorf("a fast failure must not name a phase: %q", notice)
+	}
+
+	// A failure past the threshold does — the notice goes out for the
+	// status, and the phase rides along.
+	m = httpNotifyApp(t, 0)
+	resp = httpNotifyResponse("fail", 502, "502 Bad Gateway", 5*time.Second)
+	resp.Timing = &httpclient.Timing{Connect: 4800 * time.Millisecond, TTFB: 4900 * time.Millisecond}
+	m = landHTTPResponse(t, m, "GET /report", resp)
+	if notice := httpNotice(m); !strings.Contains(notice, "mostly connect (4.8s)") {
+		t.Errorf("a slow failure names its phase: %q", notice)
+	}
+}
+
+// The highlight threshold's off value drops the phase from the notice; the
+// notice itself still follows http.notify_slow_ms.
+func TestHTTPNoticePhaseOff(t *testing.T) {
+	old := config.Get()
+	t.Cleanup(func() { config.Set(old) })
+	c := *old
+	c.HTTP.NotifySlowMs = 3000
+	c.HTTP.SlowThresholdMs = 0
+	config.Set(&c)
+	m := httpApp(t)
+	resp := httpNotifyResponse("slow", 200, "200 OK", 14100*time.Millisecond)
+	resp.Timing = &httpclient.Timing{TTFB: 13900 * time.Millisecond, Transfer: 200 * time.Millisecond}
+	m = landHTTPResponse(t, m, "GET /report", resp)
+	notice := httpNotice(m)
+	if !strings.Contains(notice, "slower than 3.0s") || strings.Contains(notice, "mostly") {
+		t.Errorf("threshold 0 keeps the notice but drops the phase: %q", notice)
+	}
+}
+
 // A canceled dispatch reports the abort, not a failure — the user asked for
 // it, and its partial answer is not news.
 func TestHTTPNoCompletionNoticeForCancel(t *testing.T) {

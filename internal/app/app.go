@@ -10646,6 +10646,9 @@ func applyIDColorConfig() {
 func applyHTTPHighlightLimit() {
 	if c := config.Get(); c != nil {
 		httppane.SetHighlightLimit(c.HTTP.HighlightLimitKB)
+		// The slow-flight threshold (#2547) rides along: same package global
+		// arrangement, same two install points.
+		httppane.SetSlowThreshold(c.HTTP.SlowThresholdMs)
 	}
 }
 
