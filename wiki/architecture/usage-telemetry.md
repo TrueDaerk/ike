@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Usage Telemetry
-description: Local-only usage recording — command (with outcome), keybinding, layout, session, heartbeat, operation-lifecycle, palette-dismissal and project-time events appended as per-session JSONL under ~/.ike/telemetry, asynchronous and content-free, switched by telemetry.enabled.
+description: Local-only usage recording — command (with outcome), keybinding, layout, session, heartbeat, operation-lifecycle, palette-pick, palette-dismissal and project-time events appended as per-session JSONL under ~/.ike/telemetry, asynchronous and content-free, switched by telemetry.enabled.
 resource: internal/telemetry/telemetry.go
 tags: [architecture, telemetry, usage, jsonl, privacy, diagnostics]
 timestamp: 2026-09-03T00:00:00Z
@@ -50,6 +50,7 @@ currently 5); readers must tolerate unknown fields and filter on `v`.
 | 4 | #2408 | Heartbeats slow from 10s to 60s (any per-hour rate must branch on `v`); `command`/`internal` events gain `ok` and `ms` when the dispatch failed or was slow; the types `palette.dismiss` and `project.leave` join; the v3 pseudo-command `palette.recentFiles.dismiss` (#2399, `data.qlen`) is gone — its successor is `palette.dismiss` with `data.query_len`. |
 | 5 | #2492 | The `project.switch` op's warm-up phase becomes total: every `ok` is followed by exactly one `lsp` phase. A phase without a publish measurement carries `skipped` (`no_server_docs`, `quiet`, `superseded`, `quit`); its `ms` still counts from the switch's start. On v4 a missing `lsp` phase was ambiguous (server silence or lost event); on v5 absence is a bug. |
 | 6 | #2490 | `palette.dismiss` events gain `results` — how many rows the palette was listing when esc was pressed. It separates "typed a name that does not exist" (`query_len > 0`, `results == 0`) from "found it, changed my mind", which `query_len` alone cannot. Additive: every v5 field keeps its meaning, and a missing `results` on v5 and below means "not recorded", not zero. |
+| 7 | #2551 | The type `palette.pick` joins — the counterpart of `palette.dismiss`, carrying `mode`, `query_len`, `rank` (the 0-based index of the chosen row) and `results`, so ranking quality (#2399, #2155) becomes measurable; it never carries the query or a file id, and a picked command's id follows in the next `command` event. The `session.restore` op's `ok` phase gains `tabs` (file tabs that came back) and `missing` (files gone since the save) next to `panes`. Additive: a missing `rank`/`tabs`/`missing` on v6 and below means "not recorded", not zero. |
 
 An export spanning versions therefore needs three guards: filter v1 `command`
 events on `data.source != "internal"`, treat a missing `ok`/`ms` on v4 as
@@ -166,10 +167,22 @@ counts by the version's interval before comparing sessions.
     - `session.restore` (#2403) — the startup layout/session restore
       (`restoreLayout` + `restoreSession` in `buildModel`), the one startup
       phase whose cost scales with what the user left open; `panes` is what
-      came back. Only the startup model records it — a project switch builds
+      came back, and since v7 (#2551) `tabs` counts the file tabs that
+      reopened and `missing` the files that no longer existed on disk — the
+      same count the "session restore: N files are gone" notice reports. Only the startup model records it — a project switch builds
       its model on a recorder that is discarded right after — and like the
       session marker it never opens a session file on its own, so a launch
       that only restores and quits stays a ghost (#2318).
+  - `palette.pick` (#2551) — a palette row was activated, the counterpart of
+    `palette.dismiss`. `mode` is the mode's prefix rune, `query_len` the number
+    of runes typed — **never the query itself** — `rank` the **0-based index**
+    of the chosen row and `results` how many rows the list held. The rank is
+    what makes ranking quality measurable: the `command` event that follows a
+    picked command says what ran, never where it sat, so "the wanted row was
+    third" is invisible without it. No file id and no query travel; a picked
+    command's id is already in that next `command` event. Recorded for keyboard
+    picks, alt-activations and mouse clicks alike, in the same Update pass that
+    closed the overlay.
   - `palette.dismiss` (#2408) — a palette mode closed with esc instead of a
     pick, the one palette outcome that otherwise leaves no trace at all.
     `mode` is the mode's prefix rune (`":"`, `"@"`, `"%"`, …), `query_len` the
@@ -333,6 +346,10 @@ jq -r 'select(.type=="command" and .data.ms) | [.data.id, .data.ok, .data.ms] | 
 jq -r 'select(.type=="palette.dismiss") | .data.mode' ~/.ike/telemetry/*.jsonl | sort | uniq -c | sort -rn
 # fruitless searches: typed something, matched nothing, gave up (v6+)
 jq -r 'select(.type=="palette.dismiss" and .data.results != null and (.data.query_len|tonumber) > 0 and (.data.results|tonumber) == 0) | [.data.mode, .data.query_len, .data.ms] | @tsv' ~/.ike/telemetry/*.jsonl
+# where in the list the picked row sat, per mode (v7+)
+jq -r 'select(.type=="palette.pick") | [.data.mode, .data.rank] | @tsv' ~/.ike/telemetry/*.jsonl | sort | uniq -c | sort -rn
+# restores that lost files (v7+)
+jq -r 'select(.type=="op" and .data.id=="session.restore" and .data.phase=="ok" and .data.missing != null and (.data.missing|tonumber) > 0) | [.data.panes, .data.tabs, .data.missing] | @tsv' ~/.ike/telemetry/*.jsonl
 # minutes per project (v4+)
 jq -r 'select(.type=="project.leave") | [.data.project, (.data.ms|tonumber/60000|floor)] | @tsv' ~/.ike/telemetry/*.jsonl
 ```

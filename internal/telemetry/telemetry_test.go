@@ -126,6 +126,8 @@ func TestSchemaCarriesOnlyStructuralFields(t *testing.T) {
 	r.Op("project.switch", "lsp", map[string]string{"ms": "0", "skipped": "no_server_docs"})
 	r.CommandOutcome("editor.save", SourceKeybind, false, 0)
 	r.PaletteDismiss("%", 4, 7, 900*time.Millisecond)
+	r.PalettePick(":", 3, 2, 9)
+	r.Op("session.restore", "ok", map[string]string{"ms": "12", "panes": "2", "tabs": "7", "missing": "1"})
 	r.ProjectLeave("ab12cd34ef56", "switch", time.Minute)
 	r.Close()
 
@@ -141,6 +143,10 @@ func TestSchemaCarriesOnlyStructuralFields(t *testing.T) {
 		"mode":      true, // palette.dismiss (#2408) — a prefix rune, never the query
 		"query_len": true, // palette.dismiss (#2408) — the length, never the text
 		"results":   true, // palette.dismiss (#2490) — a row count, never content
+		"rank":      true, // palette.pick (#2551) — a row index, never the picked item
+		"panes":     true, // session.restore (#2403) — a pane count
+		"tabs":      true, // session.restore (#2551) — a tab count
+		"missing":   true, // session.restore (#2551) — a count of vanished files
 		"reason":    true, // project.leave (#2408)
 		"skipped":   true, // project.switch lsp phase (#2492) — a reason token, never content
 	}
@@ -668,16 +674,53 @@ func TestProjectLeaveEvent(t *testing.T) {
 	}
 }
 
-// The version analysis scripts branch on (#2490).
-func TestSchemaVersionIsSix(t *testing.T) {
-	if SchemaVersion != 6 {
-		t.Fatalf("SchemaVersion = %d, want 6", SchemaVersion)
+// A pick is its own event type carrying the mode, the query *length*, the
+// 0-based rank of the chosen row and how many rows were listed (#2551).
+func TestPalettePickEvent(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	r.PalettePick("@", 5, 3, 20)
+	r.Close()
+
+	evs := readSession(t, dir)
+	if len(evs) != 1 || evs[0].Type != TypePalettePick {
+		t.Fatalf("want one %s event, got %v", TypePalettePick, evs)
+	}
+	d := evs[0].Data
+	if d["mode"] != "@" || d["query_len"] != "5" || d["rank"] != "3" || d["results"] != "20" {
+		t.Fatalf("payload = %v, want mode @, query_len 5, rank 3, results 20", d)
+	}
+	if _, ok := d["query"]; ok {
+		t.Errorf("a pick must never carry the query: %v", d)
+	}
+}
+
+// Negative rank and result counts clamp to zero (#2551), like the dismissal's.
+func TestPalettePickClampsNegatives(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	r.PalettePick(":", 0, -1, -4)
+	r.Close()
+
+	evs := readSession(t, dir)
+	if len(evs) != 1 {
+		t.Fatalf("want one event, got %v", evs)
+	}
+	if d := evs[0].Data; d["rank"] != "0" || d["results"] != "0" {
+		t.Fatalf("payload = %v, want rank 0 and results 0", d)
+	}
+}
+
+// The version analysis scripts branch on (#2551).
+func TestSchemaVersionIsSeven(t *testing.T) {
+	if SchemaVersion != 7 {
+		t.Fatalf("SchemaVersion = %d, want 7", SchemaVersion)
 	}
 	dir := t.TempDir()
 	r := New(dir, nil)
 	r.Command("editor.save", SourceKeybind)
 	r.Close()
-	if evs := readSession(t, dir); len(evs) != 1 || evs[0].V != 6 {
-		t.Fatalf("events must be stamped v6, got %v", evs)
+	if evs := readSession(t, dir); len(evs) != 1 || evs[0].V != 7 {
+		t.Fatalf("events must be stamped v7, got %v", evs)
 	}
 }

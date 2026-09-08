@@ -70,7 +70,18 @@ import (
 // does not exist" (query_len > 0, results 0) from "found it, changed my mind",
 // which query_len alone cannot. The field is additive: every v5 field keeps
 // its meaning, and its absence on a v5 log means "not recorded", not zero.
-const SchemaVersion = 6
+//
+// v7 (#2551): "palette.pick" joins — the counterpart to "palette.dismiss",
+// recording where in the list the chosen row sat ("rank", 0-based) out of how
+// many were listed ("results"), plus the mode prefix and the query length. It
+// carries no query and no file id; the command id of a picked command follows
+// in the very next "command" event. Without it the ranking quality of the
+// frecency work (#2399, #2155) cannot be measured at all — a pick used to
+// leave no trace of its position. The "session.restore" op's "ok" phase gains
+// "tabs" (file tabs that came back) and "missing" (files that no longer
+// existed), next to the "panes" it already carried. Both additions are
+// additive: their absence on a v6 log means "not recorded", not zero.
+const SchemaVersion = 7
 
 // defaultFlushInterval is how often the writer goroutine flushes the
 // bufio.Writer on its own, independent of buffer fill or explicit Flush
@@ -89,6 +100,7 @@ const (
 	TypeOp        = "op"        // lifecycle of a long-running operation (#2348)
 
 	TypePaletteDismiss = "palette.dismiss" // a palette mode closed without a pick (#2408)
+	TypePalettePick    = "palette.pick"    // a palette row was activated: which rank, out of how many (#2551)
 	TypeProjectLeave   = "project.leave"   // foreground time spent in the project being left (#2408)
 )
 
@@ -296,6 +308,30 @@ func (r *Recorder) PaletteDismiss(mode string, queryLen, results int, d time.Dur
 		"query_len": strconv.Itoa(queryLen),
 		"results":   strconv.Itoa(results),
 		"ms":        strconv.FormatInt(d.Milliseconds(), 10),
+	})
+}
+
+// PalettePick records a palette row being activated (#2551): mode is the
+// mode's prefix rune as a string, queryLen the number of runes typed — never
+// the query itself — rank the 0-based index of the chosen row and results how
+// many rows the list was showing. It is the counterpart of PaletteDismiss:
+// together they cover both palette outcomes, and the rank is what makes the
+// ranking quality of the frecency work (#2399, #2155) measurable — "the wanted
+// row was third" is invisible in the command event that follows. No file id or
+// query travels; a picked command's id is already in that next command event.
+// A negative rank or count is clamped to zero.
+func (r *Recorder) PalettePick(mode string, queryLen, rank, results int) {
+	if rank < 0 {
+		rank = 0
+	}
+	if results < 0 {
+		results = 0
+	}
+	r.record(TypePalettePick, map[string]string{
+		"mode":      mode,
+		"query_len": strconv.Itoa(queryLen),
+		"rank":      strconv.Itoa(rank),
+		"results":   strconv.Itoa(results),
 	})
 }
 

@@ -1044,6 +1044,13 @@ type Model struct {
 	// (#2177): every pane's active tab restores its own framing, not just the
 	// focused one's.
 	pendingScroll []editorScroll
+
+	// restoredTabs / restoredMissing count what the layout restore brought
+	// back and what it could not (#2551): the file tabs it reopened and the
+	// files gone since the save. Written by restoreLayout, read once by the
+	// session.restore op span right after.
+	restoredTabs    int
+	restoredMissing int
 	// tabViews is the session's per-tab caret/framing table (#2177), pane key
 	// → path → view. Read once at construction and consumed by the layout
 	// restore, which hands each entry to its deferred tab.
@@ -1713,7 +1720,11 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		endOp := m.usage.OpTimer(telemetry.OpSessionRestore)
 		m.restoreLayout(cfg)
 		m.restoreSession()
-		endOp("ok", map[string]string{"panes": strconv.Itoa(len(m.activeWS().Panes.Keys()))})
+		endOp("ok", map[string]string{
+			"panes":   strconv.Itoa(len(m.activeWS().Panes.Keys())),
+			"tabs":    strconv.Itoa(m.restoredTabs),
+			"missing": strconv.Itoa(m.restoredMissing),
+		})
 	} else if extras, ok := resumed.Aux.(wsExtras); ok {
 		// The debug session parked with the workspace re-attaches (#777).
 		m.dbg = extras.dbg
@@ -2097,7 +2108,8 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 	panes.SetSender(m.host.Send)
 	panes.AddExplorer()
 	load := m.deferredLoader(panes)
-	missing := 0 // files gone since the save; reported once, below
+	missing := 0  // files gone since the save; reported once, below
+	restored := 0 // file tabs that did come back (#2551, telemetry)
 	// The debuggee terminal pane (#1370) never resurrects — its content is
 	// session state, and restoring a shell in its place would be misleading.
 	// Its leaf is pruned; the next debug session recreates the pane beside
@@ -2403,6 +2415,7 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			if slot < 0 {
 				continue
 			}
+			restored++
 			if i == id.Active {
 				active = slot
 			}
@@ -2529,6 +2542,10 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 	m.recentEditor = firstEditorKey(leaves)
 	m.recentFlex = ""
 	m.activeWS().Tree = tree
+	// The restore span reports what came back (#2551): the notice below tells
+	// the user, the telemetry fields tell an export how big a restore is and
+	// how often files vanish under it.
+	m.restoredTabs, m.restoredMissing = restored, missing
 	if missing > 0 {
 		// One summary notice for the whole restore (#2177), not one per file:
 		// a deleted directory can take dozens of tabs with it.
@@ -3249,6 +3266,20 @@ func (m Model) recordPaletteDismissal() {
 		return
 	}
 	m.usage.PaletteDismiss(string(d.Prefix), d.QueryLen, d.Results, d.Open)
+}
+
+// recordPalettePick turns a palette row activation into a telemetry event
+// (#2551) — the counterpart of recordPaletteDismissal. The command event that
+// follows a picked command says *what* was run but never *where* it sat in the
+// list, so the ranking quality the frecency work (#2399, #2155) aims at is
+// unmeasurable without the rank. Only the mode prefix, the query length, the
+// 0-based rank and the row count travel: never the query, never a file id.
+func (m Model) recordPalettePick() {
+	p, ok := m.palette.TakePick()
+	if !ok {
+		return
+	}
+	m.usage.PalettePick(string(p.Prefix), p.QueryLen, p.Rank, p.Results)
 }
 
 // recentRankingFrecency reads palette.recent.ranking (#2399): whether the
@@ -8329,6 +8360,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			cmd := m.palette.Update(msg)
 			m.recordPaletteDismissal()
+			m.recordPalettePick()
 			if !m.palette.IsOpen() && cmd == nil && m.diffPick != 0 {
 				// The picker was dismissed mid diff.files flow (#60): abandon
 				// the pending picks so a later "@" open is a plain file open.
@@ -11049,7 +11081,11 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 						return m, nil
 					}
 				}
-				return m, m.palette.Click(msg.X-bx, msg.Y-by)
+				cmd := m.palette.Click(msg.X-bx, msg.Y-by)
+				// A click activates rows too (#2551), so the pick funnel is
+				// read here as well as after the key path's Update.
+				m.recordPalettePick()
+				return m, cmd
 			}
 		}
 		// The wheel scrolls the column under the cursor (#2041): the recent
