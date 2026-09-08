@@ -1193,10 +1193,14 @@ type Notifications struct {
 // context: "rank" lists them last, "hide" omits them. ToggleKey is the default
 // key that opens the palette (Roadmap 0080 owns the final keymap).
 type Palette struct {
-	MaxResults  int           `toml:"max_results"`
-	DefaultMode string        `toml:"default_mode"`
-	OffContext  string        `toml:"off_context"`
-	ToggleKey   string        `toml:"toggle_key"`
+	MaxResults  int    `toml:"max_results"`
+	DefaultMode string `toml:"default_mode"`
+	OffContext  string `toml:"off_context"`
+	ToggleKey   string `toml:"toggle_key"`
+	// HintKeybind toasts the chord a command picked from the palette is
+	// bound to in the focused context (#2549), and offers a key once the same
+	// unbound command was picked three times in a session.
+	HintKeybind bool          `toml:"hint_keybind"`
 	Recent      RecentPalette `toml:"recent"`
 }
 

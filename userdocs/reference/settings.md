@@ -163,6 +163,7 @@ secrets — are documented together, with screenshots, in
 | Default mode | `palette.default_mode` | enum: `:`, `@` | `:` | user | Prefix assumed when the query starts with no mode rune: ":" ranks it as a command, "@" as a file name |
 | Off-context commands | `palette.off_context` | enum: `rank`, `hide` | `rank` | user | How command mode treats commands scoped to a pane other than the focused one: rank them last, or hide them |
 | Recent files ranking | `palette.recent.ranking` | enum: `recency`, `frecency` | `recency` | user | How the recent-files dialog (cmd+e) orders its files and projects: "recency" (the default) lists them newest first, "frecency" blends in how often each was opened |
+| Keybind hint after a pick | `palette.hint_keybind` | boolean | `true` | user | After running a command from the palette, toast the chord it is bound to in the focused pane ("also: cmd+shift+a"); once the same unbound command was picked three times in a session, offer Bind a Key for the Last Palette Command instead |
 
 ### Keymap Hints
 

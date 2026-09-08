@@ -110,6 +110,12 @@ type KeymapDoctorMsg struct{}
 // Dispatched by keymap.deadBindings.
 type KeymapDeadBindingsMsg struct{}
 
+// BindLastPaletteCommandMsg asks the root model to open the settings keymap
+// page narrowed to the command last run from the palette (#2549): the
+// "bind a key" offer raised after the same unbound command was picked three
+// times in a session. Dispatched by palette.bindLastPick.
+type BindLastPaletteCommandMsg struct{}
+
 // CyclePaneFocusMsg asks the root model to move focus to the next pane, the
 // same behavior as the hardcoded tab. Dispatched by pane.switcher.
 type CyclePaneFocusMsg struct{}
@@ -801,6 +807,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("keymap.importJetBrains", "Import JetBrains Keymap XML…", ImportJetBrainsKeymapMsg{}),
 			appCommand("keymap.doctor", "Keymap Doctor: Probe Chord Delivery", KeymapDoctorMsg{}),
 			appCommand("keymap.deadBindings", "Keymap Doctor: Dead Bindings", KeymapDeadBindingsMsg{}),
+			appCommand("palette.bindLastPick", "Bind a Key for the Last Palette Command", BindLastPaletteCommandMsg{}),
 			appCommand("pane.splitDown", "Split Down", SplitFocusedMsg{Zone: layout.ZoneBottom}),
 			appCommand("pane.splitUp", "Split Up", SplitFocusedMsg{Zone: layout.ZoneTop}),
 			appCommand("pane.splitRight", "Split Right", SplitFocusedMsg{Zone: layout.ZoneRight}),

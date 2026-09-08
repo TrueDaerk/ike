@@ -601,6 +601,10 @@ var jetbrainsRows = []row{
 	{"cmd+alt+i", "issues.openCurrentBranch", "Open current branch issue", Global, "GitHub issues (#2544)"},
 	{"f10", "menu.open", "Open menu bar", Global, "Menu (0160)"},
 	{"cmd+,", "settings.open", "Settings", Global, "Menu (0160)"},
+	// The bind-a-key offer after repeated palette picks (#2549): the toast
+	// names this chord, so the offer is itself a learnable shortcut.
+	// cmd+alt+k is free on both platforms (ctrl+alt+k off macOS).
+	{"cmd+alt+k", "palette.bindLastPick", "Bind key for last palette command", Global, "Command palette (#2549)"},
 	// Unbound-command audit (#1378): JetBrains chords for palette-only
 	// commands where one exists and is conflict-free on both platforms.
 	// cmd+f12 is JetBrains' File Structure popup (macOS keymap verbatim);

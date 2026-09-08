@@ -181,6 +181,7 @@ var reachableAlternatives = map[string]string{
 	"deps.toggle":                      "palette",
 	"time.toggle":                      "palette / Tools menu",
 	"usage.toggle":                     "palette / Tools menu",
+	"palette.bindLastPick":             "palette / the bind-a-key toast after repeated palette picks",
 	"issues.openCurrentBranch":         "palette / click the status line's branch-issue segment",
 	"lsp.ignoreDiagnostic":             "palette",
 	"structure.toggle":                 "palette",

@@ -108,6 +108,38 @@ func (k *KeymapPage) SetDoctorLaunch(f func() tea.Cmd) { k.doctorLaunch = f }
 // platform and terminal.
 func (k *KeymapPage) SetDeadBindingsLaunch(f func() tea.Cmd) { k.deadLaunch = f }
 
+// ShowCommand filters the list down to one command id and selects its first
+// row (#2549) — the bind-a-key offer after repeated palette picks lands here,
+// so enter captures a chord for exactly that command. The filter is the id
+// itself, visible and editable like a typed one; an unknown id leaves an
+// empty list rather than failing.
+func (k *KeymapPage) ShowCommand(id string) {
+	k.filtering = false
+	k.filter, k.filterCur = id, len([]rune(id))
+	k.sel, k.off = 0, 0
+	for i, r := range k.rows() {
+		if r.Command == id {
+			k.sel = i
+			return
+		}
+	}
+}
+
+// OpenKeymapOn opens the panel on the Keymap page with the list narrowed to
+// one command (#2549) — the palette.bindLastPick entry point. Reports whether
+// a keymap page was found.
+func (m *Model) OpenKeymapOn(commandID string) bool {
+	m.Open()
+	for i, page := range m.pages {
+		if kp, ok := page.Custom.(*KeymapPage); ok {
+			m.cat, m.focus = i, formColumn
+			kp.ShowCommand(commandID)
+			return true
+		}
+	}
+	return false
+}
+
 // Capturing implements PageModel: while a rebind capture (or its conflict
 // confirmation) or the filter input (#531) is active the page needs every key
 // verbatim — filter text may contain the page's own action letters (u/r/j/k).

@@ -1,5 +1,17 @@
 # Log
 
+## 2026-09-08 (palette pick hints its chord, offers a key for unbound commands, #2549)
+
+- After a palette pick of a command bound in the focused context a toast
+  names the chord (`also: cmd+shift+a`); the third pick in a session of a
+  command bound nowhere offers **`palette.bindLastPick`** (`cmd+alt+k`),
+  which opens Settings ▸ Keymap narrowed to that command so `enter` binds
+  it. `keymap.LiveBindings.BindingIn` is the context-honest lookup behind
+  the hint; `settings.Model.OpenKeymapOn` / `KeymapPage.ShowCommand` the
+  entry point. Setting **`palette.hint_keybind`** (default on, Settings UI
+  "Command Palette") silences both toasts.
+  Docs: [Command Palette](/architecture/command-palette.md#learnable-shortcuts-the-keybind-hint-after-a-pick-2549).
+
 ## 2026-09-08 (usage tool window over the local telemetry log, #2552)
 
 - **`usage.toggle`** (`cmd+alt+u`, Tools ▸ Usage Report) opens the singleton

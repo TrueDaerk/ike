@@ -94,3 +94,23 @@ func TestLargeFileThresholdsExposed(t *testing.T) {
 		t.Fatalf("missing large-file entries: %v", found)
 	}
 }
+
+// TestPaletteHintKeybindExposed guards #2549: the post-pick keybind hint is a
+// boolean entry on the Command Palette page.
+func TestPaletteHintKeybindExposed(t *testing.T) {
+	for _, p := range BasePages([]string{"default"}, nil, nil) {
+		if p.Title != "Command Palette" {
+			continue
+		}
+		for _, e := range p.Entries {
+			if e.Key == "palette.hint_keybind" {
+				if e.Type != Bool {
+					t.Fatalf("palette.hint_keybind type = %v, want Bool", e.Type)
+				}
+				return
+			}
+		}
+		t.Fatal("Command Palette page missing palette.hint_keybind")
+	}
+	t.Fatal("no Command Palette page")
+}

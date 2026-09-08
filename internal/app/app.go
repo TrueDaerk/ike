@@ -979,6 +979,13 @@ type Model struct {
 	lhDiff        diff.Result          // selected snapshot vs lhCur, for the inline diff pane
 	lhErr         string               // selection's snapshot load error, shown in place of the diff
 
+	// lastPalettePick is the command id last run from the palette (#2549),
+	// the target of palette.bindLastPick; unboundPicks counts, per session,
+	// the palette picks of commands with no binding at all, so the third one
+	// raises the bind-a-key offer.
+	lastPalettePick string
+	unboundPicks    map[string]int
+
 	// The project-wide local-history timeline (#2171): every file's snapshots
 	// on one day-grouped axis, handing a picked row to the per-file panel.
 	ph       projectHistoryState
@@ -5292,6 +5299,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.settings.OpenPythonEnvWizard()
 		return m, nil
 
+	case BindLastPaletteCommandMsg:
+		// palette.bindLastPick (cmd+alt+k / palette, #2549): the settings
+		// keymap page narrowed to the command last run from the palette.
+		return m, m.openBindLastPick()
+
 	case OpenSettingsMsg:
 		// settings.open (cmd+, / menu / palette): the floating settings panel.
 		// Opening prefetches the marketplace catalog once (no-op when it is
@@ -7421,6 +7433,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A palette-window selection — never a keybind invocation — bumps the
 		// most-used counter (#773).
 		m.cmdUsage.Bump(msg.ID)
+		// Learnable shortcuts (#2549): the chord that would have done the
+		// same, or — for a command that has none — the offer to bind one.
+		m.paletteKeybindHint(msg.ID)
 		return m, m.RunCommandFrom(msg.ID, telemetry.SourcePalette)
 
 	case palette.OpenFileMsg:

@@ -1350,6 +1350,7 @@ JetBrains is:
 | `http.showResponse` | `cmd+shift+enter` | fragile | `ctrl+shift+f9` | live via ctrl+shift+f9 |
 | `issues.copy` | `cmd+c` | fragile | `issues pane "y" / palette` | live via issues pane "y" / palette |
 | `issues.nextTab` | `right` | delivered | `—` | live |
+| `issues.openCurrentBranch` | `cmd+alt+i` | fragile | `palette / click the status line's branch-issue segment` | live via palette / click the status line's branch-issue segment |
 | `issues.prevTab` | `left` | delivered | `—` | live |
 | `issues.selectNext` | `down` | delivered | `—` | live |
 | `issues.selectPrev` | `up` | delivered | `—` | live |
@@ -1387,6 +1388,7 @@ JetBrains is:
 | `nav.pins` | `cmd+2` | fragile | `palette` | live via palette |
 | `nav.recentLocations` | `alt+shift+e` | fragile | `palette / Navigate menu` | live via palette / Navigate menu |
 | `notifications.history` | `cmd+alt+n` | fragile | `palette` | live via palette |
+| `palette.bindLastPick` | `cmd+alt+k` | fragile | `palette / the bind-a-key toast after repeated palette picks` | live via palette / the bind-a-key toast after repeated palette picks |
 | `palette.keymapHelp` | `f1` | delivered | `—` | live |
 | `palette.recentFiles` | `cmd+e` | fragile | `palette` | live via palette |
 | `palette.searchEverywhere` | `cmd+shift+a` | fragile | `palette (esc esc)` | live via palette (esc esc) |
@@ -1446,14 +1448,14 @@ JetBrains is:
 | `terminal.newTab` | `ctrl+t` | delivered | `—` | live |
 | `terminal.popup` | `cmd+alt+t` | fragile | `palette` | live via palette |
 | `terminal.popup.pin` | `cmd+alt+shift+k` | fragile | `palette` | live via palette |
-| `terminal.sendSelection` | `cmd+alt+shift+enter` | fragile | `palette / editor context menu` | live via palette / editor context menu |
 | `terminal.rerunLast` | `alt+shift+r` | fragile | `palette` | live via palette |
+| `terminal.sendSelection` | `cmd+alt+shift+enter` | fragile | `palette / editor context menu` | live via palette / editor context menu |
 | `terminal.sendSelectionRun` | `cmd+alt+enter` | fragile | `palette / editor context menu` | live via palette / editor context menu |
 | `terminal.toggle` | `alt+f12` | fragile | `palette` | live via palette |
 | `tests.toggle` | `cmd+4` | fragile | `palette / View menu` | live via palette / View menu |
 | `time.toggle` | `cmd+alt+0` | fragile | `palette / Tools menu` | live via palette / Tools menu |
-| `usage.toggle` | `cmd+alt+u` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `todo.list` | `cmd+6` | fragile | `palette` | live via palette |
+| `usage.toggle` | `cmd+alt+u` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `vcs.diff` | `cmd+alt+d` | fragile | `palette` | live via palette |
 | `vcs.panel` | `cmd+9` | fragile | `palette` | live via palette |
 | `vcs.revertFile` | `cmd+alt+z` | fragile | `palette` | live via palette |
