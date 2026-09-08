@@ -820,6 +820,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand(findPanelCommand, "Open Results in Find Window", OpenInFindPanelMsg{}),
 			appCommand("tests.toggle", "Test Results", TestsToggleMsg{}),
 			appCommand("issues.toggle", "GitHub Issues", IssuesToggleMsg{}),
+			appCommand("issues.openCurrentBranch", "Open Current Branch Issue", IssuesOpenCurrentBranchMsg{}),
 			paneCommand("data.columnProfile", "Data: Column Profile", "data", DataColumnProfileMsg{}),
 			paneCommand("data.sortColumn", "Data: Sort Column", "data", DataSortColumnMsg{}),
 			paneCommand("data.export", "Data: Export Rows…", "data", DataExportMsg{}),

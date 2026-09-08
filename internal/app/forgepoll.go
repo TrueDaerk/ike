@@ -228,6 +228,10 @@ func (m *Model) forgeInput() {
 // poll service: events out, backoff and the degrade/recover notifications in.
 func (m *Model) applyForgeListing(msg forge.IssuesMsg) tea.Cmd {
 	m.fillIssuesPanel(msg)
+	// Every listing also feeds the branch-issue segment's title lookup
+	// (#2544), which is why that segment costs the forge no request of its
+	// own and refreshes on the poll's cadence.
+	m.rememberIssueTitles(msg.Issues)
 	p := m.forgePoller()
 	if p == nil {
 		return nil

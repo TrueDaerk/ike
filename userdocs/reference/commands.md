@@ -148,6 +148,7 @@ bring their own.
 | Toggle Raw / Pretty HTTP Response Body | `http.toggleRawBody` | — | — | everywhere |
 | Issues: Copy Issue Reference | `issues.copy` | `cmd+c` | — | `issues` pane |
 | Issues: Next Tab | `issues.nextTab` | `right` | — | `issues` pane |
+| Open Current Branch Issue | `issues.openCurrentBranch` | `cmd+alt+i` | — | everywhere |
 | Issues: Previous Tab | `issues.prevTab` | `left` | — | `issues` pane |
 | Issues: Next Issue | `issues.selectNext` | `down` | — | `issues` pane |
 | Issues: Previous Issue | `issues.selectPrev` | `up` | — | `issues` pane |

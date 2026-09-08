@@ -4,7 +4,7 @@ title: Issues Tool Window
 description: Singleton pane over the repository's forge listing — tabbed Issues/PRs views, a unified filter overlay (fuzzy match, state radio, sort, grouping, label multi-select with an any-of/all-of switch) with a permanent chip row whose chips clear individually and a structured qualifier layer in the match input (label:/is:/sort: with inline tab completion) writing the same filter model, a full-area issue detail with the issue's paginated timeline (comments, label/state/assignee events), a full-area PR detail with per-check CI status and merge/close-with-comment behind a confirm dialog plus an offered post-merge branch cleanup, an action menu with type-ahead speed search in every picker, permission-gated label/assignee/state mutations with optimistic rollback, editing your own texts and composing comments in markdown buffers, a consolidated key table with one meaning per letter and arrow family across all modes, and the start-work action branching issue/<number> off an up-to-date default branch (#1934, #2090, #2084, #2088, #2087, #2089, #2111, #2114, #2112, #2110, #2376, #2537).
 resource: internal/ghissues/ghissues.go
 tags: [architecture, vcs, github, gitea, issues, forge, tool-window, pane, keymap]
-timestamp: 2026-09-04T12:00:00Z
+timestamp: 2026-09-08T12:00:00Z
 ---
 
 # Issues Tool Window (#1934, #2090, #2084, #2088, #2087, #2089, #2104, #2110, #2111, #2112, #2114)
@@ -705,3 +705,26 @@ typing. Opening this tool window views the pending events and clears the badge;
 the dialog's open action reveals the announced issue's detail view here. The
 surface, its queueing rules and the `[forge.notify]` settings are documented in
 [Notifications](/architecture/notifications.md).
+
+## The current branch's issue (#2544)
+
+Work happens on `issue/<number>` branches (the
+[change workflow](/process/change-workflow.md)), and reading the title behind
+that number used to mean opening this window for a lookup and closing it again.
+The opt-in status-line segment `statusline.branch_issue` puts it on the bar —
+`#2544 status line: show the issue behind…` — matching the branch against
+`statusline.branch_issue_pattern` (first capture group = the number, default
+`^issue/(\d+)`), both on the Settings UI's Forge page.
+
+Nothing is fetched for it. Every listing this pane and the poller produce —
+including the persisted snapshot (#2108), which an opted-in session reads once
+per issue branch even with the window never opened — folds its titles into
+`Model.forgeTitles`, and the segment reads that map; an issue no listing
+carries renders as the bare `#2544`. Clicking the segment, or
+`issues.openCurrentBranch` (`cmd+alt+i`), opens this window on that issue's
+**detail** through the same `Reveal` path the forge event dialog uses: straight
+away when the listing is already here, otherwise as soon as the pane's first
+fetch lands. The branch is read from the vcs snapshot, so both backends (GitHub
+via `gh`, Gitea/Forgejo via `tea`) behave identically — the segment only ever
+reads the listing the Forge interface returned. See
+[Status Line Segments](/architecture/status-line.md).

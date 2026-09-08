@@ -330,6 +330,8 @@ func (c *Config) Flat() map[string]string {
 	put("forge.cache", c.Forge.Cache)
 	put("telemetry.enabled", c.Telemetry.Enabled)
 	put("statusline.project_time", c.StatusLine.ProjectTime)
+	put("statusline.branch_issue", c.StatusLine.BranchIssue)
+	put("statusline.branch_issue_pattern", c.StatusLine.BranchIssuePattern)
 	put("ansible.vault_password_file", c.Ansible.VaultPasswordFile)
 	put("playground.xmq.path", c.Playground.XMQ.Path)
 

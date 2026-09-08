@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"unicode"
 
@@ -178,6 +179,31 @@ const (
 	ForgePollMinSeconds = 10
 	ForgePollMaxSeconds = 3600
 )
+
+// DefaultBranchIssuePattern is the branch-name regexp behind the status
+// line's branch-issue segment (#2544): IKE's own change workflow branches
+// work on issue/<number>, and the first capture group is read as that number.
+const DefaultBranchIssuePattern = `^issue/(\d+)`
+
+// ValidateBranchIssuePattern reports why pattern cannot serve as
+// statusline.branch_issue_pattern, "" when it can (#2544). The settings form
+// runs the same check on commit, so a typo is rejected where it is typed
+// instead of silently hiding the segment. A pattern has to compile and has to
+// capture the number in a group — matching alone says nothing about which
+// part of "issue/2544-status-line" is the number.
+func ValidateBranchIssuePattern(pattern string) string {
+	if strings.TrimSpace(pattern) == "" {
+		return "empty pattern"
+	}
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return "not a valid regular expression: " + err.Error()
+	}
+	if re.NumSubexp() < 1 {
+		return "no capture group for the issue number, e.g. " + DefaultBranchIssuePattern
+	}
+	return ""
+}
 
 // validate clamps c in place against the baseline rules and returns one
 // diagnostic per correction. Extension validators run after the built-in checks.
@@ -454,6 +480,17 @@ func validate(c *Config) []Diagnostic {
 	if !popupScopes[c.Terminal.PopupScope] {
 		diags = append(diags, Diagnostic{Field: "terminal.popup_scope", Message: fmt.Sprintf("unknown scope %q, using \"project\"", c.Terminal.PopupScope)})
 		c.Terminal.PopupScope = "project"
+	}
+	// statusline.branch_issue (#2544) opts into the branch-issue segment; its
+	// pattern has to compile and to capture the number, or the segment could
+	// never resolve one.
+	if !onOffModes[c.StatusLine.BranchIssue] {
+		diags = append(diags, Diagnostic{Field: "statusline.branch_issue", Message: fmt.Sprintf("expected \"on\" or \"off\", got %q, using \"off\"", c.StatusLine.BranchIssue)})
+		c.StatusLine.BranchIssue = "off"
+	}
+	if msg := ValidateBranchIssuePattern(c.StatusLine.BranchIssuePattern); msg != "" {
+		diags = append(diags, Diagnostic{Field: "statusline.branch_issue_pattern", Message: fmt.Sprintf("%s, using %q", msg, DefaultBranchIssuePattern)})
+		c.StatusLine.BranchIssuePattern = DefaultBranchIssuePattern
 	}
 	// statusline.project_time (#2426) opts into the project-time segment.
 	if !onOffModes[c.StatusLine.ProjectTime] {
