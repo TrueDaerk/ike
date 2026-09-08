@@ -25,6 +25,7 @@ segments.
 | `mode` | editor input mode (`NORMAL`, `INSERT`, …) | never |
 | `macro` | `recording @x` while a macro recording is active (#58) | idle |
 | `file` | project-relative path + `[+]` / `[disk changed]` markers, plus `[vault]` / `[vault: <id>]` on a decrypted Ansible Vault document (#2528) | never (`no file`) |
+| `group` | project-group marker (#2571, see [Project Groups](/architecture/project-groups.md)): `⦿ web/api` — the active group's name / the current root's directory name; `opening web 2/3` while a group open chain runs | no active group and no chain running |
 | `largefile` | large-file degradation badge (#2159): `[large file]` past the base cliff, `[large: <feature> off]` / `[large: N features off]` for per-feature thresholds; clicking opens the detail popup | nothing degraded |
 | `buflang` | chosen buffer language of a file-less buffer, `as Markdown` (#2033, see [Language Registry](/architecture/languages.md)) | the buffer has a file, or no type was chosen |
 | `hint` | empty-editor discovery hint, `? help · shift shift find` (#659); the search chord renders resolver-truth (a remap outside the known defaults shows the live chord) | a file is open, or the terminal is narrower than ~70 columns |
@@ -63,7 +64,7 @@ does not clip, so without the guard an over-wide segment set would wrap the
 bar onto a second row and corrupt the layout. Overflow shrinks
 priority-aware (#471, `composeStatus`): first the file segment shortens by
 exactly the overflow with a JetBrains-style middle ellipsis (floor 16
-cells), then low-priority segments drop in a defined order (hint, eol,
+cells), then low-priority segments drop in a defined order (hint, group, eol,
 encoding, indent, svcolumn, docpath, toolchain, todo, host, notifications, macro,
 branchissue, branch, buflang, forge, diagnostics, lsp, search — mode, file and the cursor never drop), and only as a
 last resort the bar hard-clips on the right.
@@ -177,6 +178,7 @@ router dispatches a left press through `statusSegmentCommands`:
 | `forge` (unread forge events) | `issues.toggle` |
 | `branchissue` (the current branch's issue, #2544) | `issues.openCurrentBranch` |
 | `lsp` (server state) | `lsp.doctor` (#2164) |
+| `group` (project-group marker, #2571) | `project.group.next` — registered ahead of #2572; until that command lands the click notifies that it is not available yet |
 
 Only segments with one clear, obvious target are wired; every other press on
 the status row is swallowed (the row sits outside the layout tree, so nothing

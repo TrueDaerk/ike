@@ -19,6 +19,7 @@ var noCounterpart = map[string]string{
 	"find.openInPanel":                 "JetBrains' Open in Find Window is a popup-local chord, not a keymap action",
 	"project.findInAllProjects":        "IKE-only concept (#2394): JetBrains searches one project at a time, no cross-project keymap action",
 	"project.findInAllProjectsResults": "IKE-only concept (#2394): re-opening a cross-project result set has no JetBrains equivalent",
+	"project.group.open":               "IKE-only concept (#2571): JetBrains opens one project per window, it has no named project sets",
 	"http.run":                         "JetBrains HTTP client runs via context Run, no dedicated keymap action",
 	"http.resend":                      "IKE-only concept (#1832): repeating a captured request verbatim has no JetBrains keymap action",
 	"archive.reload":                   "IKE-only concept (#1762): JetBrains re-reads an archive on focus, no keymap action",

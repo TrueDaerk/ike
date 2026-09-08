@@ -121,6 +121,8 @@ func (m Model) updateSwitchPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		m.switchPending = ""
 		m.shell.Close()
+		// A cancelled hop ends a running group open chain (#2571).
+		m.abortGroupOpen()
 		return m, nil
 	}
 	return m, nil
@@ -385,6 +387,12 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	fresh.editRing = m.editRing
 	fresh.wireEditorEmitters()
 	fresh.allFindRecent = m.allFindRecent
+	// The project-group state (0510, #2571) is session state on the same
+	// terms: the open chain rides the very rebuild its hop caused — the
+	// SwitchedMsg handler runs the next hop — and the active-group marker
+	// survives every switch until group.close clears it.
+	fresh.groupOpening = m.groupOpening
+	fresh.activeGroup = m.activeGroup
 	// Deep-link state (#2396) is session state on the same terms: the socket
 	// endpoint serves the whole run, and a link's parked payload — the very
 	// reason for this switch, finished by the SwitchedMsg handler — rides

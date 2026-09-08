@@ -36,6 +36,11 @@ var jetbrainsRows = []row{
 	// (recent files), the palette detour it replaces.
 	{"cmd+shift+e", "project.switchLast", "Switch to last project", Global, "Project (#2398)"},
 	{"ctrl+shift+e", "project.switchLast", "Switch to last project", Global, "Project (#2398)"},
+	// Open Project Group (0510, #2571): "g" for group on the cmd+alt+shift
+	// layer the other project-set entry points use (find in all projects),
+	// with the delivered ctrl secondary like project.switch above.
+	{"cmd+alt+shift+g", "project.group.open", "Open project group", Global, "Project groups (#2571)"},
+	{"ctrl+alt+shift+g", "project.group.open", "Open project group", Global, "Project groups (#2571)"},
 	// Direct MRU project switching (#2489): switchLast generalized to the
 	// nine most recent projects, numbered the way the picker and the Recent
 	// Projects column show it. ctrl+alt+digit is the only free digit family

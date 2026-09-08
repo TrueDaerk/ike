@@ -11,6 +11,7 @@ import (
 	"ike/internal/jqplay"
 	"ike/internal/layout"
 	"ike/internal/plugin"
+	"ike/internal/project"
 	"ike/internal/registry"
 	"ike/internal/settings"
 )
@@ -624,6 +625,9 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("pane.switcher", "Switch Pane Focus", CyclePaneFocusMsg{}),
 			appCommand("pane.focusByIndex", "Focus Pane by Number…", PaneFocusByIndexMsg{}),
 			appCommand("project.goToFile", "Go to File", GoToFileMsg{}),
+			// Open a project group (0510, #2571): the picker over
+			// [[project.groups]]; the root model runs the warm-up chain.
+			appCommand("project.group.open", "Open Project Group…", project.OpenGroupPickerMsg{}),
 			// Revoke every paired network device (#2519). No default chord:
 			// a rare, deliberate act — the palette is its doorway.
 			appCommand("network.forgetClients", "Forget Paired Network Clients", NetworkForgetClientsMsg{}),

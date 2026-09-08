@@ -834,6 +834,14 @@ type Model struct {
 	// peekReturnPending is the busy peek-return guard state (#2136): the
 	// activity the drop would kill, awaiting the user's answer.
 	peekReturnPending *pendingPeekReturn
+	// activeGroup is the project-group marker (0510, #2571): the name of the
+	// group the session works in, "" without one. Seeded from
+	// project.active_group at startup (after main.go's reconciliation),
+	// carried across every rebuild, replaced by group.open's landing.
+	activeGroup string
+	// groupOpening is the in-flight group open chain (#2571); nil while no
+	// group is being opened. Carried across the rebuild each hop causes.
+	groupOpening *groupOpen
 
 	// closePending is the close request awaiting the unsaved-changes guard
 	// (#259); nil when no guard is open.
@@ -1607,6 +1615,13 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.ctxMenu = menu.NewContext(m.commandInfo(reg))
 	m.ctxMenu.SetPalette(themePal)
 	m.cfgOpts = config.Discover(".")
+	// The project-group marker (0510, #2571) seeds from the persisted
+	// project.active_group — main.go reconciled it against the process root
+	// before the config loaded. A switch overrides this with the marker the
+	// departing model carries (performSwitchOpts).
+	if g, ok := project.ActiveGroup(config.Get()); ok {
+		m.activeGroup = g.Name
+	}
 	phase := time.Now()
 	pages := settings.BasePages(themeNames(reg), themeNamesByDark(reg, false), themeNamesByDark(reg, true), reg.Themes()...)
 	// The [theme.captures] editor (#1238) belongs with the theme picker.
@@ -3174,6 +3189,9 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	projPeek := project.NewPeekPickerMode(nil)
 	projPeek.SetOpen(openInMemory)
 	projPeek.SetGitCache(projGit)
+	// The project-group picker behind project.group.open (0510, #2571):
+	// the stored groups, opened locked like the two flavours above.
+	groups := project.NewGroupPickerMode(nil)
 	mru.SetProjects(func() []palette.Item {
 		cur := currentProjectRoot()
 		var items []palette.Item
@@ -3223,7 +3241,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, projPeek, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, recentLocs, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, tabs, ssh, remoteHosts, playFilters, playCheat, bufLang, openAs)
+	return palette.New(pcfg, cmd, file, dir, proj, projPeek, groups, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, recentLocs, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, tabs, ssh, remoteHosts, playFilters, playCheat, bufLang, openAs)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -3591,6 +3609,8 @@ var terminalGlobalCommands = map[string]bool{
 	// focused too — the bounce often happens while looking at a shell.
 	"project.switchLast": true,
 	"project.close":      true,
+	// #2571: opening a group is a project entry point like the picker.
+	"project.group.open": true,
 	// #2136: the one-key way back from a peek must work with a terminal
 	// focused too — a peek often ends while looking at a shell.
 	"project.peek.return": true,
@@ -6885,6 +6905,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.palette.OpenLocked(m.paletteContext(), project.PeekPickerPrefix)
 		return m, project.EnrichCmd(project.History(config.Get()))
 
+	case project.OpenGroupPickerMsg:
+		// project.group.open (0510, #2571): the group picker, locked to its
+		// mode; the selection lands as project.OpenGroupMsg.
+		return m.handleOpenGroupPicker()
+
+	case project.OpenGroupMsg:
+		// A picked group: resolve the members and run the warm-up chain.
+		return m.handleOpenGroup(msg)
+
+	case project.ActiveGroupMsg:
+		return m.handleActiveGroupWritten(msg)
+
 	case project.GitInfoMsg:
 		// One finished picker probe (#2178): file it and re-list, so the row
 		// grows its branch badge without the palette losing its query. A
@@ -7159,10 +7191,21 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case project.SwitchFailedMsg:
+		// A failed hop of a group open chain (#2571) is skipped and the
+		// chain continues; the group handler owns the notification.
+		if next, cmd, ok := m.groupHopFailed(msg); ok {
+			return next, cmd
+		}
 		m.host.Notify(host.Error, "cannot switch project: "+msg.Err.Error())
 		return m, nil
 
 	case project.SwitchedMsg:
+		// A hop of a group open chain (#2571) runs the next hop instead of
+		// toasting — one toast per hop is noise; the status segment counts
+		// and the landing announces the group.
+		if next, cmd, ok := m.groupHopLanded(msg.Root); ok {
+			return next, cmd
+		}
 		// A switch driven by an all-projects search match (#2394) finishes
 		// the job here: the pending open rode the model rebuild through the
 		// carry-over block in performSwitchOpts.
@@ -11616,6 +11659,10 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 					if c, found := m.reg.Command(id); found {
 						return m, m.dispatchCommandFrom(id, c, telemetry.SourceMouse)
 					}
+					// A segment wired to a command that is not registered
+					// yet (the group slot ahead of #2572) says so rather
+					// than swallowing the click.
+					m.host.Notify(host.Info, id+" is not available yet")
 				}
 			}
 			return m, nil
