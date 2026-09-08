@@ -64,6 +64,15 @@ func TestVCSMarksSkippedForLargeFile(t *testing.T) {
 	if ed == nil || !ed.LargeFile() {
 		t.Fatal("setup: focused editor must hold the flagged document")
 	}
+	// A clean gutter has nothing to clear: no message, no pass (#2541).
+	if cmd := m.vcsMarksCmd(ed); cmd != nil {
+		t.Fatalf("a degraded document over a clean gutter must answer nil, got %#v", cmd())
+	}
+	// With stale marks showing, the degraded document still gets them
+	// cleared — and never the git recompute.
+	out, _ := m.Update(vcs.MarksMsg{Path: path, Marks: map[int]vcs.LineMark{0: vcs.LineChanged}})
+	m = out.(Model)
+	ed = m.activeEditor()
 	cmd := m.vcsMarksCmd(ed)
 	if cmd == nil {
 		t.Fatal("a degraded document still needs its stale marks cleared")

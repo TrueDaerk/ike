@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions/code-lenses/folding-ranges/semantic-tokens/selection-ranges/willRenameFiles rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-09-03T12:00:00Z
+timestamp: 2026-09-08T14:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -162,7 +162,20 @@ notification is actually sent (an unchanged text sends nothing). The change is
 O(document) diff runs on the debounce goroutine, not the bubbletea Update loop.
 Any request (`cur()` is the choke point; completion, signature and save flush
 explicitly) drains the pending change first, so a completion or hover never acts
-on stale server text; a close cancels it so no sync lands after `didClose`. A
+on stale server text; a close cancels it so no sync lands after `didClose`.
+The **decorations wait for the pause** (#2541): the flush used to fire the
+semantic-token, inlay-hint, code-lens, folding-range, inheritance-mark and
+occurrence-highlight refreshes at once, and at an ordinary 150ms typing
+cadence the 40ms debounce flushes per keystroke — five or six Update+View
+passes a character redrawing what the parse pass had drawn. The flush now
+(re)arms a per-path `decorationDebounce` (300ms) and `refreshDecorations`
+runs them once typing pauses; a cursor move inside that window
+(`typingBurst`: a change pending or the timer armed) leaves the occurrence
+request to the same timer instead of its own 150ms one. Replies that carry
+an **empty set after an empty set** are dropped before `host.Send`
+(`dropEmptyRepeat`, per kind and path, forgotten on close): a server
+without the capability answers empty on every refresh and the editor holds
+nothing to clear. Non-empty sets always go out. A
 file-open hook drives `didOpen`, save drives `didSave`, close drives `didClose`.
 The close side (#827) is centralised in the root model: every path that removes
 an editor view (tab close, pane close, tab-limit eviction #742, tab drag)
@@ -255,8 +268,10 @@ path like inline ones.
 **Incomplete lists (#849).** A reply flagged `isIncomplete` is a partial view:
 identifier runes typed while the popup shows re-emit the completion trigger
 instead of only narrowing the client-side filter, and the bridge **debounces
-identifier-rune requests** (80ms, re-armed per keystroke) so a typing burst
-reaches the server once, at the resting position. Complete replies keep the
+identifier-rune requests** (`lsp.completion_delay_ms`, default 100ms,
+re-armed per keystroke; #2541 made the former fixed 80ms a setting shared
+with the local engine) so a typing burst reaches the server once, at the
+resting position. Complete replies keep the
 filter-only behavior; server trigger characters and manual ctrl+space stay
 immediate. Requests also report **why** they fired (#850): a typed character
 in the server's declared trigger set sends `TriggerCharacter` with the
@@ -1040,7 +1055,8 @@ server. The watched-files path closes that gap.
 The `[lsp]` section: `enabled` (master switch), `inlay_hints` (inline
 parameter/type hints, default `false`, #523), `signature_auto` (automatic
 signature popup on trigger characters, default `true`; the manual
-`lsp.parameterInfo` command works regardless), `completion_auto` (as-you-type
+`lsp.parameterInfo` command works regardless), `completion_delay_ms` (the
+identifier-rune wait, #2541), `completion_auto` (as-you-type
 completion popup on identifier characters, default `true`, #527; server
 trigger characters and `ctrl+space` work regardless), the #1912 per-feature
 toggles `code_lens`, `folding`, `semantic_tokens`, `selection_range` and

@@ -42,6 +42,38 @@ func RefreshMarks(root, path, buffer string) tea.Cmd {
 	}
 }
 
+// RefreshMarksIfChanged is RefreshMarks for a buffer already showing
+// current (#2541): the command resolves to nil — no message, no Update+View
+// pass — when the recomputed marks equal the ones the editor holds, and to
+// the MarksMsg otherwise. Every snapshot refresh recomputes the marks of
+// every open document, and most of them have not moved.
+func RefreshMarksIfChanged(root, path, buffer string, current map[int]LineMark) tea.Cmd {
+	return func() tea.Msg {
+		var marks map[int]LineMark
+		if head, err := HeadContent(root, path); err == nil {
+			marks = LineMarks(head, buffer)
+		}
+		if MarksEqual(marks, current) {
+			return nil
+		}
+		return MarksMsg{Path: path, Marks: marks}
+	}
+}
+
+// MarksEqual reports whether two mark sets colour the gutter identically;
+// nil and empty are the same clean gutter.
+func MarksEqual(a, b map[int]LineMark) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for line, mk := range a {
+		if b[line] != mk {
+			return false
+		}
+	}
+	return true
+}
+
 // HeadContent returns the HEAD blob of the file at path (absolute or
 // repo-relative) in the repository at root.
 func HeadContent(root, path string) (string, error) {

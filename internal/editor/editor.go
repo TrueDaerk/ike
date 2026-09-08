@@ -1724,7 +1724,8 @@ func (m Model) updateMsg(msg tea.Msg) (Model, tea.Cmd) {
 		return m, nil
 	case vcs.MarksMsg:
 		// Recomputed gutter diff markers against HEAD (Roadmap 0320, #464);
-		// nil clears them (clean file, untracked, not a repo).
+		// nil clears them (clean file, untracked, not a repo). The map is
+		// adopted, never mutated: GitMarks hands out a copy.
 		if msg.Path == m.path {
 			m.gitMarks = msg.Marks
 			m.marksEpoch++ // invalidates the scrollbar git-mark memo (#1131)
@@ -2057,3 +2058,22 @@ func (m *Model) SetScroll(top, left int) {
 	m.view.Top = top
 	m.view.Left = left
 }
+
+// GitMarks returns a copy of the gutter diff markers the view shows (#2541),
+// nil for a clean gutter — what a recompute compares against before it
+// decides whether a MarksMsg is worth a pass. A copy, because the command
+// reads it on its own goroutine while the view may adopt a new map.
+func (m Model) GitMarks() map[int]vcs.LineMark {
+	if len(m.gitMarks) == 0 {
+		return nil
+	}
+	out := make(map[int]vcs.LineMark, len(m.gitMarks))
+	for line, mk := range m.gitMarks {
+		out[line] = mk
+	}
+	return out
+}
+
+// HasGitMarks reports whether the view shows any gutter diff markers — a
+// clearing message is only worth sending while it does (#2541).
+func (m Model) HasGitMarks() bool { return len(m.gitMarks) > 0 }

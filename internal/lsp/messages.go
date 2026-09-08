@@ -112,6 +112,17 @@ type CompletionMsg struct {
 	Key string
 }
 
+// CompletionBatchMsg carries the tagged batches of one local-engine dispatch
+// in a single message (#2541). The sources answer concurrently and each used
+// to send its own CompletionMsg — one Update+View pass per source per
+// keystroke, three or four passes for a popup that opens once. The engine
+// gathers what lands inside its short window and sends it as one message;
+// the app routes each batch exactly as it would a lone CompletionMsg, so the
+// editor's per-source merge (#851) is unchanged.
+type CompletionBatchMsg struct {
+	Batches []CompletionMsg
+}
+
 // RouteKey is the identity this batch is delivered by: Key when the producer
 // set one, else Path. The LSP bridge only ever answers for real files, so it
 // leaves Key empty and keeps routing by path (#2048).

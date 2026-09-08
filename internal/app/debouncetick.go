@@ -13,6 +13,16 @@ import (
 // the .http variable lint (#2194) all mark buffers in a backup.Debouncer and
 // need exactly one armed timer at the earliest pending deadline.
 
+// debounceTick builds the wake timer armTick returns. It is tea.Tick in the
+// program; the test binary replaces it (app_test.go's TestMain) with a command
+// resolving to nil at once. Since #2541 every keystroke into a dirty buffer
+// arms these debounces inside its own Update pass — the sync no longer
+// travels through a loop the tests never run — and the test helpers drain a
+// key's command batch synchronously, so a real 2s snapshot timer would sleep
+// out its deadline per typed key and then fire an autosave into a fixture
+// that expects its buffer still dirty.
+var debounceTick = tea.Tick
+
 // armTick schedules one wake at deb's earliest pending deadline and flips
 // armed. An already armed side (or an empty debouncer) schedules nothing: the
 // tick handler clears armed and re-arms while marks remain, so a burst of
@@ -33,5 +43,5 @@ func (m *Model) armTick(armed *bool, deb *backup.Debouncer, mk func(gen int64) t
 		d = 0
 	}
 	gen := m.modelGen
-	return tea.Tick(d, func(time.Time) tea.Msg { return mk(gen) })
+	return debounceTick(d, func(time.Time) tea.Msg { return mk(gen) })
 }

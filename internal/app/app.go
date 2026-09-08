@@ -104,7 +104,6 @@ import (
 	"ike/internal/telemetry"
 	"ike/internal/terminal"
 	"ike/internal/testresults"
-	"ike/internal/textenc"
 	"ike/internal/theme"
 	"ike/internal/timepanel"
 	"ike/internal/todoindex"
@@ -158,6 +157,10 @@ type Model struct {
 	// preview costs no message. Written on the settled pass
 	// (syncPreviewBound); shared by pointer with every emitter.
 	previewBound *atomic.Bool
+	// editorSyncs is the queue of document-change syncs the editor emitters
+	// leave for the settled pass (#2541); one shared pointer, like
+	// previewBound, so the value-copied model and every emitter see it.
+	editorSyncs *editorSyncQueue
 	// completeEngine is the local completion engine (0410, #851): word/symbol
 	// sources register here; it fans out per completion trigger next to the
 	// LSP bridge and its batches merge into the editor popup.
@@ -1332,6 +1335,11 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	// word (#852) and symbol (#853) indexes start their one-shot project
 	// scans in the background.
 	engine := complete.NewEngine(h.Send)
+	// The identifier-rune trigger delay (#2541) is the same setting the LSP
+	// bridge debounces with; read per trigger so a reload applies live.
+	engine.Delay = func() time.Duration {
+		return time.Duration(config.Get().LSP.CompletionDelayMs) * time.Millisecond
+	}
 	engine.Register(words.New(root))
 	engine.Register(symbols.New(root))
 	engine.Register(emmet.New())
@@ -1467,6 +1475,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		liveImages:      map[int]bool{},
 		navHist:         &nav.History{},
 		previewBound:    new(atomic.Bool),
+		editorSyncs:     &editorSyncQueue{},
 		playHistory:     jqplay.NewHistory(jqplay.HistoryFile()), // one per-user program list (#1977, persisted since #2536)
 		playLastProgram: map[string]string{},                     // per-file last valid program (#1982)
 		compMRU:         mru.Load(mru.DefaultFile()),
@@ -1831,6 +1840,9 @@ type editorEmitter struct {
 	// previews is the model's previewBound flag (#2540); nil (a bare test
 	// emitter) sends the cursor message unconditionally, as before.
 	previews *atomic.Bool
+	// syncs is the model's editor-sync queue (#2541); nil (a bare test
+	// emitter) falls back to sending the SyncMsg through the program loop.
+	syncs *editorSyncQueue
 }
 
 // Emit implements editor.Emitter. The editor and host event-kind constants share
@@ -1882,13 +1894,20 @@ func (e editorEmitter) Emit(ev editor.Event) {
 	}
 	if ev.Kind == editor.EventChange || ev.Kind == editor.EventSave {
 		// Shared documents (#142): tell the other views of this file that the
-		// document changed. Emit runs synchronously inside Update, and sending
-		// into the program's own message loop from there deadlocks — so the
-		// send goes through a goroutine. Flags are NOT carried here: delivery
-		// order between goroutines is not guaranteed, so the root model reads
-		// dirty/stale fresh from the originating pane when the message lands.
+		// document changed. Emit runs synchronously inside Update, so the
+		// sync is queued for the settled pass of this very Update (#2541) —
+		// it used to travel through the program loop as its own message,
+		// one Update+View pass per keystroke that redrew a frame the key's
+		// own pass had already drawn. Flags are NOT carried here: the root
+		// model reads dirty/stale fresh from the originating pane when it
+		// applies the sync. A bare emitter without a queue keeps the
+		// goroutine send (a direct send from inside Update would deadlock).
 		msg := editor.SyncMsg{Path: ev.Path, FromKey: e.key}
-		go e.host.Send(msg)
+		if e.syncs != nil {
+			e.syncs.push(msg)
+		} else {
+			go e.host.Send(msg)
+		}
 	}
 	e.host.EmitEditor(host.EditorEvent{
 		Kind:         int(ev.Kind),
@@ -1924,7 +1943,7 @@ func (m *Model) installEmitter(key string) {
 		mkSet, mkLines, mkAdjust := markHooks(m.gmarks)
 		bmSigns, bmAdjust := bookmarkHooks(m.bmarks)
 		for _, ed := range inst.Editors() {
-			ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, key: key, previews: m.previewBound})
+			ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, key: key, previews: m.previewBound, syncs: m.editorSyncs})
 			ed.SetBreakpointSource(bph.source)
 			ed.SetBreakpointDisabledSource(bph.disabled)
 			ed.SetBreakpointConditionalSource(bph.conditional)
@@ -4170,6 +4189,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if !ok {
 		return tm, cmd
 	}
+	// Document-change syncs the editors emitted during this pass apply
+	// here (#2541), before anything below reads dirty flags, previews or
+	// backup deadlines: the same pass, not a message of their own.
+	if sync := mm.drainEditorSyncs(); sync != nil {
+		cmd = tea.Batch(cmd, sync)
+	}
 	if tick := mm.drainNotifications(); tick != nil {
 		cmd = tea.Batch(cmd, tick)
 	}
@@ -6375,7 +6400,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.host.Notify(host.Error, "edit: "+err.Error())
 			return m, nil
 		}
-		ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, key: msg.Key, previews: m.previewBound})
+		ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, key: msg.Key, previews: m.previewBound, syncs: m.editorSyncs})
 		inst.StartDiffEdit(&ed)
 		m.host.Notify(host.Info, "editing "+displayPath(msg.Path)+" — ctrl+e returns to the diff")
 		return m, ed.Reparse()
@@ -7406,72 +7431,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.routeParse(msg)
 
 	case editor.SyncMsg:
-		// Any buffer change also outdates the file's stored coverage (#2081):
-		// the flag makes later opens of the file show the marks as stale
-		// (each live view detects its own edits by document version).
-		m.coverage.MarkStale(msg.Path)
-		// A shared document changed in one pane (#142): every other view of the
-		// same file re-clamps and mirrors the flags. Dirty/stale are read from
-		// the originating pane *now* (not at emit time), so late or reordered
-		// broadcasts always converge on the current document state.
-		var skip *editor.Model
-		if origin := m.activeWS().Panes.Get(msg.FromKey); origin != nil && origin.Kind() == pane.KindEditor {
-			if ed := origin.EditorForPath(msg.Path); ed != nil {
-				skip = ed
-				msg.Dirty = ed.Dirty()
-				msg.Stale = ed.Stale()
-				msg.Large = ed.LargeFile()
-				msg.Hash = ed.DiskHash()
-				msg.EOL = textenc.LineEnding(ed.LineEnding())
-				msg.Enc = textenc.Encoding(ed.EncodingName())
-				msg.MixedEOL = ed.MixedEOL()
-				msg.Vault, msg.VaultPass, msg.VaultLabel = ed.VaultState()
-			}
-		}
-		var cmds []tea.Cmd
-		// Crash-recovery write side (#167): the same seam drives the snapshot
-		// debounce — dirty (re)arms it, clean cancels and drops the snapshot.
-		if c := m.backupOnSync(msg.FromKey, msg.Path); c != nil {
-			cmds = append(cmds, c)
-		}
-		// Idle autosave (#731) rides the same seam: dirty (re)arms the idle
-		// deadline, clean cancels it.
-		if c := m.autosaveIdleOnSync(msg.FromKey, msg.Path); c != nil {
-			cmds = append(cmds, c)
-		}
-		// An edited .http buffer is re-linted for unknown {{variables}} once
-		// it goes quiet (#2158); every other path is a cheap no-op.
-		if c := m.httpVarsOnSync(msg.Path); c != nil {
-			cmds = append(cmds, c)
-		}
-		// Deliver to every other view of the document — other panes and this
-		// pane's background tabs alike; only the originating tab is skipped.
-		for _, key := range m.editorKeysForPath(msg.Path) {
-			if cmd := m.activeWS().Panes.Get(key).UpdateForPath(msg.Path, skip, msg); cmd != nil {
-				cmds = append(cmds, cmd)
-			}
-		}
-		// Markdown previews of the document re-render debounced off the same
-		// seam (#62), pulling the text fresh from the originating editor.
-		if previews := m.previewsForPath(msg.Path); len(previews) > 0 {
-			src := skip
-			if src == nil {
-				if key := m.editorWithFile(msg.Path); key != "" {
-					src = m.activeWS().Panes.Get(key).EditorForPath(msg.Path)
-				}
-			}
-			if src != nil {
-				text := src.Text()
-				line, _ := src.CursorPos()
-				for _, inst := range previews {
-					if cmd := inst.Preview().SetSource(text); cmd != nil {
-						cmds = append(cmds, cmd)
-					}
-					inst.Preview().SetCursorLine(line)
-				}
-			}
-		}
-		return m, tea.Batch(cmds...)
+		// A sync fed through the loop (tests, a bare emitter) takes the same
+		// path the settled pass takes (#2541).
+		return m, m.applyEditorSync(msg)
 
 	case ilsp.DiagnosticInfoMsg:
 		// lsp.diagnosticInfo (#739): show the caret line's diagnostics in the
@@ -7524,6 +7486,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// batch (#2048). For a file the key *is* the path, so every view of a
 		// shared document is still served.
 		return m, m.routeToEditorKey(msg.RouteKey(), msg)
+	case ilsp.CompletionBatchMsg:
+		// One local-engine dispatch, every source's batch in one pass
+		// (#2541): each batch takes the exact route a lone CompletionMsg
+		// takes, so the editor's per-source merge sees no difference.
+		var cmds []tea.Cmd
+		for _, b := range msg.Batches {
+			if cmd := m.routeToEditorKey(b.RouteKey(), b); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+		return m, tea.Batch(cmds...)
 	case ilsp.HoverMsg:
 		return m, m.routeToEditor(msg.Path, msg)
 	case ilsp.SignatureHelpMsg:

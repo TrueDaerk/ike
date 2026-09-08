@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-09-07T14:00:00Z
+timestamp: 2026-09-08T14:00:00Z
 ---
 
 # Editor
@@ -1638,7 +1638,8 @@ dirty **titled** buffer writes itself after staying quiet for
 `editor.auto_save_idle_ms` (default 2000, clamped ≥ 100). The idle side rides
 the same change seam and debouncer shape as the crash-recovery snapshots
 (`internal/app/autosave_idle.go` mirrors `backup.go`): every `SyncMsg` from a
-dirty buffer (re)arms its deadline, a clean one cancels it, and a single
+dirty buffer — since #2541 applied inside the edit's own Update pass via
+`drainEditorSyncs`, not as a message of its own — (re)arms its deadline, a clean one cancels it, and a single
 armed `tea.Tick` saves the buffers that went quiet — through `Autosave()`, so
 all the guarantees above (EventSave, untouched undo, stale-skip) hold and
 the modified indicator clears. Untitled buffers are never idle-saved; crash

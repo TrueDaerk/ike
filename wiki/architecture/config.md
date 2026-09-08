@@ -4,7 +4,7 @@ title: Configuration System
 description: Single typed configuration package — TOML files merged across defaults < user < project, clamp-and-warn validation, an extension hook for downstream sections, and a flat read-only view backing the plugin host API.
 resource: internal/config/config.go
 tags: [architecture, config, toml, merge, precedence, validation, plugins]
-timestamp: 2026-09-04T00:00:00Z
+timestamp: 2026-09-08T14:00:00Z
 ---
 
 # Configuration System
@@ -95,7 +95,8 @@ Sections and their default-bearing slots (`schema.go`):
   in (`"editor.ctrl+s"`, or the sub-table `[keymap.bindings.editor]`, #1312).
 - `[lsp]` — enabled, log-level, `inlay_hints` (default `false`, #523),
   `signature_auto` (default `true`, #523), `completion_auto` (default `true`,
-  #527) + an empty `[lsp.servers]` slot (Roadmap 0100).
+  #527), `completion_delay_ms` (default `100`, clamped 0–2000, #2541) + an
+  empty `[lsp.servers]` slot (Roadmap 0100).
 - `[theme]` — `name`, `auto`, `light`, `dark` (the selector and the auto
   light/dark pair, #1480; palettes owned by Roadmap 0110).
 - `[project]` — recent-projects history as `[[project.history]]` entries

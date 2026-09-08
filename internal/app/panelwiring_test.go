@@ -149,6 +149,14 @@ func TestEnsurePanelOpensOnceAndKeepsFocus(t *testing.T) {
 // armed timer at a time, nothing armed without pending marks, and the tick
 // carries the model generation it was armed in.
 func TestArmTickGenerationGuard(t *testing.T) {
+	// This test is about the real timer's payload: put tea.Tick back in
+	// place of the inert test seam (app_test.go's TestMain, #2541).
+	debounceTick = tea.Tick
+	t.Cleanup(func() {
+		debounceTick = func(time.Duration, func(time.Time) tea.Msg) tea.Cmd {
+			return func() tea.Msg { return nil }
+		}
+	})
 	m := problemsApp(t)
 	m.modelGen = 7
 	deb := backup.NewDebouncer(0)

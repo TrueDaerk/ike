@@ -114,24 +114,34 @@ func (m Model) vcsMarksCmds() []tea.Cmd {
 
 // vcsMarksCmd recomputes one buffer's gutter diff markers (#464). Buffers
 // without HEAD-relative changes — clean, untracked, outside the repo — get a
-// clearing message instead of a git subprocess.
+// clearing message instead of a git subprocess, and only while they hold
+// marks to clear (#2541): every snapshot refresh fans out here once per open
+// document, and a message that leaves the gutter as it is costs an
+// Update+View pass for nothing. The recompute likewise answers nil when the
+// diff lands on the marks the editor already shows.
 func (m Model) vcsMarksCmd(ed *editor.Model) tea.Cmd {
 	if ed == nil || !ed.HasFile() {
 		return nil
 	}
+	path := ed.Path()
+	clear := func() tea.Cmd {
+		if !ed.HasGitMarks() {
+			return nil
+		}
+		return func() tea.Msg { return vcs.MarksMsg{Path: path} }
+	}
 	if ed.FeatureOff(largefile.FeatureVCS) {
 		// Large-file degradation (#2159): the recompute is a `git show` of the
 		// HEAD version plus a whole-file diff — clear any stale marks instead.
-		path := ed.Path()
-		return func() tea.Msg { return vcs.MarksMsg{Path: path} }
+		return clear()
 	}
-	snap, path := m.vcs.snap, ed.Path()
+	snap := m.vcs.snap
 	switch snap.Status(path) {
 	case vcs.StatusModified, vcs.StatusConflicted, vcs.StatusRenamed,
 		vcs.StatusPartiallyStaged:
-		return vcs.RefreshMarks(snap.Root, path, ed.Text())
+		return vcs.RefreshMarksIfChanged(snap.Root, path, ed.Text(), ed.GitMarks())
 	default:
-		return func() tea.Msg { return vcs.MarksMsg{Path: path} }
+		return clear()
 	}
 }
 

@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Completion Engine
-description: Multi-source autocomplete (Roadmap 0410) — the LSP server plus local index sources answer each trigger as independent tagged batches; the editor merges them into one popup with priority-based de-dup and stable selection.
+description: Multi-source autocomplete (Roadmap 0410) — the LSP server plus local index sources answer each trigger as independent tagged batches; the editor merges them into one popup with priority-based de-dup and stable selection. Identifier-rune triggers wait lsp.completion_delay_ms and one dispatch's local batches travel as a single message (#2541).
 resource: internal/complete
 tags: [architecture, completion, autocomplete, lsp, sources, postfix]
-timestamp: 2026-09-03T12:00:00Z
+timestamp: 2026-09-08T14:00:00Z
 ---
 
 # Completion Engine
@@ -30,6 +30,32 @@ source at the protocol level. Today there are two producers:
 Both are registered as named editor-event sinks (`host.SetEditorEmitter(name,
 e)`); the host fans every editor event out to all sinks in deterministic name
 order. Named registration is idempotent across project switches.
+
+**Two pass-count rules (#2541).** A bubbletea message is an Update plus a
+full render, so the protocol also says *when* and *how many*:
+
+- **Identifier runes wait.** An auto-trigger on a letter, digit or `_` waits
+  `lsp.completion_delay_ms` (default 100, 0 = immediate, Settings UI →
+  Language Support) for the next keystroke before either producer asks
+  anything; a typing burst asks once, at its resting position. The bridge
+  already debounced this (#849, formerly a fixed 80ms); the local engine now
+  does too (`Engine.Delay`, read per trigger so a reload applies live). Server
+  trigger characters (`.`), sources' own trigger characters (#1913) and the
+  manual ctrl+space request never wait — the user asked, or the character
+  itself is the position of interest — and any of them cancels an armed wait.
+- **One dispatch, one message.** The engine's sources answer concurrently
+  and each used to send its own `CompletionMsg` — with five sources that was
+  five Update+View passes for a popup that opens once, empty answers
+  included. The dispatch now gathers what lands within `gatherWindow` (15ms
+  after the first answer, or as soon as every source answered) into a single
+  `lsp.CompletionBatchMsg`; the app routes each batch exactly as it routes
+  a lone `CompletionMsg`, so the editor's merge is unchanged. A source
+  slower than the window still sends on its own when it arrives — a slow
+  index never holds the popup back. The LSP bridge is not a Source and
+  keeps its own message (it already drops empty replies).
+
+Measured in the #2541 typing trace: 96 `CompletionMsg` per 42 keys became
+12 `CompletionBatchMsg` (see [performance](performance.md)).
 
 ## The local engine (`internal/complete`)
 

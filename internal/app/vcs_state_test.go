@@ -57,14 +57,22 @@ func TestVCSMarksCmdGatesOnStatus(t *testing.T) {
 		t.Fatal("setup: file not open")
 	}
 
-	// No snapshot / clean file: the command resolves to a clearing message,
-	// never a git subprocess.
+	// No snapshot / clean file, clean gutter: no command at all (#2541) —
+	// a clearing message would leave the gutter as it is.
+	if cmd := m.vcsMarksCmd(ed); cmd != nil {
+		t.Fatalf("clean file over a clean gutter must answer nil, got %#v", cmd())
+	}
+	// With marks showing, the clean file gets its clearing message, never a
+	// git subprocess.
+	out, _ = m.Update(vcs.MarksMsg{Path: path, Marks: map[int]vcs.LineMark{0: vcs.LineChanged}})
+	m = out.(Model)
+	ed = m.activeEditor()
 	msg, ok := m.vcsMarksCmd(ed)().(vcs.MarksMsg)
 	if !ok || msg.Path != path || msg.Marks != nil {
 		t.Fatalf("clean-file marks cmd = %#v", msg)
 	}
 
-	// Untracked stays clearing; modified goes through RefreshMarks (which on
+	// Untracked stays clearing; modified goes through the recompute (which on
 	// this fake root fails and also resolves to a clear — the gate is what's
 	// under test, the git call is covered in internal/vcs).
 	m.vcs.snap = vcs.NewSnapshot(dir, map[string]vcs.FileStatus{"f.go": vcs.StatusUntracked})
@@ -74,6 +82,14 @@ func TestVCSMarksCmdGatesOnStatus(t *testing.T) {
 	m.vcs.snap = vcs.NewSnapshot(dir, map[string]vcs.FileStatus{"f.go": vcs.StatusModified})
 	if msg := m.vcsMarksCmd(ed)().(vcs.MarksMsg); msg.Path != path {
 		t.Fatalf("modified marks path = %q", msg.Path)
+	}
+	// And once the gutter is clean again, the failing recompute lands on
+	// the marks already shown (none) and answers nil (#2541).
+	out, _ = m.Update(vcs.MarksMsg{Path: path})
+	m = out.(Model)
+	ed = m.activeEditor()
+	if got := m.vcsMarksCmd(ed)(); got != nil {
+		t.Fatalf("unchanged marks must resolve to nil, got %#v", got)
 	}
 }
 

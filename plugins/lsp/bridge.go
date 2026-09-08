@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -111,8 +112,20 @@ type bridge struct {
 	resolveID    int
 	resolveTimer *time.Timer
 	// compTimer debounces identifier-rune completion requests (#849) so a
-	// typing burst reaches the server once, at the resting position.
+	// typing burst reaches the server once, at the resting position; the
+	// wait is lsp.completion_delay_ms (#2541).
 	compTimer *time.Timer
+	// decoTimer holds the per-path decoration idle debounce (#2541): the
+	// semantic-token, inlay-hint, code-lens, folding, inheritance and
+	// occurrence refreshes after a didChange wait for typing to pause
+	// instead of following every flushed change.
+	decoTimer map[string]*time.Timer
+	// emptySent remembers, per decoration kind and path, that the last
+	// reply delivered was empty (#2541): a server without the capability —
+	// or a document with nothing to decorate — answers empty on every
+	// refresh, and re-delivering an empty set the editor already holds is
+	// an Update+View pass for nothing. Keyed kind+" "+path.
+	emptySent map[string]bool
 	// pendingChange/changeTimer coalesce didChange per path (#595): each edit
 	// stores its latest event and (re)arms a short debounce; the flush runs the
 	// O(document) diff + notification off the Update goroutine (on the timer
@@ -136,6 +149,20 @@ type bridge struct {
 // message is sent. Short enough that squiggles feel live, long enough to fold a
 // workspace publish storm into a single re-render.
 const diagCoalesce = 50 * time.Millisecond
+
+// decorationDebounce is how long the decoration refreshes wait after the last
+// flushed change (#2541). The didChange itself stays on changeDebounce — a
+// completion request needs the server to hold the current text — but the
+// semantic overlay, inlay hints, code lenses, folding ranges, inheritance
+// marks and occurrence highlight only need to be right once typing pauses;
+// at a 150ms typing cadence each of them used to answer per keystroke, five
+// or six Update+View passes a character that redrew what the parse pass had
+// already drawn.
+const decorationDebounce = 300 * time.Millisecond
+
+// defaultCompletionDelay is the identifier-rune completion debounce while
+// lsp.completion_delay_ms is unset (#2541); it mirrors the config default.
+const defaultCompletionDelay = 100 * time.Millisecond
 
 // changeDebounce is how long a didChange is held to coalesce a typing burst.
 // Short enough to feel instant, long enough to collapse fast keystrokes; any
@@ -217,7 +244,11 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 		b.setCur(ev.Path, ev.Line, ev.Col)
 		b.setSel(ev)
 		if l, ok := lang.ByPath(ev.Path); ok && l.HasServer() {
-			b.scheduleDocumentHighlight(ev.Path)
+			// Mid-burst the decoration idle timer owns the occurrence
+			// request (#2541): it fires once, at the resting cursor.
+			if !b.typingBurst(ev.Path) {
+				b.scheduleDocumentHighlight(ev.Path)
+			}
 			// A showing signature popup follows the cursor (#523): the server
 			// re-picks the active parameter, or answers null to dismiss.
 			b.mu.Lock()
@@ -235,12 +266,13 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 			// to one request at the resting position. Server trigger
 			// characters and manual requests stay immediate.
 			if b.identAutoTrigger(ev) {
+				delay := b.completionDelay() // reads config under b.mu: before the lock below
 				b.mu.Lock()
 				if b.compTimer != nil {
 					b.compTimer.Stop()
 				}
 				path, line, col := ev.Path, ev.Line, ev.Col
-				b.compTimer = time.AfterFunc(80*time.Millisecond, func() { b.requestCompletion(path, line, col, "") })
+				b.compTimer = time.AfterFunc(delay, func() { b.requestCompletion(path, line, col, "") })
 				b.mu.Unlock()
 			} else {
 				b.requestCompletion(ev.Path, ev.Line, ev.Col, ev.Char)
@@ -391,6 +423,9 @@ func (b *bridge) externalFileChange(h host.API, fc plugin.FileChange) {
 func (b *bridge) fileClosed(path string) {
 	// Drop any queued change so a debounced sync never lands after didClose (#595).
 	b.cancelChange(path)
+	// And the decoration refresh it would have armed (#2541), with the
+	// empty-reply memory: a reopen starts from an editor holding nothing.
+	b.cancelDecorations(path)
 	// Release the per-path bridge state (#1543): request coalescing flags,
 	// the inheritance-mark debounce, the cached diagnostics and — when the
 	// closed file owns it — the last raw completion reply. None of it is
@@ -1392,6 +1427,23 @@ func completionWarranted(ch string, triggers []string, autoIdent bool) bool {
 	return autoIdent && len(r) == 1 && (r[0] == '_' || unicode.IsLetter(r[0]))
 }
 
+// completionDelay reads lsp.completion_delay_ms (#2541): how long an
+// identifier-rune auto-trigger waits for the next keystroke. Unset or
+// unparsable means the config default; 0 fires at once (AfterFunc with a
+// zero duration runs on the next timer tick, off the Update goroutine like
+// every other request).
+func (b *bridge) completionDelay() time.Duration {
+	v, ok := b.configGet("lsp.completion_delay_ms")
+	if !ok {
+		return defaultCompletionDelay
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return defaultCompletionDelay
+	}
+	return time.Duration(n) * time.Millisecond
+}
+
 // completionAutoEnabled reads the lsp.completion_auto config toggle (#527);
 // unset means enabled, matching the config default. It only gates the
 // identifier-rune auto-trigger — server trigger characters and the manual
@@ -1441,7 +1493,7 @@ func (b *bridge) requestSemanticTokens(path string) {
 	go func() {
 		for {
 			spans, err := mgr.SemanticTokens(context.Background(), path)
-			if err == nil && spans != nil && b.h != nil {
+			if err == nil && spans != nil && b.h != nil && !b.dropEmptyRepeat("semantic", path, len(spans) == 0) {
 				b.h.Send(ilsp.SemanticSpansMsg{Path: path, Spans: spans})
 			}
 			b.mu.Lock()
@@ -1514,7 +1566,7 @@ func (b *bridge) requestInlayHints(path string) {
 	go func() {
 		for {
 			hints, err := mgr.InlayHints(context.Background(), path)
-			if err == nil && b.h != nil {
+			if err == nil && b.h != nil && !b.dropEmptyRepeat("hints", path, len(hints) == 0) {
 				b.h.Send(ilsp.InlayHintsMsg{Path: path, Hints: hints})
 			}
 			b.mu.Lock()
@@ -1574,12 +1626,90 @@ func (b *bridge) flushChange(path string) {
 		_ = mgr.Change(ev.Path, ev.Text)
 	}
 	b.maybeSignatureHelp(ev)
-	b.requestSemanticTokens(ev.Path)
-	b.requestInlayHints(ev.Path)
-	b.requestCodeLenses(ev.Path)
-	b.requestFoldingRanges(ev.Path)
-	b.scheduleInheritanceMarks(ev.Path)
-	b.scheduleDocumentHighlight(ev.Path)
+	b.scheduleDecorations(ev.Path)
+}
+
+// scheduleDecorations (re)arms the per-path decoration idle debounce
+// (#2541): the refreshes that used to follow every flushed change fire once,
+// decorationDebounce after the last one. Cheap on any goroutine — a map
+// touch and a timer reset.
+func (b *bridge) scheduleDecorations(path string) {
+	b.mu.Lock()
+	if b.decoTimer == nil {
+		b.decoTimer = map[string]*time.Timer{}
+	}
+	if t := b.decoTimer[path]; t != nil {
+		t.Reset(decorationDebounce)
+	} else {
+		b.decoTimer[path] = time.AfterFunc(decorationDebounce, func() { b.refreshDecorations(path) })
+	}
+	b.mu.Unlock()
+}
+
+// refreshDecorations runs the post-change decoration refreshes for path once
+// typing paused: the semantic overlay (#9), inlay hints (#171), code lenses
+// and folding ranges (#1912), the inheritance marks (#1453) and the
+// occurrence highlight (#172) at the resting cursor. Runs on the timer
+// goroutine; every request coalesces or spawns its own goroutine.
+func (b *bridge) refreshDecorations(path string) {
+	b.mu.Lock()
+	if t := b.decoTimer[path]; t != nil {
+		t.Stop()
+		delete(b.decoTimer, path)
+	}
+	b.mu.Unlock()
+	b.requestSemanticTokens(path)
+	b.requestInlayHints(path)
+	b.requestCodeLenses(path)
+	b.requestFoldingRanges(path)
+	b.scheduleInheritanceMarks(path)
+	b.requestDocumentHighlight(path)
+}
+
+// typingBurst reports whether path has a change still coalescing or a
+// decoration refresh still pending (#2541) — the window in which a cursor
+// move is a keystroke's side effect, not a navigation.
+func (b *bridge) typingBurst(path string) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if _, ok := b.pendingChange[path]; ok {
+		return true
+	}
+	return b.decoTimer[path] != nil
+}
+
+// cancelDecorations drops an armed decoration refresh for path (close
+// time), so a refresh never lands after didClose.
+func (b *bridge) cancelDecorations(path string) {
+	b.mu.Lock()
+	if t := b.decoTimer[path]; t != nil {
+		t.Stop()
+		delete(b.decoTimer, path)
+	}
+	for _, kind := range []string{"semantic", "hints", "lenses", "folds", "highlight"} {
+		delete(b.emptySent, kind+" "+path)
+	}
+	b.mu.Unlock()
+}
+
+// dropEmptyRepeat records whether the reply about to go out for kind/path
+// is empty and reports whether it may be dropped (#2541): an empty set
+// following an empty set changes nothing the editor holds — the editor only
+// ever clears these on its own, never fills them — so delivering it would
+// be an Update+View pass with no visible effect. A non-empty reply always
+// goes out and resets the memory.
+func (b *bridge) dropEmptyRepeat(kind, path string, empty bool) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	key := kind + " " + path
+	if empty && b.emptySent[key] {
+		return true
+	}
+	if b.emptySent == nil {
+		b.emptySent = map[string]bool{}
+	}
+	b.emptySent[key] = empty
+	return false
 }
 
 // cancelChange drops any pending change for path without syncing it — used when
@@ -1623,7 +1753,7 @@ func (b *bridge) requestDocumentHighlight(path string) {
 		return
 	}
 	hs, err := mgr.DocumentHighlight(context.Background(), path, buffer.Position{Line: line, Col: col})
-	if err != nil {
+	if err != nil || b.dropEmptyRepeat("highlight", path, len(hs) == 0) {
 		return
 	}
 	b.h.Send(ilsp.DocumentHighlightsMsg{Path: path, Line: line, Col: col, Highlights: hs})

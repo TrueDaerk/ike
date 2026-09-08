@@ -1,11 +1,19 @@
 // Package complete is the local completion engine (Roadmap 0410, #851): a
 // registry of CompletionSources — the word index, the symbol index, later
 // Emmet — dispatched asynchronously per completion trigger. Each source's
-// result is sent as its own tagged lsp.CompletionMsg batch; the editor merges
-// batches for the same request position, so instant local answers open the
-// popup and slower ones (the LSP server, which is its own event sink, not a
-// Source here) merge in on arrival. A slow source is bounded by the engine
-// timeout; a new trigger cancels the previous dispatch.
+// result is a tagged lsp.CompletionMsg batch; the editor merges batches for
+// the same request position, so instant local answers open the popup and
+// slower ones (the LSP server, which is its own event sink, not a Source
+// here) merge in on arrival. A slow source is bounded by the engine timeout;
+// a new trigger cancels the previous dispatch.
+//
+// Two pass-count rules shape the dispatch (#2541): an identifier-rune
+// trigger waits Delay for the next keystroke, so a typing burst dispatches
+// once at its resting position instead of once per character; and the
+// batches landing inside gatherWindow of each other travel as one
+// lsp.CompletionBatchMsg — one Update+View pass for the whole popup instead
+// of one per source. Sources slower than the window still send on their own,
+// so a slow index never holds the popup back.
 package complete
 
 import (
@@ -93,7 +101,22 @@ type Engine struct {
 	// Timeout bounds one dispatch; a source still running when it expires is
 	// cancelled and its result dropped.
 	Timeout time.Duration
+	// Delay returns how long an identifier-rune trigger waits for the next
+	// keystroke before dispatching (#2541); nil or a zero result dispatches
+	// at once. Read per trigger, so a config reload applies without
+	// re-wiring (the app binds it to lsp.completion_delay_ms).
+	Delay func() time.Duration
+	// delayTimer is the armed identifier-rune trigger; a newer trigger of
+	// any kind replaces or cancels it, so only the resting position fires.
+	delayTimer *time.Timer
 }
+
+// gatherWindow is how long a dispatch waits for its sources after the first
+// result before sending what arrived as one batch message (#2541). The local
+// indexes answer within microseconds of each other, so the window is a
+// safety net for a slow one, not a delay the popup pays: the batch goes out
+// as soon as every source has answered.
+const gatherWindow = 15 * time.Millisecond
 
 // pluginSources are sources registered from plugin init()s (#922) — before
 // any engine exists — picked up by every NewEngine.
@@ -188,6 +211,14 @@ func (e *Engine) Emit(ev host.EditorEvent) {
 	if ev.Kind != host.EditorCompletionTrigger {
 		return
 	}
+	// Any trigger supersedes an armed identifier-rune wait (#2541): the
+	// position it was going to ask for is gone.
+	e.mu.Lock()
+	if e.delayTimer != nil {
+		e.delayTimer.Stop()
+		e.delayTimer = nil
+	}
+	e.mu.Unlock()
 	if !localTrigger(ev.Char) {
 		// A punctuation trigger reaches only the sources claiming it (#1913),
 		// and never past an exclusive claim on the path (#1302) — a source
@@ -197,14 +228,37 @@ func (e *Engine) Emit(ev host.EditorEvent) {
 			return
 		}
 	}
-	e.dispatch(Request{
+	req := Request{
 		Path:     ev.Path,
 		Key:      ev.BufKey(),
 		LangPath: ev.LangName(),
 		Line:     ev.Line,
 		Col:      ev.Col,
 		Char:     ev.Char,
-	}, sources)
+	}
+	// An identifier rune waits for the next keystroke (#2541); a manual
+	// request ("") and a claimed punctuation character stay immediate — the
+	// user asked, or the character itself is the position of interest.
+	if ev.Char != "" && localTrigger(ev.Char) {
+		if d := e.delay(); d > 0 {
+			e.mu.Lock()
+			e.delayTimer = time.AfterFunc(d, func() { e.dispatch(req, sources) })
+			e.mu.Unlock()
+			return
+		}
+	}
+	e.dispatch(req, sources)
+}
+
+// delay reads the identifier-rune trigger delay; unset means immediate.
+func (e *Engine) delay() time.Duration {
+	if e.Delay == nil {
+		return 0
+	}
+	if d := e.Delay(); d > 0 {
+		return d
+	}
+	return 0
 }
 
 // charTriggered narrows sources to the ones claiming ch as their own trigger
@@ -247,9 +301,11 @@ func exclusiveFor(name string, sources []Source) []Source {
 }
 
 // dispatch cancels the previous dispatch and runs the given sources
-// concurrently, sending each result as a tagged batch (an empty batch clears
-// the source's contribution from a merged popup). Results landing after the
-// context died (timeout or a newer trigger) are dropped.
+// concurrently. Each result is a tagged batch (an empty batch clears the
+// source's contribution from a merged popup); the batches that land within
+// gatherWindow of the first travel as one CompletionBatchMsg, later ones as
+// their own CompletionMsg (#2541). Results landing after the context died
+// (timeout or a newer trigger) are dropped.
 func (e *Engine) dispatch(req Request, sources []Source) {
 	e.mu.Lock()
 	if e.cancel != nil {
@@ -259,16 +315,21 @@ func (e *Engine) dispatch(req Request, sources []Source) {
 	e.cancel = cancel
 	e.mu.Unlock()
 	sources = exclusiveFor(req.LangName(), sources)
+	if len(sources) == 0 {
+		return
+	}
+	results := make(chan ilsp.CompletionMsg, len(sources))
 	for _, s := range sources {
 		go func(s Source) {
 			items, err := s.Complete(ctx, req)
 			if err != nil || ctx.Err() != nil {
+				results <- ilsp.CompletionMsg{} // a dropped answer still counts down
 				return
 			}
 			for i := range items {
 				items[i].Source = s.Name()
 			}
-			e.send(ilsp.CompletionMsg{
+			results <- ilsp.CompletionMsg{
 				Path:           req.Path,
 				Key:            req.BufKey(),
 				Line:           req.Line,
@@ -276,7 +337,55 @@ func (e *Engine) dispatch(req Request, sources []Source) {
 				Items:          items,
 				Source:         s.Name(),
 				SourcePriority: s.Priority(),
-			})
+			}
 		}(s)
+	}
+	go e.gather(ctx, results, len(sources))
+}
+
+// gather collects the dispatch's answers: everything that lands before all
+// sources answered or gatherWindow after the first answer goes out as one
+// batch message; a straggler is sent on its own when it arrives. A dropped
+// answer (error, dead context) counts towards "all answered" but carries no
+// batch, so the window closes as soon as the last source is done.
+func (e *Engine) gather(ctx context.Context, results <-chan ilsp.CompletionMsg, n int) {
+	var batches []ilsp.CompletionMsg
+	var window <-chan time.Time
+	done := 0
+	for done < n {
+		select {
+		case m := <-results:
+			done++
+			if m.Source == "" {
+				continue
+			}
+			if ctx.Err() != nil {
+				continue
+			}
+			batches = append(batches, m)
+			if window == nil {
+				window = time.After(gatherWindow)
+			}
+		case <-window:
+			if len(batches) > 0 {
+				e.send(ilsp.CompletionBatchMsg{Batches: batches})
+				batches = nil
+			}
+			window = nil
+			// Past the window every further answer is its own message.
+			for done < n {
+				m := <-results
+				done++
+				if m.Source != "" && ctx.Err() == nil {
+					e.send(m)
+				}
+			}
+			return
+		case <-ctx.Done():
+			return
+		}
+	}
+	if len(batches) > 0 && ctx.Err() == nil {
+		e.send(ilsp.CompletionBatchMsg{Batches: batches})
 	}
 }

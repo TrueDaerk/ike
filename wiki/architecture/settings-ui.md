@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-09-04T12:00:00Z
+timestamp: 2026-09-08T14:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -202,7 +202,7 @@ any entry whose key the typed schema does not expose (no dead keys).
   glob list (#1139).
 - **Language Support** (#1663) — the LSP subsystem's global switches:
   `lsp.enabled`, `lsp.auto_install`, `lsp.completion_auto`,
-  `lsp.signature_auto`, `lsp.inlay_hints`, the #1912 per-feature toggles
+  `lsp.completion_delay_ms` (#2541), `lsp.signature_auto`, `lsp.inlay_hints`, the #1912 per-feature toggles
   `lsp.code_lens`, `lsp.folding`, `lsp.semantic_tokens`,
   `lsp.selection_range`, `lsp.will_rename`, and `lsp.log_level`. The
   per-language server commands stay on the plugin-contributed **Language

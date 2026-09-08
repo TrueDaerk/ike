@@ -53,8 +53,15 @@ func collect(t *testing.T, ch <-chan ilsp.CompletionMsg, n int) []ilsp.Completio
 func newTestEngine() (*Engine, chan ilsp.CompletionMsg) {
 	ch := make(chan ilsp.CompletionMsg, 16)
 	e := NewEngine(func(msg tea.Msg) {
-		if cm, ok := msg.(ilsp.CompletionMsg); ok {
-			ch <- cm
+		switch m := msg.(type) {
+		case ilsp.CompletionMsg:
+			ch <- m
+		case ilsp.CompletionBatchMsg:
+			// One dispatch's gathered batches (#2541): unpacked in order,
+			// so the per-source assertions below read as before.
+			for _, cm := range m.Batches {
+				ch <- cm
+			}
 		}
 	})
 	return e, ch
