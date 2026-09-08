@@ -1,5 +1,24 @@
 # Log
 
+## 2026-09-08 (Find in Project Group: the all-projects search restricted to the members, #2575)
+
+- **`project.findInGroup`** ("Find in Project Group…", `cmd+alt+shift+d` /
+  `ctrl+alt+shift+d`, #805 terminal allowlist) opens the Find-in-All-Projects form
+  (`internal/allfind`) with the project list restricted to the **active group's members**,
+  all checked — a member missing on disk greys out and is skipped as always. Engine
+  (`search.MultiService`), status segment, results overlay, cross-project open and the
+  retained-results `cmd+g` stepping are reused unchanged.
+- **Shared memory, the group's selection**: the remembered `project.find_all.*` state
+  (query, toggles, globs, result cap) is the all-projects form's, but a group run
+  deliberately does **not** write `project.find_all.excluded_roots` back — its root set is
+  the group's, not the user's all-projects pick.
+- **The header names the set**: the overlay is titled `Find in Project Group`, its summary
+  row reads `7 matches in group web · 3 projects` and the status segment counts
+  `⌕ group web 2/3 · 41 hits`. Without an active group the command notifies
+  `no project group open` and opens nothing.
+  Docs: [Project Search](/architecture/search.md),
+  [Project Groups](/architecture/project-groups.md), [Keybindings](/architecture/keybindings.md).
+
 ## 2026-09-08 (MRU integration: group members first, `⦿ <group>` badge, #2574)
 
 - **One order for every recent-projects list**: `project.MRUOrder(history, current, group)`

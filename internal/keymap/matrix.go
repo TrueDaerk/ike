@@ -161,6 +161,7 @@ var reachableAlternatives = map[string]string{
 	"project.replaceInPath":            "palette",
 	"project.findInAllProjects":        "palette",
 	"project.findInAllProjectsResults": "palette",
+	"project.findInGroup":              "palette",
 	"lsp.references":                   "palette",
 	"lsp.format":                       "palette",
 	"lsp.codeAction":                   "palette",

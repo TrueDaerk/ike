@@ -4,7 +4,7 @@ title: Project Search (Find in Path)
 description: Streaming project-wide search engine — rg --json backend with a pure-Go walker fallback, generation-based cancellation, bounded results — and the shared in-pane "/" search (ui.LineSearch) every viewer pane jumps through its matches with.
 resource: internal/search
 tags: [architecture, search, find-in-path, in-pane-search, ui]
-timestamp: 2026-09-03T00:00:00Z
+timestamp: 2026-09-08T22:00:00Z
 ---
 
 # Project Search (Find in Path)
@@ -404,3 +404,31 @@ overlay, one grouping level deeper.
   default include/exclude globs, the excluded projects list and the result
   cap; the last-used query/toggles are form-maintained state and stay out of
   the UI (excused in the settings coverage ledger).
+
+### The group variant (`project.findInGroup`, 0510 #2575)
+
+`project.findInGroup` ("Find in Project Group…", `cmd+alt+shift+d`, `ctrl` as
+the delivered secondary off macOS / palette; on the terminal allowlist, so a
+focused shell does not swallow it) is the **same** surface with the project
+list restricted to the **active project group's members**
+([project groups](project-groups.md)). Everything below the form is reused
+unchanged: `search.MultiService`, the status segment, the results overlay, the
+cross-project open and the retained-results `cmd+g` stepping.
+
+- **Form:** `Form.OpenGroup` seeds the identical remembered `project.find_all.*`
+  state (query, toggles, globs, result cap) and lists the group's roots in
+  group order, **all checked** — the persisted `excluded_roots` is an
+  all-projects notion and does not apply. A member missing from disk greys out
+  with `(missing)` and is skipped, exactly as in the all-projects list. Title
+  and heading name the group (`Find in Project Group — ⦿ web`, `Group web
+  (2 of 3 searched …)`).
+- **No group, no search:** without an active group the command notifies
+  `no project group open` and opens nothing. The group is read through
+  `capGroup`, so it also works during a group-open chain, before the marker is
+  persisted.
+- **Persistence:** the shared query/toggle/glob state is written back as
+  usual; `project.find_all.excluded_roots` is **not** — the root selection of
+  a group run is the group's, not the user's all-projects pick.
+- **Header:** the results overlay is titled `Find in Project Group` and its
+  summary row names the searched set — `7 matches in group web · 3 projects`;
+  the status segment counts `⌕ group web 2/3 · 41 hits` while the scan runs.

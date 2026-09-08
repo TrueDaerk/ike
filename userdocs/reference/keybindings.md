@@ -51,6 +51,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Find in all projects | `cmd+alt+shift+f` | `ctrl+alt+shift+f` | `project.findInAllProjects` |
 | Find in pane | `cmd+f` | `ctrl+f` | `search.open` |
 | Find in path | `cmd+shift+f` | `ctrl+shift+f` | `project.findInPath` |
+| Find in project group | `cmd+alt+shift+d` | `ctrl+alt+shift+d` | `project.findInGroup` |
 | Focus pane 1 | `ctrl+1` | — | `pane.focus1` |
 | Focus pane 2 | `ctrl+2` | — | `pane.focus2` |
 | Focus pane 3 | `ctrl+3` | — | `pane.focus3` |

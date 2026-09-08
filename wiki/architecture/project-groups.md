@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Project Groups
-description: Epic 0510 — named sets of project roots opened, parked and closed as one; the [[project.groups]] data layer, the project.active_group marker, the group-aware background workspace cap, the project.group.open picker and warm-up chain, the status-line group segment, project.group.close with the aggregated busy guard, group.next/prev cycling and group.warm.
+description: Epic 0510 — named sets of project roots opened, parked and closed as one; the [[project.groups]] data layer, the project.active_group marker, the group-aware background workspace cap, the project.group.open picker and warm-up chain, the status-line group segment, project.group.close with the aggregated busy guard, group.next/prev cycling, group.warm and the group-restricted Find in Project Group.
 resource: internal/app/project_group.go
 tags: [architecture, project, groups, workspace, config, palette, status-line]
-timestamp: 2026-09-08T21:00:00Z
+timestamp: 2026-09-08T22:00:00Z
 ---
 
 # Project Groups (Epic 0510)
@@ -17,7 +17,8 @@ group is nothing more than **a set of ordinary workspaces plus a marker**.
 Spec: epic #2569. This page grows with each sub-issue; today it documents the data layer (#2570),
 the open entry point — picker, warm-up chain, marker, status segment (#2571) — and leaving and
 moving within a group: the close with its aggregated busy guard, `next` / `prev` cycling and
-`warm` (#2572).
+`warm` (#2572), the MRU integration (#2574) and the group-restricted `project.findInGroup`
+(#2575).
 
 ## Persisted shape
 
@@ -269,6 +270,19 @@ one function does it, so all of them agree:
 
 Standing in `api` of `web = {api, ui, infra}`, the picker lists `ui`, `infra` (MRU order among
 them) and then the non-members, and `ctrl+alt+1` switches to the first member row.
+
+## Find in group (`project.findInGroup`, #2575)
+
+`project.findInGroup` ("Find in Project Group…", `cmd+alt+shift+d`, on the #805 terminal
+allowlist) is **Find in All Projects with the project list restricted to the members** — the same
+form, engine, status segment, results overlay, cross-project open and retained-results stepping.
+Members are listed in group order, all checked; a member missing on disk greys out and is skipped
+like any other root. It shares the remembered `project.find_all.*` state (query, toggles, globs,
+result cap) but its root selection is the group's, so a group run never writes
+`project.find_all.excluded_roots`. The overlay header names the searched set —
+`7 matches in group web · 3 projects`. Without an active group it notifies `no project group open`
+and opens nothing. Full mechanics:
+[Search → Find in All Projects → the group variant](search.md).
 
 ## Validation diagnostics
 

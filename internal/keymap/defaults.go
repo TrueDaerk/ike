@@ -182,6 +182,9 @@ var jetbrainsRows = []row{
 	// like copyDocPath sits above copy. The results chord mirrors it on r.
 	{"cmd+alt+shift+f", "project.findInAllProjects", "Find in all projects", Global, "Project (#2394)"},
 	{"cmd+alt+shift+r", "project.findInAllProjectsResults", "Show all-projects search results", Global, "Project (#2394)"},
+	// Find in Project Group (0510, #2575) joins the two above on the
+	// cmd+alt+shift layer; "d" is the free letter next to them.
+	{"cmd+alt+shift+d", "project.findInGroup", "Find in project group", Global, "Project groups (#2575)"},
 	// Retained find-in-path match stepping (0150, #242): the JetBrains
 	// next/previous-occurrence keys.
 	{"f3", "search.nextMatch", "Next search match", Global, "Search (0150)"},

@@ -2,6 +2,7 @@ package app
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -21,6 +22,13 @@ import (
 // the find-in-path results overlay, grouped by project (#2413). The form
 // state — query, toggles, globs, excluded roots — persists in the user config
 // layer (project.find_all.*), like the project history it draws its list from.
+//
+// project.findInGroup (#2575) is the same machinery with the project list
+// restricted to the active project group's members, all checked: form, engine,
+// status segment, results overlay, cross-project open and the retained-results
+// stepping are reused unchanged. It shares the remembered project.find_all.*
+// state, but its root selection is the group's — so a group run deliberately
+// leaves project.find_all.excluded_roots alone.
 
 // openAllFind seeds the form from the persisted state and the recent-projects
 // history and shows it.
@@ -37,6 +45,56 @@ func (m *Model) openAllFind() {
 	}
 	m.allFind.SetSize(m.width, m.height)
 	m.allFind.Open(st, allFindProjects(project.History(config.Get()), fa.ExcludedRoots, os.Stat), m.activeSelectionText())
+}
+
+// openAllFindGroup opens the same form over the active project group's members
+// (project.findInGroup, #2575). Without a group there is nothing to restrict
+// the search to, so it notifies and opens nothing.
+func (m *Model) openAllFindGroup() {
+	cfg := config.Get()
+	g, ok := m.capGroup()
+	if !ok {
+		m.host.Notify(host.Info, "no project group open")
+		return
+	}
+	fa := cfg.Project.FindAll
+	st := allfind.State{
+		Query:         fa.Query,
+		Include:       strings.Join(fa.Include, ","),
+		Exclude:       strings.Join(fa.Exclude, ","),
+		CaseSensitive: fa.CaseSensitive,
+		WholeWord:     fa.WholeWord,
+		Regex:         fa.Regex,
+	}
+	m.allFind.SetSize(m.width, m.height)
+	// capGroup prefers the marker the model carries, so the command works
+	// during a group-open chain too, before the marker is persisted.
+	m.allFind.OpenGroup(st, groupFindProjects(g, project.History(cfg), os.Stat), m.activeSelectionText(), g.Name)
+}
+
+// groupFindProjects maps a group's members onto the form's project list: group
+// order (the open order), every member checked — the persisted
+// project.find_all.excluded_roots is an all-projects notion and does not apply
+// — display names from the recent-projects history where it knows one, and a
+// root that fails the stat probe marked missing (greyed out, never scanned).
+func groupFindProjects(g project.Group, entries []project.Entry, stat func(string) (os.FileInfo, error)) []allfind.Project {
+	names := make(map[string]string, len(entries))
+	for _, e := range entries {
+		names[e.Path] = e.Name
+	}
+	out := make([]allfind.Project, 0, len(g.Roots))
+	for _, root := range g.Roots {
+		missing := false
+		if fi, err := stat(root); err != nil || !fi.IsDir() {
+			missing = true
+		}
+		name := names[root]
+		if name == "" {
+			name = filepath.Base(root)
+		}
+		out = append(out, allfind.Project{Root: root, Name: name, Missing: missing})
+	}
+	return out
 }
 
 // allFindProjects maps the history onto the form's project list: history
@@ -69,7 +127,11 @@ func (m *Model) startAllFind(msg allfind.ConfirmMsg) tea.Cmd {
 		roots[i] = r.Root
 	}
 	m.allResults.SetSize(m.width, m.height)
-	m.allResults.Begin(st.Query, msg.Roots)
+	if msg.Group != "" {
+		m.allResults.BeginGroup(st.Query, msg.Roots, msg.Group)
+	} else {
+		m.allResults.Begin(st.Query, msg.Roots)
+	}
 	m.allFindGen = m.allSearch.ScanMulti(search.MultiQuery{
 		Query: search.Query{
 			Pattern:       st.Query,
@@ -83,7 +145,11 @@ func (m *Model) startAllFind(msg allfind.ConfirmMsg) tea.Cmd {
 		Roots: roots,
 	})
 	m.allFindRecent = true
-	m.host.Notify(host.Info, "searching "+plural(len(roots), "project", "projects")+" for \""+st.Query+"\"…")
+	scope := plural(len(roots), "project", "projects")
+	if msg.Group != "" {
+		scope = "group " + msg.Group + " (" + scope + ")"
+	}
+	m.host.Notify(host.Info, "searching "+scope+" for \""+st.Query+"\"…")
 
 	// One batched write + reload for the whole remembered state (#2394):
 	// user scope on purpose — the search spans projects, so its memory does.
@@ -98,7 +164,11 @@ func (m *Model) startAllFind(msg allfind.ConfirmMsg) tea.Cmd {
 		{Scope: config.UserScope, Key: "project.find_all.regex", Value: st.Regex},
 		{Scope: config.UserScope, Key: "project.find_all.include", Value: splitAllFindGlobs(st.Include)},
 		{Scope: config.UserScope, Key: "project.find_all.exclude", Value: splitAllFindGlobs(st.Exclude)},
-		{Scope: config.UserScope, Key: "project.find_all.excluded_roots", Value: excluded},
+	}
+	// A group run's root selection is the group's, not the user's all-projects
+	// pick: it must not overwrite the remembered exclusions (#2575).
+	if msg.Group == "" {
+		muts = append(muts, config.Mutation{Scope: config.UserScope, Key: "project.find_all.excluded_roots", Value: excluded})
 	}
 	return config.ApplyAndReload(m.cfgOpts, muts)
 }

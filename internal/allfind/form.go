@@ -6,6 +6,11 @@
 // fields and single-line editing — but confirming closes it immediately and
 // hands the scan to the root model; while it runs only a status-line segment
 // counts the projects, and the results open when it finishes.
+//
+// The same surface serves Find in Project Group (#2575): the very same form,
+// engine and results overlay with the project list restricted to the active
+// project group's members, all checked. Only the wording differs — the group
+// variant rides along as a name on ConfirmMsg and on the results header.
 package allfind
 
 import (
@@ -46,10 +51,19 @@ type Project struct {
 // ConfirmMsg asks the root model to start the background scan: persist the
 // state and fan the query out over the kept roots. Roots lists the projects
 // to scan, in history order (excluded and missing entries already dropped).
+// Group names the active project group when the form was opened restricted to
+// its members (project.findInGroup, #2575); empty for the all-projects form.
+// The root selection of a group run is the group's, so it is deliberately not
+// persisted back into project.find_all.excluded_roots.
 type ConfirmMsg struct {
 	State State
 	Roots []Project
+	Group string
 }
+
+// groupGlyph marks a project group, the glyph the status line's group slot,
+// the group picker and the recent-projects badges use (0510).
+const groupGlyph = "⦿"
 
 // field enumerates the focusable form sections; tab cycles through them.
 type field int
@@ -83,6 +97,11 @@ type Form struct {
 	projects []Project
 	projCur  int // highlighted row while fieldProjects has the focus
 
+	// group names the project group the list is restricted to (#2575); empty
+	// for the all-projects form. It only changes the wording and rides along
+	// in ConfirmMsg — the editing behaviour is identical.
+	group string
+
 	// lay maps content rows to click targets; View fills it each render.
 	lay formLayout
 
@@ -104,6 +123,25 @@ func (f *Form) SetSize(w, h int) { f.width, f.height = w, h }
 // non-empty (single-line) it prefills the query, selected, outranking the
 // remembered one; otherwise the remembered query arrives preselected.
 func (f *Form) Open(st State, projects []Project, sel string) {
+	f.group = ""
+	f.openWith(st, projects, sel)
+}
+
+// OpenGroup shows the same form restricted to the named project group's
+// members (project.findInGroup, #2575): the query, toggles and globs are the
+// remembered project.find_all.* state, the project list is the group's — all
+// checked, missing members greyed out and skipped as in the all-projects form.
+func (f *Form) OpenGroup(st State, projects []Project, sel, group string) {
+	f.group = group
+	f.openWith(st, projects, sel)
+}
+
+// Group returns the project group the open form is restricted to, or "" for
+// the all-projects form.
+func (f *Form) Group() string { return f.group }
+
+// openWith is the shared body of Open and OpenGroup.
+func (f *Form) openWith(st State, projects []Project, sel string) {
 	f.query.Set(st.Query)
 	f.include.Set(st.Include)
 	f.exclude.Set(st.Exclude)
@@ -182,7 +220,7 @@ func (f *Form) confirm() tea.Cmd {
 	if len(roots) == 0 {
 		return nil
 	}
-	msg := ConfirmMsg{State: f.State(), Roots: roots}
+	msg := ConfirmMsg{State: f.State(), Roots: roots, Group: f.group}
 	f.Close()
 	return func() tea.Msg { return msg }
 }
@@ -394,7 +432,7 @@ func (f *Form) View() string {
 	boxW := f.boxWidth()
 	innerW := boxW - 6 // border + padding (#971)
 
-	title := lipgloss.NewStyle().Bold(true).Underline(true).Render("Find in All Projects")
+	title := lipgloss.NewStyle().Bold(true).Underline(true).Render(f.title())
 	lay := formLayout{projTop: -1}
 	rows := []string{title, ""}
 	lay.query = len(rows)
@@ -420,6 +458,15 @@ func (f *Form) View() string {
 		Padding(0, 1).
 		Width(boxW - 2)
 	return box.Render(strings.Join(rows, "\n"))
+}
+
+// title names the form: the all-projects one, or the group variant naming the
+// group it is restricted to (#2575).
+func (f *Form) title() string {
+	if f.group != "" {
+		return "Find in Project Group — " + groupGlyph + " " + f.group
+	}
+	return "Find in All Projects"
 }
 
 // theme returns the active palette, defaulting when none was threaded in.
@@ -470,7 +517,11 @@ func (f *Form) togglesRow(width int) string {
 // projectsHeading labels the project list with the kept/total count.
 func (f *Form) projectsHeading(width int) string {
 	kept := len(f.keptRoots())
-	head := "Projects (" + itoa(kept) + " of " + itoa(len(f.projects)) + " searched — space toggles)"
+	label := "Projects"
+	if f.group != "" {
+		label = "Group " + f.group
+	}
+	head := label + " (" + itoa(kept) + " of " + itoa(len(f.projects)) + " searched — space toggles)"
 	style := lipgloss.NewStyle().Faint(true)
 	if f.focus == fieldProjects {
 		style = lipgloss.NewStyle().Foreground(f.theme().Foreground)
@@ -506,7 +557,11 @@ func (f *Form) projectRows(width int) []string {
 		out = append(out, "  "+ansi.Truncate(line, width-2, "…"))
 	}
 	if len(out) == 0 {
-		out = append(out, dim.Render("  no recent projects"))
+		empty := "  no recent projects"
+		if f.group != "" {
+			empty = "  no members in this group"
+		}
+		out = append(out, dim.Render(empty))
 	}
 	return out
 }
