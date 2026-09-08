@@ -1,5 +1,35 @@
 # Log
 
+## 2026-09-08 (the typing fan-out: 8.45 → 2.45 passes per key, #2541)
+
+- **Measured, not inferred.** The four-day ratio (six input passes and ten
+  renders per key press) mostly counted the mouse/terminal fold #2540 has
+  since parked; the trace log in a tmux session typing 42 characters at
+  150ms into a modified markdown file with marksman attached put the real
+  per-key cost at 8.45 Update passes (and as many renders): the key, the
+  parse, a `SyncMsg`, 2.3 `CompletionMsg`, and one each of semantic spans,
+  code lenses and occurrence highlights. After: 2.45 — the key, the parse,
+  and 0.3 completion batches. Table and recipe in
+  [performance](/architecture/performance.md).
+- **Completion waits for the rune to rest, and answers once.**
+  `lsp.completion_delay_ms` (default 100, 0 = immediate; Settings UI →
+  Language Support, validated 0–2000) is the identifier-rune debounce for
+  both the LSP bridge (was a fixed 80ms) and the local engine (had none);
+  trigger characters and ctrl+space stay immediate. One local dispatch sends
+  one `lsp.CompletionBatchMsg` instead of a message per source.
+- **Decorations wait for the pause.** The bridge's post-didChange refreshes
+  (semantic tokens, inlay hints, code lenses, folding, inheritance,
+  occurrences) fire 300ms after the last flushed change, not per flush; a
+  cursor move mid-burst leaves the occurrence request to that timer; an
+  empty reply after an empty reply is dropped before `host.Send`.
+- **The document sync rides the keystroke's pass.** The editor emitter
+  queues the `SyncMsg` and `app.Update` applies it on the settled pass
+  (`internal/app/editorsync.go`); a looped `SyncMsg` still takes the same
+  handler.
+- **Gutter marks only when they change.** `vcs.RefreshMarksIfChanged`
+  resolves to nil for an unchanged diff, and a clean document sends its
+  clearing message only while marks show.
+
 ## 2026-09-08 (jq/yq playground history: per user, not per file or session, #2536)
 
 - **The program history's lifetime is now stated and pinned.** The report

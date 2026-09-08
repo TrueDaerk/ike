@@ -4,7 +4,7 @@ title: Crash Recovery
 description: Vim-swapfile-style crash recovery — debounced full-text snapshots of dirty buffers, written atomically to the project state dir, restored on next launch.
 resource: internal/backup
 tags: [architecture, backup, crash-recovery, persistence]
-timestamp: 2026-08-27T12:00:00Z
+timestamp: 2026-09-08T14:00:00Z
 ---
 
 # Crash Recovery
@@ -92,7 +92,9 @@ A snapshot's life is tied to the dirty flag:
   rest.
 
 The write side (#167, `internal/app/backup.go`) rides the shared-document sync
-seam: `editor.SyncMsg` fires on every buffer change and save, and the
+seam: `editor.SyncMsg` fires on every buffer change and save — applied on the
+settled pass of the keystroke's own Update since #2541, no longer a message
+of its own through the loop — and the
 originating pane's dirty flag decides — dirty `Mark`s the buffer on the
 debouncer (key = file path, or a pane-scoped `untitled:` token for pathless
 buffers), clean `Cancel`s the mark and removes the snapshot. One armed

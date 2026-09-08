@@ -1033,6 +1033,12 @@ type LSP struct {
 	// identifier characters (#527). Server trigger characters ("." etc.) and
 	// the manual ctrl+space request work regardless.
 	CompletionAuto bool `toml:"completion_auto"`
+	// CompletionDelayMs is how long an identifier-rune auto-trigger waits
+	// for the next keystroke before the completion request goes out (#2541):
+	// a typing burst reaches the server and the local indexes once, at the
+	// resting position, instead of once per character. Server trigger
+	// characters (".") and the manual ctrl+space request stay immediate.
+	CompletionDelayMs int `toml:"completion_delay_ms"`
 	// CodeLens toggles server code lenses ("run test", reference counts)
 	// rendered as virtual annotations on the anchored line and executable via
 	// the lsp.codeLens command (#1912).

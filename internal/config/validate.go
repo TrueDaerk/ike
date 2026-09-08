@@ -672,6 +672,16 @@ func validate(c *Config) []Diagnostic {
 		}
 		c.Issues.SavedFilters = kept
 	}
+	// Completion auto-trigger delay (#2541): 0 restores the immediate
+	// request; anything past two seconds would read as a broken popup.
+	if c.LSP.CompletionDelayMs < 0 {
+		diags = append(diags, Diagnostic{Field: "lsp.completion_delay_ms", Message: fmt.Sprintf("delay %d out of range, using 0", c.LSP.CompletionDelayMs)})
+		c.LSP.CompletionDelayMs = 0
+	}
+	if c.LSP.CompletionDelayMs > 2000 {
+		diags = append(diags, Diagnostic{Field: "lsp.completion_delay_ms", Message: fmt.Sprintf("delay %d out of range, using 2000", c.LSP.CompletionDelayMs)})
+		c.LSP.CompletionDelayMs = 2000
+	}
 	// Performance HUD (#1999): the refresh interval is also the HUD's own
 	// wake rate, so the lower bound keeps a diagnostic overlay from becoming
 	// the regression it is there to find.

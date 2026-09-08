@@ -225,11 +225,14 @@ func dirtyActive(t *testing.T, m Model) Model {
 
 // isQuit reports whether cmd resolves to tea.Quit's message.
 func isQuit(cmd tea.Cmd) bool {
-	if cmd == nil {
-		return false
+	// The quit may ride in a batch next to the save's own sync commands
+	// (#2541: the settled pass batches them into the key's command).
+	for _, msg := range cmdMsgs(cmd) {
+		if _, ok := msg.(tea.QuitMsg); ok {
+			return true
+		}
 	}
-	_, ok := cmd().(tea.QuitMsg)
-	return ok
+	return false
 }
 
 // TestQuitGuardPromptsOnDirty guards #287: q/ctrl+c with unsaved changes must

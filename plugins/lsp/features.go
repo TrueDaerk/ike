@@ -99,7 +99,7 @@ func (b *bridge) requestCodeLenses(path string) {
 				b.lensCache[path] = lenses
 				h := b.h
 				b.mu.Unlock()
-				if h != nil {
+				if h != nil && !b.dropEmptyRepeat("lenses", path, len(lenses) == 0) {
 					h.Send(ilsp.CodeLensesMsg{Path: path, Lenses: lenses})
 				}
 			}
@@ -212,7 +212,7 @@ func (b *bridge) requestFoldingRanges(path string) {
 	go func() {
 		for {
 			folds, err := mgr.FoldingRanges(context.Background(), path)
-			if err == nil && folds != nil && b.h != nil {
+			if err == nil && folds != nil && b.h != nil && !b.dropEmptyRepeat("folds", path, len(folds) == 0) {
 				b.h.Send(ilsp.FoldingRangesMsg{Path: path, Folds: folds})
 			}
 			b.mu.Lock()

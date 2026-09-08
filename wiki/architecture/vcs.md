@@ -4,7 +4,7 @@ title: VCS / Git Integration
 description: "Epics 0320/0330, slimmed by #750 — git status snapshot behind explorer coloring, branch status-line segment, gutter diff markers, file-vs-HEAD diff, hunk/file revert, inline blame, and a read-only changes tool window; git *workflow* (staging, commits, branches, log) is delegated to custom tool panes, with lazygit preconfigured; all git calls async via tea.Cmd."
 resource: internal/vcs
 tags: [architecture, vcs, git]
-timestamp: 2026-08-28T00:00:00Z
+timestamp: 2026-09-08T14:00:00Z
 ---
 
 # VCS / Git Integration (Epics 0320/0330, slimmed by #750)
@@ -64,7 +64,13 @@ packed-refs, reflog — lock/temp churn filtered) and reports them as one
 coalesced `GitChanged` event, so commits, branch switches, staging or pulls
 made in a lazygit tool pane or a terminal refresh the snapshot automatically.
 Each new snapshot re-feeds the explorer, the VCS panel, gutter marks, and
-enabled blame maps.
+enabled blame maps. The gutter fan-out is one recompute per open document,
+and since #2541 it costs a message only where the gutter changes:
+`vcs.RefreshMarksIfChanged` compares the fresh diff with the marks the view
+already shows (`editor.GitMarks`) and resolves to nil when equal, and a
+clean or untracked document sends its clearing `MarksMsg` only while marks
+are showing (`editor.HasGitMarks`). Marks are never recomputed on an edit —
+only a snapshot refresh (save, watcher, VCS command) triggers them.
 
 ## Surfaces
 

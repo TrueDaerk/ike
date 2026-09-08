@@ -55,7 +55,15 @@ func TestFormatEditsMsgSchedulesReparse(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("FormatEditsMsg must schedule a reparse of the edited buffer")
 	}
-	sp, ok := cmd().(highlight.SpansMsg)
+	// The reparse rides in the pass's batch next to the edit's sync commands
+	// (#2541): find it among the produced messages.
+	var sp highlight.SpansMsg
+	ok := false
+	for _, msg := range cmdMsgs(cmd) {
+		if s, is := msg.(highlight.SpansMsg); is {
+			sp, ok = s, true
+		}
+	}
 	if !ok || sp.Path != file {
 		t.Fatalf("reparse must yield a SpansMsg for %s, got %#v", file, sp)
 	}

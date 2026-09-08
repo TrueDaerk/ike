@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Performance & Diagnostics
-description: Idle-behavior rules (who may wake the render loop, and how often), the render budget and the always-on per-message-type pass accounting, the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, the opt-in update-loop trace log, the freeze-triage procedure, the selection-overlay rule for drag latency (#2495), and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
+description: Idle-behavior rules (who may wake the render loop, and how often), the render budget and the always-on per-message-type pass accounting, the per-keystroke fan-out budget while typing (#2541), the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, the opt-in update-loop trace log, the freeze-triage procedure, the selection-overlay rule for drag latency (#2495), and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/perfhud
 tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog, startup, freeze, render-budget]
-timestamp: 2026-09-08T12:00:00Z
+timestamp: 2026-09-08T14:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -199,6 +199,71 @@ heartbeat diffs two snapshots and ships the interval's top 3 as the `top`
 field (`app.termCheckMsg:5,view/render:5,…`), so an idle regression in the
 field names its own culprit in the next telemetry export — the HUD (below)
 is the interactive view of the same question.
+
+## The typing fan-out (#2541)
+
+The idle model above is about a session nobody types into; this section is
+about the other one. Four days of telemetry (2026-09-03..08) counted 45,617
+`tea.KeyPressMsg` against 434,644 `view/render` passes and 293,428
+`app.coalescedInputMsg` — read as ratios, six input passes and ten renders
+per key. The ratio overstates the typing cost: `coalescedInputMsg` is the
+mouse-and-terminal fold (#602/#803), and most of the 293k came from the
+hidden-terminal spinner #2540 has since parked. What a keystroke *itself*
+fans out into had never been measured, so it was — with the trace log
+(`perf.trace_log`, above) in a tmux session, typing 42 characters at a
+150ms cadence into a modified markdown file of a git repository with
+marksman attached, on `main` before the fix and on the branch after it:
+
+| Message per 42 keys | Before | After | Where it came from |
+| --- | --- | --- | --- |
+| `tea.KeyPressMsg` | 42 | 42 | the keys |
+| `highlight.SpansMsg` | 42 | 42 | the per-edit Tree-sitter parse — kept: it colours what the key typed |
+| `editor.SyncMsg` | 42 | 0 | the shared-document sync, sent through the loop from inside Update — now applied on the settled pass of the key's own Update |
+| `lsp.CompletionMsg` | 96 | 0 | every local source answering every identifier rune as its own message (empty answers included) |
+| `lsp.CompletionBatchMsg` | — | 12 | one message per dispatch, and a dispatch only once the identifier runes rest |
+| `lsp.SemanticSpansMsg` | 42 | 0 | re-requested after every flushed didChange; now once typing pauses, and an empty set after an empty set not at all |
+| `lsp.CodeLensesMsg` | 42 | 0 | same |
+| `lsp.DocumentHighlightsMsg` | 42 | 0 | the occurrence request after every cursor move — the keystroke *is* a cursor move; mid-burst it now waits for the pause |
+| `app.backupTickMsg` | 4 | 4 | the crash-recovery debounce, already one wake per quiet stretch |
+| **Total** | **355 (8.45 / key)** | **103 (2.45 / key)** | Update passes; renders are the same count again |
+
+`vcs.MarksMsg` was not in the per-key trace at all: the gutter diff only
+recomputes on a snapshot refresh (a save, a watcher event), never on an
+edit. Its share of the four-day totals (2,929) is the fan-out *per refresh*
+— one message per open document, whether or not anything moved — which is
+now nil for a document whose marks did not change and for a clean gutter
+with nothing to clear (`vcs.RefreshMarksIfChanged`, `vcsMarksCmd`).
+
+The rules this adds to the render budget, for the typing case:
+
+- **A per-keystroke follow-up that only needs to be right once typing
+  pauses waits for the pause.** The bridge's `decorationDebounce` (300ms
+  after the last flushed change) owns the semantic overlay, inlay hints,
+  code lenses, folding ranges, inheritance marks and the occurrence
+  highlight; the didChange itself keeps its 40ms so completion sees current
+  text. The identifier-rune completion trigger waits
+  `lsp.completion_delay_ms` (default 100ms, Settings UI → Language
+  Support) in both the bridge and the local engine; trigger characters and
+  ctrl+space stay immediate.
+- **Answers that land together travel together.** The local engine's
+  sources answer one dispatch as one `CompletionBatchMsg` (a 15ms gather
+  window after the first answer; a slower source still sends on its own).
+- **A message from inside Update that the same pass could apply is a wasted
+  pass.** The editor emitter used to `go host.Send` the `SyncMsg` because
+  `Emit` cannot return a Cmd; the settled pass (`drainEditorSyncs`) applies
+  it in the same pass now. Any other emitter-side "send to myself" is the
+  same shape.
+- **An empty set after an empty set is not a message.** `dropEmptyRepeat`
+  in the bridge keeps a per-kind, per-path memory; a server without the
+  capability answers empty on every refresh and the editor already holds
+  nothing. Non-empty sets always go out — the editor clears them on its own
+  and a dropped identical reply would never restore them.
+
+To re-measure: `IKE_CONFIG_DIR` with `[perf] trace_log = true`, type a fixed
+string with `tmux send-keys` at a fixed cadence, bracket the wall-clock
+window, and count `trace:` lines by type. The cadence matters — a 40ms
+debounce collapses nothing at 150ms per key, which is why the follow-ups had
+to move to a pause-based timer rather than a shorter one.
 
 ## The performance HUD (`internal/perfhud`, #1999)
 

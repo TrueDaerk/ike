@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -42,6 +43,16 @@ func TestMain(m *testing.M) {
 	// the welcome tour (#658) would auto-open and swallow scripted input. The
 	// first-run tests re-enable it locally.
 	tourAutoOpen = false
+	// The per-buffer debounce wakes (backup, idle autosave, .http vars) arm
+	// on every keystroke into a dirty buffer since #2541, and drainCmd runs a
+	// key's commands synchronously: a real tea.Tick would sleep its 2s
+	// deadline per typed key and then autosave the fixture. The armed flags
+	// and pending marks — what the seam tests assert — are unaffected; the
+	// tick handlers are driven directly (snapshotDueBackups,
+	// saveDueIdleBuffers) where a test needs them.
+	debounceTick = func(time.Duration, func(time.Time) tea.Msg) tea.Cmd {
+		return func() tea.Msg { return nil }
+	}
 	dir, err := os.MkdirTemp("", "ike-app-test")
 	if err == nil {
 		testStoreRoot = dir

@@ -154,13 +154,16 @@ func defaults() *Config {
 			InlayHints:     false,
 			SignatureAuto:  true,
 			CompletionAuto: true,
-			CodeLens:       true,
-			Folding:        true,
-			SemanticTokens: true,
-			SelectionRange: true,
-			WillRename:     true,
-			LogLevel:       "warn",
-			Servers:        map[string]map[string]any{},
+			// 100ms sits under the gap between two words at a brisk typing
+			// pace (#2541) and above the gap between two characters of one.
+			CompletionDelayMs: 100,
+			CodeLens:          true,
+			Folding:           true,
+			SemanticTokens:    true,
+			SelectionRange:    true,
+			WillRename:        true,
+			LogLevel:          "warn",
+			Servers:           map[string]map[string]any{},
 			// Default ignore rules (#1260): intelephense's P1006 TypeError
 			// cannot infer types written through by-reference parameters
 			// (&$param) and floods by-ref-heavy PHP with bogus
