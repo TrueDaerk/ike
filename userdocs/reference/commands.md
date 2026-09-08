@@ -81,7 +81,11 @@ bring their own.
 | Treat Buffer as… | `editor.setBufferLanguage` | — | — | everywhere |
 | Split View Down | `editor.splitViewDown` | `cmd+alt+shift+down` | — | everywhere |
 | Split View Right | `editor.splitViewRight` | `cmd+alt+shift+right` | — | everywhere |
-| Close Other Tabs | `editor.tab.closeOthers` | — | — | everywhere |
+| Close All Tabs | `editor.tab.closeAll` | — | — | everywhere |
+| Close Tabs to the Left | `editor.tab.closeLeft` | — | — | everywhere |
+| Close Other Tabs | `editor.tab.closeOthers` | `cmd+alt+w` | — | everywhere |
+| Close Tabs to the Right | `editor.tab.closeRight` | — | — | everywhere |
+| Close Unmodified Tabs | `editor.tab.closeUnmodified` | — | — | everywhere |
 | Move Tab Left | `editor.tab.moveLeft` | `ctrl+shift+pgup` | — | everywhere |
 | Move Tab Right | `editor.tab.moveRight` | `ctrl+shift+pgdown` | — | everywhere |
 | New Empty Editor Tab | `editor.tab.new` | `ctrl+t` | — | everywhere |

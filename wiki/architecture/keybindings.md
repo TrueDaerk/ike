@@ -1276,6 +1276,7 @@ JetBrains is:
 | `editor.sortLines` | `alt+shift+s` | fragile | `vim :sort / Edit menu` | live via vim :sort / Edit menu |
 | `editor.splitViewDown` | `cmd+alt+shift+down` | fragile | `palette` | live via palette |
 | `editor.splitViewRight` | `cmd+alt+shift+right` | fragile | `palette` | live via palette |
+| `editor.tab.closeOthers` | `cmd+alt+w` | fragile | `palette / File menu / tab context menu` | live via palette / File menu / tab context menu |
 | `editor.tab.moveLeft` | `ctrl+shift+pgup` | delivered | `—` | live |
 | `editor.tab.moveRight` | `ctrl+shift+pgdown` | delivered | `—` | live |
 | `editor.tab.new` | `ctrl+t` | delivered | `—` | live |

@@ -4,7 +4,7 @@ title: Editor Tabs
 description: The per-pane tab model — a tab-hosting pane holds an ordered tab list (documents, embedded terminals and any tabbable viewer content) with one active tab; opening routes into the focused pane's tab list, closing peels tabs before the pane.
 resource: internal/pane/instance.go
 tags: [architecture, panes, tabs, editors, terminals, viewers, shared-documents, close, pins, overflow, mru, picker]
-timestamp: 2026-08-27T12:00:00Z
+timestamp: 2026-09-08T12:00:00Z
 ---
 
 # Editor Tabs
@@ -159,9 +159,11 @@ saved layout reopens as saved.
 `editor.tab.togglePin` ("Pin/Unpin Tab" in the palette; a state-aware
 "Pin Tab"/"Unpin Tab" entry in the tab context menu) flips a per-tab pin
 (`pane.Tab.pinned`, accessors `TabPinned`/`SetTabPinned`/`ToggleTabPin`).
-A pinned tab is exempt from the tab-limit LRU eviction and survives
-**Close Others** (alongside dirty tabs; the notification counts both reasons).
-Manual closes — `✕`, middle-click, `editor.closeTab` — stay allowed. The bar
+A pinned tab is exempt from the tab-limit LRU eviction and from every
+**batch close** (#2538: Close Others / Left / Right / Unmodified / All); a
+notification counts the pinned tabs a batch skipped. Manual closes — `✕`,
+middle-click, `editor.closeTab` — stay allowed, so pinning holds a tab through
+the batch commands without locking it. The bar
 renders a pinned segment with a `• ` prefix (single-width, Accent); the prefix
 is part of the label string, so `tabWindow`/`tabHit` measure it for free and
 the mirrored geometry needs no special case. Pins persist with the layout
@@ -176,7 +178,8 @@ only closes the pane when the last tab goes — single-tab panes feel exactly li
 before. **Dirty buffers open the unsaved-changes guard first** (#259,
 `internal/app/closeguard.go`): a floating-shell prompt offers `[s]` save then
 close, `[d]` discard, `[esc]` cancel — same pattern as the project-switch
-guard. A pane close checks every tab; documents still shown by another pane
+guard, and the batch closes (#2538) raise it once for their whole victim set.
+A pane close checks every tab; documents still shown by another pane
 (#142) close without a prompt (nothing is lost), `:q!` forces the close
 vim-style, and a failed save (read-only file) keeps the tab open with an
 error toast. **App quit runs through the same guard** (#287): `q` (normal-mode
@@ -230,6 +233,10 @@ one):
 | `editor.tab.reopenClosed` | `cmd+shift+t` (JetBrains) / `alt+shift+t` | pop the reopen ring |
 | `editor.tab.picker` | `alt+e` | open the MRU tab picker (#2151) |
 | `editor.closeTab` | `cmd+w` / `ctrl+w` / `:q` | close the active tab, the pane on its last tab |
+| `editor.tab.closeOthers` | `cmd+alt+w` (macOS) | close every tab but the active one |
+| `editor.tab.closeLeft` / `editor.tab.closeRight` | — (menus / palette) | close the tabs before / after the active one |
+| `editor.tab.closeUnmodified` | — (menus / palette) | close every tab without unsaved changes |
+| `editor.tab.closeAll` | — (menus / palette) | close every tab; the pane goes with them |
 
 Tab cycling now mirrors JetBrains' macOS keymap export: `ctrl+cmd+arrow`
 primaries with `ctrl+alt+arrow` secondaries. These Cmd/Option chords only reach
@@ -243,6 +250,43 @@ The **reopen ring** keeps the last 10 closed tabs (path + caret), fed by both
 tab closes and pane closes; `editor.tab.reopenClosed` pops entries, skipping
 files deleted since, and restores the caret via the standard open flow. A
 "Reopen Closed Tab" item joins the File menu.
+
+### Batch closes (#1128, #2538)
+
+`editor.closeTab` is one of the most-dispatched commands there is, and closing
+tabs one at a time is what made it that. The four JetBrains batch closes join
+the older **Close Others**, all five sharing one implementation
+(`closeTabScope` in `internal/app/tabs.go`): a `tabCloseScope` picks the
+victims, everything after that is common.
+
+| scope | picks |
+|---|---|
+| `closeScopeOthers` | every tab but the active one |
+| `closeScopeLeft` / `closeScopeRight` | every tab before / after the active one |
+| `closeScopeUnmodified` | every tab whose document has no unsaved changes — the active one included, so a pane of clean buffers empties down to what is actually being edited |
+| `closeScopeAll` | every tab |
+
+Three rules apply to all of them:
+
+- **Pinned tabs are never picked** (#1172). Pinning is the way to hold a tab
+  through a batch close; the skipped ones are reported ("2 pinned tabs kept").
+- **Unsaved changes go through the guard** (#259), once for the whole batch:
+  `dirtyInTabs` collects the documents the batch would lose (deduped, and
+  skipping documents another pane still shows), `openBatchClosePrompt` names
+  them all in one prompt, and the answer settles the whole set — `s` writes
+  every dirty victim and then closes them, `d` discards and closes, `esc`
+  closes nothing. The pending close carries its own victim list
+  (`pendingClose.tabs`), so no tab moves between the prompt and the close.
+- **A batch that empties the pane takes the pane with it**
+  (`pendingClose.whole`), the way `cmd+w` on a single-tab pane already
+  behaves — unless a pinned tab survives to hold it open, or the pane is the
+  workspace's last leaf, which never closes.
+
+`editor.tab.closeOthers` carries `cmd+alt+w`, `cmd+w`'s neighbour, on macOS
+only: off macOS the `Cmd`→`Ctrl` fold would land it on `ctrl+alt+w`, which
+`pane.close` owns. The other three are menu-and-palette commands with a ledger
+entry (`cmd/ike/keybind_audit_test.go`) — the tab context menu and the **File**
+menu are where a once-in-a-while cleanup is looked for, not muscle memory.
 
 ### Tab picker (#2151)
 
@@ -287,8 +331,10 @@ actually showing a bar.
 - **Right-click (#1128)** on a segment selects that tab — like the left-click
   focus path — and opens the shared floating context menu (`menu.Context`,
   #1020) with **Close** (`editor.closeTab`, targeting the now-active clicked
-  tab), **Close Others** (`editor.tab.closeOthers` — closes every other tab;
-  dirty and pinned ones stay open with a notification), a state-aware
+  tab), the batch closes **Close Others** / **Close Tabs to the Left** /
+  **Close Tabs to the Right** / **Close Unmodified Tabs** / **Close All Tabs**
+  (#2538 — sides are read from the clicked segment; pinned tabs stay, dirty
+  ones raise the batch guard), a state-aware
   **Pin Tab / Unpin Tab** (`editor.tab.togglePin`, #1172 — the item list is
   built at open time, so the label reflects the clicked tab) and **Reopen
   Closed** (`editor.tab.reopenClosed`). The title band outside the segments opens the

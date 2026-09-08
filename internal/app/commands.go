@@ -38,9 +38,24 @@ type TabMoveMsg struct{ Delta int }
 type TabReopenMsg struct{}
 
 // TabCloseOthersMsg closes every tab of the active editor pane except the
-// active one (#1128); tabs with unsaved changes stay open. Dispatched by
-// editor.tab.closeOthers (tab context menu / palette).
+// active one (#1128). Dispatched by editor.tab.closeOthers (tab context menu
+// / palette / cmd+alt+w).
 type TabCloseOthersMsg struct{}
+
+// TabCloseSideMsg closes the tabs on one side of the active one: Delta -1 is
+// "Close Tabs to the Left", +1 "Close Tabs to the Right" (#2538). Dispatched
+// by editor.tab.closeLeft / editor.tab.closeRight.
+type TabCloseSideMsg struct{ Delta int }
+
+// TabCloseUnmodifiedMsg closes every tab of the active editor pane whose
+// document has no unsaved changes (#2538), the active one included — the way
+// back to the handful of buffers actually being edited. Dispatched by
+// editor.tab.closeUnmodified.
+type TabCloseUnmodifiedMsg struct{}
+
+// TabCloseAllMsg closes every tab of the active editor pane (#2538); the pane
+// itself goes when nothing would be left. Dispatched by editor.tab.closeAll.
+type TabCloseAllMsg struct{}
 
 // NewEditorTabMsg appends a fresh empty editor tab to the focused (else the
 // active) editor pane and focuses it (#1794, the editor half of the
@@ -546,6 +561,10 @@ func (appCommands) Capabilities() plugin.Capabilities {
 		appCommand("editor.tab.new", "New Empty Editor Tab", NewEditorTabMsg{}),
 		appCommand("editor.tab.reopenClosed", "Reopen Closed Tab", TabReopenMsg{}),
 		appCommand("editor.tab.closeOthers", "Close Other Tabs", TabCloseOthersMsg{}),
+		appCommand("editor.tab.closeLeft", "Close Tabs to the Left", TabCloseSideMsg{Delta: -1}),
+		appCommand("editor.tab.closeRight", "Close Tabs to the Right", TabCloseSideMsg{Delta: 1}),
+		appCommand("editor.tab.closeUnmodified", "Close Unmodified Tabs", TabCloseUnmodifiedMsg{}),
+		appCommand("editor.tab.closeAll", "Close All Tabs", TabCloseAllMsg{}),
 		appCommand("editor.tab.togglePin", "Pin/Unpin Tab", TabTogglePinMsg{}),
 		appCommand("editor.tab.picker", "Switch Tab…", TabPickerMsg{}),
 	}

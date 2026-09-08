@@ -2,6 +2,7 @@ package app
 
 import (
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -27,6 +28,12 @@ type pendingClose struct {
 	tab   int
 	dirty []string // display names for the prompt body
 	quit  bool
+	// A batch close (#2538: Close Others / Left / Right / Unmodified / All)
+	// holds its whole victim list here — the guard answers for all of them at
+	// once — and whole marks a batch that empties the pane, so the pane closes
+	// with its last tab.
+	tabs  []int
+	whole bool
 }
 
 // guardedCloseFocused closes the focused pane's active tab (the pane on its
@@ -155,6 +162,44 @@ func (m *Model) dirtyOnClose(inst *pane.Instance, idx int) []string {
 	return dirty
 }
 
+// dirtyInTabs lists, deduped, the documents that closing the given tabs of
+// inst would lose — the batch-close flavour of dirtyOnClose (#2538).
+func (m *Model) dirtyInTabs(inst *pane.Instance, idxs []int) []string {
+	var dirty []string
+	seen := map[string]bool{}
+	for _, i := range idxs {
+		for _, name := range m.dirtyOnClose(inst, i) {
+			if seen[name] {
+				continue
+			}
+			seen[name] = true
+			dirty = append(dirty, name)
+		}
+	}
+	return dirty
+}
+
+// openBatchClosePrompt shows the guard for a batch tab close (#2538): one
+// prompt for the whole set, whose answer closes them all — saving first, or
+// discarding — instead of stopping at the first dirty tab.
+func (m *Model) openBatchClosePrompt(key string, tabs []int, dirty []string, whole bool) {
+	m.closePending = &pendingClose{key: key, tab: -1, tabs: tabs, whole: whole, dirty: dirty}
+	subject := strings.Join(dirty, ", ") + " have unsaved changes."
+	if len(dirty) == 1 {
+		subject = dirty[0] + " has unsaved changes."
+	}
+	body := subject + "\n\n" +
+		guardLine("s", "save all, then close all "+strconv.Itoa(len(tabs))+" tabs", true) +
+		guardLine("d", "discard changes and close them all", false) +
+		guardCancel("cancel — close no tab")
+	m.shell.SetContent(ui.ModelContent{
+		Heading: "Unsaved changes",
+		Body:    func() string { return body },
+	})
+	m.shell.SetSize(m.width, m.height)
+	m.shell.Open()
+}
+
 // openClosePrompt shows the guard for the pending close.
 func (m *Model) openClosePrompt(key string, tab int, dirty []string) {
 	m.closePending = &pendingClose{key: key, tab: tab, dirty: dirty}
@@ -191,12 +236,12 @@ func (m Model) updateClosePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		var cmds []tea.Cmd
-		for _, i := range pendingTabs(inst, pending.tab) {
+		for _, i := range pendingTabs(inst, pending) {
 			if ed := inst.TabEditor(i); ed != nil && ed.Dirty() {
 				cmds = append(cmds, inst.UpdateTab(i, editor.ActionMsg{Action: "write"}))
 			}
 		}
-		if len(m.dirtyOnClose(inst, pending.tab)) > 0 {
+		if len(m.dirtyPending(inst, pending)) > 0 {
 			// The write failed (read-only file, full disk): keep the tab open.
 			m.host.Notify(host.Error, "not closed: save failed")
 			return m, tea.Batch(cmds...)
@@ -221,6 +266,15 @@ func (m Model) updateClosePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 // pane.close path, #1128) closes the leaf outright; a tab pending closes the
 // focused pane's active tab, as guardedCloseFocused queued it.
 func (m *Model) resumePendingClose(p *pendingClose) {
+	if p.tabs != nil {
+		// A batch close (#2538) names its own victims; the set was computed
+		// before the prompt opened and no tab could move while it held the
+		// keyboard.
+		if inst := m.activeWS().Panes.Get(p.key); inst != nil {
+			m.closeTabSet(inst, p.tabs, p.whole)
+		}
+		return
+	}
 	if p.tab < 0 {
 		if inst := m.activeWS().Panes.Get(p.key); inst != nil && inst.TabCount() > 1 {
 			m.closePane(p.key)
@@ -271,14 +325,27 @@ func (m Model) updateQuitPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// pendingTabs expands a pendingClose tab index into the concrete tab list.
-func pendingTabs(inst *pane.Instance, idx int) []int {
-	if idx >= 0 {
-		return []int{idx}
+// pendingTabs expands a pendingClose into the concrete tab list it saves and
+// closes: a batch's own victims (#2538), one tab, or the whole pane.
+func pendingTabs(inst *pane.Instance, p *pendingClose) []int {
+	if p.tabs != nil {
+		return p.tabs
+	}
+	if p.tab >= 0 {
+		return []int{p.tab}
 	}
 	tabs := make([]int, inst.TabCount())
 	for i := range tabs {
 		tabs[i] = i
 	}
 	return tabs
+}
+
+// dirtyPending re-reads what the pending close would still lose after a save
+// attempt: the batch's victims, or the single tab / whole pane.
+func (m *Model) dirtyPending(inst *pane.Instance, p *pendingClose) []string {
+	if p.tabs != nil {
+		return m.dirtyInTabs(inst, p.tabs)
+	}
+	return m.dirtyOnClose(inst, p.tab)
 }

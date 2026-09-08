@@ -89,6 +89,15 @@ var actionMap = map[string]string{
 	"SaveAll":      "editor.saveAll",
 	"CloseContent": "editor.closeTab",
 	"CloseEditor":  "editor.closeTab",
+	// The batch tab closes (#2538) fold onto IntelliJ's Window → Editor Tabs
+	// actions; "Close All but Pinned" has no IKE twin because pinned tabs are
+	// exempt from every batch close here.
+	"CloseAllEditorsButActive":  "editor.tab.closeOthers",
+	"CloseAllEditorsButPinned":  "editor.tab.closeOthers",
+	"CloseAllToTheLeft":         "editor.tab.closeLeft",
+	"CloseAllToTheRight":        "editor.tab.closeRight",
+	"CloseAllUnmodifiedEditors": "editor.tab.closeUnmodified",
+	"CloseAllEditors":           "editor.tab.closeAll",
 
 	// Clipboard & history.
 	"$Copy":         "editor.copy",
