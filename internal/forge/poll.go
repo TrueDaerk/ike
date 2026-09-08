@@ -39,6 +39,15 @@ const (
 	// smallest configured interval drops to at most one poll a minute while
 	// the pane is closed.
 	MinSlowPollInterval = 60 * time.Second
+	// IdleBackoffAfter is how long the user must go without input before the
+	// cadence starts stretching (#2540): a focused window nobody has typed
+	// into or clicked for this long is being glanced at, not worked in, and
+	// every further idle stretch of this length doubles the wait.
+	IdleBackoffAfter = 2 * time.Minute
+	// MaxIdlePollInterval caps the idle stretch: however long the user stays
+	// away, a new issue is at most this late — and a configured interval
+	// longer than the cap is its own ceiling, as with the failure backoff.
+	MaxIdlePollInterval = 10 * time.Minute
 )
 
 // Snapshot is one observed listing state: the open issues and every pull
@@ -182,6 +191,15 @@ type Poller struct {
 	lastFetch   time.Time // when the last fetch was dispatched
 	now         func() time.Time
 
+	// Idle backoff (#2540). lastInput is the last user input the app
+	// reported (Input); zero means never reported, which — like the
+	// visibility gates — leaves the cadence exactly as configured, so a bare
+	// poller that reports nothing polls as before. idleArmed marks a pending
+	// deadline armed at an idle-stretched cadence, the one Input has to
+	// supersede so the first key press after a long pause gets fresh data.
+	lastInput time.Time
+	idleArmed bool
+
 	snap      *Snapshot // nil until the first successful fetch seeds it
 	prsSeeded bool      // the snapshot's PRs came from a real listing, not a PRErr
 	failures  int       // consecutive fetch failures, driving the backoff
@@ -204,6 +222,14 @@ func (p *Poller) clock() time.Time {
 		return p.now()
 	}
 	return time.Now()
+}
+
+// SetClock overrides the poller's time source (tests outside this package
+// that drive the idle backoff, #2540); nil restores the wall clock.
+func (p *Poller) SetClock(now func() time.Time) {
+	if p != nil {
+		p.now = now
+	}
 }
 
 // Root is the workspace root this poller polls (message routing, tests).
@@ -335,6 +361,54 @@ func (p *Poller) Refreshed() {
 	p.due = false
 }
 
+// Input records user input — a key press, click, wheel or paste (#2540) —
+// and reports whether the caller must Rearm. The idle clock restarts on
+// every call; the rearm is owed only when the pending deadline was armed at
+// an idle-stretched cadence, since that deadline may sit minutes away while
+// the user is back and looking. A listing that went stale meanwhile is due
+// at once, exactly as Focus treats a pause that outlasted an interval.
+func (p *Poller) Input() bool {
+	if p == nil {
+		return false
+	}
+	p.lastInput = p.clock()
+	if !p.idleArmed {
+		return false
+	}
+	p.idleArmed = false
+	if p.stale() {
+		p.due = true
+	}
+	// Dropping the armed flag lets the caller's Rearm supersede the
+	// stretched deadline; Seq invalidates it when its timer fires.
+	p.armed = false
+	return true
+}
+
+// idleStretch is the multiplier the idle backoff applies to the cadence: 1
+// until IdleBackoffAfter passed without input, then doubling for every
+// further IdleBackoffAfter of silence. A poller never told about input
+// (zero lastInput) reports 1 — the compatibility promise of the visibility
+// gates, extended.
+func (p *Poller) idleStretch() time.Duration {
+	if p.lastInput.IsZero() {
+		return 1
+	}
+	idle := p.clock().Sub(p.lastInput)
+	if idle < IdleBackoffAfter {
+		return 1
+	}
+	steps := int(idle / IdleBackoffAfter)
+	if steps > 16 {
+		steps = 16 // the cap below is reached long before; no overflow
+	}
+	return 1 << uint(steps)
+}
+
+// IdleStretched reports whether the idle backoff is in effect right now
+// (perf HUD, tests).
+func (p *Poller) IdleStretched() bool { return p != nil && p.idleStretch() > 1 }
+
 // stale reports whether the last fetch is older than the configured interval
 // — the "is it worth fetching right now" question the focus and pane-open
 // edges ask. It deliberately measures against the interval and not against
@@ -377,8 +451,9 @@ func (p *Poller) Snapshot() *Snapshot {
 }
 
 // Delay is the wait before the next fetch: the current cadence (the
-// configured interval, or the stretched one while the Issues pane is closed),
-// doubled per consecutive failure and capped at MaxPollBackoff. It is 0 when
+// configured interval, stretched while the Issues pane is closed and again
+// while the user is idle, #2540), doubled per consecutive failure and capped
+// at MaxPollBackoff. It is 0 when
 // a fetch is due at once — focus or pane-open found the listing stale. A
 // success resets the failure count, so recovery is immediate rather than
 // gradual. A cadence already longer than the cap is its own ceiling —
@@ -412,12 +487,30 @@ func (p *Poller) Delay() time.Duration {
 // raised to is a minute, which the smallest configured interval (10 s) is well
 // below — so a closed pane never costs the forge more requests.
 func (p *Poller) cadence() time.Duration {
-	if p.paneOpen {
-		return p.interval
+	base := p.interval
+	if !p.paneOpen {
+		base = SlowPollFactor * p.interval
+		if base < MinSlowPollInterval {
+			base = MinSlowPollInterval
+		}
 	}
-	d := SlowPollFactor * p.interval
-	if d < MinSlowPollInterval {
-		d = MinSlowPollInterval
+	// The idle backoff (#2540) multiplies whatever the pane gate left:
+	// doubling per idle stretch, capped at MaxIdlePollInterval — unless the
+	// cadence is already longer, which then stays its own ceiling.
+	stretch := p.idleStretch()
+	if stretch <= 1 {
+		return base
+	}
+	limit := MaxIdlePollInterval
+	if base > limit {
+		limit = base
+	}
+	d := base
+	for i := time.Duration(1); i < stretch; i *= 2 {
+		if d >= limit/2 {
+			return limit
+		}
+		d *= 2
 	}
 	return d
 }
@@ -441,6 +534,7 @@ func (p *Poller) Arm() tea.Cmd {
 	}
 	p.armed = true
 	p.seq++
+	p.idleArmed = p.IdleStretched()
 	root, seq, delay := p.root, p.seq, p.Delay()
 	return tea.Tick(delay, func(time.Time) tea.Msg { return PollTickMsg{Root: root, Seq: seq} })
 }

@@ -152,6 +152,12 @@ type Model struct {
 	// by pointer across the value-model copies. navSkip suppresses recording
 	// while nav.back/nav.forward themselves drive the open funnel.
 	navHist *nav.History
+	// previewBound says whether any markdown preview pane is open (#2540);
+	// the editor emitters read it off the update loop's goroutine before
+	// sending a preview.CursorMsg, so a caret move in a session without a
+	// preview costs no message. Written on the settled pass
+	// (syncPreviewBound); shared by pointer with every emitter.
+	previewBound *atomic.Bool
 	// completeEngine is the local completion engine (0410, #851): word/symbol
 	// sources register here; it fans out per completion trigger next to the
 	// LSP bridge and its batches merge into the editor popup.
@@ -1450,6 +1456,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		toolchainSeg:    map[string]string{},
 		liveImages:      map[int]bool{},
 		navHist:         &nav.History{},
+		previewBound:    new(atomic.Bool),
 		playHistory:     &jqplay.History{},   // one session-wide program list (#1977)
 		playLastProgram: map[string]string{}, // per-file last valid program (#1982)
 		compMRU:         mru.Load(mru.DefaultFile()),
@@ -1804,6 +1811,9 @@ type editorEmitter struct {
 	watcher *watch.Service
 	nav     *nav.History // navigation history (Roadmap 0220); shared pointer
 	key     string       // pane key of the editor this emitter is installed on
+	// previews is the model's previewBound flag (#2540); nil (a bare test
+	// emitter) sends the cursor message unconditionally, as before.
+	previews *atomic.Bool
 }
 
 // Emit implements editor.Emitter. The editor and host event-kind constants share
@@ -1844,11 +1854,13 @@ func (e editorEmitter) Emit(ev editor.Event) {
 		// no-op while the mode is off or the panel closed.
 		go e.host.Send(testWatchSavedMsg{path: ev.Path})
 	}
-	if ev.Kind == editor.EventCursorMove && ev.Path != "" {
+	if ev.Kind == editor.EventCursorMove && ev.Path != "" && (e.previews == nil || e.previews.Load()) {
 		// Markdown previews follow the cursor (#62). Same goroutine indirection
 		// as the SyncMsg below: Emit runs inside Update, so a direct send into
 		// the program's own loop would deadlock. The handler is a cheap no-op
-		// when no preview pane is bound to the path.
+		// when no preview pane is bound to the path — and since #2540 the
+		// message is not even sent while no preview pane is open at all: a
+		// caret move must not cost an Update+View pass for nobody.
 		go e.host.Send(preview.CursorMsg{Path: ev.Path, Line: ev.Line})
 	}
 	if ev.Kind == editor.EventChange || ev.Kind == editor.EventSave {
@@ -1895,7 +1907,7 @@ func (m *Model) installEmitter(key string) {
 		mkSet, mkLines, mkAdjust := markHooks(m.gmarks)
 		bmSigns, bmAdjust := bookmarkHooks(m.bmarks)
 		for _, ed := range inst.Editors() {
-			ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, key: key})
+			ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, key: key, previews: m.previewBound})
 			ed.SetBreakpointSource(bph.source)
 			ed.SetBreakpointDisabledSource(bph.disabled)
 			ed.SetBreakpointConditionalSource(bph.conditional)
@@ -4219,6 +4231,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// into the model. A no-op — a few string compares — while the endpoint
 	// is off or nothing moved.
 	mm.refreshNetStatus()
+	// Terminal sessions nothing renders park here (#2540): tab switches,
+	// popup toggles, pane closes and zooms all settle in this pass, and a
+	// hidden session must stop waking the loop per output burst.
+	mm.syncTerminalVisibility()
+	// Whether a markdown preview is open decides if caret moves send a
+	// preview.CursorMsg at all (#2540); pane opens/closes settled above.
+	mm.syncPreviewBound()
 	return mm, cmd
 }
 
@@ -4325,6 +4344,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tourCmd
 
 	case tea.MouseClickMsg:
+		// A click is user input like a key: it restarts the forge poll's
+		// idle clock (#2540).
+		m.forgeInput()
 		// A click while a chord is pending interrupts the sequence (#1482):
 		// the surviving which-key popup closes and the click acts normally.
 		if m.keys.Pending() {
@@ -4385,6 +4407,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Bracketed paste (#603): the terminal delivers the whole pasted block as
 		// one message. Insert it in a single pass (one edit, one undo unit) rather
 		// than letting it arrive as per-character key input.
+		m.forgeInput()
 		return m.handlePaste(msg.Content)
 
 	case explorer.OpenFileMsg:
@@ -6297,7 +6320,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.host.Notify(host.Error, "edit: "+err.Error())
 			return m, nil
 		}
-		ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, key: msg.Key})
+		ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, key: msg.Key, previews: m.previewBound})
 		inst.StartDiffEdit(&ed)
 		m.host.Notify(host.Info, "editing "+displayPath(msg.Path)+" — ctrl+e returns to the diff")
 		return m, ed.Reparse()
@@ -6372,20 +6395,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case terminal.OutputMsg:
-		// The grid changed; returning repaints. The msg is send-coalesced.
-		// The completion popup (#740) recomputes here: the shell has echoed
-		// the keystrokes, so the cursor row reads current.
-		if t := m.terminalModelForSession(msg.Key); t != nil {
-			t.OnOutput()
-			// Output landing in a hidden popup-layer shell arms the statusbar
-			// activity indicator (#2309); the next show clears it. A visible
-			// layer — focused or blurred — has the output on screen already.
-			if !m.popupLayerVisible() {
-				if _, _, pt := m.popupTabForSession(msg.Key); pt != nil {
-					m.popupUnseen = true
-				}
-			}
-		}
+		// The grid changed; returning repaints. In a running program the msg
+		// is folded by the input coalescer (#803) and lands through
+		// coalescedInputMsg instead; both paths share noteTerminalOutput.
+		m.noteTerminalOutput(msg.Key)
 		return m, nil
 
 	case terminal.CopiedMsg:
@@ -8151,6 +8164,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Keys landing in an editor or terminal stamp the do-not-interrupt
 		// guard (#2086): a forge event dialog never lands mid-word.
 		m.noteTypingInput()
+		// Any key restarts the forge poll's idle clock (#2540).
+		m.forgeInput()
 		// The keymap doctor (#2080) outranks everything: probing only means
 		// anything if the overlay sees the raw key before any other consumer
 		// — toast dismissal, overlay paste, keymap resolution — touches it.

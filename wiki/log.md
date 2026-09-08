@@ -1,5 +1,41 @@
 # Log
 
+## 2026-09-08 (idle wake-up churn: quiet heartbeats, #2540)
+
+- **Hidden terminal sessions park.** Four days of telemetry held no quiet
+  minute: an IKE nobody typed into still ran ~216 renders and ~186
+  `coalescedInputMsg` passes a minute. The weight was terminal output from
+  sessions nothing rendered — the closed popup layer's shell, inactive
+  terminal tabs — each burst a full Update+View pass. The settled pass now
+  parks every session the frame does not draw (`Session.SetHidden`), which
+  folds its bursts into the one repaint owed on reveal and leaves a single
+  wake per hidden stretch for the popup's activity indicator (which, as a
+  side effect, now arms through the coalesced path a running program takes;
+  it only ever worked for the raw message tests send). A 5 Hz spinner in a
+  hidden tab: ~271 passes a minute before, one after.
+- **Forge poll idle backoff.** With the Issues pane open and the window
+  focused, the forge was fetched every 20 s through 133 of 375 key-less
+  minutes. Two minutes without a key press, click, wheel notch or paste now
+  double the cadence, each further two minutes double it again, capped at
+  ten minutes; the next input restarts the clock and supersedes a stretched
+  deadline (a stale listing is fetched at once). Terminal output is not
+  input. Constants `IdleBackoffAfter` / `MaxIdlePollInterval`, no setting.
+- **The explorer poll never wakes for itself.** Its goroutine used to return
+  an empty `pollMsg` every 30 quiet rounds to refresh a private stamp
+  snapshot — one wake a minute, which alone kept every 60-second heartbeat
+  noisy. The model now publishes the stamp set on every rebuild
+  (`pollShared`), the goroutine reads it each round and returns only for a
+  change; a retired chain (`RetirePoll` on switch/park/disable) returns nil.
+- **No `preview.CursorMsg` without a preview pane.** Every caret move sent
+  one for the markdown previews to follow, a pass per keystroke with no
+  consumer; the emitter now reads a settled-pass `previewBound` flag first.
+- Measured on this branch in tmux (issues pane open, spinner in a hidden
+  tab, no input): baseline heartbeats `view/render:277,
+  app.coalescedInputMsg:271,forge.IssuesMsg:3`; after, `view/render:2,
+  forge.IssuesMsg:1,forge.PollTickMsg:1` for the first minutes, then empty
+  `top` fields — the first quiet heartbeats the #2402 telemetry ever saw.
+  The idle model is written up in `performance.md`.
+
 ## 2026-09-08 (issues window: the plain arrows navigate, #2537)
 
 - **Arrows in the issues window**: `up` / `down` now walk the selection —

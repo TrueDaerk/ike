@@ -261,6 +261,13 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	// by re-attaching the parked session instead of spawning a duplicate.
 	m.detachGlobalTools()
 	m.watcher.Stop()
+	// The departing explorer's auto-refresh chain retires (#2540): its
+	// goroutine would otherwise keep stat-walking the old tree, and a parked
+	// workspace's tree is reconciled on resume anyway (Init rotates the
+	// chain id and starts afresh).
+	if ex := m.explorer(); ex != nil {
+		ex.RetirePoll()
+	}
 	// Stop the old root's scans (#1549): a running find-in-path keeps its
 	// goroutine and rg child walking the old tree, sending results into the
 	// shared host.Send — the todo-index scan likewise. Cancel also bumps the

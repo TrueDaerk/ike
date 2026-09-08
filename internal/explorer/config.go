@@ -71,10 +71,10 @@ func (m *Model) Configure(cfg host.Config) {
 	if v, ok := cfg.Get(cfgAutoRefresh); ok {
 		m.autoRefresh = v != "false"
 		if !m.autoRefresh {
-			// The in-flight chain retires on its next delivery (schedulePoll
-			// returns nil while disabled); clearing the armed flag keeps a
-			// later re-enable's startPoll from finding it stuck true (#2163).
-			m.polling = false
+			// The in-flight chain retires on its next round (#2540); clearing
+			// the armed flag keeps a later re-enable's startPoll from finding
+			// it stuck true (#2163).
+			m.RetirePoll()
 		}
 	}
 	if v, ok := cfg.Get(cfgAutoReveal); ok {

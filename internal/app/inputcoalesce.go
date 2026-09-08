@@ -352,6 +352,11 @@ func (m Model) handlePaste(text string) (tea.Model, tea.Cmd) {
 // wheel notches in arrival order, then the latest motion. One render covers the
 // whole burst.
 func (m Model) applyCoalescedInput(msg coalescedInputMsg) (tea.Model, tea.Cmd) {
+	if len(msg.wheels) > 0 || msg.motion != nil {
+		// A wheel notch or a drag step is user input: it restarts the forge
+		// poll's idle clock (#2540). Terminal repaints alone are not.
+		m.forgeInput()
+	}
 	var tm tea.Model = m
 	var cmds []tea.Cmd
 	for _, w := range msg.wheels {
@@ -375,14 +380,13 @@ func (m Model) applyCoalescedInput(msg coalescedInputMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	// Terminal repaints (#803): the grids already hold the new content — only
-	// the per-session hooks (completion popup recompute) run here; returning
-	// repaints once for the whole batch.
+	// the per-session hooks (completion popup recompute, the popup activity
+	// indicator) run here; returning repaints once for the whole batch.
 	if mm, ok := tm.(Model); ok {
 		for _, key := range msg.termKeys {
-			if t := mm.terminalModelForSession(key); t != nil {
-				t.OnOutput()
-			}
+			mm.noteTerminalOutput(key)
 		}
+		tm = mm
 	}
 	return tm, tea.Batch(cmds...)
 }
