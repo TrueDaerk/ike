@@ -57,6 +57,9 @@ func init() {
 		// reading after the expression. Permission hints (#1656): an octal
 		// `mode:`/`defaultMode:` value carries its symbolic rwx form.
 		Spans: yamlSpans,
+		// Secret masking in an embedding host (#2598): a YAML request body in
+		// a .http buffer masks its credential values through the region seam.
+		Masks: maskSpans,
 		// Shell in CI `run:` blocks (#1625): step scripts highlight with the
 		// shell grammar; see regions.go for the gate and extent rules.
 		Regions: shellRegions,

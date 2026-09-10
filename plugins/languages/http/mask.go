@@ -14,6 +14,12 @@ package langhttp
 // In-file `@token = value` variable definitions mask under the same rule the
 // dotenv producer applies to its keys.
 //
+// Request bodies mask by their own language (#2598): the region seam of
+// regions.go already types a body from its Content-Type, and lang.RegionMasks
+// runs that language's mask producer over the body's lines, so a
+// `"password": "hunter2"` in a JSON body hides exactly as it does in a .json
+// file. A body language without a mask producer contributes nothing.
+//
 // basicAuthSpans is the sibling decode (#2345): the base64 payload of
 // `Authorization: Basic …` is the one place base64 is the convention in a
 // request file, so it decodes like a Secret manifest's data: values — but the
@@ -81,7 +87,14 @@ func maskSpans(f *httpfile.File, lines []string) []lang.Span {
 			out = append(out, secret.Span(li, vs, ve))
 		}
 	}
-	return out
+	// Request bodies mask by their own language (#2598): the region seam
+	// already types a body from its Content-Type, and lang.RegionMasks runs
+	// that language's mask producer over the body's lines, so a
+	// `"password": "hunter2"` in a JSON body masks exactly as it does in a
+	// .json file. A body language with no mask producer contributes nothing.
+	// This is view-only, like every other mask: the runner, the snapshot and
+	// the curl export read the source text.
+	return append(out, lang.RegionMasks(lines, regionsFor(f, lines))...)
 }
 
 // hasPlaceholder reports whether a value carries a "{{name}}" or "${name}"
