@@ -793,6 +793,24 @@ func splitList(v string) []string {
 	return out
 }
 
+// peers is the lookup the element checks and hints read config through: every
+// key answers with its effective — staged-first — value, except the entry's
+// *own* key, which answers with the list minus the element being edited
+// (#2592). A uniqueness check needs exactly that: re-editing "vcs=3" must not
+// see the row it is about to replace as a conflicting peer.
+func (l *listEditor) peers(key string) string {
+	if key != l.e.Key {
+		return l.m.value(key)
+	}
+	rest := make([]string, 0, len(l.items))
+	for i, it := range l.items {
+		if i != l.idx {
+			rest = append(rest, it)
+		}
+	}
+	return strings.Join(rest, ",")
+}
+
 func (l *listEditor) Value() any {
 	if l.numeric {
 		return toInts(l.items)
@@ -856,7 +874,7 @@ func (l *listEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 			// A schema-declared element check (#1946, tools.layout.assign):
 			// reject in place with the message naming the valid values.
 			if l.e.ValidateEntry != nil && text != "" {
-				if msg := l.e.ValidateEntry(l.m.value, text); msg != "" {
+				if msg := l.e.ValidateEntry(l.peers, text); msg != "" {
 					l.err = msg
 					return nil
 				}
@@ -957,7 +975,7 @@ func (l *listEditor) View(w, h int) []string {
 	// Value hints while typing (#1946): the schema-declared candidates for
 	// the element under edit, re-narrowed on every keystroke.
 	if l.editing && l.e.EntryHints != nil {
-		for _, row := range hintRows(l.e.EntryHints(l.m.value, strings.TrimSpace(l.tf.Text))) {
+		for _, row := range hintRows(l.e.EntryHints(l.peers, strings.TrimSpace(l.tf.Text))) {
 			if len(out) >= h {
 				break
 			}

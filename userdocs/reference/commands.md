@@ -219,6 +219,7 @@ bring their own.
 | Next Project in Group | `project.group.next` | `cmd+alt+right-bracket` | — | everywhere |
 | Open Project Group… | `project.group.open` | `cmd+alt+shift+g` | — | everywhere |
 | Previous Project in Group | `project.group.prev` | `cmd+alt+left-bracket` | — | everywhere |
+| Save Open Projects as Group… | `project.group.saveOpen` | — | — | everywhere |
 | Warm Project Group | `project.group.warm` | — | — | everywhere |
 | Replace in Path | `project.replaceInPath` | `cmd+shift+r` | — | everywhere |
 | Switch to Recent Project 1 | `project.switchMRU1` | `ctrl+alt+1` | — | everywhere |

@@ -561,6 +561,21 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "layout.pane_numbers", Message: fmt.Sprintf("unknown mode %q, using \"on\"", c.Layout.PaneNumbers)})
 		c.Layout.PaneNumbers = "on"
 	}
+	// layout.pane_slots (#2592) pins pane numbers to tool windows. A broken
+	// entry is dropped rather than failing the load — the rest of the table
+	// still describes usable chords — but every drop is reported, because a
+	// silently ignored assignment reads as a broken chord.
+	if len(c.Layout.PaneSlots) > 0 {
+		slots, probs := ParsePaneSlots(c.Layout.PaneSlots)
+		for _, msg := range probs {
+			diags = append(diags, Diagnostic{Field: "layout.pane_slots", Message: msg + ", dropping it"})
+		}
+		kept := make([]string, 0, len(slots))
+		for _, s := range slots {
+			kept = append(kept, fmt.Sprintf("%s=%d", s.Tool, s.Number))
+		}
+		c.Layout.PaneSlots = kept
+	}
 	// The #1932 scratch tool pane became the explorer's Scratches section
 	// (#1963). Old configs still carry [scratch] panel / panel_height; both
 	// migrate silently, like new_terminal: panel_height seeds section_height

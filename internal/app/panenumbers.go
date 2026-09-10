@@ -81,15 +81,13 @@ func (m Model) paneNumberOrder() []string {
 	return keys
 }
 
-// paneNumberOf returns the 1-based number of pane key, or 0 when it has none
-// (not visible, or past paneNumberMax).
+// paneNumberOf returns the number pane key carries, or 0 when it has none —
+// not visible, or past the last addressable number once the reserved slots
+// (#2592) have taken theirs.
 func (m Model) paneNumberOf(key string) int {
-	for i, k := range m.paneNumberOrder() {
+	for n, k := range m.paneNumberAssign() {
 		if k == key {
-			if i >= paneNumberMax {
-				return 0
-			}
-			return i + 1
+			return n
 		}
 	}
 	return 0
@@ -175,25 +173,37 @@ func paneNumberBadge(text string, focused bool, pal *theme.Palette) string {
 }
 
 // focusPaneNumber handles pane.focus1…9: it moves focus to the pane carrying
-// that number. An out-of-range number is a no-op with a notification — a
-// silent dead chord is indistinguishable from a broken one (#275).
-func (m *Model) focusPaneNumber(n int) {
-	order := m.paneNumberOrder()
-	if len(order) > paneNumberMax {
-		order = order[:paneNumberMax]
+// that number. A number reserved for a tool window that is not open (#2592)
+// opens it instead — the chord is the tool's address whether or not it is on
+// screen. A number nothing carries is a no-op with a notification: a silent
+// dead chord is indistinguishable from a broken one (#275).
+func (m *Model) focusPaneNumber(n int) tea.Cmd {
+	if key, ok := m.paneNumberAssign()[n]; ok {
+		m.leavePopupForFocus()
+		m.setFocus(key)
+		return nil
 	}
-	if n < 1 || n > len(order) {
-		m.host.Notify(host.Info, "focus pane "+strconv.Itoa(n)+": only "+strconv.Itoa(len(order))+" panes are open")
-		return
+	if def, ok := m.paneSlotTable()[n]; ok {
+		if def.open == nil {
+			m.host.Notify(host.Info, "focus pane "+strconv.Itoa(n)+": the "+def.label+" window is not open")
+			return nil
+		}
+		m.leavePopupForFocus()
+		return def.open(m)
 	}
-	// From inside the popup terminal layer (#2493) the chord means the same
-	// thing as clicking into a pane below it (#2309): the layer stays on
-	// screen but hands the keyboard down, or the focus move would be
-	// invisible — the popup would keep every following key.
+	m.host.Notify(host.Info, "focus pane "+strconv.Itoa(n)+": no pane carries that number")
+	return nil
+}
+
+// leavePopupForFocus hands the keyboard down out of the popup terminal layer
+// (#2493) before a focus-by-number chord takes effect: the layer stays on
+// screen but stops taking keys, the same thing a click into a pane below it
+// does (#2309). Without it the focus move would be invisible — the popup would
+// keep every following key.
+func (m *Model) leavePopupForFocus() {
 	if m.popupLayerFocused() {
 		m.blurPopupLayer()
 	}
-	m.setFocus(order[n-1])
 }
 
 // panePromptHeading titles the shell prompt of pane.focusByIndex.
@@ -251,8 +261,8 @@ func (m Model) updatePaneNumPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			m.host.Notify(host.Info, "focus pane: not a pane number: "+text)
 			return m, nil
 		}
-		m.focusPaneNumber(n)
-		return m, m.raisePaneNumberHint()
+		cmd := m.focusPaneNumber(n)
+		return m, tea.Batch(cmd, m.raisePaneNumberHint())
 	default:
 		m.paneNumInput.Key(msg)
 	}

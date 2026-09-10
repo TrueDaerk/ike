@@ -5108,9 +5108,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case PaneFocusIndexMsg:
 		// pane.focus1…9 (ctrl+digit on macOS / palette): focus the pane
-		// carrying that number in the chrome (#2407).
-		m.focusPaneNumber(msg.Index)
-		return m, m.raisePaneNumberHint()
+		// carrying that number in the chrome (#2407), or open the tool window
+		// the number is reserved for when it is closed (#2592).
+		cmd := m.focusPaneNumber(msg.Index)
+		return m, tea.Batch(cmd, m.raisePaneNumberHint())
 
 	case PaneFocusByIndexMsg:
 		// pane.focusByIndex (palette): the typed flavour, for panes past nine

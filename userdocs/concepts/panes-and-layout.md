@@ -91,17 +91,35 @@ title bar just focuses.
 
 ### Focusing a pane by its number
 
-Every visible pane shows a number in its title bar — `[1] EDITOR` — counted in
-reading order: the top row left to right, then the row below it. The numbers
-follow the layout, so splitting, moving or closing a pane renumbers the rest
-immediately, and a maximized pane is simply pane 1 on its own.
+Every visible pane shows a number in its title bar — `[1] EDITOR` — and
+++ctrl+1++ … ++ctrl+9++ (macOS) jump straight to the pane with that number.
 
-On macOS ++ctrl+1++ … ++ctrl+9++ jump straight to the pane with that number.
-(They are deliberately not ++cmd+1++ … ++cmd+9++, which toggle the tool
-windows.) On Linux and Windows those chords are what the ++cmd++ tool-window
+Some numbers are **reserved**, so the chord is worth learning:
+
+- the **file tree is always 1**;
+- **2, 3, 4 and 5** belong to the **terminal**, the **VCS**, **Problems** and
+  **Structure** windows out of the box — whether or not they are open. Pressing
+  the chord for a closed one *opens* it and focuses it;
+- your **files** — editors, diffs, previews — take the numbers after the last
+  reserved one, so with the default table they start at **6**, counted in
+  reading order: the top row left to right, then the row below it.
+
+Because a tool keeps its number while it is closed, nothing renumbers when you
+open or close a tool window; splitting, moving or closing a *file* pane
+renumbers the file panes below it immediately.
+
+Which tools get which number is yours to choose: `layout.pane_slots` (Settings
+→ **Appearance** → *Reserved pane numbers*) is a list of `tool=number` entries
+like `terminal=2`. Numbers run from 2 to 9, each number and each tool may
+appear once, and the file tree's 1 is fixed. A shorter table leaves more
+numbers for your files; a tool you leave out is simply numbered like a file
+pane.
+
+The chords are deliberately not ++cmd+1++ … ++cmd+9++, which toggle the tool
+windows. On Linux and Windows those chords are what the ++cmd++ tool-window
 shortcuts fold onto, so the numbers are reached through the command palette
-instead: **Focus Pane by Number…** asks for one. Asking for a pane that is not
-open says so rather than doing nothing.
+instead: **Focus Pane by Number…** asks for one. Asking for a number nothing
+carries says so rather than doing nothing.
 
 If the badges are noise to you, `layout.pane_numbers` (Settings →
 **Appearance** → *Pane numbers*) turns them `off`, or sets them to

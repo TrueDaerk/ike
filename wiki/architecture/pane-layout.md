@@ -333,7 +333,9 @@ the number is addressable.
   invalidation step: a split, move, close or restore is visible in the badges
   on the next frame, a zoomed pane (#358) is the only numbered one, and a tool
   window counts exactly while it is on screen. The popup terminal and the
-  floating panels are not layout leaves and never take a number.
+  floating panels are not layout leaves and never take a number. That reading
+  order is the *input* to the numbering, not the numbering itself — the
+  reserved slots below take their numbers out of it first.
 - **The badge is an inverted pill (#2496).** `renderPaneBox` prefixes the title
   row with `paneNumberBadge`: the digit padded to ` 1 ` on a filled background
   with a bold, contrasting digit — the theme's accent (`PaneBadge` /
@@ -378,6 +380,59 @@ the number is addressable.
   the prompt — raises it and schedules its own expiry message, generation-
   tagged so a faster second switch outruns the older timer. The numbers are
   therefore on screen exactly while panes are being switched.
+
+### Reserved numbers for the explorer and the tool windows (#2592)
+
+A purely geometric number is not addressable from memory: the VCS window is 4
+with two editors open and 3 with one, so reaching it by chord means reading its
+badge first — exactly the look-up the chord was supposed to replace. A tool
+therefore *owns* a number.
+
+- **The explorer is always 1**, whatever the configuration says.
+  `paneSlotTable` (`internal/app/paneslots.go`) adds it unconditionally and
+  `layout.pane_slots` cannot name it.
+- **`layout.pane_slots`** (Settings → Appearance → *Reserved pane numbers*,
+  user scope) is a list of `tool=number` entries — shipped as
+  `terminal=2, vcs=3, problems=4, structure=5`. A number runs from 2 to 9,
+  each number and each tool appears at most once, and the tool is one of
+  `config.PaneSlotTools()` (the tool windows' layout keys: `terminal`, `vcs`,
+  `problems`, `structure`, `usages`, `breakpoints`, `tests`, `issues`, `dom`,
+  `xdoctor`, `lspdoctor`, `deps`, `time`, `usage`, `debug`, `http`). The
+  parser is shared (`config.ParsePaneSlots`): the config layer drops a
+  broken entry with a `layout.pane_slots` diagnostic, the settings form
+  rejects it before it is staged, and the app numbers from the same reading.
+- **Document panes take what is left.** Every pane that holds no reserved
+  number — the editors and viewers, plus any tool window with no entry in the
+  table — is numbered from *one past the highest reserved number*, in the
+  usual reading order. With the shipped table the editors start at 6. Keeping
+  the table short is therefore what keeps chords available for documents; four
+  tools is the shipped compromise.
+- **Gaps stay.** A reserved number belongs to its tool whether or not the tool
+  is on screen, so closing the VCS window does not shift a single other
+  number. This is the whole point: a number that moves when a tool opens is a
+  number nobody can learn.
+- **A reserved chord opens its tool.** `focusPaneNumber` focuses the pane
+  carrying the number; when the number is reserved and its tool is closed it
+  runs that tool's own toggle route instead (`togglePanel` / `openToolPane`
+  via the `paneSlotDefs` table), so placement, seeding and focus land exactly
+  as the tool's command would leave them. The debug area and the HTTP response
+  viewer have no toggle command of their own — they open with a session and a
+  request — so their reserved number stays a gap and the chord says so. An
+  unassigned or unused number keeps the #275 no-op-with-notification.
+- **A tab host answers with its active tab.** A pane hosting several kinds
+  (#1989 tool tabs, #573 terminal tabs, #1778 viewer tabs) claims a reserved
+  number for the kind of the tab currently on screen, so the number follows
+  what the pane is showing; switching tabs moves the claim with it. When two
+  panes could claim the same number the first in reading order wins and the
+  other flows with the documents.
+- **The badge is unchanged**: a pane draws the number it carries. A closed tool
+  draws nothing — there is no pane to draw on — and `pane.focusByIndex` reads
+  the same table as the chords.
+- **Zoom keeps its rule.** A zoomed pane (#358) is still the only *visible*
+  one, so it is the only one numbered: a zoomed editor carries the first
+  flowing number (6 with the shipped table), a zoomed tool its reserved one.
+  The reserved chords keep working from inside the zoom — they address the
+  tools, not the layout.
 
 ## The flexible region and its MRU (#2507)
 

@@ -72,10 +72,15 @@ type Entry struct {
 	// (#1946: slot letters / tool ids for tools.layout.assign), rendered under
 	// the input and re-narrowed on every keystroke. lookup reads another
 	// entry's effective — staged-first — value, so hints follow an uncommitted
-	// template edit in the same session.
+	// template edit in the same session. Looking up the entry's *own* key
+	// yields the list minus the element under edit (#2592), which is what a
+	// uniqueness check needs: re-editing a row must not conflict with the
+	// value it is replacing.
 	EntryHints func(lookup func(key string) string, text string) []string
 	// ValidateEntry rejects a committed List element with a message naming the
-	// valid values; "" accepts (#1946). Same lookup as EntryHints.
+	// valid values; "" accepts (#1946). Same lookup as EntryHints — including
+	// the own-key rule, which is how layout.pane_slots checks that a tool and
+	// a pane number are each claimed once.
 	ValidateEntry func(lookup func(key string) string, text string) string
 	// ValidateInt rejects a committed Int value with a message naming the
 	// valid range; "" accepts (#2085). It exists for the entries whose valid
@@ -315,6 +320,7 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "ui.menu_bar", Type: Bool, Title: "Menu bar", Description: "Show the File/Edit/… menu row above the panes", Scope: config.UserScope},
 			{Key: "ui.h_scroll_marks", Type: Bool, Title: "Horizontal scroll marks", Description: "Mark the edges of a horizontally scrolled view \u2014 \u2039 where content continues left, \u203a where a line continues right \u2014 in the editor, diff, explorer and playground result", Scope: config.UserScope},
 			{Key: "layout.pane_numbers", Type: Enum, Title: "Pane numbers", Description: "Draw each visible pane's layout-order number in its title bar (\"[1] EDITOR\"), the number the pane-focus chords (ctrl+1…ctrl+9 on macOS) and Focus Pane by Number address: \"on\" always, \"off\" never, \"focus-only\" only for a moment after a pane switch, when the numbers are actually being used", Scope: config.UserScope, Options: []string{"on", "off", "focus-only"}},
+			{Key: "layout.pane_slots", Type: List, Title: "Reserved pane numbers", Description: "\"tool=number\" entries pinning a pane number to a tool window (\"terminal=2, vcs=3\"), so ctrl+N reaches that tool however many editors are open — and opens it when it is closed. The explorer is always 1 and takes no entry; numbers run from 2 to 9, each used once, each tool named once. The document panes (editor, diff, markdown, image, …) take the numbers after the highest reserved one, so a short table leaves them more chords. While typing, the free tools and numbers are listed under the input", Scope: config.UserScope, EntryHints: paneSlotHints, ValidateEntry: paneSlotValidate},
 			{Key: "ui.popup_max_width", Type: Int, Title: "Popup max width", Description: "Cap centered popups (palette, dialogs, settings) at this width in columns; 0 disables", Scope: config.UserScope},
 			{Key: "palette.toggle_key", Type: Chord, Title: "Command palette key", Description: "Chord that opens the command palette", Scope: config.UserScope},
 		}},
