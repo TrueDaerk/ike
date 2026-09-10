@@ -4,7 +4,7 @@ title: Formatter Registry
 description: The neutral reformat layer — providers (config override, external command, LSP, built-in) registered per language, one resolution chain behind lsp.format/lsp.formatRange and format-on-save, edits applied as one undo unit.
 resource: internal/format
 tags: [architecture, format, reformat, registry, lsp, plugins]
-timestamp: 2026-08-07T00:00:00Z
+timestamp: 2026-09-10T00:00:00Z
 ---
 
 # Formatter Registry
@@ -114,9 +114,11 @@ the registry like every other provider's.
 
 Two registration paths:
 
-- **Plugin defaults** (`RegisterExternalDefault`, TierExternal): a language
-  plugin declares its ecosystem tool (#1405 wires Python/Markdown/Shell/
-  Ansible); the spec is also recorded for the settings page.
+- **Plugin defaults** (`RegisterExternalDefault` / `RegisterExternalDefaults`,
+  TierExternal): a language plugin declares its ecosystem tool — or a
+  *fallback chain*, where the first spec whose binary is installed serves and
+  a missing chain raises the primary spec's install hint; the specs are also
+  recorded for the settings page.
 - **Config overrides** (`plugins/format.overrideProvider`, TierOverride): a
   `[format.<languageID>]` table — `command`, `args`, `range_args`,
   `temp_file`, `install`, `enabled` — layered user < project like
@@ -131,6 +133,44 @@ wired to a warn toast by the app) naming the install command, then the chain
 falls through to the next tier. `range_args` opts into reformat-selection
 (1-based inclusive line numbers); absent means the registry's usual range
 fallback.
+
+### Plugin default coverage
+
+The chains a language plugin registers, in probe order (#1405, #2596). The
+node tools resolve `node_modules/.bin/<tool>` first — the command runs with
+the project root as cwd, so a project-local install wins over the PATH one,
+the same shape as Python's `.venv/bin/ruff`:
+
+| Language | Chain | Why an external tool |
+| --- | --- | --- |
+| `python` | `.venv/bin/ruff`, `venv/bin/ruff`, `ruff`, `.venv/bin/black`, `venv/bin/black`, `black` | pyright advertises no formatting provider |
+| `typescript` (js/ts/jsx/tsx) | `node_modules/.bin/prettier`, `node_modules/.bin/biome`, `prettier`, `biome` | tsserver (via vtsls) only normalizes whitespace around *existing* line breaks — it never wraps, so a minified one-liner reformats to "no changes" |
+| `css` (css/scss/less) | same as `typescript` | the css server re-indents but does not pretty-print |
+| `html` | `node_modules/.bin/prettier`, `prettier` | same as css; biome's HTML formatter is still experimental, so it is not in the chain |
+| `json` (json/jsonc) | same as `typescript` | the json server re-indents but does not re-wrap a minified document |
+| `yaml` | `node_modules/.bin/prettier`, `prettier`, `yamlfmt` | yaml-language-server's own formatting is an opt-in prettier wrapper |
+| `ansible` | `prettier` (yaml parser), `yamlfmt` | ansible-language-server advertises no formatting provider |
+| `markdown` | `prettier`, `mdformat` | marksman advertises no formatting provider |
+| `shell` | `shfmt` | bash-language-server only formats when shfmt happens to be on PATH, silently otherwise |
+
+`ndjson` deliberately stays without a default: one document per line is the
+format's point, and prettier would expand every record.
+
+Prettier runs in stdin mode with the real file name
+(`--stdin-filepath ${FILE}`, biome: `format --stdin-file-path=${FILE}`), so
+both pick up the project's `.prettierrc` / `biome.json` and infer the parser
+from the extension. Neither takes a *line* range — prettier's
+`--range-start`/`--range-end` are character offsets — so the web chains
+declare no `RangeArgs` and Reformat Selection falls through to the LSP tier,
+unchanged from before #2596.
+
+**Format-on-save and prettier's start-up cost:** the save chain time-boxes
+each step at `saveChainStepTimeout` (2 s, `plugins/lsp/savechain.go`), while a
+manual reformat gets `reformatTimeout` (15 s). A warm prettier answers in
+~300–600 ms and fits comfortably; a cold Node start in a large project with
+plugins can exceed the 2 s budget. That case is *safe, not flaky*: the step's
+context expires, the chain falls through without edits and the file is written
+unformatted — the save is never blocked or lost. `cmd+alt+l` still formats it.
 
 ## Formatters settings page (#1402, #1662)
 
