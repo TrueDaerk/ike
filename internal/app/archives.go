@@ -64,7 +64,7 @@ func (archiveProvider) Capabilities() plugin.Capabilities {
 		// plain .gz is not ours. The compressed flavours arrive through Match
 		// below, which looks *inside* the stream — so app.log.gz stays with
 		// the gz handler while backup.tar.gz lands here.
-		Extensions: []string{".tar", ".tgz", ".tbz", ".tbz2"},
+		Extensions: []string{".tar", ".tgz", ".tbz", ".tbz2", ".zip"},
 		Match:      archive.IsArchive,
 		Open: func(h host.API, path string) tea.Cmd {
 			return h.Dispatch(OpenArchiveMsg{Path: path})

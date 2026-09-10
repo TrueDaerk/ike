@@ -2,6 +2,7 @@ package app
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/gzip"
 	"os"
@@ -12,6 +13,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/archive"
 	"ike/internal/archview"
 	"ike/internal/editor"
 	"ike/internal/host"
@@ -65,10 +67,43 @@ func sortedNames(files map[string]string) []string {
 	return out
 }
 
-// writeTestArchive drops a tar (gzipped when name ends in .gz/.tgz) in a temp
-// dir and returns its path.
+// zipBytes builds a zip holding name/body pairs, the zip twin of tarBytes.
+func zipBytes(t *testing.T, files map[string]string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for _, name := range sortedNames(files) {
+		h := &zip.FileHeader{
+			Name:     name,
+			Method:   zip.Deflate,
+			Modified: time.Date(2026, 8, 10, 12, 0, 0, 0, time.UTC),
+		}
+		h.SetMode(0o644)
+		w, err := zw.CreateHeader(h)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte(files[name])); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// writeTestArchive drops an archive in a temp dir and returns its path: a zip
+// when name ends in .zip, otherwise a tar, gzipped for .gz/.tgz.
 func writeTestArchive(t *testing.T, name string, files map[string]string) string {
 	t.Helper()
+	if strings.HasSuffix(name, ".zip") {
+		p := filepath.Join(t.TempDir(), name)
+		if err := os.WriteFile(p, zipBytes(t, files), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
 	data := tarBytes(t, files)
 	if strings.HasSuffix(name, ".gz") || strings.HasSuffix(name, ".tgz") {
 		var buf bytes.Buffer
@@ -120,10 +155,10 @@ func dispatched(cmd tea.Cmd) []tea.Msg {
 	return out
 }
 
-// TestOpenPathRoutesArchivesToHandler: .tar/.tgz/.tar.gz never land in a raw
-// text buffer — the handler claims them and dispatches OpenArchiveMsg.
+// TestOpenPathRoutesArchivesToHandler: .tar/.tgz/.tar.gz/.zip never land in a
+// raw text buffer — the handler claims them and dispatches OpenArchiveMsg.
 func TestOpenPathRoutesArchivesToHandler(t *testing.T) {
-	for _, name := range []string{"src.tar", "src.tgz", "src.tar.gz"} {
+	for _, name := range []string{"src.tar", "src.tgz", "src.tar.gz", "src.zip"} {
 		t.Run(name, func(t *testing.T) {
 			m := newSized()
 			p := writeTestArchive(t, name, map[string]string{"main.go": "package main\n"})
@@ -565,5 +600,79 @@ func TestArchiveGzipInner(t *testing.T) {
 		if got := archiveGzipInner(c.entry, c.inner); got != c.want {
 			t.Errorf("archiveGzipInner(%q, %q) = %q, want %q", c.entry, c.inner, got, c.want)
 		}
+	}
+}
+
+// TestOpenZipPaneListsEntries: a zip opens in the same pane as a tar, with
+// the same tree, and the header names the format (#2594).
+func TestOpenZipPaneListsEntries(t *testing.T) {
+	m := newSized()
+	p := writeTestArchive(t, "src.zip", map[string]string{
+		"cmd/main.go": "package main\n",
+		"README.md":   "# hi\n",
+	})
+	tm, _ := m.Update(OpenArchiveMsg{Path: p})
+	m = tm.(Model)
+	keys := archiveKeys(m)
+	if len(keys) != 1 {
+		t.Fatalf("expected one archive pane, got %v", keys)
+	}
+	inst := m.activeWS().Panes.Get(keys[0])
+	av := inst.Archive()
+	if av.Path() != p {
+		t.Fatalf("pane bound to %q", av.Path())
+	}
+	if av.Format() != archive.FormatZip {
+		t.Fatalf("format = %v, want zip", av.Format())
+	}
+	var rows []string
+	for i := 0; i < av.Rows(); i++ {
+		rows = append(rows, av.RowName(i))
+	}
+	if len(rows) != 3 || rows[0] != "cmd" || rows[1] != "cmd/main.go" || rows[2] != "README.md" {
+		t.Fatalf("rows = %v", rows)
+	}
+	view := inst.View()
+	if !strings.Contains(view, "src.zip") || !strings.Contains(view, "zip") {
+		t.Errorf("the header must name the archive and its format:\n%s", view)
+	}
+}
+
+// TestOpenZipEntryReadOnly: enter on a zip member previews it read-only,
+// exactly as for a tar member.
+func TestOpenZipEntryReadOnly(t *testing.T) {
+	m := newSized()
+	p := writeTestArchive(t, "src.zip", map[string]string{"cmd/main.go": "package main\n"})
+	tm, cmd := m.Update(archview.OpenEntryMsg{Archive: p, Entry: "cmd/main.go"})
+	m = tm.(Model)
+	m = drainCmd(m, cmd)
+
+	ed := readOnlyEditor(m, archiveEntryPath(p, "cmd/main.go"))
+	if ed == nil {
+		t.Fatal("the zip member must open in an editor tab")
+	}
+	if !ed.ReadOnly() {
+		t.Fatal("an archive entry opens read-only")
+	}
+	if got := ed.Text(); got != "package main" {
+		t.Fatalf("buffer = %q", got)
+	}
+}
+
+// TestReloadZipPaneRelists: ctrl+r re-reads a zip in place, so a re-packed
+// file shows its new members (#2314) for zip too.
+func TestReloadZipPaneRelists(t *testing.T) {
+	m := newSized()
+	p := writeTestArchive(t, "src.zip", map[string]string{"a.txt": "a\n"})
+	tm, _ := m.Update(OpenArchiveMsg{Path: p})
+	m = tm.(Model)
+	if err := os.WriteFile(p, zipBytes(t, map[string]string{"a.txt": "a\n", "b.txt": "b\n"}), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	tm, _ = m.Update(ArchiveReloadMsg{})
+	m = tm.(Model)
+	inst := m.activeWS().Panes.Get(archiveKeys(m)[0])
+	if got := inst.Archive().Entries(); got != 2 {
+		t.Fatalf("entries after reload = %d, want 2", got)
 	}
 }

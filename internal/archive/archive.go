@@ -1,17 +1,18 @@
 // Package archive reads archive files for the archive viewer pane (#1762):
 // it sniffs whether a file is an archive, lists its entries, and extracts one
 // entry into memory. Everything goes through the standard library —
-// archive/tar plus compress/gzip and compress/bzip2 — so no dependency is
-// added for a viewer.
+// archive/tar and archive/zip plus compress/gzip and compress/bzip2 — so no
+// dependency is added for a viewer.
 //
-// The package is deliberately format-shaped rather than tar-shaped: Format
-// classifies a file and the rest of IKE speaks only of "archives", so a later
-// zip reader slots in beside FormatTar without renaming the pane, the pane
-// kind, or the UI strings.
+// The package is format-shaped rather than tar-shaped: Format classifies a
+// file and the rest of IKE speaks only of "archives", so the zip reader sits
+// beside the tar one (#2594) behind the members seam without renaming the
+// pane, the pane kind, or the UI strings.
 package archive
 
 import (
 	"archive/tar"
+	"archive/zip"
 	"bytes"
 	"compress/bzip2"
 	"compress/gzip"
@@ -37,6 +38,9 @@ const (
 	FormatTarGz
 	// FormatTarBz2 is a bzip2-compressed tar (.tar.bz2, .tbz2).
 	FormatTarBz2
+	// FormatZip is a zip container (.zip, and every other zip-shaped file —
+	// .jar, .whl, .docx — since detection reads content, not extensions).
+	FormatZip
 )
 
 // String names the format for the pane header.
@@ -48,6 +52,8 @@ func (f Format) String() string {
 		return "tar.gz"
 	case FormatTarBz2:
 		return "tar.bz2"
+	case FormatZip:
+		return "zip"
 	}
 	return ""
 }
@@ -105,6 +111,8 @@ func Detect(path string, head []byte) Format {
 		if innerIsTar(path, func(r io.Reader) (io.Reader, error) { return bzip2.NewReader(r), nil }) {
 			return FormatTarBz2
 		}
+	case isZip(head):
+		return FormatZip
 	case looksLikeTar(head):
 		return FormatTar
 	}
@@ -120,6 +128,14 @@ func isGzip(head []byte) bool { return bytes.HasPrefix(head, []byte{0x1f, 0x8b})
 // isBzip2 reports the bzip2 magic ("BZh" plus the block-size digit).
 func isBzip2(head []byte) bool {
 	return len(head) >= 4 && bytes.HasPrefix(head, []byte("BZh")) && head[3] >= '1' && head[3] <= '9'
+}
+
+// isZip reports the zip magic: a local file header ("PK\x03\x04") or — for an
+// archive holding nothing at all — the bare end-of-central-directory record
+// ("PK\x05\x06"), so an empty zip opens as an empty archive rather than as a
+// 22-byte binary blob.
+func isZip(head []byte) bool {
+	return bytes.HasPrefix(head, []byte("PK\x03\x04")) || bytes.HasPrefix(head, []byte("PK\x05\x06"))
 }
 
 // innerIsTar decompresses the first block of path through wrap and checks it
@@ -205,19 +221,44 @@ func parseOctal(f []byte) (int64, bool) {
 	return n, true
 }
 
-// reader opens path and returns the decompressed tar stream plus a closer for
-// the whole chain.
-func reader(p string) (*tar.Reader, io.Closer, Format, error) {
+// members is the listing/reading seam between the formats. A tar is a stream
+// of headers, a zip is a random-access directory; both answer the same two
+// questions — what is the next entry, and how do I read the one I am on — so
+// List, ReadEntry and Extract are written once against this and never against
+// a *tar.Reader.
+type members interface {
+	// next advances to the following entry, returning io.EOF at the end.
+	// Metadata-only records are skipped, so every entry it returns is a
+	// member the pane shows.
+	next() (Entry, error)
+	// open returns the content of the entry next returned. The reader stays
+	// valid until the following next call and is closed by the caller.
+	open() (io.ReadCloser, error)
+	io.Closer
+}
+
+// reader opens path, classifies it and returns its members plus the format.
+func reader(p string) (members, Format, error) {
 	f, err := os.Open(p)
 	if err != nil {
-		return nil, nil, FormatNone, err
+		return nil, FormatNone, err
 	}
 	head := make([]byte, blockSize)
 	n, _ := io.ReadFull(f, head)
 	head = head[:n]
+	if isZip(head) {
+		// A zip's central directory sits at the end of the file, so the
+		// reader needs the path rather than the stream we sniffed with.
+		f.Close()
+		zr, err := zip.OpenReader(p)
+		if err != nil {
+			return nil, FormatNone, fmt.Errorf("read archive: %w", err)
+		}
+		return &zipMembers{zr: zr, i: -1}, FormatZip, nil
+	}
 	if _, err := f.Seek(0, io.SeekStart); err != nil {
 		f.Close()
-		return nil, nil, FormatNone, err
+		return nil, FormatNone, err
 	}
 	var src io.Reader = f
 	format := FormatTar
@@ -226,40 +267,63 @@ func reader(p string) (*tar.Reader, io.Closer, Format, error) {
 		gz, err := gzip.NewReader(f)
 		if err != nil {
 			f.Close()
-			return nil, nil, FormatNone, err
+			return nil, FormatNone, err
 		}
 		src, format = gz, FormatTarGz
 	case isBzip2(head):
 		src, format = bzip2.NewReader(f), FormatTarBz2
 	}
-	return tar.NewReader(src), f, format, nil
+	return &tarMembers{tr: tar.NewReader(src), closer: f}, format, nil
 }
+
+// tarMembers walks a tar stream.
+type tarMembers struct {
+	tr     *tar.Reader
+	closer io.Closer
+}
+
+// next reads header after header until one of them is a member.
+func (t *tarMembers) next() (Entry, error) {
+	for {
+		h, err := t.tr.Next()
+		if err != nil {
+			return Entry{}, err
+		}
+		if e, ok := entryOf(h); ok {
+			return e, nil
+		}
+	}
+}
+
+// open hands out the tar stream itself: it already stands at the current
+// member's payload, and closing it must not close the archive.
+func (t *tarMembers) open() (io.ReadCloser, error) { return io.NopCloser(t.tr), nil }
+
+func (t *tarMembers) Close() error { return t.closer.Close() }
 
 // List reads every entry header of the archive at p. A truncated or corrupt
 // archive returns the entries read so far together with the error, so the
 // pane can show what it got plus the failure instead of nothing.
 func List(p string) (Listing, error) {
-	tr, closer, format, err := reader(p)
+	ms, format, err := reader(p)
 	if err != nil {
 		return Listing{}, err
 	}
-	defer closer.Close()
+	defer ms.Close()
 	out := Listing{Format: format}
 	for {
 		if len(out.Entries) >= maxEntries {
 			out.Truncated = true
 			return out, nil
 		}
-		h, err := tr.Next()
+		e, err := ms.next()
 		if errors.Is(err, io.EOF) {
 			return out, nil
 		}
 		if err != nil {
 			return out, fmt.Errorf("read archive: %w", err)
 		}
-		if e, ok := entryOf(h); ok {
-			out.Entries = append(out.Entries, e)
-		}
+		out.Entries = append(out.Entries, e)
 	}
 }
 
@@ -295,21 +359,20 @@ func entryOf(h *tar.Header) (Entry, bool) {
 // it returns ErrTooLarge before any of it is buffered, so the large-file
 // policy holds for archive members too (#149).
 func ReadEntry(p, name string, limit int64) ([]byte, error) {
-	tr, closer, _, err := reader(p)
+	ms, _, err := reader(p)
 	if err != nil {
 		return nil, err
 	}
-	defer closer.Close()
+	defer ms.Close()
 	for {
-		h, err := tr.Next()
+		e, err := ms.next()
 		if errors.Is(err, io.EOF) {
 			return nil, ErrNotFound
 		}
 		if err != nil {
 			return nil, fmt.Errorf("read archive: %w", err)
 		}
-		e, ok := entryOf(h)
-		if !ok || e.Name != name {
+		if e.Name != name {
 			continue
 		}
 		if e.IsDir {
@@ -318,11 +381,16 @@ func ReadEntry(p, name string, limit int64) ([]byte, error) {
 		if limit > 0 && e.Size > limit {
 			return nil, ErrTooLarge
 		}
+		rc, err := ms.open()
+		if err != nil {
+			return nil, fmt.Errorf("read archive entry %s: %w", name, err)
+		}
+		defer rc.Close()
 		// The header size is untrusted for a corrupt archive: read one byte
 		// past the limit and fail rather than buffering the whole stream.
-		var src io.Reader = tr
+		var src io.Reader = rc
 		if limit > 0 {
-			src = io.LimitReader(tr, limit+1)
+			src = io.LimitReader(rc, limit+1)
 		}
 		data, err := io.ReadAll(src)
 		if err != nil {
