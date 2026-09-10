@@ -1,5 +1,31 @@
 # Log
 
+## 2026-09-10 (Reserved pane numbers for the explorer and the tool windows, #2592)
+
+- **A tool now owns its `ctrl+N`.** Pane numbers used to be purely geometric (#2407), so
+  the VCS window was 4 with two editors open and 3 with one — a chord nobody could learn
+  without reading the badge first. The **explorer is always 1**, and
+  **`layout.pane_slots`** (Settings → **Appearance** → *Reserved pane numbers*, user
+  scope) pins the rest: shipped as `terminal=2, vcs=3, problems=4, structure=5`.
+- **Documents take what is left**: editors, diffs and previews — plus any tool window with
+  no entry in the table — are numbered from one past the highest reserved number, in the
+  same reading order as before. With the shipped table they start at **6**; a shorter
+  table gives them more of the nine chords.
+- **Gaps stay.** A reserved number belongs to its tool while the tool is closed, so
+  opening or closing a tool window renumbers nothing.
+- **A reserved chord opens its tool** through that tool's own toggle route
+  (`togglePanel` / `openToolPane`), placement and seeding included, instead of reporting an
+  out-of-range number. The debug area and the HTTP viewer have no toggle command of their
+  own, so their reserved number stays a gap and the chord says so; an unassigned number
+  keeps the #275 notification. `pane.focusByIndex` reads the same table.
+- **A tab host answers with its active tab** (#1989 / #573 / #1778), and the first pane in
+  reading order wins a contested number.
+- **Validation everywhere**: shape, range (2…9), known tool id and uniqueness are checked
+  by one shared parser (`config.ParsePaneSlots`) — the settings form rejects an element in
+  the row, the config layer drops a broken entry with a `layout.pane_slots` diagnostic.
+- Docs: [Pane Layout](/architecture/pane-layout.md), [Settings UI](/architecture/settings-ui.md),
+  [Configuration](/architecture/config.md).
+
 ## 2026-09-08 (project.group.saveOpen — name the open workspace set as a group, #2577)
 
 - **`project.group.saveOpen`** ("Save Open Projects as Group…", global, palette only —

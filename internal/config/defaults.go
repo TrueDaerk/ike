@@ -252,6 +252,12 @@ func defaults() *Config {
 			// Pane numbers are on by default (#2407): the badge is what makes
 			// the focus-by-number chords usable without counting panes.
 			PaneNumbers: "on",
+			// The four tool windows that carry a chord out of the box
+			// (#2592): terminal, VCS, Problems, Structure on 2…5, with the
+			// explorer's fixed 1 above them. Four is deliberately short —
+			// only nine numbers are addressable, and the rest belong to the
+			// document panes, which start at 6.
+			PaneSlots: DefaultPaneSlots(),
 		},
 		Backup: Backup{
 			Enable:     true,

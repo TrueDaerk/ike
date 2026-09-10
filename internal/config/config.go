@@ -291,6 +291,7 @@ func (c *Config) Flat() map[string]string {
 	put("ui.popup_max_width", c.UI.PopupMaxWidth)
 	put("ui.h_scroll_marks", c.UI.HScrollMarks)
 	put("layout.pane_numbers", c.Layout.PaneNumbers)
+	put("layout.pane_slots", strings.Join(c.Layout.PaneSlots, ","))
 
 	put("terminal.shell", c.Terminal.Shell)
 	put("terminal.autosuggest", c.Terminal.Autosuggest)

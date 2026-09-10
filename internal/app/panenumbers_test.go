@@ -11,8 +11,10 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"ike/internal/config"
 	"ike/internal/host"
 	"ike/internal/layout"
+	"ike/internal/pane"
 	"ike/internal/registry"
 )
 
@@ -45,12 +47,18 @@ func dismissOnboarding(m Model) Model {
 	return m
 }
 
+// noSlots empties layout.pane_slots (#2592): with no tool window holding a
+// reserved number the panes are numbered 1…N in plain reading order, which is
+// what the geometry, badge and prompt tests are about. The reserved numbering
+// has its own tests below.
+func noSlots() host.MapConfig { return host.MapConfig{"layout.pane_slots": ""} }
+
 // splitOrderApp builds the nested layout the ordering test asserts on:
 // explorer left, and a right-hand column split into two rows below a second
 // editor column — four panes whose tree walk order and reading order differ.
 func splitOrderApp(t *testing.T) Model {
 	t.Helper()
-	m := numberedApp(t, host.MapConfig{})
+	m := numberedApp(t, noSlots())
 	m.SplitFocused(layout.ZoneRight)  // explorer | A | B
 	m.SplitFocused(layout.ZoneBottom) // …with B split into B (top) and C (bottom)
 	m.layout()
@@ -123,7 +131,7 @@ func TestPaneNumberBadgeInChrome(t *testing.T) {
 		}
 	}
 
-	off := numberedApp(t, host.MapConfig{"layout.pane_numbers": "off"})
+	off := numberedApp(t, host.MapConfig{"layout.pane_numbers": "off", "layout.pane_slots": ""})
 	off.SplitFocused(layout.ZoneRight)
 	off.layout()
 	for _, key := range off.paneNumberOrder() {
@@ -192,7 +200,7 @@ func ansiOf(c color.Color) string {
 // hidden until a pane switch raises the which-pane hint, and the hint's own
 // timer message takes them down again.
 func TestPaneNumbersFocusOnlyFollowsTheHint(t *testing.T) {
-	m := numberedApp(t, host.MapConfig{"layout.pane_numbers": "focus-only"})
+	m := numberedApp(t, host.MapConfig{"layout.pane_numbers": "focus-only", "layout.pane_slots": ""})
 	m.SplitFocused(layout.ZoneRight)
 	m.layout()
 	if m.paneNumbersShown() {
@@ -244,7 +252,7 @@ func TestPaneFocusChordFocusesThatPane(t *testing.T) {
 	if runtime.GOOS != "darwin" {
 		t.Skip("ctrl+digit pane focus ships on macOS only (#2407)")
 	}
-	m := dismissOnboarding(newSized())
+	m := numberedApp(t, noSlots())
 	m.SplitFocused(layout.ZoneRight)
 	m.layout()
 	order := m.paneNumberOrder()
@@ -307,5 +315,293 @@ func TestTabBarHitStartsAfterTheBadge(t *testing.T) {
 	gotKey, idx, _, hit := m.tabBarHit(r.X+paneContentX+paneNumberBadgeWidth+1, y)
 	if !hit || gotKey != key || idx != 0 {
 		t.Errorf("the first bar cell after the pill = (%q, %d, hit=%v), want (%q, 0, true)", gotKey, idx, hit, key)
+	}
+}
+
+// --- Reserved pane numbers (#2592) ---------------------------------------
+//
+// The numbers below are pinned by layout.pane_slots: the explorer is always 1,
+// an assigned tool always carries its number — open or closed — and the
+// document panes take what is left above the highest reserved one.
+
+// slotApp is a sized app whose reserved-number table is exactly slots. The
+// short toast timeout keeps drainCmd from running a four-second expiry tick
+// inline when a chord notifies.
+func slotApp(t *testing.T, slots string) Model {
+	t.Helper()
+	return numberedApp(t, host.MapConfig{
+		"layout.pane_slots":             slots,
+		"notifications.timeout_seconds": "1",
+	})
+}
+
+// TestReservedNumbersIgnoreTheEditorCount: with vcs=3 the explorer is 1, the
+// VCS window is 3 whether zero, one or three editors are open, and the editors
+// start at 4 — the number after the highest reserved one.
+func TestReservedNumbersIgnoreTheEditorCount(t *testing.T) {
+	m := slotApp(t, "vcs=3")
+	vcs := focusToolWindow(t, &m, toolWindowKinds()["vcs"])
+	editor := m.activeEditorKey()
+	if editor == "" {
+		t.Fatal("precondition: the default layout should include an editor pane")
+	}
+	check := func(what string, editors int) {
+		t.Helper()
+		if got := m.paneNumberOf(pane.ExplorerKey); got != 1 {
+			t.Errorf("%s: explorer numbered %d, want 1", what, got)
+		}
+		if got := m.paneNumberOf(vcs); got != 3 {
+			t.Errorf("%s: VCS numbered %d, want its reserved 3", what, got)
+		}
+		var docs []int
+		for _, key := range m.paneNumberOrder() {
+			if key == vcs || key == pane.ExplorerKey {
+				continue
+			}
+			docs = append(docs, m.paneNumberOf(key))
+		}
+		if len(docs) != editors {
+			t.Fatalf("%s: %d document panes, want %d", what, len(docs), editors)
+		}
+		for i, n := range docs {
+			if want := 4 + i; n != want {
+				t.Errorf("%s: document pane %d numbered %d, want %d", what, i, n, want)
+			}
+		}
+	}
+	check("one editor", 1)
+
+	m.setFocus(editor)
+	m.SplitFocused(layout.ZoneRight)
+	m.SplitFocused(layout.ZoneRight)
+	m.layout()
+	check("three editors", 3)
+
+	for _, key := range m.paneNumberOrder() {
+		if key != vcs && key != pane.ExplorerKey {
+			m.closeKey(key)
+		}
+	}
+	m.layout()
+	check("no editors", 0)
+}
+
+// TestReservedNumberGapStaysWhenTheToolCloses: closing an assigned tool leaves
+// every other number exactly where it was — the reserved number becomes a gap
+// rather than shifting the panes below it up.
+func TestReservedNumberGapStaysWhenTheToolCloses(t *testing.T) {
+	m := slotApp(t, "vcs=3,problems=4")
+	vcs := focusToolWindow(t, &m, toolWindowKinds()["vcs"])
+	problems := focusToolWindow(t, &m, toolWindowKinds()["problems"])
+	before := map[string]int{}
+	for _, key := range m.paneNumberOrder() {
+		before[key] = m.paneNumberOf(key)
+	}
+	if before[vcs] != 3 || before[problems] != 4 {
+		t.Fatalf("precondition: vcs=%d problems=%d, want 3 and 4", before[vcs], before[problems])
+	}
+	m.closeKey(problems)
+	m.layout()
+	for key, want := range before {
+		if key == problems {
+			continue
+		}
+		if got := m.paneNumberOf(key); got != want {
+			t.Errorf("after closing Problems, %s numbered %d, want an unchanged %d", key, got, want)
+		}
+	}
+	if got := m.paneNumberOf(problems); got != 0 {
+		t.Errorf("the closed Problems pane still carries %d", got)
+	}
+}
+
+// TestReservedChordOpensAClosedTool: the chord on a reserved number whose tool
+// is not open opens it through the tool's own toggle route and focuses it —
+// the number addresses the tool, not merely a pane that happens to exist.
+func TestReservedChordOpensAClosedTool(t *testing.T) {
+	m := slotApp(t, "problems=3")
+	if m.activeWS().Panes.Has(pane.ProblemsKey) {
+		t.Fatal("precondition: the Problems window should start closed")
+	}
+	tm, cmd := m.Update(PaneFocusIndexMsg{Index: 3})
+	m = drainCmd(tm.(Model), cmd)
+	m.layout()
+	if !m.activeWS().Panes.Has(pane.ProblemsKey) {
+		t.Fatal("the reserved chord did not open the Problems window")
+	}
+	if got := m.activeWS().Panes.Focused(); got != pane.ProblemsKey {
+		t.Errorf("the reserved chord focused %s, want the Problems window", got)
+	}
+	if got := m.paneNumberOf(pane.ProblemsKey); got != 3 {
+		t.Errorf("the opened Problems window is numbered %d, want its reserved 3", got)
+	}
+	// Pressing it again focuses the pane that is now open (and does not
+	// toggle it away — the chord is "go there", not "toggle").
+	m.setFocus(m.activeEditorKey())
+	tm, cmd = m.Update(PaneFocusIndexMsg{Index: 3})
+	m = drainCmd(tm.(Model), cmd)
+	if got := m.activeWS().Panes.Focused(); got != pane.ProblemsKey {
+		t.Errorf("the chord on the open window focused %s, want the Problems window", got)
+	}
+}
+
+// TestExplorerIsAlwaysPaneOne: 1 belongs to the explorer whatever the table
+// says, and the chord brings a hidden explorer back rather than dying.
+func TestExplorerIsAlwaysPaneOne(t *testing.T) {
+	m := slotApp(t, "vcs=3")
+	if got := m.paneNumberOf(pane.ExplorerKey); got != 1 {
+		t.Fatalf("explorer numbered %d, want 1", got)
+	}
+	m.setFocus(pane.ExplorerKey)
+	m.toggleExplorer()
+	m.layout()
+	if m.explorerVisible() {
+		t.Fatal("precondition: the explorer should be hidden")
+	}
+	for _, key := range m.paneNumberOrder() {
+		if got := m.paneNumberOf(key); got == 1 {
+			t.Errorf("%s took the explorer's 1 while the tree was hidden", key)
+		}
+	}
+	tm, cmd := m.Update(PaneFocusIndexMsg{Index: 1})
+	m = drainCmd(tm.(Model), cmd)
+	m.layout()
+	if !m.explorerVisible() {
+		t.Fatal("ctrl+1 did not bring the hidden explorer back")
+	}
+	if got := m.activeWS().Panes.Focused(); got != pane.ExplorerKey {
+		t.Errorf("ctrl+1 focused %s, want the explorer", got)
+	}
+}
+
+// TestUnassignedToolIsNumberedLikeAnEditor: a tool with no entry in the table
+// takes a flowing number after the reserved ones, in reading order, exactly
+// like a document pane.
+func TestUnassignedToolIsNumberedLikeAnEditor(t *testing.T) {
+	m := slotApp(t, "vcs=3")
+	problems := focusToolWindow(t, &m, toolWindowKinds()["problems"])
+	n := m.paneNumberOf(problems)
+	if n < 4 {
+		t.Fatalf("the unassigned Problems window is numbered %d, want a flowing number past the reserved 3", n)
+	}
+	// It flows with the document panes: its number is the reading-order
+	// position among the panes holding no reserved number.
+	want := 4
+	for _, key := range m.paneNumberOrder() {
+		if key == pane.ExplorerKey {
+			continue
+		}
+		if key == problems {
+			break
+		}
+		want++
+	}
+	if n != want {
+		t.Errorf("Problems numbered %d, want %d — its place in the flowing order", n, want)
+	}
+}
+
+// TestReservedNumberWithoutAnOpenerNotifies: the two windows that have no
+// toggle command of their own (the debug area, the HTTP viewer) keep their
+// gap — the chord says so instead of silently doing nothing (#275).
+func TestReservedNumberWithoutAnOpenerNotifies(t *testing.T) {
+	m := numberedApp(t, host.MapConfig{
+		"layout.pane_slots": "debug=3",
+		// drainKey runs the toast's expiry tick inline; keep it short.
+		"notifications.timeout_seconds": "1",
+	})
+	focused := m.activeWS().Panes.Focused()
+	tm, cmd := m.Update(PaneFocusIndexMsg{Index: 3})
+	m = drainCmd(tm.(Model), cmd)
+	if got := m.activeWS().Panes.Focused(); got != focused {
+		t.Errorf("the chord moved focus to %s, want no move", got)
+	}
+	if m.activeWS().Panes.Has(pane.DebugKey) {
+		t.Error("the chord opened a debug area it has no command for")
+	}
+	if !notifiedAbout(m, "focus pane 3") {
+		t.Errorf("the chord must notify, history = %v", m.history)
+	}
+}
+
+// TestUnassignedNumberNotifies: a number no pane carries and no tool reserves
+// is the pre-existing no-op with a notification.
+func TestUnassignedNumberNotifies(t *testing.T) {
+	m := numberedApp(t, host.MapConfig{
+		"layout.pane_slots":             "vcs=3",
+		"notifications.timeout_seconds": "1",
+	})
+	focused := m.activeWS().Panes.Focused()
+	tm, cmd := m.Update(PaneFocusIndexMsg{Index: paneNumberMax})
+	m = drainCmd(tm.(Model), cmd)
+	if got := m.activeWS().Panes.Focused(); got != focused {
+		t.Errorf("an unassigned number moved focus to %s", got)
+	}
+	if !notifiedAbout(m, "focus pane "+strconv.Itoa(paneNumberMax)) {
+		t.Errorf("an unassigned number must notify, history = %v", m.history)
+	}
+}
+
+// notifiedAbout reports whether text was toasted, live or in the history ring.
+func notifiedAbout(m Model, text string) bool {
+	for _, h := range m.history {
+		if strings.Contains(h.text, text) {
+			return true
+		}
+	}
+	for _, n := range m.toasts {
+		if strings.Contains(n.text, text) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestReservedNumbersFollowTheBadge: the badge a tool draws is its reserved
+// number, and pane.focusByIndex resolves the same table the chords do.
+func TestReservedNumbersFollowTheBadge(t *testing.T) {
+	m := slotApp(t, "vcs=3")
+	vcs := focusToolWindow(t, &m, toolWindowKinds()["vcs"])
+	if got := m.paneNumberBadgeText(vcs); got != " 3 " {
+		t.Errorf("VCS badge = %q, want \" 3 \"", got)
+	}
+	m.setFocus(m.activeEditorKey())
+	tm, _ := m.Update(PaneFocusByIndexMsg{})
+	m = tm.(Model)
+	for _, k := range []tea.KeyPressMsg{{Code: '3', Text: "3"}, {Code: tea.KeyEnter}} {
+		tm, cmd := m.Update(k)
+		m = drainCmd(tm.(Model), cmd)
+	}
+	if got := m.activeWS().Panes.Focused(); got != vcs {
+		t.Errorf("Focus Pane by Number 3 focused %s, want the VCS window", got)
+	}
+}
+
+// TestPaneSlotDefsCoverEveryConfigurableTool keeps the app's slot table and
+// the config id list from drifting apart: every tool the settings form accepts
+// must have a definition here (or the chord would address nothing), and no
+// definition may name an id the form rejects. Only the debug area and the HTTP
+// viewer may lack an opener — they have no toggle command of their own.
+func TestPaneSlotDefsCoverEveryConfigurableTool(t *testing.T) {
+	defs := map[string]paneSlotDef{}
+	for _, d := range paneSlotDefs {
+		defs[d.id] = d
+	}
+	if _, ok := defs[config.PaneSlotExplorer]; !ok {
+		t.Error("the explorer must have a slot definition — it always carries 1")
+	}
+	for _, id := range config.PaneSlotTools() {
+		d, ok := defs[id]
+		if !ok {
+			t.Errorf("layout.pane_slots accepts %q but no pane slot defines it", id)
+			continue
+		}
+		if d.open == nil && id != "debug" && id != "http" {
+			t.Errorf("%q has no opener: a reserved chord could not open it", id)
+		}
+	}
+	if len(defs) != len(config.PaneSlotTools())+1 {
+		t.Errorf("%d slot definitions, want the %d configurable tools plus the explorer",
+			len(defs), len(config.PaneSlotTools()))
 	}
 }

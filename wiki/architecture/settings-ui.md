@@ -75,7 +75,15 @@ box capped at ~110×32 cells above the workspace, laid out as the
   for a bare token — staged template edits included — and the assignable tool
   ids after a `SLOT=` prefix), and `ValidateEntry` refuses a committed element
   in the row with a message naming the valid values
-  (`internal/settings/assign_hints.go`). Path inputs get shell-style
+  (`internal/settings/assign_hints.go`). Both hooks read config through a
+  **lookup** whose one special case is the entry's *own* key: it answers with
+  the list minus the element being edited (#2592), so a uniqueness check does
+  not see the row it is about to replace as a conflict. *Reserved pane
+  numbers* (`layout.pane_slots`, Appearance) is the check's other user
+  (`internal/settings/paneslot_hints.go`): it hints the tools and numbers that
+  are still free and refuses an element whose shape, range (2…9), tool id or
+  uniqueness would not survive the numbering — the explorer's 1 is fixed and
+  cannot be assigned. See [pane layout](./pane-layout.md). Path inputs get shell-style
   **tab completion** (#541) via the shared `internal/pathcomplete` engine:
   matching entries render as a suggestion list under the row (final path
   component only, capped with a `+N more` tail), tab extends the input to the

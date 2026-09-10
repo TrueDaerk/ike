@@ -619,9 +619,42 @@ type UI struct {
 //	focus-only  draw them only while the "which pane" hint is up — a pane
 //	            switch (pane.switcher, a focus-by-number chord) raises it for
 //	            a moment, so the numbers appear exactly when they are used
+//
+// PaneSlots reserves a pane number for a tool window (#2592) as "tool=N"
+// entries ("terminal=2, vcs=3"). The explorer is always 1 and takes no entry;
+// N runs from 2 to 9, and each number and each tool appears at most once. The
+// document panes take the numbers after the highest reserved one, so a tool
+// keeps its chord no matter how many editors are open — and keeps it while it
+// is closed, where the chord opens it. PaneSlotTools names the assignable
+// tools.
 type Layout struct {
-	PaneNumbers string `toml:"pane_numbers"`
+	PaneNumbers string   `toml:"pane_numbers"`
+	PaneSlots   []string `toml:"pane_slots"`
 }
+
+// PaneSlotTools lists the tool windows layout.pane_slots may reserve a pane
+// number for (#2592), in the order the settings hints offer them. The
+// explorer is deliberately absent: its number is the fixed 1. The ids are the
+// tool windows' layout keys, the same spelling BuiltinAssignTools uses.
+func PaneSlotTools() []string {
+	return []string{
+		"terminal", "vcs", "problems", "structure", "usages", "breakpoints",
+		"tests", "issues", "dom", "xdoctor", "lspdoctor", "deps", "time",
+		"usage", "debug", "http",
+	}
+}
+
+// PaneSlotExplorer is the id of the one pane number that is not configurable:
+// the explorer always carries 1 (#2592). Validation names it when an entry
+// tries to assign it.
+const PaneSlotExplorer = "explorer"
+
+// PaneSlotMin and PaneSlotMax bound a reservable pane number: 1 belongs to the
+// explorer and only nine numbers are addressable by chord at all.
+const (
+	PaneSlotMin = 2
+	PaneSlotMax = 9
+)
 
 // Backup holds crash-recovery snapshot behaviour (Roadmap 0210). Enable turns
 // the subsystem on; disabling it also purges existing snapshots (they contain
