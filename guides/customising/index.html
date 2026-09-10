@@ -1,0 +1,2203 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A JetBrains-inspired terminal IDE with vim-like editing.">
+      
+      
+      
+        <link rel="canonical" href="https://truedaerk.github.io/ike/guides/customising/">
+      
+      
+        <link rel="prev" href="../scratch-and-snippets/">
+      
+      
+        <link rel="next" href="../../reference/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Customising IKE - IKE</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#customising-ike" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="IKE" class="md-header__button md-logo" aria-label="IKE" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 19V7H4v12zm0-16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm-7 14v-2h5v2zm-3.42-4L5.57 9H8.4l3.3 3.3c.39.39.39 1.03 0 1.42L8.42 17H5.59z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            IKE
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Customising IKE
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/TrueDaerk/ike" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    TrueDaerk/ike
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="IKE" class="md-nav__button md-logo" aria-label="IKE" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 19V7H4v12zm0-16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm-7 14v-2h5v2zm-3.42-4L5.57 9H8.4l3.3 3.3c.39.39.39 1.03 0 1.42L8.42 17H5.59z"/></svg>
+
+    </a>
+    IKE
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/TrueDaerk/ike" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    TrueDaerk/ike
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/terminal-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Terminal setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/desktop-launcher/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Desktop launcher
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/first-project/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Your first project
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/command-line/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command line
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/panes-and-layout/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Panes, tabs and layouts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/modal-editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The modal editor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/projects-and-sessions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Projects and sessions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/commands-and-palette/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Commands and the palette
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../navigation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting around
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../search/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Search and replace
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../file-rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How files are rendered
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../conceal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conceal and decoded values
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code-intelligence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../terminal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The integrated terminal
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../git/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Git
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependencies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../project-time/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project time
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../run-and-debug/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running and debugging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../http-client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The HTTP client
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scratch-and-snippets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scratch files and snippets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Customising IKE
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Customising IKE
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Settings
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Settings">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#changes-are-staged-then-applied" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changes are staged, then applied
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#searching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Searching
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#which-file-gets-written" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Which file gets written
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#keybindings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keybindings
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Keybindings">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#by-hand" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        By hand
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#importing-a-jetbrains-keymap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Importing a JetBrains keymap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-is-not-in-the-keymap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is not in the keymap
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#themes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Themes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Themes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#recolouring-single-syntax-captures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recolouring single syntax captures
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#plugins" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plugins
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-it-all-ends-up" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where it all ends up
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#related" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Related
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/keybindings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Keybindings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/settings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Settings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/commands/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Commands
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    About & contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Settings
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Settings">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#changes-are-staged-then-applied" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Changes are staged, then applied
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#searching" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Searching
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#which-file-gets-written" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Which file gets written
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#keybindings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Keybindings
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Keybindings">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#by-hand" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        By hand
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#importing-a-jetbrains-keymap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Importing a JetBrains keymap
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#what-is-not-in-the-keymap" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What is not in the keymap
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#themes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Themes
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Themes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#recolouring-single-syntax-captures" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Recolouring single syntax captures
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#plugins" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plugins
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#where-it-all-ends-up" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where it all ends up
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#related" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Related
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/TrueDaerk/ike/edit/main/userdocs/guides/customising.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="customising-ike">Customising IKE<a class="headerlink" href="#customising-ike" title="Permanent link">&para;</a></h1>
+<p>Three things you will want to change: settings, keybindings, and the theme.
+All three are TOML underneath, and all three have a UI so you rarely have to
+write it by hand.</p>
+<h2 id="settings">Settings<a class="headerlink" href="#settings" title="Permanent link">&para;</a></h2>
+<p><span class="keys"><kbd class="key-command">Cmd</kbd><span>+</span><kbd class="key-comma">,</kbd></span> opens the settings panel. It is a <strong>three-column grid</strong>:
+categories on the left (grouped, with only the current group unfolded), the
+settings of the selected page in the middle with their current values, and a
+detail column on the right that
+explains the selected setting <em>and</em> holds its editor.</p>
+<div class="highlight"><pre><span></span><code>categories │ settings           on · 4 · focus ▾ │ description + editor
+</code></pre></div>
+<p><img alt="The settings panel with the Editor page selected: the category rail on the left, the page's keys with their value markers in the middle, the description and editor on the right" src="../../screenshots/features/settings-panel.png" /></p>
+<p>The screenshot uses the <code>monokai-pro</code> theme — which is itself one row on the
+Appearance page.</p>
+<p><span class="keys"><kbd class="key-tab">Tab</kbd></span> walks the three columns, <span class="keys"><kbd class="key-arrow-up">Up</kbd></span>/<span class="keys"><kbd class="key-arrow-down">Down</kbd></span> (or <code>j</code>/<code>k</code>) move inside one,
+<span class="keys"><kbd class="key-enter">Enter</kbd></span> activates. On a narrow terminal the detail column becomes a band
+under the list rather than disappearing. <code>?</code> opens the full key list.</p>
+<p>Values read as words: a toggle shows <code>on</code> or <code>off</code>, a chord sits in a keycap
+like <code>[cmd+k]</code>, an empty value is <code>—</code>, and a <code>▾</code> after a value means there is
+a list of options behind it. Enums and integers can also be changed straight
+on the row with <span class="keys"><kbd class="key-arrow-left">Left</kbd></span>/<span class="keys"><kbd class="key-arrow-right">Right</kbd></span>.</p>
+<p>The detail column is never empty: with the categories focused it describes the
+page, with a setting selected it shows the description, <code>key · type · default</code>,
+the editor, and where the value currently comes from (<code>set in user · writes to
+user</code>).</p>
+<p>The panel and the file are the same thing seen two ways — nothing is
+panel-only, and nothing you write by hand is invisible to the panel. The
+<a href="../../reference/settings/">settings reference</a> lists every key, its type,
+default and allowed values.</p>
+<h3 id="changes-are-staged-then-applied">Changes are staged, then applied<a class="headerlink" href="#changes-are-staged-then-applied" title="Permanent link">&para;</a></h3>
+<p>Editing a setting does <strong>not</strong> write it immediately. Changes collect in a
+batch: the header counts them (<code>● 3 changes · ctrl+s apply</code>), each affected
+page is marked in the category rail, and the detail column shows the selected
+row's <code>● old → new</code>. Editing a value back to where it started removes it from
+the batch again.</p>
+<p><span class="keys"><kbd class="key-control">Ctrl</kbd><span>+</span><kbd class="key-s">S</kbd></span> opens the diff panel — one line per change as
+<code>page · key · old → new</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><span class="keys"><kbd class="key-enter">Enter</kbd></span></td>
+<td>Write the batch (one write, one reload)</td>
+</tr>
+<tr>
+<td><code>u</code></td>
+<td>Drop the selected line</td>
+</tr>
+<tr>
+<td><code>s</code></td>
+<td>Retarget the whole batch at another layer</td>
+</tr>
+<tr>
+<td><code>d</code></td>
+<td>Discard everything</td>
+</tr>
+</tbody>
+</table>
+<p><span class="keys"><kbd class="key-escape">Esc</kbd></span> with pending changes opens the same diff rather than throwing your
+edits away silently. <code>r</code> (reset to the default) stages a removal like any
+other change.</p>
+<p>Settings whose whole point is how they look — the theme — preview live: moving
+through the option list re-themes the whole IDE on the highlighted entry,
+<span class="keys"><kbd class="key-escape">Esc</kbd></span> puts the previous theme back, and only <span class="keys"><kbd class="key-enter">Enter</kbd></span> stages a value that
+the usual <span class="keys"><kbd class="key-control">Ctrl</kbd><span>+</span><kbd class="key-s">S</kbd></span> then writes. A preview is never written, and discarding a
+staged one undoes it the same way.</p>
+<p>Custom pages are the exception: installing a plugin, choosing an interpreter
+or creating a virtualenv writes straight through, because those are actions,
+not values in a file.</p>
+<h3 id="searching">Searching<a class="headerlink" href="#searching" title="Permanent link">&para;</a></h3>
+<p><code>/</code> searches the whole panel and keeps the grid working: the left column
+becomes the pages that have hits, the middle lists every match as
+<code>Page › Title</code>, and the right column is still the editor — so <span class="keys"><kbd class="key-enter">Enter</kbd></span> sets
+the value right there instead of navigating you somewhere. <span class="keys"><kbd class="key-tab">Tab</kbd></span> opens the
+match's own page on that row, <span class="keys"><kbd class="key-escape">Esc</kbd></span> clears the query. The header reads
+<code>⌕ query · 7 hits · 5 pages</code>.</p>
+<p>The search reaches custom pages too: <code>/python</code> finds <code>Toolchain › python</code> and
+<code>Toolchain › New Python environment</code>.</p>
+<h3 id="which-file-gets-written">Which file gets written<a class="headerlink" href="#which-file-gets-written" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code>built-in defaults  &lt;  ~/.ike/settings.toml  &lt;  &lt;project&gt;/.ike/settings.toml
+</code></pre></div>
+<p>The <strong>Scope</strong> column in the settings reference tells you which layer a given
+setting is written to when you change it in the panel. Most are user-scoped;
+a few that are inherently project-specific are not.</p>
+<p>Editing by hand works exactly as well:</p>
+<div class="highlight"><pre><span></span><code><span class="k">[editor]</span>
+<span class="n">relative_line_numbers</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+<span class="n">tab_width</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">2</span>
+<span class="n">format_on_save</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
+
+<span class="k">[theme]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"gruvbox"</span>
+</code></pre></div>
+<p><code>$IKE_CONFIG_DIR</code> relocates the user layer if you keep your dotfiles
+elsewhere.</p>
+<div class="admonition warning">
+<p class="admonition-title">Arrays replace, they do not merge</p>
+<p>A TOML array in a later layer replaces the earlier one wholesale. A
+project-level <code>[[tools.custom]]</code> or <code>[[snippets]]</code> block hides your
+user-level ones rather than adding to them.</p>
+</div>
+<h2 id="keybindings">Keybindings<a class="headerlink" href="#keybindings" title="Permanent link">&para;</a></h2>
+<p>Before rebinding anything, <span class="keys"><kbd class="key-f1">F1</kbd></span> shows what is bound today in <em>your</em> build —
+the same data the Keymap page edits:</p>
+<p><img alt="The F1 cheatsheet, listing the essential commands with their live chords" src="../../screenshots/features/cheatsheet.png" /></p>
+<p>The <strong>Keymap</strong> settings page lists the <strong>effective</strong> bindings as
+<code>chord · command</code>, on the same grid as every other page.</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/</code></td>
+<td>Filter the list</td>
+</tr>
+<tr>
+<td><span class="keys"><kbd class="key-enter">Enter</kbd></span></td>
+<td>Capture a new chord for the selected row</td>
+</tr>
+<tr>
+<td><code>u</code></td>
+<td>Unbind</td>
+</tr>
+<tr>
+<td><code>r</code></td>
+<td>Reset to the shipped default</td>
+</tr>
+<tr>
+<td><code>i</code></td>
+<td>Import a JetBrains keymap XML</td>
+</tr>
+<tr>
+<td><code>z</code></td>
+<td>Unfold a folded run of numbered bindings</td>
+</tr>
+</tbody>
+</table>
+<p>The detail column carries what used to clutter the table: the command's title
+and id, <strong>every</strong> chord bound to it with its context and layer (<code>@default</code> /
+<code>@user</code>), and its conflict state — <code>✓ no conflicts</code>, or the other commands
+sharing the chord plus two free chords you could take instead.</p>
+<p>Runs of numbered bindings fold into one row — <code>alt+1 … alt+9 · Go to tab 1–9
+▸ 9</code> — so nine near-identical lines do not bury the rest. <code>z</code> (or <span class="keys"><kbd class="key-enter">Enter</kbd></span> on
+the folded row) expands it, and the detail column meanwhile lists every
+binding the row stands for. Filtering never folds: you see exactly what
+matched.</p>
+<p>Capturing is literal: press the chord you want and each key press appends a
+step, so multi-step chords like <span class="keys"><kbd class="key-command">Cmd</kbd><span>+</span><kbd class="key-k">K</kbd></span> <span class="keys"><kbd class="key-command">Cmd</kbd><span>+</span><kbd class="key-s">S</kbd></span> work. <span class="keys"><kbd class="key-enter">Enter</kbd></span> confirms,
+<span class="keys"><kbd class="key-escape">Esc</kbd></span> cancels.</p>
+<p>If the chord is already taken, the capture dialog makes it a decision rather
+than a yes/no: <strong>Replace &amp; unbind the other</strong> (<span class="keys"><kbd class="key-enter">Enter</kbd></span>), <strong>Pick a different
+chord</strong> (<code>p</code>, which clears what you pressed and keeps capturing), or cancel.
+Capturing a chord that not every terminal delivers gets you a warning rather
+than a silent disappointment.</p>
+<p>The list is honest about its edges: commands whose default chord you rebound
+stay visible as <code>(unbound)</code> rows so you can give them a new one, and every
+command with no binding at all — palette-only commands, your tool panes — is
+listed at the end so it can be bound.</p>
+<h3 id="by-hand">By hand<a class="headerlink" href="#by-hand" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="k">[keymap.bindings]</span>
+<span class="s2">"cmd+7"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"editor.commentLine"</span>
+<span class="s2">"ctrl+shift+k"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"editor.duplicateLine"</span>
+<span class="s2">"cmd+d"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">""</span><span class="w">                          </span><span class="c1"># unbind</span>
+</code></pre></div>
+<p>The key is the chord, the value the command ID; an empty value unbinds. The
+<a href="../../reference/commands/">commands reference</a> lists every ID, including the
+ones with no default chord.</p>
+<h3 id="importing-a-jetbrains-keymap">Importing a JetBrains keymap<a class="headerlink" href="#importing-a-jetbrains-keymap" title="Permanent link">&para;</a></h3>
+<p>Export your keymap from IntelliJ (Settings → Keymap → the gear → Export) and
+run <strong>Import JetBrains Keymap XML…</strong> from the palette, or <code>i</code> on the Keymap
+page.</p>
+<p>IKE translates the Swing keystroke syntax into its own, maps IntelliJ action
+IDs onto IKE commands, and reports what it did: how many bindings landed,
+which action IDs it has no counterpart for, and which keystrokes it could not
+translate. Nothing is fatal — an unmappable entry is skipped and named.</p>
+<p>An imported chord <strong>replaces</strong> the default rather than joining it: defaults
+for the imported commands that your export did not keep are unbound, so you
+end up with your keymap, not a merge of two.</p>
+<div class="admonition note">
+<p class="admonition-title">Chords the terminal has to deliver</p>
+<p>Rebinding cannot fix a chord your terminal swallows. If a new binding does
+nothing, check <a href="../../getting-started/terminal-setup/">Terminal setup</a>
+before assuming the rebind failed.</p>
+</div>
+<h3 id="what-is-not-in-the-keymap">What is not in the keymap<a class="headerlink" href="#what-is-not-in-the-keymap" title="Permanent link">&para;</a></h3>
+<p>The vim keys inside the editor — motions, operators, text objects,
+ex-commands — are the editor's own and are not part of the keymap layer.
+<code>d</code>, <code>w</code>, <code>ciw</code> and <code>:w</code> are not rebindable there.</p>
+<h2 id="themes">Themes<a class="headerlink" href="#themes" title="Permanent link">&para;</a></h2>
+<p>One setting recolours everything — syntax, file tree, chrome:</p>
+<div class="highlight"><pre><span></span><code><span class="k">[theme]</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"tokyo-night"</span>
+</code></pre></div>
+<p><img alt="IKE with the monokai-pro theme — the one every screenshot in this documentation uses" src="../../screenshots/monokai-pro.png" /></p>
+<p>Twenty-eight themes ship with IKE: <code>default</code>, <code>tokyo-night</code>, <code>nord</code>, <code>gruvbox</code>,
+<code>gruvbox-light</code>, <code>rose-pine</code>, <code>rose-pine-dawn</code>, <code>catppuccin-mocha</code>,
+<code>catppuccin-latte</code>, <code>kanagawa</code>, <code>one-dark</code>, <code>solarized-dark</code>,
+<code>solarized-light</code>, <code>dracula</code>, <code>darcula</code>, <code>intellij-light</code>,
+<code>everforest-dark</code>, <code>everforest-light</code>, <code>ayu-dark</code>, <code>ayu-mirage</code>,
+<code>ayu-light</code>, <code>github-dark</code>, <code>github-light</code>, <code>oxocarbon</code>, <code>monokai-pro</code>,
+<code>zenburn</code>, <code>high-contrast-dark</code> and <code>high-contrast-light</code>. The last two are
+the accessibility tier: they target WCAG AAA (7:1) everywhere and give up the
+dimmed comment/hint layer entirely, for low-vision use, bright rooms and
+washed-out projectors. Plugins can register more. The README shows a
+<a href="https://github.com/TrueDaerk/ike#themes">screenshot of every theme</a>.</p>
+<p>Switching live is easiest from the palette — type <code>:</code> and then <code>Theme</code>. The
+<strong>Appearance</strong> settings page lists them too, and re-themes the whole IDE — open
+files included, syntax colours and all — as you move through the list. Nothing
+is written until you press <span class="keys"><kbd class="key-enter">Enter</kbd></span> and apply; <span class="keys"><kbd class="key-escape">Esc</kbd></span> restores the theme you
+came in with. Every row of that list is its own mini-preview: the theme's name is
+painted in that theme's background and foreground, and the strip of colour
+chips at the end of the row shows its background, foreground, accent, keyword
+and string colours — so themes compare at a glance without applying them one
+by one. The selected row is marked with the <code>❯</code> chevron and an underline
+rather than a colour band, so the preview stays visible under the cursor.</p>
+<p>Tool panes get the theme's colours in their environment, so a TUI program that
+reads them follows along.</p>
+<h3 id="recolouring-single-syntax-captures">Recolouring single syntax captures<a class="headerlink" href="#recolouring-single-syntax-captures" title="Permanent link">&para;</a></h3>
+<p>A theme you like except for one colour does not have to be forked. The
+<strong>Syntax Colors</strong> page (right behind Appearance) lists every syntax capture
+the active theme defines — plus the six <code>rainbow.N</code> bracket slots and
+<code>bracket.unmatched</code>, the colour a bracket with no partner is underlined in —
+with a swatch in the colour that actually resolves, the capture name and the
+token in use. <code>(derived)</code> marks a slot with no token of its own.</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><span class="keys"><kbd class="key-enter">Enter</kbd></span></td>
+<td>Pick from the named colours, or the capture's theme default</td>
+</tr>
+<tr>
+<td><code>e</code></td>
+<td>Type a colour token directly</td>
+</tr>
+<tr>
+<td><code>r</code></td>
+<td>Remove the override</td>
+</tr>
+</tbody>
+</table>
+<p>The detail column says what the capture paints, names the config key, and
+tells you whether the colour comes from the theme or from your config.</p>
+<p>Overrides live under <code>[theme.captures]</code> and are written at user scope:</p>
+<div class="highlight"><pre><span></span><code><span class="k">[theme.captures]</span>
+<span class="n">comment</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"#7f8c98"</span>
+<span class="s2">"keyword.control"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"magenta"</span>
+<span class="s2">"rainbow.0"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"42"</span>
+</code></pre></div>
+<p>A token is a hex colour (<code>#rrggbb</code> or <code>#rgb</code>), a named colour, or an ANSI
+palette index.</p>
+<p>These write through immediately rather than being staged — choosing a colour
+you cannot see would be pointless. An unparseable token is rejected instead of
+silently rendering as your terminal default. Captures your config names that
+the theme does not define stay listed, so an override can never become
+unreachable.</p>
+<h2 id="plugins">Plugins<a class="headerlink" href="#plugins" title="Permanent link">&para;</a></h2>
+<p>WASM plugins can add commands, themes and languages. The <strong>Plugins</strong> settings
+page lists what is installed and toggles each one; the marketplace page
+installs new ones.</p>
+<p>Disabling a plugin is written as:</p>
+<div class="highlight"><pre><span></span><code><span class="k">[plugins.some-plugin]</span>
+<span class="n">enabled</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span>
+</code></pre></div>
+<p>A plugin's own settings, where it has any, appear as their own settings page.</p>
+<p>IKE checks installed plugins against the marketplace catalog once a day in the
+background and tells you how many updates are waiting; <code>u</code> on the Marketplace
+page installs them all at once. A new version that asks for <strong>more
+capabilities</strong> than the one you installed is held back and updated only after
+you confirm the added capabilities. Turn the check off with
+<code>marketplace.auto_check = false</code> (Settings ▸ Marketplace Catalog).</p>
+<h2 id="where-it-all-ends-up">Where it all ends up<a class="headerlink" href="#where-it-all-ends-up" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>Path</th>
+<th>What</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>~/.ike/settings.toml</code></td>
+<td>Your settings, keybindings, theme</td>
+</tr>
+<tr>
+<td><code>&lt;project&gt;/.ike/settings.toml</code></td>
+<td>Project overrides</td>
+</tr>
+<tr>
+<td><code>$IKE_CONFIG_DIR</code></td>
+<td>Relocates the user layer</td>
+</tr>
+</tbody>
+</table>
+<h2 id="related">Related<a class="headerlink" href="#related" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../../reference/settings/">Settings reference</a> — every key</li>
+<li><a href="../../reference/keybindings/">Keybindings reference</a> — every default binding</li>
+<li><a href="../../reference/commands/">Commands reference</a> — every command ID</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Documentation for IKE — a terminal IDE.
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+    <a href="https://github.com/TrueDaerk/ike" target="_blank" rel="noopener" title="IKE on GitHub" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.top", "content.code.copy", "content.action.edit", "search.highlight", "search.suggest", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
