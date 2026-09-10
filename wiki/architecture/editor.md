@@ -3342,9 +3342,16 @@ friends by its own table, since `secret.Suspect("Authorization")` is
 deliberately false (AUTHOR is a public marker), other header names by the
 shared tables — keeps the scheme word (`Bearer`, `Basic`) readable, masks
 suspect `@name = value` definitions, and skips values holding a `{{…}}`
-placeholder: indirection is not the credential. Everywhere the masks are
-emitted first in the hook, so no decode or hint can render a piece of a
-masked value.
+placeholder: indirection is not the credential. A **request body** masks by
+its *own* language (#2598): the region seam that already types a body from its
+`Content-Type` (`/architecture/http-client.md`) now also carries masks, so
+`"password": "abcdef"` in a JSON body hides exactly as it does in a `.json`
+file. `lang.Language.Masks` is the seam — a language registers the
+mask-producing half of its `Spans` hook there, and `lang.RegionMasks` runs it
+over each region's lines and shifts the spans into host coordinates. JSON,
+NDJSON and YAML register one; a body language without one (`text/plain`,
+HTML, …) stays untouched. Everywhere the masks are emitted first in the hook,
+so no decode or hint can render a piece of a masked value.
 
 Duplicate keys in the same file are marked in the gutter and underlined
 inline: the dotenv language registers a `lang.Lint` (see

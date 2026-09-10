@@ -160,6 +160,17 @@ type Language struct {
 	// be cheap. Nil — the normal case — means the language has none.
 	Spans func(lines []string) []Span
 
+	// Masks optionally produces the *secret-mask* subset of a language's
+	// spans (#2598): the stand-in spans that hide credential values, and
+	// nothing else. It exists for the embedded case — a .http request body is
+	// a JSON document, and the credential in it must mask exactly as it would
+	// in a standalone .json file, while the body's decodes and hints stay the
+	// host's business. A language that masks registers the same producer here
+	// that its Spans hook already calls; nil — the normal case — means the
+	// language contributes no masks to a host that embeds it. See
+	// RegionMasks.
+	Masks func(lines []string) []Span
+
 	// Folds optionally produces Go-computed fold ranges for a buffer of this
 	// language (#1630). It exists for foldable structure no Tree-sitter
 	// grammar provides — the unified diff format has no grammar at all, yet
@@ -240,6 +251,60 @@ type Region struct {
 	StartCol  int
 	EndLine   int
 	EndCol    int
+}
+
+// RegionMasks returns the secret-mask spans the embedded languages of regions
+// contribute to a host buffer (#2598), translated into host coordinates. It is
+// the span half of the region seam: Regions already says which lines of a
+// .http buffer are a JSON body, and this runs that language's Masks producer
+// over exactly those lines so `"password": "hunter2"` masks in a request body
+// the way it does in a .json file. Regions whose language is unregistered or
+// has no Masks producer contribute nothing, so a body language without masking
+// stays untouched.
+//
+// Host span producers call it and prepend the result to their own spans, which
+// keeps the mask ahead of every decode for the same cells (first-covering
+// wins).
+func RegionMasks(lines []string, regions []Region) []Span {
+	var out []Span
+	for _, r := range regions {
+		l, ok := ByID(r.Lang)
+		if !ok || l.Masks == nil || r.StartLine < 0 || r.StartLine >= len(lines) {
+			continue
+		}
+		end := r.EndLine
+		if end >= len(lines) {
+			end = len(lines) - 1
+		}
+		if end < r.StartLine {
+			continue
+		}
+		sub := append([]string{}, lines[r.StartLine:end+1]...)
+		// A region may start or end mid-line; the producer sees only the
+		// region's own text, and the first line's columns shift back below.
+		if r.StartCol > 0 {
+			if first := []rune(sub[0]); r.StartCol <= len(first) {
+				sub[0] = string(first[r.StartCol:])
+			}
+		}
+		if last := len(sub) - 1; r.EndCol > 0 {
+			if line := []rune(sub[last]); r.EndCol <= len(line) {
+				sub[last] = string(line[:r.EndCol])
+			}
+		}
+		for _, s := range l.Masks(sub) {
+			if s.Line < 0 || s.Line >= len(sub) {
+				continue
+			}
+			if s.Line == 0 && r.StartCol > 0 {
+				s.StartCol += r.StartCol
+				s.EndCol += r.StartCol
+			}
+			s.Line += r.StartLine
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // RegionAt returns the embedded region covering line (0-based) in a buffer of

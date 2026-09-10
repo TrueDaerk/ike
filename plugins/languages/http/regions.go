@@ -88,7 +88,13 @@ func bodyLanguage(contentType string) (string, bool) {
 // to a known language. Requests without a body, without a Content-Type, or
 // with an unmapped one contribute nothing.
 func bodyRegions(lines []string) []lang.Region {
-	f := httpfile.Parse(strings.Join(lines, "\n"))
+	return regionsFor(httpfile.Parse(strings.Join(lines, "\n")), lines)
+}
+
+// regionsFor is bodyRegions over a parse the caller already has — the span
+// producer parses the buffer once per highlight pass and must not pay for a
+// second one just to learn where the bodies are (#2598).
+func regionsFor(f *httpfile.File, lines []string) []lang.Region {
 	var out []lang.Region
 	for _, r := range f.Requests {
 		if r.GraphQL != nil && r.BodyFile == "" {

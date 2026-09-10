@@ -60,6 +60,9 @@ func init() {
 		// a numeric timestamp in a value position conceals as its UTC form,
 		// a \uXXXX escape in a string as the escaped character.
 		Spans: jsonSpans,
+		// Secret masking in an embedding host (#2598): a JSON request body in
+		// a .http buffer masks its credential values through the region seam.
+		Masks: maskSpans,
 	})
 
 	register.Language(lang.Language{
@@ -69,6 +72,7 @@ func init() {
 		FoldNodes:  []string{"object", "array"},
 		SpaceAfter: []rune{':'},
 		Spans:      jsonSpans,
+		Masks:      maskSpans,
 	})
 }
 

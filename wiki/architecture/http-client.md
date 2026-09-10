@@ -1770,6 +1770,34 @@ requests reads as a list of its separators. Body folds nest inside their
 request's fold. Both are derived from the parse on every pass, so they follow
 edits without stale ranges.
 
+The same answer also drives **secret masking in bodies** (#2598): a credential
+in a request body is as exposed as one in an `Authorization` header, so a body
+masks by its own language's rule. `lang.Language.Masks` carries the
+mask-producing half of a language's `Spans` hook, and `lang.RegionMasks` runs
+it over each region's lines and shifts the spans into host coordinates; the
+http span producer prepends the result to its own masks, which keeps every
+mask ahead of every decode (first-covering wins). So
+
+```http
+PUT http://example.com/text
+Content-Type: application/json
+
+{
+    "time_seconds": 600,
+    "password": "abcdef"
+}
+```
+
+renders `"password": "••••"` with the quotes intact and `time_seconds`
+readable — the same `internal/secret` decision, the same positional reveal
+under the caret and the same `g?` explanation a `.json` buffer gives. JSON,
+NDJSON and YAML register a `Masks` producer; a body language without one
+(`text/plain`, HTML, CSS, …) is left untouched, and a body whose media type
+maps to nothing never becomes a region in the first place. Masking is a
+rendering overlay only: the runner, the stored snapshot and the curl/httpie
+exports all read the source text, so a masked request still sends the real
+credential.
+
 Completion inside a body stays deliberately off: the source claims the buffer
 exclusively (#1302), so a JSON body offers nothing rather than every identifier
 in the file. The one body that *does* complete is a `GRAPHQL` block's query
