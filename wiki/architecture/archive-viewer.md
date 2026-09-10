@@ -1,25 +1,27 @@
 ---
 type: concept
 title: Archive Viewer
-description: "#1762 — archive files (tar, tar.gz/.tgz, tar.bz2) open as a collapsible entry list instead of a raw text buffer; Enter (or a double-click) extracts one member into a read-only editor buffer with syntax highlighting from the member's own file name; gzip members open decompressed (#1948); e/E write members or the whole archive to a directory on disk under path, overwrite and size guards (#2249); ctrl+r re-lists the file in place (archive.reload, #2314)."
+description: "#1762 — archive files (tar, tar.gz/.tgz, tar.bz2, zip — #2594) open as a collapsible entry list instead of a raw text buffer; Enter (or a double-click) extracts one member into a read-only editor buffer with syntax highlighting from the member's own file name; gzip members open decompressed (#1948); e/E write members or the whole archive to a directory on disk under path, overwrite and size guards (#2249); ctrl+r re-lists the file in place (archive.reload, #2314)."
 resource: internal/archview
-tags: [architecture, archive, tar, viewer, pane, read-only, mouse, extract, reload]
-timestamp: 2026-09-03T00:00:00Z
+tags: [architecture, archive, tar, zip, viewer, pane, read-only, mouse, extract, reload]
+timestamp: 2026-09-10T00:00:00Z
 ---
 
 # Archive Viewer (#1762)
 
-Opening a `.tar` (plain, gzip- or bzip2-compressed) lands in a pane of kind
-`KindArchive` that lists the archive's entries as a collapsible tree, not in a
-text buffer full of header blocks and padding. `Enter` on a file row extracts
-that one member into memory and shows it in a **read-only** editor tab.
+Opening a `.tar` (plain, gzip- or bzip2-compressed) or a `.zip` (#2594) lands
+in a pane of kind `KindArchive` that lists the archive's entries as a
+collapsible tree, not in a text buffer full of header blocks and padding.
+`Enter` on a file row extracts that one member into memory and shows it in a
+**read-only** editor tab. Both format families reach the same tree, the same
+preview and the same extraction; the pane header names which one it read.
 
 Three packages carry it, none of them tar-shaped in its API:
 
 - `internal/archive` — the format layer: sniff, list, read one entry into
   memory, and write members out to disk (`PlanExtract`/`Extract`, #2249).
-  Everything through the standard library (`archive/tar`, `compress/gzip`,
-  `compress/bzip2`); no dependency was added.
+  Everything through the standard library (`archive/tar`, `archive/zip`,
+  `compress/gzip`, `compress/bzip2`); no dependency was added.
 - `internal/archview` — the pane model: the tree, the cursor, the key handling,
   the rendering.
 - `internal/app/archives.go` — the plugin, the pane lifecycle, and the
@@ -30,18 +32,26 @@ Three packages carry it, none of them tar-shaped in its API:
 ## Routing and the sniff
 
 The compile-in `archives` plugin claims files via a `FileHandler`. Extensions
-`.tar`, `.tgz`, `.tbz`, `.tbz2` are claimed outright; `.tar.gz` and `.tar.bz2`
-are **not**, because the registry matches `filepath.Ext`, which reads
-`.tar.gz` as `.gz`. They arrive through the handler's `Match` instead, which
-sniffs content:
+`.tar`, `.tgz`, `.tbz`, `.tbz2`, `.zip` are claimed outright; `.tar.gz` and
+`.tar.bz2` are **not**, because the registry matches `filepath.Ext`, which
+reads `.tar.gz` as `.gz`. They arrive through the handler's `Match` instead,
+which sniffs content:
 
 - gzip or bzip2 magic → decompress **one 512-byte block** and test that for a
   tar header. A 10 GB archive costs the same as a 10 KB one, and a compressed
   stream that holds no tar is not claimed — that is the coordination point
   with the [gz viewer](./gz-viewer.md), which keeps `app.log.gz`.
+- zip magic → a local file header (`PK\x03\x04`) or, for an archive holding
+  nothing at all, the bare end-of-central-directory record (`PK\x05\x06`), so
+  an empty zip opens as an empty archive rather than as a 22-byte blob.
 - otherwise → test the leading block directly: the POSIX/GNU `ustar` magic at
   offset 257, or, for magic-less v7 tars, a header checksum that verifies (the
   same test tar itself uses, so random 512-byte prefixes are not claimed).
+
+Detection is **content-based for every format**, so any zip container opens as
+an archive when it is explicitly opened: a `.jar`, a `.whl`, a `.docx` are all
+zips, and IKE shows them as one — the same thing JetBrains does with jars.
+There is no file-association setting for it.
 
 The handler dispatches `OpenArchiveMsg`; `openArchivePane` opens as a content
 tab in the pane the open asked for — the focused pane for a palette pick
@@ -51,6 +61,37 @@ tab in the pane the open asked for — the focused pane for a palette pick
 preview, refocusing an existing pane already bound to the same path instead of
 duplicating. Keys mint as `archive`, `archive:2`, …; persistence records `{Kind: "archive", Path}` and restore re-lists the file (a
 vanished or corrupt file restores as the pane's own error notice).
+
+## Formats behind one seam
+
+`internal/archive` is format-shaped, not tar-shaped: `Format` classifies a
+file (`tar`, `tar.gz`, `tar.bz2`, `zip` — that string is what the pane header
+shows) and everything above the package speaks only of "archives".
+
+A tar is a *stream* of headers, a zip is a *random-access* central directory
+that lives at the **end** of the file — so the two cannot share a reader, but
+they do share an interface. The `members` seam
+(`internal/archive/archive.go`, `zip.go`) answers exactly two questions —
+what is the next entry, and how do I read the one I am on — and `List`,
+`ReadEntry`, `PlanExtract` and `Extract` are written once against it. That is
+why zip support needed no change in `archview`, in the pane kind, or in the
+extraction UI.
+
+What differs is only what the container carries:
+
+- **Metadata** is filled from the zip header the way it is from the tar
+  header: name (normalized the same way, no trailing slash), uncompressed
+  size, mode, directory flag, and the symlink target where the zip stores one.
+  Fields zip does not carry — a hard-link target, an owner — stay zero. The
+  modification time is read from `FileHeader.Modified`, which accounts for the
+  local-time DOS timestamp as well as the extended-timestamp field.
+- **Unsupported compression.** `archive/zip` decompresses *store* and
+  *deflate* only. A member packed with anything else fails **per member**:
+  the listing still shows it, and preview or extraction reports
+  `unsupported zip compression method <n>` — a preview error, one
+  `skipped` entry on extraction, never an aborted listing.
+- The 50 000-entry cap and the truncated-listing report apply to zip
+  unchanged.
 
 ## The entry list
 
@@ -289,9 +330,9 @@ the reopen ring (#158). Like a scratch tab, it is session-local.
   planned. Extraction out of one is supported (#2249) and is one-way.
 - **No per-file overwrite dialog.** The guard answers for the whole run;
   cherry-picking is what extracting a single member is for.
-- **Zip is out of scope**, but nothing in the pane, the pane kind or the UI
-  strings says "tar": `archive.Format` classifies, everything above speaks of
-  archives, so a zip reader slots in beside `FormatTar`.
+- **Encrypted zips are out of scope** — `archive/zip` cannot read them, and
+  no password prompt exists; such a member fails on preview/extract like any
+  other unreadable one.
 - **xz / zstd** are not supported — neither has a standard-library reader, and
   the no-new-dependency rule holds.
 - A listing is capped at 50 000 entries; the cap is reported in the header

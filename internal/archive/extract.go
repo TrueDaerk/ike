@@ -213,26 +213,33 @@ func Extract(pl Plan, opts Options) (Result, error) {
 	if len(want) == 0 {
 		return res, nil
 	}
-	tr, closer, _, err := reader(pl.Archive)
+	ms, _, err := reader(pl.Archive)
 	if err != nil {
 		return res, err
 	}
-	defer closer.Close()
+	defer ms.Close()
 	budget := opts.MaxBytes
 	for len(want) > 0 {
-		h, err := tr.Next()
+		e, err := ms.next()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
 			return res, fmt.Errorf("read archive: %w", err)
 		}
-		e, ok := entryOf(h)
-		if !ok || !want[e.Name] {
+		if !want[e.Name] {
 			continue
 		}
 		delete(want, e.Name)
-		n, skip, err := writeMember(pl.Dest, e, tr, opts, budget)
+		// A member the format cannot decompress (a zip method beyond
+		// store/deflate) is one skip with a reason, not an aborted run.
+		src, err := ms.open()
+		if err != nil {
+			res.Skipped = append(res.Skipped, Skipped{Name: e.Name, Reason: err.Error()})
+			continue
+		}
+		n, skip, err := writeMember(pl.Dest, e, src, opts, budget)
+		src.Close()
 		switch {
 		case err != nil:
 			return res, err

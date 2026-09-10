@@ -264,3 +264,46 @@ func TestDefaultExtractDirStripsArchiveSuffix(t *testing.T) {
 		}
 	}
 }
+
+// TestArchiveExtractZipWritesMembers: E on a zip runs the same extraction
+// path as on a tar and reports the same summary (#2594).
+func TestArchiveExtractZipWritesMembers(t *testing.T) {
+	m := newSized()
+	p := writeTestArchive(t, "src.zip", map[string]string{
+		"cmd/main.go": "package main\n",
+		"README.md":   "# hi\n",
+	})
+	m = startExtract(t, m, archview.ExtractMsg{Archive: p})
+	dest := filepath.Join(t.TempDir(), "out")
+	m = typeExtractPath(t, m, dest)
+	for name, want := range map[string]string{"cmd/main.go": "package main\n", "README.md": "# hi\n"} {
+		got, err := os.ReadFile(filepath.Join(dest, filepath.FromSlash(name)))
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if string(got) != want {
+			t.Errorf("%s = %q, want %q", name, got, want)
+		}
+	}
+	if notice := extractNotice(m); !strings.Contains(notice, "extracted 2 file(s)") {
+		t.Errorf("notice = %q, want the extraction summary", notice)
+	}
+}
+
+// TestArchiveExtractZipSingleMember: e on a zip row extracts that member only.
+func TestArchiveExtractZipSingleMember(t *testing.T) {
+	m := newSized()
+	p := writeTestArchive(t, "src.zip", map[string]string{
+		"cmd/main.go": "package main\n",
+		"README.md":   "# hi\n",
+	})
+	m = startExtract(t, m, archview.ExtractMsg{Archive: p, Members: []string{"cmd/main.go"}})
+	dest := filepath.Join(t.TempDir(), "out")
+	m = typeExtractPath(t, m, dest)
+	if _, err := os.Stat(filepath.Join(dest, "cmd", "main.go")); err != nil {
+		t.Fatalf("the selected member must be extracted: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "README.md")); err == nil {
+		t.Fatal("only the selected member may be extracted")
+	}
+}
