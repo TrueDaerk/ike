@@ -4810,6 +4810,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if cmd, handled := m.stepPaneMatch(msg.Delta); handled {
 			return m, cmd
 		}
+		if m.stepEditorSearchLine(msg.Delta) {
+			return m, nil
+		}
 		if m.inFileSearchRecent {
 			if ed := m.activeEditor(); ed != nil && ed.HasSearch() {
 				ed.RepeatSearch(msg.Delta < 0)
@@ -9924,6 +9927,31 @@ func (m *Model) stepPaneMatch(delta int) (tea.Cmd, bool) {
 		m.host.Notify(host.Info, noMatchesNotice)
 	}
 	return st.Cmd, true
+}
+
+// stepEditorSearchLine steps the focused editor's *open* search line to the
+// next (delta > 0) or previous match of the pattern being typed (#2603). A
+// plain editor tab is deliberately not pane.Searchable — editor.find lives in
+// the more specific Editor context — so the editor answers the match-step
+// chord here, right after the pane protocol and before the chord's older
+// readings (#376, #2410). It reports false when no search line is open.
+func (m *Model) stepEditorSearchLine(delta int) bool {
+	inst := m.activeWS().Panes.FocusedInstance()
+	if inst == nil || inst.Kind() != pane.KindEditor {
+		return false
+	}
+	ed := inst.Editor()
+	if ed == nil {
+		return false
+	}
+	st := ed.StepSearchPreview(delta < 0)
+	if !st.Handled {
+		return false
+	}
+	if st.Total == 0 {
+		m.host.Notify(host.Info, noMatchesNotice)
+	}
+	return true
 }
 
 // explorerCapturing reports whether the focused pane is the explorer with an

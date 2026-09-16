@@ -264,6 +264,13 @@ the palette):
   committed in-file search (`/`, `?`, cmd+f) makes f3/shift+f3 repeat it like
   `n`/`N` on the active editor (the editor announces the commit with
   `editor.SearchCommittedMsg`); the next find-in-path scan reclaims them.
+  An **open** editor search line outranks both (#2603): while `/`, `?` or
+  cmd+f is up, the chord steps that line's incremental preview
+  (`Model.stepEditorSearchLine` → `editor.StepSearchPreview`, right after the
+  `pane.Searchable` step and before these fallbacks), so the matches being
+  typed are walkable without committing first — the #2410 contract, which a
+  plain editor tab cannot join through `pane.Searchable` because `editor.find`
+  lives in the more specific Editor context.
   `editor.RepeatSearch` scrolls the landing into view itself (#1198): the
   root model calls it directly on the model, so the trailing `scroll()` of
   `Update`'s key branch — which is what makes `n`/`N` follow the cursor —
