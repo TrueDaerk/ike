@@ -100,3 +100,90 @@ func TestValidatePaneSlotEntry(t *testing.T) {
 		t.Errorf("a broken peer must not block a good element: %s", msg)
 	}
 }
+
+// --- [[tools.custom]] names (#2601) ---------------------------------------
+
+// A configured custom tool is as assignable as a built-in window, and its
+// entry takes part in the same uniqueness rules.
+func TestParsePaneSlotsAcceptsCustomToolNames(t *testing.T) {
+	slots, probs := ParsePaneSlots([]string{"lazygit=6", "vcs=3"}, "lazygit", "htop")
+	if len(probs) != 0 {
+		t.Fatalf("unexpected problems: %v", probs)
+	}
+	if len(slots) != 2 || slots[0].Tool != "lazygit" || slots[0].Number != 6 {
+		t.Fatalf("slots = %v, want lazygit=6 first", slots)
+	}
+	if _, probs := ParsePaneSlots([]string{"lazygit=6", "lazygit=7"}, "lazygit"); len(probs) != 1 ||
+		!strings.Contains(probs[0], "already has a pane number") {
+		t.Errorf("a custom tool must take one number only, problems = %v", probs)
+	}
+	// Without the tool configured the same entry is the ordinary unknown-tool
+	// drop — which is what a renamed or deleted [[tools.custom]] leaves behind.
+	slots, probs = ParsePaneSlots([]string{"lazygit=6"})
+	if len(slots) != 0 {
+		t.Fatalf("an unconfigured tool was accepted as %v", slots)
+	}
+	if len(probs) != 1 {
+		t.Fatalf("problems = %v, want one", probs)
+	}
+	for _, want := range []string{`unknown tool "lazygit"`, "structure", "[[tools.custom]]"} {
+		if !strings.Contains(probs[0], want) {
+			t.Errorf("message %q must name %q — both accepted sources", probs[0], want)
+		}
+	}
+}
+
+// ValidatePaneSlotEntry takes the same custom names, so the settings form and
+// the loader agree on what may be typed.
+func TestValidatePaneSlotEntryCustomToolName(t *testing.T) {
+	if msg := ValidatePaneSlotEntry("lazygit=6", []string{"vcs=3"}, "lazygit"); msg != "" {
+		t.Errorf("a configured custom tool was rejected: %s", msg)
+	}
+	if msg := ValidatePaneSlotEntry("lazygit=3", []string{"vcs=3"}, "lazygit"); !strings.Contains(msg, "already reserved") {
+		t.Errorf("a taken number reported %q", msg)
+	}
+	if msg := ValidatePaneSlotEntry("lazygit=6", nil); !strings.Contains(msg, `unknown tool "lazygit"`) {
+		t.Errorf("an unconfigured tool reported %q", msg)
+	}
+}
+
+// A pane_slots entry naming a custom tool loads clean; one naming a tool that
+// is gone is dropped with a layout.pane_slots diagnostic.
+func TestValidatePaneSlotsWithCustomTools(t *testing.T) {
+	c := defaults()
+	c.Tools.Custom = []ToolEntry{{Name: "lazygit", Command: "lazygit"}}
+	c.Layout.PaneSlots = []string{"lazygit=6", "gone=7"}
+	diags := validate(c)
+	if got := strings.Join(c.Layout.PaneSlots, ","); got != "lazygit=6" {
+		t.Fatalf("kept %q, want only the configured custom tool", got)
+	}
+	ds := diagsFor(diags, "layout.pane_slots")
+	if len(ds) != 1 || !strings.Contains(ds[0].Message, `unknown tool "gone"`) {
+		t.Fatalf("diagnostics = %v, want one naming the vanished tool", ds)
+	}
+}
+
+// A custom tool named like a built-in window loses the id to the window: the
+// entry still works, but it reserves the window — said out loud, because a
+// chord opening the wrong thing is worse than a rejected entry.
+func TestPaneSlotBuiltinBeatsCustomToolOfTheSameName(t *testing.T) {
+	c := defaults()
+	c.Tools.Custom = []ToolEntry{{Name: "vcs", Command: "tig"}}
+	c.Layout.PaneSlots = []string{"vcs=3"}
+	diags := validate(c)
+	if got := strings.Join(c.Layout.PaneSlots, ","); got != "vcs=3" {
+		t.Fatalf("kept %q, want the entry kept for the built-in window", got)
+	}
+	ds := diagsFor(diags, "layout.pane_slots")
+	if len(ds) != 1 || !strings.Contains(ds[0].Message, "built-in window") {
+		t.Fatalf("diagnostics = %v, want one naming the shadowed custom tool", ds)
+	}
+}
+
+// CustomNames is the shared reading of the configured tool names.
+func TestToolsCustomNames(t *testing.T) {
+	tools := Tools{Custom: []ToolEntry{{Name: "lazygit"}, {Name: ""}, {Name: "k9s"}}}
+	if got := strings.Join(tools.CustomNames(), " "); got != "lazygit k9s" {
+		t.Fatalf("CustomNames = %q, want the named entries in config order", got)
+	}
+}

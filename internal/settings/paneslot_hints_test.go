@@ -23,6 +23,21 @@ func withPaneSlots(t *testing.T, slots ...string) {
 	t.Cleanup(func() { config.Set(prev) })
 }
 
+// withCustomToolSlots installs the reserved-number table next to a pair of
+// [[tools.custom]] entries, the setup the #2601 cases need.
+func withCustomToolSlots(t *testing.T, slots ...string) {
+	t.Helper()
+	prev := config.Get()
+	c := *prev
+	c.Layout.PaneSlots = slots
+	c.Tools.Custom = []config.ToolEntry{
+		{Name: "lazygit", Command: "lazygit"},
+		{Name: "k9s", Command: "k9s"},
+	}
+	config.Set(&c)
+	t.Cleanup(func() { config.Set(prev) })
+}
+
 func TestPaneSlotValidateMessages(t *testing.T) {
 	restoreConfig(t)
 	withPaneSlots(t, "vcs=3", "terminal=2")
@@ -70,6 +85,87 @@ func TestPaneSlotHintsOfferWhatIsFree(t *testing.T) {
 	}
 	if strings.Contains(nums, "terminal=1") {
 		t.Errorf("number hints %q must not offer the explorer's 1", nums)
+	}
+}
+
+// TestPaneSlotCustomToolNames: a configured [[tools.custom]] name is a valid
+// tool id (#2601), an unconfigured one is refused with a message naming both
+// accepted sources, and the taken-number rule spans the two sources.
+func TestPaneSlotCustomToolNames(t *testing.T) {
+	restoreConfig(t)
+	withCustomToolSlots(t, "vcs=3")
+	if got := paneSlotValidate(lookupLive, "lazygit=6"); got != "" {
+		t.Errorf("a configured custom tool was rejected: %q", got)
+	}
+	if got := paneSlotValidate(lookupLive, "lazygit=3"); !strings.Contains(got, "already reserved") {
+		t.Errorf("validate(lazygit=3) = %q, want the taken number", got)
+	}
+	got := paneSlotValidate(lookupLive, "nosuchtool=6")
+	if !strings.Contains(got, `unknown tool "nosuchtool"`) ||
+		!strings.Contains(got, "structure") || !strings.Contains(got, "[[tools.custom]]") {
+		t.Errorf("message %q must name the built-in ids and the custom-name source", got)
+	}
+}
+
+// TestPaneSlotHintsListCustomTools: the free custom tools are offered next to
+// the free built-ins, marked so the two are tellable apart.
+func TestPaneSlotHintsListCustomTools(t *testing.T) {
+	restoreConfig(t)
+	withCustomToolSlots(t, "vcs=3", "k9s=4")
+	hints := paneSlotHints(lookupLive, "")
+	joined := strings.Join(hints, " ")
+	if !strings.Contains(joined, "terminal=") {
+		t.Errorf("hints %q must still offer the free built-ins", joined)
+	}
+	if !strings.Contains(joined, "lazygit= (custom)") {
+		t.Errorf("hints %q must offer the free custom tool, marked as one", joined)
+	}
+	if strings.Contains(joined, "k9s=") {
+		t.Errorf("hints %q must drop the custom tool that already has a number", joined)
+	}
+	if got := paneSlotHints(lookupLive, "lazy"); len(got) != 1 || got[0] != "lazygit= (custom)" {
+		t.Errorf("hints for %q = %v, want the narrowed custom tool", "lazy", got)
+	}
+	// The number hints see the custom tool's claim too: 4 is taken by k9s.
+	nums := strings.Join(paneSlotHints(lookupLive, "lazygit="), " ")
+	if !strings.Contains(nums, "lazygit=6") || strings.Contains(nums, "lazygit=4") {
+		t.Errorf("number hints %q must skip the number the custom tool holds", nums)
+	}
+}
+
+// A custom tool named like a built-in window is not offered: the built-in id
+// wins the entry, so the hint would promise a chord the tool never gets.
+func TestPaneSlotHintsSkipCustomToolShadowedByBuiltin(t *testing.T) {
+	restoreConfig(t)
+	prev := config.Get()
+	c := *prev
+	c.Layout.PaneSlots = nil
+	c.Tools.Custom = []config.ToolEntry{{Name: "vcs", Command: "tig"}}
+	config.Set(&c)
+	t.Cleanup(func() { config.Set(prev) })
+	for _, h := range paneSlotHints(lookupLive, "") {
+		if strings.Contains(h, "(custom)") {
+			t.Errorf("hint %q offers a custom tool the built-in id shadows", h)
+		}
+	}
+}
+
+// TestPaneSlotEditorPersistsACustomTool: a custom name survives the form's
+// commit and reaches layout.pane_slots.
+func TestPaneSlotEditorPersistsACustomTool(t *testing.T) {
+	restoreConfig(t)
+	withCustomToolSlots(t, "vcs=3")
+	m, ed := openPaneSlotEditor(t)
+	ed.idx = len(ed.items)
+	m.Update(key("enter"))
+	ed.tf.Set("lazygit=6")
+	m.Update(key("enter"))
+	if ed.err != "" {
+		t.Fatalf("err = %q, want the custom tool accepted", ed.err)
+	}
+	apply(t, m.applyChanges())
+	if got := strings.Join(config.Get().Layout.PaneSlots, ","); got != "vcs=3,lazygit=6" {
+		t.Fatalf("pane_slots = %q, want %q", got, "vcs=3,lazygit=6")
 	}
 }
 
