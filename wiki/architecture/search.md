@@ -4,7 +4,7 @@ title: Project Search (Find in Path)
 description: Streaming project-wide search engine — rg --json backend with a pure-Go walker fallback, generation-based cancellation, bounded results — and the shared in-pane "/" search (ui.LineSearch) every viewer pane jumps through its matches with.
 resource: internal/search
 tags: [architecture, search, find-in-path, in-pane-search, ui]
-timestamp: 2026-09-08T22:00:00Z
+timestamp: 2026-09-16T00:00:00Z
 ---
 
 # Project Search (Find in Path)
@@ -137,6 +137,40 @@ Not adopters, by design (allowlisted in the guard test): the editor's own vim
 `/` (regex, history, direction), the terminal copy mode's `/` and `?`
 (directional accept-then-repeat), the settings and TODO-index *filters* and
 the DOM inspector's CSS-selector matches.
+
+## Matching across line boundaries (#2600)
+
+`internal/editor/search` — the buffer matcher behind the editor's `/` `?`, the
+find/replace panel and the HTTP response pane — scans **line by line**: a
+`Span` is one line's rune columns, and a `Query` answers `LineMatches(buf, i)`
+per line. A pattern that itself holds a line break (typed with `alt+enter`, see
+[editor](./editor.md)) cannot be answered that way, so `multiline.go` adds a
+second path. `Compile` takes it when the pattern contains a real `\n` — or, for
+a regex, spells one as the `\n` / `\r` escape, which is how the same break
+survives the replace panel's single-line ex hand-off. A break-free pattern keeps
+the per-line scan and its `strings.Index` fast path untouched.
+
+The public shape of a match does not change; the two consumers just get two
+different answers from it:
+
+- `LineMatches` serves the **highlighter**: the *pieces* a match contributes to
+  one line, so a match spanning lines 4 and 5 paints on both.
+- `AllMatches` / `ScanMatches` serve **n/N, the tally and the multi-caret**: one
+  *head* span per match (its start line and start column), so a two-line match
+  counts once and `n` steps onto it once.
+
+`LineMatches` cannot afford a whole-buffer scan — the view asks it per visible
+line per frame — so it joins a **window** around the line instead: a pattern
+with *k* breaks can only reach a line from at most *k* lines above it. Because
+leftmost-first scanning makes a match's boundary depend on the text before it,
+a window whose own first lines already hold a match is widened and rescanned
+until the boundary settles, bounded by `maxLookback` (256 lines); past that the
+window's answer stands. The expression is compiled with `(?m)`, so `^` and `$`
+keep meaning line start / line end exactly as per-line matching gave them for
+free — and so a windowed rescan can never disagree with a whole-buffer one
+about them. `.` keeps *not* matching a newline: a break in the pattern is
+written, not stumbled into. `MatchesLine` (the follow filter's allocation-free
+predicate) reports `false` for such a query — one line can never answer it.
 
 ## Find-in-path overlay (#85)
 

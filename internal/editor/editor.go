@@ -1448,6 +1448,13 @@ func (m Model) Capturing() bool {
 	return m.mode.Capturing() || m.replPanel != nil || m.subConfirm != nil || m.leap != nil
 }
 
+// FindFieldOpen reports whether a find/replace text field currently owns the
+// editor's keyboard: the "/" or "?" search line, or the cmd+r replace panel.
+// The app dispatch asks so alt+enter reaches the field as its insert-a-line-
+// break chord (#2600) instead of resolving to lsp.codeAction, which owns the
+// chord everywhere else in the editor context.
+func (m Model) FindFieldOpen() bool { return m.replPanel != nil || m.searching }
+
 // Cursor returns the 1-based line and column for the status line.
 func (m Model) Cursor() (line, col int) { return m.cursor.Line + 1, m.cursor.Col + 1 }
 

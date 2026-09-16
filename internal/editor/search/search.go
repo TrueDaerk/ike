@@ -47,6 +47,11 @@ type Query struct {
 	fold    bool // matching ignores case (smartcase resolved at compile time)
 	re      *regexp.Regexp
 	jq      *jqState // structural (jq) mode (#2363, structural.go)
+	// multi marks a pattern that itself holds a line break and therefore
+	// matches across line boundaries (#2600, multiline.go); breaks is how many
+	// it holds, which bounds how far a match can reach.
+	multi  bool
+	breaks int
 }
 
 // ID identifies a compiled query for caching (#2145): two queries with equal
@@ -83,6 +88,11 @@ func Compile(pattern string, regex bool, cs Case) Query {
 	insensitive := cs == CaseFold ||
 		(cs == CaseSmart && strings.IndexFunc(pattern, unicode.IsUpper) < 0)
 	q.fold = insensitive
+	if spansLines(pattern, regex) {
+		// A pattern carrying a line break (#2600) leaves the per-line world
+		// entirely — multiline.go matches it against joined lines.
+		return compileMulti(q, insensitive)
+	}
 	if regex {
 		expr := pattern
 		if insensitive {
@@ -117,21 +127,32 @@ func (q Query) MatchesLine(text string) bool {
 	if q.Empty() {
 		return false
 	}
+	if q.multi {
+		// A pattern spanning lines can never be answered by one line (#2600);
+		// the predicate's callers (the follow filter) are all single-line.
+		return false
+	}
 	if q.re != nil {
 		return q.re.MatchString(text)
 	}
 	return strings.Contains(text, q.Pattern)
 }
 
-// LineMatches returns every match on line i as rune-column spans.
+// LineMatches returns every match on line i as rune-column spans. For a
+// pattern spanning lines (#2600) those are the *pieces* the matches contribute
+// to line i, which is what the highlighter wants; AllMatches below counts each
+// match once instead.
 func (q Query) LineMatches(b *buffer.Buffer, i int) []Span {
 	if q.jq != nil {
 		return q.structuralLineMatches(i)
 	}
-	line := b.Line(i)
 	if q.Empty() {
 		return nil
 	}
+	if q.multi {
+		return q.multiLineMatches(b, i)
+	}
+	line := b.Line(i)
 	var spans []Span
 	if q.re != nil {
 		for _, m := range q.re.FindAllStringIndex(line, -1) {
@@ -155,8 +176,13 @@ func (q Query) LineMatches(b *buffer.Buffer, i int) []Span {
 	return spans
 }
 
-// AllMatches returns every match in the buffer in reading order.
+// AllMatches returns every match in the buffer in reading order — one span per
+// match, so a match spanning lines (#2600) is one entry, starting where it
+// starts. That is what n/N stepping, the tally and the multi-caret need.
 func (q Query) AllMatches(b *buffer.Buffer) []Span {
+	if q.multi {
+		return q.multiAll(b)
+	}
 	var out []Span
 	for i := 0; i < b.LineCount(); i++ {
 		out = append(out, q.LineMatches(b, i)...)
@@ -240,6 +266,9 @@ func (q Query) ScanMatches(b *buffer.Buffer, maxMatches, maxLines int) (spans []
 	}
 	if q.jq != nil {
 		return q.structuralScan()
+	}
+	if q.multi {
+		return q.multiScan(b, maxMatches, maxLines)
 	}
 	lines := b.LineCount()
 	if lines > maxLines {
