@@ -34,6 +34,7 @@ func (m *Model) beginSearch(dir search.Direction, prefill string) {
 	m.cmdSelStart, m.cmdSelEnd = 0, m.cmdCur
 	m.cmdHistIdx = -1 // a fresh line starts outside history recall (#1171)
 	m.preview = search.Query{}
+	m.searchStepped = false
 	m.searchOrigin = m.cursor
 	m.searchOrigTop, m.searchOrigLft = m.view.Top, m.view.Left
 	if prefill != "" {
@@ -112,6 +113,53 @@ func (m *Model) ClearSearch() {
 func (m *Model) RepeatSearch(reverse bool) {
 	m.searchNextRepeat(reverse, 1)
 	m.scroll()
+}
+
+// StepSearchPreview steps the *open* search line's incremental preview to the
+// next (reverse=false) or previous (reverse=true) match of the half-typed
+// pattern, the editor's half of the shared match-step chord (#2603). The line
+// stays open with its text and cursor untouched, so cmd+g/cmd+shift+g walk the
+// occurrences the way n/N do — wrap-around and "search wrapped" hint included —
+// without the search having to be committed first.
+//
+// It returns ui.NoStep when no search line is open, leaving cmd+g its older
+// meanings at the root model (#376, #2410). An open line owns the chord even
+// when its pattern is empty or matches nothing: ui.NoMatches() makes the root
+// model say so rather than move the cursor for a different search.
+func (m *Model) StepSearchPreview(reverse bool) ui.MatchStep {
+	if !m.searching || m.filtering {
+		return ui.NoStep
+	}
+	q := m.compileSearchLine()
+	if q.Empty() || q.StructuralErr() != "" {
+		return ui.NoMatches()
+	}
+	dir := m.searchDir
+	if reverse {
+		dir = opposite(dir)
+	}
+	p, ok := q.Next(m.buf, m.cursor, dir, 1)
+	if !ok {
+		return ui.NoMatches()
+	}
+	w := wrapped(m.cursor, p, dir)
+	if w {
+		m.cmdMsg = "search wrapped"
+	} else {
+		m.cmdMsg = ""
+	}
+	m.preview = q
+	m.searchStepped = true
+	m.cursor = p
+	m.desiredCol = p.Col
+	m.scroll()
+	t := q.CountMatches(m.buf, p, search.MaxMatches, search.MaxScanLines)
+	if t.Total == 0 {
+		// The capped scan found nothing where Next did (a match beyond the
+		// line budget): the step itself stands, so report it as one match.
+		return ui.Stepped(0, 1, w)
+	}
+	return ui.Stepped(max(t.Index-1, 0), t.Total, w)
 }
 
 // wrapped reports whether a search landing at p from `from` crossed a buffer
@@ -392,6 +440,9 @@ func (m Model) parseSearchPattern(line string) (string, bool, search.Case) {
 // pattern) parks the cursor back at the origin; nothing lands on the nav
 // stack — only the committed jump does.
 func (m *Model) searchPreview() {
+	// A changed pattern restarts from the origin, dropping whatever cmd+g
+	// stepped to (#2603).
+	m.searchStepped = false
 	m.preview = m.compileSearchLine()
 	if !m.preview.Empty() {
 		if p, ok := m.preview.Next(m.buf, m.searchOrigin, m.searchDir, 1); ok {
@@ -409,6 +460,7 @@ func (m *Model) searchPreview() {
 // its n/N state) is untouched.
 func (m *Model) cancelSearch() {
 	m.preview = search.Query{}
+	m.searchStepped = false
 	m.restoreSearchOrigin()
 }
 
@@ -427,6 +479,8 @@ func (m *Model) commitSearch() {
 	m.preview = m.compileSearchLine()
 	m.query = m.preview
 	m.preview = search.Query{}
+	stepped := m.searchStepped
+	m.searchStepped = false
 	if m.query.Empty() {
 		m.restoreSearchOrigin()
 		return
@@ -440,7 +494,13 @@ func (m *Model) commitSearch() {
 		m.restoreSearchOrigin()
 		return
 	}
-	p, ok := m.query.Next(m.buf, m.searchOrigin, m.searchDir, 1)
+	// cmd+g may have walked the preview off the first match (#2603): the
+	// cursor then already sits on the match the user is looking at, and Enter
+	// commits exactly that one instead of jumping back to the first.
+	p, ok := m.cursor, true
+	if !stepped {
+		p, ok = m.query.Next(m.buf, m.searchOrigin, m.searchDir, 1)
+	}
 	if !ok {
 		m.hlActive = false
 		m.cmdMsg = "no matches: " + m.query.Pattern
@@ -448,7 +508,9 @@ func (m *Model) commitSearch() {
 		return
 	}
 	m.hlActive = true
-	if wrapped(m.searchOrigin, p, m.searchDir) {
+	if !stepped && wrapped(m.searchOrigin, p, m.searchDir) {
+		// A stepped commit keeps whatever the last step reported; the jump
+		// from the origin is not the motion the user made.
 		m.cmdMsg = "search wrapped"
 	}
 	m.cursor = m.searchOrigin // the jump departs from the origin, not the preview

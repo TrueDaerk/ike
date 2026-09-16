@@ -193,6 +193,12 @@ type Model struct {
 	searchOrigin  buffer.Position
 	searchOrigTop int
 	searchOrigLft int
+	// searchStepped marks that cmd+g/cmd+shift+g walked the open search
+	// line's preview off its first match (#2603): the preview then belongs to
+	// the cursor, not to the origin, so Enter commits where the step landed
+	// while Esc still returns to searchOrigin. Any edit of the pattern clears
+	// it and the preview restarts from the origin.
+	searchStepped bool
 	hlActive      bool
 	cmdMsg        string           // transient ":"-line message (errors, reports); shown while idle
 	lastSub       lastSubstitute   // last :substitute, for a bare ":s" repeat

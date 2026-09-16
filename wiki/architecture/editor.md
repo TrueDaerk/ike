@@ -534,7 +534,16 @@ Cluster-aware motion is a possible follow-up, not part of this change.
   `n`/`N`). All matches of the active query render with a background
   highlight, the current match on an accent tint and underlined; a normal-mode
   Esc clears the highlights (`:noh`-style) and `/`, `n`/`N`, `*`/`#` re-arm
-  them. The same counter also occupies a **status line slot** (`search`,
+  them. **cmd+g / cmd+shift+g step the open line** (#2603,
+  `editor.StepSearchPreview`): the preview walks to the next/previous match of
+  the half-typed pattern with the same wrap-around (and "search wrapped" hint)
+  as `n`/`N`, while the line keeps its text, its caret and the keyboard. Enter
+  then commits on the match the step landed on; Esc still returns to the
+  search origin, and editing the pattern drops the stepping and previews from
+  the origin again. With no search line open the chord keeps its older
+  readings — repeat the committed in-file search (#376) or walk the retained
+  find-in-path results (#2410). The same counter also occupies a **status line
+  slot** (`search`,
   `⌕ 3/17`, #2145) — it outlives the `/` line, so `n`/`N` navigation updates
   the index in place until the highlights are cleared.
   **Cost caps** (#2145): highlighting only ever scans the lines the viewport

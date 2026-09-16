@@ -1,5 +1,20 @@
 # Log
 
+## 2026-09-16 (cmd+g steps the editor's open search line, #2603)
+
+- **The half-typed search is walkable.** With `/`, `?` or cmd+f up, `search.nextMatch`
+  (cmd+g) and `search.prevMatch` (cmd+shift+g) move the incremental preview to the
+  next/previous match of the pattern being typed, wrapping like `n`/`N` and leaving the
+  "search wrapped" hint. The line keeps its text, its caret and the keyboard — committing
+  first is no longer the price of seeing the second occurrence.
+- **Enter commits where the stepping stopped**, Esc still restores the cursor and viewport
+  captured when the line opened, and editing the pattern drops the stepping so the preview
+  restarts from the search origin (`searchStepped` in `internal/editor`).
+- **Routing**: the root model tries `pane.Searchable` first (#2410), then the focused
+  editor's open line (`stepEditorSearchLine` → `editor.StepSearchPreview`), and only then
+  the chord's older readings — repeat the committed in-file search (#376) or walk the
+  retained find-in-path results. A plain editor tab stays out of `pane.Searchable`, since
+  `editor.find` lives in the more specific Editor context.
 ## 2026-09-16 (Line breaks in the find/replace fields, #2600)
 
 - **`alt+enter` inserts a line break** into the in-file find line (`/` `?`) and into both
