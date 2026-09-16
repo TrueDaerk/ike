@@ -27,8 +27,9 @@ func DefaultPaneSlots() []string {
 	return []string{"terminal=2", "vcs=3", "problems=4", "structure=5"}
 }
 
-// PaneSlot is one accepted assignment: a tool id from PaneSlotTools and the
-// pane number reserved for it.
+// PaneSlot is one accepted assignment: a tool id — a built-in window from
+// PaneSlotTools or a [[tools.custom]] name (#2601) — and the pane number
+// reserved for it.
 type PaneSlot struct {
 	Tool   string
 	Number int
@@ -39,7 +40,11 @@ type PaneSlot struct {
 // drop — wrong shape, the explorer (whose 1 is fixed), a number outside
 // 2…9, or a tool or number already spoken for. The accepted assignments come
 // back in entry order, so the first claim on a number wins.
-func ParsePaneSlots(entries []string) ([]PaneSlot, []string) {
+//
+// custom are the configured [[tools.custom]] names (#2601), accepted as tool
+// ids next to the built-in ones. Callers with no config at hand pass none and
+// get the built-in ids only.
+func ParsePaneSlots(entries []string, custom ...string) ([]PaneSlot, []string) {
 	var (
 		out   []PaneSlot
 		probs []string
@@ -50,7 +55,7 @@ func ParsePaneSlots(entries []string) ([]PaneSlot, []string) {
 		if strings.TrimSpace(e) == "" {
 			continue
 		}
-		slot, msg := parsePaneSlot(e)
+		slot, msg := parsePaneSlot(e, custom)
 		if msg == "" {
 			switch {
 			case tools[slot.Tool]:
@@ -71,8 +76,11 @@ func ParsePaneSlots(entries []string) ([]PaneSlot, []string) {
 
 // parsePaneSlot reads one entry on its own — shape, tool id and range — and
 // returns the reason it is unusable, "" when it is fine. Uniqueness is the
-// table's business, not the entry's, so it is not checked here.
-func parsePaneSlot(entry string) (PaneSlot, string) {
+// table's business, not the entry's, so it is not checked here. A tool id is
+// either a built-in window (PaneSlotTools) or one of the configured
+// [[tools.custom]] names in custom (#2601); the built-in ids are checked first,
+// so a custom tool sharing a built-in's name never shadows the window.
+func parsePaneSlot(entry string, custom []string) (PaneSlot, string) {
 	tool, num, ok := strings.Cut(entry, "=")
 	tool, num = strings.TrimSpace(tool), strings.TrimSpace(num)
 	if !ok || tool == "" || num == "" {
@@ -81,8 +89,9 @@ func parsePaneSlot(entry string) (PaneSlot, string) {
 	if tool == PaneSlotExplorer {
 		return PaneSlot{}, "the explorer is always pane 1 and takes no assignment"
 	}
-	if !slices.Contains(PaneSlotTools(), tool) {
-		return PaneSlot{}, fmt.Sprintf("unknown tool %q (valid: %s)", tool, strings.Join(PaneSlotTools(), ", "))
+	if !slices.Contains(PaneSlotTools(), tool) && !slices.Contains(custom, tool) {
+		return PaneSlot{}, fmt.Sprintf("unknown tool %q (built-in windows: %s; or a [[tools.custom]] name)",
+			tool, strings.Join(PaneSlotTools(), ", "))
 	}
 	n, err := strconv.Atoi(num)
 	if err != nil {
@@ -98,14 +107,15 @@ func parsePaneSlot(entry string) (PaneSlot, string) {
 // naming what is wrong, "" when it is acceptable next to peers — the other
 // elements of the same list. It is what the settings form calls on commit, so
 // a table that would be silently repaired on load cannot be typed in the first
-// place.
-func ValidatePaneSlotEntry(entry string, peers []string) string {
-	slot, msg := parsePaneSlot(entry)
+// place. custom are the configured [[tools.custom]] names (#2601), accepted as
+// tool ids next to the built-in ones.
+func ValidatePaneSlotEntry(entry string, peers []string, custom ...string) string {
+	slot, msg := parsePaneSlot(entry, custom)
 	if msg != "" {
 		return msg
 	}
 	for _, p := range peers {
-		other, err := parsePaneSlot(p)
+		other, err := parsePaneSlot(p, custom)
 		if err != "" {
 			continue // a broken peer is its own diagnostic
 		}

@@ -401,6 +401,17 @@ therefore *owns* a number.
   parser is shared (`config.ParsePaneSlots`): the config layer drops a
   broken entry with a `layout.pane_slots` diagnostic, the settings form
   rejects it before it is staged, and the app numbers from the same reading.
+- **A `[[tools.custom]]` name is a tool id too** (#2601, `"lazygit=6"`) —
+  the same rule `[tools.layout]` assignments follow (#1946), and the custom
+  tool panes are the ones most worth a muscle-memory chord. The configured
+  names are passed into the parser (`ParsePaneSlots(entries, custom...)`,
+  `ValidatePaneSlotEntry(entry, peers, custom...)`), so all three layers read
+  one list; the settings hints offer the free custom names marked `(custom)`
+  next to the free built-ins. Built-in ids are matched *first*: a custom tool
+  named like a window loses the id to the window and gets a
+  `layout.pane_slots` diagnostic saying so, and a name that is neither is the
+  ordinary `unknown tool` drop — which is also what a renamed or deleted
+  custom tool leaves behind.
 - **Document panes take what is left.** Every pane that holds no reserved
   number — the editors and viewers, plus any tool window with no entry in the
   table — is numbered from *one past the highest reserved number*, in the
@@ -417,14 +428,24 @@ therefore *owns* a number.
   via the `paneSlotDefs` table), so placement, seeding and focus land exactly
   as the tool's command would leave them. The debug area and the HTTP response
   viewer have no toggle command of their own — they open with a session and a
-  request — so their reserved number stays a gap and the chord says so. An
-  unassigned or unused number keeps the #275 no-op-with-notification.
+  request — so their reserved number stays a gap and the chord says so. A
+  reserved custom tool opens through its own `tool.<name>` route
+  (`customPaneSlotDef`, built per read because the set of custom tools is
+  config, not code), so its `[tools.layout]` slot or home position still
+  decides where the pane lands. An unassigned or unused number keeps the #275
+  no-op-with-notification.
 - **A tab host answers with its active tab.** A pane hosting several kinds
   (#1989 tool tabs, #573 terminal tabs, #1778 viewer tabs) claims a reserved
   number for the kind of the tab currently on screen, so the number follows
   what the pane is showing; switching tabs moves the claim with it. When two
   panes could claim the same number the first in reading order wins and the
-  other flows with the documents.
+  other flows with the documents — which is also how two instances of one
+  `multiple = true` custom tool share a single reserved number.
+- **A custom tool is claimed by name, not by kind.** Every custom tool pane is
+  a terminal pane, so `paneSlotKind` returns the session's tool name beside the
+  kind and `paneNumberAssign` matches a pinned custom tool on that name first
+  (#2601). Without it the first custom pane in reading order would answer every
+  custom chord.
 - **The badge is unchanged**: a pane draws the number it carries. A closed tool
   draws nothing — there is no pane to draw on — and `pane.focusByIndex` reads
   the same table as the chords.

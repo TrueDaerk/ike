@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -561,17 +562,29 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "layout.pane_numbers", Message: fmt.Sprintf("unknown mode %q, using \"on\"", c.Layout.PaneNumbers)})
 		c.Layout.PaneNumbers = "on"
 	}
-	// layout.pane_slots (#2592) pins pane numbers to tool windows. A broken
-	// entry is dropped rather than failing the load — the rest of the table
-	// still describes usable chords — but every drop is reported, because a
-	// silently ignored assignment reads as a broken chord.
+	// layout.pane_slots (#2592) pins pane numbers to tool windows and, since
+	// #2601, to [[tools.custom]] tools by name. A broken entry is dropped
+	// rather than failing the load — the rest of the table still describes
+	// usable chords — but every drop is reported, because a silently ignored
+	// assignment reads as a broken chord. A renamed or deleted custom tool
+	// therefore surfaces as the ordinary "unknown tool" drop.
 	if len(c.Layout.PaneSlots) > 0 {
-		slots, probs := ParsePaneSlots(c.Layout.PaneSlots)
+		custom := c.Tools.CustomNames()
+		slots, probs := ParsePaneSlots(c.Layout.PaneSlots, custom...)
 		for _, msg := range probs {
 			diags = append(diags, Diagnostic{Field: "layout.pane_slots", Message: msg + ", dropping it"})
 		}
 		kept := make([]string, 0, len(slots))
 		for _, s := range slots {
+			// A custom tool named like a built-in window loses the id: the
+			// entry reserves the window, and the tool has no way to claim a
+			// number at all. Silence there would read as a chord that opens
+			// the wrong thing.
+			if slices.Contains(custom, s.Tool) && slices.Contains(PaneSlotTools(), s.Tool) {
+				diags = append(diags, Diagnostic{Field: "layout.pane_slots", Message: fmt.Sprintf(
+					"tool %q is a built-in window; pane %d reserves the window, not the [[tools.custom]] entry of the same name — rename the tool to give it a pane number",
+					s.Tool, s.Number)})
+			}
 			kept = append(kept, fmt.Sprintf("%s=%d", s.Tool, s.Number))
 		}
 		c.Layout.PaneSlots = kept

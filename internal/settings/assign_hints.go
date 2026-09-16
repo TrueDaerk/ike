@@ -21,13 +21,19 @@ import (
 // assignableTools returns the valid assign targets: the shared built-in id
 // list plus the configured custom tool names, in that order.
 func assignableTools() []string {
-	out := append([]string{}, config.BuiltinAssignTools()...)
-	for _, e := range config.Get().Tools.Custom {
-		if e.Name != "" {
-			out = append(out, e.Name)
-		}
+	return append(append([]string{}, config.BuiltinAssignTools()...), customToolNames()...)
+}
+
+// customToolNames lists the configured [[tools.custom]] names — the tool ids a
+// slot assignment (#1946) or a reserved pane number (#2601) may name besides
+// the built-in ones. Read from the loaded config rather than through lookup:
+// the tools are edited on their own settings page, not as a flat list field.
+func customToolNames() []string {
+	c := config.Get()
+	if c == nil {
+		return nil
 	}
-	return out
+	return c.Tools.CustomNames()
 }
 
 // templateSlots parses the effective tools.layout.template — via lookup, so

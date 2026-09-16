@@ -113,6 +113,15 @@ adaptive placement (`Model.auxZone`, #1588 — below by default, to the right
 when the host is wider than 120 cells and wider than tall); pane exists
 unfocused → focus it (remembering where focus was); focused → return focus.
 
+A tool can also be pinned to a **pane number** (#2601): `layout.pane_slots`
+accepts a `[[tools.custom]]` name as its tool id (`"lazygit=6"`), so `ctrl+6`
+reaches that tool however many editors are open and opens it when it is
+closed — through this very route, so the home position and the slot assignment
+still decide where the pane lands. Since every custom tool pane is a terminal
+pane, the number is claimed by tool *name*, and a custom tool named like a
+built-in window loses the id to the window. See
+[pane layout](./pane-layout.md).
+
 ## Home positions (#1889)
 
 A tool with a `placement` opens at its home dock slot instead of the adaptive

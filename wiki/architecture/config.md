@@ -129,8 +129,12 @@ Sections and their default-bearing slots (`schema.go`):
   `off` / `focus-only`) and `pane_slots` (#2592), the `tool=number` list
   reserving a fixed pane number for a tool window (default
   `["terminal=2", "vcs=3", "problems=4", "structure=5"]`; the explorer is
-  always 1, numbers run 2…9, each number and tool once). Broken entries are
-  dropped with a `layout.pane_slots` diagnostic rather than failing the load.
+  always 1, numbers run 2…9, each number and tool once). The tool is a
+  built-in window id (`config.PaneSlotTools()`) or a `[[tools.custom]]` name
+  (#2601, `"lazygit=6"`), like a `[tools.layout]` assignment; a built-in id
+  wins a name collision, which is reported. Broken entries — a shape error, a
+  taken number, a custom tool that no longer exists — are dropped with a
+  `layout.pane_slots` diagnostic rather than failing the load.
   See [pane layout](./pane-layout.md).
 - `[ui]` — `menu_bar`, `onboarded`, `popup_max_width` (#932), and
   `h_scroll_marks` (#2377, default `true`): the horizontal-scroll edge marks
