@@ -1461,6 +1461,18 @@ func (m Model) Capturing() bool {
 // chord everywhere else in the editor context.
 func (m Model) FindFieldOpen() bool { return m.replPanel != nil || m.searching }
 
+// LineInputOpen reports whether a single-line text input owns the editor's
+// keyboard: the command line in any of its readings — search "/" "?", the ":"
+// ex line, the follow filter — or the cmd+r replace panel. It is the wider
+// sibling of FindFieldOpen, which only covers the find/replace fields.
+//
+// The app dispatch asks so the single-line kill chords (ui.IsKillKey) reach
+// the input instead of resolving to the buffer commands bound to them in the
+// Editor context — cmd+backspace is editor.deleteLine, alt+backspace is
+// editor.deleteWordBackward, and both used to delete document text while the
+// user was editing a query (#2602).
+func (m Model) LineInputOpen() bool { return m.replPanel != nil || m.mode == Command }
+
 // Cursor returns the 1-based line and column for the status line.
 func (m Model) Cursor() (line, col int) { return m.cursor.Line + 1, m.cursor.Col + 1 }
 

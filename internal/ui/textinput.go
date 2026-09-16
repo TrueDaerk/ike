@@ -125,6 +125,36 @@ func EditKey(msg tea.KeyPressMsg, text string, cur int) (out string, ncur int, h
 	return text, cur, false, false
 }
 
+// IsKillKey reports whether msg is one of the modified backspace/delete kill
+// chords EditKey implements for a single-line input: cmd+backspace /
+// cmd+delete (kill to line start / end) and alt|ctrl+backspace / alt|ctrl+delete
+// (kill the word before / after the cursor).
+//
+// It is exported (#2602) for the same reason as IsBreakKey: a host whose
+// keymap binds one of these chords to a command — the editor binds
+// cmd+backspace to editor.deleteLine and alt+backspace to
+// editor.deleteWordBackward — has to claim the key for its open input *before*
+// the keymap layer resolves it, or the command edits the document behind the
+// input the user believes they are typing into.
+//
+// shift is deliberately not tolerated here, unlike inside EditKey:
+// cmd+shift+backspace is nav.lastEdit, a navigation command that stays a
+// command while an input is open.
+//
+// The readline twins (ctrl+u / ctrl+k / ctrl+w / ctrl+h) are left out on
+// purpose: they are letter chords that several hosts bind themselves, and
+// letting an input claim them app-wide would steal those bindings.
+func IsKillKey(msg tea.KeyPressMsg) bool {
+	if msg.Code != tea.KeyBackspace && msg.Code != tea.KeyDelete {
+		return false
+	}
+	switch msg.Mod {
+	case tea.ModSuper, tea.ModMeta, tea.ModAlt, tea.ModCtrl:
+		return true
+	}
+	return false
+}
+
 // Typing reports whether a key press would insert printable text into a
 // single-line field: it carries text and no modifier that turns it into a
 // chord. It is EditKey's own insertion guard, exported (#2327) so a host that

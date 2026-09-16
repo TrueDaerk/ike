@@ -137,6 +137,18 @@ action.
   kill-to-line-start added in #2459; the palette keeps `cmd+backspace` as its
   aux action; the explorer's speed search keeps `ctrl+n`/`ctrl+p` as match
   stepping.
+- **An open field outranks the keymap.** A chord the keymap binds to a command
+  never reaches the field, because the keybinding layer resolves it first — and
+  a modified chord stays eligible even in a text-capturing editor. So a host
+  whose keymap binds an editing chord has to claim it for its open input ahead
+  of that layer, the way `internal/app` does with `ui.IsBreakKey` for
+  `alt+enter` (#2600) and `ui.IsKillKey` for the modified backspace/delete
+  kills (#2602) — `cmd+backspace` and `alt+backspace` are `editor.deleteLine`
+  and `editor.deleteWordBackward` in the Editor context, and used to delete
+  document text while the editor's search line was open. `ui.IsKillKey` matches
+  the kill chords **without** shift (`cmd+shift+backspace` is `nav.lastEdit`, a
+  command that stays one) and leaves the readline twins `ctrl+u`/`k`/`w`/`h`
+  out, since those are letter chords hosts bind themselves per the rule above.
 - **`changed`, not `handled`, drives side effects.** A cursor motion is
   `handled` but not `changed`; re-running an incremental search on it wastes a
   pass and can move the viewport for no reason.

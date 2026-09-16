@@ -12,6 +12,45 @@ func key(code rune, mod tea.KeyMod) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: code, Mod: mod}
 }
 
+// TestIsKillKey pins the chord set a host claims for its open single-line
+// input ahead of its keymap (#2602).
+func TestIsKillKey(t *testing.T) {
+	kill := []tea.KeyPressMsg{
+		{Code: tea.KeyBackspace, Mod: tea.ModSuper},
+		{Code: tea.KeyBackspace, Mod: tea.ModMeta},
+		{Code: tea.KeyBackspace, Mod: tea.ModAlt},
+		{Code: tea.KeyBackspace, Mod: tea.ModCtrl},
+		{Code: tea.KeyDelete, Mod: tea.ModSuper},
+		{Code: tea.KeyDelete, Mod: tea.ModAlt},
+		{Code: tea.KeyDelete, Mod: tea.ModCtrl},
+	}
+	for _, k := range kill {
+		if !IsKillKey(k) {
+			t.Errorf("IsKillKey(%v) = false, want true", k)
+		}
+		// Every claimed chord really is one EditKey handles as an edit.
+		if _, _, handled, _ := EditKey(k, "alpha beta", 6); !handled {
+			t.Errorf("EditKey does not handle %v", k)
+		}
+	}
+	notKill := []tea.KeyPressMsg{
+		{Code: tea.KeyBackspace},
+		{Code: tea.KeyDelete},
+		// cmd+shift+backspace is nav.lastEdit and stays a command.
+		{Code: tea.KeyBackspace, Mod: tea.ModSuper | tea.ModShift},
+		{Code: tea.KeyBackspace, Mod: tea.ModCtrl | tea.ModShift},
+		// The readline twins are letter chords a host may bind itself.
+		{Code: 'u', Mod: tea.ModCtrl},
+		{Code: 'w', Mod: tea.ModCtrl},
+		{Code: tea.KeyLeft, Mod: tea.ModAlt},
+	}
+	for _, k := range notKill {
+		if IsKillKey(k) {
+			t.Errorf("IsKillKey(%v) = true, want false", k)
+		}
+	}
+}
+
 func TestEditKeyMotions(t *testing.T) {
 	cases := []struct {
 		name    string
