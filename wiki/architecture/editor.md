@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-09-08T14:00:00Z
+timestamp: 2026-09-16T00:00:00Z
 ---
 
 # Editor
@@ -490,6 +490,19 @@ Cluster-aware motion is a possible follow-up, not part of this change.
   `\c`. `*`/`#` always match the word exactly, and `:s` keeps its own
   explicit `i`/`I` flags. The `\v`/`\c`/`\C` markers compose in any order at
   the start of the query.
+  **Line breaks in the pattern** (#2600): `alt+enter` (macOS `opt+enter`) on
+  the `/` `?` line inserts a line break into the pattern — plain `enter` still
+  commits the search — and a pattern holding one matches **across the line
+  boundary**, so `foo⏎bar` finds a `foo` ending one line followed by a `bar`
+  starting the next. The break renders as a dimmed one-cell `⏎` marker, so the
+  line stays one row and cursor movement / backspace treat it as one character;
+  the incremental preview and the counter keep running over it, and `n`/`N`
+  step onto such a match once. The chord is an in-field one, not a command: the
+  app dispatch claims it while a find/replace field is open, because
+  `alt+enter` is `lsp.codeAction` everywhere else in the editor. The follow
+  filter shares the line but not the chord — its query is per line by
+  definition. How the matching works:
+  [search](./search.md#matching-across-line-boundaries-2600).
   **Structural mode** (#2363): in a JSON/YAML buffer (the languages
   `internal/docpath` registers, `ndjson`/`ansible` included) a leading `\j`
   marker — toggled with **ctrl+x**, ctrl+c-style — turns the query into a
@@ -1308,17 +1321,55 @@ default, `\v` prefix for regex — so `:s//bar/` reuses the last search (then th
 last substitute) as its pattern. Any non-alphanumeric delimiter works
 (`:s#a#b#`), and `\<delim>` is a literal delimiter.
 
+**Line breaks in the fields (`alt+enter`, #2600).** `alt+enter` (macOS
+`opt+enter`) inserts a line break into the active field, JetBrains-style;
+plain `enter` keeps running the substitute. It is an *in-field chord*, not a
+command — like the panel's `ctrl+u` and `ctrl+a` — so it carries no keymap
+entry and the [keybind audit](../process/change-workflow.md) has nothing to
+record. The app dispatch claims it ahead of the keymap layer while a
+find/replace field is open (`Model.FindFieldOpen`), because `alt+enter` is
+`lsp.codeAction` everywhere else in the editor context.
+
+- The break is stored as a real `\n` in the field, so the cursor, the word
+  motions and backspace treat it as exactly **one rune**; only rendering is
+  special-cased — `ui.ShowBreaks` paints it as a dimmed one-cell `⏎` marker, so
+  the field stays one row and every column after it stays honest. The live
+  match tally and the incsearch preview keep running over a pattern with a
+  break.
+- A break in the **Find** field makes the pattern match across a line boundary
+  (see [search](./search.md#matching-across-line-boundaries-2600)); a break in
+  the **Replace** field produces a real break in the buffer, so one match on
+  one line can become two lines — still a single undo unit like any other
+  substitute.
+- The panel hands off through a single-line ex `:s` line, so `buildSubLine`
+  writes a break as the `\n` escape and both ends honour it: `substitute()`
+  turns `\n` / `\r` back into a break in a *literal* pattern, and `expandRepl`
+  expands them in the replacement. Typing `\n` directly on the `:s` line
+  therefore works too. A regex pattern is passed through untouched — the
+  regexp engine already reads `\n` as a newline.
+
 - **Flags:** `g` (every match per line, not just the first), `i` / `I`
   (case-insensitive / -sensitive), `n` (report the count without changing
   anything), `c` (confirm each match interactively — see below). An unknown flag
   is an error.
 - **Replacement** is vim-style: `&` / `\0` is the whole match, `\1`-`\9` the
-  capture groups, `\&` and `\\` literal `&` / `\` (Go's `$name` syntax is *not*
-  used — `$` is literal).
+  capture groups, `\&` and `\\` literal `&` / `\`, `\n` / `\r` a **line break**
+  (#2600) (Go's `$name` syntax is *not* used — `$` is literal).
 - **One undo unit:** all replacements of one invocation are applied inside a
   single `mutate`, so a single `u` reverts the whole run; the cursor lands on the
   last changed line. A bare `:s` (optionally with a range) repeats the last
   substitute. The outcome is reported as *N substitutions on M lines*.
+- **Crossing line boundaries (#2600):** when the pattern can match a newline or
+  the replacement inserts one, the engine leaves the per-line path
+  (`substituteLine`) for `substituteSpanning`: the range's lines are joined,
+  matches are collected as buffer *ranges*, and the edits are applied
+  **bottom-up** inside the one recorder, so an edit that adds or removes lines
+  can never invalidate a position that has not been applied yet. The scan reads
+  up to the pattern's own break count past the range's last line, so
+  `:s/foo\nbar/x/` on the `foo` line is about the pair rather than about where
+  the range happens to stop; matches *starting* outside the range are dropped.
+  A break-free pattern with a break-free replacement keeps the old per-line
+  path untouched, including its cost.
 
 ### Confirm mode (`substitute_confirm.go`)
 
@@ -1333,9 +1384,14 @@ and shows `replace (y/n/a/q/l)?` on the command-line row.
   key waits.
 - Accepted replacements accumulate in one open `history.Recorder`, so the whole
   interaction is a **single undo unit** and cancelling keeps what was already
-  applied. A per-line rune-column delta maps each precomputed match's original
-  span onto the shifted buffer, so multiple matches on one line stay aligned as
-  earlier replacements change the line's length.
+  applied. Each precomputed match's original range is mapped onto the shifted
+  buffer through two running shifts (#2600): `lineShift`, the net number of
+  lines the replacements so far added or removed, and a per-line rune-column
+  delta, so multiple matches on one line stay aligned as earlier replacements
+  change the line's length — and stay aligned when a replacement carrying a
+  line break (or a match that spanned lines) changes the line *count*.
+- A match spanning lines highlights its part of the **first** line, out to the
+  line end, and the cursor goes to its start.
 
 ### Range companions (`excmd_ops.go`)
 

@@ -15,6 +15,27 @@
   the chord's older readings — repeat the committed in-file search (#376) or walk the
   retained find-in-path results. A plain editor tab stays out of `pane.Searchable`, since
   `editor.find` lives in the more specific Editor context.
+## 2026-09-16 (Line breaks in the find/replace fields, #2600)
+
+- **`alt+enter` inserts a line break** into the in-file find line (`/` `?`) and into both
+  fields of the `cmd+r` replace panel, JetBrains-style; plain `enter` keeps running the
+  search / the substitute. The break is a real `\n` in the field — so the cursor, word
+  motions and backspace treat it as one rune — rendered as a dimmed one-cell `⏎` marker
+  by `ui.ShowBreaks`, so the field stays one row. The chord is an in-field one, not a
+  command: the app dispatch claims it while a find/replace field is open, because
+  `alt+enter` is `lsp.codeAction` everywhere else in the editor.
+- **Patterns match across line boundaries.** `internal/editor/search/multiline.go` adds a
+  second matching path for a pattern holding a break: whole-buffer scans feed the tally
+  and `n`/`N` (one head span per match), a bounded window feeds the per-line highlight
+  (both lines of a two-line match paint). A break-free pattern keeps the per-line scan
+  and its fast path untouched.
+- **Replacements can add lines.** `:s` leaves `substituteLine` for `substituteSpanning`
+  when the pattern can match a newline or the replacement inserts one: matches are
+  collected as buffer ranges and the edits are applied bottom-up inside the one recorder,
+  so `;` → `;⏎` over `a; b; c` yields three lines as a single undo unit. The confirm
+  (`gc`) walk maps its precomputed matches through a running line shift as well as the
+  per-line column delta. `\n` / `\r` in a replacement is now a line break, and the panel's
+  single-line ex hand-off escapes a break as `\n` at both ends.
 
 ## 2026-09-10 (Reserved pane numbers for the explorer and the tool windows, #2592)
 

@@ -199,7 +199,9 @@ func stripControl(s string) string {
 }
 
 // CursorView renders text with a reverse-video cursor at rune index cur
-// (end-of-text shows a reversed space).
+// (end-of-text shows a reversed space). A line break — which only the
+// find/replace fields can hold (#2600) — renders as the one-cell marker glyph,
+// so the row stays one row and every cursor column after it stays honest.
 func CursorView(text string, cur int) string {
 	rev := lipgloss.NewStyle().Reverse(true)
 	r := []rune(text)
@@ -207,9 +209,9 @@ func CursorView(text string, cur int) string {
 		cur = 0
 	}
 	if cur >= len(r) {
-		return text + rev.Render(" ")
+		return ShowBreaks(text) + rev.Render(" ")
 	}
-	return string(r[:cur]) + rev.Render(string(r[cur])) + string(r[cur+1:])
+	return ShowBreaks(string(r[:cur])) + rev.Render(cellGlyph(r[cur])) + ShowBreaks(string(r[cur+1:]))
 }
 
 // CursorViewSel renders text like CursorView, but first paints the rune range
@@ -233,11 +235,13 @@ func CursorViewSel(text string, cur, selStart, selEnd int, selStyle lipgloss.Sty
 		cur = selEnd
 	}
 	rev := lipgloss.NewStyle().Reverse(true)
-	before := string(r[:selStart]) + selStyle.Render(string(r[selStart:selEnd])) + string(r[selEnd:cur])
+	before := ShowBreaks(string(r[:selStart])) +
+		selStyle.Render(ShowBreaks(string(r[selStart:selEnd]))) +
+		ShowBreaks(string(r[selEnd:cur]))
 	if cur >= len(r) {
 		return before + rev.Render(" ")
 	}
-	return before + rev.Render(string(r[cur])) + string(r[cur+1:])
+	return before + rev.Render(cellGlyph(r[cur])) + ShowBreaks(string(r[cur+1:]))
 }
 
 // wordLeft finds the start of the word before cur: skip non-word runes,

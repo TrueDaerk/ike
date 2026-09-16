@@ -9017,6 +9017,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.openFilePaletteAnchored()
 			return m, nil
 		}
+		// A find/replace field open in the focused editor owns alt+enter (#2600):
+		// there the chord inserts a line break into the pattern / replacement.
+		// It has to be claimed ahead of the keymap layer, which binds alt+enter
+		// to lsp.codeAction in the editor context and would otherwise consume it
+		// before the pane ever saw the key.
+		if ui.IsBreakKey(msg) && m.editorFindField() {
+			return m.routeKey(msg)
+		}
 		// Keybinding layer (Roadmap 0080): resolve IDE-level chords to registered
 		// commands before pane dispatch. In a text-capturing editor only modified
 		// chords (or a chord already in progress) are eligible; plain letters always
@@ -9902,6 +9910,24 @@ func (m Model) editorCapturing() bool {
 	}
 	ed := inst.Editor()
 	return ed != nil && ed.Capturing()
+}
+
+// editorFindField reports whether the focused editor has a find/replace field
+// open — the "/" "?" search line or the cmd+r replace panel (#2600).
+func (m Model) editorFindField() bool {
+	inst := m.focusedContent()
+	if inst == nil {
+		return false
+	}
+	if inst.Kind() == pane.KindDiff {
+		ed := inst.DiffEditor()
+		return ed != nil && ed.FindFieldOpen()
+	}
+	if inst.Kind() != pane.KindEditor {
+		return false
+	}
+	ed := inst.Editor()
+	return ed != nil && ed.FindFieldOpen()
 }
 
 // noMatchesNotice is what the match-step chord says when it owns the key and

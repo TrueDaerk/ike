@@ -286,6 +286,22 @@ type Tools struct {
 	Layout ToolLayout  `toml:"layout"`
 }
 
+// CustomNames lists the configured [[tools.custom]] names in config order,
+// nameless entries skipped. It is the single reading of "which tool names does
+// this config offer" that the places accepting a custom name next to a
+// built-in id share — [tools.layout] assignments (#1946) and the
+// layout.pane_slots table (#2601) — so a name the user can type in one is
+// never silently unknown in the other.
+func (t Tools) CustomNames() []string {
+	var out []string
+	for _, e := range t.Custom {
+		if e.Name != "" {
+			out = append(out, e.Name)
+		}
+	}
+	return out
+}
+
 // ToolLayout is the named-slot template for tool placement (#1897). Template
 // is an ASCII grid, one string per row (like CSS grid-template-areas): every
 // cell names a slot by a single rune, each slot's cells must form a solid
@@ -626,16 +642,19 @@ type UI struct {
 // document panes take the numbers after the highest reserved one, so a tool
 // keeps its chord no matter how many editors are open — and keeps it while it
 // is closed, where the chord opens it. PaneSlotTools names the assignable
-// tools.
+// built-in windows; a [[tools.custom]] name is equally assignable (#2601).
 type Layout struct {
 	PaneNumbers string   `toml:"pane_numbers"`
 	PaneSlots   []string `toml:"pane_slots"`
 }
 
-// PaneSlotTools lists the tool windows layout.pane_slots may reserve a pane
-// number for (#2592), in the order the settings hints offer them. The
+// PaneSlotTools lists the built-in tool windows layout.pane_slots may reserve
+// a pane number for (#2592), in the order the settings hints offer them. The
 // explorer is deliberately absent: its number is the fixed 1. The ids are the
-// tool windows' layout keys, the same spelling BuiltinAssignTools uses.
+// tool windows' layout keys, the same spelling BuiltinAssignTools uses. A
+// [[tools.custom]] name is accepted next to these ids (#2601) — a built-in id
+// wins a name collision, so a custom tool named like a built-in window cannot
+// be reached by pane number.
 func PaneSlotTools() []string {
 	return []string{
 		"terminal", "vcs", "problems", "structure", "usages", "breakpoints",

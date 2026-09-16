@@ -3,6 +3,7 @@ package editor
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"unicode/utf8"
 
@@ -53,8 +54,17 @@ func (m Model) substitute(cmd excmd.Command) Model {
 				m.cmdMsg = "E: no previous pattern"
 				return m
 			}
-		} else if strings.HasPrefix(pat, `\v`) {
-			pat, regex = pat[2:], true
+		} else {
+			if strings.HasPrefix(pat, `\v`) {
+				pat, regex = pat[2:], true
+			}
+			if !regex {
+				// "\n" / "\r" written on the ":s" line is a line break (#2600).
+				// This is also how the find/replace panel carries a break
+				// through the single-line ex round trip (buildSubLine escapes
+				// it, and we undo that here).
+				pat = unescapeBreaks(pat)
+			}
 		}
 	} else {
 		// Bare ":s" repeats the last substitute (pattern, replacement, flags).
@@ -71,7 +81,13 @@ func (m Model) substitute(cmd excmd.Command) Model {
 		return m
 	}
 
-	re, err := compileSub(pat, regex, ci)
+	// A substitution crosses line boundaries when the pattern can match a line
+	// break or the replacement inserts one (#2600). Both break the per-line
+	// assumption the fast path rests on, so they take their own route — and the
+	// pattern is compiled for it.
+	spanning := subSpansLines(pat, regex, repl)
+
+	re, err := compileSub(pat, regex, ci, spanning)
 	if err != nil {
 		m.cmdMsg = "E: invalid pattern: " + err.Error()
 		return m
@@ -80,14 +96,21 @@ func (m Model) substitute(cmd excmd.Command) Model {
 		m.lastSub = lastSubstitute{pattern: pat, regex: regex, repl: repl, flags: flags, valid: true}
 	}
 
+	// reach is how far past the range's last line a spanning match may run.
+	reach := subReach(pat, regex)
+
 	// The "c" flag drives an interactive match-by-match confirmation instead of
 	// a one-shot batch replace (the "n" count-only flag takes precedence).
 	if confirm && !countOnly {
-		return m.beginSubstituteConfirm(re, repl, global, start, end, pat)
+		return m.beginSubstituteConfirm(re, repl, global, spanning, reach, start, end, pat)
+	}
+
+	if spanning {
+		return m.substituteSpanning(re, repl, global, countOnly, reach, start, end, pat)
 	}
 
 	// Collect per-line replacements from the current text first; replacements
-	// never span lines, so line indices stay stable while we apply them.
+	// never span lines here, so line indices stay stable while we apply them.
 	type change struct {
 		line   int
 		text   string
@@ -128,6 +151,148 @@ func (m Model) substitute(cmd excmd.Command) Model {
 	})
 	m.cmdMsg = fmt.Sprintf("%d substitution%s on %d line%s", totalSubs, plural(totalSubs, "s"), linesChanged, plural(linesChanged, "s"))
 	return m
+}
+
+// substituteSpanning is the batch replace for a substitution that crosses line
+// boundaries (#2600): the matches are collected as buffer ranges over the
+// joined range text, then applied bottom-up inside one recorder — so an edit
+// that adds or removes lines can never invalidate the position of an edit that
+// has not run yet, and the whole run stays one undo unit like any other :s.
+func (m Model) substituteSpanning(re *regexp.Regexp, repl string, global, countOnly bool, reach, start, end int, pat string) Model {
+	hits := collectSubMatches(m.buf, re, global, true, reach, start, end)
+	if len(hits) == 0 {
+		m.cmdMsg = "E: pattern not found: " + pat
+		return m
+	}
+	lines := map[int]bool{}
+	for _, h := range hits {
+		for l := h.start.Line; l <= h.end.Line; l++ {
+			lines[l] = true
+		}
+	}
+	if countOnly {
+		m.cmdMsg = fmt.Sprintf("%d match%s on %d line%s", len(hits), plural(len(hits), "es"), len(lines), plural(len(lines), "s"))
+		return m
+	}
+
+	edits := make([]buffer.Edit, len(hits))
+	for i, h := range hits {
+		edits[i] = buffer.Edit{
+			Range: buffer.Range{Start: h.start, End: h.end},
+			Text:  expandRepl(repl, h.groups),
+		}
+	}
+	// Where the cursor lands: the last replacement's final line, once the line
+	// shift every earlier replacement introduces is added in.
+	last := edits[len(edits)-1]
+	shift := 0
+	for _, e := range edits[:len(edits)-1] {
+		shift += strings.Count(e.Text, "\n") - (e.Range.End.Line - e.Range.Start.Line)
+	}
+	cursor := buffer.Position{Line: last.Range.Start.Line + shift + strings.Count(last.Text, "\n"), Col: 0}
+
+	m.mutate(func(rec *history.Recorder) buffer.Position {
+		for i := len(edits) - 1; i >= 0; i-- {
+			rec.Apply(edits[i])
+		}
+		return m.buf.ClampCursor(cursor)
+	})
+	m.cmdMsg = fmt.Sprintf("%d substitution%s on %d line%s", len(hits), plural(len(hits), "s"), len(lines), plural(len(lines), "s"))
+	return m
+}
+
+// subMatch is one match of a substitution: the buffer range it covers (which
+// may span lines, #2600) and the capture-group strings for the replacement.
+type subMatch struct {
+	start, end buffer.Position
+	groups     []string
+}
+
+// collectSubMatches finds every match of re in lines [start, end] in reading
+// order. spanning selects the joined-text scan, which is the only one that can
+// see a match crossing a line boundary; without it each line is scanned on its
+// own, exactly as the substitute engine always has. Without the "g" flag only
+// the first match per line is taken, matching vim. Zero-width matches are
+// skipped.
+//
+// reach is how many lines past end the scan may read so a match that *starts*
+// inside the range can finish outside it — ":s/foo\nbar/x/" on the foo line is
+// about the pair, not about where the range happens to stop. Matches starting
+// past end are dropped.
+func collectSubMatches(b *buffer.Buffer, re *regexp.Regexp, global, spanning bool, reach, start, end int) []subMatch {
+	var out []subMatch
+	if !spanning {
+		for i := start; i <= end; i++ {
+			line := b.Line(i)
+			for _, loc := range re.FindAllStringSubmatchIndex(line, -1) {
+				if loc[0] == loc[1] {
+					continue
+				}
+				out = append(out, subMatch{
+					start:  buffer.Position{Line: i, Col: byteToRune(line, loc[0])},
+					end:    buffer.Position{Line: i, Col: byteToRune(line, loc[1])},
+					groups: submatchStrings(line, loc),
+				})
+				if !global {
+					break
+				}
+			}
+		}
+		return out
+	}
+	scanEnd := end + reach
+	if last := b.LineCount() - 1; scanEnd > last {
+		scanEnd = last
+	}
+	text, starts := joinRange(b, start, scanEnd)
+	seen := map[int]bool{}
+	for _, loc := range re.FindAllStringSubmatchIndex(text, -1) {
+		if loc[0] == loc[1] {
+			continue
+		}
+		s := rangePos(text, starts, start, loc[0])
+		if s.Line > end {
+			continue // the match starts outside the range; only its tail may
+		}
+		if !global {
+			if seen[s.Line] {
+				continue
+			}
+			seen[s.Line] = true
+		}
+		out = append(out, subMatch{
+			start:  s,
+			end:    rangePos(text, starts, start, loc[1]),
+			groups: submatchStrings(text, loc),
+		})
+	}
+	return out
+}
+
+// joinRange joins lines [start, end] with "\n" and returns the byte offset each
+// line begins at inside the result.
+func joinRange(b *buffer.Buffer, start, end int) (string, []int) {
+	lines := make([]string, 0, end-start+1)
+	starts := make([]int, 0, end-start+1)
+	n := 0
+	for i := start; i <= end; i++ {
+		line := b.Line(i)
+		lines = append(lines, line)
+		starts = append(starts, n)
+		n += len(line) + 1 // + the joining "\n"
+	}
+	return strings.Join(lines, "\n"), starts
+}
+
+// rangePos maps a byte offset inside a joined range back to a buffer position.
+// An offset landing on a joining newline belongs to the line before it, at its
+// end — where a match running to the end of a line should report.
+func rangePos(text string, starts []int, first, byteOff int) buffer.Position {
+	i := sort.Search(len(starts), func(k int) bool { return starts[k] > byteOff }) - 1
+	if i < 0 {
+		i = 0
+	}
+	return buffer.Position{Line: first + i, Col: byteToRune(text[starts[i]:], byteOff-starts[i])}
 }
 
 // substituteLine replaces matches of re in line with repl (all matches when
@@ -172,7 +337,9 @@ func submatchStrings(line string, m []int) []string {
 }
 
 // expandRepl expands a vim-style replacement: `&` and `\0` are the whole match,
-// `\1`-`\9` the capture groups, `\&` a literal `&`, `\\` a literal backslash;
+// `\1`-`\9` the capture groups, `\&` a literal `&`, `\\` a literal backslash,
+// `\n` and `\r` a line break (#2600 — vim spells it `\r`, and `\n` joins it
+// here because that is what the find/replace panel's ex hand-off writes);
 // any other `\x` contributes x. `$` is literal (no Go `$name` expansion).
 func expandRepl(repl string, groups []string) string {
 	var b strings.Builder
@@ -193,11 +360,91 @@ func expandRepl(repl string, groups []string) string {
 				b.WriteByte('&')
 			case n == '\\':
 				b.WriteByte('\\')
+			case n == 'n', n == 'r':
+				b.WriteByte('\n')
 			default:
 				b.WriteByte(n)
 			}
 		default:
 			b.WriteByte(c)
+		}
+	}
+	return b.String()
+}
+
+// subSpansLines reports whether a substitution can cross a line boundary: the
+// pattern can match a newline, or the replacement inserts one (#2600). It is
+// the switch between the per-line engine and the joined-range one.
+func subSpansLines(pat string, regex bool, repl string) bool {
+	if strings.Contains(pat, "\n") || strings.Contains(repl, "\n") {
+		return true
+	}
+	if escapesBreak(repl) {
+		return true
+	}
+	// A literal pattern's "\n" was already turned into a real break above, so
+	// only a regex still carries one as an escape. "(?s)" makes "." match a
+	// newline, which is the other way a regex reaches across a line.
+	return regex && (escapesBreak(pat) || strings.Contains(pat, "(?s"))
+}
+
+// escapesBreak reports whether s contains a `\n` or `\r` escape, skipping over
+// `\\` so an escaped backslash never reads as the start of one.
+func escapesBreak(s string) bool { return countBreakEscapes(s) > 0 }
+
+// countBreakEscapes counts the `\n` / `\r` escapes in s.
+func countBreakEscapes(s string) int {
+	n := 0
+	for i := 0; i < len(s); i++ {
+		if s[i] != '\\' || i+1 >= len(s) {
+			continue
+		}
+		if s[i+1] == 'n' || s[i+1] == 'r' {
+			n++
+		}
+		i++ // the escaped byte is consumed, `\\n` is a backslash then an n
+	}
+	return n
+}
+
+// subReach is how many lines past a range's end a match of pat may still run:
+// the line breaks the pattern itself holds. A literal pattern carries them as
+// real breaks by now, a regex may still spell them as escapes. A pattern whose
+// match can stretch further than it is written (a regex repeating a break)
+// simply stops at the range's reach, which is the bound that keeps the scan
+// proportional to the range.
+func subReach(pat string, regex bool) int {
+	n := strings.Count(pat, "\n")
+	if regex {
+		n += countBreakEscapes(pat)
+	}
+	return n
+}
+
+// unescapeBreaks turns the `\n` / `\r` escapes of a *literal* pattern into real
+// line breaks (#2600). Every other escape is left exactly as written — `\d`
+// stays a backslash and a d, which is how a literal search has always spelled
+// it — and `\\` is stepped over whole, so an escaped backslash can never pair
+// with a following n into a break.
+func unescapeBreaks(s string) string {
+	if !strings.Contains(s, `\`) {
+		return s
+	}
+	var b strings.Builder
+	for i := 0; i < len(s); i++ {
+		if s[i] != '\\' || i+1 >= len(s) {
+			b.WriteByte(s[i])
+			continue
+		}
+		switch s[i+1] {
+		case 'n', 'r':
+			b.WriteByte('\n')
+			i++
+		case '\\':
+			b.WriteString(`\\`)
+			i++
+		default:
+			b.WriteByte(s[i])
 		}
 	}
 	return b.String()
@@ -244,13 +491,23 @@ func parseSubFlags(flags string) (global, ci, countOnly, confirm bool, errMsg st
 
 // compileSub builds the substitution regexp from the search-layer convention:
 // a literal pattern is quoted, `i` prepends the case-insensitive flag.
-func compileSub(pattern string, regex, ci bool) (*regexp.Regexp, error) {
+//
+// spanning marks the joined-range engine (#2600), which runs the expression
+// over several lines at once: there `^` and `$` must keep meaning line start
+// and line end, which per-line matching gave them for free, so the multi-line
+// flag goes on.
+func compileSub(pattern string, regex, ci, spanning bool) (*regexp.Regexp, error) {
 	expr := pattern
 	if !regex {
 		expr = regexp.QuoteMeta(pattern)
 	}
-	if ci {
+	switch {
+	case ci && spanning:
+		expr = "(?mi)" + expr
+	case ci:
 		expr = "(?i)" + expr
+	case spanning:
+		expr = "(?m)" + expr
 	}
 	return regexp.Compile(expr)
 }
