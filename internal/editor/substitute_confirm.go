@@ -3,7 +3,6 @@ package editor
 import (
 	"fmt"
 	"regexp"
-	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -11,25 +10,25 @@ import (
 	"ike/internal/editor/history"
 )
 
-// subHit is one precomputed substitute match: its line, the match's rune-column
-// span in the original line, and the capture-group strings for the replacement.
-type subHit struct {
-	line       int
-	start, end int
-	groups     []string
-}
-
 // subConfirmState drives the interactive ":s///c" confirmation. It walks the
 // precomputed hits in reading order, applying accepted replacements into one
-// open recorder (a single undo unit). lineDelta tracks the running rune-column
-// shift already applied to each line so a later hit on the same line maps from
-// its original span to the current buffer; curLine/curStart/curEnd is the span
-// the view highlights.
+// open recorder (a single undo unit).
+//
+// Accepted replacements move the text under the hits that follow, so each hit's
+// original range is mapped through two running shifts (#2600): lineShift is the
+// net number of lines the replacements so far added or removed — a replacement
+// carrying a line break, or a match that spanned lines, changes it — and
+// colDelta is the rune-column shift on the line a replacement ended on, which
+// is where the next hit on that same original line now lives.
+// curLine/curStart/curEnd is the span the view highlights; for a match
+// spanning lines that is its part on the first line, which is where the cursor
+// goes too.
 type subConfirmState struct {
 	repl                      string
-	hits                      []subHit
+	hits                      []subMatch
 	idx                       int
-	lineDelta                 map[int]int
+	lineShift                 int
+	colDelta                  map[int]int
 	rec                       *history.Recorder
 	replaced                  int
 	touched                   map[int]bool
@@ -38,36 +37,20 @@ type subConfirmState struct {
 
 // beginSubstituteConfirm collects the matches over [start,end] and enters the
 // confirmation sub-state on the first one. Without the "g" flag only the first
-// match per line is offered, matching vim.
-func (m Model) beginSubstituteConfirm(re *regexp.Regexp, repl string, global bool, start, end int, pat string) Model {
-	var hits []subHit
-	for i := start; i <= end; i++ {
-		line := m.buf.Line(i)
-		for _, loc := range re.FindAllStringSubmatchIndex(line, -1) {
-			if loc[0] == loc[1] {
-				continue // skip empty matches
-			}
-			hits = append(hits, subHit{
-				line:   i,
-				start:  byteToRune(line, loc[0]),
-				end:    byteToRune(line, loc[1]),
-				groups: submatchStrings(line, loc),
-			})
-			if !global {
-				break
-			}
-		}
-	}
+// match per line is offered, matching vim. spanning selects the joined-range
+// scan, the one that can see a match crossing a line boundary (#2600).
+func (m Model) beginSubstituteConfirm(re *regexp.Regexp, repl string, global, spanning bool, reach, start, end int, pat string) Model {
+	hits := collectSubMatches(m.buf, re, global, spanning, reach, start, end)
 	if len(hits) == 0 {
 		m.cmdMsg = "E: pattern not found: " + pat
 		return m
 	}
 	m.subConfirm = &subConfirmState{
-		repl:      repl,
-		hits:      hits,
-		lineDelta: map[int]int{},
-		rec:       history.NewRecorder(m.buf, m.cursor),
-		touched:   map[int]bool{},
+		repl:     repl,
+		hits:     hits,
+		colDelta: map[int]int{},
+		rec:      history.NewRecorder(m.buf, m.cursor),
+		touched:  map[int]bool{},
 	}
 	m.mode = Command // capture single-letter keys; the prompt renders on the ":" row
 	m = m.focusSubMatch()
@@ -106,35 +89,54 @@ func (m Model) updateSubConfirm(key tea.KeyPressMsg) Model {
 	return m // any other key waits for a valid answer
 }
 
+// mapPos maps an original buffer position through the shifts the already
+// applied replacements introduced.
+func (sc *subConfirmState) mapPos(p buffer.Position) buffer.Position {
+	return buffer.Position{Line: p.Line + sc.lineShift, Col: p.Col + sc.colDelta[p.Line]}
+}
+
 // focusSubMatch positions the cursor on the current hit and records its span for
-// the view to highlight, mapping the original span through the line's delta.
+// the view to highlight, mapping the original span through the running shifts.
+// A hit spanning lines highlights its part of the first line, out to the line
+// end — the rest of the match is on the lines below, which the prompt is about
+// to rewrite anyway.
 func (m Model) focusSubMatch() Model {
 	sc := m.subConfirm
 	h := sc.hits[sc.idx]
-	d := sc.lineDelta[h.line]
-	sc.curLine, sc.curStart, sc.curEnd = h.line, h.start+d, h.end+d
-	m.cursor = m.buf.ClampCursor(buffer.Position{Line: h.line, Col: h.start + d})
+	s, e := sc.mapPos(h.start), sc.mapPos(h.end)
+	sc.curLine, sc.curStart = s.Line, s.Col
+	if e.Line == s.Line {
+		sc.curEnd = e.Col
+	} else {
+		sc.curEnd = m.buf.RuneLen(s.Line)
+	}
+	m.cursor = m.buf.ClampCursor(s)
 	m.desiredCol = m.cursor.Col
 	return m
 }
 
-// applyCurrentMatch replaces the current hit through the open recorder and grows
-// the line's delta by the length change so later hits on that line stay aligned.
+// applyCurrentMatch replaces the current hit through the open recorder and
+// grows the shifts by what the replacement did, so later hits stay aligned: the
+// line count it changed feeds lineShift, and where it left the end of the
+// original last line feeds that line's column delta.
 func (m *Model) applyCurrentMatch() {
 	sc := m.subConfirm
 	h := sc.hits[sc.idx]
-	d := sc.lineDelta[h.line]
+	s, e := sc.mapPos(h.start), sc.mapPos(h.end)
 	text := expandRepl(sc.repl, h.groups)
-	sc.rec.Apply(buffer.Edit{
-		Range: buffer.Range{
-			Start: buffer.Position{Line: h.line, Col: h.start + d},
-			End:   buffer.Position{Line: h.line, Col: h.end + d},
-		},
-		Text: text,
+	end := sc.rec.Apply(buffer.Edit{
+		Range: buffer.Range{Start: s, End: e},
+		Text:  text,
 	})
-	sc.lineDelta[h.line] = d + utf8.RuneCountInString(text) - (h.end - h.start)
+	// The text that followed the match on its last line now continues at end,
+	// so a later hit on that original line shifts by the difference. lineShift
+	// takes the net line-count change; end already accounts for the old one.
+	sc.lineShift += (end.Line - s.Line) - (e.Line - s.Line)
+	sc.colDelta[h.end.Line] = end.Col - h.end.Col
 	sc.replaced++
-	sc.touched[h.line] = true
+	for l := h.start.Line; l <= h.end.Line; l++ {
+		sc.touched[l] = true
+	}
 }
 
 // advanceSubConfirm moves to the next hit, or finishes when none remain.
@@ -163,7 +165,9 @@ func (m Model) finishSubConfirm() Model {
 			}
 		}
 		if hi >= 0 {
-			lastLine = hi
+			// touched holds *original* line numbers; the replacements may have
+			// moved them (#2600), so the running shift maps the last one back.
+			lastLine = hi + sc.lineShift
 		}
 	}
 	cursorAfter := m.buf.ClampCursor(buffer.Position{Line: lastLine, Col: 0})

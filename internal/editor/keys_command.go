@@ -191,6 +191,15 @@ func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		m.recallHistory(1)
 	case key.Code == tea.KeyDown:
 		m.recallHistory(-1)
+	case m.searching && ui.IsBreakKey(key):
+		// alt+enter inserts a line break into the search pattern (#2600), which
+		// makes it match across a line boundary; plain enter still commits. It
+		// is an in-field chord, not a command, so it carries no keymap entry —
+		// the app dispatch hands it to the pane while this line is open,
+		// because alt+enter is lsp.codeAction everywhere else in the editor.
+		m.cmdline, m.cmdCur = ui.InsertBreak(m.cmdline, m.cmdCur)
+		m.cmdHistIdx = -1
+		m.searchPreview()
 	case key.Code == tea.KeyEnter:
 		if m.filtering {
 			// Follow filter (#2255): the pattern is already applied live, so

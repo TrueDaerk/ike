@@ -93,6 +93,16 @@ func (m Model) updateReplacePanel(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		m.closeReplacePanel(true)
 	case key.Code == tea.KeyTab:
 		p.field = 1 - p.field
+	case ui.IsBreakKey(key):
+		// alt+enter inserts a line break into the active field (#2600),
+		// JetBrains-style, while plain enter keeps running the substitute. It
+		// is an in-field chord rather than a command — like the panel's ctrl+u
+		// and ctrl+a — so it carries no keymap entry and the keybind audit has
+		// nothing to record.
+		m.panelField().InsertBreak()
+		if p.field == 0 {
+			m.previewPanelFind()
+		}
 	case key.Code == tea.KeyEnter:
 		return m.runPanelSubstitute("gc")
 	case key.Code == 'a' && key.Mod == tea.ModCtrl:
@@ -155,9 +165,16 @@ func (m Model) runPanelSubstitute(flags string) (Model, tea.Cmd) {
 }
 
 // buildSubLine assembles "%s<d>find<d>repl<d>flags" with a delimiter that
-// appears in neither field, so no escaping is ever needed. ok=false when
-// every candidate collides (pathological input).
+// appears in neither field, so no delimiter escaping is ever needed. ok=false
+// when every candidate collides (pathological input).
+//
+// The ex line is a single line, so a line break in either field (#2600) cannot
+// travel through it raw — parseSub would never see the second half. It is
+// written as the `\n` escape instead, which both ends of the hand-off honour:
+// substitute() turns it back into a break in a literal pattern, and expandRepl
+// expands it in the replacement.
 func buildSubLine(find, repl, flags string) (string, bool) {
+	find, repl = escapeSubBreaks(find), escapeSubBreaks(repl)
 	for _, d := range "/#|@~!+=" {
 		if strings.ContainsRune(find, d) || strings.ContainsRune(repl, d) {
 			continue
@@ -167,6 +184,10 @@ func buildSubLine(find, repl, flags string) (string, bool) {
 	}
 	return "", false
 }
+
+// escapeSubBreaks writes a field's line breaks as the `\n` escape the ex line
+// carries them in.
+func escapeSubBreaks(s string) string { return strings.ReplaceAll(s, "\n", `\n`) }
 
 // replacePanelRows renders the panel's bottom rows: the two labelled fields
 // (active one carries the cursor block), a live match tally on the Find row,
@@ -186,7 +207,7 @@ func (m Model) replacePanelRows(width int) []string {
 	}
 	find := "Find     " + m.panelInput(p.find.Text, p.find.Cur, p.field == 0) + tally
 	repl := "Replace  " + m.panelInput(p.repl.Text, p.repl.Cur, p.field == 1)
-	hint := "[enter] confirm each · [ctrl+a] replace all · [tab] switch field · [esc] cancel"
+	hint := "[enter] confirm each · [ctrl+a] replace all · [alt+enter] line break · [tab] switch field · [esc] cancel"
 	if m.cmdMsg != "" {
 		// Panel errors ("E: empty pattern") render where the ex line would
 		// (#292) — the hint row is the panel's message surface.
@@ -197,20 +218,21 @@ func (m Model) replacePanelRows(width int) []string {
 
 // panelInput renders one field's text, the active one with a cursor block.
 // A preselected Find prefill renders inverted so it reads as replace-on-type
-// (#292).
+// (#292). A line break in the text (#2600) renders as the one-cell marker
+// glyph through ui.ShowBreaks, so the row stays one row.
 func (m Model) panelInput(text string, cur int, active bool) string {
 	if m.replPanel.preselect && active && m.replPanel.field == 0 && text != "" {
-		return lipgloss.NewStyle().Reverse(true).Render(text) + "▏"
+		return lipgloss.NewStyle().Reverse(true).Render(ui.ShowBreaks(text)) + "▏"
 	}
 	if active {
 		// The cursor sits inside the text (#2002), so it has to be visible
 		// wherever it is — end-of-text still shows the trailing block.
 		if cur >= len([]rune(text)) {
-			return text + "▏"
+			return ui.ShowBreaks(text) + "▏"
 		}
 		return ui.CursorView(text, cur)
 	}
-	return text
+	return ui.ShowBreaks(text)
 }
 
 // truncRow clamps a panel row to the pane width.
