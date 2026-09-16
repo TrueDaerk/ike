@@ -1,5 +1,20 @@
 # Log
 
+## 2026-09-16 (The kill chords stay in the open command line, #2602)
+
+- **`cmd+backspace` / `alt+backspace` no longer delete document text while a line input
+  is open.** Both are bound in the Editor keymap context (`editor.deleteLine`,
+  `editor.deleteWordBackward`), and a modified chord stays eligible for the keybinding
+  layer even in a capturing editor — so the keymap resolved them before the pane and the
+  buffer lost a word or a whole line while the user was editing a search query.
+- **The app dispatch claims them for the input**, exactly like `alt+enter` in #2600:
+  `ui.IsKillKey` (the modified backspace/delete kills, shift excluded — `cmd+shift+
+  backspace` is `nav.lastEdit` — and the readline letter twins left out) plus
+  `editor.LineInputOpen`, which covers the `/` `?` search line, the `:` ex line, the
+  follow filter and the `cmd+r` replace panel. The keys then route to the pane, where
+  `ui.EditKey` has always implemented them. Outside a line input the chords stay the
+  buffer commands they were.
+
 ## 2026-09-16 (cmd+g steps the editor's open search line, #2603)
 
 - **The half-typed search is walkable.** With `/`, `?` or cmd+f up, `search.nextMatch`

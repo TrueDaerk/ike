@@ -9025,6 +9025,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if ui.IsBreakKey(msg) && m.editorFindField() {
 			return m.routeKey(msg)
 		}
+		// A single-line input open in the focused editor — the "/" "?" search
+		// line, the ":" ex line, the cmd+r replace panel — owns the kill
+		// chords the same way (#2602). cmd+backspace and alt+backspace are
+		// bound to editor.deleteLine / editor.deleteWordBackward in the Editor
+		// context, so without this claim the keymap layer resolved them first
+		// and the document lost a line or a word while the user was editing a
+		// query.
+		if ui.IsKillKey(msg) && m.editorLineInput() {
+			return m.routeKey(msg)
+		}
 		// Keybinding layer (Roadmap 0080): resolve IDE-level chords to registered
 		// commands before pane dispatch. In a text-capturing editor only modified
 		// chords (or a chord already in progress) are eligible; plain letters always
@@ -9915,19 +9925,34 @@ func (m Model) editorCapturing() bool {
 // editorFindField reports whether the focused editor has a find/replace field
 // open — the "/" "?" search line or the cmd+r replace panel (#2600).
 func (m Model) editorFindField() bool {
+	return m.focusedEditorSays((*editor.Model).FindFieldOpen)
+}
+
+// editorLineInput reports whether the focused editor has any single-line input
+// open — the command line in any reading, or the replace panel (#2602).
+func (m Model) editorLineInput() bool {
+	return m.focusedEditorSays((*editor.Model).LineInputOpen)
+}
+
+// focusedEditorSays answers pred about the editor of the focused pane — a
+// plain editor tab, or a diff pane's editable column (#496), which may itself
+// live in a tab (#1778). It is false whenever the focused pane is not an
+// editor at all.
+func (m Model) focusedEditorSays(pred func(*editor.Model) bool) bool {
 	inst := m.focusedContent()
 	if inst == nil {
 		return false
 	}
-	if inst.Kind() == pane.KindDiff {
-		ed := inst.DiffEditor()
-		return ed != nil && ed.FindFieldOpen()
-	}
-	if inst.Kind() != pane.KindEditor {
+	var ed *editor.Model
+	switch inst.Kind() {
+	case pane.KindDiff:
+		ed = inst.DiffEditor()
+	case pane.KindEditor:
+		ed = inst.Editor()
+	default:
 		return false
 	}
-	ed := inst.Editor()
-	return ed != nil && ed.FindFieldOpen()
+	return ed != nil && pred(ed)
 }
 
 // noMatchesNotice is what the match-step chord says when it owns the key and

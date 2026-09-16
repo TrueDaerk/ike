@@ -568,7 +568,14 @@ Cluster-aware motion is a possible follow-up, not part of this change.
   (`internal/ui.EditKey`, #763, #1110): left/right move the cursor, typing
   inserts at it, alt+backspace deletes the previous word, cmd+backspace
   clears the line, and the incremental preview keeps tracking mid-query
-  edits.
+  edits. Those two kills are also `editor.deleteWordBackward` /
+  `editor.deleteLine` in the Editor keymap context, so — like `alt+enter`
+  above — the app dispatch claims them (`ui.IsKillKey` + `LineInputOpen`,
+  #2602) while any single-line input owns the editor's keyboard: the `/` `?`
+  and `:` lines, the follow filter and the `cmd+r` replace panel. Without the
+  claim the keymap resolved them first and the chords deleted a word or a
+  whole line **in the document** while the user was editing a query. Outside
+  such an input they stay the buffer commands they always were.
   **Query history** (#1171): `up`/`down` on the open line cycle recent
   committed queries, vim-style (up = older, most recent first; down past the
   newest restores the half-typed live line). A recall replaces the input
