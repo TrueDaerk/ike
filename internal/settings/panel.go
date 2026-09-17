@@ -58,9 +58,9 @@ type row struct {
 	activate func() // rowItem positioning
 }
 
-// Model is the settings panel state. Values are never cached: every render
-// reads the live config (config.Get().Flat()), and every edit goes through the
-// write-back layer and the reload pipeline.
+// Model is the settings panel state. Values are not stored: every render reads
+// the live config (config.Get().Flat(), memoized per event since #2616), and
+// every edit goes through the write-back layer and the reload pipeline.
 type Model struct {
 	pages []Page
 	opts  config.Options
@@ -134,6 +134,19 @@ type Model struct {
 
 	// search memoizes the filter's result rows (#2179); see searchCache.
 	search searchCache
+	// searchPinned keeps that memo across the event just handled and the
+	// frame it draws (#2616): set by Update for a pure selection move, cleared
+	// by the render that used it and by every other entry point.
+	searchPinned bool
+	// flatCache memoizes the live config's flat key map for the current event
+	// (#2616); see flat.
+	flatCache map[string]string
+	// origins is config.Origins for the current event (#2616): one decode of
+	// both config layers instead of two file reads per rendered row — with a
+	// filter up that was hundreds of file reads per frame, which is what made
+	// a held arrow key lag behind the key repeat. It is dropped wherever the
+	// search cache is, so it never outlives the write that could change it.
+	origins func(key string) string
 }
 
 // scopeSel names the panel's write-scope selector states.
@@ -538,7 +551,17 @@ func (m *Model) Deliver(msg tea.Msg) tea.Cmd {
 // Update handles one key while the panel is open. Returned commands carry
 // write-back reloads.
 func (m *Model) Update(key tea.KeyPressMsg) tea.Cmd {
-	m.invalidateSearch()
+	// A pure selection move keeps the memoized result list alive through the
+	// event *and* the frame it draws (#2616): it walks the list, it cannot
+	// change anything the list was built from. Without that a held arrow key
+	// re-ran the fuzzy match over every page of the schema twice per repeat —
+	// once here, once in View — and the highlight went on travelling for
+	// seconds after the key was released.
+	pinned := m.open && m.filter != "" && !m.SubOpen() && navOnlyKey(key)
+	if !pinned {
+		m.invalidateSearch()
+	}
+	m.searchPinned = pinned
 	if !m.open {
 		return nil
 	}
@@ -777,6 +800,20 @@ func (m *Model) moveNav(key string) {
 		m.followForm = true
 		m.syncHitSel()
 	}
+}
+
+// navOnlyKey reports that key can do nothing but move a selection: the list
+// keys and the match-step chord. It is the gate on keeping the search cache
+// across an event (#2616) — every other key may edit the query, write a value
+// or run a custom page's action, any of which changes the result list.
+func navOnlyKey(key tea.KeyPressMsg) bool {
+	name := key.String()
+	switch name {
+	case "up", "down", "k", "j", "pgup", "pgdown", "home", "end":
+		return true
+	}
+	_, ok := ui.MatchStepChord(name)
+	return ok
 }
 
 // move shifts the focused column's selection by one step, wrapping at both

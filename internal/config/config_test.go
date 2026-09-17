@@ -700,3 +700,35 @@ func TestInvalidTerminalPaletteEntriesDropped(t *testing.T) {
 		t.Fatalf("both problems must be reported, got %v", diags)
 	}
 }
+
+// TestOriginsMatchesOrigin guards the batched lookup (#2616): Origins decodes
+// both layers once and must answer exactly what Origin answers key by key —
+// the settings panel colours every rendered row with it.
+func TestOriginsMatchesOrigin(t *testing.T) {
+	dir := t.TempDir()
+	project := filepath.Join(dir, "project")
+	opts := Options{UserPath: filepath.Join(dir, "settings.toml"), ProjectRoot: project}
+	if err := WriteKey(opts, UserScope, "editor.tab_width", "4"); err != nil {
+		t.Fatalf("write user key: %v", err)
+	}
+	if err := WriteKey(opts, ProjectScope, "editor.use_spaces", "true"); err != nil {
+		t.Fatalf("write project key: %v", err)
+	}
+	// A key set in both layers must report the project layer, the one that
+	// wins.
+	if err := WriteKey(opts, UserScope, "editor.use_spaces", "false"); err != nil {
+		t.Fatalf("write user key: %v", err)
+	}
+	at := Origins(opts)
+	for _, key := range []string{"editor.tab_width", "editor.use_spaces", "editor.wrap"} {
+		if got, want := at(key), Origin(opts, key); got != want {
+			t.Errorf("Origins()(%s) = %q, want %q", key, got, want)
+		}
+	}
+	if got := at("editor.use_spaces"); got != "project" {
+		t.Errorf("a key in both layers must read project, got %q", got)
+	}
+	if got := at("editor.wrap"); got != "default" {
+		t.Errorf("an unset key must read default, got %q", got)
+	}
+}

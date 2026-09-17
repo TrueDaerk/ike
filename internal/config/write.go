@@ -88,13 +88,46 @@ func splitKey(key string) (parents []string, leaf string) {
 	return parts[:len(parts)-1], parts[len(parts)-1]
 }
 
+// Origins resolves the origin of many keys at once (#2616). Origin re-reads
+// and re-parses both layer files on every call, which a list rendering one row
+// per setting otherwise pays once per row — hundreds of file reads per frame in
+// the settings panel's filter results. The returned lookup answers from the two
+// layers as they stood when it was built, so callers drop it after a write.
+func Origins(opts Options) func(key string) string {
+	project, err := decodeFile(layerPath(opts, ProjectScope))
+	if err != nil {
+		project = nil
+	}
+	user, err := decodeFile(layerPath(opts, UserScope))
+	if err != nil {
+		user = nil
+	}
+	return func(key string) string {
+		switch {
+		case rawHasKey(project, key):
+			return "project"
+		case rawHasKey(user, key):
+			return "user"
+		}
+		return "default"
+	}
+}
+
 // hasKey reports whether the TOML file at path sets the dotted key.
 func hasKey(path, key string) bool {
 	if path == "" {
 		return false
 	}
 	raw, err := decodeFile(path)
-	if err != nil || raw == nil {
+	if err != nil {
+		return false
+	}
+	return rawHasKey(raw, key)
+}
+
+// rawHasKey reports whether a decoded layer sets the dotted key.
+func rawHasKey(raw map[string]any, key string) bool {
+	if raw == nil {
 		return false
 	}
 	parents, leaf := splitKey(key)

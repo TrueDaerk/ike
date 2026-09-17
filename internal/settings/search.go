@@ -89,8 +89,12 @@ type searchCache struct {
 	valid bool
 }
 
-// invalidateSearch drops the memoized result list.
-func (m *Model) invalidateSearch() { m.search = searchCache{} }
+// invalidateSearch drops the memoized result list — and with it the config
+// memos and the pin (#2616), which share its "one input event" lifetime.
+func (m *Model) invalidateSearch() {
+	m.search, m.origins, m.flatCache = searchCache{}, nil, nil
+	m.searchPinned = false
+}
 
 // scored is one match with the score that ordered it.
 type scored struct {

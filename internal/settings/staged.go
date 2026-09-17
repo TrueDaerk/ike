@@ -46,7 +46,29 @@ func (m *Model) value(key string) string {
 	if c, ok := m.change(key); ok {
 		return c.shown
 	}
-	return liveValue(key)
+	return m.flat()[key]
+}
+
+// flat is the live config's flat view, memoized for the current event
+// (#2616): Flat builds the whole key → value map from scratch on every call,
+// and the settings column asks for a value once per rendered row. The memo
+// shares the search cache's lifetime, so it is dropped before any event that
+// could write a value.
+func (m *Model) flat() map[string]string {
+	if m.flatCache == nil {
+		m.flatCache = config.Get().Flat()
+	}
+	return m.flatCache
+}
+
+// origin reports which layer set key, through a config.Origins lookup built
+// once per event the same way flat is (#2616): config.Origin re-reads and
+// re-parses both layer files from disk on every single call.
+func (m *Model) origin(key string) string {
+	if m.origins == nil {
+		m.origins = config.Origins(m.opts)
+	}
+	return m.origins(key)
 }
 
 // liveValue reads an entry's value from the live config, ignoring staging.
