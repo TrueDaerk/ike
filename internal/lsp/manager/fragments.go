@@ -238,7 +238,7 @@ func (m *Manager) reconcileFragments(hostPath string, found []detectedFragment) 
 // A failed spawn degrades silently (nil): the fragment simply stays plain text.
 func (m *Manager) openFragment(hostPath string, slot int, det detectedFragment, text string, spec lsp.ServerSpec) *fragmentDoc {
 	fr := det.frag
-	root := detectRoot(hostPath, spec.RootMarkers)
+	root := m.rootFor(hostPath, spec.RootMarkers) // a scratch host attaches to the project (#2612)
 	srv, err := m.ensureServer(fr.Lang, root, spec)
 	if err != nil {
 		return nil

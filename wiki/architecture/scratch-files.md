@@ -389,6 +389,22 @@ with the project's resolved interpreter, so a Python scratch runs under the
 project's virtualenv and a PHP scratch under its configured `php`. See
 [run configurations](./run-configurations.md).
 
+## Code insight in a scratch (#2612)
+
+The language server follows the same rule. A scratch lies outside the project
+tree, so the LSP manager's upward root walk would end at the scratch store: a
+second server, rooted at `~/.ike/scratches` and analysing against the *system*
+toolchain, where a project dependency reads as an unresolved import. Instead
+the manager attaches a scratch to the **active project root** — the workspace
+it was opened in — so it is served by the very server the project's files talk
+to, with the project's detected interpreter, module cache and settings: a
+Python scratch resolves the venv's packages and completes their symbols, a Go
+or PHP scratch the module's. No second server is spawned, and the scratch is a
+document of that root for teardown too (idle shutdown closes and lazily
+reopens it with the project). Only files inside the store move this way; a file
+opened from anywhere else on disk keeps its own detected root. See
+[LSP](./lsp.md#workspace-roots--scratch-files-2612).
+
 ## Listing (#352, #2057)
 
 `scratch.list` ("Open Scratch File…", palette + File menu) opens the palette

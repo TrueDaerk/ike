@@ -89,6 +89,11 @@ type Manager struct {
 	// fresh incident instead of a continuation of the current restart round
 	// (restart.go). Zero means restartStableRun.
 	stableRun time.Duration
+	// projectRoot is the active workspace's root as the host last announced
+	// it (SetProjectRoot, #2612): the root a scratch file attaches to, so it
+	// is served by the project's server instead of one rooted at the scratch
+	// store. Guarded by mu; "" means "never told" and disables the rule.
+	projectRoot string
 	// companionsHinted marks languages whose optional companion tools were
 	// already probed (#1067) — the missing-tool hint fires once per language
 	// per manager lifetime, not per file or per root.
@@ -231,7 +236,9 @@ func (m *Manager) Open(path, lang, text string) error {
 	if !ok {
 		return nil // no server configured for this language: silent no-op
 	}
-	root := detectRoot(path, spec.RootMarkers)
+	// A scratch file rides on the project's server (#2612); everything else
+	// is served under the root detected from its own location.
+	root := m.rootFor(path, spec.RootMarkers)
 	srv, err := m.ensureServer(srvLang, root, spec)
 	if err != nil {
 		if errors.Is(err, errServerDisabled) {
@@ -1145,19 +1152,17 @@ func (m *Manager) StopLang(lang string) {
 }
 
 // CloseRoot releases everything the manager holds under one project root
-// (#825): every open document whose path lies inside root closes (didClose to
-// servers that keep running), and every server rooted inside root stops
-// outright. Called when a background workspace is torn down; the next
-// document event respawns lazily. Best-effort, like Shutdown.
+// (#825): every open document accounted to root closes (didClose to servers
+// that keep running), and every server rooted inside root stops outright.
+// Called when a background workspace is torn down; the next document event
+// respawns lazily. Best-effort, like Shutdown.
+//
+// "Accounted to root" is the document's own root, not just its path: a scratch
+// file attached to the project root (#2612) lives outside the tree yet belongs
+// to this root's server, so it closes with it — and reopens lazily with it —
+// instead of being orphaned on a stopped server.
 func (m *Manager) CloseRoot(root string) {
-	m.mu.Lock()
-	var paths []string
-	for path := range m.docs {
-		if underRoot(path, root) {
-			paths = append(paths, path)
-		}
-	}
-	m.mu.Unlock()
+	paths := m.RootDocs(root)
 	// Close releases the doc, its fragments and its diagnostics, and notifies
 	// the server — wasted on servers stopped below, but harmless.
 	for _, p := range paths {
@@ -1208,6 +1213,24 @@ func (m *Manager) CloseRoot(root string) {
 	for _, p := range flush {
 		m.publishEmpty(p, nil, 0)
 	}
+}
+
+// RootDocs returns the paths of the open documents accounted to root, sorted:
+// those inside the tree plus the out-of-tree ones attached to it — a scratch
+// served by the project's server (#2612). CloseRoot closes exactly these, and
+// the bridge prunes its per-path caches for them, so no cache entry outlives
+// the document it describes.
+func (m *Manager) RootDocs(root string) []string {
+	m.mu.Lock()
+	var paths []string
+	for path, doc := range m.docs {
+		if underRoot(path, root) || underRoot(doc.root, root) {
+			paths = append(paths, path)
+		}
+	}
+	m.mu.Unlock()
+	sort.Strings(paths)
+	return paths
 }
 
 // underRoot reports whether path lies inside (or equals) root.
