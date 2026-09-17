@@ -45,10 +45,31 @@ func (m *Manager) clearServerDiagnostics(srvKey string, docs []*document) {
 // disabled language must not survive as stale findings. Open documents are
 // additionally covered by the callers' own #994 clears; the double empty
 // publish is harmless.
-func (m *Manager) flushPublished(lang string) {
+func (m *Manager) flushPublished(lang string) { m.flushPublishedIn(lang, "") }
+
+// flushPublishedIn is flushPublished optionally scoped to one project root
+// (#2613): a root-scoped stop leaves the language's servers in the *other*
+// roots running, and retracting their unopened paths' diagnostics would empty
+// the Problems view for projects nothing happened to. root == "" is the
+// unscoped flushPublished.
+func (m *Manager) flushPublishedIn(lang, root string) {
 	m.mu.Lock()
-	paths := m.published[lang]
-	delete(m.published, lang)
+	var paths map[string]bool
+	if root == "" {
+		paths = m.published[lang]
+		delete(m.published, lang)
+	} else {
+		paths = map[string]bool{}
+		for p := range m.published[lang] {
+			if underRoot(p, root) {
+				paths[p] = true
+				delete(m.published[lang], p)
+			}
+		}
+		if len(m.published[lang]) == 0 {
+			delete(m.published, lang)
+		}
+	}
 	// Open documents are cleared by the callers' own #994 paths — skip them
 	// here so nobody gets a duplicate empty publish.
 	skip := make(map[string]bool)

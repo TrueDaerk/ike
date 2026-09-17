@@ -29,6 +29,7 @@ type Language struct {
     Server     *ServerSpec  // LSP launch config, or nil
     ServerLanguage string   // delegate documents to this language's server (#1063); "" = own Server
     Toolchain  Toolchain    // project interpreter detector, or nil
+    Deps       *DepWatch    // dependency-update markers (#2613), or nil
 
     LineComment  string     // "//", "#" — comment-toggle marker (0120)
     BlockComment [2]string  // {"/*", "*/"}; empty = no block syntax
@@ -515,6 +516,62 @@ PATH shims, debug launch and LSP injection. Discovery
 (`internal/settings/toolchain_discover.go`) resolves shim candidates before
 listing too (including the hardcoded pyenv shim entry) and dedupes identical
 resolutions, so the picker shows versioned paths.
+
+## Dependency-update markers (#2613)
+
+A language declares **where its dependency tree announces itself** so a running
+language server notices `pip install -U`, `go get`, `npm install` or
+`composer update` without a manual `lsp.restart`. The declaration sits next to
+`Toolchain` on the `Language`, which keeps the list *data on the language*
+rather than a switch statement in the watcher or the LSP manager:
+
+```go
+type DepWatch struct {
+    Files   []string                   // root-relative marker paths; last segment may glob
+    Dirs    func(root string) []string // toolchain-resolved marker directories (absolute)
+    Restart bool                       // servers need a restart, not just a notification
+}
+```
+
+- **`Files`** are slash-form paths under the workspace root: `"go.mod"`,
+  `"vendor/composer/installed.json"`. A `*`/`?`/`[…]` in the last segment
+  (`"requirements*.txt"`) *matches* events but registers no watch — a pattern
+  names no file, and everything inside the root is covered by the recursive
+  watch anyway. Everything else — including the paths inside pruned trees —
+  gets its own per-path registration.
+- **`Dirs`** resolves directories only a toolchain probe can name. Python
+  returns the venv's `site-packages`, whose `<pkg>-<ver>.dist-info` entries
+  appear and disappear on every install. Watched **non-recursively**: the
+  directory's own entries are the signal, never its subtree. The probe is the
+  *project-local* part of the interpreter resolution above — active
+  `$VIRTUAL_ENV`, `.venv`/`venv`, a `.python-version` pin — and stops short of
+  the `python3`-on-`PATH` fallback on purpose: that is a machine default, and
+  following it would make every Go or PHP project on the box watch the system
+  site-packages.
+- **`Restart`** is the notify-vs-restart decision, per language. Default
+  (false) means the `workspace/didChangeWatchedFiles` notification is the whole
+  reaction. Python sets it because pyright resolves imports and stubs from
+  `site-packages` once and does not re-scan on that notification.
+
+| Language | Markers | Reaction |
+| --- | --- | --- |
+| `python` | `requirements*.txt`, `pyproject.toml`, `uv.lock`, `poetry.lock`, `<venv>/lib/python*/site-packages` | notify **+ restart** |
+| `go` | `go.mod`, `go.sum` | notify |
+| `typescript` | `package.json`, `package-lock.json`, `yarn.lock`, `pnpm-lock.yaml`, `node_modules/.package-lock.json` | notify |
+| `php` | `composer.json`, `composer.lock`, `vendor/composer/installed.json` | notify |
+
+Declare the markers on the language that **owns the server** — `go` rather than
+the delegating `go.mod` language next door — since that is the language the
+manager keys its servers by. (A declaration on a delegating language still
+works: the manager resolves it through `ServerLanguage`.)
+
+Helpers: `lang.DepWatchPaths(root)` resolves the concrete paths to register
+(path → language id), `lang.DepWatchMatch(root, path, registered)` reports
+which language a watcher event belongs to, and `lang.DepWatchRestart(id)`
+answers the per-language flag. The consuming ends are
+`internal/app/depwatch.go` (registration + event tagging) and
+`internal/lsp/manager/depwatch.go` (notify + debounced restart) — see
+[LSP § Dependency updates](./lsp.md#dependency-updates-2613).
 
 ## Task discovery (#1915)
 

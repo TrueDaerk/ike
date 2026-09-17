@@ -124,6 +124,16 @@ type Manager struct {
 	watchedPending map[string]int
 	watchedTimer   *time.Timer
 	watchedDelay   time.Duration
+	// Dependency-marker state (#2613, depwatch.go): watchedMarkers tags the
+	// paths of the current watched-files batch that are toolchain markers,
+	// so they reach their language's servers past the glob/language filter;
+	// depPending collects the (language, root) pairs awaiting a restart and
+	// depTimer/depDelay debounce it, so one `pip install` touching dozens of
+	// dist-info entries costs one restart.
+	watchedMarkers map[string]depMarker
+	depPending     map[depMarker]bool
+	depTimer       *time.Timer
+	depDelay       time.Duration
 }
 
 // server is one running language server instance.
@@ -186,6 +196,8 @@ func New(resolve func(lang string) (lsp.ServerSpec, bool), connect Connector, cb
 
 		watchedPending: make(map[string]int),
 		watchedDelay:   watchedDebounce,
+		watchedMarkers: make(map[string]depMarker),
+		depDelay:       depRestartDebounce,
 	}
 }
 
@@ -1082,11 +1094,18 @@ func (m *Manager) Encoding(path string) string {
 // StopLang stops every running server for one language (all roots), dropping
 // its open documents; the next document event respawns it lazily — the
 // per-server restart of the settings page (#130). Best-effort, like Shutdown.
-func (m *Manager) StopLang(lang string) {
+func (m *Manager) StopLang(lang string) { m.stopLang(lang, "") }
+
+// stopLang is StopLang optionally scoped to one project root (#2613): with
+// root set, only the language's servers sitting inside it stop and only its
+// documents are dropped, so a dependency-update restart in one project of a
+// monorepo leaves the sibling projects' servers — and their diagnostics —
+// untouched. root == "" is the unscoped StopLang.
+func (m *Manager) stopLang(lang, root string) {
 	m.mu.Lock()
 	var stopped []*server
 	for k, srv := range m.servers {
-		if srv.lang != lang {
+		if srv.lang != lang || (root != "" && !underRoot(srv.root, root)) {
 			continue
 		}
 		srv.closing = true // suppress restart on the resulting Done
@@ -1102,7 +1121,7 @@ func (m *Manager) StopLang(lang string) {
 	}
 	var cleared []clearedDoc
 	for path, doc := range m.docs {
-		if doc.lang == lang {
+		if doc.lang == lang && (root == "" || underRoot(doc.root, root)) {
 			cleared = append(cleared, clearedDoc{path, doc.lines, doc.version})
 			delete(m.docs, path)
 			delete(m.frags, path)
@@ -1118,6 +1137,15 @@ func (m *Manager) StopLang(lang string) {
 	// (and their published diagnostics) so the next host change reopens cleanly.
 	republish := map[string]bool{}
 	for host, fds := range m.frags {
+		if root != "" {
+			// Root-scoped: a fragment belongs to the root of its host
+			// document, which is the only thing that ties it to a project.
+			// A fragment whose host is already gone is cleaned up either
+			// way — nothing is left to own it.
+			if hd, ok := m.docs[host]; ok && !underRoot(hd.root, root) {
+				continue
+			}
+		}
 		for slot, fd := range fds {
 			if fd.lang == lang {
 				delete(fds, slot)
@@ -1145,7 +1173,7 @@ func (m *Manager) StopLang(lang string) {
 	for _, d := range cleared {
 		m.publishEmpty(d.path, d.lines, d.version)
 	}
-	m.flushPublished(lang) // unopened paths leave the Problems store too (#1102)
+	m.flushPublishedIn(lang, root) // unopened paths leave the Problems store too (#1102)
 	for host := range republish {
 		m.publishHostDiagnostics(host)
 	}

@@ -31,6 +31,13 @@ func init() {
 		// The Composer dependency manifest (#2419): the Dependencies tool
 		// window scans it via composer outdated + audit.
 		DepManifests: []string{"composer.json"},
+		// Dependency-update markers (#2613): a `composer update` rewrites the
+		// lock file and vendor/composer/installed.json — the latter inside
+		// the pruned vendor tree, so it needs its own per-path watch.
+		// Intelephense re-indexes on the notification; no restart.
+		Deps: &lang.DepWatch{Files: []string{
+			"composer.json", "composer.lock", "vendor/composer/installed.json",
+		}},
 		Server: &lang.ServerSpec{
 			Language:    "php",
 			Command:     "intelephense",

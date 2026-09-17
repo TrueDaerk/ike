@@ -418,6 +418,11 @@ func (b *bridge) fileSaved(h host.API, path string) {
 // externalFileChange forwards one 0140 watcher event (#1144) into the
 // manager's watched-files batch: servers get workspace/didChangeWatchedFiles
 // so their workspace index follows external creates/changes/deletes.
+//
+// An event the app tagged as a dependency-toolchain marker (#2613) — go.mod,
+// package.json, a `.dist-info` entry appearing in the venv's site-packages —
+// goes through DepEvent instead: same notification, plus the debounced
+// per-root restart for the languages whose servers do not re-index on it.
 func (b *bridge) externalFileChange(h host.API, fc plugin.FileChange) {
 	b.ensure(h)
 	mgr := b.manager()
@@ -430,6 +435,10 @@ func (b *bridge) externalFileChange(h host.API, fc plugin.FileChange) {
 		typ = protocol.FileChangeCreated
 	case plugin.FileDeleted:
 		typ = protocol.FileChangeDeleted
+	}
+	if fc.DepLang != "" {
+		mgr.DepEvent(fc.DepLang, fc.DepRoot, fc.Path, typ)
+		return
 	}
 	mgr.FileEvent(fc.Path, typ)
 }

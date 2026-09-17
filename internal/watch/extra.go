@@ -8,6 +8,10 @@ package watch
 // FileCreated / FileRemoved EventMsgs, through the same debounce and the same
 // self-save suppression.
 //
+// A registered path that *is* a directory is watched as itself — the
+// dependency-marker case (#2613): its direct entries report, its subtree does
+// not. Everything else registers as a file.
+//
 // The registration follows the file rather than its directory: on kqueue
 // (macOS) adding a *directory* opens one file descriptor per entry in it, so
 // watching /tmp — or a home directory — to hear about one file would cost
@@ -72,11 +76,21 @@ func (s *Service) WatchedPaths() []string {
 	return out
 }
 
-// isExtra reports whether path is a registered per-path watch.
+// isExtra reports whether path is a registered per-path watch, or an entry of
+// a registered *directory* watch. The second case is what a marker directory
+// needs (#2613): watching a venv's site-packages reports its entries by their
+// own paths, and a `<pkg>-1.2.dist-info` appearing there is exactly the
+// signal. It stays narrow — the parent must itself be registered *and* be
+// held as a directory watch — so the directory fallback a missing file holds
+// (a shared /tmp) keeps filtering its neighbours out.
 func (s *Service) isExtra(path string) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.extras[path] > 0
+	if s.extras[path] > 0 {
+		return true
+	}
+	dir := filepath.Dir(path)
+	return s.extras[dir] > 0 && s.extraDirs[dir]
 }
 
 // covered reports whether the recursive root watch already reports events for
@@ -155,9 +169,16 @@ func (s *Service) armExtras() {
 		if covered(root, p) {
 			continue
 		}
-		if st, err := os.Stat(p); err == nil && !st.IsDir() {
+		switch st, err := os.Stat(p); {
+		case err == nil && st.IsDir():
+			// A registered directory is watched itself, never its subtree
+			// (#2613): its entries are the signal, and descending into a
+			// site-packages would be exactly the thousands-of-files cost the
+			// recursive watch prunes it to avoid.
+			wantDirs[p] = true
+		case err == nil:
 			wantFiles[p] = true
-		} else {
+		default:
 			wantDirs[filepath.Dir(p)] = true
 		}
 	}

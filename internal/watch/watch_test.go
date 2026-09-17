@@ -49,6 +49,14 @@ func (c *collector) wait(t *testing.T, n int) []EventMsg {
 	return nil
 }
 
+// all returns a snapshot of the events collected so far, for the tests that
+// assert an absence rather than waiting for a count.
+func (c *collector) all() []EventMsg {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]EventMsg(nil), c.msgs...)
+}
+
 func (c *collector) count() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
