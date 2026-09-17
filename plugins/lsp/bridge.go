@@ -319,6 +319,15 @@ func (b *bridge) fileOpened(h host.API, path string) {
 	}
 	mgr := b.manager()
 	cfg := h.Config()
+	// The active workspace's root — the IDE is anchored at the process working
+	// directory, which a project switch chdirs — so the manager can attach a
+	// scratch file to the project's server instead of spawning one rooted at
+	// the scratch store (#2612). Re-announced per open, so a workspace switch
+	// (and the lazy respawn after an idle shutdown) lands the scratch on the
+	// workspace it is opened in.
+	if wd, err := os.Getwd(); err == nil && mgr != nil {
+		mgr.SetProjectRoot(wd)
+	}
 	go func() {
 		// The disk read runs off the caller too (#2260): Init fires this hook
 		// once per restored file, and a session full of large files would
@@ -2074,36 +2083,48 @@ func (b *bridge) workspaceIdle(root string) tea.Cmd {
 // stopped). Shared by eviction/close (#825) and the background idle shutdown
 // (#1521).
 func (b *bridge) closeRootState(root string) tea.Cmd {
+	// The documents the manager will close are asked for first — outside
+	// b.mu, since the manager takes its own lock — so the out-of-tree ones
+	// attached to this root (a scratch served by the project's server, #2612)
+	// are pruned here too instead of leaving caches for a closed document.
+	mgr := b.manager()
+	closing := map[string]bool{}
+	if mgr != nil {
+		for _, p := range mgr.RootDocs(root) {
+			closing[p] = true
+		}
+	}
+	dropped := func(path string) bool { return pathUnder(path, root) || closing[path] }
+
 	b.mu.Lock()
 	for path, t := range b.changeTimer {
-		if pathUnder(path, root) {
+		if dropped(path) {
 			t.Stop()
 			delete(b.changeTimer, path)
 		}
 	}
 	for path, t := range b.inheritTimer {
-		if pathUnder(path, root) {
+		if dropped(path) {
 			t.Stop()
 			delete(b.inheritTimer, path)
 		}
 	}
-	prunePaths(b.pendingChange, root)
-	prunePaths(b.diags, root)
-	prunePaths(b.sentDiags, root)
-	prunePaths(b.deliverDiags, root)
-	prunePaths(b.sigActive, root)
-	prunePaths(b.semInFlight, root)
-	prunePaths(b.semPending, root)
-	prunePaths(b.hintInFlight, root)
-	prunePaths(b.hintPending, root)
-	prunePaths(b.inheritInFlight, root)
-	prunePaths(b.inheritPending, root)
-	prunePaths(b.pendingDiags, root)
-	prunePaths(b.saveChains, root)
-	if pathUnder(b.compPath, root) {
+	prunePaths(b.pendingChange, dropped)
+	prunePaths(b.diags, dropped)
+	prunePaths(b.sentDiags, dropped)
+	prunePaths(b.deliverDiags, dropped)
+	prunePaths(b.sigActive, dropped)
+	prunePaths(b.semInFlight, dropped)
+	prunePaths(b.semPending, dropped)
+	prunePaths(b.hintInFlight, dropped)
+	prunePaths(b.hintPending, dropped)
+	prunePaths(b.inheritInFlight, dropped)
+	prunePaths(b.inheritPending, dropped)
+	prunePaths(b.pendingDiags, dropped)
+	prunePaths(b.saveChains, dropped)
+	if dropped(b.compPath) {
 		b.compItems, b.compPath, b.compResolved = nil, "", nil
 	}
-	mgr := b.mgr
 	b.mu.Unlock()
 	if mgr == nil {
 		return nil
@@ -2114,10 +2135,10 @@ func (b *bridge) closeRootState(root string) tea.Cmd {
 	}
 }
 
-// prunePaths drops every entry whose path lies under root.
-func prunePaths[V any](m map[string]V, root string) {
+// prunePaths drops every entry whose path the predicate claims.
+func prunePaths[V any](m map[string]V, dropped func(string) bool) {
 	for p := range m {
-		if pathUnder(p, root) {
+		if dropped(p) {
 			delete(m, p)
 		}
 	}

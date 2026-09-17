@@ -55,7 +55,8 @@ internal/lsp/
              on traffic that races the handshake (Intelephense dies on an early
              didOpen/initialized).
   manager/   owns every server: maps (language, workspace root) -> Client, detects
-             roots from root_markers, spawns lazily, routes ops, recovers from
+             roots from root_markers (scratch files attach to the active project
+             root instead, #2612), spawns lazily, routes ops, recovers from
              crashes (restart.go), and injects toolchain settings at spawn.
   config.go  ServerSpec (aliased from the lang registry) + Overlay: parse the
              [lsp.servers.<id>] config overlay onto the language's baseline.
@@ -1123,9 +1124,45 @@ all roots, and re-opens their documents — #2148) beside the global
 
 Closing a background workspace (#825) releases its LSP footprint the same
 lazy-respawn way: the `EventWorkspaceClosed` hook (`lsp.wsclose`) has the
-bridge drop its per-path caches under the closed root and call
-`Manager.CloseRoot`, which didCloses every document inside the root and
-stops every server rooted there.
+bridge drop its per-path caches for the closed root and call
+`Manager.CloseRoot`, which didCloses every document *accounted to* the root —
+`Manager.RootDocs`: the documents inside the tree plus the out-of-tree
+scratches attached to it (see below) — and stops every server rooted there.
+
+## Workspace roots & scratch files (#2612)
+
+`manager/roots.go` `detectRoot` walks **upwards from the file's own
+directory** until a root marker from the language's `root_markers` matches
+(`go.mod`, `composer.json`, `pyproject.toml`, `.git`, …), falling back to the
+file's directory. Root plus language is the server key, so every file in one
+project talks to one server instance, and `withToolchain` runs the language's
+`Toolchain.Detect` against that same root.
+
+**A scratch file is the one exception.** Scratches live under the user state
+dir (`~/.ike/scratches`, [scratch files](./scratch-files.md)), so the upward
+walk never reaches the project: a scratch would get a *second* server rooted
+at the scratch store, analysing against the system toolchain — a Python
+scratch importing a package from the project's venv reported "Import could not
+be resolved", and project dependencies were missing from completion.
+`Manager.rootFor` therefore serves a scratch under the **active project root**:
+
+- the root comes from `Manager.SetProjectRoot`, which the bridge announces on
+  every file open from the process working directory — the anchor a project
+  switch `chdir`s (`internal/app/switch.go`), so with several workspaces the
+  scratch attaches to the one it was opened in. A manager never told keeps the
+  plain `detectRoot` behaviour;
+- the redirect applies only to a path inside the scratch store
+  (`scratch.IsScratch`) that lies outside the project root. **Any other file
+  opened from elsewhere on disk keeps its detected root** — a file belonging to
+  another project still gets that project's server;
+- the scratch is then an ordinary document of that root: same server instance
+  (no second `RunningLangs` entry), the project's toolchain settings, and
+  `CloseRoot` — idle shutdown (#1521) included — closes it with the root and
+  respawns it lazily on the next open. Embedded fragments in a scratch host
+  (0300) follow the same root.
+
+This mirrors the rule running a scratch already follows: `run.file` executes it
+with the project's interpreter and the project root as cwd (#1223).
 
 ## Missing-server installation (#131)
 
