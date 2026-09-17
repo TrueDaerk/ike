@@ -91,7 +91,8 @@ const doubleClickWindow = 400 * time.Millisecond
 // click → word → line (#975): a double-click selects the word under the
 // pointer, a triple-click the whole line — both as regular visual selections,
 // so the usual operators and cmd+c/x apply. A later plain click collapses a
-// mouse-made selection back to a bare cursor.
+// mouse-made selection — and a Shift+arrow one (#2608) — back to a bare cursor;
+// Shift+click extends instead (see ShiftClick).
 func (m *Model) MouseClick(x, y int) {
 	p := m.clickPosition(x, y)
 	// A plain click returns to single-caret editing (#145).
@@ -115,8 +116,33 @@ func (m *Model) MouseClick(x, y int) {
 		// click-extends semantics.
 		m.mode = Normal
 		m.clickVisual = false
+	} else if m.shiftSelect {
+		// A selection started with Shift+arrows is GUI-style (#326): a plain
+		// click drops it and places the caret, exactly like an unshifted
+		// navigation key does (#2608).
+		m.dropShiftSelection()
 	}
 	m.cursor = p
+	m.desiredCol = m.cursor.Col
+	m.scroll()
+	m.emit(EventCursorMove)
+}
+
+// ShiftClick extends the active selection to the content-local cell (x, y)
+// (#2608): the GUI counterpart of Shift+arrows, mirroring the explorer's
+// shift+click. Without a selection it starts one at the current cursor — a
+// shift-select selection, so an unshifted key or a plain click drops it again.
+// It never advances the multi-click streak, so a following double-click still
+// starts a fresh streak.
+func (m *Model) ShiftClick(x, y int) {
+	p := m.clickPosition(x, y)
+	m.collapseCarets()
+	m.clickStreak = 0
+	if !m.mode.IsVisual() {
+		m.enterVisual(Visual)
+		m.shiftSelect = true
+	}
+	m.cursor = m.buf.ClampCursor(p)
 	m.desiredCol = m.cursor.Col
 	m.scroll()
 	m.emit(EventCursorMove)

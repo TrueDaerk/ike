@@ -12697,7 +12697,14 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 				}
 			}
 		} else {
-			inst.Editor().MouseClick(localX, localY)
+			// shift+click extends the selection to the clicked cell (#2608),
+			// mirroring the explorer's shift+click; a plain click places the
+			// caret and drops a Shift+arrow selection.
+			if msg.Button == tea.MouseLeft && msg.Mod&tea.ModShift != 0 {
+				inst.Editor().ShiftClick(localX, localY)
+			} else {
+				inst.Editor().MouseClick(localX, localY)
+			}
 			// Track the press so motion events extend a selection (#977):
 			// char-wise from a plain press, word-/line-wise after a
 			// double/triple click.

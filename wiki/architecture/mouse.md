@@ -159,9 +159,20 @@ and is listed so the next change has a baseline.
 
 ### Editor and viewers
 
+In the **editor body** the plain click places the caret, and `shift`+click
+extends the selection to the clicked cell (#2608) — the mouse counterpart of
+`Shift+arrows`, mirroring the explorer's `shift`+click range. Without an active
+selection `shift`+click starts one at the current caret. Which selections a
+plain click *drops* follows the keyboard rule of
+[editor.md](editor.md): a GUI-style selection — made with `Shift+arrows` (#326)
+or by a double/triple click (#975) — collapses, so the caret simply lands where
+the pointer is, while a vim selection entered with `v`/`V`/`Ctrl+V` keeps its
+click-extends semantics. Either way the press still arms the drag, so
+press-move keeps extending a selection (#977).
+
 | Surface | Wheel | Click | Double click |
 |---|---|---|---|
-| Editor pane | ✅ vertical + horizontal + `shift` | ✅ caret, gutter breakpoint, `alt` multi-caret, `cmd` go-to-definition, scrollbar drag | ✅ word / triple line select |
+| Editor pane | ✅ vertical + horizontal + `shift` | ✅ caret, `shift` extends selection, gutter breakpoint, `alt` multi-caret, `cmd` go-to-definition, scrollbar drag | ✅ word / triple line select |
 | Editor tab bar | ✅ cycles tabs | ✅ activate, middle closes, `✕` closes, right-click menu, drag tears out | — |
 | Pane title band | — | ✅ focuses, drag moves/docks, right-click menu | — |
 | Pane divider | — | ✅ drag resizes | — |

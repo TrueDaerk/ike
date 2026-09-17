@@ -1599,7 +1599,12 @@ func (m Model) playPaneClick(key string, msg mouseEvent, x, y int) (tea.Model, t
 		return m, nil
 	}
 	s.setBufFocus(true)
-	ed.MouseClick(x, y)
+	// shift+click extends the selection like in an editor pane (#2608).
+	if msg.Mod&tea.ModShift != 0 {
+		ed.ShiftClick(x, y)
+	} else {
+		ed.MouseClick(x, y)
+	}
 	m.drag = &dragState{kind: dragEditSelect, srcPane: key, curX: msg.X, curY: msg.Y}
 	return m, nil
 }

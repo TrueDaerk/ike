@@ -40,6 +40,16 @@ func (m *Model) selectAll() {
 	m.emit(EventCursorMove)
 }
 
+// dropShiftSelection ends a selection started with Shift+arrows (#326) without
+// touching the buffer: back to normal mode, the cursor staying where it is.
+// Both the unshifted navigation keys and a plain mouse click (#2608) use it, so
+// the GUI-style drop behaves the same whichever input ends the selection.
+func (m *Model) dropShiftSelection() {
+	m.mode = Normal
+	m.shiftSelect = false
+	m.clickVisual = false
+}
+
 // updateVisual handles keys while a selection is active. Motions extend the
 // selection; d/c/y act on it; v/V/ctrl+v toggle or switch the visual variant.
 func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
@@ -134,8 +144,7 @@ func (m Model) updateVisual(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	// where the key moves the cursor like any plain motion.
 	if m.shiftSelect {
 		if _, shifted := shiftSelectKey(s); !shifted && stopSelectKey(s) {
-			m.mode = Normal
-			m.shiftSelect = false
+			m.dropShiftSelection()
 			m.pending.Reset()
 			m.emit(EventCursorMove)
 			return m.updateNormal(key)
