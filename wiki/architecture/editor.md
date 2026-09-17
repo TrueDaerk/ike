@@ -1479,19 +1479,34 @@ Lines* does too.
 - **Multi-caret collapses first:** only the primary selection's line range takes
   part.
 
-## Case conversion (#2418)
+## Case conversion (#2418, #2618)
 
-Case changing has two halves that meet in the same operator plumbing. The vim
-half — `gu` / `gU` / `g~` with any motion or text object, their linewise
-doubles (`guu`, `gUgU`, `g~~`) and `u` / `U` / `~` on a visual selection — runs
-through `runOperator` → `caseTarget` → `operator.Transform` (#1193). The
-command half (`caseops.go`) adds the four ids JetBrains users reach for:
+Case changing has two halves that meet in the same operator plumbing, and they
+deliberately part ways on what a selection means. The vim half — `gu` / `gU` /
+`g~` with any motion or text object, their linewise doubles (`guu`, `gUgU`,
+`g~~`) and `u` / `U` / `~` on a visual selection — runs through `runOperator` →
+`caseTarget` → `operator.Transform` (#1193) and keeps vim semantics: the
+mutation **ends visual mode**, `~`/`g~` stay a per-rune swap. The command half
+(`caseops.go`) adds the four ids JetBrains users reach for, and there a
+selection **stays selected** across repeats (`caseSelection`, #2618): the
+rewritten range (same charwise/linewise/block mode, same anchor/cursor
+orientation) is reselected, unchanged for the rune transforms and re-fitted to
+the new text for a length-changing `case_cycle` — so pressing the command again
+addresses the same text instead of degrading to the word under the caret. A
+no-op rewrite (already-lower `case_lower`, say) still keeps the selection.
 
 - **`editor.case.lower` / `.upper` / `.toggle`** map runes: they rewrite the
   **selection** when there is one, else the **inner word under every caret**.
   `editor.case.toggle` carries JetBrains' *Toggle Case* chord, cmd+shift+u
   (ctrl+shift+u as the delivered secondary); the one-directional pair stays
   chordless because `gu`/`gU` already are the gesture (keybind ledger).
+  Unlike vim's `~`/`g~`, the **command's** `.toggle` is whole-text, not
+  per-rune (`toggleCase`, #2618): any lower-case letter in the text means it
+  is upper-cased whole (`Pogo` → `POGO`, `pOGO` → `POGO`); otherwise (all-caps,
+  or no cased letters) it is lower-cased whole (`POGO` → `pogo`) — so repeated
+  cmd+shift+u on `Pogo` cycles `POGO` → `pogo` → `POGO` instead of swapping
+  case rune-by-rune. Multiple carets / a multi-word selection decide the
+  direction once for the whole span; the no-selection path decides per caret.
 - **`editor.case.cycle`** (alt+shift+u) rotates the **identifier** under every
   caret through camelCase → snake_case → kebab-case → PascalCase →
   SCREAMING_SNAKE → camelCase. cmd+alt+shift+u — the chord that would have sat

@@ -3,6 +3,8 @@ package editor
 import (
 	"strings"
 	"testing"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 // caseops_test.go covers the #2418 command half of the case family. The vim
@@ -35,14 +37,115 @@ func TestCaseCommandOnSelection(t *testing.T) {
 	if line(m, 0) != "FOO BAr baz" {
 		t.Fatalf("selection upper got %q", line(m, 0))
 	}
-	if m.mode != Normal {
-		t.Fatal("case command should leave visual mode")
+	if m.mode != Visual {
+		t.Fatal("case command should keep the selection active (#2618)")
 	}
 	// A linewise selection covers its lines whole.
 	m = typeKeys(m, "V")
 	m, _ = m.Update(ActionMsg{Action: "case_lower"})
 	if line(m, 0) != "foo bar baz" {
 		t.Fatalf("linewise lower got %q", line(m, 0))
+	}
+	if m.mode != VisualLine {
+		t.Fatal("linewise selection should keep its mode (#2618)")
+	}
+}
+
+// TestCaseCommandTogglesSelectionRepeatedly is the JetBrains Toggle Case
+// contract (#2618): repeating the command keeps addressing the same
+// selection instead of dropping to a single caret after the first hit.
+func TestCaseCommandTogglesSelectionRepeatedly(t *testing.T) {
+	m, _ := loaded(t, "foo bar baz\n")
+	m = typeKeys(m, "v$")
+	m, _ = m.Update(ActionMsg{Action: "case_toggle"})
+	if got := line(m, 0); got != "FOO BAR BAZ" {
+		t.Fatalf("first toggle got %q", got)
+	}
+	if m.mode != Visual {
+		t.Fatal("selection should still be active after the first toggle")
+	}
+	m, _ = m.Update(ActionMsg{Action: "case_toggle"})
+	if got := line(m, 0); got != "foo bar baz" {
+		t.Fatalf("second toggle got %q", got)
+	}
+	if m.mode != Visual {
+		t.Fatal("selection should still be active after the second toggle")
+	}
+}
+
+// TestCaseCommandLowerUpperNoOpKeepsSelection covers the second-invocation
+// no-op case for .lower/.upper: nothing changes, but the selection stays put.
+func TestCaseCommandLowerUpperNoOpKeepsSelection(t *testing.T) {
+	m, _ := loaded(t, "foo bar\n")
+	m = typeKeys(m, "v$")
+	m, _ = m.Update(ActionMsg{Action: "case_lower"})
+	if got := line(m, 0); got != "foo bar" {
+		t.Fatalf("first lower got %q", got)
+	}
+	if m.mode != Visual {
+		t.Fatal("no-op case_lower should keep the selection")
+	}
+	m, _ = m.Update(ActionMsg{Action: "case_lower"})
+	if got := line(m, 0); got != "foo bar" {
+		t.Fatalf("second lower got %q", got)
+	}
+	if m.mode != Visual {
+		t.Fatal("no-op case_lower should keep the selection")
+	}
+}
+
+// TestCaseCycleOnSelectionRefitsSelection covers a length-changing rewrite:
+// the selection must be re-fitted to the new identifier, not the old range.
+func TestCaseCycleOnSelectionRefitsSelection(t *testing.T) {
+	m, _ := loaded(t, "fooBar\n")
+	m = typeKeys(m, "v$")
+	m, _ = m.Update(ActionMsg{Action: "case_cycle"})
+	if got := line(m, 0); got != "foo_bar" {
+		t.Fatalf("cycle got %q", got)
+	}
+	if m.mode != Visual {
+		t.Fatal("case_cycle should keep the selection")
+	}
+	if m.anchor.Col != 0 || m.cursor.Col != len([]rune("foo_bar"))-1 {
+		t.Fatalf("selection not refitted: anchor=%v cursor=%v", m.anchor, m.cursor)
+	}
+}
+
+func TestCaseToggleWholeTextSemantics(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"Pogo", "POGO"},
+		{"POGO", "pogo"},
+		{"pOGO", "POGO"},
+	}
+	for _, c := range cases {
+		if got := toggleCase(c.in); got != c.want {
+			t.Errorf("toggleCase(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// TestCaseCommandOnBlockSelectionKeepsMode covers a block-mode selection
+// (which composes to a charwise range, #2618): the mode must stay VisualBlock.
+func TestCaseCommandOnBlockSelectionKeepsMode(t *testing.T) {
+	m, _ := loaded(t, "foo bar\n")
+	m = send(m, modKey('v', tea.ModCtrl))
+	m = typeKeys(m, "$")
+	m, _ = m.Update(ActionMsg{Action: "case_upper"})
+	if got := line(m, 0); got != "FOO BAR" {
+		t.Fatalf("block upper got %q", got)
+	}
+	if m.mode != VisualBlock {
+		t.Fatal("case command should keep block selection mode (#2618)")
+	}
+}
+
+func TestCaseToggleThreeStepCycleUnderCaret(t *testing.T) {
+	m, _ := loaded(t, "Pogo\n")
+	for _, want := range []string{"POGO", "pogo", "POGO"} {
+		m, _ = m.Update(ActionMsg{Action: "case_toggle"})
+		if got := line(m, 0); got != want {
+			t.Fatalf("case_toggle got %q, want %q", got, want)
+		}
 	}
 }
 
