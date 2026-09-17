@@ -193,13 +193,13 @@ func TestNotificationsSection(t *testing.T) {
 // page edits.
 func TestForgeNotifySection(t *testing.T) {
 	c, _ := Load(Options{})
-	if c.Forge.Notify.IssueOpened != "dialog" || c.Forge.Notify.PRChecksFailing != "badge" {
+	if c.Forge.Notify.IssueOpened != "off" || c.Forge.Notify.PRChecksFailing != "badge" {
 		t.Fatalf("unexpected defaults: %+v", c.Forge.Notify)
 	}
 
 	proj := writeProject(t, "[forge.notify]\nissue_opened = \"shout\"\npr_opened = \"badge\"\n")
 	c, diags := Load(Options{ProjectRoot: proj})
-	if c.Forge.Notify.IssueOpened != "dialog" {
+	if c.Forge.Notify.IssueOpened != "off" {
 		t.Errorf("unknown style should fall back to the default, got %q", c.Forge.Notify.IssueOpened)
 	}
 	if c.Forge.Notify.PROpened != "badge" {
@@ -208,7 +208,7 @@ func TestForgeNotifySection(t *testing.T) {
 	if len(diags) != 1 {
 		t.Errorf("expected 1 diagnostic, got %v", diags)
 	}
-	if flat := c.Flat(); flat["forge.notify.issue_opened"] != "dialog" || flat["forge.notify.pr_opened"] != "badge" {
+	if flat := c.Flat(); flat["forge.notify.issue_opened"] != "off" || flat["forge.notify.pr_opened"] != "badge" {
 		t.Errorf("forge.notify keys missing from Flat: %v", flat)
 	}
 }
