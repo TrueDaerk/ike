@@ -922,6 +922,35 @@ longer means knowing which category it lives in:
 - **Esc follows the picker speed search** (`ui.SpeedSearch.EscClears`, #2111):
   first press clears the query, second leaves the search.
 
+### Walking the results is free (#2616)
+
+A held arrow key has to track the key repeat, and with a filter up it did not:
+the highlight went on travelling for seconds after the key was released,
+because each repeat re-matched the whole schema **twice** — `Update` and
+`View` each dropped the `searchCache` — and then rendered every one of the
+hundreds of matches, each row re-reading and re-parsing both config layers
+from disk for its origin colour. Three rules keep a navigation step cheap:
+
+- **A pure selection move pins the memo.** `navOnlyKey` (the list keys and the
+  match-step chord) marks the event as one that can only move the selection,
+  so `Update` keeps the memoized result list and the frame it draws uses it
+  too. Every other key — an edit of the query, a write, a custom page's action
+  — still drops the cache, so a result list can never outlive the state it was
+  built from.
+- **The settings column renders its window, not its list.** `renderForm` plans
+  the lines as indices (row, page header, note), resolves the scroll offset,
+  and styles only the lines actually on screen. `formLines` still maps *every*
+  line to its row, so the mouse hit-testing is unchanged.
+- **The config layers are read once per event.** `config.Origins` decodes both
+  layer files once and returns a lookup; the panel builds one per event beside
+  `config.Get().Flat()`, and drops both wherever it drops the search cache.
+  `config.Origin` itself still re-reads the files on every call — it is the
+  single-key form.
+
+`internal/settings/navcost_test.go` guards the rule (a counting `Searchable`
+page must see no rebuild across a selection move, and one across an edit of
+the query) and benchmarks the per-key cost with and without a filter.
+
 ## Keymap page on the grid (0460, #1298)
 
 The keymap page adopts the same raster through `splitGrid`, so a custom page

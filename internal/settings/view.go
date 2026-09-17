@@ -134,8 +134,13 @@ func (m *Model) View() string {
 	}
 	// The frame re-matches once (#2179): a page's searchable items may have
 	// changed while the last event was handled, and every rows() call inside
-	// this render then shares the one result list.
-	m.invalidateSearch()
+	// this render then shares the one result list. A frame drawn for a pure
+	// selection move skips even that (#2616) — nothing it renders can have
+	// changed the matches.
+	if !m.searchPinned {
+		m.invalidateSearch()
+	}
+	m.searchPinned = false
 	pal := m.theme()
 	innerW := m.width - 2          // content columns inside the border (v2 sizes outer)
 	inner := m.height - chromeRows // body rows under the column headers
@@ -595,59 +600,82 @@ func (m *Model) renderForm(w, h int) string {
 		empty := clip.Render(lipgloss.NewStyle().Foreground(pal.Secondary).Render(" no matching settings"))
 		return strings.Join(padTo([]string{empty}, h), "\n")
 	}
-	lines := make([]string, 0, len(rows)+1)
+	// The column is laid out before it is rendered (#2616): a filter matches
+	// hundreds of rows and only h of them are on screen, so the lines are
+	// planned as indices first and only the visible window is styled. Rendering
+	// every match on every frame — each one re-reading the config layers for
+	// its origin colour — is what made a held arrow key lag behind the key
+	// repeat.
+	type line struct {
+		row  int // index into rows, -1 on a header or the note line
+		page int // page header, -1 on any other line
+		note bool
+	}
+	plan := make([]line, 0, len(rows)+len(m.pages)+1)
 	m.formLines = nil
 	selLine := m.sel
+	note := ""
 	if m.filter != "" {
 		// Search results group under a header naming their page, so the rows
 		// need no "Page › " prefix — which wrapped most of them onto two
 		// lines. Headers are lines without a row: formLines keeps the
 		// line → row map the click, hover and follow paths use.
-		hdr := lipgloss.NewStyle().Foreground(pal.Secondary)
-		avail := maxInt(w-markerWidth, 1)
 		lastPage := -1
 		for i, r := range rows {
 			if r.page != lastPage {
 				lastPage = r.page
-				text := "─ " + m.pages[r.page].Title + " "
-				if pad := avail - lipgloss.Width(text); pad > 0 {
-					text += strings.Repeat("─", pad)
-				}
-				lines = append(lines, clip.Render(strings.Repeat(" ", markerWidth)+hdr.Render(text)))
+				plan = append(plan, line{row: -1, page: r.page})
 				m.formLines = append(m.formLines, -1)
 			}
 			if i == m.sel {
-				selLine = len(lines)
+				selLine = len(plan)
 			}
-			lines = append(lines, clip.Render(m.renderEntry(r, i == m.sel, i == m.hoverRow, w)))
+			plan = append(plan, line{row: i, page: -1})
 			m.formLines = append(m.formLines, i)
 		}
-		if note := m.customPagesNote(); note != "" {
-			lines = append(lines, clip.Render(
-				lipgloss.NewStyle().Foreground(pal.Secondary).Faint(true).Render(note)))
+		if note = m.customPagesNote(); note != "" {
+			plan = append(plan, line{row: -1, page: -1, note: true})
 			m.formLines = append(m.formLines, -1)
 		}
 	} else {
-		for i, r := range rows {
-			lines = append(lines, clip.Render(m.renderEntry(r, i == m.sel, i == m.hoverRow, w)))
+		for i := range rows {
+			plan = append(plan, line{row: i, page: -1})
 		}
 	}
 	if m.followForm {
-		m.formOff = follow(m.formOff, selLine, selLine, len(lines), h)
+		m.formOff = follow(m.formOff, selLine, selLine, len(plan), h)
 		m.followForm = false
 	}
-	m.formOff = clamp(m.formOff, 0, maxOff(len(lines), h))
+	m.formOff = clamp(m.formOff, 0, maxOff(len(plan), h))
 	end := m.formOff + h
-	if end > len(lines) {
-		end = len(lines)
+	if end > len(plan) {
+		end = len(plan)
 	}
-	out := append([]string{}, lines[m.formOff:end]...)
+	hdr := lipgloss.NewStyle().Foreground(pal.Secondary)
+	avail := maxInt(w-markerWidth, 1)
+	out := make([]string, 0, end-m.formOff)
+	for _, ln := range plan[m.formOff:end] {
+		switch {
+		case ln.page >= 0:
+			text := "─ " + m.pages[ln.page].Title + " "
+			if pad := avail - lipgloss.Width(text); pad > 0 {
+				text += strings.Repeat("─", pad)
+			}
+			out = append(out, clip.Render(strings.Repeat(" ", markerWidth)+hdr.Render(text)))
+		case ln.note:
+			out = append(out, clip.Render(
+				lipgloss.NewStyle().Foreground(pal.Secondary).Faint(true).Render(note)))
+		default:
+			i := ln.row
+			out = append(out, clip.Render(m.renderEntry(rows[i], i == m.sel, i == m.hoverRow, w)))
+		}
+	}
 	// Scroll indicators (#890).
 	ind := lipgloss.NewStyle().Foreground(pal.Secondary)
 	if m.formOff > 0 && len(out) > 0 {
 		out[0] = clip.Render(ind.Render(" ▲ more"))
 	}
-	if end < len(lines) && len(out) > 0 {
+	if end < len(plan) && len(out) > 0 {
 		out[len(out)-1] = clip.Render(ind.Render(" ▼ more"))
 	}
 	return strings.Join(padTo(out, h), "\n")
@@ -747,7 +775,7 @@ func (m *Model) detailFoot(e Entry, w int, clip, dim lipgloss.Style, pal *theme.
 		}
 		out = append(out, clip.Render(lipgloss.NewStyle().Foreground(pal.Warning).Render(arrow)))
 	}
-	origin := config.Origin(m.opts, e.Key)
+	origin := m.origin(e.Key)
 	scope := "user"
 	if m.scopeFor(e) == config.ProjectScope {
 		scope = "project"
@@ -926,7 +954,7 @@ func (m *Model) renderEntry(r row, selected, hovered bool, w int) string {
 		style = style.Background(pal.Selection).Foreground(pal.SelectionText).Faint(true)
 	case hovered:
 		style = style.Underline(true) // pointer affordance (#885)
-	case config.Origin(m.opts, e.Key) == "default":
+	case m.origin(e.Key) == "default":
 		style = style.Foreground(pal.Foreground)
 	default:
 		style = style.Foreground(pal.Info) // overridden values stand out
