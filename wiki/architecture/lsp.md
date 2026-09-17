@@ -258,12 +258,52 @@ document.
 **Lazy resolve (#847).** Servers with `resolveProvider` ship lean completion
 lists; documentation and late `additionalTextEdits` arrive per item via
 `completionItem/resolve`. The editor emits a completion-select event whenever
-the popup's selection rests on a doc-less item (carrying the item's reply
-index, `CompletionID`); the bridge caches the raw reply, debounces 120ms so
-arrowing through the list resolves only where the selection rests, and answers
-with a `CompletionResolveMsg`. The resolved documentation renders dimmed under
-the popup's hint row; resolve-delivered additional edits merge into the accept
-path like inline ones.
+the popup's selection rests on a server item not yet resolved — **regardless
+of inline documentation** (#2610: pyright and tsserver ship the auto-import
+edit only in the resolve reply, so a documented item would otherwise never
+get its import) — carrying the item's reply index (`CompletionID`) and the
+reply's sequence (`CompletionSeq`); the bridge caches the raw reply, debounces
+120ms so arrowing through the list resolves only where the selection rests,
+and answers with a `CompletionResolveMsg` stamped with the same `Seq`. The
+resolved documentation renders dimmed under the popup's hint row;
+resolve-delivered additional edits merge into the accept path like inline
+ones. The resolve request carries the item's **`data` token untouched**
+(`protocol.CompletionItem.Data`, a raw message): pyright and tsserver
+identify the item by it and answer a data-less resolve with the item
+unchanged — exactly a silently dropped import, which is what #2610 fixed.
+
+**Resolve-before-accept (#2610).** Enter right after the popup opened — inside
+the bridge's debounce, or while the resolve is in flight — must not lose the
+import. Accepting a server item with no cached resolve and no inline edits
+records a `pendingImport` (reply index + `Seq` + the cursor right after the
+insert as *anchor*) and emits a completion-**accept** event; the bridge
+resolves it immediately (`resolveNow`, no debounce; an item already resolved
+or in flight is left alone — its reply is on the way). When the reply lands
+the editor applies its `additionalTextEdits` to the accepted text: only edits
+ending at or before the anchor (the import block above), through the open
+insert session's recorder as its own undo segment, or — the user pressed Esc
+meanwhile — as one committed change. Typing on after the accept keeps the
+import armed (the cursor stays at or past the anchor); an edit *above* the
+anchor (undo of the accept, typing on an earlier line) disarms it, since the
+edit's positions no longer hold. The `Seq` stamp keeps a late reply from
+landing on a newer popup whose items happen to share the index. The client
+announces `completionItem.labelDetailsSupport` and
+`resolveSupport: [documentation, detail, additionalTextEdits]` at initialize.
+
+**Auto-import server options (#2610).** Every default server is configured to
+offer unimported symbols, through the server spec's `Settings` (delivered as
+`initializationOptions` and as the `workspace/configuration` answer; a user
+`[lsp.servers.<lang>]` setting overrides): pyright / basedpyright
+`python.analysis.autoImportCompletions = true` (basedpyright defaults it off),
+gopls `completeUnimported = true`, vtsls `typescript|javascript.suggest.autoImports
+= true` + `preferences.includePackageJsonAutoImports = "auto"`, intelephense
+`intelephense.completion.insertUseDeclaration = true`. The popup shows the
+auto-import's origin: the item's detail column is the `labelDetails` pair
+(detail, then *description* — the module pyright and vtsls name there) ahead
+of the classic `detail`, so `APIRouter fastapi Auto-import` tells the candidate
+that adds an import from a local one. Two server items with the same insert
+text but different detail (the same name importable from two modules) both
+stay listed; across sources the higher-priority item still wins.
 
 **Incomplete lists (#849).** A reply flagged `isIncomplete` is a partial view:
 identifier runes typed while the popup shows re-emit the completion trigger

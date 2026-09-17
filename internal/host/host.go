@@ -103,8 +103,12 @@ type EditorEvent struct {
 	// (#527); empty means a manual request the bridge honours unconditionally.
 	Char string
 	// CompletionID carries the selected item's reply index on
-	// EditorCompletionSelect (#847), for completionItem/resolve.
+	// EditorCompletionSelect (#847) and EditorCompletionAccept (#2610), for
+	// completionItem/resolve.
 	CompletionID int
+	// CompletionSeq is the reply sequence (CompletionMsg.Seq) the ID indexes
+	// into (#2610); the bridge ignores an accept for a superseded reply.
+	CompletionSeq int
 	// Key identifies the emitting buffer where Path cannot (#2048): a buffer
 	// with no file has an empty Path, so per-buffer state keyed by it — the
 	// word index's text store, the completion route back to the view — would
@@ -156,6 +160,10 @@ const (
 	EditorSave
 	EditorJump
 	EditorCompletionSelect
+	// EditorCompletionAccept (#2610): the editor accepted a server item whose
+	// resolve has not answered yet; the bridge resolves it right away (no
+	// debounce) so the late auto-import lands on the accepted text.
+	EditorCompletionAccept
 	// EditorHoverRequest is app-originated (mouse-idle hover, #1129), not a
 	// cast editor.EventKind: it asks the LSP bridge for hover content at the
 	// event's Line/Col (the hovered cell, not the cursor). Keep it after every

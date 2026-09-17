@@ -104,7 +104,15 @@ func clientCapabilities() protocol.ClientCapabilities {
 		},
 		TextDocument: &protocol.TextDocumentClientCaps{
 			Synchronization: &protocol.SyncClientCaps{DidSave: true},
-			Completion:      &protocol.CompletionClientCaps{CompletionItem: &protocol.CompletionItemCaps{SnippetSupport: true}},
+			// Completion (#2610): labelDetails carries the auto-import
+			// module of an unimported symbol; resolveSupport tells servers
+			// which properties the lazy completionItem/resolve fetches —
+			// pyright and tsserver deliver the import edit only there.
+			Completion: &protocol.CompletionClientCaps{CompletionItem: &protocol.CompletionItemCaps{
+				SnippetSupport:      true,
+				LabelDetailsSupport: true,
+				ResolveSupport:      &protocol.CompletionResolveSupport{Properties: []string{"documentation", "detail", "additionalTextEdits"}},
+			}},
 			Hover:           &protocol.HoverClientCaps{ContentFormat: []string{"markdown", "plaintext"}},
 			Definition:      &protocol.LinkSupportCaps{LinkSupport: true},
 			Implementation:  &protocol.LinkSupportCaps{LinkSupport: true},

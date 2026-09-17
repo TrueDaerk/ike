@@ -215,6 +215,17 @@ type CompletionClientCaps struct {
 }
 type CompletionItemCaps struct {
 	SnippetSupport bool `json:"snippetSupport,omitempty"`
+	// LabelDetailsSupport asks for labelDetails (#2610), where pyright and
+	// vtsls name the auto-import module of an unimported symbol.
+	LabelDetailsSupport bool `json:"labelDetailsSupport,omitempty"`
+	// ResolveSupport lists the properties the client fetches lazily through
+	// completionItem/resolve (#2610); servers may leave them off the list.
+	ResolveSupport *CompletionResolveSupport `json:"resolveSupport,omitempty"`
+}
+
+// CompletionResolveSupport is completionItem.resolveSupport (#2610).
+type CompletionResolveSupport struct {
+	Properties []string `json:"properties"`
 }
 type HoverClientCaps struct {
 	ContentFormat []string `json:"contentFormat,omitempty"`
@@ -409,6 +420,22 @@ type CompletionItem struct {
 	FilterText          string     `json:"filterText,omitempty"`
 	InsertTextFormat    int        `json:"insertTextFormat,omitempty"`
 	AdditionalTextEdits []TextEdit `json:"additionalTextEdits,omitempty"`
+	// LabelDetails is the LSP 3.17 label detail pair (#2610): Detail renders
+	// right after the label (a signature), Description after that — pyright
+	// and vtsls put the auto-import module there.
+	LabelDetails *CompletionItemLabelDetails `json:"labelDetails,omitempty"`
+	// Data is the server's opaque resolve token (#2610). It must round-trip
+	// untouched into completionItem/resolve: pyright and tsserver identify
+	// the item by it and answer a data-less resolve with the item unchanged
+	// — which is exactly a silently dropped auto-import.
+	Data json.RawMessage `json:"data,omitempty"`
+}
+
+// CompletionItemLabelDetails is the completionItem.labelDetails object
+// (#2610); the client capability labelDetailsSupport opts in.
+type CompletionItemLabelDetails struct {
+	Detail      string `json:"detail,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 // InsertTextFormat values (LSP): 1 = plain text, 2 = snippet syntax.

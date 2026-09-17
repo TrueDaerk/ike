@@ -461,7 +461,13 @@ type Toolchain interface { Detect(root string) (settings map[string]any, ok bool
 runs at server spawn in `manager.ensureServer` (and on restart); the result is
 deep-merged into the server's settings (an explicit user setting wins). The manager
 then answers the server's `workspace/configuration` request from those settings, so
-e.g. the resolved `python.defaultInterpreterPath` reaches pyright.
+e.g. the resolved `python.defaultInterpreterPath` reaches pyright. The server
+spec's own `Settings` share that path: the auto-import switches every default
+server ships (#2610 — pyright `autoImportCompletions`, gopls
+`completeUnimported`, vtsls `suggest.autoImports`, intelephense
+`insertUseDeclaration`; see [LSP](./lsp.md)) are deep-merged under the same
+sections the detectors fill, and a user `[lsp.servers.<lang>]` setting wins
+over both.
 
 The **Python** detector (`plugins/languages/python/toolchain.go`) resolves the
 interpreter in priority order: active `$VIRTUAL_ENV` → project `.venv`/`venv` →
@@ -634,7 +640,7 @@ projects so pyproject.toml and uv.lock stay in sync — see
 | Language | Default server | Rationale / alternative |
 |---|---|---|
 | Go | gopls | Reference server, no contest. Also serves `go.mod`/`go.work`/`go.sum` (#1063): filename-matched languages delegating to the same instance, languageIds `go.mod`/`go.work`/`go.sum`. |
-| Python | pyright (via server spec in `plugins/languages/python`) | Fast, precise; venv-aware via `workspace/configuration`. |
+| Python | pyright (via server spec in `plugins/languages/python`) | Fast, precise; venv-aware via `workspace/configuration`. `python.analysis.autoImportCompletions` is sent on (#2610) so basedpyright — which defaults it off — offers unimported symbols too. |
 | PHP | Intelephense | Free tier beats phpactor on completion quality and speed; cross-file rename & advanced refactors are premium (paid). Prefer those? Override to phpactor via `[lsp.servers.php]`. |
 | TS/JS | vtsls | Wraps the same tsserver VS Code uses but speaks LSP far more faithfully than typescript-language-server (streaming/isIncomplete completions, lower memory churn). Override via `[lsp.servers.typescript]`. |
 | HTML | vscode-html-language-server (`vscode-langservers-extracted`) | The extracted VS Code server; unmatched tag/attribute data. |

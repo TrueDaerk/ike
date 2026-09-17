@@ -1983,19 +1983,20 @@ func (e editorEmitter) Emit(ev editor.Event) {
 		}
 	}
 	e.host.EmitEditor(host.EditorEvent{
-		Kind:         int(ev.Kind),
-		Path:         ev.Path,
-		Key:          ev.Key,
-		LangPath:     ev.LangPath,
-		Line:         ev.Line,
-		Col:          ev.Col,
-		Text:         ev.Text,
-		Sel:          int(ev.Sel),
-		AnchorLine:   ev.AnchorLine,
-		AnchorCol:    ev.AnchorCol,
-		Large:        ev.Large,
-		Char:         ev.Char,
-		CompletionID: ev.CompletionID,
+		Kind:          int(ev.Kind),
+		Path:          ev.Path,
+		Key:           ev.Key,
+		LangPath:      ev.LangPath,
+		Line:          ev.Line,
+		Col:           ev.Col,
+		Text:          ev.Text,
+		Sel:           int(ev.Sel),
+		AnchorLine:    ev.AnchorLine,
+		AnchorCol:     ev.AnchorCol,
+		Large:         ev.Large,
+		Char:          ev.Char,
+		CompletionID:  ev.CompletionID,
+		CompletionSeq: ev.CompletionSeq,
 	})
 }
 

@@ -103,13 +103,16 @@ type bridge struct {
 	hlTimer *time.Timer
 	// compItems caches the raw items of the latest completion reply for
 	// compPath, so a selection can completionItem/resolve its item (#847);
-	// compResolved marks IDs already resolved (or in flight), resolveID the
-	// latest selection, and resolveTimer debounces the request so arrowing
-	// through the list only resolves where the selection rests.
+	// compResolved marks IDs already resolved (or in flight), and resolveTimer
+	// debounces the request so arrowing through the list only resolves where
+	// the selection rests.
+	// compSeq numbers the reply (#2610): stamped on the CompletionMsg and
+	// every resolve answered off it, so the editor can match a late resolve
+	// to the popup (or accepted item) it belongs to.
 	compItems    []protocol.CompletionItem
 	compPath     string
+	compSeq      int
 	compResolved map[int]bool
-	resolveID    int
 	resolveTimer *time.Timer
 	// compTimer debounces identifier-rune completion requests (#849) so a
 	// typing burst reaches the server once, at the resting position; the
@@ -279,7 +282,9 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 			}
 		}
 	case host.EditorCompletionSelect:
-		b.scheduleResolve(ev.Path, ev.CompletionID)
+		b.scheduleResolve(ev.Path, ev.CompletionID, ev.CompletionSeq)
+	case host.EditorCompletionAccept:
+		b.resolveNow(ev.Path, ev.CompletionID, ev.CompletionSeq)
 	case host.EditorHoverRequest:
 		// Mouse-idle hover (#1129): the app asks for hover at the hovered
 		// cell, not the cursor. Flush any pending didChange first so the
@@ -1831,11 +1836,17 @@ func (b *bridge) requestCompletion(path string, line, col int, triggerChar strin
 		// Cache the raw reply for lazy completionItem/resolve (#847); the
 		// editor items' IDs index into it.
 		b.mu.Lock()
+		b.compSeq++
+		seq := b.compSeq
 		b.compItems, b.compPath = items, path
 		b.compResolved = map[int]bool{}
+		if b.resolveTimer != nil {
+			b.resolveTimer.Stop() // a pending resolve indexed the old reply
+		}
 		b.mu.Unlock()
 		h.Send(ilsp.CompletionMsg{
 			Path: path, Line: line, Col: col,
+			Seq:            seq,
 			Items:          mgr.ConvertCompletionItems(path, items),
 			IsIncomplete:   incomplete,
 			Source:         ilsp.SourceLSP,
@@ -1847,30 +1858,56 @@ func (b *bridge) requestCompletion(path string, line, col int, triggerChar strin
 // scheduleResolve debounces a completionItem/resolve for the selected item
 // (#847): arrowing through the popup re-arms the timer, so only the item the
 // selection rests on is resolved. Runs on the Update goroutine — must not block.
-func (b *bridge) scheduleResolve(path string, id int) {
+func (b *bridge) scheduleResolve(path string, id, seq int) {
 	if b.manager() == nil || b.h == nil {
 		return
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.compPath != path || id < 0 || id >= len(b.compItems) || b.compResolved[id] {
+	if !b.resolvableLocked(path, id, seq) {
 		return
 	}
-	b.resolveID = id
 	if b.resolveTimer != nil {
 		b.resolveTimer.Stop()
 	}
-	b.resolveTimer = time.AfterFunc(120*time.Millisecond, func() { b.fireResolve(path) })
+	b.resolveTimer = time.AfterFunc(120*time.Millisecond, func() { b.fireResolve(path, id, seq) })
 }
 
-// fireResolve runs the debounced resolve on the timer goroutine and sends the
-// result as a CompletionResolveMsg. A reply for a superseded completion list
-// (path changed, new request cached) is dropped by the ID/path guard.
-func (b *bridge) fireResolve(path string) {
+// resolveNow resolves an accepted item immediately (#2610): the selection
+// debounce may not have fired yet when the user hits Enter right after the
+// popup opened, and pyright / tsserver deliver the auto-import edit only in
+// the resolve reply. An item already resolved or in flight is left alone —
+// its reply is on the way. Runs on the Update goroutine — must not block.
+func (b *bridge) resolveNow(path string, id, seq int) {
+	if b.manager() == nil || b.h == nil {
+		return
+	}
 	b.mu.Lock()
-	id := b.resolveID
+	defer b.mu.Unlock()
+	if !b.resolvableLocked(path, id, seq) {
+		return
+	}
+	if b.resolveTimer != nil {
+		b.resolveTimer.Stop()
+		b.resolveTimer = nil
+	}
+	go b.fireResolve(path, id, seq)
+}
+
+// resolvableLocked reports whether (path, id, seq) names an item of the
+// cached reply that has not been resolved (or fired) yet. Caller holds b.mu.
+func (b *bridge) resolvableLocked(path string, id, seq int) bool {
+	return b.compPath == path && b.compSeq == seq && id >= 0 && id < len(b.compItems) && !b.compResolved[id]
+}
+
+// fireResolve runs a resolve off the Update goroutine and sends the result as
+// a CompletionResolveMsg stamped with the reply's Seq. A resolve for a
+// superseded completion list (path changed, new reply cached) is dropped by
+// the guard.
+func (b *bridge) fireResolve(path string, id, seq int) {
+	b.mu.Lock()
 	mgr, h := b.mgr, b.h
-	if mgr == nil || h == nil || b.compPath != path || id < 0 || id >= len(b.compItems) || b.compResolved[id] {
+	if mgr == nil || h == nil || !b.resolvableLocked(path, id, seq) {
 		b.mu.Unlock()
 		return
 	}
@@ -1885,7 +1922,7 @@ func (b *bridge) fireResolve(path string) {
 	if len(conv) == 0 {
 		return
 	}
-	h.Send(ilsp.CompletionResolveMsg{Path: path, ID: id, Doc: conv[0].Doc, AdditionalEdits: conv[0].AdditionalEdits})
+	h.Send(ilsp.CompletionResolveMsg{Path: path, ID: id, Seq: seq, Doc: conv[0].Doc, AdditionalEdits: conv[0].AdditionalEdits})
 }
 
 // --- manager callbacks ---

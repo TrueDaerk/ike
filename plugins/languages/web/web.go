@@ -77,6 +77,15 @@ func init() {
 			// tsserver project with the default libs, so document.<members>
 			// complete.
 			FragmentScheme: "untitled",
+			// Auto-import completions (#2610): exports of other modules
+			// complete with the import statement delivered by
+			// completionItem/resolve. vtsls takes VS Code's configuration
+			// shape both as initializationOptions and as the
+			// workspace/configuration answer; the suggest.autoImports
+			// switches are on by default and pinned here, and package.json
+			// dependencies join the candidates ("auto" = unless the
+			// project is too large for it).
+			Settings: tsAutoImportSettings(),
 		},
 		// Workspace-TypeScript detection (#1079): vendored TS wins.
 		Toolchain:    tsToolchain{},
@@ -152,6 +161,18 @@ func init() {
 		// escapes conceal as the character they name.
 		Spans: cssSpans,
 	})
+}
+
+// tsAutoImportSettings is the vtsls configuration that keeps auto-import
+// completions on for TypeScript and JavaScript alike (#2610).
+func tsAutoImportSettings() map[string]any {
+	section := func() map[string]any {
+		return map[string]any{
+			"suggest":     map[string]any{"autoImports": true},
+			"preferences": map[string]any{"includePackageJsonAutoImports": "auto"},
+		}
+	}
+	return map[string]any{"typescript": section(), "javascript": section()}
 }
 
 // scriptSpans is the JavaScript/TypeScript lang.Language.Spans hook: the

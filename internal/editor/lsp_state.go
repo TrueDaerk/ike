@@ -50,6 +50,21 @@ type completionState struct {
 	// documentation for the doc rows and late additionalTextEdits for accept.
 	// Only SourceLSP items resolve, so IDs cannot collide across sources.
 	resolved map[int]resolvedCompletion
+	// seq is the server reply the SourceLSP batch came from (#2610); resolve
+	// replies carry it back so one for a superseded reply is ignored.
+	seq int
+}
+
+// pendingImport records a server item accepted before its resolve answered
+// (#2610). The bridge resolves it right away; when the reply lands the
+// additionalTextEdits (the auto-import) apply to the accepted text as long as
+// they sit at or before anchor — the cursor right after the accept — and
+// nothing has been edited above it since (see emitChar). id/seq identify the
+// reply the item came from, so a new popup's resolve can never be mistaken
+// for the accepted item's.
+type pendingImport struct {
+	id, seq int
+	anchor  buffer.Position
 }
 
 // sourceBatch is one source's contribution to the popup (#851).
@@ -411,6 +426,9 @@ func (m *Model) openCompletion(msg ilsp.CompletionMsg) {
 		prio:       msg.SourcePriority,
 		incomplete: msg.IsIncomplete,
 	}
+	if msg.Seq != 0 {
+		m.comp.seq = msg.Seq
+	}
 	m.rebuildCompletion()
 	if len(m.comp.items) == 0 || m.filteredCompletion() == nil {
 		m.comp = nil
@@ -450,14 +468,22 @@ func (m *Model) rebuildCompletion() {
 		}
 		return names[i] < names[j]
 	})
-	seen := map[string]bool{}
+	seen := map[string]string{}   // insert text → source that claimed it
+	variants := map[string]bool{} // source + insert text + detail
 	var items []ilsp.CompletionItem
 	for _, n := range names {
 		for _, it := range m.comp.bySource[n].items {
-			if seen[it.InsertText] {
+			// Within one source two items may share the insert text and
+			// differ in detail (#2610): pyright offers `Path` from pathlib
+			// and from a sibling module as separate auto-import items, and
+			// the user picks by the module shown. Across sources the
+			// higher-priority source's item still wins.
+			vk := n + "\x00" + it.InsertText + "\x00" + it.Detail
+			if src, ok := seen[it.InsertText]; ok && (src != n || variants[vk]) {
 				continue
 			}
-			seen[it.InsertText] = true
+			seen[it.InsertText] = n
+			variants[vk] = true
 			items = append(items, it)
 		}
 	}
@@ -494,8 +520,12 @@ func (m *Model) restoreCompletionSelection(key string) {
 	}
 }
 
-// requestCompletionResolve asks the bridge to resolve the selected item when
-// it still lacks documentation (#847).
+// requestCompletionResolve asks the bridge to resolve the selected server
+// item (#847) unless a reply for it is already cached. Inline documentation
+// does not skip the round-trip (#2610): pyright and tsserver ship the
+// auto-import's additionalTextEdits only in the resolve reply, so an item
+// with docs would otherwise never get its import. The bridge gates on the
+// server's resolveProvider and debounces the request.
 func (m *Model) requestCompletionResolve() {
 	items := m.filteredCompletion()
 	if m.comp == nil || len(items) == 0 {
@@ -506,23 +536,68 @@ func (m *Model) requestCompletionResolve() {
 		sel = 0
 	}
 	it := items[sel]
-	if it.Source != ilsp.SourceLSP || it.Doc != "" {
+	if it.Source != ilsp.SourceLSP {
 		return // only server items resolve (#851)
 	}
 	if _, ok := m.comp.resolved[it.ID]; ok {
 		return
 	}
-	m.emitCompletionSelect(it.ID)
+	m.emitCompletionSelect(it.ID, m.comp.seq)
 }
 
-// applyCompletionResolve caches a resolve reply for the open popup (#847); a
-// reply for a stale popup (different path handled by the caller, popup already
-// closed here) is dropped.
+// applyCompletionResolve routes a resolve reply (#847): for the open popup it
+// caches the documentation and late additionalTextEdits; for an item already
+// accepted while its resolve was outstanding (#2610) it applies the edits —
+// the auto-import — to the accepted text. A reply belonging to neither (a
+// superseded popup, an accept the user has edited above since) is dropped.
 func (m *Model) applyCompletionResolve(msg ilsp.CompletionResolveMsg) {
-	if m.comp == nil {
+	if p := m.pendingImport; p != nil && p.id == msg.ID && p.seq == msg.Seq {
+		m.pendingImport = nil
+		m.applyLateImport(msg.AdditionalEdits, p.anchor)
+		return
+	}
+	if m.comp == nil || m.comp.seq != msg.Seq {
 		return
 	}
 	m.comp.resolved[msg.ID] = resolvedCompletion{doc: msg.Doc, edits: msg.AdditionalEdits}
+}
+
+// applyLateImport applies the additionalTextEdits of a resolve that answered
+// after its item was accepted (#2610). Only edits ending at or before anchor
+// apply — an import lands in the import block above the accept, and the
+// text below has moved on with the user's typing. Inside an open insert
+// session the edits form their own undo segment through the session
+// recorder; outside one (the user left insert mode meanwhile) they commit as
+// one change. The cursor and carets shift past the edits like on accept.
+func (m *Model) applyLateImport(edits []ilsp.FormatEdit, anchor buffer.Position) {
+	var keep []ilsp.FormatEdit
+	for _, e := range edits {
+		if e.EndLine < anchor.Line || (e.EndLine == anchor.Line && e.EndCol <= anchor.Col) {
+			keep = append(keep, e)
+		}
+	}
+	if len(keep) == 0 {
+		return
+	}
+	if m.insert.active && m.insert.rec != nil {
+		m.breakInsertUndo()
+		m.applyCompletionExtraEdits(keep)
+		m.dirtyFromInsert()
+		m.breakInsertUndo()
+		return
+	}
+	rec := m.newRecorder()
+	saved := m.insert.rec
+	m.insert.rec = rec
+	m.applyCompletionExtraEdits(keep)
+	m.insert.rec = saved
+	if rec.Empty() {
+		return
+	}
+	m.pushChange(rec.Commit(m.cursor))
+	m.dirty = true
+	m.scroll()
+	m.emit(EventChange)
 }
 
 // CompletionOpen reports whether the autocomplete popup is showing.
@@ -668,9 +743,17 @@ func (m *Model) completionAccept() {
 	// A resolve may have delivered late additionalTextEdits (#847) — merge
 	// them in unless the item already carried its own. Resolve results only
 	// exist for server items (#851).
-	if r, ok := m.comp.resolved[item.ID]; ok && item.Source == ilsp.SourceLSP && len(item.AdditionalEdits) == 0 {
+	r, resolved := m.comp.resolved[item.ID]
+	if resolved && item.Source == ilsp.SourceLSP && len(item.AdditionalEdits) == 0 {
 		item.AdditionalEdits = r.edits
 	}
+	// A server item accepted before its resolve answered (#2610) — Enter
+	// right after the popup opened, inside the bridge's debounce — must not
+	// lose its auto-import: remember it, and after the insert ask the bridge
+	// to resolve now; the reply applies through applyLateImport.
+	awaitImport := item.Source == ilsp.SourceLSP && !resolved && len(item.AdditionalEdits) == 0
+	seq := m.comp.seq
+	m.pendingImport = nil
 	m.comp = nil
 	insertText := item.InsertText
 	var stops []snippet.Stop
@@ -723,6 +806,10 @@ func (m *Model) completionAccept() {
 	})
 	m.dirtyFromInsert()
 	m.compMRU.Bump(m.mruScope(), item.Label) // recently-accepted ranking boost (#854)
+	if awaitImport {
+		m.pendingImport = &pendingImport{id: item.ID, seq: seq, anchor: m.cursor}
+		m.emitCompletionAccept(item.ID, seq)
+	}
 	if len(stops) > 0 && !m.hasCarets() {
 		m.startSnippetSession(insertText, stops)
 	}

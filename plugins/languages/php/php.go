@@ -37,6 +37,16 @@ func init() {
 			Args:        []string{"--stdio"},
 			RootMarkers: []string{"composer.json", ".git"},
 			Install:     []string{"npm", "install", "-g", "intelephense"},
+			// Auto-import completions (#2610): accepting a class from
+			// another namespace adds the `use` declaration
+			// (additionalTextEdits). Intelephense defaults it on; pinned,
+			// and delivered through the workspace/configuration answer for
+			// the "intelephense" section the toolchain's phpVersion shares.
+			Settings: map[string]any{
+				"intelephense": map[string]any{
+					"completion": map[string]any{"insertUseDeclaration": true},
+				},
+			},
 		},
 		Toolchain: toolchain{},
 		// Constant conceals (#1701): `const` and `define()` declarations get
