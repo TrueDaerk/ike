@@ -119,6 +119,20 @@ While the mode is active on a pane:
   rendered but keeps its entire state. The breadcrumbs row (#1153) is
   suppressed for the pane; the query header takes its place in the mouse
   translation (`contentYOff`).
+- The pane's **title row** names the mode and its input — `JQ — data.json` —
+  but only where the pane has no tab bar to show (#2606). A pane holding
+  several tabs (or one tab with `editor.tabs.always_show`) keeps the bar:
+  labels, active marker, dirty/pin markers and close buttons render exactly as
+  without the playground, and clicks reach the same tab switch the keyboard
+  chords reach. `paneTabBarShown` is the single predicate behind all three —
+  what `renderPaneBox` draws, what `tabBarHit` resolves, and whether the
+  playground claims the row — so the bar can never be drawn without being
+  clickable, or hit-tested without being drawn. The dialect and the source are
+  not lost with the title: `playModeSegment` puts `JQ — data.json` at the head
+  of the info row exactly while the bar owns the title row, ahead of the
+  summary and before every other segment, so it survives an error or a
+  transient status too. On a pane too narrow to carry both, the label wins —
+  nothing else on screen would name the queried snapshot.
 
 The keyboard is modal **while the hosting pane is focused** and starts on the
 query line; **tab** moves it into the result buffer and back. A mouse click

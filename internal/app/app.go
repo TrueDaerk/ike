@@ -14109,8 +14109,11 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 
 	// The inline playground (#1970) takes over the pane's chrome with its
 	// content: the title names the mode — jq or yq (#2039) — and the queried
-	// snapshot.
-	if m.playInlineActive(key) {
+	// snapshot. It yields the row to the tab bar (#2606): a pane holding
+	// several tabs keeps them visible and clickable while the playground runs,
+	// and the mode and source are named in the playground's own info row
+	// instead (playModeSegment).
+	if m.playInlineActive(key) && !m.paneTabBarShown(inst) {
 		title = strings.ToUpper(m.play.dialect.Name()) + " — " + m.play.source
 	}
 

@@ -74,14 +74,23 @@ func termExitedTitle(t *terminal.Model) string {
 // tabBar returns the rendered tab bar for an editor pane fitting width cells,
 // and whether the bar (rather than the plain title) should be shown.
 func (m Model) tabBar(inst *pane.Instance, width int) (string, bool) {
-	if m.zen {
-		// Zen (#359): no tab bar; the plain single-document title renders.
-		return "", false
-	}
-	if inst.TabCount() < 2 && !m.tabsAlwaysShow() {
+	if !m.paneTabBarShown(inst) {
 		return "", false
 	}
 	return renderTabBar(tabLabels(inst), inst.ActiveTab(), width, m.pal()), true
+}
+
+// paneTabBarShown reports whether inst's title row is taken by the tab bar
+// rather than by a plain title: an editor pane holding several tabs, or one
+// tab with editor.tabs.always_show, and never in zen mode (#359) which shows
+// no bar at all. Rendering (tabBar), hit-testing (tabBarHit) and the inline
+// playground's chrome (#2606) all ask here, so what is drawn, what is
+// clickable and what the playground does with the row cannot disagree.
+func (m Model) paneTabBarShown(inst *pane.Instance) bool {
+	if m.zen || inst == nil || inst.Kind() != pane.KindEditor {
+		return false
+	}
+	return inst.TabCount() >= 2 || m.tabsAlwaysShow()
 }
 
 // tabsAlwaysShow reads editor.tabs.always_show live from the config, so the
@@ -383,10 +392,7 @@ func (m Model) tabBarHit(x, y int) (string, int, bool, bool) {
 			continue
 		}
 		inst := m.activeWS().Panes.Get(key)
-		if inst == nil || inst.Kind() != pane.KindEditor {
-			continue
-		}
-		if inst.TabCount() < 2 && !m.tabsAlwaysShow() {
+		if !m.paneTabBarShown(inst) {
 			continue // the row shows the plain title, not a bar
 		}
 		// The pane-number badge (#2407) takes the first cells of the row and
