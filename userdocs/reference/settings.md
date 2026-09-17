@@ -485,7 +485,7 @@ project-scope `[[elasticsearch.endpoints]]` table hides the user-scope one.
 
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
-| New issue | `forge.notify.issue_opened` | enum: `off`, `toast`, `badge`, `dialog` | `dialog` | user | Notification style when an issue appears on the forge |
+| New issue | `forge.notify.issue_opened` | enum: `off`, `toast`, `badge`, `dialog` | `off` | user | Notification style when an issue appears on the forge |
 | Issue closed | `forge.notify.issue_closed` | enum: `off`, `toast`, `badge`, `dialog` | `toast` | user | Notification style when an issue disappears from the open listing |
 | New pull request | `forge.notify.pr_opened` | enum: `off`, `toast`, `badge`, `dialog` | `toast` | user | Notification style when a pull request is opened |
 | Pull request merged | `forge.notify.pr_merged` | enum: `off`, `toast`, `badge`, `dialog` | `toast` | user | Notification style when a pull request is merged |
