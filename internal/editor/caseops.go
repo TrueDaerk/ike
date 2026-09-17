@@ -44,16 +44,30 @@ const (
 )
 
 // mapCase applies kind's rune transform to text. caseCycle never reaches here:
-// it works on whole identifiers, not on runes (see cycleToken).
+// it works on whole identifiers, not on runes (see cycleToken). caseToggle on
+// the command path is whole-text (see toggleCase), unlike the vim `~`/`g~`
+// operators, which keep swapping per rune (vimops.go).
 func mapCase(text string, kind caseKind) string {
 	switch kind {
 	case caseLower:
 		return strings.Map(unicode.ToLower, text)
 	case caseUpper:
 		return strings.Map(unicode.ToUpper, text)
+	case caseToggle:
+		return toggleCase(text)
 	default:
 		return strings.Map(swapCase, text)
 	}
+}
+
+// toggleCase implements JetBrains' Toggle Case: any lower-case letter present
+// means the text is not fully upper-cased yet, so upper-case all of it;
+// otherwise (all-caps, or no cased letters at all) lower-case all of it.
+func toggleCase(text string) string {
+	if strings.ContainsFunc(text, unicode.IsLower) {
+		return strings.Map(unicode.ToUpper, text)
+	}
+	return strings.Map(unicode.ToLower, text)
 }
 
 // runCaseCommand is the entry point for the four editor.case.* actions. It
@@ -96,8 +110,11 @@ func (m *Model) runCaseCommand(kind caseKind) tea.Cmd {
 	return nil
 }
 
-// caseSelection rewrites the visual selection and leaves visual mode. A
-// linewise selection covers its lines whole, like the operators do.
+// caseSelection rewrites the visual selection and keeps it selected — over the
+// same range for the rune transforms, re-fitted to the rewritten text for a
+// length-changing cycle — so a repeated command keeps addressing it (#2618).
+// This is JetBrains behaviour, unlike the vim `gu`/`gU`/`g~` operators
+// (caseTarget in vimops.go), which end visual mode.
 func (m *Model) caseSelection(kind caseKind) tea.Cmd {
 	t := m.visualSelection()
 	rng := t.Range
@@ -113,19 +130,53 @@ func (m *Model) caseSelection(kind caseKind) tea.Cmd {
 	}
 	text := m.buf.Slice(rng)
 	out, ok := m.caseText(text, kind)
-	m.mode = Normal
 	m.pending.Reset()
 	if !ok {
 		return notice(caseMiss(kind))
 	}
-	if out != text {
-		m.mutate(func(rec *history.Recorder) buffer.Position {
-			rec.Apply(buffer.Edit{Range: rng, Text: out})
-			return rng.Start
-		})
-		m.dot = &dotCommand{run: func(mm *Model) { mm.runCaseCommand(kind) }}
+	if out == text {
+		return nil
 	}
+	// The cursor may sit at either end of the selection; keep that orientation
+	// after the rewrite.
+	cursorAtEnd := !m.cursor.Before(m.anchor)
+	var newAnchor buffer.Position
+	m.mutate(func(rec *history.Recorder) buffer.Position {
+		end := rec.Apply(buffer.Edit{Range: rng, Text: out})
+		if t.Linewise {
+			if cursorAtEnd {
+				newAnchor = buffer.Position{Line: rng.Start.Line}
+				return buffer.Position{Line: end.Line}
+			}
+			newAnchor = buffer.Position{Line: end.Line}
+			return buffer.Position{Line: rng.Start.Line}
+		}
+		last := prevCell(m.buf, end)
+		if cursorAtEnd {
+			newAnchor = rng.Start
+			return last
+		}
+		newAnchor = last
+		return rng.Start
+	})
+	m.anchor = newAnchor
+	m.emit(EventCursorMove)
+	m.dot = &dotCommand{run: func(mm *Model) { mm.runCaseCommand(kind) }}
 	return nil
+}
+
+// prevCell steps p back one rune cell, the inverse of operator.Compose's
+// bumpRune: it is used to turn an edit's exclusive end position back into the
+// inclusive cursor cell a charwise visual selection ends on.
+func prevCell(b *buffer.Buffer, p buffer.Position) buffer.Position {
+	if p.Col > 0 {
+		return buffer.Position{Line: p.Line, Col: p.Col - 1}
+	}
+	if p.Line > 0 {
+		prev := p.Line - 1
+		return buffer.Position{Line: prev, Col: b.RuneLen(prev)}
+	}
+	return p
 }
 
 // caseText maps text for kind. ok is false only for a cycle over something
