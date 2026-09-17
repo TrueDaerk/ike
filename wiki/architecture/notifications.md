@@ -118,10 +118,11 @@ does not carry the issue yet, the reveal runs on the next fetch. A pull-request
 event has no pane of its own and opens in the browser.
 
 Config (typed section `[forge.notify]`, one key per event kind, all editable in
-Settings → Forge Notifications): `issue_opened` (default `dialog`),
-`issue_closed`, `pr_opened`, `pr_merged`, `pr_closed` (default `toast`) and
-`pr_checks_failing` (default `badge`). An unknown value falls back to that
-kind's default with a config diagnostic.
+Settings → Forge Notifications): `issue_opened` (default `off`, #2617 — a new
+issue is opt-in, not an interruption), `issue_closed`, `pr_opened`,
+`pr_merged`, `pr_closed` (default `toast`) and `pr_checks_failing` (default
+`badge`). An unknown value falls back to that kind's default with a config
+diagnostic.
 
 ## Call-site migration (#79)
 

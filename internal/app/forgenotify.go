@@ -16,7 +16,8 @@ import (
 // forgenotify.go is the prominent forge event surface (#2086). A toast in the
 // bottom-right corner is too easy to miss for something as actionable as a new
 // issue appearing on the forge, so each event kind picks its own style
-// (forge.notify.<kind>):
+// (forge.notify.<kind>). New issues default to off (#2617): they are recorded
+// in the history but otherwise silent unless a user opts into dialog/badge/toast.
 //
 //   - dialog — a centered, bordered, dismissable dialog over the workspace,
 //     following the project's dialog convention (the terminal's dead-process
@@ -71,10 +72,10 @@ func (m Model) forgeStyle(kind forge.EventKind) forgeNotifyStyle {
 	if v, ok := m.host.Config().Get(kind.ConfigKey()); ok {
 		return parseForgeStyle(v)
 	}
-	// No config view (tests, early startup): the shipped default — only a new
-	// issue interrupts.
+	// No config view (tests, early startup): the shipped default — new
+	// issues are opt-in, other kinds toast.
 	if kind == forge.IssueOpened {
-		return forgeStyleDialog
+		return forgeStyleOff
 	}
 	return forgeStyleToast
 }

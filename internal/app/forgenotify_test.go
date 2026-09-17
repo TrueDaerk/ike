@@ -8,7 +8,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/forge"
+	"ike/internal/host"
 	"ike/internal/pane"
+	"ike/internal/registry"
 )
 
 // issueEvent builds an IssueOpened event for the tests.
@@ -29,8 +31,35 @@ func feedEvents(m Model, events ...forge.Event) Model {
 	return tm.(Model)
 }
 
-func TestForgeIssueOpenedRaisesDialog(t *testing.T) {
+// newDialogSized is newSized with forge.notify.issue_opened forced to
+// "dialog", for tests exercising the (no longer default) dialog behaviour.
+// The first-start LSP onboarding dialog (#301) can also claim the shell on a
+// fresh config dir; dismiss it so it does not mask the forge dialog.
+func newDialogSized() Model {
+	m := NewWith(registry.New(), host.MapConfig{"forge.notify.issue_opened": "dialog"})
+	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = tm.(Model)
+	if m.onboardingOpen() {
+		m = m.closeOnboarding().(Model)
+	}
+	return m
+}
+
+func TestForgeIssueOpenedDefaultsOff(t *testing.T) {
 	m := feedEvents(newSized(), issueEvent(12, "Fix the thing"))
+	if m.forgeDialogOpen() {
+		t.Fatal("an IssueOpened event must not raise the dialog by default (#2617)")
+	}
+	if len(m.forgeUnread) != 0 {
+		t.Fatalf("unread badge = %d want 0: off must not badge either", len(m.forgeUnread))
+	}
+	if len(m.history) != 1 {
+		t.Fatalf("history = %d want 1: the event is still recorded", len(m.history))
+	}
+}
+
+func TestForgeIssueOpenedRaisesDialog(t *testing.T) {
+	m := feedEvents(newDialogSized(), issueEvent(12, "Fix the thing"))
 	if !m.forgeDialogOpen() {
 		t.Fatal("an IssueOpened event must raise the dialog")
 	}
@@ -46,7 +75,7 @@ func TestForgeIssueOpenedRaisesDialog(t *testing.T) {
 }
 
 func TestForgeEventsCollapseIntoOneDialogWithCount(t *testing.T) {
-	m := feedEvents(newSized(), issueEvent(1, "one"))
+	m := feedEvents(newDialogSized(), issueEvent(1, "one"))
 	m = feedEvents(m, issueEvent(2, "two"), issueEvent(3, "three"))
 	if len(m.forgeQueue) != 3 {
 		t.Fatalf("queue = %d want 3 collapsed events", len(m.forgeQueue))
@@ -64,7 +93,7 @@ func TestForgeEventsCollapseIntoOneDialogWithCount(t *testing.T) {
 }
 
 func TestForgeDialogDismissAndDismissAll(t *testing.T) {
-	m := feedEvents(newSized(), issueEvent(1, "one"), issueEvent(2, "two"))
+	m := feedEvents(newDialogSized(), issueEvent(1, "one"), issueEvent(2, "two"))
 	tm, _ := m.updateForgeDialog(tea.KeyPressMsg{Text: "d", Code: 'd'})
 	m = tm.(Model)
 	if len(m.forgeQueue) != 1 || !m.forgeDialogOpen() {
@@ -79,7 +108,7 @@ func TestForgeDialogDismissAndDismissAll(t *testing.T) {
 }
 
 func TestForgeDialogEscDismissesLastAndCloses(t *testing.T) {
-	m := feedEvents(newSized(), issueEvent(7, "solo"))
+	m := feedEvents(newDialogSized(), issueEvent(7, "solo"))
 	tm, _ := m.updateForgeDialog(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = tm.(Model)
 	if m.forgeDialogOpen() || len(m.forgeQueue) != 0 {
@@ -88,7 +117,7 @@ func TestForgeDialogEscDismissesLastAndCloses(t *testing.T) {
 }
 
 func TestForgeDialogOpenAction(t *testing.T) {
-	m := feedEvents(newSized(), issueEvent(42, "open me"))
+	m := feedEvents(newDialogSized(), issueEvent(42, "open me"))
 	tm, _ := m.updateForgeDialog(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = tm.(Model)
 	if m.forgeDialogOpen() {
@@ -116,7 +145,7 @@ func TestForgeDialogOpenAction(t *testing.T) {
 }
 
 func TestForgeTypingGuardDefersDialogToBadge(t *testing.T) {
-	m := newSized()
+	m := newDialogSized()
 	m.lastInputAt = time.Now()
 	m = feedEvents(m, issueEvent(5, "later"))
 	if m.forgeDialogOpen() {
@@ -137,7 +166,7 @@ func TestForgeTypingGuardDefersDialogToBadge(t *testing.T) {
 }
 
 func TestForgeGuardExpiresAfterTypingWindow(t *testing.T) {
-	m := newSized()
+	m := newDialogSized()
 	m.lastInputAt = time.Now().Add(-2 * forgeTypingWindow)
 	m = feedEvents(m, issueEvent(8, "now fine"))
 	if !m.forgeDialogOpen() {
@@ -146,7 +175,7 @@ func TestForgeGuardExpiresAfterTypingWindow(t *testing.T) {
 }
 
 func TestForgeBadgeClearsOnIssuesView(t *testing.T) {
-	m := newSized()
+	m := newDialogSized()
 	m.lastInputAt = time.Now()
 	m = feedEvents(m, issueEvent(9, "deferred"))
 	if m.forgeBadgeSegment() == "" {
@@ -159,7 +188,7 @@ func TestForgeBadgeClearsOnIssuesView(t *testing.T) {
 }
 
 func TestForgeBadgeClearsWhenDialogOpens(t *testing.T) {
-	m := newSized()
+	m := newDialogSized()
 	m.lastInputAt = time.Now()
 	m = feedEvents(m, issueEvent(10, "deferred"))
 	m.lastInputAt = time.Time{} // the user stopped typing
@@ -223,7 +252,7 @@ func TestForgeEventsLandInHistory(t *testing.T) {
 }
 
 func TestForgeDialogOwnsKeyboard(t *testing.T) {
-	m := feedEvents(newSized(), issueEvent(1, "one"), issueEvent(2, "two"))
+	m := feedEvents(newDialogSized(), issueEvent(1, "one"), issueEvent(2, "two"))
 	// j moves within the queue instead of reaching the editor.
 	tm, _ := m.Update(tea.KeyPressMsg{Text: "j", Code: 'j'})
 	m = tm.(Model)

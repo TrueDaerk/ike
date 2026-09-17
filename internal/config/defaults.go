@@ -427,12 +427,13 @@ func defaults() *Config {
 			// instant issues window after a restart, cheaper polls — so it
 			// defaults on; the file lives in the project's .ike directory.
 			Cache: true,
-			// A new issue is the event the user must not miss (#2086), so it
-			// gets the dialog; failing checks are actionable but rarely
-			// urgent enough to interrupt typing, so they take the badge.
-			// Everything else stays an ordinary toast.
+			// New issues are opt-in (#2617): many users never asked for the
+			// interrupting dialog, so it defaults off (history only) until a
+			// user picks a style in Settings. Failing checks are actionable
+			// but rarely urgent enough to interrupt typing, so they take the
+			// badge. Everything else stays an ordinary toast.
 			Notify: ForgeNotify{
-				IssueOpened:     "dialog",
+				IssueOpened:     "off",
 				IssueClosed:     "toast",
 				PROpened:        "toast",
 				PRMerged:        "toast",
