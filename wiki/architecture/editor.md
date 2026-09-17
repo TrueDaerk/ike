@@ -695,7 +695,12 @@ in-line word motion; mid-insert they just move the caret. A selection started
 this way is GUI-style (vim's `keymodel=stopsel`, #326): releasing Shift and
 pressing an unshifted navigation key (arrows, `Home`/`End`, word/paragraph and
 page keys) drops the selection and just moves the caret, while vim motions and
-selections entered with `v`/`V`/`Ctrl+V` keep extending as in vim.
+selections entered with `v`/`V`/`Ctrl+V` keep extending as in vim. The mouse
+follows the same rule (#2608): a plain left click drops a `Shift+arrow`
+selection and places the caret on the clicked cell, `Shift`+click extends the
+selection to it instead (and starts one at the caret when none is active), and
+a `v`/`V`/`Ctrl+V` selection keeps being extended by a plain click — see
+[mouse.md](mouse.md).
 `editor.selectAll` (`Cmd+A`, JetBrains "Select All", #1861) selects the whole
 buffer as a linewise visual selection — the `ggVG` equivalent — so the usual
 follow-ups (`y`/`d`/typing, or Copy from a read-only buffer) act on it; an
