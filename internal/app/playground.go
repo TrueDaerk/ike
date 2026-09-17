@@ -1731,9 +1731,48 @@ func (m Model) playInlineBody(width int) string {
 	return body + s.resultEd.View()
 }
 
-// playInfoRow is the header's second line: an error beats a transient status
-// beats the input/result summary with the key hints. One fixed row — the
-// buffer below must not resize when an error appears mid-keystroke.
+// playInfoRow is the header's second line: the mode/source label where the
+// chrome no longer carries it (playModeSegment, #2606), then the line proper —
+// an error beats a transient status beats the input/result summary with the
+// key hints. One fixed row — the buffer below must not resize when an error
+// appears mid-keystroke.
+func (m Model) playInfoRow(width int) string {
+	seg := m.playModeSegment()
+	if seg == "" {
+		return m.playInfoLine(width)
+	}
+	segW := ansi.StringWidth(seg)
+	if rest := width - segW - 3; rest >= playInfoMinLine {
+		sep := lipgloss.NewStyle().Foreground(m.pal().Hint).Render(" · ")
+		return seg + sep + m.playInfoLine(rest)
+	}
+	// Too narrow for both: the label wins. Nothing else on screen names the
+	// dialect and the queried snapshot once the tab bar has the title row.
+	return ansi.Truncate(seg, width, "…")
+}
+
+// playInfoMinLine is the room the info line proper needs before the mode label
+// may share its row: below it the line would be cut to a few cells, which says
+// less than the label it was squeezed in beside.
+const playInfoMinLine = 20
+
+// playModeSegment is the "JQ — <source>" label of the info row, "" while the
+// pane's title row still carries it. The tab bar takes that row over whenever
+// the pane holds several tabs (#2606), so the playground names its dialect and
+// its input snapshot in its own header instead of losing them.
+func (m Model) playModeSegment() string {
+	s := m.play
+	if s == nil || !m.playInlineActive(s.paneKey) {
+		return ""
+	}
+	if !m.paneTabBarShown(m.activeWS().Panes.Get(s.paneKey)) {
+		return ""
+	}
+	return lipgloss.NewStyle().Foreground(m.pal().Secondary).Bold(true).Render(strings.ToUpper(s.dialect.Name()) + " — " + s.source)
+}
+
+// playInfoLine is the info row's line proper: an error beats a transient
+// status beats the input/result summary with the key hints.
 //
 // The row is composed of styled segments (#1978): caps render in Warning so
 // a capped run is not the dimmest thing on the row, a runtime error keeps
@@ -1741,7 +1780,7 @@ func (m Model) playInlineBody(width int) string {
 // whole `·`-separated segments on a narrow pane instead of being cut
 // mid-word. Truncation is cell-aware (ansi.Truncate), so a wide glyph in the
 // source label cannot overflow the row.
-func (m Model) playInfoRow(width int) string {
+func (m Model) playInfoLine(width int) string {
 	s := m.play
 	pal := m.pal()
 	hint := lipgloss.NewStyle().Foreground(pal.Hint)

@@ -320,6 +320,11 @@ actually showing a bar.
 - **Left-click** on an inactive segment focuses the pane and activates that
   tab. The active tab's own segment — and the row outside the segments —
   still starts a **pane move**, keeping the title row as the drag handle.
+- An **inline playground** (jq/yq/xmq, #1970) running in the pane does not take
+  the row away from the bar (#2606): its own `JQ — <source>` title renders only
+  where no bar would, and the dialect and source move into the playground's
+  info row otherwise. See
+  [jq, yq & xmq Playground](jq-playground.md#the-inline-mount).
 - **Close button (#1128).** Every segment renders a trailing muted `✕`
   (`" label ✕ "`); a left press on that cell closes the clicked tab like a
   middle click. A dirty tab is selected first so the unsaved-changes guard
