@@ -67,9 +67,15 @@ func (m *Model) routeWatchEvent(msg watch.EventMsg) tea.Cmd {
 	// Announce the file event to hook subscribers (#1144): the LSP bridge
 	// forwards it to the servers as workspace/didChangeWatchedFiles, so
 	// Intelephense re-indexes externally created/changed/deleted files.
+	// A dependency-marker change rides the same route, tagged with the
+	// language that declared the marker (#2613) so the bridge can apply the
+	// notify-or-restart rule instead of treating it as an ordinary file.
+	depLang, depRoot := m.depWatchLang(msg.Path)
 	hookCmds := m.fireHooks(plugin.EventExternalFileChange, plugin.FileChange{
-		Path: msg.Path,
-		Kind: fileChangeKind(msg.Kind),
+		Path:    msg.Path,
+		Kind:    fileChangeKind(msg.Kind),
+		DepLang: depLang,
+		DepRoot: depRoot,
 	})
 	if msg.Kind == watch.FileRemoved {
 		if ed := m.editorForPath(msg.Path); ed != nil && ed.Following() {

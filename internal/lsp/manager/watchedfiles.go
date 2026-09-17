@@ -111,7 +111,9 @@ func mergeChangeTypes(old, next int) (merged int, keep bool) {
 func (m *Manager) flushWatched() {
 	m.mu.Lock()
 	batch := m.watchedPending
+	markers := m.watchedMarkers
 	m.watchedPending = make(map[string]int)
+	m.watchedMarkers = make(map[string]depMarker)
 	m.watchedTimer = nil
 	paths := make([]string, 0, len(batch))
 	for p := range batch {
@@ -126,7 +128,7 @@ func (m *Manager) flushWatched() {
 	for _, srv := range m.servers {
 		var changes []protocol.FileEvent
 		for _, p := range paths {
-			if m.serverWantsLocked(srv, p, batch[p]) {
+			if m.serverWantsLocked(srv, p, batch[p], markers) {
 				changes = append(changes, protocol.FileEvent{URI: protocol.PathToURI(p), Type: batch[p]})
 			}
 		}
@@ -143,8 +145,15 @@ func (m *Manager) flushWatched() {
 // serverWantsLocked decides whether one event is relevant for srv. Caller
 // holds m.mu. With registered watchers the globs (and their kind bits) decide;
 // without any registration the fallback forwards events for files whose
-// language the server handles and that lie under the server's root.
-func (m *Manager) serverWantsLocked(srv *server, path string, typ int) bool {
+// language the server handles and that lie under the server's root. A path
+// tagged as a dependency marker (#2613) short-circuits both.
+func (m *Manager) serverWantsLocked(srv *server, path string, typ int, markers map[string]depMarker) bool {
+	// Dependency markers first (#2613): they bypass both filters below on
+	// purpose — go.sum maps to no registered language, and a `.dist-info`
+	// entry inside site-packages is not a file any registered glob names.
+	if dm, ok := markers[path]; ok && markerWants(dm, srv, path) {
+		return true
+	}
 	if len(srv.watchers) > 0 {
 		for _, set := range srv.watchers {
 			for _, w := range set {

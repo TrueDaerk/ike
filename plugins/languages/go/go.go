@@ -65,6 +65,13 @@ func init() {
 				"completeUnimported": true,
 			},
 		},
+		// Dependency-update markers (#2613): a `go get` or `go mod tidy`
+		// outside IKE rewrites the module files, and gopls re-resolves the
+		// module graph from the didChangeWatchedFiles notification alone —
+		// no restart needed. Declared on "go" rather than on the "go.mod"
+		// language next door: the markers belong to the language that owns
+		// the server they have to reach.
+		Deps:         &lang.DepWatch{Files: []string{"go.mod", "go.sum"}},
 		LineComment:  "//",
 		BlockComment: [2]string{"/*", "*/"},
 		IndentAfter:  []string{"{", "(", "["},

@@ -319,6 +319,14 @@ type Model struct {
 	// settled Update pass against the panes actually open, so a closed or
 	// retargeted diff never leaks its registration.
 	diffWatched map[string]bool
+	// depWatched maps each registered dependency-marker path to the language
+	// that declared it (#2613, depwatch.go): go.mod, package.json, the venv's
+	// site-packages directory. depWatchRoot is the project root it was
+	// resolved for, and depWatchDirty asks the next settled pass to re-resolve
+	// it after a marker itself changed.
+	depWatched    map[string]string
+	depWatchRoot  string
+	depWatchDirty bool
 	// menu is the menu bar (Roadmap 0160, #90), rendered above the panes when
 	// ui.menu_bar is enabled.
 	menu *menu.Model
@@ -4394,6 +4402,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// pass, and a single reconcile against the panes that are actually open
 	// beats hooking every one of those sites.
 	mm.syncDiffWatches()
+	// The dependency-marker watches (#2613) settle here too: a project switch
+	// re-roots them, and a marker change re-resolves where the toolchain now
+	// keeps its packages. A root-string compare while nothing moved.
+	mm.syncDepWatches()
 	// The network endpoint's status snapshot (#2529) follows the settled
 	// pass: any message may have switched the project or moved the cursor,
 	// and a paired client asks over its own goroutine, which cannot look

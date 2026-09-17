@@ -39,6 +39,20 @@ func (r *statusRecorder) hints() []string {
 	return out
 }
 
+// dependencyToasts returns the recorded dependency-restart announcements
+// (#2613), so a test can ignore the ordinary started/ready traffic.
+func (r *statusRecorder) dependencyToasts() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	var out []string
+	for _, t := range r.texts {
+		if strings.Contains(t, "dependencies changed") {
+			out = append(out, t)
+		}
+	}
+	return out
+}
+
 // fakeLookPath makes only the listed binaries resolvable.
 func fakeLookPath(t *testing.T, present ...string) {
 	t.Helper()

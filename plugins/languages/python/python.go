@@ -34,6 +34,17 @@ func init() {
 		// The Python dependency manifests (#2419): the Dependencies tool
 		// window scans them via pip/uv list --outdated + pip-audit.
 		DepManifests: []string{"requirements.txt", "pyproject.toml"},
+		// Dependency-update markers (#2613): the root manifests plus the
+		// venv's site-packages directory, whose *.dist-info entries appear
+		// and disappear on every pip/uv install. Python is the one language
+		// that restarts: pyright resolves imports and stubs from
+		// site-packages once and does not re-scan it on a
+		// didChangeWatchedFiles notification.
+		Deps: &lang.DepWatch{
+			Files:   []string{"requirements*.txt", "pyproject.toml", "uv.lock", "poetry.lock"},
+			Dirs:    sitePackages,
+			Restart: true,
+		},
 		Server: &lang.ServerSpec{
 			Language:    "python",
 			Command:     "pyright-langserver",

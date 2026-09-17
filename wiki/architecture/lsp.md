@@ -1028,7 +1028,54 @@ server. The watched-files path closes that gap.
   watched-files event so its index and the buffer sync stay coherent.
 - **Coverage limits**: events originate from the recursive fsnotify watch, so
   changes under pruned directories (dot dirs, `vendor/`, `node_modules/`, or
-  beyond the #1011 directory cap) are not announced.
+  beyond the #1011 directory cap) are not announced — except for the
+  dependency markers below, which register per-path watches of their own.
+
+### Dependency updates (#2613)
+
+The coverage limit above has one painful consequence: after `pip install -U
+<pkg>` in the project venv, `go get`, `npm install` or `composer update`, the
+running server keeps serving the dependency index it built at startup. Imports
+of new symbols stay flagged unresolved and completion does not offer them until
+`lsp.restart`. Watching the dependency trees recursively is not an option —
+they hold thousands of files, which is exactly why they are pruned.
+
+Instead each language declares a handful of cheap **toolchain marker paths**
+through the registry (`lang.DepWatch`, see
+[Languages § Dependency-update markers](./languages.md#dependency-update-markers-2613)),
+and only those are watched:
+
+- **Registration**: `internal/app/depwatch.go` resolves the declared markers
+  once per project root and registers them with `watch.Service.WatchPath`
+  (#2506). A registered path that *is* a directory — the venv's
+  `site-packages` — is watched **non-recursively**: its direct entries report
+  (`<pkg>-<ver>.dist-info` appearing is what an install looks like), its
+  subtree does not. The set is re-resolved after a marker change, so an
+  install that also created the venv is picked up.
+- **Tagging**: the marker event rides the ordinary
+  `plugin.EventExternalFileChange` route, with `FileChange.DepLang` /
+  `DepRoot` naming the declaring language and the project root. An untagged
+  event behaves exactly as before.
+- **Notify**: the bridge routes a tagged event through `Manager.DepEvent`,
+  which is `FileEvent` plus a marker tag. The tag lets the path **bypass both
+  interest filters** — deliberately: `go.sum` maps to no registered language,
+  so the language fallback would drop it, and a `.dist-info` *directory* is
+  not a file any server's registered glob names. Interest becomes "same
+  language, and server root and marker root contain one another".
+- **Restart**: a language whose servers do not re-index on the notification
+  (Python only, by default) additionally gets its servers restarted for the
+  affected root via `Manager.RestartRoot` — the root-scoped sibling of
+  `RestartLang`, so a monorepo's other projects keep their servers. Open
+  buffers survive: the restart re-opens the tracked documents exactly like the
+  crash-restart path.
+- **Debouncing**: marker events collect for 1.5 s before the restart fires, and
+  the pending set is keyed by (language, root). One `pip install` touching
+  dozens of `dist-info` entries costs **one** restart, not one per entry.
+- **Explaining it**: the restart announces itself on the existing status
+  channel — `pyright-langserver restarted: dependencies changed`, an info toast
+  — so the brief diagnostics blip is accounted for.
+
+There is no user-facing setting: the marker lists are language defaults.
 
 ## Design rules
 

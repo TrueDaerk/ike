@@ -196,6 +196,16 @@ type Language struct {
 	// disabling a language plugin also silences its dependency scan. Nil —
 	// the normal case — declares none.
 	DepManifests []string
+
+	// Deps optionally declares this language's dependency-update markers
+	// (#2613): the cheap toolchain paths whose change means the dependency
+	// tree moved (go.mod, package.json, the venv's site-packages directory),
+	// plus whether the language's servers must be restarted to notice.
+	// The app registers them as non-recursive per-path watches; the LSP
+	// manager turns their events into workspace/didChangeWatchedFiles and,
+	// for a restarting language, a debounced per-root restart. Nil — the
+	// normal case — declares none. See depwatch.go.
+	Deps *DepWatch
 }
 
 // Note is one Go-computed diagnostic (#1623): the half-open rune-column range

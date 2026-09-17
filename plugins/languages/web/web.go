@@ -64,6 +64,15 @@ func init() {
 		// The npm dependency manifest (#2419): the Dependencies tool window
 		// scans it via npm/pnpm/yarn outdated + audit.
 		DepManifests: []string{"package.json"},
+		// Dependency-update markers (#2613): an `npm install` rewrites the
+		// lock file and node_modules/.package-lock.json — the latter inside
+		// the pruned node_modules tree, so it needs its own per-path watch.
+		// tsserver re-reads the module resolution on the notification; no
+		// restart.
+		Deps: &lang.DepWatch{Files: []string{
+			"package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
+			"node_modules/.package-lock.json",
+		}},
 		Server: &lang.ServerSpec{
 			Language:    "typescript",
 			Command:     "vtsls",

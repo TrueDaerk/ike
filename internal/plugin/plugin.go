@@ -201,6 +201,16 @@ const (
 type FileChange struct {
 	Path string
 	Kind FileChangeKind
+	// DepLang names the language whose dependency-update markers cover Path
+	// (#2613) — "go" for a go.mod write, "python" for a `.dist-info` entry
+	// appearing in the venv's site-packages — and is empty for an ordinary
+	// file event. DepRoot is the project root those markers were resolved
+	// for. The LSP bridge routes a tagged event through the manager's
+	// dependency path: the servers are notified as usual, and a language
+	// whose servers do not re-index on that notification (pyright) is
+	// restarted for DepRoot once the burst settles.
+	DepLang string
+	DepRoot string
 }
 
 // Hook subscribes to a lifecycle Event.
