@@ -180,7 +180,10 @@ previous contribution and the merged list is rebuilt:
 - items within a source in server order (`sortText`, label fallback),
 - **de-dup by insert text** — the first occurrence, i.e. the
   highest-priority source's item, wins (the LSP item beats the word-index
-  echo of the same identifier).
+  echo of the same identifier); within one source, items sharing the insert
+  text but differing in detail all stay (#2610: the same symbol importable
+  from two modules is two auto-import candidates the user picks between by
+  the module shown).
 
 A batch for a *different* position replaces the popup outright; an empty
 merge batch clears only its source's contribution (the popup closes when
@@ -193,7 +196,11 @@ the user is arrowing.
 Fuzzy filtering (#845) runs on the merged list; `completionItem/resolve`
 (#847) and its documentation/auto-import merge apply to `SourceLSP` items
 only — local items never resolve, and resolve IDs cannot collide across
-sources.
+sources. Every selected server item resolves, documented or not, and an
+accept that outruns its resolve records a pending import the late reply
+applies to the accepted text (#2610) — the ordering, the `Seq` stamp that
+ties a reply to its popup, and the per-server auto-import options are in
+[LSP](./lsp.md) ("Resolve-before-accept", "Auto-import server options").
 
 ## Word index (#852)
 

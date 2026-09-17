@@ -34,9 +34,15 @@ const (
 	// w/b, paragraphs) never emit it.
 	EventJump
 	// EventCompletionSelect fires when the completion popup's selection lands
-	// on an item without documentation (#847). CompletionID carries the item's
-	// reply index; the LSP bridge answers with completionItem/resolve.
+	// on a server item not yet resolved (#847, #2610 — regardless of inline
+	// documentation, since the auto-import edit only arrives by resolve).
+	// CompletionID carries the item's reply index; the LSP bridge answers
+	// with completionItem/resolve.
 	EventCompletionSelect
+	// EventCompletionAccept fires when a server item is accepted before its
+	// resolve answered (#2610): the bridge resolves it immediately and the
+	// reply's additionalTextEdits apply to the accepted text.
+	EventCompletionAccept
 )
 
 // SelKind classifies the visual selection carried on an event: none, a
@@ -77,8 +83,11 @@ type Event struct {
 	// the threshold on disk.
 	Large bool
 	// CompletionID carries the selected item's reply index on
-	// EventCompletionSelect (#847).
+	// EventCompletionSelect (#847) and EventCompletionAccept (#2610).
 	CompletionID int
+	// CompletionSeq is the server reply (CompletionMsg.Seq) the ID indexes
+	// into (#2610).
+	CompletionSeq int
 	// Key identifies the emitting view where Path cannot (#2048): it is
 	// ParseKey — the file path, or this view's tag for a buffer with no file.
 	// Consumers keying per-buffer state (the completion sources) and the
@@ -112,19 +121,30 @@ func (m *Model) emit(kind EventKind) { m.emitChar(kind, "") }
 
 // emitCompletionSelect announces the selected completion item for lazy
 // resolve (#847); the bridge debounces and answers with CompletionResolveMsg.
-func (m *Model) emitCompletionSelect(id int) {
+func (m *Model) emitCompletionSelect(id, seq int) {
+	m.emitCompletionResolve(EventCompletionSelect, id, seq)
+}
+
+// emitCompletionAccept announces an accepted item whose resolve is still
+// outstanding (#2610); the bridge resolves it without the selection debounce.
+func (m *Model) emitCompletionAccept(id, seq int) {
+	m.emitCompletionResolve(EventCompletionAccept, id, seq)
+}
+
+func (m *Model) emitCompletionResolve(kind EventKind, id, seq int) {
 	if m.emitter == nil {
 		return
 	}
 	m.emitter.Emit(Event{
-		Kind:         EventCompletionSelect,
-		Path:         m.path,
-		Key:          m.ParseKey(),
-		LangPath:     m.langPath(),
-		Line:         m.cursor.Line,
-		Col:          m.cursor.Col,
-		Mode:         m.mode,
-		CompletionID: id,
+		Kind:          kind,
+		Path:          m.path,
+		Key:           m.ParseKey(),
+		LangPath:      m.langPath(),
+		Line:          m.cursor.Line,
+		Col:           m.cursor.Col,
+		Mode:          m.mode,
+		CompletionID:  id,
+		CompletionSeq: seq,
 	})
 }
 
@@ -132,6 +152,14 @@ func (m *Model) emitCompletionSelect(id int) {
 func (m *Model) emitChar(kind EventKind, ch string) {
 	if kind == EventChange {
 		m.docVersion++
+		// An edit above the text a late auto-import belongs to (#2610) —
+		// undo of the accept lands the cursor before it, so does typing on
+		// an earlier line — moves the import's target; drop it rather than
+		// splice a stale-positioned edit. Typing on after the accept keeps
+		// the cursor at or past the anchor and leaves it armed.
+		if p := m.pendingImport; p != nil && (m.cursor.Line < p.anchor.Line || (m.cursor.Line == p.anchor.Line && m.cursor.Col < p.anchor.Col)) {
+			m.pendingImport = nil
+		}
 		// Keep collapsed folds consistent with the mutation (#144): dissolve
 		// the fold the edit landed in, shift the ones below it (fold.go).
 		m.dissolveFoldsAtEdit()

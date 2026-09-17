@@ -500,28 +500,6 @@ func TestCompletionResolveFlow(t *testing.T) {
 	}
 }
 
-// TestCompletionResolveNotRequestedWithInlineDoc guards #847: an item that
-// already ships documentation needs no resolve round-trip.
-func TestCompletionResolveNotRequestedWithInlineDoc(t *testing.T) {
-	m, _ := loaded(t, "ab\n")
-	var selects []int
-	m.SetEmitter(EmitterFunc(func(e Event) {
-		if e.Kind == EventCompletionSelect {
-			selects = append(selects, e.CompletionID)
-		}
-	}))
-	m = insertModeAt(m, 0, 2)
-	m, _ = m.Update(ilsp.CompletionMsg{Path: m.path, Line: 0, Col: 2, Items: []ilsp.CompletionItem{
-		{Label: "abc", InsertText: "abc", ID: 1, Doc: "inline docs", Source: ilsp.SourceLSP},
-	}})
-	if len(selects) != 0 {
-		t.Fatalf("selects = %v, want none (doc already present)", selects)
-	}
-	if v := m.CompletionView(); !strings.Contains(v, "inline docs") {
-		t.Fatalf("popup must render the inline doc, got:\n%s", v)
-	}
-}
-
 // TestCompletionMergesSourceBatches guards #851: a local batch opens the popup
 // instantly, the LSP batch merges in at the same request position without a
 // selection jump, duplicates by insert text keep the higher-priority item, and

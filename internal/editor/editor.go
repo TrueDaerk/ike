@@ -715,8 +715,11 @@ type Model struct {
 	debugVals *debugValueStore
 	comp      *completionState
 	compMRU   *mru.Store // recently accepted completions (#854); nil-safe
-	snippet   *snippetSession
-	hover     *hoverState
+	// pendingImport is a server completion accepted before its resolve
+	// answered (#2610); the reply's auto-import applies to the accepted text.
+	pendingImport *pendingImport
+	snippet       *snippetSession
+	hover         *hoverState
 	// mouseHover is the pending mouse-idle hover position (#1129): set when
 	// the app fires the idle hover, matched against the LSP reply's position
 	// so a stale answer never opens a popup at a cell the pointer has left.
@@ -1182,6 +1185,7 @@ func (m *Model) Load(path string) error {
 	}
 	m.hist = history.New()
 	m.changes = changeList{} // the change list follows the history (#1174)
+	m.pendingImport = nil    // a late auto-import belongs to the text that was just replaced (#2610)
 	m.restoreUndo(raw)       // hash the on-disk bytes — for a vault file the ciphertext
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
@@ -1245,6 +1249,7 @@ func (m *Model) NewFile(path string) {
 	m.depOK = false
 	m.hist = history.New()
 	m.changes = changeList{} // the change list follows the history (#1174)
+	m.pendingImport = nil    // a late auto-import belongs to the text that was just replaced (#2610)
 	m.diskHash = ""          // nothing on disk yet; the first :w stamps it
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
@@ -1280,6 +1285,7 @@ func (m *Model) RestoreText(text string) {
 	m.wait = awaitNone
 	m.hist = history.New()
 	m.changes = changeList{} // the change list follows the history (#1174)
+	m.pendingImport = nil    // a late auto-import belongs to the text that was just replaced (#2610)
 	m.hist.MarkNeverSaved()  // recovered text is dirty even after undoing back to it
 	m.diskHash = ""          // recovered content matches no on-disk state
 	m.dirty = true

@@ -58,6 +58,11 @@ func init() {
 					"rangeVariableTypes":     true,
 					"compositeLiteralFields": true,
 				},
+				// Auto-import completions (#2610): members of packages the
+				// file does not import yet complete with the import as an
+				// additionalTextEdit. gopls defaults it on; pinned so a
+				// future default flip cannot silently drop the feature.
+				"completeUnimported": true,
 			},
 		},
 		LineComment:  "//",

@@ -43,6 +43,18 @@ func init() {
 			// Pyright applies per-rule severity overrides natively (#1503);
 			// exact-code lsp.diagnostics_severity rules land here.
 			SeverityOverridesPath: []string{"python", "analysis", "diagnosticSeverityOverrides"},
+			// Auto-import completions (#2610): unimported symbols show up in
+			// the popup and accepting one adds the import. Pyright defaults
+			// the switch on, basedpyright off — send it explicitly so either
+			// server behaves the same. Reaches the server as
+			// initializationOptions and as the workspace/configuration
+			// answer for the "python" section; a user [lsp.servers.python]
+			// setting still overrides it.
+			Settings: map[string]any{
+				"python": map[string]any{
+					"analysis": map[string]any{"autoImportCompletions": true},
+				},
+			},
 		},
 		Toolchain: toolchain{},
 		// Network literals (#1653) inside string literals: a CIDR prefix

@@ -110,6 +110,11 @@ type CompletionMsg struct {
 	// async parse takes (#2033). Empty means "route by Path"; read it through
 	// RouteKey.
 	Key string
+	// Seq numbers the server reply this batch came from (#2610); the bridge
+	// stamps the same Seq on every CompletionResolveMsg answered off it, so
+	// a late resolve for an accepted item never lands on a newer popup whose
+	// items happen to share the index. Local sources leave it 0.
+	Seq int
 }
 
 // CompletionBatchMsg carries the tagged batches of one local-engine dispatch
@@ -200,6 +205,8 @@ type CompletionResolveMsg struct {
 	ID              int
 	Doc             string
 	AdditionalEdits []FormatEdit
+	// Seq is the CompletionMsg.Seq of the reply the item belongs to (#2610).
+	Seq int
 }
 
 // HoverMsg delivers hover content (already flattened to text) for a popup.
@@ -853,7 +860,7 @@ func ConvertCompletion(items []protocol.CompletionItem) []CompletionItem {
 		}
 		out = append(out, CompletionItem{
 			Label:      it.Label,
-			Detail:     it.Detail,
+			Detail:     completionDetail(it),
 			InsertText: insert,
 			Kind:       it.Kind,
 			SortText:   it.SortText,
@@ -865,6 +872,27 @@ func ConvertCompletion(items []protocol.CompletionItem) []CompletionItem {
 		})
 	}
 	return out
+}
+
+// completionDetail composes the popup's detail column (#2610): the
+// labelDetails pair first — detail (a signature) then description, where
+// pyright and vtsls name the module an auto-import will pull the symbol from
+// — followed by the classic detail, so a candidate that adds an import is
+// recognisable before it is accepted.
+func completionDetail(it protocol.CompletionItem) string {
+	var parts []string
+	if ld := it.LabelDetails; ld != nil {
+		if s := strings.TrimSpace(ld.Detail); s != "" {
+			parts = append(parts, s)
+		}
+		if s := strings.TrimSpace(ld.Description); s != "" {
+			parts = append(parts, s)
+		}
+	}
+	if s := strings.TrimSpace(it.Detail); s != "" {
+		parts = append(parts, s)
+	}
+	return strings.Join(parts, " ")
 }
 
 // DocText flattens a completion item's `string | MarkupContent`
