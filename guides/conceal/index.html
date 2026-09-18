@@ -1,0 +1,2668 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="A JetBrains-inspired terminal IDE with vim-like editing.">
+      
+      
+      
+        <link rel="canonical" href="https://truedaerk.github.io/ike/guides/conceal/">
+      
+      
+        <link rel="prev" href="../file-rendering/">
+      
+      
+        <link rel="next" href="../code-intelligence/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
+    
+    
+      
+        <title>Conceal and decoded values - IKE</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#conceal-what-the-editor-draws-instead" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="IKE" class="md-header__button md-logo" aria-label="IKE" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 19V7H4v12zm0-16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm-7 14v-2h5v2zm-3.42-4L5.57 9H8.4l3.3 3.3c.39.39.39 1.03 0 1.42L8.42 17H5.59z"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            IKE
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Conceal and decoded values
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: light)" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_0">
+    
+      <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_1" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="m17.75 4.09-2.53 1.94.91 3.06-2.63-1.81-2.63 1.81.91-3.06-2.53-1.94L12.44 4l1.06-3 1.06 3zm3.5 6.91-1.64 1.25.59 1.98-1.7-1.17-1.7 1.17.59-1.98L15.75 11l2.06-.05L18.5 9l.69 1.95zm-2.28 4.95c.83-.08 1.72 1.1 1.19 1.85-.32.45-.66.87-1.08 1.27C15.17 23 8.84 23 4.94 19.07c-3.91-3.9-3.91-10.24 0-14.14.4-.4.82-.76 1.27-1.08.75-.53 1.93.36 1.85 1.19-.27 2.86.69 5.83 2.89 8.02a9.96 9.96 0 0 0 8.02 2.89m-1.64 2.02a12.08 12.08 0 0 1-7.8-3.47c-2.17-2.19-3.33-5-3.49-7.82-2.81 3.14-2.7 7.96.31 10.98 3.02 3.01 7.84 3.12 10.98.31"/></svg>
+      </label>
+    
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="(prefers-color-scheme: dark)" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_1">
+    
+      <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_0" hidden>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 7a5 5 0 0 1 5 5 5 5 0 0 1-5 5 5 5 0 0 1-5-5 5 5 0 0 1 5-5m0 2a3 3 0 0 0-3 3 3 3 0 0 0 3 3 3 3 0 0 0 3-3 3 3 0 0 0-3-3m0-7 2.39 3.42C13.65 5.15 12.84 5 12 5s-1.65.15-2.39.42zM3.34 7l4.16-.35A7.2 7.2 0 0 0 5.94 8.5c-.44.74-.69 1.5-.83 2.29zm.02 10 1.76-3.77a7.131 7.131 0 0 0 2.38 4.14zM20.65 7l-1.77 3.79a7.02 7.02 0 0 0-2.38-4.15zm-.01 10-4.14.36c.59-.51 1.12-1.14 1.54-1.86.42-.73.69-1.5.83-2.29zM12 22l-2.41-3.44c.74.27 1.55.44 2.41.44.82 0 1.63-.17 2.37-.44z"/></svg>
+      </label>
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/TrueDaerk/ike" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    TrueDaerk/ike
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="IKE" class="md-nav__button md-logo" aria-label="IKE" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 19V7H4v12zm0-16a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2zm-7 14v-2h5v2zm-3.42-4L5.57 9H8.4l3.3 3.3c.39.39.39 1.03 0 1.42L8.42 17H5.59z"/></svg>
+
+    </a>
+    IKE
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/TrueDaerk/ike" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+  </div>
+  <div class="md-source__repository">
+    TrueDaerk/ike
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting started
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Getting started
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/installation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Installation
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/terminal-setup/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Terminal setup
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/desktop-launcher/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Desktop launcher
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/first-project/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Your first project
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../getting-started/command-line/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Command line
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Concepts
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Concepts
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/panes-and-layout/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Panes, tabs and layouts
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/modal-editor/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The modal editor
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/projects-and-sessions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Projects and sessions
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../concepts/commands-and-palette/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Commands and the palette
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Guides
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Guides
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../navigation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting around
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../search/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Search and replace
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../file-rendering/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    How files are rendered
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conceal and decoded values
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Conceal and decoded values
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-one-rule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The one rule
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The one rule">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reveal-next-to-the-value-not-only-inside-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reveal next to the value, not only inside it
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#timestamps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Timestamps
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#number-readability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Number readability
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Number readability">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#when-the-field-name-knows-better" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When the field name knows better
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#constants-in-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constants in code
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#escaped-text" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Escaped text
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#percent-encoded-urls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Percent-encoded URLs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cron-expressions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cron expressions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File modes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#network-literals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network literals
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#certificates-and-pem-blocks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Certificates and PEM blocks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#masked-secrets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Masked secrets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#markup-markdown-csv-and-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Markup: Markdown, CSV and logs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#two-things-that-look-like-conceal-and-are-not" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two things that look like conceal and are not
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The settings
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The settings">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#where-they-apply" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where they apply
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#related" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Related
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../code-intelligence/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Code intelligence
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../terminal/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The integrated terminal
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../git/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Git
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../dependencies/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dependencies
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../project-time/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Project time
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../run-and-debug/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Running and debugging
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../http-client/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    The HTTP client
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../scratch-and-snippets/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Scratch files and snippets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../customising/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Customising IKE
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" >
+        
+          
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_5">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/keybindings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Keybindings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/settings/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Settings
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/commands/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Commands
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../troubleshooting/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Troubleshooting
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    About & contributing
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-one-rule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The one rule
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The one rule">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#reveal-next-to-the-value-not-only-inside-it" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Reveal next to the value, not only inside it
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#timestamps" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Timestamps
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#number-readability" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Number readability
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Number readability">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#when-the-field-name-knows-better" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        When the field name knows better
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#constants-in-code" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Constants in code
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#escaped-text" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Escaped text
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#percent-encoded-urls" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Percent-encoded URLs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#cron-expressions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Cron expressions
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#file-modes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        File modes
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#network-literals" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Network literals
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#certificates-and-pem-blocks" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Certificates and PEM blocks
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#masked-secrets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Masked secrets
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#markup-markdown-csv-and-logs" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Markup: Markdown, CSV and logs
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#two-things-that-look-like-conceal-and-are-not" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Two things that look like conceal and are not
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The settings
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="The settings">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#where-they-apply" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Where they apply
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#related" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Related
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+    <a href="https://github.com/TrueDaerk/ike/edit/main/userdocs/guides/conceal.md" title="Edit this page" class="md-content__button md-icon" rel="edit">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M10 20H6V4h7v5h5v3.1l2-2V8l-6-6H6c-1.1 0-2 .9-2 2v16c0 1.1.9 2 2 2h4zm10.2-7c.1 0 .3.1.4.2l1.3 1.3c.2.2.2.6 0 .8l-1 1-2.1-2.1 1-1c.1-.1.2-.2.4-.2m0 3.9L14.1 23H12v-2.1l6.1-6.1z"/></svg>
+    </a>
+  
+  
+
+
+<h1 id="conceal-what-the-editor-draws-instead">Conceal: what the editor draws instead<a class="headerlink" href="#conceal-what-the-editor-draws-instead" title="Permanent link">&para;</a></h1>
+<p>A configuration file is full of values written for the machine that reads them.
+<code>10485760</code> is ten mebibytes, <code>1722945600</code> is a Tuesday afternoon, <code>0644</code> is
+<code>rw-r--r--</code>, <code>*/5 * * * *</code> is every five minutes. You can work all of that out
+by hand. <strong>Conceal</strong> is IKE doing it for you, in place, while you keep editing
+the bytes that are actually in the file.</p>
+<p>The same layer hides characters that only exist to carry structure — the <code>**</code>
+around bold text, the commas between CSV fields, the ANSI escape bytes in a
+log — so the line reads as what it means.</p>
+<p>All screenshots on this page use the <code>monokai-pro</code> theme.</p>
+<h2 id="the-one-rule">The one rule<a class="headerlink" href="#the-one-rule" title="Permanent link">&para;</a></h2>
+<p>Everything on this page obeys the same three guarantees, and they are the
+reason concealing is safe rather than clever:</p>
+<ol>
+<li><strong>Nothing is rewritten.</strong> Conceal is a rendering layer. The buffer, the file
+   on disk, what you copy, what you save, what Git diffs — all unchanged. A
+   decoded timestamp is drawn over the digits, not instead of them.</li>
+<li><strong>The caret reveals.</strong> The stand-in the caret sits <em>inside</em> renders raw,
+   while the rest of the line stays decoded. Move away and it decodes again.
+   That is vim's <code>concealcursor</code> granularity, and it is why you can edit
+   concealed text without editing blind.</li>
+<li><strong>Every family has an off switch</strong> — a setting for the default and a palette
+   command that flips it for the current view only. The
+   <a href="#the-settings">table at the bottom</a> lists all of them, along with the file
+   patterns that decide <a href="#where-they-apply">where they apply</a>.</li>
+</ol>
+<p>Here is rule 2. A JSON file with its epoch timestamps decoded:</p>
+<p><img alt="Epoch timestamps decoded to UTC dates" src="../../screenshots/features/conceal-timestamps.png" /></p>
+<p>…and the same file with the caret moved into the <code>started_at</code> value on line 3.
+Only that one number is raw; the other five are still dates:</p>
+<p><img alt="The caret inside a stand-in showing the raw digits" src="../../screenshots/features/conceal-reveal.png" /></p>
+<p>A <strong>selection</strong> reveals the same way: any stand-in the selection touches renders
+raw, so a visual-mode yank always copies what is really there. (It would
+anyway — the clipboard takes buffer text, not display text — but seeing it
+helps.)</p>
+<h3 id="reveal-next-to-the-value-not-only-inside-it">Reveal next to the value, not only inside it<a class="headerlink" href="#reveal-next-to-the-value-not-only-inside-it" title="Permanent link">&para;</a></h3>
+<p>For the families that stand in for a <em>value</em> — decoded epochs and the four
+number-readability families — the window is one column wider on each side. Put
+the caret directly before or directly after the literal and it reveals too:</p>
+<p><img alt="The caret on the comma directly after a stand-in, revealing it" src="../../screenshots/features/conceal-reveal-adjacent.png" /></p>
+<p>The caret is on the comma at column 27, past the end of the number, and the
+number is raw. Without that widening, appending a digit to a value would mean
+typing against a stand-in you cannot see. Marker chrome (Markdown's <code>**</code>),
+masked secrets and CSV separator padding keep the strict inside-only rule:
+those ranges are dense, and widening them would flicker a whole line as you
+move through it.</p>
+<h2 id="timestamps">Timestamps<a class="headerlink" href="#timestamps" title="Permanent link">&para;</a></h2>
+<p><code>editor.timestamp_decoding</code> draws a numeric Unix epoch as its UTC date and
+time. Seconds and milliseconds both decode — a millisecond value keeps its
+<code>.480</code> fraction. Raw first:</p>
+<p><img alt="Epoch timestamps with decoding switched off" src="../../screenshots/features/conceal-timestamps-raw.png" /></p>
+<p>Decoded:</p>
+<p><img alt="The same file with the timestamps decoded" src="../../screenshots/features/conceal-timestamps.png" /></p>
+<p>Only 9–10 digit second values and 12–13 digit millisecond values between 2001
+and 2100 decode, and a leading zero disqualifies a run — so ports, byte counts,
+ids and years are left alone. Beyond that the rule is <em>position</em>: a number
+decodes where the format puts a <strong>value</strong>, never where it puts a key. In JSON
+that means after a <code>:</code>, <code>[</code> or <code>,</code>; elsewhere <code>=</code> opens a value and <code>&amp;</code> closes
+one, so <code>KEY=1722945600</code>, a YAML <code>created_at:</code>, a TOML assignment and a
+<code>?since=…</code> query parameter all decode.</p>
+<p>It works in JSON and ndjson, YAML, TOML, ini/conf, dotenv, <code>.http</code> files and
+log lines. The HTTP <em>response</em> viewer has no caret, so it has no positional
+reveal and stays out of this layer; save a response as <code>.json</code> and it decodes
+like any other buffer.</p>
+<h2 id="number-readability">Number readability<a class="headerlink" href="#number-readability" title="Permanent link">&para;</a></h2>
+<p>Four families turn a large integer into the thing it means, all on by default:</p>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>Example</th>
+<th>Setting</th>
+<th>Per-view toggle</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Byte sizes</td>
+<td><code>10485760</code> → <code>10 MiB</code></td>
+<td><code>editor.byte_size_hints</code></td>
+<td>Toggle Byte Size Hints</td>
+</tr>
+<tr>
+<td>Durations</td>
+<td><code>86400000</code> → <code>24h</code></td>
+<td><code>editor.duration_hints</code></td>
+<td>Toggle Duration Hints</td>
+</tr>
+<tr>
+<td>Digit grouping</td>
+<td><code>1204880</code> → <code>1_204_880</code></td>
+<td><code>editor.digit_grouping</code></td>
+<td>Toggle Digit Grouping</td>
+</tr>
+<tr>
+<td>Radix</td>
+<td><code>0x1F4</code> → <code>0x1F4  = 500</code></td>
+<td><code>editor.radix_hints</code></td>
+<td>Toggle Radix Hints</td>
+</tr>
+</tbody>
+</table>
+<p>The first three replace the literal; the radix hint is <em>appended</em> after it,
+because a hex literal is usually the thing you want to keep looking at. Raw:</p>
+<p><img alt="Config numbers with all four hint families off" src="../../screenshots/features/conceal-numbers-raw.png" /></p>
+<p>With the hints:</p>
+<p><img alt="The same numbers as sizes, durations, grouped digits and decimal readings" src="../../screenshots/features/conceal-numbers.png" /></p>
+<p>Config formats carry no types, so the <strong>key</strong> decides how a value is read:
+<code>*size*</code>, <code>*bytes*</code>, <code>*memory*</code>, <code>*buffer*</code> name a byte count; the timeout
+family (<code>*timeout*</code>, <code>*interval*</code>, <code>*delay*</code>, <code>*backoff*</code>) counts milliseconds
+and the TTL family (<code>*ttl*</code>, <code>*expires*</code>, <code>*lifetime*</code>, <code>*max_age*</code>) counts
+seconds, unless the key's last word spells the unit out (<code>flush_ms</code>,
+<code>*_seconds</code>). <code>*mode*</code>, <code>*perm*</code>, <code>*umask*</code> read octal; <code>*mask*</code>, <code>*flags*</code>
+read hex. Weak quantifiers — <code>limit</code>, <code>max</code>, <code>quota</code> — name no family on their
+own, because a rate limit is not a byte count.</p>
+<p>Where no key helps, the <em>shape</em> does: a multiple of 1024 is a byte size
+wherever it appears, a <code>0x</code> literal always has a decimal reading, and a plain
+integer of five digits or more always reads better grouped. A literal never
+carries two hints — the families are tried in a fixed order.</p>
+<p>The formatting is deliberately conservative. Sizes are binary (<code>4 KiB</code>,
+<code>1.5 GiB</code>; nothing below 1 KiB, no decimal kB). Durations use at most two
+components (<code>1h30m</code>, <code>1s500ms</code>) and only reach for days past 48h, so
+neighbouring timeouts stay comparable. Grouping starts at five digits, because
+four-digit numbers are years, ports and status codes. A hint that would say
+nothing new — <code>500</code> in a <code>*_ms</code> key, <code>0x9</code>, <code>mode: 7</code> — is not drawn at all.</p>
+<p>Tokens glued to <code>.</code>, <code>-</code>, <code>+</code>, <code>/</code>, <code>%</code> or a letter never parse as bare
+integers, so versions, ISO dates, floats, paths, percentages and <code>30s</code>-style
+suffixed values are safe. Keys are safe by construction: the scanner only ever
+hints a token that <em>follows</em> a separator.</p>
+<h3 id="when-the-field-name-knows-better">When the field name knows better<a class="headerlink" href="#when-the-field-name-knows-better" title="Permanent link">&para;</a></h3>
+<p>The heuristics are ambiguous by nature. Is a <code>retention</code> counted in seconds or
+in days? Is a <code>span</code> bytes or rows? Is an <code>id</code> that happens to be ten digits a
+timestamp? Left alone, the guesses can be wrong:</p>
+<p><img alt="Ambiguous fields read by the built-in heuristics" src="../../screenshots/features/conceal-number-units-off.png" /></p>
+<p><code>editor.number_hint_units</code> (Settings → Editor) maps field names to units and
+ends the guessing. Each entry is written <code>pattern=unit</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="k">[editor]</span>
+<span class="n">number_hint_units</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"retention_*=s"</span><span class="p">,</span><span class="w"> </span><span class="s2">"chunk_span=bytes"</span><span class="p">,</span><span class="w"> </span><span class="s2">"session_id=none"</span><span class="p">]</span>
+</code></pre></div>
+<p><img alt="The same fields with editor.number_hint_units pinning each unit" src="../../screenshots/features/conceal-number-units.png" /></p>
+<p>Patterns match case-insensitively over the whole field name with <code>*</code> wildcards,
+and a camel-case name is matched in its snake_case form too, so <code>max_body_size</code>
+also covers <code>maxBodySize</code>. Earlier entries win, so a specific name can precede
+a wildcard that covers it. The units are <code>bytes</code>, a duration unit (<code>ns</code>, <code>us</code>,
+<code>ms</code>, <code>s</code>, <code>min</code>, <code>h</code>, <code>d</code>, or the spelled-out forms), <code>timestamp-s</code>,
+<code>timestamp-ms</code>, <code>octal</code>, <code>hex</code>, <code>group</code> and <code>none</code>.</p>
+<p>A mapped field is read in that unit and <strong>no other</strong>: the shape triggers and
+the built-in key words are not consulted, a value the unit says nothing about
+stays bare rather than falling through to another family, and <code>none</code> silences
+every stand-in over that field — timestamp decoding included, which is exactly
+what <code>session_id</code> needed above.</p>
+<h3 id="constants-in-code">Constants in code<a class="headerlink" href="#constants-in-code" title="Permanent link">&para;</a></h3>
+<p>The same families reach into Python, Go and PHP source: a <strong>constant
+assignment</strong> reads by its name exactly like a config value reads by its key —
+including your <code>number_hint_units</code> mapping — and a right-hand side that is
+pure literal arithmetic is <strong>evaluated first</strong>:</p>
+<div class="highlight"><pre><span></span><code><span class="n">MAX_BYTES</span> <span class="o">=</span> <span class="mi">10</span> <span class="o">*</span> <span class="mi">1024</span> <span class="o">*</span> <span class="mi">1024</span>      <span class="c1"># draws as 10 MiB</span>
+<span class="n">TIMEOUT_MS</span> <span class="o">=</span> <span class="mi">30</span> <span class="o">*</span> <span class="mi">1000</span>            <span class="c1"># draws as 30s</span>
+<span class="n">SECONDS_PER_DAY</span> <span class="o">=</span> <span class="mi">60</span> <span class="o">*</span> <span class="mi">60</span> <span class="o">*</span> <span class="mi">24</span>    <span class="c1"># draws as 86_400</span>
+</code></pre></div>
+<p>What counts as a constant is what marks one in each language: a CONST_CASE
+name in Python (<code>MAX_BYTES</code>, annotated forms like <code>RETRIES: Final = 3</code>
+included — lowercase assignments never conceal), a <code>const</code> declaration in Go
+(single-line or inside a <code>const ( … )</code> block, any name case), and <code>const</code> or
+<code>define('NAME', …)</code> in PHP.</p>
+<p>The evaluator is deliberately strict: number literals and the side-effect-free
+integer operators only (<code>+ - * / % &lt;&lt; &gt;&gt; &amp; | ^</code>, parentheses, unary sign),
+computed with each language's own precedence and literal syntax. An
+expression containing an identifier (<code>iota</code>, <code>self::BASE</code>), a call, a float
+or a string stays raw, as does anything the languages disagree on — inexact
+division, negative remainders — or that overflows. A single <code>0x</code>/<code>0o</code>/<code>0b</code>
+literal gains its decimal reading appended instead (<code>0xCAFE  = 51_966</code>), the
+same way hex reads in config files.</p>
+<p>These conceals ride the same channels as the config hints: the same four
+settings and per-view toggles gate them, and the caret reveals the raw
+expression as everywhere else.</p>
+<h2 id="escaped-text">Escaped text<a class="headerlink" href="#escaped-text" title="Permanent link">&para;</a></h2>
+<p>Three families decode escapes in place, each with its own switch:</p>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>Setting</th>
+<th>Per-view toggle</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Unicode escapes in string literals</td>
+<td><code>editor.unicode_escape_decoding</code></td>
+<td>Toggle Unicode Escape Decoding</td>
+</tr>
+<tr>
+<td>HTML/XML character references</td>
+<td><code>editor.entity_decoding</code></td>
+<td>Toggle Entity Decoding</td>
+</tr>
+<tr>
+<td>base64 values</td>
+<td><code>editor.base64_decoding</code></td>
+<td>Toggle Base64 Decoding</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Unicode escapes.</strong> A JSON file written by a serializer that escapes
+everything non-ASCII:</p>
+<p><img alt="JSON \uXXXX escapes with decoding off" src="../../screenshots/features/conceal-escapes-raw.png" /></p>
+<p>Decoded — surrogate pairs combine into the one character they encode:</p>
+<p><img alt="The same escapes decoded in place" src="../../screenshots/features/conceal-escapes-unicode.png" /></p>
+<p>Decoding only happens inside a single-line quoted literal. Go, JSON, NDJSON,
+JavaScript/TypeScript, Python, PHP, YAML (and Ansible) and TOML all decode; a
+language without <code>\u</code> escapes in its strings — shell, INI, CSV, Dockerfile,
+Make, SQL — does not.</p>
+<p>Which quote counts, and which escape forms decode, follows the language:</p>
+<table>
+<thead>
+<tr>
+<th>Language</th>
+<th>escape quotes</th>
+<th>raw quotes</th>
+<th><code>\uXXXX</code> <code>\UXXXXXXXX</code></th>
+<th><code>\u{X…}</code></th>
+<th><code>\xNN</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Go</td>
+<td><code>"</code> <code>'</code></td>
+<td><code>`</code></td>
+<td>yes</td>
+<td>no</td>
+<td>no</td>
+</tr>
+<tr>
+<td>JSON, NDJSON</td>
+<td><code>"</code> <code>'</code></td>
+<td>—</td>
+<td>yes</td>
+<td>no</td>
+<td>no</td>
+</tr>
+<tr>
+<td>JavaScript, TypeScript</td>
+<td><code>"</code> <code>'</code> <code>`</code></td>
+<td>—</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>Python</td>
+<td><code>"</code> <code>'</code></td>
+<td><code>r"…"</code>, <code>b"…"</code> prefixes</td>
+<td>yes</td>
+<td>no</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>PHP</td>
+<td><code>"</code></td>
+<td><code>'</code></td>
+<td>yes</td>
+<td>yes</td>
+<td>no</td>
+</tr>
+<tr>
+<td>YAML, Ansible</td>
+<td><code>"</code></td>
+<td><code>'</code></td>
+<td>yes</td>
+<td>no</td>
+<td>yes</td>
+</tr>
+<tr>
+<td>TOML</td>
+<td><code>"</code></td>
+<td><code>'</code></td>
+<td>yes</td>
+<td>no</td>
+<td>no</td>
+</tr>
+</tbody>
+</table>
+<p>So Python's <code>r"\u00fc"</code> and PHP's <code>'\u00fc'</code> stay raw — a backslash is literal
+text there. <code>\xNN</code> decodes only where it names a character: in Go and PHP it is
+a raw <em>byte</em>, where <code>"\xc3\xbc"</code> is one <code>ü</code> written as two escapes, so
+decoding either alone would show <code>Ã¼</code>. Python's <code>\N{LATIN SMALL LETTER A}</code>
+stays raw as well. Multi-line literals — Python triple quotes, PHP heredocs,
+YAML block scalars — are out of scope.</p>
+<p>The scanner walks the quote state and consumes escapes pairwise, so the
+<code>\\u0041</code> on the last line stays raw — it is a literal backslash, not an
+escape. A truncated escape, a lone surrogate, or a value that is not a
+printable character also stays raw.</p>
+<p><strong>HTML and XML entities.</strong> <code>&amp;amp;</code>, <code>&amp;#37;</code>, <code>&amp;#x2192;</code> and the rest draw as
+the characters they name:</p>
+<p><img alt="HTML character references drawn as characters" src="../../screenshots/features/conceal-escapes-entities.png" /></p>
+<p>HTML decodes by the full named-entity table; <strong>XML decodes only the five
+predefined entities</strong> plus numeric references, because any other name is
+document-defined and guessing the HTML table would lie. References to
+non-graphic code points (zero-width joiners, controls) stay raw on purpose: an
+invisible stand-in would hide that the reference is there at all.</p>
+<p><strong>Base64.</strong> Decoded only where base64 is the <em>convention</em>, never on every
+base64-looking string — in practice, the <code>data:</code> block of a YAML document
+declaring <code>kind: Secret</code>, and only when the payload decodes to printable
+single-line UTF-8:</p>
+<p><img alt="A Kubernetes Secret data block decoded" src="../../screenshots/features/conceal-escapes-base64.png" /></p>
+<p><code>stringData:</code> holds plaintext and is never touched, the <code>ConfigMap</code> in the
+second document is not a Secret so its <code>data:</code> stays raw, and a binary payload
+stays raw everywhere.</p>
+<h2 id="percent-encoded-urls">Percent-encoded URLs<a class="headerlink" href="#percent-encoded-urls" title="Permanent link">&para;</a></h2>
+<p>A <code>.http</code> query travels percent-encoded, and percent-encoded is unreadable.
+IKE draws the decoded characters — <code>%20</code> as a space, <code>%C3%A4</code> as <code>ä</code> — across
+query parameters, folded query continuation lines, header values and inline
+bodies:</p>
+<p><img alt="Percent-encoded .http query parameters drawn decoded" src="../../screenshots/features/conceal-http-percent.png" /></p>
+<p><code>caf%C3%A9%20m%C3%BCnchen</code> reads as <code>café münchen</code>, <code>open%2Cpending</code> as
+<code>open,pending</code>, and the encoded path segment <code>acme%20gmbh</code> as <code>acme gmbh</code>. A
+stand-in that decodes to a space still gets the subtle background tint every
+stand-in carries, so a decoded space never looks like an ordinary one. The
+<code>&amp;since=</code> value on the last line shows the epoch decoding working in the same
+file — hint families compose.</p>
+<p>More on <code>.http</code> files in <a href="../http-client/">The HTTP client</a>.</p>
+<h2 id="cron-expressions">Cron expressions<a class="headerlink" href="#cron-expressions" title="Permanent link">&para;</a></h2>
+<p><code>editor.cron_hints</code> appends a cron expression's English reading after it. The
+expression itself stays on screen — the hint is an annotation, not a
+replacement, because a schedule is edited far more often than it is read:</p>
+<p><img alt="Cron expressions with their English reading appended" src="../../screenshots/features/conceal-cron.png" /></p>
+<p>The dialect is the standard five fields with an optional leading seconds field
+(the Quartz/Spring six-field form), plus ranges, steps, lists, names (<code>MON</code>,
+<code>JAN</code>), <code>?</code> and the <code>@daily</code>/<code>@reboot</code> shorthands. The extensions that need a
+calendar — <code>L</code>, <code>W</code>, <code>#</code> — and a seventh year field are <strong>rejected outright</strong>:
+no hint beats a wrong one. systemd's <code>OnCalendar=</code> is a different language and
+is not handled.</p>
+<p>Hints appear in crontab files, in CI YAML <code>cron:</code>/<code>schedule:</code> values (GitHub
+Actions, GitLab CI), and in quoted scalars in YAML, JSON and TOML. The quoted
+case additionally demands a cron-specific character or a field name, so a
+quoted list of numbers like <code>"1 2 3 4 5"</code> is never mistaken for a schedule.</p>
+<p>Cron ORs day-of-month against day-of-week when both are restricted, which the
+reading says out loud (<code>day 15 or Tue 03:30</code>) rather than quietly picking one.</p>
+<h2 id="file-modes">File modes<a class="headerlink" href="#file-modes" title="Permanent link">&para;</a></h2>
+<p><code>editor.permission_hints</code> appends the symbolic form <code>ls</code> would print after an
+octal mode — the reading nobody computes by eye:</p>
+<p><img alt="Octal file modes with their symbolic form" src="../../screenshots/features/conceal-permissions.png" /></p>
+<p>Three or four octal digits, written bare (<code>755</code>), zero-prefixed (<code>0644</code>) or
+with the Go/Python <code>0o</code> prefix. The fourth digit is the special-bit field:
+4 setuid, 2 setgid, 1 sticky, each replacing the execute character of its triad
+— <code>4755</code> is <code>rwsr-xr-x</code>, <code>1777</code> is <code>rwxrwxrwt</code>, and <code>4644</code> is <code>rwSr--r--</code> with
+the capital <code>S</code> that means "setuid, but no execute bit under it".</p>
+<p>The context carries the whole burden here, because a bare three-digit number is
+a port or a year far more often than a mode. Only things that genuinely <em>carry</em>
+a permission produce a hint: <code>chmod</code>'s first operand and the <code>-m</code>/<code>--mode</code> value
+of <code>install</code>/<code>mkdir</code> in shell, <code>COPY --chmod=</code> and <code>RUN</code> lines in Dockerfiles,
+the mode arguments of <code>os.Chmod</code>, <code>os.WriteFile</code>, <code>os.MkdirAll</code>, <code>os.chmod</code> and
+<code>Path(…).chmod(…)</code> in Go and Python, and <code>mode:</code>/<code>defaultMode:</code> keys in YAML
+and Ansible.</p>
+<p>In code and YAML the literal must also be <em>written</em> as octal. That is
+deliberate: in Go and Python a bare <code>644</code> is decimal, and in Ansible
+<code>mode: 644</code> really is the decimal 644 — the classic footgun. That case falls to
+the radix hint instead, which says <code>644  = 01204</code> and so states the problem
+rather than papering over it.</p>
+<h2 id="network-literals">Network literals<a class="headerlink" href="#network-literals" title="Permanent link">&para;</a></h2>
+<p>Two literals nobody reads by eye get their meaning appended, both on by
+default:</p>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>Setting</th>
+<th>Per-view toggle</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CIDR prefixes</td>
+<td><code>editor.cidr_hints</code></td>
+<td>Toggle CIDR Hints</td>
+</tr>
+<tr>
+<td>Punycode hostnames</td>
+<td><code>editor.idn_hints</code></td>
+<td>Toggle IDN Hints</td>
+</tr>
+</tbody>
+</table>
+<p><img alt="CIDR prefixes and punycode hosts with their readings" src="../../screenshots/features/conceal-network.png" /></p>
+<p>Host counts follow the protocol: IPv4 subtracts the network and broadcast
+addresses, except on the point-to-point prefixes where there are none to
+subtract, so a <code>/31</code> carries 2 hosts and a <code>/32</code> one. IPv6 has neither, so its
+prefixes count <em>addresses</em>, and the ones too large to read stay a power of two.
+A prefix with host bits set describes the network the address falls in, which
+is what the notation means to the parser reading it.</p>
+<p>Punycode decoding turns every <code>xn--</code> label back into its Unicode form, keeping
+any <code>:port</code> suffix. The last line of the shot is the reason this family earns
+its place: <code>xn--pple-43d.com</code> decodes to something that reads as <code>apple.com</code>
+but is not — the first letter is Cyrillic. A label that <strong>mixes scripts</strong>, or a
+non-Latin label spelled <strong>entirely in Latin look-alikes</strong>, is drawn in the
+theme's warning colour. The script combinations ordinary names use — Han with
+kana, Han with Hangul, Han with Bopomofo — are not homographs and stay normal.</p>
+<p>Whole lines are scanned where every line is data (YAML, JSON, TOML, ini,
+dotenv, <code>.http</code>); in source files only <strong>string literals</strong> are scanned, because
+a bare <code>10.0.0.0/8</code> in code is arithmetic.</p>
+<h2 id="certificates-and-pem-blocks">Certificates and PEM blocks<a class="headerlink" href="#certificates-and-pem-blocks" title="Permanent link">&para;</a></h2>
+<p><code>editor.pem_summary</code> collapses a PEM block onto its <code>-----BEGIN …-----</code> line
+with a decoded one-line summary, so a <code>.pem</code> file — or a certificate pasted
+into a YAML block scalar — reads as facts instead of forty lines of base64:</p>
+<p><img alt="A certificate collapsed onto its BEGIN marker with a decoded summary" src="../../screenshots/features/conceal-pem.png" /></p>
+<p>Subject CN, validity window, issuer CN, key type and SANs, in that order — the
+order that survives a narrow pane, since the row truncates from the right and
+the CN is the last thing to go. An expired or not-yet-valid certificate draws
+in the error colour and bold; one expiring within 30 days in the warning
+colour. A healthy certificate carries <strong>no verdict text at all</strong>: the dates
+already said so, and a summary that shouts on every healthy block teaches you
+to ignore it.</p>
+<p>This one reveals by cursor position like the rest, but a block is not a line,
+so the whole block comes back at once. Put the cursor anywhere inside it:</p>
+<p><img alt="The cursor inside the block, showing the whole certificate raw" src="../../screenshots/features/conceal-pem-reveal.png" /></p>
+<p>Leaving collapses it again. The collapsed block costs exactly one row of
+scrolling, and motions, mouse clicks and the gutter all treat the hidden lines
+as hidden.</p>
+<p>Decoding depth is asymmetric on purpose. <code>CERTIFICATE</code> decodes fully.
+<code>CERTIFICATE REQUEST</code> and <code>PUBLIC KEY</code> decode to their subject and key facts.
+<strong>Private keys are never parsed</strong> — they get a label built from the marker text
+that was already on screen (<code>private key (rsa)</code>, <code>private key (encrypted)</code>) and
+nothing more, because a summary that renders a secret defeats the point of the
+file being opaque. Anything that fails to parse falls back to
+<code>&lt;label&gt;  (unparseable)</code>: a wrong summary is worse than no summary. An
+unterminated block is never claimed at all.</p>
+<h2 id="masked-secrets">Masked secrets<a class="headerlink" href="#masked-secrets" title="Permanent link">&para;</a></h2>
+<p><code>editor.secret_masking</code> renders a dotenv value as <code>••••</code> when its <strong>key</strong> names
+a credential:</p>
+<p><img alt="Dotenv values whose key names a credential, masked" src="../../screenshots/features/conceal-secrets.png" /></p>
+<p>The key alone decides — <code>*_SECRET</code>, <code>PASSWORD</code>, <code>*_TOKEN</code>, <code>*_KEY</code>,
+<code>CREDENTIALS</code>, <code>DSN</code> and friends — and keys that only look like one are cleared
+again: <code>PUBLIC_KEY_ID</code> above is untouched, as are <code>TOKEN_URL</code>, <code>AUTH_TYPE</code> and
+<code>AUTHOR</code>. The value itself is never inspected to decide whether to hide it.</p>
+<p>The mask is fixed width. Sizing it to the value would leak the value's length,
+which for a short password is most of the secret.</p>
+<p>House-style keys the built-in patterns never heard of go in
+<code>editor.secret_masking_keys</code>. Each entry is matched case-insensitively over the
+whole key name with <code>*</code> wildcards, and a <code>-</code> (or <code>!</code>) prefix exempts instead of
+masking:</p>
+<div class="highlight"><pre><span></span><code><span class="k">[editor]</span>
+<span class="n">secret_masking_keys</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="s2">"MY_API_KEY"</span><span class="p">,</span><span class="w">     </span><span class="c1"># a key the built-in patterns miss</span>
+<span class="w">  </span><span class="s2">"*_LICENSE"</span><span class="p">,</span><span class="w">      </span><span class="c1"># …and every key ending in it</span>
+<span class="w">  </span><span class="s2">"db_pass*"</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">"-PUBLIC_TOKEN"</span><span class="p">,</span><span class="w">  </span><span class="c1"># a key the built-in patterns would mask, kept readable</span>
+<span class="p">]</span>
+</code></pre></div>
+<p>Earlier entries win, so a specific name can precede a wildcard covering it, and
+a key no entry matches falls through to the built-in patterns. The list only
+decides <em>which</em> keys are secrets — masking still needs <code>editor.secret_masking</code>
+on and the file to pass the <a href="#where-they-apply">file filters</a>.</p>
+<p>It is not a decode, but it rides the identical mechanic, so the positional
+reveal applies unchanged: put the caret inside a value and the raw secret is
+there to read and edit. A masked value copies, saves and diffs as itself. Note
+what else the shot shows — <code>SESSION_TIMEOUT_MS=1800000</code> drawing as <code>30m</code>,
+because the duration hints work in dotenv files too.</p>
+<h2 id="markup-markdown-csv-and-logs">Markup: Markdown, CSV and logs<a class="headerlink" href="#markup-markdown-csv-and-logs" title="Permanent link">&para;</a></h2>
+<p>The three rendering layers hide characters that exist only to carry structure.
+They are covered in full, with their own before/after shots, in
+<a href="../file-rendering/">How files are rendered</a> — the short version:</p>
+<ul>
+<li><strong>Markdown</strong> (<code>editor.markdown_rendering</code>) conceals the <code>**</code>, <code>*</code>, <code>`</code>
+  and link chrome, and draws pipe tables with box characters. Reveal is
+  finer-grained here than anywhere else: a caret anywhere inside an inline
+  span reveals that span's markers (not just a caret on the marker itself), and
+  in a table only the <strong>cursor's cell</strong> shows raw source while the frame stays
+  drawn.</li>
+<li><strong>CSV/TSV</strong> (<code>editor.csv_rendering</code>) conceals each separator behind the
+  padding that aligns its column. Only the separator the caret sits on reverts
+  to its raw character, so the rest of the table stays aligned while you edit.</li>
+<li><strong>Logs</strong> (<code>editor.log_rendering</code>) conceals ANSI escape bytes and draws the
+  styles they mean. A run of repeated lines collapses to the first one with a
+  <code>×N</code> marker, and the caret brings the whole run back — the same positional
+  reveal, applied to rows instead of columns.</li>
+</ul>
+<h2 id="two-things-that-look-like-conceal-and-are-not">Two things that look like conceal and are not<a class="headerlink" href="#two-things-that-look-like-conceal-and-are-not" title="Permanent link">&para;</a></h2>
+<p><strong>Colour swatches</strong> (<code>editor.color_preview</code>) tint a colour literal's own cells
+with the colour it names, foreground picked for contrast:</p>
+<p><img alt="Colour literals tinted with the colour they name" src="../../screenshots/features/conceal-colors.png" /></p>
+<p>Nothing is hidden and no columns are added — the literal is still exactly where
+it was, which is why motions, mouse clicks and soft wrap need no special
+handling. <code>#rgb</code>, <code>#rgba</code>, <code>#rrggbb</code>, <code>#rrggbbaa</code>, <code>rgb()</code>, <code>rgba()</code>, <code>hsl()</code>
+and <code>hsla()</code> are recognised; an invalid value (out-of-range channel, wrong
+arity, five- or seven-digit hex) gets no swatch, and an alpha component parses
+but does not tint, since a terminal cell has no alpha. In CSS every literal
+tints; in every other language only literals in a <strong>value position</strong> do, so
+<code>accent = "#ff8800"</code> lights up and the fragment in
+<code>https://example.com/p#ff8800</code> does not.</p>
+<p><strong>JWT decoding</strong> is deliberately <em>not</em> a conceal. A token is far too long to
+stand in for inline and its decoded form is multi-line JSON, so <strong>Decode JWT at
+Caret</strong> opens the header and payload in a hover popup instead. The signature
+segment is drawn faint wherever a token appears — a colour, not a stand-in, so
+those bytes always read as they stand.</p>
+<h2 id="the-settings">The settings<a class="headerlink" href="#the-settings" title="Permanent link">&para;</a></h2>
+<p>Every family has a default in <code>Settings → Editor</code> and a palette command that
+flips it for the current view only. A view toggle sticks: once flipped, that
+view stops following the config value.</p>
+<table>
+<thead>
+<tr>
+<th>Family</th>
+<th>Setting</th>
+<th>Per-view toggle</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Markdown rendering</td>
+<td><code>editor.markdown_rendering</code></td>
+<td>Toggle Markdown Rendering</td>
+</tr>
+<tr>
+<td>CSV/TSV table rendering</td>
+<td><code>editor.csv_rendering</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Log rendering</td>
+<td><code>editor.log_rendering</code></td>
+<td>Toggle Log Rendering</td>
+</tr>
+<tr>
+<td>Epoch timestamps</td>
+<td><code>editor.timestamp_decoding</code></td>
+<td>Toggle Timestamp Decoding</td>
+</tr>
+<tr>
+<td>Byte sizes</td>
+<td><code>editor.byte_size_hints</code></td>
+<td>Toggle Byte Size Hints</td>
+</tr>
+<tr>
+<td>Durations</td>
+<td><code>editor.duration_hints</code></td>
+<td>Toggle Duration Hints</td>
+</tr>
+<tr>
+<td>Digit grouping</td>
+<td><code>editor.digit_grouping</code></td>
+<td>Toggle Digit Grouping</td>
+</tr>
+<tr>
+<td>Radix readings</td>
+<td><code>editor.radix_hints</code></td>
+<td>Toggle Radix Hints</td>
+</tr>
+<tr>
+<td>Field→unit mapping</td>
+<td><code>editor.number_hint_units</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Unicode escapes</td>
+<td><code>editor.unicode_escape_decoding</code></td>
+<td>Toggle Unicode Escape Decoding</td>
+</tr>
+<tr>
+<td>HTML/XML entities</td>
+<td><code>editor.entity_decoding</code></td>
+<td>Toggle Entity Decoding</td>
+</tr>
+<tr>
+<td>Base64 values</td>
+<td><code>editor.base64_decoding</code></td>
+<td>Toggle Base64 Decoding</td>
+</tr>
+<tr>
+<td>Cron expressions</td>
+<td><code>editor.cron_hints</code></td>
+<td>Toggle Cron Hints</td>
+</tr>
+<tr>
+<td>File modes</td>
+<td><code>editor.permission_hints</code></td>
+<td>Toggle Permission Hints</td>
+</tr>
+<tr>
+<td>CIDR prefixes</td>
+<td><code>editor.cidr_hints</code></td>
+<td>Toggle CIDR Hints</td>
+</tr>
+<tr>
+<td>Punycode hostnames</td>
+<td><code>editor.idn_hints</code></td>
+<td>Toggle IDN Hints</td>
+</tr>
+<tr>
+<td>PEM summaries</td>
+<td><code>editor.pem_summary</code></td>
+<td>Toggle PEM Summary</td>
+</tr>
+<tr>
+<td>Secret masking</td>
+<td><code>editor.secret_masking</code></td>
+<td>Toggle Secret Masking</td>
+</tr>
+<tr>
+<td>Extra secret key patterns</td>
+<td><code>editor.secret_masking_keys</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>Colour swatches</td>
+<td><code>editor.color_preview</code></td>
+<td>Toggle Color Preview</td>
+</tr>
+<tr>
+<td>Where the families apply</td>
+<td><code>editor.conceal_include</code>, <code>editor.conceal_exclude</code>, <code>editor.conceal_file_rules</code></td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>Percent-decoding in <code>.http</code> files has no switch of its own — it is part of how
+the format is rendered.</p>
+<h3 id="where-they-apply">Where they apply<a class="headerlink" href="#where-they-apply" title="Permanent link">&para;</a></h3>
+<p>The switches above are global: on means on everywhere. The second dimension is
+<em>where</em>, and it is written as file patterns:</p>
+<div class="highlight"><pre><span></span><code><span class="k">[editor]</span>
+<span class="n">conceal_exclude</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"**/testdata/**"</span><span class="p">,</span><span class="w"> </span><span class="s2">"*.min.js"</span><span class="p">]</span>
+</code></pre></div>
+<p><code>editor.conceal_include</code> restricts every family to the files it matches;
+<code>editor.conceal_exclude</code> switches them off in the files it matches. Both are
+lists of globs. A pattern without a separator matches the <strong>base name</strong> —
+<code>*.py</code>, <code>Makefile</code>, <code>*.{yml,yaml}</code> — which is the per-filetype case. A pattern
+with one matches the whole path, anchored at any segment boundary unless it
+starts with <code>/</code> or <code>**</code>, so <code>vendor/**</code>, <code>**/vendor/**</code> and <code>/etc/**</code> all mean
+what they read as. Matching ignores case.</p>
+<p>Precedence is <strong>exclude &gt; include &gt; allow</strong>: with neither list set everything
+conceals (the pre-existing behaviour), an include list makes everything else
+stop, and an exclude match wins over any include.</p>
+<p><code>editor.conceal_file_rules</code> overrides both lists for a <strong>single family</strong>. Each
+entry is written <code>family=pattern</code>, the pattern prefixed <code>-</code> for an exclude and
+bare for an include, the family named by its setting key without the <code>editor.</code>
+prefix:</p>
+<div class="highlight"><pre><span></span><code><span class="k">[editor]</span>
+<span class="n">conceal_include</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"*.yaml"</span><span class="p">,</span><span class="w"> </span><span class="s2">"*.env"</span><span class="p">]</span><span class="w">     </span><span class="c1"># conceal only in config files…</span>
+<span class="n">conceal_file_rules</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">  </span><span class="s2">"secret_masking=-**/testdata/**"</span><span class="p">,</span><span class="w">          </span><span class="c1"># …but never mask the fixtures</span>
+<span class="w">  </span><span class="s2">"cron_hints=*.log"</span><span class="p">,</span><span class="w">                        </span><span class="c1"># …and read cron in logs anyway</span>
+<span class="p">]</span>
+</code></pre></div>
+<p>A family whose own rules decide a file is done there — that is what makes the
+entry an override rather than a second opinion. A family with nothing to say
+about the file falls through to the two global lists. Within either level,
+exclude still beats include.</p>
+<p>Two things this filter deliberately does not do. It never touches the toggles
+themselves, so a family reads as on in <code>Settings → Editor</code> even in a file
+where nothing draws — the pattern is a property of the file, not of the
+family. And a <strong>per-view toggle beats it</strong>: flip Toggle Secret Masking in an
+excluded buffer and the masks appear, because a pattern list states a default
+and you just said otherwise. Editing the lists takes effect immediately, in
+every open buffer, with no reload.</p>
+<p>All of these default to <strong>on</strong>. The full descriptions, including the
+highlighting limits that apply to very large files (where the insight layers
+switch themselves off), are in the
+<a href="../../reference/settings/">settings reference</a>.</p>
+<h2 id="related">Related<a class="headerlink" href="#related" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="../file-rendering/">How files are rendered</a> — highlighting, and the Markdown
+  / CSV / log layers in full</li>
+<li><a href="../../concepts/modal-editor/">The modal editor</a> — moving the caret that
+  drives the reveal</li>
+<li><a href="../http-client/">The HTTP client</a> — <code>.http</code> files, where several families
+  meet at once</li>
+<li><a href="../../reference/settings/">Settings reference</a> — every key on this page</li>
+</ul>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+          <button type="button" class="md-top md-icon" data-md-component="top" hidden>
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M13 20h-2V8l-5.5 5.5-1.42-1.42L12 4.16l7.92 7.92-1.42 1.42L13 8z"/></svg>
+  Back to top
+</button>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+    <div class="md-copyright__highlight">
+      Documentation for IKE — a terminal IDE.
+    </div>
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+        
+<div class="md-social">
+  
+    
+    
+    
+    
+    <a href="https://github.com/TrueDaerk/ike" target="_blank" rel="noopener" title="IKE on GitHub" class="md-social__link">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M173.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6m-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3m44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9M252.8 8C114.1 8 8 113.3 8 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C436.2 457.8 504 362.9 504 252 504 113.3 391.5 8 252.8 8M105.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1m-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7m32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1m-11.4-14.7c-1.6 1-1.6 3.6 0 5.9s4.3 3.3 5.6 2.3c1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2"/></svg>
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.instant", "navigation.tracking", "navigation.sections", "navigation.top", "content.code.copy", "content.action.edit", "search.highlight", "search.suggest", "toc.follow"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      
+    
+  </body>
+</html>
