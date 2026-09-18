@@ -1,10 +1,10 @@
 ---
 type: architecture
 title: Single-Line Text Input
-description: The shared single-line editing helpers in internal/ui (ui.Field, EditKey, PasteText, CursorView) that every text field in the IDE routes through — plus the chord table, the convention, the audit of every input site, and the guard test that keeps new fields from re-inventing them.
+description: The shared single-line editing helpers in internal/ui (ui.Field, EditKey, PasteText, CursorView) that every text field in the IDE routes through — plus the chord table, the field-level select-all (cmd+a, replace-on-type) and bounded undo (ctrl+z, runs of typing coalesced, dropped by Set/Clear), the convention, the audit of every input site, and the guard test that keeps new fields from re-inventing them.
 resource: internal/ui/textinput.go
 tags: [ui, input, keys, paste, conventions]
-timestamp: 2026-09-03T18:00:00Z
+timestamp: 2026-09-18T12:00:00Z
 ---
 
 # Single-Line Text Input
@@ -40,16 +40,34 @@ remainder and added a guard so the pattern cannot come back quietly.
 
 `internal/ui/field.go`:
 
-- **`ui.Field`** (#2459) — `struct { Text string; Cur int }`, the state every
-  one-line input should hold. `Key(msg) (handled, changed bool)`,
-  `Paste(s) bool`, `View() string`, `ViewSel(selStart, selEnd, style) string`,
-  `Set(s)` (cursor to the end), `Clear()`, `Empty()`, `Runes()`, `Len()`, and
-  the `NewField(text)` constructor. The fields are exported on purpose: a
+- **`ui.Field`** (#2459) — `Text string` + `Cur int`, the state every one-line
+  input should hold. `Key(msg) (handled, changed bool)`, `Paste(s) bool`,
+  `View() string`, `ViewSel(selStart, selEnd, style) string`, `Set(s)` (cursor
+  to the end), `Clear()`, `Empty()`, `Runes()`, `Len()`, and the
+  `NewField(text)` constructor. Those two fields are exported on purpose: a
   matcher, a renderer or a completion source reads `Text` directly, and a host
   seeding a caret writes `Cur`. The zero value is an empty field. It removes
   the four-line "call `EditKey`, store the result if `handled`" dance that was
   written out at ~60 call sites, each of them a place to forget writing the
   cursor back.
+- **Select-all and undo** (#2633) live on `Field` beside them, in unexported
+  state — a selection flag and a bounded edit history — so every one-line input
+  answers `cmd+a` and `ctrl+z` without a line of its own:
+  - `SelectAll()` arms a **whole-text** selection (there is no range: a
+    one-line input has no selection gesture that could produce one). The next
+    typed rune or `Paste` replaces the text, a plain `backspace`/`delete`
+    clears it, any other key drops it and acts normally. `Selected()` reports
+    it for a host that paints the row itself; `View()` paints it in
+    `ui.SelectionStyle()` (reverse video — `internal/ui` knows no theme).
+  - `Undo()` restores the text and caret from before the last edit. A **run**
+    of insertions (or of deletions) coalesces into one step, so `ctrl+z` takes
+    back a word rather than a rune; a paste is always its own step. The stack
+    is capped at `fieldUndoDepth` (50) and is copied on push, because a `Field`
+    is a value hosts copy freely and two copies must not share a backing array.
+  - `Set` and `Clear` **drop** the history: content put into the field from
+    outside (a history step, a prefill, a reopened prompt) has no earlier state
+    of its own worth restoring, and a reused prompt must not resurrect the
+    previous one's text.
 
 `internal/ui/textinput.go`:
 
@@ -114,6 +132,22 @@ selection keys.
 | `cmd+backspace`, `ctrl+u` | kill to line start |
 | `cmd+delete`, `ctrl+k` | kill to line end |
 | printable rune (no chord modifier) | insert at the caret |
+
+`Field.Key` adds two chords of its own **ahead** of `EditKey` (#2633), with
+`ui.IsSelectAllKey` / `ui.IsUndoKey` exported the way `ui.IsKillKey` is, so a
+host inside an editor context can claim them for an open input before the
+keymap layer resolves them:
+
+| Chord | Effect |
+| --- | --- |
+| `cmd+a` | select the whole text (the next insertion replaces it) |
+| `ctrl+z`, `cmd+z` | undo the last edit |
+
+Neither tolerates `shift`, unlike the chords inside `EditKey`: `cmd+shift+a` is
+Search Everywhere and `cmd+shift+z` is redo, and a field that swallowed either
+would take an IDE-level command away from every surface it is open on. `ctrl+a`
+is not an undocumented alias for select-all either — it is readline's line
+start and is bound by several hosts.
 
 Everything else — `enter`, `tab`, `esc`, the vertical keys, `cmd+c`, `cmd+v` —
 comes back `handled=false` and is the caller's.
