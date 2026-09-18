@@ -7696,6 +7696,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// focused pane's tab list, and so does a viewer file — the '@' finder
 		// on a .duckdb opens the data viewer as a tab in the focused pane
 		// rather than splitting one off beside it (#1825).
+		if msg.Line > 0 {
+			// A row that names a position too — the '@' finder's pasted
+			// "path:line[:col]" row (#2636). The msg counts from one as
+			// written, the editor from zero; an unset column stays -1, which
+			// SetCursor clamps to the line start, exactly like a CLI target.
+			return m.openPathFocusedAt(msg.Path, msg.Line-1, msg.Col-1)
+		}
 		return m.openPathFocused(msg.Path)
 
 	case host.OpenModalRequest:
@@ -10781,6 +10788,19 @@ func (m *Model) routeToEditorKey(key string, msg tea.Msg) tea.Cmd {
 // openPathAt opens path (reusing the standard open flow) and places the cursor at
 // the 0-based line/col — the navigation half of go-to-definition.
 func (m Model) openPathAt(path string, line, col int) (tea.Model, tea.Cmd) {
+	return m.openPathAtWith(path, line, col, false)
+}
+
+// openPathFocusedAt is openPathAt through the palette's open target (#2636):
+// a pasted "path:line" picked in the '@' finder lands where a plain palette
+// pick lands (openPathFocused) and then jumps to the line.
+func (m Model) openPathFocusedAt(path string, line, col int) (tea.Model, tea.Cmd) {
+	return m.openPathAtWith(path, line, col, true)
+}
+
+// openPathAtWith is the shared body: focused chooses between the plain open
+// funnel and the palette's focused-pane one.
+func (m Model) openPathAtWith(path string, line, col int, focused bool) (tea.Model, tea.Cmd) {
 	// Canonicalize before the same-file compare and editorForPath below;
 	// openPath normalizes again, which is harmless (#272).
 	path = canonicalPath(path)
@@ -10789,7 +10809,11 @@ func (m Model) openPathAt(path string, line, col int) (tea.Model, tea.Cmd) {
 	if cur := m.currentNavPos(); cur.Path == path && cur.Line != line {
 		m.recordNavFrom(cur)
 	}
-	model, cmd := m.openPath(path, false)
+	open := m.openPath
+	if focused {
+		open = func(p string, _ bool) (tea.Model, tea.Cmd) { return m.openPathFocused(p) }
+	}
+	model, cmd := open(path, false)
 	mm, ok := model.(Model)
 	if !ok {
 		return model, cmd
