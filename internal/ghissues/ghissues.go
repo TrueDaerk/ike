@@ -1339,6 +1339,25 @@ func (m *Model) PasteText(text string) bool {
 	return true
 }
 
+// textInputOpen reports whether a text-entry surface currently holds the
+// pane's keyboard (#2634): the filter overlay's match row, the close/reopen
+// comment prompt and the PR dialog's comment stage (both m.cmInput), or a
+// picker's running type-ahead (ovSearch, #2360). It is what the pane answers
+// LineInputOpen with, so the caret chords the surface owns are claimed for it
+// ahead of the keymap layer instead of being logged as unbound keybindings.
+//
+// An idle picker counts too: every printable key there types into the
+// type-ahead, so the surface is open even while the query is still empty.
+func (m *Model) textInputOpen() bool {
+	switch m.ov {
+	case ovFilter, ovActions, ovEdit, ovComment:
+		return true
+	case ovPRAct:
+		return m.prActStage == 0
+	}
+	return false
+}
+
 // matchText is the haystack one issue exposes to the fuzzy filter: number,
 // title, labels, assignees and author, so "#19 fable" or a label name both
 // narrow.

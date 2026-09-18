@@ -74,6 +74,10 @@ func (m *Model) NextMatch() ui.MatchStep { return m.stepRow(1) }
 // PrevMatch steps backwards; see NextMatch.
 func (m *Model) PrevMatch() ui.MatchStep { return m.stepRow(-1) }
 
+// LineInputOpen implements the pane's Searchable capability (#2634): the
+// filter input owns the caret chords while it is being edited.
+func (m *Model) LineInputOpen() bool { return m.fEditing }
+
 // stepRow moves the row cursor by delta over the loaded page, wrapping. It is
 // deliberately page-local: the pane fetches one page at a time, and a chord
 // that silently paged would step over rows the user cannot see.

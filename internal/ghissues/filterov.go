@@ -166,6 +166,11 @@ func (m *Model) NextMatch() ui.MatchStep { return m.stepFiltered(1) }
 // PrevMatch steps backwards; see NextMatch.
 func (m *Model) PrevMatch() ui.MatchStep { return m.stepFiltered(-1) }
 
+// LineInputOpen implements the pane's Searchable capability (#2634): the
+// filter overlay's match row, the pane's filter row and the comment box are
+// all ui.Field inputs, and each owns the caret chords while it has the keys.
+func (m *Model) LineInputOpen() bool { return m.textInputOpen() }
+
 func (m *Model) stepFiltered(delta int) ui.MatchStep {
 	if !m.Filtering() {
 		return ui.NoStep

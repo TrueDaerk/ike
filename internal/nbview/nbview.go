@@ -464,6 +464,10 @@ func (m *Model) NextMatch() ui.MatchStep { return m.searchStep(1) }
 // PrevMatch steps backwards; see NextMatch.
 func (m *Model) PrevMatch() ui.MatchStep { return m.searchStep(-1) }
 
+// LineInputOpen implements the pane's Searchable capability (#2634): the open
+// search prompt owns the caret chords.
+func (m *Model) LineInputOpen() bool { return m.search.Open }
+
 func (m *Model) searchStep(delta int) ui.MatchStep {
 	if !m.search.Active() {
 		return ui.NoStep

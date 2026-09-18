@@ -155,6 +155,36 @@ func IsKillKey(msg tea.KeyPressMsg) bool {
 	return false
 }
 
+// IsNavKey reports whether msg is one of the caret-navigation chords EditKey
+// implements for a single-line input: cmd+left / cmd+right (to the start /
+// end of the text, the editor's editor.lineStart / editor.lineEnd) and
+// alt|ctrl+left / alt|ctrl+right (the word jumps).
+//
+// It is exported (#2634) for the same reason as IsKillKey: telemetry showed
+// these chords resolving as `unbound` while a text input in a tool pane held
+// the keyboard — the issues filter, the problems filter row, the terminal's
+// scrollback search. The field itself has always answered them (EditKey), but
+// the keymap layer got its verdict in first, so the log filled with
+// keybindings that were never missing. A host whose input is open claims the
+// chord ahead of that layer, the way alt+enter and the kill keys do.
+//
+// shift is tolerated, exactly as it is inside EditKey: a one-line field has
+// no selection range for a shift to extend, so shift+cmd+left still means
+// "to the start" rather than a chord the field must hand back. The
+// two-modifier arrows are deliberately *not* nav keys — ctrl+alt+left and
+// ctrl+cmd+left walk the editor tabs, cmd+alt+left is nav.back — so the
+// exact-match switch below rejects them.
+func IsNavKey(msg tea.KeyPressMsg) bool {
+	if msg.Code != tea.KeyLeft && msg.Code != tea.KeyRight {
+		return false
+	}
+	switch msg.Mod &^ tea.ModShift {
+	case tea.ModSuper, tea.ModMeta, tea.ModAlt, tea.ModCtrl:
+		return true
+	}
+	return false
+}
+
 // IsSelectAllKey reports whether msg is the select-all chord for a one-line
 // input: cmd+a, in either spelling a terminal reports the Command key in
 // (super / meta), the way EditKey accepts it for the line-start chords.

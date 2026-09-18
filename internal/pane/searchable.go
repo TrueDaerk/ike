@@ -31,6 +31,18 @@ type Searchable interface {
 	// search, or walking the retained find-in-path results.
 	NextMatch() ui.MatchStep
 	PrevMatch() ui.MatchStep
+
+	// LineInputOpen reports whether the pane's one-line text input currently
+	// holds the keyboard (#2634) — the search prompt, the filter row, the
+	// selector line, whichever this pane wears. It is what lets the root
+	// model hand the caret-navigation chords (ui.IsNavKey) to the pane ahead
+	// of the keymap layer, so cmd+left/right and the word jumps move the
+	// caret instead of being logged as missing keybindings.
+	//
+	// It lives on Searchable rather than in a second capability so a new
+	// searchable pane cannot quietly skip it: the compiler asks for it the
+	// moment the pane claims the find chord.
+	LineInputOpen() bool
 }
 
 // Searchable returns the focused component of the instance as a Searchable,
@@ -94,6 +106,15 @@ func (i *Instance) Searchable() Searchable {
 func (i *Instance) OpenSearch() bool {
 	s := i.Searchable()
 	return s != nil && s.OpenSearch()
+}
+
+// LineInputOpen reports whether the focused component of this pane has a
+// one-line text input holding the keyboard (#2634). A pane kind without a
+// search of its own — and a plain editor tab, which the root model asks about
+// through the editor itself — reports false.
+func (i *Instance) LineInputOpen() bool {
+	s := i.Searchable()
+	return s != nil && s.LineInputOpen()
 }
 
 // StepMatch moves the focused pane's open search by delta (#2410): +1 to the

@@ -4,7 +4,7 @@ title: Single-Line Text Input
 description: The shared single-line editing helpers in internal/ui (ui.Field, EditKey, PasteText, CursorView) that every text field in the IDE routes through — plus the chord table, the field-level select-all (cmd+a, replace-on-type) and bounded undo (ctrl+z, runs of typing coalesced, dropped by Set/Clear), the convention, the audit of every input site, and the guard test that keeps new fields from re-inventing them.
 resource: internal/ui/textinput.go
 tags: [ui, input, keys, paste, conventions]
-timestamp: 2026-09-18T12:00:00Z
+timestamp: 2026-09-18T18:00:00Z
 ---
 
 # Single-Line Text Input
@@ -183,6 +183,20 @@ action.
   the kill chords **without** shift (`cmd+shift+backspace` is `nav.lastEdit`, a
   command that stays one) and leaves the readline twins `ctrl+u`/`k`/`w`/`h`
   out, since those are letter chords hosts bind themselves per the rule above.
+  `ui.IsNavKey` (#2634) is the third of that family and covers the *caret*
+  chords — `cmd+left`/`cmd+right` and `alt|ctrl+left`/`alt|ctrl+right`. It was
+  needed for the panes rather than the editor: telemetry recorded `ctrl+left`
+  in the issues and problems filters and `ctrl+right` in the terminal's
+  scrollback search as **unbound**, because the keymap layer wrote its "no
+  binding" verdict before the pane ever saw the key — a missing keybind in the
+  log that was never missing. It tolerates `shift` (a one-line field has no
+  range to extend) and rejects the two-modifier arrows, which stay commands:
+  `ctrl+alt+left`/`ctrl+cmd+left` walk the editor tabs and `cmd+alt+left` is
+  `nav.back`. The root model asks `lineInputFocused()` — the editor's own line
+  inputs, plus `pane.Searchable.LineInputOpen` for a tool pane's search prompt
+  / filter row / selector line — and inside a focused terminal it claims the
+  chord *ahead of the spatial focus moves*, so `ctrl+left`/`ctrl+right` jump a
+  word in an open query while `ctrl+up`/`ctrl+down` still escape the pane.
 - **`changed`, not `handled`, drives side effects.** A cursor motion is
   `handled` but not `changed`; re-running an incremental search on it wastes a
   pass and can move the viewport for no reason.
