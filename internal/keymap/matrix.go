@@ -271,6 +271,9 @@ var reachableAlternatives = map[string]string{
 	// #2487: the LSP Doctor's copy joins that family — same reasoning, and
 	// the pane's own "c" is the escape next to the palette.
 	"lsp.doctor.copy": "LSP Doctor pane \"c\" / palette",
+	// #2628: the diff viewer's copy joins the same family — its pane-local
+	// "y" delivers on every terminal, next to the palette.
+	"diff.copy": "diff pane \"y\" / palette",
 }
 
 // StatusMatrix builds the ledger over the default table. commandExists

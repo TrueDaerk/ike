@@ -324,3 +324,10 @@ func (m *Model) copyKey() tea.Cmd {
 	}
 	return CopyCmd(m.HunkPatchText(), "hunk")
 }
+
+// CopyKeyCmd is diff.copy (#2628): the copy key as a command the keymap table
+// can bind, so cmd+c resolves in the diff context instead of being logged
+// unbound while the pane quietly handled it. Same action as the pane-local
+// "y" — the selection, else the current hunk as a patch — and nil when there
+// is nothing to copy.
+func (m *Model) CopyKeyCmd() tea.Cmd { return m.copyKey() }

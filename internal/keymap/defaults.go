@@ -138,6 +138,12 @@ var jetbrainsRows = []row{
 	// report. The pane keeps its own 'c' for the same action; no ctrl+c
 	// secondary, for the reason above.
 	{"cmd+c", "lsp.doctor.copy", "Copy LSP Doctor report", LSPDoctor, "LSP Doctor (#2487)"},
+	// And once more for the diff viewer (#2628): the pane handled cmd+c on
+	// its own since #2070, so the chord was recorded unbound although it
+	// worked — binding it makes the action listed, rebindable and countable.
+	// The merge view resolves under the editor context, where editor.copy
+	// already owns cmd+c, so it needs no row of its own.
+	{"cmd+c", "diff.copy", "Copy diff selection or hunk", Diff, "Diff (#2628)"},
 	// JetBrains' Copy Reference chord, applied to the position *inside* a
 	// JSON/YAML document rather than to the file (#1660). The jq and yq
 	// flavours stay palette-only — one chord for the everyday form.

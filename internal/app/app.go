@@ -6661,6 +6661,23 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case DiffCopyMsg:
+		// diff.copy (cmd+c, #2628): the focused diff pane's copy key as a
+		// bound command — the selection, else the current hunk as a patch —
+		// so the chord resolves in the keymap table instead of being logged
+		// unbound while the pane quietly handled it. The clipboard write
+		// travels the usual diff.CopyMsg path, toast included.
+		inst := m.focusedContent()
+		if inst == nil || inst.Kind() != pane.KindDiff {
+			m.host.Notify(host.Info, "diff: no diff pane focused")
+			return m, nil
+		}
+		cmd := inst.Diff().CopyKeyCmd()
+		if cmd == nil {
+			m.host.Notify(host.Info, "diff: nothing to copy")
+		}
+		return m, cmd
+
 	case ToolOpenMsg:
 		// tool.<name> (#741): open the configured TUI tool pane, focus it
 		// when it exists, return focus when it is already focused. New

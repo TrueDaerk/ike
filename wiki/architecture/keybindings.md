@@ -1285,6 +1285,7 @@ JetBrains is:
 | `debug.testAtCursor` | `alt+shift+f9` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.toggleBreakpoint` | `cmd+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `deps.toggle` | `cmd+0` | fragile | `palette` | live via palette |
+| `diff.copy` | `cmd+c` | fragile | `diff pane "y" / palette` | live via diff pane "y" / palette |
 | `diff.nextChange` | `f7` | delivered | `—` | live |
 | `diff.prevChange` | `shift+f7` | delivered | `—` | live |
 | `editor.caret.addAbove` | `alt+shift+up` | fragile | `palette` | live via palette |
