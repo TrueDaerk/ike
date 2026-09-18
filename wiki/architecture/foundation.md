@@ -4,7 +4,7 @@ title: Foundation Slice
 description: Root model that hosts the explorer and editor panes, owns layout/focus, and routes messages between them.
 resource: internal/app/app.go
 tags: [architecture, bubbletea, foundation]
-timestamp: 2026-09-04T00:00:00Z
+timestamp: 2026-09-18T12:00:00Z
 ---
 
 # Foundation Slice
@@ -177,6 +177,46 @@ re-measuring every line — back-to-back and peg a core during a sustained scrol
 With pacing, cheap frames still flush at ~60fps while an expensive fullscreen
 frame throttles toward ~15–22fps, bounding CPU instead of saturating it. Keys and
 clicks bypass the coalescer, so they are never paced.
+
+### Render only on a hover change (#2626)
+
+Coalescing bounds a burst to one pass, but a terminal that reports pointer
+motion (~10–17 events/s) still delivered one `coalescedInputMsg` — and one
+full frame — per flush even when the pointer moved over nothing that reacts to
+hover. The telemetry after #2540 showed exactly that: in minutes without a key
+or click, `view/render` tracked `app.coalescedInputMsg` nearly 1:1. bubbletea
+offers no "nothing changed" return from `Update`, so the lever sits on the
+`View` side (`internal/app/renderreuse.go`):
+
+- **A motion consumer proves "hover target unchanged".** The plain-pane motion
+  path (`handleMouse`, `case mouseMotion` with no drag) asks its two consumers:
+  `updateHover` reports whether the explorer's highlighted row (tree or
+  Scratches) moved, `trackMouseHover` whether a mouse-anchored hover popup was
+  dismissed. Arming or re-arming the idle-hover tick is *not* a change — the
+  tick's fire is, and it renders as its own pass (a re-arming or cancelled tick
+  reuses too).
+- **Only a motion-only burst with no change opts in.** `applyCoalescedInput`
+  (and the unfolded `tea.MouseMotionMsg` case) marks the frame reusable when the
+  burst carried no wheel notch and no terminal repaint key and the consumer
+  reported no change. Everything else — a drag step (selection, divider,
+  scrollbar, float move/resize), an overlay hover (menu, settings, context
+  menu, popup layer), a wheel notch, a terminal repaint folded into the same
+  burst — keeps the default and composes a frame.
+- **`View` hands the previous frame out again.** The verdict lives in a
+  pointer-shared `frameCache` (the model is a value type): `Update` entry
+  clears it, so it can never outlive its pass, and `View` only reuses a frame
+  composed for (or already reused in) the *immediately preceding* pass — a
+  frame cached from a stale model copy is never served. The renderer diffs the
+  identical view against the screen and writes nothing.
+- **The rule is opt-in, so a miss is cheap.** A consumer that cannot prove
+  "unchanged" simply renders; a missed consumer costs a frame, never a stale
+  one.
+- **Observable.** A composed frame counts as a `view/render` pass, a reused one
+  as `view/reuse` (`diag.MessageCounts`, the heartbeat `top` field), so the
+  ratio "motion bursts → renders" is a unit-test assertion
+  (`renderreuse_test.go`: N bursts over an empty editor compose ≤ 1 frame;
+  entering/leaving an explorer row and opening/dismissing the hover popup
+  compose exactly on the transition).
 
 ## Render hot path (#608)
 

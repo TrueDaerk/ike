@@ -4,7 +4,7 @@ title: Usage Telemetry
 description: Local-only usage recording — command (with outcome), keybinding, layout, session, heartbeat, operation-lifecycle, palette-pick, palette-dismissal and project-time events appended as per-session JSONL under ~/.ike/telemetry, asynchronous and content-free, switched by telemetry.enabled.
 resource: internal/telemetry/telemetry.go
 tags: [architecture, telemetry, usage, jsonl, privacy, diagnostics]
-timestamp: 2026-09-08T18:00:00Z
+timestamp: 2026-09-18T12:00:00Z
 ---
 
 # Usage Telemetry
@@ -114,7 +114,8 @@ counts by the version's interval before comparing sessions.
     outside the loop (input reader, renderer, terminal); stopping dead → the
     process ended. Since #2402 it also carries `top`: the interval's three
     loudest pass sources as `type:count` pairs
-    (`app.termCheckMsg:5,view/render:5`), diffed from the always-on
+    (`app.termCheckMsg:5,view/render:5`; `view/reuse` counts the frames a no-op
+    motion pass handed out again, #2626), diffed from the always-on
     per-message-type counter (`diag.MessageCounts`) — the field that names
     an idle-wake culprit in an export without a local repro. Omitted when
     the interval was dead quiet, so a truly idle session stays cheap to

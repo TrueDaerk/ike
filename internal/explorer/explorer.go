@@ -2035,6 +2035,11 @@ func (m *Model) ClearHover() { m.hover, m.scrHover = -1, -1 }
 // HoverRow returns the visible row index under the pointer, or -1 when none.
 func (m Model) HoverRow() int { return m.hover }
 
+// ScratchHoverRow returns the Scratches-section row under the pointer
+// (#1963), or -1 when none. With HoverRow it is the whole hover state a
+// motion can change — the app's render-reuse check compares both (#2626).
+func (m Model) ScratchHoverRow() int { return m.scrHover }
+
 // Active returns the path of the file currently marked open, or "" when none.
 func (m Model) Active() string { return m.active }
 
