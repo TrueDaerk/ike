@@ -435,7 +435,11 @@ type Model struct {
 	// flight (#1001). See hover_idle.go.
 	hoverIdle          mouseHoverState
 	hoverIdleTickArmed bool
-	autosaveIdleIv     time.Duration
+	// frame is the render-reuse state (#2626): a motion pass that changed no
+	// hover target hands bubbletea the previous frame again. Pointer-shared
+	// across the value copies of one model; see renderreuse.go.
+	frame          *frameCache
+	autosaveIdleIv time.Duration
 	// renamePath is the file being renamed by the file.rename prompt (#175)
 	// while the shell shows it; renameInput/renamePos are the typed name and
 	// its cursor. "" when no rename prompt is open.
@@ -1504,6 +1508,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	keymap.SetProbeVerdicts(keymap.LoadProbeStore(keymap.ProbeStorePath()).Results(keymap.TerminalID(os.Getenv)))
 	m := Model{
 		modelGen:        nextModelGen(), // stamps this model's ticks (#2194)
+		frame:           &frameCache{},  // render reuse on no-op motion (#2626)
 		cmdUsage:        cmdUsage,
 		fileUsage:       fileUsage,
 		cmdFrec:         cmdFrec,
@@ -4346,6 +4351,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// LoopExit is a frozen loop, and the watchdog goroutine dumps stacks.
 	diag.LoopEnter(msg)
 	defer diag.LoopExit()
+	// Render reuse (#2626): every pass starts as "render"; only a no-op
+	// motion pass below opts into handing the previous frame out again.
+	m.frame.beginPass()
 	// The opt-in update-loop trace (#2348): one line per processed message,
 	// so a freeze investigation can read what the loop was doing and how many
 	// HTTP flights were open. Off by default — the check is one config load.
@@ -4620,7 +4628,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m.handleMouse(mouseEvent{Mouse: msg.Mouse(), action: mouseRelease})
 	case tea.MouseMotionMsg:
-		return m.handleMouse(mouseEvent{Mouse: msg.Mouse(), action: mouseMotion})
+		// An unfolded motion (the coalescer is not installed, e.g. tests):
+		// same no-op rule as a motion-only coalesced burst (#2626).
+		tm, cmd := m.handleMouse(mouseEvent{Mouse: msg.Mouse(), action: mouseMotion})
+		if mm, ok := tm.(Model); ok && mm.motionNoop() {
+			mm.markFrameReusable()
+		}
+		return tm, cmd
 	case tea.MouseWheelMsg:
 		return m.queueWheel(mouseEvent{Mouse: msg.Mouse(), action: mouseWheel})
 	case wheelFlushMsg:
@@ -8438,7 +8452,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.ownsTick(msg.gen) {
 			return m, nil // a departed model's tick (#2194)
 		}
-		return m, m.mouseHoverTick(time.Now())
+		cmd := m.mouseHoverTick(time.Now())
+		if !m.hoverIdle.fired {
+			// A re-arm or a cancelled wait opens nothing: the frame is
+			// unchanged (#2626).
+			m.markFrameReusable()
+		}
+		return m, cmd
 
 	case toastExpireMsg:
 		m.expireToast(msg.id)
@@ -11965,10 +11985,17 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		}
 	case mouseMotion:
 		if m.drag == nil {
-			m.updateHover(msg)
+			hoverChanged := m.updateHover(msg)
 			// Mouse-idle hover (#1129): overlay branches returned above, so
 			// this motion is over plain panes — track the resting cell.
-			return m, m.trackMouseHover(msg)
+			cmd, popupChanged := m.trackMouseHover(msg)
+			if !hoverChanged && !popupChanged {
+				// Nothing hover-dependent moved: the frame is exact as it
+				// is, the pass need not compose it again (#2626). Arming
+				// the idle tick is not a visual change — its fire is.
+				m.noteMotionNoop()
+			}
+			return m, cmd
 		}
 		// A drag owns the mouse: no idle hover while it runs.
 		m.cancelMouseHover()
@@ -12592,19 +12619,23 @@ func (m Model) flushWheel() (tea.Model, tea.Cmd) {
 	return tm, tea.Batch(cmds...)
 }
 
-// updateHover sets (or clears) the explorer's hover highlight.
-func (m *Model) updateHover(msg mouseEvent) {
+// updateHover sets (or clears) the explorer's hover highlight and reports
+// whether the highlighted row changed — the render-reuse seam (#2626): a
+// motion that keeps the pointer on the same row (or off the explorer) draws
+// the same frame.
+func (m *Model) updateHover(msg mouseEvent) (changed bool) {
 	r, ok := m.lay.Panes[pane.ExplorerKey]
 	if !ok {
-		return
+		return false
 	}
-	if inst := m.activeWS().Panes.Get(pane.ExplorerKey); inst != nil {
-	}
+	exp := m.explorer()
+	beforeRow, beforeScratch := exp.HoverRow(), exp.ScratchHoverRow()
 	if p, in := m.lay.PaneAt(msg.X, msg.Y); in && p == pane.ExplorerKey {
-		m.explorer().SetHoverAt(msg.X-(r.X+paneContentX), msg.Y-(r.Y+paneContentY))
-		return
+		exp.SetHoverAt(msg.X-(r.X+paneContentX), msg.Y-(r.Y+paneContentY))
+	} else {
+		exp.ClearHover()
 	}
-	m.explorer().ClearHover()
+	return exp.HoverRow() != beforeRow || exp.ScratchHoverRow() != beforeScratch
 }
 
 // paneClick focuses the clicked leaf and forwards the interior click to it,
@@ -13260,6 +13291,12 @@ func (m *Model) copyTerminalSelection(term *terminal.Model) {
 // single F8 tap stepped the debugger twice (#622). Legacy `~` keys carry no
 // event type without the flag, so leaving it off is a clean fix.
 func (m Model) View() tea.View {
+	// A no-op motion pass (#2626) hands the previous frame out again: the
+	// renderer diffs it against the screen and writes nothing. Counted as
+	// `view/reuse`, so `view/render` stays the count of composed frames.
+	if m.frameReusable() {
+		return m.cachedView()
+	}
 	// A frame that never finishes composing freezes the loop as surely as a
 	// stuck Update; the watchdog covers both (#2163).
 	diag.LoopEnter("view/render")
@@ -13277,6 +13314,7 @@ func (m Model) View() tea.View {
 	// instead of the terminal's own theme.
 	v.BackgroundColor = m.pal().Background
 	v.ForegroundColor = m.pal().Foreground
+	m.storeView(v)
 	return v
 }
 

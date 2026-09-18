@@ -4,7 +4,7 @@ title: Performance & Diagnostics
 description: Idle-behavior rules (who may wake the render loop, and how often), the render budget and the always-on per-message-type pass accounting, the per-keystroke fan-out budget while typing (#2541), the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, the opt-in update-loop trace log, the freeze-triage procedure, the selection-overlay rule for drag latency (#2495), and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/perfhud
 tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog, startup, freeze, render-budget]
-timestamp: 2026-09-08T14:00:00Z
+timestamp: 2026-09-18T12:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -159,6 +159,18 @@ content changes (a visible spinner is worth drawing), the forge deadline when
 it is due, file changes reported by the watcher, and an LSP publishing
 changed diagnostics.
 
+**Mouse motion is a wake without a frame** (#2626). Seven sessions after
+#2540 (0.6.0 … 0.6.15) still showed idle minutes of 500–1100 `view/render`
+passes tracking `app.coalescedInputMsg` nearly 1:1 — the pointer wiggling in a
+terminal that reports motion, one coalesced burst and one full frame per
+flush, over nothing that reacts to hover. The coalescer still delivers the
+burst (a drag or a hover transition needs it), but the plain-pane motion path
+proves "hover target unchanged" and `View` hands out the previous frame
+again, counted as `view/reuse` instead of `view/render`. The rule and its
+guards are in [foundation](foundation.md#render-only-on-a-hover-change-2626);
+the heartbeat reads `app.coalescedInputMsg:N,view/reuse:N,view/render:≤a few`
+for a minute of pointer wiggling.
+
 ## The render budget & the idle pass count (#2402)
 
 The unit the idle rules are enforced in is the **pass**: one
@@ -193,7 +205,7 @@ forge is configured). Rules for new code, in budget terms:
   deferral).
 
 **Accounting is always on** (#2402): `diag.LoopEnter` tallies every outermost
-pass under the message's Go type name (or the `view/render` label), two map
+pass under the message's Go type name (or the `view/render` / `view/reuse` labels, #2626), two map
 operations per pass. `diag.MessageCounts` exposes the snapshot; the telemetry
 heartbeat diffs two snapshots and ships the interval's top 3 as the `top`
 field (`app.termCheckMsg:5,view/render:5,…`), so an idle regression in the

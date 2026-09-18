@@ -48,19 +48,24 @@ type mouseHoverTickMsg struct{ gen int64 }
 // finder, palette, settings, shell, or open menu). Motion onto a new cell
 // closes a mouse-anchored popup, cancels the pending wait, and — over
 // hoverable editor content — arms a fresh idle wait for the new cell.
-func (m *Model) trackMouseHover(msg mouseEvent) tea.Cmd {
+//
+// changed reports whether the step altered the frame (#2626): only a
+// dismissed popup does. Arming or moving the pending wait draws nothing —
+// the tick's fire is the visual change, and it renders as its own pass.
+func (m *Model) trackMouseHover(msg mouseEvent) (cmd tea.Cmd, changed bool) {
 	if (m.hoverIdle.pending || m.hoverIdle.fired) && msg.X == m.hoverIdle.x && msg.Y == m.hoverIdle.y {
-		return nil // still the same cell: the armed tick keeps counting
+		return nil, false // still the same cell: the armed tick keeps counting
 	}
+	changed = m.hoverIdle.fired // an open mouse-anchored popup closes below
 	m.cancelMouseHover()
 	st, ok := m.mouseHoverTarget(msg.X, msg.Y)
 	if !ok {
-		return nil
+		return nil, changed
 	}
 	st.pending = true
 	st.deadline = time.Now().Add(hoverIdleDelay)
 	m.hoverIdle = st
-	return m.armMouseHoverTick()
+	return m.armMouseHoverTick(), changed
 }
 
 // cancelMouseHover drops the pending idle wait and closes a mouse-anchored

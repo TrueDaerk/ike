@@ -380,6 +380,13 @@ func (m Model) applyCoalescedInput(msg coalescedInputMsg) (tea.Model, tea.Cmd) {
 			if cmd != nil {
 				cmds = append(cmds, cmd)
 			}
+			// Render only on a hover change (#2626): a burst that is motion
+			// alone — no wheel notch, no terminal repaint — and whose
+			// consumer proved its hover target unchanged reuses the
+			// previous frame instead of composing one per burst.
+			if mm2, ok := tm.(Model); ok && len(msg.wheels) == 0 && len(msg.termKeys) == 0 && mm2.motionNoop() {
+				mm2.markFrameReusable()
+			}
 		}
 	}
 	// Terminal repaints (#803): the grids already hold the new content — only

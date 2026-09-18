@@ -1,5 +1,22 @@
 # Log
 
+## 2026-09-18 (Mouse motion renders only on a hover change, #2626)
+
+- **A pointer wiggling over nothing no longer costs a frame per burst.** The
+  telemetry after #2540 still showed idle minutes of 500–1100 `view/render`
+  passes tracking `app.coalescedInputMsg` nearly 1:1: a terminal reporting
+  motion delivered one coalesced burst and one full frame per flush. The
+  plain-pane motion path now asks its consumers — the explorer hover row and
+  the mouse-idle hover popup — whether anything changed; a motion-only burst
+  (no wheel notch, no terminal repaint) with no change marks the frame
+  reusable and `View` hands bubbletea the previous frame again
+  (`internal/app/renderreuse.go`). Drag steps, overlay hovers and wheel
+  notches keep rendering per burst.
+- **Observable.** A composed frame counts as `view/render`, a reused one as
+  `view/reuse` — in `diag.MessageCounts`, the heartbeat `top` field and the
+  unit tests (`renderreuse_test.go`). Concept docs: foundation ("Render only
+  on a hover change"), performance (idle model), usage telemetry.
+
 ## 2026-09-16 (The kill chords stay in the open command line, #2602)
 
 - **`cmd+backspace` / `alt+backspace` no longer delete document text while a line input
