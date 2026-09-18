@@ -521,7 +521,13 @@ type Model struct {
 	// file resumes the look that was interrupted — something the one shared,
 	// buffer-agnostic history cannot express. In memory for the session, like
 	// the history itself.
-	play            *playState
+	play *playState
+	// playChord marks a partial multi-step chord the playground fed to the
+	// resolver (#2633). The mode owns the keyboard, so it resolves keys in
+	// Global scope itself — and the timeout and the which-key hints have to
+	// read the held sequence back in that same scope, or a pane-scoped
+	// binding on the leader could claim a sequence the playground started.
+	playChord       bool
 	playHistory     *jqplay.History
 	playLastProgram map[string]string
 	// playFilters is the palette mode listing the named saved filters of both
@@ -3084,6 +3090,34 @@ func (m *Model) clearWhichKey() {
 	m.whichKeyGen++
 }
 
+// armPendingChord holds a partial multi-step chord: it arms the resolver
+// timeout and the which-key hints while the key itself is swallowed. The
+// hints (0081/40) wait for the configured delay (#1909) so a sequence typed
+// at speed never flashes a popup — but once the popup is up, a narrowing key
+// updates it at once.
+//
+// It is shared (#2633) by the main dispatch and by the playground, which owns
+// the keyboard ahead of resolveKeymap and would otherwise have to re-derive
+// the timer and popup rules to let a leader sequence run from its query line.
+func (m *Model) armPendingChord() tea.Cmd {
+	m.whichKeyGen++
+	cmds := []tea.Cmd{tea.Tick(keymap.TimeoutDuration, func(time.Time) tea.Msg {
+		return keymapTimeoutMsg{}
+	})}
+	switch on, delay := whichKeyConfig(); {
+	case !on:
+		m.whichKey = nil
+	case len(m.whichKey) > 0 || delay <= 0:
+		m.showWhichKey()
+	default:
+		gen := m.whichKeyGen
+		cmds = append(cmds, tea.Tick(delay, func(time.Time) tea.Msg {
+			return whichKeyDelayMsg{gen: gen}
+		}))
+	}
+	return tea.Batch(cmds...)
+}
+
 // resolveKeymap feeds one key to the keybinding resolver in the focused context.
 // It returns (cmd, true) when the key is consumed by the keymap layer — either a
 // resolved command to run or a partial chord to wait on — and (nil, false) when
@@ -3104,26 +3138,7 @@ func (m *Model) resolveKeymap(k keymap.Key) (tea.Cmd, bool) {
 	res := m.keys.Feed(k, m.keyContext())
 	switch res.Status {
 	case keymap.Pending:
-		// Hold the partial chord and arm the resolver timeout; swallow the key
-		// meanwhile. The which-key hints (0081/40) wait for the configured
-		// delay (#1909) so a sequence typed at speed never flashes a popup —
-		// but once the popup is up, a narrowing key updates it at once.
-		m.whichKeyGen++
-		cmds := []tea.Cmd{tea.Tick(keymap.TimeoutDuration, func(time.Time) tea.Msg {
-			return keymapTimeoutMsg{}
-		})}
-		switch on, delay := whichKeyConfig(); {
-		case !on:
-			m.whichKey = nil
-		case len(m.whichKey) > 0 || delay <= 0:
-			m.showWhichKey()
-		default:
-			gen := m.whichKeyGen
-			cmds = append(cmds, tea.Tick(delay, func(time.Time) tea.Msg {
-				return whichKeyDelayMsg{gen: gen}
-			}))
-		}
-		return tea.Batch(cmds...), true
+		return m.armPendingChord(), true
 	case keymap.Resolved:
 		m.clearWhichKey()
 		if c, ok := m.reg.Command(res.Command); ok {
@@ -8260,6 +8275,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case switchLSPNoticeMsg:
+		// The post-switch warm-up has taken longer than lsp.warmup_notice_ms
+		// without a publish (#2629): tell the user, instead of leaving the
+		// editor silently diagnostic-blind until the quiet fallback. Same
+		// pointer-identity guard as above — a superseding switch armed a
+		// different wait, and its timer is not this one.
+		if m.switchLSPWait == msg.wait {
+			m.noteSwitchLSPSilent()
+		}
+		return m, nil
+
 	case vcs.SnapshotMsg:
 		return m, m.applyVCSSnapshot(msg)
 
@@ -9083,12 +9109,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.lspRenamePreviewOpen() {
 			return m.updateLSPRenamePreview(msg)
 		}
-		// The notification center (#2152) owns one key of its own — "c"
-		// clears the ring; everything else (scrolling, Esc) belongs to the
-		// shell below, so only a handled key returns here.
+		// The notification center (#2152) owns a few keys of its own — "c"
+		// clears the ring, 1-9 run a notification's follow-up command
+		// (#2629); everything else (scrolling, Esc) belongs to the shell
+		// below, so only a handled key returns here.
 		if m.notifCenterOpen() {
-			if nm, handled := m.updateNotifCenter(msg); handled {
-				return nm, nil
+			if nm, cmd, handled := m.updateNotifCenter(msg); handled {
+				return nm, cmd
 			}
 		}
 		if m.floats.IsOpen() && !m.tourOpen() {
@@ -9993,6 +10020,13 @@ func (m Model) paletteContextAt(root string) palette.Context {
 // resolve and shadow only there. Every other consumer of the context id
 // (palette scoping, registry, help snapshot) keeps the plain focusContext.
 func (m Model) keyContext() keymap.Context {
+	// A leader sequence the playground started resolves in Global scope
+	// (#2633) — the only scope that applies while the mode owns the keyboard
+	// — so its timeout and its which-key hints read the held prefix back in
+	// the scope its first step was fed in.
+	if m.playChord && m.keys != nil && m.keys.Pending() {
+		return keymap.Global
+	}
 	ctx := keymap.Context(m.focusContext())
 	if ctx != keymap.Editor || m.popupLayerFocused() {
 		return ctx

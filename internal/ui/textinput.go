@@ -155,6 +155,38 @@ func IsKillKey(msg tea.KeyPressMsg) bool {
 	return false
 }
 
+// IsSelectAllKey reports whether msg is the select-all chord for a one-line
+// input: cmd+a, in either spelling a terminal reports the Command key in
+// (super / meta), the way EditKey accepts it for the line-start chords.
+//
+// shift is deliberately *not* tolerated here, unlike inside EditKey:
+// cmd+shift+a is Search Everywhere, an IDE-level command that stays a command
+// while an input is open (#1983) — swallowing it as a select-all would take
+// the palette away from every field in the tree.
+//
+// ctrl+a is not an alias either: it is readline's "line start" and is bound by
+// several hosts, and claiming it app-wide would steal those.
+func IsSelectAllKey(msg tea.KeyPressMsg) bool {
+	return msg.Code == 'a' && (msg.Mod == tea.ModSuper || msg.Mod == tea.ModMeta)
+}
+
+// IsUndoKey reports whether msg is the undo chord for a one-line input:
+// cmd+z or ctrl+z, the same pair the editor binds to editor.undo (the
+// terminal-deliverable alias exists for the same reason there).
+//
+// shift is deliberately not tolerated: cmd+shift+z is redo, which a field
+// with a one-way history has no answer for and must not swallow.
+func IsUndoKey(msg tea.KeyPressMsg) bool {
+	if msg.Code != 'z' {
+		return false
+	}
+	switch msg.Mod {
+	case tea.ModSuper, tea.ModMeta, tea.ModCtrl:
+		return true
+	}
+	return false
+}
+
 // Typing reports whether a key press would insert printable text into a
 // single-line field: it carries text and no modifier that turns it into a
 // chord. It is EditKey's own insertion guard, exported (#2327) so a host that

@@ -778,6 +778,12 @@ func (m *Model) closePlayground() {
 // its immediate meaning — no timeout latency on the common key — and the
 // second esc, now landing in a normal focus, opens the palette.
 func (m *Model) leavePlaygroundOnEsc() {
+	if m.play != nil {
+		// An armed select-all (#2633) does not survive the mode: the state
+		// parks with the document, and a selection painted over a resumed
+		// query would promise a replacement the user never armed.
+		m.play.program.Deselect()
+	}
 	m.closePlayground()
 	m.lastEscAt = m.clock()
 }
@@ -1076,6 +1082,17 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// column the cursor is actually in.
 	goal := s.qgoal
 	s.qgoal = -1
+	// A leader sequence started from the playground keeps the keyboard until
+	// it completes (#2633): the continuation of cmd+k is a plain key — z,
+	// right — that the query line or the result buffer would otherwise take,
+	// and the sequence would never resolve. This sits ahead of every other
+	// route for that reason, including the focus moves, whose ctrl+arrows are
+	// themselves possible continuations.
+	if m.playChordPending() {
+		if handled, cmd := m.playGlobalChord(msg); handled {
+			return m, cmd
+		}
+	}
 	// The spatial focus moves (default ctrl+arrows) leave the pane with the
 	// playground still mounted (#1980), the way they escape a focused
 	// terminal: the mode is scoped to its pane, not to the whole keyboard.
@@ -1133,6 +1150,10 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.leavePlaygroundOnEsc()
 		return m, nil
 	case "tab":
+		// The mode's own keys are not the query line's: an armed select-all
+		// (#2633) is dropped on the way out rather than left painted over a
+		// program the next keystroke no longer replaces.
+		s.program.Deselect()
 		s.setBufFocus(true)
 		return m, nil
 	case "ctrl+space":
@@ -1141,6 +1162,7 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.refreshPlayCompletion("", true)
 		return m, nil
 	case "enter":
+		s.program.Deselect()
 		s.hist.Add(s.program.Text)
 		s.histIdx = -1
 		return m, m.runPlayNow()
@@ -1484,31 +1506,60 @@ func (m *Model) playNoCodeActions() {
 	s.statusWarn = true
 }
 
-// playGlobalChord resolves a single-step chord against the Global scope of the
-// live binding table and dispatches its command (#1983). The playground owns
-// the keyboard while its pane is focused, so without this a chord like
+// playGlobalChord resolves a chord against the Global scope of the live
+// binding table and dispatches its command (#1983). The playground owns the
+// keyboard while its pane is focused, so without this a chord like
 // cmd+shift+a would never reach the keymap layer. Only keys the playground
 // leaves over get here — its own keys keep priority — and only Global-scope
 // bindings fire: a pane-scoped binding belongs to the pane the mode replaces,
-// not to the playground. Multi-step chords cannot resolve without buffering
-// query input and are left alone, the same trade the terminal makes (#805).
-func (m Model) playGlobalChord(msg tea.KeyPressMsg) (bool, tea.Cmd) {
-	if m.bindings == nil || m.bindings.Table() == nil {
+// not to the playground.
+//
+// Multi-step sequences resolve here too since #2633: the key goes through the
+// app's own resolver in Global scope, so cmd+k holds as a prefix exactly as it
+// does with an editor focused and cmd+k right / cmd+k z complete from the
+// query line. That is what playChordPending guards — while a sequence the
+// playground started is held, the *next* key belongs to it and not to the
+// query line, which would otherwise type the continuation into the program.
+// The leader itself is never left recorded as unbound, because holding it is
+// handling it.
+func (m *Model) playGlobalChord(msg tea.KeyPressMsg) (bool, tea.Cmd) {
+	if m.keys == nil || m.bindings == nil || m.bindings.Table() == nil {
 		return false, nil
 	}
 	k, ok := keymap.FromKeyMsg(msg)
 	if !ok {
 		return false, nil
 	}
-	chord := keymap.Chord{Steps: []keymap.Key{k}}
-	b, found := m.bindings.Table().Lookup(chord, keymap.Global)
-	if !found {
-		return false, nil
+	// esc abandons a held sequence (#1909) instead of doubling as the
+	// playground's own esc, which would close the mode under the user.
+	if m.playChordPending() && k.Base == "esc" && k.Mods == 0 && !m.keys.Continues(k, keymap.Global) {
+		m.keys.Reset()
+		m.clearWhichKey()
+		m.playChord = false
+		return true, nil
 	}
-	if c, okc := m.reg.Command(b.Command); okc {
-		return true, m.dispatchCommandFrom(b.Command, c, telemetry.SourceKeybind)
+	res := m.keys.Feed(k, keymap.Global)
+	switch res.Status {
+	case keymap.Pending:
+		m.playChord = true
+		return true, m.armPendingChord()
+	case keymap.Resolved:
+		m.playChord = false
+		m.clearWhichKey()
+		if c, okc := m.reg.Command(res.Command); okc {
+			m.usage.Key(res.Binding.Chord.String(), ctxPlayground, res.Command, "resolved")
+			return true, m.dispatchCommandFrom(res.Command, c, telemetry.SourceKeybind)
+		}
 	}
+	m.playChord = false
 	return false, nil
+}
+
+// playChordPending reports whether the resolver is holding a partial chord the
+// playground fed it (#2633) — the state that makes the next key the
+// sequence's rather than the query line's.
+func (m Model) playChordPending() bool {
+	return m.playChord && m.keys != nil && m.keys.Pending()
 }
 
 // pastePlayground inserts a bracketed paste into the query line, flattened:
@@ -2098,6 +2149,19 @@ func (m Model) playHighlighted(program string, pos, width int) string {
 func (m Model) playKindStyles() map[jqplay.Kind]lipgloss.Style {
 	pal := m.pal()
 	style := lipgloss.NewStyle()
+	// A select-all (cmd+a, #2633) paints the whole program as selected
+	// instead: the next typed rune replaces it, and that is not a promise to
+	// make invisibly. The highlighting steps aside for the one render it is
+	// armed — the colors say what the program *is*, the reverse video says
+	// what the next key will do to it.
+	if s := m.play; s != nil && s.program.Selected() && !s.bufFocus && m.playFocused() {
+		sel := ui.SelectionStyle()
+		out := map[jqplay.Kind]lipgloss.Style{}
+		for k := jqplay.KindPlain; k <= jqplay.KindComment; k++ {
+			out[k] = sel
+		}
+		return out
+	}
 	return map[jqplay.Kind]lipgloss.Style{
 		jqplay.KindPlain:    style.Foreground(pal.Foreground),
 		jqplay.KindPath:     style.Foreground(pal.Accent),
