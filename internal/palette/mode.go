@@ -193,4 +193,10 @@ type OpenFileMsg struct {
 	// producer (explorer, anchored "@" finder, go-to-file, recent-files mode)
 	// leaves the zero value.
 	CountUsage bool
+	// Line and Col place the cursor when the row names a position as well as
+	// a file (#2636): a pasted "path:line[:col]" opens the file *at* that
+	// line. Both are 1-based as written, 0 means unset — the file opens
+	// wherever it normally would.
+	Line int
+	Col  int
 }
