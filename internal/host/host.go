@@ -25,10 +25,22 @@ const (
 	Error
 )
 
+// NotifyAction is one command a notification offers as a follow-up (#2629):
+// a notice about a silent language server is only half an answer without the
+// "restart it" / "look at the doctor" step it implies. Command is a registry
+// command id, Label the short human name the notification center shows.
+type NotifyAction struct {
+	Command string
+	Label   string
+}
+
 // Notification is one Notify payload, drained and rendered by the root model.
+// Actions is optional (#2629): when set, the notification center offers the
+// listed commands as numbered follow-ups on the entry.
 type Notification struct {
 	Severity Severity
 	Text     string
+	Actions  []NotifyAction
 }
 
 // API is everything a plugin may ask of the host. It intentionally stays small
@@ -446,9 +458,14 @@ func (h *Host) SetStatus(text string) { h.status = text }
 
 // Notify implements API: it queues the notification for the root model, which
 // drains the queue after every Update pass (rendering and expiry live there).
-func (h *Host) Notify(sev Severity, text string) {
+func (h *Host) Notify(sev Severity, text string) { h.NotifyActions(sev, text) }
+
+// NotifyActions is Notify with follow-up commands attached (#2629). It stays
+// off the plugin-facing API on purpose: the actions name registry command ids,
+// which only the host itself resolves.
+func (h *Host) NotifyActions(sev Severity, text string, actions ...NotifyAction) {
 	h.mu.Lock()
-	h.notifications = append(h.notifications, Notification{Severity: sev, Text: text})
+	h.notifications = append(h.notifications, Notification{Severity: sev, Text: text, Actions: actions})
 	h.mu.Unlock()
 }
 

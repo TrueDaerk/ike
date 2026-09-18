@@ -180,7 +180,10 @@ counts by the version's interval before comparing sessions.
       switched-to model opened no document of a server language — emitted in
       the same pass as the `ok`), `quiet` (a wait was armed but nothing
       published within `switchLSPQuietTimeout`, 2 min — no server configured,
-      binary missing, or the server never spoke), `superseded` (the next
+      binary missing, or the server never spoke; since #2629 it carries
+      `notified: "true"` when the user was told about the silent server
+      before the fallback closed the wait, see
+      [project-switching](project-switching.md)), `superseded` (the next
       switch started before the wait resolved) or `quit` (the session ended
       first). A resumed parked workspace answers fast by design: the manager
       reuses its live server and the bridge delivers the first
