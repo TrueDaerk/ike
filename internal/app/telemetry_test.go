@@ -409,18 +409,27 @@ func TestTelemetryHTTPFlightCancelAndError(t *testing.T) {
 
 	var phases []string
 	var streams []string
+	var reasons []string
 	for _, ev := range opsOf(usageEvents(t, m), telemetry.OpHTTPFlight) {
 		if ev.Data["phase"] == "start" {
 			continue
 		}
 		phases = append(phases, ev.Data["phase"])
 		streams = append(streams, ev.Data["stream"])
+		reasons = append(reasons, ev.Data["reason"])
 	}
 	if len(phases) != 3 || phases[0] != "canceled" || phases[1] != "error" || phases[2] != "ok" {
 		t.Fatalf("want canceled/error/ok end phases, got %v", phases)
 	}
 	if streams[2] != "true" {
 		t.Fatalf("streamed flight not flagged: %v", streams)
+	}
+	// The failure class (#2631) rides on the error/canceled end, never on ok.
+	if reasons[0] != "canceled" || reasons[1] != "other" {
+		t.Fatalf("want reasons canceled/other, got %v", reasons)
+	}
+	if reasons[2] != "" {
+		t.Fatalf("ok end must carry no reason, got %q", reasons[2])
 	}
 }
 

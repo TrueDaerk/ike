@@ -115,7 +115,7 @@ import (
 // as a standing "passes" value across consecutive beats — explicit, and lets
 // a reader pair the episode with the stack dump on disk. No path is
 // recorded; the correlation runs over the session id and the timestamps.
-const SchemaVersion = 10
+const SchemaVersion = 11
 
 // defaultFlushInterval is how often the writer goroutine flushes the
 // bufio.Writer on its own, independent of buffer fill or explicit Flush
