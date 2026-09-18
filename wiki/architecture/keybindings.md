@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts plus language-scoped editor bindings, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-09-08T18:00:00Z
+timestamp: 2026-09-18T00:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -1113,8 +1113,9 @@ type Searchable interface {
 
 `Instance.StepMatch(delta)` picks the direction; the root model's
 `MatchStepMsg` handler asks the focused pane **first** and only falls back to
-the older readings — repeat the editor's in-file search (#376), walk the
-retained find-in-path results — when the pane reports `ui.NoStep`. That is the
+the older readings — repeat the project's last in-file search in the active
+editor (#376, #2623), walk the retained find-in-path results — when the pane
+reports `ui.NoStep`. That is the
 whole gate: a pane whose search is closed is not claiming the chord, so the
 editor path is unchanged.
 

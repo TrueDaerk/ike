@@ -301,7 +301,7 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	// document survives the switch in this workspace, so the mode does too.
 	m.activeWS().Aux = wsExtras{dbg: m.dbg, dbgLaunching: m.dbgLaunching, dbgLaunchGen: m.dbgLaunchGen,
 		popup: m.popup, floats: projectFloatTerms(m.floatTerms), docSymbols: m.docSymbols,
-		play: m.parkPlayground()}
+		play: m.parkPlayground(), lastSearch: m.lastSearch, inFileRecent: m.inFileSearchRecent}
 	parkedRoot := m.activeWS().Root
 	m.ws.Park()
 	// Arm the background LSP idle shutdown for the workspace just parked

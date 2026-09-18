@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-09-16T00:00:00Z
+timestamp: 2026-09-18T00:00:00Z
 ---
 
 # Editor
@@ -541,8 +541,9 @@ Cluster-aware motion is a possible follow-up, not part of this change.
   then commits on the match the step landed on; Esc still returns to the
   search origin, and editing the pattern drops the stepping and previews from
   the origin again. With no search line open the chord keeps its older
-  readings — repeat the committed in-file search (#376) or walk the retained
-  find-in-path results (#2410). The same counter also occupies a **status line
+  readings — repeat the project's last committed in-file search in this
+  editor (#376, #2623; seeded via `SeedSearch`, see the [project
+  search](search.md) doc) or walk the retained find-in-path results (#2410). The same counter also occupies a **status line
   slot** (`search`,
   `⌕ 3/17`, #2145) — it outlives the `/` line, so `n`/`N` navigation updates
   the index in place until the highlights are cleared.

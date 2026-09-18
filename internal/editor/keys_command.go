@@ -16,8 +16,13 @@ import (
 // SearchCommittedMsg announces that an in-file search was committed with a
 // non-empty pattern (Enter on the "/" or "?" line). The app uses it to make
 // f3/shift+f3 repeat the in-file search instead of retained find-in-path
-// results while it is the most recent search (#376).
-type SearchCommittedMsg struct{}
+// results while it is the most recent search (#376). Query and Dir carry
+// the committed query so the app can keep it as the project's last search
+// and seed it into any other editor via SeedSearch (#2623).
+type SearchCommittedMsg struct {
+	Query search.Query
+	Dir   search.Direction
+}
 
 // beginSearch enters the command line in search mode for "/" or "?", capturing
 // the cursor and viewport so an Esc restores them exactly (#255). prefill
@@ -63,10 +68,10 @@ func (m *Model) visualSearchPrefill() string {
 
 // searchNextRepeat repeats the active search for n/N. reverse flips the stored
 // direction (N). Wrapping past a buffer end leaves a "search wrapped" hint on
-// the ex line (#255).
-func (m *Model) searchNextRepeat(reverse bool, count int) {
+// the ex line (#255). It reports whether a match was found.
+func (m *Model) searchNextRepeat(reverse bool, count int) bool {
 	if m.query.Empty() {
-		return
+		return false
 	}
 	dir := m.searchDir
 	if reverse {
@@ -81,7 +86,9 @@ func (m *Model) searchNextRepeat(reverse bool, count int) {
 		}
 		m.hlActive = true
 		m.jumpTo(p) // n/N landings are jumps (Roadmap 0220)
+		return true
 	}
+	return false
 }
 
 // HasSearch reports whether a committed in-file search query is active, i.e.
@@ -101,18 +108,43 @@ func (m *Model) ClearSearch() {
 	m.hlActive = false
 }
 
+// SeedSearch installs q as this editor's committed in-file search with the
+// given direction, exactly as if the user had typed and committed it here
+// (#2623): n/N repeat it and its matches highlight. The app uses it to carry
+// the project's last search into whichever editor cmd+g runs in. A structural
+// query (#2363) is recompiled for this editor's document language, so its
+// evaluation state is never shared between buffers. A query the editor
+// already holds is left untouched (its wrap state included).
+func (m *Model) SeedSearch(q search.Query, dir search.Direction) {
+	if q.Empty() {
+		return
+	}
+	if q.IsStructural() {
+		q = search.CompileStructural(m.docPathLang(), q.Pattern)
+	}
+	if !m.query.Empty() && m.query.ID() == q.ID() && m.searchDir == dir {
+		return
+	}
+	m.query = q
+	m.searchDir = dir
+	m.preview = search.Query{}
+	m.hlActive = true
+}
+
 // RepeatSearch steps the committed in-file search once, like n (reverse=false)
 // or N (reverse=true). It backs search.nextMatch/prevMatch when the in-file
-// search is the most recent one (#376).
+// search is the most recent one (#376). It reports whether a match was found,
+// so the host can say "no match" instead of silently doing nothing (#2623).
 //
 // It follows the cursor itself (#1198): n/N reach searchNextRepeat through
 // Update, whose key branch ends in scroll(), but the root model calls this
 // entry point directly on the model, so nothing else would move the viewport.
 // scroll() is idempotent, so keeping it here rather than in searchNextRepeat
 // leaves the key path untouched.
-func (m *Model) RepeatSearch(reverse bool) {
-	m.searchNextRepeat(reverse, 1)
+func (m *Model) RepeatSearch(reverse bool) bool {
+	found := m.searchNextRepeat(reverse, 1)
 	m.scroll()
+	return found
 }
 
 // StepSearchPreview steps the *open* search line's incremental preview to the
@@ -268,7 +300,8 @@ func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
 			m.cmdline = ""
 			m.cmdCur = 0
 			if !m.query.Empty() {
-				return m, func() tea.Msg { return SearchCommittedMsg{} }
+				q, dir := m.query, m.searchDir
+				return m, func() tea.Msg { return SearchCommittedMsg{Query: q, Dir: dir} }
 			}
 			return m, nil
 		}

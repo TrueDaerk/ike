@@ -144,7 +144,7 @@ func (m *Model) startAllFind(msg allfind.ConfirmMsg) tea.Cmd {
 		},
 		Roots: roots,
 	})
-	m.allFindRecent = true
+	m.markAllFindRecent()
 	scope := plural(len(roots), "project", "projects")
 	if msg.Group != "" {
 		scope = "group " + msg.Group + " (" + scope + ")"
@@ -195,7 +195,7 @@ func (m *Model) finishAllFind(msg search.MultiDoneMsg) {
 	if msg.Gen != m.allFindGen {
 		return
 	}
-	m.allFindRecent = true
+	m.markAllFindRecent()
 	m.allResults.SetSize(m.width, m.height)
 	m.allResults.Finish(msg.Truncated, msg.Errs)
 	if m.allResults.Total() == 0 {
@@ -215,7 +215,7 @@ func (m *Model) showAllFindResults() {
 		m.host.Notify(host.Info, "all-projects search still running — no hits yet")
 		return
 	}
-	m.allFindRecent = true
+	m.markAllFindRecent()
 	m.allResults.SetSize(m.width, m.height)
 	m.allResults.Open()
 }
@@ -226,7 +226,7 @@ func (m *Model) showAllFindResults() {
 // the model rebuild via the carry-over block in performSwitchOpts, as does the
 // result set itself, so the hits stay walkable after the switch (#2413).
 func (m Model) openAllFindMatch(msg allfind.OpenMatchMsg) (tea.Model, tea.Cmd) {
-	m.allFindRecent = true
+	m.markAllFindRecent()
 	if cwd, err := os.Getwd(); err == nil && cwd == msg.Root {
 		return m.openPathAt(msg.Path, msg.Line-1, msg.Col)
 	}
