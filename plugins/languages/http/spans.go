@@ -61,6 +61,9 @@ func querySpans(lines []string) []lang.Span {
 	// Assertion directives (#2546) likewise: marker, subject, operator and
 	// expected value lifted out of the comment colour (assert.go).
 	out = append(out, assertSpans(lines)...)
+	// Timeout directives (#2630) the same way: the marker as a keyword, the
+	// duration as a number (timeout.go).
+	out = append(out, timeoutSpans(lines)...)
 	// JWTs (#1619) are scanned over the whole buffer, not per request region:
 	// they show up in an Authorization header, in a body, in a @token variable
 	// and in a pasted response block alike. Detection is structural — three

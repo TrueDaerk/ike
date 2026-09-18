@@ -67,6 +67,7 @@ bring their own.
 | Write Heap Dump | `diag.heapDump` | — | — | everywhere |
 | Memory Statistics | `diag.memoryStats` | — | — | everywhere |
 | Compare with Clipboard | `diff.compareWithClipboard` | — | — | everywhere |
+| Diff: Copy Selection or Hunk | `diff.copy` | `cmd+c` | — | `diff` pane |
 | Diff Two Files… | `diff.files` | — | — | everywhere |
 | Next Change (Diff) | `diff.nextChange` | `f7` | — | everywhere |
 | Previous Change (Diff) | `diff.prevChange` | `shift+f7` | — | everywhere |

@@ -169,7 +169,11 @@ type Options struct {
 	CurlrcPath string
 	// DisableConfig skips .netrc/.curlrc detection entirely.
 	DisableConfig bool
-	// Timeout overrides DefaultTimeout when > 0.
+	// Timeout is the configured default deadline for the whole exchange —
+	// the `http.timeout_ms` setting the host passes down (#2630) — used when
+	// > 0 instead of DefaultTimeout. It sits third in the precedence chain: a
+	// request's `# @timeout` directive wins, then a .curlrc `max-time`, then
+	// this, then DefaultTimeout.
 	Timeout time.Duration
 	// Now returns the current time; defaults to time.Now (tests).
 	Now func() time.Time
@@ -238,8 +242,13 @@ func loadBodyFile(file string, substitute bool, opts Options, vars *httpfile.Var
 // prepared is the executable form of one request — everything Dispatch and
 // DispatchStream share before the wire is touched (#1776).
 type prepared struct {
-	httpReq  *http.Request
-	client   *http.Client
+	httpReq *http.Request
+	client  *http.Client
+	// timeout is the deadline the client was built with (#2630) — what the
+	// precedence chain resolved to. It is kept so an exchange that ends by
+	// that deadline can say which limit it hit instead of reporting a generic
+	// transport failure.
+	timeout  time.Duration
 	warnings []string
 	now      func() time.Time
 	// snapshot is what goes on the wire (#1832), captured once everything —
@@ -308,7 +317,8 @@ func prepare(ctx context.Context, req *httpfile.Request, opts Options) (*prepare
 	}
 	return &prepared{
 		httpReq:  httpReq,
-		client:   buildClient(cfg, opts),
+		client:   buildClient(cfg, opts, resolved.Timeout),
+		timeout:  effectiveTimeout(cfg, opts, resolved.Timeout),
 		warnings: warnings,
 		now:      now,
 		snapshot: snapshotOf(httpReq, body),
@@ -377,7 +387,8 @@ func prepareSnapshot(ctx context.Context, key string, snap *RequestSnapshot, opt
 	}
 	return &prepared{
 		httpReq:  httpReq,
-		client:   buildClient(cfg, opts),
+		client:   buildClient(cfg, opts, 0),
+		timeout:  effectiveTimeout(cfg, opts, 0),
 		now:      now,
 		snapshot: snap.Clone(),
 	}, nil
@@ -411,6 +422,12 @@ func (p *prepared) collect(key string) (*Response, error) {
 	tr := newTimingTrace(p.now, start)
 	httpResp, err := p.client.Do(p.traced(tr))
 	if err != nil {
+		// A deadline that ran out is named as such (#2630): "timed out after
+		// 30 s" plus the two ways to raise it beats the transport's generic
+		// wording, which says nothing about where the 30 s came from.
+		if te := asTimeout(p.httpReq.Context(), key, p.timeout, err); te != nil {
+			return nil, te
+		}
 		return nil, fmt.Errorf("request %s: %v", key, err)
 	}
 	defer httpResp.Body.Close()
@@ -532,13 +549,23 @@ func (p *prepared) run(ctx context.Context, key string, opts Options, cb StreamC
 	p.client.Timeout = 0
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	deadline := time.AfterFunc(overall, cancel)
+	// timedOut tells the deadline's cancel apart from the user's (#2630):
+	// both end the exchange as context.Canceled, but only one of them is a
+	// timeout the pane should name.
+	var timedOut atomic.Bool
+	deadline := time.AfterFunc(overall, func() { timedOut.Store(true); cancel() })
 	defer deadline.Stop()
 
 	start := p.now()
 	tr := newTimingTrace(p.now, start)
 	httpResp, err := p.client.Do(p.httpReq.WithContext(httptrace.WithClientTrace(ctx, tr.clientTrace())))
 	if err != nil {
+		if timedOut.Load() {
+			return nil, &TimeoutError{Key: key, Limit: overall}
+		}
+		if te := asTimeout(ctx, key, overall, err); te != nil {
+			return nil, te
+		}
 		return nil, fmt.Errorf("request %s: %v", key, err)
 	}
 	defer httpResp.Body.Close()
@@ -546,8 +573,12 @@ func (p *prepared) run(ctx context.Context, key string, opts Options, cb StreamC
 
 	if !IsStreamContentType(httpResp.Header.Get("Content-Type")) {
 		// Collect mode — the overall deadline stays armed, the behavior is
-		// Dispatch's to the letter.
-		return p.collectBody(key, httpResp, start, tr)
+		// Dispatch's to the letter, the deadline's own failure included.
+		resp, err := p.collectBody(key, httpResp, start, tr)
+		if err != nil && timedOut.Load() {
+			return nil, &TimeoutError{Key: key, Limit: overall}
+		}
+		return resp, err
 	}
 
 	// Stream mode: the headers are the first visible result, the body arrives
@@ -671,8 +702,10 @@ func applyNetrc(httpReq *http.Request, cfg *curlConfig, opts Options) error {
 }
 
 // buildClient assembles the http.Client honoring .curlrc proxy/insecure/
-// redirect/timeout options over the defaults.
-func buildClient(cfg *curlConfig, opts Options) *http.Client {
+// redirect/timeout options over the defaults. reqTimeout is the deadline the
+// request's own `# @timeout` directive asks for (#2630), 0 when it carries
+// none.
+func buildClient(cfg *curlConfig, opts Options, reqTimeout time.Duration) *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	if cfg.Insecure {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
@@ -686,15 +719,7 @@ func buildClient(cfg *curlConfig, opts Options) *http.Client {
 		transport.DialContext = (&timeoutDialer{cfg.ConnectTimeout}).DialContext
 	}
 
-	timeout := DefaultTimeout
-	if opts.Timeout > 0 {
-		timeout = opts.Timeout
-	}
-	if cfg.MaxTime > 0 {
-		timeout = cfg.MaxTime
-	}
-
-	client := &http.Client{Transport: transport, Timeout: timeout}
+	client := &http.Client{Transport: transport, Timeout: effectiveTimeout(cfg, opts, reqTimeout)}
 	if cfg.FollowRedirect != nil && !*cfg.FollowRedirect {
 		client.CheckRedirect = func(*http.Request, []*http.Request) error {
 			return http.ErrUseLastResponse

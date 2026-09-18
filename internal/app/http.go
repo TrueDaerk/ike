@@ -276,12 +276,17 @@ func (m *Model) dispatchHTTPRequest(source string, f *httpfile.File, req *httpfi
 		m.host.Notify(host.Error, "http: "+err.Error())
 		return nil
 	}
-	return m.dispatchHTTP(source, req.Key(), requestLabel(req), req.WebSocket != nil,
+	return m.dispatchHTTPLimit(source, req.Key(), requestLabel(req), req.WebSocket != nil,
+		httpFlightLimit(req.Timeout),
 		func(ctx context.Context, source, key string, cb httpclient.WSCallbacks) (*httpclient.Response, error) {
 			// The .http file's directory anchors relative external-body paths
 			// (#1305): `< ./payload.json` is relative to the request file, not
 			// to wherever IKE was started.
-			opts := httpclient.Options{BaseDir: filepath.Dir(source), Vars: vars}
+			opts := httpclient.Options{BaseDir: filepath.Dir(source), Vars: vars,
+				// The configured deadline (#2630) travels as the *default*:
+				// the request's own `# @timeout` directive and a .curlrc
+				// `max-time` still win over it inside the dispatcher.
+				Timeout: httpTimeout()}
 			var resp *httpclient.Response
 			var err error
 			if req.WebSocket != nil {
@@ -324,14 +329,18 @@ func (m *Model) resendHTTPRequest() tea.Cmd {
 	// with is the run before it, so it arms the same auto-diff.
 	m.armHTTPRerunDiff(p.Source(), key)
 	ws := snap.Method == httpfile.WebSocketMethod
-	return m.dispatchHTTP(p.Source(), key, snap.Label(), ws,
+	return m.dispatchHTTPLimit(p.Source(), key, snap.Label(), ws, httpFlightLimit(0),
 		func(ctx context.Context, _, key string, cb httpclient.WSCallbacks) (*httpclient.Response, error) {
+			// A verbatim re-send repeats the bytes, not the .http block, so
+			// there is no `# @timeout` directive to read (#2630): the
+			// configured deadline applies, as it does to any dispatch.
+			opts := httpclient.Options{Timeout: httpTimeout()}
 			if ws {
 				// A stored websocket session (#2422) re-opens and replays its
 				// initial messages instead of repeating one exchange.
-				return httpclient.ResendWS(ctx, key, snap, httpclient.Options{}, cb)
+				return httpclient.ResendWS(ctx, key, snap, opts, cb)
 			}
-			return httpclient.Resend(ctx, key, snap, httpclient.Options{}, cb.StreamCallbacks)
+			return httpclient.Resend(ctx, key, snap, opts, cb.StreamCallbacks)
 		})
 }
 
@@ -414,6 +423,35 @@ func (m *Model) takeHTTPRerunDiff(source, key string) bool {
 // natural backpressure — a slow UI slows the read, never drops data.
 func (m *Model) dispatchHTTP(source, key, label string, ws bool,
 	send func(ctx context.Context, source, key string, cb httpclient.WSCallbacks) (*httpclient.Response, error)) tea.Cmd {
+	return m.dispatchHTTPLimit(source, key, label, ws, httpFlightLimit(0), send)
+}
+
+// httpTimeout is the configured overall deadline of one dispatch (#2630) —
+// http.timeout_ms as a duration. It is read per dispatch rather than cached,
+// so a change in the settings UI applies to the next request without a
+// restart.
+func httpTimeout() time.Duration {
+	return time.Duration(config.Get().HTTP.TimeoutMs) * time.Millisecond
+}
+
+// httpFlightLimit is the deadline the in-flight header counts against
+// (#2630): the request's own `# @timeout` directive when it carries one, the
+// configured default otherwise. A `.curlrc max-time` sits between the two in
+// the dispatcher's precedence chain but is not read here — the header would
+// have to parse the file on every dispatch to show it, and a .curlrc deadline
+// is the rare case, while a wrong-looking countdown would be worse than a
+// slightly conservative one only for those users.
+func httpFlightLimit(directive time.Duration) time.Duration {
+	if directive > 0 {
+		return directive
+	}
+	return httpTimeout()
+}
+
+// dispatchHTTPLimit is dispatchHTTP with the flight's deadline spelled out
+// (#2630), so the response pane can count the wait against it.
+func (m *Model) dispatchHTTPLimit(source, key, label string, ws bool, limit time.Duration,
+	send func(ctx context.Context, source, key string, cb httpclient.WSCallbacks) (*httpclient.Response, error)) tea.Cmd {
 	flightKey := httpFlightKey(source, key)
 	if _, running := m.httpFlight[flightKey]; running {
 		// Duplicate-dispatch guard (#1272): never fire the same request twice
@@ -433,6 +471,7 @@ func (m *Model) dispatchHTTP(source, key, label string, ws bool,
 		label:   label,
 		request: key,
 		started: time.Now(),
+		limit:   limit,
 		cancel:  cancel,
 		ws:      ws,
 		endOp:   endOp,
@@ -668,6 +707,14 @@ func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) tea.Cmd {
 			m.host.Notify(host.Info, "http: "+msg.Request+" canceled")
 			return nil
 		}
+		var timedOut *httpclient.TimeoutError
+		if errors.As(msg.Err, &timedOut) {
+			// The deadline ran out (#2630). A generic transport error left the
+			// user guessing — and re-sending the same request, waiting the
+			// same thirty seconds — so the pane says what happened and names
+			// both ways out of it.
+			return m.showHTTPTimeout(msg.Request, timedOut)
+		}
 		m.host.Notify(host.Error, "http: "+msg.Err.Error())
 		return nil
 	}
@@ -741,6 +788,44 @@ func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) tea.Cmd {
 		m.openHTTPPreviousRunDiff()
 	}
 	return report
+}
+
+// httpTimeoutText is what a timed-out dispatch says (#2630): how long it
+// waited, and the two ways to give it longer — the setting for "every request
+// here is slow", the directive for "this one endpoint is".
+func httpTimeoutText(err *httpclient.TimeoutError) string {
+	return fmt.Sprintf("timed out after %s — raise http.timeout_ms or add a `# @timeout %s` directive to the request",
+		httpclient.FormatTimeout(err.Limit), suggestedHTTPTimeout(err.Limit))
+}
+
+// suggestedHTTPTimeout is the directive value the timeout message proposes:
+// twice the deadline that just ran out, spelled in whole seconds. A concrete
+// value makes the advice copy-pasteable instead of homework.
+func suggestedHTTPTimeout(limit time.Duration) string {
+	secs := int64((2 * limit).Round(time.Second) / time.Second)
+	if secs < 1 {
+		secs = 1
+	}
+	return strconv.FormatInt(secs, 10) + "s"
+}
+
+// showHTTPTimeout puts the explicit timeout message into the response pane
+// (#2630) and, for a pane nobody can see, into the notification channel — the
+// same two routes an ordinary answer takes.
+func (m *Model) showHTTPTimeout(request string, err *httpclient.TimeoutError) tea.Cmd {
+	text := httpTimeoutText(err)
+	if m.httpPanel() == nil {
+		m.openHTTPPanel()
+	}
+	p := m.httpPanel()
+	if p == nil {
+		m.host.Notify(host.Error, "http: "+request+" "+text)
+		return nil
+	}
+	p.SetFailure(request, text)
+	m.host.Notify(host.Error, "http: "+request+" "+text)
+	m.layout()
+	return nil
 }
 
 // copyHTTPResponse copies the shown response to the system clipboard
@@ -1017,6 +1102,11 @@ type httpFlightEntry struct {
 	// streamed marks a dispatch whose response was recognized as a stream
 	// (#1776) — the flight-end telemetry event carries it (#2348).
 	streamed bool
+	// limit is the overall deadline this dispatch runs under (#2630) — the
+	// request directive's value or the configured default. It feeds the
+	// response pane's "waiting 12 s / 30 s" header; 0 leaves the header at
+	// the elapsed time alone.
+	limit time.Duration
 	// ws marks a websocket session (#2422): the flight-end event carries
 	// kind=ws plus the frame count, and the pane unlocks its input line.
 	ws bool
@@ -1250,6 +1340,7 @@ func (m *Model) markHTTPPending() {
 	p.SetCancelChord(m.httpCancelChord())
 	for _, e := range m.httpFlight {
 		p.SetPending(e.request, e.started)
+		p.SetPendingLimit(e.limit)
 		return
 	}
 	p.ClearPending()

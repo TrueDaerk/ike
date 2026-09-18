@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-09-08T16:00:00Z
+timestamp: 2026-09-18T00:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -289,7 +289,11 @@ any entry whose key the typed schema does not expose (no dead keys).
   (#2547) is the wall clock past which the response pane's header flags a
   flight with its duration and dominating timing phase, and the off-screen
   notice names that phase (0–600000 ms, default 2000, `0` = off).
-  See [HTTP client](./http-client.md).
+  `http.timeout_ms` (#2630) is the overall deadline of one dispatch
+  (1000–600000 ms, default 30000); unlike the two thresholds above it has no
+  off value, since `0` would mean "no deadline" — the hang it exists to bound.
+  A request's own `# @timeout 5s` directive and a `.curlrc max-time` override
+  it. See [HTTP client](./http-client.md).
 - **Ansible Vault** (#2293) — `ansible.vault_password_file`, the `Path` entry
   (existence-checked in the form) naming the file whose first line decrypts
   `$ANSIBLE_VAULT;` files for transparent editing: user scope is the global

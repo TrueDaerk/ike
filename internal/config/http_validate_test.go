@@ -137,3 +137,33 @@ func TestValidateHTTPSlowThresholdMs(t *testing.T) {
 		t.Errorf("http.slow_threshold_ms = %q", got)
 	}
 }
+
+// The overall dispatch deadline (#2630) defaults to 30 s, has a one-second
+// floor — 0 would be "no deadline", the hang the setting bounds — and is
+// reported once when it falls outside its window.
+func TestValidateHTTPTimeoutMs(t *testing.T) {
+	if c := defaults(); c.HTTP.TimeoutMs != 30000 {
+		t.Errorf("default timeout = %d, want 30000", c.HTTP.TimeoutMs)
+	}
+	for _, bad := range []int{0, -1, 999, 600001} {
+		c := defaults()
+		c.HTTP.TimeoutMs = bad
+		diags := validate(c)
+		if c.HTTP.TimeoutMs != 30000 {
+			t.Errorf("timeout %d validated to %d, want the 30000 fallback", bad, c.HTTP.TimeoutMs)
+		}
+		if len(diagsFor(diags, "http.timeout_ms")) != 1 {
+			t.Errorf("timeout %d must be reported once, got %v", bad, diags)
+		}
+	}
+	for _, good := range []int{1000, 5000, 30000, 600000} {
+		c := defaults()
+		c.HTTP.TimeoutMs = good
+		if diags := validate(c); len(diagsFor(diags, "http.timeout_ms")) != 0 || c.HTTP.TimeoutMs != good {
+			t.Errorf("timeout %d is valid: %d, %v", good, c.HTTP.TimeoutMs, diags)
+		}
+	}
+	if got := defaults().Flat()["http.timeout_ms"]; got != "30000" {
+		t.Errorf("http.timeout_ms = %q", got)
+	}
+}

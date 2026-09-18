@@ -665,6 +665,15 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "http.slow_threshold_ms", Message: fmt.Sprintf("threshold %d out of range (0–600000 ms, 0 = off), using 2000", c.HTTP.SlowThresholdMs)})
 		c.HTTP.SlowThresholdMs = 2000
 	}
+
+	// The overall dispatch deadline (#2630). Unlike the two thresholds above
+	// 0 is not "off": a request without a deadline can hang the pane forever,
+	// which is the failure this setting exists to bound, so the floor is one
+	// second.
+	if c.HTTP.TimeoutMs < 1000 || c.HTTP.TimeoutMs > 600000 {
+		diags = append(diags, Diagnostic{Field: "http.timeout_ms", Message: fmt.Sprintf("timeout %d out of range (1000–600000 ms), using 30000", c.HTTP.TimeoutMs)})
+		c.HTTP.TimeoutMs = 30000
+	}
 	// Issues window (#2090): both defaults are fixed vocabularies; an unknown
 	// value falls back rather than opening the pane in an undefined state.
 	switch c.Issues.DefaultTab {

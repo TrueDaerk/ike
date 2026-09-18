@@ -369,6 +369,12 @@ func defaults() *Config {
 			// flight near 230 ms and the outliers in the double-digit
 			// seconds, so 2 s separates the two without noise.
 			SlowThresholdMs: 2000,
+			// The overall deadline of one dispatch (#2630). 30 s is what the
+			// client always used as its built-in limit, so the default keeps
+			// today's behaviour; the point of the setting is that an endpoint
+			// which needs longer — or a local service that should fail fast —
+			// no longer requires a .curlrc.
+			TimeoutMs: 30000,
 		},
 		Issues: Issues{
 			// The issues window opens on its issue list, ordered the way the

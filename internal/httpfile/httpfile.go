@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Ext is the file extension the HTTP client handles.
@@ -69,6 +70,12 @@ type Request struct {
 	// (#2546), in file order. Like Captures they are evaluated against the
 	// response after dispatch; the parser only collects them.
 	Assertions []Assertion
+	// Timeout is the deadline the block's `# @timeout 5s` directive sets
+	// (#2630), 0 when it carries none. It overrides both a `.curlrc`
+	// `max-time` and the `http.timeout_ms` setting, for this request only —
+	// the one endpoint that is known to take a minute needs no global
+	// loosening. See timeout.go.
+	Timeout time.Duration
 	// GraphQL is the split of a `GRAPHQL <url>` block's body (#2423) — query,
 	// variables, operation name and their line ranges. nil for every other
 	// method, so `req.GraphQL != nil` is the test for "this is a GraphQL
@@ -224,6 +231,12 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 	// request, which does not exist yet at the first of those places.
 	var captures []Capture
 	var assertions []Assertion
+	var timeout Timeout
+	// badTimeout drops the whole block (#2630): a mistyped deadline must not
+	// leave the request runnable under the default one, which is exactly the
+	// silent 30 s wait the directive was written to avoid. The error above
+	// names the line, and http.run reports it instead of dispatching.
+	badTimeout := false
 	noteCapture := func(idx int) {
 		if c, ok := captureAt(lines[idx], idx); ok {
 			captures = append(captures, c)
@@ -231,6 +244,18 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 		// Assertion directives (#2546) are comment lines in the same places.
 		if a, ok := assertAt(lines[idx], idx); ok {
 			assertions = append(assertions, a)
+		}
+		// The per-request deadline (#2630) is a comment line in the same
+		// places. The last one wins — re-stating it is an edit, not a second
+		// deadline — and a value that does not parse is reported on its own
+		// line instead of quietly leaving the configured default in place.
+		if t, ok := timeoutAt(lines[idx], idx); ok {
+			if t.Err != nil {
+				f.Errors = append(f.Errors, &ParseError{Line: t.Line, Msg: t.Err.Error()})
+				badTimeout = true
+				return
+			}
+			timeout = t
 		}
 	}
 
@@ -360,6 +385,10 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 
 	req.Captures = captures
 	req.Assertions = assertions
+	if badTimeout {
+		return
+	}
+	req.Timeout = timeout.Duration
 	f.Requests = append(f.Requests, req)
 }
 

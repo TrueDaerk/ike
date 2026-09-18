@@ -1,10 +1,10 @@
 ---
 type: concept
 title: HTTP Client (.http files)
-description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, WEBSOCKET session blocks with ===-separated initial messages, a live frame transcript and an interactive send line in the response pane, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, GraphQL errors lifted out of a 200 answer into a red block above the body, and @assert directives checked against every response with a pass/fail block above the body, a run in the Test Results window and a failure notice.
+description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, WEBSOCKET session blocks with ===-separated initial messages, a live frame transcript and an interactive send line in the response pane, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, GraphQL errors lifted out of a 200 answer into a red block above the body, and @assert directives checked against every response with a pass/fail block above the body, a run in the Test Results window and a failure notice, plus a configurable request timeout with a per-request @timeout directive, a visible elapsed/limit countdown while a request is out and an explicit timed-out result.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-09-08T16:00:00Z
+timestamp: 2026-09-18T00:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -136,6 +136,10 @@ Authorization: Bearer {{$env TOKEN}}
   request block are checked against *its response*, with a pass/fail block
   above the body, a run in the Test Results window and a failure notice —
   see [assertions](#assertions-2546).
+- **Timeout directive** (#2630): a `# @timeout 5s` comment line inside a
+  request block sets *that* request's overall deadline, overriding both the
+  `http.timeout_ms` setting and a `.curlrc` `max-time` — see
+  [the request timeout](#the-request-timeout-2630).
 - **GraphQL blocks** (#2423): a request line spelled `GRAPHQL <url>` takes the
   query as its body and an optional JSON `variables` object after a blank line,
   and sends the `POST` envelope for both — see
@@ -885,12 +889,90 @@ hard failure, and **explicit values in the `.http` file always win**:
   response warnings, never errors.
 
 Defaults: redirects followed (Go's limit of 10), TLS verification on (unless
-`insecure`), 30 s overall timeout (`max-time` overrides), response bodies
+`insecure`), a 30 s overall timeout (`http.timeout_ms`, a request's
+`# @timeout` directive and `max-time` all override it — see below), response bodies
 capped at 10 MiB with a truncation warning so huge downloads cannot freeze
 the TUI. `Options` lets callers (and tests) override the env lookup, pass the
 user-variable chain (`Options.Vars`, #1867 — the caller's value is copied, so
 one `Options` can serve several dispatches), override the config file paths,
 or disable detection entirely.
+
+### The request timeout (#2630)
+
+The overall deadline used to be a constant: 30 s, adjustable only through a
+`.curlrc` `max-time` or an `Options.Timeout` a Go caller passed. The local
+telemetry showed what that costs — seven of ten HTTP errors in a week ended at
+exactly 30,0xx ms, and the same request was re-sent four times in ten minutes,
+each time waiting the full half minute for a failure that said nothing about
+where the limit came from.
+
+**Where the deadline comes from**, most specific first
+(`httpclient/timeout.go`, `effectiveTimeout`):
+
+1. the request's own **`# @timeout 5s` directive**
+2. a **`.curlrc` `max-time`**
+3. the **`http.timeout_ms` setting** (`Options.Timeout`, passed down by the app)
+4. **`DefaultTimeout`**, the built-in 30 s
+
+The order is the package's general rule — explicit values in the `.http` file
+always win — extended downwards: the file beats the local client
+configuration, which beats ike's own setting, which beats the built-in.
+
+**The setting** is `http.timeout_ms` (Settings → HTTP Client → *Request
+timeout*), user scope, default `30000`, range 1000–600000 ms. The floor is a
+second rather than zero on purpose: `0` would mean "no deadline", which is the
+hang the setting exists to bound. The app reads it per dispatch
+(`app.httpTimeout`), so a change applies to the next request without a
+restart.
+
+**The directive** is a comment line like every other one — `#`, `##` or `//`,
+never `###` — anywhere a comment is allowed in the block and not inside a
+body:
+
+```
+### slow report
+# @timeout 2m
+GET https://example.com/reports/annual
+```
+
+The value is a Go duration (`5s`, `1500ms`, `2m`) or, for authors coming from
+`max-time`, a bare number of seconds (`45`, `0.5`). It is parsed by
+`httpfile.TimeoutDirective` — the function the highlighter reads too, which
+paints the marker as a keyword and the duration as a number — and the last
+directive in a block wins. A value that does not parse (or a `0`) is a parse
+error on its own line **and drops the block**: a mistyped deadline must not
+leave the request runnable under the default one, which is exactly the silent
+30 s wait the directive was written to avoid.
+
+**While the request is out**, the response pane header counts the wait against
+the limit: `⟳ running create (waiting 12.0s / 30 s)`, next to the `x /
+ctrl+. cancels` hint (#2404). Both move with the existing 250 ms flight tick —
+no second ticker. The limit travels on the flight entry
+(`httpFlightEntry.limit` → `httppane.SetPendingLimit`) and is the directive's
+value when the block carries one, the setting otherwise; a `.curlrc max-time`
+is not read for the header, since showing it would mean parsing `.curlrc` on
+every repaint for the rarest of the three sources.
+
+**When the deadline runs out**, the dispatch fails with a
+`httpclient.TimeoutError` carrying the limit that was hit, rather than the
+transport's generic wording. `fillHTTPPanel` recognises it and puts the
+explanation where the answer would have been
+(`httppane.SetFailure`, header slot and error row):
+
+```
+✗ timed out after 30 s — raise http.timeout_ms or add a `# @timeout 60s` directive to the request
+```
+
+The previous response is dropped rather than left standing — it is not what
+this request returned. A user cancel is deliberately *not* a timeout: the
+dispatcher tells the deadline's own cancel from the context's, so aborting two
+seconds into a thirty-second budget still reads as "canceled" (#1272).
+`TimeoutError` unwraps to `context.DeadlineExceeded`, so a caller testing for
+the sentinel keeps working.
+
+**Streams are unaffected** (#1776): once a response is recognised as a stream
+the overall deadline is dropped for `StreamIdleTimeout`, so a healthy
+long-lived SSE/NDJSON connection is never cut off by the request timeout.
 
 ### Where the time went (`timing.go`, #2404)
 
@@ -1873,7 +1955,8 @@ dispatch's `context.CancelFunc`:
 - **Indicator**: a statusline segment (`⟳ http: GET /_cat/indices (1.2s)`, or
   `⟳ http: 2 requests (…)` when several run) repainted by a 250 ms tick that
   only runs while something is in flight. The response viewer marks the
-  pending request in its header (`⟳ running one (1.2s)`) and keeps the
+  pending request in its header (`⟳ running one (waiting 1.2s / 30 s)`,
+  #2630 — the elapsed time against the deadline the dispatch runs under) and keeps the
   previous response readable below — it is simply no longer presented as the
   current answer.
 - **Inline marker (#1746)**: the request line in the `.http` file itself
@@ -1905,7 +1988,8 @@ response, error and cancel alike.
 
 ### The pane says how to stop it (#2404)
 
-Elapsed time was already in the pane header (`⟳ running one (1.2s)`), moving
+Elapsed time was already in the pane header (`⟳ running one (1.2s)`; since
+#2630 it reads against the deadline, `waiting 1.2s / 30 s`), moving
 with the same 250 ms tick as the statusline indicator. What was missing is the
 way out: `x` is undiscoverable and the chord is new. Once a flight has been
 out for longer than **one second** (`cancelHintAfter`), the pane adds a hint

@@ -314,6 +314,7 @@ func (c *Config) Flat() map[string]string {
 	put("http.highlight_limit_kb", c.HTTP.HighlightLimitKB)
 	put("http.notify_slow_ms", c.HTTP.NotifySlowMs)
 	put("http.slow_threshold_ms", c.HTTP.SlowThresholdMs)
+	put("http.timeout_ms", c.HTTP.TimeoutMs)
 	put("issues.default_tab", c.Issues.DefaultTab)
 	put("issues.default_sort", c.Issues.DefaultSort)
 	put("issues.default_filter", c.Issues.DefaultFilter)
