@@ -1235,6 +1235,17 @@ func (m *Model) recordHTTPFlightEnd(e *httpFlightEntry, msg HTTPResponseMsg) {
 		phase = "error"
 	}
 	d := map[string]string{"stream": strconv.FormatBool(e.streamed)}
+	// The failure class (#2631): the response pane already knows why a
+	// request failed — timeout, DNS, refused, TLS, reset, canceled — so the
+	// event carries that instead of leaving the analysis to guess from `ms`
+	// alone. Structural only, never the error text.
+	if phase == "error" || phase == "canceled" {
+		if reason := httpclient.ClassifyError(msg.Err); reason != "" {
+			d["reason"] = reason
+		} else if phase == "canceled" {
+			d["reason"] = "canceled"
+		}
+	}
 	if e.ws {
 		// A websocket session (#2422): the kind plus the frame count — how
 		// much crossed the wire, nothing of what it said.

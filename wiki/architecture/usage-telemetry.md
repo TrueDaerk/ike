@@ -33,11 +33,11 @@ paths.** Two guards enforce it:
 ## Event schema (the analysis interface)
 
 One JSON object per line. `v` is the schema version (`telemetry.SchemaVersion`,
-currently 10); readers must tolerate unknown fields and filter on `v`.
+currently 11); readers must tolerate unknown fields and filter on `v`.
 
 ```json
-{"v":10,"ts":"2026-08-27T10:15:30.123Z","sid":"a1b2c3d4e5f6","type":"command","data":{"id":"editor.save","source":"keybind"}}
-{"v":10,"ts":"2026-08-27T10:15:31.456Z","sid":"a1b2c3d4e5f6","type":"internal","data":{"id":"lsp.documentSymbols","source":"internal"}}
+{"v":11,"ts":"2026-08-27T10:15:30.123Z","sid":"a1b2c3d4e5f6","type":"command","data":{"id":"editor.save","source":"keybind"}}
+{"v":11,"ts":"2026-08-27T10:15:31.456Z","sid":"a1b2c3d4e5f6","type":"internal","data":{"id":"lsp.documentSymbols","source":"internal"}}
 ```
 
 ### Version history (what an analysis script must branch on)
@@ -54,6 +54,7 @@ currently 10); readers must tolerate unknown fields and filter on `v`.
 | 8 | #2547 | The `http.flight` end phases carry the timing breakdown the response pane shows: `dns_ms`, `connect_ms`, `tls_ms`, `ttfb_ms`, `transfer_ms` (milliseconds spent *in* each phase; `ttfb_ms` counts from the start of the exchange and so contains the setup phases) and `reused` (`true` when the request went out on a kept-alive connection, which is why its setup phases read 0). Builds since #2404 already wrote the fields without a bump; from v8 a reader may rely on them for every flight that produced a response — their absence on an `ok` means nothing was measured (a history restore), never a lost field. Below v8 absence means "not recorded". Structural numbers only, never a host or URL. |
 | 9 | #2578 | The group-level ops join: `project.group.open` (the whole warm-up switch chain — `members` present members, `skipped` hops that failed, `landed_on` the 12-hex project token of the member the chain ended on, `ms` the chain's total) and `project.group.close` (`members` the member workspaces torn down, `ms` the total). Each hop keeps recording its own `project.switch` op, so chain and parts nest. `project.group.close` was already emitted without `members` since #2572; from v9 a reader may rely on the field, and its absence below v9 means "not recorded", not zero. |
 | 10 | #2627 | The type `freeze` joins — one event per heartbeat interval in which the update loop completed fewer than `diag.FreezePassThreshold` (3) passes, carrying `passes` (the interval's completed passes), `since_ms` (wall time since the previous beat) and `dumped` (`true` on the beat that wrote the episode's goroutine stack dump next to the project's `debug.log`, `false` on the episode's follow-up beats and once the per-session dump cap is reached). Below v10 the same episodes are only visible indirectly, as a `passes` value standing still across consecutive heartbeats, and no dump exists. No path is recorded; dump and event are paired over `sid` and the timestamps. |
+| 11 | #2631 | The `http.flight` `error` and `canceled` end phases gain `reason`, a closed vocabulary classifying the failure — `timeout`, `dns`, `refused`, `tls`, `reset`, `canceled`, `other` — derived from the Go error by `httpclient.ClassifyError`. It separates a deadline hit from a refused connection, DNS failure or TLS rejection, which the `ms` field alone could only guess at. Structural only: never the host, URL or the error text. Below v11 absence means "not recorded". |
 
 An export spanning versions therefore needs three guards: filter v1 `command`
 events on `data.source != "internal"`, treat a missing `ok`/`ms` on v4 as
@@ -151,7 +152,11 @@ counts by the version's interval before comparing sessions.
       breakdown `dns_ms`, `connect_ms`, `tls_ms`, `ttfb_ms`, `transfer_ms`
       plus the `reused` flag, so a slow flight is attributable after the
       fact: a `ttfb_ms` near the total is the server's wait, a large
-      `dns_ms` the resolver's. No URL, request key, header or body.
+      `dns_ms` the resolver's. An `error` or `canceled` end — v11 (#2631) —
+      also carries `reason`, one of `timeout`, `dns`, `refused`, `tls`,
+      `reset`, `canceled`, `other` (`httpclient.ClassifyError`), so a fast
+      failure is distinguishable from a hung deadline without ever recording
+      the underlying error text. No URL, request key, header or body.
     - `project.switch` (#2403) — the seamless switch transaction
       (`performSwitchOpts`, `internal/app/switch.go`): persisting the
       departing project's session and layout, the chdir, parking the old
@@ -175,7 +180,10 @@ counts by the version's interval before comparing sessions.
       switched-to model opened no document of a server language — emitted in
       the same pass as the `ok`), `quiet` (a wait was armed but nothing
       published within `switchLSPQuietTimeout`, 2 min — no server configured,
-      binary missing, or the server never spoke), `superseded` (the next
+      binary missing, or the server never spoke; since #2629 it carries
+      `notified: "true"` when the user was told about the silent server
+      before the fallback closed the wait, see
+      [project-switching](project-switching.md)), `superseded` (the next
       switch started before the wait resolved) or `quit` (the session ended
       first). A resumed parked workspace answers fast by design: the manager
       reuses its live server and the bridge delivers the first

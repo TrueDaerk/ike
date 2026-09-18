@@ -4,7 +4,7 @@ title: Project Switching
 description: Roadmap 0090 — internal/project owns the switch flow end to end; recent-projects history, project.switch command, palette picker and the msg-driven re-root orchestration with an unsaved-changes guard.
 resource: internal/project
 tags: [architecture, project, history, switching, palette]
-timestamp: 2026-09-08T16:00:00Z
+timestamp: 2026-09-18T12:00:00Z
 ---
 
 # Project Switching (Roadmap 0090)
@@ -517,6 +517,48 @@ poll would get there eventually, and not at all with
 merge over existing children; the selection stays on its entry via the
 per-merge stability snap in `applyScan`. Git status needs no extra step —
 `StartWatcher` sends a `vcsInvalidateMsg` on every switch.
+
+**The LSP warm-up, and the server that stays silent (#2492, #2629).** The
+language servers of the incoming root are not part of the switch transaction:
+their first `publishDiagnostics` for the new documents lands long after the
+model is ready. `performSwitch` therefore arms a **warm-up wait**
+(`switchLSPWait`, `internal/app/telemetry.go`) that the first publish closes,
+reported as the `project.switch` op's own `lsp` phase (details:
+[usage-telemetry](usage-telemetry.md)). A switch whose model opened no document
+of a server language never arms one — no `didOpen` fires, so no publish can
+ever arrive — and closes the phase as `no_server_docs` on the spot.
+
+An armed wait that nobody closes used to be a purely statistical fact: the
+quiet fallback resolved it after two minutes, and the user in front of the
+editor saw *nothing at all* in the meantime — no diagnostics, no breadcrumbs,
+no hint that the server was missing, dead or misconfigured. Since #2629 a
+second timer speaks up first:
+
+- **`lsp.warmup_notice_ms`** (Settings UI: "Language Support" → *Silent server
+  notice*, user scope, 0–600000, default **15000**) is how long the wait may
+  stay silent before the notice goes out. Warm-ups measured in practice sit at
+  a few hundred milliseconds (parked resume) to ~2.6 s (p90, cold), so the
+  default is far past every normal warm-up and still inside the moment the
+  switch is what the user is thinking about. **0** turns the notice off, and
+  so does `lsp.enabled = false` — with the subsystem off no server is meant to
+  answer, and saying so on every switch would be pure noise.
+- The notice is an ordinary `Warn` notification — "Language server for
+  `<lang>` has not responded since the switch", naming the language of the
+  first server-backed document the switch opened — and is recorded in the
+  notification history like any other.
+- It carries **follow-up actions** (`host.NotifyAction`, #2629): *Restart
+  Language Servers* (`lsp.restart`) and *Open LSP Doctor* (`lsp.doctor`). The
+  notification center numbers the actions of the ring and runs one on its
+  digit (`1`–`9`), closing the center. Details:
+  [notifications](notifications.md).
+- It fires **at most once per wait** and does **not** disarm it: a late publish
+  is still a real measurement. The pointer-identity guard the quiet fallback
+  uses holds here too, so a switch superseded before its threshold drops its
+  pending notice instead of reporting the previous project's server. The
+  `no_server_docs` case arms nothing and therefore never notifies.
+- The `lsp` phase keeps its semantics; a `quiet` end whose user was warned
+  additionally carries `notified: "true"`, so the export can separate a
+  silence nobody noticed from one that was reported.
 
 **Settings scope (0380, #795).** The config reload inside `performSwitch`
 runs after the chdir, so the incoming project's `.ike/settings.toml` layer

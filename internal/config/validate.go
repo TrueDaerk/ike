@@ -725,6 +725,12 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "lsp.completion_delay_ms", Message: fmt.Sprintf("delay %d out of range, using 2000", c.LSP.CompletionDelayMs)})
 		c.LSP.CompletionDelayMs = 2000
 	}
+	// Post-switch warm-up notice (#2629): 0 is "off", and a threshold past ten
+	// minutes would outlive the switch's quiet fallback entirely.
+	if c.LSP.WarmupNoticeMs < 0 || c.LSP.WarmupNoticeMs > 600000 {
+		diags = append(diags, Diagnostic{Field: "lsp.warmup_notice_ms", Message: fmt.Sprintf("threshold %d out of range (0\u2013600000 ms, 0 = off), using 15000", c.LSP.WarmupNoticeMs)})
+		c.LSP.WarmupNoticeMs = 15000
+	}
 	// Performance HUD (#1999): the refresh interval is also the HUD's own
 	// wake rate, so the lower bound keeps a diagnostic overlay from becoming
 	// the regression it is there to find.

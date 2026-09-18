@@ -277,7 +277,8 @@ the palette drops every mode's cache via the optional `Refresher` extension on
 each open, #1372, so newly created files appear and deleted ones vanish), skips
 hidden entries and heavy directories (`.git`, `node_modules`, `vendor`), uses
 forward-slash paths for stable matching, and is capped at `maxFiles`. Activation
-emits `OpenFileMsg{Path}` joined onto the root.
+emits `OpenFileMsg{Path}` joined onto the root (plus `Line`/`Col` for a pasted
+path, see below).
 
 Ranking blends three signals — fuzzy score, **frecency** (#2155) and the
 **most-used** counter (#1419) — and the blend order depends on how much the
@@ -285,14 +286,34 @@ user has typed:
 
 | Query length | Order |
 | --- | --- |
-| 0–2 characters (`shortQueryLen`) | frecency, then fuzzy score, then usage, then path |
-| 3+ characters | fuzzy score, then frecency, then usage, then path |
+| 0–2 characters (`shortQueryLen`) | frecency, then fuzzy score, then usage, then path — capped at `maxEmptyRows` (50) when nothing is typed |
+| 3+ characters | fuzzy score **plus a frecency boost**, then frecency, then usage, then path |
 
 The rationale is that one or two characters barely discriminate — nearly every
 file matches, and the score differences are noise — so the files one is
 actually working on belong on top; from the third character the typed text is a
-real signal and match quality leads again, with frecency demoted to the
-tiebreak that decides equally good matches.
+real signal and match quality leads again.
+
+**The long-query frecency rule (#2636).** Past `shortQueryLen` frecency is not
+only a tiebreak: it is a **boost added to the fuzzy score**, worth
+`frecencyLongWeight` (6) per query rune beyond the threshold, scaled by the
+file's decayed open count squashed into `[0,1)` (`fileFrecencyBoost`). Fuzzy
+scores grow with the query — up to roughly `bonusBoundary + bonusConsecutive`
+per matched rune — so a *constant* boost would vanish exactly where it is
+needed: on a long, pasted-path-like query over a big tree, where hundreds of
+candidates score within a few points of each other and the wanted file sinks
+(the telemetry behind #2636 had picks at rank 28 and rank **114**). Scaling the
+boost with the query keeps it a fixed fraction — a quarter — of what one more
+matched rune is worth: at four runes it stays below a single word-boundary
+bonus, so a clearly better cold match still wins (#2155's rule); at twelve it
+is worth a handful of matched runes, enough to lift a file one actually works
+on into the top rows.
+
+**The empty listing (#2636).** With nothing typed the list is the frecency
+order **capped at `maxEmptyRows`**. Uncapped it was the whole tree — ten
+thousand rows, which is not something one browses; the telemetry showed such
+opens dismissed after eight seconds without a pick. Fifty rows is well past
+the point where one starts typing instead.
 
 The file-usage counter (same `Usage` type as #773, persisted in
 `.ike/fileusage.json`, `IKE_CONFIG_DIR`-redirectable) counts only file
@@ -318,6 +339,26 @@ finder reflects what one is working on however the file was reached. Both sides
 key the store through `frecency.Key` (cleaned, absolute), since the finder
 holds root-relative paths and the opening sites hold whatever spelling they
 were given.
+
+**Paste as path (#2636).** A query that already *is* a path to an existing
+file is offered as the **first row** and opens that very file, whatever the
+fuzzy index thinks — the case a pasted path comes from: a stack trace, a grep
+hit, a review comment. It is recognised before either branch below, so it works
+for a project-relative path (`internal/foo/bar.go`) as well as for a path query
+(`/…`, `~/…`, `./…`) that `pathcomplete` would otherwise serve on its own. What
+is accepted is what a clipboard actually delivers: surrounding whitespace and
+newlines are trimmed, and a `:line[:col]` suffix is parsed with the **command
+line's own grammar** (`cli.SplitTarget`, exported for this) so `file.go:42`
+means the same thing pasted into `@` as typed after `ike`. The row carries the
+position in `OpenFileMsg{Line, Col}` (1-based, 0 = unset) and the root model
+opens it through `openPathFocusedAt` — the palette's usual focused-pane open,
+then the standard jump funnel. Only an **existing regular file** qualifies: a
+typo falls through to the ordinary fuzzy ranking and its no-match state, and a
+directory stays the path query's business (descending). A file inside the
+project is titled by its relative path; one outside keeps its absolute path and
+opens as an out-of-root buffer exactly like a `;` picker row (#565). The file
+is never listed twice — the path row seeds the same `seen` map the filesystem
+fallback and the scratch rows use.
 
 **Filesystem reach (#1433).** `@` is no longer project-only: a query typed as
 a filesystem path — leading `/`, `~/`, `./` or `../` — is served by the shared

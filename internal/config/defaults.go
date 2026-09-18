@@ -157,13 +157,17 @@ func defaults() *Config {
 			// 100ms sits under the gap between two words at a brisk typing
 			// pace (#2541) and above the gap between two characters of one.
 			CompletionDelayMs: 100,
-			CodeLens:          true,
-			Folding:           true,
-			SemanticTokens:    true,
-			SelectionRange:    true,
-			WillRename:        true,
-			LogLevel:          "warn",
-			Servers:           map[string]map[string]any{},
+			// 15 s is far past every warm-up on record (p90 ≈ 2.6 s) and
+			// still short enough that the notice arrives while the switch is
+			// what the user is thinking about (#2629).
+			WarmupNoticeMs: 15000,
+			CodeLens:       true,
+			Folding:        true,
+			SemanticTokens: true,
+			SelectionRange: true,
+			WillRename:     true,
+			LogLevel:       "warn",
+			Servers:        map[string]map[string]any{},
 			// Default ignore rules (#1260): intelephense's P1006 TypeError
 			// cannot infer types written through by-reference parameters
 			// (&$param) and floods by-ref-heavy PHP with bogus

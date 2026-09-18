@@ -1100,6 +1100,16 @@ type LSP struct {
 	// resting position, instead of once per character. Server trigger
 	// characters (".") and the manual ctrl+space request stay immediate.
 	CompletionDelayMs int `toml:"completion_delay_ms"`
+	// WarmupNoticeMs is how long a project switch waits for the first
+	// diagnostics publish of the newly opened documents before it says out
+	// loud that the language server has not answered (#2629). A switch that
+	// opens documents of a server language arms a warm-up wait; a server that
+	// is missing, dead or misconfigured never closes it, and without this
+	// notice the editor simply stays diagnostic-blind — silently, for the two
+	// minutes the telemetry fallback takes. Warm-ups measured in practice sit
+	// at a few hundred milliseconds to ~2.6 s (p90), so the default leaves
+	// plenty of room for a cold index. 0 turns the notice off.
+	WarmupNoticeMs int `toml:"warmup_notice_ms"`
 	// CodeLens toggles server code lenses ("run test", reference counts)
 	// rendered as virtual annotations on the anchored line and executable via
 	// the lsp.codeLens command (#1912).

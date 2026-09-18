@@ -152,3 +152,9 @@ func splitTarget(arg string) Target {
 	}
 	return t
 }
+
+// SplitTarget is splitTarget's exported form (#2636): the '@' file finder
+// parses a pasted "path:line[:col]" with the very same grammar the command
+// line uses, so a path copied out of a stack trace or a grep hit means the
+// same thing wherever it is pasted.
+func SplitTarget(arg string) Target { return splitTarget(arg) }

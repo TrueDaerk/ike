@@ -1,5 +1,33 @@
 # Log
 
+## 2026-09-18 (A silent language server reports itself after a switch, #2629)
+
+- **Two minutes of silence used to be invisible.** A cold `project.switch`
+  armed the LSP warm-up wait and never heard a publish; the telemetry fallback
+  closed the phase as `skipped: quiet` after 120 s (#2492), but the user in
+  front of the editor saw nothing at all — no diagnostics, no breadcrumbs, no
+  hint that the server was missing, dead or misconfigured. Every other switch
+  on record warmed up in 460 ms (parked) to ~2.6 s (p90, cold).
+- **A second timer speaks up first** (`armSwitchLSPNotice`,
+  `internal/app/telemetry.go`): past `lsp.warmup_notice_ms` with the wait still
+  unresolved, a `Warn` notification says "Language server for `<lang>` has not
+  responded since the switch", naming the language of the first server-backed
+  document the switch opened. It fires at most once per wait and does not
+  disarm it — a late publish is still a real measurement — and the same
+  pointer-identity guard the quiet fallback uses drops the notice of a
+  superseded switch. `no_server_docs` arms nothing and never notifies.
+- **Notifications can carry actions now** (`host.NotifyAction`,
+  `Host.NotifyActions`): the notification center numbers the actions of the
+  ring and runs one on its digit (`1`–`9`), closing the center. The notice
+  offers *Restart Language Servers* (`lsp.restart`) and *Open LSP Doctor*
+  (`lsp.doctor`). Deliberately off the plugin-facing `host.API` — the ids only
+  the host resolves.
+- **Setting:** `lsp.warmup_notice_ms` (Settings UI: Language Support → *Silent
+  server notice*, user scope, 0–600000, default 15000). `0` turns the notice
+  off, and so does `lsp.enabled = false`.
+- **Telemetry keeps its semantics:** the `lsp` phase is unchanged except that a
+  `quiet` end whose user was warned additionally carries `notified: "true"`.
+
 ## 2026-09-18 (The tab limit evicts by real recency, #2640)
 
 - **One slot was recycled, not the least recently used tab.** Opening files

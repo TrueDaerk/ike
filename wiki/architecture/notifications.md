@@ -4,7 +4,7 @@ title: Notifications
 description: Toast notifications — host.Notify severities, expiry, stacking, Esc dismissal; the notification center over the session history ring with relative ages and clear-all; the prominent forge event dialog, the status-line unread badge and the per-event-kind style setting; SetStatus stays for persistent status segments.
 resource: internal/app/notifications.go
 tags: [architecture, notifications, host, ui, forge]
-timestamp: 2026-08-28T00:00:00Z
+timestamp: 2026-09-18T12:00:00Z
 ---
 
 # Notifications
@@ -19,7 +19,8 @@ event-shaped goes through `Notify`.
 ## API
 
 `host.API` carries `Notify(sev host.Severity, text string)` with severities
-`Info`, `Warn`, `Error`. The `Host` queues notifications under a mutex (safe
+`Info`, `Warn`, `Error`; `Host.NotifyActions` adds the optional follow-up
+commands described below (#2629). The `Host` queues notifications under a mutex (safe
 from background goroutines); the root model drains the queue after **every**
 Update pass (`Model.Update` wraps the dispatch switch in `updateMsg` and calls
 `drainNotifications`), so a toast appears in the same frame its event
@@ -53,14 +54,28 @@ the ring **newest first**, one line per entry: a right-aligned relative age
 (`ui.ShortAge` — "now", "5m", "3h", "4d"), the severity glyph (`●`/`▲`/`✖`)
 in the severity color, and the text.
 
-Its own keys, footered in the view as `[c] clear all   [esc] close`:
+Its own keys, footered in the view as
+`[1-9] run action   [c] clear all   [esc] close`:
 
 - **`c`** — clear all: the ring is emptied and the view reads "no
-  notifications yet". Only this key is consumed (`updateNotifCenter` reports
-  it as handled); everything else falls through to the shell, so scrolling and
-  Esc keep their usual meaning. Outside the center `c` is an ordinary key —
-  the center is identified by its shell content heading, not by a flag that
-  could go stale under another dialog.
+  notifications yet".
+- **`1`–`9`** (#2629) — run a notification's follow-up command. A
+  notification may carry **actions** (`host.NotifyAction{Command, Label}`,
+  raised through `Host.NotifyActions` — deliberately not part of the
+  plugin-facing `host.API`, since the ids only the host resolves). The center
+  renders them as an indented `[n] Label` line under their entry, numbered
+  across the whole ring in render order and capped at `maxNotifActions` (9,
+  the digits that can address them); the digit runs the command through the
+  ordinary dispatch funnel and closes the center, so the command's own surface
+  is what the user looks at next. The silent-language-server notice
+  ([project-switching](/architecture/project-switching.md)) is the first user:
+  *Restart Language Servers* and *Open LSP Doctor*.
+
+Only those keys are consumed (`updateNotifCenter` reports it as handled) — a
+digit past the last action is not one of them; everything else falls through
+to the shell, so scrolling and Esc keep their usual meaning. Outside the center
+`c` is an ordinary key — the center is identified by its shell content
+heading, not by a flag that could go stale under another dialog.
 
 The ring is session state, not workspace state (#1514): it survives a seamless
 project switch (the root model carries `history` and the unseen counter into

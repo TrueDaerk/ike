@@ -2,11 +2,14 @@ package palette
 
 import (
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
+	"ike/internal/cli"
 	"ike/internal/frecency"
 	"ike/internal/fuzzy"
 	"ike/internal/pathcomplete"
@@ -23,6 +26,27 @@ const maxFiles = 10000
 // from the third character the typed text is a real signal and match quality
 // takes the lead again, with frecency demoted to a tiebreak.
 const shortQueryLen = 2
+
+// maxEmptyRows caps the empty-query listing (#2636). With nothing typed the
+// list is the frecency order — what one is working on — and scrolling past the
+// files one recognises is not browsing, it is waiting: the telemetry showed
+// empty-query opens dismissed after eight seconds in front of ten thousand
+// rows. Fifty is well past the point where one starts typing instead.
+const maxEmptyRows = 50
+
+// frecencyLongWeight is the boost one rune of query beyond shortQueryLen adds
+// for a file that is fully hot in the frecency store (#2636). Fuzzy scores
+// grow with the query — roughly up to bonusBoundary+bonusConsecutive per
+// matched rune — so a constant boost would vanish exactly where it is needed:
+// on a long, pasted-path-like query over a big tree, where the scores of the
+// hundreds of candidates cluster and the wanted file sinks (a pick at rank 114
+// in the telemetry). Scaling the boost with the query keeps it a fixed
+// fraction of what one more matched rune is worth: enough to lift a file one
+// actually works on into the top rows, never enough to beat a clearly better
+// match on a short query — six is a quarter of that per-rune maximum, so at
+// four runes the boost stays under one word-boundary bonus, while at twelve it
+// is worth a handful of matched runes.
+const frecencyLongWeight = 6
 
 // maxFsFallback caps the filesystem rows appended below the project matches
 // (#1775), per anchor (project root, home). The fallback is a reachability
@@ -106,21 +130,37 @@ func (f *FileMode) CodePreview() bool { return true }
 // Placeholder implements Mode.
 func (f *FileMode) Placeholder() string { return "Find a file… (tab completes; /, ~/ any path)" }
 
-// Results implements Mode. With an empty or very short query (up to
-// shortQueryLen) it ranks by frecency (#2155) — the files opened most often
+// Results implements Mode. A query that *is* a path to an existing file —
+// pasted from a stack trace, a grep hit or a review comment, optionally with
+// ":line[:col]" and whatever whitespace the clipboard carried — is offered as
+// the first row and opens that very file, whatever the fuzzy index thinks
+// (#2636). With an empty or very short query (up to shortQueryLen) it ranks
+// by frecency (#2155) — the files opened most often
 // and most recently first — so the finder opens on what one is working on
-// instead of on the alphabetical head of the tree. From the third character
-// the fuzzy score of the relative path leads and frecency is only a tiebreak
-// above the usage count (#1419), then path. A query typed as a filesystem path
-// (#1433: leading /, ~/, ./ or ../) is served by the shared pathcomplete engine
-// instead — the same candidates the ';' picker produces — so '@' also reaches
-// files outside the project. Below the project matches every non-empty query
+// instead of on the alphabetical head of the tree; the empty listing is capped
+// at maxEmptyRows, since the whole tree is nothing one browses. From the third
+// character the fuzzy score of the relative path leads, with frecency as a
+// boost that grows with the query (#2636) and, at equal score, still a
+// tiebreak above the usage count (#1419), then path. A query typed as a
+// filesystem path (#1433: leading /, ~/, ./ or ../) is served by the shared
+// pathcomplete engine instead — the same candidates the ';' picker produces —
+// so '@' also reaches files outside the project. Below the project matches every non-empty query
 // also offers filesystem candidates for the same text (#1775), so a file like
 // ~/notes.txt is reachable by typing a fragment of its name instead of its
 // whole path.
 func (f *FileMode) Results(query string, cx Context) []Item {
+	// The pasted-path row first, so it survives both branches below: a path
+	// query ('/', '~/', './') is otherwise served by pathcomplete, which knows
+	// nothing of a ":42" suffix, and a project-relative one would have to win
+	// the fuzzy ranking to be reachable.
+	seen := make(map[string]bool)
+	var head []Item
+	if it, ok := f.pathTarget(query, cx.Root); ok {
+		head = []Item{it}
+		seen[expandedAbs(it.Msg.(OpenFileMsg).Path)] = true
+	}
 	if isPathQuery(query) {
-		return pathItems(query, '@')
+		return append(head, dropSeen(pathItems(query, '@'), seen)...)
 	}
 	files := f.files(cx.Root)
 	type scored struct {
@@ -128,6 +168,7 @@ func (f *FileMode) Results(query string, cx Context) []Item {
 		score int
 		usage int
 		frec  float64
+		rank  float64 // score plus the frecency boost (#2636)
 		spans []int
 	}
 	// The frecency key prefix is resolved once per call, not per candidate:
@@ -160,16 +201,25 @@ func (f *FileMode) Results(query string, cx Context) []Item {
 			spans: m.Positions,
 		})
 	}
-	// Frecency leads while the query is too short to discriminate, and is a
-	// tiebreak below the fuzzy score once it is not (#2155).
-	frecencyLeads := len([]rune(strings.TrimSpace(query))) <= shortQueryLen
+	// Frecency leads while the query is too short to discriminate (#2155);
+	// past that it is a boost on the fuzzy score (#2636) and, at equal
+	// boosted score, still the tiebreak above usage and path.
+	queryLen := len([]rune(strings.TrimSpace(query)))
+	frecencyLeads := queryLen <= shortQueryLen
+	// The boosted score is computed once per candidate, not per comparison:
+	// the walk holds up to maxFiles paths and the list is re-sorted on every
+	// keystroke, so a math.Pow inside the comparator would be paid n log n
+	// times for nothing.
+	for i := range out {
+		out[i].rank = float64(out[i].score) + fileFrecencyBoost(out[i].frec, queryLen)
+	}
 	sort.SliceStable(out, func(i, j int) bool {
 		a, b := out[i], out[j]
 		if frecencyLeads && !sameFrecency(a.frec, b.frec) {
 			return a.frec > b.frec
 		}
-		if a.score != b.score {
-			return a.score > b.score
+		if a.rank != b.rank {
+			return a.rank > b.rank
 		}
 		if !sameFrecency(a.frec, b.frec) {
 			return a.frec > b.frec
@@ -179,24 +229,110 @@ func (f *FileMode) Results(query string, cx Context) []Item {
 		}
 		return a.path < b.path
 	})
-	items := make([]Item, len(out))
-	seen := make(map[string]bool, len(out))
-	for i, s := range out {
+	// The empty listing is the frecency order, capped: the whole tree is not
+	// a list one reads (#2636).
+	if queryLen == 0 && len(out) > maxEmptyRows {
+		out = out[:maxEmptyRows]
+	}
+	items := head
+	for _, s := range out {
 		abs := filepath.Join(cx.Root, s.path)
+		if seen[expandedAbs(abs)] {
+			continue // already offered as the pasted-path row
+		}
 		seen[expandedAbs(abs)] = true
-		items[i] = Item{
+		items = append(items, Item{
 			Title:   s.path,
 			Spans:   s.spans,
 			Score:   s.score,
 			Msg:     OpenFileMsg{Path: abs},
 			Preview: PreviewTarget{Path: abs, Line: 1},
-		}
+		})
 	}
 	if q := strings.TrimSpace(query); q != "" {
 		items = append(items, f.scratchItems(q, seen)...)
 		items = append(items, f.fsFallbackItems(cx.Root, query, seen)...)
 	}
 	return items
+}
+
+// fileFrecencyBoost converts a decayed open count into a sort bonus for a
+// query of queryLen runes (#2636). The count is squashed into [0,1) first, so
+// a file opened fifty times cannot outweigh the query by sheer volume; the
+// weight then grows with every rune past shortQueryLen, because that is where
+// fuzzy scores start to cluster and stop telling the wanted file from its
+// nine hundred neighbours. Below the threshold the boost is zero — frecency
+// leads the sort outright there.
+func fileFrecencyBoost(score float64, queryLen int) float64 {
+	if score <= 0 || queryLen <= shortQueryLen {
+		return 0
+	}
+	norm := 1 - math.Pow(0.5, score)
+	return norm * frecencyLongWeight * float64(queryLen-shortQueryLen)
+}
+
+// pathTarget reads the query as a path to an existing file (#2636) and turns
+// it into the finder's first row. It accepts what a clipboard actually
+// delivers: surrounding whitespace and newlines, a "path:line[:col]" suffix in
+// the command line's own grammar (cli.SplitTarget), an absolute path, a
+// "~"-prefixed one, or one relative to the project root. Only an existing
+// regular file qualifies — a typo falls through to the ordinary fuzzy ranking
+// and its no-match state. Rows for a file inside the project are titled by
+// their relative path; one outside keeps its absolute path and opens exactly
+// the way the ';' picker's rows do (an out-of-root buffer, #565).
+func (f *FileMode) pathTarget(query, root string) (Item, bool) {
+	q := strings.TrimSpace(query)
+	if q == "" {
+		return Item{}, false
+	}
+	t := cli.SplitTarget(q)
+	// "file.go :42" leaves the space on the path side of the split.
+	abs := strings.TrimSpace(t.Path)
+	if abs == "" {
+		return Item{}, false
+	}
+	if strings.HasPrefix(abs, "~") {
+		abs = pathcomplete.Expand(abs)
+	}
+	if !filepath.IsAbs(abs) {
+		abs = filepath.Join(root, abs)
+	}
+	abs = expandedAbs(abs)
+	if fi, err := os.Stat(abs); err != nil || fi.IsDir() {
+		return Item{}, false
+	}
+	title := abs
+	if rel, err := filepath.Rel(expandedAbs(root), abs); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		title = filepath.ToSlash(rel)
+	}
+	detail := "path"
+	line := t.Line
+	if line > 0 {
+		detail = "path · line " + strconv.Itoa(line)
+	}
+	previewLine := line
+	if previewLine <= 0 {
+		previewLine = 1
+	}
+	return Item{
+		Title:   title,
+		Detail:  detail,
+		Msg:     OpenFileMsg{Path: abs, Line: line, Col: t.Col},
+		Preview: PreviewTarget{Path: abs, Line: previewLine},
+	}, true
+}
+
+// dropSeen filters the rows whose file is already listed — the pasted-path row
+// above must not be repeated by the pathcomplete candidates for the same text.
+func dropSeen(items []Item, seen map[string]bool) []Item {
+	out := items[:0:0]
+	for _, it := range items {
+		if m, ok := it.Msg.(OpenFileMsg); ok && seen[expandedAbs(m.Path)] {
+			continue
+		}
+		out = append(out, it)
+	}
+	return out
 }
 
 // sameFrecency reports whether two frecency scores are close enough to count
