@@ -36,8 +36,8 @@ One JSON object per line. `v` is the schema version (`telemetry.SchemaVersion`,
 currently 11); readers must tolerate unknown fields and filter on `v`.
 
 ```json
-{"v":11,"ts":"2026-08-27T10:15:30.123Z","sid":"a1b2c3d4e5f6","type":"command","data":{"id":"editor.save","source":"keybind"}}
-{"v":11,"ts":"2026-08-27T10:15:31.456Z","sid":"a1b2c3d4e5f6","type":"internal","data":{"id":"lsp.documentSymbols","source":"internal"}}
+{"v":12,"ts":"2026-08-27T10:15:30.123Z","sid":"a1b2c3d4e5f6","type":"command","data":{"id":"editor.save","source":"keybind"}}
+{"v":12,"ts":"2026-08-27T10:15:31.456Z","sid":"a1b2c3d4e5f6","type":"internal","data":{"id":"lsp.documentSymbols","source":"internal"}}
 ```
 
 ### Version history (what an analysis script must branch on)
@@ -55,6 +55,7 @@ currently 11); readers must tolerate unknown fields and filter on `v`.
 | 9 | #2578 | The group-level ops join: `project.group.open` (the whole warm-up switch chain — `members` present members, `skipped` hops that failed, `landed_on` the 12-hex project token of the member the chain ended on, `ms` the chain's total) and `project.group.close` (`members` the member workspaces torn down, `ms` the total). Each hop keeps recording its own `project.switch` op, so chain and parts nest. `project.group.close` was already emitted without `members` since #2572; from v9 a reader may rely on the field, and its absence below v9 means "not recorded", not zero. |
 | 10 | #2627 | The type `freeze` joins — one event per heartbeat interval in which the update loop completed fewer than `diag.FreezePassThreshold` (3) passes, carrying `passes` (the interval's completed passes), `since_ms` (wall time since the previous beat) and `dumped` (`true` on the beat that wrote the episode's goroutine stack dump next to the project's `debug.log`, `false` on the episode's follow-up beats and once the per-session dump cap is reached). Below v10 the same episodes are only visible indirectly, as a `passes` value standing still across consecutive heartbeats, and no dump exists. No path is recorded; dump and event are paired over `sid` and the timestamps. |
 | 11 | #2631 | The `http.flight` `error` and `canceled` end phases gain `reason`, a closed vocabulary classifying the failure — `timeout`, `dns`, `refused`, `tls`, `reset`, `canceled`, `other` — derived from the Go error by `httpclient.ClassifyError`. It separates a deadline hit from a refused connection, DNS failure or TLS rejection, which the `ms` field alone could only guess at. Structural only: never the host, URL or the error text. Below v11 absence means "not recorded". |
+| 12 | #2635 | The `palette.pick` and `palette.dismiss` events of the code-actions mode (`"!"`, the alt+enter intention popup) gain `kinds` — the action kinds that were listed, comma-joined, sorted and counted (`builtin,quickfix*2,source.organizeImports`) — and a pick adds `picked_kind`, the chosen row's own kind. A kind is an LSP `CodeActionKind`, the marker `builtin` for one of ike's own intentions, `none` for a server action that named none, or `other` for anything outside the allowed identifier vocabulary. **Never a title**, which may quote the user's code. Both fields are *omitted* for every other mode (whose rows carry no kind), so absence reads as "this mode has none" rather than "empty". Below v12 they are absent everywhere: the 33 % dismissal rate of the intention popup was visible, what it had offered was not. |
 
 An export spanning versions therefore needs three guards: filter v1 `command`
 events on `data.source != "internal"`, treat a missing `ok`/`ms` on v4 as
@@ -236,14 +237,29 @@ counts by the version's interval before comparing sessions.
     third" is invisible without it. No file id and no query travel; a picked
     command's id is already in that next `command` event. Recorded for keyboard
     picks, alt-activations and mouse clicks alike, in the same Update pass that
-    closed the overlay.
+    closed the overlay. Since v12 (#2635) a pick out of the code-actions mode
+    also carries `kinds` (the offered summary, see `palette.dismiss`) and
+    `picked_kind`, the chosen row's own kind — so "which kinds are picked out
+    of which offers" is answerable; the fields are omitted for every other
+    mode.
   - `palette.dismiss` (#2408) — a palette mode closed with esc instead of a
     pick, the one palette outcome that otherwise leaves no trace at all.
     `mode` is the mode's prefix rune (`":"`, `"@"`, `"%"`, …), `query_len` the
     number of runes typed — **never the query itself** — `ms` how long the box
     stood open, and (since v6, #2490) `results` how many rows the list was
     showing at that moment: a count, never content, so a dismissal off a query
-    that matched nothing is distinguishable from one off a full list. Picks keep going through the ordinary command funnel, so
+    that matched nothing is distinguishable from one off a full list. Since
+    v12 (#2635) the code-actions mode (`"!"`) additionally carries `kinds`: the
+    kinds of the rows that were listed, comma-joined, sorted and suffixed with
+    `*n` where a kind occurred more than once — `builtin,quickfix*2,source.organizeImports`.
+    A kind is the LSP `CodeActionKind`, `builtin` for one of ike's own
+    intentions (which one is in the `command` event after a pick), `none` for a
+    server action without a kind, and `other` for anything that is not an
+    identifier within `kindTokenMax` (40) characters; at most
+    `kindSummaryMax` (12) kinds are named, followed by `…`. **Titles never
+    travel** — they quote the user's code, kinds do not. Without them a
+    dismissal of the intention popup said only "two to four rows were
+    rejected", never what they were. Picks keep going through the ordinary command funnel, so
     the dismissal rate per mode is `palette.dismiss` over its opens. A mode
     that re-opens itself with a seeded query (the directory descend) starts a
     new open and is timed on its own.

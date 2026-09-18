@@ -66,6 +66,15 @@ type Item struct {
 	// is built by the root model). A mode blends it into its own ordering; 0
 	// means "no usage history", which falls back to the input order.
 	Rank float64
+	// Kind is the row's structural telemetry token (#2635) — an LSP
+	// CodeActionKind ("quickfix", "source.organizeImports") or the "builtin"
+	// marker of one of ike's own intentions. The palette never renders it; it
+	// travels in the palette.pick / palette.dismiss events so the kinds that
+	// were on offer (and the one that was picked) can be counted. Only modes
+	// whose rows have a closed, content-free vocabulary set it — "" keeps the
+	// row out of the recorded summary, which is why every other mode's events
+	// carry no kinds at all.
+	Kind string
 	// Inert marks a chrome row (#2548): the "did you mean" separator and the
 	// no-match hint the command mode lists among its results. The palette
 	// renders it dim and full-width, never selects it — navigation steps

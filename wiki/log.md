@@ -1,5 +1,36 @@
 # Log
 
+## 2026-09-18 (The intention popup says what it offered, #2635)
+
+- **A third of the opens ended in esc, and the log could not say why.** Local
+  telemetry counted 27 picks against 13 dismissals out of the `alt+enter`
+  code-actions popup; ten dismissals sat on two to four rows for under three
+  seconds — looked, found nothing, left. Whether the same two low-value entries
+  were on offer every time or the server simply had nothing relevant was
+  unanswerable, so no ranking or filtering decision could be made.
+- **`palette.Item.Kind`** is the new structural token a mode may attach to a
+  row. The palette summarizes the listed rows into `kindSummary()` — sorted,
+  deduplicated, `*n` where a kind repeats, `builtin,quickfix*2,source.organizeImports`
+  — and puts it on both outcome records (`Dismissal.Kinds`, `Pick.Kinds` plus
+  `Pick.PickedKind`). Only the code-actions mode sets kinds, so every other
+  mode's events are byte-for-byte what they were.
+- **Kinds, never titles.** A `CodeActionKind` is the LSP spec's closed
+  vocabulary; a title quotes the user's code. `sanitizeKind` enforces that:
+  identifier characters within 40 runes travel verbatim, anything else collapses
+  to `other`, a kindless server action reports `none`, and one of ike's own
+  intentions reports the marker `builtin` (which one it was is already in the
+  `command` event that follows a pick). At most 12 kinds are named, then `…`.
+- **`telemetry.SchemaVersion` → 12**, with `kinds` and `picked_kind` *omitted*
+  rather than written empty for modes that have none — absence reads as "this
+  mode has no kinds", not as a lost field.
+- **The merge order was re-examined, not changed.** The built-ins already sort
+  after every server action by construction (preferred LSP → LSP → built-ins),
+  `quickfix` included, so there was nothing arbitrary to fix; whether kinds
+  should be ranked differently is the follow-up this data feeds.
+- Docs: [Usage Telemetry](/architecture/usage-telemetry.md) (schema row v12,
+  the two event bullets), [Intention Actions](/architecture/intention-actions.md)
+  (the order decision and what the popup now records).
+
 ## 2026-09-18 (Tool-pane text inputs take the caret chords, #2634)
 
 - **A keybind that was never missing.** Local telemetry recorded `ctrl+left`

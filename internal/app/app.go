@@ -3387,7 +3387,7 @@ func (m Model) recordPaletteDismissal() {
 	if !ok {
 		return
 	}
-	m.usage.PaletteDismiss(string(d.Prefix), d.QueryLen, d.Results, d.Open)
+	m.usage.PaletteDismiss(string(d.Prefix), d.QueryLen, d.Results, d.Kinds, d.Open)
 }
 
 // recordPalettePick turns a palette row activation into a telemetry event
@@ -3395,13 +3395,15 @@ func (m Model) recordPaletteDismissal() {
 // follows a picked command says *what* was run but never *where* it sat in the
 // list, so the ranking quality the frecency work (#2399, #2155) aims at is
 // unmeasurable without the rank. Only the mode prefix, the query length, the
-// 0-based rank and the row count travel: never the query, never a file id.
+// 0-based rank and the row count travel: never the query, never a file id —
+// plus, for the code-actions mode only, the offered kinds and the picked row's
+// kind (#2635), which is what a ranking decision on that list needs.
 func (m Model) recordPalettePick() {
 	p, ok := m.palette.TakePick()
 	if !ok {
 		return
 	}
-	m.usage.PalettePick(string(p.Prefix), p.QueryLen, p.Rank, p.Results)
+	m.usage.PalettePick(string(p.Prefix), p.QueryLen, p.Rank, p.Results, p.Kinds, p.PickedKind)
 }
 
 // recentRankingFrecency reads palette.recent.ranking (#2399): whether the
