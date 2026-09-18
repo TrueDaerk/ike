@@ -206,6 +206,7 @@ func (c *Config) Flat() map[string]string {
 	put("lsp.signature_auto", c.LSP.SignatureAuto)
 	put("lsp.completion_auto", c.LSP.CompletionAuto)
 	put("lsp.completion_delay_ms", c.LSP.CompletionDelayMs)
+	put("lsp.warmup_notice_ms", c.LSP.WarmupNoticeMs)
 	put("lsp.code_lens", c.LSP.CodeLens)
 	put("lsp.folding", c.LSP.Folding)
 	put("lsp.semantic_tokens", c.LSP.SemanticTokens)

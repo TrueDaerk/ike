@@ -45,6 +45,9 @@ type histEntry struct {
 	sev  host.Severity
 	text string
 	root string
+	// actions are the follow-up commands the notification offered (#2629),
+	// numbered and runnable in the notification center.
+	actions []host.NotifyAction
 }
 
 // toastExpireMsg removes the identified toast when its timeout elapses.
@@ -63,7 +66,7 @@ func (m *Model) drainNotifications() tea.Cmd {
 	root := m.projectRootTag()
 	var ticks []tea.Cmd
 	for _, n := range pending {
-		m.history = append([]histEntry{{at: time.Now(), sev: n.Severity, text: n.Text, root: root}}, m.history...)
+		m.history = append([]histEntry{{at: time.Now(), sev: n.Severity, text: n.Text, root: root, actions: n.Actions}}, m.history...)
 		if len(m.history) > historyCap {
 			m.history = m.history[:historyCap]
 		}
@@ -136,7 +139,11 @@ const notifCenterTitle = "NOTIFICATIONS"
 
 // notifCenterLegend names the center's own keys, the way the other shell
 // dialogs footer theirs.
-const notifCenterLegend = "[c] clear all   [esc] close"
+const notifCenterLegend = "[1-9] run action   [c] clear all   [esc] close"
+
+// maxNotifActions bounds the numbered action list of the center (#2629): the
+// digits 1-9 address them, so the tenth would have no key.
+const maxNotifActions = 9
 
 // ageColumn is the width the relative-age column is padded to, wide enough for
 // every ui.ShortAge form ("now", "59m", "23h", "13d", "52w").
@@ -154,6 +161,7 @@ func (m Model) historyView() string {
 	}
 	cur := m.projectRootTag()
 	now := time.Now()
+	num := 0
 	var b strings.Builder
 	for _, e := range m.history {
 		age := ui.ShortAge(e.at, now)
@@ -166,6 +174,17 @@ func (m Model) historyView() string {
 			b.WriteString(dim.Render("  [" + filepath.Base(e.root) + "]"))
 		}
 		b.WriteByte('\n')
+		// Follow-up commands (#2629) are numbered across the whole ring, so
+		// the digit that runs one never depends on where the eye is.
+		for _, a := range e.actions {
+			if num >= maxNotifActions {
+				break
+			}
+			num++
+			b.WriteString(dim.Render(strings.Repeat(" ", ageColumn+1) +
+				"[" + strconv.Itoa(num) + "] " + a.Label))
+			b.WriteByte('\n')
+		}
 	}
 	b.WriteByte('\n')
 	b.WriteString(dim.Render(notifCenterLegend))
@@ -198,17 +217,46 @@ func (m Model) notifCenterOpen() bool {
 	return ok && c.Heading == notifCenterTitle
 }
 
-// updateNotifCenter handles the center's own keys while it is open. Only "c"
-// (clear all) is consumed — reported by the handled flag; every other key falls
-// through to the shell, so scrolling and Esc keep their meaning.
-func (m Model) updateNotifCenter(msg tea.KeyPressMsg) (Model, bool) {
-	if msg.String() != "c" {
-		return m, false
+// notifActions flattens the follow-up commands of the history ring in render
+// order (#2629), capped at the digits that can address them.
+func (m Model) notifActions() []host.NotifyAction {
+	var out []host.NotifyAction
+	for _, e := range m.history {
+		for _, a := range e.actions {
+			if len(out) >= maxNotifActions {
+				return out
+			}
+			out = append(out, a)
+		}
 	}
-	m.history = nil
-	m.notifUnseen = 0
-	m.bindNotifCenter()
-	return m, true
+	return out
+}
+
+// updateNotifCenter handles the center's own keys while it is open: "c" clears
+// the ring, and 1-9 run the correspondingly numbered follow-up command (#2629),
+// closing the center so the command's own surface — the LSP Doctor, a restart
+// toast — is what the user looks at next. Only those keys are consumed —
+// reported by the handled flag; every other key falls through to the shell, so
+// scrolling and Esc keep their meaning. A digit past the last action is not
+// ours either, so the shell still sees it.
+func (m Model) updateNotifCenter(msg tea.KeyPressMsg) (Model, tea.Cmd, bool) {
+	key := msg.String()
+	if key == "c" {
+		m.history = nil
+		m.notifUnseen = 0
+		m.bindNotifCenter()
+		return m, nil, true
+	}
+	if len(key) != 1 || key[0] < '1' || key[0] > '9' {
+		return m, nil, false
+	}
+	actions := m.notifActions()
+	idx := int(key[0] - '1')
+	if idx >= len(actions) {
+		return m, nil, false
+	}
+	m.shell.Close()
+	return m, m.RunCommand(actions[idx].Command), true
 }
 
 // projectRootTag is the absolute project root recorded on history entries

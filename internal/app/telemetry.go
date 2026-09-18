@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -13,6 +14,7 @@ import (
 
 	"ike/internal/config"
 	"ike/internal/diag"
+	"ike/internal/host"
 	"ike/internal/keymap"
 	"ike/internal/layout"
 	"ike/internal/telemetry"
@@ -220,7 +222,17 @@ func (m Model) recordProjectLeave(project, reason string) {
 // holds the switch's start stamp until the first publishDiagnostics arrives,
 // so the export can tell "the switch was slow" from "the switch was instant
 // and the editor stayed diagnostic-blind for eight seconds".
-type switchLSPWait struct{ start time.Time }
+type switchLSPWait struct {
+	start time.Time
+	// lang names the language of the first server-backed document the switch
+	// opened (#2629): the silent-server notice says whose server went quiet,
+	// and "gopls said nothing" is a far more actionable sentence than "a
+	// server said nothing".
+	lang string
+	// notified records that the silent-server notice already went out, so the
+	// quiet fallback can say whether the user was told (#2629).
+	notified bool
+}
 
 // noteSwitchLSPReady records the first LSP publish after a project switch as
 // the op's "lsp" phase (#2403), carrying the ms from the switch's start. It
@@ -256,14 +268,21 @@ func (m *Model) noteSwitchLSPSkipped(reason string) {
 		return
 	}
 	ms := time.Since(m.switchLSPWait.start)
+	notified := m.switchLSPWait.notified
 	m.switchLSPWait = nil
 	if ms < 0 {
 		ms = 0
 	}
-	m.usage.Op(telemetry.OpProjectSwitch, "lsp", map[string]string{
+	fields := map[string]string{
 		"ms":      strconv.FormatInt(ms.Milliseconds(), 10),
 		"skipped": reason,
-	})
+	}
+	// A quiet end the user was warned about reads differently from one they
+	// never noticed (#2629), so the phase says which it was.
+	if notified {
+		fields["notified"] = "true"
+	}
+	m.usage.Op(telemetry.OpProjectSwitch, "lsp", fields)
 }
 
 // switchLSPQuietTimeout bounds the post-switch warm-up wait (#2492): a switch
@@ -283,6 +302,59 @@ type switchLSPQuietMsg struct{ wait *switchLSPWait }
 // armSwitchLSPQuiet schedules the quiet fallback for the wait just armed.
 func armSwitchLSPQuiet(wait *switchLSPWait) tea.Cmd {
 	return tea.Tick(switchLSPQuietTimeout, func(time.Time) tea.Msg { return switchLSPQuietMsg{wait: wait} })
+}
+
+// switchLSPNoticeMsg fires when the warm-up notice threshold for one armed
+// wait elapses. Like switchLSPQuietMsg it carries the wait's identity, so a
+// timer outliving its switch is recognised and dropped.
+type switchLSPNoticeMsg struct{ wait *switchLSPWait }
+
+// switchLSPNoticeDelay reads lsp.warmup_notice_ms — how long a switch waits
+// for the first publish before it says the server has gone quiet (#2629).
+// 0 (or an out-of-range value validation already reset) turns the notice off,
+// and so does lsp.enabled = false: with the subsystem switched off no server
+// is meant to answer, and reporting that on every switch would be pure noise.
+func switchLSPNoticeDelay() time.Duration {
+	cfg := config.Get()
+	if !cfg.LSP.Enabled || cfg.LSP.WarmupNoticeMs <= 0 {
+		return 0
+	}
+	return time.Duration(cfg.LSP.WarmupNoticeMs) * time.Millisecond
+}
+
+// armSwitchLSPNotice schedules the silent-server notice for the wait just
+// armed, or nothing when the notice is switched off.
+func armSwitchLSPNotice(wait *switchLSPWait) tea.Cmd {
+	d := switchLSPNoticeDelay()
+	if d <= 0 {
+		return nil
+	}
+	return tea.Tick(d, func(time.Time) tea.Msg { return switchLSPNoticeMsg{wait: wait} })
+}
+
+// noteSwitchLSPSilent raises the silent-server notice (#2629): the switch
+// armed a warm-up wait — documents of a server language are open — and the
+// threshold passed without a single diagnostics publish. Telemetry had this
+// case covered for a while (the quiet fallback, #2492) but the *user* saw
+// nothing at all for two minutes: no diagnostics, no breadcrumbs, no hint that
+// the server was missing or dead. The notice names the language and carries
+// the two follow-ups that actually help — restart the servers, or open the
+// doctor that explains why none is running. It fires at most once per wait;
+// the wait itself stays armed, so a late publish is still measured.
+func (m *Model) noteSwitchLSPSilent() {
+	if m.switchLSPWait == nil || m.switchLSPWait.notified {
+		return
+	}
+	m.switchLSPWait.notified = true
+	name := m.switchLSPWait.lang
+	if name == "" {
+		name = "this project"
+	}
+	m.host.NotifyActions(host.Warn,
+		fmt.Sprintf("Language server for %s has not responded since the switch", name),
+		host.NotifyAction{Command: "lsp.restart", Label: "Restart Language Servers"},
+		host.NotifyAction{Command: "lsp.doctor", Label: "Open LSP Doctor"},
+	)
 }
 
 // telemetryProjectToken names the current project structurally: a short hash

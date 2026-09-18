@@ -8260,6 +8260,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case switchLSPNoticeMsg:
+		// The post-switch warm-up has taken longer than lsp.warmup_notice_ms
+		// without a publish (#2629): tell the user, instead of leaving the
+		// editor silently diagnostic-blind until the quiet fallback. Same
+		// pointer-identity guard as above — a superseding switch armed a
+		// different wait, and its timer is not this one.
+		if m.switchLSPWait == msg.wait {
+			m.noteSwitchLSPSilent()
+		}
+		return m, nil
+
 	case vcs.SnapshotMsg:
 		return m, m.applyVCSSnapshot(msg)
 
@@ -9083,12 +9094,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.lspRenamePreviewOpen() {
 			return m.updateLSPRenamePreview(msg)
 		}
-		// The notification center (#2152) owns one key of its own — "c"
-		// clears the ring; everything else (scrolling, Esc) belongs to the
-		// shell below, so only a handled key returns here.
+		// The notification center (#2152) owns a few keys of its own — "c"
+		// clears the ring, 1-9 run a notification's follow-up command
+		// (#2629); everything else (scrolling, Esc) belongs to the shell
+		// below, so only a handled key returns here.
 		if m.notifCenterOpen() {
-			if nm, handled := m.updateNotifCenter(msg); handled {
-				return nm, nil
+			if nm, cmd, handled := m.updateNotifCenter(msg); handled {
+				return nm, cmd
 			}
 		}
 		if m.floats.IsOpen() && !m.tourOpen() {
