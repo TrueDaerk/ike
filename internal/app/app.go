@@ -52,6 +52,7 @@ import (
 	"ike/internal/domview"
 	"ike/internal/editor"
 	"ike/internal/editor/register"
+	edsearch "ike/internal/editor/search"
 	"ike/internal/espane"
 	"ike/internal/esq"
 	"ike/internal/explorer"
@@ -971,7 +972,13 @@ type Model struct {
 	// cmd+f) is more recent than any find-in-path scan: f3/shift+f3 then repeat
 	// the in-file search on the active editor instead of stepping retained
 	// find-in-path results (#376). Any new scan activity flips it back.
+	// lastSearch is that committed query (#2623): the project's last in-file
+	// search, seeded into whichever editor cmd+g runs in, so the repeat no
+	// longer depends on the active editor having typed it. Both are project
+	// state: they park in wsExtras and resume with the workspace, so a switch
+	// never repeats another project's search.
 	inFileSearchRecent bool
+	lastSearch         inFileSearch
 	// palette is the command palette overlay (Roadmap 0070): a modal input that
 	// fronts registered commands (":") and file search ("@"). paletteKey is the
 	// default key that opens it (the final binding is Roadmap 0080's).
@@ -1791,6 +1798,10 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		// refeeds the Structure panel, breadcrumbs and sticky scopes from it,
 		// and only a buffer edited past its cached version re-requests.
 		m.docSymbols = extras.docSymbols
+		// The project's last in-file search comes back with it (#2623), so
+		// cmd+g repeats this project's query, never the one switched from.
+		m.lastSearch = extras.lastSearch
+		m.inFileSearchRecent = extras.inFileRecent
 		// The playground parked over one of this workspace's documents comes
 		// back mounted (#2535); the layout pass sizes its result buffer.
 		m.resumePlayground(extras.play, themePal, cfg)
@@ -1849,6 +1860,18 @@ type wsExtras struct {
 	// this workspace (#2355), it parks and resumes with the document instead of
 	// dying with the model performSwitch discards.
 	play *playState
+	// lastSearch and inFileRecent are the project's last in-file search and
+	// its recency flag (#2623): what cmd+g repeats in this project.
+	lastSearch   inFileSearch
+	inFileRecent bool
+}
+
+// inFileSearch is a committed in-file search as the app retains it per
+// project (#2623): the compiled query (pattern, regex/case flags, structural
+// mode) and the direction it was committed with.
+type inFileSearch struct {
+	query edsearch.Query
+	dir   edsearch.Direction
 }
 
 // SetSender wires the program's Send into the host so background workers (the LSP
@@ -3877,6 +3900,31 @@ func (m *Model) newEditorTab() {
 // access path to the pane registry, split tree and terminal return-focus.
 func (m Model) activeWS() *workspace.Workspace { return m.ws.Active() }
 
+// repeatLastSearch steps the project's last in-file search on the active
+// editor (#2623): the query is seeded into that editor as its committed
+// search — so n/N and the match highlights carry on from there — and stepped
+// once like n (reverse=false) or N (reverse=true). A miss toasts instead of
+// moving; the chord never falls through to find-in-path results here.
+func (m *Model) repeatLastSearch(reverse bool) {
+	ed := m.activeEditor()
+	if ed == nil {
+		m.host.Notify(host.Info, "no editor to repeat the search \""+m.lastSearch.query.Pattern+"\" in")
+		return
+	}
+	ed.SeedSearch(m.lastSearch.query, m.lastSearch.dir)
+	if !ed.RepeatSearch(reverse) {
+		m.host.Notify(host.Info, "no match for \""+m.lastSearch.query.Pattern+"\"")
+	}
+}
+
+// markAllFindRecent makes the all-projects results the set cmd+g walks
+// (#2413): they win over this project's last in-file search until the next
+// commit makes that the most recent one again (#2623).
+func (m *Model) markAllFindRecent() {
+	m.allFindRecent = true
+	m.inFileSearchRecent = false
+}
+
 // currentTerminal returns the focused regular terminal instance, else the
 // first regular terminal in pane order, else nil. Tool panes (#741) never
 // count (#772).
@@ -4803,8 +4851,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case editor.SearchCommittedMsg:
 		// A committed "/", "?" or cmd+f search: f3/shift+f3 repeat it until the
-		// next find-in-path scan (#376).
+		// next find-in-path scan (#376). The query is the project's last
+		// search from here on (#2623), repeatable from any of its editors.
 		m.inFileSearchRecent = true
+		m.lastSearch = inFileSearch{query: msg.Query, dir: msg.Dir}
 		return m, nil
 
 	case finder.OpenLocationMsg:
@@ -4817,20 +4867,21 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// search comes first (#2410) — cmd+g steps a filter row or a find
 		// prompt without it losing focus, which is what the chord means while
 		// one is up. With none open the chord keeps its older readings: when
-		// an in-file search is the most recent one, repeat it on the active
-		// editor like n/N (#376); otherwise walk the retained find-in-path
-		// results without the overlay.
+		// an in-file search is the most recent one, repeat the project's last
+		// query on the active editor like n/N (#376, #2623) — seeded into
+		// that editor first, so file B repeats what was typed in file A, and
+		// a miss says so rather than falling through to another search's
+		// results; otherwise walk the retained find-in-path results without
+		// the overlay.
 		if cmd, handled := m.stepPaneMatch(msg.Delta); handled {
 			return m, cmd
 		}
 		if m.stepEditorSearchLine(msg.Delta) {
 			return m, nil
 		}
-		if m.inFileSearchRecent {
-			if ed := m.activeEditor(); ed != nil && ed.HasSearch() {
-				ed.RepeatSearch(msg.Delta < 0)
-				return m, nil
-			}
+		if m.inFileSearchRecent && !m.lastSearch.query.Empty() {
+			m.repeatLastSearch(msg.Delta < 0)
+			return m, nil
 		}
 		if m.allFindRecent && m.allResults.Total() > 0 {
 			// The all-projects results are the most recent search (#2413):
@@ -7299,6 +7350,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// carry-over block in performSwitchOpts.
 		if po := m.allPendingOpen; po != nil && po.Root == msg.Root {
 			m.allPendingOpen = nil
+			// The hit lands in this project through the all-projects results,
+			// which stay the most recent search here too (#2623).
+			m.markAllFindRecent()
 			m.host.Notify(host.Info, "switched to "+msg.Root)
 			return m.openPathAt(po.Path, po.Line-1, po.Col)
 		}

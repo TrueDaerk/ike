@@ -4,7 +4,7 @@ title: Project Search (Find in Path)
 description: Streaming project-wide search engine — rg --json backend with a pure-Go walker fallback, generation-based cancellation, bounded results — and the shared in-pane "/" search (ui.LineSearch) every viewer pane jumps through its matches with.
 resource: internal/search
 tags: [architecture, search, find-in-path, in-pane-search, ui]
-timestamp: 2026-09-16T00:00:00Z
+timestamp: 2026-09-18T00:00:00Z
 ---
 
 # Project Search (Find in Path)
@@ -294,10 +294,33 @@ the palette):
   definition-jump path (`openPathAt`) and closes the overlay; the results
   survive closing, so `search.nextMatch` / `search.prevMatch` (f3/shift+f3,
   plus the IntelliJ macOS aliases cmd+g/cmd+shift+g, also palette commands)
-  keep stepping matches — wrapping across files — without the overlay. The most recent search wins those keys (#376): a
-  committed in-file search (`/`, `?`, cmd+f) makes f3/shift+f3 repeat it like
-  `n`/`N` on the active editor (the editor announces the commit with
-  `editor.SearchCommittedMsg`); the next find-in-path scan reclaims them.
+  keep stepping matches — wrapping across files — without the overlay. The
+  most recent search wins those keys (#376): a committed in-file search
+  (`/`, `?`, cmd+f) makes f3/shift+f3 repeat it like `n`/`N` on the active
+  editor; the next find-in-path scan reclaims them.
+  **The in-file reading repeats the project's *last entered* query, in any
+  editor** (#2623): the editor announces a commit with
+  `editor.SearchCommittedMsg` carrying the compiled query (pattern, regex /
+  case markers, structural mode) and its direction, and the root model keeps
+  it as the project's last search (`Model.lastSearch`, beside the
+  `inFileSearchRecent` recency flag). The chord then seeds that query into
+  the *active* editor as its committed search (`editor.SeedSearch` — the
+  same state Enter on the `/` line leaves behind, so `n`/`N` and the match
+  highlights carry on there as if it had been typed in that file) and steps
+  once from the cursor. Searching `foo` in file A and pressing cmd+g in file
+  B finds the next `foo` in B; a file without a match toasts
+  `no match for "foo"` and the view stays put — the chord never falls
+  through to older find-in-path or all-projects results while an in-file
+  search is the most recent one. The recency rule stays symmetric: a
+  find-in-path scan, an all-projects scan or an all-projects hit opened
+  (`Model.markAllFindRecent`) makes those results the walked set again; the
+  next in-file commit takes it back.
+  **Per project:** the last query and its recency flag are workspace state —
+  they park in `wsExtras` with the debug session and popup terminal and
+  resume with the workspace — so switching to project P and pressing cmd+g
+  repeats P's last search, never the other project's, and a project with no
+  search yet leaves the chord to the retained find-in-path results, or
+  nothing. In-memory only: an ike restart starts without a last search.
   An **open** editor search line outranks both (#2603): while `/`, `?` or
   cmd+f is up, the chord steps that line's incremental preview
   (`Model.stepEditorSearchLine` → `editor.StepSearchPreview`, right after the
