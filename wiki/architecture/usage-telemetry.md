@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Usage Telemetry
-description: Local-only usage recording — command (with outcome), keybinding, layout, session, heartbeat, operation-lifecycle, palette-pick, palette-dismissal and project-time events appended as per-session JSONL under ~/.ike/telemetry, asynchronous and content-free, switched by telemetry.enabled.
+description: Local-only usage recording — command (with outcome), keybinding, layout, session, heartbeat, freeze-with-goroutine-dump, operation-lifecycle, palette-pick, palette-dismissal and project-time events appended as per-session JSONL under ~/.ike/telemetry, asynchronous and content-free, switched by telemetry.enabled.
 resource: internal/telemetry/telemetry.go
 tags: [architecture, telemetry, usage, jsonl, privacy, diagnostics]
 timestamp: 2026-09-18T12:00:00Z
@@ -33,11 +33,11 @@ paths.** Two guards enforce it:
 ## Event schema (the analysis interface)
 
 One JSON object per line. `v` is the schema version (`telemetry.SchemaVersion`,
-currently 9); readers must tolerate unknown fields and filter on `v`.
+currently 10); readers must tolerate unknown fields and filter on `v`.
 
 ```json
-{"v":9,"ts":"2026-08-27T10:15:30.123Z","sid":"a1b2c3d4e5f6","type":"command","data":{"id":"editor.save","source":"keybind"}}
-{"v":9,"ts":"2026-08-27T10:15:31.456Z","sid":"a1b2c3d4e5f6","type":"internal","data":{"id":"lsp.documentSymbols","source":"internal"}}
+{"v":10,"ts":"2026-08-27T10:15:30.123Z","sid":"a1b2c3d4e5f6","type":"command","data":{"id":"editor.save","source":"keybind"}}
+{"v":10,"ts":"2026-08-27T10:15:31.456Z","sid":"a1b2c3d4e5f6","type":"internal","data":{"id":"lsp.documentSymbols","source":"internal"}}
 ```
 
 ### Version history (what an analysis script must branch on)
@@ -53,6 +53,7 @@ currently 9); readers must tolerate unknown fields and filter on `v`.
 | 7 | #2551 | The type `palette.pick` joins — the counterpart of `palette.dismiss`, carrying `mode`, `query_len`, `rank` (the 0-based index of the chosen row) and `results`, so ranking quality (#2399, #2155) becomes measurable; it never carries the query or a file id, and a picked command's id follows in the next `command` event. The `session.restore` op's `ok` phase gains `tabs` (file tabs that came back) and `missing` (files gone since the save) next to `panes`. Additive: a missing `rank`/`tabs`/`missing` on v6 and below means "not recorded", not zero. |
 | 8 | #2547 | The `http.flight` end phases carry the timing breakdown the response pane shows: `dns_ms`, `connect_ms`, `tls_ms`, `ttfb_ms`, `transfer_ms` (milliseconds spent *in* each phase; `ttfb_ms` counts from the start of the exchange and so contains the setup phases) and `reused` (`true` when the request went out on a kept-alive connection, which is why its setup phases read 0). Builds since #2404 already wrote the fields without a bump; from v8 a reader may rely on them for every flight that produced a response — their absence on an `ok` means nothing was measured (a history restore), never a lost field. Below v8 absence means "not recorded". Structural numbers only, never a host or URL. |
 | 9 | #2578 | The group-level ops join: `project.group.open` (the whole warm-up switch chain — `members` present members, `skipped` hops that failed, `landed_on` the 12-hex project token of the member the chain ended on, `ms` the chain's total) and `project.group.close` (`members` the member workspaces torn down, `ms` the total). Each hop keeps recording its own `project.switch` op, so chain and parts nest. `project.group.close` was already emitted without `members` since #2572; from v9 a reader may rely on the field, and its absence below v9 means "not recorded", not zero. |
+| 10 | #2627 | The type `freeze` joins — one event per heartbeat interval in which the update loop completed fewer than `diag.FreezePassThreshold` (3) passes, carrying `passes` (the interval's completed passes), `since_ms` (wall time since the previous beat) and `dumped` (`true` on the beat that wrote the episode's goroutine stack dump next to the project's `debug.log`, `false` on the episode's follow-up beats and once the per-session dump cap is reached). Below v10 the same episodes are only visible indirectly, as a `passes` value standing still across consecutive heartbeats, and no dump exists. No path is recorded; dump and event are paired over `sid` and the timestamps. |
 
 An export spanning versions therefore needs three guards: filter v1 `command`
 events on `data.source != "internal"`, treat a missing `ok`/`ms` on v4 as
@@ -123,6 +124,20 @@ counts by the version's interval before comparing sessions.
     identifiers, not user data. The goroutine lives in the recorder, starts
     with the session file and never depends on the update loop. Cost: ~1 MB
     per day-long session, inside the 5 MiB cap.
+  - `freeze` (#2627) — the verdict on a heartbeat interval the update loop
+    spent (almost) frozen: fewer than `diag.FreezePassThreshold` (3) completed
+    passes. `passes` is what the interval did complete, `since_ms` the wall
+    time it covered, `dumped` whether *this* beat wrote the episode's
+    goroutine stack dump. Before #2627 such an episode was visible only as a
+    `passes` value standing still across beats, with nothing saying *where*
+    the loop was — the dump is that missing evidence: `runtime.Stack` of every
+    goroutine, capped at 1 MiB, written by the heartbeat goroutine (never by
+    the loop, which is the thing being diagnosed) into a sibling of the
+    project's `.ike/debug.log`, one per episode and at most three per session,
+    with a `debug.log` line naming the file. See
+    [Performance](/architecture/performance.md) for the dump file and its
+    stall-watchdog counterpart. Structure only: the event carries no path, so
+    dump and event pair over `sid` and the timestamps.
   - `op` (#2348) — the lifecycle of a long-running operation. `id` names it,
     `phase` is `start`, `ok`, `error` or `canceled`, and every end phase
     carries `ms`. All of them are timed through one helper,
@@ -429,6 +444,8 @@ jq -r 'select(.type=="project.leave") | [.data.project, (.data.ms|tonumber/60000
 jq -r 'select(.type=="op" and .data.id=="project.group.open" and .data.phase!="start") | [.data.phase, .data.members, .data.skipped, .data.landed_on, .data.ms] | @tsv' ~/.ike/telemetry/*.jsonl
 # group closes: how many members went down and what it cost (v9+)
 jq -r 'select(.type=="op" and .data.id=="project.group.close" and .data.phase!="start") | [.data.phase, .data.members, .data.ms] | @tsv' ~/.ike/telemetry/*.jsonl
+# frozen update-loop intervals, and which of them left a goroutine dump (v10+)
+jq -r 'select(.type=="freeze") | [.ts, .sid, .data.passes, .data.since_ms, .data.dumped] | @tsv' ~/.ike/telemetry/*.jsonl
 ```
 
 ### The 0510 success metrics (project groups)
