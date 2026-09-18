@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Performance & Diagnostics
-description: Idle-behavior rules (who may wake the render loop, and how often), the render budget and the always-on per-message-type pass accounting, the per-keystroke fan-out budget while typing (#2541), the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, the opt-in update-loop trace log, the freeze-triage procedure, the selection-overlay rule for drag latency (#2495), and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
+description: Idle-behavior rules (who may wake the render loop, and how often), the render budget and the always-on per-message-type pass accounting, the per-keystroke fan-out budget while typing (#2541), the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, the heartbeat freeze dump (#2627), the opt-in update-loop trace log, the freeze-triage procedure, the selection-overlay rule for drag latency (#2495), and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/perfhud
 tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog, startup, freeze, render-budget]
 timestamp: 2026-09-18T12:00:00Z
@@ -426,7 +426,38 @@ dir, so without knowing which project a session ran in there is nothing to
 find. Both gaps are covered by telemetry now: the `session` event's project
 token attributes a log to a project, and the `heartbeat` event's pass count
 is the loop-independent liveness stamp (see
-[Usage Telemetry](/architecture/usage-telemetry.md)).
+[Usage Telemetry](/architecture/usage-telemetry.md)) — which since #2627 also
+dumps, see the next section.
+
+## The heartbeat freeze dump (`internal/diag/freeze.go`, #2627)
+
+The stall watchdog only ever sees a pass that *entered*. The telemetry
+heartbeats recorded the other failure: the pass count standing still across a
+whole 60s interval, i.e. the loop never entered a pass at all — blocked
+before `LoopEnter`, starved of messages, or stuck in the runtime. Four such
+beats are on record (0 passes twice, 4 passes across two minutes) and each
+said *that* the loop went quiet and nothing about where.
+
+`diag.FreezeWatch` closes that gap from the heartbeat goroutine — which by
+construction is not the loop. Every beat diffs `diag.LoopPasses`; an interval
+below `diag.FreezePassThreshold` (3 passes) counts as frozen. The threshold is
+deliberately not zero: an idle IKE still wakes on the clock segment, the
+backup debounce and the VCS/forge polls, so "almost nothing moved" is the real
+signature, and the occasional benign dump from a genuinely dead-quiet minute
+is cheap and easy to recognize (its stacks show the loop parked in its own
+select).
+
+The first frozen beat of an episode writes `runtime.Stack` of every goroutine,
+capped at 1 MiB, to `ike-freeze-<pid>-<stamp>-<n>-goroutines.txt` next to
+`debug.log` in the state dir — the same discovery the watchdog uses, resolved
+at dump time so a project switch is followed — with a header carrying the
+verdict and the heartbeat's own payload (`passes`, `top`), and logs the file's
+path to `debug.log`. The write runs on its own goroutine, so neither a slow
+disk nor the wedged loop can hold the next beat up. One dump per episode,
+three per session; an episode re-arms as soon as a beat sees the loop running
+again. Every frozen beat — dumping or not — also records a `freeze` telemetry
+event (`passes`, `since_ms`, `dumped`), so the usage log and the dump on disk
+pair up over the session id and the timestamps.
 
 ## The update-loop trace log (`perf.trace_log`, #2348)
 
@@ -451,12 +482,17 @@ The evidence trail, in the order worth checking:
    outside it (input reader, renderer, terminal); heartbeats stopping dead →
    the process ended (crash, kill, exit). The `top` field (#2402) names the
    interval's three loudest message types — for a freeze, what the loop was
-   chewing on; for an idle-CPU report, the wake source, with no repro needed. An `op` `http.flight` start without
-   its end phase means a dispatch never came back.
+   chewing on; for an idle-CPU report, the wake source, with no repro needed. A `freeze`
+   event (#2627) is the same verdict made explicit, and its `dumped: "true"`
+   promises a goroutine dump in the project's state dir. An `op`
+   `http.flight` start without its end phase means a dispatch never came back.
 2. **The project's state dir** — found via the `session` event's `project`
    token (hash candidate roots to match): `debug.log` for watchdog stall/
-   recovery lines and slow-update entries, `ike-watchdog-*-goroutines.txt`
-   for the full stack dump of a loop stall.
+   recovery lines, freeze-dump pointers and slow-update entries,
+   `ike-watchdog-*-goroutines.txt` for the full stack dump of a loop stall and
+   `ike-freeze-*-goroutines.txt` (#2627) for the dump of an interval the loop
+   spent frozen — the file a `freeze` telemetry event with `dumped: "true"`
+   points at.
 3. **If the session is still hung**: `SIGUSR1` (dump below) or, with
    `IKE_PPROF` set, the live pprof endpoint.
 4. **If it reproduces**: flip `perf.trace_log` on and read `trace.log` up to

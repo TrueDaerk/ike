@@ -69,6 +69,7 @@ func newUsageRecorder() *telemetry.Recorder {
 	// would only ever name the session's loudest type. Safe without a lock:
 	// telemetry calls the payload func from its single heartbeat goroutine.
 	var prev map[string]uint64
+	freeze := newFreezeWatch(diag.LoopPasses)
 	r.SetHeartbeat(telemetryHeartbeatInterval, func() map[string]string {
 		cur := diag.MessageCounts()
 		p := map[string]string{"passes": strconv.FormatUint(diag.LoopPasses(), 10)}
@@ -76,9 +77,31 @@ func newUsageRecorder() *telemetry.Recorder {
 			p["top"] = top
 		}
 		prev = cur
+		recordFreeze(r, freeze, p)
 		return p
 	})
 	return r
+}
+
+// newFreezeWatch builds the session's starvation watch (#2627): its goroutine
+// dumps land next to debug.log — the same state-dir discovery the stall
+// watchdog uses, resolved at dump time so a project switch is followed — and
+// the one-line pointers go through logDiagnostic, a plain file append that
+// never depends on the loop being diagnosed. passes is the loop's pass
+// counter (diag.LoopPasses in the session, a stub in tests).
+func newFreezeWatch(passes func() uint64) *diag.FreezeWatch {
+	return diag.NewFreezeWatch(passes,
+		func() string { return filepath.Dir(debugLogFile()) }, logDiagnostic)
+}
+
+// recordFreeze runs one beat of the starvation watch and records the `freeze`
+// event for a frozen interval (#2627). Called from the heartbeat goroutine
+// with the beat's payload, so the dump header and the telemetry log carry the
+// same numbers; the dump itself is written off this goroutine by the watch.
+func recordFreeze(r *telemetry.Recorder, w *diag.FreezeWatch, snapshot map[string]string) {
+	if rep := w.Beat(snapshot); rep.Frozen {
+		r.Freeze(rep.Passes, rep.Since, rep.Dumped)
+	}
 }
 
 // topMessageDelta formats the n loudest pass sources of an interval as

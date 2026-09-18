@@ -1,5 +1,35 @@
 # Log
 
+## 2026-09-18 (A frozen update loop dumps its goroutines, #2627)
+
+- **The heartbeat now says *where*, not just *that*.** Four heartbeats in the
+  local telemetry export carried a standing `passes` count — the update loop
+  completed (almost) no pass in a whole minute — and left nothing else behind.
+  The stall watchdog (#2163) could not help: it only ever sees a pass that
+  *entered*, and this loop never entered one.
+- **`diag.FreezeWatch`** (`internal/diag/freeze.go`) diffs `diag.LoopPasses`
+  between heartbeats from the heartbeat goroutine — by construction not the
+  loop. An interval below `FreezePassThreshold` (3 passes; not zero, because an
+  idle IKE still wakes on the clock segment, the backup debounce and the
+  VCS/forge polls) counts as frozen. The first frozen beat of an episode
+  writes `runtime.Stack` of every goroutine, capped at 1 MiB, to
+  `ike-freeze-<pid>-<stamp>-<n>-goroutines.txt` next to the project's
+  `debug.log`, header carrying the heartbeat payload, pointer line in
+  `debug.log`. The write runs on its own goroutine: neither a slow disk nor
+  the wedged loop can hold the next beat up. One dump per episode, three per
+  session, re-armed as soon as a beat sees the loop running again.
+- **Telemetry**: the `freeze` event (`passes`, `since_ms`, `dumped`) lands on
+  every frozen beat, dumping or not, so the usage log and the file on disk
+  pair up over `sid` and timestamps — the event carries no path.
+  `SchemaVersion` → **10**.
+- Concept docs: usage telemetry (schema table, event list, jq recipe) and
+  performance & diagnostics (the dump next to the watchdog's, freeze triage).
+  Tests: `internal/diag/freeze_test.go` (fake clock and pass counter: one dump
+  per episode, silence while the loop runs, re-arm, session cap, and a dump
+  written past a wedged fake loop), `internal/app/freeze_telemetry_test.go`
+  (the heartbeat wiring: event + dump + `debug.log` line) and the payload-key
+  allowlist in `internal/telemetry/telemetry_test.go`.
+
 ## 2026-09-18 (cmd+c in the diff viewer is a binding, #2628)
 
 - **The diff pane's copy chord is listed, not a pane secret.** Local usage

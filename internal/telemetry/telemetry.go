@@ -104,7 +104,18 @@ import (
 // "project.group.close" was already emitted without "members" since #2572;
 // from v9 a reader may rely on the field, and its absence below v9 means
 // "not recorded", not zero.
-const SchemaVersion = 9
+//
+// v10 (#2627): "freeze" joins — one event per heartbeat interval in which the
+// update loop completed fewer than diag.FreezePassThreshold passes, carrying
+// "passes" (the interval's completed passes), "since_ms" (wall time since the
+// previous beat) and "dumped" ("true" when this beat wrote the episode's
+// goroutine stack dump next to the project's debug.log, "false" for the
+// follow-up beats of an episode and once the per-session dump cap is
+// reached). It makes the frozen-heartbeat episodes of v3..v9 — visible only
+// as a standing "passes" value across consecutive beats — explicit, and lets
+// a reader pair the episode with the stack dump on disk. No path is
+// recorded; the correlation runs over the session id and the timestamps.
+const SchemaVersion = 10
 
 // defaultFlushInterval is how often the writer goroutine flushes the
 // bufio.Writer on its own, independent of buffer fill or explicit Flush
@@ -125,6 +136,7 @@ const (
 	TypePaletteDismiss = "palette.dismiss" // a palette mode closed without a pick (#2408)
 	TypePalettePick    = "palette.pick"    // a palette row was activated: which rank, out of how many (#2551)
 	TypeProjectLeave   = "project.leave"   // foreground time spent in the project being left (#2408)
+	TypeFreeze         = "freeze"          // a heartbeat interval the update loop spent (almost) frozen (#2627)
 )
 
 // Operation ids for the op lifecycle events (#2348, #2403). Callers outside
@@ -378,6 +390,22 @@ func (r *Recorder) ProjectLeave(project, reason string, d time.Duration) {
 		"project": project,
 		"reason":  reason,
 		"ms":      strconv.FormatInt(d.Milliseconds(), 10),
+	})
+}
+
+// Freeze records a heartbeat interval in which the update loop completed
+// (almost) no passes (#2627): passes is what the interval did complete, since
+// the wall time it covered, dumped whether this beat wrote the episode's
+// goroutine stack dump. Structure only — the dump's path stays out of the
+// log; the session id and the timestamp pair the two.
+func (r *Recorder) Freeze(passes uint64, since time.Duration, dumped bool) {
+	if since < 0 {
+		since = 0
+	}
+	r.record(TypeFreeze, map[string]string{
+		"passes":   strconv.FormatUint(passes, 10),
+		"since_ms": strconv.FormatInt(since.Milliseconds(), 10),
+		"dumped":   strconv.FormatBool(dumped),
 	})
 }
 

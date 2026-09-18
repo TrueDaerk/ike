@@ -130,6 +130,7 @@ func TestSchemaCarriesOnlyStructuralFields(t *testing.T) {
 	r.PalettePick(":", 3, 2, 9)
 	r.Op("session.restore", "ok", map[string]string{"ms": "12", "panes": "2", "tabs": "7", "missing": "1"})
 	r.ProjectLeave("ab12cd34ef56", "switch", time.Minute)
+	r.Freeze(0, 60*time.Second, true)
 	r.Close()
 
 	allowed := map[string]bool{
@@ -151,7 +152,9 @@ func TestSchemaCarriesOnlyStructuralFields(t *testing.T) {
 		"reason":    true,                                                                           // project.leave (#2408)
 		"skipped":   true,                                                                           // project.switch lsp phase (#2492) — a reason token, never content
 		"dns_ms":    true, "connect_ms": true, "tls_ms": true, "ttfb_ms": true, "transfer_ms": true, // http.flight timing (#2404, v8 #2547) — milliseconds, never a host
-		"reused": true, // http.flight (#2547) — keep-alive flag
+		"reused":   true, // http.flight (#2547) — keep-alive flag
+		"since_ms": true, // freeze (#2627) — the frozen interval's wall time
+		"dumped":   true, // freeze (#2627) — whether a goroutine dump was written, never its path
 	}
 	for _, ev := range readSession(t, dir) {
 		for k := range ev.Data {
@@ -502,6 +505,35 @@ func TestHeartbeatNeverStartsASession(t *testing.T) {
 	}
 }
 
+// The freeze marker (#2627) carries the frozen interval and whether it wrote
+// the episode's goroutine dump — the correlation handle between the usage log
+// and the dump file next to debug.log.
+func TestFreezeRecordsTheEpisode(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	r.Command("editor.save", SourceKeybind) // opens the session file
+	r.Freeze(2, 61*time.Second, true)
+	r.Freeze(0, -time.Second, false)
+	r.Close()
+
+	var frozen []Event
+	for _, ev := range readSession(t, dir) {
+		if ev.Type == TypeFreeze {
+			frozen = append(frozen, ev)
+		}
+	}
+	if len(frozen) != 2 {
+		t.Fatalf("want 2 freeze events, got %v", frozen)
+	}
+	if frozen[0].Data["passes"] != "2" || frozen[0].Data["since_ms"] != "61000" || frozen[0].Data["dumped"] != "true" {
+		t.Errorf("dumping freeze payload wrong: %v", frozen[0])
+	}
+	// A backwards clock must not leak a negative duration into the export.
+	if frozen[1].Data["passes"] != "0" || frozen[1].Data["since_ms"] != "0" || frozen[1].Data["dumped"] != "false" {
+		t.Errorf("follow-up freeze payload wrong: %v", frozen[1])
+	}
+}
+
 // FlushSoon puts already-enqueued events on disk without blocking and without
 // an explicit Flush/Close (#2348) — the guarantee that the events leading up
 // to a long-running operation are on the platter before it starts.
@@ -714,16 +746,16 @@ func TestPalettePickClampsNegatives(t *testing.T) {
 	}
 }
 
-// The version analysis scripts branch on (#2578).
-func TestSchemaVersionIsNine(t *testing.T) {
-	if SchemaVersion != 9 {
-		t.Fatalf("SchemaVersion = %d, want 9", SchemaVersion)
+// The version analysis scripts branch on (#2627).
+func TestSchemaVersionIsTen(t *testing.T) {
+	if SchemaVersion != 10 {
+		t.Fatalf("SchemaVersion = %d, want 10", SchemaVersion)
 	}
 	dir := t.TempDir()
 	r := New(dir, nil)
 	r.Command("editor.save", SourceKeybind)
 	r.Close()
-	if evs := readSession(t, dir); len(evs) != 1 || evs[0].V != 9 {
-		t.Fatalf("events must be stamped v9, got %v", evs)
+	if evs := readSession(t, dir); len(evs) != 1 || evs[0].V != 10 {
+		t.Fatalf("events must be stamped v10, got %v", evs)
 	}
 }
