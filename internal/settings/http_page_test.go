@@ -3,6 +3,8 @@ package settings
 import (
 	"strings"
 	"testing"
+
+	"ike/internal/config"
 )
 
 // The HTTP Client page exposes both re-run/compare settings (#2247) — a
@@ -60,6 +62,21 @@ func TestHTTPClientPageEntries(t *testing.T) {
 	}
 	if s.Min != 0 || s.Max != 600000 {
 		t.Errorf("http.slow_threshold_ms bounds = %d–%d, want 0–600000", s.Min, s.Max)
+	}
+
+	tmo, ok := byKey["http.timeout_ms"]
+	if !ok || tmo.Type != Int || tmo.Scope != config.UserScope {
+		t.Fatalf("http.timeout_ms entry = %+v", tmo)
+	}
+	// The floor is a second, not zero: 0 would be "no deadline", which is the
+	// hang the setting exists to bound (#2630).
+	if tmo.Min != 1000 || tmo.Max != 600000 {
+		t.Errorf("http.timeout_ms bounds = %d–%d, want 1000–600000", tmo.Min, tmo.Max)
+	}
+	for _, want := range []string{"timed out", "@timeout", "max-time"} {
+		if !strings.Contains(tmo.Description, want) {
+			t.Errorf("http.timeout_ms description must mention %q: %s", want, tmo.Description)
+		}
 	}
 	for _, want := range []string{"0 turns", "ttfb"} {
 		if !strings.Contains(s.Description, want) {

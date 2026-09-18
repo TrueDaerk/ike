@@ -144,6 +144,17 @@ type Model struct {
 	// content as the current answer. pendingSince drives the elapsed time.
 	pending      string
 	pendingSince time.Time
+	// pendingLimit is the deadline the in-flight dispatch runs against
+	// (#2630) — what the host resolved from the request directive, .curlrc
+	// and http.timeout_ms. 0 means "unknown", which keeps the older
+	// elapsed-only wording; with a limit the header reads "waiting 12 s /
+	// 30 s", so the wait has a visible end.
+	pendingLimit time.Duration
+	// failure is the explanation of a dispatch that never produced a response
+	// (#2630), the timeout above all: the pane says so where the answer would
+	// have been instead of leaving the previous response standing as if it
+	// were current.
+	failure string
 	// cancelChord is the keymap chord bound to http.cancel, as the host
 	// resolved it (#2404). It only feeds the in-flight hint line — "x /
 	// <chord> cancels" — so an unbound command simply names "x" alone.
@@ -508,13 +519,47 @@ func (m *Model) SetPending(request string, at time.Time) {
 	m.pending, m.pendingSince = request, at
 }
 
+// SetPendingLimit records the deadline the in-flight dispatch runs against
+// (#2630), 0 when the host does not know one. It is set alongside SetPending
+// on every state change, so a request whose `# @timeout` directive or
+// `http.timeout_ms` changed between two dispatches counts against the limit
+// that actually applies to this one.
+func (m *Model) SetPendingLimit(d time.Duration) { m.pendingLimit = d }
+
+// PendingLimit reports the deadline the in-flight dispatch runs against
+// (tests).
+func (m *Model) PendingLimit() time.Duration { return m.pendingLimit }
+
+// SetFailure shows why a dispatch produced no response at all (#2630) — it
+// timed out, in practice — in place of the answer. The previous response is
+// dropped rather than left standing: it is not what this request returned,
+// and presenting it as the current content is exactly the confusion the
+// explicit message exists to end.
+func (m *Model) SetFailure(request, text string) {
+	m.ClearPending()
+	m.hist = nil
+	m.histIdx = 0
+	m.request = request
+	m.compose(nil)
+	m.failure = text
+	m.rows = append(m.rows, row{kind: kindError, text: gqlErrorGlyph + " " + text})
+	m.syncVisible()
+	m.research()
+}
+
+// Failure reports the shown failure message, "" when a response is on show
+// (tests).
+func (m *Model) Failure() string { return m.failure }
+
 // SetCancelChord records the keymap chord bound to http.cancel (#2404), so
 // the in-flight hint can name it next to the pane-local "x". "" (the command
 // is unbound, or the host never told the pane) leaves the hint at "x".
 func (m *Model) SetCancelChord(chord string) { m.cancelChord = chord }
 
 // ClearPending drops the in-flight marker (response, error or cancel).
-func (m *Model) ClearPending() { m.pending, m.pendingSince = "", time.Time{} }
+func (m *Model) ClearPending() {
+	m.pending, m.pendingSince, m.pendingLimit = "", time.Time{}, 0
+}
 
 // Pending reports the in-flight request, "" when none (tests).
 func (m *Model) Pending() string { return m.pending }
@@ -553,6 +598,7 @@ func (m *Model) recompose(resp *httpclient.Response) {
 	m.folds, m.folded, m.visible = nil, nil, nil
 	m.gqlErrors = nil
 	m.asserts = nil
+	m.failure = "" // a response (or an empty pane) replaces the last failure
 	if resp == nil {
 		m.research()
 		return
@@ -1271,7 +1317,15 @@ func (m *Model) headerSegs(pal *theme.Palette) []headerSeg {
 		// An in-flight dispatch (#1272): the rows below are the *previous*
 		// response until the new one lands.
 		segs = append(segs, headerSeg{
-			text:  fmt.Sprintf("   ⟳ running %s (%s)", m.pending, runningFor(m.pendingSince)),
+			text:  fmt.Sprintf("   ⟳ running %s (%s)", m.pending, m.waitedFor()),
+			style: lipgloss.NewStyle().Foreground(pal.Warning)})
+	}
+	if m.failure != "" {
+		// A dispatch that never answered (#2630): the reason belongs in the
+		// warning slot too, so "what happened to my request?" is answered by
+		// the header alone, without reading the rows.
+		segs = append(segs, headerSeg{
+			text:  "   " + m.failure,
 			style: lipgloss.NewStyle().Foreground(pal.Warning)})
 	}
 	if mark := m.slowMarker(); mark != "" {
@@ -1693,6 +1747,20 @@ func (m *Model) footerText() string {
 		s += " · U copy url"
 	}
 	return s
+}
+
+// waitedFor is the in-flight header's wait text (#2630): the elapsed time
+// alone while no deadline is known, and "waiting 12 s / 30 s" — elapsed
+// against the limit the dispatch actually runs under — when one is. The limit
+// turns an open-ended spinner into a wait with a visible end, which is what
+// makes "cancel and retry" or "raise the setting" a decision rather than a
+// guess.
+func (m *Model) waitedFor() string {
+	if m.pendingLimit <= 0 {
+		return runningFor(m.pendingSince)
+	}
+	return fmt.Sprintf("waiting %s / %s", runningFor(m.pendingSince),
+		httpclient.FormatTimeout(m.pendingLimit))
 }
 
 // runningFor formats how long the in-flight dispatch has been running.

@@ -1,5 +1,34 @@
 # Log
 
+## 2026-09-18 (The HTTP request timeout is a setting, #2630)
+
+- **The 30 s deadline was a constant.** Seven of ten HTTP errors in a week of
+  local telemetry ended at exactly 30,0xx ms, and the same request was re-sent
+  four times in ten minutes — each wait the full half minute, each failure a
+  generic transport error that named neither the limit nor where it came from.
+  The only way to change it was a `.curlrc` `max-time`.
+- **`http.timeout_ms`** (user scope, default `30000`, 1000–600000 ms, in
+  Settings → HTTP Client) is now the deadline the app passes down as
+  `httpclient.Options.Timeout`. The floor is a second rather than zero: `0`
+  would mean "no deadline", which is the hang the setting bounds.
+- **`# @timeout 5s`** (`internal/httpfile/timeout.go`) sets one request's
+  deadline in its own block — a Go duration or curl's bare seconds, the last
+  directive winning. A value that does not parse is a parse error *and* drops
+  the block, so a typo cannot leave the request running under the default. The
+  highlighter paints the marker as a keyword and the duration as a number.
+- **Precedence** (`httpclient/timeout.go`, `effectiveTimeout`): directive >
+  `.curlrc max-time` > `http.timeout_ms` > the built-in `DefaultTimeout`.
+- **The wait is visible.** While a request is out the response pane header
+  reads `⟳ running create (waiting 12.0s / 30 s)` next to the `x / ctrl+.
+  cancels` hint (#2404), moving with the existing 250 ms flight tick — no new
+  ticker.
+- **The result says so.** A dispatch that ends by its deadline fails with a
+  `httpclient.TimeoutError` carrying the limit, and the pane shows
+  "✗ timed out after 30 s — raise http.timeout_ms or add a `# @timeout 60s`
+  directive to the request" in place of the answer. A user cancel is still a
+  cancel (the deadline's own cancel is told apart from the context's), and a
+  recognised stream keeps its `StreamIdleTimeout` semantics (#1776).
+
 ## 2026-09-18 (A frozen update loop dumps its goroutines, #2627)
 
 - **The heartbeat now says *where*, not just *that*.** Four heartbeats in the

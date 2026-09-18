@@ -300,6 +300,7 @@ Active when a diff pane has focus.
 
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|
+| Copy diff selection or hunk | `cmd+c` | `ctrl+c` | `diff.copy` |
 | Next change (diff) | `f7` | `f7` | `diff.nextChange` |
 | Previous change (diff) | `shift+f7` | `shift+f7` | `diff.prevChange` |
 

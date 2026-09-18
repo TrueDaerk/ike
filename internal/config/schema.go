@@ -185,13 +185,17 @@ type StatusLine struct {
 // wall clock past which a flight counts as slow for the response pane: its
 // header then carries the duration and the dominating timing phase in the
 // warning slot, and the off-screen completion notice names that phase; 0
-// turns the highlight off.
+// turns the highlight off. TimeoutMs (#2630) is the overall deadline of one
+// dispatch in milliseconds — how long a request may run before it is given
+// up on. It is the default only: a request's own `# @timeout 5s` directive
+// wins over it, and so does a `.curlrc` `max-time`.
 type HTTP struct {
 	DiffIgnoreHeaders []string `toml:"diff_ignore_headers"`
 	DiffAfterRerun    bool     `toml:"diff_after_rerun"`
 	HighlightLimitKB  int      `toml:"highlight_limit_kb"`
 	NotifySlowMs      int      `toml:"notify_slow_ms"`
 	SlowThresholdMs   int      `toml:"slow_threshold_ms"`
+	TimeoutMs         int      `toml:"timeout_ms"`
 }
 
 // Forge holds the code-forge settings (#2085, #2086). PollIntervalSeconds is
