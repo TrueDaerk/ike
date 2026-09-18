@@ -323,8 +323,21 @@ former Roadmap 0085, spec in git history, for the v1→v2 key-model change:
 `internal/app` builds the resolver from config (`buildKeymap`) and, in its
 `tea.KeyPressMsg` path, attempts resolution before pane dispatch (`resolveKeymap`):
 
-- In a text-capturing editor (insert mode) only **modified** chords — or a chord
-  already in progress — are eligible; plain letters always reach the editor.
+- In a text-capturing editor (insert mode) only **non-typing** chords
+  (`keymap.Key.NonTyping`: a function key `f1`–`f24`, with or without
+  modifiers, or a chord carrying `cmd`/`ctrl`/`alt`) — or a chord already in
+  progress — are eligible; plain letters, `enter`, `tab`, `backspace`, `esc`
+  and the arrows always reach the editor (#627). So the JetBrains navigation
+  keys fire while typing, exactly as they do from normal mode (#2622): `f2` /
+  `shift+f2` step diagnostics, `f4` goes to the declaration, `alt+f7` opens
+  find usages, `cmd+g` / `cmd+shift+g` step search matches — and the chord is
+  consumed, never inserted. Shift alone does not qualify (`shift+a` types
+  `A`). The chords the editor itself consumes in insert mode (`ctrl+space`,
+  `ctrl+w`/`ctrl+u`/`ctrl+h`, the completion popup's keys) are non-typing too
+  and keep working because the keymap has no `Editor` binding for them; there
+  is no allow-list — a genuine clash is resolved by claiming the chord for the
+  pane *above* this layer, the way `alt+enter` in a find field (#2600) and the
+  kill keys in a search/ex line (#2602) are claimed.
 - A **Resolved** id that names a registered command runs it via `host.API`; an
   inert id falls through — unless the blocked ledger documents it, in which
   case the chord is consumed with an explanatory toast (#267). **Pending**

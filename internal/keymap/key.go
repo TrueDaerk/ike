@@ -61,3 +61,15 @@ func (k Key) String() string {
 	b.WriteString(k.Base)
 	return b.String()
 }
+
+// NonTyping reports whether the chord can never stand for text input: it is a
+// function key (f1–f24, with or without modifiers) or it carries cmd/ctrl/alt.
+// Such chords resolve through the keymap even while an editor captures text
+// (#2622) — in JetBrains f2/f4/alt+f7 navigate regardless of whether the caret
+// is typing. Shift alone does not qualify: shift+a types "A".
+func (k Key) NonTyping() bool {
+	if k.Mods&(ModMeta|ModCtrl|ModAlt) != 0 {
+		return true
+	}
+	return isFunctionKey(k.Base)
+}
