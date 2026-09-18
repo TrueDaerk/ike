@@ -127,8 +127,10 @@ func TestSchemaCarriesOnlyStructuralFields(t *testing.T) {
 	r.Op("http.flight", "error", map[string]string{"ms": "9", "stream": "false", "reason": "refused"})
 	r.Op("project.switch", "lsp", map[string]string{"ms": "0", "skipped": "no_server_docs"})
 	r.CommandOutcome("editor.save", SourceKeybind, false, 0)
-	r.PaletteDismiss("%", 4, 7, 900*time.Millisecond)
-	r.PalettePick(":", 3, 2, 9)
+	r.PaletteDismiss("%", 4, 7, "", 900*time.Millisecond)
+	r.PalettePick(":", 3, 2, 9, "", "")
+	r.PaletteDismiss("!", 0, 3, "builtin,quickfix*2", 700*time.Millisecond)
+	r.PalettePick("!", 0, 1, 3, "builtin,quickfix*2", "quickfix")
 	r.Op("session.restore", "ok", map[string]string{"ms": "12", "panes": "2", "tabs": "7", "missing": "1"})
 	r.ProjectLeave("ab12cd34ef56", "switch", time.Minute)
 	r.Freeze(0, 60*time.Second, true)
@@ -142,17 +144,19 @@ func TestSchemaCarriesOnlyStructuralFields(t *testing.T) {
 		"passes": true,                                            // heartbeat (#2348)
 		"top":    true,                                            // heartbeat (#2402) — Go message type names, never content
 		"phase":  true, "ms": true, "class": true, "stream": true, // op (#2348)
-		"ok":        true,                                                                           // command outcome (#2408)
-		"mode":      true,                                                                           // palette.dismiss (#2408) — a prefix rune, never the query
-		"query_len": true,                                                                           // palette.dismiss (#2408) — the length, never the text
-		"results":   true,                                                                           // palette.dismiss (#2490) — a row count, never content
-		"rank":      true,                                                                           // palette.pick (#2551) — a row index, never the picked item
-		"panes":     true,                                                                           // session.restore (#2403) — a pane count
-		"tabs":      true,                                                                           // session.restore (#2551) — a tab count
-		"missing":   true,                                                                           // session.restore (#2551) — a count of vanished files
-		"reason":    true,                                                                           // project.leave (#2408); http.flight error/canceled (#2631) — a closed failure-class token, never the error text
-		"skipped":   true,                                                                           // project.switch lsp phase (#2492) — a reason token, never content
-		"dns_ms":    true, "connect_ms": true, "tls_ms": true, "ttfb_ms": true, "transfer_ms": true, // http.flight timing (#2404, v8 #2547) — milliseconds, never a host
+		"ok":          true,                                                                           // command outcome (#2408)
+		"mode":        true,                                                                           // palette.dismiss (#2408) — a prefix rune, never the query
+		"query_len":   true,                                                                           // palette.dismiss (#2408) — the length, never the text
+		"results":     true,                                                                           // palette.dismiss (#2490) — a row count, never content
+		"rank":        true,                                                                           // palette.pick (#2551) — a row index, never the picked item
+		"kinds":       true,                                                                           // palette.pick/dismiss (#2635) — LSP CodeActionKind tokens plus the "builtin" marker, never a title
+		"picked_kind": true,                                                                           // palette.pick (#2635) — the chosen row's kind, never its title
+		"panes":       true,                                                                           // session.restore (#2403) — a pane count
+		"tabs":        true,                                                                           // session.restore (#2551) — a tab count
+		"missing":     true,                                                                           // session.restore (#2551) — a count of vanished files
+		"reason":      true,                                                                           // project.leave (#2408); http.flight error/canceled (#2631) — a closed failure-class token, never the error text
+		"skipped":     true,                                                                           // project.switch lsp phase (#2492) — a reason token, never content
+		"dns_ms":      true, "connect_ms": true, "tls_ms": true, "ttfb_ms": true, "transfer_ms": true, // http.flight timing (#2404, v8 #2547) — milliseconds, never a host
 		"reused":   true, // http.flight (#2547) — keep-alive flag
 		"since_ms": true, // freeze (#2627) — the frozen interval's wall time
 		"dumped":   true, // freeze (#2627) — whether a goroutine dump was written, never its path
@@ -648,7 +652,7 @@ func TestCommandOutcomeShapes(t *testing.T) {
 func TestPaletteDismissEvent(t *testing.T) {
 	dir := t.TempDir()
 	r := New(dir, nil)
-	r.PaletteDismiss("%", 4, 0, 1500*time.Millisecond)
+	r.PaletteDismiss("%", 4, 0, "", 1500*time.Millisecond)
 	r.Close()
 
 	evs := readSession(t, dir)
@@ -666,8 +670,8 @@ func TestPaletteDismissEvent(t *testing.T) {
 func TestPaletteDismissResults(t *testing.T) {
 	dir := t.TempDir()
 	r := New(dir, nil)
-	r.PaletteDismiss(":", 3, 12, time.Second)
-	r.PaletteDismiss("@", 0, -1, time.Second)
+	r.PaletteDismiss(":", 3, 12, "", time.Second)
+	r.PaletteDismiss("@", 0, -1, "", time.Second)
 	r.Close()
 
 	evs := readSession(t, dir)
@@ -715,7 +719,7 @@ func TestProjectLeaveEvent(t *testing.T) {
 func TestPalettePickEvent(t *testing.T) {
 	dir := t.TempDir()
 	r := New(dir, nil)
-	r.PalettePick("@", 5, 3, 20)
+	r.PalettePick("@", 5, 3, 20, "", "")
 	r.Close()
 
 	evs := readSession(t, dir)
@@ -731,11 +735,41 @@ func TestPalettePickEvent(t *testing.T) {
 	}
 }
 
+// The code-actions mode's kinds travel on both palette outcomes (#2635), and
+// a mode that offers none leaves both fields out entirely — so a reader can
+// tell "nothing recorded" from "recorded as empty".
+func TestPaletteKindFields(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	r.PaletteDismiss("!", 0, 3, "builtin,quickfix*2", 700*time.Millisecond)
+	r.PalettePick("!", 0, 1, 3, "builtin,quickfix*2", "quickfix")
+	r.PalettePick("@", 5, 3, 20, "", "")
+	r.Close()
+
+	evs := readSession(t, dir)
+	if len(evs) != 3 {
+		t.Fatalf("want three events, got %v", evs)
+	}
+	if d := evs[0].Data; d["kinds"] != "builtin,quickfix*2" {
+		t.Errorf("dismiss payload = %v, want the offered kinds", d)
+	} else if _, ok := d["picked_kind"]; ok {
+		t.Errorf("a dismissal picked nothing: %v", d)
+	}
+	if d := evs[1].Data; d["kinds"] != "builtin,quickfix*2" || d["picked_kind"] != "quickfix" {
+		t.Errorf("pick payload = %v, want the offered kinds and the picked one", d)
+	}
+	for _, k := range []string{"kinds", "picked_kind"} {
+		if _, ok := evs[2].Data[k]; ok {
+			t.Errorf("a kindless mode must not write %q: %v", k, evs[2].Data)
+		}
+	}
+}
+
 // Negative rank and result counts clamp to zero (#2551), like the dismissal's.
 func TestPalettePickClampsNegatives(t *testing.T) {
 	dir := t.TempDir()
 	r := New(dir, nil)
-	r.PalettePick(":", 0, -1, -4)
+	r.PalettePick(":", 0, -1, -4, "", "")
 	r.Close()
 
 	evs := readSession(t, dir)
@@ -747,16 +781,16 @@ func TestPalettePickClampsNegatives(t *testing.T) {
 	}
 }
 
-// The version analysis scripts branch on (#2627).
-func TestSchemaVersionIsEleven(t *testing.T) {
-	if SchemaVersion != 11 {
-		t.Fatalf("SchemaVersion = %d, want 11", SchemaVersion)
+// The version analysis scripts branch on (#2635).
+func TestSchemaVersionIsTwelve(t *testing.T) {
+	if SchemaVersion != 12 {
+		t.Fatalf("SchemaVersion = %d, want 12", SchemaVersion)
 	}
 	dir := t.TempDir()
 	r := New(dir, nil)
 	r.Command("editor.save", SourceKeybind)
 	r.Close()
-	if evs := readSession(t, dir); len(evs) != 1 || evs[0].V != 11 {
-		t.Fatalf("events must be stamped v11, got %v", evs)
+	if evs := readSession(t, dir); len(evs) != 1 || evs[0].V != 12 {
+		t.Fatalf("events must be stamped v12, got %v", evs)
 	}
 }

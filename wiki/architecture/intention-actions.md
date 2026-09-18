@@ -75,6 +75,21 @@ reply, failed request — and no longer toasts. The app merges:
 3. built-in items grouped by kind (kinds in first-appearance order, stable
    within one).
 
+This order was re-examined for #2635, which asked whether the built-ins sit
+after the server `quickfix` entries by accident: they do not. Step 3 runs after
+both LSP steps by construction, so every built-in already sorts below every
+server action, `quickfix` included, and the order is fully determined by the
+server's own ranking plus registration order. Nothing was reordered; whether
+kinds should be *ranked* differently is left to the follow-up the telemetry
+below feeds.
+
+Since #2635 the popup's telemetry says which kinds were on offer: a dismissal
+and a pick out of the `"!"` mode carry `kinds` (the listed rows' kinds, sorted
+and counted — `builtin,quickfix*2,source.organizeImports`, with `builtin`
+standing in for every one of ike's own intentions) and a pick adds
+`picked_kind`. Titles never travel — they quote the user's code, kinds do not.
+See [usage-telemetry](usage-telemetry.md).
+
 Empty merged list → the "no code actions here" toast (only honest verdict
 lives here now). Otherwise the picker opens **anchored one row below the
 caret** (`caretPopupAnchor` — the `compositeLSPPopups` math: pane rect +

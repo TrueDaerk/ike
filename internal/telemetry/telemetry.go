@@ -115,7 +115,25 @@ import (
 // as a standing "passes" value across consecutive beats — explicit, and lets
 // a reader pair the episode with the stack dump on disk. No path is
 // recorded; the correlation runs over the session id and the timestamps.
-const SchemaVersion = 11
+//
+// v11 (#2631): the "http.flight" "error" and "canceled" end phases gain
+// "reason", a closed failure class — "timeout", "dns", "refused", "tls",
+// "reset", "canceled", "other" — derived from the Go error by
+// httpclient.ClassifyError, never the host, URL or error text. Below v11
+// absence means "not recorded".
+//
+// v12 (#2635): the "palette.dismiss" and "palette.pick" events of the
+// code-actions mode ("!") gain "kinds" — the comma-joined, sorted summary of
+// the action kinds that were on offer, each with "*n" when it occurred more
+// than once ("builtin,quickfix*2,source.organizeImports") — and a pick adds
+// "picked_kind", the chosen row's own kind. "builtin" marks one of ike's own
+// intentions, "none" a server action that named no kind, "other" a kind
+// outside the allowed identifier vocabulary. Titles never travel, and the
+// fields are absent for every other palette mode, where they would carry
+// nothing. Without them the 33 % dismissal rate of the intention popup cannot
+// be explained: the log showed that two to four rows were rejected, never
+// what they offered. Absence below v12 means "not recorded".
+const SchemaVersion = 12
 
 // defaultFlushInterval is how often the writer goroutine flushes the
 // bufio.Writer on its own, independent of buffer fill or explicit Flush
@@ -337,20 +355,27 @@ func (r *Recorder) CommandOutcome(id, source string, ok bool, d time.Duration) {
 // one palette outcome that otherwise leaves no trace at all, so re-open
 // streaks ("wrong entry, esc, try again") stay invisible without it; since
 // #2490 the row count tells a fruitless search (results 0 on a typed query)
-// from a deliberate change of mind. A negative count is clamped to zero.
-func (r *Recorder) PaletteDismiss(mode string, queryLen, results int, d time.Duration) {
+// from a deliberate change of mind. Since #2635 kinds carries the code-actions
+// mode's offered-kind summary ("builtin,quickfix*2"); it is empty — and the
+// field then absent — for every other mode. A negative count is clamped to
+// zero.
+func (r *Recorder) PaletteDismiss(mode string, queryLen, results int, kinds string, d time.Duration) {
 	if d < 0 {
 		d = 0
 	}
 	if results < 0 {
 		results = 0
 	}
-	r.record(TypePaletteDismiss, map[string]string{
+	data := map[string]string{
 		"mode":      mode,
 		"query_len": strconv.Itoa(queryLen),
 		"results":   strconv.Itoa(results),
 		"ms":        strconv.FormatInt(d.Milliseconds(), 10),
-	})
+	}
+	if kinds != "" {
+		data["kinds"] = kinds
+	}
+	r.record(TypePaletteDismiss, data)
 }
 
 // PalettePick records a palette row being activated (#2551): mode is the
@@ -361,20 +386,29 @@ func (r *Recorder) PaletteDismiss(mode string, queryLen, results int, d time.Dur
 // ranking quality of the frecency work (#2399, #2155) measurable — "the wanted
 // row was third" is invisible in the command event that follows. No file id or
 // query travels; a picked command's id is already in that next command event.
-// A negative rank or count is clamped to zero.
-func (r *Recorder) PalettePick(mode string, queryLen, rank, results int) {
+// Since #2635 kinds carries the code-actions mode's offered-kind summary and
+// pickedKind the chosen row's own kind; both are empty — and the fields then
+// absent — for every other mode. A negative rank or count is clamped to zero.
+func (r *Recorder) PalettePick(mode string, queryLen, rank, results int, kinds, pickedKind string) {
 	if rank < 0 {
 		rank = 0
 	}
 	if results < 0 {
 		results = 0
 	}
-	r.record(TypePalettePick, map[string]string{
+	data := map[string]string{
 		"mode":      mode,
 		"query_len": strconv.Itoa(queryLen),
 		"rank":      strconv.Itoa(rank),
 		"results":   strconv.Itoa(results),
-	})
+	}
+	if kinds != "" {
+		data["kinds"] = kinds
+	}
+	if pickedKind != "" {
+		data["picked_kind"] = pickedKind
+	}
+	r.record(TypePalettePick, data)
 }
 
 // ProjectLeave records the foreground time spent in a project as it is left

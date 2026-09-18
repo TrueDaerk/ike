@@ -10,6 +10,8 @@ package palette
 import (
 	"fmt"
 	"image/color"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -591,7 +593,7 @@ func (p *Palette) activate() tea.Cmd {
 		msg = of
 	}
 	p.recordPick(it, false)
-	p.notePick(p.pickRank(), p.resultCount())
+	p.notePick(p.pickRank(), p.resultCount(), it)
 	p.Close()
 	if msg == nil {
 		return nil
@@ -623,6 +625,11 @@ type Dismissal struct {
 	QueryLen int
 	Results  int
 	Open     time.Duration
+	// Kinds summarizes the kinds of the rows that were listed (#2635), as
+	// built by kindSummary: "" for every mode whose rows carry no Kind. The
+	// code-actions popup is dismissed a third of the time, and the log could
+	// not say what had been on offer — two low-value entries or a real choice.
+	Kinds string
 }
 
 // Pick describes a row activated out of the palette (#2551): the mode that was
@@ -637,17 +644,102 @@ type Pick struct {
 	QueryLen int
 	Rank     int
 	Results  int
+	// Kinds is the listed rows' kind summary, PickedKind the chosen row's own
+	// kind (#2635) — both "" for modes whose rows carry no Kind. Together with
+	// the dismissal's Kinds they say which kinds get picked and which are
+	// merely shown, which is what a ranking decision needs.
+	Kinds      string
+	PickedKind string
 }
 
 // notePick records the activation of the row at rank out of results rows
 // (#2551). It must run before Close drops the per-open state; a palette with
 // no resolvable mode records nothing, like dismiss.
-func (p *Palette) notePick(rank, results int) {
+func (p *Palette) notePick(rank, results int, picked Item) {
 	m, body := p.mode()
 	if m == nil {
 		return
 	}
-	p.picked = &Pick{Prefix: m.Prefix(), QueryLen: len([]rune(body)), Rank: rank, Results: results}
+	p.picked = &Pick{
+		Prefix:     m.Prefix(),
+		QueryLen:   len([]rune(body)),
+		Rank:       rank,
+		Results:    results,
+		Kinds:      p.kindSummary(),
+		PickedKind: sanitizeKind(picked.Kind),
+	}
+}
+
+// kindSummaryMax caps how many distinct kinds one summary names (#2635); a
+// longer list is truncated to the alphabetically first entries plus the "…"
+// marker, so a pathological offer cannot blow up an event line.
+const kindSummaryMax = 12
+
+// kindTokenMax is the longest kind identifier that travels verbatim (#2635).
+const kindTokenMax = 40
+
+// kindSummary condenses the currently listed rows into the comma-joined,
+// sorted kind list the palette telemetry records (#2635): "builtin,quickfix*3"
+// — each distinct kind once, with "*n" appended when it occurred more than
+// once. Chrome rows and rows without a Kind are skipped, so a mode that sets
+// no kinds summarizes to "" and its events carry no kinds field at all. Every
+// token passes sanitizeKind: only a closed identifier vocabulary travels,
+// never a row title.
+func (p *Palette) kindSummary() string {
+	counts := map[string]int{}
+	for _, it := range p.items {
+		if it.Inert || it.Kind == "" {
+			continue
+		}
+		counts[sanitizeKind(it.Kind)]++
+	}
+	if len(counts) == 0 {
+		return ""
+	}
+	kinds := make([]string, 0, len(counts))
+	for k := range counts {
+		kinds = append(kinds, k)
+	}
+	sort.Strings(kinds)
+	truncated := false
+	if len(kinds) > kindSummaryMax {
+		kinds, truncated = kinds[:kindSummaryMax], true
+	}
+	parts := make([]string, 0, len(kinds)+1)
+	for _, k := range kinds {
+		if n := counts[k]; n > 1 {
+			k += "*" + strconv.Itoa(n)
+		}
+		parts = append(parts, k)
+	}
+	if truncated {
+		parts = append(parts, "…")
+	}
+	return strings.Join(parts, ",")
+}
+
+// sanitizeKind reduces a row's Kind to the closed vocabulary telemetry allows
+// (#2635): letters, digits, ".", "-" and "_" only, at most kindTokenMax runes.
+// Anything else — a server inventing a kind out of the user's code, a mode
+// setting a title by mistake — collapses to "other" rather than leaking text.
+func sanitizeKind(kind string) string {
+	if kind == "" {
+		return ""
+	}
+	n := 0
+	for _, r := range kind {
+		n++
+		if n > kindTokenMax {
+			return "other"
+		}
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '.', r == '-', r == '_':
+		default:
+			return "other"
+		}
+	}
+	return kind
 }
 
 // resultCount is the number of real result rows listed (#2548): the "did you
@@ -697,9 +789,10 @@ func (p *Palette) dismiss() tea.Cmd {
 	m, body := p.mode()
 	opened := p.openedAt
 	results := p.resultCount() // read before Close drops the list (#2490)
+	kinds := p.kindSummary()   // likewise: the offered kinds (#2635)
 	p.Close()
 	if m != nil {
-		d := &Dismissal{Prefix: m.Prefix(), QueryLen: len([]rune(body)), Results: results}
+		d := &Dismissal{Prefix: m.Prefix(), QueryLen: len([]rune(body)), Results: results, Kinds: kinds}
 		if !opened.IsZero() {
 			d.Open = p.clock().Sub(opened)
 		}
@@ -745,7 +838,7 @@ func (p *Palette) altActivate() tea.Cmd {
 	}
 	msg := it.Alt
 	// An alt activation is a pick too (#2551): same row, same rank.
-	p.notePick(p.pickRank(), p.resultCount())
+	p.notePick(p.pickRank(), p.resultCount(), it)
 	p.Close()
 	return func() tea.Msg { return msg }
 }
@@ -776,7 +869,7 @@ func (p *Palette) activateSide() tea.Cmd {
 	it := p.sideItems[p.sideSel]
 	msg := it.Msg
 	p.recordPick(it, true)
-	p.notePick(p.sideSel, len(p.sideItems))
+	p.notePick(p.sideSel, len(p.sideItems), it)
 	p.Close()
 	if msg == nil {
 		return nil

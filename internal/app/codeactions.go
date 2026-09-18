@@ -112,7 +112,8 @@ func (a *actionsMode) SetMerged(msg ilsp.CodeActionsMsg, builtins []intention.It
 		if act.Preferred {
 			title = "★ " + title
 		}
-		a.push(palette.Item{Title: title, Detail: actionKindLabel(act.Kind)}, actionEntry{lspIndex: i})
+		a.push(palette.Item{Title: title, Detail: actionKindLabel(act.Kind), Kind: actionKindToken(act.Kind)},
+			actionEntry{lspIndex: i})
 	}
 	var kinds []string
 	byKind := map[string][]intention.Item{}
@@ -124,7 +125,7 @@ func (a *actionsMode) SetMerged(msg ilsp.CodeActionsMsg, builtins []intention.It
 	}
 	for _, kind := range kinds {
 		for _, it := range byKind[kind] {
-			a.push(palette.Item{Title: it.Title, Detail: actionKindLabel(it.Kind)},
+			a.push(palette.Item{Title: it.Title, Detail: actionKindLabel(it.Kind), Kind: builtinKindToken},
 				actionEntry{lspIndex: -1, commandID: it.CommandID, preview: it.Preview})
 		}
 	}
@@ -165,6 +166,27 @@ func actionKindLabel(kind string) string {
 		parts[i] = string(out)
 	}
 	return strings.Join(parts, " · ")
+}
+
+// builtinKindToken marks one of ike's own intentions in the telemetry kind
+// summary (#2635). The built-in kinds ("copy", "http", "vcs", …) are ike's own
+// vocabulary and would drown the server kinds the ranking question is about,
+// so every builtin row reports the same marker; which builtin was picked is
+// already in the command event that follows a pick.
+const builtinKindToken = "builtin"
+
+// actionKindToken is the telemetry token for a server action's kind (#2635):
+// the raw LSP CodeActionKind ("quickfix", "source.organizeImports"), which is
+// a closed spec vocabulary and never derived from the user's code — unlike the
+// title, which is why only the kind travels. A server that names no kind
+// reports "none", so "offered something unclassified" stays distinguishable
+// from "offered nothing"; the palette sanitizes anything outside the allowed
+// identifier characters to "other" before it reaches an event.
+func actionKindToken(kind string) string {
+	if strings.TrimSpace(kind) == "" {
+		return "none"
+	}
+	return kind
 }
 
 // CommandFor resolves a picked built-in entry to its command id ("" for an
