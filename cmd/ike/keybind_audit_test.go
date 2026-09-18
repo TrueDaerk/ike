@@ -173,7 +173,6 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	{"editor.tab.closeRight", reasonMenu},         //
 	{"editor.tab.closeUnmodified", reasonMenu},    //
 	{"editor.tab.closeAll", reasonMenu},           //
-	{"editor.tab.togglePin", reasonMenu},          //
 	{"editor.forceCodeInsight", reasonMenu},       // the status line's large-file badge
 	{"editor.largeFileDetails", reasonMenu},       //
 	{"editor.setBufferLanguage", reasonMenu},      // the status line's language picker

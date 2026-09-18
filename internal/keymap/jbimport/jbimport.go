@@ -98,6 +98,10 @@ var actionMap = map[string]string{
 	"CloseAllToTheRight":        "editor.tab.closeRight",
 	"CloseAllUnmodifiedEditors": "editor.tab.closeUnmodified",
 	"CloseAllEditors":           "editor.tab.closeAll",
+	// Pin Tab (#1172, chord in #2640): IntelliJ's toggle, under both the
+	// current and the legacy action id.
+	"PinActiveTabToggle": "editor.tab.togglePin",
+	"PinActiveEditorTab": "editor.tab.togglePin",
 
 	// Clipboard & history.
 	"$Copy":         "editor.copy",

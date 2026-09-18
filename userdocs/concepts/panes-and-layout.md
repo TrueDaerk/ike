@@ -148,9 +148,13 @@ lands.
 
 ### The tab limit
 
-`editor.tabs.limit` (default `5`) caps the document tabs per pane,
+`editor.tabs.limit` (default `5`) caps the *unpinned* document tabs per pane,
 JetBrains-style: opening a file beyond the limit closes the least recently used
 tab instead of growing the bar forever. Set it to `0` to disable the cap.
+Pinned tabs do not count toward the limit, so with the default of 5 and three
+pinned tabs five unpinned tabs still fit beside them. "Least recently used"
+means what you last had on screen — the order survives a restart, and the tab
+you just opened or jumped back to is always the safest one.
 
 Eviction never costs you anything you cannot get back. Exempt from it are the
 active tab, tabs with unsaved changes, scratch tabs (there is no path to reopen
@@ -159,8 +163,9 @@ other tab pinned, say — the limit is simply exceeded rather than something
 being closed that should not be. Evicted tabs go into the reopen ring, so
 ++cmd+shift+t++ brings them back.
 
-Pin a tab with **Pin/Unpin Tab** from the palette or the tab context menu. A
-pinned tab is exempt from eviction and survives the close-others actions.
+Pin a tab with ++alt+shift+p++, or **Pin/Unpin Tab** from the palette or the
+tab context menu. A pinned tab is exempt from eviction and survives the
+close-others actions; ++cmd+w++ and the tab's `✕` still close it.
 
 ## Buffers are shared
 

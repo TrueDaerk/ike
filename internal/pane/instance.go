@@ -1065,6 +1065,37 @@ func (i *Instance) TabLastUsed(idx int) int {
 	return i.tabs[idx].lastUsed
 }
 
+// TouchTab restamps tab idx's recency without touching the active index or
+// focus (#2640): the paths that bring an already-active tab back on screen —
+// re-opening the file that is already showing, filling the pane's empty
+// scratch tab — are uses of that tab too, and must not leave it looking stale
+// to the tab-limit eviction. It reports whether the index was valid.
+func (i *Instance) TouchTab(idx int) bool {
+	if idx < 0 || idx >= len(i.tabs) {
+		return false
+	}
+	i.useSeq++
+	i.tabs[idx].lastUsed = i.useSeq
+	return true
+}
+
+// SetTabRecency restores tab idx's recency rank (#2640): a session records the
+// relative use order of its tabs, so a restart does not reset every tab to
+// "never used" — which degraded the tab-limit eviction to always picking the
+// same slot. rank is a position in that order (higher = more recently used);
+// the instance's counter moves above it so later activations keep winning. It
+// reports whether the index was valid.
+func (i *Instance) SetTabRecency(idx, rank int) bool {
+	if idx < 0 || idx >= len(i.tabs) || rank <= 0 {
+		return false
+	}
+	i.tabs[idx].lastUsed = rank
+	if rank > i.useSeq {
+		i.useSeq = rank
+	}
+	return true
+}
+
 // TabsByMRU returns every tab index ordered most-recently-used first (#2151),
 // the order the tab picker lists them in: the active tab leads (activate
 // stamps it last), then the tabs by descending activation stamp, with
@@ -1122,26 +1153,77 @@ func (i *Instance) FileTabCount() int {
 	return n
 }
 
+// LimitTabCount counts the document tabs the tab limit (#742) measures a pane
+// by: FileTabCount minus the pinned tabs (#2640). A pin says "this tab stays",
+// so it must not spend a slot of the limit either — with limit 5 and three
+// pinned tabs, five unpinned tabs still fit beside them.
+func (i *Instance) LimitTabCount() int {
+	n := 0
+	for _, t := range i.tabs {
+		if t.Editor() != nil && !t.pinned {
+			n++
+		}
+	}
+	return n
+}
+
 // EvictableLRUTab returns the least recently used tab the tab limit may close
 // (#742): a file-backed, non-dirty document tab that is not active — dirty
 // tabs, scratch tabs (nothing to reopen from), terminals and pinned tabs
-// (#1172) are exempt. ok=false when no tab is eligible, in which case the
-// limit may be exceeded.
+// (#1172) are exempt. A tab restored but never activated since (#2177) counts
+// too: it names a file, holds no edits and reopens from the ring like any
+// other — excluding it was what forced the eviction to recycle the freshly
+// opened slots instead (#2640). ok=false when no tab is eligible, in which
+// case the limit may be exceeded.
+//
+// Equal recency — never-used tabs of a session restored without a recorded
+// order — breaks in favour of the tab furthest from the active one, and a
+// left/right tie in favour of the lower index. That keeps the pick
+// deterministic without pinning it to a fixed slot: the active tab moves with
+// every open, so the distance ranking moves with it.
 func (i *Instance) EvictableLRUTab() (idx int, ok bool) {
 	best := -1
 	for n, t := range i.tabs {
-		if n == i.active || t.IsTerminal() || t.pinned {
+		if n == i.active || !i.tabEvictable(n) {
 			continue
 		}
-		ed := t.Editor()
-		if ed == nil || !ed.HasFile() || ed.Dirty() {
-			continue
-		}
-		if best < 0 || t.lastUsed < i.tabs[best].lastUsed {
+		switch {
+		case best < 0:
+			best = n
+		case t.lastUsed != i.tabs[best].lastUsed:
+			if t.lastUsed < i.tabs[best].lastUsed {
+				best = n
+			}
+		case i.tabDistance(n) > i.tabDistance(best):
 			best = n
 		}
 	}
 	return best, best >= 0
+}
+
+// tabEvictable reports whether tab idx may be closed by the tab limit,
+// ignoring whether it is the active one: a non-pinned document tab naming a
+// file with no unsaved changes, loaded or still deferred (#2177).
+func (i *Instance) tabEvictable(idx int) bool {
+	t := i.tabs[idx]
+	if t.IsTerminal() || t.pinned || t.Editor() == nil {
+		return false
+	}
+	if t.deferred != nil {
+		return t.deferred.Path != ""
+	}
+	ed := t.Editor()
+	return ed.HasFile() && !ed.Dirty()
+}
+
+// tabDistance is how far tab idx sits from the active tab, the tie-break of
+// the LRU pick above.
+func (i *Instance) tabDistance(idx int) int {
+	d := idx - i.active
+	if d < 0 {
+		return -d
+	}
+	return d
 }
 
 // MoveTab reorders the tab at from to position to, keeping the same tab active.

@@ -111,8 +111,11 @@ var reachableAlternatives = map[string]string{
 	"editor.tab.reopenClosed":   "palette",
 	// #2538: the batch tab closes live in the tab context menu and the File
 	// menu; only Close Others takes a chord, and it is a macOS Cmd chord.
-	"editor.tab.closeOthers":           "palette / File menu / tab context menu",
-	"editor.tab.picker":                "palette",
+	"editor.tab.closeOthers": "palette / File menu / tab context menu",
+	"editor.tab.picker":      "palette",
+	// #2640: alt+shift+p needs a terminal forwarding Option; the tab context
+	// menu and the palette stay the delivered doorways.
+	"editor.tab.togglePin":             "palette / tab context menu",
 	"editor.tab.select1":               "palette",
 	"editor.tab.select2":               "palette",
 	"editor.tab.select3":               "palette",

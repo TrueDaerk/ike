@@ -2476,6 +2476,10 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 		}
 		active := 0
 		views := m.tabViews[key] // per-tab caret and framing (#2177)
+		// slots maps a persisted tab index onto the strip slot it restored
+		// into, so the recorded recency order (#2640) can be replayed after
+		// the strip is built — missing files leave gaps in the mapping.
+		slots := make(map[int]int, len(paths))
 		for i, p := range paths {
 			if p == "" {
 				continue
@@ -2501,6 +2505,7 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 				continue
 			}
 			restored++
+			slots[i] = slot
 			if i == id.Active {
 				active = slot
 			}
@@ -2508,6 +2513,15 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 				// Pins round-trip restarts (#1172): the index convention is
 				// the persisted Tabs list, same as Active.
 				inst.SetTabPinned(slot, true)
+			}
+		}
+		// Replay the saved use order (#2640): the most recently used tab gets
+		// the highest rank, so the tab-limit eviction keeps picking by real
+		// recency after a restart instead of degenerating to one fixed slot.
+		// Tabs the save did not list stay at "never used" and go first.
+		for pos, n := range id.Recent {
+			if slot, ok := slots[n]; ok {
+				inst.SetTabRecency(slot, len(id.Recent)-pos)
 			}
 		}
 		if v, ok := views[inst.TabPath(active)]; ok && (v.Top != 0 || v.Left != 0) {
@@ -9420,6 +9434,10 @@ func (m *Model) openInTab(key, path string) bool {
 	inst := m.activeWS().Panes.Get(key)
 	if idx := inst.TabForPath(path); idx >= 0 {
 		m.activateTab(inst, idx)
+		// Re-opening the file that is already active is a use of that tab too
+		// (#2640): activateTab returns early then, so stamp here — otherwise
+		// the tab the user keeps landing on looks stale to the LRU eviction.
+		inst.TouchTab(idx)
 		return true
 	}
 	added := false
@@ -9446,17 +9464,23 @@ func (m *Model) openInTab(key, path string) bool {
 	}
 	if added {
 		m.enforceTabLimit(inst)
+	} else {
+		// The file landed in the pane's empty scratch tab: no new tab, but the
+		// slot was just used (#2640).
+		inst.TouchTab(inst.ActiveTab())
 	}
 	return true
 }
 
 // enforceTabLimit applies the editor.tabs.limit cap (#742, the JetBrains tab
 // limit) to a pane after a file open appended a tab: while the pane holds
-// more document tabs than the limit, the least recently used non-dirty file
-// tab closes, landing in the reopen ring (#158) so it stays restorable.
-// Dirty, scratch, terminal and pinned (#1172) tabs are exempt — when nothing
-// is eligible (e.g. every other tab is pinned) the limit is exceeded rather
-// than data risked or a pin overridden. 0 (or negative) disables.
+// more unpinned document tabs than the limit, the least recently used
+// non-dirty file tab closes, landing in the reopen ring (#158) so it stays
+// restorable. Dirty, scratch, terminal and pinned (#1172) tabs are exempt —
+// when nothing is eligible (e.g. every other tab is pinned) the limit is
+// exceeded rather than data risked or a pin overridden. Pinned tabs do not
+// count toward the limit either (#2640): a pin says the tab stays, so it must
+// not spend one of the limit's slots. 0 (or negative) disables.
 func (m *Model) enforceTabLimit(inst *pane.Instance) {
 	limit := 0
 	if c := config.Get(); c != nil {
@@ -9465,12 +9489,17 @@ func (m *Model) enforceTabLimit(inst *pane.Instance) {
 	if limit <= 0 {
 		return
 	}
-	for inst.FileTabCount() > limit {
+	for inst.LimitTabCount() > limit {
 		idx, ok := inst.EvictableLRUTab()
 		if !ok {
 			return
 		}
-		if ed := inst.TabEditor(idx); ed != nil {
+		if d, deferred := inst.TabDeferredView(idx); deferred {
+			// A tab restored but never activated (#2177) has no document to
+			// persist undo for or to drop a snapshot of; the reopen ring
+			// still remembers it, exactly as the manual close does.
+			m.closedTabs = appendClosedTab(m.closedTabs, closedTab{path: d.Path, line: d.Line, col: d.Col})
+		} else if ed := inst.TabEditor(idx); ed != nil {
 			m.rememberClosedTab(ed)
 			// The LRU eviction is a tab close like any other (#1550): the
 			// undo history persists (the tab is non-dirty by selection, so

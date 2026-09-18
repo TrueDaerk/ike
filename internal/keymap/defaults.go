@@ -341,6 +341,15 @@ var jetbrainsRows = []row{
 	{"alt+e", "editor.tab.picker", "Switch tab (recent tabs)", Global, "Editor tabs (0190)"},
 	{"cmd+shift+t", "editor.tab.reopenClosed", "Reopen closed tab", Global, "Editor tabs (0190)"},
 	{"alt+shift+t", "editor.tab.reopenClosed", "Reopen closed tab", Global, "Editor tabs (0190)"},
+	// Pin/unpin tab (#1172, chord in #2640): a pin holds a tab through the
+	// tab-limit eviction and the batch closes, so it is an everyday tab
+	// action, not a menu-only one. JetBrains has no default chord for Pin Tab.
+	// Collision check: cmd+alt+p is out — it folds onto ctrl+alt+p (the perf
+	// HUD) off macOS, the same reason playground.open avoided it; alt+shift+p
+	// is unclaimed on both platforms and continues the editor-tab alt+shift
+	// family next to alt+shift+t's reopen. Editor-scoped: the active tab of
+	// the focused editor pane is what it pins.
+	{"alt+shift+p", "editor.tab.togglePin", "Pin/unpin tab", Editor, "Editor tabs (#2640)"},
 	// Follow mode (#1928): tail -f for the open file, less-F style.
 	{"alt+shift+f", "view.toggleFollow", "Toggle follow (tail -f)", Editor, "Follow mode (#1928)"},
 	// Live filter over the tailed output (#2255); highlight-only mode and the
