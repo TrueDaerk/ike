@@ -423,6 +423,11 @@ func (m *Model) NextMatch() ui.MatchStep { return m.stepSelector(1) }
 // PrevMatch steps backwards; see NextMatch.
 func (m *Model) PrevMatch() ui.MatchStep { return m.stepSelector(-1) }
 
+// LineInputOpen implements the pane's Searchable capability (#2634): the
+// selector line is a one-line text input and owns the caret chords while the
+// cursor sits in it.
+func (m *Model) LineInputOpen() bool { return m.selEditing }
+
 // stepSelector owns the chord whenever a selector exists at all — the open
 // input or the applied one the footer still counts.
 func (m *Model) stepSelector(delta int) ui.MatchStep {

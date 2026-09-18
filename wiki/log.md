@@ -1,5 +1,36 @@
 # Log
 
+## 2026-09-18 (Tool-pane text inputs take the caret chords, #2634)
+
+- **A keybind that was never missing.** Local telemetry recorded `ctrl+left`
+  in the issues and problems filters and `ctrl+right` in the terminal's
+  scrollback search as `unbound`. The field had always answered those chords
+  (`ui.EditKey`), but with a *tool pane* focused the keybinding layer wrote its
+  "no binding" verdict before the pane ever saw the key — so the missing-keybind
+  report filled with chords that work. In the terminal `ctrl+left`/`ctrl+right`
+  were genuinely lost as well: the spatial focus moves (#228) took them out of
+  the open query line.
+- **`ui.IsNavKey`** (`internal/ui/textinput.go`) joins `ui.IsBreakKey` and
+  `ui.IsKillKey`: the caret chords a one-line input owns — `cmd+left`/`cmd+right`
+  to the ends of the text, `alt`|`ctrl+left`/`right` by words. It tolerates
+  `shift` (a one-line field has no range to extend) and rejects the
+  two-modifier arrows, which stay commands (`ctrl+alt+left` and
+  `ctrl+cmd+left` walk the editor tabs, `cmd+alt+left` is `nav.back`).
+- **`pane.Searchable.LineInputOpen`** is the pane-side answer, on the
+  capability rather than beside it so a new searchable pane cannot skip it —
+  the compiler asks the moment the pane claims the find chord. Every adopter
+  reports its own surface: the filter row (`filterbar.Active`), the `/` prompt
+  (`LineSearch.Open`), the DOM selector line, the terminal's scrollback search
+  *and* copy mode's query line, the issues pane's overlays.
+- **The root model claims the chord** through `lineInputFocused()` — the
+  editor's own line inputs plus `pane.Instance.LineInputOpen` — ahead of the
+  keymap layer, and inside a focused terminal ahead of the spatial focus moves,
+  so `ctrl+left`/`ctrl+right` jump a word in an open query while
+  `ctrl+up`/`ctrl+down` still escape the pane.
+- Docs: [Single-Line Text Input](/architecture/text-input.md) (the ordering
+  rules), [Shared Building Blocks](/architecture/shared-building-blocks.md)
+  (the field's chord table).
+
 ## 2026-09-18 (A silent language server reports itself after a switch, #2629)
 
 - **Two minutes of silence used to be invisible.** A cold `project.switch`

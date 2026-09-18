@@ -8938,6 +8938,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if handled, tm, cmd := m.terminalReservedKey(msg.String()); handled {
 				return tm, cmd
 			}
+			// A one-line input open in the pane — the scrollback search, copy
+			// mode's query line — owns the caret chords (#2634), ahead of the
+			// spatial focus moves below: ctrl+left / ctrl+right default to
+			// those, and a user editing a query means "a word left", not
+			// "focus the pane next door". ctrl+up / ctrl+down still escape,
+			// so the way out of the pane is never lost.
+			if ui.IsNavKey(msg) && m.lineInputFocused() {
+				return m.routeKey(msg)
+			}
 			// The spatial focus moves (default ctrl+arrows) escape the terminal
 			// like every other pane (#228); keymap.bindings.focus_* overrides
 			// apply, and a disabled direction stays with the shell.
@@ -9185,6 +9194,19 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// and the document lost a line or a word while the user was editing a
 		// query.
 		if ui.IsKillKey(msg) && m.editorLineInput() {
+			return m.routeKey(msg)
+		}
+		// Whichever one-line input holds the keyboard owns the caret chords
+		// (#2634): cmd+left / cmd+right to the ends of the text and
+		// ctrl|alt+left / ctrl|alt+right by words. The field has always
+		// answered them (ui.EditKey), but with a *tool pane* focused the
+		// keymap layer got its verdict in first and logged each press as an
+		// unbound keybinding — the issues filter, the problems filter row and
+		// the terminal's scrollback search all showed up that way in the
+		// telemetry. Claiming the chord here is the alt+enter / kill-key
+		// pattern applied to the panes: the editor answers for its own line
+		// inputs, pane.Instance for the tool panes' (pane.Searchable).
+		if ui.IsNavKey(msg) && m.lineInputFocused() {
 			return m.routeKey(msg)
 		}
 		// Keybinding layer (Roadmap 0080): resolve IDE-level chords to registered
@@ -10112,6 +10134,21 @@ func (m Model) editorFindField() bool {
 // open — the command line in any reading, or the replace panel (#2602).
 func (m Model) editorLineInput() bool {
 	return m.focusedEditorSays((*editor.Model).LineInputOpen)
+}
+
+// lineInputFocused reports whether a single-line text input anywhere in the
+// focused pane currently holds the keyboard (#2634) — the editor's command
+// line or replace panel, or a tool pane's search prompt / filter row /
+// selector line through the pane.Searchable capability. It is the gate on the
+// caret-chord claim above; the overlays that capture every key (the explorer's
+// prompts, the debug panel's value editor, the floating stack) are routed to
+// their host further up and never reach it.
+func (m Model) lineInputFocused() bool {
+	if m.editorLineInput() {
+		return true
+	}
+	inst := m.focusedContent()
+	return inst != nil && inst.LineInputOpen()
 }
 
 // focusedEditorSays answers pred about the editor of the focused pane — a

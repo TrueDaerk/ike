@@ -4,7 +4,7 @@ title: Shared Building Blocks
 description: The catalog of reusable pieces every new pane, prompt, list, search line or tool window MUST be built from — one table per family with the helper, when it is mandatory, the guard test that enforces it, and the concept doc that explains it (0500 consolidation sweep, Epic #2458).
 resource: internal/ui
 tags: [architecture, ui, conventions, reuse, guard-tests]
-timestamp: 2026-09-03T00:00:00Z
+timestamp: 2026-09-18T18:00:00Z
 ---
 
 # Shared Building Blocks
@@ -43,6 +43,26 @@ apply to every family:
 | `SpeedSearch` | `internal/ui/speedsearch.go` | type-ahead narrowing inside a modal picker | — |
 | `filterbar.Model` | `internal/filterbar` | the permanent filter row of a list pane with a `filterexpr` schema | — |
 
+The keys a field answers, wherever it is hosted — reuse the block and a filter
+row in a tool pane edits exactly like the palette's query line:
+
+| Chord | Effect |
+| --- | --- |
+| `left` / `right` | move the caret one rune |
+| `home` / `end`, `cmd+left` / `cmd+right` | to the start / end of the text |
+| `alt+left` / `ctrl+left`, `alt+right` / `ctrl+right` | word left / word right |
+| `backspace` / `delete` (`ctrl+h`) | delete the rune before / under the caret |
+| `alt`\|`ctrl+backspace`, `ctrl+w` / `alt`\|`ctrl+delete`, `alt+d` | kill the word before / after the caret |
+| `cmd+backspace`, `ctrl+u` / `cmd+delete`, `ctrl+k` | kill to the start / end |
+| `cmd+a` / `ctrl+z`, `cmd+z` | select the whole text / undo the last edit |
+
+A host whose keymap context binds one of these has to claim it for its open
+input ahead of the keybinding layer — `ui.IsBreakKey` (`alt+enter`),
+`ui.IsKillKey` (the modified backspace/delete kills) and `ui.IsNavKey` (the
+caret chords, #2634) exist for that. A tool pane answers
+`pane.Searchable.LineInputOpen` and the root model does the claiming; without
+it the chord worked but was logged as an unbound keybinding.
+
 Doc: [Single-Line Text Input](/architecture/text-input.md) (chord table, the
 input-site audit), [Speed Search](/architecture/speed-search.md),
 [List Filter Syntax](/architecture/list-filters.md).
@@ -54,7 +74,7 @@ input-site audit), [Speed Search](/architecture/speed-search.md),
 | `LineSearch` (`Start`, `Key`, `Paste`, `Recompute`, `Apply`, `Step`, `Line`) | `internal/ui/linesearch.go` | a search that jumps between matches in a read-only or list view, opened with `/` or the find chord | `internal/ui/searchsweep_test.go` |
 | `SmartCaseContains` | `internal/ui/linesearch.go` | the one matching rule (lowercase folds, any uppercase is exact) | — |
 | `FindChord`, `MatchStepChord`, `MatchStep`, `StepWrap`, `StepOver`, `MatchCounter` | `internal/ui/findkey.go`, `matchstep.go` | the chords and the counter every search shares | — |
-| `pane.Searchable` | `internal/pane/searchable.go` | the capability the root model dispatches cmd+f / cmd+g to | — |
+| `pane.Searchable` (`OpenSearch`, `NextMatch`, `PrevMatch`, `LineInputOpen`) | `internal/pane/searchable.go` | the capability the root model dispatches cmd+f / cmd+g to, and asks whether the pane's input holds the keyboard (#2634) | — |
 
 Doc: [Search](/architecture/search.md) (in-pane search section, adopter and
 deviation table).

@@ -230,6 +230,10 @@ func (m *Model) NextMatch() ui.MatchStep { return m.stepFiltered(1) }
 // PrevMatch steps backwards; see NextMatch.
 func (m *Model) PrevMatch() ui.MatchStep { return m.stepFiltered(-1) }
 
+// LineInputOpen implements the pane's Searchable capability (#2634): the
+// focused filter row owns the caret chords.
+func (m *Model) LineInputOpen() bool { return m.filter.Active() }
+
 func (m *Model) stepFiltered(delta int) ui.MatchStep {
 	return ui.StepFiltered(&m.filter, &m.cursor, &m.top, len(m.rows), m.bodyHeight(), delta,
 		func(i int) bool { return !m.rows[i].header })

@@ -66,6 +66,16 @@ type termSearch struct {
 // Searching reports whether the scrollback search field is open.
 func (m Model) Searching() bool { return m.search != nil }
 
+// SearchQuery returns the scrollback search's text and whether its field is
+// open — the shape the HTTP pane already exposes, read by the root model's
+// caret-chord tests (#2634).
+func (m Model) SearchQuery() (string, bool) {
+	if m.search == nil {
+		return "", false
+	}
+	return m.search.Text, true
+}
+
 // StartSearch opens the scrollback search from the app-side cmd+f entry point
 // (#1504). Unlike `/` (which only captures while scrolled — the live shell
 // needs the key for paths), an explicit chord carries intent, so it opens
@@ -93,6 +103,14 @@ func (m *Model) OpenSearch() bool {
 		return true
 	}
 	return m.StartSearch()
+}
+
+// LineInputOpen implements the pane's Searchable capability (#2634): the
+// scrollback search field, or copy mode's own query line, holds the keyboard.
+// Both are ui.Field-backed, so the caret chords belong to them and not to the
+// keymap layer — and neither is the live shell, which keeps every key.
+func (m *Model) LineInputOpen() bool {
+	return m.search != nil || (m.copy != nil && m.copy.input)
 }
 
 // searchCaptures reports whether `/` opens the search in the current state:
