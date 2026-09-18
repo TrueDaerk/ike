@@ -544,6 +544,12 @@ type TogglePlaygroundQueryViewMsg struct{}
 // DiffStepMsg steps the focused diff pane's current hunk (0340, #495).
 type DiffStepMsg struct{ Delta int }
 
+// DiffCopyMsg runs diff.copy (cmd+c in the diff viewer, #2628): the mouse
+// selection when there is one, else the current hunk as a unified patch. The
+// pane already handled the chord locally, so the keymap layer logged it
+// unbound; the command makes the meaning listed and rebindable.
+type DiffCopyMsg struct{}
+
 // appCommands is the compile-in plugin exposing root-model actions as registry
 // commands, so the default keybindings (Roadmap 0080/0081) and the palette can
 // drive them; the root model owns the behavior, this file only names it.
@@ -889,6 +895,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			langCommand(paneCommand("csv.columnProfile", "CSV: Column Profile", "editor", CSVColumnProfileMsg{}), []string{"csv", "tsv", "psv"}),
 			appCommand("diff.nextChange", "Next Change (Diff)", DiffStepMsg{Delta: 1}),
 			appCommand("diff.prevChange", "Previous Change (Diff)", DiffStepMsg{Delta: -1}),
+			paneCommand("diff.copy", "Diff: Copy Selection or Hunk", "diff", DiffCopyMsg{}),
 		), append(append(append(append(scratchCommands(), toolCommands()...), memoryCommands()...), perfCommands()...), esCommands()...)...),
 	}
 }

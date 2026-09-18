@@ -1,5 +1,26 @@
 # Log
 
+## 2026-09-18 (cmd+c in the diff viewer is a binding, #2628)
+
+- **The diff pane's copy chord is listed, not a pane secret.** Local usage
+  telemetry recorded `cmd+c` in the `diff` context as `unbound`, twice,
+  followed by focus changes — the user gave up. The pane has copied since
+  #2070, but it did so from its own key table, invisibly to the keymap layer,
+  so the chord could be neither discovered nor rebound. `diff.copy`
+  (`Diff: Copy Selection or Hunk`) is now a registered pane-scoped command
+  running `diff.Model.CopyKeyCmd` — the selection when there is one, else the
+  current hunk as a unified patch — and `Defaults()` binds `cmd+c` to it in
+  the `Diff` context. Same story as #2315 (HTTP/explorer), #2400 (debug/
+  issues) and #2487 (LSP Doctor); no `ctrl+c` secondary, which stays the
+  global quit chord on macOS, and the pane's own `y` remains the escape route.
+- **The merge view needs no row.** It resolves under the `editor` context
+  (its result editor owns the keys), where `editor.copy` already holds
+  `cmd+c`.
+- Concept doc: diff viewer ("Text selection & copy"). Tests:
+  `internal/app/diff_copychord_test.go` (binding, no `unbound` event,
+  selection and hunk through the clipboard) and
+  `internal/diff/copycmd_test.go`.
+
 ## 2026-09-18 (Mouse motion renders only on a hover change, #2626)
 
 - **A pointer wiggling over nothing no longer costs a frame per burst.** The

@@ -37,6 +37,7 @@ var noCounterpart = map[string]string{
 	"issues.openCurrentBranch":         "IKE-only concept (#2544): JetBrains' task management opens a task, not the issue behind the checked-out branch",
 	"palette.bindLastPick":             "IKE-only concept (#2549): JetBrains has no keymap action that opens the keymap settings on the action just run from Find Action",
 	"lsp.doctor.copy":                  "IKE-only concept (#2487): the LSP Doctor tool window has no JetBrains counterpart",
+	"diff.copy":                        "IKE-only concept (#2628): JetBrains' diff viewer copies from the editor action, not a viewer-scoped copy command",
 	"issues.selectPrev":                "IKE-only concept (#2400): the issues window has no JetBrains counterpart",
 	"issues.selectNext":                "IKE-only concept (#2400): the issues window has no JetBrains counterpart",
 	"issues.nextTab":                   "IKE-only concept (#2537): the issues window's tab walk has no JetBrains counterpart",

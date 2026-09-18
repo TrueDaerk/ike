@@ -307,6 +307,15 @@ into the pane while a selection lives (`paneSelectionCopy`, the audit rule
 from #2062), and the mouse press/drag/release arrive via the app's
 `dragDiffSelect` gesture — presses are ignored in edit mode.
 
+`cmd+c` is additionally a *bound* chord in the `diff` context
+(`diff.copy` → `DiffCopyMsg`, #2628): the pane handled it locally from the
+start, which left the keymap layer recording the press as `unbound` although
+it worked — and an unlisted chord cannot be rebound or discovered. The command
+runs `Model.CopyKeyCmd`, the same selection-else-hunk action as the pane-local
+`y`, so the behaviour is unchanged and only the route differs. The merge view
+resolves under the `editor` context (its result editor owns the keys), where
+`editor.copy` already holds `cmd+c`, so it needs no row of its own.
+
 The merge view's read-only side columns get the same treatment
 (`internal/merge/selection.go`, `dragMergeSelect`): a press in ours/theirs
 anchors a side-pinned selection, the copy chords intercept in
