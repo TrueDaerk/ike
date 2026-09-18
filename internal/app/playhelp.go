@@ -38,6 +38,8 @@ var playQueryHelpKeys = []struct{ Key, Title string }{
 	{"alt+↑ / alt+↓", "Program history from any row of the full query view"},
 	{"home / end", "Ends of the program — of the caret's row in the full view"},
 	{"ctrl+home / ctrl+end", "Start / end of the whole program"},
+	{"cmd+a", "Select the whole program — the next key typed replaces it"},
+	{"ctrl+z / cmd+z", "Undo the last edit of the program"},
 	{"tab", "Move the keyboard into the result buffer"},
 	{"pgup / pgdn", "Page the result without leaving the query line"},
 	{"ctrl+s", "Save the program as a named filter"},
