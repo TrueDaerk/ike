@@ -499,6 +499,19 @@ var jetbrainsRows = []row{
 	{"cmd+shift+n", "scratch.new", "New scratch file", Global, "Scratch files (#151)"},
 	// JetBrains Run (Windows keymap's shift+f10; macOS ctrl+r would shadow
 	// vim's redo in the editor, so the F-key is the delivered primary, 0350).
+	// #2632's telemetry saw an unbound ctrl+r in editor[python]/editor[sql],
+	// answered by shift+f10 and cmd+shift+r respectively — the Windows chord
+	// muscle memory reaching for the macOS one already bound here. An
+	// Editor-context ctrl+r alias was considered and rejected: the keymap
+	// registry resolves a pane's context (app.go's key routing) *before* the
+	// editor's own vim key handling ever runs, in every mode (normal, insert,
+	// visual — ctrl+r is a non-typing chord, so it reaches the registry even
+	// while capturing). An Editor-scoped binding would therefore make vim's
+	// ctrl+r redo (editor/keys_normal.go) permanently unreachable everywhere
+	// the editor has focus, not just resolve the telemetry's unbound chord.
+	// The Context model has no mode-aware scoping to carve normal mode back
+	// out, so the alias stays out; shift+f10 (and the palette) remain the
+	// only doorways.
 	{"shift+f10", "run.file", "Run file", Global, "Run (0350)"},
 	// JetBrains toggle breakpoint: cmd+f8 is the macOS-keymap chord and the
 	// darwin primary (#1374 — plain ctrl+F-keys are macOS system shortcuts and
