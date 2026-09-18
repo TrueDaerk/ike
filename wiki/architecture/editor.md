@@ -683,7 +683,15 @@ cancels instead. In visual mode the chords delete the selection like plain
 mode they would collide with the `d` operator and the window-command prefix.
 Because these chords never reach the keymap table, the host asks the editor
 whether it acted on a key before logging it as an unbound chord — see
-[keymap.md](keymap.md). The editor strips the caps/num-lock modifier bits a
+[keymap.md](keymap.md). Insert mode captures *typing* keys only (#627): a
+**non-typing** chord — a function key, or one carrying `cmd`/`ctrl`/`alt` —
+resolves through the keymap layer first even while the caret is typing
+(#2622), so `f2`/`shift+f2`, `f4`, `alt+f7` and `cmd+g` navigate from insert
+mode exactly as from normal mode and insert nothing; the insert-mode chords
+the editor owns (above, plus the completion popup's keys) keep working because
+no `Editor` binding claims them. See
+[keybindings.md](./keybindings.md#root-model-integration).
+The editor strips the caps/num-lock modifier bits a
 Kitty-protocol terminal reports before matching any key (#2313), so a lock key
 held or latched never changes what an editing chord means. All of these chords
 are mode-owned, not language-owned: they behave identically in every buffer

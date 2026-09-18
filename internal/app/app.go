@@ -9049,13 +9049,19 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.routeKey(msg)
 		}
 		// Keybinding layer (Roadmap 0080): resolve IDE-level chords to registered
-		// commands before pane dispatch. In a text-capturing editor only modified
-		// chords (or a chord already in progress) are eligible; plain letters always
-		// reach the editor. Inert/unbound chords fall through unchanged.
+		// commands before pane dispatch. In a text-capturing editor only
+		// non-typing chords — a command modifier (cmd/ctrl/alt) or a function
+		// key (#2622) — or a chord already in progress are eligible; plain
+		// letters, enter/tab/backspace/esc and the arrows always reach the
+		// editor. The chords the editor itself consumes in insert mode
+		// (ctrl+space, ctrl+w/u/h, the completion popup's keys, the kill
+		// chords claimed above) are non-typing too and still reach it, because
+		// the keymap has no Editor binding for them — no allow-list is kept
+		// here; a real clash is resolved by claiming the chord for the pane
+		// above this layer, as alt+enter and the kill keys do. Inert/unbound
+		// chords fall through unchanged.
 		if k, ok := keymap.FromKeyMsg(msg); ok {
-			eligible := !m.editorCapturing() ||
-				k.Has(keymap.ModCtrl) || k.Has(keymap.ModAlt) || k.Has(keymap.ModMeta) ||
-				m.keys.Pending()
+			eligible := !m.editorCapturing() || k.NonTyping() || m.keys.Pending()
 			if eligible {
 				if cmd, handled := m.resolveKeymap(k); handled {
 					return m, cmd

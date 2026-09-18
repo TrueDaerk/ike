@@ -3,7 +3,6 @@ package app
 import (
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -278,20 +277,13 @@ func telemetryProjectToken() string {
 	return telemetry.ProjectToken(wd)
 }
 
-// telemetryFnKey matches function-key bases (f1..f24).
-var telemetryFnKey = regexp.MustCompile(`^f\d+$`)
-
 // recordableUnbound reports whether an unresolved key press may be recorded
 // as an "unbound" event. The privacy line (#2235): plain typed characters —
 // including shifted ones — must never reach the log, so only chords carrying
 // a command modifier (ctrl/alt/cmd) or a function key qualify. Those are the
-// presses that look like an expected-but-missing keybind rather than typing.
-func recordableUnbound(k keymap.Key) bool {
-	if k.Mods&(keymap.ModMeta|keymap.ModCtrl|keymap.ModAlt) != 0 {
-		return true
-	}
-	return telemetryFnKey.MatchString(k.Base)
-}
+// presses that look like an expected-but-missing keybind rather than typing —
+// the same class keymap.Key.NonTyping names for insert-mode dispatch (#2622).
+func recordableUnbound(k keymap.Key) bool { return k.NonTyping() }
 
 // telemetryZone names a layout zone for the usage log.
 func telemetryZone(z layout.Zone) string {
