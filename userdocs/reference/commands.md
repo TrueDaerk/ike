@@ -103,7 +103,7 @@ bring their own.
 | Go to Tab 7 | `editor.tab.select7` | `alt+7` | — | everywhere |
 | Go to Tab 8 | `editor.tab.select8` | `alt+8` | — | everywhere |
 | Go to Tab 9 | `editor.tab.select9` | `alt+9` | — | everywhere |
-| Pin/Unpin Tab | `editor.tab.togglePin` | — | — | everywhere |
+| Pin/Unpin Tab | `editor.tab.togglePin` | `alt+shift+p` | — | everywhere |
 | ES: Run Query Buffer | `es.run` | — | — | `editor` pane |
 | Focus Explorer / Editor | `explorer.toggle` | `cmd+1` | — | everywhere |
 | Copy Path | `file.copyPath` | `cmd+shift+c` | — | everywhere |

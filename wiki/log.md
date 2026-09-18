@@ -1,5 +1,38 @@
 # Log
 
+## 2026-09-18 (The tab limit evicts by real recency, #2640)
+
+- **One slot was recycled, not the least recently used tab.** Opening files
+  through the `@` finder always replaced the same tab. Two causes: after a
+  session restore every tab's `lastUsed` was `0` — the stamp is a per-instance
+  counter and nothing persisted it — and the eviction skipped restored-but-
+  unread tabs entirely (#2177 leaves them without a loaded editor, so
+  `HasFile()` was false). What was left to pick from were the tabs the user had
+  just opened.
+- **Recency is stamped by every path that shows a tab.** `Instance.activate`
+  remains the funnel (clicks, `editor.tab.next`/`prev`, `TabSelect`, moves,
+  close-then-activate-neighbour, LSP/nav jumps, the restore's active tab); the
+  two paths that switch nothing — re-opening the file already active and
+  filling a pane's empty scratch tab — stamp through the new `TouchTab`.
+- **Deferred tabs are evictable** (`tabEvictable`): they name a file, hold no
+  edits and land in the reopen ring (#158) like any other closed tab.
+- **The order survives a restart.** `paneIdentity.recent` lists the used tabs
+  as indexes into `tabs`, most recently used first; restore replays it with
+  `SetTabRecency`. Only the order persists — the counter has no meaning across
+  runs. A pre-#2640 layout file restores as "never used", which is the LRU end.
+- **Tie-break** for tabs of equal recency: the tab furthest from the active
+  one, a left/right tie to the lower index. The active tab moves with every
+  open, so the ranking does too — deterministic, never a fixed slot.
+- **Pinned tabs no longer count toward the limit** (`LimitTabCount`): a pin
+  says the tab stays, so it must not spend a slot either. Limit 5 with three
+  pinned tabs now holds five unpinned tabs; the sixth unpinned open evicts the
+  LRU unpinned one. The batch closes (#2538) and the eviction keep skipping
+  pinned tabs; `cmd+w`, the `✕` and the context menu still close them.
+- **`editor.tab.togglePin` has a chord:** `alt+shift+p`, next to
+  `alt+shift+t`'s reopen-closed. `cmd+alt+p` was rejected — off macOS it folds
+  onto `ctrl+alt+p`, the perf HUD — and the `reasonMenu` ledger entry in
+  `cmd/ike/keybind_audit_test.go` is gone.
+
 ## 2026-09-18 (The HTTP request timeout is a setting, #2630)
 
 - **The 30 s deadline was a constant.** Seven of ten HTTP errors in a week of

@@ -143,10 +143,9 @@ pane.
 
 ### Tab limit (#742)
 
-`editor.tabs.limit` (default 5, 0/negative disables) caps the document tabs
-per pane, JetBrains-style: when a file open appends a tab beyond the limit,
-`enforceTabLimit` closes the **least recently used** eligible tab — recency is
-a per-instance activation counter stamped in `activate` (`Tab.lastUsed`).
+`editor.tabs.limit` (default 5, 0/negative disables) caps the **unpinned**
+document tabs per pane, JetBrains-style: when a file open appends a tab beyond
+the limit, `enforceTabLimit` closes the **least recently used** eligible tab.
 Exempt are the active tab, dirty tabs, scratch tabs (no path to reopen from),
 terminal tabs and **pinned tabs** (#1172); when nothing is eligible — e.g.
 every other tab is pinned — the limit is exceeded rather than data risked or a
@@ -154,13 +153,40 @@ pin overridden. Evicted tabs land in the reopen ring (#158), so
 `editor.tab.reopenClosed` restores them. Layout restore is not limited — a
 saved layout reopens as saved.
 
+- **Pinned tabs do not count** (#2640): `LimitTabCount` is the pane's document
+  tabs minus the pinned ones, so with limit 5 and three pinned tabs five
+  unpinned tabs still fit beside them and the sixth unpinned open evicts the
+  LRU unpinned tab. (`FileTabCount` still counts every document tab; only the
+  limit uses the reduced count.)
+- **Recency is stamped by every path that puts a tab on screen** (#2640):
+  `Tab.lastUsed` carries a per-instance counter written in `Instance.activate`
+  — the funnel for tab clicks, `editor.tab.next`/`prev`, `TabSelect`, tab
+  moves, tab closes activating a neighbour, LSP and nav jumps, CLI opens and
+  the restore's active tab. The two paths that do not switch tabs stamp
+  explicitly through `TouchTab`: re-opening the file that is already active
+  (palette `@`, explorer, `openPathAt`) and filling a pane's empty scratch tab.
+- **A restored-but-unread tab is evictable** (#2177 tabs): it names a file and
+  holds no edits, so the limit may close it and the reopen ring remembers it.
+  Excluding it was what forced the eviction onto the freshly opened tabs,
+  recycling one slot over and over.
+- **Recency survives a restart** (#2640): the layout identity stores `recent` —
+  the used tabs as indexes into `tabs`, most recently used first — and restore
+  replays it through `SetTabRecency`. Only the *order* persists, not the
+  counter; tabs missing from the list (a pre-#2640 layout file, or a tab never
+  used in that session) come back as "never used" and are evicted first.
+- **Tie-break** (#2640): equal recency goes to the tab **furthest from the
+  active tab**, a left/right tie to the lower index. The active tab moves with
+  every open, so the ranking moves with it — deterministic without ever
+  pinning the eviction to a fixed slot.
+
 ### Pinned tabs (#1172)
 
-`editor.tab.togglePin` ("Pin/Unpin Tab" in the palette; a state-aware
-"Pin Tab"/"Unpin Tab" entry in the tab context menu) flips a per-tab pin
+`editor.tab.togglePin` (`alt+shift+p`; "Pin/Unpin Tab" in the palette and a
+state-aware "Pin Tab"/"Unpin Tab" entry in the tab context menu) flips a
+per-tab pin
 (`pane.Tab.pinned`, accessors `TabPinned`/`SetTabPinned`/`ToggleTabPin`).
-A pinned tab is exempt from the tab-limit LRU eviction and from every
-**batch close** (#2538: Close Others / Left / Right / Unmodified / All); a
+A pinned tab does not count toward the tab limit and is exempt from its LRU
+eviction (#2640) and from every **batch close** (#2538: Close Others / Left / Right / Unmodified / All); a
 notification counts the pinned tabs a batch skipped. Manual closes — `✕`,
 middle-click, `editor.closeTab` — stay allowed, so pinning holds a tab through
 the batch commands without locking it. The bar
@@ -169,7 +195,10 @@ is part of the label string, so `tabWindow`/`tabHit` measure it for free and
 the mirrored geometry needs no special case. Pins persist with the layout
 identity (`pinned` — indexes into `tabs`, the `active` convention) and
 round-trip restarts; a dragged-out pinned tab keeps its pin in the destination
-pane (#305 center merge and edge splits alike).
+pane (#305 center merge and edge splits alike). The chord is `alt+shift+p`
+(#2640) — next to `alt+shift+t`'s reopen-closed in the editor-tab family;
+`cmd+alt+p` was rejected because its Cmd→Ctrl fold lands on the perf HUD's
+`ctrl+alt+p` off macOS.
 
 ## Closing peels tabs before the pane
 

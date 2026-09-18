@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"ike/internal/layout"
@@ -42,7 +43,14 @@ type paneIdentity struct {
 	Tabs   []string `json:"tabs,omitempty"`
 	Tools  []string `json:"tools,omitempty"`  // editor panes: tool sessions hosted as tabs (#836), restarted on restore
 	Pinned []int    `json:"pinned,omitempty"` // editor panes: indexes into Tabs of pinned tabs (#1172)
-	Active int      `json:"active,omitempty"`
+	// Recent holds the used tabs as indexes into Tabs, most recently used
+	// first (#2640) — the relative recency the tab-limit LRU eviction orders
+	// by. Only the order is persisted, not the per-pane counter behind it;
+	// tabs missing from the list restore as "never used" and are evicted
+	// first. Older builds ignore the key and restore without recency, which
+	// is what made the eviction recycle one fixed slot.
+	Recent []int `json:"recent,omitempty"`
+	Active int   `json:"active,omitempty"`
 	// CTabs holds a tab host's content tabs (#1778) — previews, diffs, data
 	// viewers and the like living in the tab strip — each with the identity
 	// its dedicated-pane persistence would carry plus its position in the
@@ -70,6 +78,31 @@ type contentTabIdentity struct {
 	Rev2   string `json:"rev2,omitempty"`
 	Index  int    `json:"index"`
 	Pinned bool   `json:"pinned,omitempty"`
+}
+
+// tabRecency pairs a persisted tab (its index in paneIdentity.Tabs) with the
+// instance's activation stamp, the intermediate the save uses to write
+// paneIdentity.Recent (#2640).
+type tabRecency struct {
+	tab  int
+	used int
+}
+
+// recentTabOrder turns activation stamps into the persisted most-recently-used
+// order (#2640): the stamps themselves are per-pane counters with no meaning
+// across a restart, so only their order is written. Equal stamps — the same
+// tab list never having been used apart — keep tab order, so the output is
+// stable.
+func recentTabOrder(rec []tabRecency) []int {
+	if len(rec) == 0 {
+		return nil
+	}
+	sort.SliceStable(rec, func(a, b int) bool { return rec[a].used > rec[b].used })
+	out := make([]int, 0, len(rec))
+	for _, r := range rec {
+		out = append(out, r.tab)
+	}
+	return out
 }
 
 // contentIdentity is the persisted identity of viewer content — shared by the
@@ -447,6 +480,7 @@ func encodeLayoutState(root layout.Node, reg *pane.Registry) ([]byte, bool) {
 			// dedicated tool panes they remember their name and restart the
 			// configured program on restore. The Run tool (#1905) is session
 			// state either way and restores as nothing.
+			var recency []tabRecency
 			for i := 0; i < inst.TabCount(); i++ {
 				if tt := inst.TabTerminal(i); tt != nil {
 					if tool := tt.Tool(); tool != "" && tool != runToolName {
@@ -498,8 +532,15 @@ func encodeLayoutState(root layout.Node, reg *pane.Registry) ([]byte, bool) {
 					// same convention Active uses; older builds ignore the key.
 					id.Pinned = append(id.Pinned, len(id.Tabs))
 				}
+				if used := inst.TabLastUsed(i); used > 0 {
+					// Recency (#2640) rides along in the same index space, so
+					// a restart keeps knowing which tab the user last worked
+					// in and which one the limit may drop.
+					recency = append(recency, tabRecency{tab: len(id.Tabs), used: used})
+				}
 				id.Tabs = append(id.Tabs, path)
 			}
+			id.Recent = recentTabOrder(recency)
 			if toolTabHost(inst) {
 				// A pane holding nothing but tool tabs persists as "tools"
 				// (#1989), so nothing mistakes it for an editor slot; restore

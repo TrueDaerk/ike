@@ -245,6 +245,7 @@ Active when an editor pane has focus.
 | Paste | `cmd+v` | `ctrl+v` | `editor.paste` |
 | Paste from history | `cmd+shift+v` | `ctrl+shift+v` | `editor.pasteFromHistory` |
 | Peek definition | `cmd+y` | `ctrl+y` | `lsp.peekDefinition` |
+| Pin/unpin tab | `alt+shift+p` | `alt+shift+p` | `editor.tab.togglePin` |
 | Previous bookmark | `ctrl+shift+f11` | `ctrl+shift+f11` | `bookmark.previous` |
 | Previous diagnostic | `shift+f2` | `shift+f2` | `lsp.prevDiagnostic` |
 | Quick documentation | `ctrl+q` | `ctrl+q` | `lsp.hover` |

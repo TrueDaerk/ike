@@ -233,7 +233,7 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "editor.rainbow_indent_guides", Type: Bool, Title: "Rainbow indent guides", Description: "Color each indent guide by its depth with the rainbow palette, so nesting reads in files that have no brackets (YAML, Python); only in effect while indent guides are drawn", Scope: config.UserScope},
 			{Key: "editor.breadcrumbs", Type: Bool, Title: "Breadcrumbs", Description: "Show the enclosing symbol path in a row under the editor's tab bar; segments are clickable", Scope: config.UserScope},
 			{Key: "editor.tabs.always_show", Type: Bool, Title: "Always show tab bar", Description: "Render the pane's tab bar even with a single tab", Scope: config.UserScope},
-			{Key: "editor.tabs.limit", Type: Int, Title: "Tab limit", Description: "Max open editor tabs per pane; opening beyond it closes the least recently used non-dirty tab (0 disables)", Scope: config.UserScope},
+			{Key: "editor.tabs.limit", Type: Int, Title: "Tab limit", Description: "Max open unpinned editor tabs per pane; opening beyond it closes the least recently used non-dirty unpinned tab (pinned tabs never count and are never closed; 0 disables)", Scope: config.UserScope},
 		}},
 		{Title: "Conceal & Hints", Description: "The conceal and inline-hint families: what the editor draws in place of — or after — the raw bytes. These are the config defaults; a per-view toggle from the editor (Toggle Timestamp Decoding, …) overrides them for that buffer only. The file rules below gate every family by path.", Entries: []Entry{
 			// Rendering layers: whole-file readable renderings.

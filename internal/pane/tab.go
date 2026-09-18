@@ -24,7 +24,10 @@ type Tab struct {
 	// itself uses. It never nests an editor or explorer kind.
 	inst *Instance
 	// lastUsed is the instance's use-sequence stamp of the last activation,
-	// the recency the tab-limit eviction orders by (#742).
+	// the recency the tab-limit eviction orders by (#742). It is a rank, not
+	// a timestamp: only the order between one pane's stamps is meaningful,
+	// which is why the session persists the order rather than the counter
+	// (#2640). 0 means "never used in this session".
 	lastUsed int
 	// pinned protects the tab from the tab-limit LRU eviction and from
 	// "Close Others" (#1172); manual closes stay allowed. It persists with

@@ -1342,6 +1342,7 @@ JetBrains is:
 | `editor.tab.select7` | `alt+7` | fragile | `palette` | live via palette |
 | `editor.tab.select8` | `alt+8` | fragile | `palette` | live via palette |
 | `editor.tab.select9` | `alt+9` | fragile | `palette` | live via palette |
+| `editor.tab.togglePin` | `alt+shift+p` | fragile | `palette / tab context menu` | live via palette / tab context menu |
 | `editor.undo` | `cmd+z` | fragile | `ctrl+z` | live via ctrl+z |
 | `editor.unescapeSelection` | `cmd+alt+shift+u` | fragile | `palette` | live via palette |
 | `editor.write` | `cmd+s` | fragile | `ctrl+s` | live via ctrl+s |

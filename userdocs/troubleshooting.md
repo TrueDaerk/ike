@@ -72,10 +72,12 @@ keeps for itself.
 
 ## Tabs are closing on their own
 
-Designed behaviour. `editor.tabs.limit` (default `5`) caps document tabs per
-pane and closes the least recently used one when you open a file beyond it.
-Unsaved, pinned, active, scratch and terminal tabs are never evicted, and
-++cmd+shift+t++ reopens what was.
+Designed behaviour. `editor.tabs.limit` (default `5`) caps the *unpinned*
+document tabs per pane and closes the least recently used one when you open a
+file beyond it. Unsaved, pinned, active, scratch and terminal tabs are never
+evicted — pinned tabs do not even count toward the limit — and
+++cmd+shift+t++ reopens what was. Pin the tabs you want to keep with
+++alt+shift+p++.
 
 Set `editor.tabs.limit = 0` to switch the cap off.
 

@@ -54,15 +54,18 @@ func TestTabLimitEvictionSkipsPinned(t *testing.T) {
 	a := writeTemp(t, dir, "a.txt", "a\n")
 	b := writeTemp(t, dir, "b.txt", "b\n")
 	c := writeTemp(t, dir, "c.txt", "c\n")
+	d := writeTemp(t, dir, "d.txt", "d\n")
 	m := newSized()
 	withTabLimit(t, 2)
 	m = openApp2(t, m, a)
 	m = dispatch(t, m, TabTogglePinMsg{}) // pin a, the LRU-to-be
-	m = openApp2(t, m, b, c)
+	// The pin takes a out of the limit's count (#2640), so b and c fill the
+	// two slots beside it; d is the open that pushes past the limit.
+	m = openApp2(t, m, b, c, d)
 
 	inst := m.activeWS().Panes.FocusedInstance()
-	if inst.TabCount() != 2 {
-		t.Fatalf("tabs = %v, want 2 after eviction", tabPaths(inst))
+	if inst.TabCount() != 3 {
+		t.Fatalf("tabs = %v, want the pinned tab plus two unpinned ones", tabPaths(inst))
 	}
 	for _, p := range tabPaths(inst) {
 		if p == b {

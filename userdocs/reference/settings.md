@@ -62,7 +62,7 @@ secrets — are documented together, with screenshots, in
 | Rainbow indent guides | `editor.rainbow_indent_guides` | boolean | `true` | user | Color each indent guide by its depth with the rainbow palette, so nesting reads in files that have no brackets (YAML, Python); only in effect while indent guides are drawn |
 | Breadcrumbs | `editor.breadcrumbs` | boolean | `true` | user | Show the enclosing symbol path in a row under the editor's tab bar; segments are clickable |
 | Always show tab bar | `editor.tabs.always_show` | boolean | `false` | user | Render the pane's tab bar even with a single tab |
-| Tab limit | `editor.tabs.limit` | integer | `5` | user | Max open editor tabs per pane; opening beyond it closes the least recently used non-dirty tab (0 disables) |
+| Tab limit | `editor.tabs.limit` | integer | `5` | user | Max open unpinned editor tabs per pane; opening beyond it closes the least recently used non-dirty unpinned tab (pinned tabs never count and are never closed; 0 disables) |
 
 ### Typing Assistance
 
