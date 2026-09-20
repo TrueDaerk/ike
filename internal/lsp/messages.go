@@ -195,6 +195,18 @@ type CompletionItem struct {
 	// Doc is the item's inline documentation, flattened to plain text; empty
 	// until (and unless) a resolve fills it in.
 	Doc string
+	// ImportModule is the module an auto-import would pull the symbol from
+	// (#2653): the `labelDetails.description` pyright and vtsls fill in.
+	// Empty for servers that only describe the module in free-text detail;
+	// the editor never parses Detail for it.
+	ImportModule string
+	// Variants are the auto-import alternatives folded behind this entry
+	// (#2653): the editor groups items of one source sharing label, insert
+	// text and kind but importable from several modules, shows the canonical
+	// one and one trailing "+N modules" entry whose Variants these are.
+	// Accepting the folded entry opens a picker over them. Never set by the
+	// bridge.
+	Variants []CompletionItem
 }
 
 // CompletionResolveMsg delivers a completionItem/resolve result (#847) for the
@@ -859,16 +871,17 @@ func ConvertCompletion(items []protocol.CompletionItem) []CompletionItem {
 			insert = it.Label
 		}
 		out = append(out, CompletionItem{
-			Label:      it.Label,
-			Detail:     completionDetail(it),
-			InsertText: insert,
-			Kind:       it.Kind,
-			SortText:   it.SortText,
-			FilterText: it.FilterText,
-			IsSnippet:  it.InsertTextFormat == protocol.InsertSnippet,
-			ID:         len(out),
-			Doc:        DocText(it.Documentation),
-			Source:     SourceLSP,
+			Label:        it.Label,
+			Detail:       completionDetail(it),
+			InsertText:   insert,
+			Kind:         it.Kind,
+			SortText:     it.SortText,
+			FilterText:   it.FilterText,
+			IsSnippet:    it.InsertTextFormat == protocol.InsertSnippet,
+			ID:           len(out),
+			Doc:          DocText(it.Documentation),
+			Source:       SourceLSP,
+			ImportModule: completionImportModule(it),
 		})
 	}
 	return out
@@ -893,6 +906,17 @@ func completionDetail(it protocol.CompletionItem) string {
 		parts = append(parts, s)
 	}
 	return strings.Join(parts, " ")
+}
+
+// completionImportModule is the module an auto-import item comes from
+// (#2653): labelDetails.description, which pyright and vtsls fill with the
+// module path (`app.util`, `./util`). The classic free-text detail is not
+// parsed — a server that names the module only there gets no module.
+func completionImportModule(it protocol.CompletionItem) string {
+	if ld := it.LabelDetails; ld != nil {
+		return strings.TrimSpace(ld.Description)
+	}
+	return ""
 }
 
 // DocText flattens a completion item's `string | MarkupContent`

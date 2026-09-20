@@ -208,7 +208,19 @@ previous contribution and the merged list is rebuilt:
   echo of the same identifier); within one source, items sharing the insert
   text but differing in detail all stay (#2610: the same symbol importable
   from two modules is two auto-import candidates the user picks between by
-  the module shown).
+  the module shown),
+- **auto-import variants collapse** (#2653, `foldImportVariants`): items of
+  one source with equal label, insert text and kind whose `ImportModule`
+  (the `labelDetails.description` the bridge carries as its own field)
+  differs form one group. The **canonical** item — module equal to the
+  label (`logging` from `logging`), else the shortest module path (fewest
+  `.`/`/` segments, then shortest string), else server order — stays a
+  normal entry; the rest fold into **one** trailing entry rendered
+  `<label>   +N modules` directly behind it, carrying them in `Variants`.
+  A group of exactly two skips the folded entry and shows both, canonical
+  first (two rows read faster than a row plus a picker). Items without an
+  `ImportModule` — servers naming the module only in free-text detail —
+  never group; free text is not parsed.
 
 A batch for a *different* position replaces the popup outright; an empty
 merge batch clears only its source's contribution (the popup closes when
@@ -217,6 +229,16 @@ clobber another source's popup. The **selection is stable across merges**:
 the selected item is re-located by identity (source + label + insert text)
 after each rebuild, so a late-arriving batch never yanks the highlight while
 the user is arrowing.
+
+The folded entry has its own selection identity (`completionItemKey`
+appends a marker) and never resolves — it inserts nothing. **Accepting it
+opens the picker**: the popup itself switches to a variants mode
+(`completionState.variants`), listing the variants by module under the same
+filter, ranking, keys and rendering as the list, with its own hint row;
+accepting a variant runs the ordinary accept (resolve cache,
+`additionalTextEdits`, pending late import), Esc returns to the list on the
+folded entry. A batch merge while the picker is open drops back to the
+merged list — its items may belong to a superseded reply.
 
 Hump filtering (#2650, see "Unified ranking") runs on the merged list; `completionItem/resolve`
 (#847) and its documentation/auto-import merge apply to `SourceLSP` items

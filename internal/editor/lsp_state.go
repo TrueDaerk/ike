@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"fmt"
 	"image/color"
 	"sort"
 	"strconv"
@@ -54,6 +55,13 @@ type completionState struct {
 	// seq is the server reply the SourceLSP batch came from (#2610); resolve
 	// replies carry it back so one for a superseded reply is ignored.
 	seq int
+	// variants, when set, turns the popup into the auto-import picker
+	// (#2653): the list shows these items — the module alternatives folded
+	// behind the "+N modules" entry the user accepted — instead of items,
+	// and accepting one applies it like a direct accept. variantsFrom is the
+	// folded entry's identity, re-selected when Esc leaves the picker.
+	variants     []ilsp.CompletionItem
+	variantsFrom string
 }
 
 // pendingImport records a server item accepted before its resolve answered
@@ -488,12 +496,109 @@ func (m *Model) rebuildCompletion() {
 			items = append(items, it)
 		}
 	}
-	m.comp.items = items
+	m.comp.items = foldImportVariants(items)
+	// A rebuild invalidates an open picker: its items may belong to a
+	// superseded reply. The popup falls back to the merged list.
+	m.comp.variants, m.comp.variantsFrom = nil, ""
+}
+
+// foldImportVariants collapses auto-import variants of one symbol (#2653).
+// Items of one source that share label, insert text and kind but name
+// different import modules — pyright answering `loggi` with `logging` from
+// the stdlib and from every project module re-exporting it — are one group.
+// Its canonical item (see importModuleLess: module equal to the label, else
+// the shortest module path, else server order) stays a normal entry; the
+// others fold into one trailing "+N modules" entry right behind it, whose
+// Variants the picker lists. A group of exactly two skips the folded entry
+// and shows both, canonical first: two rows read faster than a row plus a
+// picker. Items without an ImportModule (servers that describe the module
+// only in free-text detail) never group and keep today's behaviour.
+func foldImportVariants(items []ilsp.CompletionItem) []ilsp.CompletionItem {
+	type groupKey struct {
+		source, label, insert string
+		kind                  int
+	}
+	key := func(it ilsp.CompletionItem) groupKey {
+		return groupKey{it.Source, it.Label, it.InsertText, it.Kind}
+	}
+	groups := map[groupKey][]int{}
+	for i, it := range items {
+		if it.ImportModule == "" {
+			continue
+		}
+		groups[key(it)] = append(groups[key(it)], i)
+	}
+	folded := false
+	for _, idx := range groups {
+		if len(idx) > 1 {
+			folded = true
+			break
+		}
+	}
+	if !folded {
+		return items
+	}
+	out := make([]ilsp.CompletionItem, 0, len(items))
+	dropped := map[int]bool{}
+	for i, it := range items {
+		if dropped[i] {
+			continue
+		}
+		idx := groups[key(it)]
+		if it.ImportModule == "" || len(idx) < 2 {
+			out = append(out, it)
+			continue
+		}
+		members := make([]ilsp.CompletionItem, 0, len(idx))
+		for _, j := range idx {
+			dropped[j] = true
+			members = append(members, items[j])
+		}
+		sort.SliceStable(members, func(a, b int) bool { return importModuleLess(members[a], members[b]) })
+		if len(members) == 2 {
+			out = append(out, members...)
+			continue
+		}
+		canonical, rest := members[0], members[1:]
+		entry := canonical
+		entry.Detail = fmt.Sprintf("+%d modules", len(rest))
+		entry.Doc = ""
+		entry.ImportModule = ""
+		entry.AdditionalEdits = nil
+		entry.Variants = rest
+		out = append(out, canonical, entry)
+	}
+	return out
+}
+
+// importModuleLess orders one symbol's auto-import variants (#2653): the
+// module spelled exactly like the label first (`logging` for `logging` — the
+// stdlib module itself, not a re-export), then the shortest module path by
+// segment count (`.` and `/` separated), then by string length; equal keys
+// keep server order under the stable sort.
+func importModuleLess(a, b ilsp.CompletionItem) bool {
+	if ea, eb := a.ImportModule == a.Label, b.ImportModule == b.Label; ea != eb {
+		return ea
+	}
+	if sa, sb := moduleSegments(a.ImportModule), moduleSegments(b.ImportModule); sa != sb {
+		return sa < sb
+	}
+	return len(a.ImportModule) < len(b.ImportModule)
+}
+
+// moduleSegments counts a module path's segments: `app.util` and `./util`
+// are two, `logging` is one.
+func moduleSegments(module string) int {
+	return 1 + strings.Count(module, ".") + strings.Count(module, "/")
 }
 
 // completionItemKey identifies an item across merges for selection stability.
 func completionItemKey(it ilsp.CompletionItem) string {
-	return it.Source + "\x00" + it.Label + "\x00" + it.InsertText
+	k := it.Source + "\x00" + it.Label + "\x00" + it.InsertText
+	if len(it.Variants) > 0 {
+		k += "\x00+variants" // the folded entry shares everything else with its canonical item (#2653)
+	}
+	return k
 }
 
 // selectedCompletionKey returns the selected item's identity, if any.
@@ -537,8 +642,8 @@ func (m *Model) requestCompletionResolve() {
 		sel = 0
 	}
 	it := items[sel]
-	if it.Source != ilsp.SourceLSP {
-		return // only server items resolve (#851)
+	if it.Source != ilsp.SourceLSP || len(it.Variants) > 0 {
+		return // only server items resolve (#851); the folded entry inserts nothing itself (#2653)
 	}
 	if _, ok := m.comp.resolved[it.ID]; ok {
 		return
@@ -649,7 +754,11 @@ func (m Model) filteredCompletion() []ilsp.CompletionItem {
 		key  completionRank
 	}
 	var matched []ranked
-	for _, it := range m.comp.items {
+	base := m.comp.items
+	if m.comp.variants != nil {
+		base = m.comp.variants // the auto-import picker (#2653) lists the folded variants instead
+	}
+	for _, it := range base {
 		text := completionFilterText(it)
 		key := completionRank{tier: tierHump, sortKey: completionSortKey(it)}
 		if prefix != "" {
@@ -805,6 +914,16 @@ func (m *Model) completionAccept() {
 		m.comp.sel = 0
 	}
 	item := items[m.comp.sel]
+	// The folded "+N modules" entry (#2653) inserts nothing: it turns the
+	// popup into the picker over its variants, and accepting one of those
+	// comes back through here as a plain item.
+	if len(item.Variants) > 0 {
+		m.comp.variants = item.Variants
+		m.comp.variantsFrom = completionItemKey(item)
+		m.comp.sel = 0
+		m.requestCompletionResolve()
+		return
+	}
 	// A resolve may have delivered late additionalTextEdits (#847) — merge
 	// them in unless the item already carried its own. Resolve results only
 	// exist for server items (#851).
@@ -1051,8 +1170,18 @@ func isIdentRune(r rune) bool {
 	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
 }
 
-// completionCancel hides the popup without inserting.
-func (m *Model) completionCancel() { m.comp = nil }
+// completionCancel hides the popup without inserting. Inside the
+// auto-import picker (#2653) Esc only returns to the list, on the folded
+// entry it came from.
+func (m *Model) completionCancel() {
+	if m.comp != nil && m.comp.variants != nil {
+		from := m.comp.variantsFrom
+		m.comp.variants, m.comp.variantsFrom = nil, ""
+		m.restoreCompletionSelection(from)
+		return
+	}
+	m.comp = nil
+}
 
 // CompletionView renders the popup box (selected row highlighted). The app
 // composites it at the anchor cell.
@@ -1076,7 +1205,11 @@ func (m Model) CompletionView() string {
 		endIdx = len(items)
 	}
 
-	width := lipgloss.Width(completionHint) // the hint row must stay readable (#308)
+	hintText := completionHint
+	if m.comp.variants != nil {
+		hintText = completionPickHint
+	}
+	width := lipgloss.Width(hintText) // the hint row must stay readable (#308)
 	for _, it := range items[start:endIdx] {
 		if l := lipgloss.Width(completionLabel(it)); l > width {
 			width = l
@@ -1100,7 +1233,7 @@ func (m Model) CompletionView() string {
 	// The accept affordance stays visible (#308): the signature popup looks
 	// similar but is informational, so the actionable list says its keys.
 	hint := lipgloss.NewStyle().Background(m.theme().Panel).Foreground(m.theme().Border)
-	rows = append(rows, hint.Width(width).Render(truncate(completionHint, width)))
+	rows = append(rows, hint.Width(width).Render(truncate(hintText, width)))
 	// The selected item's documentation — inline or resolved (#847) — shows
 	// dimmed below the hint, capped at a few lines.
 	if doc := m.selectedCompletionDoc(items[sel]); doc != "" {
@@ -1166,7 +1299,12 @@ func completionDocLines(doc string, max int) []string {
 }
 
 // completionLabel renders one item's display text (label + optional detail).
+// The folded auto-import entry (#2653) sets its "+N modules" count apart
+// from the label with a wider gap, so it reads as a count, not a module.
 func completionLabel(it ilsp.CompletionItem) string {
+	if len(it.Variants) > 0 {
+		return it.Label + "   " + it.Detail
+	}
 	if it.Detail != "" {
 		return it.Label + " " + it.Detail
 	}
@@ -1186,6 +1324,9 @@ func truncate(s string, w int) string {
 
 // completionHint is the completion popup's keys row (#308).
 const completionHint = "↹/⏎ accept · esc close"
+
+// completionPickHint is the keys row of the auto-import picker (#2653).
+const completionPickHint = "module: ↹/⏎ accept · esc back"
 
 // --- signature popup ---
 

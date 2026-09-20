@@ -56,3 +56,30 @@ func TestCompletionItemDataRoundTrips(t *testing.T) {
 		t.Fatalf("data-less item encoded as %s", out)
 	}
 }
+
+// TestConvertCompletionImportModule guards #2653: the auto-import module is
+// carried as its own field, from labelDetails.description as pyright
+// (`app.util`) and vtsls (`./util`, or a package name) shape it; a
+// description-less item, and one naming the module only in free-text
+// detail, carry none.
+func TestConvertCompletionImportModule(t *testing.T) {
+	items := ConvertCompletion([]protocol.CompletionItem{
+		{Label: "logging", Detail: "Auto-import", LabelDetails: &protocol.CompletionItemLabelDetails{Description: " app.util "}},
+		{Label: "readFile", LabelDetails: &protocol.CompletionItemLabelDetails{Detail: "(path: string)", Description: "./util"}},
+		{Label: "useState", LabelDetails: &protocol.CompletionItemLabelDetails{Description: "react"}},
+		{Label: "run", LabelDetails: &protocol.CompletionItemLabelDetails{Detail: "(cmd: str)"}},
+		{Label: "ToUpper", Detail: "strings"},
+	})
+	want := []string{"app.util", "./util", "react", "", ""}
+	for i, w := range want {
+		if items[i].ImportModule != w {
+			t.Errorf("item %d ImportModule = %q, want %q", i, items[i].ImportModule, w)
+		}
+		if len(items[i].Variants) != 0 {
+			t.Errorf("item %d: the bridge never folds variants", i)
+		}
+	}
+	if items[1].Detail != "(path: string) ./util" {
+		t.Errorf("the detail column still carries the module: %q", items[1].Detail)
+	}
+}
