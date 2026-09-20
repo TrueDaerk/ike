@@ -1,5 +1,19 @@
 # Log
 
+## 2026-09-20 (Completion ranks by match tier, #2651)
+
+- **An exact prefix lost to a scattered CamelCase hit.** The single additive
+  score (`fuzzy·4 + priority + locality + MRU`, #854) let `DumpAllTablesAgain`
+  outrank `DataAccessObject` for `data`, and the label `dao` sat below it for
+  `dao`; the server's `sortText` only survived as the stable-sort tie-break.
+- **Match tiers** now come first and never mix: exact label, exact ignoring
+  case, case-exact prefix, prefix under the case rule, hump match. Inside a
+  tier: MRU, locality, shorter filter text, source priority, `sortText`, and
+  the fuzzy score last (`completionRank`, a comparator over a struct).
+- An empty prefix keeps its shape (recent and near items first, then server
+  order); the `fuzzyWeight` / `priorityScale` / `localityStep` constants are
+  gone.
+
 ## 2026-09-20 (Hump matcher for the completion filter, #2650)
 
 - **`my` offered `empty` and `summary`, `log` offered `dialogBox`.** The popup
