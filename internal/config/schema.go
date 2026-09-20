@@ -57,6 +57,8 @@ type Config struct {
 	Issues Issues `toml:"issues"`
 	// Debug holds debugger behaviour (0360, #823).
 	Debug Debug `toml:"debug"`
+	// Completion holds the completion popup's filter behaviour (#2650).
+	Completion Completion `toml:"completion"`
 	// Tools holds user-defined TUI tool panes (#741).
 	Tools Tools `toml:"tools"`
 	// Elasticsearch holds the ES console's cluster endpoints (#1927).
@@ -390,6 +392,18 @@ type ESEndpoint struct {
 	Username string `toml:"username"`
 	Password string `toml:"password"`
 	APIKey   string `toml:"api_key"`
+}
+
+// Completion holds the completion popup's filter settings (#2650). The popup
+// and the local word/symbol sources filter candidates with the JetBrains-style
+// hump matcher (fuzzy.MatchHumps): every matched rune either continues the
+// previous match or starts a word segment. CaseSensitivity is the case rule the
+// typed prefix is held to: "first_letter" (the default, IntelliJ's rule) lets a
+// lowercase rune match either case while an uppercase rune only matches an
+// uppercase one, so "DataA" cannot match "database"; "none" folds every rune;
+// "all" compares every rune exactly.
+type Completion struct {
+	CaseSensitivity string `toml:"case_sensitivity"`
 }
 
 // Debug holds debugger behaviour (0360). PHP carries the web/request listen

@@ -388,6 +388,7 @@ func defaults() *Config {
 			DefaultTab:  "issues",
 			DefaultSort: "relevance",
 		},
+		Completion: Completion{CaseSensitivity: "first_letter"}, // IntelliJ's rule (#2650)
 		Debug: Debug{
 			InlineValues: true,   // paused locals annotate their lines (#1914)
 			SessionEnd:   "keep", // the finished area stays reviewable (#689, #2190)

@@ -25,6 +25,7 @@ import (
 	"ike/internal/editor/search"
 	"ike/internal/editor/viewport"
 	"ike/internal/editorconfig"
+	"ike/internal/fuzzy"
 	"ike/internal/highlight"
 	"ike/internal/histories"
 	"ike/internal/host"
@@ -755,8 +756,11 @@ type Model struct {
 	// (#1912); the cached semIndex stays, so flipping the toggle back resumes
 	// instantly — the same rendering-only gate the inlay hints use.
 	semanticTokens bool
-	stickyScroll   bool
-	stickyDepth    int
+	// compCase is the case rule the completion hump filter applies (#2650,
+	// completion.case_sensitivity); the local sources read the same key.
+	compCase     fuzzy.Case
+	stickyScroll bool
+	stickyDepth  int
 	// stickySymbols gates the LSP fallback source for sticky scroll
 	// (#2167, editor.sticky_scroll_symbols): symScopes below.
 	stickySymbols bool
@@ -979,6 +983,9 @@ func (m *Model) applyConfig() {
 	m.showInlayHints = boolOr(m.cfg, "lsp.inlay_hints", m.showInlayHints)
 	m.showCodeLens = boolOr(m.cfg, "lsp.code_lens", m.showCodeLens)
 	m.semanticTokens = boolOr(m.cfg, "lsp.semantic_tokens", m.semanticTokens)
+	if v, ok := m.cfg.Get("completion.case_sensitivity"); ok {
+		m.compCase = fuzzy.ParseCase(v)
+	}
 	m.lspFolding = boolOr(m.cfg, "lsp.folding", m.lspFolding)
 	m.insertFinalNewline = boolOr(m.cfg, "editor.insert_final_newline", m.insertFinalNewline)
 	m.view.LineNumbers = boolOr(m.cfg, "editor.line_numbers", m.view.LineNumbers)

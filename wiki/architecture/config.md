@@ -97,6 +97,9 @@ Sections and their default-bearing slots (`schema.go`):
   `signature_auto` (default `true`, #523), `completion_auto` (default `true`,
   #527), `completion_delay_ms` (default `100`, clamped 0–2000, #2541) + an
   empty `[lsp.servers]` slot (Roadmap 0100).
+- `[completion]` — `case_sensitivity` (`none` / `first_letter` default /
+  `all`, #2650): the case rule of the completion popup's hump filter, shared
+  by the word and symbol sources.
 - `[theme]` — `name`, `auto`, `light`, `dark` (the selector and the auto
   light/dark pair, #1480; palettes owned by Roadmap 0110).
 - `[project]` — recent-projects history as `[[project.history]]` entries

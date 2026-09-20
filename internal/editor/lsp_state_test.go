@@ -186,14 +186,14 @@ func TestCompletionOpenFilterAccept(t *testing.T) {
 	if !m.CompletionOpen() {
 		t.Fatal("completion popup should be open")
 	}
-	// Type "Pr": fuzzy matching keeps all three ("Pr" is a subsequence of
-	// Sprintf too, #845), but the boundary-anchored Println/Printf rank first.
+	// Type "Pr": the hump filter (#2650) keeps Println and Printf; Sprintf
+	// drops out because its "p" is neither a segment start nor uppercase.
 	m = send(m, key('P'), key('r'))
-	if got := len(m.filteredCompletion()); got != 3 {
-		t.Fatalf("filtered = %d, want 3 (Println, Printf, Sprintf)", got)
+	if got := len(m.filteredCompletion()); got != 2 {
+		t.Fatalf("filtered = %d, want 2 (Println, Printf)", got)
 	}
 	// Equal fuzzy scores keep the sortText base order (label fallback), so
-	// "Printf" sorts before "Println"; the scattered Sprintf ranks last.
+	// "Printf" sorts before "Println".
 	if got := m.filteredCompletion()[0].Label; got != "Printf" {
 		t.Fatalf("top item = %q, want Printf (start-anchored match outranks scattered)", got)
 	}
@@ -221,8 +221,8 @@ func TestCompletionFuzzyCamelCase(t *testing.T) {
 		{Label: "getCount", InsertText: "getCount"},
 		{Label: "do_request", InsertText: "do_request"},
 	}})
-	// Case-insensitive fuzzy also lets "gCN" hit getCount's mid-word n, but
-	// the hump-anchored getClassName must rank first; do_request drops out.
+	// The hump filter (#2650) rejects getCount ("N" is neither a segment start
+	// nor a continuation); getClassName survives and do_request drops out.
 	m = send(m, key('g'), key('C'), key('N'))
 	got := labels(m.filteredCompletion())
 	if len(got) == 0 || got[0] != "getClassName" {

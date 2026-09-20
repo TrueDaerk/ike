@@ -622,8 +622,10 @@ func (m Model) completionPrefix() (string, bool) {
 //
 //	score = fuzzy·4 + priority + locality + MRU
 //
-// Fuzzy quality (#845 — CamelCase/boundary bonuses against filterText)
-// dominates; the source priority (batch-level, scaled down), the locality
+// Only hump matches survive (#2650 — fuzzy.MatchHumps under
+// completion.case_sensitivity: every typed rune continues the previous match
+// or starts a word segment of filterText, so "my" no longer offers "empty");
+// among them match quality (#845 — CamelCase/boundary bonuses) dominates; the source priority (batch-level, scaled down), the locality
 // tier (nearer origin wins) and the recently-accepted boost (mru store)
 // break within-quality ties, and the stable sort over the merged base order
 // (#851) makes everything deterministic. An empty prefix ranks the whole
@@ -645,7 +647,7 @@ func (m Model) filteredCompletion() []ilsp.CompletionItem {
 	for _, it := range m.comp.items {
 		score := 0
 		if prefix != "" {
-			r, ok := fuzzy.Match(prefix, completionFilterText(it))
+			r, ok := fuzzy.MatchHumpsCase(prefix, completionFilterText(it), m.compCase)
 			if !ok {
 				continue
 			}

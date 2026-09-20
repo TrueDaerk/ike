@@ -877,6 +877,13 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "tools.layout.assign", Message: "assignments have no effect without tools.layout.template"})
 	}
 
+	switch c.Completion.CaseSensitivity {
+	case "none", "first_letter", "all":
+	default:
+		diags = append(diags, Diagnostic{Field: "completion.case_sensitivity", Message: fmt.Sprintf("unknown case_sensitivity %q, using \"first_letter\"", c.Completion.CaseSensitivity)})
+		c.Completion.CaseSensitivity = "first_letter"
+	}
+
 	if !logLevels[c.LSP.LogLevel] {
 		diags = append(diags, Diagnostic{Field: "lsp.log_level", Message: fmt.Sprintf("unknown log_level %q, using \"warn\"", c.LSP.LogLevel)})
 		c.LSP.LogLevel = "warn"
