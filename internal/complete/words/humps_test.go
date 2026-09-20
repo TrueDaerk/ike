@@ -4,7 +4,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"ike/internal/complete"
 	"ike/internal/config"
@@ -15,18 +14,15 @@ import (
 // mid-word hits ("my" → summary) never leave the source.
 
 func TestProjectWordsHumpMatched(t *testing.T) {
+	requireGrammar(t, "go")
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "x.go"), []byte("func GotoURLResolver() {}\nvar summary, mycelium int\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "x.go"), []byte("package x\n\nfunc GotoURLResolver() {}\nvar summary, mycelium int\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	s := New(dir)
-	for start := time.Now(); !s.ScanDone(); {
-		if time.Since(start) > 5*time.Second {
-			t.Fatal("scan did not finish")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
 	s.Observe(change("/a.go", "gur\nmy"))
+	labels(t, s, complete.Request{Path: "/a.go"}) // starts the Go scan (#2652)
+	waitScan(t, s, "go")
 	if got := labels(t, s, complete.Request{Path: "/a.go", Line: 0, Col: 3}); len(got) != 1 || got[0] != "GotoURLResolver" {
 		t.Fatalf("gur → %v, want [GotoURLResolver]", got)
 	}

@@ -22,7 +22,7 @@ func TestProjectSymbolsHumpMatched(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := New(dir)
-	waitScan(t, s)
+	waitScan(t, s, "go")
 	other := filepath.Join(dir, "a.go")
 	s.Observe(change(other, "package x\n\nlog"))
 	if got := labels(t, s, complete.Request{Path: other, Line: 2, Col: 3}); len(got) == 0 {
@@ -44,7 +44,7 @@ func TestCSSClassesHumpMatched(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := New(dir)
-	waitScan(t, s)
+	waitScan(t, s, "css")
 	page := filepath.Join(dir, "index.html")
 	s.Observe(change(page, `<div class="bp`))
 	if got := labels(t, s, complete.Request{Path: page, Line: 0, Col: 14}); len(got) != 1 || got[0] != "btn-primary" {

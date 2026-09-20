@@ -57,9 +57,12 @@ func labels(t *testing.T, s *Source, req complete.Request) []string {
 	return out
 }
 
-func waitScan(t *testing.T, s *Source) {
+// waitScan starts the project scans of langs (the query path does so on the
+// first request of a language, #2652) and blocks until they finish.
+func waitScan(t *testing.T, s *Source, langs ...string) {
 	t.Helper()
-	for start := time.Now(); !s.ScanDone(); {
+	s.project.Ensure(langs...)
+	for start := time.Now(); !s.ScanDone(langs...); {
 		if time.Since(start) > 5*time.Second {
 			t.Fatal("scan did not finish")
 		}
@@ -76,7 +79,7 @@ func TestCSSClassesIntoHTML(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := New(dir)
-	waitScan(t, s)
+	waitScan(t, s, "css")
 
 	page := filepath.Join(dir, "index.html")
 	line := `<div class="bt`
@@ -108,7 +111,7 @@ func TestCSSBufferOverridesDisk(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := New(dir)
-	waitScan(t, s)
+	waitScan(t, s, "css")
 	s.Observe(change(cssPath, ".new-name {}"))
 
 	page := filepath.Join(dir, "a.html")
@@ -128,7 +131,7 @@ func TestInvalidateFileRefreshes(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := New(dir)
-	waitScan(t, s)
+	waitScan(t, s, "css")
 	if err := os.WriteFile(cssPath, []byte(".after {}"), 0o644); err != nil {
 		t.Fatal(err)
 	}

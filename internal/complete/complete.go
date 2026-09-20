@@ -18,13 +18,16 @@ package complete
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/highlight"
 	"ike/internal/host"
+	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
 )
 
@@ -45,6 +48,45 @@ type Request struct {
 	// Buffer as …" (#2033), so a file-less Go buffer gets the sources a .go
 	// file gets. Empty means "same as Path"; read it through LangName.
 	LangPath string
+	// Lang is the effective language id at the cursor (#2652): the id of
+	// the innermost embedded fragment covering the position — a ```python
+	// fence in Markdown, a <script> body in HTML — when there is one, else
+	// the buffer language's id, else "" for a buffer no language claims.
+	// The engine computes it from the buffer's text once per dispatch so
+	// every source filters by the same value; read it through LangID, which
+	// resolves the buffer language for a request built without it.
+	Lang string
+}
+
+// LangID is the effective language id the request completes in: Lang when
+// the engine set it, else the language lang.ByPath resolves for LangName, else
+// "". Sources scope their answers by it — the word and symbol indexes offer
+// only its tokens (plus CompletionPeers), snippets, postfix and Emmet resolve
+// their templates through it — so a PHP fence in README.md gets PHP answers.
+func (r Request) LangID() string {
+	if r.Lang != "" {
+		return r.Lang
+	}
+	if l, ok := lang.ByPath(r.LangName()); ok {
+		return l.ID
+	}
+	return ""
+}
+
+// Langs is the language family the request draws index tokens from: LangID
+// followed by the language's CompletionPeers (#2652). A request with no
+// language answers the single "" scope — the plain-text tier.
+func (r Request) Langs() []string {
+	id := r.LangID()
+	out := []string{id}
+	if l, ok := lang.ByID(id); ok {
+		for _, p := range l.CompletionPeers {
+			if p != "" && p != id {
+				out = append(out, p)
+			}
+		}
+	}
+	return out
 }
 
 // BufKey is the request's buffer identity: Key when set, else Path. Sources
@@ -109,6 +151,21 @@ type Engine struct {
 	// delayTimer is the armed identifier-rune trigger; a newer trigger of
 	// any kind replaces or cancels it, so only the resting position fires.
 	delayTimer *time.Timer
+	// texts is the latest text of every observed buffer, keyed by BufKey,
+	// from which a dispatch resolves the effective language at the cursor
+	// (#2652). Fragment detection is cached per text generation and runs
+	// on the dispatch goroutine, never under the lock Emit takes.
+	texts map[string]*bufText
+}
+
+// bufText is one observed buffer's text plus its cached embedded fragments.
+// gen counts Emit updates; frags is valid while fragGen == gen.
+type bufText struct {
+	text    string
+	gen     uint64
+	fragGen uint64
+	frags   []highlight.Fragment
+	host    string // the buffer language id the fragments were resolved under
 }
 
 // gatherWindow is how long a dispatch waits for its sources after the first
@@ -137,7 +194,7 @@ func RegisterSource(s Source) {
 // NewEngine returns an engine sending result batches through send (host.Send —
 // safe to call from goroutines). Plugin-registered sources are included.
 func NewEngine(send func(tea.Msg)) *Engine {
-	e := &Engine{send: send, Timeout: 2 * time.Second}
+	e := &Engine{send: send, Timeout: 2 * time.Second, texts: map[string]*bufText{}}
 	pluginMu.Lock()
 	e.sources = append(e.sources, pluginSources...)
 	pluginMu.Unlock()
@@ -207,6 +264,10 @@ func (e *Engine) Emit(ev host.EditorEvent) {
 		if o, ok := s.(EventObserver); ok {
 			o.Observe(ev)
 		}
+	}
+	if ev.Kind == host.EditorChange {
+		e.observeText(ev)
+		return
 	}
 	if ev.Kind != host.EditorCompletionTrigger {
 		return
@@ -318,6 +379,74 @@ func (e *Engine) dispatch(req Request, sources []Source) {
 	if len(sources) == 0 {
 		return
 	}
+	// The effective language (#2652) needs the buffer's fragments, which is
+	// a parse: resolve it off this goroutine — dispatch is reached from the
+	// UI's Update or a timer — then fan the sources out.
+	go func() {
+		req.Lang = e.effectiveLang(req)
+		if ctx.Err() != nil {
+			return
+		}
+		e.fanOut(ctx, req, sources)
+	}()
+}
+
+// observeText stashes a buffer's latest text for effective-language
+// resolution; a large-file change carries no text and drops the entry.
+func (e *Engine) observeText(ev host.EditorEvent) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if ev.Large {
+		delete(e.texts, ev.BufKey())
+		return
+	}
+	b := e.texts[ev.BufKey()]
+	if b == nil {
+		b = &bufText{}
+		e.texts[ev.BufKey()] = b
+	}
+	b.text = ev.Text
+	b.gen++
+}
+
+// effectiveLang resolves the language id at the request position (#2652):
+// the innermost embedded fragment's language when the cursor sits in one,
+// else the buffer's own. Fragments are resolved once per text generation
+// and cached; the parse runs outside the lock, and a cache install racing a
+// newer edit is simply skipped (the next dispatch re-resolves).
+func (e *Engine) effectiveLang(req Request) string {
+	host := ""
+	if l, ok := lang.ByPath(req.LangName()); ok {
+		host = l.ID
+	}
+	if host == "" {
+		return ""
+	}
+	e.mu.Lock()
+	b := e.texts[req.BufKey()]
+	if b == nil {
+		e.mu.Unlock()
+		return host
+	}
+	text, gen := b.text, b.gen
+	frags, fresh := b.frags, b.fragGen == gen && b.host == host
+	e.mu.Unlock()
+	if !fresh {
+		frags = highlight.Embedded(host, strings.Split(text, "\n"))
+		e.mu.Lock()
+		if b.gen == gen {
+			b.frags, b.fragGen, b.host = frags, gen, host
+		}
+		e.mu.Unlock()
+	}
+	if f, ok := highlight.InnermostAt(frags, req.Line, req.Col); ok {
+		return f.Lang
+	}
+	return host
+}
+
+// fanOut runs the sources concurrently for req and gathers their answers.
+func (e *Engine) fanOut(ctx context.Context, req Request, sources []Source) {
 	results := make(chan ilsp.CompletionMsg, len(sources))
 	for _, s := range sources {
 		go func(s Source) {

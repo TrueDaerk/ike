@@ -91,7 +91,11 @@ func (s *Source) Complete(_ context.Context, req complete.Request) ([]ilsp.Compl
 	if s.enabled != nil && !s.enabled() {
 		return nil, nil
 	}
-	templates, exprNodes := lang.PostfixFor(req.LangName())
+	// Templates follow the effective language at the cursor (#2652): a
+	// ```python fence in Markdown gets Python's. Expression detection still
+	// parses the buffer by its own name — the host grammar owns the tree —
+	// and falls back to the token scan inside a fragment.
+	templates, exprNodes := lang.PostfixForLang(req.LangID())
 	if len(templates) == 0 {
 		return nil, nil
 	}

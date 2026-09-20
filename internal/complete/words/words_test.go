@@ -52,7 +52,7 @@ func TestMidExtractionEditKeepsDirty(t *testing.T) {
 	s.Observe(change("/a.go", "newword"))
 	// Install the stale extraction the way Complete does.
 	s.mu.Lock()
-	b.words = extractWords("oldword", nil)
+	b.words = extractBuffer("/a.go", "oldword")
 	if b.gen == gen {
 		b.dirty = false
 	}
@@ -133,7 +133,11 @@ func TestShortAndNumericWordsSkipped(t *testing.T) {
 	}
 }
 
+// TestProjectScan: the project tier answers a buffer with the code words of
+// its own language (#2652) — the scan runs lazily on the first request from
+// a Python buffer — and never with the noise under node_modules.
 func TestProjectScan(t *testing.T) {
+	requireGrammar(t, "python")
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "x.py"), []byte("def projectword(): pass"), 0o644); err != nil {
 		t.Fatal(err)
@@ -141,20 +145,28 @@ func TestProjectScan(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(dir, "node_modules"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "node_modules", "y.js"), []byte("ignoredword"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "node_modules", "y.py"), []byte("ignoredword = 1"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	s := New(dir)
-	for start := time.Now(); !s.ScanDone(); {
-		if time.Since(start) > 5*time.Second {
-			t.Fatal("scan did not finish")
-		}
-		time.Sleep(5 * time.Millisecond)
-	}
-	s.Observe(change("/a.go", "pro"))
-	got := labels(t, s, complete.Request{Path: "/a.go", Line: 0, Col: 3})
+	s.Observe(change("/a.py", "pro"))
+	req := complete.Request{Path: "/a.py", Line: 0, Col: 3}
+	labels(t, s, req) // the first Python request starts the Python scan
+	waitScan(t, s, "python")
+	got := labels(t, s, req)
 	if len(got) != 1 || got[0] != "projectword" {
 		t.Fatalf("got %v, want [projectword] (node_modules skipped)", got)
+	}
+}
+
+// waitScan blocks until the project scan of lang finished.
+func waitScan(t *testing.T, s *Source, lang string) {
+	t.Helper()
+	for start := time.Now(); !s.ScanDone(lang); {
+		if time.Since(start) > 5*time.Second {
+			t.Fatalf("%s scan did not finish", lang)
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 

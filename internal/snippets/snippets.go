@@ -68,6 +68,13 @@ func For(path string) []Entry {
 	if l, ok := lang.ByPath(path); ok {
 		id = l.ID
 	}
+	return ForLang(id)
+}
+
+// ForLang is For by language id (#2652): the completion source resolves the
+// effective language at the cursor through it, so a ```php fence in a
+// Markdown buffer offers the PHP templates. "" answers the globals only.
+func ForLang(id string) []Entry {
 	user := config.Get().Snippets
 	seen := map[string]bool{}
 	var out []Entry
@@ -112,11 +119,12 @@ func (Source) Name() string { return SourceName }
 // word echo — a deliberately placed template usually beats an incidental match.
 func (Source) Priority() int { return ilsp.PrioritySnippets }
 
-// Complete implements complete.Source: every template for the buffer's
-// language (plus globals) is returned; the popup's fuzzy prefix filter
-// narrows the list as the user types.
+// Complete implements complete.Source: every template for the effective
+// language at the cursor (plus globals) is returned — the buffer's language,
+// or an embedded fragment's where the cursor sits in one (#2652); the
+// popup's fuzzy prefix filter narrows the list as the user types.
 func (Source) Complete(_ context.Context, req complete.Request) ([]ilsp.CompletionItem, error) {
-	entries := For(req.LangName())
+	entries := ForLang(req.LangID())
 	items := make([]ilsp.CompletionItem, 0, len(entries))
 	for _, e := range entries {
 		items = append(items, ilsp.CompletionItem{

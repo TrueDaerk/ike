@@ -37,3 +37,14 @@ func PostfixFor(path string) (templates []PostfixTemplate, exprNodes []string) {
 	}
 	return l.Postfix, l.PostfixExprNodes
 }
+
+// PostfixForLang is PostfixFor by language id (#2652): the postfix source
+// resolves the effective language at the cursor, so a fence in Markdown gets
+// the fence language's templates.
+func PostfixForLang(id string) (templates []PostfixTemplate, exprNodes []string) {
+	l, ok := ByID(id)
+	if !ok {
+		return nil, nil
+	}
+	return l.Postfix, l.PostfixExprNodes
+}

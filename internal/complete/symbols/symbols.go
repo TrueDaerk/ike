@@ -6,15 +6,19 @@
 // attribute values — the cross-file case language servers are structurally
 // weak at.
 //
+// Symbols are scoped by language (#2652): a buffer is offered declarations of
+// its own language family (complete.Request.Langs) only — a Go function is
+// not a Python candidate — and an embedded fragment's declarations belong to
+// the fragment's language, so a ```go fence in Markdown feeds the Go index.
+//
 // Freshness: open buffers re-extract lazily from the engine's forwarded
 // change events; on-disk changes invalidate through the watcher
-// (Engine.NotifyFileChanged). The one-shot background scan seeds the index.
+// (Engine.NotifyFileChanged). The project index scans one language at a
+// time, on the first request from a buffer of that language.
 package symbols
 
 import (
 	"context"
-	"io/fs"
-	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -24,6 +28,7 @@ import (
 	"unicode"
 
 	"ike/internal/complete"
+	"ike/internal/complete/langindex"
 	"ike/internal/config"
 	"ike/internal/fuzzy"
 	"ike/internal/highlight"
@@ -39,11 +44,6 @@ const (
 	maxScanFiles = 2000
 	maxResults   = 200
 )
-
-var skipDirs = map[string]bool{
-	"node_modules": true, "vendor": true, "dist": true, "build": true,
-	"target": true, "__pycache__": true, ".git": true, ".venv": true, "venv": true,
-}
 
 // captureKinds maps the grammar capture names worth indexing to completion
 // item kinds. Builtins and call-sites are noise, not symbols.
@@ -69,14 +69,14 @@ type sym struct {
 	kind int
 }
 
-// fileIndex is one file's contribution.
+// fileIndex is one language's contribution from one file.
 type fileIndex struct {
 	syms    []sym
 	classes map[string]struct{}
 	ids     map[string]struct{}
 }
 
-// doc is one observed open buffer; its extraction overrides the on-disk scan
+// doc is one observed open buffer; its extraction overrides the on-disk index
 // for the same path. lang is the name extraction resolves the buffer's
 // grammar by — the file path, or the synthetic name of a file-less buffer's
 // chosen language (#2048), which is why it is stored instead of re-derived
@@ -86,7 +86,7 @@ type fileIndex struct {
 type doc struct {
 	text  string
 	lang  string
-	idx   fileIndex
+	idx   map[string]fileIndex // per language id
 	dirty bool
 	gen   uint64
 }
@@ -96,28 +96,16 @@ type doc struct {
 type Source struct {
 	mu      sync.RWMutex
 	buffers map[string]*doc
-	files   map[string]fileIndex
-	scanned bool
-
-	// Invalidation queue (#2176): watcher events re-extract through one
-	// worker goroutine instead of one goroutine per event — a 300-file git
-	// checkout must not become 300 concurrent disk readers.
-	invalMu   sync.Mutex
-	invalQ    []string
-	invalSet  map[string]bool
-	invalBusy bool
+	project *langindex.Index[fileIndex]
 }
 
-// New returns the source and starts the one-shot background scan under root
-// ("" skips it).
+// New returns the source over the project at root ("" indexes no files).
+// Nothing is scanned until a buffer of some language asks.
 func New(root string) *Source {
-	s := &Source{buffers: map[string]*doc{}, files: map[string]fileIndex{}}
-	if root == "" {
-		s.scanned = true
-		return s
+	return &Source{
+		buffers: map[string]*doc{},
+		project: langindex.New(root, langindex.Limits{MaxFileSize: maxFileSize, MaxFiles: maxScanFiles}, langOf, extractFile),
 	}
-	go s.scan(root)
-	return s
 }
 
 // Name implements complete.Source.
@@ -146,64 +134,20 @@ func (s *Source) Observe(ev host.EditorEvent) {
 	if d.lang != ev.LangName() {
 		// "Treat Buffer as …" switched the language under the buffer
 		// (#2048): the stashed index belongs to the old grammar.
-		d.lang, d.idx = ev.LangName(), fileIndex{}
+		d.lang, d.idx = ev.LangName(), nil
 	}
 	d.text, d.dirty = ev.Text, true
 	d.gen++
 }
 
 // InvalidateFile implements complete.FileObserver: an on-disk change
-// re-extracts the file off the caller's goroutine (the buffer entry, when the
-// file is open, keeps overriding it anyway). Paths queue behind one worker
-// (#2176) — bounded disk concurrency — and a path already queued is not
-// queued twice.
-func (s *Source) InvalidateFile(path string) {
-	if !eligible(path) {
-		return
-	}
-	s.invalMu.Lock()
-	if s.invalSet == nil {
-		s.invalSet = map[string]bool{}
-	}
-	if !s.invalSet[path] {
-		s.invalSet[path] = true
-		s.invalQ = append(s.invalQ, path)
-	}
-	if !s.invalBusy {
-		s.invalBusy = true
-		go s.drainInvalidations()
-	}
-	s.invalMu.Unlock()
-}
-
-// drainInvalidations is the single re-extraction worker (#2176): it pops the
-// queue until empty and exits; the next InvalidateFile restarts it.
-func (s *Source) drainInvalidations() {
-	for {
-		s.invalMu.Lock()
-		if len(s.invalQ) == 0 {
-			s.invalBusy = false
-			s.invalMu.Unlock()
-			return
-		}
-		path := s.invalQ[0]
-		s.invalQ = s.invalQ[1:]
-		delete(s.invalSet, path)
-		s.invalMu.Unlock()
-		idx, ok := extractDisk(path)
-		s.mu.Lock()
-		if ok {
-			s.files[path] = idx
-		} else {
-			delete(s.files, path)
-		}
-		s.mu.Unlock()
-	}
-}
+// re-extracts the file for every scanned language off the caller's
+// goroutine, queued behind the index's single worker (#2176).
+func (s *Source) InvalidateFile(path string) { s.project.Invalidate(path) }
 
 // Complete implements complete.Source. Inside an HTML class=/id= attribute it
-// offers the project's CSS class names / IDs; elsewhere the indexed symbols,
-// current file first.
+// offers the project's CSS class names / IDs; elsewhere the indexed symbols
+// of the request's language family, current file first.
 func (s *Source) Complete(_ context.Context, req complete.Request) ([]ilsp.CompletionItem, error) {
 	// Extraction (tree-sitter over full texts) must not run under the lock
 	// (#2193): Observe is reached synchronously from the UI's Update and would
@@ -231,7 +175,7 @@ func (s *Source) Complete(_ context.Context, req complete.Request) ([]ilsp.Compl
 
 	line := lineAt(curText, req.Line)
 	for i := range jobs {
-		idx := extractText(jobs[i].lang, jobs[i].text)
+		idx := extractText(jobs[i].lang, jobs[i].text, nil)
 		s.mu.Lock()
 		if jobs[i].d.lang == jobs[i].lang {
 			jobs[i].d.idx = idx
@@ -242,35 +186,45 @@ func (s *Source) Complete(_ context.Context, req complete.Request) ([]ilsp.Compl
 		s.mu.Unlock()
 	}
 
+	langs := req.Langs()
+	html := req.LangID() == "html" || isHTML(req.LangName())
+	if html {
+		s.project.Ensure(cssLangs()...)
+	}
+	s.project.Ensure(langs...)
+
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if isHTML(req.LangName()) {
+	if html {
 		if attr, ok := htmlAttrContext(line, req.Col); ok {
 			return s.cssItems(attr, cssPrefix(line, req.Col)), nil
 		}
 	}
-	return s.symbolItems(req.BufKey(), identifierPrefix(line, req.Col)), nil
+	return s.symbolItems(req.BufKey(), identifierPrefix(line, req.Col), langs), nil
 }
 
-// symbolItems collects prefix-matched symbols, current file tiered first.
-func (s *Source) symbolItems(curPath, prefix string) []ilsp.CompletionItem {
+// symbolItems collects hump-matched symbols of langs, current file tiered
+// first.
+func (s *Source) symbolItems(curPath, prefix string, langs []string) []ilsp.CompletionItem {
 	mode := completionCase()
 	seen := map[string]bool{}
 	var items []ilsp.CompletionItem
-	add := func(fi fileIndex, tier int) {
+	add := func(fis []fileIndex, tier int) {
 		var ss []sym
-		for _, y := range fi.syms {
-			if seen[y.name] || y.name == prefix || !matchesPrefix(y.name, prefix, mode) {
-				continue
+		for _, fi := range fis {
+			for _, y := range fi.syms {
+				if seen[y.name] || y.name == prefix || !matchesPrefix(y.name, prefix, mode) {
+					continue
+				}
+				seen[y.name] = true
+				ss = append(ss, y)
 			}
-			ss = append(ss, y)
 		}
 		sort.Slice(ss, func(i, j int) bool { return ss[i].name < ss[j].name })
 		for _, y := range ss {
 			if len(items) >= maxResults {
 				return
 			}
-			seen[y.name] = true
 			items = append(items, ilsp.CompletionItem{
 				Label:        y.name,
 				InsertText:   y.name,
@@ -280,25 +234,39 @@ func (s *Source) symbolItems(curPath, prefix string) []ilsp.CompletionItem {
 			})
 		}
 	}
-	if d := s.buffers[curPath]; d != nil {
-		add(d.idx, 0)
+	pick := func(d *doc) []fileIndex {
+		var fis []fileIndex
+		for _, l := range langs {
+			if fi, ok := d.idx[l]; ok {
+				fis = append(fis, fi)
+			}
+		}
+		return fis
 	}
+	if d := s.buffers[curPath]; d != nil {
+		add(pick(d), 0)
+	}
+	var others []fileIndex
 	for path, d := range s.buffers {
 		if path != curPath {
-			add(d.idx, 1)
+			others = append(others, pick(d)...)
 		}
 	}
-	for path, fi := range s.files {
+	add(others, 1)
+	var project []fileIndex
+	s.project.Each(langs, func(path string, fi fileIndex) {
 		if s.buffers[path] == nil {
-			add(fi, 2)
+			project = append(project, fi)
 		}
-	}
+	})
+	add(project, 2)
 	return items
 }
 
 // cssItems collects the project's class names or IDs for an HTML attribute.
 func (s *Source) cssItems(attr, prefix string) []ilsp.CompletionItem {
 	mode := completionCase()
+	langs := cssLangs()
 	seen := map[string]bool{}
 	names := []string{}
 	collect := func(fi fileIndex) {
@@ -314,13 +282,17 @@ func (s *Source) cssItems(attr, prefix string) []ilsp.CompletionItem {
 		}
 	}
 	for _, d := range s.buffers {
-		collect(d.idx)
+		for _, l := range langs {
+			if fi, ok := d.idx[l]; ok {
+				collect(fi)
+			}
+		}
 	}
-	for path, fi := range s.files {
+	s.project.Each(langs, func(path string, fi fileIndex) {
 		if s.buffers[path] == nil {
 			collect(fi)
 		}
-	}
+	})
 	sort.Strings(names)
 	if len(names) > maxResults {
 		names = names[:maxResults]
@@ -339,37 +311,84 @@ func (s *Source) cssItems(attr, prefix string) []ilsp.CompletionItem {
 
 // --- extraction ---
 
-// extractDisk reads and extracts one file within the size cap.
-func extractDisk(path string) (fileIndex, bool) {
-	info, err := os.Stat(path)
-	if err != nil || info.IsDir() || info.Size() > maxFileSize {
-		return fileIndex{}, false
+// langOf classifies a path for the index: the registered language's id, or
+// "css" for a stylesheet no plugin claims (the selector regex needs no
+// grammar, so CSS classes reach HTML even in a build without the web
+// plugin), else "".
+func langOf(path string) string {
+	if id := langindex.LangOf(path); id != "" {
+		return id
 	}
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return fileIndex{}, false
+	if isCSS(path) {
+		return "css"
 	}
-	return extractText(path, string(data)), true
+	return ""
 }
 
-// extractText extracts one file's symbols: CSS files by selector regex,
-// grammar-backed files through the highlight layer's captures. Without cgo
-// the highlight layer answers nothing and only CSS survives — the word index
-// still covers those projects.
-func extractText(path, text string) fileIndex {
-	if isCSS(path) {
-		return fileIndex{
-			classes: matchSet(cssClassRe, text),
-			ids:     matchSet(cssIDRe, text),
+// cssLangs lists the language ids stylesheets index under — the registered
+// language of each stylesheet extension, "css" where none is — so the HTML
+// attribute query reads the right scopes.
+func cssLangs() []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, ext := range []string{"css", "scss", "less"} {
+		id := langOf("x." + ext)
+		if !seen[id] {
+			seen[id] = true
+			out = append(out, id)
 		}
 	}
+	return out
+}
+
+// extractFile is the project index's extractor.
+func extractFile(path, _, text string, only func(string) bool) map[string]fileIndex {
+	return extractText(path, text, only)
+}
+
+// extractText extracts one text's symbols per language: grammar-backed
+// segments (the host's own code and every embedded fragment, each under its
+// language) through the highlight layer's captures, stylesheets by selector
+// regex. Without cgo the highlight layer answers nothing and only CSS
+// survives — the word index still covers those buffers.
+func extractText(path, text string, only func(string) bool) map[string]fileIndex {
+	out := map[string]fileIndex{}
+	host := langOf(path)
 	lines := strings.Split(text, "\n")
-	spans := highlight.Highlight(path, lines)
+	css := cssLangs()
+	for _, seg := range highlight.Segments(host, lines, only) {
+		fi := out[seg.Lang]
+		if contains(css, seg.Lang) {
+			code := seg.CodeText(lines)
+			fi.classes = matchSet(cssClassRe, code, fi.classes)
+			fi.ids = matchSet(cssIDRe, code, fi.ids)
+		} else {
+			fi.syms = captureSyms(seg, lines, fi.syms)
+		}
+		out[seg.Lang] = fi
+	}
+	if isCSS(path) && (only == nil || only(host)) {
+		if _, ok := out[host]; !ok {
+			// No grammar for the stylesheet (no cgo, no plugin): the
+			// regex runs over the raw text.
+			out[host] = fileIndex{
+				classes: matchSet(cssClassRe, text, nil),
+				ids:     matchSet(cssIDRe, text, nil),
+			}
+		}
+	}
+	return out
+}
+
+// captureSyms appends the indexable captures of one segment to syms.
+func captureSyms(seg highlight.Segment, lines []string, syms []sym) []sym {
 	seen := map[string]bool{}
-	var syms []sym
-	for _, sp := range spans {
+	for _, y := range syms {
+		seen[y.name] = true
+	}
+	for _, sp := range seg.Spans {
 		kind, ok := captureKinds[sp.Capture]
-		if !ok || sp.Line >= len(lines) {
+		if !ok || sp.Line < 0 || sp.Line >= len(lines) {
 			continue
 		}
 		runes := []rune(lines[sp.Line])
@@ -383,15 +402,26 @@ func extractText(path, text string) fileIndex {
 		seen[name] = true
 		syms = append(syms, sym{name: name, kind: kind})
 	}
-	return fileIndex{syms: syms}
+	return syms
 }
 
-func matchSet(re *regexp.Regexp, text string) map[string]struct{} {
-	out := map[string]struct{}{}
+func matchSet(re *regexp.Regexp, text string, out map[string]struct{}) map[string]struct{} {
+	if out == nil {
+		out = map[string]struct{}{}
+	}
 	for _, m := range re.FindAllStringSubmatch(text, -1) {
 		out[m[1]] = struct{}{}
 	}
 	return out
+}
+
+func contains(xs []string, s string) bool {
+	for _, x := range xs {
+		if x == s {
+			return true
+		}
+	}
+	return false
 }
 
 // --- context helpers ---
@@ -488,48 +518,19 @@ func isHTML(path string) bool {
 	return false
 }
 
-// eligible reports whether a path can contribute to the index at all.
-func eligible(path string) bool {
-	return isCSS(path) || highlight.Supported(path)
-}
-
-// scan walks root once, extracting every eligible file within the caps.
-func (s *Source) scan(root string) {
-	files := map[string]fileIndex{}
-	count := 0
-	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if d.IsDir() {
-			if path != root && (skipDirs[d.Name()] || strings.HasPrefix(d.Name(), ".")) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if count >= maxScanFiles {
-			return filepath.SkipAll
-		}
-		if !eligible(path) {
-			return nil
-		}
-		if idx, ok := extractDisk(path); ok {
-			files[path] = idx
-			count++
-		}
-		return nil
-	})
-	s.mu.Lock()
-	for p, fi := range files {
-		s.files[p] = fi
+// ScanDone reports whether the project scans of the listed languages
+// finished — with no argument, every scan started so far (tests).
+func (s *Source) ScanDone(langs ...string) bool {
+	if len(langs) == 0 {
+		langs = s.project.Scanned()
 	}
-	s.scanned = true
-	s.mu.Unlock()
+	for _, l := range langs {
+		if !s.project.Done(l) {
+			return false
+		}
+	}
+	return true
 }
 
-// ScanDone reports whether the one-shot scan finished (tests).
-func (s *Source) ScanDone() bool {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.scanned
-}
+// ScannedLangs lists the languages a project scan was started for (tests).
+func (s *Source) ScannedLangs() []string { return s.project.Scanned() }
