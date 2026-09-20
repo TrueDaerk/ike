@@ -24,6 +24,8 @@ import (
 	"unicode"
 
 	"ike/internal/complete"
+	"ike/internal/config"
+	"ike/internal/fuzzy"
 	"ike/internal/host"
 	ilsp "ike/internal/lsp"
 	"ike/internal/lsp/protocol"
@@ -145,6 +147,7 @@ func (s *Source) Complete(_ context.Context, req complete.Request) ([]ilsp.Compl
 		s.mu.Unlock()
 	}
 
+	mode := completionCase()
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	seen := map[string]bool{}
@@ -152,7 +155,7 @@ func (s *Source) Complete(_ context.Context, req complete.Request) ([]ilsp.Compl
 	add := func(words map[string]struct{}, tier int) {
 		var ws []string
 		for w := range words {
-			if seen[w] || w == prefix || !matchesPrefix(w, prefix) {
+			if seen[w] || w == prefix || !matchesPrefix(w, prefix, mode) {
 				continue
 			}
 			ws = append(ws, w)
@@ -185,17 +188,22 @@ func (s *Source) Complete(_ context.Context, req complete.Request) ([]ilsp.Compl
 	return items, nil
 }
 
-// matchesPrefix is the source-side pre-filter: case-insensitive prefix. The
-// editor's fuzzy filter refines the survivors; an empty prefix (manual
+// matchesPrefix is the source-side pre-filter (#2650): the same JetBrains-style
+// hump match the popup applies, under completion.case_sensitivity, so "gur"
+// reaches GotoURLResolver from the local index rather than only from a
+// language server. The editor re-ranks the survivors; an empty prefix (manual
 // trigger at a word boundary) passes everything up to the cap.
-func matchesPrefix(w, prefix string) bool {
+func matchesPrefix(w, prefix string, mode fuzzy.Case) bool {
 	if prefix == "" {
 		return true
 	}
-	if len(w) < len(prefix) {
-		return false
-	}
-	return strings.EqualFold(w[:len(prefix)], prefix)
+	_, ok := fuzzy.MatchHumpsCase(prefix, w, mode)
+	return ok
+}
+
+// completionCase reads completion.case_sensitivity live, once per query.
+func completionCase() fuzzy.Case {
+	return fuzzy.ParseCase(config.Get().Completion.CaseSensitivity)
 }
 
 // identifierPrefix is the partial identifier ending at (line, col) in text.

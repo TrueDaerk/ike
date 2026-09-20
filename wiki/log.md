@@ -1,5 +1,22 @@
 # Log
 
+## 2026-09-20 (Hump matcher for the completion filter, #2650)
+
+- **`my` offered `empty` and `summary`, `log` offered `dialogBox`.** The popup
+  filtered with the pickers' permissive subsequence matcher, so any pattern
+  whose runes appeared somewhere in order survived — the main reason the popup
+  showed too many candidates.
+- **`fuzzy.MatchHumps`** is the JetBrains-style constraint on the same dynamic
+  program: a matched rune either continues the previous match or starts a word
+  segment (`_`/`-`/`.`, camelCase hump, acronym end, letter↔digit change).
+  `fuzzy.Match` is untouched for every other consumer; `Result.Prefix` is
+  exposed for the ranking follow-up.
+- **`completion.case_sensitivity`** (`none` / `first_letter` / `all`, Settings →
+  Language Support) is the case rule; the default is IntelliJ's: lowercase
+  folds, uppercase must match uppercase.
+- The **word and symbol sources** pre-filter with the same matcher, so `gur` →
+  `GotoURLResolver` now comes from the local indexes too.
+
 ## 2026-09-18 (The intention popup says what it offered, #2635)
 
 - **A third of the opens ended in esc, and the log could not say why.** Local

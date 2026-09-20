@@ -210,7 +210,8 @@ any entry whose key the typed schema does not expose (no dead keys).
   glob list (#1139).
 - **Language Support** (#1663) — the LSP subsystem's global switches:
   `lsp.enabled`, `lsp.auto_install`, `lsp.completion_auto`,
-  `lsp.completion_delay_ms` (#2541), `lsp.signature_auto`, `lsp.inlay_hints`, the #1912 per-feature toggles
+  `lsp.completion_delay_ms` (#2541), `completion.case_sensitivity` (the hump
+  filter's case rule, #2650), `lsp.signature_auto`, `lsp.inlay_hints`, the #1912 per-feature toggles
   `lsp.code_lens`, `lsp.folding`, `lsp.semantic_tokens`,
   `lsp.selection_range`, `lsp.will_rename`, and `lsp.log_level`. The
   per-language server commands stay on the plugin-contributed **Language

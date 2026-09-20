@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Completion Engine
-description: Multi-source autocomplete (Roadmap 0410) — the LSP server plus local index sources answer each trigger as independent tagged batches; the editor merges them into one popup with priority-based de-dup and stable selection. Identifier-rune triggers wait lsp.completion_delay_ms and one dispatch's local batches travel as a single message (#2541).
+description: Multi-source autocomplete (Roadmap 0410) — the LSP server plus local index sources answer each trigger as independent tagged batches; the editor merges them into one popup with priority-based de-dup and stable selection. Identifier-rune triggers wait lsp.completion_delay_ms and one dispatch's local batches travel as a single message (#2541). The popup and the local sources filter with the JetBrains-style hump matcher under completion.case_sensitivity (#2650).
 resource: internal/complete
 tags: [architecture, completion, autocomplete, lsp, sources, postfix]
-timestamp: 2026-09-08T14:00:00Z
+timestamp: 2026-09-20T12:00:00Z
 ---
 
 # Completion Engine
@@ -193,7 +193,7 @@ the selected item is re-located by identity (source + label + insert text)
 after each rebuild, so a late-arriving batch never yanks the highlight while
 the user is arrowing.
 
-Fuzzy filtering (#845) runs on the merged list; `completionItem/resolve`
+Hump filtering (#2650, see "Unified ranking") runs on the merged list; `completionItem/resolve`
 (#847) and its documentation/auto-import merge apply to `SourceLSP` items
 only — local items never resolve, and resolve IDs cannot collide across
 sources. Every selected server item resolves, documented or not, and an
@@ -216,8 +216,10 @@ buffers — and a **one-shot
 background project scan** at construction (skips dot-dirs, `node_modules`,
 `vendor` & co.; 256KB/file, 10k files, binaries by NUL sniff). A query
 computes the partial identifier at the cursor from the observed buffer text,
-pre-filters by case-insensitive prefix, excludes the word being typed, caps at
-200 items, and encodes the locality tier (current buffer < other buffers <
+pre-filters with the popup's hump matcher (`fuzzy.MatchHumpsCase` under
+`completion.case_sensitivity`, #2650 — so `gur` reaches `GotoURLResolver`
+from the local index, not only from a server), excludes the word being typed,
+caps at 200 items, and encodes the locality tier (current buffer < other buffers <
 project) into `SortText` so nearer words list first. Words shorter than 3
 runes or starting with a digit are noise and never indexed. Edits to files not
 open in a buffer are not re-scanned — the buffer feed covers what the user
@@ -247,11 +249,31 @@ file costs a parse.
 
 ## Unified ranking (#854)
 
+**Which candidates survive** is decided first, by the JetBrains-style **hump
+matcher** `fuzzy.MatchHumps` (#2650): every typed rune must either directly
+continue the previous matched rune or sit at the start of a word segment of
+the filter text — index 0, after `_`/`-`/`.`, a camelCase hump, the last
+capital of an acronym run (`URLResolver`), or a letter↔digit change. So `my`
+offers `mycelium` and `MY_CONSTANT` but no longer `empty` or `summary`,
+`log` no `dialogBox`/`catalogOf`, while `gur` → `GotoURLResolver` and
+`dacco` → `DataAccessObject`. The matcher is the same dynamic program as the
+pickers' permissive `fuzzy.Match`, with a transition to position *j* only
+legal when *j* continues the previous match or `isBoundary(j)`; `Match`
+itself is unchanged for the palette, finder and settings search. The case
+rule is **`completion.case_sensitivity`** (Settings → Language Support):
+`first_letter` (default, IntelliJ's rule) lets a lowercase typed rune match
+either case while an uppercase rune only matches an uppercase one (`DataA`
+cannot match `database`), `none` folds every rune, `all` compares exactly.
+The word and symbol sources pre-filter with the same matcher and setting
+(read live from `config.Get()` once per query), and `Result.Prefix` reports
+whether the filter text starts with the pattern so a ranking tier "exact
+prefix > hump" needs no second pass.
+
 The popup ranks the merged list with one score:
 
     score = fuzzy·4 + priority + locality + MRU
 
-Fuzzy match quality (#845) dominates — the boosts top out well under a single
+Among the survivors, fuzzy match quality (#845) dominates — the boosts top out well under a single
 word-boundary bonus, so they only settle comparable matches. Priority is the
 batch's source priority scaled down (LSP 100 → +4); locality reads the item's
 `LocalityTier` (0 current file — and everything a server answers — +4,

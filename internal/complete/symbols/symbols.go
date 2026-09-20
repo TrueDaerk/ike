@@ -24,6 +24,8 @@ import (
 	"unicode"
 
 	"ike/internal/complete"
+	"ike/internal/config"
+	"ike/internal/fuzzy"
 	"ike/internal/highlight"
 	"ike/internal/host"
 	ilsp "ike/internal/lsp"
@@ -252,12 +254,13 @@ func (s *Source) Complete(_ context.Context, req complete.Request) ([]ilsp.Compl
 
 // symbolItems collects prefix-matched symbols, current file tiered first.
 func (s *Source) symbolItems(curPath, prefix string) []ilsp.CompletionItem {
+	mode := completionCase()
 	seen := map[string]bool{}
 	var items []ilsp.CompletionItem
 	add := func(fi fileIndex, tier int) {
 		var ss []sym
 		for _, y := range fi.syms {
-			if seen[y.name] || y.name == prefix || !matchesPrefix(y.name, prefix) {
+			if seen[y.name] || y.name == prefix || !matchesPrefix(y.name, prefix, mode) {
 				continue
 			}
 			ss = append(ss, y)
@@ -295,6 +298,7 @@ func (s *Source) symbolItems(curPath, prefix string) []ilsp.CompletionItem {
 
 // cssItems collects the project's class names or IDs for an HTML attribute.
 func (s *Source) cssItems(attr, prefix string) []ilsp.CompletionItem {
+	mode := completionCase()
 	seen := map[string]bool{}
 	names := []string{}
 	collect := func(fi fileIndex) {
@@ -303,7 +307,7 @@ func (s *Source) cssItems(attr, prefix string) []ilsp.CompletionItem {
 			set = fi.ids
 		}
 		for n := range set {
-			if !seen[n] && n != prefix && matchesPrefix(n, prefix) {
+			if !seen[n] && n != prefix && matchesPrefix(n, prefix, mode) {
 				seen[n] = true
 				names = append(names, n)
 			}
@@ -441,14 +445,21 @@ func lineAt(text string, line int) string {
 	return lines[line]
 }
 
-func matchesPrefix(w, prefix string) bool {
+// matchesPrefix is the source-side pre-filter (#2650): the same JetBrains-style
+// hump match the popup applies, under completion.case_sensitivity, so "gur"
+// reaches GotoURLResolver from the local symbol index. An empty prefix passes
+// everything up to the cap.
+func matchesPrefix(w, prefix string, mode fuzzy.Case) bool {
 	if prefix == "" {
 		return true
 	}
-	if len(w) < len(prefix) {
-		return false
-	}
-	return strings.EqualFold(w[:len(prefix)], prefix)
+	_, ok := fuzzy.MatchHumpsCase(prefix, w, mode)
+	return ok
+}
+
+// completionCase reads completion.case_sensitivity live, once per query.
+func completionCase() fuzzy.Case {
+	return fuzzy.ParseCase(config.Get().Completion.CaseSensitivity)
 }
 
 func isIdentifier(s string) bool {
