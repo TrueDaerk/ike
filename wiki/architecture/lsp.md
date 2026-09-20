@@ -304,7 +304,13 @@ auto-import's origin: the item's detail column is the `labelDetails` pair
 of the classic `detail`, so `APIRouter fastapi Auto-import` tells the candidate
 that adds an import from a local one. Two server items with the same insert
 text but different detail (the same name importable from two modules) both
-stay listed; across sources the higher-priority item still wins.
+stay listed; across sources the higher-priority item still wins. The module
+also travels as its own field, `CompletionItem.ImportModule` (#2653) — the
+trimmed `labelDetails.description`, empty when a server names the module only
+in free-text `detail` — so the editor can collapse the same symbol importable
+from many modules into the canonical item plus a folded `+N modules` entry
+without parsing the detail column (see
+[Completion](./completion.md), "Editor-side merge").
 
 **Incomplete lists (#849).** A reply flagged `isIncomplete` is a partial view:
 identifier runes typed while the popup shows re-emit the completion trigger
