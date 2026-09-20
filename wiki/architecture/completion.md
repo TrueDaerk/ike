@@ -269,17 +269,42 @@ The word and symbol sources pre-filter with the same matcher and setting
 whether the filter text starts with the pattern so a ranking tier "exact
 prefix > hump" needs no second pass.
 
-The popup ranks the merged list with one score:
+The popup ranks the survivors by **match tier** (#2651, replacing the
+single additive score of #854), and tiers never mix:
 
-    score = fuzzy·4 + priority + locality + MRU
+1. exact filter text (case-sensitive), then equal ignoring case
+2. case-exact prefix of the filter text
+3. prefix under the case rule (`Result.Prefix`)
+4. every other hump match
 
-Among the survivors, fuzzy match quality (#845) dominates — the boosts top out well under a single
-word-boundary bonus, so they only settle comparable matches. Priority is the
-batch's source priority scaled down (LSP 100 → +4); locality reads the item's
-`LocalityTier` (0 current file — and everything a server answers — +4,
-1 other open buffers +2, 2 project scan +0), which the word/symbol sources
-stamp; MRU boosts the last-accepted labels (rank 0 → +10 fading to 0 past
-rank 10), fed by `internal/complete/mru` — a per-project, most-recent-first
+So `data` lists `database` and `DataAccessObject` above `DumpAllTablesAgain`
+even though the scattered CamelCase hit scores more fuzzy points, `dao`
+lists the label `dao` above `DataAccessObject`, and `my` lists `mycelium`
+above `MY_CONSTANT`. Inside a tier the comparator (`completionRank`, a small
+struct compared field by field rather than a folded integer, so further keys
+such as an auto-import duplicate can slot in) orders by:
+
+1. **MRU** — the last-accepted labels first (rank 0 → 10 fading to 0 past
+   rank 10), fed by `internal/complete/mru`; a recent accept tops its own
+   tier but cannot climb into a better one
+2. **locality** — the item's `LocalityTier` (0 current file and everything a
+   server answers, 1 other open buffers, 2 project scan), which the
+   word/symbol sources stamp
+3. **length** — shorter filter text first (fewer unmatched runes)
+4. **source priority** — the batch's priority (LSP 100 > symbols > … >
+   words), so server order is only compared among one source's items
+5. **server order** — `sortText` (label when absent), which gopls/pyright use
+   to encode expected type, scope distance and deprecation; this survives as
+   a real key now instead of only as the stable-sort tie-break
+6. **fuzzy score** — the matcher's points, which in practice only settle the
+   hump tier
+
+An empty prefix (manual trigger at a word boundary) puts every item in tier 4
+and skips the length key, so a fresh popup keeps its shape: recently used and
+near items first, then server order. Ties stay deterministic: the sort is
+stable over the merged base order (#851).
+
+The MRU store is a per-project, most-recent-first
 label store persisted atomically at `.ike/completion-mru.json` and bumped on
 every accept. Since #2146 the store is **scoped per language**: the editor
 bumps and ranks under the buffer's resolved language id (`lang.ByPath` over
@@ -287,9 +312,7 @@ bumps and ranks under the buffer's resolved language id (`lang.ByPath` over
 file), an accept in a Go buffer boosts Go popups only, and buffers no
 language claims share the `""` scope. A named scope with no hit falls back
 to `""`, so a pre-scope flat-array store file keeps boosting after the
-migration. An empty prefix ranks the same way with fuzzy 0, so a fresh
-popup already prefers near and recently used items. Ties stay deterministic:
-the sort is stable over the merged base order (#851).
+migration.
 
 ## Emmet subset (#856)
 

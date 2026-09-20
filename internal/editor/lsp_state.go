@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -618,19 +619,23 @@ func (m Model) completionPrefix() (string, bool) {
 }
 
 // filteredCompletion returns the items matching the current prefix, best
-// first, under the unified ranking (#854):
-//
-//	score = fuzzy·4 + priority + locality + MRU
-//
-// Only hump matches survive (#2650 — fuzzy.MatchHumps under
+// first, under the tiered ranking (#2651, superseding the additive score of
+// #854). Only hump matches survive (#2650 — fuzzy.MatchHumps under
 // completion.case_sensitivity: every typed rune continues the previous match
-// or starts a word segment of filterText, so "my" no longer offers "empty");
-// among them match quality (#845 — CamelCase/boundary bonuses) dominates; the source priority (batch-level, scaled down), the locality
-// tier (nearer origin wins) and the recently-accepted boost (mru store)
-// break within-quality ties, and the stable sort over the merged base order
-// (#851) makes everything deterministic. An empty prefix ranks the whole
-// list the same way with fuzzy 0, so a fresh popup already prefers near and
-// recently used items.
+// or starts a word segment of filterText, so "my" no longer offers "empty").
+// Each survivor gets a match tier — exact label, exact label ignoring case,
+// case-exact prefix, prefix under the case rule, hump match — and the tiers
+// never mix: an exact prefix always lists above a scattered CamelCase hit.
+// Inside a tier the recently-accepted boost (mru store) lifts an item to the
+// top, then the locality tier (nearer origin wins), then the shorter filter
+// text (fewer unmatched runes), then the source priority and the server's own
+// order (completionSortKey — sortText, where gopls/pyright encode expected
+// type and scope), and the fuzzy score only settles what is left, which
+// matters inside the hump tier. The stable sort over the merged base order
+// (#851) makes everything deterministic. An empty prefix (manual trigger at a
+// word boundary) puts every item in the hump tier and skips the length key,
+// so a fresh popup keeps today's shape: recent and near items first, then
+// server order.
 func (m Model) filteredCompletion() []ilsp.CompletionItem {
 	if m.comp == nil {
 		return nil
@@ -639,23 +644,29 @@ func (m Model) filteredCompletion() []ilsp.CompletionItem {
 	if !ok {
 		return nil
 	}
-	type scored struct {
-		item  ilsp.CompletionItem
-		score int
+	type ranked struct {
+		item ilsp.CompletionItem
+		key  completionRank
 	}
-	var matched []scored
+	var matched []ranked
 	for _, it := range m.comp.items {
-		score := 0
+		text := completionFilterText(it)
+		key := completionRank{tier: tierHump, sortKey: completionSortKey(it)}
 		if prefix != "" {
-			r, ok := fuzzy.MatchHumpsCase(prefix, completionFilterText(it), m.compCase)
+			r, ok := fuzzy.MatchHumpsCase(prefix, text, m.compCase)
 			if !ok {
 				continue
 			}
-			score = r.Score * fuzzyWeight
+			key.tier = completionTier(prefix, text, r)
+			key.length = utf8.RuneCountInString(text)
+			key.fuzzy = r.Score
 		}
-		matched = append(matched, scored{item: it, score: score + m.completionBoost(it)})
+		key.mru = m.completionMRUBoost(it)
+		key.locality = it.LocalityTier
+		key.priority = m.comp.bySource[it.Source].prio
+		matched = append(matched, ranked{item: it, key: key})
 	}
-	sort.SliceStable(matched, func(i, j int) bool { return matched[i].score > matched[j].score })
+	sort.SliceStable(matched, func(i, j int) bool { return matched[i].key.less(matched[j].key) })
 	out := make([]ilsp.CompletionItem, len(matched))
 	for i, s := range matched {
 		out[i] = s.item
@@ -663,26 +674,78 @@ func (m Model) filteredCompletion() []ilsp.CompletionItem {
 	return out
 }
 
-// Ranking weights (#854): one fuzzy point is worth fuzzyWeight; the boosts
-// below top out well under a single boundary bonus, so match quality always
-// dominates and the boosts only settle comparable matches.
+// matchTier is how a completion item's filter text relates to the typed
+// prefix (#2651); lower ranks first.
+type matchTier int
+
 const (
-	fuzzyWeight   = 4
-	localityStep  = 2  // per tier nearer than "project"
-	priorityScale = 25 // batch priority / priorityScale (lsp 100 → 4)
-	mruWindow     = 10 // accepts deeper in history carry no boost
+	tierExact      matchTier = iota // filter text equals the prefix
+	tierExactFold                   // equal ignoring case
+	tierPrefix                      // filter text starts with the prefix, case-exact
+	tierPrefixFold                  // starts with it under the case rule
+	tierHump                        // any other hump match (and every item on an empty prefix)
 )
 
-// completionBoost is the fuzzy-independent part of an item's rank score.
-func (m Model) completionBoost(it ilsp.CompletionItem) int {
-	boost := m.comp.bySource[it.Source].prio / priorityScale
-	if tier := it.LocalityTier; tier < 2 {
-		boost += (2 - tier) * localityStep
+// completionTier derives the tier of an accepted hump match. r.Prefix is the
+// matcher's own verdict under completion.case_sensitivity, so the folded
+// tiers follow the rule the filter used rather than a blanket case fold.
+func completionTier(prefix, text string, r fuzzy.Result) matchTier {
+	switch {
+	case text == prefix:
+		return tierExact
+	case r.Prefix && utf8.RuneCountInString(text) == utf8.RuneCountInString(prefix):
+		return tierExactFold
+	case strings.HasPrefix(text, prefix):
+		return tierPrefix
+	case r.Prefix:
+		return tierPrefixFold
 	}
+	return tierHump
+}
+
+// completionRank is one item's sort key (#2651). Fields are compared in
+// declaration order by less; keeping them a struct rather than one folded
+// integer leaves room for further keys (e.g. an auto-import duplicate
+// collapsing next to its canonical item).
+type completionRank struct {
+	tier     matchTier
+	mru      int    // recently-accepted boost, higher first
+	locality int    // ilsp.CompletionItem.LocalityTier, nearer first
+	length   int    // filter-text runes, shorter first (0 on an empty prefix)
+	priority int    // source batch priority, higher first
+	sortKey  string // server order: sortText, else label
+	fuzzy    int    // match score, higher first
+}
+
+func (a completionRank) less(b completionRank) bool {
+	switch {
+	case a.tier != b.tier:
+		return a.tier < b.tier
+	case a.mru != b.mru:
+		return a.mru > b.mru
+	case a.locality != b.locality:
+		return a.locality < b.locality
+	case a.length != b.length:
+		return a.length < b.length
+	case a.priority != b.priority:
+		return a.priority > b.priority
+	case a.sortKey != b.sortKey:
+		return a.sortKey < b.sortKey
+	}
+	return a.fuzzy > b.fuzzy
+}
+
+// mruWindow bounds the recently-accepted boost: accepts deeper in history
+// carry none.
+const mruWindow = 10
+
+// completionMRUBoost is the recently-accepted boost of an item: mruWindow for
+// the last accepted label, fading to 1 at rank mruWindow-1 and 0 beyond.
+func (m Model) completionMRUBoost(it ilsp.CompletionItem) int {
 	if rank := m.compMRU.Rank(m.mruScope(), it.Label); rank >= 0 && rank < mruWindow {
-		boost += mruWindow - rank
+		return mruWindow - rank
 	}
-	return boost
+	return 0
 }
 
 // completionFilterText is the text an item is matched against: the server's
