@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Completion Engine
-description: Multi-source autocomplete (Roadmap 0410) — the LSP server plus local index sources answer each trigger as independent tagged batches; the editor merges them into one popup with priority-based de-dup and stable selection. Identifier-rune triggers wait lsp.completion_delay_ms and one dispatch's local batches travel as a single message (#2541). The popup and the local sources filter with the JetBrains-style hump matcher under completion.case_sensitivity (#2650).
+description: Multi-source autocomplete (Roadmap 0410) — the LSP server plus local index sources answer each trigger as independent tagged batches; the editor merges them into one popup with priority-based de-dup and stable selection. Identifier-rune triggers wait lsp.completion_delay_ms and one dispatch's local batches travel as a single message (#2541). The popup and the local sources filter with the JetBrains-style hump matcher under completion.case_sensitivity (#2650). The word and symbol indexes hold code tokens of one language at a time, scanned lazily per language, and every source resolves the effective language at the cursor — an embedded fence's inside one (#2652).
 resource: internal/complete
 tags: [architecture, completion, autocomplete, lsp, sources, postfix]
-timestamp: 2026-09-20T12:00:00Z
+timestamp: 2026-09-20T18:00:00Z
 ---
 
 # Completion Engine
@@ -163,6 +163,31 @@ Both fields are empty for an ordinary file buffer and both accessors then
 answer with `Path`, so no source needed a behaviour change for files. The
 synthetic name is a *classification* name only — never opened, never written.
 
+**Effective language at the cursor (#2652).** A fourth field, `Lang`, is the
+language id completion actually happens in: the id of the innermost embedded
+fragment covering the position — a ```` ```python ```` fence in Markdown, the
+`<script>` body of an HTML page, HTML inside a Python string — or the buffer
+language's id otherwise (`""` for a buffer no language claims). The engine
+computes it once per dispatch, off the UI goroutine, from the text it stashes
+per buffer on every `EditorChange`: `highlight.Embedded` resolves the
+fragments recursively (cached per text generation) and
+`highlight.InnermostAt` picks the deepest one whose language is a *buffer
+language* — a registered language with extensions or file names. The
+Markdown grammar's `markdown_inline` pass and the regex mini-grammar are
+injection targets, not languages a buffer is in, so prose stays `markdown`
+and a regex literal stays JavaScript. The end of a fragment counts as inside
+it, since that is where typing appends. Sources read it through
+`req.LangID()` (which falls back to `lang.ByPath(LangName())` for a request
+built without it) and `req.Langs()` — the id plus the language's
+`lang.Language.CompletionPeers`, an optional list for families that share
+identifiers (JS/TS, C and its headers); the default is empty, i.e. strict
+same-language, and no registered language populates it yet. The word and
+symbol indexes filter by it, and snippets (`snippets.ForLang`), postfix
+(`lang.PostfixForLang`) and Emmet resolve their templates through it, so a
+PHP fence in `README.md` gets PHP templates instead of Markdown's. Postfix
+expression detection still parses the buffer under its own grammar and takes
+the token fallback inside a fragment.
+
 **Deliberately out of scope: LSP.** The bridge (`plugins/lsp`) speaks
 `file://` URIs to a real server and needs a document that exists on disk; it
 keeps reading `Path` and stays silent on a file-less buffer, exactly as
@@ -212,18 +237,53 @@ lazily on the next query (large-file buffers drop out); re-extraction runs
 **outside the source's lock** (#2193) — texts snapshot under the lock,
 tokenize unlocked, re-install generation-guarded — so a keystroke's `Observe`
 (reached synchronously from `Update`) never blocks behind tokenizing dirty
-buffers — and a **one-shot
-background project scan** at construction (skips dot-dirs, `node_modules`,
-`vendor` & co.; 256KB/file, 10k files, binaries by NUL sniff). A query
+buffers — and the **per-language project index** (below). A query
 computes the partial identifier at the cursor from the observed buffer text,
 pre-filters with the popup's hump matcher (`fuzzy.MatchHumpsCase` under
 `completion.case_sensitivity`, #2650 — so `gur` reaches `GotoURLResolver`
 from the local index, not only from a server), excludes the word being typed,
 caps at 200 items, and encodes the locality tier (current buffer < other buffers <
 project) into `SortText` so nearer words list first. Words shorter than 3
-runes or starting with a digit are noise and never indexed. Edits to files not
-open in a buffer are not re-scanned — the buffer feed covers what the user
-actually types in.
+runes or starting with a digit are noise and never indexed.
+
+**Code tokens of the same language only (#2652).** The index used to
+tokenize raw text — string contents, comments, Markdown prose, JSON keys and
+lock-file noise all became candidates, from every file type into one pool.
+Now a word is an identifier in *code* of the request's language family
+(`req.Langs()`): the tokenizer runs over `highlight.Segments`, the highlight
+layer's per-language view of a text, which masks the grammar's `string` /
+`comment` / `char` captures (the same mask the bracket scanner uses) and
+attributes every embedded fragment to its own language, recursively. So a
+Go buffer with `// commentWord`, `"stringWord"` and the identifier
+`codeWord` offers only `codeWord`; `README.md` prose is not indexed at all
+(Markdown is a prose language — `highlight.CodeLanguage` says which
+languages have code tokens of their own: a registered file language with a
+grammar that is not prose); and `$myObj` in the README's ```` ```php ````
+fence lands in the PHP index, offered in a `.php` buffer and inside the fence
+itself, never in a `.py` buffer. Every buffer's and file's words are stored
+**per language id**, and the query reads only the ids in `req.Langs()`.
+A buffer whose language has **no grammar** — Plain Text, a plugin disabled
+at build time (#908), a no-cgo build — keeps the plain tokenizer over its
+own text under its language id (`""` for Plain Text), so a plain-text buffer
+still completes from itself and from other plain-text buffers; such files
+contribute **nothing** to the project tier.
+
+**Per-language lazy project index (#2652).** `internal/complete/langindex`
+is the walk both indexes share: the first request from a buffer of language
+*X* starts the scan for *X* in the background — `*.x` files plus the *X*
+fragments embedded in other files — and a Go buffer opened later triggers the
+Go scan; nothing is scanned for a language nobody completes in, and the
+language filter at query time is a map lookup. A file another language owns
+is read for *X* only when it can embed anything (its language has a grammar
+or a region detector); every file read records the languages of its
+embedded fragments, so the next language's scan skips the files that cannot
+contain it without parsing them again. The walk keeps the caps and skips
+(dot-dirs, `node_modules`, `vendor` & co.; 256KB/file and 10k files per
+language for words, 128KB/2000 for symbols; binaries by NUL sniff), and the
+watcher's `Engine.NotifyFileChanged` re-extracts a file for every scanned
+language through the index's **single worker** with per-path dedup (#2176)
+— the word index now refreshes on-disk edits too. Until a language's scan
+finishes, its buffer tiers answer alone.
 
 ## Symbol index (#853)
 
@@ -233,19 +293,29 @@ the captures the language grammars already produce (`function`,
 `function.method`, `constructor`, `type`, `constant`) become completion items
 with proper kinds — no server round-trip, no per-language extraction code.
 Without cgo the grammar layer answers nothing and the source stays silent
-(the word index covers those builds). **CSS files** contribute selector class
-names and IDs (regex over `.css`/`.scss`/`.less`), offered inside HTML
+(the word index covers those builds). **Same language only (#2652):** the
+captures come from `highlight.Segments`, so every symbol is stored under the
+language of the segment that declared it — the host's own code, or an
+embedded fragment's language — and a query reads only `req.Langs()`: a Go
+function is not offered in a Python buffer, and `func FencedFunc` in a
+```` ```go ```` fence of a README is a Go symbol, offered in Go buffers and
+inside the fence. **CSS files** contribute selector class
+names and IDs (regex over the stylesheet's code text — a `<style>` fragment
+in an HTML page counts too), offered inside HTML
 `class="…"`/`id="…"` attribute values — detected on the current line, with
 `data-class` & co. excluded — the cross-file case language servers are
-structurally weak at. Freshness mirrors the word index (observed buffers
+structurally weak at; an HTML request also starts the stylesheet
+languages' scan, and a stylesheet no plugin claims still indexes under
+`css` by extension, so the feature survives a build without the web plugin
+or cgo. Freshness mirrors the word index (observed buffers
 override the disk index; lazy re-extraction outside the lock, #2193) plus
 **watcher invalidation**:
 the app forwards file-change events through `Engine.NotifyFileChanged` to
 sources implementing `FileObserver`, which re-extract off-goroutine — queued
-behind a **single worker** with per-path dedup (#2176), so a mass checkout
-cannot fan out into hundreds of concurrent disk readers. The
-one-shot background scan is capped tighter (2000 files, 128KB) since each
-file costs a parse.
+behind the shared index's **single worker** with per-path dedup (#2176), so
+a mass checkout cannot fan out into hundreds of concurrent disk readers. The
+per-language scan (see "Per-language lazy project index" above) is capped
+tighter (2000 files, 128KB) since each file costs a parse.
 
 ## Unified ranking (#854)
 
@@ -322,7 +392,9 @@ expansion preview in the item detail: CSS property shorthands (`m10` →
 `margin: 10px;`, `bg` → `background: $1;`, fixed forms like `df` →
 `display: flex;`) in CSS/SCSS/LESS buffers, and HTML tag snippets (`div` →
 `<div>$1</div>`, list/img/input/link special shapes) in HTML buffers, outside
-attribute values. Full Emmet abbreviations (`ul>li*3`) contain
+attribute values. The buffer kind is the effective language at the cursor
+(#2652): a `<style>` body in a page gets the CSS shorthands, a `<script>`
+body gets neither, and a path no plugin claims still resolves by extension. Full Emmet abbreviations (`ul>li*3`) contain
 non-identifier characters the popup's identifier-replace accept path cannot
 span and are deliberately out of scope.
 
@@ -331,8 +403,9 @@ span and are deliberately out of scope.
 `internal/snippets` (name `snippets`, priority `lsp.PrioritySnippets` = 40 —
 below symbols, above Emmet) offers the user's `[[snippets]]` config templates
 plus the built-in examples as **snippet items** (kind snippet, detail
-`template <preview>`), scoped to the buffer's language via `lang.ByPath`
-(global entries everywhere). The source returns every matching template and
+`template <preview>`), scoped to the effective language at the cursor
+(`req.LangID()`, #2652 — the buffer's language, or the embedded fragment's
+inside one; `snippets.ForLang`) with global entries everywhere. The source returns every matching template and
 lets the popup's fuzzy prefix filter narrow the list, so it needs no buffer
 text of its own; entries are read live from `config.Get()` per request, so a
 config reload needs no re-wiring. Because the local engine answers triggers

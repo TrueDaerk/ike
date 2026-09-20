@@ -35,10 +35,10 @@ var cssProps = map[string]string{
 
 // cssFixed are complete shorthands expanding to a full declaration.
 var cssFixed = map[string]string{
-	"df":  "display: flex;",
-	"db":  "display: block;",
-	"dib": "display: inline-block;",
-	"dn":  "display: none;",
+	"df":   "display: flex;",
+	"db":   "display: block;",
+	"dib":  "display: inline-block;",
+	"dn":   "display: none;",
 	"posa": "position: absolute;",
 	"posr": "position: relative;",
 	"posf": "position: fixed;",
@@ -92,16 +92,35 @@ func (s *Source) Complete(_ context.Context, req complete.Request) ([]ilsp.Compl
 	if abbrev == "" {
 		return nil, nil
 	}
-	switch strings.ToLower(filepath.Ext(req.LangName())) {
-	case ".css", ".scss", ".less":
+	// The effective language at the cursor decides (#2652): a <style> body
+	// in an HTML page gets the CSS shorthands, a ```html fence in Markdown
+	// the tag snippets. A path no plugin claims still resolves by extension.
+	switch emmetLang(req) {
+	case "css":
 		return cssItems(abbrev), nil
-	case ".html", ".htm", ".xhtml":
+	case "html":
 		if insideAttrValue(line, req.Col) {
 			return nil, nil
 		}
 		return htmlItems(abbrev), nil
 	}
 	return nil, nil
+}
+
+// emmetLang classifies the request as "css", "html" or "": the effective
+// language id when the request has one (a <script> body in a page is
+// TypeScript, not HTML), else the LangName's extension.
+func emmetLang(req complete.Request) string {
+	if id := req.LangID(); id != "" {
+		return id
+	}
+	switch strings.ToLower(filepath.Ext(req.LangName())) {
+	case ".css", ".scss", ".less":
+		return "css"
+	case ".html", ".htm", ".xhtml":
+		return "html"
+	}
+	return ""
 }
 
 // cssItems expands a CSS shorthand abbreviation.

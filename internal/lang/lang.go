@@ -206,6 +206,14 @@ type Language struct {
 	// for a restarting language, a debounced per-root restart. Nil — the
 	// normal case — declares none. See depwatch.go.
 	Deps *DepWatch
+
+	// CompletionPeers lists the ids of languages whose identifiers this
+	// language shares for completion (#2652): the word and symbol indexes
+	// offer a buffer only tokens of its own language, and a peer widens that
+	// to a family that reads each other's code — JavaScript and TypeScript,
+	// C and its headers. Empty, the default, is strict same-language. Peers
+	// are one-directional: a language lists the ones it wants to see.
+	CompletionPeers []string
 }
 
 // Note is one Go-computed diagnostic (#1623): the half-open rune-column range
