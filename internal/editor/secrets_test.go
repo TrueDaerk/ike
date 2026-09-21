@@ -144,3 +144,95 @@ func TestLintNotesReplacedByNextPass(t *testing.T) {
 		t.Error("a pass without notes must clear the mark")
 	}
 }
+
+// maskedAt loads content with a mask span over [startCol,endCol) of line and
+// parks the caret off that line, so every reveal below is the caret's doing.
+func maskedAt(t *testing.T, content string, line, startCol, endCol int) Model {
+	t.Helper()
+	m, path := mdLoaded(t, content)
+	m.cursor = buffer.Position{Line: line + 1}
+	spans := []highlight.Span{
+		{Line: line, StartCol: startCol, EndCol: endCol, Capture: secret.Capture, Replace: secret.Mask},
+	}
+	mm, _ := m.Update(highlight.SpansMsg{Path: path, Version: m.docVersion, Spans: spans})
+	return mm
+}
+
+// TestSecretRevealsAtAppendPositionInInsertMode (#2678): a value ending its
+// line is masked exactly where it is typed into — the insert caret rests at
+// len(line), which equals the range end — so insert mode widens the reveal
+// window by the append position.
+func TestSecretRevealsAtAppendPositionInInsertMode(t *testing.T) {
+	m, _ := masked(t)
+	m.cursor = buffer.Position{Line: 0, Col: 12} // append position, == range end
+	if view := plainView(m); strings.Contains(view, "abc123") {
+		t.Error("normal mode must keep the value masked after it")
+	}
+	m.mode = Insert
+	if view := plainView(m); !strings.Contains(view, "abc123") {
+		t.Error("insert mode at the append position must reveal the value")
+	}
+}
+
+// TestSecretAppendRevealMidFile: the rule is per line, so a masked value that
+// ends a line in the middle of the buffer reveals the same way.
+func TestSecretAppendRevealMidFile(t *testing.T) {
+	m := maskedAt(t, "PORT=80\nTOKEN=abc123\nHOST=x\n", 1, 6, 12)
+	m.mode = Insert
+	m.cursor = buffer.Position{Line: 1, Col: 12}
+	if view := plainView(m); !strings.Contains(view, "abc123") {
+		t.Error("insert caret after a mid-file value must reveal it")
+	}
+}
+
+// TestSecretAppendRevealWhileTyping: typing pushes the caret to the new range
+// end, which is still the append position — the value stays readable.
+func TestSecretAppendRevealWhileTyping(t *testing.T) {
+	m := maskedAt(t, "TOKEN=abc123x\nPORT=80\n", 0, 6, 13)
+	m.mode = Insert
+	m.cursor = buffer.Position{Line: 0, Col: 13}
+	if view := plainView(m); !strings.Contains(view, "abc123x") {
+		t.Error("the appended character must keep the value revealed")
+	}
+}
+
+// TestSecretStaysMaskedAfterValueInNormalMode: in normal mode the caret at the
+// range end sits on a following character (here the space before a comment),
+// so the strict inside-only rule stays in force.
+func TestSecretStaysMaskedAfterValueInNormalMode(t *testing.T) {
+	m := maskedAt(t, "TOKEN=abc123 # note\nPORT=80\n", 0, 6, 12)
+	m.cursor = buffer.Position{Line: 0, Col: 12} // the space after the value
+	if view := plainView(m); strings.Contains(view, "abc123") {
+		t.Error("normal mode on the character after the value must not reveal it")
+	}
+	m.cursor = buffer.Position{Line: 0, Col: 11} // last value character
+	if view := plainView(m); !strings.Contains(view, "abc123") {
+		t.Error("the caret on the last value character must reveal it")
+	}
+}
+
+// TestSecretAppendRevealNotBeforeValue: the widening is right-hand only — the
+// column before the range keeps the value masked even in insert mode.
+func TestSecretAppendRevealNotBeforeValue(t *testing.T) {
+	m, _ := masked(t)
+	m.mode = Insert
+	m.cursor = buffer.Position{Line: 0, Col: 5} // the "=" before the value
+	if view := plainView(m); strings.Contains(view, "abc123") {
+		t.Error("insert mode before the value must keep it masked")
+	}
+}
+
+// TestSecretAppendRevealMultiCaret: secondary carets (#145) get the same
+// append-position treatment as the primary caret.
+func TestSecretAppendRevealMultiCaret(t *testing.T) {
+	m := maskedAt(t, "PORT=80\nTOKEN=abc123\nHOST=x\n", 1, 6, 12)
+	m.cursor = buffer.Position{Line: 0, Col: 0}
+	m.carets = []caret{{pos: buffer.Position{Line: 1, Col: 12}}}
+	if view := plainView(m); strings.Contains(view, "abc123") {
+		t.Error("a normal-mode caret after the value must keep it masked")
+	}
+	m.mode = Insert
+	if view := plainView(m); !strings.Contains(view, "abc123") {
+		t.Error("a secondary insert caret at the append position must reveal the value")
+	}
+}

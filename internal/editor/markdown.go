@@ -39,12 +39,16 @@ import (
 // spacing and renders untinted. adjacent widens the positional reveal (#1594)
 // by one column on each side, so a caret directly before or after the range
 // reveals it too (#1686) — set for the value families in
-// adjacentRevealCaptures.
+// adjacentRevealCaptures. appendReveal widens it by one column on the right
+// only, and only in insert mode: the masked secret family (#1623) reveals at
+// the append position so a value ending its line stays readable while the
+// caret sits at end of line and characters are typed into it (#2678).
 type concealRange struct {
-	start, end int
-	repl       string
-	standIn    bool
-	adjacent   bool
+	start, end   int
+	repl         string
+	standIn      bool
+	adjacent     bool
+	appendReveal bool
 }
 
 // decodeCaptures are the capture names of the decode conceal families that
@@ -86,9 +90,10 @@ func isDecodeCapture(capture string) bool {
 // and the number-readability hints (#1627): appending or prepending digits
 // puts the caret next to the literal rather than in it, and typing against a
 // stand-in without seeing the real value is confusing. Marker chrome (#881),
-// masked secrets (#1623) and the sv separator padding (#1589) keep the strict
-// inside-only rule — widening those would flicker the whole line while moving
-// through it.
+// The sv separator padding (#1589) keeps the strict inside-only rule —
+// widening it would flicker the whole line while moving through it. Masked
+// secrets (#1623) stay inside-only in every mode but insert, where they also
+// reveal at the append position (appendRevealCaptures, #2678).
 var adjacentRevealCaptures = []string{
 	epochtime.Capture,
 	numhint.SizeCapture,
@@ -99,6 +104,26 @@ var adjacentRevealCaptures = []string{
 
 func isAdjacentRevealCapture(capture string) bool {
 	for _, c := range adjacentRevealCaptures {
+		if c == capture {
+			return true
+		}
+	}
+	return false
+}
+
+// appendRevealCaptures are the decode families whose ranges also reveal when
+// the caret sits directly after them — at the append position, column r.end —
+// while the editor is in insert mode (#2678). Masked secrets (#1623) are the
+// one family here: a value ending its line would otherwise stay masked exactly
+// while it is being typed into, because the insert caret rests at len(line).
+// In normal mode the caret at r.end is on a following character (a space, a
+// comment), so the strict inside-only rule stays in force there.
+var appendRevealCaptures = []string{
+	secret.Capture,
+}
+
+func isAppendRevealCapture(capture string) bool {
+	for _, c := range appendRevealCaptures {
 		if c == capture {
 			return true
 		}
@@ -171,10 +196,12 @@ func (m Model) lineConcealRanges(line int) []concealRange {
 			// Never alias m.conceal's backing array when combining.
 			base := len(ranges)
 			ranges = append(append([]concealRange(nil), ranges...), ds...)
-			if isAdjacentRevealCapture(c) {
+			adj, app := isAdjacentRevealCapture(c), isAppendRevealCapture(c)
+			if adj || app {
 				// The copies above are ours to mark; m.decodes stays untouched.
 				for i := base; i < len(ranges); i++ {
-					ranges[i].adjacent = true
+					ranges[i].adjacent = adj
+					ranges[i].appendReveal = app
 				}
 			}
 		}
@@ -196,10 +223,16 @@ func (m Model) lineConcealRanges(line int) []concealRange {
 	inRange := func(r concealRange) bool {
 		// Caret window: the range itself, widened by one column on each side
 		// for the value families (#1686) so appending/prepending digits shows
-		// the literal being typed against.
+		// the literal being typed against, and by one column on the right for
+		// the insert-mode append position of the masked secret family (#2678).
 		lo, hi := r.start, r.end
-		if r.adjacent {
+		switch {
+		case r.adjacent:
 			lo, hi = r.start-1, r.end+1
+		case r.appendReveal && m.mode == Insert:
+			// Append position only (#2678): the insert caret at end of line
+			// sits at r.end when the masked value closes the line.
+			hi = r.end + 1
 		}
 		if cursorOn && cursorCol >= lo && cursorCol < hi {
 			return true
