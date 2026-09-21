@@ -530,16 +530,26 @@ func (b *bridge) requestHover(h host.API, path string, line, col int, mouse bool
 	}
 	mgr := b.manager()
 	if mgr == nil {
+		// Nobody to ask: the PHP trait index can still answer inside a
+		// trait body (#2670).
+		b.traitHover(h, path, line, col, mouse)
 		return
 	}
 	go func() {
 		hv, err := mgr.Hover(context.Background(), path, buffer.Position{Line: line, Col: col})
-		if requestFailed(h, "hover", err) || hv == nil {
+		if requestFailed(h, "hover", err) {
 			return
 		}
-		if text := ilsp.HoverText(hv); text != "" {
-			h.Send(ilsp.HoverMsg{Path: path, Contents: text, Mouse: mouse, Line: line, Col: col})
+		if hv != nil {
+			if text := ilsp.HoverText(hv); text != "" {
+				h.Send(ilsp.HoverMsg{Path: path, Contents: text, Mouse: mouse, Line: line, Col: col})
+				return
+			}
 		}
+		// The server knows nothing here. Inside a trait body that is the
+		// expected answer for a consumer's member, so the index fills the
+		// card (#2670); everywhere else this is inert.
+		b.traitHover(h, path, line, col, mouse)
 	}()
 }
 
@@ -587,6 +597,9 @@ func (b *bridge) definitionRequest(h host.API, peek bool) tea.Cmd {
 	}
 	mgr := b.manager()
 	if mgr == nil {
+		// Nobody to ask: the PHP trait index can still resolve a consumer's
+		// member inside a trait body (#2670).
+		b.traitDefinition(h, path, line, col, peek)
 		return nil
 	}
 	go func() {
@@ -595,6 +608,12 @@ func (b *bridge) definitionRequest(h host.API, peek bool) tea.Cmd {
 			return
 		}
 		if len(locs) == 0 {
+			// The server found nothing. Inside a trait body it never could
+			// for a member living on a consumer, so the index answers
+			// instead (#2670) — after the server, never in front of it.
+			if b.traitDefinition(h, path, line, col, peek) {
+				return
+			}
 			// Never fail silently (#858): say whether nothing was found or
 			// nobody could be asked.
 			h.Send(ilsp.ServerStatusMsg{Text: definitionNotice(mgr.DefinitionSupported(path)), Kind: ilsp.ServerEventInfo})

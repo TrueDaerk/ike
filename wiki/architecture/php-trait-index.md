@@ -3,8 +3,8 @@ type: concept
 title: PHP Trait Index
 description: The workspace-wide PHP declaration index (Epic 0520, #2667) — every class-like declaration with its members, the trait-use / extends / implements edges between them, and the consumer scope a `$this` inside a trait body resolves against where Intelephense is blind. Built on the shared per-language project walk, kept fresh from buffer edits and watcher events, configured by the [php] section (Settings → PHP).
 resource: internal/phpindex
-tags: [architecture, php, traits, index, completion, lsp]
-timestamp: 2026-09-21T15:00:00Z
+tags: [architecture, php, traits, index, completion, navigation, hover, lsp]
+timestamp: 2026-09-21T18:00:00Z
 ---
 
 # PHP Trait Index
@@ -214,12 +214,80 @@ they are never rows. Telemetry records the op `php.trait.diag_suppressed`
 with the count per `applyDiagnostics` call, only when it is greater than
 zero.
 
+## Navigation (#2670)
+
+Go-to-definition, peek definition and hover on `$this->abc()` inside a trait
+return **nothing** from Intelephense whenever `abc` lives on a consumer — the
+bridge could only answer "no definition found under the cursor". The index
+fills that gap as a **fallback**, consulted strictly *after* the server:
+
+| seam (`plugins/lsp/bridge.go`) | when the index is asked |
+| --- | --- |
+| `definitionRequest` (go-to **and** peek) | the server answered **zero** locations, or there is no manager to ask at all |
+| `requestHover` | the server answered **null**/empty hover, or there is no manager |
+
+That ordering is the whole design. The pre-server family of
+[local providers](lsp.md#layers) (`internal/lsp/localdef.go`) is *first*
+claim wins and would bypass the server — exactly wrong here, where the server
+is right everywhere except inside a trait body. So this fallback is not a
+local provider; a server answer is never replaced.
+
+**The seam.** The bridge is a plugin and may not import `internal/phpindex`,
+so the index is reached through the host the way configuration is:
+`host.TraitIndex` (`internal/host/traitindex.go`) is a one-method read-only
+view the app registers with `Host.SetTraitIndex`, and the bridge asks for it
+with `h.TraitIndex()` — no package-level global. Its single question is
+*"which members does the trait's consumer scope declare under this
+position?"*, answered with flat `host.TraitMember` values (name, signature,
+docblock summary, declaring FQN/kind/short name, and the jump target). Every
+gate lives behind the seam, in `phpindex.HostView` (`hostview.go`), cheapest
+first: the buffer must be PHP, `php.trait_index` must be on, `ScopeAt` must
+land in a **trait body**, and the syntax tree must name a member access
+there. Only then does `LookupAccess` run.
+
+**Symbol extraction is tree-based, not regex** (`phpindex.MemberAccessAt`,
+`access.go`). The parse walks from the innermost node containing the position
+up to the nearest member access, so `$this->abc(`, `$this->abc`, `self::K`,
+`self::$x` and `static::make()` all resolve, and `$this->outer($this->inner())`
+resolves the *inner* call when the cursor sits on it. Only `$this`, `self`
+and `static` receivers claim — `$other->abc()` and `parent::gone()` stay the
+server's business — and standing **on the receiver** claims nothing, since
+`$this` inside a trait names the trait. A `::` access may name a constant or
+an enum case and an arrow access a property or a method, so `Access.Kinds`
+carries the candidate kinds and the first that resolves wins.
+
+**Delivery matches a server answer exactly** (`plugins/lsp/traitfallback.go`):
+one hit sends the same `DefinitionMsg` (or `PeekDefinitionMsg` for peek) the
+server path sends, so the app's navigation history, pane dedupe and open
+funnel all apply unchanged; **several hits** — the member declared
+independently on two consumers — send the same `DefinitionCandidatesMsg` the
+[multi-target picker](lsp.md#data-flow) opens for multiple server locations,
+each row previewing the signature and its declaring type, with `Peek` carried
+through. Nothing resolved means the function reports "not handled" and the
+existing #858 notice goes out as before.
+
+**Hover** renders a markdown card per declaration: the signature in a `php`
+fence, the declaring type (`class B — App\Models\B`), the docblock summary,
+and the footer `resolved via trait consumer B`. Several declarations are
+listed, rule-separated. Hover **inside the consumer class** is untouched:
+the server resolves the member there, so its answer wins and the index is
+never consulted.
+
+Telemetry records `php.trait.definition` and `php.trait.hover` with the
+declaration count, only for non-empty answers — a server answer records
+nothing, because the index was never asked. With `php.trait_index = false`,
+without a registered index and in a build without the PHP grammar the whole
+fallback is inert. See [lsp](lsp.md#layers) § definition / hover for the
+bridge side.
+
 ## Wiring
 
 `buildModel` (`internal/app/app.go`) constructs one index per project root
 beside `symbols.New(root)` from the flat host config's `[php]` keys and
 registers it on the completion engine as an observer; the trait completion
 source (#2668) is registered beside it as an ordinary source over the same
-index, and gets its telemetry callback once the model's recorder exists. A
-project switch rebuilds both with the model. `Model.PHPIndex()` exposes the
-index to the features of the later issues.
+index, and gets its telemetry callback once the model's recorder exists. The
+navigation fallback's host view (#2670) is registered on the live host in the
+same place (`internal/app/phpnav.go` builds it and hangs the telemetry
+recorder on it). A project switch rebuilds them with the model.
+`Model.PHPIndex()` exposes the index to the features of the later issues.

@@ -362,6 +362,19 @@ func (x *Index) Lookup(traitFQN string, kind MemberKind, name string) []Member {
 	return out
 }
 
+// LookupAccess is Lookup for a member access resolved from the syntax tree
+// (#2670): the access carries the declaration kinds a member of that shape
+// may have, and the first kind that resolves wins — `self::K` finds the
+// constant `K` or, failing that, the enum case `K`.
+func (x *Index) LookupAccess(traitFQN string, a Access) []Member {
+	for _, k := range a.Kinds {
+		if ms := x.Lookup(traitFQN, k, a.Name); len(ms) > 0 {
+			return ms
+		}
+	}
+	return nil
+}
+
 // DeclarationsNamed lists the declarations matching name: a qualified name
 // exactly, a bare name by short name; sorted by path.
 func (x *Index) DeclarationsNamed(name string) []Decl {

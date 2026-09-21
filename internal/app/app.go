@@ -1628,6 +1628,11 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	// recorder is captured by itself, not through the model, so the closure
 	// keeps nothing else alive.
 	phpTraits.SetTelemetry(traitCompleteRecorder(m.usage))
+	// The LSP bridge's trait navigation fallback (0520, #2670) reaches the
+	// same index through the host: go-to-definition, peek and hover inside a
+	// trait body consult it after the server answered empty. Registered on
+	// the live host, so a project switch swaps in the new project's index.
+	m.host.SetTraitIndex(traitNavView(phpIdx, m.usage))
 	m.floats = ui.NewStack(m.shell)                 // z-ordered floating stack (#1237)
 	m.floats.SetSizeStore(winSizes)                 // resizable modal shell (#774)
 	m.palette.SetSizeStore(winSizes)                // resizable palette box (#774)
