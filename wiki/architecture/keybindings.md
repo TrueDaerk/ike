@@ -1010,7 +1010,7 @@ The explorer did nothing at all.
 | context | chord | command | what it copies |
 |---|---|---|---|
 | `http` | `cmd+c` | `http.copyResponse` | the live selection, else the whole response body |
-| `explorer` | `cmd+c` | `file.copyPath` | the selected entry's absolute path |
+| `explorer` | `cmd+c` | `explorer.clipCopy` | the selected entries, onto the explorer's file clipboard (#2660) |
 
 Two things this pass deliberately did *not* do:
 
@@ -1020,15 +1020,35 @@ Two things this pass deliberately did *not* do:
   moot — `NormalizeChord` folds `cmd+c` onto `ctrl+c` anyway, exactly like the
   editor's copy row, so those panes lose quit-by-`ctrl+c` there the way editors
   already had.
-- **No file copy/paste pair in the explorer.** There is none to bind to; the
-  path is the copy the tree can actually make today. If a real file
-  copy/paste lands, this chord is where it belongs and `file.copyPath` moves
-  back to its `cmd+shift+c` home alone.
+- **No file copy/paste pair in the explorer.** There was none to bind to at
+  the time; the path was the copy the tree could actually make. That is the
+  one line this pass has since been overtaken on — see the section below.
 
 `http.copyResponse` exists because binding `http.copyBody` would have been a
 *different* key: the pane's copy key prefers the selection. The command
 forwards to `httppane.Model.CopyKeyCmd`, the exported form of the pane-local
 `copyKeyCmd`, so the chord and the pane key cannot drift apart.
+
+## The explorer's file clipboard takes `cmd+c` (#2660)
+
+The section above left a promise: *"if a real file copy/paste lands, this chord
+is where it belongs and `file.copyPath` moves back to its `cmd+shift+c` home
+alone."* #2660 landed it, and the promise was kept.
+
+| context | chord | command | effect |
+|---|---|---|---|
+| `explorer` | `cmd+c` | `explorer.clipCopy` | put the selection on the file clipboard (copy mode) |
+| `explorer` | `cmd+x` | `explorer.clipCut` | the same, in cut mode — a paste moves |
+| `explorer` | `cmd+v` | `explorer.clipPaste` | drop the clipboard into the selection's directory |
+
+Nothing was lost in the rebind: `file.copyPath` keeps `cmd+shift+c` (Global,
+#2305) and its entry in the explorer's context menu, which also gained Copy /
+Cut / Paste rows. The clipboard is explorer-internal state, never the OS
+clipboard — see [Explorer](./explorer.md#file-clipboard-2660).
+
+The two rules from the copy-chord pass hold unchanged: **no `ctrl+c`
+secondary** (it stays the global quit chord on macOS, #2062), and off macOS
+`cmd+x`/`cmd+v` fold onto `ctrl+x`/`ctrl+v` exactly like the editor's rows.
 
 ## The find chord outside the editor (#2409)
 
@@ -1346,12 +1366,15 @@ JetBrains is:
 | `editor.undo` | `cmd+z` | fragile | `ctrl+z` | live via ctrl+z |
 | `editor.unescapeSelection` | `cmd+alt+shift+u` | fragile | `palette` | live via palette |
 | `editor.write` | `cmd+s` | fragile | `ctrl+s` | live via ctrl+s |
+| `explorer.clipCopy` | `cmd+c` | fragile | `palette / explorer context menu` | live via palette / explorer context menu |
+| `explorer.clipCut` | `cmd+x` | fragile | `palette / explorer context menu` | live via palette / explorer context menu |
+| `explorer.clipPaste` | `cmd+v` | fragile | `palette / explorer context menu` | live via palette / explorer context menu |
 | `explorer.newFile` | `cmd+n` | fragile | `palette (or a in the explorer)` | live via palette (or a in the explorer) |
 | `explorer.redo` | `cmd+shift+z` | fragile | `palette` | live via palette |
 | `explorer.reveal` | `alt+f1` | fragile | `palette` | live via palette |
 | `explorer.toggle` | `cmd+1` | fragile | `palette` | live via palette |
 | `explorer.undo` | `cmd+z` | fragile | `ctrl+z` | live via ctrl+z |
-| `file.copyPath` | `cmd+c` | fragile | `palette / context menu` | live via palette / context menu |
+| `file.copyPath` | `cmd+shift+c` | fragile | `palette / context menu` | live via palette / context menu |
 | `file.move` | `f6` | delivered | `—` | live |
 | `file.openAs` | `cmd+alt+shift+o` | fragile | `palette / context menu` | live via palette / context menu |
 | `file.openInBrowser` | `alt+f2` | fragile | `palette / context menu` | live via palette / context menu |

@@ -308,6 +308,51 @@ selection cannot supply.
 Directories render with a `▾`/`▸` marker; a read error is retained and shown in
 place of the tree.
 
+## File clipboard (#2660)
+
+`cmd+c` / `cmd+x` / `cmd+v` are the familiar pick-here/drop-there gesture, and
+they complement — not replace — the target-directory prompts above: `m`/`y` ask
+where to go by typing a path, the clipboard lets the cursor answer that
+question by navigating there.
+
+The clipboard is **explorer-internal state** (`Model.clip`, `Model.clipCut` in
+`clipboard.go`), deliberately **not** the OS clipboard: `internal/clipboard`
+carries text, and the explorer's copy must not overwrite what the user copied
+in an editor with a list of paths. Copying the *path* of an entry keeps its own
+chord, `cmd+shift+c` (`file.copyPath`, Global), plus its context-menu entry —
+that is what the explorer's `cmd+c` meant before the clipboard existed (#2315).
+Off macOS the rows fold onto `ctrl+x` / `ctrl+v` like the editor's; `ctrl+c`
+stays unbound, because on macOS it is the global quit chord (#2062).
+
+- **Copy / cut** fill the clipboard from `opTargets` — the marks, else an
+  active range, else the cursor entry — so a multi-selection is picked up as
+  one batch. The marks survive: the clipboard holds resolved targets, so the
+  selection is free to serve a second operation.
+- **Paste** drops them into `targetDir()` — the selected directory itself, or
+  the parent directory of a selected file, the same rule new entries follow. A
+  cut moves (`os.Rename`, one `opRename`, `FileMovedMsg` so open editors follow
+  it); a copy recurses through `copyTree` (one `opCreate`, `FileCreatedMsg`).
+  Everything goes through the bulk machinery (`checkRelocate`, `pushBatch`,
+  `finishBatch`), so one paste is **one undo step** and a partial failure is
+  reported per entry.
+- **After the paste** a cut empties the clipboard (the sources are gone), a
+  copy keeps it so the same entries can be dropped again somewhere else.
+
+**Name conflicts** are the one thing a paste adds to the bulk machinery. An
+entry whose base name is already taken in the target directory does not fail —
+it opens the ordinary name prompt (`ui.Field`, same box as rename) prefilled
+with the conflicting name. Confirming a name that is *still* taken keeps the
+box open with the reason in `prompt.note`; `esc` skips that one entry and the
+rest of the batch continues (`prompt.cancel`). With several conflicting entries
+the prompt is asked once per entry. This is why a paste is a small state
+machine (`pasteState`) rather than a loop: the prompt hands control back to
+`Update` between entries, and `runPaste` resumes where it left off.
+
+Two outcomes are **notes, not failures** (`Model.note` — the notice dialog's
+shape, but the `Info` colour and a `note` title, and no `Model.err`): pasting
+with an empty clipboard, and cutting an entry back into its own directory,
+which is simply skipped.
+
 ## Root path context & file-type markers (#1046)
 
 The **root row** shows more than the basename: a dimmed ` — ~/path` suffix
@@ -469,6 +514,9 @@ these are defaults.
 | `explorer.rename` | `R` | prompt (prefilled with the current name) to rename the selected entry (`RenameMsg`) |
 | `explorer.move` | `m` | prompt for a target directory and move the selection there (`MoveSelectionMsg`, #2166) |
 | `explorer.copy` | `y` | prompt for a target directory and copy the selection there (`CopySelectionMsg`, #2166) |
+| `explorer.clipCopy` | `cmd+c` | put the selection on the file clipboard in copy mode (`ClipCopyMsg`, #2660) |
+| `explorer.clipCut` | `cmd+x` | put the selection on the file clipboard in cut mode (`ClipCutMsg`, #2660) |
+| `explorer.clipPaste` | `cmd+v` | drop the file clipboard into the selection's directory (`ClipPasteMsg`, #2660) |
 | `explorer.toggleMark` | `space` | toggle the selection mark on the cursor row (`ToggleMarkMsg`, #2166) |
 | `explorer.clearMarks` | `esc` | clear the whole multi-select (`ClearMarksMsg`, #2166) |
 | `explorer.search` | `/` | open the type-to-select speed search (`SearchMsg`, #1087); the Global `search.open` chord reaches it through `pane.Searchable` (#2409) |

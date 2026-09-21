@@ -119,13 +119,20 @@ var jetbrainsRows = []row{
 	// handled it silently (http) or did nothing (explorer). Binding it makes
 	// the meaning explicit, listed and rebindable. http.copyResponse is the
 	// pane's own copy key — the selection when there is one, else the whole
-	// body; the explorer has no file-copy/paste pair, so its copy is the
-	// selected entry's path. No ctrl+c secondary: on macOS ctrl+c stays the
-	// global quit chord (a selection-less press must keep quitting, #2062),
-	// and off macOS these rows already normalise to ctrl+c anyway, exactly
-	// like the editor's cmd+c row above.
+	// body. No ctrl+c secondary: on macOS ctrl+c stays the global quit chord
+	// (a selection-less press must keep quitting, #2062), and off macOS these
+	// rows already normalise to ctrl+c anyway, exactly like the editor's
+	// cmd+c row above.
 	{"cmd+c", "http.copyResponse", "Copy response selection or body", HTTP, "HTTP client (#2315)"},
-	{"cmd+c", "file.copyPath", "Copy path of the selected entry", Explorer, "Explorer (#2315)"},
+	// The explorer's cmd+c was file.copyPath while the pane had no file
+	// clipboard (#2315); with one (#2660) the chord means what it means
+	// everywhere else — copy the selected entries, paste them with cmd+v.
+	// file.copyPath keeps cmd+shift+c (Global, below) and its context-menu
+	// entry, so nothing is lost. cmd+x/cmd+v fold onto ctrl+x/ctrl+v off
+	// macOS exactly like the editor's rows do.
+	{"cmd+c", "explorer.clipCopy", "Copy the selected entries", Explorer, "Explorer (#2660)"},
+	{"cmd+x", "explorer.clipCut", "Cut the selected entries", Explorer, "Explorer (#2660)"},
+	{"cmd+v", "explorer.clipPaste", "Paste into the selected directory", Explorer, "Explorer (#2660)"},
 	// The same story one audit later (#2400): cmd+c in the debug panel and in
 	// the issues window. Neither pane could copy at all (the issues window
 	// only copied a mouse selection), so the chord was recorded unbound; the

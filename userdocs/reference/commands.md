@@ -449,6 +449,9 @@ bring their own.
 |---|---|---|---|---|
 | Explorer: Jump to Bottom | `explorer.bottom` | — | `G` | `explorer` pane |
 | Explorer: Clear Selection Marks | `explorer.clearMarks` | — | `esc` | `explorer` pane |
+| Explorer: Copy Files | `explorer.clipCopy` | `cmd+c` | — | `explorer` pane |
+| Explorer: Cut Files | `explorer.clipCut` | `cmd+x` | — | `explorer` pane |
+| Explorer: Paste Files | `explorer.clipPaste` | `cmd+v` | — | `explorer` pane |
 | Explorer: Collapse All | `explorer.collapseAll` | — | — | `explorer` pane |
 | Explorer: Collapse or Go to Parent | `explorer.collapseOrParent` | — | `h / left` | `explorer` pane |
 | Explorer: Copy Selection To… | `explorer.copy` | — | — | `explorer` pane |

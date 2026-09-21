@@ -54,15 +54,30 @@ const (
 // lines is an optional detail list rendered under the title (#2166): the bulk
 // delete/move/copy prompts spell out every entry they will touch, so a
 // selection-wide confirmation names its targets instead of only counting them.
+// note is an extra message line under the title, rendered in the Error colour:
+// the paste conflict prompt (#2660) uses it to say why the last name was
+// rejected while keeping the box open for another try.
+//
+// cancel runs when the prompt is dismissed without a name (esc, or an empty
+// input). It exists for the paste batch, which must continue with its
+// remaining entries after one of them is skipped; a nil cancel — every other
+// prompt — simply closes the box.
+//
+// info renders a promptNotice as a neutral status message (Info colour,
+// "note" title) instead of an error, for the paste messages that report a
+// no-op rather than a failure (#2660).
 type prompt struct {
 	kind     promptKind
 	title    string
 	lines    []string
+	note     string
 	input    ui.Field
 	selStart int
 	selEnd   int
 	anchor   string
+	info     bool
 	accept   func(m *Model, input string) tea.Cmd
+	cancel   func(m *Model) tea.Cmd
 }
 
 // fail records a failed user-initiated file operation and opens a dismissable
@@ -72,6 +87,14 @@ type prompt struct {
 func (m *Model) fail(err error) {
 	m.err = err
 	m.prompt = &prompt{kind: promptNotice, title: "error", input: ui.NewField(err.Error())}
+}
+
+// note reports a harmless outcome the user would otherwise have to guess at —
+// a paste with an empty clipboard, a cut dropped back into its own directory
+// (#2660). It borrows the notice dialog's shape (any key dismisses) but reads
+// as a status message, not as a failure: no m.err, Info colour, "note" title.
+func (m *Model) note(text string) {
+	m.prompt = &prompt{kind: promptNotice, title: "note", info: true, input: ui.NewField(text)}
 }
 
 // opKind distinguishes the reversible file operations.
@@ -183,11 +206,12 @@ func (m *Model) handlePromptKey(msg tea.KeyPressMsg) tea.Cmd {
 		name := trimSpace(p.input.Text)
 		m.prompt = nil
 		if name == "" {
-			return nil
+			return promptCancel(m, p)
 		}
 		return p.accept(m, name)
 	case msg.Code == tea.KeyEscape:
 		m.prompt = nil
+		return promptCancel(m, p)
 	default:
 		// Everything else is shared line editing (#2002): cursor and word
 		// motions, word/line kills and the macOS opt/cmd chords, plus
@@ -195,6 +219,16 @@ func (m *Model) handlePromptKey(msg tea.KeyPressMsg) tea.Cmd {
 		p.input.Key(msg)
 	}
 	return nil
+}
+
+// promptCancel runs a dismissed prompt's cancel hook, if it has one. It is
+// what lets a multi-entry paste survive an esc on one of its conflict prompts
+// (#2660) instead of stranding the rest of the batch.
+func promptCancel(m *Model, p *prompt) tea.Cmd {
+	if p.cancel == nil {
+		return nil
+	}
+	return p.cancel(m)
 }
 
 // targetDir is the directory a new entry is created in: the selected directory
@@ -810,11 +844,22 @@ func (m Model) promptBox() string {
 		// The bulk operations' target list (#2166), one entry per row.
 		body += "\n" + ansi.Truncate(l, inner, "…")
 	}
+	if p.note != "" {
+		// A rejected attempt the box stays open for (#2660).
+		body += "\n" + lipgloss.NewStyle().Foreground(m.theme().Error).
+			Render(ansi.Truncate(p.note, inner, "…"))
+	}
 	switch p.kind {
 	case promptNotice:
-		// Dismissable error dialog (#1030): message in the Error colour,
-		// hint row mirrors the confirm prompt's affordance line.
-		msg := lipgloss.NewStyle().Foreground(m.theme().Error).
+		// Dismissable dialog (#1030): the message in the Error colour — or in
+		// the Info colour for a status note (#2660), which reports an outcome
+		// rather than a failure. The hint row mirrors the confirm prompt's
+		// affordance line.
+		fg := m.theme().Error
+		if p.info {
+			fg = m.theme().Info
+		}
+		msg := lipgloss.NewStyle().Foreground(fg).
 			Render(ansi.Truncate(p.input.Text, inner, "…"))
 		body += "\n" + msg + "\n" + ansi.Truncate("any key to dismiss", inner, "…")
 	case promptInput:
@@ -943,8 +988,13 @@ func (m *Model) PromptMouseClick(x, y int) {
 		return
 	}
 	// border(1) + title line(1) = the input row; border(1) + padding(1) +
-	// the "> " prefix reach the text column.
-	inputRow := by + 2
+	// the "> " prefix reach the text column. A target list (#2166) and a
+	// rejection note (#2660) sit between the title and the input, so the row
+	// counts them too.
+	inputRow := by + 2 + len(p.lines)
+	if p.note != "" {
+		inputRow++
+	}
 	textX := bx + 2 + len(promptInputPrefix)
 	if y != inputRow {
 		return

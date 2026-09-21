@@ -13,8 +13,10 @@ import (
 
 // copychord_test.go covers #2315: cmd+c is a listed binding in the response
 // viewer and in the explorer, not a pane secret (http) or a dead key
-// (explorer). GOOS is pinned to darwin in the dispatch tests so the built
-// table keeps the meta chord the tests feed, regardless of the build platform.
+// (explorer). Since #2660 the explorer's cmd+c is its file clipboard rather
+// than file.copyPath — the path copy moved to cmd+shift+c and the context
+// menu. GOOS is pinned to darwin in the dispatch tests so the built table
+// keeps the meta chord the tests feed, regardless of the build platform.
 
 // pinDarwin keeps cmd chords as Meta in the default table for one test.
 func pinDarwin(t *testing.T) {
@@ -58,7 +60,11 @@ func TestCopyChordDefaultsBound(t *testing.T) {
 		want string
 	}{
 		{keymap.HTTP, "http.copyResponse", "cmd+c"},
-		{keymap.Explorer, "file.copyPath", "cmd+c"},
+		// The explorer's file clipboard (#2660); cmd+x/cmd+v fold onto
+		// ctrl+x/ctrl+v off macOS like every other cmd row.
+		{keymap.Explorer, "explorer.clipCopy", "cmd+c"},
+		{keymap.Explorer, "explorer.clipCut", "cmd+x"},
+		{keymap.Explorer, "explorer.clipPaste", "cmd+v"},
 	}
 	for _, goos := range []string{"darwin", "linux"} {
 		table := keymap.BuildTable(keymap.DefaultsFor(keymap.PresetJetBrains, goos), nil, goos)
@@ -140,8 +146,10 @@ func TestCopyResponseCommandWithoutPane(t *testing.T) {
 	}
 }
 
-// TestCopyChordCopiesExplorerPath: cmd+c on a tree selection copies its path.
-func TestCopyChordCopiesExplorerPath(t *testing.T) {
+// TestCopyChordFillsExplorerClipboard: cmd+c on a tree selection puts the
+// entry on the explorer's file clipboard (#2660) and leaves the OS clipboard
+// — which carries text, never paths — untouched.
+func TestCopyChordFillsExplorerClipboard(t *testing.T) {
 	pinDarwin(t)
 	var copied string
 	orig := clipboardWrite
@@ -160,13 +168,25 @@ func TestCopyChordCopiesExplorerPath(t *testing.T) {
 		m = out.(Model)
 	}
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
-	path, _, ok := m.explorer().Selected()
-	if !ok {
+	if _, _, ok := m.explorer().Selected(); !ok {
 		t.Fatal("precondition: the tree must have a selection")
 	}
 
 	m = drainKey(m, tea.KeyPressMsg{Code: 'c', Mod: tea.ModMeta})
+	if n := m.explorer().ClipCount(); n != 1 {
+		t.Fatalf("cmd+c in the explorer put %d entries on the file clipboard, want 1", n)
+	}
+	if m.explorer().ClipCut() {
+		t.Error("cmd+c must arm copy mode, not cut")
+	}
+	if copied != "" {
+		t.Errorf("the explorer's cmd+c must not touch the OS clipboard, wrote %q", copied)
+	}
+
+	// cmd+shift+c still copies the path — nothing was lost in the rebind.
+	m = drainKey(m, tea.KeyPressMsg{Code: 'c', Mod: tea.ModMeta | tea.ModShift})
+	path, _, _ := m.explorer().Selected()
 	if copied != path {
-		t.Fatalf("cmd+c in the explorer copied %q, want %q", copied, path)
+		t.Fatalf("cmd+shift+c copied %q, want the path %q", copied, path)
 	}
 }
