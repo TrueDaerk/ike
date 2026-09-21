@@ -193,6 +193,13 @@ const (
 	// "index" detail how many rows the index added after deduplication.
 	// Recorded only when the index contributed at least one row.
 	OpPHPTraitReferences = "php.trait.references"
+	// One applied rename the PHP trait index took part in (0520, #2672):
+	// the "path" detail is "extended" (a server rename completed with the
+	// occurrences inside consumed traits) or "index" (an index-driven
+	// rename inside a trait body the server refused), the "edits" detail
+	// how many identifiers the index rewrote. A rename the index added
+	// nothing to records nothing.
+	OpPHPTraitRename = "php.trait.rename"
 )
 
 // CommandSlowThreshold is the dispatch duration from which a command event

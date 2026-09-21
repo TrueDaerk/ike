@@ -532,6 +532,17 @@ type RenamePromptMsg struct {
 	Path        string
 	Placeholder string
 	Apply       func(newName string) tea.Cmd
+	// Note is an extra line the prompt shows under the input (#2672): what
+	// the rename will touch beyond the server's edits ("+ 7 occurrences in
+	// traits A, C"), or that the index performs it. Empty for a plain
+	// server rename.
+	Note string
+	// Validate, when set, checks the typed name before Apply runs and
+	// returns a message rejecting it ("" accepts). The prompt shows the
+	// message and stays open, so a bad name never reaches the server or
+	// the disk. The PHP member renames (#2672) use it to require an
+	// identifier.
+	Validate func(newName string) string
 }
 
 // PreviewFile is one file a pending edit would rewrite: its path, whether an

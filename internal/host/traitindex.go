@@ -95,6 +95,83 @@ type TraitIndex interface {
 	// caller deduplicates against the server's list. op is TraitReferences
 	// or TraitHighlight; the latter restricts the answer to path.
 	TraitReferencesAt(op TraitLookup, path string, lines []string, line, col, serverHits int) []TraitReference
+	TraitRenamer
+}
+
+// TraitRenameSide names the rename path asking the index (#2672): the
+// extension of a rename the server accepted, or the index-driven rename of
+// a member the server refused to rename.
+type TraitRenameSide int
+
+const (
+	// TraitRenameExtend is the consumer side: the server renames a member
+	// declared on a class, and the index supplies the occurrences inside
+	// the traits that class consumes — the rows the server never edits.
+	TraitRenameExtend TraitRenameSide = iota
+	// TraitRenameIndex is the trait side: PrepareRename failed inside a
+	// trait body, and the index supplies the whole rename — the
+	// declaration(s) in the consumer or sibling trait plus every access.
+	TraitRenameIndex
+)
+
+// String is the telemetry spelling of the side.
+func (s TraitRenameSide) String() string {
+	if s == TraitRenameIndex {
+		return "index"
+	}
+	return "extended"
+}
+
+// TraitRenameEdit is one identifier an index-driven rename rewrites
+// (#2672): its range in editor coordinates (rune columns, one line), the
+// text currently there (a property declaration keeps its `$`, so the bridge
+// can preserve it), and where it sits.
+type TraitRenameEdit struct {
+	Path string
+	Line int
+	Col  int
+	// EndCol is the exclusive end column of the identifier on Line.
+	EndCol int
+	// Text is the identifier as written: `abc`, or `$abc` for a property
+	// declaration.
+	Text string
+	// Declaring is the FQN of the class-like declaration the edit lies in,
+	// DeclName its short name; InTrait says that declaration is a trait.
+	Declaring string
+	DeclName  string
+	InTrait   bool
+	// Decl marks a declaration of the member rather than an access.
+	Decl bool
+}
+
+// TraitRenamePlan is what an index-driven rename would touch (#2672).
+type TraitRenamePlan struct {
+	// OldName is the member's bare name (a property without its `$`) — the
+	// prompt's placeholder on the index side.
+	OldName string
+	// Edits lists every identifier to rewrite, sorted by path and position,
+	// without duplicates. Empty when the member is ambiguous.
+	Edits []TraitRenameEdit
+	// Ambiguous lists the declarations the member resolves to when they sit
+	// on unrelated consumers with differing definitions — the rename is
+	// then refused, naming them.
+	Ambiguous []TraitMember
+}
+
+// TraitRenamer is the rename half of the index seam (#2672).
+type TraitRenamer interface {
+	// TraitRenameAt plans the index's share of a rename of the member under
+	// the position. On the extend side it answers for a member the server
+	// can rename itself — the plan then carries only the rows inside trait
+	// bodies. On the index side it answers only inside a trait body, with
+	// the member's whole scope. ok is false when the index has nothing to
+	// say: not a PHP buffer, php.trait_index off, no member under the
+	// position.
+	TraitRenameAt(side TraitRenameSide, path string, lines []string, line, col int) (plan TraitRenamePlan, ok bool)
+	// TraitRenameApplied records that a rename the index took part in was
+	// applied: the side and how many identifiers the index rewrote — the
+	// app turns it into the php.trait.rename telemetry op.
+	TraitRenameApplied(side TraitRenameSide, edits int)
 }
 
 // SetTraitIndex registers (or, with nil, removes) the PHP trait index the

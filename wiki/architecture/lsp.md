@@ -728,6 +728,20 @@ the user approved. Cancelling is free: nothing has been written when the
 dialog is up, so buffers and files stay as they were. A rename confined to a
 single file keeps applying instantly, dialog-free.
 
+*PHP trait members (#2672).* Intelephense never edits `$this->abc()` inside
+the traits a class consumes, and refuses to rename such a member from inside
+the trait. The [PHP trait index](php-trait-index.md#rename-2672) closes both
+gaps through the same funnel (`plugins/lsp/traitrename.go`): a server rename
+of a PHP member is **extended** with the occurrences inside consumed traits —
+announced in the prompt as `+ 7 occurrences in traits A, C`, deduplicated
+against the server's edits and always previewed — and a `prepareRename`
+the server refuses inside a trait body becomes an **index-driven rename**
+of the declaration and every access, previewed before anything is written
+and refused when the member resolves to unrelated consumers declaring it
+differently. Both validate the new name as a PHP identifier in the prompt
+(`RenamePromptMsg.Validate`; the prompt shows the rejection and stays open)
+and are inert with `php.trait_index = false`.
+
 *Markdown headings (#2025).* marksman resolves same-document references
 itself: renaming `## Old Heading` already returns edits rewriting every
 `](#old-heading)` in the file alongside the heading, and IKE applies them —

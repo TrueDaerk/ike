@@ -3,8 +3,8 @@ type: concept
 title: PHP Trait Index
 description: The workspace-wide PHP declaration index (Epic 0520, #2667) — every class-like declaration with its members, the trait-use / extends / implements edges between them, and the consumer scope a `$this` inside a trait body resolves against where Intelephense is blind. Built on the shared per-language project walk, kept fresh from buffer edits and watcher events, configured by the [php] section (Settings → PHP).
 resource: internal/phpindex
-tags: [architecture, php, traits, index, completion, navigation, hover, references, lsp]
-timestamp: 2026-09-21T18:00:00Z
+tags: [architecture, php, traits, index, completion, navigation, hover, references, rename, lsp]
+timestamp: 2026-09-21T20:00:00Z
 ---
 
 # PHP Trait Index
@@ -350,6 +350,87 @@ highlight variant records nothing. With `php.trait_index = false`, without a
 registered index and in a build without the PHP grammar the merge returns
 the server's list untouched. See [lsp](lsp.md#layers) § find references for
 the bridge side.
+
+## Rename (#2672)
+
+Rename around traits is unsafe or impossible with the server alone: renaming
+`abc()` on class `B` via Intelephense leaves `$this->abc()` inside the traits
+`B` consumes untouched — broken code after the rename — and a rename started
+inside a trait body on such a member is refused, because the server cannot
+resolve it. The index turns the reference scanner's rows into **rename
+plans** the bridge applies through the one multi-file funnel every rename
+takes (`dispatchRenameEdits`, `plugins/lsp/bridge.go`), on two paths:
+
+| path | trigger | what the index contributes |
+| --- | --- | --- |
+| **extended server rename** (consumer side) | the server accepted the rename of a PHP member | the occurrences **inside trait bodies** — the rows the server never edits — appended to the server's `WorkspaceEdit` |
+| **index-driven rename** (trait side) | `prepareRename` failed or answered empty inside a **trait body**, or the server offers no rename at all | the **whole rename**: the declaration(s) in the consumer or sibling trait plus every `$this` / `self` / `static` access in the member's scope |
+
+**The seam** is `host.TraitRenamer` (`internal/host/traitindex.go`), the
+third question on `host.TraitIndex`: `TraitRenameAt(side, path, lines, line,
+col)` answers a `TraitRenamePlan` — the member's bare name, the identifiers
+to rewrite (`TraitRenameEdit`: path, line, start and end column, the text
+currently there, the declaring type) or the declarations that make the
+target ambiguous — and `TraitRenameApplied(side, edits)` reports an applied
+rename back for telemetry. `phpindex.HostView` (`hostview_rename.go`)
+answers behind the same gates as references (PHP buffer, `php.trait_index`
+on, a class-like body; the index side additionally requires a trait body):
+`MembersAt` resolves the member under the position, `References` per
+declaration supplies the rows, filtered to trait bodies on the extend side.
+A row whose identifier is not the member's own spelling — the `bar` of
+`use X { foo as bar; }` and the calls of `bar` — is never rewritten: the
+alias is the consumer's own name and stays valid. A property keeps its `$`
+where it is written (`protected $x`, `self::$x`) and drops it where it is
+not (`$this->x`).
+
+**Ambiguity.** On the index side the member may resolve to several
+declarations, nearest first. Two declarations on **unrelated** types (neither
+in the other's parent chain or trait closure) with **different
+signatures** are different members sharing a name — renaming both, or
+guessing one, would be wrong either way — so the plan carries them as
+`Ambiguous`, and the bridge refuses with a toast naming every declaration
+(`cannot rename abc: declared differently in class B (B.php:13) and class
+B2 (B2.php:10)`). Declarations with the same signature (two consumers
+implementing one trait contract) or on related types are renamed together.
+
+**The bridge** (`plugins/lsp/traitrename.go`). On the extend side
+`promptRename` computes the plan before the name is typed and hands the
+prompt a **note** — `+ 7 occurrences in traits A, C` — and a **validator**;
+`applyRename` recomputes it after the server's `WorkspaceEdit` arrived
+(nothing can change while the prompt is modal), converts it with
+`traitRenameFiles` and merges it into the server's converted edits,
+**skipping every identifier a server edit already overlaps** (same file and
+line, intersecting columns), so nothing is applied twice. An extended rename
+is always previewed (`RenamePreviewMsg`, [lsp](lsp.md#layers) § rename),
+even when the server's own share stayed in one file, so the index's edits
+are seen before they are written; an empty plan changes nothing. On the
+index side `rename` consults `traitIndexRename` where it used to toast
+"cannot rename here" (and where a licence-less Intelephense reports no
+rename capability at all): an ambiguous plan is refused, otherwise the
+prompt opens prefilled with the member name and a note saying the index
+performs the rename, and `applyTraitIndexRename` **always** previews the
+plan's edits — every edit here is IKE's own reading of the code — before
+`dispatchRenameEdits` applies them on enter; esc drops the message and
+nothing has been written.
+
+Common rules for both paths: the new name is validated **in the prompt** as
+a PHP identifier (`validatePHPName`, an optional leading `$` allowed);
+`1abc` or `a-b` is rejected with a message and the prompt stays open
+(`RenamePromptMsg.Validate`, `internal/app/lsprename.go`). Occurrences in
+open buffers are edited through the buffer as one undo unit per file
+(`FormatEditsMsg`), the others rewritten on disk — the funnel's existing
+guarantee: a closed file is rewritten bottom-up preserving its mode and has
+**no undo** beyond local history, exactly like a server rename's disk-only
+files. The navigation history records nothing extra, like a server rename.
+Telemetry records `php.trait.rename` with `path` (`extended` / `index`) and
+`edits` (the identifiers the index rewrote) on apply, never for a cancelled
+preview or a rename the index added nothing to. With `php.trait_index =
+false`, without a registered index and in a build without the PHP grammar
+both paths are inert: the prompt stays plain and a refused position toasts
+"cannot rename here" as before. The intention popup's rename entry
+(`plugins/lsp/renamegate.go`) is unchanged: it still requires the server's
+capability and verdict, so the index-driven path is reached through
+`lsp.rename` itself.
 
 ## Wiring
 

@@ -24,7 +24,23 @@ func traitNavView(idx *phpindex.Index, rec *telemetry.Recorder) *phpindex.HostVi
 	v := phpindex.NewHostView(idx)
 	v.SetTelemetry(traitNavRecorder(rec))
 	v.SetReferencesTelemetry(traitRefsRecorder(rec))
+	v.SetRenameTelemetry(traitRenameRecorder(rec))
 	return v
+}
+
+// traitRenameRecorder is the callback for an applied rename the index took
+// part in (#2672): one php.trait.rename event carrying the path (extended /
+// index) and how many identifiers the index rewrote.
+func traitRenameRecorder(rec *telemetry.Recorder) func(host.TraitRenameSide, int) {
+	if rec == nil {
+		return nil
+	}
+	return func(side host.TraitRenameSide, edits int) {
+		rec.Op(telemetry.OpPHPTraitRename, telemetry.OpPhaseOK, map[string]string{
+			"path":  side.String(),
+			"edits": strconv.Itoa(edits),
+		})
+	}
 }
 
 // traitRefsRecorder is the callback for a find-usages answer the index

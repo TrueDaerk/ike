@@ -1,5 +1,33 @@
 # Log
 
+## 2026-09-21 (Rename across traits, #2672)
+
+- **Rename around traits was unsafe or impossible.** Renaming `abc()` on
+  class `B` via Intelephense left `$this->abc()` inside the traits `B`
+  consumes untouched — broken code after the rename — and a rename started
+  inside a trait body on such a member ended in "cannot rename here".
+- **Two rename paths, one funnel** (`plugins/lsp/traitrename.go`, both
+  through `dispatchRenameEdits`): a server rename of a PHP member is
+  **extended** with the occurrences inside consumed traits, announced in the
+  prompt (`+ 7 occurrences in traits A, C`), deduplicated against the server's
+  edits by overlap and always previewed; a `prepareRename` the server refuses
+  inside a trait body (or a server without rename at all) becomes an
+  **index-driven rename** of the declaration(s) and every access, previewed
+  before anything is written, refused with a toast naming the declarations
+  when the member resolves to unrelated consumers declaring it differently.
+- **The plan lives behind the seam** (`host.TraitRenamer`,
+  `phpindex.HostView.TraitRenameAt`): the reference scanner (#2671) supplies
+  the rows, the view keeps every PHP rule — a trait-use alias keeps its own
+  name, a property keeps its `$` where written, related or alike declarations
+  rename together — and reports the applied rename back for telemetry
+  (`php.trait.rename` with `path` and `edits`).
+- **The prompt validates and explains** (`RenamePromptMsg.Note` /
+  `.Validate`, `internal/app/lsprename.go`): a name that is not a PHP
+  identifier (`1abc`, `a-b`) is rejected in place and the prompt stays open.
+- Wiki: [php-trait-index](architecture/php-trait-index.md#rename-2672) §
+  Rename, [lsp](architecture/lsp.md) § rename, the rename gate notes in
+  `plugins/lsp/renamegate.go`.
+
 ## 2026-09-21 (Trait navigation: definition, peek and hover fallback, #2670)
 
 - **Go-to-definition, peek and hover went nowhere inside a trait.** With

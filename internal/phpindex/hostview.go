@@ -39,6 +39,10 @@ type HostView struct {
 	// find-usages answer the index complemented (telemetry op
 	// php.trait.references, #2671); nil until SetReferencesTelemetry.
 	reportRefs func(server, index int)
+	// reportRename is called with the side and the index's edit count of
+	// every applied rename the index took part in (telemetry op
+	// php.trait.rename, #2672); nil until SetRenameTelemetry.
+	reportRename func(side host.TraitRenameSide, edits int)
 }
 
 // NewHostView returns the host-facing view of the index.
