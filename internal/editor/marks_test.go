@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/host"
 )
@@ -92,9 +93,9 @@ func TestLocalMarkClampsAfterTruncation(t *testing.T) {
 func TestGlobalMarkSetRoutesToHook(t *testing.T) {
 	m, path := loaded(t, "alpha\nbeta\n")
 	var got []interface{}
-	m.SetMarkHooks(func(r rune, p string, line, col int) {
+	m.SetMarkHooks(MarkHooks{Set: func(r rune, p string, line, col int) {
 		got = []interface{}{r, p, line, col}
-	}, nil, nil)
+	}})
 	m = typeKeys(m, "jmA")
 	if len(got) == 0 || got[0].(rune) != 'A' || got[1].(string) != path || got[2].(int) != 1 {
 		t.Fatalf("global set hook got %v, want [A %s 1 0]", got, path)
@@ -108,7 +109,7 @@ func TestGlobalMarkSetRoutesToHook(t *testing.T) {
 // a command carrying GlobalMarkJumpMsg with the exact flag; '-A clears it.
 func TestGlobalMarkJumpEmitsMsg(t *testing.T) {
 	m, _ := loaded(t, "alpha\n")
-	m.SetMarkHooks(func(rune, string, int, int) {}, nil, nil)
+	m.SetMarkHooks(MarkHooks{Set: func(rune, string, int, int) {}})
 	m = typeKeys(m, "`")
 	m, cmd := m.Update(key('A'))
 	if cmd == nil {
@@ -134,9 +135,9 @@ func TestGlobalMarkJumpEmitsMsg(t *testing.T) {
 func TestGlobalMarkAdjustHookFires(t *testing.T) {
 	m, path := loaded(t, "l0\nl1\nl2\n")
 	var calls [][3]interface{}
-	m.SetMarkHooks(nil, nil, func(p string, cursorAfter, delta int) {
+	m.SetMarkHooks(MarkHooks{Adjust: func(p string, cursorAfter, delta int) {
 		calls = append(calls, [3]interface{}{p, cursorAfter, delta})
-	})
+	}})
 	m = send(m, key('o'), special(tea.KeyEscape))
 	if len(calls) == 0 {
 		t.Fatal("adjust hook did not fire on a line insert")
@@ -153,16 +154,33 @@ func TestGlobalMarkAdjustHookFires(t *testing.T) {
 	}
 }
 
-// TestGutterShowsBookmarkGlyph: a marked line renders the accent flag in the
-// gutter's sign column; the letter deliberately does not render there.
-func TestGutterShowsBookmarkGlyph(t *testing.T) {
+// TestGutterShowsMarkLetter: a marked line renders the mark's own letter in
+// the gutter's sign column (#2661), not the anonymous flag.
+func TestGutterShowsMarkLetter(t *testing.T) {
 	m, _ := loaded(t, "alpha\nbeta\ngamma\n")
 	m.Configure(host.MapConfig{"editor.line_numbers": "true"})
 	m = typeKeys(m, "jmb")
 	view := m.View()
-	if !strings.Contains(view, "⚑") {
-		t.Fatalf("view lacks the bookmark glyph:\n%s", view)
+	if strings.Contains(view, "⚑") {
+		t.Fatalf("a vim mark must not draw the anonymous flag:\n%s", view)
 	}
+	if !markedLineHasSign(t, m, 1, "b") {
+		t.Fatalf("gutter lacks the mark letter b:\n%s", view)
+	}
+}
+
+// markedLineHasSign reports whether the rendered row for 0-based line l
+// opens with sign — the sign cell is the gutter's first column.
+func markedLineHasSign(t *testing.T, m Model, l int, sign string) bool {
+	t.Helper()
+	text := m.LineText(l)
+	for _, row := range strings.Split(ansi.Strip(m.View()), "\n") {
+		if !strings.Contains(row, text) {
+			continue
+		}
+		return strings.HasPrefix(row, sign)
+	}
+	return false
 }
 
 // TestGutterBreakpointOutranksBookmark: a breakpoint on the marked line keeps
@@ -186,9 +204,9 @@ func TestGutterBreakpointOutranksBookmark(t *testing.T) {
 func TestGutterShowsGlobalMarkLines(t *testing.T) {
 	m, _ := loaded(t, "alpha\nbeta\n")
 	m.Configure(host.MapConfig{"editor.line_numbers": "true"})
-	m.SetMarkHooks(nil, func(string) []int { return []int{0} }, nil)
-	if !strings.Contains(m.View(), "⚑") {
-		t.Fatal("global mark line lacks the bookmark glyph")
+	m.SetMarkHooks(MarkHooks{Letters: func(string) map[int]rune { return map[int]rune{0: 'Z'} }})
+	if !markedLineHasSign(t, m, 0, "Z") {
+		t.Fatalf("global mark line lacks its letter:\n%s", m.View())
 	}
 }
 
@@ -237,5 +255,108 @@ func TestJumpToLocalMark(t *testing.T) {
 	}
 	if m.JumpToLocalMark('z') {
 		t.Fatal("JumpToLocalMark(z) = true for an unset mark")
+	}
+}
+
+// TestLocalMarkToggles: m{letter} on the line that already carries the mark
+// removes it (#2661) — the gutter glyph goes, a jump reports E20 — while the
+// same key on another line still moves the mark.
+func TestLocalMarkToggles(t *testing.T) {
+	m, _ := loaded(t, "alpha\nbeta\ngamma\n")
+	m.Configure(host.MapConfig{"editor.line_numbers": "true"})
+	m = typeKeys(m, "jmm")
+	if lms := m.LocalMarks(); len(lms) != 1 || lms[0].Line != 1 {
+		t.Fatalf("after set, marks = %+v, want line 1", lms)
+	}
+	// A different column on the same line still counts as the same line.
+	m = typeKeys(m, "$mm")
+	if lms := m.LocalMarks(); len(lms) != 0 {
+		t.Fatalf("repeat on the marked line must remove, marks = %+v", lms)
+	}
+	if m.cmdMsg != "mark m removed" {
+		t.Fatalf("ex line = %q, want the removal confirmation", m.cmdMsg)
+	}
+	if markedLineHasSign(t, m, 1, "m") {
+		t.Fatalf("gutter still shows the mark:\n%s", m.View())
+	}
+	m = typeKeys(m, "'m")
+	if m.cmdMsg != "E20: mark not set" {
+		t.Fatalf("jump after removal = %q, want E20", m.cmdMsg)
+	}
+	// Setting again and pressing on another line moves the mark.
+	m = typeKeys(m, "ggmm")
+	m = typeKeys(m, "jjmm")
+	if lms := m.LocalMarks(); len(lms) != 1 || lms[0].Line != 2 {
+		t.Fatalf("mark on another line must move, marks = %+v", lms)
+	}
+}
+
+// TestGlobalMarkToggleRoutesToHook: m{A-Z} on the line the store already
+// holds the mark on calls the remove hook instead of the setter (#2661).
+func TestGlobalMarkToggleRoutesToHook(t *testing.T) {
+	m, path := loaded(t, "alpha\nbeta\n")
+	var removed []rune
+	sets := 0
+	m.SetMarkHooks(MarkHooks{
+		Set:    func(rune, string, int, int) { sets++ },
+		At:     func(r rune, p string, line int) bool { return r == 'A' && p == path && line == 1 },
+		Remove: func(r rune) { removed = append(removed, r) },
+	})
+	m = typeKeys(m, "jmA")
+	if len(removed) != 1 || removed[0] != 'A' || sets != 0 {
+		t.Fatalf("removed = %v, sets = %d, want the toggle to remove A", removed, sets)
+	}
+	if m.cmdMsg != "mark A removed" {
+		t.Fatalf("ex line = %q, want the removal confirmation", m.cmdMsg)
+	}
+	// On another line the mark moves as before.
+	m = typeKeys(m, "ggmA")
+	if sets != 1 {
+		t.Fatalf("sets = %d, want 1 after marking another line", sets)
+	}
+}
+
+// TestGutterSignPrecedence: a bookmark's mnemonic digit outranks a vim mark
+// letter, which in turn outranks the anonymous bookmark flag (#2661).
+func TestGutterSignPrecedence(t *testing.T) {
+	m, _ := loaded(t, "alpha\nbeta\ngamma\n")
+	m.Configure(host.MapConfig{"editor.line_numbers": "true"})
+	m.SetBookmarkHooks(func(string) map[int]string {
+		return map[int]string{0: "⚑", 1: "3"}
+	}, nil)
+	m = typeKeys(m, "ma")  // line 0: vim mark + anonymous bookmark
+	m = typeKeys(m, "jmb") // line 1: vim mark + mnemonic bookmark
+	if !markedLineHasSign(t, m, 0, "a") {
+		t.Fatalf("mark letter must outrank the anonymous flag:\n%s", m.View())
+	}
+	if !markedLineHasSign(t, m, 1, "3") {
+		t.Fatalf("mnemonic digit must outrank the mark letter:\n%s", m.View())
+	}
+}
+
+// TestGutterPrefersFirstMarkLetter: two marks on one line show the
+// alphabetically first letter, lowercase before uppercase (#2661).
+func TestGutterPrefersFirstMarkLetter(t *testing.T) {
+	m, _ := loaded(t, "alpha\nbeta\n")
+	m.Configure(host.MapConfig{"editor.line_numbers": "true"})
+	m.SetMarkHooks(MarkHooks{Letters: func(string) map[int]rune { return map[int]rune{0: 'B'} }})
+	m = typeKeys(m, "mc")
+	if !markedLineHasSign(t, m, 0, "B") {
+		t.Fatalf("B must beat c alphabetically:\n%s", m.View())
+	}
+	m = typeKeys(m, "ma")
+	if !markedLineHasSign(t, m, 0, "a") {
+		t.Fatalf("a must beat B alphabetically:\n%s", m.View())
+	}
+}
+
+// TestMarkLetterBeforeLowercaseFirst: the same letter in both cases resolves
+// to the local (lowercase) mark.
+func TestMarkLetterBeforeLowercaseFirst(t *testing.T) {
+	if !markLetterBefore('a', 'A') {
+		t.Fatal("lowercase must win the shared letter")
+	}
+	if markLetterBefore('A', 'a') {
+		t.Fatal("uppercase must not win the shared letter")
 	}
 }

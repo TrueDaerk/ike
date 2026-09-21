@@ -161,6 +161,38 @@ func (s *Store) Lines(path string) []int {
 	return lines
 }
 
+// At reports whether mark r sits on path's 0-based line — the editor's
+// toggle test (m{A-Z} on a line that already carries the mark removes it).
+func (s *Store) At(r rune, path string, line int) bool {
+	if !Global(r) || path == "" {
+		return false
+	}
+	s.ensure()
+	mk, ok := s.marks[string(r)]
+	return ok && mk.Path == canon(path) && mk.Line == line
+}
+
+// Letters returns path's marked 0-based lines with their letter, the gutter's
+// sign source. Two marks on one line yield the alphabetically first letter.
+func (s *Store) Letters(path string) map[int]rune {
+	s.ensure()
+	abs := canon(path)
+	out := map[int]rune{}
+	for k, v := range s.marks {
+		if v.Path != abs {
+			continue
+		}
+		r := []rune(k)[0]
+		if cur, ok := out[v.Line]; !ok || r < cur {
+			out[v.Line] = r
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // AdjustEdit shifts path's marks after a buffer edit that changed the line
 // count by delta, with the cursor on cursorAfter (0-based) once the edit
 // applied — the breakpoint store's semantics (debug.Breakpoints.AdjustEdit):

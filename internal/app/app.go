@@ -2057,7 +2057,7 @@ func (m *Model) wireEditorEmitters() {
 func (m *Model) installEmitter(key string) {
 	if inst := m.activeWS().Panes.Get(key); inst != nil && inst.Kind() == pane.KindEditor {
 		bph := breakpointHooks(m.bpts)
-		mkSet, mkLines, mkAdjust := markHooks(m.gmarks)
+		mkHooks := markHooks(m.gmarks)
 		bmSigns, bmAdjust := bookmarkHooks(m.bmarks)
 		for _, ed := range inst.Editors() {
 			ed.SetEmitter(editorEmitter{host: m.host, watcher: m.watcher, nav: m.navHist, edits: m.editRing, root: m.activeWS().Root, key: key, previews: m.previewBound, syncs: m.editorSyncs})
@@ -2066,7 +2066,7 @@ func (m *Model) installEmitter(key string) {
 			ed.SetBreakpointConditionalSource(bph.conditional)
 			ed.SetBreakpointLogpointSource(bph.logpoints)
 			ed.SetBreakpointAdjuster(bph.adjust)
-			ed.SetMarkHooks(mkSet, mkLines, mkAdjust)
+			ed.SetMarkHooks(mkHooks)
 			ed.SetBookmarkHooks(bmSigns, bmAdjust)
 			ed.SetHistories(m.qhist) // search/ex query recall (#1171)
 			ed.SetCompletionMRU(m.compMRU)

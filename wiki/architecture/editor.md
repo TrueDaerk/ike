@@ -52,8 +52,9 @@ in the success tone on every detected test declaration (`testmarks.go` —
 detection via the language registry's `lang.TestSpec` regex seam, cached per
 document version in a per-view pointer store like the line cache, so the scan
 runs at most once per edit, never per frame). Sign precedence: debugger paused
-`▶` > breakpoint `●` > bookmark `⚑` or its mnemonic digit (#1151/#55, accent
-tone — vim marks and project bookmarks, see "Vim marks & bookmarks") > test `▶` > inheritance `↑`/`↓` (#1453, info tone —
+`▶` > breakpoint `●` > a bookmark's mnemonic digit > a vim mark's letter > the
+anonymous bookmark `⚑` (#1151/#55/#2661, accent tone — vim marks and project
+bookmarks, see "Vim marks & bookmarks") > test `▶` > inheritance `↑`/`↓` (#1453, info tone —
 LSP-pushed arrows on symbols that implement/override a super declaration or
 have implementations; `inheritmarks.go`, per-line map like `gitMarks`, gated by
 the `editor.marks.inheritance` toggle which also stops the probe traffic) >
@@ -1093,14 +1094,28 @@ app-owned persistent store (`internal/marks`, one `marks.json` under the state
 store — `IKE_CONFIG_DIR` or the project's `.ike` — loaded lazily, saved on
 every change, so globals survive restarts). The editor reaches the store
 through injected hooks (`SetMarkHooks`), the breakpoint-store pattern:
-setting/gutter-lines/edit-adjust are closures, and a `'{A-Z}` / `` `{A-Z} ``
+set/at/remove/gutter-letters/edit-adjust are closures (`MarkHooks`), and a `'{A-Z}` / `` `{A-Z} ``
 jump travels as `GlobalMarkJumpMsg` which the app resolves through the
 standard open funnel (`openPathAt`) — cross-file jumps open the file and the
 navigation history records.
 
-Marked lines carry a `⚑` in the gutter's sign column (accent tone; the letter
-shows in the picker, not the gutter), slotted below the breakpoint `●` and
-above the test `▶`. **Edit adjustment** uses the same cheap line-count-delta
+Repeating the key on a mark's own line **removes** the mark (#2661): `mm` on an
+unmarked line sets local mark `m`, `mm` again anywhere on that line drops it
+(`'m` then reports `E20: mark not set`), and `mm` on another line moves it as
+before. The comparison is by line, not by column — the user thinks in marked
+lines and the cursor column rarely matches the recorded one. Global marks
+toggle the same way, through the store's `At`/`Remove` hooks, so `mA` twice
+deletes the entry from `marks.json` and the picker. Either removal writes
+`mark <letter> removed` to the ex line, so the toggle is visible with the
+gutter hidden.
+
+Marked lines carry the **mark's letter** in the gutter's sign column (accent
+tone; `m` for local mark `m`, `M` for global `M` — with several marks in one
+file the old shared `⚑` said nothing about which line held which), slotted
+below the breakpoint `●` and above the test `▶`. The one-cell column
+resolves collisions in `bookmarkSigns`: a bookmark's mnemonic digit outranks a
+vim mark letter, which outranks the anonymous bookmark `⚑`; two vim marks on
+one line show the alphabetically first, lowercase before uppercase. **Edit adjustment** uses the same cheap line-count-delta
 scheme as folds and breakpoints (`notifyMarkEdit`, beside
 `notifyBreakpointEdit`): whole-line insertions/deletions above a mark shift it
 exactly; multi-line replacements approximate (the mark clamps to the edit

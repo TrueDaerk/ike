@@ -116,3 +116,61 @@ func TestMalformedFileReadsEmpty(t *testing.T) {
 		t.Fatalf("All = %+v, want empty on malformed file", all)
 	}
 }
+
+// TestAtMatchesLineOnly: At compares path and line, not the column — the
+// editor's m{A-Z} toggle (#2661) works on the marked line from anywhere in
+// it; another line or another file is not a match.
+func TestAtMatchesLineOnly(t *testing.T) {
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	s := &Store{}
+	s.Set('A', "/tmp/a.go", 4, 7)
+	if !s.At('A', "/tmp/a.go", 4) {
+		t.Fatal("At must match the marked line regardless of the column")
+	}
+	if s.At('A', "/tmp/a.go", 5) {
+		t.Fatal("another line must not match")
+	}
+	if s.At('A', "/tmp/b.go", 4) {
+		t.Fatal("another file must not match")
+	}
+	if s.At('B', "/tmp/a.go", 4) || s.At('a', "/tmp/a.go", 4) || s.At('A', "", 4) {
+		t.Fatal("unset letters, local letters and empty paths must not match")
+	}
+}
+
+// TestToggleRemovesFromStore: the editor's toggle path — At reports the
+// mark, Remove drops it, and the removal persists (the picker stops listing
+// it after a reload).
+func TestToggleRemovesFromStore(t *testing.T) {
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	s := &Store{}
+	s.Set('A', "/tmp/a.go", 2, 0)
+	if !s.At('A', "/tmp/a.go", 2) {
+		t.Fatal("mark not recorded")
+	}
+	s.Remove('A')
+	if s.At('A', "/tmp/a.go", 2) {
+		t.Fatal("At still reports the removed mark")
+	}
+	if all := (&Store{}).All(); len(all) != 0 {
+		t.Fatalf("All after reload = %+v, want empty", all)
+	}
+}
+
+// TestLettersPerLine: Letters reports one letter per marked line of the
+// path, the alphabetically first on a shared line, nil when nothing matches.
+func TestLettersPerLine(t *testing.T) {
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	s := &Store{}
+	s.Set('C', "/tmp/a.go", 3, 0)
+	s.Set('B', "/tmp/a.go", 3, 4)
+	s.Set('D', "/tmp/a.go", 9, 0)
+	s.Set('E', "/tmp/b.go", 1, 0)
+	got := s.Letters("/tmp/a.go")
+	if len(got) != 2 || got[3] != 'B' || got[9] != 'D' {
+		t.Fatalf("Letters = %v, want {3:B 9:D}", got)
+	}
+	if s.Letters("/tmp/none.go") != nil {
+		t.Fatal("an unmarked path must report nil")
+	}
+}

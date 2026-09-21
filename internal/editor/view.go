@@ -628,9 +628,10 @@ func (m Model) View() string {
 		} else if glyph, ok := bookmarks[i]; ok {
 			// A bookmark/mark glyph (#1151) slots below the breakpoint —
 			// breakpoints stay visible everywhere — and above the test run
-			// marker: ⚑ for a vim mark or an anonymous bookmark, the digit
-			// of a mnemonic bookmark (#55). The mark's letter shows in the
-			// bookmarks picker, not here.
+			// marker: a vim mark draws its own letter (#2661, lowercase local
+			// / uppercase global — with several marks in one file the glyph
+			// alone said nothing), a project bookmark (#55) its mnemonic digit
+			// or the anonymous ⚑. bookmarkSigns resolves the precedence.
 			sign = glyph
 			signStyle = lipgloss.NewStyle().Foreground(m.theme().Accent).Bold(true)
 		} else if _, ok := tests[i]; ok {

@@ -2,6 +2,7 @@ package editor
 
 import (
 	"sort"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -39,14 +40,24 @@ type LocalMark struct {
 	Line, Col int
 }
 
-// SetMarkHooks injects the global-mark store closures (#1151): set records a
-// mark, lines reports the marked 0-based lines of a path for the gutter, and
-// adjust shifts the store's marks after an edit changed the line count (the
-// breakpoint adjuster's signature). Nil hooks disable global marks.
-func (m *Model) SetMarkHooks(set func(r rune, path string, line, col int), lines func(path string) []int, adjust func(path string, cursorAfter, delta int)) {
-	m.gmSet = set
-	m.gmLines = lines
-	m.gmAdjust = adjust
+// MarkHooks bundles the global-mark store closures (#1151): Set records a
+// mark, At reports whether a mark already sits on a line (the m{A-Z} toggle,
+// #2661), Remove drops one, Letters reports a path's marked 0-based lines
+// with their letter for the gutter, and Adjust shifts the store's marks
+// after an edit changed the line count (the breakpoint adjuster's
+// signature). A zero value disables global marks.
+type MarkHooks struct {
+	Set     func(r rune, path string, line, col int)
+	At      func(r rune, path string, line int) bool
+	Remove  func(r rune)
+	Letters func(path string) map[int]rune
+	Adjust  func(path string, cursorAfter, delta int)
+}
+
+// SetMarkHooks injects the global-mark store closures; the zero value
+// disables global marks.
+func (m *Model) SetMarkHooks(h MarkHooks) {
+	m.gm = h
 	m.markLines = m.buf.LineCount()
 }
 
@@ -66,17 +77,34 @@ func localMarkName(r rune) bool { return r >= 'a' && r <= 'z' }
 func globalMarkName(r rune) bool { return r >= 'A' && r <= 'Z' }
 
 // setMark handles the char after `m`: a-z records a local mark at the
-// cursor, A-Z records a global mark through the injected store.
+// cursor, A-Z records a global mark through the injected store. Repeating
+// the key on the mark's own line removes it instead (#2661) — the toggle
+// compares by line, not by column, because the user thinks in marked lines
+// and the cursor column rarely matches the recorded one. A mark sitting on
+// another line still moves to the cursor. The removal reports on the ex
+// line, so the toggle is visible with the gutter hidden.
 func (m *Model) setMark(r rune) {
 	switch {
 	case localMarkName(r):
+		if pos, ok := m.marks[r]; ok && m.buf.ClampCursor(pos).Line == m.cursor.Line {
+			delete(m.marks, r)
+			m.cmdMsg = "mark " + string(r) + " removed"
+			m.bumpRender()
+			return
+		}
 		if m.marks == nil {
 			m.marks = map[rune]buffer.Position{}
 		}
 		m.marks[r] = m.cursor
-		m.bumpRender() // the bookmark glyph appears in the gutter
-	case globalMarkName(r) && m.gmSet != nil && m.HasFile():
-		m.gmSet(r, m.path, m.cursor.Line, m.cursor.Col)
+		m.bumpRender() // the mark's letter appears in the gutter
+	case globalMarkName(r) && m.gm.Set != nil && m.HasFile():
+		if m.gm.At != nil && m.gm.Remove != nil && m.gm.At(r, m.path, m.cursor.Line) {
+			m.gm.Remove(r)
+			m.cmdMsg = "mark " + string(r) + " removed"
+			m.bumpRender()
+			return
+		}
+		m.gm.Set(r, m.path, m.cursor.Line, m.cursor.Col)
 		m.bumpRender()
 	}
 }
@@ -87,7 +115,7 @@ func (m *Model) setMark(r rune) {
 // standard open funnel. Missing marks report on the ex line, vim's E20.
 func (m *Model) jumpMark(r rune, exact bool) tea.Cmd {
 	if globalMarkName(r) {
-		if m.gmSet == nil {
+		if m.gm.Set == nil {
 			return nil
 		}
 		msg := GlobalMarkJumpMsg{Letter: r, Exact: exact}
@@ -156,29 +184,62 @@ func (m Model) LineText(i int) string {
 	return m.buf.Line(i)
 }
 
-// bookmarkSigns snapshots the gutter glyphs for the marked lines: this
-// view's local marks and the global marks recorded for the open file draw
-// the anonymous flag, a project bookmark (#55) draws its mnemonic digit when
-// it has one — the digit outranks the flag, it carries more information.
+// markLetterBefore reports whether vim mark a outranks b for the single
+// gutter cell (#2661): alphabetically first wins, lowercase before uppercase
+// for the same letter (the local mark is this view's own).
+func markLetterBefore(a, b rune) bool {
+	la, lb := unicode.ToLower(a), unicode.ToLower(b)
+	if la != lb {
+		return la < lb
+	}
+	return unicode.IsLower(a)
+}
+
+// vimMarkLetters collects the gutter letter of every vim mark on the open
+// document: this view's local marks (m{a-z}) plus the global marks recorded
+// for the file (m{A-Z}). One cell per line, so a line carrying several marks
+// keeps the markLetterBefore winner.
+func (m Model) vimMarkLetters() map[int]rune {
+	out := map[int]rune{}
+	add := func(l int, r rune) {
+		if l < 0 || l >= m.buf.LineCount() {
+			return
+		}
+		if cur, ok := out[l]; !ok || markLetterBefore(r, cur) {
+			out[l] = r
+		}
+	}
+	for r, pos := range m.marks {
+		add(m.buf.ClampCursor(pos).Line, r)
+	}
+	if m.HasFile() && m.gm.Letters != nil {
+		for l, r := range m.gm.Letters(m.path) {
+			add(l, r)
+		}
+	}
+	return out
+}
+
+// bookmarkSigns snapshots the gutter glyphs for the marked lines: a vim mark
+// draws its own letter (#2661 — with several marks in a file the picker was
+// the only way to tell them apart), a project bookmark (#55) its mnemonic
+// digit or the anonymous flag. Precedence in the single sign cell: mnemonic
+// digit > vim mark letter > anonymous "⚑" — the digit and the letter carry
+// information the flag does not.
 func (m Model) bookmarkSigns() map[int]string {
 	set := map[int]string{}
-	for _, pos := range m.marks {
-		set[m.buf.ClampCursor(pos).Line] = "⚑"
+	for l, r := range m.vimMarkLetters() {
+		set[l] = string(r)
 	}
-	if m.HasFile() {
-		if m.gmLines != nil {
-			for _, l := range m.gmLines(m.path) {
-				if l >= 0 && l < m.buf.LineCount() {
-					set[l] = "⚑"
-				}
+	if m.HasFile() && m.bmSigns != nil {
+		for l, sign := range m.bmSigns(m.path) {
+			if l < 0 || l >= m.buf.LineCount() {
+				continue
 			}
-		}
-		if m.bmSigns != nil {
-			for l, sign := range m.bmSigns(m.path) {
-				if l >= 0 && l < m.buf.LineCount() {
-					set[l] = sign
-				}
+			if _, marked := set[l]; marked && sign == "⚑" {
+				continue // a vim mark letter outranks the anonymous flag
 			}
+			set[l] = sign
 		}
 	}
 	if len(set) == 0 {
@@ -203,8 +264,8 @@ func (m *Model) notifyMarkEdit() {
 	// The change-list ring drifts with the same scheme (#1174).
 	m.changes.shift(m.cursor.Line, delta)
 	if m.HasFile() {
-		if m.gmAdjust != nil {
-			m.gmAdjust(m.path, m.cursor.Line, delta)
+		if m.gm.Adjust != nil {
+			m.gm.Adjust(m.path, m.cursor.Line, delta)
 		}
 		if m.bmAdjust != nil {
 			m.bmAdjust(m.path, m.cursor.Line, delta)
