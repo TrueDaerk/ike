@@ -15,6 +15,15 @@ import (
 	"ike/internal/phpindex"
 )
 
+// PHPIndexChangedMsg says the PHP declaration index reached a new content
+// generation (#2669): the initial scan finished, or a re-extract changed a
+// trait or one of its consumers. The root model answers it by re-running the
+// diagnostic filter over every cached raw set, so a trait marker disappears
+// once the index is warm and comes back when a consumer loses the member.
+// The index debounces the notification, so one keystroke cannot refilter the
+// world.
+type PHPIndexChangedMsg struct{}
+
 // PHPIndex returns the project's PHP declaration index (never nil; a
 // disabled index answers nothing and reports Enabled false).
 func (m Model) PHPIndex() *phpindex.Index { return m.phpIndex }

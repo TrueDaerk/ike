@@ -269,6 +269,11 @@ type Model struct {
 	// Refresh so the header never iterates the whole diagnostic set per frame.
 	errCount  int
 	warnCount int
+	// traitSuppressed is how many undefined-member diagnostics the PHP trait
+	// index resolved in a trait's consumer scope (#2669). They never reach
+	// the store, so the header names them separately — the panel would
+	// otherwise be silent about diagnostics the IDE dropped on its own.
+	traitSuppressed int
 
 	// Double-click detection mirrors the VCS panel (#514): activating a row
 	// needs a second click on the same row within ui.DoubleClickWindow; now
@@ -301,6 +306,13 @@ func (m *Model) SetStore(s *Store) {
 // SetDisplayPath injects the project-relative path shortener the app already
 // uses for the finder; unset falls back to the raw (absolute) path.
 func (m *Model) SetDisplayPath(f func(string) string) { m.displayPath = f }
+
+// SetTraitSuppressed records how many diagnostics the PHP trait index
+// resolved away project-wide (#2669); the header names the count.
+func (m *Model) SetTraitSuppressed(n int) { m.traitSuppressed = n }
+
+// TraitSuppressed is the recorded trait-suppression count.
+func (m *Model) TraitSuppressed() int { return m.traitSuppressed }
 
 // SetSize records the interior content size.
 func (m *Model) SetSize(w, h int) { m.width, m.height = w, h }
@@ -643,6 +655,11 @@ func (m *Model) headerLine(pal *theme.Palette) string {
 	}
 	errs, warns := m.errCount, m.warnCount
 	counts := plural(errs, "error") + " · " + plural(warns, "warning")
+	// The trait-resolved ones (#2669) are never rows, so the header is the
+	// only place they are visible at all.
+	if n := m.traitSuppressed; n > 0 {
+		counts += " · " + strconv.Itoa(n) + " resolved via trait consumers"
+	}
 	title := lipgloss.NewStyle().Foreground(pal.Accent).Bold(m.focused).Render(" Problems — " + scope)
 	return title + lipgloss.NewStyle().Faint(true).Render("   "+counts)
 }

@@ -4,7 +4,7 @@ title: Usage Telemetry
 description: Local-only usage recording — command (with outcome), keybinding, layout, session, heartbeat, freeze-with-goroutine-dump, operation-lifecycle, palette-pick, palette-dismissal and project-time events appended as per-session JSONL under ~/.ike/telemetry, asynchronous and content-free, switched by telemetry.enabled.
 resource: internal/telemetry/telemetry.go
 tags: [architecture, telemetry, usage, jsonl, privacy, diagnostics]
-timestamp: 2026-09-18T12:00:00Z
+timestamp: 2026-09-21T15:00:00Z
 ---
 
 # Usage Telemetry
@@ -228,6 +228,17 @@ counts by the version's interval before comparing sessions.
       its model on a recorder that is discarded right after — and like the
       session marker it never opens a session file on its own, so a launch
       that only restores and quits stays a ghost (#2318).
+    - `php.trait.diag_suppressed` (#2669) — one diagnostic publish whose
+      undefined-member entries the [PHP trait index](php-trait-index.md#diagnostics-2669)
+      resolved in a trait's consumer scope; `count` is how many were
+      suppressed. The odd one out of the ids: it is not a lifecycle but a
+      single `ok` phase per `applyDiagnostics` call, recorded only when the
+      count is greater than zero, so the volume prices how much of the
+      server's trait noise the index is actually absorbing. A reader pairing
+      `start` with `ok` must skip it. No path, member name or message
+      travels. Additive to the `op` vocabulary — no existing field changes
+      meaning, so no schema bump; its absence in an older export means the
+      build predates it.
   - `palette.pick` (#2551) — a palette row was activated, the counterpart of
     `palette.dismiss`. `mode` is the mode's prefix rune, `query_len` the number
     of runes typed — **never the query itself** — `rank` the **0-based index**

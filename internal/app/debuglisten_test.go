@@ -44,8 +44,23 @@ func (phpListenStub) DebugLaunchArgs(_ string, spec lang.RunSpec, cwd string, _ 
 	return map[string]any{"request": "launch", "program": spec.File, "cwd": cwd}
 }
 
-func init() {
-	lang.Register(lang.Language{ID: "php", Toolchain: phpListenStub{}})
+func init() { registerPHPListenStub() }
+
+// registerPHPListenStub gives php the debug-capable toolchain stub. The
+// server stays stripped — that is what keeps the LSP onboarding dialog out of
+// this binary (see phpListenStub) — but the rest of the real registration is
+// kept, the **grammar** above all: lang.Register replaces the whole entry, so
+// registering a bare {ID, Toolchain} left the package without a PHP syntax
+// tree and every declaration-index test (#2667/#2669) skipped itself as "no
+// PHP grammar in this build".
+func registerPHPListenStub() {
+	l, ok := lang.ByID("php")
+	if !ok {
+		l = lang.Language{ID: "php"}
+	}
+	l.Server = nil
+	l.Toolchain = phpListenStub{}
+	lang.Register(l)
 }
 
 // TestDebugListenToggle guards #823: debug.listen starts the persistent

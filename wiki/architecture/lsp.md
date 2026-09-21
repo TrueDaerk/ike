@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions/code-lenses/folding-ranges/semantic-tokens/selection-ranges/willRenameFiles rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-09-08T14:00:00Z
+timestamp: 2026-09-21T15:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -364,7 +364,13 @@ still surface, and a user-set `lsp.diagnostics_ignore` replaces the defaults
 wholesale. The editor's `lsp.ignoreDiagnostic` command (palette, "Ignore
 Diagnostic Under Caret") appends the caret diagnostic's rule
 (source+code, or exact message when the server sent no code) to the project
-config. After the ignore filter, the **severity remap** (#1503,
+config. Rules match per code and message, never per position: the
+position-aware counterpart is the PHP **trait suppression pass** (#2669,
+[PHP Trait Index § Diagnostics](php-trait-index.md#diagnostics-2669)), which
+runs right after the ignore filter and drops an undefined-member diagnostic
+only where it sits inside a trait body whose consumer declares the member —
+the case a rule wide enough to cover it would over-suppress everywhere else.
+After the ignore filter, the **severity remap** (#1503,
 `internal/lsp/severity.go`, `lsp.diagnostics_severity`) applies on the same
 central path: each rule is the ignore-rule condition grammar plus a trailing
 `error`/`warning`/`info`/`hint`/`off` keyword (`reportArgumentType warning`);

@@ -43,6 +43,14 @@ const (
 	// re-extracts; extraction is a full parse and never runs on the UI
 	// goroutine.
 	bufferDebounce = 150 * time.Millisecond
+	// changeSettle paces the content-change callback (#2669): it sits above
+	// bufferDebounce so the check that follows a keystroke already sees the
+	// re-extraction, and it is the debounce that keeps one keystroke from
+	// refiltering the world.
+	changeSettle = 250 * time.Millisecond
+	// changeWatch is how long the settle poll keeps looking after an event
+	// whose work lands asynchronously (see armWatchLocked).
+	changeWatch = 2 * time.Second
 )
 
 // Options are the [php] settings the index runs under (#2667). Enabled is
@@ -113,6 +121,15 @@ type Index struct {
 	snap    *snapshot
 	snapKey snapKey
 
+	// onChange is the debounced content-change callback (#2669) and
+	// chTimer its settle timer; lastGen is the generation the last
+	// notification was sent for, watchUntil the deadline the settle poll
+	// keeps checking to for an asynchronous re-extraction. See SetOnChange.
+	onChange   func()
+	chTimer    *time.Timer
+	lastGen    snapKey
+	watchUntil time.Time
+
 	availOnce sync.Once
 	avail     bool
 }
@@ -160,12 +177,17 @@ func (x *Index) Reconfigure(opts Options) {
 			x.timer.Stop()
 			x.timer = nil
 		}
+		if x.chTimer != nil {
+			x.chTimer.Stop()
+		}
 	case x.project == nil || prev.IncludeVendor != opts.IncludeVendor || prev.MaxFiles != opts.MaxFiles:
 		x.project = x.newProject(opts)
 		x.project.Ensure("php")
 		x.snap = nil
+		x.armWatchLocked()
 	default:
 		x.snap = nil
+		x.armChangeLocked()
 	}
 }
 
@@ -217,6 +239,7 @@ func (x *Index) Observe(ev host.EditorEvent) {
 		if _, had := x.buffers[key]; had {
 			delete(x.buffers, key)
 			x.bufGen++
+			x.armChangeLocked()
 		}
 		return
 	}
@@ -232,6 +255,7 @@ func (x *Index) Observe(ev host.EditorEvent) {
 	} else {
 		x.timer.Reset(bufferDebounce)
 	}
+	x.armChangeLocked()
 }
 
 // Flush extracts every dirty buffer now, on the caller's goroutine (the
@@ -261,6 +285,7 @@ func (x *Index) Flush() {
 				j.d.dirty = false
 			}
 			x.bufGen++
+			x.armChangeLocked()
 		}
 		x.mu.Unlock()
 	}
@@ -275,6 +300,7 @@ func (x *Index) InvalidateFile(path string) {
 	}
 	x.mu.Lock()
 	p := x.project
+	x.armWatchLocked()
 	x.mu.Unlock()
 	if p != nil {
 		p.Invalidate(path)
@@ -343,6 +369,71 @@ func (x *Index) snapshot() *snapshot {
 	}
 	x.mu.Unlock()
 	return s
+}
+
+// SetOnChange installs the callback the index fires whenever its content
+// generation changed — the initial scan finished, a watched file was
+// re-extracted, an observed buffer was re-parsed, or a setting moved the
+// derived scope (#2669). It is called off the UI goroutine, debounced by
+// changeSettle, and never while the index holds its lock, so the callback
+// may query the index. Pass nil to remove it.
+//
+// The callback is armed by the events that *can* change the content and then
+// verified against the generation counters, because the work they kick off is
+// asynchronous: a re-extraction queues behind the walk's worker and the
+// initial scan runs for as long as it runs. A check that still sees a running
+// scan re-arms, so the settle poll is bounded by the scan and stops the
+// moment the generation is stable.
+func (x *Index) SetOnChange(fn func()) {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	x.onChange = fn
+	x.armWatchLocked()
+}
+
+// armChangeLocked (re-)starts the settle timer; the caller holds x.mu.
+func (x *Index) armChangeLocked() {
+	if x.onChange == nil || x.project == nil {
+		return
+	}
+	if x.chTimer == nil {
+		x.chTimer = time.AfterFunc(changeSettle, x.checkChange)
+		return
+	}
+	x.chTimer.Reset(changeSettle)
+}
+
+// armWatchLocked arms the settle timer and keeps it checking for changeWatch,
+// for the events whose work lands asynchronously (a watcher re-extraction
+// queues behind the walk's worker, a rescan behind the walk itself) and would
+// otherwise be missed by a single check. The caller holds x.mu.
+func (x *Index) armWatchLocked() {
+	x.watchUntil = time.Now().Add(changeWatch)
+	x.armChangeLocked()
+}
+
+// checkChange runs on the settle timer: it fires the callback when the
+// content generation moved since the last notification.
+func (x *Index) checkChange() {
+	x.mu.Lock()
+	fn, p := x.onChange, x.project
+	if fn == nil || p == nil {
+		x.mu.Unlock()
+		return
+	}
+	gen := snapKey{projGen: p.Gen(), bufGen: x.bufGen, depth: x.opts.ParentDepth, project: p}
+	changed := gen != x.lastGen
+	x.lastGen = gen
+	// Keep settling while the scan is still producing generations or an
+	// asynchronous re-extraction may still land; a change re-arms once so
+	// the follow-up check can confirm the content settled.
+	if changed || !p.Done("php") || time.Now().Before(x.watchUntil) {
+		x.armChangeLocked()
+	}
+	x.mu.Unlock()
+	if changed {
+		fn()
+	}
 }
 
 // shortName is the last segment of a (possibly qualified) PHP name.

@@ -4,7 +4,7 @@ title: PHP Trait Index
 description: The workspace-wide PHP declaration index (Epic 0520, #2667) — every class-like declaration with its members, the trait-use / extends / implements edges between them, and the consumer scope a `$this` inside a trait body resolves against where Intelephense is blind. Built on the shared per-language project walk, kept fresh from buffer edits and watcher events, configured by the [php] section (Settings → PHP).
 resource: internal/phpindex
 tags: [architecture, php, traits, index, completion, lsp]
-timestamp: 2026-09-21T12:00:00Z
+timestamp: 2026-09-21T15:00:00Z
 ---
 
 # PHP Trait Index
@@ -137,6 +137,53 @@ unavailable.
 The loader clamps the ranges with a diagnostic; the form rejects a
 non-number and clamps out-of-range input with a notice. Reloads reach the
 index through `reloadConfig` → `Reconfigure`.
+
+## Diagnostics (#2669)
+
+Because the server resolves `$this` inside a trait as the trait itself,
+every `$this->abc()` whose `abc` lives on a consumer comes back as an
+undefined member. The rule list
+[`lsp.diagnostics_ignore`](lsp.md#data-flow) cannot fix that: it
+matches per code and message, so a rule wide enough to hide the access
+inside the trait hides a genuine typo everywhere else too. The index makes
+the suppression **position-aware** instead.
+
+Every published set already passes one shaping funnel — `applyDiagnostics` →
+`filterDiags` (`internal/app/diag_ignore.go`): the ignore rules, then the
+trait pass (`internal/app/diag_trait.go`), then the severity remap. The
+trait pass drops a diagnostic only when **all three** hold:
+
+1. it is an Intelephense **undefined-member** diagnostic — one of the codes
+   `P1013` (method), `P1014` (property), `P1012` (class constant), with the
+   message naming that kind of member in quotes as a secondary check, so a
+   code reused by a future server version cannot silently widen the pass
+   (`internal/lsp/undefmember.go` — the one place the server's vocabulary
+   lives);
+2. its range lies inside a **trait body** — `ScopeAt(path, pos)` with
+   `IsTrait()`;
+3. the member the message names **resolves** in that trait's consumer
+   scope — `Lookup(traitFQN, kind, name)`.
+
+Everything else passes unchanged: `$this->nope()` inside the trait, the same
+code inside the consumer class, another code inside the trait. Genuinely
+undefined members stay red. Positions need no conversion — `ConvertDiagnostics`
+has already mapped the server's LSP positions to editor coordinates (rune
+columns) through the negotiated encoding, which is what the index stores.
+
+**Freshness.** The index notifies the app whenever its content generation
+moved (`SetOnChange`, debounced by 250 ms and armed by the events that can
+change the content — so one keystroke never refilters the world); the app
+answers with `PHPIndexChangedMsg` → `refilterDiagnostics`, which re-runs the
+funnel over every cached raw set. A marker therefore disappears once the
+initial scan is warm and **comes back** when a re-extract takes the member
+off the consumer. With `php.trait_index = false` the pass drops nothing.
+
+**Reporting.** Suppressed diagnostics are counted per path, apart from the
+rule-ignored ones, and the Problems panel header names the project-wide
+total — `12 errors · 3 warnings · 2 resolved via trait consumers` — since
+they are never rows. Telemetry records the op `php.trait.diag_suppressed`
+with the count per `applyDiagnostics` call, only when it is greater than
+zero.
 
 ## Wiring
 

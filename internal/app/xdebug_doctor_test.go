@@ -18,7 +18,6 @@ import (
 	"ike/internal/config"
 	"ike/internal/dap"
 	"ike/internal/debugdoctor"
-	"ike/internal/lang"
 	"ike/internal/pane"
 )
 
@@ -136,7 +135,7 @@ func TestDoctorListenToggleMarksStopped(t *testing.T) {
 	// The registry is global and registerEnvTestPython (terminal_test.go)
 	// strips toolchains; re-register the debug-capable php stub, as the
 	// convention there prescribes.
-	lang.Register(lang.Language{ID: "php", Toolchain: phpListenStub{}})
+	registerPHPListenStub()
 	// A free port keeps the bridge's bind off the real Xdebug default.
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

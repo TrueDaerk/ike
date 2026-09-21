@@ -3,6 +3,7 @@ package app
 import (
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -10,6 +11,7 @@ import (
 	"ike/internal/config"
 	"ike/internal/host"
 	ilsp "ike/internal/lsp"
+	"ike/internal/telemetry"
 )
 
 // diag_ignore.go — the app-level diagnostic ignore filter (#1259). Every
@@ -44,11 +46,14 @@ func (m *Model) compileDiagSeverity() bool {
 	return true
 }
 
-// filterDiags runs one raw set through the ignore filter (#1259) and the
-// severity remap (#1503), in that order — the one shaping pass every consumer
-// sees.
-func (m *Model) filterDiags(diags []ilsp.Diagnostic) []ilsp.Diagnostic {
-	return m.diagSeverity.Apply(m.diagIgnore.Filter(diags))
+// filterDiags runs one raw set through the ignore filter (#1259), the
+// position-aware trait suppression pass (#2669) and the severity remap
+// (#1503), in that order — the one shaping pass every consumer sees. The
+// second result is how many entries the trait pass dropped, counted
+// separately from the rule-ignored ones (diag_trait.go).
+func (m *Model) filterDiags(path string, diags []ilsp.Diagnostic) ([]ilsp.Diagnostic, int) {
+	kept, n := m.suppressTraitDiags(path, m.diagIgnore.Filter(diags))
+	return m.diagSeverity.Apply(kept), n
 }
 
 // applyDiagnostics is the single entry point for a published diagnostic set:
@@ -63,17 +68,25 @@ func (m *Model) applyDiagnostics(path string, diags []ilsp.Diagnostic) tea.Cmd {
 	} else {
 		m.rawDiags[path] = diags
 	}
-	filtered := m.filterDiags(diags)
+	filtered, suppressed := m.filterDiags(path, diags)
+	m.setTraitSuppressed(path, suppressed)
+	if suppressed > 0 {
+		m.usage.Op(telemetry.OpPHPTraitDiagSuppressed, telemetry.OpPhaseOK,
+			map[string]string{"count": strconv.Itoa(suppressed)})
+	}
 	m.probStore.Set(path, filtered)
 	return m.routeToEditor(path, ilsp.DiagnosticsMsg{Path: path, Diagnostics: filtered})
 }
 
 // refilterDiagnostics re-applies the (changed) rules to every cached raw set —
-// the live-apply path for rule edits.
+// the live-apply path for rule edits, and for the PHP index reporting a
+// changed trait or consumer (#2669): a marker disappears once the index is
+// warm and comes back when a consumer loses the member.
 func (m *Model) refilterDiagnostics() []tea.Cmd {
 	var cmds []tea.Cmd
 	for path, raw := range m.rawDiags {
-		filtered := m.filterDiags(raw)
+		filtered, suppressed := m.filterDiags(path, raw)
+		m.setTraitSuppressed(path, suppressed)
 		m.probStore.Set(path, filtered)
 		if cmd := m.routeToEditor(path, ilsp.DiagnosticsMsg{Path: path, Diagnostics: filtered}); cmd != nil {
 			cmds = append(cmds, cmd)
@@ -88,12 +101,14 @@ func (m *Model) refilterDiagnostics() []tea.Cmd {
 func (m *Model) dropRawDiags(path string, isDir bool) {
 	if !isDir {
 		delete(m.rawDiags, path)
+		delete(m.traitSuppressed, path)
 		return
 	}
 	prefix := path + string(filepath.Separator)
 	for p := range m.rawDiags {
 		if strings.HasPrefix(p, prefix) {
 			delete(m.rawDiags, p)
+			delete(m.traitSuppressed, p)
 		}
 	}
 }
