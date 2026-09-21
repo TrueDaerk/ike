@@ -11,6 +11,8 @@ import (
 // as an actionMap value, so new commands cannot silently drift out of
 // import coverage.
 var noCounterpart = map[string]string{
+	"php.traitIndex.status":            "IKE-only concept (0520, #2673): the PHP declaration index has no JetBrains counterpart to import",
+	"php.traitIndex.rebuild":           "IKE-only concept (0520, #2673): JetBrains rescans via Invalidate Caches, not a keymap action",
 	"editor.tab.moveLeft":              "JetBrains reorders tabs by drag only, no keymap action",
 	"editor.tab.moveRight":             "JetBrains reorders tabs by drag only, no keymap action",
 	"explorer.clipCopy":                "project-view copy rides $Copy in JetBrains, already mapped to editor.copy (#2660)",

@@ -709,6 +709,17 @@ var jetbrainsRows = []row{
 	{"cmd+shift+c", "file.copyPath", "Copy path", Global, "App (#2305)"},
 	// JetBrains Optimize Imports (ctrl+alt+o in both keymaps).
 	{"ctrl+alt+o", "lsp.organizeImports", "Organize imports", Editor, "LSP (#2305)"},
+	// The PHP declaration index's two operations (0520, #2673). They belong
+	// with the LSP/tools family — the index is the trait-scope half of what
+	// the PHP server answers — and the cmd+alt+shift layer is where that
+	// family's project-wide entries already sit (cmd+alt+shift+o is the
+	// Elasticsearch console, cmd+alt+shift+n the new scratch). "i" is the
+	// index itself and "b" its (re)build; both letters were unclaimed on the
+	// layer on either platform, so the Cmd→Ctrl fold off macOS lands on a
+	// free chord too. Global, like the commands: rebuilding after a branch
+	// switch is wanted with the explorer focused as much as with a buffer.
+	{"cmd+alt+shift+i", "php.traitIndex.status", "PHP index status", Global, "PHP trait index (#2673)"},
+	{"cmd+alt+shift+b", "php.traitIndex.rebuild", "Rebuild PHP index", Global, "PHP trait index (#2673)"},
 	// The playgrounds (#1936/#2039) join the ctrl+alt family next to their own
 	// ctrl+alt+e query-view toggle: j for jq, y for yq. Global for the same
 	// reason as that row — the playground owns the keyboard while its pane is

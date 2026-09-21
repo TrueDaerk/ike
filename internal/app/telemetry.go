@@ -17,6 +17,7 @@ import (
 	"ike/internal/host"
 	"ike/internal/keymap"
 	"ike/internal/layout"
+	"ike/internal/phpindex"
 	"ike/internal/telemetry"
 	"ike/internal/version"
 )
@@ -160,6 +161,22 @@ func traitCompleteRecorder(r *telemetry.Recorder) func(int) {
 	return func(items int) {
 		r.Op(telemetry.OpPHPTraitComplete, telemetry.OpPhaseOK,
 			map[string]string{"count": strconv.Itoa(items)})
+	}
+}
+
+// traitIndexScanRecorder is the callback the PHP declaration index reports a
+// completed project walk through (0520, #2673): one op event per scan — the
+// initial one and every rebuild — carrying the walk's duration, the file
+// count it left behind and whether it stopped at php.index.max_files. It runs
+// on the index's own timer goroutine, so it touches nothing but the recorder.
+// No path and no declaration name travels.
+func traitIndexScanRecorder(r *telemetry.Recorder) func(phpindex.Stats) {
+	return func(s phpindex.Stats) {
+		r.Op(telemetry.OpPHPTraitIndexScan, telemetry.OpPhaseOK, map[string]string{
+			"ms":        strconv.FormatInt(s.LastScan.Milliseconds(), 10),
+			"files":     strconv.Itoa(s.Files),
+			"truncated": strconv.FormatBool(s.Truncated),
+		})
 	}
 }
 

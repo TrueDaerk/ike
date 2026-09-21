@@ -4,7 +4,7 @@ title: Usage Telemetry
 description: Local-only usage recording — command (with outcome), keybinding, layout, session, heartbeat, freeze-with-goroutine-dump, operation-lifecycle, palette-pick, palette-dismissal and project-time events appended as per-session JSONL under ~/.ike/telemetry, asynchronous and content-free, switched by telemetry.enabled.
 resource: internal/telemetry/telemetry.go
 tags: [architecture, telemetry, usage, jsonl, privacy, diagnostics]
-timestamp: 2026-09-21T18:00:00Z
+timestamp: 2026-09-21T21:00:00Z
 ---
 
 # Usage Telemetry
@@ -249,6 +249,30 @@ counts by the version's interval before comparing sessions.
       prices how often navigation would otherwise have dead-ended. A server
       answer records nothing — the index is never consulted then. No path,
       member name or type name travels.
+    - `php.trait.complete` (#2668) — one non-empty answer of the trait-member
+      completion source inside a trait body; `count` is how many items it
+      offered. An empty answer — the common case outside a trait body —
+      records nothing, so the volume prices how often the index is what
+      completed the member the server could not see.
+    - `php.trait.index_scan` (#2673) — one completed project walk of the
+      [PHP trait index](php-trait-index.md#operations-2673): the initial scan
+      and every `php.traitIndex.rebuild`. `ms` is the walk's duration, `files`
+      how many files it left indexed and `truncated` (`true`/`false`) whether
+      it stopped at `php.index.max_files` — the three numbers the status popup
+      shows, so a review can say what the warm-up costs and whether the file
+      cap is biting. Like its neighbours a single `ok` phase, one per scan; a
+      disabled index and a build without the PHP grammar never scan and
+      therefore record nothing. Like `session.restore` it **never opens a
+      session file on its own** (#2318): the walk finishes a few seconds after
+      every launch into a PHP project, so a file opened by it would be exactly
+      the ghost the deferred `pane.focus` rule avoids. It is held and written
+      as soon as a real usage event starts the session.
+
+    Those five are epic 0520's op vocabulary as of #2673 — the ids the
+    epic's review recipe greps for; references (#2671) and rename (#2672)
+    add theirs here when they land. All of them are additive — no existing
+    field changes meaning, so no schema bump; absence in an older export
+    means the build predates them.
   - `palette.pick` (#2551) — a palette row was activated, the counterpart of
     `palette.dismiss`. `mode` is the mode's prefix rune, `query_len` the number
     of runes typed — **never the query itself** — `rank` the **0-based index**

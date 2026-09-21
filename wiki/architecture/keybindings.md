@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts plus language-scoped editor bindings, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-09-18T00:00:00Z
+timestamp: 2026-09-21T21:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -1449,6 +1449,8 @@ JetBrains is:
 | `pane.splitUp` | `cmd+k up` | fragile | `palette` | live via palette |
 | `pane.switcher` | `ctrl+tab` | fragile | `tab key` | live via tab key |
 | `perf.hud` | `ctrl+alt+p` | fragile | `palette / View menu` | live via palette / View menu |
+| `php.traitIndex.rebuild` | `cmd+alt+shift+b` | fragile | `palette` | live via palette |
+| `php.traitIndex.status` | `cmd+alt+shift+i` | fragile | `palette` | live via palette |
 | `playground.open` | `cmd+shift+j` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `problems.toggle` | `cmd+8` | fragile | `palette` | live via palette |
 | `project.close` | `cmd+shift+w` | fragile | `palette / File menu` | live via palette / File menu |
