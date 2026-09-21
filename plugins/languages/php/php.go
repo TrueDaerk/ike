@@ -4,6 +4,7 @@ package langphp
 
 import (
 	_ "embed"
+	"regexp"
 
 	"ike/internal/consthint"
 	"ike/internal/cronhint"
@@ -63,6 +64,10 @@ func init() {
 		LineComment:  "//",
 		BlockComment: [2]string{"/*", "*/"},
 		IndentAfter:  []string{"{", "(", "["},
+		// Completion context (#2654): declaring keywords, and the `use` line
+		// only the server resolves.
+		DeclKeywords: []string{"function", "class", "interface", "trait", "enum", "const", "namespace"},
+		ImportLine:   regexp.MustCompile(`^\s*use\b`),
 		// Sticky-scroll scopes (#168).
 		ScopeNodes: []string{
 			"function_definition", "method_declaration", "anonymous_function",

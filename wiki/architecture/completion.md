@@ -489,14 +489,78 @@ The source can be switched off with **`editor.postfix_completion`** (Settings �
 Typing Assistance); the flag is read per query, so a config reload applies with
 no re-wiring.
 
+## Completion context (#2654)
+
+Not every position deserves the popup. The editor classifies the cursor at
+trigger time into a **completion context** and both producers gate on it —
+the local engine through `complete.Request.Context`, the LSP bridge through
+`host.EditorEvent.Context` (the same `lang.CompletionContext` value, a
+string). The zero value is ordinary code, so a request built without one
+behaves as before.
+
+| context | auto-trigger | ordinary local sources | LSP |
+|---|---|---|---|
+| code | as always | all | asked |
+| comment | withheld; ctrl+space opens | word index only, **current buffer only** | not asked |
+| string literal | withheld | none (sources claiming strings stay) | asked — servers answer import paths and the like |
+| declaration position | withheld; ctrl+space opens | all | asked |
+| import line | as always | none | asked |
+
+**Detection** (`lang.CompletionContextAt`, `internal/lang/complctx.go`) needs
+no cgo and never parses the line:
+
+- *comment* / *string*: the syntax highlighter's capture (`comment…`,
+  `string…`) at the character **before the current word** — the `/` of `//`,
+  the opening quote, a blank inside the comment. Not the capture at the
+  cursor: the highlight index lags one parse behind the keystroke, so the
+  just-typed rune is never inside a span yet. Without a grammar there is no
+  capture and the position reads as code.
+- *declaration position*: the identifier-delimited word left of the current
+  word on the same line, separated by whitespace, is one of the language's
+  **`DeclKeywords`** (case-insensitive): `func type var const package` for Go,
+  `def class` for Python, `function class let const var interface type enum`
+  for TypeScript/JavaScript, `function class interface trait enum const
+  namespace` for PHP, `function local` for shell, `ARG ENV` for Dockerfile,
+  `define` for make, `module` for go.mod, `keyframes` for CSS. A bracket or
+  comma between the words is not whitespace, so `func(x` is a parameter list
+  and `f(a, b` an argument list; a receiver's closing `)` likewise keeps
+  `func (r *T) Na` in code, where gopls offers interface methods to implement.
+- *import line*: the language's **`ImportLine`** regex matches the line
+  (`^\s*import\b` for Go and TypeScript, `^\s*(import|from)\b` for Python,
+  `^\s*use\b` for PHP).
+
+Every registered language either lists its `DeclKeywords` or carries a
+justified entry in the audit ledger `cmd/ike/declkeyword_audit_test.go`,
+whose test fails otherwise — the same discipline as the span-family audit
+(see [Change workflow](/process/change-workflow.md)).
+
+**Gating.** The editor withholds the auto-trigger (`maybeAutoComplete`,
+`internal/editor/keys_insert.go`) wherever the table says so; ctrl+space
+always dispatches, tagged with the context. In the engine, a code or
+declaration position keeps every source; any other context keeps only the
+sources declaring it through the optional extension
+
+```go
+type ContextSource interface{ CompletesIn(ctx lang.CompletionContext) bool }
+```
+
+The word index claims comments and, seeing the context on the request,
+answers with the current buffer's tier alone. The exclusive `.http` and
+ES-query sources and the Ansible hosts source claim every context: their
+answers are position-specific by construction and typed inside what the
+grammar calls a string (a JSON key, a YAML plain scalar). The bridge skips
+the server request in a comment and honours every other context.
+
 ## Adding a source
 
 Implement `Source`, register it on the app's engine (`completeEngine` in
 `internal/app`) at build time. A source that owns a language's files
 end-to-end should also implement `ExclusiveSource` (see above), or the generic
 indexes will merge their identifiers into its popup; one that needs a
-punctuation trigger implements `TriggerSource`. All Phase-2 sources have
-landed.
+punctuation trigger implements `TriggerSource`; one with something to say
+inside a comment or a string literal implements `ContextSource` (#2654),
+without which it runs in code and declaration positions only. All Phase-2
+sources have landed.
 
 Not every popup routes through the engine: the protocol is wired to *editor*
 events, so a non-editor input rolls a self-contained aid in the same look and

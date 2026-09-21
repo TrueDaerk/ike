@@ -37,6 +37,9 @@ func init() {
 		// spans resolve first-covering-wins.
 		Spans:       dockerfileSpans,
 		LineComment: "#",
+		// Completion context (#2654): ARG and ENV introduce build/runtime
+		// variable names.
+		DeclKeywords: []string{"ARG", "ENV"},
 	})
 }
 

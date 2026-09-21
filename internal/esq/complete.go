@@ -10,6 +10,7 @@ import (
 	"ike/internal/complete"
 	"ike/internal/fuzzy"
 	"ike/internal/host"
+	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
 )
 
@@ -85,6 +86,11 @@ func (s *CompletionSource) Priority() int { return ilsp.PrioritySymbols }
 // Exclusive claims query buffers outright (#1302): only this source runs
 // there, so the popup holds mapping fields and DSL keys, not buffer words.
 func (s *CompletionSource) Exclusive(path string) bool { return IsQueryPath(path) }
+
+// CompletesIn implements complete.ContextSource (#2654): DSL keys and field
+// names are typed inside JSON string literals, so the string context must
+// not silence the source.
+func (s *CompletionSource) CompletesIn(lang.CompletionContext) bool { return true }
 
 // TriggerChar re-triggers on the JSON string delimiters that matter here: an
 // opening quote starts a key, a dot descends into an object field's children.

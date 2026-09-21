@@ -56,6 +56,11 @@ type Request struct {
 	// every source filters by the same value; read it through LangID, which
 	// resolves the buffer language for a request built without it.
 	Lang string
+	// Context classifies the request position (#2654): comment, string
+	// literal, declaration, import line, or code (the zero value). The
+	// editor computes it at trigger time; the engine narrows the dispatched
+	// sources by it (see lang.CompletionContext and ContextSource).
+	Context lang.CompletionContext
 }
 
 // LangID is the effective language id the request completes in: Lang when
@@ -131,6 +136,17 @@ type Source interface {
 // every other language keeps the full merged popup.
 type ExclusiveSource interface {
 	Exclusive(path string) bool
+}
+
+// ContextSource is an optional Source extension (#2654): a source with
+// something to say outside code positions declares the contexts it answers
+// in. Without it a source runs in code and declaration positions only —
+// nothing inside a string literal, nothing on an import line, nothing in a
+// comment. The word index implements it for comments (the current buffer's
+// words); the exclusive `.http` and ES-query sources claim every context,
+// since their answers are position-specific by construction.
+type ContextSource interface {
+	CompletesIn(ctx lang.CompletionContext) bool
 }
 
 // Engine dispatches registered sources per completion trigger. It implements
@@ -289,6 +305,12 @@ func (e *Engine) Emit(ev host.EditorEvent) {
 			return
 		}
 	}
+	// The position's context (#2654) narrows further: outside code and
+	// declaration positions only the sources claiming the context run.
+	sources = contextSources(lang.CompletionContext(ev.Context), sources)
+	if len(sources) == 0 {
+		return
+	}
 	req := Request{
 		Path:     ev.Path,
 		Key:      ev.BufKey(),
@@ -296,6 +318,7 @@ func (e *Engine) Emit(ev host.EditorEvent) {
 		Line:     ev.Line,
 		Col:      ev.Col,
 		Char:     ev.Char,
+		Context:  lang.CompletionContext(ev.Context),
 	}
 	// An identifier rune waits for the next keystroke (#2541); a manual
 	// request ("") and a claimed punctuation character stay immediate — the
@@ -328,6 +351,23 @@ func charTriggered(ch string, sources []Source) []Source {
 	var claimed []Source
 	for _, s := range sources {
 		if t, ok := s.(TriggerSource); ok && t.TriggerChar(ch) {
+			claimed = append(claimed, s)
+		}
+	}
+	return claimed
+}
+
+// contextSources narrows sources by the request position's context (#2654):
+// a code or declaration position keeps every source; a comment, string or
+// import position keeps only the sources whose ContextSource claim covers
+// it.
+func contextSources(ctx lang.CompletionContext, sources []Source) []Source {
+	if ctx.LocalSources() {
+		return sources
+	}
+	var claimed []Source
+	for _, s := range sources {
+		if c, ok := s.(ContextSource); ok && c.CompletesIn(ctx) {
 			claimed = append(claimed, s)
 		}
 	}

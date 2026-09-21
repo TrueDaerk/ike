@@ -2037,6 +2037,7 @@ func (e editorEmitter) Emit(ev editor.Event) {
 		AnchorCol:     ev.AnchorCol,
 		Large:         ev.Large,
 		Char:          ev.Char,
+		Context:       string(ev.Context),
 		CompletionID:  ev.CompletionID,
 		CompletionSeq: ev.CompletionSeq,
 	})

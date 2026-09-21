@@ -24,6 +24,7 @@ package langweb
 
 import (
 	_ "embed"
+	"regexp"
 
 	"ike/internal/consthint"
 	"ike/internal/cronhint"
@@ -101,6 +102,9 @@ func init() {
 		LineComment:  "//",
 		BlockComment: [2]string{"/*", "*/"},
 		IndentAfter:  []string{"{", "(", "["},
+		// Completion context (#2654).
+		DeclKeywords: []string{"function", "class", "let", "const", "var", "interface", "type", "enum"},
+		ImportLine:   regexp.MustCompile(`^\s*import\b`),
 		// Sticky scopes + folding (#168, #144).
 		ScopeNodes: []string{"function_declaration", "method_definition", "class_declaration", "arrow_function", "function_expression"},
 		FoldNodes: []string{
@@ -165,7 +169,10 @@ func init() {
 		IndentAfter:  []string{"{"},
 		// Sticky scopes + folding: rule headers pin, blocks fold.
 		ScopeNodes: []string{"rule_set", "media_statement", "keyframes_statement", "supports_statement"},
-		FoldNodes:  []string{"rule_set", "media_statement", "keyframes_statement", "supports_statement", "block", "comment"},
+		// Completion context (#2654): `@keyframes name` is the one CSS form
+		// that introduces a name by keyword.
+		DeclKeywords: []string{"keyframes"},
+		FoldNodes:    []string{"rule_set", "media_statement", "keyframes_statement", "supports_statement", "block", "comment"},
 		// Unicode-escape decoding (#2345): CSS's `\e9` / `\00e9` character
 		// escapes conceal as the character they name.
 		Spans: cssSpans,

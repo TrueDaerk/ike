@@ -2,6 +2,7 @@ package editor
 
 import (
 	"ike/internal/editor/mode"
+	"ike/internal/lang"
 	"ike/internal/largefile"
 )
 
@@ -76,6 +77,12 @@ type Event struct {
 	// characters (#527). Empty means a manual request (ctrl+space), which the
 	// bridge honours unconditionally.
 	Char string
+	// Context classifies the position of an EventCompletionTrigger (#2654):
+	// code, comment, string literal, declaration or import line, computed
+	// by completionContext at emit time. The engine and the bridge gate
+	// their sources by it; the editor itself withholds the auto-trigger where
+	// the context says no popup should open.
+	Context lang.CompletionContext
 	// Large marks a change on a document in large-file mode (#149): Text is
 	// intentionally absent (not "the file became empty"), so the LSP bridge
 	// must stop syncing instead of shipping an empty didChange — a reload can
@@ -185,6 +192,9 @@ func (m *Model) emitChar(kind EventKind, ch string) {
 		Col:      m.cursor.Col,
 		Mode:     m.mode,
 		Char:     ch,
+	}
+	if kind == EventCompletionTrigger {
+		ev.Context = m.completionContext()
 	}
 	if m.mode.IsVisual() {
 		ev.Sel = SelChar

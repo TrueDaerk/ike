@@ -214,6 +214,25 @@ type Language struct {
 	// C and its headers. Empty, the default, is strict same-language. Peers
 	// are one-directional: a language lists the ones it wants to see.
 	CompletionPeers []string
+
+	// DeclKeywords lists the keywords that introduce a *new* name (#2654):
+	// `func`, `type`, `var`, `const` in Go, `def` and `class` in Python. An
+	// identifier typed right after one of them is being invented, not
+	// recalled, so the auto-popup stays shut there (manual ctrl+space still
+	// opens it). Matched case-insensitively against the word left of the
+	// current word on the same line; see CompletionContextAt. Empty means
+	// the language declares nothing by keyword — every registered language
+	// either lists its keywords or carries an entry in the audit ledger
+	// cmd/ike/declkeyword_audit_test.go.
+	DeclKeywords []string
+
+	// ImportLine matches a line whose completion belongs to the language
+	// server alone (#2654): `import loggi` in Python, `use App\` in PHP.
+	// The local indexes have only noise to add there — `logging_config`,
+	// `loggingHelper` — so the engine dispatches none of them on such a
+	// line while the bridge still asks the server. Nil means no line is an
+	// import line.
+	ImportLine *regexp.Regexp
 }
 
 // Note is one Go-computed diagnostic (#1623): the half-open rune-column range

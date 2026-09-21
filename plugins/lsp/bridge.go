@@ -263,6 +263,12 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 		}
 	case host.EditorCompletionTrigger:
 		b.setCur(ev.Path, ev.Line, ev.Col)
+		// A comment position never asks the server (#2654): the editor's
+		// manual request there offers buffer words only. A string position
+		// still asks — servers answer import paths and the like in strings.
+		if !lang.CompletionContext(ev.Context).AsksServer() {
+			return
+		}
 		if b.shouldComplete(ev) {
 			// Identifier-rune auto-triggers debounce (#849): a typing burst —
 			// notably the re-queries an isIncomplete reply forces — collapses

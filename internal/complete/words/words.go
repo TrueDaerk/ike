@@ -90,6 +90,12 @@ func (s *Source) Name() string { return "words" }
 // against the server and the symbol index.
 func (s *Source) Priority() int { return ilsp.PriorityWords }
 
+// CompletesIn implements complete.ContextSource (#2654): the word index is
+// the one local source a comment position still dispatches, answering with
+// the current buffer's words only — prose in a comment refers to the code
+// around it, not to the project's every identifier.
+func (s *Source) CompletesIn(ctx lang.CompletionContext) bool { return ctx == lang.CtxComment }
+
 // Observe implements complete.EventObserver: change events stash the buffer's
 // latest text; extraction happens lazily on the next query, off this (UI)
 // goroutine. Large-file changes carry no text and drop the buffer's index.
@@ -211,6 +217,9 @@ func (s *Source) Complete(_ context.Context, req complete.Request) ([]ilsp.Compl
 	}
 	if cur != nil {
 		add(pick(cur), 0)
+	}
+	if req.Context == lang.CtxComment {
+		return items, nil // a comment offers the current buffer's words only (#2654)
 	}
 	var others []wordSet
 	for key, b := range s.buffers {
