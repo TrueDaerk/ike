@@ -197,11 +197,14 @@ func (b *bookmarksMode) Results(query string, cx palette.Context) []palette.Item
 // markHooks returns the editor-facing global-mark closures (#1151), the
 // breakpointHooks pattern: they capture the store pointer so every view
 // shares the live, persisted set.
-func markHooks(store *marks.Store) (set func(r rune, path string, line, col int), lines func(path string) []int, adjust func(path string, cursorAfter, delta int)) {
-	set = store.Set
-	lines = store.Lines
-	adjust = store.AdjustEdit
-	return set, lines, adjust
+func markHooks(store *marks.Store) editor.MarkHooks {
+	return editor.MarkHooks{
+		Set:     store.Set,
+		At:      store.At,
+		Remove:  store.Remove,
+		Letters: store.Letters,
+		Adjust:  store.AdjustEdit,
+	}
 }
 
 // focusedEditor returns the focused pane's editor, nil when the focus is not

@@ -660,7 +660,7 @@ func detachWorkspaceServices(w *workspace.Workspace) {
 			ed.SetBreakpointConditionalSource(nil)
 			ed.SetBreakpointLogpointSource(nil)
 			ed.SetBreakpointAdjuster(nil)
-			ed.SetMarkHooks(nil, nil, nil)
+			ed.SetMarkHooks(editor.MarkHooks{})
 			ed.SetBookmarkHooks(nil, nil)
 			ed.SetHistories(nil)
 			ed.SetCompletionMRU(nil)

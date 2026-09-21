@@ -667,14 +667,12 @@ type Model struct {
 	covDocVersion int
 	// Vim marks (#1151): marks are this view's local marks (m{a-z}),
 	// per-session like the caret set; markLines is the last observed line
-	// count for the edit-shift delta (the bpLines pattern). The gm* hooks
-	// reach the app-owned persistent global-mark store (m{A-Z}), injected
-	// like bpSource/bpAdjust; see marks.go.
+	// count for the edit-shift delta (the bpLines pattern). gm holds the
+	// hooks reaching the app-owned persistent global-mark store (m{A-Z}),
+	// injected like bpSource/bpAdjust; see marks.go.
 	marks     map[rune]buffer.Position
 	markLines int
-	gmSet     func(r rune, path string, line, col int)
-	gmLines   func(path string) []int
-	gmAdjust  func(path string, cursorAfter, delta int)
+	gm        MarkHooks
 	// Project bookmarks (#55) reach the editor the same way: bmSigns reports
 	// a file's gutter glyphs by line (mnemonic digit or the anonymous flag),
 	// bmAdjust shifts the store after an edit. Nil means no bookmarks.
