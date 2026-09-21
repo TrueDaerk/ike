@@ -36,13 +36,15 @@ func (m *Model) Configure(cfg host.Config) {
 	if cfg == nil {
 		return
 	}
-	// Apply show_hidden only when the config value actually changed since the
-	// last Configure (or on first configure). Live reloads fire on unrelated
-	// events (plugin toggle, interpreter change, project switch); re-applying an
-	// unchanged default would clobber the runtime `.` toggle every time (#629).
-	if v, ok := cfg.Get(cfgShowHidden); ok && v != m.hiddenCfg {
-		m.showHidden = v == "true"
-		m.hiddenCfg = v
+	// show_hidden is the IDE-wide hidden-files preference (#2663): the runtime
+	// `.` toggle writes the key, so this branch is the single apply path for
+	// both the settings page and the chord. It only fires when the config
+	// value actually changed since the last Configure (or on first configure):
+	// live reloads fire on unrelated events (plugin toggle, interpreter
+	// change, project switch), and re-applying an unchanged value would
+	// clobber a toggle whose write failed (#629).
+	if v, ok := cfg.Get(cfgShowHidden); ok {
+		m.applyShowHidden(v)
 	}
 	// The horizontal-scroll edge marks (#2377) are a UI-wide toggle, applied
 	// here like the [explorer] keys — the tree has no other config seam.
@@ -124,6 +126,36 @@ func (m *Model) Configure(cfg host.Config) {
 	}
 	m.cfgColors = readColors(cfg)
 	m.mergeColors()
+}
+
+// ApplyShowHidden applies the IDE-wide explorer.show_hidden value to an
+// explorer that is not part of the reconfigured pane registry (#2663) — the
+// tree of a parked background workspace, which must follow the toggle too.
+// v is the config string ("true" / "false").
+func (m *Model) ApplyShowHidden(v string) {
+	if m.applyShowHidden(v) {
+		m.invalidateWidth()
+	}
+}
+
+// applyShowHidden is the guarded show_hidden apply shared by Configure and
+// ApplyShowHidden; it reports whether the visible rows changed.
+func (m *Model) applyShowHidden(v string) bool {
+	if v == m.hiddenCfg {
+		return false
+	}
+	m.hiddenCfg = v
+	show := v == "true"
+	if show == m.showHidden {
+		// The toggle already flipped the tree and then wrote the key: the
+		// reload carries the value the rows are built from. Nothing to redo.
+		return false
+	}
+	m.showHidden = show
+	// A settings-page edit takes effect without a restart: the dot-entries
+	// appear/vanish on the next frame.
+	m.rebuild()
+	return true
 }
 
 // parseExclude splits the comma-joined explorer.exclude value into the glob

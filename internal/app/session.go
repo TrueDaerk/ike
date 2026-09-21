@@ -111,9 +111,13 @@ type editorSession struct {
 }
 
 type explorerSession struct {
-	Expanded   []string `json:"expanded,omitempty"`
-	ShowHidden bool     `json:"show_hidden"`
-	Cursor     string   `json:"cursor,omitempty"`
+	Expanded []string `json:"expanded,omitempty"`
+	// ShowHidden is the pre-#2663 per-workspace hidden-files toggle. It is
+	// kept so old session files still parse, but it is never written and its
+	// value is ignored on restore: hidden-file visibility is the IDE-wide
+	// explorer.show_hidden preference now.
+	ShowHidden bool   `json:"show_hidden,omitempty"`
+	Cursor     string `json:"cursor,omitempty"`
 	// The Scratches section's runtime state (#1963): folded to its divider,
 	// and the divider-dragged height (0 = the configured default).
 	ScratchCollapsed bool `json:"scratch_collapsed,omitempty"`

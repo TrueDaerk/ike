@@ -228,8 +228,9 @@ func TestReconfigureDoesNotClobberToggle(t *testing.T) {
 	}
 }
 
-// TestToggleEmitsPersist guards #629: toggling emits a HiddenToggledMsg so the
-// app can persist immediately (survive a kill/crash, not only a clean quit).
+// TestToggleEmitsPersist guards #629/#2663: toggling emits a HiddenToggledMsg
+// so the app can persist the new value as the IDE-wide explorer.show_hidden
+// preference immediately.
 func TestToggleEmitsPersist(t *testing.T) {
 	m := New(".")
 	_, cmd := m.Update(ToggleHiddenMsg{})

@@ -11,10 +11,13 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/config"
+	"ike/internal/explorer"
 	"ike/internal/host"
+	"ike/internal/pane"
 	"ike/internal/plugin"
 	"ike/internal/registry"
 	"ike/internal/theme"
+	"ike/internal/workspace"
 )
 
 // themeReg is a registry carrying the built-in theme provider, mirroring what
@@ -186,28 +189,83 @@ func TestStaleSessionThemeIgnored(t *testing.T) {
 	}
 }
 
-// TestReloadPersistsConfigShowHidden (#642): a genuine settings edit to
-// explorer.show_hidden applied by a live config reload must persist to the
-// session like the runtime `.` toggle does — otherwise a kill/crash (no clean
-// quit) leaves a stale session.json that restoreSession re-applies over the
-// edit at next boot. An unrelated reload must not touch session.json at all.
-func TestReloadPersistsConfigShowHidden(t *testing.T) {
+// TestToggleWritesGlobalShowHidden (#2663): the explorer's `.` toggle is an
+// IDE-wide preference, so the app turns HiddenToggledMsg into a user-scoped
+// explorer.show_hidden write and the reload applies it live. A later start in
+// another project reads the value from the config, with no session entry
+// involved.
+func TestToggleWritesGlobalShowHidden(t *testing.T) {
 	proj := t.TempDir()
 	state := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", state)
 	t.Chdir(proj)
-	sessionPath := filepath.Join(state, "session.json")
 
 	cfg, _ := config.Load(config.Options{})
 	m := NewWith(registry.New(), host.FromConfig(cfg))
 	if m.explorer().ShowingHidden() {
 		t.Fatal("show_hidden should start off")
 	}
-	// A previously persisted session holds the old value (e.g. written by an
-	// earlier clean quit).
-	saveSession(m.snapshotSession())
 
-	// Settings edit: show_hidden flips on and the config reloads live.
+	tm, cmd := m.Update(explorer.HiddenToggledMsg{ShowHidden: true})
+	m = tm.(Model)
+	if cmd == nil {
+		t.Fatal("toggle produced no config write")
+	}
+	msg := cmd()
+	reloaded, ok := msg.(config.ConfigReloadedMsg)
+	if !ok {
+		t.Fatalf("toggle command produced %T, want ConfigReloadedMsg", msg)
+	}
+	for _, d := range reloaded.Diags {
+		if d.Field == "explorer.show_hidden" {
+			t.Fatalf("write reported a diagnostic: %s", d.Message)
+		}
+	}
+	raw, err := os.ReadFile(filepath.Join(state, "settings.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "show_hidden = true") {
+		t.Fatalf("user config missing show_hidden = true:\n%s", raw)
+	}
+	if !reloaded.Config.Explorer.ShowHidden {
+		t.Fatal("reloaded config did not carry show_hidden = true")
+	}
+
+	// The session file must not carry the toggle any more.
+	saveSession(m.snapshotSession())
+	sess, err := os.ReadFile(filepath.Join(state, "session.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(sess), "show_hidden") {
+		t.Fatalf("session.json still persists show_hidden:\n%s", sess)
+	}
+
+	// A different project started afterwards follows the preference.
+	other := t.TempDir()
+	t.Chdir(other)
+	cfg2, _ := config.Load(config.Discover(other))
+	m2 := NewWith(registry.New(), host.FromConfig(cfg2))
+	if !m2.explorer().ShowingHidden() {
+		t.Fatal("a fresh project did not pick up the global show_hidden preference")
+	}
+}
+
+// TestReloadAppliesShowHiddenLive (#2663, replacing the session round trip of
+// #642): a settings-page edit applies to the running tree, and a restart reads
+// the value from the config — the session is not involved either way, and an
+// old session.json carrying the pre-#2663 field is ignored instead of
+// clobbering the preference.
+func TestReloadAppliesShowHiddenLive(t *testing.T) {
+	proj := t.TempDir()
+	state := t.TempDir()
+	t.Setenv("IKE_CONFIG_DIR", state)
+	t.Chdir(proj)
+
+	cfg, _ := config.Load(config.Options{})
+	m := NewWith(registry.New(), host.FromConfig(cfg))
+
 	cfg2, _ := config.Load(config.Options{})
 	cfg2.Explorer.ShowHidden = true
 	tm, _ := m.Update(config.ConfigReloadedMsg{Config: cfg2})
@@ -216,24 +274,100 @@ func TestReloadPersistsConfigShowHidden(t *testing.T) {
 		t.Fatal("config change did not apply live")
 	}
 
-	// Simulated kill/crash: no quit. A fresh model restores the session, which
-	// must already carry the new value instead of clobbering the edit.
-	m2 := NewWith(registry.New(), host.FromConfig(cfg2))
-	if !m2.explorer().ShowingHidden() {
-		t.Fatal("config-driven show_hidden change did not survive a restart without clean quit (#642)")
-	}
-
-	// An unrelated reload (show_hidden unchanged) must not write the session.
-	if err := os.Remove(sessionPath); err != nil {
+	// A stale session file from before #2663 claims the opposite; the restore
+	// must ignore it.
+	legacy := `{"explorer":{"show_hidden":false,"expanded":[]}}`
+	if err := os.WriteFile(filepath.Join(state, "session.json"), []byte(legacy), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cfg3, _ := config.Load(config.Options{})
-	cfg3.Explorer.ShowHidden = true
-	cfg3.Editor.TabWidth = 2
-	tm, _ = m2.Update(config.ConfigReloadedMsg{Config: cfg3})
-	_ = tm
-	if _, err := os.Stat(sessionPath); err == nil {
-		t.Error("unrelated reload wrote session.json; expected no write")
+	m2 := NewWith(registry.New(), host.FromConfig(cfg2))
+	if !m2.explorer().ShowingHidden() {
+		t.Fatal("stale session show_hidden clobbered the global preference (#2663)")
+	}
+}
+
+// TestToggleWriteFailureKeepsSessionToggle (#2663): when the user config file
+// cannot be written, the tree keeps the flipped state for this session and the
+// failure surfaces as a config diagnostic.
+func TestToggleWriteFailureKeepsSessionToggle(t *testing.T) {
+	proj := t.TempDir()
+	state := t.TempDir()
+	t.Setenv("IKE_CONFIG_DIR", state)
+	t.Chdir(proj)
+
+	cfg, _ := config.Load(config.Options{})
+	m := NewWith(registry.New(), host.FromConfig(cfg))
+	// The explorer already flipped when it emitted the message.
+	exp := m.explorer()
+	flipped, _ := exp.Update(explorer.ToggleHiddenMsg{})
+	*exp = flipped
+	if !m.explorer().ShowingHidden() {
+		t.Fatal("toggle did not flip the tree")
+	}
+
+	// Make the user layer unwritable: a directory where the file belongs.
+	if err := os.Mkdir(filepath.Join(state, "settings.toml"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, cmd := m.Update(explorer.HiddenToggledMsg{ShowHidden: true})
+	if cmd == nil {
+		t.Fatal("toggle produced no config write")
+	}
+	reloaded, ok := cmd().(config.ConfigReloadedMsg)
+	if !ok {
+		t.Fatalf("toggle command produced %T, want ConfigReloadedMsg", reloaded)
+	}
+	found := false
+	for _, d := range reloaded.Diags {
+		if d.Field == "explorer.show_hidden" && d.Message != "" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("failed write reported no diagnostic; diags=%v", reloaded.Diags)
+	}
+	tm, _ := m.Update(config.ConfigReloadedMsg{Config: reloaded.Config, Diags: reloaded.Diags})
+	m = tm.(Model)
+	if !m.explorer().ShowingHidden() {
+		t.Fatal("a failed write must leave this session's toggle standing")
+	}
+}
+
+// TestReloadAppliesShowHiddenToParkedWorkspaces (#2663): hidden-file
+// visibility is IDE-wide, but Reconfigure only reaches the active workspace's
+// panes — a parked background workspace (#777) must follow the preference too,
+// so switching back does not show a tree contradicting the toggle.
+func TestReloadAppliesShowHiddenToParkedWorkspaces(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("IKE_CONFIG_DIR", state)
+	t.Chdir(t.TempDir())
+
+	cfg, _ := config.Load(config.Options{})
+	m := NewWith(registry.New(), host.FromConfig(cfg))
+
+	// A second workspace with its own registry, parked in the background.
+	bgRoot := t.TempDir()
+	bgPanes := pane.NewRegistry(host.FromConfig(cfg), nil)
+	bgPanes.AddExplorer()
+	active := m.ws.Active()
+	m.ws.SetActive(workspace.New(bgRoot, bgPanes))
+	m.ws.Park()
+	m.ws.SetActive(active)
+
+	cfg2, _ := config.Load(config.Options{})
+	cfg2.Explorer.ShowHidden = true
+	tm, _ := m.Update(config.ConfigReloadedMsg{Config: cfg2})
+	m = tm.(Model)
+
+	if !m.explorer().ShowingHidden() {
+		t.Fatal("active workspace did not apply show_hidden")
+	}
+	bg := m.ws.Peek(bgRoot)
+	if bg == nil {
+		t.Fatal("background workspace vanished")
+	}
+	if !bg.Panes.Get(pane.ExplorerKey).Explorer().ShowingHidden() {
+		t.Fatal("parked workspace's explorer did not follow the IDE-wide show_hidden (#2663)")
 	}
 }
 

@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"ike/internal/host"
 )
 
 // buildTree lays out a small project: root/{a/{a1.txt}, b/, .hidden/, top.txt}.
@@ -60,15 +62,18 @@ func rowPaths(m Model) map[string]bool {
 	return out
 }
 
-// TestRestoreExpandsAndPositions verifies a saved State re-expands directories,
-// re-applies show-hidden, and parks the cursor on the saved path.
+// TestRestoreExpandsAndPositions verifies a saved State re-expands directories
+// and parks the cursor on the saved path. Hidden-file visibility is no longer
+// part of State (#2663): it comes from explorer.show_hidden via Configure, so
+// a restore leaves the configured value alone.
 func TestRestoreExpandsAndPositions(t *testing.T) {
 	root := buildTree(t)
 	m := New(root)
 	subA := filepath.Join(root, "a")
 	a1 := filepath.Join(subA, "a1.txt")
 
-	m.Restore(State{Expanded: []string{subA}, ShowHidden: true, Cursor: a1})
+	m.Configure(host.MapConfig{"explorer.show_hidden": "true"})
+	m.Restore(State{Expanded: []string{subA}, Cursor: a1})
 	m = drainRestore(m)
 
 	rows := rowPaths(m)
@@ -89,13 +94,10 @@ func TestSnapshotRoundTrip(t *testing.T) {
 	subA := filepath.Join(root, "a")
 
 	m := New(root)
-	m.Restore(State{Expanded: []string{subA}, ShowHidden: true, Cursor: subA})
+	m.Restore(State{Expanded: []string{subA}, Cursor: subA})
 	m = drainRestore(m)
 
 	s := m.Snapshot()
-	if !s.ShowHidden {
-		t.Fatal("snapshot lost show_hidden")
-	}
 	if s.Cursor != subA {
 		t.Fatalf("snapshot cursor = %q, want %q", s.Cursor, subA)
 	}

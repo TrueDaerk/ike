@@ -100,7 +100,8 @@ type Model struct {
 	// hiddenCfg is the last explorer.show_hidden config string actually applied
 	// by Configure. A live reload only re-applies show_hidden when the config
 	// value genuinely changed, so an unrelated Reconfigure never clobbers the
-	// runtime `.` toggle (#629). "" means "not yet configured".
+	// runtime `.` toggle whose own write did not land (#629, #2663). "" means
+	// "not yet configured".
 	hiddenCfg string
 	// exclude holds the explorer.exclude base-name glob patterns (#1139):
 	// matching entries are hidden at every depth regardless of showHidden —
@@ -718,7 +719,10 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.showHidden = !m.showHidden
 		m.rebuild()
 		show := m.showHidden
-		// Persist right away so a kill/crash keeps the toggle (#629).
+		// The app turns this into a user-scoped explorer.show_hidden write
+		// (#2663): hidden-file visibility is one IDE-wide preference, so the
+		// toggle must reach every workspace and every later start, not just
+		// this project's session file.
 		return m, func() tea.Msg { return HiddenToggledMsg{ShowHidden: show} }
 	case CollapseAllMsg:
 		m.collapseAll()

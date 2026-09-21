@@ -229,7 +229,7 @@ secrets — are documented together, with screenshots, in
 
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
-| Show hidden files | `explorer.show_hidden` | boolean | `false` | user | List dot files and dot directories in the tree; entries matched by the exclude patterns below stay hidden either way |
+| Show hidden files | `explorer.show_hidden` | boolean | `false` | user | List dot files and dot directories in the tree; entries matched by the exclude patterns below stay hidden either way. The explorer's . chord writes this key, so the toggle applies to every project |
 | Git status colors | `explorer.git_status` | boolean | `true` | user | Tint tree entries by their git status (added, modified, ignored) and roll a directory's status up from its children |
 | File type icons | `explorer.icons` | boolean | `false` | user | Draw a one-cell file-type marker glyph before each name (plain unicode, no nerd font needed) |
 | Autoscroll from source | `explorer.auto_reveal` | boolean | `false` | user | Reveal the focused editor's file in the tree on every focus/tab switch — expand its ancestors, select it and scroll it into view (JetBrains' "autoscroll from source") |
