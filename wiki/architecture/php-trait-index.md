@@ -138,6 +138,35 @@ The loader clamps the ranges with a diagnostic; the form rejects a
 non-number and clamps out-of-range input with a notice. Reloads reach the
 index through `reloadConfig` → `Reconfigure`.
 
+## Completion (#2668)
+
+`internal/complete/phptraits` is the index's completion source (name
+`phptraits`, priority `lsp.PriorityPHPTraits` = 60): inside a trait body it
+offers the consumer scope's members after `$this->`, `self::` and `static::`,
+which the server cannot resolve there. It is a plain `complete.Source` on the
+app's engine — it keeps no index of its own, only the observed buffer text it
+reads the line before the cursor from, and asks `ScopeAt` + `VisibleMembers`
+once the cheap checks (language `php`, the access syntax before the cursor,
+`php.trait_index`) have passed.
+
+The access rule lives in one function: `$this->` reaches every method (static
+ones too — PHP allows `$this->staticMethod()`) and the non-static properties;
+`self::` / `static::` reach the static members plus constants and enum cases.
+Methods are offered as `name(`, properties bare after `->` and with their `$`
+after `::`; `detail` names the declaring type (`abc(): string  —  class B`),
+`documentation` the docblock summary, and the item kind maps to LSP
+Method / Property / Constant / EnumMember. In the fixture project,
+`$this->` inside trait `A` therefore lists `abc(` (from the consumer `B`),
+`fromC(` and `x` (from the sibling trait `C`) and the parent chain's `find(`;
+`self::` lists `K` and the static members.
+
+Because the priority sits below the server's, the editor's per-insert-text
+merge keeps the **server's** item for a member both offer — the source only
+adds what Intelephense cannot see. A non-empty answer records the telemetry op
+`php.trait.complete` with its item count. With `php.trait_index = false`, and
+in a build without the PHP grammar, the source answers nothing. See
+[completion](completion.md) § PHP trait members for the engine side.
+
 ## Diagnostics (#2669)
 
 Because the server resolves `$this` inside a trait as the trait itself,
@@ -189,6 +218,8 @@ zero.
 
 `buildModel` (`internal/app/app.go`) constructs one index per project root
 beside `symbols.New(root)` from the flat host config's `[php]` keys and
-registers it on the completion engine as an observer; a project switch
-rebuilds it with the model. `Model.PHPIndex()` exposes it to the features
-of the later issues.
+registers it on the completion engine as an observer; the trait completion
+source (#2668) is registered beside it as an ordinary source over the same
+index, and gets its telemetry callback once the model's recorder exists. A
+project switch rebuilds both with the model. `Model.PHPIndex()` exposes the
+index to the features of the later issues.

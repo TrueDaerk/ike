@@ -175,6 +175,10 @@ const (
 	// index resolved in a trait's consumer scope (0520, #2669); the "count"
 	// detail is how many were suppressed. Recorded only when it is > 0.
 	OpPHPTraitDiagSuppressed = "php.trait.diag_suppressed"
+	// One non-empty answer of the PHP trait-member completion source (0520,
+	// #2668); the "count" detail is how many items it offered. An empty
+	// answer — the common case outside a trait body — records nothing.
+	OpPHPTraitComplete = "php.trait.complete"
 )
 
 // CommandSlowThreshold is the dispatch duration from which a command event

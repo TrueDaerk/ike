@@ -152,6 +152,17 @@ func recordTelemetrySession(r *telemetry.Recorder) {
 	r.Session(version.Short(), runtime.GOOS, telemetryProjectToken())
 }
 
+// traitCompleteRecorder is the callback the PHP trait-member completion
+// source reports its non-empty answers through (0520, #2668): one op event
+// per answer, carrying how many members it offered. It runs on the source's
+// goroutine, so it touches nothing but the recorder, which is safe there.
+func traitCompleteRecorder(r *telemetry.Recorder) func(int) {
+	return func(items int) {
+		r.Op(telemetry.OpPHPTraitComplete, telemetry.OpPhaseOK,
+			map[string]string{"count": strconv.Itoa(items)})
+	}
+}
+
 // projectClock measures how long the current project was actually worked in
 // (#2408): the foreground time between the session marker that opened it and
 // the project.leave event that closes it. Terminals that report focus let it

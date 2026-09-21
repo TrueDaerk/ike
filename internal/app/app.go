@@ -35,6 +35,7 @@ import (
 	"ike/internal/complete"
 	"ike/internal/complete/emmet"
 	"ike/internal/complete/mru"
+	"ike/internal/complete/phptraits"
 	"ike/internal/complete/postfix"
 	"ike/internal/complete/symbols"
 	"ike/internal/complete/words"
@@ -1425,6 +1426,12 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	// the index debounces, so a keystroke storm arrives as one message.
 	phpIdx.SetOnChange(func() { h.Send(PHPIndexChangedMsg{}) })
 	engine.RegisterObserver(phpIdx)
+	// The trait-member completion source (0520, #2668) queries that index:
+	// inside a trait body it offers the members living on the trait's
+	// consumers and sibling traits, which the server cannot resolve. Its
+	// telemetry callback is installed below, once the model's recorder exists.
+	phpTraits := phptraits.New(phpIdx)
+	engine.Register(phpTraits)
 	engine.Register(emmet.New())
 	// Live templates (#1152): user [[snippets]] + built-ins as popup items,
 	// language-scoped per buffer. Reads config.Get() live, so reloads apply.
@@ -1616,6 +1623,11 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	// that records nothing meaningful still leaves no file; a project switch
 	// re-emits it on the carried recorder (switch.go).
 	recordTelemetrySession(m.usage)
+	// Every non-empty trait-member answer is one op event (0520, #2668). The
+	// source calls this off the UI goroutine, which the recorder allows; the
+	// recorder is captured by itself, not through the model, so the closure
+	// keeps nothing else alive.
+	phpTraits.SetTelemetry(traitCompleteRecorder(m.usage))
 	m.floats = ui.NewStack(m.shell)                 // z-ordered floating stack (#1237)
 	m.floats.SetSizeStore(winSizes)                 // resizable modal shell (#774)
 	m.palette.SetSizeStore(winSizes)                // resizable palette box (#774)

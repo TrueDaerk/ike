@@ -147,8 +147,13 @@ const (
 	// cursor's line, exactly as it does for live templates.
 	SourcePostfix = "postfix"
 
-	PriorityLSP      = 100
-	PrioritySymbols  = 50
+	PriorityLSP = 100
+	// PriorityPHPTraits keeps the PHP trait-member source (0520, #2668)
+	// below the server and above the symbol index: a member Intelephense
+	// already knows keeps the server's item, while the members it cannot see
+	// inside a trait body outrank a project symbol of the same name.
+	PriorityPHPTraits = 60
+	PrioritySymbols   = 50
 	PrioritySnippets = 40
 	PriorityEmmet    = 30
 	// PriorityPostfix keeps postfix templates below every member the server

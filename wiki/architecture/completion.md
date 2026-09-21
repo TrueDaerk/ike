@@ -497,6 +497,45 @@ The source can be switched off with **`editor.postfix_completion`** (Settings �
 Typing Assistance); the flag is read per query, so a config reload applies with
 no re-wiring.
 
+## PHP trait members (#2668)
+
+`internal/complete/phptraits` (name `phptraits`, priority
+`lsp.PriorityPHPTraits` = 60 — below the server, above the symbol index) is the
+completion half of the [PHP trait index](php-trait-index.md). Intelephense
+resolves `$this` inside a trait body as the trait itself, so `$this->` there
+offers only the trait's own members; every member living on the trait's
+**consumers** or on the **sibling traits** those consumers use is missing,
+although the code legitimately calls it. The index knows those members
+(`VisibleMembers`), and this source turns them into items.
+
+It answers only where it has something to say: the buffer's language is `php`,
+`ScopeAt` reports a **trait body** around the cursor, and the text before the
+cursor ends with `$this->`, `self::`, `static::` or one of those plus a partial
+identifier. The checks run cheapest first — language, then the line before the
+cursor, then `php.trait_index` — so an ordinary PHP position never reaches the
+index. `TriggerSource` claims `>` and `:`, so the popup opens on the operator
+instead of waiting for the first letter; `ContextSource` keeps it out of
+comments, strings and import lines.
+
+One function (`offers`) holds the access rule: `$this->` reaches every method
+(static ones too — PHP allows `$this->staticMethod()`) and the non-static
+properties; `self::` / `static::` reach the static members plus constants and
+enum cases, which have no instance form. Methods are offered as `name(`,
+properties bare after `->` and with their `$` after `::`. `detail` names the
+declaring type (`abc(int $times = 1): string  —  class B`) — the whole point
+being that this type is not the trait the cursor sits in — `documentation`
+carries the docblock summary, and the kind maps to LSP
+Method/Property/Constant/EnumMember. Items keep the index's precedence order
+(a consumer's own member before the trait's, the trait's before a parent's)
+through their sort text.
+
+Because the priority sits below `PriorityLSP`, a member the server already
+knows keeps the **server's** item in the editor-side merge; only what the
+server cannot see is added. Every non-empty answer records the telemetry op
+`php.trait.complete` with its item count. The source is inert when
+`php.trait_index = false` and in a build without the PHP grammar (no cgo),
+because the index holds nothing then.
+
 ## Completion context (#2654)
 
 Not every position deserves the popup. The editor classifies the cursor at
