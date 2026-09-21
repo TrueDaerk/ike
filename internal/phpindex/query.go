@@ -22,8 +22,12 @@ type snapshot struct {
 	// declarations using it directly — classes, enums and traits.
 	users map[string][]string
 	// refs maps a declaration key to the files referring to it.
-	refs  map[string][]string
-	edges int
+	refs map[string][]string
+	// children maps a class key to the keys of the classes extending it
+	// directly — the reverse extends edges the reference scanner (#2671)
+	// walks down to the subclasses within depth.
+	children map[string][]string
+	edges    int
 }
 
 func key(fqn string) string { return strings.ToLower(strings.TrimPrefix(fqn, "\\")) }
@@ -31,12 +35,13 @@ func key(fqn string) string { return strings.ToLower(strings.TrimPrefix(fqn, "\\
 // buildSnapshot derives the tables from the per-file extractions.
 func buildSnapshot(files map[string]fileDecls, depth int) *snapshot {
 	s := &snapshot{
-		depth:   depth,
-		byFQN:   map[string][]*Decl{},
-		byShort: map[string][]*Decl{},
-		files:   map[string][]*Decl{},
-		users:   map[string][]string{},
-		refs:    map[string][]string{},
+		depth:    depth,
+		byFQN:    map[string][]*Decl{},
+		byShort:  map[string][]*Decl{},
+		files:    map[string][]*Decl{},
+		users:    map[string][]string{},
+		refs:     map[string][]string{},
+		children: map[string][]string{},
 	}
 	paths := make([]string, 0, len(files))
 	for p := range files {
@@ -75,7 +80,10 @@ func buildSnapshot(files map[string]fileDecls, depth int) *snapshot {
 				}
 			}
 			for _, pn := range d.Extends {
-				s.edges += len(s.targets(pn))
+				for _, pk := range s.targets(pn) {
+					s.children[pk] = append(s.children[pk], key(d.FQN))
+					s.edges++
+				}
 			}
 			for _, in := range d.Implements {
 				s.edges += len(s.targets(in))

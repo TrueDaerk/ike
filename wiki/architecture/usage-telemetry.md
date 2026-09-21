@@ -254,6 +254,19 @@ counts by the version's interval before comparing sessions.
       offered. An empty answer — the common case outside a trait body —
       records nothing, so the volume prices how often the index is what
       completed the member the server could not see.
+    - `php.trait.references` (#2671) — one find-usages answer the
+      [PHP trait index](php-trait-index.md#references-2671) complemented:
+      `server` is how many locations the server reported, `index` how many
+      rows the index added after deduplication. Recorded only when the index
+      contributed at least one row, so the volume prices how much of a trait
+      member's usage the server alone would have missed.
+    - `php.trait.rename` (#2672) — one applied rename the
+      [PHP trait index](php-trait-index.md#rename-2672) took part in: `path`
+      is `extended` (a server rename completed with the occurrences inside
+      consumed traits) or `index` (an index-driven rename inside a trait body
+      the server refused), `edits` how many identifiers the index rewrote.
+      Recorded on apply only — a cancelled preview or a rename the index added
+      nothing to records nothing. No path, member name or type name travels.
     - `php.trait.index_scan` (#2673) — one completed project walk of the
       [PHP trait index](php-trait-index.md#operations-2673): the initial scan
       and every `php.traitIndex.rebuild`. `ms` is the walk's duration, `files`
@@ -268,11 +281,10 @@ counts by the version's interval before comparing sessions.
       the ghost the deferred `pane.focus` rule avoids. It is held and written
       as soon as a real usage event starts the session.
 
-    Those five are epic 0520's op vocabulary as of #2673 — the ids the
-    epic's review recipe greps for; references (#2671) and rename (#2672)
-    add theirs here when they land. All of them are additive — no existing
-    field changes meaning, so no schema bump; absence in an older export
-    means the build predates them.
+    Those seven `php.trait.*` ids are epic 0520's complete op vocabulary —
+    the ids the epic's review recipe greps for. All of them are additive — no
+    existing field changes meaning, so no schema bump; absence in an older
+    export means the build predates them.
   - `palette.pick` (#2551) — a palette row was activated, the counterpart of
     `palette.dismiss`. `mode` is the mode's prefix rune, `query_len` the number
     of runes typed — **never the query itself** — `rank` the **0-based index**

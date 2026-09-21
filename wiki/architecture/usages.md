@@ -49,9 +49,12 @@ the shared toggle state machine: open → focus → return focus.
 
 Rows group by file in server order (headers accented, first-appearance file
 order, within-file order untouched); each reference row shows 1-based
-`line:col` plus the trimmed source-line preview. The header line — and the
-`Title()` seam — carry the searched symbol and totals:
-`Usages: Foo — 12 in 4 files`. The cursor starts on the first reference.
+`line:col` plus the trimmed source-line preview; a row the server did not
+report shows its source as a badge after the preview — `[trait]` for a row
+the [PHP trait index](./php-trait-index.md#references-2671) added (#2671).
+The header line — and the `Title()` seam — carry the searched symbol and
+totals: `Usages: Foo — 12 in 4 files`. The cursor starts on the first
+reference.
 
 ## Interaction
 

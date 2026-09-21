@@ -542,6 +542,20 @@ instead of the palette: grouped by file, refreshable with `r`, title carrying
 the symbol captured under the cursor at request time. The palette stays the
 quick mode; the pane is the worklist.
 
+**PHP trait scope, both ways (0520, #2671).** Around traits the server's
+references answer is incomplete in both directions — empty inside a trait
+body on a consumer's member, and missing the calls inside consumed traits on
+the consumer's declaration. Every references flow above (`findReferences`,
+`findUsages`, the no-server branches of `references` / `referencesPanel`)
+therefore runs its result through `mergeTraitReferences`
+(`plugins/lsp/traitrefs.go`), which asks the host seam's
+`TraitReferencesAt` *after* the server answered and appends the index rows
+behind the server's, deduplicated by (path, line, col), each carrying the
+`trait` badge (`ilsp.Reference.Badge`) the pane and the palette render as
+`[trait]`. The occurrence highlight falls back the same way inside a trait
+body. Scope rules, the tree-based scanner and the empty-vs-non-empty
+decision table: [PHP trait index](php-trait-index.md) § References.
+
 **Call hierarchy (#173).** `lsp.callHierarchy` (default `ctrl+alt+h`, also
 `H` — lowercase `h` is the notification history) sends
 `textDocument/prepareCallHierarchy` from the cursor and opens the prepared
@@ -713,6 +727,20 @@ edits — no second `textDocument/rename` whose answer could differ from what
 the user approved. Cancelling is free: nothing has been written when the
 dialog is up, so buffers and files stay as they were. A rename confined to a
 single file keeps applying instantly, dialog-free.
+
+*PHP trait members (#2672).* Intelephense never edits `$this->abc()` inside
+the traits a class consumes, and refuses to rename such a member from inside
+the trait. The [PHP trait index](php-trait-index.md#rename-2672) closes both
+gaps through the same funnel (`plugins/lsp/traitrename.go`): a server rename
+of a PHP member is **extended** with the occurrences inside consumed traits —
+announced in the prompt as `+ 7 occurrences in traits A, C`, deduplicated
+against the server's edits and always previewed — and a `prepareRename`
+the server refuses inside a trait body becomes an **index-driven rename**
+of the declaration and every access, previewed before anything is written
+and refused when the member resolves to unrelated consumers declaring it
+differently. Both validate the new name as a PHP identifier in the prompt
+(`RenamePromptMsg.Validate`; the prompt shows the rejection and stays open)
+and are inert with `php.trait_index = false`.
 
 *Markdown headings (#2025).* marksman resolves same-document references
 itself: renaming `## Old Heading` already returns edits rewriting every
