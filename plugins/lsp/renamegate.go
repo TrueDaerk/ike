@@ -25,6 +25,13 @@ import (
 // Servers without prepareRename support keep the #426 contract: the manager
 // answers ok for them without asking, so the entry stays offered and the
 // rename attempt decides.
+//
+// The gate is the *server's* verdict only. A PHP trait-scope member the
+// server refuses (#2672, traitrename.go) is still renameable through
+// `lsp.rename` itself, where the index-driven path takes over after the
+// refusal; the popup entry is not offered on the index's say-so, so a
+// closed gate never turns into a server rename that would leave the
+// consumed traits behind.
 
 // renameGate is the last recorded prepareRename verdict, valid for exactly one
 // (path, line, col). known is false when nothing has been validated (yet) —

@@ -721,6 +721,11 @@ func (b *bridge) references(h host.API) tea.Cmd {
 		return nil
 	}
 	if b.manager() == nil {
+		// Nobody to ask: the PHP trait index still knows the usages of a
+		// consumer's member inside a trait body (#2671).
+		if refs := b.mergeTraitReferences(h, path, line, col, true, nil); len(refs) > 0 {
+			h.Send(ilsp.ReferencesMsg{Refs: refs})
+		}
 		return nil
 	}
 	go b.findReferences(h, path, line, col, true)
@@ -740,7 +745,11 @@ func (b *bridge) findReferences(h host.API, path string, line, col int, includeD
 	if requestFailed(h, "find usages", err) {
 		return
 	}
-	h.Send(ilsp.ReferencesMsg{Refs: locationsToRefs(mgr, path, locs)})
+	// The PHP trait index fills what the server cannot see (#2671): the
+	// whole scope when the server had nothing inside a trait body, the
+	// calls inside consumed traits when it answered on the consumer.
+	refs := b.mergeTraitReferences(h, path, line, col, includeDecl, locationsToRefs(mgr, path, locs))
+	h.Send(ilsp.ReferencesMsg{Refs: refs})
 }
 
 // referencesPanel is lsp.referencesPanel (#1155): the same references request
@@ -761,6 +770,14 @@ func (b *bridge) referencesPanel(h host.API) tea.Cmd {
 		return nil
 	}
 	if b.manager() == nil {
+		// Nobody to ask: the PHP trait index still answers inside a trait
+		// body (#2671), with a Refresh that retries the whole resolution.
+		if refs := b.mergeTraitReferences(h, path, line, col, true, nil); len(refs) > 0 {
+			h.Send(ilsp.UsagesMsg{
+				Symbol: symbol, Path: path, Line: line, Col: col, Refs: refs,
+				Refresh: func() tea.Msg { return b.referencesPanel(h) },
+			})
+		}
 		return nil
 	}
 	go b.findUsages(h, symbol, path, line, col)
@@ -810,7 +827,8 @@ func (b *bridge) findUsages(h host.API, symbol, path string, line, col int) {
 		Path:   path,
 		Line:   line,
 		Col:    col,
-		Refs:   locationsToRefs(mgr, path, locs),
+		// Index rows (#2671) carry the `trait` badge the pane shows.
+		Refs: b.mergeTraitReferences(h, path, line, col, true, locationsToRefs(mgr, path, locs)),
 		Refresh: func() tea.Msg {
 			go b.findUsages(h, symbol, path, line, col)
 			return nil
@@ -1057,10 +1075,21 @@ func (b *bridge) rename(h host.API) tea.Cmd {
 		}
 		placeholder, ok, err := mgr.PrepareRename(context.Background(), path, pos)
 		if errors.Is(err, manager.ErrRenameUnsupported) {
+			// A server without rename at all (intelephense without a
+			// licence) still leaves a trait-scope member renameable by
+			// the index (#2672, traitrename.go).
+			if b.traitIndexRename(h, path, pos) {
+				return
+			}
 			h.Send(ilsp.ServerStatusMsg{Text: "language server does not support rename", Kind: ilsp.ServerEventWarn})
 			return
 		}
 		if err != nil || !ok {
+			// Inside a PHP trait body the server cannot resolve a
+			// consumer's member: the index renames it instead (#2672).
+			if b.traitIndexRename(h, path, pos) {
+				return
+			}
 			h.Send(ilsp.ServerStatusMsg{Text: "cannot rename here", Kind: ilsp.ServerEventWarn})
 			return
 		}
@@ -1072,14 +1101,25 @@ func (b *bridge) rename(h host.API) tea.Cmd {
 // promptRename asks the app for the new name, carrying the Apply continuation
 // the prompt runs on enter. placeholder is both the prefill and the old symbol
 // text the Markdown completion (markdown_rename.go) compares link titles to.
+//
+// A PHP member the index resolves gets the trait extension announced in the
+// prompt (#2672): the note says how many occurrences inside consumed traits
+// the rename will add to the server's edits, and the typed name must be an
+// identifier. The plan is recomputed when the name is applied — the buffer
+// cannot change while the prompt is open, so both readings agree.
 func (b *bridge) promptRename(h host.API, path string, pos buffer.Position, placeholder string) {
-	h.Send(ilsp.RenamePromptMsg{
+	msg := ilsp.RenamePromptMsg{
 		Path:        path,
 		Placeholder: placeholder,
 		Apply: func(newName string) tea.Cmd {
 			return b.applyRename(h, path, pos, placeholder, newName)
 		},
-	})
+	}
+	if plan, ok := b.traitRenamePlan(h, host.TraitRenameExtend, path, pos); ok {
+		msg.Note = traitRenameNote(plan)
+		msg.Validate = validatePHPName
+	}
+	h.Send(msg)
 }
 
 // applyRename requests the workspace edit for newName and applies it: open
@@ -1106,19 +1146,28 @@ func (b *bridge) applyRename(h host.API, path string, pos buffer.Position, oldNa
 			return
 		}
 		files = b.mergeHeadingTitleEdits(files, path, oldName, strings.TrimSpace(newName))
-		if preview := previewFiles(mgr, files); len(preview) > 1 {
+		// A PHP member declared on a class that consumes traits: the
+		// occurrences inside those traits, which the server never edits
+		// (#2672, traitrename.go). An extended rename is always previewed,
+		// so the index's share is seen before it is written.
+		files, extra := b.extendTraitRename(h, path, pos, newName, files)
+		if preview := previewFiles(mgr, files); len(preview) > 1 || (extra > 0 && len(preview) > 0) {
 			h.Send(ilsp.RenamePreviewMsg{
 				OldName: oldName,
 				NewName: strings.TrimSpace(newName),
 				Files:   preview,
 				Apply: func() tea.Cmd {
-					go dispatchRenameEdits(h, files)
+					go func() {
+						dispatchRenameEdits(h, files)
+						b.traitRenameApplied(h, host.TraitRenameExtend, extra)
+					}()
 					return nil
 				},
 			})
 			return
 		}
 		dispatchRenameEdits(h, files)
+		b.traitRenameApplied(h, host.TraitRenameExtend, extra)
 	}()
 	return nil
 }
@@ -1801,7 +1850,15 @@ func (b *bridge) requestDocumentHighlight(path string) {
 		return
 	}
 	hs, err := mgr.DocumentHighlight(context.Background(), path, buffer.Position{Line: line, Col: col})
-	if err != nil || b.dropEmptyRepeat("highlight", path, len(hs) == 0) {
+	if err != nil {
+		return
+	}
+	if len(hs) == 0 {
+		// Inside a PHP trait body the server sees no occurrences of a
+		// consumer's member; the trait index marks them instead (#2671).
+		hs = b.traitHighlights(b.h, path, line, col)
+	}
+	if b.dropEmptyRepeat("highlight", path, len(hs) == 0) {
 		return
 	}
 	b.h.Send(ilsp.DocumentHighlightsMsg{Path: path, Line: line, Col: col, Highlights: hs})

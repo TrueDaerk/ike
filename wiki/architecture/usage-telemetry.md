@@ -249,6 +249,13 @@ counts by the version's interval before comparing sessions.
       prices how often navigation would otherwise have dead-ended. A server
       answer records nothing — the index is never consulted then. No path,
       member name or type name travels.
+    - `php.trait.rename` (#2672) — one applied rename the
+      [PHP trait index](php-trait-index.md#rename-2672) took part in: `path`
+      is `extended` (a server rename completed with the occurrences inside
+      consumed traits) or `index` (an index-driven rename inside a trait body
+      the server refused), `edits` how many identifiers the index rewrote.
+      Recorded on apply only — a cancelled preview or a rename the index added
+      nothing to records nothing. No path, member name or type name travels.
   - `palette.pick` (#2551) — a palette row was activated, the counterpart of
     `palette.dismiss`. `mode` is the mode's prefix rune, `query_len` the number
     of runes typed — **never the query itself** — `rank` the **0-based index**

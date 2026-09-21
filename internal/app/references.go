@@ -58,6 +58,11 @@ func (r *refsMode) set(refs []ilsp.Reference, peek bool) {
 		if runes := []rune(preview); len(runes) > previewMax {
 			preview = string(runes[:previewMax-1]) + "…"
 		}
+		if ref.Badge != "" {
+			// An index-derived row (#2671) names its source beside the
+			// preview, as the Usages pane does.
+			preview += "  [" + ref.Badge + "]"
+		}
 		var msg tea.Msg = ilsp.DefinitionMsg{Path: ref.Path, Line: ref.Line, Col: ref.Col}
 		if peek {
 			msg = ilsp.PeekDefinitionMsg{Path: ref.Path, Line: ref.Line, Col: ref.Col}

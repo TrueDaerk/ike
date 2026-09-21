@@ -404,6 +404,11 @@ func (m *Model) renderRow(pal *theme.Palette, base, header lipgloss.Style, i int
 	} else {
 		pos := strconv.Itoa(r.ref.Line+1) + ":" + strconv.Itoa(r.ref.Col+1)
 		line = "   " + pos + "  " + r.ref.Preview
+		if r.ref.Badge != "" {
+			// A row the server did not report, e.g. one the PHP trait index
+			// added (#2671): the badge names its source.
+			line += "  [" + r.ref.Badge + "]"
+		}
 	}
 	if i == m.cursor {
 		if m.focused {
