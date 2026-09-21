@@ -87,6 +87,10 @@ type API interface {
 	SetEditorEmitter(name string, e EditorEmitter)
 	// Config exposes read-only configuration access.
 	Config() Config
+	// TraitIndex is the PHP declaration index the LSP bridge consults as a
+	// navigation/hover *fallback* inside trait bodies (0520, #2670), or nil
+	// when the app registered none. See traitindex.go.
+	TraitIndex() TraitIndex
 }
 
 // EditorEvent is a lifecycle signal from the editor the LSP bridge consumes. It
@@ -288,8 +292,12 @@ type Host struct {
 
 	// Queued notifications awaiting the root model's drain. Guarded by mu:
 	// background workers (LSP goroutines) may Notify while Update drains.
+	// mu also guards traitIndex, the PHP trait-index seam (traitindex.go):
+	// the bridge reads it from its request goroutines while a project switch
+	// re-registers it from Update.
 	mu            sync.Mutex
 	notifications []Notification
+	traitIndex    TraitIndex
 
 	// Outbox for Send (#2027), guarded by sendMu: messages awaiting the
 	// dispatcher goroutine that hands them to the program in Send order.

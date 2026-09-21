@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions/code-lenses/folding-ranges/semantic-tokens/selection-ranges/willRenameFiles rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-09-21T15:00:00Z
+timestamp: 2026-09-21T18:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -102,6 +102,23 @@ find-usages on either lists every mark of the name with line previews, and
 hover on an alias shows the anchored node's value as a highlighted `yaml`
 fence, dedented, `<<:` merge keys spliced in recursively (cycle-guarded,
 capped at 16 lines).
+
+**The PHP trait fallback sits on the other side of the server** (0520, #2670).
+Intelephense resolves `$this` inside a trait body as the trait itself, so
+`lsp.definition`, `lsp.peekDefinition` and `lsp.hover` on `$this->abc()` come
+back empty whenever `abc` is declared on one of the trait's consumers. The
+declaration index knows those members, but it must **not** be a local
+provider: a first claim would bypass the server, which is right everywhere
+else. So `definitionRequest` and `requestHover` consult it only *after* the
+server answered empty (or when there is no manager to ask), through the host
+seam `host.TraitIndex` — the bridge is a plugin and reaches the index the way
+it reaches configuration, `h.TraitIndex()`, never a global. One hit is
+delivered as the same `DefinitionMsg` / `PeekDefinitionMsg` a server location
+would be, several open the same multi-target picker, an empty hover is filled
+with a markdown card (signature, declaring type, docblock, a
+`resolved via trait consumer B` footer), and nothing resolved leaves the #858
+notice exactly as it was. Details, gates and the tree-based symbol
+extraction: [PHP trait index](php-trait-index.md) § Navigation.
 
 **Peek definition** (#1154, #2168, `lsp.peekDefinition` — `cmd+y`, palette +
 the editor context menu next to Go to Definition): the same resolution as
@@ -408,7 +425,10 @@ jump would go nowhere, so F4/cmd+click show the symbol's usages instead
 count; a jump that lands in a vendored
 dependency (`.venv`/`site-packages`/`node_modules`/…) opens the file read-only —
 the first edit prompts for confirmation before unlocking it (the editor's
-[dependency-file edit guard](./editor.md), #565). Hover markdown is rendered,
+[dependency-file edit guard](./editor.md), #565); inside a **PHP trait body**
+an empty definition or hover answer falls through to the declaration index
+instead of the notice (#2670, [PHP trait index](php-trait-index.md) §
+Navigation) — after the server, never in front of it. Hover markdown is rendered,
 not shown raw (#379): fence markers (```` ```go ````) are stripped, the fenced
 block is syntax-highlighted through the language registry (`HighlightFenced`,
 fence tag resolved as language id then extension; an unresolvable tag falls

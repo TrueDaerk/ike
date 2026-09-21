@@ -179,6 +179,15 @@ const (
 	// #2668); the "count" detail is how many items it offered. An empty
 	// answer — the common case outside a trait body — records nothing.
 	OpPHPTraitComplete = "php.trait.complete"
+	// One go-to-definition / peek the PHP trait index answered after the
+	// server came back empty or could not be asked (0520, #2670); the
+	// "count" detail is how many declarations it resolved — more than one
+	// means the multi-location picker opened. A server answer records
+	// nothing: the index is never consulted then.
+	OpPHPTraitDefinition = "php.trait.definition"
+	// One hover card the PHP trait index filled after an empty server hover
+	// (0520, #2670); the "count" detail is how many declarations it listed.
+	OpPHPTraitHover = "php.trait.hover"
 )
 
 // CommandSlowThreshold is the dispatch duration from which a command event

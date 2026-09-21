@@ -1,5 +1,36 @@
 # Log
 
+## 2026-09-21 (Trait navigation: definition, peek and hover fallback, #2670)
+
+- **Go-to-definition, peek and hover went nowhere inside a trait.** With
+  `$this` resolved as the trait itself, Intelephense answers empty for every
+  member living on a consumer; the bridge could only say "no definition found
+  under the cursor".
+- **The declaration index now answers after the server**
+  (`plugins/lsp/traitfallback.go`): `definitionRequest` consults it on a zero
+  location answer, `requestHover` on an empty hover, and both when there is no
+  manager to ask at all. It is deliberately **not** a local provider
+  (`internal/lsp/localdef.go`, first claim wins) — that would bypass the
+  server, which is right everywhere outside a trait body.
+- **The bridge reaches the index through the host**, not a global:
+  `host.TraitIndex` (`internal/host/traitindex.go`) is a one-method read-only
+  view the app registers with `SetTraitIndex`; every gate — PHP buffer,
+  `php.trait_index`, trait body, member access — lives behind it in
+  `phpindex.HostView`.
+- **Symbol extraction is tree-based** (`phpindex.MemberAccessAt`): the walk
+  from the innermost node at the position resolves `$this->abc(`, `$this->abc`,
+  `self::K`, `self::$x` and `static::make()`, only for `$this`/`self`/`static`
+  receivers, and never when the cursor sits on the receiver itself.
+- **Delivery matches a server answer**: one hit jumps or peeks through the
+  usual `DefinitionMsg` / `PeekDefinitionMsg` funnel, several open the #279
+  multi-location picker, and an unknown member keeps the #858 notice. Hover
+  renders a card with the signature, the declaring type, the docblock and a
+  `resolved via trait consumer <Class>` footer.
+- Telemetry ops `php.trait.definition` / `php.trait.hover`; inert with
+  `php.trait_index = false` and in a build without the PHP grammar.
+- Docs: [PHP trait index](architecture/php-trait-index.md) § Navigation,
+  cross-linked from [LSP](architecture/lsp.md).
+
 ## 2026-09-21 (Trait diagnostics: position-aware suppression, #2669)
 
 - **Every `$this->abc()` inside a trait was red.** Intelephense resolves
