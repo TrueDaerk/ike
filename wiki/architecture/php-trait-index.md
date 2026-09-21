@@ -3,7 +3,7 @@ type: concept
 title: PHP Trait Index
 description: The workspace-wide PHP declaration index (Epic 0520, #2667) — every class-like declaration with its members, the trait-use / extends / implements edges between them, and the consumer scope a `$this` inside a trait body resolves against where Intelephense is blind. Built on the shared per-language project walk, kept fresh from buffer edits and watcher events, configured by the [php] section (Settings → PHP).
 resource: internal/phpindex
-tags: [architecture, php, traits, index, completion, navigation, hover, lsp]
+tags: [architecture, php, traits, index, completion, navigation, hover, references, lsp]
 timestamp: 2026-09-21T18:00:00Z
 ---
 
@@ -279,6 +279,77 @@ nothing, because the index was never asked. With `php.trait_index = false`,
 without a registered index and in a build without the PHP grammar the whole
 fallback is inert. See [lsp](lsp.md#layers) § definition / hover for the
 bridge side.
+
+## References (#2671)
+
+Find usages is blind in **both** directions around traits. Inside trait `A`,
+`$this->abc()` resolves to nothing, so the server reports no usages at all;
+on `abc()` declared in class `B`, the server lists the declaration and the
+calls inside `B` but never the calls inside the traits `B` consumes — which
+is what makes a server-side rename unsafe (#2672 builds on this). The index
+answers both sides through a **reference scanner** and a **merge** in the
+bridge, after the server answered, never in front of it.
+
+**The scanner** (`internal/phpindex/references.go`) is independent from the
+bridge so the rename issue can reuse it. `References(member)` returns
+`Location` rows — the member identifier's range, the declaring type, whether
+that type is a trait, whether the row is the declaration itself — for the
+member's **scope**: the declaring type, its traits transitively, its
+subclasses within `php.index.parent_depth` (the snapshot's reverse `extends`
+edges), and for a trait member every consumer and sibling trait, each with
+their trait closures and subclasses. It parses every file of that scope and
+matches accesses on the **syntax tree**, never by text: the same
+classification `MemberAccessAt` uses (`member_call_expression`,
+`member_access_expression`, `scoped_call_expression`,
+`scoped_property_access_expression`, `class_constant_access_expression`) on
+a `$this` / `self` / `static` receiver, with the exact member name, inside a
+declaration belonging to the scope. A same-named member on an unrelated
+class, `$other->abc()`, a property-shaped `$this->abc` for the method `abc`,
+a string or a comment never match. Anonymous classes are skipped (their
+`$this` is their own). A trait-use alias `use X { foo as bar; }` makes `bar`
+a name of `X::foo`: usages under either name are found from either member,
+and the alias clause counts as a declaration under both names. An open
+buffer is scanned in its **observed text** (the same buffer override the
+extractor uses), not its on-disk copy. `ReferencesIn(member, path)` is the
+same restricted to one file — the occurrence-highlight case — and
+`MembersAt(path, text, pos)` resolves the member a position names in *any*
+class-like body: the declaration identifier under the cursor, or a
+`$this` / `self` / `static` access looked up in the enclosing declaration's
+scope (the consumer scope inside a trait; the type, its traits and its parent
+chain inside a class or enum).
+
+**The seam** extends `host.TraitIndex` with one more question,
+`TraitReferencesAt(op, path, lines, line, col, serverHits)`, answered by
+`phpindex.HostView` (`hostview_refs.go`) behind the same gates (PHP buffer,
+`php.trait_index` on, a class-like body) plus the rule that decides the
+direction:
+
+| server answer | position | what the index adds |
+| --- | --- | --- |
+| **empty** | inside a **trait body** | the member's whole scope: its declaration(s), every access in the declaring type, its traits, its subclasses, its consumers and sibling traits |
+| **empty** | anywhere else | nothing — an empty answer means what it says |
+| **non-empty** | any | only the rows **inside trait bodies** (the server reported the consumer side itself) |
+
+**The merge** (`plugins/lsp/traitrefs.go`, `mergeTraitReferences`) runs
+after every references request — `findReferences` (the palette list and the
+at-definition usages, which drop declaration rows), `findUsages` (the
+[Usages pane](usages.md)) and the no-server case of `references` /
+`referencesPanel` — appending the index rows behind the server's, in server
+order, **deduplicated by (path, line, col)** against the server's list. Each
+index row reads its preview line from the synced document (or disk) like a
+server location and carries the **`trait` badge** (`ilsp.Reference.Badge`)
+the Usages pane and the palette list render as `[trait]` beside the
+preview, so the source of a row is visible. The **occurrence highlight**
+(`requestDocumentHighlight`) asks the file-local variant when the server
+reports no occurrences, so `$this->abc()` inside trait `A` lights up like
+any other symbol.
+
+Telemetry records `php.trait.references` with the server's location count
+and the rows the index added, only when it added at least one; the
+highlight variant records nothing. With `php.trait_index = false`, without a
+registered index and in a build without the PHP grammar the merge returns
+the server's list untouched. See [lsp](lsp.md#layers) § find references for
+the bridge side.
 
 ## Wiring
 

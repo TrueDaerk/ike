@@ -542,6 +542,20 @@ instead of the palette: grouped by file, refreshable with `r`, title carrying
 the symbol captured under the cursor at request time. The palette stays the
 quick mode; the pane is the worklist.
 
+**PHP trait scope, both ways (0520, #2671).** Around traits the server's
+references answer is incomplete in both directions — empty inside a trait
+body on a consumer's member, and missing the calls inside consumed traits on
+the consumer's declaration. Every references flow above (`findReferences`,
+`findUsages`, the no-server branches of `references` / `referencesPanel`)
+therefore runs its result through `mergeTraitReferences`
+(`plugins/lsp/traitrefs.go`), which asks the host seam's
+`TraitReferencesAt` *after* the server answered and appends the index rows
+behind the server's, deduplicated by (path, line, col), each carrying the
+`trait` badge (`ilsp.Reference.Badge`) the pane and the palette render as
+`[trait]`. The occurrence highlight falls back the same way inside a trait
+body. Scope rules, the tree-based scanner and the empty-vs-non-empty
+decision table: [PHP trait index](php-trait-index.md) § References.
+
 **Call hierarchy (#173).** `lsp.callHierarchy` (default `ctrl+alt+h`, also
 `H` — lowercase `h` is the notification history) sends
 `textDocument/prepareCallHierarchy` from the cursor and opens the prepared

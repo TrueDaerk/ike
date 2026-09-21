@@ -23,7 +23,23 @@ import (
 func traitNavView(idx *phpindex.Index, rec *telemetry.Recorder) *phpindex.HostView {
 	v := phpindex.NewHostView(idx)
 	v.SetTelemetry(traitNavRecorder(rec))
+	v.SetReferencesTelemetry(traitRefsRecorder(rec))
 	return v
+}
+
+// traitRefsRecorder is the callback for a find-usages answer the index
+// complemented (#2671): one php.trait.references event carrying the server's
+// location count and the rows the index added.
+func traitRefsRecorder(rec *telemetry.Recorder) func(server, index int) {
+	if rec == nil {
+		return nil
+	}
+	return func(server, index int) {
+		rec.Op(telemetry.OpPHPTraitReferences, telemetry.OpPhaseOK, map[string]string{
+			"server": strconv.Itoa(server),
+			"index":  strconv.Itoa(index),
+		})
+	}
 }
 
 // traitNavRecorder is the callback the host view reports its non-empty

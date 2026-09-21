@@ -115,6 +115,11 @@ func (c *countingIndex) TraitMembersAt(op host.TraitLookup, path string, lines [
 	return c.inner.TraitMembersAt(op, path, lines, line, col)
 }
 
+func (c *countingIndex) TraitReferencesAt(op host.TraitLookup, path string, lines []string, line, col, serverHits int) []host.TraitReference {
+	atomic.AddInt32(&c.calls, 1)
+	return c.inner.TraitReferencesAt(op, path, lines, line, col, serverHits)
+}
+
 func (c *countingIndex) count() int { return int(atomic.LoadInt32(&c.calls)) }
 
 // phpProject writes the fixture files into a temp dir and returns its root.

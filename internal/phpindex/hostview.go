@@ -35,6 +35,10 @@ type HostView struct {
 	// non-empty answer (telemetry ops php.trait.definition / .hover); nil
 	// until SetTelemetry.
 	report func(op host.TraitLookup, n int)
+	// reportRefs is called with the server and index counts of every
+	// find-usages answer the index complemented (telemetry op
+	// php.trait.references, #2671); nil until SetReferencesTelemetry.
+	reportRefs func(server, index int)
 }
 
 // NewHostView returns the host-facing view of the index.

@@ -188,6 +188,11 @@ const (
 	// One hover card the PHP trait index filled after an empty server hover
 	// (0520, #2670); the "count" detail is how many declarations it listed.
 	OpPHPTraitHover = "php.trait.hover"
+	// One find-usages answer the PHP trait index complemented (0520, #2671):
+	// the "server" detail is how many locations the server reported, the
+	// "index" detail how many rows the index added after deduplication.
+	// Recorded only when the index contributed at least one row.
+	OpPHPTraitReferences = "php.trait.references"
 )
 
 // CommandSlowThreshold is the dispatch duration from which a command event

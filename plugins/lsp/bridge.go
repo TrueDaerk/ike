@@ -721,6 +721,11 @@ func (b *bridge) references(h host.API) tea.Cmd {
 		return nil
 	}
 	if b.manager() == nil {
+		// Nobody to ask: the PHP trait index still knows the usages of a
+		// consumer's member inside a trait body (#2671).
+		if refs := b.mergeTraitReferences(h, path, line, col, true, nil); len(refs) > 0 {
+			h.Send(ilsp.ReferencesMsg{Refs: refs})
+		}
 		return nil
 	}
 	go b.findReferences(h, path, line, col, true)
@@ -740,7 +745,11 @@ func (b *bridge) findReferences(h host.API, path string, line, col int, includeD
 	if requestFailed(h, "find usages", err) {
 		return
 	}
-	h.Send(ilsp.ReferencesMsg{Refs: locationsToRefs(mgr, path, locs)})
+	// The PHP trait index fills what the server cannot see (#2671): the
+	// whole scope when the server had nothing inside a trait body, the
+	// calls inside consumed traits when it answered on the consumer.
+	refs := b.mergeTraitReferences(h, path, line, col, includeDecl, locationsToRefs(mgr, path, locs))
+	h.Send(ilsp.ReferencesMsg{Refs: refs})
 }
 
 // referencesPanel is lsp.referencesPanel (#1155): the same references request
@@ -761,6 +770,14 @@ func (b *bridge) referencesPanel(h host.API) tea.Cmd {
 		return nil
 	}
 	if b.manager() == nil {
+		// Nobody to ask: the PHP trait index still answers inside a trait
+		// body (#2671), with a Refresh that retries the whole resolution.
+		if refs := b.mergeTraitReferences(h, path, line, col, true, nil); len(refs) > 0 {
+			h.Send(ilsp.UsagesMsg{
+				Symbol: symbol, Path: path, Line: line, Col: col, Refs: refs,
+				Refresh: func() tea.Msg { return b.referencesPanel(h) },
+			})
+		}
 		return nil
 	}
 	go b.findUsages(h, symbol, path, line, col)
@@ -810,7 +827,8 @@ func (b *bridge) findUsages(h host.API, symbol, path string, line, col int) {
 		Path:   path,
 		Line:   line,
 		Col:    col,
-		Refs:   locationsToRefs(mgr, path, locs),
+		// Index rows (#2671) carry the `trait` badge the pane shows.
+		Refs: b.mergeTraitReferences(h, path, line, col, true, locationsToRefs(mgr, path, locs)),
 		Refresh: func() tea.Msg {
 			go b.findUsages(h, symbol, path, line, col)
 			return nil
@@ -1801,7 +1819,15 @@ func (b *bridge) requestDocumentHighlight(path string) {
 		return
 	}
 	hs, err := mgr.DocumentHighlight(context.Background(), path, buffer.Position{Line: line, Col: col})
-	if err != nil || b.dropEmptyRepeat("highlight", path, len(hs) == 0) {
+	if err != nil {
+		return
+	}
+	if len(hs) == 0 {
+		// Inside a PHP trait body the server sees no occurrences of a
+		// consumer's member; the trait index marks them instead (#2671).
+		hs = b.traitHighlights(b.h, path, line, col)
+	}
+	if b.dropEmptyRepeat("highlight", path, len(hs) == 0) {
 		return
 	}
 	b.h.Send(ilsp.DocumentHighlightsMsg{Path: path, Line: line, Col: col, Highlights: hs})

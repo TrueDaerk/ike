@@ -154,8 +154,8 @@ const (
 	// inside a trait body outrank a project symbol of the same name.
 	PriorityPHPTraits = 60
 	PrioritySymbols   = 50
-	PrioritySnippets = 40
-	PriorityEmmet    = 30
+	PrioritySnippets  = 40
+	PriorityEmmet     = 30
 	// PriorityPostfix keeps postfix templates below every member the server
 	// offers on the same dot (#1913): `err.` lists gopls' Error() first, the
 	// `if`/`nil` transformations after it.
@@ -265,6 +265,10 @@ type Reference struct {
 	Line    int
 	Col     int
 	Preview string
+	// Badge names the source of a row the server did not report, shown
+	// beside the preview: "trait" for a row the PHP trait index added
+	// (#2671). Empty for a server location.
+	Badge string
 }
 
 // ReferencesMsg delivers the find-references results (lsp.references). The
