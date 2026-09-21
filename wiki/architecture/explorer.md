@@ -110,7 +110,7 @@ mirroring the structure-view sync.
 
 | key | meaning |
 | --- | --- |
-| `explorer.show_hidden` | initial visibility of dot-entries (toggleable at runtime) |
+| `explorer.show_hidden` | visibility of dot-entries — one IDE-wide preference (#2663): the runtime `.` toggle writes this key at user scope, so the tree, the settings page, every open workspace and every later start agree |
 | `explorer.tree_indent` | spaces per depth level (indent-guide width) |
 | `explorer.sort` | within-level ordering: `name` (default), `type` (extension, then name), `modified` (newest first) — directories always first; a live config change re-sorts the loaded tree (#1037) |
 | `explorer.colors.<ext\|glob>` | per-filetype colour; `dir` and `default` are required fallbacks |
@@ -534,15 +534,27 @@ restart; the next toggle brings the tree back.
 
 Hidden files are filtered from `rows` unless `show_hidden` is on; toggling just
 rebuilds (no re-scan), since all children — hidden included — are cached on the
-node. The runtime `.` toggle is authoritative: `Configure` re-applies
-`explorer.show_hidden` only when the config value actually changed since the last
-call (tracked in `hiddenCfg`), so an unrelated live reload never clobbers it.
-Toggling also emits `HiddenToggledMsg`, which the app persists to the session
-immediately — the state survives a kill/crash, not only a clean quit (#629).
-A genuine config edit persists the same way: after `panes.Reconfigure` the app
-compares the explorer's `ShowingHidden()` before/after and saves the session
-only when the value actually changed, so a settings-driven change also survives
-a kill/crash while unrelated reloads never touch `session.json` (#642).
+node. Visibility is a **global IDE preference**, not per-workspace state
+(#2663, superseding the session round trip of #629/#642): the `.` toggle flips
+the tree, emits `HiddenToggledMsg`, and the app turns that into a user-scoped
+`config.WriteAndReload` of `explorer.show_hidden` — the very write the settings
+page makes. The reload applies the value live, so the settings page and the
+chord stay in sync in both directions, a fresh project starts from the last
+toggle, and `session.json` never carries the flag (an old file's `show_hidden`
+still parses and is ignored).
+
+`Configure` re-applies `explorer.show_hidden` only when the config value
+actually changed since the last call (tracked in `hiddenCfg`), and rebuilds
+only when the visible rows would differ: an unrelated live reload never
+clobbers the tree, a toggle-then-reload is a no-op, and a settings edit
+appears without a restart. If the config file cannot be written (read-only,
+missing directory), the reload carries a `Diagnostic` the app surfaces as a
+warning and the tree keeps the flipped state for this session.
+
+`Panes.Reconfigure` only reaches the active workspace, so the reload also
+applies the value to every parked background workspace's explorer directly
+(`applyShowHiddenToBackground` → `Model.ApplyShowHidden`); switching back never
+shows a tree contradicting the toggle.
 
 ## File operations
 

@@ -8,21 +8,22 @@ import (
 )
 
 // State captures the explorer's session-restorable state: the set of expanded
-// directory paths (excluding the always-open root), the show-hidden toggle, and
-// the path under the cursor.
+// directory paths (excluding the always-open root) and the path under the
+// cursor. The show-hidden toggle is deliberately absent: it is an IDE-wide
+// preference living in explorer.show_hidden (#2663), not per-workspace
+// session state.
 type State struct {
-	Expanded   []string
-	ShowHidden bool
-	Cursor     string
+	Expanded []string
+	Cursor   string
 	// Scratches section state (#1963): whether it is folded to its divider
 	// and the dragged body height (0 = keep the configured default).
 	ScratchCollapsed bool
 	ScratchHeight    int
 }
 
-// ShowingHidden reports whether dot-entries are currently rendered, whichever
-// path set it last (config apply or the runtime `.` toggle). The app compares
-// it around a live reconfigure to persist config-driven changes (#642).
+// ShowingHidden reports whether dot-entries are currently rendered. The value
+// always mirrors the last applied explorer.show_hidden (#2663): both the
+// settings page and the runtime `.` toggle go through that config key.
 func (m Model) ShowingHidden() bool { return m.showHidden }
 
 // Snapshot returns the current restorable state.
@@ -44,7 +45,6 @@ func (m Model) Snapshot() State {
 	}
 	return State{
 		Expanded:         expanded,
-		ShowHidden:       m.showHidden,
 		Cursor:           cursor,
 		ScratchCollapsed: m.scrCollapsed,
 		ScratchHeight:    m.scrHeight,
@@ -68,7 +68,6 @@ func (m Model) currentConst() *node {
 // soon as their parent's scan proves them gone. The root being loaded still
 // means Init must not issue a competing root re-scan.
 func (m *Model) Restore(s State) {
-	m.showHidden = s.ShowHidden
 	m.scrCollapsed = s.ScratchCollapsed
 	if s.ScratchHeight > 0 {
 		m.scrHeight = s.ScratchHeight

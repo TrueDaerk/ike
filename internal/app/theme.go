@@ -5,11 +5,13 @@ import (
 
 	"ike/internal/config"
 	"ike/internal/host"
+	"ike/internal/pane"
 	"ike/internal/plugin"
 	"ike/internal/registry"
 	"ike/internal/settings"
 	"ike/internal/terminal"
 	"ike/internal/theme"
+	"ike/internal/workspace"
 )
 
 // SelectThemeMsg asks the root model to switch the active color scheme by
@@ -206,16 +208,13 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	// change lands without a restart.
 	pal, warning := resolveTheme(m.reg, hcfg, m.termDark)
 	m.applyTheme(pal)
-	// Persist a config-driven show_hidden change like the runtime `.` toggle
-	// does (#642): Configure applies it live, but until now only the toggle and
-	// a clean quit wrote the session, so after a kill/crash restoreSession
-	// re-applied the stale value over the settings edit. Comparing before and
-	// after keeps unrelated reloads from touching session.json.
-	prevHidden := m.explorer().ShowingHidden()
 	m.activeWS().Panes.Reconfigure(hcfg)
-	if m.explorer().ShowingHidden() != prevHidden {
-		saveSession(m.snapshotSession())
-	}
+	// show_hidden is IDE-wide (#2663, replacing the session round trip of
+	// #642): Reconfigure only reaches the active workspace's panes, so the
+	// parked background workspaces (#777) get the value applied directly —
+	// a `.` toggle (or a settings edit) in one project must not leave another
+	// project's tree showing the opposite.
+	applyShowHiddenToBackground(m.ws, hcfg)
 	// [backup] edits apply live too: interval changes re-arm, disabling purges
 	// existing snapshots (Roadmap 0210, #167).
 	m.reconfigureBackup(hcfg)
@@ -268,5 +267,32 @@ func (m *Model) cancelSettingsPreview() {
 	}
 	if msg, ok := cmd().(settings.PreviewMsg); ok && msg.Key == "theme.name" {
 		m.previewTheme(msg.Value)
+	}
+}
+
+// applyShowHiddenToBackground threads the reloaded explorer.show_hidden value
+// into every parked workspace's explorer (#2663). Background workspaces keep
+// their own pane registries and are never Reconfigured while parked, so this
+// is the only path the IDE-wide preference reaches them by before a switch.
+func applyShowHiddenToBackground(ws *workspace.Manager, cfg host.Config) {
+	if ws == nil || cfg == nil {
+		return
+	}
+	v, ok := cfg.Get("explorer.show_hidden")
+	if !ok {
+		return
+	}
+	for _, root := range ws.Background() {
+		bg := ws.Peek(root)
+		if bg == nil || bg.Panes == nil {
+			continue
+		}
+		inst := bg.Panes.Get(pane.ExplorerKey)
+		if inst == nil {
+			continue
+		}
+		if ex := inst.Explorer(); ex != nil {
+			ex.ApplyShowHidden(v)
+		}
 	}
 }

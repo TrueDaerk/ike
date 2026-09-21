@@ -2759,9 +2759,12 @@ func (m *Model) restoreSession() {
 	// ignored: the theme is a user setting now, resolved from config alone.
 	// s.RecentFiles is loaded in buildModel (#1112): the MRU must survive the
 	// resumed-workspace path too, which never reaches this restore.
+	// s.Explorer.ShowHidden (the pre-#2663 per-workspace toggle) is ignored
+	// like s.Theme: hidden-file visibility is an IDE-wide preference read
+	// from explorer.show_hidden, so an old session file must not re-apply a
+	// stale per-project value over it.
 	m.explorer().Restore(explorer.State{
 		Expanded:         s.Explorer.Expanded,
-		ShowHidden:       s.Explorer.ShowHidden,
 		Cursor:           s.Explorer.Cursor,
 		ScratchCollapsed: s.Explorer.ScratchCollapsed,
 		ScratchHeight:    s.Explorer.ScratchHeight,
@@ -2831,7 +2834,6 @@ func (m Model) snapshotSession() sessionState {
 		RecentFiles: recentListFromEntries(m.recent.Entries()),
 		Explorer: explorerSession{
 			Expanded:         st.Expanded,
-			ShowHidden:       st.ShowHidden,
 			Cursor:           st.Cursor,
 			ScratchCollapsed: st.ScratchCollapsed,
 			ScratchHeight:    st.ScratchHeight,
@@ -4980,10 +4982,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.scheduleVCSRefresh()
 
 	case explorer.HiddenToggledMsg:
-		// Persist the show-hidden toggle immediately so it survives a kill/crash,
-		// not only a clean quit (#629).
-		saveSession(m.snapshotSession())
-		return m, nil
+		// The `.` toggle is an IDE-wide preference, not per-workspace session
+		// state (#2663): persist it as the user-scoped explorer.show_hidden
+		// key — exactly the write the settings page makes — so the settings
+		// page, every other workspace and every later start agree with the
+		// tree that just flipped. The reload applies the value live; a failed
+		// write surfaces as a config diagnostic and leaves this session's
+		// toggle standing.
+		return m, config.WriteAndReload(m.cfgOpts, config.UserScope, "explorer.show_hidden", msg.ShowHidden)
 
 	case RenameFileMsg:
 		// file.rename (shift+f6 / palette): explorer prompt on the selection,

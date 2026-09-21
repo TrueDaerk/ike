@@ -1,5 +1,22 @@
 # Log
 
+## 2026-09-21 (Hidden-files toggle is a global preference, #2663)
+
+- **`.` in one project left every other project alone.** The toggle lived in
+  the per-workspace `session.json` (`explorer.ShowHidden`, #642) on top of the
+  `explorer.show_hidden` config value, so each workspace remembered its own
+  visibility and a fresh project started from the config.
+- **The toggle now writes the config key.** `HiddenToggledMsg` becomes a
+  user-scoped `config.WriteAndReload("explorer.show_hidden")` — the settings
+  page's own write — and the reload applies it live. Settings page and chord
+  stay in sync in both directions; a failed write surfaces as a config
+  diagnostic and leaves this session's toggle standing.
+- **The session no longer owns it.** `explorerSession.ShowHidden` is neither
+  written nor applied (old files still parse), `explorer.State` dropped the
+  field, and `reloadConfig`'s save-the-session special case is gone. Parked
+  background workspaces, which `Panes.Reconfigure` never reaches, get the value
+  applied directly.
+
 ## 2026-09-20 (Completion ranks by match tier, #2651)
 
 - **An exact prefix lost to a scattered CamelCase hit.** The single additive
