@@ -154,8 +154,13 @@ type ContextSource interface {
 type Engine struct {
 	mu      sync.Mutex
 	sources []Source
-	cancel  context.CancelFunc
-	send    func(tea.Msg)
+	// observers are the event/file observers that are not completion
+	// sources (#2667: the PHP declaration index listens to buffer edits and
+	// watcher events but answers no trigger itself). They receive the same
+	// forwarding as an observing Source and are never dispatched.
+	observers []any
+	cancel    context.CancelFunc
+	send      func(tea.Msg)
 	// Timeout bounds one dispatch; a source still running when it expires is
 	// cancelled and its result dropped.
 	Timeout time.Duration
@@ -224,6 +229,30 @@ func (e *Engine) Register(s Source) {
 	e.sources = append(e.sources, s)
 }
 
+// RegisterObserver adds an EventObserver and/or FileObserver that is not a
+// completion source (#2667). It gets every editor event and file-change
+// notification exactly like an observing Source, but never takes part in a
+// dispatch. Safe to call any time.
+func (e *Engine) RegisterObserver(o any) {
+	if o == nil {
+		return
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.observers = append(e.observers, o)
+}
+
+// listeners snapshots every registered source and observer under the lock.
+func (e *Engine) listeners() []any {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	out := make([]any, 0, len(e.sources)+len(e.observers))
+	for _, s := range e.sources {
+		out = append(out, s)
+	}
+	return append(out, e.observers...)
+}
+
 // TriggerSource is an optional Source extension (#1913): a source that has
 // something position-specific to say after a punctuation character the engine
 // otherwise reserves for the LSP bridge declares it here. Postfix completion is
@@ -253,11 +282,7 @@ type FileObserver interface {
 // NotifyFileChanged tells file-observing sources that path changed on disk.
 // Must not block; observers do their re-extraction off this goroutine.
 func (e *Engine) NotifyFileChanged(path string) {
-	e.mu.Lock()
-	sources := make([]Source, len(e.sources))
-	copy(sources, e.sources)
-	e.mu.Unlock()
-	for _, s := range sources {
+	for _, s := range e.listeners() {
 		if o, ok := s.(FileObserver); ok {
 			o.InvalidateFile(path)
 		}
@@ -276,7 +301,7 @@ func (e *Engine) Emit(ev host.EditorEvent) {
 	sources := make([]Source, len(e.sources))
 	copy(sources, e.sources)
 	e.mu.Unlock()
-	for _, s := range sources {
+	for _, s := range e.listeners() {
 		if o, ok := s.(EventObserver); ok {
 			o.Observe(ev)
 		}

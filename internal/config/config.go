@@ -350,6 +350,12 @@ func (c *Config) Flat() map[string]string {
 
 	put("completion.case_sensitivity", c.Completion.CaseSensitivity)
 
+	// PHP trait-consumer intelligence (0520, #2667).
+	put("php.trait_index", c.PHP.TraitIndex)
+	put("php.index.parent_depth", c.PHP.Index.ParentDepth)
+	put("php.index.include_vendor", c.PHP.Index.IncludeVendor)
+	put("php.index.max_files", c.PHP.Index.MaxFiles)
+
 	put("debug.inline_values", c.Debug.InlineValues)
 	put("debug.session_end", c.Debug.SessionEnd)
 	put("debug.php.port", c.Debug.PHP.Port)

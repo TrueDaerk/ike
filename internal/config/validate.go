@@ -156,6 +156,17 @@ var (
 // form uses the same bound.
 const whichKeyMaxDelayMs = 5000
 
+// PHP declaration index bounds (#2667); the settings form uses the same
+// ones. PHPMaxFilesMax is the form's upper bound only — the loader accepts
+// any value above the minimum.
+const (
+	phpParentDepthMax = 10
+	phpMaxFilesMin    = 100
+	PHPParentDepthMax = phpParentDepthMax
+	PHPMaxFilesMin    = phpMaxFilesMin
+	PHPMaxFilesMax    = 500000
+)
+
 // followPollMaxMs caps editor.follow_poll_ms (#1928); the settings form uses
 // the same bound. Below 100 ms the poll would stat every open buffer per
 // frame-ish; above 10 s follow mode stops feeling live.
@@ -429,6 +440,15 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "keymap.which_key_delay_ms", Message: fmt.Sprintf("%d above maximum %d, using %d", c.Keymap.WhichKeyDelayMs, whichKeyMaxDelayMs, whichKeyMaxDelayMs)})
 		c.Keymap.WhichKeyDelayMs = whichKeyMaxDelayMs
 	}
+	// PHP declaration index bounds (#2667): the parent depth is 0–10 (a
+	// deeper chain is framework territory the server covers), the file cap
+	// at least 100 so a real project is never silently unindexed.
+	clampMin("php.index.parent_depth", &c.PHP.Index.ParentDepth, 0)
+	if c.PHP.Index.ParentDepth > phpParentDepthMax {
+		diags = append(diags, Diagnostic{Field: "php.index.parent_depth", Message: fmt.Sprintf("%d above maximum %d, using %d", c.PHP.Index.ParentDepth, phpParentDepthMax, phpParentDepthMax)})
+		c.PHP.Index.ParentDepth = phpParentDepthMax
+	}
+	clampMin("php.index.max_files", &c.PHP.Index.MaxFiles, phpMaxFilesMin)
 	// Forge event notification styles (#2086): an unknown style falls back to
 	// the built-in default of that event kind, so one typo never silences an
 	// event entirely.

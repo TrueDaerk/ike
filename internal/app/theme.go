@@ -215,6 +215,9 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	// a `.` toggle (or a settings edit) in one project must not leave another
 	// project's tree showing the opposite.
 	applyShowHiddenToBackground(m.ws, hcfg)
+	// [php] edits apply live too (#2667): the trait-index master switch
+	// drops or rebuilds the PHP declaration index, the walk bounds rescan.
+	m.reconfigurePHPIndex(cfg)
 	// [backup] edits apply live too: interval changes re-arm, disabling purges
 	// existing snapshots (Roadmap 0210, #167).
 	m.reconfigureBackup(hcfg)

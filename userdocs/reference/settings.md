@@ -297,6 +297,15 @@ secrets — are documented together, with screenshots, in
 This page is an interactive editor in the settings panel rather than a
 list of keys.
 
+### PHP
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Trait consumer index | `php.trait_index` | boolean | `true` | user | Build the PHP declaration index and use it inside trait bodies (completion, diagnostics, navigation, references, rename). Off drops the index at once; on rebuilds it |
+| Parent depth | `php.index.parent_depth` | integer (0–10) | `3` | user | How many parent classes of a trait's consumers contribute members to the trait's scope: 1 is the direct parent, 0 none. Framework base classes beyond the depth stay with the language server |
+| Index vendor/ | `php.index.include_vendor` | boolean | `false` | user | Read vendor/ too. Off by default: Intelephense already covers installed packages, and a large vendor tree costs scan time |
+| Maximum files | `php.index.max_files` | integer (100–500000) | `20000` | user | How many PHP files the project walk reads before it stops; the status report flags a truncated scan. At least 100 |
+
 ### Formatters
 
 The **Formatters** page lists each language's reformat command, the config

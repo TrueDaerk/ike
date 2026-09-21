@@ -59,6 +59,8 @@ type Config struct {
 	Debug Debug `toml:"debug"`
 	// Completion holds the completion popup's filter behaviour (#2650).
 	Completion Completion `toml:"completion"`
+	// PHP holds the PHP trait-consumer intelligence settings (0520, #2667).
+	PHP PHP `toml:"php"`
 	// Tools holds user-defined TUI tool panes (#741).
 	Tools Tools `toml:"tools"`
 	// Elasticsearch holds the ES console's cluster endpoints (#1927).
@@ -404,6 +406,26 @@ type ESEndpoint struct {
 // "all" compares every rune exactly.
 type Completion struct {
 	CaseSensitivity string `toml:"case_sensitivity"`
+}
+
+// PHP holds the PHP trait-consumer intelligence settings (Epic 0520,
+// #2667). TraitIndex is the master switch for the workspace-wide PHP
+// declaration index every trait feature of the epic queries; off, the
+// index holds nothing and behaviour equals the plain language server's.
+// Index bounds the walk.
+type PHP struct {
+	TraitIndex bool     `toml:"trait_index"`
+	Index      PHPIndex `toml:"index"`
+}
+
+// PHPIndex bounds the PHP declaration index (#2667). ParentDepth is how many
+// parent classes of a trait's consumers contribute members to the trait's
+// consumer scope (0–10). IncludeVendor lets the walk read vendor/, which the
+// language server already covers. MaxFiles caps the walk (min 100).
+type PHPIndex struct {
+	ParentDepth   int  `toml:"parent_depth"`
+	IncludeVendor bool `toml:"include_vendor"`
+	MaxFiles      int  `toml:"max_files"`
 }
 
 // Debug holds debugger behaviour (0360). PHP carries the web/request listen

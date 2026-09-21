@@ -389,6 +389,14 @@ func defaults() *Config {
 			DefaultSort: "relevance",
 		},
 		Completion: Completion{CaseSensitivity: "first_letter"}, // IntelliJ's rule (#2650)
+		// The PHP declaration index (0520, #2667) is on: three parent
+		// levels cover the usual model → base model → framework chain,
+		// vendor/ stays with the language server, and 20000 files bound a
+		// large legacy tree.
+		PHP: PHP{
+			TraitIndex: true,
+			Index:      PHPIndex{ParentDepth: 3, IncludeVendor: false, MaxFiles: 20000},
+		},
 		Debug: Debug{
 			InlineValues: true,   // paused locals annotate their lines (#1914)
 			SessionEnd:   "keep", // the finished area stays reviewable (#689, #2190)

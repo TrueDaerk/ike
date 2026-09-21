@@ -4,7 +4,7 @@ title: Completion Engine
 description: Multi-source autocomplete (Roadmap 0410) — the LSP server plus local index sources answer each trigger as independent tagged batches; the editor merges them into one popup with priority-based de-dup and stable selection. Identifier-rune triggers wait lsp.completion_delay_ms and one dispatch's local batches travel as a single message (#2541). The popup and the local sources filter with the JetBrains-style hump matcher under completion.case_sensitivity (#2650). The word and symbol indexes hold code tokens of one language at a time, scanned lazily per language, and every source resolves the effective language at the cursor — an embedded fence's inside one (#2652).
 resource: internal/complete
 tags: [architecture, completion, autocomplete, lsp, sources, postfix]
-timestamp: 2026-09-20T18:00:00Z
+timestamp: 2026-09-21T12:00:00Z
 ---
 
 # Completion Engine
@@ -90,6 +90,14 @@ claims `{` the same way (#2158), so a `{{` opens the request file's variable
 popup without waiting for a letter to follow the braces; a claim never reaches
 past an exclusive claim on the path, so a claiming source that does not own the
 buffer stays out of it.
+
+**Observers that are not sources (#2667).** `Engine.RegisterObserver(o)` adds
+an `EventObserver` / `FileObserver` that receives every editor event and
+file-change notification exactly like an observing source but never takes
+part in a dispatch. The [PHP trait index](php-trait-index.md) registers this
+way: it keeps its declarations fresh from the same buffer edits and watcher
+events the symbol index sees, and the trait completion source (#2668)
+queries it instead of extracting anything itself.
 
 **Exclusive sources (#1302).** A language source that fully owns completion for
 its own files implements the optional extension
