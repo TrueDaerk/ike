@@ -797,6 +797,10 @@ type Model struct {
 	rawDiags      map[string][]ilsp.Diagnostic
 	diagIgnore    ilsp.IgnoreRules
 	diagIgnoreRaw []string
+	// traitSuppressed counts, per path, the undefined-member diagnostics the
+	// PHP trait index resolved in a trait's consumer scope (#2669) — kept
+	// apart from the rule-ignored ones so the Problems panel can name them.
+	traitSuppressed map[string]int
 	// diagSeverity/diagSeverityRaw are the compiled lsp.diagnostics_severity
 	// remap rules (#1503), applied after the ignore filter on the same path.
 	diagSeverity    ilsp.SeverityRules
@@ -1417,6 +1421,9 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	// and answers the trait features' consumer-scope queries. Its scan
 	// starts here when php.trait_index is on.
 	phpIdx := phpindex.New(root, phpOptionsFrom(cfg))
+	// A changed content generation re-runs the diagnostic filter (#2669);
+	// the index debounces, so a keystroke storm arrives as one message.
+	phpIdx.SetOnChange(func() { h.Send(PHPIndexChangedMsg{}) })
 	engine.RegisterObserver(phpIdx)
 	engine.Register(emmet.New())
 	// Live templates (#1152): user [[snippets]] + built-ins as popup items,
@@ -1640,6 +1647,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	m.depsScanner = deps.NewScanner()
 	m.timeReader = newTimeReader()
 	m.rawDiags = map[string][]ilsp.Diagnostic{}
+	m.traitSuppressed = map[string]int{}
 	m.compileDiagIgnore()   // seed the ignore rules (#1259)
 	m.compileDiagSeverity() // seed the severity remap rules (#1503)
 	m.allSearch = search.NewMulti(m.host.Send)
@@ -7838,6 +7846,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshProblemsPanel()
 		m.noteSwitchLSPReady() // warm-up span, as above (#2403)
 		return m, tea.Batch(cmds...)
+
+	case PHPIndexChangedMsg:
+		// The PHP declaration index reached a new content generation (#2669):
+		// re-run the trait suppression pass over every cached raw set.
+		return m, tea.Batch(m.refilterDiagnostics()...)
 
 	case ilsp.IgnoreDiagnosticMsg:
 		// The editor's "ignore diagnostic under caret" action (#1259).

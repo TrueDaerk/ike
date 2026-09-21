@@ -1,5 +1,40 @@
 # Log
 
+## 2026-09-21 (Trait diagnostics: position-aware suppression, #2669)
+
+- **Every `$this->abc()` inside a trait was red.** Intelephense resolves
+  `$this` as the trait, so members living on the consumers came back as
+  undefined. The only remedy was `lsp.diagnostics_ignore`, which matches per
+  code and message — a rule wide enough to cover the trait access hid
+  genuine typos everywhere else.
+- **A position-aware pass** (`internal/app/diag_trait.go`) now runs inside
+  the existing funnel, between the ignore rules and the severity remap. It
+  drops a diagnostic only when all three hold: an Intelephense
+  undefined-member code (`P1013` method, `P1014` property, `P1012` class
+  constant, with the message shape as a secondary check —
+  `internal/lsp/undefmember.go`), a range inside a trait body (`ScopeAt` +
+  `IsTrait`), and the named member resolving in that trait's consumer scope
+  (`Lookup`). `$this->nope()`, the same code inside the consumer class and
+  any other code pass untouched.
+- **Fresh both ways.** The index notifies the app when its content
+  generation moved (`SetOnChange`, 250 ms debounce, so one keystroke does
+  not refilter the world); `PHPIndexChangedMsg` re-runs the filter over the
+  raw cache, so markers vanish once the scan is warm and **come back** when
+  a consumer loses the member. `php.trait_index = false` suppresses nothing.
+- **Reported, not silent.** Suppressions are counted apart from the
+  rule-ignored ones and the Problems header names the total ("2 resolved via
+  trait consumers"); telemetry records the op `php.trait.diag_suppressed`
+  with the count, only when it is greater than zero.
+- **Test fixture fix**: the app package's php debug stub registered a bare
+  `lang.Language{ID: "php"}`, stripping the grammar for the whole test
+  binary — every PHP-index test in the package had been skipping itself as
+  "no PHP grammar in this build". It now keeps the real registration and only
+  nils the server (what keeps the LSP onboarding dialog out of the binary)
+  while swapping in the debug toolchain stub.
+- **Wiki**: `architecture/php-trait-index.md` § Diagnostics, a cross-link
+  from `architecture/lsp.md`'s diagnostics-ignore paragraph, and the new op
+  in `architecture/usage-telemetry.md`.
+
 ## 2026-09-21 (PHP declaration index: trait/consumer edges, #2667)
 
 - **Intelephense is blind inside traits.** `$this` in a trait body resolves

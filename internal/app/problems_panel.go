@@ -39,6 +39,7 @@ func (m *Model) openProblemsPanel() {
 		p := m.activeWS().Panes.Get(key).Problems()
 		p.SetDisplayPath(displayPath)
 		p.SetStore(m.probStore)
+		p.SetTraitSuppressed(m.traitSuppressedTotal()) // #2669
 		m.syncProblemsActive()
 	})
 }
@@ -47,6 +48,7 @@ func (m *Model) openProblemsPanel() {
 // a closed panel costs nothing.
 func (m *Model) refreshProblemsPanel() {
 	if p := m.problemsPanel(); p != nil {
+		p.SetTraitSuppressed(m.traitSuppressedTotal()) // #2669
 		p.Refresh()
 	}
 }

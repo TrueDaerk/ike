@@ -171,6 +171,10 @@ const (
 	// (0510, #2572); the nested project.switch op is the switch's own share.
 	OpProjectGroupClose = "project.group.close"
 	OpSessionRestore    = "session.restore" // the startup layout/session restore (#2403)
+	// One diagnostic publish whose undefined-member entries the PHP trait
+	// index resolved in a trait's consumer scope (0520, #2669); the "count"
+	// detail is how many were suppressed. Recorded only when it is > 0.
+	OpPHPTraitDiagSuppressed = "php.trait.diag_suppressed"
 )
 
 // CommandSlowThreshold is the dispatch duration from which a command event
