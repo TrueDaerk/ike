@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"ike/internal/highlight"
 	"ike/internal/lang"
@@ -40,16 +41,23 @@ var skipDirs = map[string]bool{
 type Extractor[T any] func(path, host, text string, only func(langID string) bool) map[string]T
 
 // Limits bound one language's walk: the per-file byte cap and how many files
-// the walk may read before it stops.
+// the walk may read before it stops. KeepDirs names directories of the
+// built-in skip list the walk descends into anyway (#2667: the PHP
+// declaration index opts into vendor/ through php.index.include_vendor).
 type Limits struct {
 	MaxFileSize int64
 	MaxFiles    int
+	KeepDirs    []string
 }
 
-// entry is one language's share of the index.
+// entry is one language's share of the index. dur and truncated describe
+// the scan (#2667, Stats): how long the walk took and whether it stopped at
+// MaxFiles before the tree was exhausted.
 type entry[T any] struct {
-	files map[string]T
-	done  bool
+	files     map[string]T
+	done      bool
+	dur       time.Duration
+	truncated bool
 }
 
 // Index is the per-language project index. Zero value is not usable; use New.
@@ -65,6 +73,10 @@ type Index[T any] struct {
 	// that cannot contain it without parsing them again. A watcher
 	// invalidation drops the entry.
 	embeds map[string][]string
+	// gen counts content changes (#2667): a finished scan and every
+	// re-extraction bump it, so a reader caching a derived view (the PHP
+	// index's edge tables) knows when to rebuild without diffing files.
+	gen uint64
 
 	// Invalidation queue (#2176): watcher events re-extract through one
 	// worker goroutine instead of one goroutine per event.
@@ -124,6 +136,27 @@ func (x *Index[T]) Done(id string) bool {
 	return e != nil && e.done
 }
 
+// Gen is the content generation (#2667): it changes whenever a scan
+// finishes or a file is re-extracted, and only then.
+func (x *Index[T]) Gen() uint64 {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	return x.gen
+}
+
+// ScanInfo reports id's finished scan (#2667): the walk's duration and
+// whether it stopped at Limits.MaxFiles. Zero values while the scan runs
+// or when the language was never asked for.
+func (x *Index[T]) ScanInfo(id string) (dur time.Duration, truncated bool) {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	e := x.langs[id]
+	if e == nil || !e.done {
+		return 0, false
+	}
+	return e.dur, e.truncated
+}
+
 // Scanned lists the languages a scan was started for, sorted.
 func (x *Index[T]) Scanned() []string {
 	x.mu.Lock()
@@ -160,18 +193,21 @@ func (x *Index[T]) scan(id string) {
 	only := func(l string) bool { return l == id }
 	files := map[string]T{}
 	read := 0
+	truncated := false
+	started := time.Now()
 	_ = filepath.WalkDir(x.root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
 		name := d.Name()
 		if d.IsDir() {
-			if path != x.root && (skipDirs[name] || strings.HasPrefix(name, ".")) {
+			if path != x.root && (skipDirs[name] || strings.HasPrefix(name, ".")) && !contains(x.limits.KeepDirs, name) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
 		if read >= x.limits.MaxFiles {
+			truncated = true
 			return filepath.SkipAll
 		}
 		host := x.langOf(path)
@@ -209,6 +245,9 @@ func (x *Index[T]) scan(id string) {
 		e.files[p] = v
 	}
 	e.done = true
+	e.dur = time.Since(started)
+	e.truncated = truncated
+	x.gen++
 	x.mu.Unlock()
 }
 
@@ -317,4 +356,5 @@ func (x *Index[T]) reextract(path string) {
 			delete(e.files, path)
 		}
 	}
+	x.gen++
 }

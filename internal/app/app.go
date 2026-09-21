@@ -90,6 +90,7 @@ import (
 	"ike/internal/palette"
 	"ike/internal/pane"
 	"ike/internal/perfhud"
+	"ike/internal/phpindex"
 	"ike/internal/plugin"
 	"ike/internal/preview"
 	"ike/internal/problems"
@@ -173,6 +174,11 @@ type Model struct {
 	// sources register here; it fans out per completion trigger next to the
 	// LSP bridge and its batches merge into the editor popup.
 	completeEngine *complete.Engine
+	// phpIndex is the workspace-wide PHP declaration index (0520, #2667):
+	// trait/consumer edges and members for the trait features. Built per
+	// project root beside the completion sources and registered on the
+	// engine as an observer; [php] settings reconfigure it live.
+	phpIndex *phpindex.Index
 	// cfgDiagSeen dedupes config-diagnostic notifications (#793): each
 	// distinct message toasts once per session, so a settings write that
 	// reloads an unchanged-but-warned config does not re-toast. Lazily
@@ -1406,6 +1412,12 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	}
 	engine.Register(words.New(root))
 	engine.Register(symbols.New(root))
+	// The PHP declaration index (0520, #2667) is not a completion source:
+	// it observes buffer edits and watcher events beside the symbol index
+	// and answers the trait features' consumer-scope queries. Its scan
+	// starts here when php.trait_index is on.
+	phpIdx := phpindex.New(root, phpOptionsFrom(cfg))
+	engine.RegisterObserver(phpIdx)
 	engine.Register(emmet.New())
 	// Live templates (#1152): user [[snippets]] + built-ins as popup items,
 	// language-scoped per buffer. Reads config.Get() live, so reloads apply.
@@ -1529,6 +1541,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		lhStore:         localhistory.New(localHistoryDir()), // local history (#1023)
 		feed:            changefeed.New(),                    // external-change feed (#2000)
 		completeEngine:  engine,
+		phpIndex:        phpIdx,
 		ws:              wsMgr,
 		recentEditor:    edKey,
 		recent:          recent,

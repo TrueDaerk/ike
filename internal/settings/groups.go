@@ -41,7 +41,7 @@ var pageGroups = []pageGroup{
 		"Scratch Files", "Screenshots", "TODO Index",
 	}},
 	{"Languages", []string{
-		"Language Support", "Language Servers", "Toolchain", "Formatters",
+		"Language Support", "Language Servers", "PHP", "Toolchain", "Formatters",
 		"Dependencies", "Ansible Vault", "Playgrounds",
 	}},
 	{"Build, Run & Debug", []string{"Run", "Tests", "Debug", "PHP Debug Mappings"}},

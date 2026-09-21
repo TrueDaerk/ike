@@ -1,5 +1,31 @@
 # Log
 
+## 2026-09-21 (PHP declaration index: trait/consumer edges, #2667)
+
+- **Intelephense is blind inside traits.** `$this` in a trait body resolves
+  to the trait itself, so members that only exist on the trait's consumers
+  get no completion, an undefined-member diagnostic and no navigation. Epic
+  0520 complements the server with IKE's own index; this issue is the
+  foundation every later feature queries.
+- **`internal/phpindex`**: a tree-sitter extractor over the PHP grammar
+  (namespace, imports with aliases, class-like declarations with
+  extends/implements, trait `use` statements with `insteadof`/`as` aliases,
+  methods/properties/constants/cases with signatures and doc summaries; names
+  resolved to FQNs at extraction time, short-name fallback for legacy code)
+  on the shared `langindex` walk, plus the pure query API: `ScopeAt`,
+  `ConsumersOf` (transitive, cycle-safe), `SiblingTraitsOf`, `ParentChain`,
+  `VisibleMembers`, `Lookup`, `DeclarationsNamed`, `FilesReferencing`,
+  `Stats`. Buffer edits reach it through the engine's new
+  `RegisterObserver` seam (debounced re-extraction), disk changes through
+  `NotifyFileChanged`.
+- **`highlight.SyntaxTree`**: a pure-Go snapshot of the parsed tree (kinds,
+  fields, rune-column ranges) for structural extractors; nil without cgo, so
+  the index reports itself unavailable instead of failing.
+- **Settings**: new `[php]` section and Settings page "PHP" -
+  `php.trait_index` (master switch, live drop/rebuild), `php.index.parent_depth`
+  (0-10), `php.index.include_vendor`, `php.index.max_files` (min 100).
+- **Wiki**: new concept doc `architecture/php-trait-index.md`.
+
 ## 2026-09-21 (Hidden-files toggle is a global preference, #2663)
 
 - **`.` in one project left every other project alone.** The toggle lived in
