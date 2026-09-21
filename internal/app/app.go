@@ -1633,6 +1633,11 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	// trait body consult it after the server answered empty. Registered on
 	// the live host, so a project switch swaps in the new project's index.
 	m.host.SetTraitIndex(traitNavView(phpIdx, m.usage))
+	// Every completed project walk is one op event (0520, #2673): the initial
+	// scan and every php.traitIndex.rebuild, with the duration the warm-up
+	// costs and whether it hit the file cap. Called off the UI goroutine, on
+	// the recorder alone, like the trait-completion callback above.
+	phpIdx.SetOnScan(traitIndexScanRecorder(m.usage))
 	m.floats = ui.NewStack(m.shell)                 // z-ordered floating stack (#1237)
 	m.floats.SetSizeStore(winSizes)                 // resizable modal shell (#774)
 	m.palette.SetSizeStore(winSizes)                // resizable palette box (#774)
@@ -7766,6 +7771,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m.openPathFocusedAt(msg.Path, msg.Line-1, msg.Col-1)
 		}
 		return m.openPathFocused(msg.Path)
+
+	case PHPIndexStatusMsg:
+		// php.traitIndex.status (0520, #2673): the index's numbers in the
+		// floating shell, esc to dismiss like every other info modal.
+		m.openPHPIndexStatus()
+		return m, nil
+
+	case PHPIndexRebuildMsg:
+		// php.traitIndex.rebuild (0520, #2673): the workspace changed
+		// underneath ike and no watcher event described it.
+		return m.rebuildPHPIndex()
 
 	case host.OpenModalRequest:
 		m.shell.SetContent(ui.ModelContent{Heading: msg.Title, Body: msg.View})

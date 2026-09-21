@@ -1,10 +1,10 @@
 ---
 type: concept
 title: PHP Trait Index
-description: The workspace-wide PHP declaration index (Epic 0520, #2667) — every class-like declaration with its members, the trait-use / extends / implements edges between them, and the consumer scope a `$this` inside a trait body resolves against where Intelephense is blind. Built on the shared per-language project walk, kept fresh from buffer edits and watcher events, configured by the [php] section (Settings → PHP).
+description: The workspace-wide PHP declaration index (Epic 0520, #2667) — every class-like declaration with its members, the trait-use / extends / implements edges between them, and the consumer scope a `$this` inside a trait body resolves against where Intelephense is blind. Built on the shared per-language project walk, kept fresh from buffer edits and watcher events, configured by the [php] section (Settings → PHP), with a status popup, a rebuild command and a per-scan telemetry op as its operations surface.
 resource: internal/phpindex
-tags: [architecture, php, traits, index, completion, navigation, hover, references, rename, lsp]
-timestamp: 2026-09-21T20:00:00Z
+tags: [architecture, php, traits, index, completion, navigation, hover, references, rename, lsp, telemetry, status-line]
+timestamp: 2026-09-21T21:00:00Z
 ---
 
 # PHP Trait Index
@@ -432,6 +432,82 @@ both paths are inert: the prompt stays plain and a refused position toasts
 capability and verdict, so the index-driven path is reached through
 `lsp.rename` itself.
 
+## Operations (#2673)
+
+The index works in the background and every feature above only shows its
+*answers*, so three surfaces say what it is doing.
+
+**Commands.** Both are registered by the app plugin
+(`internal/app/commands.go`) and are **global**, not PHP-scoped: the reason to
+rebuild — a branch switch with thousands of files, a generator run — is felt
+with the explorer or a terminal focused as often as with a `.php` buffer open.
+
+| command | chord | what it does |
+| --- | --- | --- |
+| `php.traitIndex.status` | `cmd+alt+shift+i` | the status popup below |
+| `php.traitIndex.rebuild` | `cmd+alt+shift+b` | drops the project walk and rescans |
+
+A rebuild drops the walk, **not** the observed open buffers: they are the
+editor's live truth, and re-reading them from disk would lose the unsaved
+overrides. With `php.trait_index = false` or in a build without the PHP
+grammar it scans nothing and says so in a notification
+(`Index.Rebuild` returns false) rather than pretending a scan started.
+
+**The status popup** (`internal/app/phpindexstatus.go`) is an ordinary
+floating-shell modal — esc dismisses it — over `Index.Stats()`:
+
+```
+  state          ready
+  files          1841
+  declarations   2977
+  edges          4102
+  last scan      612ms
+  truncated      yes — the walk stopped at php.index.max_files
+
+  …/projects/legacy-shop
+```
+
+`truncated` appears only when the walk hit `php.index.max_files`, and the
+root is elided from the left so a deeply nested project cannot widen the box
+past the terminal. The two states in which the index can never answer replace
+the numbers with the reason: `disabled — php.trait_index is off` and
+`unavailable — this build cannot parse PHP (no cgo / no grammar)`. The body
+is a snapshot, not a live closure: the popup answers "where is the index
+right now", and numbers moving under the reader are harder to report.
+
+**The status line.** While a walk runs — the initial scan or a rebuild — the
+`lsp` slot carries `php-index …` beside the focused language's server state
+(`php: ready · php-index …`), and nothing once it finished; the slot follows
+the buffer, so it only shows for PHP files. The scan's completion already
+wakes the Update loop through the content-change callback, so the slot clears
+on its own without a timer.
+
+**Telemetry.** One `php.trait.index_scan` op per completed walk — the initial
+scan and every rebuild — with `ms`, `files` and `truncated`. The index fires
+it through `SetOnScan`, which shares the settle poll with the content-change
+callback, so completion is noticed without a second timer. The op is on the
+short list that never opens a session file (`startsSession`,
+`internal/telemetry`): a walk finishes on its own after every launch into a
+PHP project, so opening the log for it would resurrect the ghost file #2318
+removed. Together with the
+per-feature ops the epic's review recipe reads:
+
+| op | issue | recorded when |
+| --- | --- | --- |
+| `php.trait.complete` | #2668 | a non-empty trait-member completion answer |
+| `php.trait.diag_suppressed` | #2669 | a publish whose undefined-member entries the index resolved |
+| `php.trait.definition` | #2670 | a go-to-definition / peek the index answered after an empty server reply |
+| `php.trait.hover` | #2670 | a hover card the index filled after an empty server hover |
+| `php.trait.references` | #2671 | a find-usages answer the index added rows to |
+| `php.trait.rename` | #2672 | an applied rename the index took part in |
+| `php.trait.index_scan` | #2673 | a completed project walk |
+
+All seven are single `ok` phases recorded only for a non-empty result, so a
+reader pairing `start` with `ok` must skip them, and none carries a path,
+member name or type name. See
+[Usage Telemetry](usage-telemetry.md#event-schema-the-analysis-interface)
+§ op ids.
+
 ## Wiring
 
 `buildModel` (`internal/app/app.go`) constructs one index per project root
@@ -442,4 +518,6 @@ index, and gets its telemetry callback once the model's recorder exists. The
 navigation fallback's host view (#2670) is registered on the live host in the
 same place (`internal/app/phpnav.go` builds it and hangs the telemetry
 recorder on it). A project switch rebuilds them with the model.
-`Model.PHPIndex()` exposes the index to the features of the later issues.
+`Model.PHPIndex()` exposes the index to the features of the later issues, and
+`phpIdx.SetOnScan(traitIndexScanRecorder(m.usage))` hangs the per-scan
+telemetry op off the same walk (#2673).

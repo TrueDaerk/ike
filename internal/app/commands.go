@@ -668,6 +668,15 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("project.findInAllProjectsResults", "Show All-Projects Search Results", ShowAllFindResultsMsg{}),
 			appCommand("project.findInGroup", "Find in Project Group…", OpenFindInProjectGroupMsg{}),
 			appCommand("todo.list", "TODO Index", OpenTodoIndexMsg{}),
+			// The PHP declaration index's operations surface (0520, #2673).
+			// Global rather than PHP-scoped: the reason to rebuild — a branch
+			// switch, a generator run — is felt with the explorer or a terminal
+			// focused at least as often as with a .php buffer open, and the
+			// status popup answers a project question, not a buffer one.
+			withAliases(appCommand("php.traitIndex.rebuild", "PHP Index: Rebuild", PHPIndexRebuildMsg{}),
+				"rescan", "reindex", "trait"),
+			withAliases(appCommand("php.traitIndex.status", "PHP Index: Status", PHPIndexStatusMsg{}),
+				"stats", "trait"),
 			appCommand("search.nextMatch", "Next Search Match", MatchStepMsg{Delta: 1}),
 			appCommand("search.prevMatch", "Previous Search Match", MatchStepMsg{Delta: -1}),
 			appCommand("editor.saveAll", "Save All", SaveAllMsg{}),

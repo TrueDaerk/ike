@@ -130,6 +130,12 @@ type Index struct {
 	lastGen    snapKey
 	watchUntil time.Time
 
+	// onScan is the per-scan telemetry callback (#2673) and scanned the
+	// project walk whose completion was already reported through it, so a
+	// finished scan is announced exactly once. See SetOnScan.
+	onScan  func(Stats)
+	scanned *langindex.Index[fileDecls]
+
 	availOnce sync.Once
 	avail     bool
 }
@@ -189,6 +195,31 @@ func (x *Index) Reconfigure(opts Options) {
 		x.snap = nil
 		x.armChangeLocked()
 	}
+}
+
+// Rebuild drops the project walk and starts a fresh one (#2673): the escape
+// hatch for a workspace that changed underneath ike — a branch switch with
+// thousands of files, a generator run — where no watcher event ever arrived.
+// Observed open buffers survive it; they are the editor's live truth, not
+// the walk's, and re-reading them would only lose the unsaved overrides.
+//
+// It reports false when there is nothing to rebuild — php.trait_index is off,
+// or the build cannot parse PHP at all — so the command can say so instead of
+// pretending a scan started.
+func (x *Index) Rebuild() bool {
+	if !x.Available() {
+		return false
+	}
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	if !x.opts.Enabled {
+		return false
+	}
+	x.project = x.newProject(x.opts)
+	x.project.Ensure("php")
+	x.snap = nil
+	x.armWatchLocked()
+	return true
 }
 
 // newProject builds the walk for opts: PHP files only (a custom classifier
@@ -391,9 +422,26 @@ func (x *Index) SetOnChange(fn func()) {
 	x.armWatchLocked()
 }
 
+// SetOnScan installs the callback fired once for every completed project
+// walk (#2673) — the initial scan and every Rebuild — with the stats the walk
+// ended on: duration, file count and the truncated flag the telemetry op
+// php.trait.index_scan carries. Like the change callback it runs off the UI
+// goroutine and never while the index holds its lock, so it may query the
+// index. Pass nil to remove it.
+//
+// It shares the settle timer with SetOnChange: the poll that watches the
+// content generation is already bounded by the scan, so completion is noticed
+// without a second timer.
+func (x *Index) SetOnScan(fn func(Stats)) {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	x.onScan = fn
+	x.armWatchLocked()
+}
+
 // armChangeLocked (re-)starts the settle timer; the caller holds x.mu.
 func (x *Index) armChangeLocked() {
-	if x.onChange == nil || x.project == nil {
+	if (x.onChange == nil && x.onScan == nil) || x.project == nil {
 		return
 	}
 	if x.chTimer == nil {
@@ -416,23 +464,33 @@ func (x *Index) armWatchLocked() {
 // content generation moved since the last notification.
 func (x *Index) checkChange() {
 	x.mu.Lock()
-	fn, p := x.onChange, x.project
-	if fn == nil || p == nil {
+	fn, scan, p := x.onChange, x.onScan, x.project
+	if (fn == nil && scan == nil) || p == nil {
 		x.mu.Unlock()
 		return
 	}
 	gen := snapKey{projGen: p.Gen(), bufGen: x.bufGen, depth: x.opts.ParentDepth, project: p}
 	changed := gen != x.lastGen
 	x.lastGen = gen
+	done := p.Done("php")
+	// A finished walk is reported once, keyed on the walk itself: a rebuild
+	// installs a new one and therefore earns its own scan event.
+	report := scan != nil && done && x.scanned != p
+	if report {
+		x.scanned = p
+	}
 	// Keep settling while the scan is still producing generations or an
 	// asynchronous re-extraction may still land; a change re-arms once so
 	// the follow-up check can confirm the content settled.
-	if changed || !p.Done("php") || time.Now().Before(x.watchUntil) {
+	if changed || !done || time.Now().Before(x.watchUntil) {
 		x.armChangeLocked()
 	}
 	x.mu.Unlock()
-	if changed {
+	if changed && fn != nil {
 		fn()
+	}
+	if report {
+		scan(x.Stats())
 	}
 }
 

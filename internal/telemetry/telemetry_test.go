@@ -714,6 +714,34 @@ func TestProjectLeaveEvent(t *testing.T) {
 	}
 }
 
+// The PHP index's project walk (0520, #2673) is background work, not usage:
+// it finishes on its own a few seconds after every launch into a PHP project,
+// so it must not open a session file either — but it lands in every file a
+// real session writes.
+func TestPHPTraitIndexScanNeverOpensASession(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	r.Op(OpPHPTraitIndexScan, OpPhaseOK, map[string]string{"ms": "612", "files": "1841", "truncated": "false"})
+	r.Close()
+	if files := sessionFiles(t, dir); len(files) != 0 {
+		t.Fatalf("a lone index scan opened a session file: %v", files)
+	}
+
+	dir = t.TempDir()
+	r = New(dir, nil)
+	r.Op(OpPHPTraitIndexScan, OpPhaseOK, map[string]string{"ms": "612", "files": "1841", "truncated": "false"})
+	r.Command("editor.save", SourceKeybind)
+	r.Close()
+
+	evs := readSession(t, dir)
+	if len(evs) != 2 || evs[0].Type != TypeOp || evs[0].Data["id"] != OpPHPTraitIndexScan {
+		t.Fatalf("the held scan op must precede the command that opened the file, got %v", evs)
+	}
+	if d := evs[0].Data; d["ms"] != "612" || d["files"] != "1841" || d["truncated"] != "false" {
+		t.Fatalf("payload = %v, want ms, files and truncated", d)
+	}
+}
+
 // A pick is its own event type carrying the mode, the query *length*, the
 // 0-based rank of the chosen row and how many rows were listed (#2551).
 func TestPalettePickEvent(t *testing.T) {

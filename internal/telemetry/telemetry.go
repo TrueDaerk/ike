@@ -200,6 +200,12 @@ const (
 	// how many identifiers the index rewrote. A rename the index added
 	// nothing to records nothing.
 	OpPHPTraitRename = "php.trait.rename"
+	// One completed project walk of the PHP declaration index (0520, #2673):
+	// the initial scan and every php.traitIndex.rebuild. "ms" is the walk's
+	// duration, "files" how many files it left indexed and "truncated" whether
+	// it stopped at php.index.max_files. A single ok phase per scan, so the
+	// volume is the number of scans and the durations price the warm-up.
+	OpPHPTraitIndexScan = "php.trait.index_scan"
 )
 
 // CommandSlowThreshold is the dispatch duration from which a command event
@@ -601,6 +607,14 @@ func startsSession(typ string, data map[string]string) bool {
 		// Leaving is not using (#2408): a launch that opens a project and
 		// quits again without doing anything would otherwise resurrect
 		// exactly the ghost file the deferred pane.focus rule avoids.
+		return false
+	}
+	if typ == TypeOp && data["id"] == OpPHPTraitIndexScan {
+		// The PHP index's project walk (0520, #2673) is background work, not
+		// usage: it finishes on its own a few seconds after every launch into
+		// a PHP project, so letting it open the file would resurrect the ghost
+		// the deferred pane.focus and session rules avoid. Held like them, it
+		// still lands in every file a real session writes.
 		return false
 	}
 	if typ == TypeOp && data["id"] == OpSessionRestore {

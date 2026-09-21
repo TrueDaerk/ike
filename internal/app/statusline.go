@@ -51,7 +51,7 @@ var statusLeft = []statusSegment{
 	{id: "diagnostics", render: diagSegment},
 	{id: "coverage", render: func(m Model, ed *editor.Model) string { return m.coverageSegment(ed) }},
 	{id: "host", render: func(m Model, _ *editor.Model) string { return m.host.Status() }},
-	{id: "lsp", render: func(m Model, ed *editor.Model) string { return m.focusedLangStatus(ed) }},
+	{id: "lsp", render: lspStatusSegment},
 	{id: "toolchain", render: func(m Model, ed *editor.Model) string { return m.toolchainSegment(ed) }},
 	{id: "notifications", render: func(m Model, _ *editor.Model) string { return m.notifSegment() }},
 	{id: "popupterm", render: func(m Model, _ *editor.Model) string { return m.popupTermSegment() }},

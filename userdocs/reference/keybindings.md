@@ -109,6 +109,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Open menu bar | `f10` | `f10` | `menu.open` |
 | Open project group | `cmd+alt+shift+g` | `ctrl+alt+shift+g` | `project.group.open` |
 | Open project group | `ctrl+alt+shift+g` | `ctrl+alt+shift+g` | `project.group.open` |
+| PHP index status | `cmd+alt+shift+i` | `ctrl+alt+shift+i` | `php.traitIndex.status` |
 | Performance HUD | `ctrl+alt+p` | `ctrl+alt+p` | `perf.hud` |
 | Pin popup terminal | `cmd+alt+shift+k` | `ctrl+alt+shift+k` | `terminal.popup.pin` |
 | Pinned files | `cmd+2` | `ctrl+2` | `nav.pins` |
@@ -123,6 +124,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Project time report | `cmd+alt+0` | `ctrl+alt+0` | `time.toggle` |
 | Promote scratch to file | `cmd+alt+shift+p` | `ctrl+alt+shift+p` | `scratch.promote` |
 | Re-run last shell command | `alt+shift+r` | `alt+shift+r` | `terminal.rerunLast` |
+| Rebuild PHP index | `cmd+alt+shift+b` | `ctrl+alt+shift+b` | `php.traitIndex.rebuild` |
 | Recent files | `cmd+e` | `ctrl+e` | `palette.recentFiles` |
 | Recent locations | `alt+shift+e` | `alt+shift+e` | `nav.recentLocations` |
 | Rename file | `shift+f6` | `shift+f6` | `file.rename` |
