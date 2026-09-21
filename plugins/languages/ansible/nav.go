@@ -139,6 +139,11 @@ func newHostsSource() *hostsSource { return &hostsSource{lines: map[string][]str
 func (s *hostsSource) Name() string  { return "ansible-hosts" }
 func (s *hostsSource) Priority() int { return hostsPriority }
 
+// CompletesIn implements complete.ContextSource (#2654): a YAML plain
+// scalar highlights as a string, and `hosts: web` is exactly where this
+// source answers, so the string context must not silence it.
+func (s *hostsSource) CompletesIn(lang.CompletionContext) bool { return true }
+
 // Observe implements complete.EventObserver: keep the latest buffer text.
 func (s *hostsSource) Observe(ev host.EditorEvent) {
 	if ev.Text == "" || ev.Large {

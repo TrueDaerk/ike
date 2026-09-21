@@ -114,6 +114,11 @@ type EditorEvent struct {
 	// Char carries the just-typed character on EditorCompletionTrigger
 	// (#527); empty means a manual request the bridge honours unconditionally.
 	Char string
+	// Context classifies the trigger position (#2654): "" for code, else one
+	// of lang.CompletionContext's "comment", "string", "declaration",
+	// "import". The editor computes it; the local engine and the LSP bridge
+	// gate their sources by it (see lang.CompletionContext).
+	Context string
 	// CompletionID carries the selected item's reply index on
 	// EditorCompletionSelect (#847) and EditorCompletionAccept (#2610), for
 	// completionItem/resolve.

@@ -243,6 +243,12 @@ func (m *Model) maybeAutoComplete(text string) {
 	if len(r) != 1 {
 		return // paste or multi-rune input never auto-triggers
 	}
+	// No auto-popup inside a comment or a string literal, nor right after
+	// a declaring keyword (#2654): the user is inventing a name or writing
+	// prose, and every candidate would be noise. ctrl+space still opens.
+	if !m.completionContext().AutoTriggers() {
+		return
+	}
 	if m.CompletionOpen() && isIdentRune(r[0]) {
 		// An incomplete reply (#849) is a partial view: further typing must
 		// re-query the server, not narrow the stale list — the bridge

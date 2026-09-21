@@ -6,6 +6,7 @@ package langgo
 
 import (
 	_ "embed"
+	"regexp"
 
 	"ike/internal/consthint"
 	"ike/internal/cronhint"
@@ -79,6 +80,10 @@ func init() {
 		// Sticky-scroll scopes (#168): declarations whose header line stays
 		// pinned while scrolling through the body.
 		ScopeNodes: []string{"function_declaration", "method_declaration", "func_literal", "type_declaration"},
+		// Completion context (#2654): keywords that introduce a new name, and
+		// the import line only gopls has an answer for.
+		DeclKeywords: []string{"func", "type", "var", "const", "package"},
+		ImportLine:   regexp.MustCompile(`^\s*import\b`),
 		// Foldable regions (#144): declarations, blocks, import/const/var
 		// groups, composite literals and multi-line /* */ comments.
 		FoldNodes: []string{
@@ -146,6 +151,7 @@ func init() {
 	lang.Register(lang.Language{
 		ID:             "go.mod",
 		Filenames:      []string{"go.mod"},
+		DeclKeywords:   []string{"module"}, // `module example.com/x` names this module (#2654)
 		ServerLanguage: "go",
 		Grammar:        gomodGrammar(),
 		LineComment:    "//",

@@ -45,6 +45,11 @@ func (s *httpSource) Name() string { return "http" }
 // popup — and a request body offers nothing rather than every word in the file.
 func (s *httpSource) Exclusive(path string) bool { return isHTTPFile(path) }
 
+// CompletesIn implements complete.ContextSource (#2654): the source decides
+// per line what it answers, so no position context silences it — a `{{`
+// placeholder inside a JSON body string keeps its variable popup.
+func (s *httpSource) CompletesIn(lang.CompletionContext) bool { return true }
+
 func (s *httpSource) Priority() int { return ilsp.PriorityEmmet }
 
 // TriggerChar claims the placeholder brace (#2158). "{" is punctuation, which

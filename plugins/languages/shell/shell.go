@@ -59,6 +59,9 @@ func init() {
 		Spans:       shellSpans,
 		LineComment: "#",
 		IndentAfter: []string{"then", "do", "{"},
+		// Completion context (#2654): `function name` and `local name`
+		// introduce new names; `export NAME` mostly re-exports existing ones.
+		DeclKeywords: []string{"function", "local"},
 		// Sticky scopes + folding (#168, #144).
 		ScopeNodes: []string{"function_definition", "if_statement", "for_statement", "while_statement", "case_statement"},
 		FoldNodes: []string{

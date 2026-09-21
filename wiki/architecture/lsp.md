@@ -217,7 +217,13 @@ auto-close pairing still trigger. Identifier runes typed while the popup is
 already open re-emit nothing — they only narrow the client-side prefix filter.
 `ctrl+space` (Kitty `ctrl+' '` or the legacy `ctrl+@`/NUL spelling) emits a
 char-less trigger the bridge honours unconditionally (#302); a re-press with
-the popup open re-queries. The popup anchors at the start of the identifier
+the popup open re-queries. The editor withholds the auto-trigger inside a
+comment or a string literal and right after a declaring keyword (`func `,
+`def `), and tags every trigger with its **completion context** (#2654,
+`EditorEvent.Context`): the bridge never asks the server in a comment, asks
+in a string (import paths live there) and on an import line, and otherwise
+behaves as above — see the completion-context section of
+[/architecture/completion.md](/architecture/completion.md). The popup anchors at the start of the identifier
 under the request position (widened past sigils like PHP's `$` while the
 widened prefix still matches an item, mirroring the accept path's
 `extendPrefixMatch`), so the partial word typed before the request counts into

@@ -7,6 +7,7 @@ package langpython
 
 import (
 	_ "embed"
+	"regexp"
 
 	"ike/internal/consthint"
 	"ike/internal/cronhint"
@@ -81,6 +82,9 @@ func init() {
 		PostfixExprNodes: postfixExprNodes,
 		// Sticky-scroll scopes (#168).
 		ScopeNodes: []string{"function_definition", "class_definition"},
+		// Completion context (#2654).
+		DeclKeywords: []string{"def", "class"},
+		ImportLine:   regexp.MustCompile(`^\s*(import|from)\b`),
 		// Foldable regions (#144): definitions, compound statements,
 		// multi-line collections and multi-line strings (docstrings).
 		FoldNodes: []string{

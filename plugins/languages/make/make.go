@@ -42,5 +42,8 @@ func init() {
 		// collapse.
 		ScopeNodes: []string{"rule", "define_directive"},
 		FoldNodes:  []string{"rule", "define_directive", "conditional"},
+		// Completion context (#2654): `define NAME` opens a multi-line
+		// variable definition.
+		DeclKeywords: []string{"define"},
 	})
 }
