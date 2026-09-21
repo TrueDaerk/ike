@@ -195,6 +195,15 @@ type Model struct {
 	// behaves exactly as it did before marks existed.
 	marks map[string]bool
 
+	// File clipboard (#2660, clipboard.go): the entries cmd+c / cmd+x put
+	// aside and cmd+v drops into the cursor's directory. clipCut selects move
+	// semantics; pasteOp is the paste currently suspended on a name-conflict
+	// prompt, nil outside one. Explorer-internal on purpose — the OS
+	// clipboard carries text, never paths.
+	clip    []delTarget
+	clipCut bool
+	pasteOp *pasteState
+
 	// Scratches section (#1963, scratches.go): the scratch store listed as a
 	// divider-separated section below the tree, operated with the explorer's
 	// own semantics. A nil lister means "no section" (the default), so the
@@ -784,6 +793,14 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case CopySelectionMsg:
 		m.promptCopy()
 		return m, nil
+	case ClipCopyMsg:
+		m.clipTargets(false)
+		return m, nil
+	case ClipCutMsg:
+		m.clipTargets(true)
+		return m, nil
+	case ClipPasteMsg:
+		return m, m.pasteClip()
 	case MoveManyMsg:
 		// The app's file.move picker resolved a target for the explorer's
 		// multi-select (#2166): move every marked entry in one batch.

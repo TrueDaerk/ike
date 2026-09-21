@@ -38,6 +38,12 @@ func (corePlugin) Capabilities() plugin.Capabilities {
 			cmd("explorer.rename", "Explorer: Rename", RenameMsg{}),
 			cmd("explorer.move", "Explorer: Move Selection To…", MoveSelectionMsg{}),
 			cmd("explorer.copy", "Explorer: Copy Selection To…", CopySelectionMsg{}),
+			// The file clipboard (#2660): pick here, drop there. The ids stay
+			// clip* because explorer.copy/move already name the
+			// type-the-target-path prompts above.
+			cmd("explorer.clipCopy", "Explorer: Copy Files", ClipCopyMsg{}),
+			cmd("explorer.clipCut", "Explorer: Cut Files", ClipCutMsg{}),
+			cmd("explorer.clipPaste", "Explorer: Paste Files", ClipPasteMsg{}),
 			cmdHint("explorer.toggleMark", "Explorer: Toggle Selection Mark", "space", ToggleMarkMsg{}),
 			cmdHint("explorer.clearMarks", "Explorer: Clear Selection Marks", "esc", ClearMarksMsg{}),
 			cmd("explorer.search", "Explorer: Speed Search", SearchMsg{}),

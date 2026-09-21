@@ -13,6 +13,9 @@ import (
 var noCounterpart = map[string]string{
 	"editor.tab.moveLeft":              "JetBrains reorders tabs by drag only, no keymap action",
 	"editor.tab.moveRight":             "JetBrains reorders tabs by drag only, no keymap action",
+	"explorer.clipCopy":                "project-view copy rides $Copy in JetBrains, already mapped to editor.copy (#2660)",
+	"explorer.clipCut":                 "project-view cut rides $Cut in JetBrains, already mapped to editor.cut (#2660)",
+	"explorer.clipPaste":               "project-view paste rides $Paste in JetBrains, already mapped to editor.paste (#2660)",
 	"explorer.undo":                    "project-view undo rides $Undo in JetBrains, already mapped to editor.undo",
 	"explorer.redo":                    "project-view redo rides $Redo in JetBrains, already mapped to editor.redo",
 	"file.rename":                      "RenameElement covers symbol and file renames, mapped to lsp.rename",

@@ -73,6 +73,19 @@ type MoveSelectionMsg struct{}
 // explorer's selection (explorer.copy, #2166).
 type CopySelectionMsg struct{}
 
+// ClipCopyMsg puts the explorer's selection on the file clipboard in copy
+// mode (explorer.clipCopy, cmd+c, #2660).
+type ClipCopyMsg struct{}
+
+// ClipCutMsg puts the explorer's selection on the file clipboard in cut mode:
+// a paste moves the sources instead of copying them (explorer.clipCut,
+// cmd+x, #2660).
+type ClipCutMsg struct{}
+
+// ClipPasteMsg drops the file clipboard into the directory of the current
+// selection (explorer.clipPaste, cmd+v, #2660).
+type ClipPasteMsg struct{}
+
 // MoveManyMsg moves every path into TargetDir as one batched, single-undo
 // operation (#2166). The app's file.move directory picker sends it when the
 // explorer's multi-select is non-empty; a single path still goes through
@@ -138,6 +151,9 @@ func (ToggleMarkMsg) explorerMsg()    {}
 func (ClearMarksMsg) explorerMsg()    {}
 func (MoveSelectionMsg) explorerMsg() {}
 func (CopySelectionMsg) explorerMsg() {}
+func (ClipCopyMsg) explorerMsg()      {}
+func (ClipCutMsg) explorerMsg()       {}
+func (ClipPasteMsg) explorerMsg()     {}
 func (MoveManyMsg) explorerMsg()      {}
 func (UndoMsg) explorerMsg()          {}
 func (RedoMsg) explorerMsg()          {}
