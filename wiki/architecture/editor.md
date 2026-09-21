@@ -2066,6 +2066,18 @@ attributes in `styleAt`):
   inside-only rule, since widening dense per-column ranges would flicker the
   whole line while moving through it. Selection reveal is unchanged: a
   selection has to intersect the range itself.
+- **Append-position reveal** (#2678): masked secrets (#1623) widen that window
+  by the single column *after* the range — the append position `r.end` — and
+  only while the editor is in insert mode. A value ending its line would
+  otherwise stay masked exactly while it is typed into, because the insert
+  caret rests at `len(line)`, which is `r.end` and therefore outside the
+  half-open range. The family is listed in `appendRevealCaptures`,
+  `lineConcealRanges` marks its copies with `concealRange.appendReveal`, and
+  `inRange` widens to the right for those when `m.mode == Insert`. It is
+  deliberately narrower than the adjacent reveal: no `r.start-1`, and nothing
+  in normal mode, where the caret at `r.end` is on a following character (a
+  space, a comment) and revealing there would flicker the line while moving
+  through it. Secondary carets (#145) are treated like the primary one.
 - **Span-extent reveal** (#1599): the query additionally captures the
   enclosing inline spans (emphasis, code span, links) as `@conceal.extent`;
   `concealSplit` routes them into a third channel (`concealExt`), and a caret
@@ -3371,7 +3383,11 @@ emits the value as a stand-in span (#1585) and `concealSplit` gives it its own
 channel in `decodes`, gated by `decodeOn` like the escape families. So the
 positional reveal of #1594 applies unchanged — put the caret inside a value
 (or select across the line) and the raw secret is there to read and edit;
-move away and it masks again. The buffer is never altered, and a masked value
+move away and it masks again. Insert mode adds the append position (#2678):
+with the caret directly after the value — where `A` parks it when the value
+ends its line — the secret reads raw too, so it stays legible while characters
+are appended to it. Normal mode keeps the strict inside-only rule, so a caret
+on the space of `KEY=value # note` leaves the value masked. The buffer is never altered, and a masked value
 copies, saves and diffs as itself. Masking is on by default; the toggle is
 per view and sticks like the other view toggles.
 
