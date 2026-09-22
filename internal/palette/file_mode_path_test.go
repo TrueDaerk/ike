@@ -193,9 +193,9 @@ func TestFileModeLongQueryFrecencyBoost(t *testing.T) {
 // A cold file that matches better still wins on a moderate query: the boost
 // lifts, it does not override (#2155's rule stays).
 func TestFileModeBoostDoesNotBeatClearlyBetterMatch(t *testing.T) {
-	f := fileMode("note.go", "xxnote.go")
+	f := fileMode("note.go", "xx-note.go")
 	cx := Context{Root: "/proj"}
-	f.SetFrecency(frecStore(cx.Root, map[string]int{"xxnote.go": 10}))
+	f.SetFrecency(frecStore(cx.Root, map[string]int{"xx-note.go": 10}))
 
 	if got := titles(f.Results("note", cx)); got[0] != "note.go" {
 		t.Fatalf("long query = %v, want the better match first", got)

@@ -1,5 +1,32 @@
 # Log
 
+## 2026-09-22 (File finder matches with the hump matcher, #2686)
+
+- **`@` matched far too much.** The finder filtered with the permissive
+  subsequence `fuzzy.Match` over the root-relative path, so every typed rune
+  could land anywhere: `gab` matched `log/database.py` as readily as
+  `gabriel.py`, and over a real tree hundreds of files survived a
+  three-letter query. `@` is used when one already knows the file.
+- **It now filters with `fuzzy.MatchHumpsCase`** — the JetBrains-style hump
+  matcher the completion popup has used since #2650 — under the shared
+  `completion.case_sensitivity` setting (no finder-specific setting). Every
+  typed rune must continue the previous match or start a word segment; a path
+  separator was already one of `isBoundary`'s separators, so `gab` still
+  reaches `google/abstract.py` and `@app/app` still finds
+  `internal/app/app.go`.
+- **Ranked by tier, never mixed** (the rule of #2651): basename equals the
+  query (with or without its extension) > basename starts with it > hump
+  match inside the basename > hump match over the whole path. Within one tier
+  the existing blend — frecency boost, frecency, usage, path (#2155, #2636,
+  #1419) — is unchanged, and the 0–2 rune rule where frecency leads still
+  comes first.
+- **Fallback.** When nothing hump-matches at all the whole list falls back to
+  `fuzzy.Match` over the path with the old ranking, so a typo shows something
+  instead of an empty box; a single hump match suppresses it.
+- The change lives in `FileMode`, so the palette's `@`, the editor's anchored
+  `@` finder and Search Everywhere's file source all get it. Command mode,
+  dir mode, the scratch rows and the settings search keep `fuzzy.Match`.
+
 ## 2026-09-22 (Run a notebook from the viewer, #2682)
 
 - **Fresh outputs needed a detour.** The notebook viewer (#2425) shows the

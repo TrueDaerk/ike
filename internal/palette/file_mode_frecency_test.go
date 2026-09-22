@@ -39,16 +39,16 @@ func TestFileModeFrecencyLeadsOnEmptyQuery(t *testing.T) {
 // threshold: at one or two characters the fuzzy score barely discriminates, so
 // a hot file wins even against a strictly better match.
 func TestFileModeFrecencyLeadsOnShortQuery(t *testing.T) {
-	f := fileMode("no.go", "xxnote.go")
+	f := fileMode("no.go", "xx-note.go")
 	cx := Context{Root: "/proj"}
-	f.SetFrecency(frecStore(cx.Root, map[string]int{"xxnote.go": 2}))
+	f.SetFrecency(frecStore(cx.Root, map[string]int{"xx-note.go": 2}))
 
 	// Sanity: without frecency the better match ("no.go", start anchor) leads.
-	cold := fileMode("no.go", "xxnote.go")
+	cold := fileMode("no.go", "xx-note.go")
 	if got := titles(cold.Results("no", cx)); got[0] != "no.go" {
 		t.Fatalf("cold short query = %v, want no.go first", got)
 	}
-	if got := titles(f.Results("no", cx)); got[0] != "xxnote.go" {
+	if got := titles(f.Results("no", cx)); got[0] != "xx-note.go" {
 		t.Fatalf("short query (2 chars) = %v, want the hot file first", got)
 	}
 }
@@ -57,9 +57,9 @@ func TestFileModeFrecencyLeadsOnShortQuery(t *testing.T) {
 // the third character the typed text is a real signal, so match quality wins
 // and frecency no longer drags a worse match to the top.
 func TestFileModeScoreLeadsOnLongQuery(t *testing.T) {
-	f := fileMode("note.go", "xxnote.go")
+	f := fileMode("note.go", "xx-note.go")
 	cx := Context{Root: "/proj"}
-	f.SetFrecency(frecStore(cx.Root, map[string]int{"xxnote.go": 10}))
+	f.SetFrecency(frecStore(cx.Root, map[string]int{"xx-note.go": 10}))
 
 	if got := titles(f.Results("note", cx)); got[0] != "note.go" {
 		t.Fatalf("long query = %v, want the better match (note.go) first", got)

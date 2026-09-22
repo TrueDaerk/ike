@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Command Palette
-description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked and frecency-boosted with a "did you mean" fallback over aliases, keybind labels and menu paths, "@" fuzzy-finds files, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself; a pick of a bound command toasts its chord, a third pick of an unbound one offers a key.
+description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked and frecency-boosted with a "did you mean" fallback over aliases, keybind labels and menu paths, "@" finds files with the hump matcher, ranked by tier, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself; a pick of a bound command toasts its chord, a third pick of an unbound one offers a key.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-09-08T16:00:00Z
+timestamp: 2026-09-22T12:00:00Z
 ---
 
 # Command Palette
@@ -34,7 +34,7 @@ internal/palette/
   palette.go               overlay tea-model: open/close, input line, ranked list, key nav, esc-dismiss, render
   mode.go                  Mode interface (Prefix/Placeholder/Results) + Item + activation msgs
   command_mode.go          ":" mode — snapshot registry, fuzzy-filter, context-first ranking
-  file_mode.go             "@" mode — fuzzy file finder over the project tree (cached walk)
+  file_mode.go             "@" mode — hump-matched file finder over the project tree (cached walk), tiered
   recent_mode.go           locked recent-files mode — injected MRU list, active file excluded
   search_mode.go           locked search-everywhere mode — composes command + class + file + symbol modes, per-kind cap
   context.go               Context captured at open (focused pane context id + project root + active file + buffer language, #2483)
@@ -268,10 +268,10 @@ way.
 
 ## File mode (`@`)
 
-A fuzzy file finder over the project tree. It matches the query against each
-file's path **relative to the root, directory segments included**, so `@app/app`
+A file finder over the project tree. It matches the query against each file's
+path **relative to the root, directory segments included**, so `@app/app`
 finds `internal/app/app.go` the way a JetBrains/Claude-Code file picker does —
-the fuzzy matcher's word-boundary bonus rewards matches at path separators. The
+a path separator counts as a word boundary like any other. The
 disk walk is cached per palette open (filtered on every keystroke, walked once;
 the palette drops every mode's cache via the optional `Refresher` extension on
 each open, #1372, so newly created files appear and deleted ones vanish), skips
@@ -280,19 +280,59 @@ forward-slash paths for stable matching, and is capped at `maxFiles`. Activation
 emits `OpenFileMsg{Path}` joined onto the root (plus `Line`/`Col` for a pasted
 path, see below).
 
-Ranking blends three signals — fuzzy score, **frecency** (#2155) and the
-**most-used** counter (#1419) — and the blend order depends on how much the
-user has typed:
+**Which files survive (#2686).** The filter is the JetBrains-style **hump
+matcher** (`fuzzy.MatchHumpsCase`, #2650 — the one the completion popup uses),
+not the permissive subsequence `Match`: every typed rune must either continue
+the previous matched rune or start a word segment of the relative path —
+index 0, after `/`, `_`, `-` or `.`, a camelCase hump, the last capital of an
+acronym run, a letter↔digit change. `@` is used when one already *knows* the
+file, and the permissive matcher made a three-letter query mean hundreds of
+files: `gab` matched `log/database.py` — a, b and g merely occur in that
+order — as readily as `gabriel.py`.
+Now `gab` reaches `gabriel.py`, `GoogleAppBlizzard.php` and
+`google/abstract.py` and leaves `log/database.py` out. The case rule is the
+shared **`completion.case_sensitivity`** setting, read live from
+`config.Get()` (no finder-specific setting): under the `first_letter` default
+a lowercase rune matches either case while an uppercase one only matches an
+uppercase one, so `GAB` is the acronym of `GoogleAppBlizzard.php`; `none`
+folds everything, `all` compares exactly.
+
+**Ranking tiers (#2686).** The survivors are graded by *how* they matched, and
+the tiers never mix (the rule the popup's ranking follows, #2651) — a file
+whose name one typed can never be pushed below a hit that borrowed a directory
+segment:
+
+1. the **basename**, with or without its extension, equals the query
+   (case-insensitively)
+2. the basename **starts with** the query (`Result.Prefix`, under the case rule)
+3. a hump match **inside the basename**
+4. a hump match over the **whole relative path** (what makes `@app/app` work)
+
+Within one tier the blend of three signals — fuzzy score, **frecency** (#2155)
+and the **most-used** counter (#1419) — applies unchanged, and the blend order
+depends on how much the user has typed:
 
 | Query length | Order |
 | --- | --- |
-| 0–2 characters (`shortQueryLen`) | frecency, then fuzzy score, then usage, then path — capped at `maxEmptyRows` (50) when nothing is typed |
-| 3+ characters | fuzzy score **plus a frecency boost**, then frecency, then usage, then path |
+| 0–2 characters (`shortQueryLen`) | frecency, then tier, then fuzzy score, then usage, then path — capped at `maxEmptyRows` (50) when nothing is typed |
+| 3+ characters | tier, then fuzzy score **plus a frecency boost**, then frecency, then usage, then path |
 
-The rationale is that one or two characters barely discriminate — nearly every
-file matches, and the score differences are noise — so the files one is
-actually working on belong on top; from the third character the typed text is a
-real signal and match quality leads again.
+The rationale is that one or two characters barely discriminate — the score
+differences are noise — so the files one is actually working on belong on top
+(the hump filter only decides *which* files survive there); from the third
+character the typed text is a real signal and match quality leads again.
+
+**Fallback (#2686).** When *nothing* hump-matches — a typo, or a query whose
+letters merely occur somewhere — the whole list falls back to the permissive
+`fuzzy.Match` over the path, in one tier and with the pre-#2686 ranking, so the
+finder shows something rather than an empty box. The fallback is not marked in
+any way; it is a last resort, so a single hump match suppresses it entirely.
+
+The tiers live in `FileMode` (`matchFile`), so every host of the mode gets
+them: the palette's `@`, the editor's anchored `@` finder and the file source
+of Search Everywhere. Path queries (`/`, `~/`, `./`), the pasted-path row and
+the scratch rows keep their own matching; command mode (`:`), dir mode and the
+settings search keep the permissive `fuzzy.Match`.
 
 **The long-query frecency rule (#2636).** Past `shortQueryLen` frecency is not
 only a tiebreak: it is a **boost added to the fuzzy score**, worth
@@ -738,6 +778,22 @@ binds to word-boundary and consecutive runs when they exist rather than to the
 earliest positions. Scoring rewards, strongest first, boundary matches, then
 consecutive runs, then a start anchor; it penalises gaps and a long unmatched
 lead. An empty pattern matches everything with a zero score.
+
+`MatchHumpsCase(pattern, text, case)` is the **hump matcher** on the same
+dynamic program (#2650): a rune may only be placed where it continues the
+previous match or starts a word segment (`isBoundary` — index 0, after a
+non-alphanumeric separator such as `/`, `_`, `-` or `.`, a camelCase hump,
+the last capital of an acronym run, a letter↔digit change), under the case
+rule `completion.case_sensitivity` names (`fuzzy.ParseCase`). `Result.Prefix`
+reports whether the text starts with the pattern under that rule, so a
+ranking tier "prefix beats hump" needs no second pass.
+
+**Who uses which.** The completion popup (see
+[completion.md](completion.md) § "Unified ranking") and the **file finder**
+(`@`, #2686 — tiers above) filter with `MatchHumpsCase`; command mode (`:`),
+dir mode, the scratch rows, Search Everywhere's own merge and the settings
+search keep the permissive `Match`, and the finder falls back to it when
+nothing hump-matches at all.
 
 ## Rendering
 

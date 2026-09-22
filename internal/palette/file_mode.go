@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"ike/internal/cli"
+	"ike/internal/config"
 	"ike/internal/frecency"
 	"ike/internal/fuzzy"
 	"ike/internal/pathcomplete"
@@ -53,10 +54,13 @@ const frecencyLongWeight = 6
 // affordance, not a browser — a long list would bury the project hits.
 const maxFsFallback = 8
 
-// FileMode is the "@" mode: a fuzzy file finder over the project tree. It matches
-// the query against each file's path relative to the root (directory segments
+// FileMode is the "@" mode: a file finder over the project tree. It matches the
+// query against each file's path relative to the root (directory segments
 // included), so "@app/app" finds internal/app/app.go the way Claude Code's file
-// picker does. The chosen item carries an OpenFileMsg the root model opens.
+// picker does. Matching is the JetBrains-style hump filter (#2686, matchFile):
+// every typed rune continues the previous match or starts a word segment, so a
+// short query no longer drags in every file that merely contains those letters
+// in order. The chosen item carries an OpenFileMsg the root model opens.
 //
 // The walk is cached per-root for the lifetime of one palette open: Results
 // filters the cached snapshot on every keystroke instead of re-walking the
@@ -139,9 +143,13 @@ func (f *FileMode) Placeholder() string { return "Find a file… (tab completes;
 // and most recently first — so the finder opens on what one is working on
 // instead of on the alphabetical head of the tree; the empty listing is capped
 // at maxEmptyRows, since the whole tree is nothing one browses. From the third
-// character the fuzzy score of the relative path leads, with frecency as a
-// boost that grows with the query (#2636) and, at equal score, still a
-// tiebreak above the usage count (#1419), then path. A query typed as a
+// character the match leads: first the hump tier (#2686 — name match before
+// path match, and the tiers never mix), then within one tier the fuzzy score
+// of the relative path, with frecency as a boost that grows with the query
+// (#2636) and, at equal score, still a tiebreak above the usage count
+// (#1419), then path. When nothing hump-matches at all the whole list falls
+// back to the permissive fuzzy.Match over the path, unmarked and ranked the
+// old way, so a mistyped query still shows something. A query typed as a
 // filesystem path (#1433: leading /, ~/, ./ or ../) is served by the shared
 // pathcomplete engine instead — the same candidates the ';' picker produces —
 // so '@' also reaches files outside the project. Below the project matches every non-empty query
@@ -165,6 +173,7 @@ func (f *FileMode) Results(query string, cx Context) []Item {
 	files := f.files(cx.Root)
 	type scored struct {
 		path  string
+		tier  fileTier // hump-match tier (#2686), never mixed
 		score int
 		usage int
 		frec  float64
@@ -184,22 +193,42 @@ func (f *FileMode) Results(query string, cx Context) []Item {
 		}
 	}
 	out := make([]scored, 0, len(files))
-	for _, p := range files {
-		m, ok := fuzzy.Match(query, p)
-		if !ok {
-			continue
-		}
+	add := func(p string, tier fileTier, m fuzzy.Result) {
 		frec := 0.0
 		if f.frec != nil {
 			frec = f.frec.Score(filepath.Join(frecRoot, p))
 		}
 		out = append(out, scored{
 			path:  p,
+			tier:  tier,
 			score: m.Score,
 			usage: f.usage.Count(filepath.Join(cx.Root, p)),
 			frec:  frec,
 			spans: m.Positions,
 		})
+	}
+	// The hump filter decides which files survive (#2686); the case rule is
+	// the popup's own completion.case_sensitivity, read live once per query.
+	mode := fuzzy.ParseCase(config.Get().Completion.CaseSensitivity)
+	for _, p := range files {
+		tier, m, ok := matchFile(query, p, mode)
+		if !ok {
+			continue
+		}
+		add(p, tier, m)
+	}
+	// Nothing hump-matched at all: fall back to the permissive subsequence
+	// matcher over the path (#2686), so a mistyped or "letters somewhere"
+	// query still shows something instead of an empty list. One tier, so the
+	// blend below ranks the fallback exactly the way the finder always did.
+	if len(out) == 0 {
+		for _, p := range files {
+			m, ok := fuzzy.Match(query, p)
+			if !ok {
+				continue
+			}
+			add(p, tierFileFallback, m)
+		}
 	}
 	// Frecency leads while the query is too short to discriminate (#2155);
 	// past that it is a boost on the fuzzy score (#2636) and, at equal
@@ -217,6 +246,9 @@ func (f *FileMode) Results(query string, cx Context) []Item {
 		a, b := out[i], out[j]
 		if frecencyLeads && !sameFrecency(a.frec, b.frec) {
 			return a.frec > b.frec
+		}
+		if a.tier != b.tier {
+			return a.tier < b.tier
 		}
 		if a.rank != b.rank {
 			return a.rank > b.rank
@@ -269,6 +301,67 @@ func fileFrecencyBoost(score float64, queryLen int) float64 {
 	}
 	norm := 1 - math.Pow(0.5, score)
 	return norm * frecencyLongWeight * float64(queryLen-shortQueryLen)
+}
+
+// fileTier is how a file relates to the query (#2686); lower lists first and
+// the tiers never mix, so a file whose *name* one typed can never be pushed
+// down by a scattered hit somewhere in a directory segment.
+type fileTier int
+
+const (
+	tierFileExact    fileTier = iota // basename, or the basename without its extension, equals the query
+	tierFilePrefix                   // basename starts with the query
+	tierFileBase                     // hump match inside the basename alone
+	tierFilePath                     // hump match that needs directory segments
+	tierFileFallback                 // permissive subsequence match: nothing hump-matched at all
+)
+
+// matchFile applies the hump filter to one root-relative path (#2686) and
+// returns its ranking tier, the match (score plus highlight spans, indexed in
+// the *path*, since that is what the row is titled with) and whether the file
+// survives at all.
+//
+// The basename is tried first: a match that lies entirely inside the file's
+// own name is what one means by typing a name, so it ranks above one that
+// needs a directory segment — while matching the whole path second keeps
+// "@app/app" finding internal/app/app.go, the path separator counting as a
+// word boundary like any other separator (fuzzy.isBoundary).
+func matchFile(query, p string, mode fuzzy.Case) (fileTier, fuzzy.Result, bool) {
+	base, off := p, 0
+	if i := strings.LastIndex(p, "/"); i >= 0 {
+		base, off = p[i+1:], len([]rune(p[:i+1]))
+	}
+	if r, ok := fuzzy.MatchHumpsCase(query, base, mode); ok {
+		for i := range r.Positions {
+			r.Positions[i] += off
+		}
+		return basenameTier(query, base, r), r, true
+	}
+	if r, ok := fuzzy.MatchHumpsCase(query, p, mode); ok {
+		return tierFilePath, r, true
+	}
+	return tierFileFallback, fuzzy.Result{}, false
+}
+
+// basenameTier grades an accepted basename match: equality (with or without
+// the extension) beats a prefix, which beats any other hump match. Equality is
+// case-insensitive whatever the case rule — one who types a whole file name
+// means that file — while the prefix verdict is the matcher's own
+// (Result.Prefix), so it follows completion.case_sensitivity.
+func basenameTier(query, base string, r fuzzy.Result) fileTier {
+	if query != "" {
+		stem := base
+		if i := strings.LastIndex(base, "."); i > 0 {
+			stem = base[:i]
+		}
+		if strings.EqualFold(base, query) || strings.EqualFold(stem, query) {
+			return tierFileExact
+		}
+	}
+	if r.Prefix {
+		return tierFilePrefix
+	}
+	return tierFileBase
 }
 
 // pathTarget reads the query as a path to an existing file (#2636) and turns
