@@ -608,6 +608,7 @@ func (r *Registry) AddNotebookView(path string) string {
 	key := suffixedKey(nbKeyBase, r.notebooks)
 	inst := &Instance{key: key, kind: KindNotebook, cfg: r.cfg, pal: r.pal}
 	inst.nv = nbview.New(key, path, r.pal)
+	applyNotebookCfg(r.cfg, inst)
 	r.put(inst)
 	return key
 }
@@ -617,6 +618,7 @@ func (r *Registry) AddNotebookView(path string) string {
 func (r *Registry) AddNotebookKey(key, path string) *Instance {
 	inst := &Instance{key: key, kind: KindNotebook, cfg: r.cfg, pal: r.pal}
 	inst.nv = nbview.New(key, path, r.pal)
+	applyNotebookCfg(r.cfg, inst)
 	r.put(inst)
 	if len(key) > len(nbKeyBase)+1 && key[:len(nbKeyBase)+1] == nbKeyBase+":" {
 		if v, err := strconv.Atoi(key[len(nbKeyBase)+1:]); err == nil && v > r.notebooks {
@@ -1146,6 +1148,7 @@ func (r *Registry) NewContentPane(kind Kind, path, path2, rev, rev2 string) *Ins
 		inst.hv = hexview.New(key, path, r.pal)
 	case KindNotebook:
 		inst.nv = nbview.New(key, path, r.pal)
+		applyNotebookCfg(r.cfg, inst)
 	case KindDiff:
 		if rev != "" || rev2 != "" {
 			return r.newDiffRevInstance(key, path, path2, rev, rev2)

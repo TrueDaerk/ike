@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Notebook Viewer
-description: "#2425 — .ipynb files open read-only as their cells: markdown through the preview renderer, code highlighted under the notebook language, outputs (stream, text/plain, degraded text/html, PNG/JPEG via Kitty graphics, errors) below each cell, with cell navigation, output folding, source search, copy, open-in-scratch and image saving."
+description: "#2425 — .ipynb files open read-only as their cells: markdown through the preview renderer, code highlighted under the notebook language, outputs (stream, text/plain, degraded text/html, PNG/JPEG via Kitty graphics under the notebook.image_max_cols width cap, errors) below each cell, with cell navigation, output folding, source search, copy, open-in-scratch and image saving."
 resource: internal/nbview
 tags: [architecture, notebook, jupyter, ipynb, pane, viewer]
 timestamp: 2026-09-03T00:00:00Z
@@ -83,6 +83,18 @@ and the preview (30000), so the three can never collide in one terminal's
 graphics memory. Where the terminal has no graphics support the metadata
 label *is* the output. Folding a cell releases its placements, so no ghost
 graphics survive.
+
+`imgview.FitGrid` fits each picture aspect-preserving into a column budget
+bounded by the pane height. The budget is the pane's body width — the pane
+minus the cell gutter — capped by **`notebook.image_max_cols`** (#2683,
+default `80`, Settings UI → Notebook Viewer → Image width cap): a plot on a
+200-column pane would otherwise stretch across the whole width and push the
+next cells off screen. `0` lifts the cap and restores the full-width fit. The
+picture stays left-aligned next to the gutter, so it lines up with its own
+metadata label. The app pushes the value with `SetImageMaxCols` the way it
+pushes the palette and the graphics flag (`pane.applyNotebookCfg`, on pane
+creation and on every config reload), and the setter re-renders — changing
+the setting resizes the placements of every open notebook.
 
 ## Navigation, folding, search
 

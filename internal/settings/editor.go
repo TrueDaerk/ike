@@ -475,10 +475,19 @@ func (n *intEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 			n.err = "not a number"
 			return nil
 		}
-		v = n.clampToBounds(v)
 		// A typed value is refused outright rather than snapped (#2085): the
 		// user is editing interactively and can fix it, so naming the valid
-		// set beats silently writing something else.
+		// set beats silently writing something else. The hook sees the typed
+		// number before the range clamp too (#2683), so an entry whose bounds
+		// would quietly turn a mistyped value into a meaningful one — -1
+		// clamping to the cap-lifting 0 — can refuse it instead.
+		if n.e.ValidateInt != nil {
+			if msg := n.e.ValidateInt(v); msg != "" {
+				n.err = msg
+				return nil
+			}
+		}
+		v = n.clampToBounds(v)
 		if n.e.ValidateInt != nil {
 			if msg := n.e.ValidateInt(v); msg != "" {
 				n.err = msg

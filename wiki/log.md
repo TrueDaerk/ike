@@ -1,5 +1,29 @@
 # Log
 
+## 2026-09-22 (Notebook image width cap, #2683)
+
+- **A plot filled the whole pane.** A notebook image output was fitted into
+  the full pane body width, so on a 200-column pane a figure stretched across
+  everything and pushed the next cells off screen, with no way to make it
+  smaller.
+- **`notebook.image_max_cols` caps it** (default **80**, `0` = no cap,
+  ceiling 1000): `nbview`'s placement fits the picture into
+  `min(pane body width, cap)` columns — `imgview.FitGrid` keeps the aspect
+  ratio and the pane-height bound as before — and the picture stays
+  left-aligned next to the gutter, under its own metadata label.
+- **Pushed down like the palette** (`nbview.SetImageMaxCols`,
+  `pane.applyNotebookCfg` on creation and on every config reload); the setter
+  re-renders, so changing the setting resizes the placements of every open
+  notebook pane.
+- **Settings UI → Notebook Viewer → Image width cap** (a new page in the
+  Editing group). A negative width is **refused in the form** rather than
+  clamped, because clamping it to `0` would silently lift the cap — so the
+  `Entry.ValidateInt` hook now also sees the typed number *before* the range
+  clamp.
+- Wiki: [notebook-viewer](architecture/notebook-viewer.md) § Images,
+  [config](architecture/config.md) § Baseline schema,
+  [settings-ui](architecture/settings-ui.md), `userdocs/reference/settings.md`.
+
 ## 2026-09-21 (Rename across traits, #2672)
 
 - **Rename around traits was unsafe or impossible.** Renaming `abc()` on

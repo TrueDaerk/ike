@@ -410,6 +410,9 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 		{Title: "Markdown Preview", Description: "The rendered markdown preview pane: how the diagram fences inside a document — ```mermaid blocks in READMEs and design docs — are drawn.", Entries: []Entry{
 			{Key: "preview.diagrams", Type: Enum, Title: "Diagram rendering", Description: "How a fenced diagram block renders in the preview. \"ascii\" pipes it through the mermaid-ascii renderer and shows its text in place of the code block; \"image\" renders a PNG with mermaid-cli (mmdc) and embeds it over the Kitty graphics path, falling back to ascii where the terminal cannot show pixels; \"off\" leaves every fence the syntax-highlighted code block it is. Rendering is asynchronous and cached per fence, so typing around a diagram never re-runs the renderer; a renderer that is not installed leaves the code block with a one-line install hint, and \"Re-render Preview Diagrams\" retries once it is", Scope: config.UserScope, Options: []string{"ascii", "image", "off"}},
 		}},
+		{Title: "Notebook Viewer", Description: "The read-only Jupyter notebook pane: how wide an image output — a plot, a rendered figure — may grow next to the cell it belongs to.", Entries: []Entry{
+			{Key: "notebook.image_max_cols", Type: Int, Title: "Image width cap", Description: "Terminal columns an image output may occupy at most. The picture is fitted into the smaller of the pane width and this cap, keeps its aspect ratio and stays bounded by the pane height, so a wide plot no longer stretches across a 200-column pane and pushes the next cells off screen. It stays left-aligned under its metadata label. 0 lifts the cap and uses the full pane width", Scope: config.UserScope, Min: 0, Max: config.NotebookImageMaxColsMax, ValidateInt: notebookImageMaxColsValidate},
+		}},
 		{Title: "Run", Description: "Where the Run tool — the dedicated pane every run's output goes to — opens.", Entries: []Entry{
 			{Key: "run.placement", Type: Enum, Title: "Run placement", Description: "Home position of the Run tool pane: docked at the bottom, left, right or top workspace edge, or in_pane for a terminal tab in the focused editor pane. A [tools.layout] slot assigned to \"run\" overrides it; the legacy value new_terminal reads as bottom", Scope: config.UserScope, Options: []string{"bottom", "left", "right", "top", "in_pane"}},
 			{Key: "run.vscode_launch", Type: Bool, Title: "Import launch.json", Description: "Merge compatible .vscode/launch.json launch configurations into the run-configuration picker (run.select); the .ike/runconfigs.json store wins name collisions and nothing is written back", Scope: config.UserScope},
@@ -569,6 +572,17 @@ func networkNameValidate(v string) string { return config.NetworkNameError(v) }
 func forgePollValidate(v int) string {
 	if v > 0 && v < config.ForgePollMinSeconds {
 		return "0 disables polling; the lowest interval is " + strconv.Itoa(config.ForgePollMinSeconds) + "s"
+	}
+	return ""
+}
+
+// notebookImageMaxColsValidate is the form check for
+// notebook.image_max_cols (#2683): a width is a column count, and a negative
+// one is refused instead of being read as the cap-lifting 0 — that would turn
+// the cap off behind the user's back.
+func notebookImageMaxColsValidate(v int) string {
+	if v < 0 {
+		return "0 lifts the cap; a width is 0\u2013" + strconv.Itoa(config.NotebookImageMaxColsMax) + " columns"
 	}
 	return ""
 }

@@ -115,6 +115,11 @@ type Model struct {
 	images map[imgKey]*cellImage
 	gfx    bool
 
+	// imgMaxCols caps the columns an image output may occupy
+	// (notebook.image_max_cols, #2683), pushed by the app like the palette
+	// and the graphics flag. 0 is "no cap": the picture uses the pane width.
+	imgMaxCols int
+
 	// hl is the capture→style table, rebuilt when the palette changes.
 	hl     highlight.Theme
 	hlName string
@@ -214,6 +219,33 @@ func (m *Model) SetSize(w, h int) {
 	}
 	m.w, m.h = w, h
 	m.render()
+}
+
+// SetImageMaxCols pushes the notebook.image_max_cols cap (#2683) and
+// re-renders, so changing the setting resizes the placements of every open
+// notebook. Values below zero read as no cap, like 0.
+func (m *Model) SetImageMaxCols(n int) {
+	if n < 0 {
+		n = 0
+	}
+	if n == m.imgMaxCols {
+		return
+	}
+	m.imgMaxCols = n
+	m.render()
+}
+
+// ImageMaxCols reports the column cap image outputs are placed under
+// (notebook.image_max_cols, #2683); 0 is no cap.
+func (m *Model) ImageMaxCols() int { return m.imgMaxCols }
+
+// imageWidth is the column budget an image output is fitted into: the pane's
+// own width, capped by notebook.image_max_cols when that is set (#2683).
+func (m *Model) imageWidth(width int) int {
+	if m.imgMaxCols > 0 && m.imgMaxCols < width {
+		return m.imgMaxCols
+	}
+	return width
 }
 
 // SetFocused records focus for the chrome.

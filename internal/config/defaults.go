@@ -321,6 +321,12 @@ func defaults() *Config {
 			// when the external renderer is not installed.
 			Diagrams: "ascii",
 		},
+		Notebook: Notebook{
+			// An image output is capped at 80 columns (#2683): a plot that
+			// stretches over a wide pane pushes the next cells off screen,
+			// and 80 is the width a figure is authored for. 0 lifts the cap.
+			ImageMaxCols: DefaultNotebookImageMaxCols,
+		},
 		Run: Run{
 			Placement:    "bottom", // the Run tool docks at the bottom edge (#1905)
 			VSCodeLaunch: true,     // .vscode/launch.json entries join the picker (#1914)

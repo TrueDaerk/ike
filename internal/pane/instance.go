@@ -1830,6 +1830,35 @@ func (i *Instance) configure(cfg host.Config) {
 		// open panes too (#2170): the viewer's own w toggle persists through
 		// the config, so the write has to land back in every diff.
 		applyDiffCfg(cfg, i)
+	case KindNotebook:
+		// notebook.image_max_cols resizes the image placements of every open
+		// notebook (#2683), so a settings change re-renders the panes.
+		applyNotebookCfg(cfg, i)
+	}
+}
+
+// defaultNotebookImageMaxCols mirrors config's default for
+// notebook.image_max_cols (#2683); it applies when no config layer is bound
+// at all, so a pane built without one is capped like every other.
+const defaultNotebookImageMaxCols = 80
+
+// applyNotebookCfg threads notebook.image_max_cols into one notebook
+// instance; a malformed value leaves the pane's current cap alone.
+func applyNotebookCfg(cfg host.Config, inst *Instance) {
+	if inst == nil || inst.kind != KindNotebook {
+		return
+	}
+	if cfg == nil {
+		inst.nv.SetImageMaxCols(defaultNotebookImageMaxCols)
+		return
+	}
+	v, ok := cfg.Get("notebook.image_max_cols")
+	if !ok {
+		inst.nv.SetImageMaxCols(defaultNotebookImageMaxCols)
+		return
+	}
+	if n, err := strconv.Atoi(v); err == nil {
+		inst.nv.SetImageMaxCols(n)
 	}
 }
 

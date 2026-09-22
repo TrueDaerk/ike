@@ -265,6 +265,14 @@ any entry whose key the typed schema does not expose (no dead keys).
   stops arming deadlines while the terminal window has no focus, and `false`
   restores the always-polling behaviour. See
   [Forge Layer](./forge.md).
+- **Notebook Viewer** (#2683) — `notebook.image_max_cols`, the column cap an
+  image output in a notebook pane is fitted into (default 80, `0` lifts it).
+  Like the forge interval it carries the `Entry.ValidateInt` hook, and for
+  the same reason: `0` is meaningful here, so a typed **negative** width is
+  rejected in the form instead of being clamped into the cap-lifting `0`.
+  The hook therefore sees the typed number before the range clamp as well as
+  after it. A write re-renders every open notebook pane
+  (`pane.applyNotebookCfg`, see [notebook viewer](./notebook-viewer.md)).
 - **Diff Viewer** (#2170, #2507) — `diff.placement`, where a diff-open lands:
   `focused` (default) opens it as a tab of the pane the user works in, `split`
   carves off a new pane the pre-#2507 way. Plus `diff.context`, the unchanged

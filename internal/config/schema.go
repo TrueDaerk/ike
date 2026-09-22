@@ -103,6 +103,8 @@ type Config struct {
 	// Preview holds the markdown preview's settings (#2421): how fenced
 	// diagram blocks (mermaid today) are rendered inside the pane.
 	Preview Preview `toml:"preview"`
+	// Notebook holds the Jupyter notebook viewer's settings (#2683).
+	Notebook Notebook `toml:"notebook"`
 	// Network holds the network deep-link endpoint (#2519): the TCP port
 	// other devices pair with to trigger ike://-style actions.
 	Network Network `toml:"network"`
@@ -116,6 +118,15 @@ type Config struct {
 // pixels — and "off" leaves every fence the code block it is without them.
 type Preview struct {
 	Diagrams string `toml:"diagrams"`
+}
+
+// Notebook holds the notebook viewer pane's settings (#2683). ImageMaxCols
+// caps how many terminal columns an image output may occupy: the placement
+// fits the picture into min(pane width, ImageMaxCols) columns, still bounded
+// by the pane height and still aspect-preserving. 0 lifts the cap, so a plot
+// stretches to the full pane width as it did before the setting existed.
+type Notebook struct {
+	ImageMaxCols int `toml:"image_max_cols"`
 }
 
 // Ansible holds the Ansible Vault integration settings (#2293).
