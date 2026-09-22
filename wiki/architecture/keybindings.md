@@ -1426,6 +1426,7 @@ JetBrains is:
 | `nav.pinGoto4` | `ctrl+shift+4` | fragile | `palette (or the cmd+2 picker)` | live via palette (or the cmd+2 picker) |
 | `nav.pins` | `cmd+2` | fragile | `palette` | live via palette |
 | `nav.recentLocations` | `alt+shift+e` | fragile | `palette / Navigate menu` | live via palette / Navigate menu |
+| `notebook.run` | `r` | delivered | `—` | live |
 | `notifications.history` | `cmd+alt+n` | fragile | `palette` | live via palette |
 | `palette.bindLastPick` | `cmd+alt+k` | fragile | `palette / the bind-a-key toast after repeated palette picks` | live via palette / the bind-a-key toast after repeated palette picks |
 | `palette.keymapHelp` | `f1` | delivered | `—` | live |
