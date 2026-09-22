@@ -4,7 +4,7 @@ title: Completion Engine
 description: Multi-source autocomplete (Roadmap 0410) — the LSP server plus local index sources answer each trigger as independent tagged batches; the editor merges them into one popup with priority-based de-dup and stable selection. Identifier-rune triggers wait lsp.completion_delay_ms and one dispatch's local batches travel as a single message (#2541). The popup and the local sources filter with the JetBrains-style hump matcher under completion.case_sensitivity (#2650). The word and symbol indexes hold code tokens of one language at a time, scanned lazily per language, and every source resolves the effective language at the cursor — an embedded fence's inside one (#2652).
 resource: internal/complete
 tags: [architecture, completion, autocomplete, lsp, sources, postfix]
-timestamp: 2026-09-21T12:00:00Z
+timestamp: 2026-09-22T12:00:00Z
 ---
 
 # Completion Engine
@@ -359,7 +359,12 @@ offers `mycelium` and `MY_CONSTANT` but no longer `empty` or `summary`,
 `dacco` → `DataAccessObject`. The matcher is the same dynamic program as the
 pickers' permissive `fuzzy.Match`, with a transition to position *j* only
 legal when *j* continues the previous match or `isBoundary(j)`; `Match`
-itself is unchanged for the palette, finder and settings search. The case
+itself is unchanged for command mode, dir mode and the settings search. The
+**file finder** (`@`) filters with the same hump matcher and setting since
+#2686 and ranks by its own tiers — see
+[command-palette.md](command-palette.md) § "File mode (`@`)"; a path
+separator is one of `isBoundary`'s separators, which is what lets `gab`
+reach `google/abstract.py`. The case
 rule is **`completion.case_sensitivity`** (Settings → Language Support):
 `first_letter` (default, IntelliJ's rule) lets a lowercase typed rune match
 either case while an uppercase rune only matches an uppercase one (`DataA`

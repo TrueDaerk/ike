@@ -10,19 +10,20 @@ import (
 // TestFileModeUsageBreaksScoreTies guards #1419: among equal fuzzy scores the
 // more-often-chosen file ranks first; a better match still wins over usage.
 func TestFileModeUsageBreaksScoreTies(t *testing.T) {
-	f := fileMode("ax.go", "bax.go")
+	f := fileMode("ax.go", "b-ax.go")
 	cx := Context{Root: "/proj"}
 	u := &Usage{}
-	u.Bump(filepath.Join("/proj", "bax.go"))
+	u.Bump(filepath.Join("/proj", "b-ax.go"))
 	f.SetUsage(u)
 
 	// Empty query: every file scores 0, usage decides.
 	got := f.Results("", cx)
-	if len(got) != 2 || got[0].Title != "bax.go" {
-		t.Fatalf("usage tie-break: got %v, want bax.go first", got)
+	if len(got) != 2 || got[0].Title != "b-ax.go" {
+		t.Fatalf("usage tie-break: got %v, want b-ax.go first", got)
 	}
 
-	// "ax" matches ax.go strictly better (start anchor): score beats usage.
+	// "ax" is the whole name of ax.go (#2686's exact tier) and only a hump
+	// match inside b-ax.go: match quality beats usage.
 	got = f.Results("ax", cx)
 	if len(got) != 2 || got[0].Title != "ax.go" {
 		t.Fatalf("score must beat usage: got %v, want ax.go first", got)

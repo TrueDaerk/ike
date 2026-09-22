@@ -130,3 +130,26 @@ func BenchmarkMatchHumps(b *testing.B) {
 		MatchHumps("dacco", "DataAccessObjectFactoryProvider")
 	}
 }
+
+// TestIsBoundaryPathSeparator guards the boundary rule the file finder relies
+// on (#2686): a path separator is a separator like any other non-alphanumeric
+// rune, so the rune after "/" starts a word segment — and the one before it
+// does not. The completion popup never sees "/" in its filter text, so this
+// costs it nothing.
+func TestIsBoundaryPathSeparator(t *testing.T) {
+	tr := []rune("google/abstract.py")
+	for i, want := range map[int]bool{0: true, 3: false, 6: false, 7: true, 8: false, 15: false, 16: true} {
+		if got := isBoundary(tr, i); got != want {
+			t.Errorf("isBoundary(%q, %d) = %v, want %v", string(tr), i, got, want)
+		}
+	}
+	if _, ok := MatchHumps("gab", "google/abstract.py"); !ok {
+		t.Error(`MatchHumps("gab", "google/abstract.py") must match across the separator`)
+	}
+	if _, ok := MatchHumps("appapp", "internal/app/app.go"); !ok {
+		t.Error(`MatchHumps("appapp", "internal/app/app.go") must match segment starts`)
+	}
+	if _, ok := MatchHumps("gab", "log/database.py"); ok {
+		t.Error(`MatchHumps("gab", "log/database.py") must not match mid-word letters`)
+	}
+}
