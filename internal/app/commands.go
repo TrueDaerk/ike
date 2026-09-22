@@ -802,6 +802,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("archive.extractEntry", "Extract Selected Archive Entry…", ArchiveExtractEntryMsg{}),
 			appCommand("archive.extractAll", "Extract Whole Archive…", ArchiveExtractAllMsg{}),
 			appCommand("archive.reload", "Reload Archive Listing", ArchiveReloadMsg{}),
+			appCommand("notebook.run", "Run Notebook (nbconvert --execute)", NotebookRunMsg{}),
 			appCommand("http.toggleRawBody", "Toggle Raw / Pretty HTTP Response Body", HTTPToggleRawBodyMsg{}),
 			langCommand(appCommand("http.jqPlayground", "Open jq Playground on HTTP Response", HTTPJQPlaygroundMsg{}), jqLangs),
 			appCommand("http.loadMoreBody", "Load More of the HTTP Response Body", HTTPLoadMoreBodyMsg{}),

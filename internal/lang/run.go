@@ -28,6 +28,11 @@ type RunSpec struct {
 	Tests    bool
 	TestName string
 	TestKind string
+	// Notebook marks a Jupyter notebook launch (#2682): File is an .ipynb
+	// and the provider executes the whole document in place
+	// (nbconvert --execute --inplace) rather than running it as a script.
+	// Module is empty then.
+	Notebook bool
 }
 
 // RunCommandProvider is an optional Toolchain extension: it turns a RunSpec

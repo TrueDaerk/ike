@@ -288,6 +288,28 @@ func TestCopyAndScratchCarryTheCellSource(t *testing.T) {
 	}
 }
 
+// TestRunKeyEmitsRunMsg: r asks the app to execute the notebook (#2682) —
+// the pane names its path and nothing else, the launch is the app's.
+func TestRunKeyEmitsRunMsg(t *testing.T) {
+	path := writeFixture(t)
+	m := newModel(t, path)
+	cmd := press(&m, "r")
+	if cmd == nil {
+		t.Fatal("r produced no command")
+	}
+	rm, ok := cmd().(RunMsg)
+	if !ok {
+		t.Fatalf("r produced %T", cmd())
+	}
+	if rm.Path != path {
+		t.Fatalf("run path = %q, want %q", rm.Path, path)
+	}
+	m.SetSize(160, 20) // wide enough that the hint line is not clipped
+	if !strings.Contains(m.footer(), "r run") {
+		t.Fatalf("footer hints must advertise the run key: %q", m.footer())
+	}
+}
+
 // TestSaveImageOutput (#2425): o on a cell with an image output asks the app
 // to write it next to the notebook, with the decoded bytes.
 func TestSaveImageOutput(t *testing.T) {

@@ -1,18 +1,20 @@
 ---
 type: concept
 title: Notebook Viewer
-description: "#2425 — .ipynb files open read-only as their cells: markdown through the preview renderer, code highlighted under the notebook language, outputs (stream, text/plain, degraded text/html, PNG/JPEG via Kitty graphics under the notebook.image_max_cols width cap, errors) below each cell, with cell navigation, output folding, source search, copy, open-in-scratch and image saving."
+description: "#2425 — .ipynb files open read-only as their cells: markdown through the preview renderer, code highlighted under the notebook language, outputs (stream, text/plain, degraded text/html, PNG/JPEG via Kitty graphics under the notebook.image_max_cols width cap, errors) below each cell, with cell navigation, output folding, source search, copy, open-in-scratch and image saving; r (or run.file) executes the whole notebook in place through nbconvert in the Run tool and the watcher shows the fresh outputs (#2682)."
 resource: internal/nbview
 tags: [architecture, notebook, jupyter, ipynb, pane, viewer]
-timestamp: 2026-09-03T00:00:00Z
+timestamp: 2026-09-22T00:00:00Z
 ---
 
 # Notebook Viewer (#2425)
 
 `internal/nbview` renders a Jupyter notebook read-only as the cells its author
 wrote, in a pane of kind `KindNotebook` — instead of the JSON document the
-file actually is. Execution and editing are out of scope; the model is shaped
-so a later edit mode grows on it rather than replacing it.
+file actually is. Editing is out of scope; the model is shaped so a later
+edit mode grows on it rather than replacing it. Execution is whole-document
+only — `r` hands the notebook to nbconvert (#2682, [Running](#running));
+the pane speaks no kernel protocol and runs no single cell.
 
 The package splits along that line:
 
@@ -124,12 +126,57 @@ highlight.
 | `e` | open the cursor cell's source as a scratch in the notebook's language (`nbview.ScratchMsg`) |
 | `y`, cmd+c | copy the cursor cell's source (`nbview.CopyMsg`) |
 | `o` | save the cell's first image output next to the notebook (`nbview.SaveImageMsg`) |
+| `r` | execute the whole notebook in place through nbconvert (`nbview.RunMsg` / `notebook.run`, #2682) |
 
-All three are messages, not actions the pane takes: the clipboard, the
-scratch store and the file system belong to the root model
-(`internal/app/nbfiles.go`). A saved image never overwrites — a taken name
+All four are messages, not actions the pane takes: the clipboard, the
+scratch store, the file system and the run system belong to the root model
+(`internal/app/nbfiles.go`, `internal/app/run.go`). A saved image never overwrites — a taken name
 gets a `-2`, `-3`, … suffix, so saving the outputs of a re-run notebook keeps
 every version.
+
+## Running (#2682)
+
+The viewer shows the outputs *stored* in the file. To refresh them from
+inside ike, the notebook is executed as a whole with nbconvert — ike does not
+speak the Jupyter kernel protocol, so cell-level execution is not offered:
+
+```
+<interpreter> -m jupyter nbconvert --to notebook --execute --inplace <file>
+```
+
+Three doorways reach the same launch: `r` in the pane (the pane emits
+`nbview.RunMsg{Path}`; the keymap's `notebook` context also binds `r` to the
+`notebook.run` command, so a remapped key still works), the global `run.file`
+chord (shift+f10) with the notebook pane focused (`runTargetPath` accepts a
+focused `KindNotebook` instance where it otherwise reads the focused
+editor's file), and `run.rerun` after either.
+
+The launch is an ordinary [run configuration](./run-configurations.md):
+`run.Default` recognizes `.ipynb` and synthesizes a configuration with
+`Notebook: true`, `Lang: python` and `Cwd` = the notebook's directory, so
+relative data paths in the cells resolve as they do under a kernel started
+there. The first run persists it (the toast says so) and it appears in the
+run picker like any file's default; the argv is synthesized at every launch
+through the Python provider (`RunSpec.Notebook`), so the interpreter is the
+`lang.Interpreter` resolution — a project venv beats the system Python,
+exactly as for a script. Output (nbconvert's progress, cell tracebacks) lands
+in the Run tool with the exit status; a notebook configuration never goes
+under the debugger (`startDebugConfig` refuses it — there is no program for
+debugpy to attach to).
+
+When nbconvert rewrites the file, the watcher path reloads the pane: an
+in-place write arrives as `FileChanged` (`refreshNotebooks`), and a writer
+that renames a temp file over the notebook arrives as `FileRemoved` —
+`notebookReplaced` re-reads the document if it is still there under its name
+and re-arms the poll tracker for the new inode. Either way the fresh outputs
+appear without a manual reload.
+
+If the interpreter has no jupyter, nbconvert's own error is the Run tool's
+output; as a courtesy the app watches a notebook run's first output
+(`notebookRun`, chained onto the problem-matcher tap) and, when the process
+exits non-zero within its first second with Python's `No module named
+jupyter`, adds a notice pointing at `pip install jupyter nbconvert`. This is
+best effort: the Run tool is the source of truth.
 
 ## Routing and lifecycle
 

@@ -492,6 +492,10 @@ type Model struct {
 	// runForm is the open run-configuration form (#2173) — the environment
 	// editor of one stored configuration; nil when it is closed.
 	runForm *runFormState
+	// nbRun watches the Run tool's current notebook run (#2682) for the
+	// "jupyter is not installed" failure shape; nil when the last run was
+	// not a notebook.
+	nbRun *notebookRun
 	// bpForm is the open breakpoint-properties form (#2245) — condition, hit
 	// count and log message of one breakpoint; nil when it is closed.
 	bpForm *bpFormState
@@ -6851,6 +6855,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// refuses (last leaf), the pane stays showing [process exited]. A
 		// command session (#576) stays open instead — its output is the point
 		// of the run; terminal tabs (#573) stay open the same way.
+		//
+		// A notebook run that died at once for want of jupyter (#2682) gets
+		// its install hint here, before the routing below decides the pane.
+		m.noteNotebookRunExit(msg.Key)
 		if inst, idx, t := m.popupTabForSession(msg.Key); t != nil {
 			// A popup terminal shell ended (#1398): its tab closes; the last
 			// tab drops the whole popup, and the next toggle spawns fresh.
@@ -7579,6 +7587,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// o on a notebook cell with an image output (#2425).
 		m.saveNotebookImage(msg)
 		return m, nil
+
+	case nbview.RunMsg:
+		// r in the notebook viewer (#2682): execute the whole notebook in
+		// place through nbconvert, in the Run tool like any other run.
+		return m, m.runNotebook(msg.Path)
+
+	case NotebookRunMsg:
+		// notebook.run (r in the viewer via the keymap, palette — #2682).
+		return m, m.runFocusedNotebook()
 
 	case OpenDataMsg:
 		// data.view (#1764): a database file opens as a table browser,

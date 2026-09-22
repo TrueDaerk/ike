@@ -19,12 +19,21 @@ var (
 
 // RunCommand implements lang.RunCommandProvider: `python -m package.module`
 // when the spec carries a module spelling, else `python file.py`, with the
-// program's own args appended.
+// program's own args appended. A notebook spec (#2682) executes the whole
+// document in place through nbconvert — `python -m jupyter nbconvert --to
+// notebook --execute --inplace file.ipynb` — under the same resolved
+// interpreter, so a project venv's jupyter wins over the system one exactly
+// like it does for a script; the program args ride after the file for
+// nbconvert's own flags (--ExecutePreprocessor.timeout=…).
 func (toolchain) RunCommand(_ string, spec lang.RunSpec, interpreter string) ([]string, bool) {
 	if interpreter == "" {
 		interpreter = "python3"
 	}
 	argv := []string{interpreter}
+	if spec.Notebook {
+		argv = append(argv, "-m", "jupyter", "nbconvert", "--to", "notebook", "--execute", "--inplace", spec.File)
+		return append(argv, spec.Args...), true
+	}
 	if spec.Module != "" {
 		argv = append(argv, "-m", spec.Module)
 	} else {

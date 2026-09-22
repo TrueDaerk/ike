@@ -78,6 +78,9 @@ func (m *Model) routeWatchEvent(msg watch.EventMsg) tea.Cmd {
 		DepRoot: depRoot,
 	})
 	if msg.Kind == watch.FileRemoved {
+		// An open notebook replaced by rename (#2682) is a reload, not a
+		// removal: nbconvert's rewrite may land as a fresh inode.
+		m.notebookReplaced(msg.Path)
 		if ed := m.editorForPath(msg.Path); ed != nil && ed.Following() {
 			// A followed file disappeared (#1928): rotation in progress,
 			// not a close — keep the pane, re-stamp the poll tracker so

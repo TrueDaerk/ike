@@ -183,6 +183,7 @@ bring their own.
 | Pinned Files | `nav.pins` | `cmd+2` | — | everywhere |
 | Recent Locations | `nav.recentLocations` | `alt+shift+e` | — | everywhere |
 | Forget Paired Network Clients | `network.forgetClients` | — | — | everywhere |
+| Run Notebook (nbconvert --execute) | `notebook.run` | `r` | — | everywhere |
 | Notification History | `notifications.history` | `cmd+alt+n` | — | everywhere |
 | Bind a Key for the Last Palette Command | `palette.bindLastPick` | `cmd+alt+k` | — | everywhere |
 | Keymap Cheatsheet | `palette.keymapHelp` | `f1` | — | everywhere |

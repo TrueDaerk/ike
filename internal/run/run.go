@@ -54,6 +54,11 @@ type Config struct {
 	// target, npm script) runs exactly this, bypassing the language
 	// synthesis. Lang/File/Module are empty then.
 	Argv []string `json:"argv,omitempty"`
+	// Notebook marks a Jupyter notebook configuration (#2682): File is an
+	// .ipynb and the argv is nbconvert's execute-in-place through the Python
+	// provider (RunSpec.Notebook), so the resolved project interpreter is
+	// shared with script runs. Cwd holds the notebook's directory.
+	Notebook bool `json:"notebook,omitempty"`
 	// Matchers names the problem matchers (internal/matcher) applied to the
 	// run's output (#1915): matched lines become entries in the Problems
 	// tool window under this configuration's name.
@@ -183,6 +188,9 @@ func (s *Store) Names() []string {
 // form when the file lies in a package (Python `-m`), a unique name from the
 // file's base name. ok=false when no registered language claims the file.
 func Default(root, file string) (Config, bool) {
+	if IsNotebook(file) {
+		return notebookDefault(root, file), true
+	}
 	l, found := lang.ByPath(file)
 	if !found {
 		return Config{}, false
@@ -196,6 +204,37 @@ func Default(root, file string) (Config, bool) {
 		Module: lang.ModuleFor(l.ID, root, file),
 	}
 	return cfg, true
+}
+
+// notebookLang is the language whose provider executes notebooks (#2682):
+// nbconvert is a Python module, so the run resolves the Python interpreter
+// (venv > pyenv > explicit [lang.python] interpreter) like a script run.
+const notebookLang = "python"
+
+// IsNotebook reports whether file is a Jupyter notebook by extension
+// (#2682) — the notebook viewer claims .ipynb the same way, no magic exists.
+func IsNotebook(file string) bool {
+	return strings.EqualFold(filepath.Ext(file), ".ipynb")
+}
+
+// notebookDefault is the default configuration for a notebook (#2682): the
+// whole document executed in place by nbconvert under the Python
+// interpreter, from the notebook's own directory so relative data paths in
+// the cells resolve as they do under a kernel started there.
+func notebookDefault(root, file string) Config {
+	rel := relTo(root, file)
+	cwd := filepath.Dir(rel)
+	if cwd == "." {
+		cwd = ""
+	}
+	return Config{
+		Name:     filepath.Base(file),
+		Kind:     KindRun,
+		Lang:     notebookLang,
+		File:     rel,
+		Cwd:      cwd,
+		Notebook: true,
+	}
 }
 
 // TestConfig synthesizes the test-scope configuration for the absolute file
@@ -288,9 +327,10 @@ func Argv(root string, cfg Config, explicit string) ([]string, bool) {
 		return lang.TestArgv(root, file, lang.TestMatch{Name: cfg.TestName, Kind: cfg.TestKind}, explicit)
 	}
 	spec := lang.RunSpec{
-		File:   absTo(root, cfg.File),
-		Module: cfg.Module,
-		Args:   cfg.Args,
+		File:     absTo(root, cfg.File),
+		Module:   cfg.Module,
+		Args:     cfg.Args,
+		Notebook: cfg.Notebook,
 	}
 	return lang.RunArgv(cfg.Lang, root, spec, explicit)
 }
