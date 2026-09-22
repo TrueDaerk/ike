@@ -1,5 +1,33 @@
 # Log
 
+## 2026-09-22 (Run a notebook from the viewer, #2682)
+
+- **Fresh outputs needed a detour.** The notebook viewer (#2425) shows the
+  outputs stored in the file; to see new plots the user had to run the
+  notebook outside ike and wait for the watcher. `run.file` did nothing on
+  a notebook pane: `.ipynb` is claimed by the notebook plugin, not a
+  language, so no run configuration resolved.
+- **The whole notebook now runs through nbconvert**
+  (`<interpreter> -m jupyter nbconvert --to notebook --execute --inplace
+  <file>`, cwd = the notebook's directory). `run.Default` recognizes
+  `.ipynb` and synthesizes a `Notebook: true` configuration under the
+  Python provider (`RunSpec.Notebook`), so the interpreter is the shared
+  `lang.Interpreter` resolution — a project venv wins. The config persists
+  on first run and shows in the picker; `run.rerun` repeats it; a notebook
+  config never goes under the debugger.
+- **Three doorways:** `r` in the pane (`nbview.RunMsg`, plus the
+  `notebook.run` command bound to `r` in the `notebook` keymap context and
+  advertised in the footer), `run.file` (shift+f10) with the pane focused
+  (`runTargetPath` accepts a focused notebook instance), and `run.rerun`.
+- **The watcher shows the result:** an in-place rewrite reloads through
+  `FileChanged` as before; a rename-over-the-file replace arrives as
+  `FileRemoved`, which `notebookReplaced` now treats as a reload when the
+  document is still there, re-arming the poll tracker for the new inode.
+- **Missing jupyter gets a hint:** a notebook run that exits non-zero within
+  its first second with `No module named jupyter` adds a `pip install
+  jupyter nbconvert` notice; the Run tool's output stays the source of
+  truth.
+
 ## 2026-09-22 (Notebook image width cap, #2683)
 
 - **A plot filled the whole pane.** A notebook image output was fitted into

@@ -26,6 +26,11 @@ import (
 // buffer by accident — "Open file as… → Text editor" still does, on purpose.
 type OpenNotebookMsg struct{ Path string }
 
+// NotebookRunMsg runs notebook.run (r in the notebook viewer, palette —
+// #2682): the focused viewer's document is executed in place through
+// nbconvert in the Run tool, exactly what run.file does on the pane.
+type NotebookRunMsg struct{}
+
 // notebookProvider is the compile-in plugin claiming .ipynb files.
 type notebookProvider struct{}
 
@@ -98,6 +103,33 @@ func (m *Model) refreshNotebooks(path string) {
 		}
 		return true
 	})
+}
+
+// notebookReplaced handles the watcher reporting an open notebook removed
+// (#2682): a writer that replaces the file atomically (write a temp file,
+// rename it over the notebook — nbformat's own atomic-write path, and what
+// an editor does) shows up as a removal of the old inode, not as a change.
+// The document is still there under the same name, so the pane re-reads it
+// and the poll set is re-armed for the new inode (Poll dropped the entry when
+// it reported the removal). A notebook that is really gone keeps its last
+// rows: the viewer holds nothing unsaved and has nothing better to show.
+func (m *Model) notebookReplaced(path string) {
+	open := false
+	m.contentInstances(func(_ string, _ int, inst *pane.Instance) bool {
+		if inst.Kind() == pane.KindNotebook && inst.Notebook().Path() == path {
+			open = true
+			return false
+		}
+		return true
+	})
+	if !open {
+		return
+	}
+	if _, err := os.Stat(path); err != nil {
+		return
+	}
+	m.trackNotebook(path)
+	m.refreshNotebooks(path)
 }
 
 // notebookScratch opens a cell's source as a scratch file in its own

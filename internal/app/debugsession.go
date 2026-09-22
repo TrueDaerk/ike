@@ -269,6 +269,12 @@ func (m *Model) startDebug() {
 // language's debug adapter — the funnel for debug.start, debug.testAtCursor
 // and debug-kind picks from the run-configuration picker (#1914).
 func (m *Model) startDebugConfig(root string, cfg run.Config) {
+	if cfg.Notebook {
+		// A notebook runs through nbconvert (#2682); there is no program
+		// for debugpy to attach to — run it instead.
+		m.host.Notify(host.Info, "debug: notebooks run through nbconvert — use run.file")
+		return
+	}
 	if !lang.SupportsDebug(cfg.Lang) {
 		m.host.Notify(host.Info, "debug: "+cfg.Lang+" has no debug adapter yet")
 		return

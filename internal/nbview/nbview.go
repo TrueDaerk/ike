@@ -55,6 +55,14 @@ type SaveImageMsg struct {
 	Data []byte
 }
 
+// RunMsg asks the root model to execute the whole notebook (#2682): the pane
+// only knows its path, the app owns the run system — the interpreter
+// resolution, the Run tool pane and the persisted configuration. Path is
+// the notebook the pane shows.
+type RunMsg struct {
+	Path string
+}
+
 // rowKind says what one rendered row is, which decides its styling and
 // whether folding hides it.
 type rowKind int
@@ -322,6 +330,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return m.copyCmd()
 	case "o":
 		return m.saveImageCmd()
+	case "r":
+		return m.runCmd()
 	}
 	return nil
 }
@@ -439,6 +449,13 @@ func (m *Model) scratchCmd() tea.Cmd {
 		return nil
 	}
 	msg := ScratchMsg{Ext: m.cellExt(c), Content: c.Source + "\n"}
+	return func() tea.Msg { return msg }
+}
+
+// runCmd asks the app to execute the notebook (#2682) — the whole document,
+// nbconvert style; the pane has no kernel to run a single cell on.
+func (m *Model) runCmd() tea.Cmd {
+	msg := RunMsg{Path: m.path}
 	return func() tea.Msg { return msg }
 }
 
@@ -752,7 +769,7 @@ func (m *Model) footer() string {
 	if len(m.hits) > 0 {
 		status += fmt.Sprintf(" · match %d/%d", m.search.Cur+1, len(m.hits))
 	}
-	hints := "j/k cell · enter fold outputs · / search · e scratch · y copy · o save image · g/G ends"
+	hints := "j/k cell · enter fold outputs · / search · r run · e scratch · y copy · o save image · g/G ends"
 	return lipgloss.NewStyle().Faint(true).Render(clipTo(status+" · "+hints, m.w))
 }
 

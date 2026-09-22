@@ -4,7 +4,7 @@ title: Run Configurations
 description: Work stream 0350 — named, persisted run/debug configurations synthesized into command lines through the language registry; per-project store in .ike/runconfigs.json; output in the dedicated Run tool pane (#1905), placed in the layout's tool region rather than the outermost bottom and remembering a user-moved position per project (#2191); run.select picker merging .vscode/launch.json imports (#1914); literal-argv task configurations, the Run Task picker and problem matchers (#1915); the run.editConfig environment form and the kind-faithful rerun-last chord (#2173).
 resource: internal/run
 tags: [architecture, run, debug, toolchain, languages, vscode, tasks]
-timestamp: 2026-08-27T18:00:00Z
+timestamp: 2026-09-22T00:00:00Z
 ---
 
 # Run Configurations (0350)
@@ -28,6 +28,7 @@ type Config struct {
     Env    map[string]string // extra environment
     Cwd    string            // project-relative working dir; "" = root
     Tests  bool              // test-scope config (#1150): argv via the TestSpec seam
+    Notebook bool            // Jupyter notebook (#2682): nbconvert execute-in-place via the Python provider
     TestName, TestKind string // one test function; empty name = whole file scope
     Argv     []string        // literal command line (#1915, task configs): skips synthesis
     Matchers []string        // problem matchers over the run's output (#1915)
@@ -78,6 +79,7 @@ Registered providers:
 | Language | Command | Module form |
 |---|---|---|
 | Python | `<interpreter> file.py` / `<interpreter> -m pkg.mod` | dotted path when every directory from root to the file is a package (`__init__.py` chain); `__main__.py` maps to its package |
+| Notebook (`.ipynb`, #2682) | `<interpreter> -m jupyter nbconvert --to notebook --execute --inplace file.ipynb` — the Python provider on a `RunSpec.Notebook` spec, so the interpreter resolution is the Python one; cwd = the notebook's directory | — (`Config.Notebook`; `run.Default` recognizes the extension itself, the notebook viewer plugin — not a language — claims `.ipynb`) |
 | PHP | `<php> file.php` | — |
 | Go | `<go> run file.go` | — |
 | Shell | `<shell> file.sh` — explicit `[lang.shell] interpreter` > the file's shebang shell (only when that binary is on PATH) > the extension's natural shell (`.bash` → bash, `.zsh` → zsh, `.sh` → sh); never executes via the shebang directly (no chmod) | — |
@@ -89,7 +91,8 @@ Registered providers:
 - **`run.file`** (shift+f10 — JetBrains' Windows-keymap Run; macOS ctrl+r
   would shadow vim redo — Run menu, palette) ensures a configuration for the
   active file (`EnsureFor`; the first run persists the default and says so in
-  the toast) and launches it. **`run.rerun`** (cmd+f5 / ctrl+f5) repeats the
+  the toast) and launches it — the focused editor's file, or the notebook a
+  focused [notebook viewer](./notebook-viewer.md) shows (#2682). **`run.rerun`** (cmd+f5 / ctrl+f5) repeats the
   last-used config **the way it was started** (#2173): every launch funnel
   touches the store with its kind, so a configuration last run under the
   debugger reruns through `startDebugConfig` and everything else rides

@@ -1,12 +1,16 @@
 package app
 
 import (
+	"bytes"
 	"strings"
+	"sync"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/host"
 	"ike/internal/lang"
+	"ike/internal/pane"
 	"ike/internal/run"
 	"ike/internal/terminal"
 )
@@ -37,11 +41,28 @@ const runInPane = "in_pane"
 // runCurrentFile is the run.file handler: it ensures a configuration for the
 // active file (creating and persisting the default on first run) and launches it.
 func (m *Model) runCurrentFile() tea.Cmd {
-	path := m.activeFilePath()
+	path := m.runTargetPath()
 	if path == "" {
 		m.host.Notify(host.Info, "run: focus a file tab first")
 		return nil
 	}
+	return m.runPath(path)
+}
+
+// runTargetPath is the file run.file acts on: the focused editor's file, or
+// the notebook a focused notebook viewer shows (#2682) — the viewer holds no
+// editor buffer, so activeFilePath alone would not see it.
+func (m Model) runTargetPath() string {
+	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindNotebook && inst.Notebook() != nil {
+		return inst.Notebook().Path()
+	}
+	return m.activeFilePath()
+}
+
+// runPath ensures a configuration for path (creating and persisting the
+// default on first run) and launches it — the run.file funnel for a file
+// resolved by the caller.
+func (m *Model) runPath(path string) tea.Cmd {
 	root := projectRoot()
 	store := run.Load()
 	cfg, created, ok := store.EnsureFor(root, path)
@@ -50,6 +71,127 @@ func (m *Model) runCurrentFile() tea.Cmd {
 		return nil
 	}
 	return m.launchRun(root, store, cfg, created)
+}
+
+// runNotebook executes the notebook at path in place (#2682): nbconvert
+// --execute --inplace under the resolved Python interpreter, in the Run tool.
+// The pane's r key and the notebook.run command land here; the watcher's
+// reload shows the fresh outputs once nbconvert has rewritten the file.
+func (m *Model) runNotebook(path string) tea.Cmd {
+	if path == "" || !run.IsNotebook(path) {
+		m.host.Notify(host.Info, "run: focus a notebook first")
+		return nil
+	}
+	return m.runPath(path)
+}
+
+// runFocusedNotebook is the notebook.run handler: the focused notebook
+// viewer's document, or a notice when something else is focused.
+func (m *Model) runFocusedNotebook() tea.Cmd {
+	inst := m.activeWS().Panes.FocusedInstance()
+	if inst == nil || inst.Kind() != pane.KindNotebook || inst.Notebook() == nil {
+		m.host.Notify(host.Info, "run: focus a notebook first")
+		return nil
+	}
+	return m.runNotebook(inst.Notebook().Path())
+}
+
+// notebookRun is the app's watch over one notebook run (#2682): the session
+// it runs in, when it started and the head of its output, so an exit that
+// comes straight back with Python's "No module named jupyter" can be turned
+// into an install hint. Best effort by design — the Run tool's output is the
+// source of truth, this only saves the user a read.
+type notebookRun struct {
+	key     string
+	started time.Time
+	mu      sync.Mutex
+	head    []byte
+}
+
+// nbRunHeadLimit caps the output a notebook run's watch keeps: the missing
+// module error is the first thing Python prints, so a few KiB cover it.
+const nbRunHeadLimit = 8 << 10
+
+// nbRunFastExit is how quickly a notebook run has to die for its exit to be
+// read as "could not even start" rather than an execution failure.
+const nbRunFastExit = time.Second
+
+// nbRunMissingHint is the notice for a notebook run whose interpreter has no
+// jupyter to speak of.
+const nbRunMissingHint = "run: jupyter is not installed for this interpreter — pip install jupyter nbconvert"
+
+// tap appends output to the retained head, dropping the rest.
+func (r *notebookRun) tap(b []byte) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if room := nbRunHeadLimit - len(r.head); room > 0 {
+		if len(b) > room {
+			b = b[:room]
+		}
+		r.head = append(r.head, b...)
+	}
+}
+
+// missingJupyter reports whether the retained output carries Python's
+// import failure for the jupyter module (any of the spellings the launcher
+// prints before nbconvert itself could say anything).
+func (r *notebookRun) missingJupyter() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return bytes.Contains(r.head, []byte("No module named jupyter")) ||
+		bytes.Contains(r.head, []byte("No module named 'jupyter'")) ||
+		bytes.Contains(r.head, []byte("No module named nbconvert")) ||
+		bytes.Contains(r.head, []byte("No module named 'nbconvert'"))
+}
+
+// watchNotebookRun arms the missing-jupyter watch on the fresh Run tool
+// session for a notebook configuration; any other configuration disarms it.
+// The tap is chained onto the problem-matcher tee so neither loses the
+// stream.
+func (m *Model) watchNotebookRun(cfg *run.Config, tap func([]byte)) func([]byte) {
+	if !cfg.Notebook {
+		m.nbRun = nil
+		return tap
+	}
+	term := m.runToolTerminal()
+	if term == nil {
+		m.nbRun = nil
+		return tap
+	}
+	r := &notebookRun{key: term.SessionKey(), started: time.Now()}
+	m.nbRun = r
+	if tap == nil {
+		return r.tap
+	}
+	return func(b []byte) {
+		r.tap(b)
+		tap(b)
+	}
+}
+
+// noteNotebookRunExit turns a notebook run's immediate failure into the
+// install hint (#2682): the watched session exited non-zero within the first
+// second and Python reported the jupyter module missing. Everything else —
+// a traceback from a cell, a timeout, a kernel that died — stays the Run
+// tool's story; the watch is dropped either way.
+func (m *Model) noteNotebookRunExit(key string) {
+	r := m.nbRun
+	if r == nil || r.key != key {
+		return
+	}
+	m.nbRun = nil
+	term := m.runToolTerminal()
+	if term == nil {
+		return
+	}
+	code, ok := term.ExitCode()
+	if !ok || code == 0 {
+		return
+	}
+	if time.Since(r.started) > nbRunFastExit || !r.missingJupyter() {
+		return
+	}
+	m.host.Notify(host.Warn, nbRunMissingHint)
 }
 
 // runTestAtCursor is the run.testAtCursor handler (#1150): it resolves the
@@ -160,6 +302,7 @@ func (m *Model) launchRun(root string, store run.Store, cfg *run.Config, created
 	// The problem-matcher tee (#1915) is built before the launch so the run's
 	// previous findings clear even when no matcher resolves.
 	tap := m.taskOutputTap(root, cfg)
+	m.nbRun = nil // a previous notebook watch never outlives its run
 
 	// The Run tool owns run output (#1905): an open one takes the new command
 	// in place, otherwise it opens at its placement. No other terminal is ever
@@ -170,7 +313,8 @@ func (m *Model) launchRun(root string, store run.Store, cfg *run.Config, created
 	}
 	// The tap installs onto the fresh session right after the spawn — the
 	// child has not produced output yet, so the tee sees the run's whole
-	// stream.
+	// stream. A notebook run (#2682) chains its missing-jupyter watch on.
+	tap = m.watchNotebookRun(cfg, tap)
 	if tap != nil {
 		if term := m.runToolTerminal(); term != nil {
 			term.SetOutputTap(tap)

@@ -3,6 +3,7 @@ package langpython
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"ike/internal/lang"
@@ -49,6 +50,25 @@ func TestModuleDetection(t *testing.T) {
 	}
 	if _, ok := tc.Module(root, "/elsewhere/x.py"); ok {
 		t.Error("files outside the root have no module form")
+	}
+}
+
+// TestRunCommandNotebook (#2682): a notebook spec is nbconvert's
+// execute-in-place under the resolved interpreter, program args after the
+// file; the interpreter fallback is the same as for a script.
+func TestRunCommandNotebook(t *testing.T) {
+	tc := toolchain{}
+	argv, ok := tc.RunCommand("/r", lang.RunSpec{File: "/r/nb.ipynb", Notebook: true, Args: []string{"--ExecutePreprocessor.timeout=60"}}, "/venv/bin/python")
+	if !ok {
+		t.Fatal("notebook spec must resolve")
+	}
+	want := "/venv/bin/python -m jupyter nbconvert --to notebook --execute --inplace /r/nb.ipynb --ExecutePreprocessor.timeout=60"
+	if got := strings.Join(argv, " "); got != want {
+		t.Fatalf("argv = %q, want %q", got, want)
+	}
+	argv, _ = tc.RunCommand("/r", lang.RunSpec{File: "/r/nb.ipynb", Notebook: true}, "")
+	if argv[0] != "python3" {
+		t.Fatalf("fallback interpreter = %q, want python3", argv[0])
 	}
 }
 

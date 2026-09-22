@@ -623,6 +623,10 @@ var jetbrainsRows = []row{
 	// The same muscle memory in the archive viewer (#2314): "rerun" reads as
 	// "read the archive again" there, which is the listing reload.
 	{"ctrl+r", "archive.reload", "Reload archive listing", Archive, "Archive viewer (#1762)"},
+	// The notebook viewer's run key (#2682): r executes the whole notebook in
+	// place through nbconvert, next to the pane's other single-letter actions
+	// (e scratch, y copy, o save image); run.file's shift+f10 does the same.
+	{"r", "notebook.run", "Run notebook (nbconvert)", Notebook, "Notebook viewer (#2682)"},
 	// Rerun and Stop (#1048, #1374): JetBrains' macOS Rerun (cmd+r) is taken by
 	// editor.replace, so rerun keeps the Windows-scheme F5 position with a cmd
 	// primary on darwin; stop's cmd+f2 is the macOS keymap verbatim. The ctrl
