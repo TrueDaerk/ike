@@ -197,6 +197,15 @@ Sections and their default-bearing slots (`schema.go`):
   empty for every interface — anything else, host names included, is reset
   with a diagnostic; `config.NetworkBindError` is the check the settings form
   shares). User scope. See [network-links](./network-links.md).
+- `[notebook]` — the notebook viewer pane (#2683): `image_max_cols`, the
+  terminal columns an image output may occupy at most (default **80**,
+  `0` = no cap, ceiling 1000). The placement fits the picture into the
+  smaller of the pane body width and this cap, aspect ratio and height bound
+  unchanged, so a wide plot no longer pushes the following cells off screen.
+  A negative or absurd value falls back to the default with a diagnostic;
+  the settings form refuses a negative one outright, because clamping it to
+  `0` would silently turn the cap off. User scope. See
+  [notebook viewer](./notebook-viewer.md).
 
 ## Extension hook
 

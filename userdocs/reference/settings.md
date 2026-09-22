@@ -132,6 +132,12 @@ secrets — are documented together, with screenshots, in
 |---|---|---|---|---|---|
 | Diagram rendering | `preview.diagrams` | enum: `ascii`, `image`, `off` | `ascii` | user | How a fenced diagram block renders in the preview. "ascii" pipes it through the mermaid-ascii renderer and shows its text in place of the code block; "image" renders a PNG with mermaid-cli (mmdc) and embeds it over the Kitty graphics path, falling back to ascii where the terminal cannot show pixels; "off" leaves every fence the syntax-highlighted code block it is. Rendering is asynchronous and cached per fence, so typing around a diagram never re-runs the renderer; a renderer that is not installed leaves the code block with a one-line install hint, and "Re-render Preview Diagrams" retries once it is |
 
+### Notebook Viewer
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Image width cap | `notebook.image_max_cols` | integer (0–1000) | `80` | user | Terminal columns an image output may occupy at most. The picture is fitted into the smaller of the pane width and this cap, keeps its aspect ratio and stays bounded by the pane height, so a wide plot no longer stretches across a 200-column pane and pushes the next cells off screen. It stays left-aligned under its metadata label. 0 lifts the cap and uses the full pane width |
+
 ## Interface
 
 ### Appearance

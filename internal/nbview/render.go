@@ -269,7 +269,7 @@ func (m *Model) appendImage(ci, oi int, o Output, width int, placed map[imgKey]b
 		im.Cols, im.Rows = 0, 0
 		return
 	}
-	im.Cols, im.Rows = imgview.FitGrid(im.imgW, im.imgH, max(1, width), max(1, m.bodyRows()-2))
+	im.Cols, im.Rows = imgview.FitGrid(im.imgW, im.imgH, max(1, m.imageWidth(width)), max(1, m.bodyRows()-2))
 	for _, grid := range imgview.PlaceholderGrid(im.ID, im.Cols, im.Rows) {
 		m.rows = append(m.rows, row{text: grid, plain: "", kind: rowImage, cell: ci, src: -1})
 	}

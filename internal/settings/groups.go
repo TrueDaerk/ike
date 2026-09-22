@@ -29,7 +29,7 @@ const otherGroup = "Other"
 var pageGroups = []pageGroup{
 	{"Editing", []string{
 		"Editor", "Typing Assistance", "Conceal & Hints", "Syntax Colors",
-		"Diagnostics", "Diff Viewer", "Markdown Preview",
+		"Diagnostics", "Diff Viewer", "Markdown Preview", "Notebook Viewer",
 	}},
 	{"Interface", []string{
 		"Appearance", "Notifications", "Command Palette", "Keymap Hints",

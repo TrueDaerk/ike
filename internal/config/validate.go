@@ -192,6 +192,15 @@ const (
 	ForgePollMaxSeconds = 3600
 )
 
+// DefaultNotebookImageMaxCols is the column cap notebook image outputs are
+// placed under (#2683), and the value an out-of-range notebook.image_max_cols
+// falls back to. NotebookImageMaxColsMax bounds it: a cap wider than that is
+// wider than any sane pane and reads as "no cap", which 0 already says.
+const (
+	DefaultNotebookImageMaxCols = 80
+	NotebookImageMaxColsMax     = 1000
+)
+
 // DefaultBranchIssuePattern is the branch-name regexp behind the status
 // line's branch-issue segment (#2544): IKE's own change workflow branches
 // work on issue/<number>, and the first capture group is read as that number.
@@ -750,6 +759,12 @@ func validate(c *Config) []Diagnostic {
 	if c.LSP.WarmupNoticeMs < 0 || c.LSP.WarmupNoticeMs > 600000 {
 		diags = append(diags, Diagnostic{Field: "lsp.warmup_notice_ms", Message: fmt.Sprintf("threshold %d out of range (0\u2013600000 ms, 0 = off), using 15000", c.LSP.WarmupNoticeMs)})
 		c.LSP.WarmupNoticeMs = 15000
+	}
+	// Notebook image cap (#2683): 0 is "no cap, use the pane width"; a
+	// negative or absurd column count falls back to the default.
+	if c.Notebook.ImageMaxCols < 0 || c.Notebook.ImageMaxCols > NotebookImageMaxColsMax {
+		diags = append(diags, Diagnostic{Field: "notebook.image_max_cols", Message: fmt.Sprintf("image_max_cols %d out of range (0\u2013%d, 0 = no cap), using %d", c.Notebook.ImageMaxCols, NotebookImageMaxColsMax, DefaultNotebookImageMaxCols)})
+		c.Notebook.ImageMaxCols = DefaultNotebookImageMaxCols
 	}
 	// Performance HUD (#1999): the refresh interval is also the HUD's own
 	// wake rate, so the lower bound keeps a diagnostic overlay from becoming

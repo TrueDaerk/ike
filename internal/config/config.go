@@ -374,6 +374,8 @@ func (c *Config) Flat() map[string]string {
 
 	put("preview.diagrams", c.Preview.Diagrams)
 
+	put("notebook.image_max_cols", c.Notebook.ImageMaxCols)
+
 	put("diff.context", c.Diff.Context)
 	put("diff.ignore_whitespace", c.Diff.IgnoreWhitespace)
 	put("diff.placement", c.Diff.Placement)
