@@ -97,15 +97,19 @@ func TestQuitClosesParkedPopupSessions(t *testing.T) {
 
 func TestWorkspaceTeardownEndsPopupSessions(t *testing.T) {
 	_, b := twoRoots(t)
-	m := openTestPopupWith(t, switchModel(t))
+	m := openTestPopupWith(t, dismissOnboarding(switchModel(t)))
 	out, _ := m.Update(project.SwitchProjectMsg{Root: b})
-	m = out.(Model)
+	m = dismissOnboarding(out.(Model))
 	root := m.ws.Background()[0]
 	parked := m.ws.Peek(root)
 	term := parked.Aux.(wsExtras).popup.inst.ActiveTerminal()
+	// Since #2702 only a popup shell with foreground work is activity.
+	waitIdle(t, term)
+	term.SendLine("sleep 30")
+	waitBusy(t, term)
 
-	// Closing the parked workspace from the list (#820) counts the popup
-	// shell as activity, so the guard asks first; d tears it down.
+	// Closing the parked workspace from the list (#820) counts the popup's
+	// running process as activity, so the guard asks first; d tears it down.
 	out, _ = m.Update(project.CloseWorkspaceMsg{Path: root})
 	m = out.(Model)
 	if !m.wsClosePromptOpen() {
@@ -123,15 +127,30 @@ func TestWorkspaceTeardownEndsPopupSessions(t *testing.T) {
 
 func TestProjectCloseGuardCountsPopup(t *testing.T) {
 	_, b := twoRoots(t)
-	m := switchModel(t)
+	m := dismissOnboarding(switchModel(t))
 	out, _ := m.Update(project.SwitchProjectMsg{Root: b})
-	m = out.(Model)
+	m = dismissOnboarding(out.(Model))
 	m = openTestPopupWith(t, m) // active project's popup, shell running
+	term := m.popup.inst.ActiveTerminal()
+	waitIdle(t, term)
+
+	// An idle popup shell is no activity since #2702 — nothing but its
+	// scrollback would be lost, so the close runs straight through.
+	var idle wsActivity
+	idle.addPopup(m.popup.inst)
+	if idle.busy() {
+		t.Fatalf("an idle popup shell must not gate the close, got %+v", idle)
+	}
+	term.SendLine("sleep 30")
+	waitBusy(t, term)
 
 	out, _ = m.Update(project.CloseProjectMsg{})
 	m = out.(Model)
 	if m.projectClosePending == nil {
-		t.Fatal("project.close with a running popup shell must ask first")
+		t.Fatal("project.close with a running popup process must ask first")
+	}
+	if got := strings.Join(m.projectClosePending.act.summary(), "\n"); !strings.HasPrefix(got, "popup terminal — running") {
+		t.Errorf("the guard names the popup's running process, got %q", got)
 	}
 	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = out.(Model)

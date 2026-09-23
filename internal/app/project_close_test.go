@@ -193,9 +193,9 @@ func TestCloseProjectChordEscapesTerminal(t *testing.T) {
 		}
 	}
 	t.Chdir(a)
-	m := sizedWith(t, registry.Global(), 100, 40)
+	m := dismissOnboarding(sizedWith(t, registry.Global(), 100, 40))
 	out, _ := m.Update(project.SwitchProjectMsg{Root: b})
-	m = out.(Model)
+	m = dismissOnboarding(out.(Model))
 	out, _ = m.Update(TerminalNewMsg{})
 	m = out.(Model)
 	inst := m.activeWS().Panes.FocusedInstance()
@@ -203,6 +203,11 @@ func TestCloseProjectChordEscapesTerminal(t *testing.T) {
 		t.Fatal("terminal.new must focus a terminal pane")
 	}
 	t.Cleanup(func() { inst.Terminal().Close() })
+	// The guard only counts a shell with foreground work since #2702, so the
+	// chord has something to stop at.
+	waitIdle(t, inst.Terminal())
+	inst.Terminal().SendLine("sleep 30")
+	waitBusy(t, inst.Terminal())
 
 	m = drainKey(m, tea.KeyPressMsg{Code: 'w', Mod: tea.ModSuper | tea.ModShift})
 	if !m.projectClosePromptOpen() {

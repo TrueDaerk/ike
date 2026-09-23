@@ -4,7 +4,7 @@ title: Project Switching
 description: Roadmap 0090 — internal/project owns the switch flow end to end; recent-projects history, project.switch command, palette picker and the msg-driven re-root orchestration with an unsaved-changes guard.
 resource: internal/project
 tags: [architecture, project, history, switching, palette]
-timestamp: 2026-09-18T12:00:00Z
+timestamp: 2026-09-23T12:00:00Z
 ---
 
 # Project Switching (Roadmap 0090)
@@ -248,6 +248,23 @@ project.
   #821 shape — `[s]` save all then close (offered only when buffers are
   dirty; a failed write keeps the project open), `[d]` close discarding,
   `[esc]` cancel. `[enter]` confirms the primary option (#1356).
+- **What counts as running (#2702)**: only a terminal with **foreground
+  work** — the #986 `Session.Busy()` rule: a shell whose PTY foreground
+  process group is not the shell itself, a command session (0350) whose
+  process has not exited, a live tool pane (its exit closes the pane, so a
+  live one is always work). An **idle shell** — prompt showing, old output in
+  the scrollback — is no activity: it is torn down with the workspace and
+  nothing but its scrollback is lost, so it never prompts. Docked terminals,
+  editor terminal tabs and the popup terminal (#1407) follow the same rule.
+  The prompt body **names** what runs: `running shell process: vim`
+  (`Session.ForegroundPid` → process name via procfs/`ps`, best effort —
+  without a name the line stays `running shell process`), `run <config>` for
+  a command session, `popup terminal — running <name>`.
+  `collectActivity` (`internal/app/workspace_guard.go`) is the single
+  inventory behind all of it: the close-current guard, the close-from-list
+  guard (#820/#821), the quit guard (#287), the eviction check
+  (`workspaceBusy`, #780) and the peek-return guard (#2136) all read it, so
+  they agree on what "busy" means.
 - **Last project**: with no background workspace the request degrades to an
   app quit through the existing quit guard (#287/#821).
 - Mechanically the close is `performSwitch` to the MRU root (which parks the
@@ -282,7 +299,8 @@ one action that also unloads it.
   #820/#825 path: terminals, LSP, memory). The peeked project's session and
   layout are **not written** when they still equal the peek-enter snapshot,
   so an untouched peek plants no `.ike` directory in a repo it only read.
-  A busy peek (dirty buffers, running processes, popup/floating shells)
+  A busy peek (dirty buffers, running processes — including a popup or
+  floating shell with foreground work, #2702; idle shells do not count)
   prompts first with the #821 shape (`[s]` save all then return / `[d]`
   discard and return / `[esc]` stay); a failed switch back (origin root gone)
   keeps the peek intact with the usual failure toast. An origin workspace

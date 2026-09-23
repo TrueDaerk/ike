@@ -228,6 +228,11 @@ func busyGroupFixture(t *testing.T) (m Model, roots []string, dirtyPath string, 
 	if term == nil || term.Kind() != pane.KindTerminal || !term.Terminal().Running() {
 		t.Fatal("setup: terminal.new must open a running shell in api")
 	}
+	// Since #2702 an idle shell is no activity: give it a foreground job, so
+	// the member counts as busy the way the guard defines it.
+	waitIdle(t, term.Terminal())
+	term.Terminal().SendLine("sleep 30")
+	waitBusy(t, term.Terminal())
 	return m, roots, dirtyPath, term
 }
 
@@ -247,8 +252,9 @@ func TestGroupCloseBusyPromptNamesMembersAndCancels(t *testing.T) {
 	if len(p.busy) != 2 {
 		t.Fatalf("both busy members listed, got %+v", p.busy)
 	}
-	if !sameDir(t, p.busy[0].root, roots[1]) || p.busy[0].act.shells != 1 {
-		t.Errorf("the active member lists its shell first, got %+v", p.busy[0])
+	if !sameDir(t, p.busy[0].root, roots[1]) || len(p.busy[0].act.running) != 1 ||
+		!strings.HasPrefix(p.busy[0].act.running[0], "running shell process") {
+		t.Errorf("the active member lists its busy shell first, got %+v", p.busy[0])
 	}
 	if !sameDir(t, p.busy[1].root, roots[2]) || strings.Join(p.busy[1].act.dirty, ",") != "f.txt" {
 		t.Errorf("the parked member lists its dirty buffer, got %+v", p.busy[1])
