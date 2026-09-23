@@ -19,6 +19,7 @@ import (
 	"sync/atomic"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	_ "golang.org/x/image/webp"
 
 	"ike/internal/theme"
@@ -51,8 +52,20 @@ type Model struct {
 	// app: nil-equivalent "unknown" is false — the metadata fallback shows
 	// until support is confirmed.
 	gfx bool
-	// applied transmission state, owned by the app's reconcile pass.
+	// applied transmission state, owned by the app's reconcile pass: the
+	// pixels resident under id, and the placement grid + crop the terminal
+	// holds (#2688).
+	sentData           bool
 	sentCols, sentRows int
+	sentCrop           image.Rectangle
+
+	// zoom/pan view state (#2688): the factor relative to fit (0 or 1 =
+	// fit) and the crop origin in image pixels; dragX/dragY anchor a
+	// primary-button drag.
+	zoom         float64
+	panX, panY   float64
+	dragX, dragY int
+	dragging     bool
 }
 
 // New decodes the image at path into a fresh preview model. Decode errors
@@ -98,68 +111,95 @@ func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
 // SetGraphics pushes the terminal's Kitty graphics capability.
 func (m *Model) SetGraphics(ok bool) { m.gfx = ok }
 
-// Grid returns the placement size for the current pane interior.
+// Grid returns the placement size for the current pane body: the fit grid
+// at zoom 1, the body-filling grid of the zoomed crop otherwise (#2688).
 func (m *Model) Grid() (cols, rows int) {
 	if m.imgRef == nil {
 		return 0, 0
 	}
-	return FitGrid(m.imgW, m.imgH, m.w, m.h)
+	v := m.geometry()
+	return v.cols, v.rows
 }
 
 // SyncSeqs returns the raw sequences bringing the terminal's placement in
-// line with the current grid — a transmit on first show, delete + transmit
-// after a resize, nothing when already current — and records the applied
-// state. Called by the app's reconcile pass, only on supporting terminals.
+// line with the current grid and crop — the pixel transmission plus a
+// placement on first show, delete-placement + re-place after a resize, zoom
+// or pan, nothing when already current — and records the applied state.
+// Called by the app's reconcile pass, only on supporting terminals. The
+// pixels are sent once per lifecycle (a=t); every geometry change only
+// replaces the placement under the same id (#2688).
 func (m *Model) SyncSeqs() []string {
 	if m.imgRef == nil {
 		return nil
 	}
-	cols, rows := m.Grid()
-	if cols == m.sentCols && rows == m.sentRows {
+	v := m.geometry()
+	if v.cols == 0 || v.rows == 0 {
+		return nil
+	}
+	if m.sentData && v.cols == m.sentCols && v.rows == m.sentRows && v.crop == m.sentCrop {
 		return nil
 	}
 	var out []string
-	if m.sentCols > 0 {
-		out = append(out, Delete(m.id))
+	if !m.sentData {
+		seq, err := TransmitData(m.id, *m.imgRef)
+		if err != nil {
+			return nil
+		}
+		out = append(out, seq)
+		m.sentData = true
+	} else if m.sentCols > 0 {
+		out = append(out, DeletePlacements(m.id))
 	}
-	seq, err := Transmit(m.id, *m.imgRef, cols, rows)
-	if err != nil {
-		return nil
-	}
-	m.sentCols, m.sentRows = cols, rows
-	return append(out, seq)
+	full := image.Rect(0, 0, m.imgW, m.imgH)
+	out = append(out, Place(m.id, v.cols, v.rows, v.crop, full))
+	m.sentCols, m.sentRows, m.sentCrop = v.cols, v.rows, v.crop
+	return out
 }
 
-// Transmitted reports whether the terminal currently holds a placement.
-func (m *Model) Transmitted() bool { return m.sentCols > 0 }
+// Transmitted reports whether the terminal currently holds the image.
+func (m *Model) Transmitted() bool { return m.sentData }
 
 // Reset forgets the applied transmission state (#1547): the app deleted the
-// pane's placement (workspace parked or torn down), so the next reconcile
-// pass must transmit again instead of assuming the terminal still holds it.
-func (m *Model) Reset() { m.sentCols, m.sentRows = 0, 0 }
+// pane's image (workspace parked or torn down), so the next reconcile pass
+// must transmit again instead of assuming the terminal still holds it.
+func (m *Model) Reset() {
+	m.sentData = false
+	m.sentCols, m.sentRows = 0, 0
+	m.sentCrop = image.Rectangle{}
+}
 
-// View renders the pane interior: the placeholder grid (centered) on a
-// supporting terminal, the metadata summary otherwise.
+// View renders the pane interior: the placeholder grid (centered) above a
+// footer naming the zoom level on a supporting terminal, the metadata
+// summary otherwise.
 func (m *Model) View() string {
 	if m.w <= 0 || m.h <= 0 {
 		return ""
 	}
 	if m.gfx && m.err == nil && m.imgRef != nil {
-		cols, rows := m.Grid()
-		grid := PlaceholderGrid(m.id, cols, rows)
-		pad := strings.Repeat(" ", (m.w-cols)/2)
+		v := m.geometry()
+		grid := PlaceholderGrid(m.id, v.cols, v.rows)
+		pad := strings.Repeat(" ", v.left)
 		lines := make([]string, 0, m.h)
-		top := (m.h - rows) / 2
-		for i := 0; i < m.h; i++ {
-			if i >= top && i-top < rows {
-				lines = append(lines, pad+grid[i-top])
+		for i := 0; i < m.bodyRows(); i++ {
+			if i >= v.top && i-v.top < v.rows {
+				lines = append(lines, pad+grid[i-v.top])
 			} else {
 				lines = append(lines, "")
 			}
 		}
+		lines = append(lines, m.footer())
 		return strings.Join(lines, "\n")
 	}
 	return m.metadataView()
+}
+
+// footer is the status line under the picture: name, format, dimensions and
+// the zoom level (#2688), truncated to the pane width.
+func (m *Model) footer() string {
+	dim := lipgloss.NewStyle().Foreground(m.pal.Ghost)
+	s := fmt.Sprintf("%s · %s · %d×%d px · %s", filepath.Base(m.path),
+		strings.ToUpper(m.format), m.imgW, m.imgH, m.ZoomLabel())
+	return dim.Render(ansi.Truncate(s, m.w, "…"))
 }
 
 // metadataView is the fallback body: file name, format, dimensions and size,

@@ -144,7 +144,7 @@ func TestKittySupportTransmitsAndCloseDeletes(t *testing.T) {
 	tm, cmd := m.Update(uv.KittyGraphicsEvent{Options: kitty.Options{ID: imgview.QueryID}, Payload: []byte("OK")})
 	m = tm.(Model)
 	raw := rawStrings(cmd)
-	if !strings.Contains(raw, "a=T") || !strings.Contains(raw, "U=1") {
+	if !strings.Contains(raw, "a=t") || !strings.Contains(raw, "a=p") || !strings.Contains(raw, "U=1") {
 		t.Fatalf("acknowledged support must transmit the open pane, got %.120q", raw)
 	}
 	if !m.liveImages[id] {
@@ -229,7 +229,7 @@ func TestReleaseWorkspaceImagesDeletesAndResets(t *testing.T) {
 	}
 
 	// The next reconcile pass (the resume) transmits again.
-	if raw := rawStrings(m.imageSyncCmd()); !strings.Contains(raw, "a=T") {
+	if raw := rawStrings(m.imageSyncCmd()); !strings.Contains(raw, "a=t") {
 		t.Fatalf("post-release sync must retransmit, got %.120q", raw)
 	}
 }

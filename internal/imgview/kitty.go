@@ -42,19 +42,57 @@ func QueryResponseOK(id int, payload []byte) bool {
 // a virtual placement of id scaled to cols×rows cells. The first chunk
 // carries the options, continuation chunks only m=1/m=0, per the protocol.
 func Transmit(id int, img image.Image, cols, rows int) (string, error) {
+	return chunked(img, "a=T", "U=1", "q=2", "t=d", "f=100",
+		fmt.Sprintf("i=%d", id),
+		fmt.Sprintf("c=%d", cols),
+		fmt.Sprintf("r=%d", rows))
+}
+
+// TransmitData encodes img as PNG and returns the chunked transmission
+// storing it under id *without* displaying it (a=t). The image pane (#2688)
+// sends its pixels once this way and then places crops of them with Place,
+// so a zoom or pan never re-encodes or re-sends the file.
+func TransmitData(id int, img image.Image) (string, error) {
+	return chunked(img, "a=t", "q=2", "t=d", "f=100", fmt.Sprintf("i=%d", id))
+}
+
+// Place returns the command creating a virtual placement of the resident
+// image id scaled to cols×rows cells (a=p, U=1), showing only the source
+// rectangle crop (image pixels) when it is smaller than full. A crop equal to
+// full (or empty) places the whole image, exactly as Transmit does.
+func Place(id, cols, rows int, crop, full image.Rectangle) string {
+	opts := []string{
+		"a=p", "U=1", "q=2",
+		fmt.Sprintf("i=%d", id),
+		fmt.Sprintf("c=%d", cols),
+		fmt.Sprintf("r=%d", rows),
+	}
+	if !crop.Empty() && crop != full {
+		opts = append(opts,
+			fmt.Sprintf("x=%d", crop.Min.X),
+			fmt.Sprintf("y=%d", crop.Min.Y),
+			fmt.Sprintf("w=%d", crop.Dx()),
+			fmt.Sprintf("h=%d", crop.Dy()))
+	}
+	return ansi.KittyGraphics(nil, opts...)
+}
+
+// DeletePlacements returns the sequence removing image id's placements while
+// keeping its data resident (a=d with a lowercase d=i), so a following Place
+// can show another crop without a retransmission.
+func DeletePlacements(id int) string {
+	return ansi.KittyGraphics(nil, "a=d", "d=i", fmt.Sprintf("i=%d", id), "q=2")
+}
+
+// chunked PNG-encodes img and emits it in protocol-sized chunks: the first
+// carries opts, continuation chunks only m=1/m=0.
+func chunked(img image.Image, opts ...string) (string, error) {
 	var raw bytes.Buffer
 	enc := kitty.Encoder{Format: kitty.PNG}
 	if err := enc.Encode(&raw, img); err != nil {
 		return "", err
 	}
 	payload := base64.StdEncoding.EncodeToString(raw.Bytes())
-
-	opts := []string{
-		"a=T", "U=1", "q=2", "t=d", "f=100",
-		fmt.Sprintf("i=%d", id),
-		fmt.Sprintf("c=%d", cols),
-		fmt.Sprintf("r=%d", rows),
-	}
 	var sb strings.Builder
 	for first := true; ; first = false {
 		chunk := payload
