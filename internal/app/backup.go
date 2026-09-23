@@ -313,3 +313,15 @@ func (m *Model) reconfigureBackup(cfg host.Config) {
 		m.shell.Close()
 	}
 }
+
+// backupPurgeWorkspace removes every crash snapshot of w, shared views or
+// not (#2703): a project restarted over the network reopens the very paths
+// whose edits were just discarded, so backupDropWorkspace's "still shown"
+// rule would keep the snapshots and the next launch would offer the
+// discarded edits as crash recovery.
+func (m *Model) backupPurgeWorkspace(w *workspace.Workspace) {
+	m.backupWalkWorkspace(w, func(svc *backup.Service, _ *editor.Model, bk string) {
+		m.backupCancelMark(bk)
+		_ = svc.Remove(bk)
+	})
+}

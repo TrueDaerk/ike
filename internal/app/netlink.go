@@ -203,7 +203,10 @@ func (m *Model) startNetLink(cfg *config.Config) error {
 		Version: version.Short(),
 		Deliver: func(url string) { h.Send(DeepLinkMsg{URL: url}) },
 		State:   netState.get,
-		Events:  netEvents{h: h},
+		Close: func(req netlink.CloseRequest, reply func(netlink.CloseResult)) {
+			h.Send(netCloseMsg{req: req, reply: reply})
+		},
+		Events: netEvents{h: h},
 	})
 	if err != nil {
 		return fmt.Errorf("network links: cannot listen on %s: %v", netListenAddr(cfg), err)
@@ -240,9 +243,9 @@ func netService(cfg *config.Config) mdns.Service {
 		Instance: strings.TrimSpace(cfg.Network.Name),
 		Type:     netServiceType,
 		Port:     cfg.Network.Port,
-		// proto is the wire-protocol generation: 2 since the status command
-		// (#2529) joined the set a client may count on.
-		TXT: []string{"v=" + version.Short(), "proto=2", "name=ike"},
+		// proto is the wire-protocol generation (netlink.ProtocolVersion): 2
+		// since the status command (#2529), 3 since close (#2703).
+		TXT: []string{"v=" + version.Short(), "proto=" + strconv.Itoa(netlink.ProtocolVersion), "name=ike"},
 	}
 	if ip := net.ParseIP(strings.Trim(strings.TrimSpace(cfg.Network.Bind), "[]")); ip != nil && !ip.IsUnspecified() {
 		svc.IPs = []net.IP{ip}

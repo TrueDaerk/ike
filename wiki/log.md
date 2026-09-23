@@ -1,5 +1,39 @@
 # Log
 
+## 2026-09-23 (Network: guarded `close` command, #2703)
+
+- **A paired client can close a project** — `{"cmd":"close","project":"ike"}`
+  (or `remote`; neither = the active project), resolved among the *open*
+  workspaces only. Guarded like `status`: unpaired → `unauthorized`, no
+  popup; not open → `unavailable`. An idle project closes exactly as
+  project.close / the close-from-list would (the MRU parked workspace
+  resumes; a parked one drops), answer `ok`.
+- **The busy guard answers over the wire.** A busy workspace is `blocked`
+  with the guard's `summary()` lines verbatim in `reasons` plus a
+  `force_token` (120 s); the UI stays untouched. Echoing the token on a
+  second `close` runs the guard's discard branch — buffers dropped, sessions
+  killed — and answers `ok`. The token is single-use, hashed in memory,
+  keyed by client id (dropped on `unpair`) and bound to the project and the
+  exact reasons: wrong, expired, reused or outgrown (a buffer dirtied since)
+  → `{"type":"forbidden","reason":"stale_force_token"}`, and every attempt
+  spends it, so the next plain `close` is `blocked` afresh. Force never
+  saves — no file writes over the wire, by design.
+- **Never a quit.** Closing the last open project over the network tears the
+  workspace down and reopens the same root through the fresh-start path
+  (`switchOpts.restart`: the parked unit is dropped before the rebuild, its
+  crash snapshots purged so a discarded edit cannot resurface as recovery,
+  the teardown run on the fresh model) — the state `ike` shows when launched
+  there.
+- **Nothing closes invisibly**: `closed ike via network (phone)`, and for a
+  force `… — discarded 2 unsaved buffers, stopped 1 running process`. A
+  close or quit prompt already open in IKE makes a remote close
+  `unavailable`; so does an update loop that does not answer within 5 s
+  (`Options.Close` + `CloseTimeout`, the request posted through `host.Send`
+  as `netCloseMsg`, the verdict evaluated on the loop where
+  `collectActivity` lives — `activeCloseActivity` is now shared with
+  project.close).
+- `hello` reports `proto` (3); the mDNS TXT record says `proto=3`.
+
 ## 2026-09-23 (Editor-level navigation reaches the viewer panes, #2698)
 
 - **The viewer panes got the Global chords and nothing else.** An archive

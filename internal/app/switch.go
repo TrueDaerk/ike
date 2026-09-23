@@ -180,6 +180,12 @@ type switchOpts struct {
 	// session/layout when nothing changed since peek-enter, so a ten-second
 	// look-up never plants a .ike directory in a repo it only read.
 	skipUnchangedPeekSave bool
+	// restart tears the departing workspace down instead of parking it (#2703:
+	// a network close of the last open project) — its sessions end and its
+	// unsaved buffers are gone — so the rebuild, finding nothing parked under
+	// the root, starts the same project afresh from its saved layout: the
+	// state `ike` shows when launched there. The IDE never quits over it.
+	restart bool
 }
 
 // performSwitch is the seamless project switch (#777). The old project's
@@ -324,6 +330,19 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	// graphics memory for the process lifetime. The reset transmission state
 	// makes the resume retransmit.
 	imgCmd := m.releaseWorkspaceImages(m.ws.Peek(parkedRoot))
+	// A restart (#2703) drops the workspace just parked before the rebuild
+	// looks for it, so buildModel below builds the root from its saved layout
+	// instead of resuming the unit. Its crash snapshots go now, every one:
+	// the flush above wrote the discarded edits, and the fresh model reopens
+	// the same paths, which would make closeWorkspace keep them for the
+	// "surviving" view — and the next launch would offer the discarded edit
+	// as crash recovery (#1550). The teardown itself runs once the fresh
+	// model stands (closeWorkspace needs an active workspace).
+	var dropped *workspace.Workspace
+	if opts.restart {
+		dropped = m.ws.Drop(parkedRoot)
+		m.backupPurgeWorkspace(dropped)
+	}
 
 	cfg, diags := config.Load(config.Discover("."))
 	config.Set(cfg)
@@ -452,6 +471,12 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	// past every failure point) and announce the switch.
 	sizedTM, sizeCmd := fresh.Update(tea.WindowSizeMsg{Width: m.width, Height: m.height})
 	sized := sizedTM.(Model)
+	// The restarted project's old unit ends here (#2703): sessions, hooks,
+	// watcher entries not shared with the fresh workspace.
+	var restartCmd tea.Cmd
+	if dropped != nil {
+		restartCmd = sized.closeWorkspace(dropped)
+	}
 	// While this workspace was parked its watcher was stopped (#1515), so
 	// files edited externally in that window (a coding agent, git operations)
 	// never produced events. Reconcile every resumed buffer against disk:
@@ -576,6 +601,7 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 		fresh.Init(),
 		sizeCmd,
 		imgCmd,
+		restartCmd,
 		capCmd,
 		reconcile,
 		playResume,

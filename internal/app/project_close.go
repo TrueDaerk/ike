@@ -34,6 +34,18 @@ func (m Model) handleCloseProject() (tea.Model, tea.Cmd) {
 		return m.guardedQuit()
 	}
 	target := bg[len(bg)-1] // most-recently-used parked root
+	act := m.activeCloseActivity()
+	if act.busy() {
+		m.openProjectClosePrompt(target, act)
+		return m, nil
+	}
+	return m.performCloseAndSwitch(target)
+}
+
+// activeCloseActivity inventories what closing the active workspace would
+// kill — the guard's input for project.close and for a network close of the
+// active project (#2703), so the two can never disagree.
+func (m Model) activeCloseActivity() wsActivity {
 	act := collectActivity(m.activeWS())
 	// The active popup terminal and project-owned floating panels live on the
 	// model (#1407, #1793) and die with the close; global panels ride to the
@@ -49,11 +61,7 @@ func (m Model) handleCloseProject() (tea.Model, tea.Cmd) {
 	for _, f := range projectFloatTerms(m.floatTerms) {
 		act.addPopup(f.inst)
 	}
-	if act.busy() {
-		m.openProjectClosePrompt(target, act)
-		return m, nil
-	}
-	return m.performCloseAndSwitch(target)
+	return act
 }
 
 // performCloseAndSwitch runs the seamless switch to target — which persists

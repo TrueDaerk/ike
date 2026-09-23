@@ -12,13 +12,14 @@ import (
 
 // protocol.go is the wire format: one JSON object per line in each
 // direction. Every request names a command in "cmd"; every response names
-// its shape in "type" — "ok", "error", "hello", "challenge", "paired" or
-// "status".
+// its shape in "type" — "ok", "error", "hello", "challenge", "paired",
+// "status", "blocked" or "forbidden".
 
 // Request is what a client sends. Only cmd is required; the other fields
 // belong to particular commands and are ignored elsewhere.
 type Request struct {
-	// Cmd is the command: hello, ping, pair, auth, open, unpair, status.
+	// Cmd is the command: hello, ping, pair, auth, open, unpair, status,
+	// close.
 	Cmd string `json:"cmd"`
 	// Token authenticates a paired client. It may ride on any request; once
 	// a connection has presented a valid token it stays authenticated.
@@ -38,12 +39,21 @@ type Request struct {
 	File    string `json:"file,omitempty"`
 	Line    int    `json:"line,omitempty"`
 	Tool    string `json:"tool,omitempty"`
+	// Force is the one-time token a blocked close answered with (#2703):
+	// echoing it on a second close discards the listed activity.
+	Force string `json:"force,omitempty"`
 }
+
+// ProtocolVersion is the wire-protocol generation: 1 was open only, 2
+// added status (#2529), 3 added the guarded close (#2703). hello reports it
+// as proto, and so does the mDNS TXT record, so a client can tell which
+// commands it may count on.
+const ProtocolVersion = 3
 
 // Response is what the server answers.
 type Response struct {
 	// Type is the response shape: ok, error, hello, challenge, paired,
-	// status.
+	// status, blocked, forbidden.
 	Type string `json:"type"`
 	// Error is a stable machine-readable code (type error only); Message is
 	// the human-readable detail, present on errors and on informational
@@ -51,10 +61,18 @@ type Response struct {
 	Error   string `json:"error,omitempty"`
 	Message string `json:"message,omitempty"`
 
-	// hello
+	// hello: Proto is ProtocolVersion.
 	Name          string `json:"name,omitempty"`
 	Version       string `json:"version,omitempty"`
+	Proto         int    `json:"proto,omitempty"`
 	Authenticated *bool  `json:"authenticated,omitempty"`
+
+	// blocked (close, #2703): the guard's summary lines and the one-time
+	// token that forces the close; ExpiresIn (shared with challenge) says
+	// how long the token lives. forbidden: Reason names why a force was
+	// refused ("stale_force_token").
+	Reasons    []string `json:"reasons,omitempty"`
+	ForceToken string   `json:"force_token,omitempty"`
 
 	// challenge: Kind names the code shape ("pin"), Length the number of
 	// positions, Alphabet the symbols allowed in each.
@@ -102,6 +120,60 @@ type Status struct {
 	// Line and Col are the active editor's 1-based cursor; 0 with File "".
 	Line, Col int
 }
+
+// CloseRequest is what the server asks the IDE when a paired client sends
+// close (#2703). The IDE resolves the target among its open workspaces,
+// runs the busy guard on the update loop and answers with a CloseResult.
+type CloseRequest struct {
+	// Project is the plain root directory name; Remote the normalised
+	// remote key (deeplink.NormalizeRemote). Both empty means the active
+	// project.
+	Project string
+	Remote  string
+	// Client is the asking device, for the IDE's notice.
+	Client Client
+	// Force asks to discard the activity a blocked reply listed: Grant is
+	// what the redeemed token was bound to, and the IDE closes only when
+	// the target still resolves to Grant.Root and the guard still lists
+	// exactly Grant.Reasons — anything else is stale.
+	Force bool
+	Grant ForceGrant
+}
+
+// CloseOutcome is the IDE's verdict on a close request.
+type CloseOutcome int
+
+const (
+	// CloseClosed: the workspace is gone (discarding, when forced).
+	CloseClosed CloseOutcome = iota
+	// CloseBlocked: the busy guard refused; Reasons say why.
+	CloseBlocked
+	// CloseUnknown: no open project matches the request.
+	CloseUnknown
+	// CloseStale: the forced close no longer matches its grant.
+	CloseStale
+	// CloseUnavailable: the IDE cannot act right now (a close guard is
+	// already asking the user); Message says so.
+	CloseUnavailable
+)
+
+// CloseResult is the IDE's answer to a CloseRequest.
+type CloseResult struct {
+	Outcome CloseOutcome
+	// Root and Project name the resolved target (set for every outcome but
+	// CloseUnknown).
+	Root    string
+	Project string
+	// Reasons are the guard's summary lines, verbatim (CloseBlocked).
+	Reasons []string
+	// Message is the human-readable detail for CloseUnavailable.
+	Message string
+}
+
+// ReasonStaleForceToken is the forbidden reason for a force token that is
+// wrong, expired, already used, or bound to activity that has since
+// changed.
+const ReasonStaleForceToken = "stale_force_token"
 
 // statusResponse renders a status snapshot, link included.
 func statusResponse(st Status) Response {
