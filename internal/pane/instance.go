@@ -1549,6 +1549,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		}
 	case KindMarkdown:
 		cmd = i.md.Update(msg)
+	case KindImage:
+		cmd = i.iv.Update(msg)
 	case KindDiff:
 		if i.dfEdit != nil {
 			// Edit mode (#496): keys belong to the embedded editor; ctrl+e

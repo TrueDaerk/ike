@@ -1241,6 +1241,7 @@ const (
 	dragDiffSelect                  // dragging a text selection in a diff pane (#2070)
 	dragMergeSelect                 // dragging a text selection in a merge view's side column (#2070)
 	dragIssueSelect                 // dragging a text selection in an Issues detail view (#2374)
+	dragImagePan                    // dragging the zoomed picture inside an image pane (#2688)
 )
 
 // dragState holds the in-flight mouse gesture. For a resize it carries the
@@ -11800,6 +11801,30 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case msg.Button == tea.MouseWheelDown:
 				m.explorer().ScrollAt(m.explorerLocalY(key, msg.Y), lines)
 			}
+		case pane.KindImage:
+			// The wheel pans the zoomed picture (#2688): plain vertically,
+			// shift+wheel and the horizontal wheel sideways, alt+wheel zooms
+			// around the pointer cell. At fit level nothing moves.
+			iv := inst.Image()
+			lx, ly, _ := m.termLocal(key, msg)
+			switch {
+			case msg.Mod&tea.ModAlt != 0 && msg.Button == tea.MouseWheelUp:
+				iv.ZoomAt(msg.ticks(), lx, ly)
+			case msg.Mod&tea.ModAlt != 0 && msg.Button == tea.MouseWheelDown:
+				iv.ZoomAt(-msg.ticks(), lx, ly)
+			case msg.Button == tea.MouseWheelLeft:
+				iv.WheelX(-lines)
+			case msg.Button == tea.MouseWheelRight:
+				iv.WheelX(lines)
+			case msg.Button == tea.MouseWheelUp && shift:
+				iv.WheelX(-lines)
+			case msg.Button == tea.MouseWheelDown && shift:
+				iv.WheelX(lines)
+			case msg.Button == tea.MouseWheelUp:
+				iv.Wheel(-lines)
+			case msg.Button == tea.MouseWheelDown:
+				iv.Wheel(lines)
+			}
 		case pane.KindMarkdown:
 			// The wheel scrolls the rendered document (#62); the next cursor
 			// move in the source editor re-syncs the view.
@@ -12281,6 +12306,13 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 					inst.HTTP().MouseDrag(lx, ly)
 				}
 			}
+		case dragImagePan:
+			// The zoomed picture follows the pointer (#2688).
+			if lx, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
+				if inst := m.bodyContent(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindImage {
+					inst.Image().MouseDrag(lx, ly)
+				}
+			}
 		case dragHTTPScroll:
 			// The response-viewer thumb follows the pointer (#1367).
 			if _, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
@@ -12366,6 +12398,12 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			}
 			m.drag = nil
 			return m, nil // a selection drag never moved the layout
+		case dragImagePan:
+			if inst := m.bodyContent(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindImage {
+				inst.Image().MouseRelease()
+			}
+			m.drag = nil
+			return m, nil // a pan drag never moved the layout
 		case dragDiffSelect:
 			if inst := m.bodyContent(m.drag.srcPane); inst != nil && inst.Kind() == pane.KindDiff {
 				inst.Diff().MouseRelease()
@@ -13160,6 +13198,13 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// the reference's location, mirroring the Problems panel.
 		if msg.Button == tea.MouseLeft {
 			return m, inst.Usages().Click(localX, localY)
+		}
+	case pane.KindImage:
+		// Image-pane clicks (#2688): a left press anchors a pan drag of the
+		// zoomed picture; at fit the press only focuses the pane.
+		if msg.Button == tea.MouseLeft {
+			inst.Image().MousePress(localX, localY)
+			m.drag = &dragState{kind: dragImagePan, srcPane: key, curX: msg.X, curY: msg.Y}
 		}
 	case pane.KindArchive:
 		// Archive-pane clicks (#1852): a click selects the row, a press on a

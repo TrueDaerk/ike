@@ -58,17 +58,21 @@ func TestSyncSeqsLifecycle(t *testing.T) {
 	m := New("image", writePNG(t, 64, 32), theme.DefaultPalette())
 	m.SetSize(60, 10)
 	first := m.SyncSeqs()
-	if len(first) != 1 || !strings.Contains(first[0], "a=T") {
-		t.Fatalf("first sync must transmit once, got %d seqs", len(first))
+	if len(first) != 2 || !strings.Contains(first[0], "a=t") || !strings.Contains(first[1], "a=p") {
+		t.Fatalf("first sync must transmit the pixels then place, got %d seqs", len(first))
 	}
 	if again := m.SyncSeqs(); again != nil {
 		t.Fatalf("unchanged geometry must be idempotent, got %d seqs", len(again))
 	}
-	// Resize: delete the old placement, transmit the new grid.
+	// Resize: delete the old placement, place the new grid — the pixels
+	// stay resident, so no second a=t (#2688).
 	m.SetSize(30, 5)
 	resized := m.SyncSeqs()
-	if len(resized) != 2 || !strings.Contains(resized[0], "a=d") || !strings.Contains(resized[1], "a=T") {
-		t.Fatalf("resize must delete + retransmit, got %v seq kinds", len(resized))
+	if len(resized) != 2 || !strings.Contains(resized[0], "a=d") || !strings.Contains(resized[0], "d=i") || !strings.Contains(resized[1], "a=p") {
+		t.Fatalf("resize must delete placements + re-place, got %q", resized)
+	}
+	if strings.Contains(strings.Join(resized, ""), "a=t") {
+		t.Fatal("a resize must not retransmit the pixels")
 	}
 }
 

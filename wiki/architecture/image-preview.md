@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Image Preview
-description: "#1479 — image files render in a preview pane via the Kitty graphics protocol (Unicode placeholders): capability probe with metadata fallback, per-pass transmit/delete reconcile, decode of PNG/JPEG/GIF/WebP, layout persistence."
+description: "#1479 — image files render in a preview pane via the Kitty graphics protocol (Unicode placeholders): capability probe with metadata fallback, per-pass transmit/delete reconcile, decode of PNG/JPEG/GIF/WebP, layout persistence; #2688 zoom and pan via a crop-based placement."
 resource: internal/imgview
-tags: [architecture, image, preview, pane, kitty, graphics]
-timestamp: 2026-09-03T00:00:00Z
+tags: [architecture, image, preview, pane, kitty, graphics, zoom]
+timestamp: 2026-09-23T00:00:00Z
 ---
 
 # Image Preview (#1479)
@@ -44,6 +44,58 @@ overlays and zoom all stay correct — a repaint can never leave ghost
 graphics, and an untransmitted placeholder renders as blank cells, never
 garbage.
 
+## Zoom & pan (#2688)
+
+The pane opens at **fit** (the whole picture inside the body) and can zoom
+into a detail. Zoom is a factor relative to the fit size, stepped
+multiplicatively (×1.25 per step, `imgview.ZoomStep`); zooming out below fit
+is not possible and zooming in stops at the larger of 8× fit
+(`MaxZoomFactor`) and the **1:1** level, where one image pixel maps to one
+terminal pixel assuming `CellPxW`-pixel-wide cells — so the loop always ends.
+Zoom and pan are view state only (never persisted; a restore opens at fit),
+and on a terminal without Kitty graphics the keys do nothing and the metadata
+card is unchanged.
+
+| Input | Effect |
+|---|---|
+| `+` / `=` | zoom in one step around the view centre |
+| `-` | zoom out one step (no-op at fit) |
+| `0` | back to fit |
+| `alt+wheel` | zoom in/out one step per tick around the pointer cell |
+| wheel | pan vertically (when zoomed) |
+| `shift+wheel`, horizontal wheel | pan horizontally (when zoomed) |
+| primary-button drag | pan the picture with the pointer (when zoomed) |
+| `h`/`j`/`k`/`l`, arrows | pan by a few cells |
+| `ctrl+d` / `ctrl+u` | pan by half the body height |
+
+At fit nothing pans — the whole image is on screen. Pan is clamped so the
+visible rectangle never leaves the image. The keys are pane-internal (the
+notebook viewer's pattern, `imgview.Model.Update` switching on the key
+string), not registry commands, so no keybind entries exist for them. The
+mouse gestures route from the root model's mouse dispatch (`handleMouse`):
+the wheel branch for `KindImage` reads the modifiers, and a left press arms a
+`dragImagePan` drag whose motion events call `MouseDrag`.
+
+**Crop-based placement.** The pane keeps one placement filling its body and
+shows a *source rectangle* of the image. `geometry()` derives, from the zoom
+factor, the virtual grid the whole image would occupy (`fit × zoom`), clips
+it to the body, and maps the clipped part back to a crop in image pixels
+(`Crop()`); the pan offset is the crop origin. The placement command carries
+that crop (`x=`, `y=`, `w=`, `h=`) whenever it is smaller than the image.
+Pixels are transmitted **once** per lifecycle with `a=t` (`TransmitData`,
+store only) and every geometry change — resize, zoom, pan — deletes the old
+placement with `a=d,d=i` (`DeletePlacements`: placements only, data kept)
+and issues a new `a=p,U=1` placement (`Place`) under the **same image id**.
+This was chosen over a fresh id per crop because the app's reconcile
+(`liveImages`, `releaseWorkspaceImages`, the pane-close delete) keys on one id
+per pane; a new id per crop would have needed an id history per pane just to
+free the previous placements. A crop change is therefore delete + re-place
+without a retransmission; an unchanged crop emits nothing.
+
+**Footer.** The last row of the body is a status line — file name, format,
+dimensions and the zoom label (`fit`, `2.4×`, `1:1`) — so the user always
+knows where they are; the fit grid is computed over the rows above it.
+
 ## Capability probe & fallback
 
 Support is detected lazily: when the first image pane opens, the reconcile
@@ -60,9 +112,10 @@ reason. Decode failures show the same card with the error.
 `imageSyncCmd` runs at the end of every root `Update` pass (next to the
 structure/breadcrumb hooks): it walks the active workspace's image panes and
 diffs desired placements against `Model.liveImages` (a pointer-shared map
-like `toolchainSeg`). First show transmits; a pane resize deletes and
-retransmits at the new grid (`SyncSeqs` is idempotent while the geometry is
-unchanged); a closed pane emits `a=d,d=I` for its id, freeing the
+like `toolchainSeg`). First show transmits the pixels and places them; a pane
+resize, zoom or pan deletes the placement and re-places at the new grid and
+crop without retransmitting (`SyncSeqs` is idempotent while the geometry is
+unchanged, see [Zoom & pan](#zoom--pan-2688)); a closed pane emits `a=d,d=I` for its id, freeing the
 terminal-side data. All sequences leave through one `tea.Raw`, bypassing the
 renderer. A workspace switch or teardown releases its placements separately
 (#1547): `releaseWorkspaceImages` emits the deletes and resets each pane's
