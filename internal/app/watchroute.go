@@ -2,6 +2,7 @@ package app
 
 import (
 	"os"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -26,6 +27,69 @@ func fixRemovedWatchKind(msg watch.EventMsg) watch.EventMsg {
 		}
 	}
 	return msg
+}
+
+// watchEventQuiet reports whether routing ev can change nothing on screen
+// within the pass (#2693), so a batch of such events may reuse the frame. A
+// directory event only arms an explorer rescan, a .git or config event only
+// launches a command — their results render as passes of their own. A file
+// event is quiet when no surface shows the path: routeWatchEvent's consumers
+// (editor tabs, file diffs, notebooks, gz previews, merged-log followers,
+// the playground source) all key on it, and every one of them may change the
+// frame synchronously when it matches. Hook subscribers only return commands;
+// a hook that notifies is caught on the settled pass.
+func (m *Model) watchEventQuiet(ev watch.EventMsg) bool {
+	switch ev.Kind {
+	case watch.DirChanged, watch.GitChanged, watch.ConfigChanged:
+		return true
+	case watch.FileChanged, watch.FileCreated, watch.FileRemoved:
+		return !m.watchPathViewed(ev.Path)
+	}
+	return false
+}
+
+// watchPathViewed mirrors the lookups of routeWatchEvent's consumers: true
+// when any surface in the active workspace shows path (#2693).
+func (m *Model) watchPathViewed(path string) bool {
+	if len(m.editorKeysForPath(path)) > 0 {
+		return true
+	}
+	if s := m.play; s != nil && s.srcPath != "" && canonicalPath(s.srcPath) == canonicalPath(path) {
+		return true
+	}
+	gzPrefix := path + entrySep
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		for i := 0; i < inst.TabCount(); i++ {
+			ed := inst.TabEditor(i)
+			if ed == nil {
+				continue
+			}
+			if ed.MergedLog() && ed.FollowSource() == path {
+				return true
+			}
+			if ed.ReadOnly() && strings.HasPrefix(ed.Path(), gzPrefix) {
+				return true
+			}
+		}
+	}
+	abs := absDiffPath(path)
+	viewed := false
+	m.contentInstances(func(_ string, _ int, c *pane.Instance) bool {
+		if c.Kind() == pane.KindNotebook && c.Notebook().Path() == path {
+			viewed = true
+			return false
+		}
+		if left, right, ok := fileDiffPaths(c); ok && (left == abs || right == abs) {
+			viewed = true
+			return false
+		}
+		return true
+	})
+	return viewed
 }
 
 // routeWatchEvent applies one (kind-fixed) watcher event: directory events

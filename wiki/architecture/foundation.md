@@ -4,7 +4,7 @@ title: Foundation Slice
 description: Root model that hosts the explorer and editor panes, owns layout/focus, and routes messages between them.
 resource: internal/app/app.go
 tags: [architecture, bubbletea, foundation]
-timestamp: 2026-09-18T12:00:00Z
+timestamp: 2026-09-23T14:00:00Z
 ---
 
 # Foundation Slice
@@ -217,6 +217,37 @@ offers no "nothing changed" return from `Update`, so the lever sits on the
   (`renderreuse_test.go`: N bursts over an empty editor compose ≤ 1 frame;
   entering/leaving an explorer row and opening/dismissing the hover popup
   compose exactly on the transition).
+
+### Render only on a change: the background wakes (#2693)
+
+The motion rule left the *background* wakes rendering: telemetry after #2626
+still showed idle minutes of 200–500 `view/render` passes in a session
+sitting on a busy repository, one frame per `watch.EventBatchMsg`, per
+`changeFeedCapturedMsg`, per `vcsTickMsg`, per `vcs.SnapshotMsg`, per
+`explorer.ScanDoneMsg` — every one an Update pass that moved nothing on
+screen. The same opt-in seam (`markFrameReusable`) now carries a proof from
+each of them:
+
+| Wake | Proof of "frame exact" | Where |
+| --- | --- | --- |
+| `vcsTickMsg` (git-status debounce) | flips `tickArmed`/`refreshing` and launches `git status`; nothing renders either flag | `app.go` handler |
+| `vcs.SnapshotMsg` | `Snapshot.Equal` on the previous snapshot — root, branch, divergence, every file's status and porcelain code, the ignore set; the marks fan-out still runs (HEAD can move with the status unchanged) and the old pointer is kept (warm path caches) | `applyVCSSnapshot` |
+| `forge.PollTickMsg` | dispatches the fetch; nothing renders the poller's in-flight state | `app.go` handler |
+| `watch.EventBatchMsg` | decided *before* routing: directory, `.git` and config events only launch commands; a file event is quiet when no surface shows the path (`watchPathViewed` mirrors every consumer of `routeWatchEvent` — editor tabs, file diffs, notebooks, gz previews, merged-log followers, the playground source); plus the change-feed capture landed nothing in an open picker | `watchEventQuiet` |
+| `changeFeedCapturedMsg` | the feed shows nowhere but its picker: reusable unless the picker is open and an entry was added | `applyChangeFeedCaptured` |
+| `explorer.ScanDoneMsg` | `sameEntries`: the listing names exactly the children the node holds (name, kind, entry mtime), no error came or went, and no deliberate cursor snap, reveal, restore or expand-all was pending — a stability snap (`externalRefresh`) over identical rows is fine | `explorer.LastScanNoop` |
+
+Two guards keep a wrong proof from showing a stale frame: the verdict is
+withdrawn on the settled pass when a notification was drained
+(`drainNotifications` → `noteFrameChanged`) — a hook subscriber or a consumer
+that toasted mid-pass changed the frame whatever the handler proved — and,
+as before, only the frame of the *immediately preceding* pass is ever reused.
+What still renders, by design: a snapshot that differs, a file event on an
+open buffer, a rescan that found a new entry, a poll result with a listing
+(`forge.IssuesMsg`), and every key, click and wheel notch. Tests:
+`renderreuse_idle_test.go` (one per wake, each with its rendering
+counterpart, plus the motion rule driven through the real coalescer),
+`explorer/scannoop_test.go`, `vcs/snapshot_equal_test.go`.
 
 ## Render hot path (#608)
 

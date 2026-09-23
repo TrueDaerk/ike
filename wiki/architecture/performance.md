@@ -4,7 +4,7 @@ title: Performance & Diagnostics
 description: Idle-behavior rules (who may wake the render loop, and how often), the render budget and the always-on per-message-type pass accounting, the per-keystroke fan-out budget while typing (#2541), the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, the heartbeat freeze dump (#2627), the opt-in update-loop trace log, the freeze-triage procedure, the selection-overlay rule for drag latency (#2495), and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/perfhud
 tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog, startup, freeze, render-budget]
-timestamp: 2026-09-18T12:00:00Z
+timestamp: 2026-09-23T14:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -170,6 +170,39 @@ again, counted as `view/reuse` instead of `view/render`. The rule and its
 guards are in [foundation](foundation.md#render-only-on-a-hover-change-2626);
 the heartbeat reads `app.coalescedInputMsg:N,view/reuse:N,view/render:≤a few`
 for a minute of pointer wiggling.
+
+**Background wakes are a wake without a frame too** (#2693). With motion
+fixed, the next telemetry (0.6.2x–0.6.5x, a session left on a repository other
+checkouts were writing into) showed idle minutes of 200–500 `view/render`
+tracking `watch.EventBatchMsg` + `app.changeFeedCapturedMsg` +
+`app.vcsTickMsg` + `vcs.SnapshotMsg` + `explorer.ScanDoneMsg` — one frame
+per background message, none of which had changed the screen: the files were
+open nowhere, `git status` came back identical, the rescan listed the same
+entries. The same reuse seam now takes a proof from each handler (the table
+is in [foundation](foundation.md#render-only-on-a-change-the-background-wakes-2693)),
+and the heartbeat gained `renders` — which message each composed frame
+followed — so the next such minute names its culprit without a repro. (The
+motion half was already clean on 0.6.53: the field data behind #2693 that
+showed `view/render` tracking `app.coalescedInputMsg` 1:1 in idle minutes
+came from a build predating #2626 or from terminal repaints folded into the
+same bursts — `renders` now tells the two apart.)
+
+Measured in tmux (`internal/app/app.go` open, explorer visible, no input,
+one external write every 1.4 s into the project ≈ 43 watcher batches / min;
+before = 0.6.53, after = this change), the steady heartbeats read:
+
+| Scenario | Before | After |
+| --- | --- | --- |
+| Quiet project, no input, 10 min | `passes` flat, no `top` | same — 0 passes / min |
+| File churn, no input (43 batches / min) | `view/render:170,app.changeFeedCapturedMsg:43,app.vcsTickMsg:43` | `view/reuse:170,app.changeFeedCapturedMsg:43,app.vcsTickMsg:43`, no `renders` field — 0 frames / min |
+| Pointer motion over the editor, ~15 events / s, 3 min | `view/reuse:671,app.coalescedInputMsg:665,app.mouseHoverTickMsg:6` — 0 frames / min (#2626 holds) | `view/reuse:672,app.coalescedInputMsg:666,app.mouseHoverTickMsg:6`, no `renders` field — 0 frames / min |
+
+The idle baseline is therefore **0 composed frames per minute** with the
+pointer resting, whatever the watcher reports, and a handful at most while
+it moves (the hover transitions it actually crosses) — inside the ≤ 10 the
+issue asked for. What still composes a frame in an idle session: a status
+snapshot that differs, a rescan that found a new entry, a poll result
+carrying a listing, and any notification.
 
 ## The render budget & the idle pass count (#2402)
 
