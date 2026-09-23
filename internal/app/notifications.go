@@ -61,6 +61,9 @@ func (m *Model) drainNotifications() tea.Cmd {
 	if len(pending) == 0 {
 		return nil
 	}
+	// A toast or an unseen-count bump is a visible change whatever the
+	// handler proved about its own state (#2693): the frame is composed.
+	m.noteFrameChanged()
 	timeout := m.toastTimeout()
 	floor := m.minSeverity()
 	root := m.projectRootTag()

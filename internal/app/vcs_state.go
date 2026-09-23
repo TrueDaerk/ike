@@ -65,15 +65,25 @@ func (m Model) startVCSRefresh() tea.Cmd {
 // follow-up run, if triggers arrived while git was running.
 func (m Model) applyVCSSnapshot(msg vcs.SnapshotMsg) tea.Cmd {
 	m.vcs.refreshing = false
-	m.vcs.snap = msg.Snap
-	// Consumers read the snapshot per frame; the explorer holds its own
-	// reference (#463).
-	if m.activeWS().Panes.Has(pane.ExplorerKey) {
-		m.explorer().SetVCS(msg.Snap)
-	}
-	// The VCS tool window re-reads the snapshot (0330, #482).
-	if m.activeWS().Panes.Has(pane.VCSKey) {
-		m.activeWS().Panes.Get(pane.VCSKey).VCS().SetVCS(msg.Snap)
+	if m.vcs.snap.Equal(msg.Snap) {
+		// The refresh found the working tree as the frame already shows it
+		// (#2693): the watcher fires for every write in the project, most of
+		// them — a build's output, another checkout's churn — leave `git
+		// status` unchanged. Keep the snapshot the consumers hold (its
+		// per-row path caches are warm) and the frame with it. The marks
+		// fan-out below still runs: HEAD can move with the status unchanged.
+		m.markFrameReusable()
+	} else {
+		m.vcs.snap = msg.Snap
+		// Consumers read the snapshot per frame; the explorer holds its own
+		// reference (#463).
+		if m.activeWS().Panes.Has(pane.ExplorerKey) {
+			m.explorer().SetVCS(msg.Snap)
+		}
+		// The VCS tool window re-reads the snapshot (0330, #482).
+		if m.activeWS().Panes.Has(pane.VCSKey) {
+			m.activeWS().Panes.Get(pane.VCSKey).VCS().SetVCS(msg.Snap)
+		}
 	}
 	if m.vcs.dirty {
 		m.vcs.dirty = false

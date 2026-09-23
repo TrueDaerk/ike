@@ -5101,6 +5101,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		exp := m.explorer()
 		var cmd tea.Cmd
 		*exp, cmd = exp.Update(msg)
+		// A rescan that found the directory as the tree already shows it
+		// (a watcher-driven refresh over an unchanged listing) rebuilt the
+		// same rows: the frame is exact (#2693).
+		if _, ok := msg.(explorer.ScanDoneMsg); ok && exp.LastScanNoop() {
+			m.markFrameReusable()
+		}
 		return m, cmd
 
 	case host.OpenFileRequest:
@@ -6455,7 +6461,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case forge.PollTickMsg:
 		// One background poll deadline (#2085). The handler only dispatches
-		// the fetch command — the Update loop never waits on the forge.
+		// the fetch command — the Update loop never waits on the forge — and
+		// nothing on screen reads the poller's in-flight state, so the frame
+		// is exact as it is (#2693); the fetch's result renders as its own
+		// pass.
+		m.markFrameReusable()
 		return m, m.forgePollTick(msg)
 
 	case forge.TimelineMsg:
@@ -8347,18 +8357,33 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// buffer; pre-change contents that need the local-history store are
 		// resolved off-loop by the returned command.
 		events := make([]watch.EventMsg, len(msg.Events))
+		quiet := true
 		for i, ev := range msg.Events {
 			events[i] = fixRemovedWatchKind(ev)
+			// Decided before routing (#2693): a viewed path is a visible
+			// change whatever the route does to it; an unviewed one only
+			// launches commands whose results render as their own passes.
+			if quiet && !m.watchEventQuiet(events[i]) {
+				quiet = false
+			}
 		}
-		cmds := []tea.Cmd{m.recordChangeFeedBatch(events)}
+		feedCmd, feedVisible := m.recordChangeFeedBatch(events)
+		cmds := []tea.Cmd{feedCmd}
 		for _, ev := range events {
 			cmds = append(cmds, m.routeWatchEvent(ev))
+		}
+		if quiet && !feedVisible {
+			m.markFrameReusable()
 		}
 		return m, tea.Batch(cmds...)
 
 	case changeFeedCapturedMsg:
 		// The off-loop pre-change capture of a watcher batch landed (#2176).
-		m.applyChangeFeedCaptured(msg)
+		// The feed shows nowhere but its picker, so with that closed the
+		// frame is exact (#2693).
+		if !m.applyChangeFeedCaptured(msg) {
+			m.markFrameReusable()
+		}
 		return m, nil
 
 	case vcsInvalidateMsg:
@@ -8368,7 +8393,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case vcsTickMsg:
 		// The git status debounce expired (Roadmap 0320): run the refresh.
+		// Flags and a subprocess launch — nothing on screen reads either, so
+		// the frame is exact (#2693); the snapshot renders when it lands.
 		m.vcs.tickArmed = false
+		m.markFrameReusable()
 		return m, m.startVCSRefresh()
 
 	case workspaceIdleMsg:
@@ -13602,7 +13630,7 @@ func (m Model) View() tea.View {
 	}
 	// A frame that never finishes composing freezes the loop as surely as a
 	// stuck Update; the watchdog covers both (#2163).
-	diag.LoopEnter("view/render")
+	diag.LoopEnter(diag.RenderLabel)
 	defer diag.LoopExit()
 	v := tea.NewView(m.render())
 	v.AltScreen = true
