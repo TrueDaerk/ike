@@ -663,12 +663,13 @@ type Model struct {
 	httpSaveOpen  bool
 	httpSaveInput ui.Field
 	// archExtractOpen marks the archive extraction target-directory prompt
-	// (#2249) while the shell shows it; archExtractInput/archExtractPos are
-	// the typed path and cursor, and archExtractArchive/archExtractMembers
-	// hold what the pane asked to extract (no members = the whole archive).
-	// archExtractPlan is the pending plan while the overwrite guard is up.
+	// (#2249) while the shell shows it; archExtractDir is its live directory
+	// autocomplete (#2689) — the typed path plus the matching directories —
+	// and archExtractArchive/archExtractMembers hold what the pane asked to
+	// extract (no members = the whole archive). archExtractPlan is the pending
+	// plan while the overwrite guard is up.
 	archExtractOpen    bool
-	archExtractInput   ui.Field
+	archExtractDir     dirPrompt
 	archExtractArchive string
 	archExtractMembers []string
 	archExtractPlan    *archive.Plan

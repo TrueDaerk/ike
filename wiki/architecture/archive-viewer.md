@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Archive Viewer
-description: "#1762 — archive files (tar, tar.gz/.tgz, tar.bz2, zip — #2594) open as a collapsible entry list instead of a raw text buffer; Enter (or a double-click) extracts one member into a read-only editor buffer with syntax highlighting from the member's own file name; gzip members open decompressed (#1948); e/E write members or the whole archive to a directory on disk under path, overwrite and size guards (#2249); ctrl+r re-lists the file in place (archive.reload, #2314)."
+description: "#1762 — archive files (tar, tar.gz/.tgz, tar.bz2, zip — #2594) open as a collapsible entry list instead of a raw text buffer; Enter (or a double-click) extracts one member into a read-only editor buffer with syntax highlighting from the member's own file name; gzip members open decompressed (#1948); e/E write members or the whole archive to a directory on disk under path, overwrite and size guards (#2249), picked in a live directory autocomplete (#2689); ctrl+r re-lists the file in place (archive.reload, #2314)."
 resource: internal/archview
 tags: [architecture, archive, tar, zip, viewer, pane, read-only, mouse, extract, reload]
-timestamp: 2026-09-10T00:00:00Z
+timestamp: 2026-09-23T00:00:00Z
 ---
 
 # Archive Viewer (#1762)
@@ -189,12 +189,22 @@ and it never writes *out* of one either: `e`/`E` (or the palette's
 only emit `archview.ExtractMsg`, naming the archive and the members. Everything
 else is the root model's, in three steps:
 
-1. **Target-directory prompt** — one path line with tab completion, the same
-   shape as the HTTP response save (#2059). It is prefilled with a directory
-   *next to the archive*, named after it without its archive suffix
-   (`backup.tar.gz` → `./backup`), so the default never scatters members beside
-   the file. A relative path is project-relative, `~` expands, and the
-   directory is created if it does not exist.
+1. **Target-directory prompt** — a live directory autocomplete (#2689,
+   `internal/app/dirprompt.go`). It is prefilled with a directory *next to the
+   archive*, named after it without its archive suffix (`backup.tar.gz` →
+   `./backup`), so the default never scatters members beside the file. Under
+   the input line the matching directories are listed and re-filtered on
+   *every* keystroke — `pathcomplete.DirsFrom` against the project root, so
+   **directories only**: the target can never be a file. The keys:
+   `down`/`up` (and `ctrl+n`/`ctrl+p`) move the highlight, `tab` completes the
+   input to the highlighted candidate — or to the candidates' common prefix
+   when none is highlighted — always with a trailing separator so typing
+   continues *inside* that directory, `enter` extracts into the highlighted
+   candidate (or into the typed text when nothing is highlighted), a click on
+   a candidate row is that `enter`, and `esc` cancels. A relative path is
+   project-relative, `~` expands, and a name that matches nothing is still a
+   valid answer — the list then reads `new directory` and the directory is
+   created on extract.
 2. **Plan** — `archive.PlanExtract` reads headers only and reports what would
    happen: the members selected (a directory name stands for its subtree), the
    ones refused with a reason, the targets that already exist, and the declared
