@@ -145,7 +145,15 @@ import (
 // frozen one from the pass counter's side), while from v13 every "freeze" has
 // a stuck loop behind it. Frequency across the boundary is therefore not
 // comparable.
-const SchemaVersion = 13
+//
+// v14 (#2693): the "heartbeat" event gains "renders" — the interval's three
+// loudest render triggers as "type:count" pairs, where the type is the
+// message whose Update pass the composed frame followed. "top" says the loop
+// rendered N frames; "renders" says what for, which is what separates a
+// wake that was worth drawing from render churn. Omitted when the interval
+// composed nothing. Structure only: message type names, never content.
+// Absence below v14 means "not recorded".
+const SchemaVersion = 14
 
 // defaultFlushInterval is how often the writer goroutine flushes the
 // bufio.Writer on its own, independent of buffer fill or explicit Flush

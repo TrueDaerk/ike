@@ -195,10 +195,12 @@ type changeFeedCapturedMsg struct{ entries []changefeed.Entry }
 // exact pre-change content — an open, clean buffer — is captured inline (it is
 // about to be overwritten by the auto-reload that routing triggers), while the
 // local-history fallback resolves in the returned command, off the Update
-// loop; its entries land via changeFeedCapturedMsg.
-func (m *Model) recordChangeFeedBatch(events []watch.EventMsg) tea.Cmd {
+// loop; its entries land via changeFeedCapturedMsg. visible reports whether
+// the inline entries changed what is on screen — the feed shows nowhere but
+// its open picker (#2693).
+func (m *Model) recordChangeFeedBatch(events []watch.EventMsg) (cmd tea.Cmd, visible bool) {
 	if m.feed == nil {
-		return nil
+		return nil, false
 	}
 	// The cap is re-read per flush rather than cached: the setting hot-reloads
 	// like every other, and lowering it has to trim the existing list too.
@@ -253,8 +255,9 @@ func (m *Model) recordChangeFeedBatch(events []watch.EventMsg) tea.Cmd {
 	if added {
 		m.syncOpenChangeFeed()
 	}
+	visible = added && m.cfPicker
 	if len(deferred) == 0 {
-		return nil
+		return nil, visible
 	}
 	store := m.lhStore // stateless disk reads — safe off the Update loop
 	return func() tea.Msg {
@@ -273,13 +276,15 @@ func (m *Model) recordChangeFeedBatch(events []watch.EventMsg) tea.Cmd {
 			})
 		}
 		return changeFeedCapturedMsg{entries: entries}
-	}
+	}, visible
 }
 
-// applyChangeFeedCaptured folds the off-loop captures into the feed (#2176).
-func (m *Model) applyChangeFeedCaptured(msg changeFeedCapturedMsg) {
+// applyChangeFeedCaptured folds the off-loop captures into the feed (#2176)
+// and reports whether that changed what is on screen: only an open picker
+// shows the feed (#2693).
+func (m *Model) applyChangeFeedCaptured(msg changeFeedCapturedMsg) (visible bool) {
 	if m.feed == nil {
-		return
+		return false
 	}
 	added := false
 	for _, e := range msg.entries {
@@ -290,6 +295,7 @@ func (m *Model) applyChangeFeedCaptured(msg changeFeedCapturedMsg) {
 	if added {
 		m.syncOpenChangeFeed()
 	}
+	return added && m.cfPicker
 }
 
 // changeFeedBefore resolves what the file held before the external write. The

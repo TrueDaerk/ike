@@ -42,9 +42,9 @@ var wd struct {
 	// pass (what, the counters) or reconfiguration writes (dir, logf). Never
 	// held while dumping, so a slow disk cannot back-pressure LoopEnter.
 	mu   sync.Mutex
-	what any            // what the in-flight pass is handling (tea.Msg or label)
-	dir  func() string  // state dir for dump files, resolved at dump time
-	logf func(string)   // best-effort diagnostic logger (app's debug.log)
+	what any           // what the in-flight pass is handling (tea.Msg or label)
+	dir  func() string // state dir for dump files, resolved at dump time
+	logf func(string)  // best-effort diagnostic logger (app's debug.log)
 
 	// counts tallies outermost passes by what started them — the message's Go
 	// type name, or the label for non-message passes ("view/render"). Always
@@ -53,6 +53,13 @@ var wd struct {
 	// resolution so the per-pass cost stays two map operations, no formatting.
 	counts map[string]uint64
 	names  map[reflect.Type]string
+	// renders tallies composed frames by the message that triggered them
+	// (#2693): a "view/render" pass is attributed to the label of the
+	// message pass that preceded it (lastMsg), so the heartbeat can say not
+	// just that the loop rendered but *what for*. A `view/reuse` pass is not
+	// a render and is not attributed.
+	renders map[string]uint64
+	lastMsg string
 
 	once sync.Once // monitor goroutine spawn
 }
@@ -60,7 +67,12 @@ var wd struct {
 func init() {
 	wd.counts = map[string]uint64{}
 	wd.names = map[reflect.Type]string{}
+	wd.renders = map[string]uint64{}
 }
+
+// RenderLabel is the pass label View stamps on a composed frame; LoopEnter
+// attributes a pass under it to the message pass that came before.
+const RenderLabel = "view/render"
 
 // LoopEnter marks the start of an update-loop pass (an Update dispatch or a
 // View composition). what names the work for the dump header — the tea.Msg
@@ -71,9 +83,23 @@ func LoopEnter(what any) {
 		wd.enterNanos.Store(time.Now().UnixNano())
 		wd.mu.Lock()
 		wd.what = what
-		wd.counts[passLabel(what)]++
+		label := passLabel(what)
+		wd.counts[label]++
+		switch {
+		case label == RenderLabel:
+			wd.renders[wd.lastMsg]++
+		case !isLabel(what):
+			wd.lastMsg = label
+		}
 		wd.mu.Unlock()
 	}
+}
+
+// isLabel reports whether a pass was opened with a string label (a View
+// composition or a test's synthetic pass) rather than a tea.Msg.
+func isLabel(what any) bool {
+	_, ok := what.(string)
+	return ok
 }
 
 // passLabel resolves what a pass handles to its counter key: a string label
@@ -102,6 +128,20 @@ func MessageCounts() map[string]uint64 {
 	defer wd.mu.Unlock()
 	out := make(map[string]uint64, len(wd.counts))
 	for k, v := range wd.counts {
+		out[k] = v
+	}
+	return out
+}
+
+// RenderTriggers returns a copy of the cumulative render attribution: the
+// message type name that preceded a composed frame → frames composed after
+// it (#2693). The heartbeat diffs two snapshots into the `renders` field;
+// summed over an interval it equals the interval's `view/render` count.
+func RenderTriggers() map[string]uint64 {
+	wd.mu.Lock()
+	defer wd.mu.Unlock()
+	out := make(map[string]uint64, len(wd.renders))
+	for k, v := range wd.renders {
 		out[k] = v
 	}
 	return out

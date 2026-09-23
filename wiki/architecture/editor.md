@@ -765,7 +765,8 @@ outside insert mode too and are rebindable: `editor.deleteLine`
 (`cmd+backspace`), `editor.deleteWordBackward` (`alt+backspace`) and — the
 missing halves of the JetBrains line family — `editor.moveLineUp` /
 `editor.moveLineDown` (`cmd`/`ctrl+shift+up`/`down`), `editor.docStart` /
-`editor.docEnd` (`cmd`/`ctrl+home`/`end`, the `gg`/`G` motions) and
+`editor.docEnd` (`cmd`/`ctrl+home`/`end`, macOS also `cmd+up`/`down` since
+#2699, the `gg`/`G` motions) and
 `editor.selectLineStart` / `editor.selectLineEnd` (`shift+home`/`shift+end`).
 Each is **selection-aware** where JetBrains is: with a selection the line move
 carries every touched line (and the selection with it), and the delete removes
@@ -3690,6 +3691,19 @@ Lookups read `config.Get()` live, so a config reload applies immediately.
 Multi-line bodies re-indent on expansion: literal tabs become the buffer's
 indent unit (`tab_width`/`use_spaces`, editorconfig-aware) and every
 continuation line inherits the current line's leading whitespace.
+
+The **picker** is the trigger-less door to the same expansion (#2694,
+`snippets.insert`, `cmd+j` — JetBrains' *Insert Live Template*): the app opens
+the palette locked to a mode listing the buffer's templates (trigger, body
+preview, language badge), filtered with the hump matcher
+(`fuzzy.MatchHumps`, #2650), and the picked body goes to
+`Model.InsertSnippet`, which shares `expandSnippetOver` with the Tab path — the
+same re-indent, the same undo unit, the same tabstop session. Normal mode
+enters insert first (like `i`), so the chord works in both modes; secondary
+carets and read-only buffers refuse it exactly as Tab expansion does. A
+language with no templates at all gets a notice instead of an empty picker. The
+list itself is `Model.SnippetEntries` — `snippets.For(langPath)`, the very set
+Tab resolves a trigger against.
 
 The same templates appear in the completion popup as snippet items (detail
 `template …`) through a local completion source (see

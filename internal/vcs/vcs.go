@@ -106,6 +106,44 @@ type Snapshot struct {
 	ignored map[string]bool
 }
 
+// Equal reports whether two snapshots describe the same repository state —
+// root, branch, divergence, every file's status and porcelain detail, the
+// ignore set — so a refresh that found nothing new can be told from one that
+// did (#2693). The lazily filled path caches are not state. Two nils are
+// equal; nil and non-nil never are.
+func (s *Snapshot) Equal(o *Snapshot) bool {
+	if s == nil || o == nil {
+		return s == o
+	}
+	if s.Root != o.Root || s.Branch != o.Branch || s.Detached != o.Detached ||
+		s.Ahead != o.Ahead || s.Behind != o.Behind ||
+		len(s.Files) != len(o.Files) || len(s.Entries) != len(o.Entries) ||
+		len(s.codes) != len(o.codes) || len(s.ignored) != len(o.ignored) {
+		return false
+	}
+	for p, st := range s.Files {
+		if ost, ok := o.Files[p]; !ok || ost != st {
+			return false
+		}
+	}
+	for i := range s.Entries {
+		if s.Entries[i] != o.Entries[i] {
+			return false
+		}
+	}
+	for p, c := range s.codes {
+		if oc, ok := o.codes[p]; !ok || oc != c {
+			return false
+		}
+	}
+	for p := range s.ignored {
+		if !o.ignored[p] {
+			return false
+		}
+	}
+	return true
+}
+
 // FileEntry is one changed file with the porcelain XY detail the commit UI
 // needs to tell staged from unstaged changes.
 type FileEntry struct {

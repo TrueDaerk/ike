@@ -226,13 +226,16 @@ Active when an editor pane has focus.
 | Find usages (panel) | `cmd+alt+f7` | `ctrl+alt+f7` | `lsp.referencesPanel` |
 | Go to declaration | `cmd+b` | `ctrl+b` | `lsp.definition` |
 | Go to declaration | `f4` | `f4` | `lsp.definition` |
+| Go to document end | `cmd+down` | — | `editor.docEnd` |
 | Go to document end | `cmd+end` | `ctrl+end` | `editor.docEnd` |
 | Go to document end | `ctrl+end` | `ctrl+end` | `editor.docEnd` |
 | Go to document start | `cmd+home` | `ctrl+home` | `editor.docStart` |
+| Go to document start | `cmd+up` | — | `editor.docStart` |
 | Go to document start | `ctrl+home` | `ctrl+home` | `editor.docStart` |
 | Go to implementations | `cmd+alt+b` | `ctrl+alt+b` | `lsp.implementations` |
 | Go to line | `cmd+l` | `ctrl+l` | `editor.goToLine` |
 | Go to super | `cmd+u` | `ctrl+u` | `lsp.goToSuper` |
+| Insert live template | `cmd+j` | `ctrl+j` | `snippets.insert` |
 | Markdown preview | `cmd+alt+m` | `ctrl+alt+m` | `markdown.preview` |
 | Move line down | `cmd+shift+down` | `ctrl+shift+down` | `editor.moveLineDown` |
 | Move line down | `ctrl+shift+down` | `ctrl+shift+down` | `editor.moveLineDown` |

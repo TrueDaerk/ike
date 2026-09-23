@@ -116,6 +116,9 @@ var actionMap = map[string]string{
 	"$SelectAll":    "editor.selectAll",
 
 	// Editing.
+	// InsertLiveTemplate is JetBrains' cmd+j, the picker IKE binds to
+	// snippets.insert (#2694); SurroundWith has no counterpart here.
+	"InsertLiveTemplate":    "snippets.insert",
 	"EditorDuplicate":       "editor.duplicateLine",
 	"CommentByLineComment":  "editor.commentLine",
 	"CommentByBlockComment": "editor.commentBlock",

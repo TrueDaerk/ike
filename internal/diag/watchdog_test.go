@@ -168,3 +168,40 @@ func TestMessageCounts(t *testing.T) {
 		t.Error("MessageCounts must return a copy, not the live map")
 	}
 }
+
+// TestRenderTriggers: a view/render pass is attributed to the message pass
+// that preceded it, a view/reuse pass is not a render, and a string-labelled
+// pass never becomes the attribution target (#2693).
+func TestRenderTriggers(t *testing.T) {
+	type fakeTickMsg struct{}
+	type fakeOtherMsg struct{}
+	before := RenderTriggers()
+	pass := func(what any) {
+		LoopEnter(what)
+		LoopExit()
+	}
+	pass(fakeTickMsg{})
+	pass(RenderLabel)
+	pass(fakeTickMsg{})
+	pass("view/reuse") // a reused frame: no render, no attribution
+	pass(fakeTickMsg{})
+	pass(RenderLabel)
+	pass(fakeOtherMsg{})
+	pass("some/label") // a label does not displace the message attribution
+	pass(RenderLabel)
+
+	after := RenderTriggers()
+	if got := after["diag.fakeTickMsg"] - before["diag.fakeTickMsg"]; got != 2 {
+		t.Errorf("want 2 renders attributed to fakeTickMsg, got %d", got)
+	}
+	if got := after["diag.fakeOtherMsg"] - before["diag.fakeOtherMsg"]; got != 1 {
+		t.Errorf("want 1 render attributed to fakeOtherMsg, got %d", got)
+	}
+	if got := after["some/label"] - before["some/label"]; got != 0 {
+		t.Errorf("a string label must never be an attribution target, got %d", got)
+	}
+	after["diag.fakeTickMsg"] += 100
+	if live := RenderTriggers()["diag.fakeTickMsg"]; live == after["diag.fakeTickMsg"] {
+		t.Error("RenderTriggers must return a copy, not the live map")
+	}
+}

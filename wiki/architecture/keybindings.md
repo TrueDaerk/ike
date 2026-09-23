@@ -1360,6 +1360,37 @@ outlive its reason. A second test checks the audit *list* itself in, so a new
 `editor`-only navigation binding is a decision someone records rather than a
 row that slips in.
 
+## macOS' document-edge chords (#2699)
+
+A later telemetry export showed `cmd+down` pressed and unbound in the editor.
+`cmd+home`/`cmd+end` (#2400 below) cover `editor.docStart`/`editor.docEnd`, but
+most Mac keyboards have no Home/End keys — macOS' own convention for "go to
+document start/end" (Xcode, TextEdit, the JetBrains macOS keymap) is
+`cmd+up`/`cmd+down` instead. Both now resolve to the same commands, as
+`darwinRows` entries: off macOS the Cmd→Ctrl fold would otherwise land them on
+`ctrl+up`/`ctrl+down`, which stay the editor's paragraph jumps (handled
+directly in `keys_normal.go`, outside the binding table) rather than being
+taken over. `cmd+left`/`cmd+right` (line start/end) were already bound
+editor-wide by #2634.
+
+## Insert Live Template (#2694)
+
+`cmd+j` was the most frequent unbound chord in the editor context of a
+telemetry export (5 presses, once followed by `playground.open`). In JetBrains
+it is *Insert Live Template*, and IKE had the snippets subsystem (#1152) but no
+chord opening a picker over it:
+
+| chord | context | command |
+|---|---|---|
+| `cmd+j` (`ctrl+j` off macOS, via the `Cmd`→`Ctrl` fold) | Editor | `snippets.insert` |
+
+`ctrl+j` is free after the fold — no other default claims it — so one
+`jetbrainsRows` entry covers both platforms. The chord is fragile like every
+`Cmd`-modified JetBrains binding; the recorded fallback is the palette *and*
+the trigger+Tab expansion, which stays the fast path for a template one knows
+by name. See [editor.md](editor.md#live-templates--snippets-1152) for the
+picker and the expansion it shares with Tab.
+
 ## The line-editing family and the pane chords (#2400)
 
 A second telemetry export (two sessions, ~9,900 events) left 37 presses on
@@ -1410,7 +1441,7 @@ JetBrains is:
 | `editor.deleteLine` | `cmd+backspace` | fragile | `vim dd` | live via vim dd |
 | `editor.deleteWordBackward` | `alt+backspace` | fragile | `vim db` | live via vim db |
 | `editor.docEnd` | `cmd+end` | fragile | `ctrl+end` | live via ctrl+end |
-| `editor.docStart` | `cmd+home` | fragile | `ctrl+home` | live via ctrl+home |
+| `editor.docStart` | `cmd+up` | fragile | `ctrl+home` | live via ctrl+home |
 | `editor.duplicateLine` | `cmd+d` | fragile | `vim yyp` | live via vim yyp |
 | `editor.escapeSelection` | `cmd+alt+shift+e` | fragile | `palette` | live via palette |
 | `editor.find` | `cmd+f` | fragile | `vim /` | live via vim / |
@@ -1577,6 +1608,7 @@ JetBrains is:
 | `search.open` | `cmd+f` | fragile | `vim / (every pane binds it, #2409)` | live via vim / (every pane binds it, #2409) |
 | `search.prevMatch` | `shift+f3` | delivered | `—` | live |
 | `settings.open` | `cmd+,` | fragile | `palette` | live via palette |
+| `snippets.insert` | `cmd+j` | fragile | `palette / trigger+tab` | live via palette / trigger+tab |
 | `structure.toggle` | `cmd+3` | fragile | `palette` | live via palette |
 | `terminal.new` | `cmd+alt+shift+t` | fragile | `palette` | live via palette |
 | `terminal.newTab` | `ctrl+t` | delivered | `—` | live |

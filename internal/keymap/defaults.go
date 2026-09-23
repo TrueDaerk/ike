@@ -253,7 +253,7 @@ var jetbrainsRows = []row{
 	// Document start/end: the cmd form is the macOS convention (and what the
 	// telemetry saw pressed), the ctrl form is JetBrains' Windows/Linux
 	// scheme and delivered everywhere. The macOS text-field twins cmd+up /
-	// cmd+down are deliberately left alone: off macOS they fold onto
+	// cmd+down (#2699) are darwinRows below: off macOS they fold onto
 	// ctrl+up / ctrl+down, which are the editor's paragraph jumps.
 	{"cmd+home", "editor.docStart", "Go to document start", Editor, "Editor (#2400)"},
 	{"cmd+end", "editor.docEnd", "Go to document end", Editor, "Editor (#2400)"},
@@ -431,6 +431,10 @@ var jetbrainsRows = []row{
 	// the Editor context (#145), and one everyday command per chord wins.
 	{"cmd+l", "editor.goToLine", "Go to line", Editor, "Editor (#2486)"},
 	{"cmd+shift+v", "editor.pasteFromHistory", "Paste from history", Editor, "Paste history (#57)"},
+	// Insert Live Template (#2694): JetBrains' own cmd+j, the most frequent
+	// unbound chord the editor telemetry saw. Free on both platforms — the
+	// Cmd→Ctrl fold lands it on ctrl+j, which no other default claims.
+	{"cmd+j", "snippets.insert", "Insert live template", Editor, "Live templates (#2694)"},
 	// Multi-caret (#145): JetBrains' ctrl+g occurrence walk plus a deliverable
 	// select-all-occurrences chord (the JetBrains original needs alt).
 	{"ctrl+g", "editor.caret.addNext", "Add caret at next occurrence", Editor, "Multi-caret (#145)"},
@@ -907,6 +911,13 @@ var darwinRows = []row{
 	// only — the Cmd→Ctrl fold would land it on ctrl+alt+w, which pane.close
 	// already owns; the other batch closes stay palette/menu-only.
 	{"cmd+alt+w", "editor.tab.closeOthers", "Close other tabs", Global, "Editor tabs (#2538)"},
+	// macOS' system-wide document start/end chords (#2699): Xcode, TextEdit
+	// and the JetBrains macOS keymap all bind these, and telemetry shows
+	// cmd+down pressed and unbound in the editor. macOS only — the Cmd→Ctrl
+	// fold would land them on ctrl+up/ctrl+down, which the editor's paragraph
+	// jumps own everywhere else (keys_normal.go).
+	{"cmd+up", "editor.docStart", "Go to document start", Editor, "Editor (#2699)"},
+	{"cmd+down", "editor.docEnd", "Go to document end", Editor, "Editor (#2699)"},
 	{"ctrl+1", "pane.focus1", "Focus pane 1", Global, "Pane numbers (#2407)"},
 	{"ctrl+2", "pane.focus2", "Focus pane 2", Global, "Pane numbers (#2407)"},
 	{"ctrl+3", "pane.focus3", "Focus pane 3", Global, "Pane numbers (#2407)"},
