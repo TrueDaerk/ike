@@ -7,6 +7,11 @@ package editor
 // engine, and the tabstop session (#846) takes over tab/shift+tab exactly like
 // an accepted snippet completion. No trigger match leaves Tab to its normal
 // indent insertion (#1137).
+//
+// The same file holds the picker's entry point (#2694): InsertSnippet expands
+// a body chosen in the app's live-template picker at the caret, sharing
+// expandSnippetOver with the Tab path so both land the same text, stops and
+// undo unit.
 
 import (
 	"strings"
