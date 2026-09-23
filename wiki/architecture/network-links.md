@@ -1,10 +1,10 @@
 ---
 type: architecture
 title: Network Links (TCP endpoint with pairing)
-description: Connecting to IKE over a socket — the [network] TCP endpoint, the newline-delimited JSON protocol, the one-time pairing PIN (six digits 1-9, expiring, regenerated on a miss), tokens, the open command that runs the ike:// pipeline, the status command reporting the open project, file and cursor, mDNS/DNS-SD discovery of the endpoint (_ike._tcp), and worked client examples (#2519, #2522, #2529)
+description: Connecting to IKE over a socket — the [network] TCP endpoint, the newline-delimited JSON protocol, the one-time pairing PIN (six digits 1-9, expiring, regenerated on a miss), tokens, the open command that runs the ike:// pipeline, the status command reporting the open project, file and cursor, the guarded close command (the busy guard's reasons on the wire, a one-time force token to discard), mDNS/DNS-SD discovery of the endpoint (_ike._tcp), and worked client examples (#2519, #2522, #2529, #2703)
 resource: internal/netlink
-tags: [deeplink, network, socket, pairing, ipc, project-switching, mdns, discovery]
-timestamp: 2026-09-07T00:00:00Z
+tags: [deeplink, network, socket, pairing, ipc, project-switching, project-close, mdns, discovery]
+timestamp: 2026-09-23T00:00:00Z
 ---
 
 # Network Links (TCP endpoint with pairing)
@@ -14,13 +14,16 @@ IKE. Network links (#2519) extend the same actions to **other devices**: a
 phone, a laptop, a script on a build box. IKE listens on a TCP port and
 speaks a small line protocol; a client that has **paired once** can then say
 "open project X at file Y line Z and show the terminal", exactly like an
-`ike://` URL would.
+`ike://` URL would — ask what IKE is showing, and close a project again.
 
 Everything a network client can do is what a clicked link can do — no shell,
 no file contents, no arbitrary commands. An accepted request is turned into
 an `ike://` URL string and handed to the very pipeline an OS click runs
 through (`internal/app/deeplink.go`): history → projects directory → clone
-dialog, file at line, tool window.
+dialog, file at line, tool window. The one action beyond a link, `close`
+(#2703), runs through the same busy guard the UI's close does and can only
+discard work after the client has been shown the guard's reasons and echoed
+a one-time token.
 
 ## Enabling the endpoint
 
@@ -57,7 +60,7 @@ name by default, so two machines are told apart — with an SRV record to
 | TXT key | Value                                   |
 |---------|-----------------------------------------|
 | `v`     | IKE's version (`0.5.171`)               |
-| `proto` | wire-protocol generation, currently `2` (`1` before `status`, #2529) |
+| `proto` | wire-protocol generation, currently `3` (`1` before `status` #2529, `2` before `close` #2703); `hello` reports the same number as `proto` |
 | `name`  | `ike`                                   |
 
 Any Bonjour / Avahi / DNS-SD client browses for it:
@@ -102,12 +105,14 @@ Every request names its command in `cmd`; every response names its shape in
 
 | `type`      | Meaning                                                        |
 |-------------|----------------------------------------------------------------|
-| `hello`     | Server identity: `name`, `version`, `authenticated`             |
-| `ok`        | The command succeeded (`open` adds `link`)                      |
+| `hello`     | Server identity: `name`, `version`, `proto`, `authenticated`    |
+| `ok`        | The command succeeded (`open` adds `link`, `close` adds `project`) |
 | `error`     | Refused: `error` is a stable code, `message` the human reason   |
 | `challenge` | Pair now: `reason`, `expires_in` (seconds), `kind`, `length`, `alphabet` |
 | `paired`    | Pairing succeeded: `token`, `client_id`                         |
 | `status`    | What IKE shows: `project`, `root`, `link`, plus `remote`, `file`, `line`, `col` when known |
+| `blocked`   | `close` refused by the busy guard: `project`, `reasons` (the guard's lines), `force_token`, `expires_in` |
+| `forbidden` | A paired, well-formed request IKE will not honour: `reason` (`stale_force_token`) |
 
 Error codes (`error` field): `bad_request` (unparseable line, unknown or
 missing `cmd`, malformed code), `unauthorized` (a guarded command without a
@@ -116,7 +121,8 @@ valid token), `invalid_link` (the `open` request does not form a valid
 refusal), `no_challenge` (a guess arrived while no code was live),
 `too_large` (line over 16 KiB — the connection is closed), `unavailable`
 (the IDE state a command reports is not available — `status` with no project
-open), `internal`.
+open, `close` naming a project that is not open, or an IDE that did not
+answer a `close` in time), `internal`.
 
 Limits: 16 KiB per line, 5 minutes idle before a connection is cut, 32
 simultaneous connections.
@@ -132,6 +138,7 @@ simultaneous connections.
 | `open`    | yes  | `url`; or `project` \| `remote` + optional `file`, `line`, `tool`      | `ok` / `invalid_link`     |
 | `unpair`  | yes  | —                                                                      | `ok` (token revoked)      |
 | `status`  | yes  | —                                                                      | `status` / `unauthorized` / `unavailable` |
+| `close`   | yes  | `project` \| `remote` (absent = the active project); `force` (the one-time token of a `blocked` reply) | `ok` / `blocked` / `forbidden` / `unauthorized` / `unavailable` |
 
 `token` may ride on **any** request. Once a connection has presented a valid
 token it stays authenticated until it closes, so a client can send the token
@@ -281,6 +288,89 @@ Typical uses: label the device in a client's list, offer "open this file in
 the project you are already in", or decide whether an `open` would switch
 projects.
 
+## The `close` command
+
+`open` and `status` never take anything away; `close` (#2703) does — it
+closes a project the way **project.close** or the recent-projects list's
+close does, so the same [busy guard](./workspace.md) stands in the
+way: unsaved buffers, running foreground processes, tool panes. A remote
+client cannot see the UI's prompt, so the guard's answer travels over the
+wire instead, and discarding takes a second, deliberate step.
+
+```json
+{"cmd":"close","token":"…","project":"ike"}
+```
+
+- `project` is the plain root directory name `open` accepts, `remote` any
+  git remote spelling (normalised like a link's); **neither means the
+  active project**. The target is resolved among the projects IKE has
+  **open** — the active workspace and every parked one, by name
+  (case-insensitively) or by the root's git remote — never the history: a
+  project that is not open answers `unavailable`.
+- `close` is guarded like `status`: an unpaired asker gets `unauthorized`
+  and **no** pairing popup.
+- **Idle workspace** (the guard would not fire): the project closes exactly
+  as the UI would close it. The active project closes and the most recently
+  used parked workspace resumes in place; a parked project is dropped and
+  torn down without touching the active one. Answer: `{"type":"ok",
+  "project":"ike"}`.
+- **The last open project never quits the IDE.** Where the UI's
+  project.close degrades into a guarded quit, a network close tears the
+  workspace down and **reopens the same root afresh** through the
+  fresh-start path — the state `ike` shows when launched in that
+  directory (saved layout, files reopened from disk). IKE notes "closed
+  project X — reopened at its start state".
+- **Busy workspace:**
+
+  ```json
+  {"type":"blocked","project":"ike",
+   "reasons":["running shell process: vim","tool sql","unsaved: app.go, main.go"],
+   "force_token":"nQ3c…","expires_in":120,
+   "message":"still busy — send close again with force set to the token to discard the listed activity"}
+  ```
+
+  `reasons` are the guard's summary lines **verbatim** — the very text the
+  UI prompt would show — and nothing in the UI moves: no popup, no
+  workspace touched.
+- **Force:** echo the token on a second `close`:
+
+  ```json
+  {"cmd":"close","token":"…","project":"ike","force":"nQ3c…"}
+  ```
+
+  This is the UI guard's *discard* answer: dirty buffers dropped, sessions
+  killed, the workspace closed; answer `ok`. Force **never saves** — there
+  is deliberately no command that writes files over the wire; a client that
+  wants the work kept tells the user to save in IKE first.
+- **The force token** is single-use, valid **120 seconds** (long enough to
+  read the reasons and decide, short enough that a forgotten token cannot be
+  replayed much later), and bound to three things: the **pairing** it was
+  issued to (keyed by client id, hashed in memory like the pairing tokens,
+  dropped on `unpair`), the **project** the guard evaluated, and the **exact
+  set of reasons** the client was shown. A wrong, expired, reused or
+  mismatched token — a buffer dirtied or a process started since the
+  `blocked` reply changes the reasons — answers
+  `{"type":"forbidden","reason":"stale_force_token"}`; every attempt,
+  right or wrong, spends the client's token, and the next plain `close` is
+  `blocked` again with the current reasons and a fresh token. A client only
+  ever holds one live token per IKE.
+- **Nothing closes invisibly.** Every remote close raises a notice in IKE —
+  `closed ike via network (phone)` — and a forced one says what it cost:
+  `closed ike via network (phone) — discarded 2 unsaved buffers, stopped 1
+  running process`. Guard-exempt tools (#2704) are named afterwards as
+  usual.
+- While a close or quit guard prompt is already open in IKE — the user is
+  being asked — a remote `close` is `unavailable` rather than pulling the
+  workspace out from under the prompt. An IDE that does not answer within
+  five seconds is `unavailable` too.
+
+The guard evaluation runs on IKE's update loop, where the inventory lives
+(`collectActivity`), so the wire and the UI can never disagree about what
+is busy: the connection goroutine posts the request through `host.Send` and
+waits for the loop's verdict. Idle shells do not count (#2702), and the
+active project's popup terminal and project-owned floating panels count
+exactly as they do for project.close.
+
 ## Worked examples
 
 Pair and open with `nc` (macOS/BSD `nc` needs the sleeps to keep the
@@ -300,6 +390,16 @@ connection open for the answers):
 #    → {"type":"status","project":"ike","root":"/Users/dev/Development/ike",
 #       "remote":"github.com/truedaerk/ike","file":"internal/app/app.go","line":4211,"col":3,
 #       "link":"ike://open?file=internal%2Fapp%2Fapp.go%3A4211&remote=https%3A%2F%2Fgithub.com%2Ftruedaerk%2Fike"}
+# 5. close it — the guard answers over the wire
+(printf '{"cmd":"close","token":"rLdRwN…","project":"ike"}\n'; sleep 1) | nc 192.168.1.20 4530
+#    → {"type":"blocked","project":"ike","reasons":["unsaved: app.go"],
+#       "force_token":"nQ3cYt…","expires_in":120,"message":"still busy — …"}
+# 6. read the reasons, decide, and discard within two minutes
+(printf '{"cmd":"close","token":"rLdRwN…","project":"ike","force":"nQ3cYt…"}\n'; sleep 1) | nc 192.168.1.20 4530
+#    → {"type":"ok","project":"ike","message":"closed ike"}
+#    (IKE shows: closed ike via network (laptop) — discarded 1 unsaved buffer)
+#    the same token again, or after 120 s, or once the reasons changed:
+#    → {"type":"forbidden","reason":"stale_force_token","message":"…"}
 ```
 
 A minimal Python client that pairs interactively and stores the token:
@@ -363,6 +463,16 @@ with socket.create_connection((HOST, PORT)) as s:
   because the asker is *paired*: `status` needs a valid token, never starts
   pairing itself, and reports nothing else — no buffer contents, no file
   listings, no environment.
+- **`close` can discard work, but only after a paired client saw the
+  reasons and echoed a one-time token** (#2703). A plain `close` never
+  loses anything the UI guard would have asked about: it either closes an
+  idle project or answers `blocked` with the guard's lines. Discarding
+  needs the `force_token` of that very reply — bound to the pairing, the
+  project and the exact reasons, 120 seconds, single-use — so a replayed,
+  guessed or stale token cannot close anything, and activity that appeared
+  after the client looked invalidates the token. The IDE never quits on a
+  network request, nothing is ever written to a file over the wire, and
+  every remote close is announced in IKE with the client's name.
 - **Input is capped**: 16 KiB lines, idle and connection limits, JSON only —
   garbage is answered with `bad_request` and never reaches the IDE.
 
@@ -379,11 +489,19 @@ with socket.create_connection((HOST, PORT)) as s:
 - `internal/netlink/tokens.go` — `Store`: `Issue`, `Verify` (constant-time
   over every hash), `Revoke`, `RevokeAll`, atomic 0600 JSON file.
 - `internal/netlink/protocol.go` — `Request` / `Response`, error codes,
-  `LinkFromRequest` (parts → URL → strict parse), `Status` /
-  `statusResponse` / `LinkFromStatus` (snapshot → `ike://open` URL).
+  `ProtocolVersion`, `LinkFromRequest` (parts → URL → strict parse),
+  `Status` / `statusResponse` / `LinkFromStatus` (snapshot → `ike://open`
+  URL), `CloseRequest` / `CloseResult` / `CloseOutcome` (the IDE's side of
+  `close`).
+- `internal/netlink/force.go` — `ForceTokens` (#2703): `Issue` (one live
+  token per client id, hashed, `ForceTokenTTL` = 120 s), `Consume`
+  (single-use, constant-time, burns on any attempt), `Forget` (unpair),
+  `ForceGrant.Matches` (root + reasons binding).
 - `internal/netlink/server.go` — `Serve(Options)`: accept loop, per-connection
-  request loop with caps and deadlines, `dispatch`, `pair`; `Options.State`
-  is the IDE's status getter, called on the connection goroutine.
+  request loop with caps and deadlines, `dispatch`, `pair`, `closeProject` /
+  `askClose` (posts through `Options.Close`, waits `CloseTimeout`);
+  `Options.State` is the IDE's status getter, called on the connection
+  goroutine.
 - `internal/mdns` — the mDNS/DNS-SD responder (#2522): `Announce(Service)`
   joins the groups and serves until `Close`; `Records`, `Respond` and
   `Announcement` are the pure core (record set, query answering, the
@@ -401,5 +519,11 @@ with socket.create_connection((HOST, PORT)) as s:
   (`netStatusHolder` / `netState`, refreshed by `refreshNetStatus` at the end
   of every settled `Update` pass, the git remote cached per root). Events reach the Update loop through
   `host.Send`; accepted links arrive as `DeepLinkMsg`.
+- `internal/app/netlink_close.go` — the `close` bridge (#2703): a
+  `netCloseMsg` per request, `handleNetClose` (resolve among open
+  workspaces → `activeCloseActivity` / `collectActivity` → blocked, stale or
+  the UI's own close paths: `finishWorkspaceClose`, `performCloseAndSwitch`,
+  `performCloseRestart` for the last project via `switchOpts.restart`), the
+  `closed X via network (client)` notice.
 - Settings page **Network Links** (`internal/settings/schema.go`), config
   `Network` struct with `NetworkBindError` shared by validator and form.

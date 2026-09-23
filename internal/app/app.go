@@ -7279,6 +7279,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case NetworkForgetClientsMsg:
 		return m.handleNetworkForgetClients()
 
+	case netCloseMsg:
+		// A paired network client asked to close a project (#2703): the
+		// guard runs here, on the loop, and the verdict goes back to the
+		// waiting connection.
+		return m.handleNetClose(msg)
+
 	case tea.FocusMsg:
 		// The terminal gained focus: stamp this instance as the one an OS
 		// ike:// click should reach (#2396). Best-effort — most terminals
