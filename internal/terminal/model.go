@@ -248,6 +248,15 @@ func (m Model) Pid() int {
 // would kill (#986); false for a failed or dead session.
 func (m Model) Busy() bool { return m.sess != nil && m.sess.Busy() }
 
+// ForegroundName names the process currently owning the session's terminal
+// (#2702), "" when that is the shell itself or the name is unavailable.
+func (m Model) ForegroundName() string {
+	if m.sess == nil {
+		return ""
+	}
+	return m.sess.ForegroundName()
+}
+
 // SendEOF forwards a ctrl+d to the child (#986): on an idle shell prompt it
 // exits the shell, which closes the pane/tab through the regular exit path.
 func (m *Model) SendEOF() {

@@ -185,6 +185,7 @@ var actionMap = map[string]string{
 	"QuickJavaDoc":         "lsp.hover",
 	"QuickDocumentation":   "lsp.hover",
 	"ParameterInfo":        "lsp.parameterInfo",
+	"CodeCompletion":       "completion.trigger",
 	"ShowErrorDescription": "lsp.diagnosticInfo",
 	"GotoNextError":        "lsp.nextDiagnostic",
 	"GotoPreviousError":    "lsp.prevDiagnostic",

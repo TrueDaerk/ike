@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts plus language-scoped editor bindings, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-09-21T21:00:00Z
+timestamp: 2026-09-23T12:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -472,7 +472,13 @@ default toggle chord, freed because the palette's primary entry is esc-esc
 (`palette.toggle_key` now defaults to empty and stays configurable) — plus
 `cmd+p` (the JetBrains chord) for terminals that deliver Cmd; both rows
 collapse to one `ctrl+p` binding off macOS. `lsp.parameterInfo` opens the
-signature-help popup on demand, in insert and normal mode.
+signature-help popup on demand, in insert and normal mode. Basic completion
+(#2695) binds `ctrl+space` — JetBrains' chord, delivered by every supported
+terminal — to `completion.trigger`, which opens the completion popup at the
+caret without the identifier-rune delay (see
+[Completion Engine](completion.md)); a terminal on the legacy encoding sends
+the C0 NUL for the same key, and `ParseKey` folds that `ctrl+@` spelling onto
+`ctrl+space`, so one binding covers both.
 
 The unbound-command audit (#1378) gave five more palette-only commands their
 JetBrains chords: `lsp.documentSymbols` (`cmd+f12`, the File Structure popup —

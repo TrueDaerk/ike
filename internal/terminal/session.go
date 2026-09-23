@@ -1058,6 +1058,31 @@ func (s *Session) AtPrompt() bool {
 	return pgrp == s.cmd.Process.Pid
 }
 
+// ForegroundPid returns the pid of the process that currently owns the
+// session's terminal (#2702): the PTY's foreground process group for a shell
+// — 0 while the shell itself owns it, i.e. at an idle prompt — and the child
+// itself for a command session (0350). 0 when the query is unavailable.
+func (s *Session) ForegroundPid() int {
+	if s.closed.Load() || s.cmd == nil || s.cmd.Process == nil || s.ptmx == nil {
+		return 0
+	}
+	if s.IsCommand() {
+		return s.Pid()
+	}
+	pgrp, err := unix.IoctlGetInt(int(s.ptmx.Fd()), unix.TIOCGPGRP)
+	if err != nil || pgrp <= 0 || pgrp == s.cmd.Process.Pid {
+		return 0
+	}
+	return pgrp
+}
+
+// ForegroundName names the foreground process (#2702) — "vim", "npm", … —
+// for the close/quit guard's prompt body. "" when nothing but the shell runs
+// or the name cannot be read; the guard then words the line generically.
+func (s *Session) ForegroundName() string {
+	return processName(s.ForegroundPid())
+}
+
 // IsCommand reports whether the session runs a program (0350, #574) rather
 // than an interactive shell.
 func (s *Session) IsCommand() bool { return s.argv != nil }

@@ -409,6 +409,19 @@ func telemetryProjectToken() string {
 // the same class keymap.Key.NonTyping names for insert-mode dispatch (#2622).
 func recordableUnbound(k keymap.Key) bool { return k.NonTyping() }
 
+// terminalOwnsUnbound reports whether an unresolved chord belongs to a
+// terminal rather than to a missing keybind (#2701). A focused live terminal
+// forwards every chord the reserved set and the terminal-context bindings do
+// not claim straight to the pty — ctrl+d is the shell's EOF, ctrl+z its
+// suspend — so recording them as "unbound" buried the genuinely missing
+// keybinds in noise, exactly as the editor's own editing chords did (#2303).
+// The exited read-only view (#1951) counts too: its keys are late shell input,
+// not a keymap gap. The playground records under its own context for the same
+// reason (recordPlayUnbound).
+func (m Model) terminalOwnsUnbound() bool {
+	return m.terminalFocused() || m.focusedDeadTerminal() != nil
+}
+
 // telemetryZone names a layout zone for the usage log.
 func telemetryZone(z layout.Zone) string {
 	switch z {

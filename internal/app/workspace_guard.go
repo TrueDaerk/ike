@@ -1,7 +1,9 @@
 package app
 
 import (
+	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -10,6 +12,7 @@ import (
 	"ike/internal/host"
 	"ike/internal/pane"
 	"ike/internal/project"
+	"ike/internal/terminal"
 	"ike/internal/ui"
 	"ike/internal/workspace"
 )
@@ -22,62 +25,163 @@ import (
 
 // wsActivity summarises the live state closing a workspace would kill.
 type wsActivity struct {
-	running []string // running debug session, runs, tools — one line each
-	shells  int      // running plain shell terminals
+	running []string // debug session, runs, tools, busy shells — one line each
 	dirty   []string // dirty buffer names
+	exempt  []string // guard-exempt tool names (#2704), killed without asking
 }
 
-// busy reports whether tearing the workspace down loses anything at all
-// (the close-from-list gate; shells count — their state dies too).
+// busy reports whether tearing the workspace down loses anything at all (the
+// close-from-list gate). Idle shells do not count since #2702: a shell
+// sitting at its prompt loses nothing but its scrollback, so it never asks.
 func (a wsActivity) busy() bool {
-	return len(a.running) > 0 || a.shells > 0 || len(a.dirty) > 0
+	return len(a.running) > 0 || len(a.dirty) > 0
 }
 
 // summary renders the activity as prompt body lines.
 func (a wsActivity) summary() []string {
 	lines := append([]string(nil), a.running...)
-	if a.shells > 0 {
-		lines = append(lines, plural(a.shells, "running shell terminal", "running shell terminals"))
-	}
 	if len(a.dirty) > 0 {
 		lines = append(lines, "unsaved: "+strings.Join(a.dirty, ", "))
 	}
 	return lines
 }
 
-// collectActivity inventories one workspace's live state. It mirrors
-// workspaceBusy (#780) but keeps the details for the prompt body.
+// exemptTools returns the guard-exempt tool names (#2704) deduplicated and
+// sorted, so the notice after a close reads the same for the same panes.
+func (a wsActivity) exemptTools() []string {
+	if len(a.exempt) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(a.exempt))
+	out := make([]string, 0, len(a.exempt))
+	for _, name := range a.exempt {
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// exemptToolsNotice words the post-close notice naming the tools that were
+// killed without a prompt (#2704) — "closed 2 tools without asking: sql,
+// yarn"; "" when nothing was exempt.
+func exemptToolsNotice(names []string) string {
+	if len(names) == 0 {
+		return ""
+	}
+	noun := "tools"
+	if len(names) == 1 {
+		noun = "tool"
+	}
+	return fmt.Sprintf("closed %d %s without asking: %s", len(names), noun, strings.Join(names, ", "))
+}
+
+// notifyExemptTools posts that notice for w's guard-exempt tools, if any. The
+// close paths call it right after the teardown, so the user still learns what
+// the close killed silently.
+func (m Model) notifyExemptTools(act wsActivity) {
+	if msg := exemptToolsNotice(act.exemptTools()); msg != "" {
+		m.host.Notify(host.Info, msg)
+	}
+}
+
+// guardTerm is the terminal surface the guard inspects: enough to tell a
+// tool pane from a run from a plain shell, whether foreground work is alive
+// (#986 Busy) and what that work is called (#2702 ForegroundName).
+// terminal.Model implements it; tests substitute a fake session.
+type guardTerm interface {
+	Running() bool
+	Busy() bool
+	IsCommand() bool
+	Tool() string
+	Label() string
+	ForegroundName() string
+}
+
+// addTerm counts one terminal session. Since #2702 only a session with
+// running foreground work counts: a shell at its prompt, and a command
+// session whose process already exited, are idle and gate no guard. Tool
+// panes keep their own rule — a tool's exit closes its pane, so a live tool
+// pane is by definition work the close would kill — unless its entry opts out
+// with guard = false (#2704).
+func (a *wsActivity) addTerm(t guardTerm) {
+	if !t.Running() {
+		return
+	}
+	tool := t.Tool()
+	switch {
+	case tool == runToolName:
+		// The Run tool (#1905) is a tool pane, but what runs in it is the
+		// user's program: name the configuration, like any run did before.
+		// It is never exemptable — guard = false belongs to a [[tools.custom]]
+		// entry and the Run tool has none.
+		if t.Busy() {
+			a.running = append(a.running, "run "+runLabel(t.Label()))
+		}
+	case tool != "":
+		entry, configured := toolEntry(tool)
+		if configured && entry.Global {
+			// A global tool (#1890) is never killed by closing a
+			// workspace — it detaches to the manager — and the quit path
+			// ends it tidily like a global floating panel (#1793), so it
+			// gates no guard. guard = false is moot for it.
+			return
+		}
+		if configured && !entry.GuardsClose() {
+			// guard = false (#2704): the pane dies with the workspace like
+			// any other tool, but it is not worth a prompt — the close
+			// names it afterwards instead of asking beforehand.
+			a.exempt = append(a.exempt, tool)
+			return
+		}
+		a.running = append(a.running, "tool "+tool)
+	case t.IsCommand():
+		if t.Busy() {
+			a.running = append(a.running, "run "+runLabel(t.Label()))
+		}
+	default:
+		if t.Busy() {
+			a.running = append(a.running, shellActivityLine(t))
+		}
+	}
+}
+
+// addTermModel is addTerm for a pane's terminal, skipping absent ones.
+func (a *wsActivity) addTermModel(t *terminal.Model) {
+	if t == nil {
+		return
+	}
+	a.addTerm(t)
+}
+
+// runLabel falls back to a generic name for an unlabelled run.
+func runLabel(label string) string {
+	if label == "" {
+		return "command"
+	}
+	return label
+}
+
+// shellActivityLine names the foreground process of a busy shell (#2702) —
+// "running shell process: vim" — and words the line generically when the
+// name is unavailable (process gone, sandbox denial, unsupported platform).
+func shellActivityLine(t guardTerm) string {
+	if name := t.ForegroundName(); name != "" {
+		return "running shell process: " + name
+	}
+	return "running shell process"
+}
+
+// collectActivity inventories one workspace's live state. workspaceBusy
+// (#780) is the same inventory reduced to a bool; this one keeps the details
+// for the prompt body.
 func collectActivity(w *workspace.Workspace) wsActivity {
 	var a wsActivity
 	if w == nil {
 		return a
-	}
-	addTerm := func(tool, label string, isCmd bool) {
-		switch {
-		case tool == runToolName:
-			// The Run tool (#1905) is a tool pane, but what runs in it is the
-			// user's program: name the configuration, like any run did before.
-			if label == "" {
-				label = "command"
-			}
-			a.running = append(a.running, "run "+label)
-		case tool != "":
-			if _, global := globalToolEntry(tool); global {
-				// A global tool (#1890) is never killed by closing a
-				// workspace — it detaches to the manager — and the quit path
-				// ends it tidily like a global floating panel (#1793), so it
-				// gates no guard.
-				return
-			}
-			a.running = append(a.running, "tool "+tool)
-		case isCmd:
-			if label == "" {
-				label = "command"
-			}
-			a.running = append(a.running, "run "+label)
-		default:
-			a.shells++
-		}
 	}
 	for _, key := range w.Panes.Keys() {
 		inst := w.Panes.Get(key)
@@ -86,9 +190,7 @@ func collectActivity(w *workspace.Workspace) wsActivity {
 		}
 		switch inst.Kind() {
 		case pane.KindTerminal:
-			if t := inst.Terminal(); t.Running() {
-				addTerm(t.Tool(), t.Label(), t.IsCommand())
-			}
+			a.addTermModel(inst.Terminal())
 		case pane.KindEditor:
 			for i := 0; i < inst.TabCount(); i++ {
 				if ed := inst.TabEditor(i); ed != nil && ed.Dirty() {
@@ -98,9 +200,7 @@ func collectActivity(w *workspace.Workspace) wsActivity {
 					}
 					a.dirty = append(a.dirty, name)
 				}
-				if t := inst.TabTerminal(i); t != nil && t.Running() {
-					addTerm(t.Tool(), t.Label(), t.IsCommand())
-				}
+				a.addTermModel(inst.TabTerminal(i))
 			}
 		}
 	}
@@ -118,23 +218,23 @@ func collectActivity(w *workspace.Workspace) wsActivity {
 	return a
 }
 
-// addPopup counts the popup terminal's running sessions (#1407): a busy tab
-// (running command inside the shell) lists as running work, an idle shell
-// counts like a pane shell — its state dies with the workspace too.
+// addPopup counts the popup terminal's sessions (#1407): a tab running
+// foreground work lists as running work and names it, an idle shell counts
+// for nothing — closing it loses only its scrollback (#2702).
 func (a *wsActivity) addPopup(inst *pane.Instance) {
 	if inst == nil {
 		return
 	}
 	for i := 0; i < inst.TabCount(); i++ {
 		t := inst.TabTerminal(i)
-		if t == nil || !t.Running() {
+		if t == nil || !t.Running() || !t.Busy() {
 			continue
 		}
-		if t.Busy() {
-			a.running = append(a.running, "popup terminal — running process")
-		} else {
-			a.shells++
+		line := "popup terminal — running process"
+		if name := t.ForegroundName(); name != "" {
+			line = "popup terminal — running " + name
 		}
+		a.running = append(a.running, line)
 	}
 }
 
@@ -166,9 +266,14 @@ func (m *Model) openWsClosePrompt(root string, act wsActivity) {
 // refreshes the palette (the ● badge disappears in place). The returned cmd
 // carries the workspace-closed hooks' async work (#825).
 func (m *Model) finishWorkspaceClose(root string) tea.Cmd {
-	cmd := m.closeWorkspace(m.ws.Drop(root))
+	w := m.ws.Drop(root)
+	// Guard-exempt tools (#2704) died with the workspace without a prompt; the
+	// notice names them.
+	exempt := collectActivity(w)
+	cmd := m.closeWorkspace(w)
 	m.palette.Refresh()
 	m.host.Notify(host.Info, "closed background workspace "+project.CompactPath(root))
+	m.notifyExemptTools(exempt)
 	return cmd
 }
 
@@ -240,7 +345,7 @@ func saveWorkspaceDirty(w *workspace.Workspace) []tea.Cmd {
 
 // quitActivity aggregates the quit-relevant state across every in-memory
 // workspace (#821): the active one plus all parked ones. Idle shells are
-// excluded (see wsActivity.noisy) — every session has a shell open.
+// excluded (#2702) — every session has a shell open.
 func (m Model) quitActivity() (dirty, running []string) {
 	label := func(root string, s string) string {
 		if root == "" {

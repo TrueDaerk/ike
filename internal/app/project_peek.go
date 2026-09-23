@@ -111,6 +111,9 @@ func (m Model) handlePeekReturn() (tea.Model, tea.Cmd) {
 func (m Model) performPeekReturn() (tea.Model, tea.Cmd) {
 	origin := m.peek.origin
 	peekedRoot := m.activeWS().Root
+	// Guard-exempt tools (#2704) of the peeked project die with the drop; note
+	// them before the switch parks the workspace.
+	exempt := collectActivity(m.activeWS())
 	next, cmd := m.performSwitchOpts(origin, switchOpts{record: true, skipUnchangedPeekSave: true})
 	sized, ok := next.(Model)
 	if !ok {
@@ -122,6 +125,7 @@ func (m Model) performPeekReturn() (tea.Model, tea.Cmd) {
 	}
 	closeCmd := sized.closeWorkspace(w)
 	sized.host.Notify(host.Info, "peek ended — unloaded "+project.CompactPath(peekedRoot))
+	sized.notifyExemptTools(exempt)
 	return sized, tea.Batch(cmd, closeCmd)
 }
 

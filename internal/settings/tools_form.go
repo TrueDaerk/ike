@@ -40,7 +40,13 @@ func newToolForm(page *ToolsPage, host SubPanelHost, idx int) *toolForm {
 		if e.Global {
 			global = "true"
 		}
-		f.form = [toolFieldCount]string{e.Name, e.Command, strings.Join(e.Args, " "), e.Cwd, e.Placement, multiple, global}
+		// "Guard on close" (#2704) shows the effective value, so the default
+		// (no key in the config) reads as yes rather than as an empty field.
+		guard := "yes"
+		if !e.GuardsClose() {
+			guard = "no"
+		}
+		f.form = [toolFieldCount]string{e.Name, e.Command, strings.Join(e.Args, " "), e.Cwd, e.Placement, multiple, global, guard}
 	}
 	return f
 }
@@ -133,6 +139,7 @@ func (f *toolForm) save() tea.Cmd {
 		Placement: strings.TrimSpace(f.form[4]),
 		Multiple:  f.form[5] == "true",
 		Global:    f.form[6] == "true",
+		Guard:     guardValue(f.form[7]),
 	}
 	entries := append([]config.ToolEntry(nil), f.page.entries()...)
 	if f.idx >= 0 && f.idx < len(entries) {
@@ -169,6 +176,14 @@ func (f *toolForm) validate() string {
 	default:
 		return "global must be true or false"
 	}
+	// "Guard on close" (#2704) is a yes/no field; the boolean spellings the
+	// neighbouring fields use are accepted too so a typed "true" is not a hard
+	// error.
+	switch strings.ToLower(strings.TrimSpace(f.form[7])) {
+	case "", "yes", "no", "true", "false":
+	default:
+		return "guard must be yes or no"
+	}
 	// #1890: one process-wide instance and concurrent instances contradict
 	// each other; reject here instead of silently dropping multiple like the
 	// config validator has to (internal/config/validate.go).
@@ -181,6 +196,18 @@ func (f *toolForm) validate() string {
 		}
 	}
 	return ""
+}
+
+// guardValue maps the "guard" field to ToolEntry.Guard (#2704): only an
+// explicit no becomes a stored guard = false; yes and an empty field leave the
+// pointer nil, which is the guarded default.
+func guardValue(text string) *bool {
+	switch strings.ToLower(strings.TrimSpace(text)) {
+	case "no", "false":
+		no := false
+		return &no
+	}
+	return nil
 }
 
 func (f *toolForm) theme() *theme.Palette {

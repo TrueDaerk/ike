@@ -70,49 +70,14 @@ func groupMembers(g project.Group, ok bool) map[string]bool {
 }
 
 // workspaceBusy reports whether evicting w would lose live state: a dirty
-// editor buffer, a running terminal (shell, tool or command session,
-// including terminal tabs), or a parked debug session.
+// editor buffer, a terminal with running foreground work (a tool pane, a
+// command session still running, a shell whose foreground process is not the
+// shell itself — terminal tabs and the parked popup terminal alike), or a
+// parked debug session. Since #2702 it is exactly the close/quit guard's
+// inventory reduced to a bool, so eviction, close, quit and the peek return
+// agree on what "busy" means — an idle shell is not it.
 func workspaceBusy(w *workspace.Workspace) bool {
-	if w == nil {
-		return false
-	}
-	for _, key := range w.Panes.Keys() {
-		inst := w.Panes.Get(key)
-		if inst == nil {
-			continue
-		}
-		switch inst.Kind() {
-		case pane.KindTerminal:
-			if inst.Terminal().Running() {
-				return true
-			}
-		case pane.KindEditor:
-			for i := 0; i < inst.TabCount(); i++ {
-				if ed := inst.TabEditor(i); ed != nil && ed.Dirty() {
-					return true
-				}
-				if t := inst.TabTerminal(i); t != nil && t.Running() {
-					return true
-				}
-			}
-		}
-	}
-	if extras, ok := w.Aux.(wsExtras); ok {
-		if extras.dbg != nil && extras.dbg.sess != nil {
-			return true
-		}
-		// A parked popup terminal (#1407) or project-owned floating panel
-		// (#1793) with a running session dies with the workspace — ask first,
-		// like pane terminals. Global panels never park, so they never count.
-		for _, inst := range parkedPopupInstances(extras) {
-			for i := 0; i < inst.TabCount(); i++ {
-				if t := inst.TabTerminal(i); t != nil && t.Running() {
-					return true
-				}
-			}
-		}
-	}
-	return false
+	return collectActivity(w).busy()
 }
 
 // setWorkspaceTerminalsParked flips the parked flag (#1522) on every terminal

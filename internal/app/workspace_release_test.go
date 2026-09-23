@@ -14,6 +14,7 @@ import (
 	"ike/internal/plugin"
 	"ike/internal/project"
 	"ike/internal/registry"
+	"ike/internal/terminal"
 	"ike/internal/workspace"
 )
 
@@ -86,7 +87,7 @@ func TestCloseWorkspaceReleasesWorkspace(t *testing.T) {
 // Session.Close — and the workspace becomes collectable.
 func TestCloseWorkspaceStopsTerminal(t *testing.T) {
 	_, b := twoProjects(t)
-	m := switchModel(t)
+	m := dismissOnboarding(switchModel(t))
 	out, _ := m.Update(TerminalNewMsg{})
 	m = out.(Model)
 	var sess *terminalSessionHandle
@@ -99,10 +100,16 @@ func TestCloseWorkspaceStopsTerminal(t *testing.T) {
 		t.Fatal("fixture: no running terminal session")
 	}
 	t.Cleanup(func() { sess.s.Close() })
+	// Since #2702 only a shell with foreground work opens the guard.
+	if term, ok := sess.s.(*terminal.Model); ok {
+		waitIdle(t, term)
+		term.SendLine("sleep 30")
+		waitBusy(t, term)
+	}
 	wp := weak.Make(m.activeWS())
 
 	out, _ = m.Update(project.SwitchProjectMsg{Root: b})
-	m = out.(Model)
+	m = dismissOnboarding(out.(Model))
 	root := m.ws.Background()[0]
 	out, _ = m.Update(project.CloseWorkspaceMsg{Path: root})
 	m = out.(Model)

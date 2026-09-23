@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Custom TUI Tool Panes
-description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking, docking into the layout's own tool region when the workspace edge is no slot, #2191), named slot templates pinning runtime tool opens to exact layout positions (#1897; #1946 adds `terminal`/`run`/`debug` as assignable targets; since #2042 saved layouts win over the template on apply), global process-wide instances shared across workspaces (#1890) whose panes follow project switches grouped at their configured positions (#1903, #2042) and return to the pane the project's saved layout recorded (#2141), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, IKE_THEME_* env for theme following, and the built-in Run tool that owns run output (#1905)."
+description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking, docking into the layout's own tool region when the workspace edge is no slot, #2191), named slot templates pinning runtime tool opens to exact layout positions (#1897; #1946 adds `terminal`/`run`/`debug` as assignable targets; since #2042 saved layouts win over the template on apply), global process-wide instances shared across workspaces (#1890) whose panes follow project switches grouped at their configured positions (#1903, #2042) and return to the pane the project's saved layout recorded (#2141), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, IKE_THEME_* env for theme following, the per-tool close-guard opt-out `guard = false` (#2704), and the built-in Run tool that owns run output (#1905)."
 resource: internal/app/tools.go
 tags: [architecture, tools, terminal, panes, lazygit]
-timestamp: 2026-08-27T12:00:00Z
+timestamp: 2026-09-23T12:00:00Z
 ---
 
 # Custom TUI Tool Panes (#741)
@@ -25,6 +25,7 @@ cwd = ""                # working directory; empty = project root
 placement = ""          # home position: left/right/top/bottom; empty = adaptive
 multiple = false        # concurrent instances via tool.<slug>.new (#835)
 global = false          # one process-wide instance shared across workspaces (#1890)
+guard = true            # counts as live state for the close/quit guard (#2704)
 ```
 
 `placement` is the tool's **configured home position** (#1889, JetBrains-style
@@ -50,8 +51,8 @@ user-defined `[[tools.custom]]` list overrides the default wholesale.
 
 Editable from the UI via **Settings → Tools** (#755,
 `internal/settings/tools_page.go`): `a` adds, enter edits, `d` deletes; the
-form validates name/command presence, duplicate names, and the placement
-values (#1889).
+form validates name/command presence, duplicate names, the placement
+values (#1889) and the guard field (#2704, `yes`/`no`).
 Writes go through the write-back layer at user scope (the whole list, the
 `project.history` pattern) and reload through the normal pipeline, so the
 `tool.<name>` commands re-shape live.
@@ -288,6 +289,40 @@ The `global` field is editable in the Settings → Tools form (#1895, validated
 `true`/`false`, listed with a `· global` marker). There the mutual exclusion
 is a **hard rejection** rather than a silent drop: saving an entry with both
 flags set fails with `global and multiple are mutually exclusive`.
+
+## Guard opt-out: `guard = false` (#2704)
+
+A live tool pane normally counts as running work: a tool's exit closes its
+pane, so closing the workspace would kill something. For some tools that
+confirmation is pure friction — a SQL shell or a `yarn` watcher is restarted in
+a second and its scrollback is worth nothing. `guard = false` on the entry says
+so:
+
+- **Effect** — `collectActivity` (`internal/app/workspace_guard.go`) leaves the
+  pane out of `wsActivity.running` and records the name in `wsActivity.exempt`
+  instead, so a workspace whose only activity is exempt tools is **not busy**.
+  The session still dies with the workspace exactly like a guarded tool's.
+- **Every guard at once** — project close (#1355), close-from-list (#820),
+  the quit aggregation (#821), LRU eviction (#780) and the peek return (#2136)
+  all read that one inventory, so the flag applies to all of them.
+- **After the fact instead of before** — the close paths report what they
+  killed silently: `closed 2 tools without asking: sql, yarn`
+  (`exemptToolsNotice`, deduplicated and sorted; project close, close-from-list
+  and the peek return post it, eviction stays silent as it always was).
+- **Never exempt** — the Run tool (#1905) and command sessions: what runs in
+  them is the user's program, not a TUI, so they keep asking whatever any
+  same-named entry says. A tool with no config entry (a stale layout entry, a
+  built-in tool window) keeps the old rule too.
+- **Moot for `global = true`** — a global tool already survives every close by
+  detaching (above), so `guard` there is dropped with a `tools.custom.guard`
+  diagnostic.
+
+Default: **guarded**. The key is a pointer in the schema
+(`ToolEntry.Guard *bool`, read through `ToolEntry.GuardsClose()`) precisely so
+an absent key means "guarded" rather than "false". In **Settings → Tools** the
+field is the yes/no `guard` row (validated, `no`/`false` persisted as
+`guard = false`, anything else writing no key at all) and the list marks an
+exempt tool with `· no guard`.
 
 ## The built-in Run tool (#1905)
 
