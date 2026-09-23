@@ -429,3 +429,89 @@ func TestPlaygroundOpenReachesTheResponsePane(t *testing.T) {
 		}
 	}
 }
+
+// TestAudit2698ViewerNavChords (#2698): the editor-level navigation chords
+// reach the viewer panes. The telemetry cases are the first two rows — ctrl+e
+// in the archive listing, shift+f11 in the notebook — and the rest is the rest
+// of the audit: the tab chords across every viewer, find-in-path's delivered
+// twin, and go-to-file, which was Global already and is asserted so it stays
+// that way.
+func TestAudit2698ViewerNavChords(t *testing.T) {
+	cases := []struct {
+		chord string
+		ctx   Context
+		cmd   string
+	}{
+		{"ctrl+e", Archive, "palette.recentFiles"},
+		{"shift+f11", Notebook, "bookmark.next"},
+		{"ctrl+e", Editor, "palette.recentFiles"},
+		{"ctrl+e", Hex, "palette.recentFiles"},
+		{"ctrl+e", Data, "palette.recentFiles"},
+		{"ctrl+e", Preview, "palette.recentFiles"},
+		{"ctrl+shift+f11", Notebook, "bookmark.previous"},
+		{"ctrl+shift+f", Archive, "project.findInPath"},
+		{"cmd+shift+f", Archive, "project.findInPath"},
+		{"cmd+shift+o", Archive, "project.goToFile"},
+		{"cmd+shift+e", Notebook, "project.switchLast"},
+		{"ctrl+shift+e", Notebook, "project.switchLast"},
+		{"cmd+e", Hex, "palette.recentFiles"},
+	}
+	for _, goos := range []string{"darwin", "linux"} {
+		table := BuildTable(DefaultsFor(PresetJetBrains, goos), nil, goos)
+		for _, c := range cases {
+			chord := NormalizeChord(MustParseChord(c.chord), goos)
+			if b, ok := table.Lookup(chord, c.ctx); !ok || b.Command != c.cmd {
+				t.Errorf("%s: %s in %q = %+v ok=%v, want %s", goos, c.chord, c.ctx, b, ok, c.cmd)
+			}
+		}
+		// The tab chords cover every viewer context, not a hand-picked few.
+		for _, pair := range []struct{ chord, cmd string }{
+			{"ctrl+t", "editor.tab.new"},
+			{"alt+shift+p", "editor.tab.togglePin"},
+		} {
+			chord := NormalizeChord(MustParseChord(pair.chord), goos)
+			for _, ctx := range ViewerContexts {
+				if b, ok := table.Lookup(chord, ctx); !ok || b.Command != pair.cmd {
+					t.Errorf("%s: %s in %q = %+v ok=%v, want %s", goos, pair.chord, ctx, b, ok, pair.cmd)
+				}
+			}
+		}
+	}
+}
+
+// TestAudit2698KeepsPaneKeys guards the two carve-outs the audit made on
+// purpose: the notebook scrolls a line with ctrl+e and the diff viewer leaves
+// edit mode with it, so the recent-files twin must not claim the chord there —
+// a table row would resolve ahead of the pane and take the key away. Toggling a
+// bookmark stays editor-only for the same family of reasons: it needs a caret
+// line, which a viewer has not got.
+func TestAudit2698KeepsPaneKeys(t *testing.T) {
+	for _, goos := range []string{"darwin", "linux"} {
+		table := BuildTable(DefaultsFor(PresetJetBrains, goos), nil, goos)
+		ctrlE := NormalizeChord(MustParseChord("ctrl+e"), goos)
+		for _, ctx := range []Context{Notebook, Diff} {
+			b, ok := table.Lookup(ctrlE, ctx)
+			if goos == "darwin" {
+				if ok {
+					t.Errorf("darwin: ctrl+e in %q = %q, must stay the pane's own key", ctx, b.Command)
+				}
+				continue
+			}
+			// Off macOS cmd+e folds onto ctrl+e in the Global scope, which
+			// predates this audit; what matters is that #2698 added no row
+			// of its own for these two contexts.
+			if ok && b.Context != Global {
+				t.Errorf("linux: ctrl+e in %q resolves a %q row (%s), want only the folded Global one",
+					ctx, b.Context, b.Command)
+			}
+		}
+		for _, ctx := range ViewerContexts {
+			for _, chord := range []string{"f11", "alt+f3"} {
+				c := NormalizeChord(MustParseChord(chord), goos)
+				if b, ok := table.Lookup(c, ctx); ok {
+					t.Errorf("%s: %s in %q = %q, bookmark toggling stays editor-only", goos, chord, ctx, b.Command)
+				}
+			}
+		}
+	}
+}

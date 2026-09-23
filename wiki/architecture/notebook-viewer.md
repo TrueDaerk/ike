@@ -4,7 +4,7 @@ title: Notebook Viewer
 description: "#2425 — .ipynb files open read-only as their cells: markdown through the preview renderer, code highlighted under the notebook language, outputs (stream, text/plain, degraded text/html, PNG/JPEG via Kitty graphics under the notebook.image_max_cols width cap, errors) below each cell, with cell navigation, output folding, source search, copy, open-in-scratch and image saving; r (or run.file) executes the whole notebook in place through nbconvert in the Run tool and the watcher shows the fresh outputs (#2682)."
 resource: internal/nbview
 tags: [architecture, notebook, jupyter, ipynb, pane, viewer]
-timestamp: 2026-09-22T00:00:00Z
+timestamp: 2026-09-23T18:00:00Z
 ---
 
 # Notebook Viewer (#2425)
@@ -101,9 +101,17 @@ the setting resizes the placements of every open notebook.
 ## Navigation, folding, search
 
 `j`/`k` step the **cell** cursor and reveal the cell; `g`/`G` jump to the
-ends; arrows, `pgup`/`pgdn`, `ctrl+d`/`ctrl+u` and the mouse wheel scroll
-rows without moving the cursor — a reader scrolling past a cell should not
-silently retarget `e` or `y`.
+ends; arrows, `pgup`/`pgdn`, `ctrl+d`/`ctrl+u`, `ctrl+e`/`ctrl+y` and the
+mouse wheel scroll rows without moving the cursor — a reader scrolling past
+a cell should not silently retarget `e` or `y`.
+
+`shift+f11` / `ctrl+shift+f11` step the project's bookmarks from here
+(`bookmark.next` / `bookmark.previous`): they were editor-scoped until
+#2698 and telemetry recorded `shift+f11` unbound in this pane. `ctrl+e` is
+the one navigation chord that pane-level scrolling kept — the pane's key
+wins, and recent files stay on `cmd+e` and the palette here; see
+[Keybindings &
+Shortcuts](./keybindings.md#editor-level-navigation-in-the-viewer-panes-2698).
 
 `enter` folds and unfolds the cursor cell's outputs, replacing them with a
 `▸ 2 outputs folded` marker. A cell with no outputs has nothing to fold.

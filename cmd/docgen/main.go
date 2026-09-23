@@ -251,6 +251,12 @@ reporting, which fewer terminals implement. See
 		{keymap.Terminal, "Terminal", "Active when a terminal pane — or an editor tab holding a terminal — has focus."},
 		{keymap.HTTP, "HTTP response pane", "Active when the HTTP response pane has focus."},
 		{keymap.Archive, "Archive viewer", "Active when an archive viewer pane has focus."},
+		// The remaining viewer panes (#2698): they carry the editor-level
+		// navigation chords now, so the page has to list them.
+		{keymap.Hex, "Hex viewer", "Active when a hex viewer pane has focus."},
+		{keymap.Notebook, "Notebook viewer", "Active when a notebook viewer pane has focus."},
+		{keymap.Data, "Data viewer", "Active when a data grid pane has focus."},
+		{keymap.Preview, "Preview", "Active when the markdown preview or the image viewer has focus."},
 	} {
 		rows := byContext[ctx.key]
 		if len(rows) == 0 {

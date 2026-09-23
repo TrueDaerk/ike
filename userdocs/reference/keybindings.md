@@ -51,6 +51,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Find in all projects | `cmd+alt+shift+f` | `ctrl+alt+shift+f` | `project.findInAllProjects` |
 | Find in pane | `cmd+f` | `ctrl+f` | `search.open` |
 | Find in path | `cmd+shift+f` | `ctrl+shift+f` | `project.findInPath` |
+| Find in path | `ctrl+shift+f` | `ctrl+shift+f` | `project.findInPath` |
 | Find in project group | `cmd+alt+shift+d` | `ctrl+alt+shift+d` | `project.findInGroup` |
 | Focus pane 1 | `ctrl+1` | — | `pane.focus1` |
 | Focus pane 2 | `ctrl+2` | — | `pane.focus2` |
@@ -96,6 +97,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | New scratch file | `cmd+shift+n` | `ctrl+shift+n` | `scratch.new` |
 | New scratch from selection | `cmd+alt+shift+s` | `ctrl+alt+shift+s` | `scratch.newFromSelection` |
 | New terminal | `cmd+alt+shift+t` | `ctrl+alt+shift+t` | `terminal.new` |
+| Next bookmark | `shift+f11` | `shift+f11` | `bookmark.next` |
 | Next project in group | `cmd+alt+right-bracket` | `ctrl+alt+right-bracket` | `project.group.next` |
 | Next project in group | `ctrl+alt+right-bracket` | `ctrl+alt+right-bracket` | `project.group.next` |
 | Next search match | `cmd+g` | `ctrl+g` | `search.nextMatch` |
@@ -114,6 +116,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Pin popup terminal | `cmd+alt+shift+k` | `ctrl+alt+shift+k` | `terminal.popup.pin` |
 | Pinned files | `cmd+2` | `ctrl+2` | `nav.pins` |
 | Popup terminal | `cmd+alt+t` | `ctrl+alt+t` | `terminal.popup` |
+| Previous bookmark | `ctrl+shift+f11` | `ctrl+shift+f11` | `bookmark.previous` |
 | Previous project in group | `cmd+alt+left-bracket` | `ctrl+alt+left-bracket` | `project.group.prev` |
 | Previous project in group | `ctrl+alt+left-bracket` | `ctrl+alt+left-bracket` | `project.group.prev` |
 | Previous search match | `cmd+shift+g` | `ctrl+shift+g` | `search.prevMatch` |
@@ -239,7 +242,6 @@ Active when an editor pane has focus.
 | Move to line start | `cmd+left` | `ctrl+left` | `editor.lineStart` |
 | Move to line start | `home` | `home` | `editor.lineStart` |
 | New empty editor tab | `ctrl+t` | `ctrl+t` | `editor.tab.new` |
-| Next bookmark | `shift+f11` | `shift+f11` | `bookmark.next` |
 | Next diagnostic | `f2` | `f2` | `lsp.nextDiagnostic` |
 | Open playground for this file | `cmd+shift+j` | `ctrl+shift+j` | `playground.open` |
 | Organize imports | `ctrl+alt+o` | `ctrl+alt+o` | `lsp.organizeImports` |
@@ -249,9 +251,9 @@ Active when an editor pane has focus.
 | Paste from history | `cmd+shift+v` | `ctrl+shift+v` | `editor.pasteFromHistory` |
 | Peek definition | `cmd+y` | `ctrl+y` | `lsp.peekDefinition` |
 | Pin/unpin tab | `alt+shift+p` | `alt+shift+p` | `editor.tab.togglePin` |
-| Previous bookmark | `ctrl+shift+f11` | `ctrl+shift+f11` | `bookmark.previous` |
 | Previous diagnostic | `shift+f2` | `shift+f2` | `lsp.prevDiagnostic` |
 | Quick documentation | `ctrl+q` | `ctrl+q` | `lsp.hover` |
+| Recent files | `ctrl+e` | `ctrl+e` | `palette.recentFiles` |
 | Redo | `cmd+shift+z` | `ctrl+shift+z` | `editor.redo` |
 | Redo | `ctrl+shift+z` | `ctrl+shift+z` | `editor.redo` |
 | Reformat file or selection | `cmd+alt+l` | `ctrl+alt+l` | `lsp.format` |
@@ -307,7 +309,9 @@ Active when a diff pane has focus.
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|
 | Copy diff selection or hunk | `cmd+c` | `ctrl+c` | `diff.copy` |
+| New empty editor tab | `ctrl+t` | `ctrl+t` | `editor.tab.new` |
 | Next change (diff) | `f7` | `f7` | `diff.nextChange` |
+| Pin/unpin tab | `alt+shift+p` | `alt+shift+p` | `editor.tab.togglePin` |
 | Previous change (diff) | `shift+f7` | `shift+f7` | `diff.prevChange` |
 
 ## Palette
@@ -347,7 +351,50 @@ Active when an archive viewer pane has focus.
 
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|
+| New empty editor tab | `ctrl+t` | `ctrl+t` | `editor.tab.new` |
+| Pin/unpin tab | `alt+shift+p` | `alt+shift+p` | `editor.tab.togglePin` |
+| Recent files | `ctrl+e` | `ctrl+e` | `palette.recentFiles` |
 | Reload archive listing | `ctrl+r` | `ctrl+r` | `archive.reload` |
+
+## Hex viewer
+
+Active when a hex viewer pane has focus.
+
+| Action | macOS | Linux / Windows | Command |
+|---|---|---|---|
+| New empty editor tab | `ctrl+t` | `ctrl+t` | `editor.tab.new` |
+| Pin/unpin tab | `alt+shift+p` | `alt+shift+p` | `editor.tab.togglePin` |
+| Recent files | `ctrl+e` | `ctrl+e` | `palette.recentFiles` |
+
+## Notebook viewer
+
+Active when a notebook viewer pane has focus.
+
+| Action | macOS | Linux / Windows | Command |
+|---|---|---|---|
+| New empty editor tab | `ctrl+t` | `ctrl+t` | `editor.tab.new` |
+| Pin/unpin tab | `alt+shift+p` | `alt+shift+p` | `editor.tab.togglePin` |
+| Run notebook (nbconvert) | `r` | `r` | `notebook.run` |
+
+## Data viewer
+
+Active when a data grid pane has focus.
+
+| Action | macOS | Linux / Windows | Command |
+|---|---|---|---|
+| New empty editor tab | `ctrl+t` | `ctrl+t` | `editor.tab.new` |
+| Pin/unpin tab | `alt+shift+p` | `alt+shift+p` | `editor.tab.togglePin` |
+| Recent files | `ctrl+e` | `ctrl+e` | `palette.recentFiles` |
+
+## Preview
+
+Active when the markdown preview or the image viewer has focus.
+
+| Action | macOS | Linux / Windows | Command |
+|---|---|---|---|
+| New empty editor tab | `ctrl+t` | `ctrl+t` | `editor.tab.new` |
+| Pin/unpin tab | `alt+shift+p` | `alt+shift+p` | `editor.tab.togglePin` |
+| Recent files | `ctrl+e` | `ctrl+e` | `palette.recentFiles` |
 
 ## Rebinding
 

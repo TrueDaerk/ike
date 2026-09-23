@@ -60,8 +60,10 @@ func TestOverrideKeyPaneContexts(t *testing.T) {
 
 // TestPerContextCtrlT (#1794): the acceptance chord — ctrl+t resolves to a new
 // terminal tab in the terminal context and a new empty editor tab in the
-// editor context, stays unbound everywhere else, and the disjoint pair is
-// neither a conflict nor a shadow.
+// editor context, and the disjoint pair is neither a conflict nor a shadow.
+// Since #2698 the editor half also covers the viewer contexts, which open as
+// tabs of an editor pane; the chord stays unbound in the Global scope and in
+// the explorer, which has no tabs.
 func TestPerContextCtrlT(t *testing.T) {
 	for _, goos := range []string{"darwin", "linux"} {
 		table := BuildTable(DefaultsFor(PresetJetBrains, goos), nil, goos)
@@ -72,7 +74,13 @@ func TestPerContextCtrlT(t *testing.T) {
 		if b, ok := table.Lookup(chord, Editor); !ok || b.Command != "editor.tab.new" {
 			t.Errorf("%s: editor ctrl+t = %+v ok=%v, want editor.tab.new", goos, b, ok)
 		}
-		for _, ctx := range []Context{Global, Explorer, Data, Preview} {
+		for _, ctx := range ViewerContexts {
+			if b, ok := table.Lookup(chord, ctx); !ok || b.Command != "editor.tab.new" {
+				t.Errorf("%s: ctrl+t in %q = %+v ok=%v, want editor.tab.new (#2698)",
+					goos, contextLabel(ctx), b, ok)
+			}
+		}
+		for _, ctx := range []Context{Global, Explorer} {
 			if b, ok := table.Lookup(chord, ctx); ok {
 				t.Errorf("%s: ctrl+t must stay unbound in %q, got %q", goos, contextLabel(ctx), b.Command)
 			}

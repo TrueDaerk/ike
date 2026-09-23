@@ -1,5 +1,51 @@
 # Log
 
+## 2026-09-23 (Editor-level navigation reaches the viewer panes, #2698)
+
+- **The viewer panes got the Global chords and nothing else.** An archive
+  listing, a hex dump, a notebook, a diff, a data grid and the markdown/image
+  preview hold a file the way an editor does, but they advertise their own
+  context (#1794), so the chords the `editor` context owned alone stopped at
+  their door. Telemetry of 2026-09-18..23 caught it twice in one week: `ctrl+e`
+  pressed in the archive viewer and `shift+f11` in the notebook, both `unbound`.
+- **The audit rule:** an `editor`-context default whose command is pure
+  navigation — it opens a picker, walks the project, or handles tabs, and never
+  touches buffer text (`palette.*`, `project.*`, `nav.*`, `bookmark.*`,
+  `search.*`, `editor.tab.*`, `pane.*`, `window.*`) — belongs in the viewer
+  contexts too. Walking the table left five commands, and three moved:
+  `ctrl+e` (`palette.recentFiles`, previously unbound everywhere — only the
+  `cmd+e` primary existed) now ships in `editor` plus `archive`/`hex`/`data`/
+  `preview`, and `ctrl+t` (`editor.tab.new`) and `alt+shift+p`
+  (`editor.tab.togglePin`) in `editor` plus every viewer context — a viewer
+  opens as a tab of an editor pane (#1778), so both mean there what they mean
+  with a document open.
+- **`shift+f11` / `ctrl+shift+f11` moved from `editor` to Global.**
+  `stepBookmark` reads the caret only to decide where to *resume*; with no
+  editor focused it starts at the project's first bookmark and routes through
+  the normal open funnel. `f11` and `alt+f3` stay editor-only — toggling
+  bookmarks the caret's line, which a viewer has not got. `ctrl+shift+f` joined
+  `cmd+shift+f` as `project.findInPath`'s delivered twin, the split
+  `project.switch` and friends already use.
+- **Only modifier chords move.** A viewer's `j`/`k`, `/`, `e`, `y`, `o`, `r`
+  never enter the table and keep reaching the pane. Two viewers keep `ctrl+e`
+  for the same reason and are excused in the ledger: the notebook scrolls one
+  line with it (nbview's vim-style `ctrl+e`/`ctrl+y`) and the diff viewer
+  returns from edit mode with it (#496). Global would have been the shorter
+  spelling for all three chords and is wrong for all three — `ctrl+t` is the
+  terminal's new-tab key — so `multiRows` in `defaults.go` states each chord
+  once with the contexts it covers, and `DefaultsFor` expands it into ordinary
+  rows.
+- **`cmd/ike/viewernav_audit_test.go`** is the standing guard, the viewer twin
+  of the unbound-command ledger: it walks every `editor`-context default on
+  both platforms and demands a viewer twin for a navigation command, or an
+  entry in `viewerNavExceptions` (keyed by command id, or by
+  `command@context` when one viewer claims the chord). Stale entries fail too,
+  and a second test checks the audit list itself in.
+- Generated docs refreshed: the status matrix now reports `ctrl+e` as
+  `palette.recentFiles`' delivered fallback instead of the palette, and
+  `userdocs/reference/keybindings.md` grew sections for the hex, notebook,
+  data and preview contexts, which had no listed bindings before.
+
 ## 2026-09-23 (Freeze detector fires only when work is pending, #2692)
 
 - **Three dumps for an idle loop.** The freeze detector (#2627) called a

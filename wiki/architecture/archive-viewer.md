@@ -4,7 +4,7 @@ title: Archive Viewer
 description: "#1762 — archive files (tar, tar.gz/.tgz, tar.bz2, zip — #2594) open as a collapsible entry list instead of a raw text buffer; Enter (or a double-click) extracts one member into a read-only editor buffer with syntax highlighting from the member's own file name; gzip members open decompressed (#1948); e/E write members or the whole archive to a directory on disk under path, overwrite and size guards (#2249), picked in a live directory autocomplete (#2689); ctrl+r re-lists the file in place (archive.reload, #2314)."
 resource: internal/archview
 tags: [architecture, archive, tar, zip, viewer, pane, read-only, mouse, extract, reload]
-timestamp: 2026-09-23T00:00:00Z
+timestamp: 2026-09-23T18:00:00Z
 ---
 
 # Archive Viewer (#1762)
@@ -115,9 +115,18 @@ step and wrap, page keys clamp, `g`/`G` jump to the ends. On top of that:
 | `E` | extract the whole archive |
 | `/`, `cmd+f` / `ctrl+f` | put the cursor in the filter row (#2409) |
 | `ctrl+r` | reload the listing from disk (`archive.reload`, #2314) |
+| `ctrl+e` | recent files (`palette.recentFiles`, #2698) |
+| `ctrl+t` / `alt+shift+p` | new editor tab · pin this tab (#2698) |
+
+The last three rows are the editor-level navigation chords #2698 extended
+to the viewer contexts — `ctrl+e` was the telemetry case that opened that
+audit, pressed here and recorded unbound because only the `Cmd` primary
+existed. See [Keybindings &
+Shortcuts](./keybindings.md#editor-level-navigation-in-the-viewer-panes-2698).
 
 The pane advertises the `archive` context id, so bindings can scope to it —
-`ctrl+r` is the one default that does (JetBrains' Rerun chord, #2314). It
+`ctrl+r` is the one *pane-specific* default that does (JetBrains' Rerun
+chord, #2314). It
 resolves through the keymap layer to `archive.reload`, which asks the focused
 pane for `Reload()`: the archive is listed again, collapsed directories keep
 their state by path and the cursor is clamped into the new row list, so a
