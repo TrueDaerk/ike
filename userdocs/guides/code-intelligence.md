@@ -82,8 +82,13 @@ Set `lsp.auto_install = false` to turn all of this off. Then
 | ++ctrl+f1++ | Show the diagnostic under the cursor in full |
 | ++cmd+o++ | Go to symbol across the project |
 | ++cmd+8++ | The Problems window — every diagnostic in the project |
+| ++ctrl+space++ | Basic completion — open the popup at the cursor |
 
 Completion appears as you type; ++enter++ accepts, ++esc++ dismisses.
+++ctrl+space++ (**Basic Completion**) opens it on demand at the cursor —
+after ++esc++ dismissed it, where no trigger character would fire one, or a
+second time to re-ask a server that answered with a partial list. It skips the
+typing delay entirely and filters by the word you already typed.
 **LSP: Peek Definition** (++cmd+y++) shows a definition inline without leaving
 the file: ++up++ / ++down++ (++ctrl+u++ / ++ctrl+d++) scroll the excerpt,
 ++enter++ jumps there for real, ++esc++ closes and leaves the cursor where it

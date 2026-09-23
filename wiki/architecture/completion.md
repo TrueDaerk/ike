@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Completion Engine
-description: Multi-source autocomplete (Roadmap 0410) — the LSP server plus local index sources answer each trigger as independent tagged batches; the editor merges them into one popup with priority-based de-dup and stable selection. Identifier-rune triggers wait lsp.completion_delay_ms and one dispatch's local batches travel as a single message (#2541). The popup and the local sources filter with the JetBrains-style hump matcher under completion.case_sensitivity (#2650). The word and symbol indexes hold code tokens of one language at a time, scanned lazily per language, and every source resolves the effective language at the cursor — an embedded fence's inside one (#2652).
+description: Multi-source autocomplete (Roadmap 0410) — the LSP server plus local index sources answer each trigger as independent tagged batches; the editor merges them into one popup with priority-based de-dup and stable selection. Identifier-rune triggers wait lsp.completion_delay_ms and one dispatch's local batches travel as a single message (#2541); ctrl+space (completion.trigger, #2695) asks on demand without any of that gating. The popup and the local sources filter with the JetBrains-style hump matcher under completion.case_sensitivity (#2650). The word and symbol indexes hold code tokens of one language at a time, scanned lazily per language, and every source resolves the effective language at the cursor — an embedded fence's inside one (#2652).
 resource: internal/complete
 tags: [architecture, completion, autocomplete, lsp, sources, postfix]
-timestamp: 2026-09-22T12:00:00Z
+timestamp: 2026-09-23T12:00:00Z
 ---
 
 # Completion Engine
@@ -56,6 +56,46 @@ full render, so the protocol also says *when* and *how many*:
 
 Measured in the #2541 typing trace: 96 `CompletionMsg` per 42 keys became
 12 `CompletionBatchMsg` (see [performance](performance.md)).
+
+## The manual trigger (#2695)
+
+`ctrl+space` — JetBrains' **Basic Completion** — opens the popup at the caret
+on demand, through the registered command **`completion.trigger`** (Editor
+context, `internal/keymap/defaults.go`). The chord no longer lives only in the
+editor's insert-mode key switch: it is a command, so it shows up in the
+palette, in the cheatsheet and in the keymap editor, and it can be rebound.
+
+The command dispatches `lsp.CompletionTriggerMsg`; the app hands it to the
+focused editor, whose `TriggerCompletion` (`internal/editor/lsp_state.go`)
+emits an ordinary completion trigger with an **empty `Char`**. That empty
+character is the manual-request marker every consumer already honours:
+
+- the LSP bridge's `shouldComplete` answers true without consulting the
+  server's trigger characters or `lsp.completion_auto`, and `identAutoTrigger`
+  is false, so the request skips `lsp.completion_delay_ms` and any armed wait;
+- the local engine treats it like an identifier rune minus the wait: it is a
+  `localTrigger`, so no trigger-character narrowing applies and every source
+  the position still allows runs (the exclusive claim of #1302 and the
+  context narrowing of #2654 stay in force), and `Engine.Delay` does not;
+- the editor's own auto-trigger gate does not apply — `maybeAutoComplete`
+  withholds the popup in the contexts the table below marks, `ctrl+space`
+  dispatches anyway, tagged with the context so the sources still judge it.
+
+The reply anchors at the identifier start like any other, so the word already
+typed before the caret filters the list instead of being ignored. With the
+popup open the chord **re-requests** rather than doing nothing — the way out of
+a server answer that came back `isIncomplete`. In normal mode there is nothing
+to complete: `TriggerCompletion` reports false and the app stays silent (no
+popup, no error).
+
+`ctrl+space` is delivered by every supported terminal. Under the Kitty
+keyboard protocol (Ghostty, Kitty, WezTerm, Tabby) it arrives as `ctrl+space`;
+on the legacy encoding the key produces the C0 NUL, which bubbletea spells
+`ctrl+@`. `keymap.ParseKey` folds `ctrl+@` onto `ctrl+space` (`parse.go`), so
+the single default binding — and any user rebinding of it — covers both
+spellings, and the chord needs no deadchords entry. The editor's insert-mode
+switch still answers both spellings directly as a fallback, for a standalone
+editor with no keymap layer in front of it.
 
 ## The local engine (`internal/complete`)
 

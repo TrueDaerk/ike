@@ -29,9 +29,12 @@ func (m *Model) updateInsert(key tea.KeyPressMsg) {
 	// arrives as ctrl+' ' under the Kitty protocol and as ctrl+@ (NUL) from
 	// legacy terminals; both request completion at the cursor through the
 	// same event the "." auto-trigger uses. With the popup already open the
-	// re-emit re-queries the server.
+	// re-emit re-queries the server. The keymap layer normally resolves the
+	// chord to completion.trigger before the key reaches here (#2695); this
+	// stays the fallback for a spelling no binding covers and for a standalone
+	// editor with no keymap in front of it.
 	case (key.Code == ' ' || key.Code == '@' || key.Code == tea.KeySpace) && key.Mod == tea.ModCtrl:
-		m.emit(EventCompletionTrigger)
+		m.TriggerCompletion()
 	case key.Code == tea.KeyEnter:
 		// A line break closes the undo segment behind it (#2189): the break —
 		// with its auto-indent and block split — rides with the text typed

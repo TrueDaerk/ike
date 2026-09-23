@@ -194,6 +194,7 @@ Active when an editor pane has focus.
 |---|---|---|---|
 | Add caret at next occurrence | `ctrl+g` | `ctrl+g` | `editor.caret.addNext` |
 | Add carets at all occurrences | `ctrl+shift+g` | `ctrl+shift+g` | `editor.caret.addAll` |
+| Basic completion | `ctrl+space` | `ctrl+space` | `completion.trigger` |
 | Call hierarchy | `ctrl+alt+h` | `ctrl+alt+h` | `lsp.callHierarchy` |
 | Cancel running HTTP request | `cmd+.` | `ctrl+.` | `http.cancel` |
 | Cancel running HTTP request | `ctrl+.` | `ctrl+.` | `http.cancel` |

@@ -79,6 +79,13 @@ func (r RelatedInfo) Label() string {
 // caret in a popup (#739). Dispatched by lsp.diagnosticInfo.
 type DiagnosticInfoMsg struct{}
 
+// CompletionTriggerMsg asks the focused editor to request completion at the
+// caret on demand (#2695): the LSP request plus every local source, without
+// the identifier-rune delay, filtered by the word already typed. Dispatched by
+// completion.trigger (ctrl+space, JetBrains' Basic Completion); a no-op
+// outside insert mode.
+type CompletionTriggerMsg struct{}
+
 // IgnoreDiagnosticMsg asks the root model to persist an ignore rule for the
 // given diagnostic (#1259): the editor emits it for the diagnostic under the
 // caret, the app appends IgnoreRuleFor's rule to lsp.diagnostics_ignore in the
