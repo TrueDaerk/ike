@@ -2,6 +2,7 @@ package editor
 
 import (
 	"ike/internal/concealexplain"
+	"ike/internal/concealfilter"
 	ilsp "ike/internal/lsp"
 )
 
@@ -78,6 +79,11 @@ func (m *Model) ConcealExplainAtCaret() (family string, ok bool) {
 	line := m.cursor.Line
 	if line >= m.buf.LineCount() {
 		return "", false
+	}
+	if m.VaultBlockAtCaret() {
+		// An inline vault block (#2712) is a stand-in with its own reading;
+		// the provenance explainer knows nothing about it.
+		return concealfilter.Vault, true
 	}
 	capture, r, hit := m.concealAtCaret()
 	if !hit {

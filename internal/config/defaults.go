@@ -109,6 +109,7 @@ func defaults() *Config {
 			ConcealExclude:         []string{},
 			ConcealFileRules:       []string{},
 			SecretMasking:          true,
+			Vault:                  true,
 			SecretMaskingKeys:      []string{}, // additions only; the built-in key patterns live in internal/secret (#1712)
 			Hyperlinks:             true,
 			ColorPreview:           true,

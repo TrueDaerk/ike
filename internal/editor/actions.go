@@ -730,6 +730,19 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.toggleCronHints()
 	case "toggle_pem_summary":
 		m.togglePemSummary()
+	case "toggle_vault_standin":
+		// The inline vault stand-in (#2712): per-view switch over the
+		// editor.vault config default.
+		m.toggleVaultStandIn()
+	case "vault_edit_value":
+		// The inline vault actions (#2712): edit re-encrypts through the
+		// masked prompt, encrypt turns a plain scalar into a block, decrypt
+		// writes the plaintext back after a confirm.
+		return m, m.vaultEditValue()
+	case "vault_encrypt_value":
+		return m, m.vaultEncryptValue()
+	case "vault_decrypt_value":
+		return m, m.vaultDecryptValue()
 	case "toggle_byte_size_hints":
 		m.toggleByteSizeHints()
 	case "toggle_duration_hints":

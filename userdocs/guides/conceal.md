@@ -436,6 +436,43 @@ there to read and edit. A masked value copies, saves and diffs as itself. Note
 what else the shot shows — `SESSION_TIMEOUT_MS=1800000` drawing as `30m`,
 because the duration hints work in dotenv files too.
 
+## Inline Ansible Vault values
+
+`editor.vault` collapses an inline Ansible Vault value — the `!vault |` block
+`ansible-vault encrypt_string` prints into a YAML file — onto one row:
+
+```yaml
+vault_mysql_password: !vault |
+          ⟨vault AES256 · 6 lines⟩
+```
+
+`· id: <label>` joins the row when the header names a vault id. The buffer
+keeps the ciphertext: put the caret anywhere in the block (or select across
+it) and the header and hex lines are back, raw, to copy or edit.
+
+The value itself is one key away. `g?` on the block opens the explain popover
+with the header facts and — when a password source is configured
+(`ANSIBLE_VAULT_PASSWORD`, `ANSIBLE_VAULT_PASSWORD_FILE` or the
+`ansible.vault_password_file` setting, see the Ansible Vault page) — the
+decrypted value, multi-line preserved, plus the source that served the
+password. `y` copies the decrypted value, `e` edits it. Without a source the
+popover says which setting to fill and `y` copies the ciphertext; a wrong
+password reads *cannot decrypt: password does not match*.
+
+`alt+enter` on the block offers **Edit vault value…** — a masked field
+prefilled with the decrypted value (`tab` reveals it; a line break is typed as
+`\n`, a backslash as `\\`). Enter re-encrypts under the same password and
+vault id, at the original indentation, as one undo step; leaving the value
+unchanged changes nothing. **Encrypt value with Ansible Vault** on a plain
+mapping value turns it into a block, and **Decrypt vault value to plain text**
+writes the plaintext back as a YAML scalar after a confirm, since that puts a
+secret in clear on disk. Without a password source none of the three is
+offered.
+
+The decrypted value lives in the popover, the edit field and the clipboard you
+copy it to — never in the buffer, so never in undo history, crash-recovery
+backups or what a language server sees.
+
 ## Markup: Markdown, CSV and logs
 
 The three rendering layers hide characters that exist only to carry structure.
@@ -505,6 +542,7 @@ view stops following the config value.
 | Punycode hostnames | `editor.idn_hints` | Toggle IDN Hints |
 | PEM summaries | `editor.pem_summary` | Toggle PEM Summary |
 | Secret masking | `editor.secret_masking` | Toggle Secret Masking |
+| Inline Ansible Vault values | `editor.vault` | Toggle Vault Stand-In |
 | Extra secret key patterns | `editor.secret_masking_keys` | — |
 | Colour swatches | `editor.color_preview` | Toggle Color Preview |
 | Where the families apply | `editor.conceal_include`, `editor.conceal_exclude`, `editor.conceal_file_rules` | — |

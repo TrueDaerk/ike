@@ -5,7 +5,7 @@ Component-level concepts for the IKE codebase.
 * [Foundation Slice](/architecture/foundation.md) - root model, layout, focus, message routing
 * [File Explorer](/architecture/explorer.md) - directory tree pane
 * [Editor](/architecture/editor.md) - vim-like modal editor: buffer, motions, operators, text objects, registers, undo/redo, search, viewport (Roadmap 0060)
-* [Ansible Vault Editing](/architecture/ansible-vault.md) - transparent $ANSIBLE_VAULT; editing: decrypt to buffer on open, re-encrypt on save, plaintext never on disk, "Treat as Vault File" intention, password from env or configured file (#2293)
+* [Ansible Vault Editing](/architecture/ansible-vault.md) - transparent $ANSIBLE_VAULT; editing: decrypt to buffer on open, re-encrypt on save, plaintext never on disk, "Treat as Vault File" intention, password from env or configured file (#2293); inline `!vault |` values as a stand-in row, decrypted in the explain popover, edited with re-encryption (#2712)
 * [Dependencies Tool Window](/architecture/dependencies.md) - project dependencies per manifest with latest versions and vulnerabilities via the go/npm/composer/cargo/pip toolchains; manifest hovers, update code action, Problems feed, confirmed-only installs (#2419)
 * [Plugin Extension Contract](/architecture/plugins.md) - compile-in registry, extension points, host API
 * [Configuration System](/architecture/config.md) - typed TOML config, defaults < user < project merge, validation, extension hook, host integration (Roadmap 0040)

@@ -25,6 +25,7 @@ import (
 	"ike/internal/nethint"
 	"ike/internal/numhint"
 	"ike/internal/permhint"
+	"ike/internal/vaultinline"
 	"ike/internal/yamlanchor"
 	"ike/plugins/languages/register"
 )
@@ -77,11 +78,15 @@ func init() {
 // the symbolic `rw-r--r--` is the reading, not the radix conversion. A decimal
 // `mode: 644` carries no permission hint by construction, so the number hints
 // keep it and still warn with `= 01204`.
-// The secret masks (#2345) come first of all: overlapping spans resolve
+// The secret masks (#2345) come right after the vault blocks: overlapping spans resolve
 // first-covering-wins, so the mask must precede any decode that would
 // otherwise render a piece of the credential.
 func yamlSpans(lines []string) []lang.Span {
-	out := append(maskSpans(lines), escapes.Base64YAMLSpans(lines)...)
+	// Inline vault blocks (#2712) go first of all: their header and hex
+	// lines are whole-line stand-ins, and a hex line of digits would
+	// otherwise pick up a digit-grouping hint.
+	out := append(vaultinline.Spans(lines), maskSpans(lines)...)
+	out = append(out, escapes.Base64YAMLSpans(lines)...)
 	out = append(out, escapes.UnicodeSpansIn(lines, escapes.UnicodeYAML)...)
 	out = append(out, cronhint.YAMLSpans(lines)...)
 	perms := permhint.YAMLSpans(lines)

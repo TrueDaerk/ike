@@ -14,6 +14,7 @@ import (
 	"ike/internal/lang"
 	"ike/internal/numhint"
 	"ike/internal/secret"
+	"ike/internal/vaultinline"
 )
 
 // explainconceal.go is the explain & override popover for concealed and masked
@@ -38,6 +39,10 @@ type explainState struct {
 	line    int
 	capture string
 	drawing bool
+	// vault is set for an inline vault block (#2712, vaultprompt.go): the
+	// popover then shows the block's facts and its decrypted value instead
+	// of a heuristic's provenance.
+	vault *vaultExplain
 }
 
 // ConcealRuleMsg asks the app to persist a rule the popover produced (#1998).
@@ -60,6 +65,16 @@ func (m *Model) explainConceal() tea.Cmd {
 	line := m.cursor.Line
 	if line >= m.buf.LineCount() {
 		return notice("nothing to explain here")
+	}
+	if b, ok := m.vaultBlockAtCaret(); ok {
+		// An inline vault block (#2712): the caret anywhere from the tag line
+		// to the last hex line explains the block, decrypted when a password
+		// source serves.
+		m.explain = &explainState{
+			line: b.Head, capture: vaultinline.Capture, drawing: m.vaultOn(),
+			vault: m.vaultExplainFor(b), ex: concealexplain.Explanation{Start: b.Indent},
+		}
+		return nil
 	}
 	text := m.buf.Line(line)
 	req := concealexplain.Request{Line: text, Col: m.cursor.Col, Lang: m.langID()}
@@ -143,6 +158,9 @@ func (m *Model) dismissExplain() { m.explain = nil }
 // normal dispatch handles it, like the peek popup (#1154).
 func (m *Model) explainKey(key tea.KeyPressMsg) (bool, tea.Cmd) {
 	st := m.explain
+	if st.vault != nil {
+		return m.vaultExplainKey(key)
+	}
 	r, hasRune := firstRune(key)
 	switch {
 	case key.Code == tea.KeyEscape:
@@ -232,6 +250,9 @@ func (m Model) ExplainView() string {
 	st := m.explain
 	if st == nil {
 		return ""
+	}
+	if st.vault != nil {
+		return m.vaultExplainView(st)
 	}
 	th := m.theme()
 	head := lipgloss.NewStyle().Foreground(th.Accent).Bold(true)

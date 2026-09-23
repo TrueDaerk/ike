@@ -171,6 +171,9 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			// PEM summaries (#1652): per-view toggle over the
 			// editor.pem_summary config default.
 			action("view.togglePemSummary", "Toggle PEM Summary", "toggle_pem_summary", ""),
+			// Inline vault stand-in (#2712): per-view toggle over the
+			// editor.vault config default.
+			action("view.toggleVaultStandIn", "Toggle Vault Stand-In", "toggle_vault_standin", ""),
 			// Number-readability hints (#1627): per-view toggles over the
 			// editor.byte_size_hints / duration_hints / digit_grouping /
 			// radix_hints config defaults.
@@ -242,6 +245,12 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			// vim-style sequence like the fold commands, so it is surfaced as
 			// a doc hint and stays rebindable through the keymap layer.
 			action("editor.explainConceal", "Explain Concealed Value", "explain_conceal", "g?"),
+			// Inline Ansible Vault values (#2712): the three intention actions
+			// over a `!vault |` block or a plain mapping scalar. Offered by the
+			// alt+enter popup where they apply (keybind_audit_test.go).
+			action("vault.editValue", "Edit Vault Value…", "vault_edit_value", ""),
+			action("vault.encryptValue", "Encrypt Value with Ansible Vault", "vault_encrypt_value", ""),
+			action("vault.decryptValue", "Decrypt Vault Value to Plain Text", "vault_decrypt_value", ""),
 			// Merge-conflict resolution (#1149, #2258): vim-style sequences
 			// rather than cmd chords (that budget is full, #711) — go/gt/gb
 			// resolve the block at the caret, gm keeps a hand-merged one, and

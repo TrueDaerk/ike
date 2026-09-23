@@ -994,6 +994,11 @@ type Editor struct {
 	// file masked (#1623) — `*_TOKEN`, `*_SECRET`, `PASSWORD`, `CREDENTIALS`
 	// and friends show as ••••; the raw value reappears under the caret.
 	SecretMasking bool `toml:"secret_masking"`
+	// Vault collapses an inline Ansible `!vault |` value in a YAML buffer
+	// onto one row, `⟨vault AES256 · 6 lines⟩` (#2712); the raw header and hex
+	// lines reappear with the caret inside the block. The key is the bare
+	// family name so a conceal file rule reads `vault=-*.yml`.
+	Vault bool `toml:"vault"`
 	// SecretMaskingKeys extends the key patterns secret masking recognises
 	// (#1712). Each entry is a pattern matched case-insensitively over the
 	// whole key name with `*` wildcards — `MY_API_KEY`, `*_LICENSE`,

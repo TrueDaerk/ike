@@ -61,7 +61,11 @@ func (m Model) intentionContext() (intention.Context, bool) {
 		CanToggleValue:    ed.CanToggleValueAtCaret(),
 		VaultBuffer:       ed.Vault(),
 		VaultReady:        ed.VaultPasswordConfigured(),
-		Preview:           intentionPreview(ed),
+		// The inline vault probes (#2712) gate on the buffer's language
+		// inside the editor, so they cost nothing outside YAML.
+		VaultBlockAtCaret:  ed.VaultBlockAtCaret(),
+		VaultScalarAtCaret: ed.VaultScalarAtCaret(),
+		Preview:            intentionPreview(ed),
 	}
 	if hasSel {
 		// Only the clipboard diff needs this, and reading the system

@@ -539,6 +539,13 @@ type Model struct {
 	pemSummary    bool
 	pemSummarySet bool
 	pemCache      *pemState
+	// Inline vault stand-in (#2712, vaultinline.go): vaultStandIn follows
+	// the editor.vault config default until vaultStandInSet marks a
+	// view.toggleVaultStandIn override. vaultPrompt is the open edit/decrypt
+	// prompt (vaultprompt.go).
+	vaultStandIn    bool
+	vaultStandInSet bool
+	vaultPrompt     *vaultPromptState
 	// colorPreview is the inline color-swatch toggle (#790,
 	// editor.color_preview): color literals tint with their own color.
 	// colorPreviewSet marks a per-view view.toggleColorPreview override
@@ -864,6 +871,7 @@ func New() Model {
 		logLangCache:       &logLangState{},
 		logDeltaCache:      &logDeltaState{},
 		pemSummary:         true,
+		vaultStandIn:       true,
 		pemCache:           &pemState{},
 		tsDecode:           true,
 		uniDecode:          true,
@@ -1071,6 +1079,9 @@ func (m *Model) applyConfig() {
 	m.hyperlinks = boolOr(m.cfg, "editor.hyperlinks", m.hyperlinks)
 	if !m.pemSummarySet {
 		m.pemSummary = boolOr(m.cfg, "editor.pem_summary", m.pemSummary)
+	}
+	if !m.vaultStandInSet {
+		m.vaultStandIn = boolOr(m.cfg, "editor.vault", m.vaultStandIn)
 	}
 	if !m.colorPreviewSet {
 		m.colorPreview = boolOr(m.cfg, "editor.color_preview", m.colorPreview)
@@ -1462,7 +1473,7 @@ func (m Model) ModeName() Mode { return m.mode }
 // and label characters include keys the app claims in plain normal mode
 // (q, tab, @).
 func (m Model) Capturing() bool {
-	return m.mode.Capturing() || m.replPanel != nil || m.subConfirm != nil || m.leap != nil
+	return m.mode.Capturing() || m.replPanel != nil || m.subConfirm != nil || m.leap != nil || m.vaultPrompt != nil
 }
 
 // FindFieldOpen reports whether a find/replace text field currently owns the
@@ -1482,7 +1493,9 @@ func (m Model) FindFieldOpen() bool { return m.replPanel != nil || m.searching }
 // Editor context — cmd+backspace is editor.deleteLine, alt+backspace is
 // editor.deleteWordBackward, and both used to delete document text while the
 // user was editing a query (#2602).
-func (m Model) LineInputOpen() bool { return m.replPanel != nil || m.mode == Command }
+func (m Model) LineInputOpen() bool {
+	return m.replPanel != nil || m.mode == Command || m.vaultPrompt != nil
+}
 
 // Cursor returns the 1-based line and column for the status line.
 func (m Model) Cursor() (line, col int) { return m.cursor.Line + 1, m.cursor.Col + 1 }
@@ -1857,6 +1870,13 @@ func (m Model) updateMsg(msg tea.Msg) (Model, tea.Cmd) {
 		}
 		before := m.docVersion
 		var cmd tea.Cmd
+		if m.vaultPrompt != nil {
+			// The vault edit/decrypt prompt (#2712) owns the keyboard the same
+			// way; accepting it replaces a block, hence the reparse.
+			m, cmd = m.updateVaultPrompt(msg)
+			m.scroll()
+			return m.maybeReparse(before, cmd)
+		}
 		if m.subConfirm != nil {
 			// An open ":s///c" confirmation consumes keys before the mode machine.
 			m = m.updateSubConfirm(msg)

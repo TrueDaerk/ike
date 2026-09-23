@@ -50,6 +50,9 @@ const (
 	CIDRHints             = "cidr_hints"
 	IDNHints              = "idn_hints"
 	SecretMasking         = "secret_masking"
+	// Vault is the inline Ansible `!vault` stand-in (#2712): editor.vault,
+	// view.toggleVaultStandIn — the bare word, so a rule reads `vault=-*.yml`.
+	Vault = "vault"
 )
 
 // IsFamily reports whether name is a registered conceal family — the
@@ -77,6 +80,7 @@ var families = map[string]bool{
 	CIDRHints:             true,
 	IDNHints:              true,
 	SecretMasking:         true,
+	Vault:                 true,
 }
 
 // Families lists the family names a rule may name, sorted.
