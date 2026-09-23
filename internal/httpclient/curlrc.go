@@ -107,8 +107,14 @@ func (c *curlConfig) apply(name, value string) {
 	case "e", "referer":
 		c.Referer = value
 	case "L", "location":
-		t := true
-		c.FollowRedirect = &t
+		// curl's config file spells a boolean option either bare (on) or with
+		// an explicit value; `location = off` is how a file that follows
+		// redirects everywhere else turns them off for ike (#2716).
+		v := curlBool(value)
+		c.FollowRedirect = &v
+	case "no-location":
+		f := false
+		c.FollowRedirect = &f
 	case "m", "max-time":
 		if d, err := parseCurlSeconds(value); err == nil {
 			c.MaxTime = d
@@ -128,6 +134,17 @@ func (c *curlConfig) apply(name, value string) {
 	default:
 		c.Warnings = append(c.Warnings, fmt.Sprintf("unsupported .curlrc option %q ignored", name))
 	}
+}
+
+// curlBool reads the value of a boolean curlrc option: a bare option is on,
+// and curl's own negative spellings turn it off. Anything else is on, which
+// is what an option written at all means.
+func curlBool(value string) bool {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "off", "false", "no", "0":
+		return false
+	}
+	return true
 }
 
 // parseCurlSeconds parses curl's (possibly fractional) seconds values.

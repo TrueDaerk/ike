@@ -26,11 +26,19 @@ const (
 	AssertJSONPath = "jsonpath" // a JSONPath into a JSON body, in Arg
 	AssertBody     = "body"     // the whole response body
 	AssertTime     = "time"     // the wall clock of the exchange
+	// AssertRedirects is how many redirects the exchange followed (#2716) —
+	// 0 for a direct answer, so `redirects == 0` is the way to say "this
+	// endpoint must answer me, not send me elsewhere".
+	AssertRedirects = "redirects"
+	// AssertFinalURL is the URL the shown response actually came from
+	// (#2716): after a chain it is the last hop's, otherwise the request's.
+	AssertFinalURL = "finalUrl"
 )
 
 // AssertSubjects lists the subjects a directive may name, in the order
 // completion offers them.
-var AssertSubjects = []string{AssertStatus, AssertHeader, AssertJSONPath, AssertBody, AssertTime}
+var AssertSubjects = []string{AssertStatus, AssertHeader, AssertJSONPath, AssertBody, AssertTime,
+	AssertRedirects, AssertFinalURL}
 
 // Assertion operators.
 const (

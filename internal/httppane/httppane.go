@@ -49,6 +49,10 @@ const (
 	// body lists every `# @assert` directive, the passed ones in the success
 	// colour, the failed ones as kindError rows.
 	kindPass
+	// kindRedirects is a row of the followed redirect chain (#2716): the
+	// foldable block between the status line and the timing line, one step per
+	// hop with the connection facts underneath. See redirects.go.
+	kindRedirects
 )
 
 // row is one pre-composed display line.
@@ -108,6 +112,15 @@ type Model struct {
 	folds   []highlight.Fold
 	folded  map[int]int
 	visible []int
+	// The redirect chain block (#2716), see redirects.go: chainFold is its
+	// own fold — kept apart from folds, which every syntax pass replaces —
+	// and chainOK says the shown response has a chain at all. chainOff marks
+	// the other case the status line reports: a 3xx that was *not* followed
+	// because .curlrc turns `-L` off, where the Location header is emphasised
+	// instead of a chain being drawn.
+	chainFold highlight.Fold
+	chainOK   bool
+	chainOff  bool
 	// top is a *display* index into visible, not a row index: a collapsed
 	// fold's body rows are not scrolled through.
 	top int
@@ -410,6 +423,7 @@ func (m *Model) StartStream(request, proto, status string, headers http.Header) 
 	m.hlGen++ // a pass still in flight belongs to rows that are gone now
 	m.hlPending = nil
 	m.folds, m.folded, m.visible = nil, nil, nil
+	m.chainFold, m.chainOK, m.chainOff = highlight.Fold{}, false, false
 	m.gqlErrors = nil // the previous response's, and a stream is never GraphQL
 	m.asserts = nil   // evaluated once the stream ends, shown by Set
 	m.streaming = true
@@ -596,6 +610,7 @@ func (m *Model) recompose(resp *httpclient.Response) {
 	m.hlGen++ // whatever pass is still out belongs to the previous rows
 	m.hlPending = nil
 	m.folds, m.folded, m.visible = nil, nil, nil
+	m.chainFold, m.chainOK, m.chainOff = highlight.Fold{}, false, false
 	m.gqlErrors = nil
 	m.asserts = nil
 	m.failure = "" // a response (or an empty pane) replaces the last failure
@@ -613,6 +628,17 @@ func (m *Model) recompose(resp *httpclient.Response) {
 		// below.
 		status += fmt.Sprintf("   %s %s", gqlErrorGlyph, pluralErrors(n))
 	}
+	if n := resp.RedirectCount(); n > 0 {
+		// The counter goes on the status row (#2716): "200 OK" after two
+		// redirects is a different answer from "200 OK", and the block below
+		// is only read once the eye knows there is one.
+		status += fmt.Sprintf("   · %s", pluralRedirects(n))
+	} else if resp.RedirectsOff {
+		// A 3xx that was declined rather than followed: the status code alone
+		// looks like the server's last word, which it is not.
+		m.chainOff = true
+		status += "   · redirect not followed (.curlrc location=off)"
+	}
 	m.asserts = resp.Assertions
 	if len(m.asserts) > 0 {
 		// The assertion summary (#2546) sits on the status row too: a red
@@ -621,6 +647,14 @@ func (m *Model) recompose(resp *httpclient.Response) {
 		status += fmt.Sprintf("   %s %s", assertGlyph(resp.AssertionsFailed() == 0), resp.AssertionSummary())
 	}
 	m.rows = append(m.rows, row{kind: kindStatus, text: status})
+	if chain := redirectRows(resp.Redirects, resp.FinalURL, m.width); len(chain) > 0 {
+		// The chain sits between the status line and the timing line (#2716):
+		// the timing line is the *sum* over the whole chain, and the block
+		// above it is what the extra DNS lookups and handshakes were for.
+		header := len(m.rows)
+		m.rows = append(m.rows, chain...)
+		m.setChain(header, len(m.rows)-1, len(resp.Redirects))
+	}
 	if line := resp.Timing.String(); line != "" {
 		// The phase breakdown (#2404) sits directly under the status line, so
 		// "2 s" and "2 s of which 1.9 s waiting for the first byte" are read
@@ -833,6 +867,18 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		// enter is the second way into the session input line (#2422).
 		if m.WSLive() {
 			m.openWSInput()
+			return nil
+		}
+		// On the redirect block (#2716) enter folds it, the way enter opens
+		// and closes a foldable row everywhere else. The block is the pane's
+		// only foldable row above the body, so "on the row" is the fold rule
+		// of fold.go: the fold at the top of the view.
+		if m.chainTargeted() {
+			row := m.chainRow()
+			m.ToggleFold(row)
+			if d := m.displayOf(row); d < m.top {
+				m.top = d
+			}
 		}
 		return nil
 	case "ctrl+r":
@@ -1009,6 +1055,12 @@ func (m *Model) copyKeyCmd() tea.Cmd {
 		text := m.SelectionText()
 		m.ClearSelection()
 		return copyCmd(text, "selection")
+	}
+	if m.chainTargeted() {
+		// On the redirect block the copy key takes the chain (#2716) — the
+		// whole block, folded or not, so pasting a chain into a ticket needs
+		// no unfold and no drag.
+		return copyCmd(m.ChainText(), "redirect chain")
 	}
 	return copyCmd(m.BodyText(), "response body")
 }
@@ -1853,7 +1905,17 @@ func (m *Model) baseStyle(pal *theme.Palette, i, from, to int) styleFn {
 	case kindTiming:
 		st := lipgloss.NewStyle().Foreground(pal.Secondary)
 		return func(int) (lipgloss.Style, string) { return st, "timing" }
+	case kindRedirects:
+		st := lipgloss.NewStyle().Foreground(pal.Secondary)
+		return func(int) (lipgloss.Style, string) { return st, "redirects" }
 	case kindHeader:
+		if m.chainOff && strings.HasPrefix(r.text, "Location: ") {
+			// The redirect was declined (#2716), so the Location header *is*
+			// the answer's real content: where this would have gone. It reads
+			// as a warning rather than as one header among forty.
+			st := lipgloss.NewStyle().Foreground(pal.Warning).Bold(true)
+			return func(int) (lipgloss.Style, string) { return st, "location" }
+		}
 		// The name (up to and including the colon) reads as a constant, the
 		// value plain — the pre-#1265 look, now column-addressed.
 		name, _, _ := strings.Cut(r.text, ": ")

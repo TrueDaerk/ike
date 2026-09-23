@@ -150,6 +150,8 @@ func assertMissing(a httpfile.Assertion) string {
 		return "header " + a.Arg + " is not present"
 	case httpfile.AssertJSONPath:
 		return a.Arg + " matched no value in the response body"
+	case httpfile.AssertFinalURL:
+		return "this response was restored without a final URL"
 	}
 	return "no value"
 }
@@ -199,6 +201,14 @@ func assertActual(a httpfile.Assertion, resp *Response, body []byte) (actual str
 		return string(body), true, nil
 	case httpfile.AssertTime:
 		return resp.Duration.String(), true, nil
+	case httpfile.AssertRedirects:
+		// The count is always answerable — a response that followed none has
+		// zero — so the subject is never "missing" (#2716).
+		return strconv.Itoa(resp.RedirectCount()), true, nil
+	case httpfile.AssertFinalURL:
+		// A response restored from a history file written before the capture
+		// existed has no final URL; it reads as absent rather than as "".
+		return resp.FinalURL, resp.FinalURL != "", nil
 	case httpfile.AssertJSONPath:
 		if len(bytes.TrimSpace(body)) == 0 {
 			return "", false, errors.New("the response body is empty")

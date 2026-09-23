@@ -77,6 +77,20 @@ type Response struct {
 	// a response restored from a history file written before the capture
 	// existed, or one composed by a test.
 	Timing *Timing
+	// Redirects is the chain the dispatch walked (#2716), one Hop per
+	// exchange with the answering one last — so a 301 → 302 → 200 is three
+	// hops and RedirectCount() is 2. Empty for a direct answer, and for a
+	// response restored from a history file written before the capture
+	// existed.
+	Redirects []Hop
+	// FinalURL is the URL the shown response actually came from, which for a
+	// chain is the last hop's and otherwise the request's own. "" on a
+	// restored response that predates the capture.
+	FinalURL string
+	// RedirectsOff records that a redirect arrived and was *not* followed
+	// because .curlrc turns `-L` off (#2716): without it an unfollowed 301
+	// and a followed one both show an empty chain.
+	RedirectsOff bool
 	// RequestKey identifies the originating request (httpfile.Request.Key).
 	RequestKey string
 	// Warnings lists non-fatal issues (e.g. ignored .curlrc options).
@@ -254,6 +268,10 @@ type prepared struct {
 	// snapshot is what goes on the wire (#1832), captured once everything —
 	// substitution, .curlrc, .netrc — has been applied.
 	snapshot *RequestSnapshot
+	// redirects is the chain recorder the client's redirect policy feeds
+	// (#2716); it belongs to the prepared request because the policy is part
+	// of the client built for it.
+	redirects *redirectRecorder
 }
 
 // prepare resolves placeholders in req, applies local configuration and
@@ -315,13 +333,15 @@ func prepare(ctx context.Context, req *httpfile.Request, opts Options) (*prepare
 	if now == nil {
 		now = time.Now
 	}
+	rec := newRedirectRecorder(followRedirects(cfg))
 	return &prepared{
-		httpReq:  httpReq,
-		client:   buildClient(cfg, opts, resolved.Timeout),
-		timeout:  effectiveTimeout(cfg, opts, resolved.Timeout),
-		warnings: warnings,
-		now:      now,
-		snapshot: snapshotOf(httpReq, body),
+		httpReq:   httpReq,
+		client:    buildClient(cfg, opts, resolved.Timeout, rec),
+		timeout:   effectiveTimeout(cfg, opts, resolved.Timeout),
+		warnings:  warnings,
+		now:       now,
+		snapshot:  snapshotOf(httpReq, body),
+		redirects: rec,
 	}, nil
 }
 
@@ -385,12 +405,14 @@ func prepareSnapshot(ctx context.Context, key string, snap *RequestSnapshot, opt
 	if now == nil {
 		now = time.Now
 	}
+	rec := newRedirectRecorder(followRedirects(cfg))
 	return &prepared{
-		httpReq:  httpReq,
-		client:   buildClient(cfg, opts, 0),
-		timeout:  effectiveTimeout(cfg, opts, 0),
-		now:      now,
-		snapshot: snap.Clone(),
+		httpReq:   httpReq,
+		client:    buildClient(cfg, opts, 0, rec),
+		timeout:   effectiveTimeout(cfg, opts, 0),
+		now:       now,
+		snapshot:  snap.Clone(),
+		redirects: rec,
 	}, nil
 }
 
@@ -420,6 +442,9 @@ func (p *prepared) collect(key string) (*Response, error) {
 	// The phase breakdown (#2404) rides along on every dispatch: the hooks
 	// only record timestamps, so there is nothing to switch on.
 	tr := newTimingTrace(p.now, start)
+	// The chain recorder reads its per-hop connection facts out of the same
+	// hook set (#2716), so it is armed with the exchange's collector.
+	p.redirects.begin(tr)
 	httpResp, err := p.client.Do(p.traced(tr))
 	if err != nil {
 		// A deadline that ran out is named as such (#2630): "timed out after
@@ -431,6 +456,7 @@ func (p *prepared) collect(key string) (*Response, error) {
 		return nil, fmt.Errorf("request %s: %v", key, err)
 	}
 	defer httpResp.Body.Close()
+	p.redirects.finish(httpResp)
 	return p.collectBody(key, httpResp, start, tr)
 }
 
@@ -456,19 +482,22 @@ func (p *prepared) collectBody(key string, httpResp *http.Response, start time.T
 	}
 	body, spool, total := sink.close()
 	return &Response{
-		Status:     httpResp.Status,
-		StatusCode: httpResp.StatusCode,
-		Proto:      httpResp.Proto,
-		Headers:    httpResp.Header,
-		Body:       body,
-		SpoolPath:  spool,
-		BodySize:   total,
-		Truncated:  sink.truncated,
-		Duration:   elapsed,
-		Timing:     tr.result(end),
-		RequestKey: key,
-		Warnings:   append(p.warnings, sink.warnings()...),
-		Request:    p.snapshot,
+		Status:       httpResp.Status,
+		StatusCode:   httpResp.StatusCode,
+		Proto:        httpResp.Proto,
+		Headers:      httpResp.Header,
+		Body:         body,
+		SpoolPath:    spool,
+		BodySize:     total,
+		Truncated:    sink.truncated,
+		Duration:     elapsed,
+		Timing:       tr.result(end),
+		Redirects:    p.redirects.chain(),
+		FinalURL:     p.redirects.final(),
+		RedirectsOff: p.redirects.declined(),
+		RequestKey:   key,
+		Warnings:     append(p.warnings, sink.warnings()...),
+		Request:      p.snapshot,
 	}, nil
 }
 
@@ -558,6 +587,7 @@ func (p *prepared) run(ctx context.Context, key string, opts Options, cb StreamC
 
 	start := p.now()
 	tr := newTimingTrace(p.now, start)
+	p.redirects.begin(tr)
 	httpResp, err := p.client.Do(p.httpReq.WithContext(httptrace.WithClientTrace(ctx, tr.clientTrace())))
 	if err != nil {
 		if timedOut.Load() {
@@ -569,6 +599,7 @@ func (p *prepared) run(ctx context.Context, key string, opts Options, cb StreamC
 		return nil, fmt.Errorf("request %s: %v", key, err)
 	}
 	defer httpResp.Body.Close()
+	p.redirects.finish(httpResp)
 	warnings := p.warnings
 
 	if !IsStreamContentType(httpResp.Header.Get("Content-Type")) {
@@ -636,19 +667,22 @@ func (p *prepared) run(ctx context.Context, key string, opts Options, cb StreamC
 	}
 
 	return &Response{
-		Status:     httpResp.Status,
-		StatusCode: httpResp.StatusCode,
-		Proto:      httpResp.Proto,
-		Headers:    httpResp.Header,
-		Body:       body,
-		SpoolPath:  spool,
-		BodySize:   total,
-		Truncated:  truncated,
-		Duration:   elapsed,
-		Timing:     tr.result(end),
-		RequestKey: key,
-		Warnings:   warnings,
-		Request:    p.snapshot,
+		Status:       httpResp.Status,
+		StatusCode:   httpResp.StatusCode,
+		Proto:        httpResp.Proto,
+		Headers:      httpResp.Header,
+		Body:         body,
+		SpoolPath:    spool,
+		BodySize:     total,
+		Truncated:    truncated,
+		Duration:     elapsed,
+		Timing:       tr.result(end),
+		Redirects:    p.redirects.chain(),
+		FinalURL:     p.redirects.final(),
+		RedirectsOff: p.redirects.declined(),
+		RequestKey:   key,
+		Warnings:     warnings,
+		Request:      p.snapshot,
 	}, nil
 }
 
@@ -704,8 +738,9 @@ func applyNetrc(httpReq *http.Request, cfg *curlConfig, opts Options) error {
 // buildClient assembles the http.Client honoring .curlrc proxy/insecure/
 // redirect/timeout options over the defaults. reqTimeout is the deadline the
 // request's own `# @timeout` directive asks for (#2630), 0 when it carries
-// none.
-func buildClient(cfg *curlConfig, opts Options, reqTimeout time.Duration) *http.Client {
+// none; rec is the dispatch's redirect chain recorder (#2716), which becomes
+// the client's redirect policy.
+func buildClient(cfg *curlConfig, opts Options, reqTimeout time.Duration, rec *redirectRecorder) *http.Client {
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	if cfg.Insecure {
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true}
@@ -720,10 +755,17 @@ func buildClient(cfg *curlConfig, opts Options, reqTimeout time.Duration) *http.
 	}
 
 	client := &http.Client{Transport: transport, Timeout: effectiveTimeout(cfg, opts, reqTimeout)}
-	if cfg.FollowRedirect != nil && !*cfg.FollowRedirect {
-		client.CheckRedirect = func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		}
-	}
+	// The redirect policy is the chain recorder's (#2716): it keeps the
+	// `-L`-off behaviour (decline with ErrUseLastResponse) and otherwise
+	// records every hop before letting the redirect through, restating Go's
+	// own ten-redirect limit that replacing CheckRedirect removes.
+	client.CheckRedirect = rec.checkRedirect
 	return client
+}
+
+// followRedirects resolves the .curlrc `-L` decision: redirects are followed
+// unless the file turns them off, which is Go's (and curl's `-L`) default in
+// the dispatcher.
+func followRedirects(cfg *curlConfig) bool {
+	return cfg.FollowRedirect == nil || *cfg.FollowRedirect
 }

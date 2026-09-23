@@ -53,8 +53,15 @@ type Entry struct {
 	// entry so a browsed history response and a D/P diff show the same
 	// dns/connect/tls/ttfb/transfer line as the fresh one. nil for entries
 	// written before the capture existed.
-	Timing   *httpclient.Timing `json:"-"`
-	Warnings []string           `json:"warnings,omitempty"`
+	Timing *httpclient.Timing `json:"-"`
+	// Redirects is the chain the exchange walked (#2716), stored with the
+	// entry so a browsed response and a restored one show the same block the
+	// fresh answer did. nil for entries written before the capture existed,
+	// and for every direct answer. FinalURL and RedirectsOff travel with it.
+	Redirects    []httpclient.Hop `json:"-"`
+	FinalURL     string           `json:"-"`
+	RedirectsOff bool             `json:"-"`
+	Warnings     []string         `json:"warnings,omitempty"`
 	// Captured holds the values this response's `# @capture` directives took
 	// out of it (#1993). They are stored with the entry rather than kept in
 	// memory, so a captured value lives exactly as long as the response it
@@ -77,22 +84,25 @@ type Entry struct {
 // encoding/json base64-encodes. Readers accept both, so files written before
 // this split keep loading.
 type wireEntry struct {
-	Time       time.Time                 `json:"time"`
-	Status     string                    `json:"status"`
-	StatusCode int                       `json:"statusCode"`
-	Proto      string                    `json:"proto"`
-	Headers    http.Header               `json:"headers,omitempty"`
-	BodyText   *string                   `json:"bodyText,omitempty"`
-	Body       []byte                    `json:"body,omitempty"`     // base64, binary bodies only
-	BodyFile   string                    `json:"bodyFile,omitempty"` // spooled body, relative to the store dir (#2157)
-	BodySize   int                       `json:"bodySize,omitempty"` // total body size when spooled (#2157)
-	Truncated  bool                      `json:"truncated,omitempty"`
-	Duration   time.Duration             `json:"duration"`
-	Timing     *httpclient.Timing        `json:"timing,omitempty"` // phase breakdown (#2404)
-	Warnings   []string                  `json:"warnings,omitempty"`
-	Captured   map[string]string         `json:"captured,omitempty"`   // capture directives (#1993)
-	Assertions []httpclient.AssertResult `json:"assertions,omitempty"` // assertion outcomes (#2546)
-	Request    *wireRequest              `json:"request,omitempty"`    // as-sent snapshot (#1832)
+	Time         time.Time                 `json:"time"`
+	Status       string                    `json:"status"`
+	StatusCode   int                       `json:"statusCode"`
+	Proto        string                    `json:"proto"`
+	Headers      http.Header               `json:"headers,omitempty"`
+	BodyText     *string                   `json:"bodyText,omitempty"`
+	Body         []byte                    `json:"body,omitempty"`     // base64, binary bodies only
+	BodyFile     string                    `json:"bodyFile,omitempty"` // spooled body, relative to the store dir (#2157)
+	BodySize     int                       `json:"bodySize,omitempty"` // total body size when spooled (#2157)
+	Truncated    bool                      `json:"truncated,omitempty"`
+	Duration     time.Duration             `json:"duration"`
+	Timing       *httpclient.Timing        `json:"timing,omitempty"`       // phase breakdown (#2404)
+	Redirects    []httpclient.Hop          `json:"redirects,omitempty"`    // followed chain (#2716)
+	FinalURL     string                    `json:"finalUrl,omitempty"`     // the URL the answer came from (#2716)
+	RedirectsOff bool                      `json:"redirectsOff,omitempty"` // a 3xx left unfollowed (#2716)
+	Warnings     []string                  `json:"warnings,omitempty"`
+	Captured     map[string]string         `json:"captured,omitempty"`   // capture directives (#1993)
+	Assertions   []httpclient.AssertResult `json:"assertions,omitempty"` // assertion outcomes (#2546)
+	Request      *wireRequest              `json:"request,omitempty"`    // as-sent snapshot (#1832)
 }
 
 // wireRequest is the on-disk shape of the as-sent request snapshot (#1832).
@@ -152,6 +162,7 @@ func (e Entry) MarshalJSON() ([]byte, error) {
 	w := wireEntry{
 		Time: e.Time, Status: e.Status, StatusCode: e.StatusCode, Proto: e.Proto,
 		Headers: e.Headers, Truncated: e.Truncated, Duration: e.Duration, Timing: e.Timing,
+		Redirects: e.Redirects, FinalURL: e.FinalURL, RedirectsOff: e.RedirectsOff,
 		Warnings: e.Warnings, Captured: e.Captured, Assertions: e.Assertions, Request: toWire(e.Request),
 		BodyFile: e.BodyFile, BodySize: e.BodySize,
 	}
@@ -176,6 +187,7 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 	*e = Entry{
 		Time: w.Time, Status: w.Status, StatusCode: w.StatusCode, Proto: w.Proto,
 		Headers: w.Headers, Truncated: w.Truncated, Duration: w.Duration, Timing: w.Timing,
+		Redirects: w.Redirects, FinalURL: w.FinalURL, RedirectsOff: w.RedirectsOff,
 		Warnings: w.Warnings, Captured: w.Captured, Assertions: w.Assertions, Request: fromWire(w.Request),
 		BodyFile: w.BodyFile, BodySize: w.BodySize,
 	}
@@ -216,41 +228,47 @@ func (e Entry) BodySizeBytes() int {
 // Response converts a stored entry back into the viewer's response shape.
 func (e Entry) Response(requestKey string) *httpclient.Response {
 	return &httpclient.Response{
-		Status:     e.Status,
-		StatusCode: e.StatusCode,
-		Proto:      e.Proto,
-		Headers:    e.Headers,
-		Body:       e.Body,
-		SpoolPath:  e.BodyFile,
-		BodySize:   e.BodySize,
-		Truncated:  e.Truncated,
-		Duration:   e.Duration,
-		Timing:     e.Timing,
-		RequestKey: requestKey,
-		Warnings:   e.Warnings,
-		Assertions: e.Assertions,
-		Request:    e.Request,
+		Status:       e.Status,
+		StatusCode:   e.StatusCode,
+		Proto:        e.Proto,
+		Headers:      e.Headers,
+		Body:         e.Body,
+		SpoolPath:    e.BodyFile,
+		BodySize:     e.BodySize,
+		Truncated:    e.Truncated,
+		Duration:     e.Duration,
+		Timing:       e.Timing,
+		Redirects:    e.Redirects,
+		FinalURL:     e.FinalURL,
+		RedirectsOff: e.RedirectsOff,
+		RequestKey:   requestKey,
+		Warnings:     e.Warnings,
+		Assertions:   e.Assertions,
+		Request:      e.Request,
 	}
 }
 
 // FromResponse converts a dispatch result into a storable entry.
 func FromResponse(resp *httpclient.Response, at time.Time) Entry {
 	return Entry{
-		Time:       at,
-		Status:     resp.Status,
-		StatusCode: resp.StatusCode,
-		Proto:      resp.Proto,
-		Headers:    resp.Headers,
-		Body:       resp.Body,
-		BodyFile:   resp.SpoolPath,
-		BodySize:   resp.BodySize,
-		Truncated:  resp.Truncated,
-		Duration:   resp.Duration,
-		Timing:     resp.Timing,
-		Warnings:   resp.Warnings,
-		Captured:   resp.CapturedValues(),
-		Assertions: resp.Assertions,
-		Request:    resp.Request,
+		Time:         at,
+		Status:       resp.Status,
+		StatusCode:   resp.StatusCode,
+		Proto:        resp.Proto,
+		Headers:      resp.Headers,
+		Body:         resp.Body,
+		BodyFile:     resp.SpoolPath,
+		BodySize:     resp.BodySize,
+		Truncated:    resp.Truncated,
+		Duration:     resp.Duration,
+		Timing:       resp.Timing,
+		Redirects:    resp.Redirects,
+		FinalURL:     resp.FinalURL,
+		RedirectsOff: resp.RedirectsOff,
+		Warnings:     resp.Warnings,
+		Captured:     resp.CapturedValues(),
+		Assertions:   resp.Assertions,
+		Request:      resp.Request,
 	}
 }
 

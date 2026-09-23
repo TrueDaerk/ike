@@ -123,7 +123,8 @@ func TestSchemaCarriesOnlyStructuralFields(t *testing.T) {
 	r.Layout("tab.switch", nil)
 	r.Session("0.1.0", "darwin", "ab12cd34ef56")
 	r.Op("http.flight", "ok", map[string]string{"ms": "120", "class": "2xx", "stream": "false",
-		"dns_ms": "2", "connect_ms": "11", "tls_ms": "34", "ttfb_ms": "100", "transfer_ms": "20", "reused": "false"})
+		"dns_ms": "2", "connect_ms": "11", "tls_ms": "34", "ttfb_ms": "100", "transfer_ms": "20", "reused": "false",
+		"redirects": "2"})
 	r.Op("http.flight", "error", map[string]string{"ms": "9", "stream": "false", "reason": "refused"})
 	r.Op("project.switch", "lsp", map[string]string{"ms": "0", "skipped": "no_server_docs"})
 	r.CommandOutcome("editor.save", SourceKeybind, false, 0)
@@ -157,9 +158,10 @@ func TestSchemaCarriesOnlyStructuralFields(t *testing.T) {
 		"reason":      true,                                                                           // project.leave (#2408); http.flight error/canceled (#2631) — a closed failure-class token, never the error text
 		"skipped":     true,                                                                           // project.switch lsp phase (#2492) — a reason token, never content
 		"dns_ms":      true, "connect_ms": true, "tls_ms": true, "ttfb_ms": true, "transfer_ms": true, // http.flight timing (#2404, v8 #2547) — milliseconds, never a host
-		"reused":   true, // http.flight (#2547) — keep-alive flag
-		"since_ms": true, // freeze (#2627) — the frozen interval's wall time
-		"dumped":   true, // freeze (#2627) — whether a goroutine dump was written, never its path
+		"reused":    true, // http.flight (#2547) — keep-alive flag
+		"since_ms":  true, // freeze (#2627) — the frozen interval's wall time
+		"dumped":    true, // freeze (#2627) — whether a goroutine dump was written, never its path
+		"redirects": true, // http.flight (#2716) — the followed hop count, never a URL, host or Location
 	}
 	for _, ev := range readSession(t, dir) {
 		for k := range ev.Data {
@@ -809,16 +811,16 @@ func TestPalettePickClampsNegatives(t *testing.T) {
 	}
 }
 
-// The version analysis scripts branch on (#2693).
-func TestSchemaVersionIsFourteen(t *testing.T) {
-	if SchemaVersion != 14 {
-		t.Fatalf("SchemaVersion = %d, want 14", SchemaVersion)
+// The version analysis scripts branch on (#2716).
+func TestSchemaVersionIsFifteen(t *testing.T) {
+	if SchemaVersion != 15 {
+		t.Fatalf("SchemaVersion = %d, want 15", SchemaVersion)
 	}
 	dir := t.TempDir()
 	r := New(dir, nil)
 	r.Command("editor.save", SourceKeybind)
 	r.Close()
-	if evs := readSession(t, dir); len(evs) != 1 || evs[0].V != 14 {
-		t.Fatalf("events must be stamped v14, got %v", evs)
+	if evs := readSession(t, dir); len(evs) != 1 || evs[0].V != 15 {
+		t.Fatalf("events must be stamped v15, got %v", evs)
 	}
 }

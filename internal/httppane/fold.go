@@ -37,8 +37,22 @@ const foldCopyGlyph = "⧉"
 // coordinates into row coordinates, and drops any collapse state (the rows
 // belong to a different response now).
 func (m *Model) setFolds(folds []highlight.Fold, bodyStart int) {
+	// The redirect block's fold (#2716) is not the body's and must survive the
+	// pass that replaces the body's: it was composed before the highlight was
+	// even scheduled, and its collapse state — the default for a long chain,
+	// or whatever the user has toggled it to since — carries over.
+	chainCollapsed := false
+	if m.chainOK {
+		_, chainCollapsed = m.folded[m.chainFold.HeaderLine]
+	}
 	m.folds = nil
 	m.folded = nil
+	if m.chainOK {
+		m.folds = append(m.folds, m.chainFold)
+		if chainCollapsed {
+			m.folded = map[int]int{m.chainFold.HeaderLine: m.chainFold.EndLine}
+		}
+	}
 	for _, f := range folds {
 		m.folds = append(m.folds, highlight.Fold{
 			HeaderLine: f.HeaderLine + bodyStart,

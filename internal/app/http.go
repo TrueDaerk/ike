@@ -1272,6 +1272,13 @@ func (m *Model) recordHTTPFlightEnd(e *httpFlightEntry, msg HTTPResponseMsg) {
 		d["transfer_ms"] = ms(t.Transfer)
 		d["reused"] = strconv.FormatBool(t.Reused)
 	}
+	// How many redirects the accumulated setup phases came from (#2716): a
+	// flight whose dns_ms and tls_ms are three handshakes' worth reads as a
+	// slow host until the hop count says otherwise. The number only —
+	// never a URL, a host or a Location.
+	if n := msg.Resp.RedirectCount(); n > 0 {
+		d["redirects"] = strconv.Itoa(n)
+	}
 	// The timer carries the ms field (#2403); an entry without one — a foreign
 	// model's, or a test-built stub — falls back to its own start stamp so the
 	// event keeps its shape.

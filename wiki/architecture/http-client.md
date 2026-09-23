@@ -1,10 +1,10 @@
 ---
 type: concept
 title: HTTP Client (.http files)
-description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, WEBSOCKET session blocks with ===-separated initial messages, a live frame transcript and an interactive send line in the response pane, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, GraphQL errors lifted out of a 200 answer into a red block above the body, and @assert directives checked against every response with a pass/fail block above the body, a run in the Test Results window and a failure notice, plus a configurable request timeout with a per-request @timeout directive, a visible elapsed/limit countdown while a request is out and an explicit timed-out result.
+description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, WEBSOCKET session blocks with ===-separated initial messages, a live frame transcript and an interactive send line in the response pane, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, GraphQL errors lifted out of a 200 answer into a red block above the body, and @assert directives checked against every response with a pass/fail block above the body, a run in the Test Results window and a failure notice, the followed redirect chain with per-hop DNS, connected address and TLS facts as a foldable block under the status line, plus a configurable request timeout with a per-request @timeout directive, a visible elapsed/limit countdown while a request is out and an explicit timed-out result.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-09-18T00:00:00Z
+timestamp: 2026-09-23T00:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -334,6 +334,7 @@ itself:
 # @assert jsonpath $.items[0].id == 42
 # @assert body matches /"total":\s*\d+/
 # @assert time < 500ms
+# @assert redirects == 0
 GET https://example.com/things
 ```
 
@@ -351,6 +352,8 @@ GET https://example.com/things
   | `jsonpath` | a JSONPath (`$.items[0].id`, `$[0]`, `$`) | the first non-null value the path selects, in `jq -r` spelling |
   | `body` | — | the whole body text |
   | `time` | — | the wall clock of the exchange (`Response.Duration`) |
+  | `redirects` | — | how many redirects were followed (#2716), as a number; `0` for a direct answer |
+  | `finalUrl` | — | the URL the answer came from after the [chain](#redirect-chain-redirectgo-2716); absent on a response restored from a file written before the capture existed |
 
   Operators: `==`, `!=`, `<`, `<=`, `>`, `>=`, `contains`, `matches` (a Go
   regex, `/…/` delimiters optional) and the unary `exists` (a header that is
@@ -1038,6 +1041,89 @@ phase differs by a few milliseconds on every run, so a breakdown in the diff
 would report a change on two identical responses and push the header or body
 line that really changed out of sight. The entry keeps the numbers; the
 comparison is about content.
+
+### Redirect chain (`redirect.go`, #2716)
+
+The timing breakdown accumulates across a redirect chain — that is what makes
+it a sum — but until #2716 nothing said there *was* a chain: a 301 → 302 → 200
+rendered exactly like a direct 200 whose DNS, connect and TLS phases happened
+to be three handshakes' worth. The chain is now recorded and shown next to the
+breakdown that it explains.
+
+Recording it means **replacing** the client's redirect policy rather than
+adding to it: Go's default `CheckRedirect` *is* the ten-redirect limit, so a
+policy of ike's own has to restate it (`httpclient.MaxRedirects`, 10). The
+`redirectRecorder` becomes that policy and does three things per hop:
+
+- it takes the hop's own request from `via`'s last entry (method and URL as
+  they went out) and the response that redirected it from `req.Response` —
+  the one place Go hands a policy an intermediate response — for the status
+  and `Location`;
+- it compares the outgoing and the incoming method, so the 303 (and the
+  de-facto 301/302) `POST` → `GET` rewrite, which drops the body with it, is
+  marked on the step it happened at (`MethodChanged`);
+- it takes the hop's **connection facts** from the timing collector. Go fires
+  the `httptrace` hooks once per hop, so the facts standing in the collector
+  when the policy is consulted are the ones of the hop that just answered;
+  `timingTrace.takeHop` hands them over and starts an empty set for the next
+  hop. A second hook set would see exactly the same events, which is why the
+  durations and the per-hop facts share one collector.
+
+`Response.Redirects` is one `Hop` per exchange with the **answering one last**,
+so a 301 → 302 → 200 is three hops and `RedirectCount()` is 2; it is empty for
+a direct answer. `Response.FinalURL` is where the shown response came from.
+
+| `Hop` field | what it holds |
+|---|---|
+| `Method`, `URL` | what went out on this hop |
+| `Status`, `Location` | what came back; `Location` is empty on the final hop |
+| `DNSAddrs` | what the resolver answered for the hop's host (`DNSDone`) |
+| `RemoteAddr` | the address actually connected to (`GotConn`, `ConnectDone`) |
+| `TLSServerName`, `Proto` | SNI name and negotiated ALPN protocol (`TLSHandshakeDone`) |
+| `Reused` | the hop went out on an existing connection — which is why its other facts are empty rather than unmeasured |
+| `MethodChanged` | the successor was sent with a different method |
+
+The chain travels with the `Response` into the
+[history entry](#response-history-1251) (`redirects`, `finalUrl`,
+`redirectsOff` in the stored JSON), so a browsed entry shows the same block
+the fresh answer did; an entry written before the capture existed has none and
+renders as it always has.
+
+**With `-L` off** (`.curlrc` `--no-location`, or `location = off` — both
+spellings now parse, where only the bare `-L`/`--location` did) a 3xx is
+declined with `http.ErrUseLastResponse` as before, and the response records
+`RedirectsOff` instead of a chain. Without that flag an unfollowed 301 and a
+followed one both carry an empty chain, and the pane could not tell the user
+that the status code is not the server's last word.
+
+In the [response pane](#the-response-viewer-1250) the block sits between the
+status line and the timing line — the sum above what explains it:
+
+```
+HTTP/1.1 200 OK   (312ms)   · 2 redirects
+2 redirects · ended at https://www.example.com/
+↳ GET  http://example.com/       → 301  Location: https://example.com/
+   dns example.com → 93.184.216.34   connected 93.184.216.34:80
+↳ GET  https://example.com/      → 302  Location: https://www.example.com/
+   connected 93.184.216.34:443   tls example.com h2
+↳ GET  https://www.example.com/  → 200
+   connected 93.184.216.34:443   (reused: yes)
+dns 2ms · connect 11ms · tls 34ms · ttfb 210ms · transfer 4ms
+```
+
+The block is a fold like any other (`internal/httppane/fold.go`), composed
+collapsed once the chain runs past three hops so it cannot push the body off
+screen. `enter` toggles it and the copy key (`y`, `cmd+c`) takes the whole
+chain instead of the body while it is the targeted fold — the cursor-less
+pane's "on the row" rule, `targetFold`. Its fold is held apart from the body's
+(`Model.chainFold`) and re-added by `setFolds`, since every syntax pass
+replaces the body's folds wholesale. Long URLs are truncated to the pane width
+with the **host always visible** — the path loses its head, not the host.
+
+The telemetry `http.flight` end phases carry the hop count as `redirects`
+(v15, structural only — never a URL, host or `Location`); the timing line
+itself is unchanged and stays the accumulated sum. There is deliberately no
+per-hop timing.
 
 ### Large bodies are spooled to disk (#2157)
 
