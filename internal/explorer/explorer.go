@@ -873,6 +873,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		return m, m.moveEntry(msg.Path, msg.TargetDir, info.IsDir())
+	case CopyPathMsg:
+		return m, m.copyPath(msg.Path, msg.Dest, msg.Overwrite)
 	case lsp.WillRenameDoneMsg:
 		// The willRenameFiles round trip finished (#1912): any server
 		// refactoring edits were applied, perform the deferred FS rename.

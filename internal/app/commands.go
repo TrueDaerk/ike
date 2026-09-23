@@ -711,6 +711,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("file.openAs", "Open File As…", ShowOpenAsMsg{}),
 			appCommand("file.rename", "Rename File", RenameFileMsg{}),
 			appCommand("file.move", "Move File", MoveFileMsg{}),
+			appCommand("file.copy", "Copy File", CopyFileMsg{}),
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),
 			langCommand(appCommand("markdown.preview", "Markdown Preview", MarkdownPreviewMsg{}), []string{"markdown"}),
 			appCommand("preview.rerenderDiagrams", "Re-render Preview Diagrams", RerenderDiagramsMsg{}),

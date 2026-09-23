@@ -114,6 +114,9 @@ var jetbrainsRows = []row{
 	{"shift+f6", "lsp.rename", "Rename symbol", Editor, "LSP (0100)"},
 	{"shift+f6", "file.rename", "Rename file", Global, "App (#175)"},
 	{"f6", "file.move", "Move file", Global, "App (#175)"},
+	// f5 is JetBrains' Copy next to f6's Move: it duplicates the selected
+	// entry to a destination path picked in a prompt (#2696).
+	{"f5", "file.copy", "Copy file", Global, "App (#2696)"},
 	// Comment toggling binds cmd+7, not the JetBrains cmd+/: on a German layout
 	// "/" lives on shift+7, so a cmd+/ chord is untypable there (idea #48).
 	{"cmd+7", "editor.commentLine", "Comment line", Editor, "Editor (idea #48)"},

@@ -42,6 +42,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Close project group | `cmd+alt+shift+w` | `ctrl+alt+shift+w` | `project.group.close` |
 | Close project group | `ctrl+alt+shift+w` | `ctrl+alt+shift+w` | `project.group.close` |
 | Continue (debug) | `f9` | `f9` | `debug.continue` |
+| Copy file | `f5` | `f5` | `file.copy` |
 | Copy path | `cmd+shift+c` | `ctrl+shift+c` | `file.copyPath` |
 | Debug console tool window | `cmd+5` | `ctrl+5` | `debug.console` |
 | Debug file | `shift+f9` | `shift+f9` | `debug.start` |

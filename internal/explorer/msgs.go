@@ -57,6 +57,18 @@ type MoveToMsg struct {
 	TargetDir string
 }
 
+// CopyPathMsg copies the entry at Path to Dest — a full destination path, not
+// a directory (file.copy, f5, #2696). Like RenamePathMsg it names its target
+// explicitly instead of acting on the selection, because the app's file.copy
+// also serves the focused editor's file. Overwrite answers the app's guard: it
+// is false unless the user confirmed replacing an existing Dest, so a copy can
+// never clobber silently.
+type CopyPathMsg struct {
+	Path      string
+	Dest      string
+	Overwrite bool
+}
+
 // ToggleMarkMsg toggles the multi-select mark on the cursor row
 // (explorer.toggleMark, space, #2166).
 type ToggleMarkMsg struct{}
@@ -148,6 +160,7 @@ func (DeleteMsg) explorerMsg()        {}
 func (RenameMsg) explorerMsg()        {}
 func (RenamePathMsg) explorerMsg()    {}
 func (MoveToMsg) explorerMsg()        {}
+func (CopyPathMsg) explorerMsg()      {}
 func (ToggleMarkMsg) explorerMsg()    {}
 func (ClearMarksMsg) explorerMsg()    {}
 func (MoveSelectionMsg) explorerMsg() {}

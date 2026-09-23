@@ -188,6 +188,64 @@ func (m *Model) copyTargets(targets []delTarget, in string) tea.Cmd {
 	return m.finishBatch("copied", len(targets), subs, dirs, cmds, errs)
 }
 
+// copyPath copies one entry to an explicit destination path (file.copy, f5,
+// #2696) — the single-entry twin of copyTargets, which always keeps the base
+// name inside a target directory. Here the app's prompt named the whole
+// destination, so the copy can be a duplicate next to the original
+// ("a-copy.txt") just as well as a copy into another directory.
+//
+// overwrite is only ever true when the user answered the app's guard, and it
+// replaces the destination wholesale (os.RemoveAll) rather than merging a
+// directory into it: a half-merged tree is nothing the user asked for. Missing
+// parent directories are created, so a destination typed into the prompt's
+// "new directory" hint works without a separate mkdir.
+//
+// The copy is recorded as an opCreate, so one undo trashes exactly it and
+// leaves the source alone, and the cursor snaps onto it once the rescan lands.
+func (m *Model) copyPath(src, dest string, overwrite bool) tea.Cmd {
+	info, err := os.Lstat(src)
+	if err != nil {
+		m.fail(err)
+		return nil
+	}
+	isDir := info.IsDir()
+	if err := checkRelocate(delTarget{path: src, isDir: isDir}, dest); err != nil {
+		// An existing destination is the one rejection the guard already
+		// settled: with overwrite the copy replaces it, without it the error
+		// stands.
+		if !overwrite || !exists(dest) {
+			m.fail(err)
+			return nil
+		}
+		if err := os.RemoveAll(dest); err != nil {
+			m.fail(err)
+			return nil
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		m.fail(err)
+		return nil
+	}
+	if err := copyTree(src, dest); err != nil {
+		// A half-written copy would be invisible garbage (see copyTargets).
+		_ = os.RemoveAll(dest)
+		m.fail(err)
+		return nil
+	}
+	m.clearSel()
+	m.clearMarks()
+	m.pushOp(fileOp{kind: opCreate, path: dest, isDir: isDir})
+	m.snapCursorTo(dest)
+	return tea.Batch(m.refreshDir(filepath.Dir(dest)), createdCmd(dest, isDir))
+}
+
+// exists reports whether path is present, without following a final symlink —
+// a dangling link is still something a copy would replace.
+func exists(path string) bool {
+	_, err := os.Lstat(path)
+	return err == nil
+}
+
 // checkRelocate rejects the two destinations no move or copy may have: the
 // entry's current location (a no-op that a plain rename would silently accept)
 // and a path inside the directory being relocated (which would consume its own
