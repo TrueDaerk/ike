@@ -153,7 +153,16 @@ import (
 // wake that was worth drawing from render churn. Omitted when the interval
 // composed nothing. Structure only: message type names, never content.
 // Absence below v14 means "not recorded".
-const SchemaVersion = 14
+//
+// v15 (#2716): the "http.flight" end phases gain "redirects" — how many
+// redirects the exchange followed before it landed on the response the pane
+// shows. It explains the setup phases: Go fires DNS, connect and TLS once per
+// hop and the breakdown accumulates them, so a three-hop chain reads as a
+// slow host until the count says it was three handshakes. The field is
+// omitted when no redirect was followed, so its absence reads as zero on v15
+// and as "not recorded" below it. Structural only — the count, never a URL,
+// host or Location.
+const SchemaVersion = 15
 
 // defaultFlushInterval is how often the writer goroutine flushes the
 // bufio.Writer on its own, independent of buffer fill or explicit Flush

@@ -122,11 +122,26 @@ func FormatPhase(d time.Duration) string {
 	return fmt.Sprintf("%.1fs", d.Seconds())
 }
 
+// hopConn are the connection facts of the exchange currently in flight — the
+// per-hop half of what the hook set collects (#2716). The durations
+// accumulate across a redirect chain, but these do not: each hop resolved its
+// own name and connected to its own address, so takeHop hands the finished
+// set to the chain recorder and starts an empty one for the next hop.
+type hopConn struct {
+	dnsAddrs      []string
+	remoteAddr    string
+	tlsServerName string
+	tlsProto      string
+	reused        bool
+}
+
 // timingTrace collects the httptrace hook timestamps of one exchange. The
 // hooks fire on the transport's own goroutines, hence the mutex; a redirect
 // chain (or a retried connection) fires the setup hooks more than once, and
 // the phases accumulate rather than the last one winning — what the user
-// waited for is the sum.
+// waited for is the sum. The same hooks feed the redirect chain's per-hop
+// connection facts (#2716): a second hook set would see exactly the same
+// events, so the collector carries both.
 type timingTrace struct {
 	now func() time.Time
 
@@ -137,6 +152,19 @@ type timingTrace struct {
 	tlsStart  time.Time
 	t         Timing
 	gotFirst  time.Time
+	hop       hopConn
+}
+
+// takeHop returns the connection facts gathered since the last call and
+// resets them, so the next hop of a redirect chain starts clean. Called from
+// the client's redirect policy (and once more at the end of the exchange),
+// both of which run after the hop's hooks have fired.
+func (t *timingTrace) takeHop() hopConn {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	c := t.hop
+	t.hop = hopConn{}
+	return c
 }
 
 // newTimingTrace starts a collector; now is the dispatcher's clock, so tests
@@ -156,12 +184,17 @@ func (t *timingTrace) clientTrace() *httptrace.ClientTrace {
 			defer t.mu.Unlock()
 			t.dnsStart = t.now()
 		},
-		DNSDone: func(httptrace.DNSDoneInfo) {
+		DNSDone: func(info httptrace.DNSDoneInfo) {
 			t.mu.Lock()
 			defer t.mu.Unlock()
 			if !t.dnsStart.IsZero() {
 				t.t.DNS += t.now().Sub(t.dnsStart)
 				t.dnsStart = time.Time{}
+			}
+			// What the resolver answered for this hop (#2716) — the reason a
+			// request reached the address it did.
+			for _, a := range info.Addrs {
+				t.hop.dnsAddrs = append(t.hop.dnsAddrs, a.IP.String())
 			}
 		},
 		ConnectStart: func(string, string) {
@@ -169,12 +202,17 @@ func (t *timingTrace) clientTrace() *httptrace.ClientTrace {
 			defer t.mu.Unlock()
 			t.connStart = t.now()
 		},
-		ConnectDone: func(string, string, error) {
+		ConnectDone: func(_, addr string, err error) {
 			t.mu.Lock()
 			defer t.mu.Unlock()
 			if !t.connStart.IsZero() {
 				t.t.Connect += t.now().Sub(t.connStart)
 				t.connStart = time.Time{}
+			}
+			if err == nil && addr != "" {
+				// The address the dial landed on; GotConn refines it to the
+				// connection's own RemoteAddr when one is available.
+				t.hop.remoteAddr = addr
 			}
 		},
 		TLSHandshakeStart: func() {
@@ -182,12 +220,15 @@ func (t *timingTrace) clientTrace() *httptrace.ClientTrace {
 			defer t.mu.Unlock()
 			t.tlsStart = t.now()
 		},
-		TLSHandshakeDone: func(tls.ConnectionState, error) {
+		TLSHandshakeDone: func(state tls.ConnectionState, err error) {
 			t.mu.Lock()
 			defer t.mu.Unlock()
 			if !t.tlsStart.IsZero() {
 				t.t.TLS += t.now().Sub(t.tlsStart)
 				t.tlsStart = time.Time{}
+			}
+			if err == nil {
+				t.hop.tlsServerName, t.hop.tlsProto = state.ServerName, state.NegotiatedProtocol
 			}
 		},
 		GotConn: func(info httptrace.GotConnInfo) {
@@ -195,6 +236,12 @@ func (t *timingTrace) clientTrace() *httptrace.ClientTrace {
 			defer t.mu.Unlock()
 			if info.Reused {
 				t.t.Reused = true
+				t.hop.reused = true
+			}
+			if info.Conn != nil {
+				if addr := info.Conn.RemoteAddr(); addr != nil {
+					t.hop.remoteAddr = addr.String()
+				}
 			}
 		},
 		GotFirstResponseByte: func() {
