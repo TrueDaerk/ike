@@ -3211,7 +3211,7 @@ func (m *Model) resolveKeymap(k keymap.Key) (tea.Cmd, bool) {
 		// A press the keymap layer has no binding for (#2235): the signal for
 		// expected-but-missing keybinds. Only command-modified chords and
 		// function keys are recordable — plain typed characters never are.
-		if recordableUnbound(k) {
+		if recordableUnbound(k) && !m.terminalOwnsUnbound() {
 			// With an editor focused the verdict waits for the pane (#2303):
 			// the editor owns editing chords the keymap table never lists
 			// (alt+delete, alt+backspace, ctrl+u, …), and reporting those as
@@ -6872,6 +6872,21 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// switch-in materializes the #810 exited overlay instead of the tool
 		// silently vanishing.
 		if m.parkedGlobalToolExited(msg.Key) {
+			return m, nil
+		}
+		// A plain shell hosted as a terminal TAB in an editor pane (#573,
+		// #729) used to linger as a dead tab when its shell ended — ctrl+d at
+		// an idle prompt exited the shell and left a read-only husk the user
+		// had to close by hand (#2701). A shell tab now closes like a
+		// dedicated shell pane does; command and tool sessions keep their
+		// output, exactly as they do below.
+		if inst, idx, t := m.terminalTabForSession(msg.Key); t != nil &&
+			!t.IsCommand() && t.Tool() == "" {
+			if inst.TabCount() > 1 {
+				m.closeTab(inst, idx)
+			} else {
+				m.closePane(inst.Key())
+			}
 			return m, nil
 		}
 		key := m.terminalPaneForSession(msg.Key)
@@ -14279,6 +14294,26 @@ func (m Model) terminalPaneForSession(sess string) string {
 		}
 	}
 	return ""
+}
+
+// terminalTabForSession resolves a session key to the editor pane hosting it
+// as a terminal TAB (#573) and that tab's index; (nil, -1, nil) when the
+// session is not an editor-hosted tab (a dedicated terminal pane, a popup tab,
+// a debug console). Used by the exit path to close a finished shell tab
+// (#2701).
+func (m Model) terminalTabForSession(sess string) (*pane.Instance, int, *terminal.Model) {
+	for _, k := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(k)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		for i := 0; i < inst.TabCount(); i++ {
+			if t := inst.TabTerminal(i); t != nil && t.SessionKey() == sess {
+				return inst, i, t
+			}
+		}
+	}
+	return nil, -1, nil
 }
 
 // terminalModelForSession resolves a session key to its live terminal model —
