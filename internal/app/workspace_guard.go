@@ -1,7 +1,9 @@
 package app
 
 import (
+	"fmt"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -25,6 +27,7 @@ import (
 type wsActivity struct {
 	running []string // debug session, runs, tools, busy shells — one line each
 	dirty   []string // dirty buffer names
+	exempt  []string // guard-exempt tool names (#2704), killed without asking
 }
 
 // busy reports whether tearing the workspace down loses anything at all (the
@@ -41,6 +44,48 @@ func (a wsActivity) summary() []string {
 		lines = append(lines, "unsaved: "+strings.Join(a.dirty, ", "))
 	}
 	return lines
+}
+
+// exemptTools returns the guard-exempt tool names (#2704) deduplicated and
+// sorted, so the notice after a close reads the same for the same panes.
+func (a wsActivity) exemptTools() []string {
+	if len(a.exempt) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(a.exempt))
+	out := make([]string, 0, len(a.exempt))
+	for _, name := range a.exempt {
+		if seen[name] {
+			continue
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// exemptToolsNotice words the post-close notice naming the tools that were
+// killed without a prompt (#2704) — "closed 2 tools without asking: sql,
+// yarn"; "" when nothing was exempt.
+func exemptToolsNotice(names []string) string {
+	if len(names) == 0 {
+		return ""
+	}
+	noun := "tools"
+	if len(names) == 1 {
+		noun = "tool"
+	}
+	return fmt.Sprintf("closed %d %s without asking: %s", len(names), noun, strings.Join(names, ", "))
+}
+
+// notifyExemptTools posts that notice for w's guard-exempt tools, if any. The
+// close paths call it right after the teardown, so the user still learns what
+// the close killed silently.
+func (m Model) notifyExemptTools(act wsActivity) {
+	if msg := exemptToolsNotice(act.exemptTools()); msg != "" {
+		m.host.Notify(host.Info, msg)
+	}
 }
 
 // guardTerm is the terminal surface the guard inspects: enough to tell a
@@ -60,7 +105,8 @@ type guardTerm interface {
 // running foreground work counts: a shell at its prompt, and a command
 // session whose process already exited, are idle and gate no guard. Tool
 // panes keep their own rule — a tool's exit closes its pane, so a live tool
-// pane is by definition work the close would kill.
+// pane is by definition work the close would kill — unless its entry opts out
+// with guard = false (#2704).
 func (a *wsActivity) addTerm(t guardTerm) {
 	if !t.Running() {
 		return
@@ -70,15 +116,25 @@ func (a *wsActivity) addTerm(t guardTerm) {
 	case tool == runToolName:
 		// The Run tool (#1905) is a tool pane, but what runs in it is the
 		// user's program: name the configuration, like any run did before.
+		// It is never exemptable — guard = false belongs to a [[tools.custom]]
+		// entry and the Run tool has none.
 		if t.Busy() {
 			a.running = append(a.running, "run "+runLabel(t.Label()))
 		}
 	case tool != "":
-		if _, global := globalToolEntry(tool); global {
+		entry, configured := toolEntry(tool)
+		if configured && entry.Global {
 			// A global tool (#1890) is never killed by closing a
 			// workspace — it detaches to the manager — and the quit path
 			// ends it tidily like a global floating panel (#1793), so it
-			// gates no guard.
+			// gates no guard. guard = false is moot for it.
+			return
+		}
+		if configured && !entry.GuardsClose() {
+			// guard = false (#2704): the pane dies with the workspace like
+			// any other tool, but it is not worth a prompt — the close
+			// names it afterwards instead of asking beforehand.
+			a.exempt = append(a.exempt, tool)
 			return
 		}
 		a.running = append(a.running, "tool "+tool)
@@ -210,9 +266,14 @@ func (m *Model) openWsClosePrompt(root string, act wsActivity) {
 // refreshes the palette (the ● badge disappears in place). The returned cmd
 // carries the workspace-closed hooks' async work (#825).
 func (m *Model) finishWorkspaceClose(root string) tea.Cmd {
-	cmd := m.closeWorkspace(m.ws.Drop(root))
+	w := m.ws.Drop(root)
+	// Guard-exempt tools (#2704) died with the workspace without a prompt; the
+	// notice names them.
+	exempt := collectActivity(w)
+	cmd := m.closeWorkspace(w)
 	m.palette.Refresh()
 	m.host.Notify(host.Info, "closed background workspace "+project.CompactPath(root))
+	m.notifyExemptTools(exempt)
 	return cmd
 }
 

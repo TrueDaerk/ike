@@ -243,7 +243,7 @@ func (t *ToolsPage) SearchItems() []SearchItem {
 		i := i
 		out = append(out, SearchItem{
 			Label:    e.Name,
-			Keywords: "tool custom pane " + e.Command,
+			Keywords: "tool custom pane guard " + e.Command,
 			Activate: func() { t.sel = i },
 		})
 	}

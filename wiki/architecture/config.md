@@ -4,7 +4,7 @@ title: Configuration System
 description: Single typed configuration package — TOML files merged across defaults < user < project, clamp-and-warn validation, an extension hook for downstream sections, and a flat read-only view backing the plugin host API.
 resource: internal/config/config.go
 tags: [architecture, config, toml, merge, precedence, validation, plugins]
-timestamp: 2026-09-08T16:00:00Z
+timestamp: 2026-09-23T12:00:00Z
 ---
 
 # Configuration System
@@ -184,6 +184,19 @@ Sections and their default-bearing slots (`schema.go`):
   routes the `tasks.` prefix to the project file); consumed via the typed
   struct by the run-output tee — see
   [Tasks & Problem Matchers](./tasks.md).
+- `[[tools.custom]]` — the custom TUI tool panes (#741/#750): `name` (display
+  name and `tool.<slug>` command suffix), `command` + `args`, `cwd`,
+  `placement` (home dock edge, #1889), `multiple` (concurrent instances,
+  #835), `global` (one process-wide instance, #1890 — mutually exclusive with
+  `multiple`, which is then dropped with a diagnostic) and `guard` (#2704,
+  default **true**): `guard = false` takes the tool out of the close, quit,
+  eviction and peek-return guards, so a workspace whose only live state is
+  such a tool closes without asking and names what it killed afterwards. The
+  key is a pointer in the schema so an absent key stays guarded; for a
+  `global` tool it is dropped with a `tools.custom.guard` diagnostic because
+  such a tool detaches instead of dying. Being a list, a project-scope
+  `[[tools.custom]]` table replaces the user-scope one. Consumed via the typed
+  struct; see [tool panes](./tool-panes.md).
 - `[ansible]` — `vault_password_file` (#2293, default empty): the file whose
   first line decrypts `$ANSIBLE_VAULT;` files for transparent vault editing;
   `~` expands. The user layer is the global default and a project layer

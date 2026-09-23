@@ -180,6 +180,68 @@ func TestToolsPageGlobalField(t *testing.T) {
 	}
 }
 
+// TestToolsPageGuardField (#2704): the guard field is a yes/no opt-out of the
+// close/quit guard — it validates, persists only when set to no, shows a list
+// marker and round-trips through edit (seeding the effective value).
+func TestToolsPageGuardField(t *testing.T) {
+	p, h := toolsPage(t)
+	p.Update(key("a"))
+	f := form(t, h)
+	typeText(f, "sql")
+	f.Update(key("tab"))
+	typeText(f, "sqlite3")
+	for i := 0; i < 6; i++ { // args, cwd, placement, multiple, global → guard
+		f.Update(key("tab"))
+	}
+	typeText(f, "maybe")
+	f.Update(key("enter"))
+	if h.top() == nil || !strings.Contains(f.note, "guard must be yes or no") {
+		t.Fatalf("invalid guard must fail validation, note=%q", f.note)
+	}
+	for range "maybe" {
+		f.Update(key("backspace"))
+	}
+	typeText(f, "no")
+	apply(t, f.Update(key("enter")))
+	got := config.Get().Tools.Custom
+	if len(got) != 1 || got[0].GuardsClose() {
+		t.Fatalf("entries = %+v, want the guard opt-out persisted", got)
+	}
+	if view := p.View(80, 12); !strings.Contains(view, "· no guard") {
+		t.Fatalf("list must mark guard-exempt tools, view=%q", view)
+	}
+	// Edit seeds "no" back into the form; saving unchanged keeps the opt-out.
+	p.sel = 0
+	p.Update(key("enter"))
+	f2 := form(t, h)
+	if f2.form[7] != "no" {
+		t.Fatalf("edit must seed guard, form=%v", f2.form)
+	}
+	apply(t, f2.Update(key("enter")))
+	if got := config.Get().Tools.Custom; len(got) != 1 || got[0].GuardsClose() {
+		t.Fatalf("unchanged save must keep the opt-out, entries = %+v", got)
+	}
+}
+
+// TestToolsPageGuardDefaultsToYes (#2704): a tool added without touching the
+// field stays guarded, writes no guard key, and edits back as "yes".
+func TestToolsPageGuardDefaultsToYes(t *testing.T) {
+	p, h := toolsPage(t)
+	addTool(t, p, h, "htop", "htop")
+	got := config.Get().Tools.Custom
+	if len(got) != 1 || !got[0].GuardsClose() || got[0].Guard != nil {
+		t.Fatalf("entries = %+v, want no guard key and the guarded default", got)
+	}
+	if view := p.View(80, 12); strings.Contains(view, "no guard") {
+		t.Fatalf("a guarded tool must carry no marker, view=%q", view)
+	}
+	p.sel = 0
+	p.Update(key("enter"))
+	if f := form(t, h); f.form[7] != "yes" {
+		t.Fatalf("edit must seed the effective guard value, form=%v", f.form)
+	}
+}
+
 // TestToolsPagePlacementField (#1889): the placement field sets the tool's
 // home dock edge, rejects non-edge values, and round-trips through edit.
 func TestToolsPagePlacementField(t *testing.T) {

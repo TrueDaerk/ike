@@ -827,6 +827,15 @@ func validate(c *Config) []Diagnostic {
 			c.Tools.Custom[i].Multiple = false
 		}
 	}
+	// guard = false (#2704) exempts a tool from the close/quit guard — a global
+	// tool (#1890) is already exempt because closing a project detaches it
+	// instead of killing it, so the key has nothing left to say there.
+	for i := range c.Tools.Custom {
+		if c.Tools.Custom[i].Global && !c.Tools.Custom[i].GuardsClose() {
+			diags = append(diags, Diagnostic{Field: "tools.custom.guard", Message: fmt.Sprintf("tool %q: guard has no effect for a global tool, ignoring it", c.Tools.Custom[i].Name)})
+			c.Tools.Custom[i].Guard = nil
+		}
+	}
 
 	// [[elasticsearch.endpoints]] entries (#1927) need a unique non-empty name
 	// and a parseable http(s) URL with a host — an entry the console could
