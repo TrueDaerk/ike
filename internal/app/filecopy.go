@@ -64,7 +64,7 @@ func (m *Model) startCopyFile() {
 	}
 	st := &fileCopyState{
 		src:  path,
-		dest: newDirPrompt(projectRoot(), displayPath(copyDestName(path, info.IsDir()))),
+		dest: newDirPrompt(projectRoot(), displayPath(explorer.CopyDest(path, info.IsDir()))),
 	}
 	st.dest.NewHint = fileCopyNewHint
 	m.fileCopy = st
@@ -73,19 +73,10 @@ func (m *Model) startCopyFile() {
 	m.shell.Open()
 }
 
-// copyDestName is the proposal the prompt opens with: the entry's own
-// directory, with "-copy" appended to the name stem so the extension keeps
-// selecting the same language. A directory (or a dotfile with no stem, like
-// ".env") takes the suffix at the end of the whole name.
-func copyDestName(path string, isDir bool) string {
-	name := filepath.Base(path)
-	ext := filepath.Ext(name)
-	stem := strings.TrimSuffix(name, ext)
-	if isDir || stem == "" {
-		return filepath.Join(filepath.Dir(path), name+"-copy")
-	}
-	return filepath.Join(filepath.Dir(path), stem+"-copy"+ext)
-}
+// The proposal the prompt opens with — the entry's own directory with "-copy"
+// appended to the name stem — is explorer.CopyDest: explorer.duplicate (cmd+d,
+// #2697) starts from the same name and then numbers it, so the two commands
+// spell a duplicate identically.
 
 // fileCopyPromptOpen reports whether the shell shows the destination prompt.
 func (m Model) fileCopyPromptOpen() bool {

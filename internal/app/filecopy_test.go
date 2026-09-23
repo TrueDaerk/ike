@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"ike/internal/explorer"
 )
 
 // copyTestModel opens file in a fresh model rooted at its project directory,
@@ -171,8 +173,8 @@ func TestCopyDestNameKeepsExtension(t *testing.T) {
 		{filepath.Join("p", "app.test.go"), true, filepath.Join("p", "app.test.go-copy")},
 		{filepath.Join("p", ".env"), false, filepath.Join("p", ".env-copy")},
 	} {
-		if got := copyDestName(tc.path, tc.isDir); got != tc.want {
-			t.Errorf("copyDestName(%q, %v) = %q, want %q", tc.path, tc.isDir, got, tc.want)
+		if got := explorer.CopyDest(tc.path, tc.isDir); got != tc.want {
+			t.Errorf("explorer.CopyDest(%q, %v) = %q, want %q", tc.path, tc.isDir, got, tc.want)
 		}
 	}
 }

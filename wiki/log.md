@@ -1,5 +1,21 @@
 # Log
 
+## 2026-09-23 (Explorer: duplicate in place, #2697)
+
+- **`explorer.duplicate` (`cmd+d`, macOS only)** copies the selected entry next
+  to itself and opens rename on the copy — JetBrains' Copy-in-place. The name
+  is free by construction (`<stem>-copy<ext>`, then `-copy-2`, `-copy-3` …,
+  checked with `Lstat` so a dangling link counts as taken), so a duplicate
+  never overwrites; esc keeps the `-copy` name rather than undoing the copy,
+  which leaves the whole gesture one undo step.
+- The disk work is `copyPath`'s (#2696) — directories recurse, symlinks stay
+  links — and the first candidate name is `CopyDest`, shared with the `file.copy`
+  prompt's prefill. `promptRenameAt` is the path flavour of `promptRename`,
+  needed because the copy's rescan is still in flight when the prompt opens.
+- `darwinRows`: off macOS the `Cmd`→`Ctrl` fold would take `ctrl+d`, the tree's
+  half-page-down. The palette and the node's context menu (new *Duplicate* row)
+  carry the command on both platforms.
+
 ## 2026-09-23 (Network: guarded `close` command, #2703)
 
 - **A paired client can close a project** — `{"cmd":"close","project":"ike"}`

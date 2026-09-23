@@ -13513,6 +13513,8 @@ func explorerContextItems() []menu.Item {
 		{Title: "New File", Command: "explorer.newFile"},
 		{Title: "New Directory", Command: "explorer.newFolder"},
 		{Title: "Rename", Command: "explorer.rename"},
+		// Copy-in-place (#2697): next to Rename, which is where it hands over.
+		{Title: "Duplicate", Command: "explorer.duplicate"},
 		{Title: "Delete", Command: "explorer.delete"},
 		// The file clipboard (#2660) sits above the path-copy entries: both
 		// families say "copy", and the menu is where the difference between

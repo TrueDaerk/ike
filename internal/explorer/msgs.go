@@ -69,6 +69,12 @@ type CopyPathMsg struct {
 	Overwrite bool
 }
 
+// DuplicateMsg duplicates the cursor entry next to itself and opens rename on
+// the copy (explorer.duplicate, cmd+d, #2697). It takes no target: unlike
+// CopyPathMsg the destination is derived from the source, which is the whole
+// point of a copy-in-place.
+type DuplicateMsg struct{}
+
 // ToggleMarkMsg toggles the multi-select mark on the cursor row
 // (explorer.toggleMark, space, #2166).
 type ToggleMarkMsg struct{}
@@ -161,6 +167,7 @@ func (RenameMsg) explorerMsg()        {}
 func (RenamePathMsg) explorerMsg()    {}
 func (MoveToMsg) explorerMsg()        {}
 func (CopyPathMsg) explorerMsg()      {}
+func (DuplicateMsg) explorerMsg()     {}
 func (ToggleMarkMsg) explorerMsg()    {}
 func (ClearMarksMsg) explorerMsg()    {}
 func (MoveSelectionMsg) explorerMsg() {}

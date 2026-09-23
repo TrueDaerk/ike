@@ -142,6 +142,11 @@ var reachableAlternatives = map[string]string{
 	"nav.pinGoto2":                     "palette (or the cmd+2 picker)",
 	"nav.pinGoto3":                     "palette (or the cmd+2 picker)",
 	"nav.pinGoto4":                     "palette (or the cmd+2 picker)",
+	// #2697's cmd+d is a darwinRows chord *and* a Cmd chord: off macOS it does
+	// not ship at all (ctrl+d is the tree's half-page-down), and on macOS a
+	// terminal may swallow it — the palette and the node's context menu carry
+	// it either way.
+	"explorer.duplicate":               "palette / explorer context menu",
 	"explorer.clipCopy":                "palette / explorer context menu",
 	"explorer.clipCut":                 "palette / explorer context menu",
 	"explorer.clipPaste":               "palette / explorer context menu",

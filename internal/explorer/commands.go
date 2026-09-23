@@ -36,6 +36,9 @@ func (corePlugin) Capabilities() plugin.Capabilities {
 			cmd("explorer.newFolder", "Explorer: New Folder", NewDirMsg{}),
 			cmd("explorer.delete", "Explorer: Delete", DeleteMsg{}),
 			cmd("explorer.rename", "Explorer: Rename", RenameMsg{}),
+			// Copy-in-place (#2697): no target prompt at all — the copy lands
+			// next to the original and rename opens on it.
+			cmd("explorer.duplicate", "Explorer: Duplicate", DuplicateMsg{}),
 			cmd("explorer.move", "Explorer: Move Selection To…", MoveSelectionMsg{}),
 			cmd("explorer.copy", "Explorer: Copy Selection To…", CopySelectionMsg{}),
 			// The file clipboard (#2660): pick here, drop there. The ids stay

@@ -301,6 +301,7 @@ Active when the file explorer has focus.
 |---|---|---|---|
 | Copy the selected entries | `cmd+c` | `ctrl+c` | `explorer.clipCopy` |
 | Cut the selected entries | `cmd+x` | `ctrl+x` | `explorer.clipCut` |
+| Duplicate entry | `cmd+d` | — | `explorer.duplicate` |
 | Paste into the selected directory | `cmd+v` | `ctrl+v` | `explorer.clipPaste` |
 | Redo file operation | `cmd+shift+z` | `ctrl+shift+z` | `explorer.redo` |
 | Redo file operation | `ctrl+shift+z` | `ctrl+shift+z` | `explorer.redo` |

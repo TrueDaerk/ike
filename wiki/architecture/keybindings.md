@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts plus language-scoped editor bindings, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-09-23T18:00:00Z
+timestamp: 2026-09-23T20:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -1424,6 +1424,30 @@ the trigger+Tab expansion, which stays the fast path for a template one knows
 by name. See [editor.md](editor.md#live-templates--snippets-1152) for the
 picker and the expansion it shares with Tab.
 
+## Duplicate in the explorer (#2697)
+
+The same telemetry export saw `cmd+d` pressed in the *explorer*, unbound, and
+answered with `cmd+n` — someone reaching for a copy of the selected file and
+settling for a new one. In the editor `cmd+d` is `editor.duplicateLine`; the
+tree's reading of the same chord is the entry-shaped one:
+
+| chord | context | command |
+|---|---|---|
+| `cmd+d` (macOS only) | Explorer | `explorer.duplicate` |
+
+It is a `darwinRows` entry, for the usual reason: off macOS the `Cmd`→`Ctrl`
+fold would land it on `ctrl+d`, which is the tree's own half-page-down (a raw
+key in the pane's `Update`, outside the binding table). Scrolling keeps the key
+there, and the recorded fallback — the palette and the node's context menu,
+which gained a *Duplicate* row next to *Rename* — carries the command on both
+platforms.
+
+The command copies the selected entry next to itself under a free `-copy` name
+and opens rename on the copy, so the gesture completes as "cmd+d, type the
+name, enter"; esc keeps the `-copy` name rather than undoing the copy. The
+mechanics are the explorer's — see
+[explorer.md](./explorer.md#file-operations).
+
 ## The line-editing family and the pane chords (#2400)
 
 A second telemetry export (two sessions, ~9,900 events) left 37 presses on
@@ -1520,6 +1544,7 @@ JetBrains is:
 | `explorer.clipCopy` | `cmd+c` | fragile | `palette / explorer context menu` | live via palette / explorer context menu |
 | `explorer.clipCut` | `cmd+x` | fragile | `palette / explorer context menu` | live via palette / explorer context menu |
 | `explorer.clipPaste` | `cmd+v` | fragile | `palette / explorer context menu` | live via palette / explorer context menu |
+| `explorer.duplicate` | `cmd+d` | fragile | `palette / explorer context menu` | live via palette / explorer context menu |
 | `explorer.newFile` | `cmd+n` | fragile | `palette (or a in the explorer)` | live via palette (or a in the explorer) |
 | `explorer.redo` | `cmd+shift+z` | fragile | `palette` | live via palette |
 | `explorer.reveal` | `alt+f1` | fragile | `palette` | live via palette |

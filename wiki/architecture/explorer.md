@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-09-08T12:00:00Z
+timestamp: 2026-09-23T20:00:00Z
 ---
 
 # File Explorer
@@ -672,6 +672,24 @@ guard was answered with `o`; without it the existing-target error stands, so a
 copy never clobbers silently. The copy lands on the undo stack as an
 `opCreate`, the cursor snaps onto it once the rescan arrives, and
 `FileCreatedMsg` refreshes the VCS status snapshot.
+
+**Duplicate in place** (`DuplicateMsg`, `duplicateEntry`, `duplicate.go`,
+#2697) is `copyPath` without a prompt in front of it: `explorer.duplicate`
+(`cmd+d`) copies the cursor entry next to itself and hands straight over to
+rename. `duplicateDest` picks a name that is free by construction —
+`<stem>-copy<ext>`, then `-copy-2`, `-copy-3` … while the name is taken
+(`os.Lstat`, so a dangling symlink counts as taken), bounded by
+`duplicateLimit` so the search terminates. Its first candidate is `CopyDest`,
+which is also the `file.copy` prompt's prefill, so both commands spell a
+duplicate identically. A directory — or an extension-only name like `.env` —
+takes the suffix behind the whole name. Because `copyPath` already snaps the
+cursor onto the copy, all that is left is `promptRenameAt`: the path flavour of
+`promptRename`, needed because the copy's directory rescan is still in flight
+and the new row does not exist yet (the prompt anchors on the path, which is
+what lets it survive that rescan). Esc is *not* a rollback — the copy stays
+under its `-copy` name, which keeps the whole gesture one undo step (the
+copy's `opCreate`). The Scratches section is skipped, like every other
+tree-shaped file operation.
 
 Removing a path (a delete, or undo of a create) emits `FileDeletedMsg`, which
 the root model handles by closing any editor still open on that file (or, for
