@@ -284,6 +284,7 @@ bring their own.
 | Find in Pane | `search.open` | `cmd+f` | — | everywhere |
 | Previous Search Match | `search.prevMatch` | `shift+f3` | — | everywhere |
 | Settings | `settings.open` | `cmd+,` | — | everywhere |
+| Insert Live Template… | `snippets.insert` | `cmd+j` | — | everywhere |
 | Structure | `structure.toggle` | `cmd+3` | — | everywhere |
 | Clear Terminal | `terminal.clear` | — | — | everywhere |
 | New Terminal | `terminal.new` | `cmd+alt+shift+t` | — | everywhere |
@@ -358,7 +359,7 @@ bring their own.
 | Delete Line | `editor.deleteLine` | `cmd+backspace` | `dd` | `editor` pane |
 | Delete Word Backward | `editor.deleteWordBackward` | `alt+backspace` | `db` | `editor` pane |
 | Go to Document End | `editor.docEnd` | `cmd+end` | `G` | `editor` pane |
-| Go to Document Start | `editor.docStart` | `cmd+home` | `gg` | `editor` pane |
+| Go to Document Start | `editor.docStart` | `cmd+up` | `gg` | `editor` pane |
 | Duplicate Line | `editor.duplicateLine` | `cmd+d` | — | `editor` pane |
 | Escape Selection as Unicode | `editor.escapeSelection` | `cmd+alt+shift+e` | — | `editor` pane |
 | Explain Concealed Value | `editor.explainConceal` | — | `g?` | `editor` pane |

@@ -7,6 +7,11 @@ package editor
 // engine, and the tabstop session (#846) takes over tab/shift+tab exactly like
 // an accepted snippet completion. No trigger match leaves Tab to its normal
 // indent insertion (#1137).
+//
+// The same file holds the picker's entry point (#2694): InsertSnippet expands
+// a body chosen in the app's live-template picker at the caret, sharing
+// expandSnippetOver with the Tab path so both land the same text, stops and
+// undo unit.
 
 import (
 	"strings"
@@ -37,6 +42,17 @@ func (m *Model) expandSnippetTrigger() bool {
 	if !ok {
 		return false
 	}
+	m.expandSnippetOver(buffer.Range{Start: start, End: m.cursor}, body)
+	return true
+}
+
+// expandSnippetOver replaces rng with the template body: the body is
+// reindented to the cursor's line, run through the placeholder engine and
+// applied as its own undo unit, after which the tabstop session (#846) takes
+// over. The Tab trigger expansion hands it the trigger word's range; the
+// picker (#2694) an empty range at the caret, so both land the very same text
+// and stops.
+func (m *Model) expandSnippetOver(rng buffer.Range, body string) {
 	src := m.reindentSnippetBody(body)
 	text, stops, err := snippet.Expand(src)
 	if err != nil {
@@ -49,7 +65,7 @@ func (m *Model) expandSnippetTrigger() bool {
 	if m.insert.rec == nil {
 		m.insert.rec = m.newRecorder()
 	}
-	m.cursor = m.insert.rec.Apply(buffer.Edit{Range: buffer.Range{Start: start, End: m.cursor}, Text: text})
+	m.cursor = m.insert.rec.Apply(buffer.Edit{Range: rng, Text: text})
 	m.desiredCol = m.cursor.Col
 	m.insert.typed = "" // the expansion is not replayable "." text
 	m.dirtyFromInsert()
@@ -59,6 +75,34 @@ func (m *Model) expandSnippetTrigger() bool {
 	// Close the expansion's segment after the tabstop session placed the
 	// caret, so the change's CursorAfter (what redo restores) is the first stop.
 	m.breakInsertUndo()
+}
+
+// SnippetEntries lists the templates available in this buffer (#2694) — the
+// very set Tab expansion resolves a trigger against, in the same precedence
+// order — so the app's picker offers exactly what typing the trigger would
+// expand.
+func (m *Model) SnippetEntries() []snippets.Entry { return snippets.For(m.langPath()) }
+
+// InsertSnippet expands one picked template body at the caret (#2694,
+// snippets.insert / cmd+j) and reports whether it fired. Insert mode expands
+// in place; every other mode enters insert first, so the chord works from
+// normal mode too and the tabstop session gets the insert session it lives
+// in. Secondary carets are refused for the same reason Tab expansion is: the
+// body's indentation would differ per caret.
+func (m *Model) InsertSnippet(body string) bool {
+	if body == "" || m.hasCarets() || m.refuseRO() {
+		return false
+	}
+	if m.mode != Insert {
+		// Any selection is dropped first (the esc route), then the insert
+		// session opens at the caret exactly like "i".
+		m.shiftSelect, m.clickVisual = false, false
+		m.startInsertWith(m.newRecorder(), nil)
+		if m.mode != Insert {
+			return false // refused (read-only, locked dependency file)
+		}
+	}
+	m.expandSnippetOver(buffer.Range{Start: m.cursor, End: m.cursor}, body)
 	return true
 }
 

@@ -414,6 +414,32 @@ func TestAudit2400KeepsExistingOwners(t *testing.T) {
 	}
 }
 
+// TestAudit2699CmdUpDownDocEdges (#2699): telemetry showed cmd+down pressed
+// and unbound in the editor. macOS' system-wide document start/end chords —
+// cmd+up/cmd+down — resolve to the same commands as cmd+home/cmd+end, but
+// only on darwin: off macOS they must keep folding onto ctrl+up/ctrl+down,
+// the paragraph jumps (TestAudit2400KeepsExistingOwners).
+func TestAudit2699CmdUpDownDocEdges(t *testing.T) {
+	table := BuildTable(DefaultsFor(PresetJetBrains, "darwin"), nil, "darwin")
+	for chord, want := range map[string]string{
+		"cmd+up":   "editor.docStart",
+		"cmd+down": "editor.docEnd",
+	} {
+		c := NormalizeChord(MustParseChord(chord), "darwin")
+		if b, ok := table.Lookup(c, Editor); !ok || b.Command != want {
+			t.Errorf("darwin %s: got %+v ok=%v, want %s", chord, b, ok, want)
+		}
+	}
+
+	linux := BuildTable(DefaultsFor(PresetJetBrains, "linux"), nil, "linux")
+	for _, chord := range []string{"cmd+up", "cmd+down"} {
+		c := NormalizeChord(MustParseChord(chord), "linux")
+		if b, ok := linux.Lookup(c, Editor); ok && (b.Command == "editor.docStart" || b.Command == "editor.docEnd") {
+			t.Errorf("linux %s: got %s, must stay off the paragraph-jump chords", chord, b.Command)
+		}
+	}
+}
+
 // TestPlaygroundOpenReachesTheResponsePane (#2451): the dialect dispatcher's
 // chord is bound in the HTTP viewer as well as in the editor — the response
 // body is a document one queries (jq over it is "q", #2157), so the chord has
