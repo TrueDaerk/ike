@@ -382,6 +382,9 @@ bring their own.
 | Redo (Chronological) | `editor.redoChrono` | — | `g+` | `editor` pane |
 | Replace in File | `editor.replace` | `cmd+r` | `:s` | `editor` pane |
 | Reverse Lines | `editor.reverseLines` | — | — | `editor` pane |
+| Caret Line to Bottom | `editor.scrollCaretBottom` | — | `zb` | `editor` pane |
+| Centre Caret Line | `editor.scrollCaretCenter` | `ctrl+l` | `zz` | `editor` pane |
+| Caret Line to Top | `editor.scrollCaretTop` | — | `zt` | `editor` pane |
 | Select All | `editor.selectAll` | `cmd+a` | `ggVG` | `editor` pane |
 | Select to Line End | `editor.selectLineEnd` | `shift+end` | `v$` | `editor` pane |
 | Select to Line Start | `editor.selectLineStart` | `shift+home` | `v0` | `editor` pane |

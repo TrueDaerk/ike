@@ -201,6 +201,7 @@ Active when an editor pane has focus.
 | Call hierarchy | `ctrl+alt+h` | `ctrl+alt+h` | `lsp.callHierarchy` |
 | Cancel running HTTP request | `cmd+.` | `ctrl+.` | `http.cancel` |
 | Cancel running HTTP request | `ctrl+.` | `ctrl+.` | `http.cancel` |
+| Centre the caret line | `ctrl+l` | — | `editor.scrollCaretCenter` |
 | Clone caret above | `alt+shift+up` | `alt+shift+up` | `editor.caret.addAbove` |
 | Clone caret below | `alt+shift+down` | `alt+shift+down` | `editor.caret.addBelow` |
 | Comment block | `cmd+shift+7` | `ctrl+shift+7` | `editor.commentBlock` |

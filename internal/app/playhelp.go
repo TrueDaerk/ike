@@ -43,7 +43,7 @@ var playQueryHelpKeys = []struct{ Key, Title string }{
 	{"tab", "Move the keyboard into the result buffer"},
 	{"pgup / pgdn", "Page the result without leaving the query line"},
 	{"ctrl+s", "Save the program as a named filter"},
-	{"ctrl+l", "Open the saved-filter picker"},
+	{"ctrl+l", "Open the saved-filter picker — in the result buffer the same key clears the output"},
 	{"ctrl+g", "Open the language cheatsheet — syntax, examples, builtins"},
 	{"ctrl+y", "Copy the whole result"},
 	{"ctrl+o", "Open the result as a scratch file"},
@@ -65,6 +65,7 @@ var playResultHelpKeys = []struct{ Key, Title string }{
 	{"ctrl+y", "Copy the whole result"},
 	{"ctrl+o", "Open the result as a scratch file"},
 	{"ctrl+g", "Open the language cheatsheet"},
+	{"ctrl+l", "Clear the output and the error line — the query line stays; the next run fills it again"},
 	{"esc", "Close the playground from resting normal mode — back to the query line after a find opened from there"},
 	{"esc esc", "Close and open the command palette"},
 }

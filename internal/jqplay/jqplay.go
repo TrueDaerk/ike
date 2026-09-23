@@ -244,6 +244,13 @@ func (r Result) Lines() []string {
 	return strings.Split(r.Text(), "\n")
 }
 
+// Empty is a result with no outputs in one dialect (#2700) — what the
+// playground's "clear the output" installs. It is not Result{}: the zero
+// value's dialect is jq, and the result buffer's display path (and with it
+// its highlighting) is named after the dialect, so a cleared yq playground
+// would re-open as a JSON buffer on the next run.
+func Empty(d Dialect) Result { return Result{dialect: d} }
+
 // Evaluate is Parse + Run against a fresh EvalTimeout context — the
 // convenient form for tests and for callers that hold text rather than a
 // parsed Input. A parse failure comes back as the Result's error, so one call
