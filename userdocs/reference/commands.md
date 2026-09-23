@@ -358,7 +358,7 @@ bring their own.
 | Delete Line | `editor.deleteLine` | `cmd+backspace` | `dd` | `editor` pane |
 | Delete Word Backward | `editor.deleteWordBackward` | `alt+backspace` | `db` | `editor` pane |
 | Go to Document End | `editor.docEnd` | `cmd+end` | `G` | `editor` pane |
-| Go to Document Start | `editor.docStart` | `cmd+home` | `gg` | `editor` pane |
+| Go to Document Start | `editor.docStart` | `cmd+up` | `gg` | `editor` pane |
 | Duplicate Line | `editor.duplicateLine` | `cmd+d` | — | `editor` pane |
 | Escape Selection as Unicode | `editor.escapeSelection` | `cmd+alt+shift+e` | — | `editor` pane |
 | Explain Concealed Value | `editor.explainConceal` | — | `g?` | `editor` pane |
