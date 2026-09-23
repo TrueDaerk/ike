@@ -330,19 +330,6 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	// graphics memory for the process lifetime. The reset transmission state
 	// makes the resume retransmit.
 	imgCmd := m.releaseWorkspaceImages(m.ws.Peek(parkedRoot))
-	// A restart (#2703) drops the workspace just parked before the rebuild
-	// looks for it, so buildModel below builds the root from its saved layout
-	// instead of resuming the unit. Its crash snapshots go now, every one:
-	// the flush above wrote the discarded edits, and the fresh model reopens
-	// the same paths, which would make closeWorkspace keep them for the
-	// "surviving" view — and the next launch would offer the discarded edit
-	// as crash recovery (#1550). The teardown itself runs once the fresh
-	// model stands (closeWorkspace needs an active workspace).
-	var dropped *workspace.Workspace
-	if opts.restart {
-		dropped = m.ws.Drop(parkedRoot)
-		m.backupPurgeWorkspace(dropped)
-	}
 
 	cfg, diags := config.Load(config.Discover("."))
 	config.Set(cfg)
@@ -362,6 +349,21 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 				w.Aux = extras
 			}
 		}
+	}
+	// A restart (#2703) drops the workspace just parked before the rebuild
+	// looks for it, so buildModel below builds the root from its saved layout
+	// instead of resuming the unit. After the global-popup lift above, so a
+	// carried popup is no longer in the dropped Aux and survives the teardown.
+	// Its crash snapshots go now, every one: the flush above wrote the
+	// discarded edits, and the fresh model reopens the same paths, which would
+	// make closeWorkspace keep them for the "surviving" view — and the next
+	// launch would offer the discarded edit as crash recovery (#1550). The
+	// teardown itself runs once the fresh model stands (closeWorkspace needs
+	// an active workspace).
+	var dropped *workspace.Workspace
+	if opts.restart {
+		dropped = m.ws.Drop(parkedRoot)
+		m.backupPurgeWorkspace(dropped)
 	}
 	fresh := buildModel(m.reg, host.FromConfig(cfg), m.host, m.ws)
 	// The usage log is session state (#2235): the recorder rides across the
