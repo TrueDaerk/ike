@@ -372,7 +372,11 @@ func BuiltinAssignTools() []string {
 // only closing the pane or quitting IKE does. Global and Multiple are
 // mutually exclusive; a config declaring both gets a diagnostic and Multiple
 // is ignored. A global tool's Cwd resolves once, against the project where it
-// first spawns.
+// first spawns. Guard opts the tool out of the close/quit guard (#2704):
+// guard = false says an open pane of this tool is not live state worth asking
+// about, so closing the project, quitting, evicting the workspace or
+// returning from a peek kills it without a prompt. The field is a pointer so
+// an absent key keeps the guarded default — read it through GuardsClose.
 type ToolEntry struct {
 	Name      string   `toml:"name"`
 	Command   string   `toml:"command"`
@@ -381,7 +385,14 @@ type ToolEntry struct {
 	Placement string   `toml:"placement"`
 	Multiple  bool     `toml:"multiple"`
 	Global    bool     `toml:"global"`
+	Guard     *bool    `toml:"guard"`
 }
+
+// GuardsClose reports whether an open pane of this tool counts as live state
+// for the close, quit, eviction and peek-return guards (#2704). The default —
+// no guard key in the config — is true; only an explicit guard = false exempts
+// the tool.
+func (e ToolEntry) GuardsClose() bool { return e.Guard == nil || *e.Guard }
 
 // Elasticsearch holds the Elasticsearch console configuration (#1927):
 // [[elasticsearch.endpoints]] entries, each exposed as a palette command

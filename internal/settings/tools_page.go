@@ -21,12 +21,13 @@ import (
 // pipeline, so the tool.<name> palette commands re-shape live.
 
 // toolFieldCount is the number of form fields: name, command, args, cwd,
-// placement, multiple (#835), global (#1890, exposed in #1895). Placement
-// returned in #1889 as the tool's home dock edge (left/right/top/bottom,
-// empty = adaptive #1588 heuristic).
-const toolFieldCount = 7
+// placement, multiple (#835), global (#1890, exposed in #1895), guard (#2704).
+// Placement returned in #1889 as the tool's home dock edge
+// (left/right/top/bottom, empty = adaptive #1588 heuristic). guard is the
+// close/quit guard opt-out, spelled yes/no and defaulting to yes.
+const toolFieldCount = 8
 
-var toolFieldNames = [toolFieldCount]string{"name", "command", "args", "cwd", "placement", "multiple", "global"}
+var toolFieldNames = [toolFieldCount]string{"name", "command", "args", "cwd", "placement", "multiple", "global", "guard"}
 
 // ToolsPage implements PageModel. The add/edit form runs as a SubPanel
 // (#883, tools_form.go) pushed through host.
@@ -226,6 +227,10 @@ func (t *ToolsPage) writeEntries(entries []config.ToolEntry) tea.Cmd {
 		if e.Global {
 			m["global"] = true
 		}
+		if !e.GuardsClose() {
+			// Only the opt-out is written; an absent key is the guarded default.
+			m["guard"] = false
+		}
 		raw[i] = m
 	}
 	return func() tea.Msg {
@@ -263,6 +268,10 @@ func (t *ToolsPage) View(w, h int) string {
 		}
 		if e.Global {
 			line += " · global"
+		}
+		if !e.GuardsClose() {
+			// #2704: the close/quit guard ignores this tool.
+			line += " · no guard"
 		}
 		style := lipgloss.NewStyle()
 		if i == t.sel {

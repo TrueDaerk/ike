@@ -69,6 +69,9 @@ func (m Model) performCloseAndSwitch(target string) (tea.Model, tea.Cmd) {
 	if w := m.ws.Active(); w != nil {
 		oldRoot = w.Root
 	}
+	// The guard-exempt tools (#2704) are gone once the workspace is torn down,
+	// so note them before the switch parks it and name them afterwards.
+	exempt := collectActivity(m.ws.Active())
 	// No peek escalation (#2136): closing a peeked active project discards
 	// it, so its root must not be recorded into project.history on the way.
 	next, cmd := m.performSwitchOpts(target, switchOpts{record: true, closing: true})
@@ -85,6 +88,7 @@ func (m Model) performCloseAndSwitch(target string) (tea.Model, tea.Cmd) {
 	closeCmd := sized.closeWorkspace(w)
 	endOp("ok", nil)
 	sized.host.Notify(host.Info, "closed project "+project.CompactPath(oldRoot))
+	sized.notifyExemptTools(exempt)
 	return sized, tea.Batch(cmd, closeCmd)
 }
 
