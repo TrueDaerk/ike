@@ -48,6 +48,7 @@ var noCounterpart = map[string]string{
 	"issues.nextTab":                   "IKE-only concept (#2537): the issues window's tab walk has no JetBrains counterpart",
 	"issues.prevTab":                   "IKE-only concept (#2537): the issues window's tab walk has no JetBrains counterpart",
 	"editor.copyDocPath":               "JetBrains copies file references, not a path inside a JSON/YAML document",
+	"editor.scrollCaretCenter":         "IKE-only concept (#2700): IntelliJ scrolls the caret into view automatically and ships no \"centre the caret line\" keymap action — the idea comes from vim's zz",
 	"editor.sortLines":                 "IntelliJ ships no Sort Lines keymap action (#2417); it lives in the String Manipulation plugin, which an exported keymap does not carry",
 	"editor.case.cycle":                "IKE-only concept (#2418): IntelliJ toggles case but never rotates identifier styles; that lives in the String Manipulation plugin, which an exported keymap does not carry",
 	"json.jqQueryView":                 "IKE-only concept (#2032): the inline jq playground has no JetBrains equivalent",

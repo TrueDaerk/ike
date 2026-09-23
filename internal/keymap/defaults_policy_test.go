@@ -440,6 +440,28 @@ func TestAudit2699CmdUpDownDocEdges(t *testing.T) {
 	}
 }
 
+// TestAudit2700CtrlLCentresTheCaret (#2700): telemetry showed ctrl+l pressed
+// and unbound in the editor. On macOS it centres the caret line (vim's `zz`),
+// which had no command id before this; off macOS the chord is the folded form
+// of cmd+l and must stay editor.goToLine, the bigger claim on the key.
+func TestAudit2700CtrlLCentresTheCaret(t *testing.T) {
+	c := NormalizeChord(MustParseChord("ctrl+l"), "darwin")
+	table := BuildTable(DefaultsFor(PresetJetBrains, "darwin"), nil, "darwin")
+	if b, ok := table.Lookup(c, Editor); !ok || b.Command != "editor.scrollCaretCenter" {
+		t.Errorf("darwin ctrl+l in the editor = %+v ok=%v, want editor.scrollCaretCenter", b, ok)
+	}
+	// Editor-scoped, so a terminal keeps ctrl+l for the shell.
+	if b, ok := table.Lookup(c, Terminal); ok && b.Command == "editor.scrollCaretCenter" {
+		t.Errorf("darwin ctrl+l in a terminal = %s, must stay the shell's", b.Command)
+	}
+
+	linux := BuildTable(DefaultsFor(PresetJetBrains, "linux"), nil, "linux")
+	lc := NormalizeChord(MustParseChord("ctrl+l"), "linux")
+	if b, ok := linux.Lookup(lc, Editor); !ok || b.Command != "editor.goToLine" {
+		t.Errorf("linux ctrl+l in the editor = %+v ok=%v, want editor.goToLine", b, ok)
+	}
+}
+
 // TestPlaygroundOpenReachesTheResponsePane (#2451): the dialect dispatcher's
 // chord is bound in the HTTP viewer as well as in the editor — the response
 // body is a document one queries (jq over it is "q", #2157), so the chord has

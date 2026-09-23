@@ -829,6 +829,8 @@ var jetbrainsRows = []row{
 	// lsp.organizeImports owns — the shift layer keeps one spelling that is
 	// free on every platform.
 	{"cmd+alt+shift+o", "file.openAs", "Open file as…", Global, "App (#2420)"},
+	// Centre the caret line (#2700) is darwinRows below: off macOS ctrl+l is
+	// the folded form of cmd+l, which editor.goToLine owns.
 }
 
 // ViewerContexts are the read-only content panes (#2698): an archive listing,
@@ -914,6 +916,19 @@ var darwinRows = []row{
 	// jumps own everywhere else (keys_normal.go).
 	{"cmd+up", "editor.docStart", "Go to document start", Editor, "Editor (#2699)"},
 	{"cmd+down", "editor.docEnd", "Go to document end", Editor, "Editor (#2699)"},
+	// Centre the caret line (#2700). ctrl+l is vim's redraw and has no
+	// JetBrains default at all, so the key is free to mean the thing ike has
+	// that is worth a chord: `zz` — until now reachable only through the vim
+	// gesture, which is no help to anyone driving the editor with chords.
+	// macOS only, and not for the usual fold reason: here the *plain* chord
+	// is the folded form of cmd+l, which editor.goToLine owns everywhere
+	// else. Jumping to a line is the bigger claim on the key, so off macOS
+	// `zz` stays the gesture it always was.
+	//
+	// Editor context, not Global: the jq/yq playground owns the keyboard
+	// while its pane is focused and answers ctrl+l itself (clear the output,
+	// the shell habit, #2700), and in a terminal the key belongs to the shell.
+	{"ctrl+l", "editor.scrollCaretCenter", "Centre the caret line", Editor, "Editor (#2700)"},
 	{"ctrl+1", "pane.focus1", "Focus pane 1", Global, "Pane numbers (#2407)"},
 	{"ctrl+2", "pane.focus2", "Focus pane 2", Global, "Pane numbers (#2407)"},
 	{"ctrl+3", "pane.focus3", "Focus pane 3", Global, "Pane numbers (#2407)"},

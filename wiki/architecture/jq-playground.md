@@ -901,7 +901,7 @@ above win):
 | `ctrl+alt+e` | toggle the [multi-line view](#the-multi-line-view) (`json.jqQueryView`) |
 | `pgup` / `pgdn` | page the result buffer without leaving the query line |
 | `ctrl+s` | save the program as a **named filter** (`json.jqSaveFilter`) |
-| `ctrl+l` | open the **saved-filter picker** over this playground's library (`json.jqFilters` / `yaml.yqFilters`) |
+| `ctrl+l` | open the **saved-filter picker** over this playground's library (`json.jqFilters` / `yaml.yqFilters`) — in the **result buffer** the same key [clears the output](#clearing-the-output) instead (#2700) |
 | `ctrl+g` | open the **[language cheatsheet](#the-language-cheatsheet)** of this playground's dialect (`json.jqCheatsheet` / `yaml.yqCheatsheet`) — also with the completion popup open, which it dismisses on the way (#2482) |
 | `ctrl+y` | copy the **whole** result (not just the visible part) |
 | `ctrl+o` | open the result as a fresh scratch in the dialect's extension (`.json` / `.yaml`) |
@@ -917,7 +917,8 @@ Result buffer (after `tab`): the **full editor keymap** — motions, search,
 folds (`za` / `zc` / `zo` / `zM` / `zR`, see
 [Folding the result](#folding-the-result)), visual selection, `y` yank of the
 selection — against the read-only
-buffer, with four exceptions: `tab` returns to the query line, `ctrl+y` /
+buffer, with five exceptions: `tab` returns to the query line, `ctrl+l` clears
+the output (below), `ctrl+y` /
 `ctrl+o` keep their result-action meaning (shadowing the editor's scroll and
 jumplist keys — a throwaway result has no jumplist worth keeping), and `esc`
 closes the mode only from resting normal mode; a visual selection, a pending
@@ -1144,6 +1145,32 @@ Editing output belongs in a writable buffer, which is exactly what `ctrl+o`
 makes — a [scratch file](./scratch-files.md) opened through the standard
 funnel, so folding and the path breadcrumb apply, and the playground can be
 run again over the result. That is how a multi-step jq session actually goes.
+
+## Clearing the output
+
+`ctrl+l` in the **result buffer** empties it (#2700). It is the shell habit,
+answered where the habit fires: the keyboard is in the output, so the key
+clears the output. On the query line the same chord keeps the meaning it has
+had since #1995 — the [saved-filter picker](#the-saved-filter-library) — which
+is what splitting the key by focus buys: both meanings keep the key they
+earned, and neither has to be typed twice.
+
+`clearPlayResult` installs `jqplay.Empty(dialect)` as the result. Not
+`jqplay.Result{}`: the zero value's dialect is jq, and the result buffer's
+display path is named after the dialect, so a cleared yq playground would come
+back as a JSON buffer on the next run. `haveResult` drops with the outputs, so
+nothing afterwards claims the empty buffer is a
+[stale result](#errors-are-inline-never-a-crash), and `runErr` is cleared with
+them — the error line and the stale banner describe a result that is no longer
+on screen.
+
+What stays is everything one is working *with*: the program, its caret, the
+history, the saved filters, and the parsed input snapshot — clearing the
+screen must not cost a re-parse of a large document. `inputErr` stays too. It
+says the input the playground runs against is broken, which is still true
+after the screen is wiped, and a message nothing would bring back is worse
+than one that remains. The next evaluation — the next keystroke on the query
+line, or `enter` — fills the buffer again exactly as the first run did.
 
 ## History
 

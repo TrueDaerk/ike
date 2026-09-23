@@ -154,17 +154,23 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	{"editor.shuffleLines", reasonOccasional},
 	// #2418's case family: cmd+shift+u toggles and alt+shift+u cycles; the
 	// one-directional pair is the gu/gU gesture users already have.
-	{"editor.case.lower", reasonVimKey},             // gu
-	{"editor.case.upper", reasonVimKey},             // gU
-	{"editor.increment", reasonVimKey},              // ctrl+a
-	{"editor.decrement", reasonVimKey},              // ctrl+x
-	{"editor.toggleValue", reasonVimKey},            // g!
-	{"editor.explainConceal", reasonVimKey},         // g?
-	{"editor.labelJump", reasonVimKey},              // gs
-	{"editor.yankValue", reasonVimKey},              // gy
-	{"editor.yankValueOuter", reasonVimKey},         // gY
-	{"editor.quit", reasonVimKey},                   // :q
-	{"editor.write_quit", reasonVimKey},             // :wq
+	{"editor.case.lower", reasonVimKey},     // gu
+	{"editor.case.upper", reasonVimKey},     // gU
+	{"editor.increment", reasonVimKey},      // ctrl+a
+	{"editor.decrement", reasonVimKey},      // ctrl+x
+	{"editor.toggleValue", reasonVimKey},    // g!
+	{"editor.explainConceal", reasonVimKey}, // g?
+	{"editor.labelJump", reasonVimKey},      // gs
+	{"editor.yankValue", reasonVimKey},      // gy
+	{"editor.yankValueOuter", reasonVimKey}, // gY
+	{"editor.quit", reasonVimKey},           // :q
+	{"editor.write_quit", reasonVimKey},     // :wq
+	// #2700's caret-positioning family: only the centre half got a chord
+	// (ctrl+l), because it is the one worth a chord — "I lost the caret, put
+	// it back in the middle". Top and bottom are placement fine-tuning one
+	// reaches for inside a vim session, where zt/zb are already at hand.
+	{"editor.scrollCaretTop", reasonVimKey},         // zt
+	{"editor.scrollCaretBottom", reasonVimKey},      // zb
 	{"editor.tab.closeOthers", reasonPlatformChord}, // cmd+alt+w on macOS (#2538)
 	// #2538's remaining batch closes: the tab context menu and the File menu
 	// are where they are discovered, and cmd+w's neighbourhood has room for

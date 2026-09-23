@@ -1305,6 +1305,13 @@ func (m Model) updatePlayBufferKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// language up is not something to have to tab back for.
 		m.openPlayCheatsheet(s.dialect, "")
 		return m, nil
+	case "ctrl+l":
+		// Clear the output (#2700) — the shell habit, answered where the
+		// habit fires: the keyboard is in the output, so the key clears the
+		// output. On the query line ctrl+l stays the saved-filter picker
+		// (#1995), the chord json.jqFilters advertises; splitting the key by
+		// focus is what lets both meanings keep the key they earned.
+		return m, m.clearPlayResult()
 	case "esc":
 		// A search the find chord opened from the query line hands the
 		// keyboard back there (#2411) rather than staying in a buffer the
@@ -1729,6 +1736,33 @@ func (m Model) dragEditor(key string) *editor.Model {
 	return nil
 }
 
+// clearPlayResult empties the result buffer and the run's error line (#2700),
+// the `ctrl+l` of the result focus. It is the shell's "clear" and it means the
+// same thing here: wipe what is on screen, keep what you are working with.
+//
+// So the *query line is untouched* — program, caret, history and the saved
+// filters all stay — and so is the input snapshot: clearing the screen must
+// not cost a re-parse of a large document. inputErr is deliberately not
+// cleared either. It says the input the playground is running against is
+// broken, which is still true after the screen is wiped, and a message that
+// nothing would bring back is worse than one that stays.
+//
+// What goes is runErr (the error line the failed run left, and with it the
+// stale banner it flagged the buffer with) and the result itself. haveResult
+// drops with it, so nothing afterwards claims the empty buffer is a stale
+// output. The next evaluation — the next keystroke on the query line, or
+// enter — installs a result again exactly as the first one did.
+func (m *Model) clearPlayResult() tea.Cmd {
+	s := m.play
+	if s == nil {
+		return nil
+	}
+	s.result, s.haveResult, s.runErr = jqplay.Empty(s.dialect), false, ""
+	m.sizePlayResult() // the stale banner's row goes back to the result
+	s.status = "cleared the output — the next run fills it again"
+	return m.syncPlayResultBuffer()
+}
+
 // copyPlayResult writes the whole result — not just the visible window — to the
 // system clipboard.
 func (m *Model) copyPlayResult() {
@@ -1893,7 +1927,7 @@ func (m Model) playHints() []string {
 		// za/zM/zR are the editor's own fold keys (#1741), listed here
 		// because folding a big result (#2029) is the reason to be in the
 		// buffer at all — and nothing else on the row advertises them.
-		return []string{"tab query line", "za fold", "zM/zR fold all", view, "ctrl+g cheatsheet", "ctrl+y copy", "ctrl+o scratch", "esc close", playHelpHint}
+		return []string{"tab query line", "za fold", "zM/zR fold all", view, "ctrl+g cheatsheet", "ctrl+y copy", "ctrl+o scratch", "ctrl+l clear", "esc close", playHelpHint}
 	}
 	// The arrows change meaning with the view (#2038), so the hints say which
 	// one is in front of the user: rows to walk, or the history.

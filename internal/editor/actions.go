@@ -675,6 +675,15 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.docEdge(false)
 	case "doc_end":
 		m.docEdge(true)
+	// The caret-positioning family (#2700): vim's zz/zt/zb as commands, so a
+	// keymap chord can reach them — before this the gesture was the only way
+	// in, and ctrl+l (vim's redraw, JetBrains' nothing) logged as unbound.
+	case "scroll_caret_center":
+		m.scrollCursorLine(0)
+	case "scroll_caret_top":
+		m.scrollCursorLine(-1)
+	case "scroll_caret_bottom":
+		m.scrollCursorLine(1)
 	case "select_line_start":
 		m.selectToLineEdge(false)
 	case "select_line_end":

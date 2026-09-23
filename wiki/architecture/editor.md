@@ -659,7 +659,11 @@ app-side), `g?` (explain the concealed or masked value at the caret, #1998),
 and the display-line motions `g0 g$ gj gk` (visual rows under soft
 wrap, plain line motions otherwise) — plus `zz zt zb` (scroll the cursor line
 to centre/top/bottom next to the `z` fold keys; a count first moves the cursor
-to that line, vim's `[count]zt`, #2144) and `ZZ`/`ZQ` (save-and-close /
+to that line, vim's `[count]zt`, #2144; since #2700 the same placement is also
+`editor.scrollCaretCenter` / `…Top` / `…Bottom`, so a chord can reach it —
+`ctrl+l` centres the caret on macOS, see
+[keybindings](./keybindings.md#ctrll--centre-the-caret-clear-the-output-2700))
+and `ZZ`/`ZQ` (save-and-close /
 force-close, mirroring `:x` / `:q!`). Visual mode gained `u U ~` (case), `J`
 (join), `r` (replace every selected character), `=`, the `x`/`s` aliases
 for `d`/`c`, and its own `g` layer (#2144): `gg` extends the selection to the

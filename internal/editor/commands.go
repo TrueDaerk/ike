@@ -71,6 +71,13 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.deleteWordBackward", "Delete Word Backward", "delete_word_backward", "db"),
 			action("editor.docStart", "Go to Document Start", "doc_start", "gg"),
 			action("editor.docEnd", "Go to Document End", "doc_end", "G"),
+			// The caret-positioning family (#2700): vim's zz/zt/zb, which had
+			// no command id at all, so no chord could reach them. Centre is
+			// the one with a default chord (ctrl+l); the other two stay
+			// gesture-only, with a ledger entry naming the key.
+			action("editor.scrollCaretCenter", "Centre Caret Line", "scroll_caret_center", "zz"),
+			action("editor.scrollCaretTop", "Caret Line to Top", "scroll_caret_top", "zt"),
+			action("editor.scrollCaretBottom", "Caret Line to Bottom", "scroll_caret_bottom", "zb"),
 			action("editor.selectLineStart", "Select to Line Start", "select_line_start", "v0"),
 			action("editor.selectLineEnd", "Select to Line End", "select_line_end", "v$"),
 			action("editor.find", "Find in File", "find", "/"),

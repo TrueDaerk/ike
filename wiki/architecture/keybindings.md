@@ -1360,6 +1360,34 @@ outlive its reason. A second test checks the audit *list* itself in, so a new
 `editor`-only navigation binding is a decision someone records rather than a
 row that slips in.
 
+## `ctrl+l` — centre the caret, clear the output (#2700)
+
+The same export showed `ctrl+l` pressed once in the editor and once in the
+jq/yq playground, unbound in both. The key has no JetBrains default at all, so
+what it should mean is decided per place by the habit that fires there.
+
+**In the editor** it centres the caret line — vim's `zz`, which until now was
+reachable only *as* the gesture: `scrollCursorLine` had no command id, so no
+chord could get at it. `editor.scrollCaretCenter` (plus `editor.scrollCaretTop`
+/ `editor.scrollCaretBottom` for `zt`/`zb`, which stay chord-less with a ledger
+entry naming the gesture) dispatch the same placement through the usual
+`ActionMsg` route. The binding is a `darwinRows` entry, and for the opposite
+reason to most of them: here the *plain* chord is the folded form of `cmd+l`,
+which `editor.goToLine` owns everywhere else — jumping to a line is the bigger
+claim on the key, so off macOS `zz` stays the gesture it always was. It is
+scoped to the editor context rather than Global, so a focused terminal keeps
+`ctrl+l` for the shell.
+
+**In the playground** the shell habit is the other one: clear the screen. The
+mode owns the keyboard while its pane is focused, so the key is answered there
+directly (`internal/app/playground.go`), and it is split by focus — on the
+query line `ctrl+l` remains the saved-filter picker it has been since #1995,
+and in the result buffer it clears. `clearPlayResult` empties the result and
+the run's error line (and with it the stale banner), and leaves the query line,
+the history and the parsed input snapshot alone; `inputErr` survives too, since
+a broken input is still broken after the screen is wiped. The next evaluation
+fills the buffer again exactly as the first one did.
+
 ## macOS' document-edge chords (#2699)
 
 A later telemetry export showed `cmd+down` pressed and unbound in the editor.
