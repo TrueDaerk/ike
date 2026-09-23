@@ -679,6 +679,10 @@ type Model struct {
 	// archExtractLimit overrides the extraction byte cap (0 = the package
 	// default), the seam the cap's test drives.
 	archExtractLimit int64
+	// fileCopy is the pending file.copy (f5, #2696) — its source, the live
+	// destination prompt and, while the overwrite guard is up, the resolved
+	// destination; nil when no copy is in flight.
+	fileCopy *fileCopyState
 	// lspRename is the open symbol-rename prompt (Roadmap 0100, #6); nil when
 	// no rename is in flight.
 	lspRename *lspRenameState
@@ -5056,6 +5060,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.startMoveFile()
 		return m, nil
 
+	case CopyFileMsg:
+		// file.copy (f5 / palette, #2696): prompt for the destination path,
+		// prefilled as a "-copy" duplicate next to the source.
+		m.startCopyFile()
+		return m, nil
+
 	case ImportJetBrainsKeymapMsg:
 		// keymap.importJetBrains (palette, #677): prompt for the exported
 		// XML's path, then translate it into keymap.bindings.* overrides.
@@ -9271,6 +9281,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.archiveExtractGuardOpen() {
 			return m.updateArchiveExtractGuard(msg)
+		}
+		// file.copy's destination prompt (#2696) is the extract prompt's twin
+		// — same directory autocomplete — and its overwrite guard answers on
+		// o / s / esc like every other guard.
+		if m.fileCopyPromptOpen() {
+			return m.updateFileCopyPrompt(msg)
+		}
+		if m.fileCopyGuardOpen() {
+			return m.updateFileCopyGuard(msg)
 		}
 		// The symbol-rename prompt (0100, #6) mirrors it.
 		if m.lspRenameOpen() {

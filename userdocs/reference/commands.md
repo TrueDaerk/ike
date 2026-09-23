@@ -107,6 +107,7 @@ bring their own.
 | Pin/Unpin Tab | `editor.tab.togglePin` | `alt+shift+p` | — | everywhere |
 | ES: Run Query Buffer | `es.run` | — | — | `editor` pane |
 | Focus Explorer / Editor | `explorer.toggle` | `cmd+1` | — | everywhere |
+| Copy File | `file.copy` | `f5` | — | everywhere |
 | Copy Path | `file.copyPath` | `cmd+shift+c` | — | everywhere |
 | Copy Reference | `file.copyReference` | — | — | everywhere |
 | Copy Relative Path | `file.copyRelPath` | — | — | everywhere |

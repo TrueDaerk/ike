@@ -65,6 +65,10 @@ type dirPrompt struct {
 	// Base is the directory a relative input resolves against; empty means
 	// the process working directory (pathcomplete's default).
 	Base string
+	// NewHint replaces dirPromptNewHint when the input matches nothing.
+	// file.copy's destination prompt (#2696) sets it, because there the last
+	// component is a file name, not a directory that is about to be created.
+	NewHint string
 
 	// cands are the matching directories in the typed notation, each with a
 	// trailing separator; completed is their longest shared extension of the
@@ -213,7 +217,7 @@ func (p dirPrompt) Body(hint string) string {
 	b.WriteString("> " + p.Input.View() + "\n\n")
 	switch {
 	case len(p.cands) == 0:
-		b.WriteString("  " + dirPromptNewHint + "\n")
+		b.WriteString("  " + p.newHint() + "\n")
 	default:
 		end := p.top + p.shown()
 		for i := p.top; i < end; i++ {
@@ -229,6 +233,15 @@ func (p dirPrompt) Body(hint string) string {
 	}
 	b.WriteString("\n" + hint)
 	return b.String()
+}
+
+// newHint is the line shown when nothing matches: the host's wording when it
+// set one, the directory default otherwise.
+func (p dirPrompt) newHint() string {
+	if p.NewHint != "" {
+		return p.NewHint
+	}
+	return dirPromptNewHint
 }
 
 // withSeparator appends the path separator to a candidate that lacks one, so

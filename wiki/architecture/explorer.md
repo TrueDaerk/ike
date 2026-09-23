@@ -658,6 +658,21 @@ Rename/move can also be requested for an explicit path (`RenamePathMsg`,
 commands use these to act on the focused editor's file; the move target comes
 from the palette's directory picker mode.
 
+**Copy to a path** (`CopyPathMsg`, `copyPath`, #2696) is the third of these
+explicit-path operations, behind the app's `file.copy` (f5). Unlike the bulk
+copy it is handed a whole **destination path**, not a target directory, so one
+command both duplicates an entry next to the original (the prompt prefills
+`<dir>/<name>-copy<ext>`) and copies it elsewhere. It shares `copyTree` with
+the bulk copy — directories recurse, modes are preserved, symlinks are
+recreated as links rather than followed — and `checkRelocate`, so copying an
+entry onto itself or a directory into its own subtree is refused. Missing
+parent directories are created. An **existing destination** is only replaced
+when `Overwrite` is set, which the app does exclusively after its overwrite
+guard was answered with `o`; without it the existing-target error stands, so a
+copy never clobbers silently. The copy lands on the undo stack as an
+`opCreate`, the cursor snaps onto it once the rescan arrives, and
+`FileCreatedMsg` refreshes the VCS status snapshot.
+
 Removing a path (a delete, or undo of a create) emits `FileDeletedMsg`, which
 the root model handles by closing any editor still open on that file (or, for
 a directory, any file beneath it). Renames and moves instead emit

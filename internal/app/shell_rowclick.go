@@ -78,6 +78,10 @@ func (m Model) shellBodyClick(msg mouseEvent, x, y int) (tea.Model, tea.Cmd, boo
 		// The extract target prompt (#2689): a click on a directory
 		// candidate accepts it, the input line and the legend are inert.
 		f = m.archiveExtractClickRow
+	case m.fileCopyPromptOpen():
+		// file.copy's destination prompt (#2696) behaves identically: the
+		// clicked directory becomes the copy's destination.
+		f = m.fileCopyClickRow
 	default:
 		return m, nil, false
 	}

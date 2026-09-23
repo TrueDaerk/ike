@@ -201,6 +201,7 @@ var actionMap = map[string]string{
 	// has no import source.
 	"OptimizeImports": "lsp.organizeImports",
 	"Move":            "file.move",
+	"CopyElement":     "file.copy",
 	"NewElement":      "explorer.newFile",
 	"NewFile":         "explorer.newFile",
 

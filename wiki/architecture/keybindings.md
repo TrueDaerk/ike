@@ -461,10 +461,15 @@ reconciled onto the registered `lsp.definition` id (instead of the forked
 `lsp.definition` also has `f4` (JetBrains jump-to-source) as its delivered
 primary, and `shift+f6` is context-aware refactor-rename: `lsp.rename` with an
 editor focused, `file.rename` everywhere else (the Editor row shadows the
-Global one). Quick documentation (`lsp.hover`, #378) binds `ctrl+q` — the
-JetBrains Windows/Linux quick-doc chord, delivered everywhere because raw mode
-disables XON flow control. Diagnostic navigation (#369) binds `f2` /
-`shift+f2` — the JetBrains next/previous-highlighted-error keys, both
+Global one). `f5` joins `f6` as the other half of JetBrains' file-refactor
+pair (#2696): `file.copy` duplicates the explorer's selection — or the focused
+editor's file — to a destination path typed into the shared directory
+autocomplete, prefilled as `<dir>/<name>-copy<ext>` so a plain enter copies
+next to the original. Both are Global rows: neither has an editor-scoped
+counterpart to shadow it. Quick documentation (`lsp.hover`, #378) binds
+`ctrl+q` — the JetBrains Windows/Linux quick-doc chord, delivered everywhere
+because raw mode disables XON flow control. Diagnostic navigation (#369) binds
+`f2` / `shift+f2` — the JetBrains next/previous-highlighted-error keys, both
 delivered — to `lsp.nextDiagnostic` / `lsp.prevDiagnostic`, which walk the
 focused document's cached diagnostics in document order (wrapping) and toast
 the message. Parameter info (#523) binds `ctrl+p` — the palette's former
@@ -1520,6 +1525,7 @@ JetBrains is:
 | `explorer.reveal` | `alt+f1` | fragile | `palette` | live via palette |
 | `explorer.toggle` | `cmd+1` | fragile | `palette` | live via palette |
 | `explorer.undo` | `cmd+z` | fragile | `ctrl+z` | live via ctrl+z |
+| `file.copy` | `f5` | delivered | `—` | live |
 | `file.copyPath` | `cmd+shift+c` | fragile | `palette / context menu` | live via palette / context menu |
 | `file.move` | `f6` | delivered | `—` | live |
 | `file.openAs` | `cmd+alt+shift+o` | fragile | `palette / context menu` | live via palette / context menu |
