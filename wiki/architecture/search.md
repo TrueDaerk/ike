@@ -281,6 +281,13 @@ the palette):
   [palette pickers](/architecture/command-palette.md) (usages, symbols, files,
   bookmarks) and the call-hierarchy overlay use the same pieces (`Target`,
   `SplitWidth`/`Natural`, `Cache`), so the columns line up and behave alike.
+  Its styling costs the **rendered width, not the line** (#2691): a hit in a
+  minified bundle used to style every rune of a one-line file against every
+  span of it and froze the update loop for tens of seconds, so the excerpt is
+  now cut to the shown columns before the spans and match ranges are filtered
+  to that window once, and a line past **4 000** runes renders plain with the
+  match emphasis only (see [Command palette § code
+  preview](/architecture/command-palette.md)).
 - **Preview focus (#2327):** `alt+p` (or `ctrl+e`, the macOS-safe alias) hands
   the excerpt column the keyboard; a mouse press inside it does the same. The
   rule turns accent-coloured, the status row spells the motions, and the

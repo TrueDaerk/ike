@@ -873,9 +873,30 @@ so does Search Everywhere, whose composed list mixes both kinds.
   `0`/`$` to the line's ends, `g`/`G` to the file's, `z` back to the hit.
   Vertical scrolling walks the whole file — the window is re-read per frame
   and clamped at the tail once a short read proves where the file ends — and
-  the horizontal offset slices the styled rows with `ansi.Cut`, so colours
-  survive scrolling. `esc` blurs; moving the result selection re-centers the
-  excerpt on the new hit and drops both offsets.
+  the horizontal offset moves the column window the rows are styled at, so
+  colours survive scrolling. `esc` blurs; moving the result selection
+  re-centers the excerpt on the new hit and drops both offsets.
+- **Styling pays for the window, not the line (#2691).** `styleLine` used to
+  ask `highlight.Index.CaptureAt` per rune of the whole line, and `CaptureAt`
+  rescans every span of that line: a hit in a minified bundle (one line of
+  hundreds of thousands of runes with as many spans) made the column
+  O(runes × spans) *per frame* and froze the update loop for tens of seconds —
+  the freeze telemetry that opened the issue caught `View` in exactly that
+  call. Now each row is cut to the shown columns `[hoff, hoff+cw)` first, and
+  the line's spans and match ranges are filtered to that window once — the
+  editor's and the HTTP pane's rule (#2386) — so the cost scales with the
+  rendered width, never the line. First-covering-wins is unchanged:
+  overlapping spans still resolve the way `CaptureAt` resolved them, iterator
+  order deciding. Because the rows are clipped before styling, the memo key
+  (`styleKey`) carries the column window too, while the parse is memoised
+  separately per window — panning restyles, it never re-parses.
+- **Long lines render plain.** Past `maxStyleRunes` (**4 000** runes) a line
+  drops its capture colours altogether and renders as plain text, the hit
+  background and the bold-underlined match emphasis intact — the editor's
+  long-line rule for the preview, so the match stays findable in a bundle
+  nobody wants coloured. `BenchmarkStyleLineMinified` and
+  `TestStyleLineLinearOnMinifiedLine` pin the path: a 200 kB line with 20 000
+  spans styles in ~2 ms.
 
 ## Open in Find window (#2055)
 

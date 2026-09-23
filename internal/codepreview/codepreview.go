@@ -34,6 +34,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -46,6 +47,15 @@ import (
 // maxLineBytes caps one scanned line; longer lines are cut rather than
 // failing the whole read (minified sources).
 const maxLineBytes = 1 << 20
+
+// maxStyleRunes caps the capture styling of one line: past it the excerpt
+// renders the line plain — the match emphasis and the hit background still
+// apply, only the syntax colors drop out. A minified source is one line of
+// hundreds of thousands of runes carrying as many spans; styling it costs
+// more than the frame is worth, and the column shows at most MaxPreviewWidth
+// cells of it anyway. It is the editor's long-line rule (#2386) for the
+// preview (#2691).
+const maxStyleRunes = 4000
 
 // Unavailable is the notice rendered in place of the excerpt when the target
 // file cannot be read (deleted, unreadable, a directory).
@@ -119,8 +129,16 @@ type Cache struct {
 	ok       bool
 	loaded   bool
 
-	// The styled rows built from that window, keyed by everything that
-	// changes their appearance (window, hit line, ranges, palette).
+	// The parse of that window: the tab-expanded lines and the span index
+	// over them, keyed by the window alone — so panning along a long line
+	// restyles without re-parsing the excerpt.
+	pKey string
+	pExp []string
+	pIx  highlight.Index
+
+	// The styled rows built from that parse, keyed by everything that
+	// changes their appearance (window, hit line, ranges, palette, and the
+	// column window they are clipped to).
 	stKey  string
 	stRows []string
 
@@ -412,7 +430,7 @@ func (c *Cache) Render(t Target, width, height int, pal *theme.Palette) []string
 	}
 
 	hit := lipgloss.NewStyle().Background(pal.SelectionMuted)
-	styled := c.styled(t, lines, from, pal)
+	styled := c.styled(t, lines, from, c.hoff, cw, pal)
 	rows := make([]string, 0, height)
 	for i, body := range styled {
 		n := from + i
@@ -421,7 +439,6 @@ func (c *Cache) Render(t Target, width, height int, pal *theme.Palette) []string
 			num := strconv.Itoa(n)
 			gutter = strings.Repeat(" ", gw-len(num)) + num + " "
 		}
-		body = ansi.Cut(body, c.hoff, c.hoff+cw)
 		if n != t.Line {
 			rows = append(rows, dim.Render(gutter)+body)
 			continue
@@ -437,23 +454,19 @@ func (c *Cache) Render(t Target, width, height int, pal *theme.Palette) []string
 }
 
 // styled returns the window's rows with syntax colors, the hit line's
-// background and the match emphasis baked in — unclipped, so the horizontal
-// offset can slice them per frame. The parse is memoised: only a changed
-// window, hit line, match set or palette re-runs it.
-func (c *Cache) styled(t Target, lines []string, from int, pal *theme.Palette) []string {
-	key := styleKey(t, from, len(lines), pal)
+// background and the match emphasis baked in, already clipped to the visible
+// column window [lo, lo+cw) — styling what is off screen is what froze the
+// loop on a minified line (#2691), so the rows are built at the width they
+// are shown at instead of whole and sliced afterwards. Both halves are
+// memoised: only a changed window, hit line, match set, palette or column
+// window re-runs the styling, and only a changed window re-parses.
+func (c *Cache) styled(t Target, lines []string, from, lo, cw int, pal *theme.Palette) []string {
+	key := styleKey(t, from, len(lines), lo, cw, pal)
 	if c.stKey == key && len(c.stRows) == len(lines) {
 		return c.stRows
 	}
 	c.ensureTheme(pal)
-	exp := make([]string, len(lines))
-	for i, l := range lines {
-		exp[i] = expandTabs(l)
-	}
-	// The excerpt is parsed standalone, exactly like the definition peek and
-	// the hover code fences do (#379): a file whose language has no grammar —
-	// or a build without tree-sitter — yields no spans and renders plain.
-	ix := highlight.NewIndex(highlight.Highlight(t.Path, exp))
+	exp, ix := c.parse(t.Path, lines, from)
 	rows := make([]string, len(lines))
 	for i, l := range exp {
 		var ranges []Range
@@ -462,18 +475,39 @@ func (c *Cache) styled(t Target, lines []string, from int, pal *theme.Palette) [
 			ranges = expandRanges(lines[i], t.Ranges)
 			bg = pal.SelectionMuted
 		}
-		rows[i] = c.styleLine(ix, i, l, ranges, bg)
+		rows[i] = c.styleLine(ix, i, l, ranges, bg, lo, lo+cw)
 	}
 	c.stKey, c.stRows = key, rows
 	return rows
 }
 
+// parse tab-expands the window and indexes its highlight spans, memoised per
+// window so panning along a long line — which restyles every frame — never
+// re-parses the excerpt.
+//
+// The excerpt is parsed standalone, exactly like the definition peek and the
+// hover code fences do (#379): a file whose language has no grammar — or a
+// build without tree-sitter — yields no spans and renders plain.
+func (c *Cache) parse(path string, lines []string, from int) ([]string, highlight.Index) {
+	key := path + "\x00" + strconv.Itoa(from) + ":" + strconv.Itoa(len(lines))
+	if c.pKey == key && len(c.pExp) == len(lines) {
+		return c.pExp, c.pIx
+	}
+	exp := make([]string, len(lines))
+	for i, l := range lines {
+		exp[i] = expandTabs(l)
+	}
+	ix := highlight.NewIndex(highlight.Highlight(path, exp))
+	c.pKey, c.pExp, c.pIx = key, exp, ix
+	return exp, ix
+}
+
 // styleKey spells everything that changes a window's styled rows.
-func styleKey(t Target, from, n int, pal *theme.Palette) string {
+func styleKey(t Target, from, n, lo, cw int, pal *theme.Palette) string {
 	var b strings.Builder
 	b.WriteString(t.Path)
 	b.WriteByte(0)
-	for _, v := range []int{from, n, t.Line} {
+	for _, v := range []int{from, n, t.Line, lo, cw} {
 		b.WriteString(strconv.Itoa(v))
 		b.WriteByte(':')
 	}
@@ -485,22 +519,63 @@ func styleKey(t Target, from, n int, pal *theme.Palette) string {
 	return b.String()
 }
 
-// styleLine renders one source line: the capture colors from ix, the match
-// ranges bold and underlined on top of them (the list's own match emphasis),
-// all over bg when the line is the hit. A capture the theme does not style,
-// with no background and no match, renders as plain text — the fallback that
-// keeps unsupported languages readable.
-func (c *Cache) styleLine(ix highlight.Index, ln int, text string, ranges []Range, bg color.Color) string {
-	runes := []rune(text)
-	var b strings.Builder
-	for col := 0; col < len(runes); {
-		capture := ix.CaptureAt(ln, col)
-		hot := inRanges(ranges, col)
-		end := col + 1
-		for end < len(runes) && ix.CaptureAt(ln, end) == capture && inRanges(ranges, end) == hot {
-			end++
+// styleLine renders the display columns [lo, hi) of one source line: the
+// capture colors from ix, the match ranges bold and underlined on top of them
+// (the list's own match emphasis), all over bg when the line is the hit. A
+// capture the theme does not style, with no background and no match, renders
+// as plain text — the fallback that keeps unsupported languages readable.
+//
+// Everything is bounded by the window (#2691). The line is cut to it first,
+// then the line's spans and its match ranges are filtered to it once — the
+// way the editor and the HTTP pane do it (#2386) — instead of asking
+// Index.CaptureAt per rune, which rescans every span of the line and made a
+// minified source O(runes x spans) per frame. Past maxStyleRunes the captures
+// drop out entirely and the line renders plain, match emphasis intact.
+func (c *Cache) styleLine(ix highlight.Index, ln int, text string, ranges []Range, bg color.Color, lo, hi int) string {
+	if hi <= lo {
+		return ""
+	}
+	seg := ansi.Cut(text, lo, hi)
+	if seg == "" {
+		return ""
+	}
+	// off is the rune column the window starts at, so the line's spans and
+	// ranges — both in whole-line columns — line up with the cut runes.
+	off := 0
+	if lo > 0 {
+		off = utf8.RuneCountInString(ansi.Cut(text, 0, lo))
+	}
+	runes := []rune(seg)
+	end := off + len(runes)
+
+	var spans []highlight.Span
+	if utf8.RuneCountInString(text) <= maxStyleRunes {
+		for _, s := range ix.LineSpans(ln) {
+			if s.EndCol > off && s.StartCol < end {
+				spans = append(spans, s)
+			}
 		}
-		seg := string(runes[col:end])
+	}
+	// First covering span wins — iterator order, CaptureAt's rule.
+	captureAt := func(col int) string {
+		for _, s := range spans {
+			if col >= s.StartCol && col < s.EndCol {
+				return s.Capture
+			}
+		}
+		return ""
+	}
+	ranges = clipRanges(ranges, off, end)
+
+	var b strings.Builder
+	for i := 0; i < len(runes); {
+		capture := captureAt(off + i)
+		hot := inRanges(ranges, off+i)
+		j := i + 1
+		for j < len(runes) && captureAt(off+j) == capture && inRanges(ranges, off+j) == hot {
+			j++
+		}
+		run := string(runes[i:j])
 		st, styled := c.hl.Style(capture)
 		if !styled {
 			st = lipgloss.NewStyle()
@@ -512,10 +587,10 @@ func (c *Cache) styleLine(ix highlight.Index, ln int, text string, ranges []Rang
 			st, styled = st.Bold(true).Underline(true), true
 		}
 		if styled {
-			seg = st.Render(seg)
+			run = st.Render(run)
 		}
-		b.WriteString(seg)
-		col = end
+		b.WriteString(run)
+		i = j
 	}
 	return b.String()
 }
@@ -527,6 +602,22 @@ func (c *Cache) ensureTheme(pal *theme.Palette) {
 	}
 	c.hl = highlight.NewTheme(pal.Captures, nil)
 	c.hlName, c.hlOK = pal.Name, true
+}
+
+// clipRanges keeps the ranges overlapping the rune columns [from, to), so
+// inRanges scans what the window shows rather than every match on the line —
+// a minified line can carry thousands of them (#2691).
+func clipRanges(ranges []Range, from, to int) []Range {
+	if len(ranges) == 0 {
+		return nil
+	}
+	out := make([]Range, 0, len(ranges))
+	for _, r := range ranges {
+		if r.End > from && r.Start < to {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // inRanges reports whether col falls inside any (half-open) range.
