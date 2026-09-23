@@ -4,7 +4,7 @@ title: Usage Telemetry
 description: Local-only usage recording — command (with outcome), keybinding, layout, session, heartbeat, freeze-with-goroutine-dump, operation-lifecycle, palette-pick, palette-dismissal and project-time events appended as per-session JSONL under ~/.ike/telemetry, asynchronous and content-free, switched by telemetry.enabled.
 resource: internal/telemetry/telemetry.go
 tags: [architecture, telemetry, usage, jsonl, privacy, diagnostics]
-timestamp: 2026-09-21T21:00:00Z
+timestamp: 2026-09-23T14:00:00Z
 ---
 
 # Usage Telemetry
@@ -56,6 +56,7 @@ currently 13); readers must tolerate unknown fields and filter on `v`.
 | 10 | #2627 | The type `freeze` joins — one event per heartbeat interval in which the update loop completed fewer than `diag.FreezePassThreshold` (3) passes, carrying `passes` (the interval's completed passes), `since_ms` (wall time since the previous beat) and `dumped` (`true` on the beat that wrote the episode's goroutine stack dump next to the project's `debug.log`, `false` on the episode's follow-up beats and once the per-session dump cap is reached). Below v10 the same episodes are only visible indirectly, as a `passes` value standing still across consecutive heartbeats, and no dump exists. No path is recorded; dump and event are paired over `sid` and the timestamps. |
 | 11 | #2631 | The `http.flight` `error` and `canceled` end phases gain `reason`, a closed vocabulary classifying the failure — `timeout`, `dns`, `refused`, `tls`, `reset`, `canceled`, `other` — derived from the Go error by `httpclient.ClassifyError`. It separates a deadline hit from a refused connection, DNS failure or TLS rejection, which the `ms` field alone could only guess at. Structural only: never the host, URL or the error text. Below v11 absence means "not recorded". |
 | 12 | #2635 | The `palette.pick` and `palette.dismiss` events of the code-actions mode (`"!"`, the alt+enter intention popup) gain `kinds` — the action kinds that were listed, comma-joined, sorted and counted (`builtin,quickfix*2,source.organizeImports`) — and a pick adds `picked_kind`, the chosen row's own kind. A kind is an LSP `CodeActionKind`, the marker `builtin` for one of ike's own intentions, `none` for a server action that named none, or `other` for anything outside the allowed identifier vocabulary. **Never a title**, which may quote the user's code. Both fields are *omitted* for every other mode (whose rows carry no kind), so absence reads as "this mode has none" rather than "empty". Below v12 they are absent everywhere: the 33 % dismissal rate of the intention popup was visible, what it had offered was not. |
+| 14 | #2693 | The `heartbeat` event gains `renders` — the interval's three loudest **render triggers** as `type:count` pairs, where the type is the message whose Update pass the composed frame followed (`watch.EventBatchMsg:43,tea.KeyPressMsg:12,vcs.SnapshotMsg:2`). `top` says the loop composed N frames; `renders` says what for — the field that separates a wake worth drawing from render churn without a local repro. Summed over an interval it equals the interval's `view/render` count; a `view/reuse` pass is not a render and is never attributed. Omitted when the interval composed nothing. Structure only, never content. Absence below v14 means "not recorded". |
 | 13 | #2692 | The `freeze` event narrows its meaning to **"the loop went quiet while work was pending"**: a beat below the pass threshold only counts as frozen when a pass was in flight at the beat, or input (a key, a mouse event) reached the program during the interval without a pass completing. An idle-quiet interval emits no event and writes no dump. The fields are unchanged (`passes`, `since_ms`, `dumped`), so a v13 event parses like a v10..v12 one — but v10..v12 `freeze` events include false positives: since the idle-churn work (#2540, #2626) an idle loop looks exactly like a frozen one from the pass counter's side, and the three dumps in the wild all showed the loop parked in its own select. Freeze *rates* are therefore not comparable across the boundary; from v13 every `freeze` has a stuck loop behind it. |
 
 An export spanning versions therefore needs three guards: filter v1 `command`
@@ -121,7 +122,11 @@ counts by the version's interval before comparing sessions.
     (`app.termCheckMsg:5,view/render:5`; `view/reuse` counts the frames a no-op
     motion pass handed out again, #2626), diffed from the always-on
     per-message-type counter (`diag.MessageCounts`) — the field that names
-    an idle-wake culprit in an export without a local repro. Omitted when
+    an idle-wake culprit in an export without a local repro. Since #2693 a
+    second field, `renders`, attributes the interval's composed frames to
+    the message that triggered each (`diag.RenderTriggers`, diffed the same
+    way) — `top` says *that* the loop rendered, `renders` says *what for*,
+    which is what an idle-churn analysis needs. Both are omitted when
     the interval was dead quiet, so a truly idle session stays cheap to
     store. Structure only, never content — message *type names* are code
     identifiers, not user data. The goroutine lives in the recorder, starts

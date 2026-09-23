@@ -488,7 +488,9 @@ independently of the LSP bridge, template items complete in plain buffers
 with no server. On accept the editor recognises the `snippets` source name
 and re-indents the body to the cursor's line before expansion — the same
 shape the insert-mode Tab trigger produces (see
-[editor](./editor.md)).
+[editor](./editor.md)). The third door onto the same templates is the picker
+behind `snippets.insert` / `cmd+j` (#2694): the palette locked to the buffer's
+template list, for the trigger one does not remember.
 
 ## Postfix completion (#1913)
 

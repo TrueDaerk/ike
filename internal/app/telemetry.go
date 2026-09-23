@@ -71,7 +71,7 @@ func newUsageRecorder() *telemetry.Recorder {
 	// what woke the loop *during* the interval (#2402) — the cumulative totals
 	// would only ever name the session's loudest type. Safe without a lock:
 	// telemetry calls the payload func from its single heartbeat goroutine.
-	var prev map[string]uint64
+	var prev, prevRenders map[string]uint64
 	freeze := newFreezeWatch(diag.FreezeSources{})
 	r.SetHeartbeat(telemetryHeartbeatInterval, func() map[string]string {
 		cur := diag.MessageCounts()
@@ -80,6 +80,15 @@ func newUsageRecorder() *telemetry.Recorder {
 			p["top"] = top
 		}
 		prev = cur
+		// renders (#2693) names what the interval's composed frames were
+		// *for*: the three message types most frames followed. top alone
+		// says the loop rendered; this says which wake was worth a frame
+		// and which was churn.
+		curRenders := diag.RenderTriggers()
+		if renders := topMessageDelta(prevRenders, curRenders, 3); renders != "" {
+			p["renders"] = renders
+		}
+		prevRenders = curRenders
 		recordFreeze(r, freeze, p)
 		return p
 	})

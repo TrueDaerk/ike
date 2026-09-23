@@ -6,7 +6,8 @@ import (
 	"ike/internal/diag"
 )
 
-// renderreuse.go makes mouse motion cheap (#2626).
+// renderreuse.go makes passes that change nothing on screen cheap (#2626,
+// #2693).
 //
 // bubbletea calls View after every Update that returns, with no way to say
 // "nothing changed". A terminal reporting pointer motion (~10-17 events/s)
@@ -14,20 +15,26 @@ import (
 // pointer moved over nothing that reacts to hover — the idle churn the
 // telemetry heartbeats kept showing after #2540 (`view/render` tracking
 // `app.coalescedInputMsg` nearly 1:1 in minutes without a key or click).
+// #2693 found the same shape behind the background wakes: a watcher batch
+// for files nobody has open, the git-status debounce tick, a status snapshot
+// identical to the last one, an explorer rescan that found the same entries,
+// a forge poll deadline — each an Update pass that moved nothing visible and
+// still composed a full frame.
 //
-// The lever is on the View side: a pass whose only effect was a motion step
-// that changed no hover-dependent state marks the frame reusable, and View
-// hands bubbletea the frame it composed for the previous pass. The renderer
-// diffs it against what is on screen and writes nothing. Counting: a
-// composed frame is a `view/render` pass, a reused one a `view/reuse` pass,
-// so the ratio "motion bursts → renders" is observable in the heartbeat's
-// `top` field and in unit tests through diag.MessageCounts.
+// The lever is on the View side: a pass that proves it changed no
+// frame-relevant state marks the frame reusable, and View hands bubbletea
+// the frame it composed for the previous pass. The renderer diffs it against
+// what is on screen and writes nothing. Counting: a composed frame is a
+// `view/render` pass, a reused one a `view/reuse` pass, so the ratio "wakes
+// → renders" is observable in the heartbeat's `top` and `renders` fields and
+// in unit tests through diag.MessageCounts.
 //
-// The rule is opt-in: a motion consumer must *prove* the hover target did
-// not change (explorer hover row, mouse-idle hover popup); every other path
-// — a drag step, an overlay hover, a wheel notch, a terminal repaint folded
-// into the same burst — keeps the default and renders. A missed consumer
-// costs a render, never a stale frame.
+// The rule is opt-in: a handler must *prove* the frame is exact — a motion
+// consumer that the hover target did not change, a tick that it only flipped
+// bookkeeping and launched a command, a result message that it landed
+// nothing new. Every other path keeps the default and renders. A missed
+// proof costs a render, never a stale frame; a proof the settled pass
+// contradicts (a toast queued during the pass) is withdrawn there.
 
 // frameCache is the pointer-shared state behind the reuse decision. Model is
 // a value type copied on every Update, so the flags live behind a pointer
@@ -76,6 +83,16 @@ func (m Model) motionNoop() bool { return m.frame != nil && m.frame.noop }
 func (m Model) markFrameReusable() {
 	if m.frame != nil {
 		m.frame.reuse = true
+	}
+}
+
+// noteFrameChanged withdraws this pass's reuse verdict: something the
+// handler could not see changed the frame after all (a notification queued
+// during the pass, drained on the settled pass). Safe to call with no verdict
+// pending.
+func (m Model) noteFrameChanged() {
+	if m.frame != nil {
+		m.frame.reuse = false
 	}
 }
 

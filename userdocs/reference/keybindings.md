@@ -236,6 +236,7 @@ Active when an editor pane has focus.
 | Go to implementations | `cmd+alt+b` | `ctrl+alt+b` | `lsp.implementations` |
 | Go to line | `cmd+l` | `ctrl+l` | `editor.goToLine` |
 | Go to super | `cmd+u` | `ctrl+u` | `lsp.goToSuper` |
+| Insert live template | `cmd+j` | `ctrl+j` | `snippets.insert` |
 | Markdown preview | `cmd+alt+m` | `ctrl+alt+m` | `markdown.preview` |
 | Move line down | `cmd+shift+down` | `ctrl+shift+down` | `editor.moveLineDown` |
 | Move line down | `ctrl+shift+down` | `ctrl+shift+down` | `editor.moveLineDown` |

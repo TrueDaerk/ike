@@ -71,6 +71,12 @@ type Model struct {
 	height  int
 	focused bool
 	err     error
+	// scanNoop records whether the last applied ScanDoneMsg changed nothing
+	// the rows show (#2693): the directory listed exactly the entries the
+	// node already held, no error came or went, and no snap, reveal, restore
+	// or expand-all was pending to move the cursor or viewport. The app
+	// reads it right after the Update that applied the scan.
+	scanNoop bool
 
 	open map[string]bool // paths currently open in any editor pane
 
@@ -367,10 +373,20 @@ func scanCmd(path string) tea.Cmd {
 // step of a pending reveal descent (#1042): each landing scan may unlock the
 // next unloaded ancestor on the way to the reveal target.
 func (m *Model) applyScan(msg ScanDoneMsg) tea.Cmd {
+	m.scanNoop = false
 	n := nodeByPath(m.root, msg.Path)
 	if n == nil {
 		return nil
 	}
+	// The no-op verdict is decided on the state before the merge: a loaded
+	// node with the same entries, nothing pending that the rebuild would act
+	// on. A stability snap (externalRefresh, followSel false) is fine — over
+	// identical rows it lands the cursor where it is and leaves the viewport
+	// alone; a deliberate snap (snapCursorTo) may reframe. The merge itself
+	// is then a rebuild of identical rows.
+	noop := msg.Err == nil && m.err == nil && n.loaded &&
+		!m.followSel && m.pendingReveal == "" && m.expandAllRoot == "" &&
+		len(m.restorePending) == 0 && sameEntries(n, msg.Entries)
 	n.loading = false
 	n.loaded = true
 	if msg.Err != nil {
@@ -403,8 +419,35 @@ func (m *Model) applyScan(msg ScanDoneMsg) tea.Cmd {
 	restore := m.continueRestore()
 	m.rebuild()
 	m.finishRestore()
+	m.scanNoop = noop
 	return tea.Batch(m.continueReveal(), restore)
 }
+
+// sameEntries reports whether a scan's entries are exactly the children n
+// already holds — same names, kinds and entry mtimes (the "modified" sort
+// reads those), in any order. Cheap on the scan's own terms: one map of the
+// existing children, one pass over the entries.
+func sameEntries(n *node, entries []scanEntry) bool {
+	if len(n.children) != len(entries) {
+		return false
+	}
+	prev := make(map[string]*node, len(n.children))
+	for _, c := range n.children {
+		prev[c.name] = c
+	}
+	for _, e := range entries {
+		old, ok := prev[e.name]
+		if !ok || old.isDir != e.isDir || !old.entMod.Equal(e.mod) {
+			return false
+		}
+	}
+	return true
+}
+
+// LastScanNoop reports whether the most recently applied ScanDoneMsg changed
+// nothing the tree shows (#2693) — the app's render-reuse seam for
+// watcher-driven rescans of an unchanged directory.
+func (m Model) LastScanNoop() bool { return m.scanNoop }
 
 // continueExpandAll resumes an in-flight expand-all (#1043) after a scan
 // landed: newly loaded directories under the expand root get expanded and

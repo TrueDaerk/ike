@@ -3696,6 +3696,19 @@ Multi-line bodies re-indent on expansion: literal tabs become the buffer's
 indent unit (`tab_width`/`use_spaces`, editorconfig-aware) and every
 continuation line inherits the current line's leading whitespace.
 
+The **picker** is the trigger-less door to the same expansion (#2694,
+`snippets.insert`, `cmd+j` — JetBrains' *Insert Live Template*): the app opens
+the palette locked to a mode listing the buffer's templates (trigger, body
+preview, language badge), filtered with the hump matcher
+(`fuzzy.MatchHumps`, #2650), and the picked body goes to
+`Model.InsertSnippet`, which shares `expandSnippetOver` with the Tab path — the
+same re-indent, the same undo unit, the same tabstop session. Normal mode
+enters insert first (like `i`), so the chord works in both modes; secondary
+carets and read-only buffers refuse it exactly as Tab expansion does. A
+language with no templates at all gets a notice instead of an empty picker. The
+list itself is `Model.SnippetEntries` — `snippets.For(langPath)`, the very set
+Tab resolves a trigger against.
+
 The same templates appear in the completion popup as snippet items (detail
 `template …`) through a local completion source (see
 [completion](./completion.md)) — this works with no LSP server at all, since

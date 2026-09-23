@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"ike/internal/deeplink"
 )
 
 // server.go is the TCP endpoint: accept loop, per-connection request loop,
@@ -49,11 +51,26 @@ type Options struct {
 	// not block; the IDE side answers from a snapshot. nil means "no state
 	// available": status is then answered with unavailable.
 	State func() Status
+	// Close asks the IDE to close a project (#2703). It runs on the
+	// connection goroutine and must not block: the IDE side posts the
+	// request into its update loop — where the busy guard lives — and calls
+	// reply exactly once from there. The server waits CloseTimeout for it
+	// and answers unavailable otherwise. nil means "this IKE cannot close
+	// projects over the wire": close is then answered with unavailable.
+	Close func(req CloseRequest, reply func(CloseResult))
 	// Events receives pairing state changes (may be nil).
 	Events Events
 	// CodeTTL is the pairing code lifetime; 0 selects DefaultCodeTTL.
 	CodeTTL time.Duration
+	// CloseTimeout bounds the wait for the IDE's close verdict; 0 selects
+	// DefaultCloseTimeout.
+	CloseTimeout time.Duration
 }
+
+// DefaultCloseTimeout is how long a close request waits for the update
+// loop before it is answered unavailable — a guard evaluation is a few
+// string compares, so an IDE that takes longer is wedged, not busy.
+const DefaultCloseTimeout = 5 * time.Second
 
 // Server is one listening endpoint.
 type Server struct {
@@ -61,6 +78,7 @@ type Server struct {
 	opts    Options
 	pairing *Pairing
 	store   *Store
+	force   ForceTokens
 	now     func() time.Time
 
 	mu    sync.Mutex
@@ -203,7 +221,7 @@ func (s *Server) dispatch(sess *session, req Request) (Response, time.Duration) 
 	switch strings.ToLower(strings.TrimSpace(req.Cmd)) {
 	case "hello":
 		authed := sess.authed
-		return Response{Type: "hello", Name: "ike", Version: s.opts.Version,
+		return Response{Type: "hello", Name: "ike", Version: s.opts.Version, Proto: ProtocolVersion,
 			Authenticated: &authed, Message: helloMessage(authed)}, 0
 	case "ping":
 		return Response{Type: "ok", Message: "pong"}, 0
@@ -221,6 +239,7 @@ func (s *Server) dispatch(sess *session, req Request) (Response, time.Duration) 
 		if _, err := s.store.Revoke(sess.client.ID); err != nil {
 			return errorResponse(CodeInternal, err.Error()), 0
 		}
+		s.force.Forget(sess.client.ID)
 		sess.authed, sess.client = false, Client{}
 		return Response{Type: "ok", Message: "token revoked"}, 0
 	case "open":
@@ -250,6 +269,14 @@ func (s *Server) dispatch(sess *session, req Request) (Response, time.Duration) 
 			return errorResponse(CodeUnavailable, "no project is open"), 0
 		}
 		return statusResponse(st), 0
+	case "close":
+		// Guarded like status: an unpaired asker is refused without a
+		// pairing popup — a device that cannot open anything has even less
+		// business closing something.
+		if !sess.authed {
+			return errorResponse(CodeUnauthorized, "close needs a paired token"), 0
+		}
+		return s.closeProject(sess, req), 0
 	case "":
 		return errorResponse(CodeBadRequest, "missing cmd"), 0
 	default:
@@ -300,6 +327,97 @@ func (s *Server) pair(sess *session, req Request) (Response, time.Duration) {
 	default: // VerdictNone
 		return errorResponse(CodeNoChallenge, "no code is being shown — send pair without a code first"), 0
 	}
+}
+
+// closeProject handles close (#2703) for an authenticated session: the
+// target is resolved and guarded by the IDE on its update loop; a busy
+// workspace comes back as blocked with the guard's reasons and a one-time
+// force token, and a second close echoing that token discards the listed
+// activity — provided the token is the client's live one and the activity
+// is still exactly what the client was shown.
+func (s *Server) closeProject(sess *session, req Request) Response {
+	if s.opts.Close == nil {
+		return errorResponse(CodeUnavailable, "this IKE does not close projects over the network")
+	}
+	ask := CloseRequest{Project: strings.TrimSpace(req.Project), Client: sess.client}
+	if remote := strings.TrimSpace(req.Remote); remote != "" {
+		key, ok := deeplink.NormalizeRemote(remote)
+		if !ok {
+			return errorResponse(CodeBadRequest, "remote is not a git remote spelling")
+		}
+		ask.Remote = key
+	}
+	if ask.Project != "" && ask.Remote != "" {
+		return errorResponse(CodeBadRequest, "close takes project or remote, not both")
+	}
+	if force := strings.TrimSpace(req.Force); force != "" {
+		// The token is consumed here whatever the IDE says next: right or
+		// wrong, it is spent, and the next plain close mints a fresh one.
+		grant, ok := s.force.Consume(sess.client.ID, force, s.now())
+		if !ok {
+			return forbiddenResponse(ReasonStaleForceToken, "the force token is wrong, expired or already used — send close again for a fresh one")
+		}
+		ask.Force, ask.Grant = true, grant
+	}
+	res, ok := s.askClose(ask)
+	if !ok {
+		return errorResponse(CodeUnavailable, "IKE did not answer the close in time")
+	}
+	switch res.Outcome {
+	case CloseClosed:
+		return Response{Type: "ok", Project: res.Project, Message: "closed " + res.Project}
+	case CloseBlocked:
+		grant := ForceGrant{Root: res.Root, Project: res.Project, Reasons: res.Reasons}
+		token, left, err := s.force.Issue(sess.client.ID, grant, s.now())
+		if err != nil {
+			return errorResponse(CodeInternal, "cannot mint a force token: "+err.Error())
+		}
+		reasons := res.Reasons
+		if reasons == nil {
+			reasons = []string{}
+		}
+		return Response{Type: "blocked", Project: res.Project, Reasons: reasons,
+			ForceToken: token, ExpiresIn: left,
+			Message: "still busy — send close again with force set to the token to discard the listed activity"}
+	case CloseUnknown:
+		return errorResponse(CodeUnavailable, "no open project matches the request")
+	case CloseStale:
+		return forbiddenResponse(ReasonStaleForceToken, "the activity changed since the blocked reply — send close again for the current reasons")
+	default:
+		msg := res.Message
+		if msg == "" {
+			msg = "IKE cannot close a project right now"
+		}
+		return errorResponse(CodeUnavailable, msg)
+	}
+}
+
+// askClose posts req to the IDE and waits for its verdict; ok is false on
+// timeout (or a server shutting down meanwhile).
+func (s *Server) askClose(req CloseRequest) (CloseResult, bool) {
+	timeout := s.opts.CloseTimeout
+	if timeout <= 0 {
+		timeout = DefaultCloseTimeout
+	}
+	// Buffered so a reply landing after the timeout never blocks the update
+	// loop on a reader that gave up.
+	replies := make(chan CloseResult, 1)
+	var once sync.Once
+	s.opts.Close(req, func(r CloseResult) { once.Do(func() { replies <- r }) })
+	select {
+	case r := <-replies:
+		return r, true
+	case <-time.After(timeout):
+		return CloseResult{}, false
+	case <-s.done:
+		return CloseResult{}, false
+	}
+}
+
+// forbiddenResponse builds a type=forbidden response: the request was well
+// formed and the asker is paired, but this particular action is refused.
+func forbiddenResponse(reason, msg string) Response {
+	return Response{Type: "forbidden", Reason: reason, Message: msg}
 }
 
 // challengeFor issues a fresh code for the session's address.
