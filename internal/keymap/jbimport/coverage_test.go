@@ -15,6 +15,7 @@ var noCounterpart = map[string]string{
 	"php.traitIndex.rebuild":           "IKE-only concept (0520, #2673): JetBrains rescans via Invalidate Caches, not a keymap action",
 	"editor.tab.moveLeft":              "JetBrains reorders tabs by drag only, no keymap action",
 	"editor.tab.moveRight":             "JetBrains reorders tabs by drag only, no keymap action",
+	"explorer.duplicate":               "JetBrains' Copy-in-place is CopyElement (f5), already mapped to file.copy (#2697)",
 	"explorer.clipCopy":                "project-view copy rides $Copy in JetBrains, already mapped to editor.copy (#2660)",
 	"explorer.clipCut":                 "project-view cut rides $Cut in JetBrains, already mapped to editor.cut (#2660)",
 	"explorer.clipPaste":               "project-view paste rides $Paste in JetBrains, already mapped to editor.paste (#2660)",

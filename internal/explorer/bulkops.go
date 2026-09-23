@@ -202,11 +202,16 @@ func (m *Model) copyTargets(targets []delTarget, in string) tea.Cmd {
 //
 // The copy is recorded as an opCreate, so one undo trashes exactly it and
 // leaves the source alone, and the cursor snaps onto it once the rescan lands.
-func (m *Model) copyPath(src, dest string, overwrite bool) tea.Cmd {
+//
+// ok reports whether the copy reached the disk; a failed one has already
+// opened the error dialog. explorer.duplicate (#2697) needs the distinction,
+// because it follows a successful copy with a rename prompt on it and must not
+// paint that over the failure's dialog.
+func (m *Model) copyPath(src, dest string, overwrite bool) (cmd tea.Cmd, ok bool) {
 	info, err := os.Lstat(src)
 	if err != nil {
 		m.fail(err)
-		return nil
+		return nil, false
 	}
 	isDir := info.IsDir()
 	if err := checkRelocate(delTarget{path: src, isDir: isDir}, dest); err != nil {
@@ -215,28 +220,28 @@ func (m *Model) copyPath(src, dest string, overwrite bool) tea.Cmd {
 		// stands.
 		if !overwrite || !exists(dest) {
 			m.fail(err)
-			return nil
+			return nil, false
 		}
 		if err := os.RemoveAll(dest); err != nil {
 			m.fail(err)
-			return nil
+			return nil, false
 		}
 	}
 	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
 		m.fail(err)
-		return nil
+		return nil, false
 	}
 	if err := copyTree(src, dest); err != nil {
 		// A half-written copy would be invisible garbage (see copyTargets).
 		_ = os.RemoveAll(dest)
 		m.fail(err)
-		return nil
+		return nil, false
 	}
 	m.clearSel()
 	m.clearMarks()
 	m.pushOp(fileOp{kind: opCreate, path: dest, isDir: isDir})
 	m.snapCursorTo(dest)
-	return tea.Batch(m.refreshDir(filepath.Dir(dest)), createdCmd(dest, isDir))
+	return tea.Batch(m.refreshDir(filepath.Dir(dest)), createdCmd(dest, isDir)), true
 }
 
 // exists reports whether path is present, without following a final symlink —

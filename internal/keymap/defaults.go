@@ -936,6 +936,13 @@ var darwinRows = []row{
 	// while its pane is focused and answers ctrl+l itself (clear the output,
 	// the shell habit, #2700), and in a terminal the key belongs to the shell.
 	{"ctrl+l", "editor.scrollCaretCenter", "Centre the caret line", Editor, "Editor (#2700)"},
+	// Copy-in-place in the explorer (#2697): telemetry saw cmd+d pressed and
+	// unbound there, the editor's duplicate-line chord reaching for the
+	// tree's obvious meaning — duplicate the selected entry. macOS only: off
+	// macOS the Cmd→Ctrl fold lands it on ctrl+d, which is the tree's own
+	// half-page-down (explorer.pageDown's vim key, handled in the pane's
+	// Update). Scrolling keeps the key there; the palette is the doorway.
+	{"cmd+d", "explorer.duplicate", "Duplicate entry", Explorer, "Explorer (#2697)"},
 	{"ctrl+1", "pane.focus1", "Focus pane 1", Global, "Pane numbers (#2407)"},
 	{"ctrl+2", "pane.focus2", "Focus pane 2", Global, "Pane numbers (#2407)"},
 	{"ctrl+3", "pane.focus3", "Focus pane 3", Global, "Pane numbers (#2407)"},

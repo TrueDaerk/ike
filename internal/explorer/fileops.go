@@ -482,25 +482,34 @@ func (m *Model) promptRename() {
 	if n == nil || n == m.root {
 		return
 	}
+	m.promptRenameAt(n.path, n.isDir)
+}
+
+// promptRenameAt is promptRename for an explicit path instead of the cursor
+// entry (#2697): a freshly duplicated copy is not in m.rows yet — its
+// directory rescan is still in flight — but the rename prompt must open on it
+// immediately, so cmd+d lands the user on a name they can type over. The
+// prompt anchors on the path, which is exactly how it survives that rescan.
+func (m *Model) promptRenameAt(path string, isDir bool) {
+	name := filepath.Base(path)
 	what := "file"
-	if n.isDir {
+	if isDir {
 		what = "folder"
 	}
-	path, isDir := n.path, n.isDir
-	sel := len([]rune(n.name))
+	sel := len([]rune(name))
 	if !isDir {
-		if stem := strings.TrimSuffix(n.name, filepath.Ext(n.name)); stem != "" {
+		if stem := strings.TrimSuffix(name, filepath.Ext(name)); stem != "" {
 			sel = len([]rune(stem))
 		}
 	}
 	m.prompt = &prompt{
 		kind:   promptInput,
-		title:  fmt.Sprintf("Rename %s %q to:", what, n.name),
-		input:  ui.Field{Text: n.name, Cur: sel},
+		title:  fmt.Sprintf("Rename %s %q to:", what, name),
+		input:  ui.Field{Text: name, Cur: sel},
 		selEnd: sel,
 		anchor: path,
-		accept: func(mm *Model, name string) tea.Cmd {
-			return mm.renameEntry(path, name, isDir)
+		accept: func(mm *Model, newName string) tea.Cmd {
+			return mm.renameEntry(path, newName, isDir)
 		},
 	}
 }

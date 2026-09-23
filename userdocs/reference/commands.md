@@ -467,6 +467,7 @@ bring their own.
 | Explorer: Cursor Down | `explorer.cursorDown` | — | `j / down` | `explorer` pane |
 | Explorer: Cursor Up | `explorer.cursorUp` | — | `k / up` | `explorer` pane |
 | Explorer: Delete | `explorer.delete` | — | — | `explorer` pane |
+| Explorer: Duplicate | `explorer.duplicate` | `cmd+d` | — | `explorer` pane |
 | Explorer: Expand All | `explorer.expandAll` | — | — | `explorer` pane |
 | Explorer: Expand or Open | `explorer.expandOrOpen` | — | `l / right` | `explorer` pane |
 | Explorer: Move Selection To… | `explorer.move` | — | — | `explorer` pane |
