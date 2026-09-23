@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Integrated Terminal
-description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); pinned mode docking the popup to the bottom edge with the toggle chord as a focus switch, plus a project/global popup scope that carries one shell across projects (#2406); popup focus loss blurs instead of hiding, with a statusbar activity indicator for the hidden layer (#2309), and the wheel outside the layer's boxes scrolls the pane below while the layer keeps focus (#2343); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); sending the editor's selection (else the caret's line) to a shell as a bracketed paste, optionally submitted (#2542); re-running the last shell command from anywhere, prompt-gated and without moving the keyboard (#2543); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192).
+description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); pinned mode docking the popup to the bottom edge with the toggle chord as a focus switch, plus a project/global popup scope that carries one shell across projects (#2406); popup focus loss blurs instead of hiding, with a statusbar activity indicator for the hidden layer (#2309), and the wheel outside the layer's boxes scrolls the pane below while the layer keeps focus (#2343); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); sending the editor's selection (else the caret's line) to a shell as a bracketed paste, optionally submitted (#2542); re-running the last shell command from anywhere, prompt-gated and without moving the keyboard (#2543); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192); unbound control chords forward to the pty instead of being recorded as missing keybinds, and a plain shell tab closes when its shell ends by EOF (#2701).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
 timestamp: 2026-09-23T12:00:00Z
@@ -73,7 +73,9 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
   timer goroutine while the pane clips/pads the stale-size grid;
   `Close` kills the child and releases the PTY (bounded — the loop
   joins continue in the background, #1786), and a shell `exit` sends
-  `ExitedMsg` so the root model closes the pane. A **finished** session still
+  `ExitedMsg` so the root model closes the pane — or, for a shell hosted as a
+  terminal **tab** in an editor pane (#573/#729), that tab (#2701): a shell
+  that ended by EOF left a dead husk there before. A **finished** session still
   resizes (#1951) — its output stays on screen in the exited state, so the
   divider drag must reflow it — only the closed PTY is skipped; the repaint
   after a debounced apply is sent directly, since `notify` stays silent once
@@ -537,6 +539,31 @@ back to live. Both predicates read `Model.Exited()`, not `Running()` (#2192),
 so a **pipe session past `FinishPipe`** — the DAP console, whose emulator
 stays open for trailing output — counts as finished like every other exited
 session; otherwise the finished debug area would swallow its own close chord.
+
+### Unbound chords belong to the shell (#2701)
+
+A chord the terminal context has **no** binding for is not a missing keybind —
+it is shell input. The routing above already guarantees the forwarding:
+`terminalReservedKey`, the focus moves, `terminalGlobalChord` and
+`terminalContextChord` each claim a *named* chord and everything else falls
+through to `routeKey` → `Model.Update` → `Session.SendKey`, i.e. to the PTY.
+`terminalShellEssential` (`ctrl+c`, `ctrl+d`, `ctrl+z`) additionally forbids a
+terminal-context binding from taking the POSIX interrupt/EOF/suspend strokes,
+so `ctrl+d` at an idle prompt always reaches the shell and exits it.
+
+Two consequences the telemetry made visible:
+
+- **No `unbound` events from a terminal.** `resolveKeymap` skips the
+  `unbound` usage event while `terminalOwnsUnbound()` holds — a focused live
+  terminal (the chord went to the pty) or its exited read-only view (the chord
+  is late shell input). Recording them buried the genuinely missing keybinds in
+  noise, the same way the editor's own editing chords did (#2303); the
+  playground records under its own context for the same reason.
+- **A plain shell closes its tab on EOF.** The `ExitedMsg` handler closes the
+  editor-hosted terminal tab (its whole pane when it was the only tab), so
+  `ctrl+d` behaves in a tab exactly as in a dedicated terminal pane or a popup
+  tab. Command sessions (#576) and tool sessions (#810) keep their output —
+  they are pseudo-terminals, see below.
 
 ## Closing a finished terminal (#2192)
 
