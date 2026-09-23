@@ -133,15 +133,17 @@ func (Source) Complete(_ context.Context, req complete.Request) ([]ilsp.Completi
 			SortText:   e.Trigger,
 			InsertText: e.Body,
 			IsSnippet:  true,
-			Detail:     "template " + preview(e.Body),
+			Detail:     "template " + Preview(e.Body),
 			Kind:       protocol.KindSnippet,
 		})
 	}
 	return items, nil
 }
 
-// preview flattens a body to a short single-line popup detail.
-func preview(body string) string {
+// Preview flattens a body to a short single-line description — the popup's
+// detail text, and the snippet picker's row detail (#2694), so both describe a
+// template the same way.
+func Preview(body string) string {
 	s := strings.ReplaceAll(body, "\n", " ")
 	s = strings.ReplaceAll(s, "\t", "")
 	if r := []rune(s); len(r) > 30 {

@@ -101,6 +101,7 @@ var reachableAlternatives = map[string]string{
 	"editor.splitViewRight":     "palette",
 	"editor.splitViewDown":      "palette",
 	"editor.pasteFromHistory":   "palette",
+	"snippets.insert":           "palette / trigger+tab",
 	"view.zenMode":              "palette / View menu",
 	"perf.hud":                  "palette / View menu",
 	"json.jqQueryView":          "palette / Tools menu",
