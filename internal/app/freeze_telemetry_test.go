@@ -6,6 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	tea "charm.land/bubbletea/v2"
+
+	"ike/internal/diag"
 )
 
 // freezeEvents returns the `freeze` events of the single session file the
@@ -58,7 +62,11 @@ func TestHeartbeatRecordsFreezeAndDumps(t *testing.T) {
 
 	r := newUsageRecorder()
 	r.Command("editor.save", "keybind") // opens the session file
-	w := newFreezeWatch(func() uint64 { return 4711 })
+	w := newFreezeWatch(diag.FreezeSources{
+		Passes:   func() uint64 { return 4711 },
+		InFlight: func() bool { return true }, // a pass wedged across the beats
+		Inputs:   func() uint64 { return 0 },
+	})
 	snapshot := map[string]string{"passes": "4711"}
 	recordFreeze(r, w, snapshot) // priming beat: nothing yet
 	recordFreeze(r, w, snapshot) // frozen: event + dump
@@ -104,7 +112,11 @@ func TestHeartbeatSilentWhileTheLoopRuns(t *testing.T) {
 	r := newUsageRecorder()
 	r.Command("editor.save", "keybind")
 	var passes uint64
-	w := newFreezeWatch(func() uint64 { return passes })
+	w := newFreezeWatch(diag.FreezeSources{
+		Passes:   func() uint64 { return passes },
+		InFlight: func() bool { return true },
+		Inputs:   func() uint64 { return 0 },
+	})
 	for i := 0; i < 4; i++ {
 		passes += 500
 		recordFreeze(r, w, map[string]string{"passes": "500"})
@@ -118,5 +130,72 @@ func TestHeartbeatSilentWhileTheLoopRuns(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(dir, "debug.log")); !os.IsNotExist(err) {
 		t.Errorf("live loop wrote to debug.log")
+	}
+}
+
+// An idle loop produces no `freeze` event and no dump (#2692): the pass count
+// stands still because nothing asked the loop to do anything — which is what
+// a quiet minute looks like since the idle-churn work (#2540, #2626), and
+// what used to litter `.ike/` with goroutine dumps.
+func TestHeartbeatIgnoresAnIdleLoop(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("IKE_CONFIG_DIR", dir)
+
+	r := newUsageRecorder()
+	r.Command("editor.save", "keybind")
+	w := newFreezeWatch(diag.FreezeSources{
+		Passes:   func() uint64 { return 4711 },
+		InFlight: func() bool { return false },
+		Inputs:   func() uint64 { return 7 }, // constant: no input in any interval
+	})
+	for i := 0; i < 3; i++ {
+		recordFreeze(r, w, map[string]string{"passes": "4711"})
+	}
+	w.WaitDumps()
+	r.Close()
+
+	events, dumps := freezeArtifacts(t, dir)
+	if len(events) != 0 || len(dumps) != 0 {
+		t.Fatalf("idle loop produced events %v / dumps %v", events, dumps)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "debug.log")); !os.IsNotExist(err) {
+		t.Errorf("idle loop wrote to debug.log")
+	}
+}
+
+// Input that arrived without a pass completing is a freeze (#2692), and the
+// input counter the watch reads is fed by the program's message filter — so
+// a key press reaching the filter is what makes the next quiet beat count.
+func TestHeartbeatRecordsFreezeOnPendingInput(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("IKE_CONFIG_DIR", dir)
+
+	r := newUsageRecorder()
+	r.Command("editor.save", "keybind")
+	w := newFreezeWatch(diag.FreezeSources{
+		Passes:   func() uint64 { return 4711 },
+		InFlight: func() bool { return false },
+	})
+	snapshot := map[string]string{"passes": "4711"}
+	recordFreeze(r, w, snapshot) // priming beat
+	c := NewMouseCoalescer()
+	c.Filter(nil, tea.KeyPressMsg{Code: 'a', Text: "a"}) // the user types, nothing answers
+	recordFreeze(r, w, snapshot)
+	w.WaitDumps()
+	r.Close()
+
+	events, dumps := freezeArtifacts(t, dir)
+	if len(events) != 1 || events[0]["dumped"] != "true" {
+		t.Fatalf("want one dumping freeze event, got %v", events)
+	}
+	if len(dumps) != 1 {
+		t.Fatalf("want one goroutine dump, got %v", dumps)
+	}
+	body, err := os.ReadFile(filepath.Join(dir, dumps[0]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "input messages pending") {
+		t.Errorf("dump header does not name the pending input: %.300q", body)
 	}
 }

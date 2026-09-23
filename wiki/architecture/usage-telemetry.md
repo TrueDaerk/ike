@@ -33,11 +33,11 @@ paths.** Two guards enforce it:
 ## Event schema (the analysis interface)
 
 One JSON object per line. `v` is the schema version (`telemetry.SchemaVersion`,
-currently 11); readers must tolerate unknown fields and filter on `v`.
+currently 13); readers must tolerate unknown fields and filter on `v`.
 
 ```json
-{"v":12,"ts":"2026-08-27T10:15:30.123Z","sid":"a1b2c3d4e5f6","type":"command","data":{"id":"editor.save","source":"keybind"}}
-{"v":12,"ts":"2026-08-27T10:15:31.456Z","sid":"a1b2c3d4e5f6","type":"internal","data":{"id":"lsp.documentSymbols","source":"internal"}}
+{"v":13,"ts":"2026-08-27T10:15:30.123Z","sid":"a1b2c3d4e5f6","type":"command","data":{"id":"editor.save","source":"keybind"}}
+{"v":13,"ts":"2026-08-27T10:15:31.456Z","sid":"a1b2c3d4e5f6","type":"internal","data":{"id":"lsp.documentSymbols","source":"internal"}}
 ```
 
 ### Version history (what an analysis script must branch on)
@@ -56,6 +56,7 @@ currently 11); readers must tolerate unknown fields and filter on `v`.
 | 10 | #2627 | The type `freeze` joins — one event per heartbeat interval in which the update loop completed fewer than `diag.FreezePassThreshold` (3) passes, carrying `passes` (the interval's completed passes), `since_ms` (wall time since the previous beat) and `dumped` (`true` on the beat that wrote the episode's goroutine stack dump next to the project's `debug.log`, `false` on the episode's follow-up beats and once the per-session dump cap is reached). Below v10 the same episodes are only visible indirectly, as a `passes` value standing still across consecutive heartbeats, and no dump exists. No path is recorded; dump and event are paired over `sid` and the timestamps. |
 | 11 | #2631 | The `http.flight` `error` and `canceled` end phases gain `reason`, a closed vocabulary classifying the failure — `timeout`, `dns`, `refused`, `tls`, `reset`, `canceled`, `other` — derived from the Go error by `httpclient.ClassifyError`. It separates a deadline hit from a refused connection, DNS failure or TLS rejection, which the `ms` field alone could only guess at. Structural only: never the host, URL or the error text. Below v11 absence means "not recorded". |
 | 12 | #2635 | The `palette.pick` and `palette.dismiss` events of the code-actions mode (`"!"`, the alt+enter intention popup) gain `kinds` — the action kinds that were listed, comma-joined, sorted and counted (`builtin,quickfix*2,source.organizeImports`) — and a pick adds `picked_kind`, the chosen row's own kind. A kind is an LSP `CodeActionKind`, the marker `builtin` for one of ike's own intentions, `none` for a server action that named none, or `other` for anything outside the allowed identifier vocabulary. **Never a title**, which may quote the user's code. Both fields are *omitted* for every other mode (whose rows carry no kind), so absence reads as "this mode has none" rather than "empty". Below v12 they are absent everywhere: the 33 % dismissal rate of the intention popup was visible, what it had offered was not. |
+| 13 | #2692 | The `freeze` event narrows its meaning to **"the loop went quiet while work was pending"**: a beat below the pass threshold only counts as frozen when a pass was in flight at the beat, or input (a key, a mouse event) reached the program during the interval without a pass completing. An idle-quiet interval emits no event and writes no dump. The fields are unchanged (`passes`, `since_ms`, `dumped`), so a v13 event parses like a v10..v12 one — but v10..v12 `freeze` events include false positives: since the idle-churn work (#2540, #2626) an idle loop looks exactly like a frozen one from the pass counter's side, and the three dumps in the wild all showed the loop parked in its own select. Freeze *rates* are therefore not comparable across the boundary; from v13 every `freeze` has a stuck loop behind it. |
 
 An export spanning versions therefore needs three guards: filter v1 `command`
 events on `data.source != "internal"`, treat a missing `ok`/`ms` on v4 as
@@ -126,11 +127,15 @@ counts by the version's interval before comparing sessions.
     identifiers, not user data. The goroutine lives in the recorder, starts
     with the session file and never depends on the update loop. Cost: ~1 MB
     per day-long session, inside the 5 MiB cap.
-  - `freeze` (#2627) — the verdict on a heartbeat interval the update loop
-    spent (almost) frozen: fewer than `diag.FreezePassThreshold` (3) completed
-    passes. `passes` is what the interval did complete, `since_ms` the wall
-    time it covered, `dumped` whether *this* beat wrote the episode's
-    goroutine stack dump. Before #2627 such an episode was visible only as a
+  - `freeze` (#2627, #2692) — the verdict on a heartbeat interval the update
+    loop spent stuck: fewer than `diag.FreezePassThreshold` (3) completed
+    passes **and** work pending — a pass in flight at the beat, or input that
+    arrived during the interval without a pass completing. A quiet interval
+    over an idle loop is not frozen and records nothing (since v13; before it
+    the standing pass count alone was the verdict, which the idle-churn work
+    of #2540/#2626 turned into a false-positive source). `passes` is what the
+    interval did complete, `since_ms` the wall time it covered, `dumped`
+    whether *this* beat wrote the episode's goroutine stack dump. Before #2627 such an episode was visible only as a
     `passes` value standing still across beats, with nothing saying *where*
     the loop was — the dump is that missing evidence: `runtime.Stack` of every
     goroutine, capped at 1 MiB, written by the heartbeat goroutine (never by
@@ -525,7 +530,8 @@ jq -r 'select(.type=="project.leave") | [.data.project, (.data.ms|tonumber/60000
 jq -r 'select(.type=="op" and .data.id=="project.group.open" and .data.phase!="start") | [.data.phase, .data.members, .data.skipped, .data.landed_on, .data.ms] | @tsv' ~/.ike/telemetry/*.jsonl
 # group closes: how many members went down and what it cost (v9+)
 jq -r 'select(.type=="op" and .data.id=="project.group.close" and .data.phase!="start") | [.data.phase, .data.members, .data.ms] | @tsv' ~/.ike/telemetry/*.jsonl
-# frozen update-loop intervals, and which of them left a goroutine dump (v10+)
+# frozen update-loop intervals, and which of them left a goroutine dump (v10+;
+# only v13+ events are guaranteed to be real freezes rather than idle minutes)
 jq -r 'select(.type=="freeze") | [.ts, .sid, .data.passes, .data.since_ms, .data.dumped] | @tsv' ~/.ike/telemetry/*.jsonl
 ```
 

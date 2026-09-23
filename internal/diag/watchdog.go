@@ -246,3 +246,24 @@ func wdLog(line string) {
 		logf(line)
 	}
 }
+
+// inputs counts input messages (keys, mouse) that reached the program, so a
+// heartbeat can tell "the loop was quiet because nobody typed" from "the loop
+// was quiet while input was waiting" (#2692). Bumped by NoteInput from the
+// program's message filter, read by the freeze watch.
+var inputs atomic.Uint64
+
+// NoteInput records that one input message (a key press or a mouse event)
+// arrived. Cheap by construction — one atomic add on the message path.
+func NoteInput() { inputs.Add(1) }
+
+// InputCount returns the cumulative input-message count. Consumers diff two
+// snapshots to learn whether an interval carried input at all.
+func InputCount() uint64 { return inputs.Load() }
+
+// LoopInFlight reports whether an update-loop pass is running right now. It
+// shares the stall watchdog's depth counter, so the freeze watch (#2692) and
+// the watchdog agree on what "in a pass" means: the freeze watch only calls
+// an interval frozen when a pass is actually in flight (or input was waiting
+// on one), never when a quiet loop simply had nothing to do.
+func LoopInFlight() bool { return wd.depth.Load() > 0 }

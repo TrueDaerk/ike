@@ -133,7 +133,19 @@ import (
 // nothing. Without them the 33 % dismissal rate of the intention popup cannot
 // be explained: the log showed that two to four rows were rejected, never
 // what they offered. Absence below v12 means "not recorded".
-const SchemaVersion = 12
+//
+// v13 (#2692): the "freeze" event narrows its meaning to "the update loop
+// went quiet while work was pending". A beat below diag.FreezePassThreshold
+// is only frozen when a pass was in flight at the beat, or input (a key, a
+// mouse event) reached the program during the interval without a pass
+// completing; an idle-quiet interval emits nothing and writes no dump. The
+// fields are unchanged ("passes", "since_ms", "dumped"), so a v13 event reads
+// like a v10..v12 one — but a v10..v12 "freeze" may be a false positive (the
+// idle-churn work of #2540/#2626 left an idle loop looking exactly like a
+// frozen one from the pass counter's side), while from v13 every "freeze" has
+// a stuck loop behind it. Frequency across the boundary is therefore not
+// comparable.
+const SchemaVersion = 13
 
 // defaultFlushInterval is how often the writer goroutine flushes the
 // bufio.Writer on its own, independent of buffer fill or explicit Flush
@@ -154,7 +166,7 @@ const (
 	TypePaletteDismiss = "palette.dismiss" // a palette mode closed without a pick (#2408)
 	TypePalettePick    = "palette.pick"    // a palette row was activated: which rank, out of how many (#2551)
 	TypeProjectLeave   = "project.leave"   // foreground time spent in the project being left (#2408)
-	TypeFreeze         = "freeze"          // a heartbeat interval the update loop spent (almost) frozen (#2627)
+	TypeFreeze         = "freeze"          // a heartbeat interval the update loop spent stuck with work pending (#2627, #2692)
 )
 
 // Operation ids for the op lifecycle events (#2348, #2403). Callers outside
@@ -463,10 +475,12 @@ func (r *Recorder) ProjectLeave(project, reason string, d time.Duration) {
 }
 
 // Freeze records a heartbeat interval in which the update loop completed
-// (almost) no passes (#2627): passes is what the interval did complete, since
-// the wall time it covered, dumped whether this beat wrote the episode's
-// goroutine stack dump. Structure only — the dump's path stays out of the
-// log; the session id and the timestamp pair the two.
+// (almost) no passes while work was pending (#2627, #2692): passes is what
+// the interval did complete, since the wall time it covered, dumped whether
+// this beat wrote the episode's goroutine stack dump. Callers pre-filter the
+// idle-quiet intervals (diag.FreezeWatch), so every recorded event means a
+// stuck loop. Structure only — the dump's path stays out of the log; the
+// session id and the timestamp pair the two.
 func (r *Recorder) Freeze(passes uint64, since time.Duration, dumped bool) {
 	if since < 0 {
 		since = 0

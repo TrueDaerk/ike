@@ -72,7 +72,7 @@ func newUsageRecorder() *telemetry.Recorder {
 	// would only ever name the session's loudest type. Safe without a lock:
 	// telemetry calls the payload func from its single heartbeat goroutine.
 	var prev map[string]uint64
-	freeze := newFreezeWatch(diag.LoopPasses)
+	freeze := newFreezeWatch(diag.FreezeSources{})
 	r.SetHeartbeat(telemetryHeartbeatInterval, func() map[string]string {
 		cur := diag.MessageCounts()
 		p := map[string]string{"passes": strconv.FormatUint(diag.LoopPasses(), 10)}
@@ -90,10 +90,11 @@ func newUsageRecorder() *telemetry.Recorder {
 // dumps land next to debug.log — the same state-dir discovery the stall
 // watchdog uses, resolved at dump time so a project switch is followed — and
 // the one-line pointers go through logDiagnostic, a plain file append that
-// never depends on the loop being diagnosed. passes is the loop's pass
-// counter (diag.LoopPasses in the session, a stub in tests).
-func newFreezeWatch(passes func() uint64) *diag.FreezeWatch {
-	return diag.NewFreezeWatch(passes,
+// never depends on the loop being diagnosed. src carries the watch's signal
+// sources; the zero value reads the process-wide counters (the session),
+// tests substitute stubs.
+func newFreezeWatch(src diag.FreezeSources) *diag.FreezeWatch {
+	return diag.NewFreezeWatch(src,
 		func() string { return filepath.Dir(debugLogFile()) }, logDiagnostic)
 }
 
