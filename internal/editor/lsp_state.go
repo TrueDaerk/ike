@@ -391,6 +391,24 @@ func (m Model) DiagnosticCounts() (errors, warnings int) {
 
 // --- completion popup ---
 
+// TriggerCompletion requests completion at the caret on demand — JetBrains'
+// Basic Completion (#2695), the editor side of the completion.trigger command
+// bound to ctrl+space. It emits the same manual trigger the "." auto-trigger
+// uses with an empty Char, so the LSP bridge and every local source answer at
+// once: no identifier-rune delay, no trigger-character or completion-context
+// gate, the word before the caret as the popup's filter. With the popup
+// already open the re-emit re-queries (an incomplete server answer is worth
+// asking again). Outside insert mode it is a silent no-op — reported by the
+// returned bool, which the app ignores: a normal-mode ctrl+space does
+// nothing rather than raising an error.
+func (m *Model) TriggerCompletion() bool {
+	if m.mode != Insert {
+		return false
+	}
+	m.emit(EventCompletionTrigger)
+	return true
+}
+
 // openCompletion shows the popup if the request still matches the cursor (the
 // trigger position must be the current line and at or before the cursor), or
 // merges the batch into an already-open popup for the same request position

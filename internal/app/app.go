@@ -7862,6 +7862,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// path the settled pass takes (#2541).
 		return m, m.applyEditorSync(msg)
 
+	case ilsp.CompletionTriggerMsg:
+		// completion.trigger (#2695): ctrl+space asks for the popup at the
+		// caret right away — the LSP request plus every local source, no
+		// identifier-rune delay. In normal mode there is nothing to complete,
+		// so the editor answers false and the chord stays a silent no-op.
+		if ed := m.activeEditor(); ed != nil {
+			ed.TriggerCompletion()
+		}
+		return m, nil
+
 	case ilsp.DiagnosticInfoMsg:
 		// lsp.diagnosticInfo (#739): show the caret line's diagnostics in the
 		// hover popup — message, severity, source and rule code, so a false

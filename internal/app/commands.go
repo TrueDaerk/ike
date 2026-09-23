@@ -10,6 +10,7 @@ import (
 	"ike/internal/intention"
 	"ike/internal/jqplay"
 	"ike/internal/layout"
+	ilsp "ike/internal/lsp"
 	"ike/internal/plugin"
 	"ike/internal/project"
 	"ike/internal/registry"
@@ -709,6 +710,12 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),
 			langCommand(appCommand("markdown.preview", "Markdown Preview", MarkdownPreviewMsg{}), []string{"markdown"}),
 			appCommand("preview.rerenderDiagrams", "Re-render Preview Diagrams", RerenderDiagramsMsg{}),
+			// JetBrains' Basic Completion (#2695): ctrl+space opens the
+			// popup at the caret on demand — after an esc dismissed it, at a
+			// position no trigger character reaches, or a second time to
+			// re-ask a server that answered incompletely. Editor-scoped: the
+			// caret is the request.
+			paneCommand("completion.trigger", "Basic Completion", "editor", ilsp.CompletionTriggerMsg{}),
 			appCommand("editor.setBufferLanguage", "Treat Buffer as…", ShowBufferLangMsg{}),
 			appCommand("editor.materializeBuffer", "Materialize Buffer to File", MaterializeBufferMsg{}),
 			appCommand("diff.files", "Diff Two Files…", DiffFilesMsg{}),

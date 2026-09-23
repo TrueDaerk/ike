@@ -309,6 +309,13 @@ var jetbrainsRows = []row{
 	// terminal's option-as-meta setting, hence fragile; 0081 owns the final
 	// reachability call.
 	{"alt+enter", "lsp.codeAction", "Show intention actions", Editor, "LSP (0100)"},
+	// JetBrains Basic Completion (#2695): ctrl+space opens the completion
+	// popup at the caret on demand, so a dismissed popup or a position no
+	// trigger character reaches is one chord away. Ghostty, Kitty and WezTerm
+	// deliver it as ctrl+space under the Kitty protocol; a terminal on the
+	// legacy encoding sends the C0 NUL the same key produces (ctrl+@), which
+	// ParseKey folds onto this chord — one binding covers both spellings.
+	{"ctrl+space", "completion.trigger", "Basic completion", Editor, "Completion (#2695)"},
 	{"cmd+1", "explorer.toggle", "Toggle project tree", Global, "Explorer (05)"},
 	// Pinned file slots (#788), the IntelliJ mnemonic-bookmark spirit.
 	// ctrl+digit is unavailable (cmd+digit tool-window chords fold onto it on

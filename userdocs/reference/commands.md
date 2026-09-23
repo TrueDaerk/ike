@@ -38,6 +38,7 @@ bring their own.
 | Previous Bookmark | `bookmark.previous` | `ctrl+shift+f11` | — | everywhere |
 | Toggle Bookmark | `bookmark.toggle` | `f11` | — | everywhere |
 | Toggle Bookmark with Mnemonic | `bookmark.toggleMnemonic` | `alt+f3` | — | everywhere |
+| Basic Completion | `completion.trigger` | `ctrl+space` | — | `editor` pane |
 | Toggle Coverage Marks | `coverage.toggle` | — | — | everywhere |
 | CSV: Column Profile | `csv.columnProfile` | — | — | `editor` pane |
 | Data: Column Profile | `data.columnProfile` | — | — | `data` pane |

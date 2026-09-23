@@ -115,5 +115,14 @@ func ParseKey(s string) (Key, error) {
 	if canon, ok := baseAlias[base]; ok {
 		base = canon
 	}
+	// ctrl+@ is ctrl+space on the legacy encoding (#2695): both keys produce
+	// the C0 NUL, and a terminal without the Kitty protocol can only report
+	// the byte, which bubbletea spells "ctrl+@". Folding it here — not in
+	// baseAlias, where a bare "@" would fold too — means one binding covers
+	// the chord in every terminal, whichever spelling arrives and whichever
+	// the user writes in settings.toml.
+	if base == "@" && mods == ModCtrl {
+		base = "space"
+	}
 	return Key{Base: base, Mods: mods}, nil
 }

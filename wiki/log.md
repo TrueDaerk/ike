@@ -1,5 +1,25 @@
 # Log
 
+## 2026-09-23 (Basic Completion on demand, #2695)
+
+- **`ctrl+space` was not a command.** The editor answered the chord in its
+  insert-mode key switch, so it could not be rebound, never appeared in the
+  palette, the cheatsheet or the keymap editor, and the telemetry logged it as
+  an unbound chord. It is now the registered `completion.trigger` ("Basic
+  Completion", editor-scoped) with a default Editor binding.
+- **What it does.** The command dispatches `lsp.CompletionTriggerMsg`; the
+  focused editor's `TriggerCompletion` emits a char-less completion trigger,
+  the manual-request marker that makes the LSP bridge and every local source
+  answer immediately — no `lsp.completion_delay_ms`, no trigger-character or
+  completion-context gate — filtered by the word already typed. With the popup
+  open it re-requests (the way out of an `isIncomplete` answer); in normal mode
+  it is a silent no-op.
+- **One chord, two spellings.** Under the Kitty protocol the key arrives as
+  `ctrl+space`; on the legacy encoding it is the C0 NUL, spelled `ctrl+@`.
+  `keymap.ParseKey` folds `ctrl+@` onto `ctrl+space`, so the single default
+  binding (and any rebinding of it) covers both, in the table and in
+  `settings.toml`.
+
 ## 2026-09-22 (File finder matches with the hump matcher, #2686)
 
 - **`@` matched far too much.** The finder filtered with the permissive
