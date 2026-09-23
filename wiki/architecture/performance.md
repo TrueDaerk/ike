@@ -440,12 +440,28 @@ said *that* the loop went quiet and nothing about where.
 
 `diag.FreezeWatch` closes that gap from the heartbeat goroutine — which by
 construction is not the loop. Every beat diffs `diag.LoopPasses`; an interval
-below `diag.FreezePassThreshold` (3 passes) counts as frozen. The threshold is
-deliberately not zero: an idle IKE still wakes on the clock segment, the
-backup debounce and the VCS/forge polls, so "almost nothing moved" is the real
-signature, and the occasional benign dump from a genuinely dead-quiet minute
-is cheap and easy to recognize (its stacks show the loop parked in its own
-select).
+below `diag.FreezePassThreshold` (3 passes) is a *candidate*. The threshold is
+deliberately not zero: an idle IKE still wakes on a few timers, so "almost
+nothing moved" is the real signature of a stuck loop.
+
+A standing pass count alone is not the verdict (#2692). Since the idle-churn
+work (#2540, #2626) removed most periodic wake-ups, a quiet minute over an
+idle loop is indistinguishable from a frozen one by the counter — and the
+three dumps the wild produced (2026-09-21, one session, 27 minutes) all showed
+the main goroutine parked in `bubbletea.(*Program).eventLoop`'s select with
+nothing runnable. A candidate interval is therefore only frozen when the loop
+owed someone a pass:
+
+- **a pass was in flight** at the beat — `diag.LoopInFlight`, the stall
+  watchdog's own depth counter, so both diagnostics agree on what "in a pass"
+  means; or
+- **input arrived** during the interval without a pass completing —
+  `diag.NoteInput`/`diag.InputCount`, bumped for keys and mouse events in the
+  program's one input chokepoint, `MouseCoalescer.Filter`.
+
+An idle-quiet interval reports neither event nor dump, and closes any open
+episode. The dump header names which of the two signals fired, so a reader
+knows whether to look for a wedged pass or for input nobody answered.
 
 The first frozen beat of an episode writes `runtime.Stack` of every goroutine,
 capped at 1 MiB, to `ike-freeze-<pid>-<stamp>-<n>-goroutines.txt` next to
@@ -457,7 +473,8 @@ disk nor the wedged loop can hold the next beat up. One dump per episode,
 three per session; an episode re-arms as soon as a beat sees the loop running
 again. Every frozen beat — dumping or not — also records a `freeze` telemetry
 event (`passes`, `since_ms`, `dumped`), so the usage log and the dump on disk
-pair up over the session id and the timestamps.
+pair up over the session id and the timestamps; from schema v13 (#2692) such
+an event always means "stuck with work pending", never "quiet minute".
 
 ## The update-loop trace log (`perf.trace_log`, #2348)
 

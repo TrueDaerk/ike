@@ -7,6 +7,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/diag"
 	"ike/internal/pane"
 	"ike/internal/terminal"
 )
@@ -101,7 +102,13 @@ func (c *MouseCoalescer) SetSender(send func(tea.Msg)) {
 // Filter is the tea.WithFilter hook. Wheel and motion events are absorbed (return
 // nil → bubbletea skips Update+render for them); everything else passes through
 // untouched, so keys and clicks are never delayed or dropped.
+//
+// It is also the program's one input chokepoint, so it is where the freeze
+// watch learns that input arrived (#2692): a quiet heartbeat interval only
+// counts as frozen when the loop owed someone a pass, and an unanswered key
+// or click is exactly that debt. One atomic add per input message.
 func (c *MouseCoalescer) Filter(_ tea.Model, msg tea.Msg) tea.Msg {
+	noteInput(msg)
 	switch m := msg.(type) {
 	case tea.MouseWheelMsg:
 		c.absorb(func() { c.wheels = append(c.wheels, m) })
@@ -119,6 +126,17 @@ func (c *MouseCoalescer) Filter(_ tea.Model, msg tea.Msg) tea.Msg {
 		return nil
 	default:
 		return msg
+	}
+}
+
+// noteInput counts the input messages — key presses and mouse events — that
+// reached the program, for the freeze watch's "was anybody waiting?" test
+// (#2692). Everything else (timers, async results, resizes) is the loop's own
+// churn and says nothing about a user waiting on a stuck frame.
+func noteInput(msg tea.Msg) {
+	switch msg.(type) {
+	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseReleaseMsg, tea.MouseWheelMsg, tea.MouseMotionMsg:
+		diag.NoteInput()
 	}
 }
 

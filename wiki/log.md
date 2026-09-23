@@ -1,5 +1,38 @@
 # Log
 
+## 2026-09-23 (Freeze detector fires only when work is pending, #2692)
+
+- **Three dumps for an idle loop.** The freeze detector (#2627) called a
+  heartbeat interval frozen whenever fewer than `diag.FreezePassThreshold`
+  (3) update-loop passes completed. Telemetry of 2026-09-21 (one session,
+  27 minutes) produced three `freeze` events with a goroutine dump each, and
+  all three showed the main goroutine parked in
+  `bubbletea.(*Program).eventLoop`'s select with nothing runnable: the loop
+  was not stuck, it had simply received no message for a minute. Since the
+  idle-churn work (#2540, #2626) removed most periodic wake-ups, "few passes"
+  is what a *quiet* loop looks like — so the detector littered `.ike/` with
+  dumps and the `freeze` event lost its meaning.
+- **A candidate interval now needs evidence of pending work.** Below the pass
+  threshold, `diag.FreezeWatch.Beat` only returns a verdict when a pass was
+  **in flight** at the beat — `diag.LoopInFlight`, the stall watchdog's own
+  depth counter, so both diagnostics agree on what "in a pass" means — or
+  **input arrived** during the interval without a pass completing
+  (`diag.NoteInput`/`diag.InputCount`, bumped for keys and mouse events in
+  the program's one input chokepoint, `MouseCoalescer.Filter`). An
+  idle-quiet interval reports nothing, writes no dump and closes any open
+  episode.
+- **The dump header names which signal fired** ("a pass in flight", "2 input
+  messages pending"), so a reader knows whether to look for a wedged pass or
+  for input nobody answered. Dump cap, episode rule and the `debug.log` line
+  are unchanged.
+- **`telemetry.SchemaVersion` → 13**, with the `freeze` fields unchanged: a
+  v13 event parses like a v10..v12 one, but only from v13 does every `freeze`
+  have a stuck loop behind it, so freeze *rates* are not comparable across
+  the boundary.
+- Docs: [Performance](/architecture/performance.md) (freeze-dump section),
+  [Usage Telemetry](/architecture/usage-telemetry.md) (schema row v13 and the
+  `freeze` event description).
+
 ## 2026-09-22 (File finder matches with the hump matcher, #2686)
 
 - **`@` matched far too much.** The finder filtered with the permissive
