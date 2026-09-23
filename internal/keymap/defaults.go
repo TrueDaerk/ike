@@ -12,6 +12,18 @@ type row struct {
 	owner   string
 }
 
+// multiRow is a row that ships in more than one context (#2698). It exists
+// so a chord meant for "any content pane" is stated once, with the contexts
+// it covers in one place, instead of as a column of near-identical rows.
+// DefaultsFor expands it into one plain row per context.
+type multiRow struct {
+	chord   string
+	command string
+	title   string
+	ctxs    []Context
+	owner   string
+}
+
 // jetbrainsRows is the JetBrains-flavoured default set (Roadmap 0080's table).
 // Each row binds a chord to a command id owned by another roadmap; commands not
 // yet registered make the binding inert until their owner lands. Chords use
@@ -189,7 +201,14 @@ var jetbrainsRows = []row{
 	// reaches them intact precisely because the chord stays unbound.
 	{"cmd+f", "search.open", "Find in pane", Global, "Search (#2409)"},
 	{"cmd+r", "editor.replace", "Replace in file", Editor, "Editor (06)"},
+	// ctrl+shift+f is the delivered twin of the Cmd chord (#2698): find in
+	// path is one of the chords reached for from a viewer pane, where only a
+	// Cmd-forwarding terminal delivers the primary. Plain ctrl+f stays
+	// unbound for the reason spelled out at search.open above (vim's page
+	// forward); the shift layer is free of that, and off macOS the two rows
+	// fold onto one binding.
 	{"cmd+shift+f", "project.findInPath", "Find in path", Global, "Project (09)"},
+	{"ctrl+shift+f", "project.findInPath", "Find in path", Global, "Project (#2698)"},
 	{"cmd+shift+r", "project.replaceInPath", "Replace in path", Global, "Project (09)"},
 	// Find in All Projects (#2394): one modifier layer above find-in-path,
 	// like copyDocPath sits above copy. The results chord mirrors it on r.
@@ -355,15 +374,8 @@ var jetbrainsRows = []row{
 	{"alt+e", "editor.tab.picker", "Switch tab (recent tabs)", Global, "Editor tabs (0190)"},
 	{"cmd+shift+t", "editor.tab.reopenClosed", "Reopen closed tab", Global, "Editor tabs (0190)"},
 	{"alt+shift+t", "editor.tab.reopenClosed", "Reopen closed tab", Global, "Editor tabs (0190)"},
-	// Pin/unpin tab (#1172, chord in #2640): a pin holds a tab through the
-	// tab-limit eviction and the batch closes, so it is an everyday tab
-	// action, not a menu-only one. JetBrains has no default chord for Pin Tab.
-	// Collision check: cmd+alt+p is out — it folds onto ctrl+alt+p (the perf
-	// HUD) off macOS, the same reason playground.open avoided it; alt+shift+p
-	// is unclaimed on both platforms and continues the editor-tab alt+shift
-	// family next to alt+shift+t's reopen. Editor-scoped: the active tab of
-	// the focused editor pane is what it pins.
-	{"alt+shift+p", "editor.tab.togglePin", "Pin/unpin tab", Editor, "Editor tabs (#2640)"},
+	// Pin/unpin tab (#1172, chord in #2640) sits in multiRows below, with the
+	// rest of the tab chords the viewer contexts share.
 	// Follow mode (#1928): tail -f for the open file, less-F style.
 	{"alt+shift+f", "view.toggleFollow", "Toggle follow (tail -f)", Editor, "Follow mode (#1928)"},
 	// Live filter over the tailed output (#2255); highlight-only mode and the
@@ -493,15 +505,14 @@ var jetbrainsRows = []row{
 	{"alt+shift+r", "terminal.rerunLast", "Re-run last shell command", Global, "Terminal (#2543)"},
 	// Per-context ctrl+t (#1794), the showcase of one chord doing the
 	// pane-appropriate thing per context: a new terminal tab with a terminal
-	// focused, a new empty editor tab with an editor focused. Disjoint
-	// contexts, so neither row conflicts with nor shadows the other; in every
-	// other pane the chord stays unbound. The terminal row is deliberately
-	// carved out of the shell forwarding (readline's rarely-used
+	// focused, a new empty editor tab in every pane that has tabs (the
+	// editor half lives in multiRows below, since #2698). Disjoint contexts,
+	// so no row conflicts with or shadows another. The terminal row is
+	// deliberately carved out of the shell forwarding (readline's rarely-used
 	// transpose-chars loses to the tab chord — iTerm and JetBrains both spend
 	// this position on new-tab); `keymap.bindings."terminal.ctrl+t" = ""`
 	// hands it back to the shell.
 	{"ctrl+t", "terminal.newTab", "New terminal tab", Terminal, "Terminal (#1794)"},
-	{"ctrl+t", "editor.tab.new", "New empty editor tab", Editor, "Editor tabs (#1794)"},
 	// New terminal session and notification history: single chords since the
 	// leader layer retired (#711); JetBrains has no defaults for either.
 	{"cmd+alt+shift+t", "terminal.new", "New terminal", Global, "Terminal (0170)"},
@@ -705,8 +716,13 @@ var jetbrainsRows = []row{
 	// they bookmark the caret's line.
 	{"f11", "bookmark.toggle", "Toggle bookmark", Editor, "Bookmarks (#55)"},
 	{"alt+f3", "bookmark.toggleMnemonic", "Toggle bookmark with mnemonic", Editor, "Bookmarks (#55)"},
-	{"shift+f11", "bookmark.next", "Next bookmark", Editor, "Bookmarks (#55)"},
-	{"ctrl+shift+f11", "bookmark.previous", "Previous bookmark", Editor, "Bookmarks (#55)"},
+	// Stepping is Global since #2698: telemetry saw shift+f11 pressed in the
+	// notebook viewer, and the step needs no caret at all — with no editor
+	// focused it starts at the project's first bookmark and routes through
+	// the normal open funnel (stepBookmark). Toggling above stays editor-only:
+	// it bookmarks the caret line, which a viewer has not got.
+	{"shift+f11", "bookmark.next", "Next bookmark", Global, "Bookmarks (#2698)"},
+	{"ctrl+shift+f11", "bookmark.previous", "Previous bookmark", Global, "Bookmarks (#2698)"},
 	// Second unbound-command audit (#2305): commands are driven by keybind far
 	// more often than by the palette, so an everyday action that ships
 	// palette-only is effectively invisible. These are the palette-only
@@ -815,6 +831,58 @@ var jetbrainsRows = []row{
 	{"cmd+alt+shift+o", "file.openAs", "Open file as…", Global, "App (#2420)"},
 }
 
+// ViewerContexts are the read-only content panes (#2698): an archive listing,
+// a hex dump, a notebook, a diff, a data grid and the markdown/image preview
+// (which share the "preview" context id). They hold a file the way an editor
+// does — one sits in them and reads — but they have no caret and no buffer
+// text, so the editor context's *navigation* chords used to stop at their
+// door while the Global ones went through. multiRows below closes that gap;
+// cmd/ike/viewernav_audit_test.go is the standing ledger for it.
+//
+// Tool windows are deliberately not in the set: they are stepped through and
+// left, not read in, and the Global scope already serves them.
+var ViewerContexts = []Context{Archive, Hex, Notebook, Diff, Data, Preview}
+
+// multiRows are the default bindings that ship in the editor context *and* in
+// the viewer contexts (#2698): navigation chords whose command never touches
+// buffer text, so "which pane has focus" does not change what they mean. Each
+// row names its contexts explicitly rather than taking ViewerContexts whole —
+// a viewer that spends the chord on a pane key of its own keeps it, and the
+// audit ledger records why.
+//
+// Global would be the shorter spelling for all three, and is wrong for all
+// three: every one of these chords is claimed by some *other* context (the
+// terminal's ctrl+t, the notebook's and the diff viewer's ctrl+e), and a
+// Global row resolves ahead of the pane that owns the key there.
+var multiRows = []multiRow{
+	// The delivered twin of cmd+e's recent-files palette. Telemetry saw
+	// ctrl+e pressed in the archive viewer: cmd+e is Global and does reach
+	// the pane, but only from a terminal that forwards Cmd, so the chord
+	// people actually press recorded as unbound. Two viewers are left out on
+	// purpose, both spending ctrl+e on a pane key: the notebook scrolls one
+	// line with it (nbview's vim-style ctrl+e/ctrl+y) and the diff viewer
+	// returns from edit mode with it (#496).
+	{"ctrl+e", "palette.recentFiles", "Recent files",
+		[]Context{Editor, Archive, Hex, Data, Preview}, "Palette (#2698)"},
+	// The tab chords. A viewer opens as a tab of an editor pane (#1778), so
+	// "open a new tab" and "pin this tab" mean there exactly what they mean
+	// with a document open — and both commands resolve the pane, not a
+	// buffer (newEditorTab, togglePinTab). ctrl+t keeps the terminal context
+	// row above: disjoint pane contexts, so neither shadows the other.
+	//
+	// The pin (#1172, chord in #2640) holds a tab through the tab-limit
+	// eviction and the batch closes, so it is an everyday tab action, not a
+	// menu-only one. JetBrains has no default chord for Pin Tab; collision
+	// check: cmd+alt+p is out — it folds onto ctrl+alt+p (the perf HUD) off
+	// macOS, the same reason playground.open avoided it — while alt+shift+p
+	// is unclaimed on both platforms and continues the editor-tab alt+shift
+	// family next to alt+shift+t's reopen.
+	{"ctrl+t", "editor.tab.new", "New empty editor tab",
+		append([]Context{Editor}, ViewerContexts...), "Editor tabs (#2698)"},
+	{"alt+shift+p", "editor.tab.togglePin", "Pin/unpin tab",
+		append([]Context{Editor}, ViewerContexts...), "Editor tabs (#2698)"},
+}
+
 // darwinRows are default bindings that only ship on macOS: chords whose
 // logical Cmd has no useful folded form elsewhere, because platform.go's
 // Cmd→Ctrl fold would land them on a chord another default already owns.
@@ -863,9 +931,17 @@ func Defaults(preset string) []Binding {
 // macOS-only chord is never judged under the Cmd→Ctrl fold.
 func DefaultsFor(preset, goos string) []Binding {
 	// Only one preset exists today; reserved for future presets (vscode, etc.).
-	rows := jetbrainsRows
+	rows := append([]row{}, jetbrainsRows...)
+	// The multi-context navigation rows (#2698) expand into one plain row
+	// per context, so everything downstream — conflict detection, the
+	// cheatsheet, the status matrix — sees ordinary bindings.
+	for _, m := range multiRows {
+		for _, ctx := range m.ctxs {
+			rows = append(rows, row{m.chord, m.command, m.title, ctx, m.owner})
+		}
+	}
 	if goos == "darwin" {
-		rows = append(append([]row{}, rows...), darwinRows...)
+		rows = append(rows, darwinRows...)
 	}
 	out := make([]Binding, 0, len(rows))
 	for _, r := range rows {

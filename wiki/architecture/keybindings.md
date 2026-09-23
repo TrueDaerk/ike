@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts plus language-scoped editor bindings, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-09-23T12:00:00Z
+timestamp: 2026-09-23T18:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -492,8 +492,10 @@ run-context-configuration chord; the macOS `ctrl+shift+r` would collide with
 the JetBrains *Windows* chords, since the macOS Toggle Bookmark chord (`f3`)
 is `search.nextMatch` here: `bookmark.toggle` (`f11`), `bookmark.next`
 (`shift+f11`), `bookmark.previous` (`ctrl+shift+f11`), plus the macOS
-mnemonic chord `alt+f3` for `bookmark.toggleMnemonic`; all editor-scoped,
-since they act on the caret's line. Everything else stays palette-only
+mnemonic chord `alt+f3` for `bookmark.toggleMnemonic`. The two *toggles*
+are editor-scoped, since they act on the caret's line; the two *steps* are
+Global since #2698 — stepping needs no caret (see
+[the viewer-navigation section](#editor-level-navigation-in-the-viewer-panes-2698)). Everything else stays palette-only
 deliberately: enumerated variants (`scratch.new.*`, `themes.select.*`,
 `file.setEncoding.*`/`file.setLineEndings.*`), pane-local commands the pane
 already keys (`explorer.*` speed keys, terminal pass-through), commands with a
@@ -1280,6 +1282,84 @@ to last tool window) and `cmd+alt+up` (previous occurrence), stay unbound:
 neither command exists, and the reason is recorded in the chord ledger of
 `cmd/ike/keybind_audit_test.go`.
 
+## Editor-level navigation in the viewer panes (#2698)
+
+The **viewer panes** — the archive listing, the hex dump, the notebook, the
+diff, the data grid and the markdown/image preview (the last two share the
+`preview` context id) — hold a file the way an editor does: one sits in them
+and reads. They advertise their own context since the #1794 audit, so they got
+the Global rows and nothing else, while the chords the `editor` context owned
+alone stopped at their door. Telemetry of 2026-09-18..23 caught it twice in
+one week: `ctrl+e` pressed in the archive viewer and `shift+f11` in the
+notebook, both recorded `unbound`.
+
+The audit rule: a default binding in the `editor` context whose command is
+pure **navigation** — it opens a picker, walks the project, or handles tabs,
+and never touches buffer text — belongs in the viewer contexts too. The
+families that count are `palette.*`, `project.*`, `nav.*`, `bookmark.*`,
+`search.*`, `editor.tab.*`, `pane.*` and `window.*`; everything else
+(`editor.*`, `lsp.*`, `http.*`, `run.*`, `view.*`) acts on a buffer, a caret
+or a symbol and has no meaning in a pane that holds none.
+
+Walking the table left five commands, and three of them moved:
+
+| chord | command | before | after |
+|---|---|---|---|
+| `ctrl+e` | `palette.recentFiles` | unbound everywhere (`cmd+e` was Global) | `editor` + `archive`/`hex`/`data`/`preview` |
+| `ctrl+t` | `editor.tab.new` | `editor` | `editor` + every viewer context |
+| `alt+shift+p` | `editor.tab.togglePin` | `editor` | `editor` + every viewer context |
+| `f11` | `bookmark.toggle` | `editor` | unchanged — needs a caret line |
+| `alt+f3` | `bookmark.toggleMnemonic` | `editor` | unchanged — needs a caret line |
+
+Two more chords came along for the reasons the issue named, without being
+`editor`-scoped to begin with: `shift+f11` / `ctrl+shift+f11`
+(`bookmark.next` / `bookmark.previous`) moved from `editor` to **Global** —
+`stepBookmark` (`internal/app/bookmarks_store.go`) reads the caret only to
+decide *where to resume*, and with no editor focused it starts at the
+project's first bookmark and routes through the normal open funnel — and
+`ctrl+shift+f` joined `cmd+shift+f` as the delivered twin of `project.findInPath`,
+the same primary/secondary split `project.switch` and friends already use.
+`cmd+shift+o` (`project.goToFile`) and `cmd+shift+e` / `ctrl+shift+e`
+(`project.switchLast`) were Global already; the policy test asserts they stay
+that way.
+
+### `multiRows`: one statement, several contexts
+
+A chord meant for "any content pane" is stated once, in `multiRows`
+(`defaults.go`), with the contexts it covers next to it; `DefaultsFor` expands
+each entry into one plain `row` per context, so conflict detection, the
+cheatsheet, the settings keymap page and the status matrix see ordinary
+bindings and need no special case. `ViewerContexts` names the set.
+
+**Global would have been the shorter spelling, and is wrong for all three.**
+Every one of these chords is claimed by some *other* context, and a Global row
+resolves ahead of the pane that owns the key there:
+
+- `ctrl+t` is `terminal.newTab` in the `terminal` context (#1794).
+- `ctrl+e` is the **notebook's** scroll-one-line key (`nbview`'s vim-style
+  `ctrl+e` / `ctrl+y`, next to its `ctrl+d` / `ctrl+u` half pages) and the
+  **diff viewer's** return from edit mode (#496). Those two viewers therefore
+  keep the key and are excused in the ledger; the palette stays their doorway
+  to recent files, as does `cmd+e`.
+
+The same rule the pane-internal keys have always had holds throughout: only
+modifier chords move. A viewer's `j`/`k`, `/`, `e`, `y`, `o` and `r` never
+enter the table, so they keep reaching the pane intact.
+
+### The ledger
+
+`cmd/ike/viewernav_audit_test.go` is the standing guard, the viewer twin of
+the unbound-command ledger in `keybind_audit_test.go`. It walks every
+`editor`-context default on **both** platforms (the `Cmd`→`Ctrl` fold makes a
+chord land differently off macOS, and a one-platform gap is still a gap),
+and for a navigation command requires the same chord to resolve to the same
+command in every viewer context — or an entry in `viewerNavExceptions`, keyed
+either by command id (editor-only everywhere) or by `command@context` (one
+viewer claims the chord). Stale entries fail too, so an exception cannot
+outlive its reason. A second test checks the audit *list* itself in, so a new
+`editor`-only navigation binding is a decision someone records rather than a
+row that slips in.
+
 ## The line-editing family and the pane chords (#2400)
 
 A second telemetry export (two sessions, ~9,900 events) left 37 presses on
@@ -1296,6 +1376,7 @@ JetBrains is:
 | `bookmark.previous` | `ctrl+shift+f11` | delivered | `—` | live |
 | `bookmark.toggle` | `f11` | delivered | `—` | live |
 | `bookmark.toggleMnemonic` | `alt+f3` | fragile | `palette / Navigate menu` | live via palette / Navigate menu |
+| `completion.trigger` | `ctrl+space` | delivered | `—` | live |
 | `debug.breakpointProperties` | `cmd+alt+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.breakpoints` | `cmd+shift+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.console` | `cmd+5` | fragile | `palette` | live via palette |
@@ -1436,7 +1517,7 @@ JetBrains is:
 | `notifications.history` | `cmd+alt+n` | fragile | `palette` | live via palette |
 | `palette.bindLastPick` | `cmd+alt+k` | fragile | `palette / the bind-a-key toast after repeated palette picks` | live via palette / the bind-a-key toast after repeated palette picks |
 | `palette.keymapHelp` | `f1` | delivered | `—` | live |
-| `palette.recentFiles` | `cmd+e` | fragile | `palette` | live via palette |
+| `palette.recentFiles` | `cmd+e` | fragile | `ctrl+e` | live via ctrl+e |
 | `palette.searchEverywhere` | `cmd+shift+a` | fragile | `palette (esc esc)` | live via palette (esc esc) |
 | `pane.close` | `ctrl+alt+w` | fragile | `palette / pane context menu` | live via palette / pane context menu |
 | `pane.focus1` | `ctrl+1` | delivered | `—` | live |
