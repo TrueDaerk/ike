@@ -67,8 +67,8 @@ func (m *Model) startArchiveExtract(msg archview.ExtractMsg) {
 	m.archExtractArchive = msg.Archive
 	m.archExtractMembers = append([]string(nil), msg.Members...)
 	m.archExtractOpen = true
-	m.archExtractInput.Set(displayPath(defaultExtractDir(msg.Archive)))
-	m.renderArchiveExtractPrompt(nil)
+	m.archExtractDir = newDirPrompt(projectRoot(), displayPath(defaultExtractDir(msg.Archive)))
+	m.renderArchiveExtractPrompt()
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()
 }
@@ -106,27 +106,14 @@ func (m Model) archiveExtractPromptOpen() bool { return m.archExtractOpen && m.s
 // archiveExtractGuardOpen reports whether the shell shows the overwrite guard.
 func (m Model) archiveExtractGuardOpen() bool { return m.archExtractPlan != nil && m.shell.IsOpen() }
 
-// renderArchiveExtractPrompt (re)fills the shell for the current input; tab
-// candidates render underneath, as in the other path prompts.
-func (m *Model) renderArchiveExtractPrompt(candidates []string) {
-	line := "> " + m.archExtractInput.View()
-	const maxLines = 8
-	var sug string
-	if n := len(candidates); n > 0 {
-		shown := candidates
-		if n > maxLines {
-			shown = candidates[:maxLines]
-		}
-		sug = "\n\n  " + strings.Join(shown, "\n  ")
-		if n > maxLines {
-			sug += fmt.Sprintf("\n  … +%d more", n-maxLines)
-		}
-	}
+// renderArchiveExtractPrompt (re)fills the shell for the current input: the
+// path line, the matching directories underneath, and the key legend.
+func (m *Model) renderArchiveExtractPrompt() {
+	body := m.archExtractDir.Body(
+		"relative to the project root · ↑↓ select · tab complete · enter extract · esc cancel")
 	m.shell.SetContent(ui.ModelContent{
 		Heading: m.archiveExtractHeading(),
-		Body: func() string {
-			return line + sug + "\n\nrelative to the project root · tab complete · enter extract · esc cancel"
-		},
+		Body:    func() string { return body },
 	})
 }
 
@@ -143,47 +130,57 @@ func (m Model) archiveExtractHeading() string {
 }
 
 // updateArchiveExtractPrompt consumes every key while the target prompt is
-// open: tab completes the path, everything else is shared line editing.
+// open: the shared directory autocomplete owns selection, completion and line
+// editing, and hands back what the extraction must do.
 func (m Model) updateArchiveExtractPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
-	var candidates []string
-	switch {
-	case msg.Code == tea.KeyEscape:
+	switch act, target := m.archExtractDir.Key(msg); act {
+	case dirPromptCancel:
 		m.closeArchiveExtractPrompt()
 		return m, nil
-	case msg.Code == tea.KeyEnter:
-		target := strings.TrimSpace(m.archExtractInput.Text)
-		archivePath, members := m.archExtractArchive, m.archExtractMembers
-		m.closeArchiveExtractPrompt()
-		if target == "" {
-			return m, nil
-		}
-		m.planArchiveExtract(archivePath, members, target)
+	case dirPromptAccept:
+		m.acceptArchiveExtractTarget(target)
 		return m, nil
-	case msg.Code == tea.KeyTab:
-		res := pathcomplete.Complete(m.archExtractInput.Text)
-		m.archExtractInput.Set(res.Completed)
-		candidates = res.Candidates
-	default:
-		m.archExtractInput.Key(msg)
 	}
-	m.renderArchiveExtractPrompt(candidates)
+	m.renderArchiveExtractPrompt()
+	return m, nil
+}
+
+// acceptArchiveExtractTarget closes the prompt and plans the extraction into
+// target — the shared tail of enter and a click on a candidate.
+func (m *Model) acceptArchiveExtractTarget(target string) {
+	archivePath, members := m.archExtractArchive, m.archExtractMembers
+	m.closeArchiveExtractPrompt()
+	if strings.TrimSpace(target) == "" {
+		return
+	}
+	m.planArchiveExtract(archivePath, members, target)
+}
+
+// archiveExtractClickRow accepts the clicked candidate (#2689): a click on a
+// directory is enter on a highlight — the prompt's only action.
+func (m Model) archiveExtractClickRow(row int) (tea.Model, tea.Cmd) {
+	cand, ok := m.archExtractDir.CandidateAt(row)
+	if !ok {
+		return m, nil
+	}
+	m.acceptArchiveExtractTarget(cand)
 	return m, nil
 }
 
 // closeArchiveExtractPrompt drops the prompt state and the shell.
 func (m *Model) closeArchiveExtractPrompt() {
 	m.archExtractOpen = false
-	m.archExtractInput.Clear()
+	m.archExtractDir = dirPrompt{}
 	m.shell.Close()
 }
 
 // pasteArchiveExtractPrompt inserts a paste into the path input at its cursor
 // (#1873), like every other single-field prompt.
 func (m *Model) pasteArchiveExtractPrompt(text string) bool {
-	if !m.archExtractInput.Paste(strings.TrimSpace(text)) {
+	if !m.archExtractDir.Paste(strings.TrimSpace(text)) {
 		return false
 	}
-	m.renderArchiveExtractPrompt(nil)
+	m.renderArchiveExtractPrompt()
 	return true
 }
 
@@ -219,7 +216,7 @@ func (m *Model) planArchiveExtract(archivePath string, members []string, target 
 // archiveExtractPath resolves the typed target directory: "~" expands and a
 // relative path is project-relative (IKE runs in the project root).
 func archiveExtractPath(target string) string {
-	dest := expandHome(target)
+	dest := pathcomplete.Expand(target)
 	if !filepath.IsAbs(dest) {
 		dest = filepath.Join(projectRoot(), dest)
 	}

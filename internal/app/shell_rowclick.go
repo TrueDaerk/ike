@@ -74,6 +74,10 @@ func (m Model) shellBodyClick(msg mouseEvent, x, y int) (tea.Model, tea.Cmd, boo
 		f = m.bookmarkOverviewClickRow
 	case m.lspRenamePreviewOpen():
 		f = m.lspRenamePreviewClickRow
+	case m.archiveExtractPromptOpen():
+		// The extract target prompt (#2689): a click on a directory
+		// candidate accepts it, the input line and the legend are inert.
+		f = m.archiveExtractClickRow
 	default:
 		return m, nil, false
 	}
