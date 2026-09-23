@@ -24,6 +24,7 @@ import (
 	"ike/internal/numhint"
 	"ike/internal/permhint"
 	"ike/internal/secret"
+	"ike/internal/vaultinline"
 )
 
 // decodeOn reports whether the decode family named by capture is switched on
@@ -59,6 +60,10 @@ func (m Model) decodeFamily(capture string) (family string, on, set bool) {
 		// Not a decode but the same stand-in mechanic (#1623): "on" means the
 		// mask shows and the value hides, gated by editor.secret_masking.
 		return concealfilter.SecretMasking, m.secretMask, m.secretMaskSet
+	case vaultinline.Capture, vaultinline.BodyCapture:
+		// The inline vault stand-in (#2712): one family in two captures — the
+		// header row and the folded hex lines — gated by editor.vault.
+		return concealfilter.Vault, m.vaultStandIn, m.vaultStandInSet
 	case numhint.SizeCapture:
 		return concealfilter.ByteSizeHints, m.sizeHints, m.sizeHintsSet
 	case numhint.DurationCapture:

@@ -1,5 +1,28 @@
 # Log
 
+## 2026-09-23 (YAML: inline Ansible `!vault` values, #2712)
+
+- **Inline vault stand-in**: a `!vault |` block in a YAML/Ansible buffer
+  collapses onto one row, `⟨vault AES256 · 6 lines⟩` (`· id: <label>` for a
+  1.2 header). New leaf `internal/vaultinline` detects the block (tag line,
+  `$ANSIBLE_VAULT;` header, hex run) without decoding it; the YAML producer
+  emits `vault.value` on the header and `vault.body` on every hex line, and
+  the editor folds the body away PEM-style, revealing the whole block with
+  the caret inside or a selection across it. Family `vault`: `editor.vault`,
+  `view.toggleVaultStandIn`, file rules `vault=…`; audited in the span-family
+  ledger for every language.
+- **Explain**: `g?` on the block shows cipher, format, vault id and line
+  count and — with a password source — the decrypted value and its source;
+  `y` copies it (the ciphertext without a source), `e` edits it. No source
+  names the setting to fill; a mismatch reads "cannot decrypt: password does
+  not match".
+- **Three intentions**: *Edit vault value…* (masked `ui.Field`, `\n` escapes
+  for multi-line, re-encrypts with the same vault id and indentation as one
+  undo step, unchanged value a no-op), *Encrypt value with Ansible Vault* on
+  a plain mapping scalar, *Decrypt vault value to plain text* with a confirm.
+  All absent without a password source. The plaintext never enters the
+  buffer, so undo, backups and the LSP stream hold ciphertext only.
+
 ## 2026-09-23 (Explorer: duplicate in place, #2697)
 
 - **`explorer.duplicate` (`cmd+d`, macOS only)** copies the selected entry next

@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Ansible Vault Editing
-description: Transparent editing of $ANSIBLE_VAULT; files — decrypted into the buffer on open when a password source is configured, re-encrypted on save so the plaintext never lands on disk, with a "Treat as Vault File" intention for the files the automatic path did not cover.
+description: Transparent editing of $ANSIBLE_VAULT; files — decrypted into the buffer on open when a password source is configured, re-encrypted on save so the plaintext never lands on disk, with a "Treat as Vault File" intention for the files the automatic path did not cover — plus inline `!vault |` values in YAML, collapsed to a stand-in row, decrypted in the explain popover and edited with re-encryption.
 resource: internal/ansiblevault
 tags: [architecture, editor, vault, ansible, security, intentions, settings]
-timestamp: 2026-09-07T14:00:00Z
+timestamp: 2026-09-23T12:00:00Z
 ---
 
 # Ansible Vault Editing
@@ -27,6 +27,9 @@ internal/editor/actions.go    saveAs — the encrypt hook before os.WriteFile
 internal/editor/reload.go     reloadFrom — external changes decrypt/adopt/drop the state
 internal/app/vault.go         the vault.treatAsFile command handler
 internal/intention/catalog.go vaultProvider — the "Treat as Vault File" entry
+internal/vaultinline/          inline `!vault |` blocks: detection, spans, wrap, YAML scalar quoting (#2712)
+internal/editor/vaultinline.go the inline stand-in, positional reveal, caret probes, encrypt action
+internal/editor/vaultprompt.go the popover's vault reading, the masked edit prompt, the decrypt confirm
 ```
 
 ## The format, natively
@@ -134,6 +137,39 @@ flipped). One command, `vault.treatAsFile`, two branches in
 Either way the same tab simply becomes the vault-backed buffer — nothing to
 close, nothing new to focus — and every later save encrypts.
 
+## Inline `!vault` values (#2712)
+
+A plain YAML file can hold **inline** vault values — `ansible-vault
+encrypt_string` output, a `!vault |` tagged block scalar whose lines are the
+hex of the same envelope. The whole-file mode does not apply: the buffer must
+keep the ciphertext, since the file is not a vault. Instead the block
+collapses to one row, `⟨vault AES256 · 6 lines⟩` (`· id: <label>` for a 1.2
+header), and the value shows on demand:
+
+- **Stand-in** — the conceal family `vault` (`editor.vault`,
+  `view.toggleVaultStandIn`, file rules `vault=…`), detected by
+  `internal/vaultinline` and emitted by the YAML producer; the editor folds the
+  hex lines away and reveals the block positionally. Documented with the
+  other families in [editor](./editor.md#inline-ansible-vault-values-2712).
+- **Explain** — `g?` on the block shows the header facts and, with a password
+  source (the same three sources as above, same precedence), the decrypted
+  value and the source that served it; `y` copies it, `e` edits it. Without a
+  source the popover names the setting to fill and `y` copies the ciphertext;
+  a wrong password reads `cannot decrypt: password does not match`.
+- **Edit / encrypt / decrypt** — three intentions
+  ([intention-actions](./intention-actions.md#inline-vault-values-2712)),
+  present only with a password source: *Edit vault value…* re-encrypts a new
+  value under the same password and vault id (fresh salt, original
+  indentation, 80-hex-column lines) as one undo step, an unchanged value being
+  a no-op; *Encrypt value with Ansible Vault* replaces a plain mapping scalar
+  by a block; *Decrypt vault value to plain text* writes the plaintext back as
+  a YAML scalar after a confirm.
+
+The plaintext boundary is stricter than the whole-file mode's: the decrypted
+value lives in the popover, the prompt field and the clipboard the user copies
+it to, and nowhere else — not the buffer, so not the undo history, backups or
+the LSP stream either. Nothing is cached between popover openings.
+
 ## Tests
 
 `internal/ansiblevault` covers the format against real ansible-core fixtures
@@ -143,4 +179,10 @@ source, the no-source and wrong-password messages (file untouched), label
 preservation, external-change reloads, both `TreatAsVault` branches, share
 semantics, and that neither the saved file nor the undo store ever holds
 plaintext; `internal/intention/vault_test.go` the offer gates;
-`internal/config` the password-file diagnostics.
+`internal/config` the password-file diagnostics. The inline family (#2712):
+`internal/vaultinline` the scanner's shapes and the quoting round-trip,
+`internal/editor/vaultinline_test.go` the one-row rendering, reveal, toggle and
+file rule, the popover per password state, and the three actions with the
+plaintext-boundary checks on the buffer and the undo store,
+`internal/intention/vaultinline_test.go` the offer gates, and
+`plugins/languages/yaml/vault_test.go` the producer wiring.

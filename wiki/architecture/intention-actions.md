@@ -4,7 +4,7 @@ title: Intention Actions
 description: The alt+enter popup — LSP code actions merged with built-in caret-dependent intention actions through a plugin-registered provider seam, opened anchored at the caret, with a debounced diff preview of the highlighted action.
 resource: internal/intention
 tags: [architecture, intentions, code-actions, palette, plugins, shortcuts]
-timestamp: 2026-09-03T21:00:00Z
+timestamp: 2026-09-23T12:00:00Z
 ---
 
 # Intention Actions
@@ -151,6 +151,24 @@ reading it, the popup gate must stay cheap) and `Context.VaultBuffer`
 the two branches — decrypt a ciphertext buffer in place, or encrypt a
 plaintext file on the spot — live in the editor and are documented in
 [ansible-vault](./ansible-vault.md#treat-as-vault-file-2293).
+
+### Inline vault values (#2712)
+
+`vaultInlineProvider` offers the inline-vault actions over a writable YAML
+buffer with a password source (`Context.VaultReady` again), keyed on two
+precomputed caret facts the editor answers only in YAML/Ansible buffers:
+`Context.VaultBlockAtCaret` (the caret inside a `!vault |` block, tag line
+through the last hex line — `vaultinline.At`) and `Context.VaultScalarAtCaret`
+(a plain mapping scalar, `vaultinline.ScalarAt`). Over a block: **"Edit vault
+value…"** (`vault.editValue`, the masked re-encrypting prompt) and **"Decrypt
+vault value to plain text"** (`vault.decryptValue`, confirmed — it puts a
+secret in clear on disk); over a scalar: **"Encrypt value with Ansible
+Vault"** (`vault.encryptValue`). Without a source the entries are absent
+rather than failing, and the explain popover (`g?`) says which setting to
+fill. The three commands are editor actions, keybind-less by the intention
+rule, and the conceal entry over a block carries `view.toggleVaultStandIn`
+like every other family's toggle. Behaviour:
+[editor](./editor.md#inline-ansible-vault-values-2712).
 
 ## Diff preview of the highlighted action
 

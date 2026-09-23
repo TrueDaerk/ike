@@ -424,6 +424,9 @@ bring their own.
 | Merge: Keep Manual Edit | `merge.keepManual` | — | `gm` | `editor` pane |
 | Merge: Next Conflict | `merge.nextConflict` | — | `]n` | `editor` pane |
 | Merge: Previous Conflict | `merge.prevConflict` | — | `[n` | `editor` pane |
+| Decrypt Vault Value to Plain Text | `vault.decryptValue` | — | — | `editor` pane |
+| Edit Vault Value… | `vault.editValue` | — | — | `editor` pane |
+| Encrypt Value with Ansible Vault | `vault.encryptValue` | — | — | `editor` pane |
 | Next Change (Editor) | `vcs.nextChange` | — | `]c` | `editor` pane |
 | Previous Change (Editor) | `vcs.prevChange` | — | `[c` | `editor` pane |
 | Clear Follow Filter | `view.clearFollowFilter` | — | — | `editor` pane |
@@ -449,6 +452,7 @@ bring their own.
 | Toggle Secret Masking | `view.toggleSecretMasking` | — | — | `editor` pane |
 | Toggle Timestamp Decoding | `view.toggleTimestampDecoding` | — | — | `editor` pane |
 | Toggle Unicode Escape Decoding | `view.toggleUnicodeEscapeDecoding` | — | — | `editor` pane |
+| Toggle Vault Stand-In | `view.toggleVaultStandIn` | — | — | `editor` pane |
 | Toggle Whitespace Rendering | `view.toggleWhitespace` | — | — | `editor` pane |
 | Toggle Soft Wrap | `view.toggleWrap` | `alt+shift+w` | — | `editor` pane |
 

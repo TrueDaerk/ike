@@ -53,6 +53,7 @@ const (
 	famPerm    = "perm-hints"      // file-mode hints (internal/permhint)
 	famCron    = "cron-hints"      // cron-schedule hints (internal/cronhint)
 	famNumber  = "number-hints"    // numeric readability hints (internal/numhint, internal/consthint)
+	famVault   = "vault"           // inline Ansible !vault blocks collapse (internal/vaultinline)
 )
 
 var spanFamilies = []spanFamily{
@@ -149,6 +150,14 @@ var spanFamilies = []spanFamily{
 			`X-Max-Bytes: 10485760`,
 		},
 	}},
+	// An inline Ansible Vault value (#2712): a `!vault |` mapping value whose
+	// block scalar is the hex-armored envelope. The body is not decoded at
+	// detection time, so any hex line makes the probe fire.
+	{famVault, []string{"vault."}, [][]string{{
+		`db_password: !vault |`,
+		`          $ANSIBLE_VAULT;1.1;AES256`,
+		`          6462653631343665326265396439373930333134343131333938333138346633316239376163656`,
+	}}},
 }
 
 // The reasons a language may record for not offering a family, grouped so the
@@ -173,6 +182,9 @@ const (
 	// The initial set (#2345) is closed; the reason stays for the next gap a
 	// new family or language surfaces.
 	reasonGap = "genuine gap, wiring tracked in an open issue"
+	// The inline vault stand-in (#2712) reads a YAML `!vault` tag: only the
+	// YAML-shaped languages have the syntax.
+	reasonNoVault = "no Ansible vault syntax"
 )
 
 // offeredSpanFamilies lists, per language, the families its Spans hook
@@ -180,7 +192,7 @@ const (
 // probe stays silent fails, so a removed wiring (or a rotted probe) cannot
 // hide here.
 var offeredSpanFamilies = map[string][]string{
-	"ansible":    {famBase64, famCron, famNet, famNumber, famPerm, famSecret, famUnicode},
+	"ansible":    {famBase64, famCron, famNet, famNumber, famPerm, famSecret, famUnicode, famVault},
 	"crontab":    {famCron, famSecret},
 	"css":        {famUnicode},
 	"dockerfile": {famPerm, famSecret},
@@ -199,7 +211,7 @@ var offeredSpanFamilies = map[string][]string{
 	"toml":       {famCron, famNet, famNumber, famSecret, famUnicode},
 	"typescript": {famCron, famEntity, famNet, famNumber, famPerm, famSecret, famUnicode},
 	"xml":        {famEntity},
-	"yaml":       {famBase64, famCron, famNet, famNumber, famPerm, famSecret, famUnicode},
+	"yaml":       {famBase64, famCron, famNet, famNumber, famPerm, famSecret, famUnicode, famVault},
 }
 
 // notOfferedSpanFamilies records why a language does not offer a family. A
@@ -261,6 +273,36 @@ var notOfferedSpanFamilies = []struct{ lang, family, reason string }{
 	{"xml", famUnicode, reasonNoSyntax},
 	{"xml", "*", reasonNoConvention},
 	{"yaml", famEntity, reasonNoSyntax},
+	// The inline vault family (#2712) is YAML syntax: every other language
+	// records the same reason explicitly, wildcard or not.
+	{"crontab", famVault, reasonNoVault},
+	{"css", famVault, reasonNoVault},
+	{"csv", famVault, reasonNoVault},
+	{"diff", famVault, reasonNoVault},
+	{"dockerfile", famVault, reasonNoVault},
+	{"dotenv", famVault, reasonNoVault},
+	{"go", famVault, reasonNoVault},
+	{"go.mod", famVault, reasonNoVault},
+	{"go.sum", famVault, reasonNoVault},
+	{"go.work", famVault, reasonNoVault},
+	{"html", famVault, reasonNoVault},
+	{"http", famVault, reasonNoVault},
+	{"ini", famVault, reasonNoVault},
+	{"json", famVault, reasonNoVault},
+	{"log", famVault, reasonNoVault},
+	{"make", famVault, reasonNoVault},
+	{"markdown", famVault, reasonNoVault},
+	{"markdown_inline", famVault, reasonNoVault},
+	{"ndjson", famVault, reasonNoVault},
+	{"php", famVault, reasonNoVault},
+	{"psv", famVault, reasonNoVault},
+	{"python", famVault, reasonNoVault},
+	{"shell", famVault, reasonNoVault},
+	{"sql", famVault, reasonNoVault},
+	{"toml", famVault, reasonNoVault},
+	{"tsv", famVault, reasonNoVault},
+	{"typescript", famVault, reasonNoVault},
+	{"xml", famVault, reasonNoVault},
 }
 
 // offersByProbe reports whether l's Spans hook produces a span of family f on

@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-09-18T00:00:00Z
+timestamp: 2026-09-23T12:00:00Z
 ---
 
 # Editor
@@ -3352,6 +3352,72 @@ over the standard library); the editor half is `pemsummary.go`.
   large-file guard (#149) — re-scanning a multi-megabyte buffer per version is
   exactly what that guard exists to avoid.
 
+## Inline Ansible Vault values (#2712)
+
+An inline `!vault |` value in a YAML/Ansible buffer — the output of
+`ansible-vault encrypt_string`, a tagged block scalar whose lines are the
+hex-armored `$ANSIBLE_VAULT;` envelope — collapses onto **one row**:
+
+```
+vault_mysql_ai_prompt_password: !vault |
+          ⟨vault AES256 · 6 lines⟩
+```
+
+`· id: <label>` joins the reading when the header carries a 1.2 vault id.
+Toggled by `editor.vault` (default on, Settings → Conceal & Hints) or per view
+by `view.toggleVaultStandIn`; the conceal file rules (#1704) know the family as
+`vault`. Detection lives in `internal/vaultinline` (a leaf over
+`internal/ansiblevault`), the YAML producer emits the spans (`vaultinline.Spans`
+first of all in `yamlSpans`, so a hex line of digits never picks up a
+digit-grouping hint), and the editor half is `vaultinline.go`.
+
+- **Mechanic**: two captures, one family. The header line carries the
+  stand-in under `vault.value` and draws through the ordinary conceal path;
+  every hex line carries `vault.body`, which never draws — it is the marker
+  the fold machinery (`lineHidden`, `hasFolds`) hides the line by, the PEM
+  summary's mechanic (#1652). Both ride the decode channel like the secret
+  mask (#1623), so `decodeOn`, the toggle and the file rules gate them
+  together. The block reveals **positionally** (#1594) as a whole: the caret
+  on the header or a hex line, or a selection touching them, draws every line
+  raw — `vaultRangeDraws` drops the header stand-in and `vaultHidden` stops
+  hiding, in step. The buffer is never altered: the ciphertext stays what is
+  saved, diffed, copied.
+- **Detection** is structural and decodes nothing: a mapping value or sequence
+  item `!vault` (`|`, `|-`, `|+`, or the indicator alone on the next line),
+  a header `ansiblevault.IsVault` accepts, indented deeper than the tag line,
+  and the run of hex lines at that indentation. A header without a body is
+  not a block. The editor re-reads a block from the buffer
+  (`vaultinline.FromHead`) rather than trusting the spans' extent, so an edit
+  the parse has not caught up with can never fold the wrong lines.
+- **Explain** (`g?`, the [popover](#conceal-explain-popover-1998)) takes the
+  vault reading over the heuristic one: header facts (cipher, format version,
+  vault id), the hex line count and — with a password source
+  (`ansiblevault.ResolvePassword`, the whole-file mode's sources) — the
+  decrypted value, multi-line preserved and hard-wrapped, plus the source that
+  served it. `y` copies the decrypted value (the envelope without a source),
+  `e` opens the edit prompt, `r` parks the caret on the header. Without a
+  source the popover says which setting to fill; a mismatch reads `cannot
+  decrypt: password does not match`, never a Go error. Nothing is cached —
+  the next `g?` decrypts again.
+- **Actions** (intentions, [intention-actions](./intention-actions.md#inline-vault-values-2712)),
+  all `vaultprompt.go`: *Edit vault value…* opens a **masked** `ui.Field`
+  prefilled with the decrypted value (tab reveals; a line break rides as `\n`,
+  a backslash as `\\`), and enter re-encrypts under the same password and
+  vault id with a fresh salt, wrapping at the header's indentation and the
+  80-hex-column width `ansiblevault.Encrypt` writes — the header and hex lines
+  replaced by one `ApplyTextEdits` call, one undo step; an unchanged value is
+  a no-op. *Encrypt value with Ansible Vault* turns a plain mapping scalar
+  into a block at the key's indentation plus `vaultinline.BlockIndent` (ten
+  columns, the CLI's shape); *Decrypt vault value to plain text* confirms
+  first — it puts a secret in clear on disk — then writes the value back as a
+  YAML scalar (`vaultinline.Quote`: plain when safe, double-quoted otherwise).
+- **Plaintext boundary**: the decrypted value exists in the popover, the
+  prompt's field and — on `y` — the clipboard. It never enters the buffer, so
+  the undo history, persistent undo, backups and the full-sync LSP stream (all
+  of which read the buffer) hold ciphertext only; contrast the whole-file mode
+  ([ansible-vault](./ansible-vault.md)), which sends plaintext to the server
+  by design.
+
 ## Secret masking (#1623)
 
 Values whose key names a credential render as `••••`
@@ -3766,7 +3832,7 @@ the `[editor]` section on every event, so `tab_width`, `use_spaces`,
 `number_hint_units` (#1685, app-level: pushed into `numhint` on config load),
 `cidr_hints`/`idn_hints` (#1653), `permission_hints` (#1656),
 `hyperlinks` (#1655),
-`pem_summary` (#1652),
+`pem_summary` (#1652), `vault` (#2712),
 `color_preview`
 (#790), `id_colors` / `id_color_min_length` (#1626)
 and `search_ignore_case` (#1111, default off — in-file search folds

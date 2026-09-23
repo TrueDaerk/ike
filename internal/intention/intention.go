@@ -132,6 +132,14 @@ type Context struct {
 	// answer "no password source".
 	VaultBuffer bool
 	VaultReady  bool
+	// The inline vault facts (#2712). VaultBlockAtCaret reports that the
+	// caret sits in an inline `!vault |` block of a YAML buffer — tag line
+	// through the last hex line — the gate of the edit and decrypt entries;
+	// VaultScalarAtCaret that it sits on a plain mapping scalar, the gate of
+	// the encrypt entry. Both still need VaultReady: without a password
+	// source none of the three could do anything but report it missing.
+	VaultBlockAtCaret  bool
+	VaultScalarAtCaret bool
 
 	// Preview computes what the entry for one command id would change, for
 	// the popup's diff preview of the highlighted action (#2252). The app

@@ -135,6 +135,8 @@ func TestParseRule(t *testing.T) {
 		exclude, ok     bool
 	}{
 		{"secret_masking=-*.log", SecretMasking, "*.log", true, true},
+		{"vault=-*.yml", Vault, "*.yml", true, true},
+		{"editor.vault=*.yaml", Vault, "*.yaml", false, true},
 		{"secret_masking=!*.log", SecretMasking, "*.log", true, true},
 		{"secret_masking=+*.log", SecretMasking, "*.log", false, true},
 		{"secret_masking=*.log", SecretMasking, "*.log", false, true},

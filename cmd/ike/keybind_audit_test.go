@@ -186,6 +186,9 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	{"editor.decodeJWT", reasonIntention},         //
 	{"editor.undoTree", reasonOccasional},         //
 	{"vault.treatAsFile", reasonIntention},        // #2293: offered on an encrypted buffer
+	{"vault.editValue", reasonIntention},          // #2712: offered on an inline !vault block
+	{"vault.decryptValue", reasonIntention},       //
+	{"vault.encryptValue", reasonIntention},       // #2712: offered on a plain YAML mapping value
 	{"lsp.ignoreDiagnostic", reasonIntention},     //
 	{"lsp.quickFixProblem", reasonIntention},      //
 	{"lsp.codeLens", reasonIntention},             //

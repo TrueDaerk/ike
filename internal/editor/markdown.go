@@ -14,6 +14,7 @@ import (
 	"ike/internal/numhint"
 	"ike/internal/permhint"
 	"ike/internal/secret"
+	"ike/internal/vaultinline"
 )
 
 // markdown.go is the Markdown rich-rendering layer (#881), vim-conceal style:
@@ -73,6 +74,8 @@ var decodeCaptures = []string{
 	nethint.IDNCapture,
 	nethint.IDNMixedCapture,
 	secret.Capture,
+	vaultinline.Capture,
+	vaultinline.BodyCapture,
 }
 
 func isDecodeCapture(capture string) bool {
@@ -192,7 +195,7 @@ func (m Model) lineConcealRanges(line int) []concealRange {
 		ranges = m.conceal[line]
 	}
 	for _, c := range decodeCaptures {
-		if ds := m.decodes[c][line]; m.decodeOn(c) && len(ds) > 0 {
+		if ds := m.decodes[c][line]; m.decodeOn(c) && len(ds) > 0 && m.vaultRangeDraws(c, line) {
 			// Never alias m.conceal's backing array when combining.
 			base := len(ranges)
 			ranges = append(append([]concealRange(nil), ranges...), ds...)

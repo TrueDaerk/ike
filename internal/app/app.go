@@ -13837,6 +13837,12 @@ func (m Model) compositeLSPPopups(base string) string {
 		col, line := ed.PeekAnchor()
 		return place(ed.PeekView(), col, line)
 	}
+	if ed.VaultPromptOpen() {
+		// The inline vault edit/decrypt prompt (#2712) is modal in the editor
+		// and anchors where the explain popover it opened from sat.
+		col, line := ed.VaultPromptAnchor()
+		return place(ed.VaultPromptView(), col, line)
+	}
 	if ed.ExplainOpen() {
 		// The conceal explain popover (#1998) is explicitly invoked too, and
 		// owns its keys while open.

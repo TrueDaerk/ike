@@ -34,14 +34,14 @@ import (
 // the follow filter narrowed away (#2255) — the fast gate the
 // render/motion/scroll paths check before doing fold-aware work.
 func (m Model) hasFolds() bool {
-	return len(m.folded) > 0 || m.hasLogRuns() || m.hasPemBlocks() || m.logFilterHiding()
+	return len(m.folded) > 0 || m.hasLogRuns() || m.hasPemBlocks() || m.hasVaultBlocks() || m.logFilterHiding()
 }
 
 // lineHidden reports whether line is inside a collapsed fold body (the header
 // line itself stays visible), folded away inside a log repeat run, inside a
 // collapsed PEM block, or filtered out of a followed stream (#2255).
 func (m Model) lineHidden(line int) bool {
-	if m.logFilterHidden(line) || m.logRunHidden(line) || m.pemHidden(line) {
+	if m.logFilterHidden(line) || m.logRunHidden(line) || m.pemHidden(line) || m.vaultHidden(line) {
 		return true
 	}
 	if len(m.folded) == 0 {

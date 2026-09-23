@@ -84,6 +84,11 @@ func concealSampleFor(key string) (concealSample, bool) {
 		if out, ok := cronhint.Describe("*/5 * * * *"); ok {
 			return concealSample{Raw: `schedule: "*/5 * * * *"`, Shown: `schedule: "*/5 * * * *"  ` + out}, true
 		}
+	case "editor.vault":
+		return concealSample{
+			Raw:   "db_password: !vault |  (+ $ANSIBLE_VAULT header and 6 hex lines)",
+			Shown: "db_password: !vault |  ⟨vault AES256 · 6 lines⟩",
+		}, true
 	case "editor.pem_summary":
 		return concealSample{
 			Raw:   "-----BEGIN CERTIFICATE----- (+18 base64 lines)",

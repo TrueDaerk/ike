@@ -28,6 +28,7 @@ func Builtins() []Provider {
 		breakpointProvider(),
 		editProvider(),
 		vaultProvider(),
+		vaultInlineProvider(),
 		bufferLangProvider(),
 	}
 }
@@ -46,6 +47,34 @@ func vaultProvider() Provider {
 				return nil
 			}
 			return []Item{{Title: "Treat as Vault File", Kind: "buffer", CommandID: "vault.treatAsFile"}}
+		},
+	}
+}
+
+// vaultInlineProvider offers the inline vault actions (#2712) on a writable
+// YAML buffer with a password source: over a `!vault |` block "Edit vault
+// value…" (the masked re-encrypting prompt) and "Decrypt vault value to
+// plain text" (confirmed — it puts a secret in clear on disk); over a plain
+// mapping scalar "Encrypt value with Ansible Vault". Without a source the
+// entries are absent rather than failing: the explain popover (`g?`) says
+// which setting to fill.
+func vaultInlineProvider() Provider {
+	return Provider{
+		ID: "app.vaultInline",
+		Items: func(cx Context) []Item {
+			if cx.ReadOnly || !cx.VaultReady {
+				return nil
+			}
+			switch {
+			case cx.VaultBlockAtCaret:
+				return []Item{
+					{Title: "Edit vault value…", Kind: "vault", CommandID: "vault.editValue"},
+					{Title: "Decrypt vault value to plain text", Kind: "vault", CommandID: "vault.decryptValue"},
+				}
+			case cx.VaultScalarAtCaret:
+				return []Item{{Title: "Encrypt value with Ansible Vault", Kind: "vault", CommandID: "vault.encryptValue"}}
+			}
+			return nil
 		},
 	}
 }
@@ -207,6 +236,7 @@ var concealToggles = map[string]Item{
 	concealfilter.SecretMasking:         {Title: "Toggle Secret Masking", Kind: "view", CommandID: "view.toggleSecretMasking"},
 	concealfilter.MarkdownRendering:     {Title: "Toggle Markdown Rendering", Kind: "view", CommandID: "view.toggleMarkdownRendering"},
 	concealfilter.LogRendering:          {Title: "Toggle Log Rendering", Kind: "view", CommandID: "view.toggleLogRendering"},
+	concealfilter.Vault:                 {Title: "Toggle Vault Stand-In", Kind: "view", CommandID: "view.toggleVaultStandIn"},
 }
 
 // concealProvider offers the explain popover (#1998) for the conceal
