@@ -284,6 +284,7 @@ bring their own.
 | Find in Pane | `search.open` | `cmd+f` | — | everywhere |
 | Previous Search Match | `search.prevMatch` | `shift+f3` | — | everywhere |
 | Settings | `settings.open` | `cmd+,` | — | everywhere |
+| Insert Live Template… | `snippets.insert` | `cmd+j` | — | everywhere |
 | Structure | `structure.toggle` | `cmd+3` | — | everywhere |
 | Clear Terminal | `terminal.clear` | — | — | everywhere |
 | New Terminal | `terminal.new` | `cmd+alt+shift+t` | — | everywhere |

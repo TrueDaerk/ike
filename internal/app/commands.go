@@ -616,6 +616,10 @@ func (appCommands) Capabilities() plugin.Capabilities {
 		appCommand("editor.tab.closeAll", "Close All Tabs", TabCloseAllMsg{}),
 		appCommand("editor.tab.togglePin", "Pin/Unpin Tab", TabTogglePinMsg{}),
 		appCommand("editor.tab.picker", "Switch Tab…", TabPickerMsg{}),
+		// Insert Live Template (#2694, JetBrains' cmd+j): the picker over the
+		// focused buffer's [[snippets]] + built-ins, expanded at the caret.
+		withAliases(appCommand("snippets.insert", "Insert Live Template…", SnippetPickerMsg{}),
+			"snippet", "template", "expand"),
 	}
 	for i := 1; i <= 9; i++ {
 		n := strconv.Itoa(i)

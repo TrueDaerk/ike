@@ -431,6 +431,10 @@ var jetbrainsRows = []row{
 	// the Editor context (#145), and one everyday command per chord wins.
 	{"cmd+l", "editor.goToLine", "Go to line", Editor, "Editor (#2486)"},
 	{"cmd+shift+v", "editor.pasteFromHistory", "Paste from history", Editor, "Paste history (#57)"},
+	// Insert Live Template (#2694): JetBrains' own cmd+j, the most frequent
+	// unbound chord the editor telemetry saw. Free on both platforms — the
+	// Cmd→Ctrl fold lands it on ctrl+j, which no other default claims.
+	{"cmd+j", "snippets.insert", "Insert live template", Editor, "Live templates (#2694)"},
 	// Multi-caret (#145): JetBrains' ctrl+g occurrence walk plus a deliverable
 	// select-all-occurrences chord (the JetBrains original needs alt).
 	{"ctrl+g", "editor.caret.addNext", "Add caret at next occurrence", Editor, "Multi-caret (#145)"},

@@ -1373,6 +1373,24 @@ directly in `keys_normal.go`, outside the binding table) rather than being
 taken over. `cmd+left`/`cmd+right` (line start/end) were already bound
 editor-wide by #2634.
 
+## Insert Live Template (#2694)
+
+`cmd+j` was the most frequent unbound chord in the editor context of a
+telemetry export (5 presses, once followed by `playground.open`). In JetBrains
+it is *Insert Live Template*, and IKE had the snippets subsystem (#1152) but no
+chord opening a picker over it:
+
+| chord | context | command |
+|---|---|---|
+| `cmd+j` (`ctrl+j` off macOS, via the `Cmd`→`Ctrl` fold) | Editor | `snippets.insert` |
+
+`ctrl+j` is free after the fold — no other default claims it — so one
+`jetbrainsRows` entry covers both platforms. The chord is fragile like every
+`Cmd`-modified JetBrains binding; the recorded fallback is the palette *and*
+the trigger+Tab expansion, which stays the fast path for a template one knows
+by name. See [editor.md](editor.md#live-templates--snippets-1152) for the
+picker and the expansion it shares with Tab.
+
 ## The line-editing family and the pane chords (#2400)
 
 A second telemetry export (two sessions, ~9,900 events) left 37 presses on
@@ -1590,6 +1608,7 @@ JetBrains is:
 | `search.open` | `cmd+f` | fragile | `vim / (every pane binds it, #2409)` | live via vim / (every pane binds it, #2409) |
 | `search.prevMatch` | `shift+f3` | delivered | `—` | live |
 | `settings.open` | `cmd+,` | fragile | `palette` | live via palette |
+| `snippets.insert` | `cmd+j` | fragile | `palette / trigger+tab` | live via palette / trigger+tab |
 | `structure.toggle` | `cmd+3` | fragile | `palette` | live via palette |
 | `terminal.new` | `cmd+alt+shift+t` | fragile | `palette` | live via palette |
 | `terminal.newTab` | `ctrl+t` | delivered | `—` | live |
