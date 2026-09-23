@@ -1360,6 +1360,19 @@ outlive its reason. A second test checks the audit *list* itself in, so a new
 `editor`-only navigation binding is a decision someone records rather than a
 row that slips in.
 
+## macOS' document-edge chords (#2699)
+
+A later telemetry export showed `cmd+down` pressed and unbound in the editor.
+`cmd+home`/`cmd+end` (#2400 below) cover `editor.docStart`/`editor.docEnd`, but
+most Mac keyboards have no Home/End keys — macOS' own convention for "go to
+document start/end" (Xcode, TextEdit, the JetBrains macOS keymap) is
+`cmd+up`/`cmd+down` instead. Both now resolve to the same commands, as
+`darwinRows` entries: off macOS the Cmd→Ctrl fold would otherwise land them on
+`ctrl+up`/`ctrl+down`, which stay the editor's paragraph jumps (handled
+directly in `keys_normal.go`, outside the binding table) rather than being
+taken over. `cmd+left`/`cmd+right` (line start/end) were already bound
+editor-wide by #2634.
+
 ## The line-editing family and the pane chords (#2400)
 
 A second telemetry export (two sessions, ~9,900 events) left 37 presses on
@@ -1410,7 +1423,7 @@ JetBrains is:
 | `editor.deleteLine` | `cmd+backspace` | fragile | `vim dd` | live via vim dd |
 | `editor.deleteWordBackward` | `alt+backspace` | fragile | `vim db` | live via vim db |
 | `editor.docEnd` | `cmd+end` | fragile | `ctrl+end` | live via ctrl+end |
-| `editor.docStart` | `cmd+home` | fragile | `ctrl+home` | live via ctrl+home |
+| `editor.docStart` | `cmd+up` | fragile | `ctrl+home` | live via ctrl+home |
 | `editor.duplicateLine` | `cmd+d` | fragile | `vim yyp` | live via vim yyp |
 | `editor.escapeSelection` | `cmd+alt+shift+e` | fragile | `palette` | live via palette |
 | `editor.find` | `cmd+f` | fragile | `vim /` | live via vim / |

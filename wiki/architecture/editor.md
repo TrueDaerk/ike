@@ -765,7 +765,8 @@ outside insert mode too and are rebindable: `editor.deleteLine`
 (`cmd+backspace`), `editor.deleteWordBackward` (`alt+backspace`) and — the
 missing halves of the JetBrains line family — `editor.moveLineUp` /
 `editor.moveLineDown` (`cmd`/`ctrl+shift+up`/`down`), `editor.docStart` /
-`editor.docEnd` (`cmd`/`ctrl+home`/`end`, the `gg`/`G` motions) and
+`editor.docEnd` (`cmd`/`ctrl+home`/`end`, macOS also `cmd+up`/`down` since
+#2699, the `gg`/`G` motions) and
 `editor.selectLineStart` / `editor.selectLineEnd` (`shift+home`/`shift+end`).
 Each is **selection-aware** where JetBrains is: with a selection the line move
 carries every touched line (and the selection with it), and the delete removes
