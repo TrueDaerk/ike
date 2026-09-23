@@ -4,7 +4,7 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); pinned mode docking the popup to the bottom edge with the toggle chord as a focus switch, plus a project/global popup scope that carries one shell across projects (#2406); popup focus loss blurs instead of hiding, with a statusbar activity indicator for the hidden layer (#2309), and the wheel outside the layer's boxes scrolls the pane below while the layer keeps focus (#2343); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); sending the editor's selection (else the caret's line) to a shell as a bracketed paste, optionally submitted (#2542); re-running the last shell command from anywhere, prompt-gated and without moving the keyboard (#2543); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-09-08T21:00:00Z
+timestamp: 2026-09-23T12:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -894,6 +894,21 @@ the popup-bound keys (tab/enter/up/down/esc) stay unconsumed so the raw route
 delivers them to the program. Completion returns the moment the shell prompt
 does. If the ioctl is unavailable the shell counts as at its prompt, so the
 gate can only ever fail open.
+
+**Busy is what the project guards count (#2702).** `Session.Busy()` (#986) is
+no longer only the `cmd+w` gate: the close/quit guards ask it about every
+terminal a teardown would kill (`collectActivity`,
+[project-switching](project-switching.md#close-project-1355)). A shell at its
+prompt is idle — closing the project takes only its scrollback, so it raises
+no prompt — while a build, `vim` or a still-running command session (0350)
+does. For the prompt body the session also names the job:
+`Session.ForegroundPid()` returns the PTY's foreground process group (the
+child itself for a command session, 0 for an idle shell) and
+`ForegroundName()` resolves it to a binary name — `/proc/<pid>/comm` where
+procfs exists, `ps -o comm=` otherwise, stripped to the base name and its
+login-shell dash. Best effort: an unavailable name only costs the guard its
+noun, never its correctness, and the lookup runs once per prompt, never on a
+render path.
 
 **Live cwd (OSC 7, #770).** Shells with prompt integration emit
 `OSC 7 ; file://host/path` on every prompt; the emulator's
