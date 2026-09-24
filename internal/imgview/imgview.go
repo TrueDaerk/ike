@@ -122,12 +122,14 @@ func (m *Model) Grid() (cols, rows int) {
 }
 
 // SyncSeqs returns the raw sequences bringing the terminal's placement in
-// line with the current grid and crop — the pixel transmission plus a
-// placement on first show, delete-placement + re-place after a resize, zoom
-// or pan, nothing when already current — and records the applied state.
-// Called by the app's reconcile pass, only on supporting terminals. The
-// pixels are sent once per lifecycle (a=t); every geometry change only
-// replaces the placement under the same id (#2688).
+// line with the current grid and crop and records the applied state: the
+// shown pixels plus a placement on first show, delete + retransmit + place
+// when the crop changed (zoom, pan), delete-placement + re-place when only
+// the grid did (a resize at fit), nothing when already current. Called by
+// the app's reconcile pass, only on supporting terminals. The terminal holds
+// exactly the crop's pixels under the pane's one id: Unicode-placeholder
+// placements ignore a source rectangle and always show the whole stored
+// image (#2730), so zooming and panning must change the pixels themselves.
 func (m *Model) SyncSeqs() []string {
 	if m.imgRef == nil {
 		return nil
@@ -140,18 +142,21 @@ func (m *Model) SyncSeqs() []string {
 		return nil
 	}
 	var out []string
-	if !m.sentData {
-		seq, err := TransmitData(m.id, *m.imgRef)
+	if !m.sentData || v.crop != m.sentCrop {
+		if m.sentData {
+			out = append(out, Delete(m.id))
+			m.Reset()
+		}
+		seq, err := TransmitData(m.id, m.cropPixels(v))
 		if err != nil {
-			return nil
+			return out
 		}
 		out = append(out, seq)
 		m.sentData = true
-	} else if m.sentCols > 0 {
+	} else {
 		out = append(out, DeletePlacements(m.id))
 	}
-	full := image.Rect(0, 0, m.imgW, m.imgH)
-	out = append(out, Place(m.id, v.cols, v.rows, v.crop, full))
+	out = append(out, Place(m.id, v.cols, v.rows))
 	m.sentCols, m.sentRows, m.sentCrop = v.cols, v.rows, v.crop
 	return out
 }

@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Image Preview
-description: "#1479 — image files render in a preview pane via the Kitty graphics protocol (Unicode placeholders): capability probe with metadata fallback, per-pass transmit/delete reconcile, decode of PNG/JPEG/GIF/WebP, layout persistence; #2688 zoom and pan via a crop-based placement."
+description: "#1479 — image files render in a preview pane via the Kitty graphics protocol (Unicode placeholders): capability probe with metadata fallback, per-pass transmit/delete reconcile, decode of PNG/JPEG/GIF/WebP, layout persistence; #2688 zoom and pan by transmitting the visible crop (#2730)."
 resource: internal/imgview
 tags: [architecture, image, preview, pane, kitty, graphics, zoom]
-timestamp: 2026-09-23T00:00:00Z
+timestamp: 2026-09-24T00:00:00Z
 ---
 
 # Image Preview (#1479)
@@ -80,17 +80,35 @@ the wheel branch for `KindImage` reads the modifiers, and a left press arms a
 shows a *source rectangle* of the image. `geometry()` derives, from the zoom
 factor, the virtual grid the whole image would occupy (`fit × zoom`), clips
 it to the body, and maps the clipped part back to a crop in image pixels
-(`Crop()`); the pan offset is the crop origin. The placement command carries
-that crop (`x=`, `y=`, `w=`, `h=`) whenever it is smaller than the image.
-Pixels are transmitted **once** per lifecycle with `a=t` (`TransmitData`,
-store only) and every geometry change — resize, zoom, pan — deletes the old
-placement with `a=d,d=i` (`DeletePlacements`: placements only, data kept)
-and issues a new `a=p,U=1` placement (`Place`) under the **same image id**.
-This was chosen over a fresh id per crop because the app's reconcile
+(`Crop()`); the pan offset is the crop origin. Once an axis of the virtual
+grid exceeds the body, the placement stops growing on it and every further
+zoom step only shrinks the crop — the picture keeps magnifying up to the cap.
+
+**The crop is cut from the pixels, not the placement (#2730).** Kitty
+(`grman_put_cell_image`) and Ghostty (`graphics_unicode.zig`) ignore a
+placement's source rectangle (`x=`, `y=`, `w=`, `h=`) for Unicode-placeholder
+(`U=1`) placements and always fit the *whole* stored image into the
+placeholder box, preserving its aspect. #2688 first sent the crop as
+placement parameters, so the image stopped changing as soon as it filled the
+body on one axis. The terminal therefore holds exactly the visible pixels:
+`cropPixels` returns the decoded image at fit and a copy of the crop when
+zoomed, downscaled to `cropCellPx` pixels per cell (twice the nominal cell)
+when larger, which bounds the encode cost of a zoom or pan step. `SyncSeqs`
+keeps one image id per pane and diffs grid and crop against the applied
+state:
+
+- **first show** — `a=t` (`TransmitData`) + `a=p,U=1` (`Place`);
+- **crop changed** (zoom, pan, back to fit) — `a=d,d=I` (`Delete`) + `a=t`
+  of the new crop + `a=p`;
+- **only the grid changed** (resize at fit) — `a=d,d=i` (`DeletePlacements`:
+  placements only, data kept) + `a=p`, no retransmission;
+- **unchanged** — nothing.
+
+One id per pane was kept over a fresh id per crop because the app's reconcile
 (`liveImages`, `releaseWorkspaceImages`, the pane-close delete) keys on one id
 per pane; a new id per crop would have needed an id history per pane just to
-free the previous placements. A crop change is therefore delete + re-place
-without a retransmission; an unchanged crop emits nothing.
+free the previous placements. The encode runs synchronously in the reconcile
+pass, like the initial transmission.
 
 **Footer.** The last row of the body is a status line — file name, format,
 dimensions and the zoom label (`fit`, `2.4×`, `1:1`) — so the user always
@@ -112,10 +130,10 @@ reason. Decode failures show the same card with the error.
 `imageSyncCmd` runs at the end of every root `Update` pass (next to the
 structure/breadcrumb hooks): it walks the active workspace's image panes and
 diffs desired placements against `Model.liveImages` (a pointer-shared map
-like `toolchainSeg`). First show transmits the pixels and places them; a pane
-resize, zoom or pan deletes the placement and re-places at the new grid and
-crop without retransmitting (`SyncSeqs` is idempotent while the geometry is
-unchanged, see [Zoom & pan](#zoom--pan-2688)); a closed pane emits `a=d,d=I` for its id, freeing the
+like `toolchainSeg`). First show transmits the pixels and places them; a zoom
+or pan retransmits the new crop's pixels, a resize at fit only re-places at
+the new grid (`SyncSeqs` is idempotent while the geometry is unchanged, see
+[Zoom & pan](#zoom--pan-2688)); a closed pane emits `a=d,d=I` for its id, freeing the
 terminal-side data. All sequences leave through one `tea.Raw`, bypassing the
 renderer. A workspace switch or teardown releases its placements separately
 (#1547): `releaseWorkspaceImages` emits the deletes and resets each pane's

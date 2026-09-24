@@ -218,38 +218,174 @@ func TestWheelZoomCentresOnPointer(t *testing.T) {
 func TestSyncSeqsCropChange(t *testing.T) {
 	m := zoomModel(t)
 	first := m.SyncSeqs()
-	if len(first) != 2 || strings.Contains(first[1], "x=") {
-		t.Fatalf("the fit placement carries no crop: %q", first)
+	if len(first) != 2 || !strings.Contains(first[0], "a=t") || !strings.Contains(first[1], "a=p") {
+		t.Fatalf("first show transmits the pixels then places them: %q", first)
 	}
 	m.ZoomIn()
 	seqs := m.SyncSeqs()
-	if len(seqs) != 2 {
-		t.Fatalf("a zoom must delete + re-place, got %q", seqs)
+	// The placement cannot carry the crop — Kitty and Ghostty ignore x/y/w/h
+	// on a Unicode-placeholder placement (#2730) — so a crop change frees the
+	// old pixels and transmits the crop's.
+	if len(seqs) != 3 {
+		t.Fatalf("a zoom must delete + retransmit + place, got %q", seqs)
 	}
-	if !strings.Contains(seqs[0], "a=d") || !strings.Contains(seqs[0], "d=i") {
-		t.Fatalf("the old placement is deleted (data kept): %q", seqs[0])
+	if !strings.Contains(seqs[0], "a=d") || !strings.Contains(seqs[0], "d=I") {
+		t.Fatalf("the old pixels are freed: %q", seqs[0])
 	}
-	crop := m.Crop()
-	for _, want := range []string{"a=p", "U=1", "x=" + strconv.Itoa(crop.Min.X), "y=" + strconv.Itoa(crop.Min.Y), "w=" + strconv.Itoa(crop.Dx()), "h=" + strconv.Itoa(crop.Dy())} {
-		if !strings.Contains(seqs[1], want) {
-			t.Errorf("crop placement lacks %q: %q", want, seqs[1])
+	if !strings.Contains(seqs[1], "a=t") {
+		t.Fatalf("the crop's pixels are transmitted: %q", seqs[1])
+	}
+	cols, rows := m.Grid()
+	for _, want := range []string{"a=p", "U=1", "c=" + strconv.Itoa(cols), "r=" + strconv.Itoa(rows)} {
+		if !strings.Contains(seqs[2], want) {
+			t.Errorf("placement lacks %q: %q", want, seqs[2])
 		}
 	}
-	if strings.Contains(seqs[0]+seqs[1], "a=t") {
-		t.Fatal("a zoom must not retransmit the pixels")
+	if strings.Contains(seqs[2], "x=") || strings.Contains(seqs[2], "w=") {
+		t.Fatalf("the placement must not rely on a protocol source rectangle: %q", seqs[2])
 	}
 	if again := m.SyncSeqs(); again != nil {
 		t.Fatalf("unchanged crop must be idempotent, got %q", again)
 	}
-	// A pan changes only the crop origin: delete + re-place again.
+	// A pan changes only the crop origin: the moved crop is sent again.
 	m.Update(key("j"))
-	if seqs := m.SyncSeqs(); len(seqs) != 2 || !strings.Contains(seqs[1], "y="+strconv.Itoa(m.Crop().Min.Y)) {
-		t.Fatalf("a pan re-places with the new origin: %q", seqs)
+	if seqs := m.SyncSeqs(); len(seqs) != 3 || !strings.Contains(seqs[1], "a=t") {
+		t.Fatalf("a pan retransmits the moved crop: %q", seqs)
 	}
-	// Reset forgets the resident pixels: the next sync transmits again.
+	// Back at fit the whole image is sent again.
+	m.Update(key("0"))
+	if seqs := m.SyncSeqs(); len(seqs) != 3 || !strings.Contains(seqs[1], "a=t") || m.Crop() != image.Rect(0, 0, 640, 320) {
+		t.Fatalf("0 retransmits the whole image: %q", seqs)
+	}
+	// Reset forgets the resident pixels: the next sync transmits again
+	// without a delete.
 	m.Reset()
 	if seqs := m.SyncSeqs(); len(seqs) != 2 || !strings.Contains(seqs[0], "a=t") {
 		t.Fatalf("after Reset the pixels are sent again: %q", seqs)
+	}
+}
+
+// TestSyncSeqsCropOnlyChange pins the #2730 path: once the placement fills
+// the body, a zoom step keeps cols/rows and only shrinks the crop — the
+// placement must still be re-emitted with the new pixels.
+func TestSyncSeqsCropOnlyChange(t *testing.T) {
+	m := zoomModel(t)
+	for i := 0; i < 5; i++ {
+		m.ZoomIn()
+	}
+	m.SyncSeqs()
+	cols, rows := m.Grid()
+	if cols != 60 || rows != 10 {
+		t.Fatalf("at %v the placement fills the 60×10 body, got %d×%d", m.Zoom(), cols, rows)
+	}
+	before := m.Crop()
+	m.ZoomIn()
+	if c, r := m.Grid(); c != cols || r != rows {
+		t.Fatalf("grid must stay %d×%d, got %d×%d", cols, rows, c, r)
+	}
+	if m.Crop() == before {
+		t.Fatalf("the crop must shrink: %v", before)
+	}
+	seqs := m.SyncSeqs()
+	if len(seqs) != 3 || !strings.Contains(seqs[1], "a=t") || !strings.Contains(seqs[2], "a=p") {
+		t.Fatalf("a crop-only change re-emits the placement with new pixels: %q", seqs)
+	}
+}
+
+// TestCropShrinksEveryStepPastBody walks the zoom from fit to the cap for a
+// portrait image (fit limited by the body height) and a landscape one (fit
+// limited by the width): once an axis fills the body the placement stops
+// growing on it, and every further step must still shrink the crop so the
+// picture keeps magnifying (#2730).
+func TestCropShrinksEveryStepPastBody(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		imgW, imgH int
+		w, h       int
+	}{
+		{"portrait", 300, 900, 80, 21},
+		{"landscape", 1600, 400, 40, 31},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := New("image", writePNG(t, tc.imgW, tc.imgH), theme.DefaultPalette())
+			m.SetSize(tc.w, tc.h)
+			m.SetGraphics(true)
+			full := image.Rect(0, 0, tc.imgW, tc.imgH)
+			prevCols, prevRows := m.Grid()
+			prev := m.Crop()
+			filled := false
+			for steps := 0; m.Zoom() < m.maxZoom(); steps++ {
+				if steps > 100 {
+					t.Fatal("zoom never reached the cap")
+				}
+				m.ZoomIn()
+				cols, rows := m.Grid()
+				c := m.Crop()
+				shrank := c.Dx()*c.Dy() < prev.Dx()*prev.Dy()
+				if cols == tc.w || rows == tc.h-1 {
+					filled = true
+					if prev != full && !shrank {
+						t.Fatalf("zoom %v past the body must shrink the crop: %v → %v", m.Zoom(), prev, c)
+					}
+				}
+				if cols <= prevCols && rows <= prevRows && !shrank {
+					t.Fatalf("zoom %v changed nothing visible: grid %d×%d crop %v", m.Zoom(), cols, rows, c)
+				}
+				// The crop keeps the placement's aspect (cells are 1:2).
+				want := float64(cols) / float64(2*rows)
+				if got := float64(c.Dx()) / float64(c.Dy()); math.Abs(got-want)/want > 0.15 {
+					t.Fatalf("zoom %v crop aspect %.3f vs grid %.3f", m.Zoom(), got, want)
+				}
+				prevCols, prevRows, prev = cols, rows, c
+			}
+			if !filled {
+				t.Fatal("the zoom never filled the body")
+			}
+			m.Update(key("0"))
+			if m.Crop() != full {
+				t.Fatalf("0 shows the whole image again: %v", m.Crop())
+			}
+		})
+	}
+}
+
+// TestCropPixels checks the transmitted pixels are the crop: the decoded
+// image itself at fit, a copy of the crop when zoomed, downscaled to the
+// per-cell budget when larger.
+func TestCropPixels(t *testing.T) {
+	m := zoomModel(t)
+	if got := m.cropPixels(m.geometry()); got != *m.imgRef {
+		t.Fatal("at fit the decoded image is sent as is")
+	}
+	for i := 0; i < 9; i++ {
+		m.ZoomIn()
+	}
+	m.Pan(4, 2)
+	v := m.geometry()
+	px := m.cropPixels(v)
+	if px.Bounds().Dx() != v.crop.Dx() || px.Bounds().Dy() != v.crop.Dy() {
+		t.Fatalf("a small crop is sent unscaled: %v vs crop %v", px.Bounds(), v.crop)
+	}
+	src := *m.imgRef
+	for _, p := range []image.Point{{0, 0}, {v.crop.Dx() - 1, v.crop.Dy() - 1}, {3, 5}} {
+		r1, g1, b1, _ := px.At(p.X, p.Y).RGBA()
+		r2, g2, b2, _ := src.At(v.crop.Min.X+p.X, v.crop.Min.Y+p.Y).RGBA()
+		if r1 != r2 || g1 != g2 || b1 != b2 {
+			t.Fatalf("pixel %v differs from the source at crop %v", p, v.crop)
+		}
+	}
+	// A large image in a small pane: the crop is downscaled to the budget.
+	big := New("image", writePNG(t, 2000, 1000), theme.DefaultPalette())
+	big.SetSize(20, 6)
+	big.SetGraphics(true)
+	big.ZoomIn()
+	v = big.geometry()
+	px = big.cropPixels(v)
+	if px.Bounds().Dx() > v.cols*cropCellPx || px.Bounds().Dy() > v.rows*2*cropCellPx {
+		t.Fatalf("crop %v not bounded to %d×%d cells: %v", v.crop, v.cols, v.rows, px.Bounds())
+	}
+	if px.Bounds().Dx() >= v.crop.Dx() {
+		t.Fatalf("a large crop must be downscaled: %v from %v", px.Bounds(), v.crop)
 	}
 }
 
