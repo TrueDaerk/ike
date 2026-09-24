@@ -80,6 +80,12 @@ var intentionalDefaultShadows = map[string]string{
 	// is immaterial.
 	shadowKey("cmd+f", "http.search", "search.open"):  "http names its own search; same gesture as the pane find chord",
 	shadowKey("ctrl+f", "http.search", "search.open"): "linux Cmd-fold: http names its own search; same gesture as the pane find chord",
+	// Complete Current Statement (#2726) takes cmd+shift+enter editor-wide;
+	// in an .http buffer the stored-response view deliberately keeps the
+	// chord it had since #1831 (editor[http] over editor). Off macOS the
+	// Cmd→Ctrl fold lands the same pair on ctrl+shift+enter.
+	shadowKey("cmd+shift+enter", "http.showResponse", "editor.completeStatement"):  "http buffers keep the stored-response chord over complete statement",
+	shadowKey("ctrl+shift+enter", "http.showResponse", "editor.completeStatement"): "linux Cmd-fold: http buffers keep the stored-response chord over complete statement",
 }
 
 // detectShadows scans the effective (post-conflict) binding set for

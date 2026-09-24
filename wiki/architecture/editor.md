@@ -1595,6 +1595,78 @@ every line of the visual selection, JetBrains-style (`comment.go`):
 - Languages without a block pair (python) fall back to line-comment toggling.
 - One undo unit, `.`-repeatable; visual mode ends after the toggle.
 
+## Complete statement (#2726)
+
+`editor.completeStatement` (`cmd+shift+enter`, `ctrl+shift+enter`; Edit menu,
+palette) is JetBrains' **Complete Current Statement**: it finishes the syntactic
+shell of the caret line and puts the caret where the body goes, in insert mode
+— the way `o` opens a line, but with the closers, the block colon or brace and
+the closing line supplied (`statement.go`):
+
+```python
+def abc()▮        →   def abc():
+                          ▮
+```
+
+```php
+function query()▮ →   function query() {
+                          ▮
+                      }
+```
+
+- **The language owns the rule.** `lang.CompleteStatement(langID, line)` asks
+  the buffer language's `Toolchain` for the optional `lang.StatementCompleter`
+  extension (`internal/lang/statement.go`); the editor never hard-codes a
+  language. The completer returns a `StatementCompletion` — `Head` (the whole
+  line with its unclosed brackets balanced and the opener appended), `Body`
+  (the caret goes one indent level deeper) and `Tail` (the closing lines at the
+  header's indentation). A language without the extension raises the notice
+  `complete statement: not supported for <lang>` and edits nothing; a supported
+  language that finds nothing to complete on the line (a Python expression, a
+  Go call) is a silent no-op.
+- **Caret placement.** A block header opens an empty indented line and lands the
+  caret on it; a simple statement (`$x = foo()` → `$x = foo();`) moves the caret
+  to a fresh line at the same indentation. The body indent is one `tabText()`
+  unit — tabs or spaces at the buffer's width, honouring editorconfig — and the
+  tail lines sit at the header's own indentation.
+- **Idempotent.** A header that is already complete (ends in `:` / `{` /
+  `then`) is left alone: with a body below, the caret goes to the end of its
+  first line; with only the closer below (`{` directly above `}`), the empty
+  body line is opened between them; with nothing below, body and closer are
+  created. Pressing the chord twice never adds a second colon or brace. A
+  nested header does not mistake the enclosing block's closer for its own —
+  only a closer at the header's exact indentation counts as already there.
+- **Auto-pair interaction.** The completer sees the whole line, so the `)` an
+  auto-close inserted after the caret (`def abc(▮)`) is part of the balanced
+  header and is consumed, never doubled; a genuinely unclosed `def abc(` is
+  balanced to `def abc():`.
+- **One undo unit, `.`-repeatable.** An open insert session commits first, so
+  the completion is its own step and typing continues in a fresh session; `u`
+  after `esc` reverts the whole completion. Secondary carets collapse — the
+  command acts on the primary caret's line.
+- **Keymap.** The chord was `http.showResponse`'s editor-wide default; that row
+  is now scoped to `editor[http]`, so in an `.http` buffer the stored response
+  still wins (`editor[lang]` beats `editor`) and everywhere else the chord
+  completes the statement. See [keybindings](./keybindings.md#complete-current-statement-takes-cmdshiftenter-2726).
+
+**Rules per language** (each in the plugin's `statement.go`, with tests; the
+table is kept honest by `cmd/ike/statement_audit_test.go`):
+
+| language | headers | simple statements |
+|---|---|---|
+| `python` | `def`/`class`/`if`/`elif`/`else`/`for`/`while`/`try`/`except`/`finally`/`with`/`match`/`case`, `async …` → balance `(`/`[`/`{`, append `:`; `if x: return` is complete | nothing to complete |
+| `php` | `function`/`class`/`interface`/`trait`/`enum`/`if`/`else`/`elseif`/`for`/`foreach`/`while`/`do`/`switch`/`match`/`try`/`catch`/`finally` (after modifiers, after `}`) → ` {` … `}`; assigned/returned `function`/`match` → `};`; a closure passed to a call → `});` | append `;`, next line |
+| `go` | `func`/`if`/`else`/`for`/`switch`/`select`, `type T struct|interface`, `x := func()` → ` {` … `}`; `go func()`/`defer func()` → `}()`; a func literal argument → `})` | nothing to complete (no semicolon rule) |
+| `typescript` (JS/TS) | `function`/`class`/`interface`/`enum`/`namespace`/`if`/`else`/`for`/`while`/`do`/`switch`/`try`/`catch`/`finally` (after `export`/`async`/…), arrow functions ending in `=>` → ` {` … `}`; assigned/returned expressions → `};`; a callback → `});` | append `;`, next line |
+| `shell` | `if`/`elif` → `; then` … `fi`, `for`/`while`/`until` → `; do` … `done`, `case` → ` in` … `esac`, `name()`/`function name` → ` {` … `}` | nothing to complete |
+| every other language | not supported (notice) | — |
+
+The shared shapes live in `internal/lang/statement.go`: `BraceCompletion` (the
+C-family rule, with a `header` callback per language and the semicolon switch),
+`CloseBrackets`, `LeadingKeyword` (keyword at a word boundary after optional
+modifiers, never before a lone `=` — `match = re.match(...)` assigns), and
+`TopLevelIndex` (the block colon outside brackets and strings).
+
 ## External file changes (Roadmap 0140)
 
 The watcher service (`internal/watch`, see [foundation](./foundation.md))

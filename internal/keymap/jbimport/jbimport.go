@@ -118,12 +118,13 @@ var actionMap = map[string]string{
 	// Editing.
 	// InsertLiveTemplate is JetBrains' cmd+j, the picker IKE binds to
 	// snippets.insert (#2694); SurroundWith has no counterpart here.
-	"InsertLiveTemplate":    "snippets.insert",
-	"EditorDuplicate":       "editor.duplicateLine",
-	"CommentByLineComment":  "editor.commentLine",
-	"CommentByBlockComment": "editor.commentBlock",
-	"EditorLineStart":       "editor.lineStart",
-	"EditorLineEnd":         "editor.lineEnd",
+	"InsertLiveTemplate":      "snippets.insert",
+	"EditorDuplicate":         "editor.duplicateLine",
+	"EditorCompleteStatement": "editor.completeStatement",
+	"CommentByLineComment":    "editor.commentLine",
+	"CommentByBlockComment":   "editor.commentBlock",
+	"EditorLineStart":         "editor.lineStart",
+	"EditorLineEnd":           "editor.lineEnd",
 	// The #2400 line/document family. JetBrains has two move-line actions —
 	// the plain line move and the syntax-aware statement move — and both are
 	// "move this line up" to the user, so both import onto the same command.

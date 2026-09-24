@@ -2190,7 +2190,10 @@ the full list over for the same `←`/`→` browsing; no stored responses yield 
 notice instead of an empty pane. The chords mirror `http.run`'s `cmd+enter` /
 `ctrl+f9` pair with an added Shift; unlike `ctrl+f9`, the shifted `ctrl+shift+f9`
 is CSI-parameter-encoded and exempt from macOS eating plain ctrl+F-keys, so it
-delivers on darwin too (`internal/keymap/reachability.go`).
+delivers on darwin too (`internal/keymap/reachability.go`). Since #2726 the
+`cmd+shift+enter` row is scoped to `editor[http]`: it still wins in an `.http`
+buffer, while every other editor runs `editor.completeStatement` on that
+chord (see [keybindings](./keybindings.md#complete-current-statement-takes-cmdshiftenter-2726)).
 
 **Switching request from the pane** (#1829): the route above required knowing
 the palette command *and* going back to the editor, so the pane offers it
