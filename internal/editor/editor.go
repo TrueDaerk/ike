@@ -200,11 +200,17 @@ type Model struct {
 	// while Esc still returns to searchOrigin. Any edit of the pattern clears
 	// it and the preview restarts from the origin.
 	searchStepped bool
-	hlActive      bool
-	cmdMsg        string           // transient ":"-line message (errors, reports); shown while idle
-	lastSub       lastSubstitute   // last :substitute, for a bare ":s" repeat
-	subConfirm    *subConfirmState // active ":s///c" confirmation, nil when idle
-	replPanel     *replacePanel    // open find/replace panel (0240 phase 2, #283); nil when idle
+	// landMatch is the search match the cursor just landed on (#2732), set
+	// by every search landing and consumed by the next scroll(): a horizontal
+	// follow then reveals the whole match plus a margin instead of parking its
+	// first character in the last column. landMatchOK marks it pending.
+	landMatch   search.Span
+	landMatchOK bool
+	hlActive    bool
+	cmdMsg      string           // transient ":"-line message (errors, reports); shown while idle
+	lastSub     lastSubstitute   // last :substitute, for a bare ":s" repeat
+	subConfirm  *subConfirmState // active ":s///c" confirmation, nil when idle
+	replPanel   *replacePanel    // open find/replace panel (0240 phase 2, #283); nil when idle
 	// panelFind/panelRepl remember the panel fields across opens (#292).
 	panelFind, panelRepl string
 
@@ -1946,8 +1952,10 @@ func (m *Model) scroll() {
 			// view.Scroll just derived from the raw column (#1752).
 			m.concealScrollFix(left)
 		}
+		m.matchScrollFix()
 		m.foldScrollFix()
 	}
+	m.landMatchOK = false
 	m.unhideCursor()
 }
 
