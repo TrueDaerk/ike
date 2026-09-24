@@ -1,5 +1,15 @@
 # Log
 
+## 2026-09-24 (Image viewer: zoom keeps magnifying past the pane, #2730)
+
+- Kitty and Ghostty ignore a Unicode-placeholder placement's source rectangle
+  (`x/y/w/h`) and fit the whole stored image into the box, so #2688's
+  crop-by-placement stopped magnifying once the image filled the body on one
+  axis. The image pane now transmits the visible crop's pixels
+  (`cropPixels`, downscaled to 2× the nominal cell size when larger): a zoom
+  or pan step is delete + `a=t` + `a=p` under the same id, a resize at fit
+  still only re-places. `imgview.Place` lost its crop parameters.
+
 ## 2026-09-24 (Highlighting: decorators/attributes as `@attribute`, #2727)
 
 - Python decorators (formerly `@function`, #928), PHP `#[...]` attributes and

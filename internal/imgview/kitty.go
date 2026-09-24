@@ -50,36 +50,29 @@ func Transmit(id int, img image.Image, cols, rows int) (string, error) {
 
 // TransmitData encodes img as PNG and returns the chunked transmission
 // storing it under id *without* displaying it (a=t). The image pane (#2688)
-// sends its pixels once this way and then places crops of them with Place,
-// so a zoom or pan never re-encodes or re-sends the file.
+// sends the pixels it shows this way — the whole image at fit, the zoomed
+// crop cut out of it otherwise (#2730) — and then places them with Place, so
+// a resize at an unchanged crop never re-encodes or re-sends them.
 func TransmitData(id int, img image.Image) (string, error) {
 	return chunked(img, "a=t", "q=2", "t=d", "f=100", fmt.Sprintf("i=%d", id))
 }
 
 // Place returns the command creating a virtual placement of the resident
-// image id scaled to cols×rows cells (a=p, U=1), showing only the source
-// rectangle crop (image pixels) when it is smaller than full. A crop equal to
-// full (or empty) places the whole image, exactly as Transmit does.
-func Place(id, cols, rows int, crop, full image.Rectangle) string {
-	opts := []string{
+// image id scaled to cols×rows cells (a=p, U=1). It carries no source
+// rectangle: Kitty and Ghostty ignore x/y/w/h on a Unicode-placeholder
+// placement and always fit the *whole* stored image into the box (#2730), so
+// a crop has to be cut from the pixels before they are transmitted.
+func Place(id, cols, rows int) string {
+	return ansi.KittyGraphics(nil,
 		"a=p", "U=1", "q=2",
 		fmt.Sprintf("i=%d", id),
 		fmt.Sprintf("c=%d", cols),
-		fmt.Sprintf("r=%d", rows),
-	}
-	if !crop.Empty() && crop != full {
-		opts = append(opts,
-			fmt.Sprintf("x=%d", crop.Min.X),
-			fmt.Sprintf("y=%d", crop.Min.Y),
-			fmt.Sprintf("w=%d", crop.Dx()),
-			fmt.Sprintf("h=%d", crop.Dy()))
-	}
-	return ansi.KittyGraphics(nil, opts...)
+		fmt.Sprintf("r=%d", rows))
 }
 
 // DeletePlacements returns the sequence removing image id's placements while
 // keeping its data resident (a=d with a lowercase d=i), so a following Place
-// can show another crop without a retransmission.
+// can show the same pixels at another grid size without a retransmission.
 func DeletePlacements(id int) string {
 	return ansi.KittyGraphics(nil, "a=d", "d=i", fmt.Sprintf("i=%d", id), "q=2")
 }

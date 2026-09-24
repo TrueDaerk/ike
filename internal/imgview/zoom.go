@@ -6,17 +6,25 @@ import (
 	"math"
 
 	tea "charm.land/bubbletea/v2"
+	"golang.org/x/image/draw"
 )
 
 // Zoom and pan (#2688). The pane keeps one Kitty placement filling its body
 // and shows a *source rectangle* of the image: zooming shrinks the crop,
-// panning moves it. The zoom factor is relative to the fit size (1 = fit);
-// steps are multiplicative (ZoomStep per step) and capped at the larger of
-// MaxZoomFactor× fit and the 1:1 level, where one image pixel maps to one
-// terminal pixel assuming CellPxW-pixel-wide cells. View state only — never
-// persisted.
+// panning moves it. The terminal ignores a placement's source rectangle for
+// Unicode placeholders (#2730), so the crop is cut from the pixels and those
+// are what the pane transmits (cropPixels). The zoom factor is relative to
+// the fit size (1 = fit); steps are multiplicative (ZoomStep per step) and
+// capped at the larger of MaxZoomFactor× fit and the 1:1 level, where one
+// image pixel maps to one terminal pixel assuming CellPxW-pixel-wide cells.
+// View state only — never persisted.
 
 const (
+	// cropCellPx is the pixel budget per placement cell width for a
+	// transmitted crop (twice the nominal cell, so HiDPI cells stay sharp);
+	// a larger crop is downscaled before it is sent, bounding the encode
+	// cost of every zoom or pan step. Heights follow the 2:1 cell aspect.
+	cropCellPx = 2 * CellPxW
 	// ZoomStep is the multiplicative zoom step per key press or wheel tick.
 	ZoomStep = 1.25
 	// MaxZoomFactor is the zoom cap relative to fit when the 1:1 level is
@@ -131,6 +139,32 @@ func clampF(v, lo, hi float64) float64 {
 // Crop returns the source rectangle the placement shows (the full image at
 // fit), in image pixels.
 func (m *Model) Crop() image.Rectangle { return m.geometry().crop }
+
+// cropPixels returns the pixels to transmit for viewport v: the decoded image
+// itself at fit, otherwise its crop copied out — downscaled to cropCellPx
+// pixels per cell when larger — since the placement shows whatever image it
+// holds in full (#2730).
+func (m *Model) cropPixels(v viewport) image.Image {
+	src := *m.imgRef
+	full := image.Rect(0, 0, m.imgW, m.imgH)
+	if v.crop.Empty() || v.crop == full {
+		return src
+	}
+	r := v.crop.Add(src.Bounds().Min)
+	w, h := r.Dx(), r.Dy()
+	if maxW, maxH := v.cols*cropCellPx, v.rows*2*cropCellPx; w > maxW || h > maxH {
+		s := math.Min(float64(maxW)/float64(w), float64(maxH)/float64(h))
+		w = max(1, int(math.Round(float64(w)*s)))
+		h = max(1, int(math.Round(float64(h)*s)))
+	}
+	dst := image.NewRGBA(image.Rect(0, 0, w, h))
+	if w == r.Dx() && h == r.Dy() {
+		draw.Draw(dst, dst.Bounds(), src, r.Min, draw.Src)
+	} else {
+		draw.ApproxBiLinear.Scale(dst, dst.Bounds(), src, r, draw.Src, nil)
+	}
+	return dst
+}
 
 // cellFraction maps a body-local cell to its position across the grid as a
 // 0..1 fraction per axis: the first column is the crop's left edge, the last
