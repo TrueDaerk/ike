@@ -4002,16 +4002,18 @@ func (m Model) activeWS() *workspace.Workspace { return m.ws.Active() }
 // search — so n/N and the match highlights carry on from there — and stepped
 // once like n (reverse=false) or N (reverse=true). A miss toasts instead of
 // moving; the chord never falls through to find-in-path results here.
-func (m *Model) repeatLastSearch(reverse bool) {
+func (m *Model) repeatLastSearch(reverse bool) tea.Cmd {
 	ed := m.activeEditor()
 	if ed == nil {
 		m.host.Notify(host.Info, "no editor to repeat the search \""+m.lastSearch.query.Pattern+"\" in")
-		return
+		return nil
 	}
 	ed.SeedSearch(m.lastSearch.query, m.lastSearch.dir)
-	if !ed.RepeatSearch(reverse) {
+	found, cmd := ed.RepeatSearch(reverse)
+	if !found {
 		m.host.Notify(host.Info, "no match for \""+m.lastSearch.query.Pattern+"\"")
 	}
+	return cmd // a landing continuing in the background (#2734)
 }
 
 // markAllFindRecent makes the all-projects results the set cmd+g walks
@@ -4986,8 +4988,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.inFileSearchRecent && !m.lastSearch.query.Empty() {
-			m.repeatLastSearch(msg.Delta < 0)
-			return m, nil
+			return m, m.repeatLastSearch(msg.Delta < 0)
 		}
 		if m.allFindRecent && m.allResults.Total() > 0 {
 			// The all-projects results are the most recent search (#2413):
@@ -7887,6 +7888,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		return m, nil
+
+	case editor.SearchScanMsg:
+		// A background search landing (#2734) routes to the view that started
+		// it by ParseKey, like a parse result — the playground's result
+		// buffer (#1970), which lives outside every pane, included.
+		if s := m.play; s != nil && s.resultEd != nil && msg.Key == s.resultEd.ParseKey() {
+			var cmd tea.Cmd
+			*s.resultEd, cmd = s.resultEd.Update(msg)
+			return m, cmd
+		}
+		return m, m.routeToEditorKey(msg.Key, msg)
 
 	case highlight.SpansMsg:
 		// The inline playground's result buffer (#1970) lives outside every

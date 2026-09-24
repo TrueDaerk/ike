@@ -80,7 +80,16 @@ func (m *Model) searchNextRepeat(reverse bool, count int) bool {
 	// A structural query's matches follow the document (#2363): re-evaluate
 	// when edits moved the version since they were computed.
 	m.query.SyncStructural(m.buf, m.docVersion)
-	if p, ok := m.query.Next(m.buf, m.cursor, dir, count); ok {
+	p, ok, pending := m.searchLand(m.query, m.cursor, dir, count, scanRepeat)
+	if pending {
+		// The landing continues in the background (#2734); the cursor
+		// moves when it arrives. Reported as found: a miss is announced
+		// by the landing itself.
+		m.cmdMsg = searchingMsg
+		m.hlActive = true
+		return true
+	}
+	if ok {
 		if wrapped(m.cursor, p, dir) {
 			m.cmdMsg = "search wrapped"
 		}
@@ -107,6 +116,7 @@ func (m *Model) ClearSearch() {
 	m.query = search.Query{}
 	m.preview = search.Query{}
 	m.hlActive = false
+	m.cancelSearchScan() // #2734
 }
 
 // SeedSearch installs q as this editor's committed in-file search with the
@@ -135,17 +145,19 @@ func (m *Model) SeedSearch(q search.Query, dir search.Direction) {
 // RepeatSearch steps the committed in-file search once, like n (reverse=false)
 // or N (reverse=true). It backs search.nextMatch/prevMatch when the in-file
 // search is the most recent one (#376). It reports whether a match was found,
-// so the host can say "no match" instead of silently doing nothing (#2623).
+// so the host can say "no match" instead of silently doing nothing (#2623),
+// and the command carrying a landing that continues in the background
+// (#2734), which the host batches.
 //
 // It follows the cursor itself (#1198): n/N reach searchNextRepeat through
 // Update, whose key branch ends in scroll(), but the root model calls this
 // entry point directly on the model, so nothing else would move the viewport.
 // scroll() is idempotent, so keeping it here rather than in searchNextRepeat
 // leaves the key path untouched.
-func (m *Model) RepeatSearch(reverse bool) bool {
+func (m *Model) RepeatSearch(reverse bool) (bool, tea.Cmd) {
 	found := m.searchNextRepeat(reverse, 1)
 	m.scroll()
-	return found
+	return found, m.takeSearchCmd()
 }
 
 // StepSearchPreview steps the *open* search line's incremental preview to the
@@ -171,7 +183,16 @@ func (m *Model) StepSearchPreview(reverse bool) ui.MatchStep {
 	if reverse {
 		dir = opposite(dir)
 	}
-	p, ok := q.Next(m.buf, m.cursor, dir, 1)
+	p, ok, pending := m.searchLand(q, m.cursor, dir, 1, scanStep)
+	if pending {
+		// The bounded pass did not settle the step (#2734): the cursor stays
+		// until the background landing arrives, reported as one match so
+		// the host does not announce a miss.
+		m.preview = q
+		st := ui.Stepped(0, 1, false)
+		st.Cmd = m.takeSearchCmd()
+		return st
+	}
 	if !ok {
 		return ui.NoMatches()
 	}
@@ -480,7 +501,10 @@ func (m *Model) searchPreview() {
 	m.searchStepped = false
 	m.preview = m.compileSearchLine()
 	if !m.preview.Empty() {
-		if p, ok := m.preview.Next(m.buf, m.searchOrigin, m.searchDir, 1); ok {
+		// A landing the bounded pass cannot settle continues in the
+		// background (#2734): the cursor parks at the origin meanwhile and
+		// moves when the answer arrives.
+		if p, ok, _ := m.searchLand(m.preview, m.searchOrigin, m.searchDir, 1, scanPreview); ok {
 			m.cursor = p
 			m.desiredCol = p.Col
 			m.landOnMatch(m.preview)
@@ -501,6 +525,7 @@ func (m *Model) searchPreview() {
 func (m *Model) cancelSearch() {
 	m.preview = search.Query{}
 	m.searchStepped = false
+	m.cancelSearchScan() // Esc aborts a background landing at once (#2734)
 	m.restoreSearchOrigin()
 }
 
@@ -539,7 +564,16 @@ func (m *Model) commitSearch() {
 	// commits exactly that one instead of jumping back to the first.
 	p, ok := m.cursor, true
 	if !stepped {
-		p, ok = m.query.Next(m.buf, m.searchOrigin, m.searchDir, 1)
+		var pending bool
+		p, ok, pending = m.searchLand(m.query, m.searchOrigin, m.searchDir, 1, scanCommit)
+		if pending {
+			// The landing continues in the background (#2734): the search
+			// is committed and highlighted, the jump happens on arrival.
+			m.hlActive = true
+			m.cmdMsg = searchingMsg
+			m.restoreSearchOrigin()
+			return
+		}
 	}
 	if !ok {
 		m.hlActive = false

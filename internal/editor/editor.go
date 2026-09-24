@@ -382,6 +382,13 @@ type Model struct {
 	// value copies like lineCache). See searchtally.go.
 	tally *searchTallyStore
 
+	// Background search landing (#2734): the cancellation generation shared
+	// by the value copies, the landing the view is waiting for and the
+	// command carrying its scan. See searchscan.go.
+	scan          *searchScanStore
+	searchPending *pendingSearch
+	searchCmd     tea.Cmd
+
 	// Test-run gutter markers (#1150): the detected test declarations, cached
 	// per document version (pointer, shared across value copies like
 	// lineCache). See testmarks.go.
@@ -862,6 +869,7 @@ func New() Model {
 		lineCache:          newLineCache(),
 		testCache:          newTestMarkStore(),
 		tally:              newSearchTally(),
+		scan:               newSearchScan(),
 		conflictCache:      newConflictStore(),
 		mdRender:           true,
 		mdTables:           &mdTableState{},
@@ -1197,6 +1205,7 @@ func (m *Model) Load(path string) error {
 	m.cmdline = ""
 	m.searching = false
 	m.filtering = false
+	m.cancelSearchScan() // a pending landing belongs to the text just replaced (#2734)
 	m.dirty = false
 	m.stale = false
 	// Dependency-file guard (#565): lock a vendored file on open. A reload of the
@@ -1262,6 +1271,7 @@ func (m *Model) NewFile(path string) {
 	m.wait = awaitNone
 	m.cmdline = ""
 	m.searching = false
+	m.cancelSearchScan() // #2734
 	m.filtering = false
 	m.dirty = false
 	m.stale = false
@@ -1669,6 +1679,9 @@ func (m Model) updateMsg(msg tea.Msg) (Model, tea.Cmd) {
 	m.renderEpoch++
 	m.applyConfig()
 	switch msg := msg.(type) {
+	case SearchScanMsg:
+		// A background search landing (#2734, searchscan.go).
+		return m.applySearchScan(msg)
 	case highlight.SpansMsg:
 		// Accept a parse result only if it matches the current document and
 		// version; a newer edit since the parse was scheduled drops it.

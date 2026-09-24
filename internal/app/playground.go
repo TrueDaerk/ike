@@ -1447,8 +1447,8 @@ func (m Model) stepPlayResultSearch(delta int) (tea.Model, tea.Cmd, bool) {
 	if s == nil || s.resultEd == nil || !s.resultEd.HasSearch() {
 		return m, nil, false
 	}
-	s.resultEd.RepeatSearch(delta < 0)
-	return m, nil, true
+	_, cmd := s.resultEd.RepeatSearch(delta < 0)
+	return m, cmd, true
 }
 
 // playMatchStepChord reports the direction of the chord bound to

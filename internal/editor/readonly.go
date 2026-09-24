@@ -52,6 +52,7 @@ func (m *Model) ShowReadOnly(path, text string) {
 	m.cmdMsg = ""
 	m.searching = false
 	m.filtering = false
+	m.cancelSearchScan()                             // #2734
 	m.logFilt, m.filtPrev = logFilter{}, logFilter{} // #2255: per-view filter
 	m.dirty = false
 	m.stale = false
