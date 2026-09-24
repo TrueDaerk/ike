@@ -272,3 +272,33 @@ func TestHTMLEntitiesSurviveAttributeInjection(t *testing.T) {
 	}
 	t.Errorf("no entity replacement span at col %d: %+v", col, spans)
 }
+
+// TestTSDecorators guards #2727: the @ sigil and the decorator name / call
+// target carry the attribute capture; arguments keep their captures.
+func TestTSDecorators(t *testing.T) {
+	lines := []string{
+		`@Component({ selector: "app" })`,
+		`class A {`,
+		`  @core.Input() name: string;`,
+		`}`,
+	}
+	ix := highlight.NewIndex(highlight.Highlight("a.ts", lines))
+	cases := []struct {
+		line int
+		word string
+		want string
+	}{
+		{0, "@", "attribute"},
+		{0, "Component", "attribute"},
+		{0, `"app"`, "string"},
+		{2, "@", "attribute"},
+		{2, "core", "attribute"},
+		{2, "Input", "attribute"},
+	}
+	for _, c := range cases {
+		col := strings.Index(lines[c.line], c.word)
+		if got := ix.CaptureAt(c.line, col); got != c.want {
+			t.Errorf("%q: CaptureAt(%d,%d) = %q, want %q", c.word, c.line, col, got, c.want)
+		}
+	}
+}

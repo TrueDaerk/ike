@@ -493,7 +493,7 @@ func gruvboxCaptures(light bool) map[string]string {
 			"variable.builtin": "#b44e0c",
 			"property":         "#3c7477",
 			"label":            "#cc241d",
-			"attribute":        "#8c6415",
+			"attribute":        "#af3a03",
 			"punctuation":      "#665c54",
 			"escape":           "#b44e0c",
 			"boolean":          "#a35177",
@@ -1248,7 +1248,7 @@ func dracula() Theme {
 			"variable.builtin": "#bd93f9", // this/self purple
 			"property":         "#f8f8f2",
 			"label":            "#ff79c6",
-			"attribute":        "#50fa7b", // HTML attributes green
+			"attribute":        "#ffb86c", // orange: distinct from function green (#2727)
 			"punctuation":      "#f8f8f2",
 			"escape":           "#ff79c6",
 			"boolean":          "#bd93f9",
@@ -1808,7 +1808,7 @@ func ayuDark() Theme {
 			"variable.builtin": "#f07178", // markup red
 			"property":         "#39bae6", // tag blue
 			"label":            "#ff8f40",
-			"attribute":        "#ffb454",
+			"attribute":        "#f07178",
 			"punctuation":      "#8a9199", // ui fg
 			"escape":           "#95e6cb",
 			"boolean":          "#d2a6ff",
@@ -1902,7 +1902,7 @@ func ayuMirage() Theme {
 			"variable.builtin": "#f28779", // markup red
 			"property":         "#5ccfe6", // tag blue
 			"label":            "#ffad66",
-			"attribute":        "#ffd173",
+			"attribute":        "#f28779",
 			"punctuation":      "#8a919e",
 			"escape":           "#95e6cb",
 			"boolean":          "#dfbfff",
@@ -1996,7 +1996,7 @@ func ayuLight() Theme {
 			"variable.builtin": "#e71818", // markup red, darkened for contrast from #f07171
 			"property":         "#277d9a", // tag blue, darkened for contrast from #55b4d4
 			"label":            "#c15405", // darkened for contrast from #fa8d3e
-			"attribute":        "#a5670c", // darkened for contrast from #f2ae49
+			"attribute":        "#c7474a", // ayu markup red, darkened for contrast (#2727)
 			"punctuation":      "#808890", // darkened for contrast from #8a9199
 			"escape":           "#2e8166", // darkened for contrast from #4cbf99
 			"boolean":          "#8f5dc1", // darkened for contrast from #a37acc
@@ -2469,7 +2469,7 @@ func zenburn() Theme {
 			"variable.builtin": "#de92c6", // lightened for contrast from #dc8cc3
 			"property":         "#dcdccc",
 			"label":            "#f0dfaf",
-			"attribute":        "#94bff3",
+			"attribute":        "#e0cf9f",
 			"punctuation":      "#9f9f8f",
 			"escape":           "#dfaf8f",
 			"boolean":          "#dca3a3",

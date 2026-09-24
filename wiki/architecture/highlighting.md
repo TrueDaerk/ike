@@ -64,6 +64,15 @@ braces, format spec and conversion as `punctuation.special`, #1466; PHP's
 key, #1869). `Highlight(path, lines)` looks the language up via `lang.ByPath`, type-asserts
 its grammar, and parses — the engine knows no specific language.
 
+**Decorators and attributes** (#2727, refines #928) use the standard
+`@attribute` capture ("attributes, annotations, decorators"), never
+`@function`, so they stand out from calls and definitions: Python's `@` sigil
+plus the (dotted) name / call target of a `(decorator)`; PHP's `#[`, `]` and
+the `name`/`qualified_name`/`relative_name` of an `(attribute)`; JS/TS
+`@Component(...)` decorators likewise. Arguments keep their normal captures.
+Every built-in theme colours `attribute` visibly apart from `function`
+(`TestBuiltinThemeAttributeDistinctFromFunction`).
+
 `HighlightScoped(path, lines)` is the same single parse returning the spans
 **plus the sticky-scroll scopes** (#168): every multi-line node whose kind the
 language lists in `lang.Language.ScopeNodes` (e.g. `function_declaration`,

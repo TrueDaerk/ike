@@ -134,3 +134,44 @@ func TestPHPStringInterpolation(t *testing.T) {
 		}
 	}
 }
+
+// TestPHPAttributes guards #2727: #[, ] and the attribute name carry the
+// attribute capture; the arguments keep their normal captures.
+func TestPHPAttributes(t *testing.T) {
+	lines := []string{
+		`<?php`,
+		`#[Route("about")]`,
+		`#[ORM\Column(type: "string", length: 255)]`,
+		`function about() {}`,
+	}
+	highlight.SetRainbow(false)
+	defer highlight.SetRainbow(true)
+	ix := highlight.NewIndex(highlight.Highlight("main.php", lines))
+	cases := []struct {
+		name string
+		line int
+		word string
+		want string
+	}{
+		{"open", 1, "#[", "attribute"},
+		{"name", 1, "Route", "attribute"},
+		{"string", 1, `"about"`, "string"},
+		{"close", 1, "]", "attribute"},
+		{"qualified name", 2, "ORM", "attribute"},
+		{"qualified tail", 2, "Column", "attribute"},
+		{"named arg string", 2, `"string"`, "string"},
+		{"close 2", 2, "]", "attribute"},
+	}
+	for _, c := range cases {
+		col := strings.Index(lines[c.line], c.word)
+		if got := ix.CaptureAt(c.line, col); got != c.want {
+			t.Errorf("%s: CaptureAt(%d,%d) = %q, want %q", c.name, c.line, col, got, c.want)
+		}
+	}
+	for _, w := range []string{"type", "length"} {
+		col := strings.Index(lines[2], w)
+		if got := ix.CaptureAt(2, col); got == "attribute" {
+			t.Errorf("named-arg label %q painted as attribute", w)
+		}
+	}
+}

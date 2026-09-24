@@ -292,3 +292,33 @@ func TestHighContrastThemesUseStrictTier(t *testing.T) {
 		}
 	}
 }
+
+// TestBuiltinThemeAttributeDistinctFromFunction guards #2727: decorators and
+// attributes render with the attribute capture, so it must be visibly
+// distinct from the function colour in every built-in theme.
+func TestBuiltinThemeAttributeDistinctFromFunction(t *testing.T) {
+	for _, th := range Builtins() {
+		p := NewPalette(th)
+		attr, ok1 := p.Captures["attribute"]
+		fn, ok2 := p.Captures["function"]
+		if !ok1 || !ok2 {
+			t.Errorf("%s: missing attribute/function capture colour", th.Name)
+			continue
+		}
+		if d := rgbDistance(Resolve(attr), Resolve(fn)); attr == fn || d < minHueDistance {
+			t.Errorf("%s: attribute %q vs function %q RGB distance %.0f, want >= %.0f", th.Name, attr, fn, d, minHueDistance)
+		}
+	}
+}
+
+// minHueDistance is the smallest 8-bit RGB distance at which two syntax
+// colours read as different; luminance contrast alone misses hue changes.
+const minHueDistance = 60.0
+
+// rgbDistance returns the Euclidean distance of two colours in 8-bit RGB.
+func rgbDistance(a, b color.Color) float64 {
+	ar, ag, ab, _ := a.RGBA()
+	br, bg, bb, _ := b.RGBA()
+	d := func(x, y uint32) float64 { return float64(x>>8) - float64(y>>8) }
+	return math.Sqrt(d(ar, br)*d(ar, br) + d(ag, bg)*d(ag, bg) + d(ab, bb)*d(ab, bb))
+}
