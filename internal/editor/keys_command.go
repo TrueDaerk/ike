@@ -86,6 +86,7 @@ func (m *Model) searchNextRepeat(reverse bool, count int) bool {
 		}
 		m.hlActive = true
 		m.jumpTo(p) // n/N landings are jumps (Roadmap 0220)
+		m.landOnMatch(m.query)
 		return true
 	}
 	return false
@@ -184,6 +185,7 @@ func (m *Model) StepSearchPreview(reverse bool) ui.MatchStep {
 	m.searchStepped = true
 	m.cursor = p
 	m.desiredCol = p.Col
+	m.landOnMatch(q)
 	m.scroll()
 	t := q.CountMatches(m.buf, p, search.MaxMatches, search.MaxScanLines)
 	if t.Total == 0 {
@@ -481,6 +483,11 @@ func (m *Model) searchPreview() {
 		if p, ok := m.preview.Next(m.buf, m.searchOrigin, m.searchDir, 1); ok {
 			m.cursor = p
 			m.desiredCol = p.Col
+			m.landOnMatch(m.preview)
+			// Each keystroke frames its match from the origin's horizontal
+			// offset (#2732): scrolling on from the previous, shorter
+			// preview would leave the grown match with a sliver of margin.
+			m.view.Left = m.searchOrigLft
 			m.scroll()
 			return
 		}
@@ -548,6 +555,7 @@ func (m *Model) commitSearch() {
 	}
 	m.cursor = m.searchOrigin // the jump departs from the origin, not the preview
 	m.jumpTo(p)               // the initial /-search landing is a jump (Roadmap 0220)
+	m.landOnMatch(m.query)
 }
 
 // SetHistories injects the app-owned persistent query-history store (#1171):

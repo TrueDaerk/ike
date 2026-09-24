@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-09-23T12:00:00Z
+timestamp: 2026-09-24T12:00:00Z
 ---
 
 # Editor
@@ -993,6 +993,22 @@ width minus one while `scrollbarGeometry()` reports a visible bar. Without it
 the follow logic parks the caret in exactly the column the bar covers, and the
 user cannot tell whether the line continues behind it. `TextWidth` itself stays
 untouched: rendering fills the full width and the bar draws over it.
+
+**Match-aware search landings (#2732, `editor/matchscroll.go`).** Plain
+cursor-following only keeps the caret column inside that window, so a search
+match right of it used to land with just its first character in the last
+column. Every in-file search landing — the `/` `?` commit, the incsearch
+preview, the cmd+g preview step, `n`/`N` and `*`/`#` — records the match it
+landed on (`landOnMatch`, via `search.Query.LineMatches`), and the next
+`scroll()` runs `matchScrollFix` after the caret follow and the conceal
+fix-up: a match not fully visible is scrolled so its end plus 5 columns
+(`matchScrollMargin`, cut at the line end) is the rightmost cell of
+`scrollTextWidth()`; a match wider than the window starts at its left edge;
+an already visible match leaves `view.Left` alone. Columns are compared in
+display cells (`svDisplayCol` for sv tables, the conceal display prefix
+otherwise), like the caret's. The incsearch preview frames each keystroke's
+match from the search origin's offset, so a growing pattern keeps the full
+margin. Ordinary motions never record a landing; soft wrap is unaffected.
 
 **Horizontal scroll marks (#2377, `editor/hscroll.go`).** The horizontal axis
 has no bar; it carries per-row edge marks instead, drawn from the shared
