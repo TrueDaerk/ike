@@ -948,15 +948,19 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	if from > 0 && m.svActive() {
 		left, padSkip = m.svDisplaySlice(line, from)
 	}
+	// The decoration scans below cover the whole line while it is short and
+	// only the rendered window with a margin once it is very long (#2734,
+	// longline.go), so a minified file renders within the frame budget.
+	dlo, dhi := decorWindow(len(runes), from, to, width)
 	// Inline color preview (#790): literal cells tint with their own color.
-	swatches := m.lineColorSwatches(line)
+	swatches := m.windowedColorSwatches(line, runes, dlo, dhi)
 	// Identifier colors (#1626): UUIDs and hex hashes take a foreground from
 	// the rainbow palette keyed on the identifier's own hash.
-	ids := m.lineIDColors(line)
+	ids := m.windowedIDColors(line, runes, dlo, dhi)
 	// Terminal hyperlinks (#1655): the clickable ranges of this line — bare
 	// URLs and Markdown link labels. Each of their cells wraps in its own
 	// OSC 8 open/close pair below (see hyperlink.go).
-	links := m.lineLinks(runes)
+	links := m.windowedLinks(runes, dlo, dhi)
 	// Caret column stripe (#1659): the rune range this line contributes to the
 	// table column the caret sits in, tinted below every other overlay.
 	svStart, svEnd, hasSVCol := m.svColumnRange(line)
@@ -986,7 +990,8 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	// underlined so it stands apart from the rest.
 	var matchSpans []search.Span
 	if q, ok := m.searchHLQuery(); ok {
-		matchSpans = q.LineMatches(m.buf, line)
+		// Only the rendered window of a very long line is scanned (#2734).
+		matchSpans = q.LineMatchesIn(m.buf, line, dlo, dhi)
 	}
 	matchStyle := lipgloss.NewStyle().Background(m.theme().SelectionMuted)
 	// The current match takes an accent-tinted background on top of the

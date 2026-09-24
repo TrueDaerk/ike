@@ -4,7 +4,7 @@ title: Project Search (Find in Path)
 description: Streaming project-wide search engine — rg --json backend with a pure-Go walker fallback, generation-based cancellation, bounded results — and the shared in-pane "/" search (ui.LineSearch) every viewer pane jumps through its matches with.
 resource: internal/search
 tags: [architecture, search, find-in-path, in-pane-search, ui]
-timestamp: 2026-09-18T00:00:00Z
+timestamp: 2026-09-24T16:00:00Z
 ---
 
 # Project Search (Find in Path)
@@ -503,3 +503,46 @@ cross-project open and the retained-results `cmd+g` stepping.
 - **Header:** the results overlay is titled `Find in Project Group` and its
   summary row names the searched set — `7 matches in group web · 3 projects`;
   the status segment counts `⌕ group web 2/3 · 41 hits` while the scan runs.
+
+## Bounded in-file landings (#2734)
+
+The editor's own `/` `?` search shares this engine's shape since #2734:
+bounded work on the keystroke, the rest off the loop, generation-tagged
+cancellation. Before, every landing — the incsearch preview per keystroke,
+Enter, `n`/`N`, `*`/`#`, the cmd+g step — called `Query.AllMatches`, a full
+pass over the buffer, and `LineMatches` converted every match's byte offsets
+with a rescan from the line start (quadratic on a long line). A 4.5 MB HTML
+file of a few very long lines froze the loop for 44 s on one keystroke
+(watchdog dump and all), and Esc could not reach it.
+
+- **`Query.Begin` / `Query.Step` / `Landing`**
+  (`internal/editor/search/landing.go`): a landing walks from the departure
+  position in the search direction and stops at the count-th match it meets,
+  wrapping once (the second leg ends at the departure line). `Step` takes a
+  byte budget and hands back a resumable `Scan`; `Next` is the unbudgeted
+  walk. A count of *n* is *n* single steps, each departing from the previous
+  match, which cycles exactly like the old modulo over the full list did. A
+  multi-line pattern (#2600) walks window by window, each window widened by
+  the pattern's break count on both sides.
+- **Budgets:** `SyncScanBytes` (256 KiB) on the keystroke, then
+  `AsyncScanBytes` (1 MiB) per slice between two cancellation checks on the
+  goroutine (`editor/searchscan.go`). The tally (`ScanMatches`) gained
+  `MaxScanBytes` (2 MiB) next to its line and match caps, for the few-long-
+  lines shape the line cap never reaches.
+- **Cancellation:** `editor.searchScanStore` is one atomic generation behind a
+  pointer the value copies of a Model share; `searchLand` bumps it when a
+  landing starts and `cancelSearchScan` on Esc, a retyped pattern,
+  `ClearSearch`, `Load`/`NewFile`/`ShowReadOnly` and `Model.Close` (which the
+  pane's tab close calls). The goroutine returns a nil message once stale —
+  bubbletea drops it before Update — and `applySearchScan` checks generation,
+  route key (`ParseKey`; the app routes `editor.SearchScanMsg` like a parse
+  result, the playground's result buffer included) and document version, so
+  no stale landing is ever applied.
+- **Long lines:** `LongLineBytes` (4 KiB). Past it a landing cuts the line at
+  the departure column instead of matching it whole (forward: the rest of the
+  line; backward: the prefix plus a 4 KiB margin, so a match reaching past
+  the column is still seen), and the highlighter asks `LineMatchesIn` for the
+  rendered window only. Anchors and word boundaries at a cut can differ from
+  the whole-line answer — the price of a bounded landing on a minified line.
+  `LineMatches` itself converts offsets with one forward walk (`runeCounter`)
+  rather than a rescan per match.

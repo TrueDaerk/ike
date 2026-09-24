@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-09-24T12:00:00Z
+timestamp: 2026-09-24T16:00:00Z
 ---
 
 # Editor
@@ -548,14 +548,34 @@ Cluster-aware motion is a possible follow-up, not part of this change.
   slot** (`search`,
   `⌕ 3/17`, #2145) — it outlives the `/` line, so `n`/`N` navigation updates
   the index in place until the highlights are cleared.
-  **Cost caps** (#2145): highlighting only ever scans the lines the viewport
-  renders, so buffer size does not enter into it, and the counter's scan is
-  bounded twice over (`search.ScanMatches`: at most `search.MaxMatches` = 999
-  matches and `search.MaxScanLines` = 20 000 lines). A count that hits either
-  budget renders as "999+". The capped match list is cached per
-  (document version, query identity) — a keystroke recompiles the query and
-  costs one bounded scan, while cursor motion (`n`/`N` and plain `j`/`k`)
-  only re-derives the index from the cached list (`editor/searchtally.go`).
+  **Cost caps** (#2145, #2734): highlighting only ever scans the lines the
+  viewport renders — and on a line longer than `search.LongLineBytes` (4 KiB)
+  only the rendered window plus a margin (`search.LineMatchesIn`) — so
+  neither buffer nor line size enters into it. The counter's scan is bounded
+  three times over (`search.ScanMatches`: at most `search.MaxMatches` = 999
+  matches, `search.MaxScanLines` = 20 000 lines and `search.MaxScanBytes` =
+  2 MiB of text). A count that hits a budget renders as "999+". The capped
+  match list is cached per (document version, query identity) — a keystroke
+  recompiles the query and costs one bounded scan, while cursor motion
+  (`n`/`N` and plain `j`/`k`) only re-derives the index from the cached list
+  (`editor/searchtally.go`).
+  **Landings are bounded too** (#2734): the preview, Enter, `n`/`N`, `*`/`#`
+  and the cmd+g step walk the buffer from the cursor in the search direction
+  and stop at the match they land on (`search.Query.Begin`/`Step`, wrapping
+  once) instead of collecting every match. The first `search.SyncScanBytes`
+  (256 KiB) of that walk run on the keystroke; the rest — a pattern matching
+  nowhere, or only far away — continues on a goroutine over a buffer snapshot
+  and lands through `editor.SearchScanMsg` (`editor/searchscan.go`). While it
+  runs the status line's large-file slot reads `searching…`, the cursor parks
+  at the origin (preview) or stays put (`n`/`N`, Enter says `searching…` on
+  the ex line), and Esc, retyping the pattern, clearing the search, loading
+  other content into the view or closing the tab cancel it through a
+  generation counter, so no stale landing is ever applied. On a line past
+  `LongLineBytes` the landing scans on from the cursor column (forward) or
+  the prefix plus a 4 KiB margin (backward) rather than the whole line;
+  anchors at that cut can differ from the whole-line answer — the price of a
+  bounded landing on a minified line. Details in the
+  [project search](search.md) doc's bounded-landings section.
   `cmd+f` (`editor.find`) opens the same `/` line — one engine, no divergent
   find UI. With an open **single-line visual selection**, `cmd+f` prefills the
   query with the selected text instead of opening empty (#2063, JetBrains-style):
@@ -2111,7 +2131,11 @@ feature threshold too (`largeFileGated` goes through `Thresholds.Off`).
 UX: a one-time warn toast on open, plus a dedicated `largefile` status-line
 segment — `[large file]` past the base cliff, `[large: <feature> off]` /
 `[large: N features off]` for per-feature degradation (#2159; it replaced the
-former marker inside the `file` segment). Clicking the badge — or the palette
+former marker inside the `file` segment). The same slot shows pending
+background work for the document (#2734): `[large file · searching…]` — or
+`[searching…]` on an undegraded document — while an in-file search landing is
+still scanning off the loop (see the in-file search section above); closing
+the tab cancels it. Clicking the badge — or the palette
 command `editor.largeFileDetails` — opens a centered popup listing every
 feature with its on/off state and config key; any key or click closes it.
 The palette command `editor.forceCodeInsight` overrides per document: it

@@ -191,13 +191,10 @@ func (q Query) multiAll(b *buffer.Buffer) []Span {
 }
 
 // multiScan serves ScanMatches under the same budgets as the per-line path:
-// at most maxLines buffer lines and maxMatches matches, capped reporting that
-// one of the two ran out.
-func (q Query) multiScan(b *buffer.Buffer, maxMatches, maxLines int) (spans []Span, capped bool) {
-	last := b.LineCount() - 1
-	if last >= maxLines {
-		last, capped = maxLines-1, true
-	}
+// the first lines buffer lines (capped reporting that a budget cut the
+// buffer short) and at most maxMatches matches.
+func (q Query) multiScan(b *buffer.Buffer, maxMatches, lines int, capped bool) (spans []Span, _ bool) {
+	last := lines - 1
 	for _, mr := range q.scanLines(b, 0, last) {
 		if len(spans) == maxMatches {
 			return spans, true

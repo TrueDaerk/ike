@@ -19,7 +19,9 @@ const matchScrollMargin = 5
 // for a search landing) leaves nothing pending.
 func (m *Model) landOnMatch(q search.Query) {
 	m.landMatchOK = false
-	for _, sp := range q.LineMatches(m.buf, m.cursor.Line) {
+	// The match starts at the cursor: on a very long line only the text
+	// from there on is scanned (#2734).
+	for _, sp := range q.LineMatchesIn(m.buf, m.cursor.Line, m.cursor.Col, m.cursor.Col+search.LongLineBytes) {
 		if m.cursor.Col >= sp.Start && m.cursor.Col < sp.End {
 			m.landMatch = sp
 			m.landMatchOK = true

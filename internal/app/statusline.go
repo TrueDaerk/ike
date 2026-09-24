@@ -232,18 +232,32 @@ func largeFileSegment(_ Model, ed *editor.Model) string {
 	if ed == nil || !ed.HasFile() {
 		return ""
 	}
+	// Background work for the document shows here too (#2734): a search
+	// landing still scanning off the loop is work in progress, not a miss.
+	pending := ""
+	if ed.SearchPending() {
+		pending = "searching…"
+	}
 	off := ed.DegradedFeatures()
+	badge := ""
 	switch {
 	case len(off) == 0:
-		return ""
+		if pending == "" {
+			return ""
+		}
+		return "[" + pending + "]"
 	case ed.InsightOff():
 		// The base cliff (#149): everything is off.
-		return "[large file]"
+		badge = "large file"
 	case len(off) == 1:
-		return "[large: " + off[0].Label() + " off]"
+		badge = "large: " + off[0].Label() + " off"
 	default:
-		return "[large: " + strconv.Itoa(len(off)) + " features off]"
+		badge = "large: " + strconv.Itoa(len(off)) + " features off"
 	}
+	if pending != "" {
+		badge += " · " + pending
+	}
+	return "[" + badge + "]"
 }
 
 // eolSegment is the focused file's on-disk line-ending flavor (#66) — "LF" or

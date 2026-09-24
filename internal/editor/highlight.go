@@ -29,6 +29,11 @@ func (m Model) maybeReparse(beforeVersion int, cmd tea.Cmd) (Model, tea.Cmd) {
 	if sig := m.takeDetectSignal(); sig != nil {
 		cmd = tea.Batch(cmd, sig)
 	}
+	// A landing the bounded pass could not settle continues in the
+	// background (#2734): its scan command rides out the same way.
+	if sc := m.takeSearchCmd(); sc != nil {
+		cmd = tea.Batch(cmd, sc)
+	}
 	if m.docVersion == beforeVersion {
 		return m, cmd
 	}

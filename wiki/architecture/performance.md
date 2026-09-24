@@ -4,7 +4,7 @@ title: Performance & Diagnostics
 description: Idle-behavior rules (who may wake the render loop, and how often), the render budget and the always-on per-message-type pass accounting, the per-keystroke fan-out budget while typing (#2541), the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, the heartbeat freeze dump (#2627), the opt-in update-loop trace log, the freeze-triage procedure, the selection-overlay rule for drag latency (#2495), and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/perfhud
 tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog, startup, freeze, render-budget]
-timestamp: 2026-09-23T14:00:00Z
+timestamp: 2026-09-24T16:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -847,3 +847,54 @@ Two guards keep typing flat regardless of file size:
   than the small-file case (which still schedules a parse). The deterministic
   companion `TestKeystrokeAvoidsFullBufferWorkWhenLarge` asserts no change
   text ships and no parse schedules on the degraded path.
+
+## Huge-file responsiveness: search landings and long lines (#2734)
+
+The large-file policy above degrades per-edit services, but two paths did
+unbounded work regardless of it: the in-file search landing
+(`search.Query.Next` collected every match in the buffer on every keystroke,
+and converted each match's columns with a rescan from the line start —
+quadratic on a long line) and the per-line decoration scans in the renderer
+(colour swatches, identifier colours and hyperlinks scan the whole line on
+every render epoch, i.e. every key). Measured in-package on a 4.5 MB HTML
+file with the default limits, in both shapes the report names:
+
+| Step | Before, 27k short lines | Before, 7 lines of 660 KB | After (short / long) |
+| --- | --- | --- | --- |
+| `Load` | 4.6 ms | 3.1 ms | 3–4 ms |
+| first `View` | 8.7 ms | 118 ms | 6.4 / 9.2 ms |
+| `j` + `View` | 6.5 ms | 117 ms | 5.5 / 9.4 ms |
+| `/` then `d` (preview) | 67 ms | 49.6 **s** | 0.05 / 2.3 ms |
+| Enter, `n`, `N` | 47 ms each | 25 **s** each | 0.03 / 1.8 ms |
+
+In the real binary (tmux, `perf.trace_log`, `main` against the branch) `main`
+logged `slow update: tea.KeyPressMsg took 43.869s` plus two watchdog stall
+dumps for the first preview keystroke on the long-line file; the branch
+logged no pass over the 200 ms line through the whole reproduction (`/div`,
+Enter, `n`, `n`, `N`, `j`, a pattern matching nowhere, Esc). The open path
+itself was already clean — `Load` is ~4 ms, the parse/lint/Unicode scan is
+skipped past the cliff, no slow pass on open — the "freeze on open" of the
+report was the first frames and keystrokes on the long lines, covered here.
+
+The rules this adds:
+
+- **A landing stops at its match.** `Query.Begin`/`Step` walk from the
+  cursor in the search direction (`search/landing.go`); the cost is the
+  distance to the match, not the buffer.
+- **What a keystroke cannot settle within `search.SyncScanBytes` (256 KiB)
+  moves off the loop:** a goroutine over a buffer snapshot, one
+  `search.AsyncScanBytes` slice per cancellation check, generation-tagged
+  like project search, its result routed by `ParseKey` as
+  `editor.SearchScanMsg` and applied only if generation, route and document
+  version still match (`editor/searchscan.go`). The status line's large-file
+  slot reads `searching…` meanwhile, and Esc, retyping and closing the tab
+  cancel it — a closed tab never keeps a scan alive (`editor.Model.Close`,
+  called from the pane's tab close).
+- **A per-line scan on the render path is windowed past `longLineRunes`
+  (4096):** colour swatches, identifier colours, hyperlinks and the
+  search-match highlight (`search.LineMatchesIn`) cover the rendered span
+  plus one span width of margin (`editor/longline.go`), so a minified line
+  costs a window, not its length.
+- **Byte offsets convert in one pass.** `search.runeCounter` replaced the
+  per-match `runeCol` rescan; anything mapping many byte offsets on one line
+  to rune columns walks the line once.

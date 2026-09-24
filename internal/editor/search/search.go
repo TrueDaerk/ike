@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"ike/internal/editor/buffer"
 )
@@ -152,28 +153,129 @@ func (q Query) LineMatches(b *buffer.Buffer, i int) []Span {
 	if q.multi {
 		return q.multiLineMatches(b, i)
 	}
+	return q.scanText(b.Line(i), i, 0)
+}
+
+// LongLineBytes is the line length past which the per-line paths cut the
+// line instead of scanning all of it (#2734): a landing scans on from the
+// departure column (Step), and the windowed highlight (LineMatchesIn) scans
+// only the columns it renders. Anchors and word boundaries at a cut can
+// answer differently from the whole line; on a line this long a bounded
+// cost matters more.
+const LongLineBytes = 4096
+
+// LineMatchesIn returns the matches of line i for a consumer that only
+// looks at rune columns [lo, hi): every match while the line is of ordinary
+// length (LineMatches, exactly), and on a line longer than LongLineBytes
+// only the matches found scanning that window — one bounded pass instead of
+// the whole line, which the view asks for per visible line per frame.
+func (q Query) LineMatchesIn(b *buffer.Buffer, i, lo, hi int) []Span {
 	line := b.Line(i)
+	if q.jq != nil || q.multi || q.Empty() || len(line) <= LongLineBytes {
+		return q.LineMatches(b, i)
+	}
+	if lo < 0 {
+		lo = 0
+	}
+	blo := byteOffset(line, lo)
+	bhi := len(line)
+	if hi >= 0 {
+		bhi = blo + byteOffset(line[blo:], hi-lo)
+	}
+	if blo >= bhi {
+		return nil
+	}
+	return q.scanText(line[blo:bhi], i, lo)
+}
+
+// scanText returns the matches in text as spans on line i, columns offset
+// by base (the rune column text starts at).
+func (q Query) scanText(text string, i, base int) []Span {
 	var spans []Span
+	// Byte offsets convert to rune columns through one forward walk over the
+	// text (runeCounter) rather than a rescan from the start per match
+	// (#2734): on a minified file with thousands of matches per multi-hundred-
+	// kilobyte line the rescan made one line's matches quadratic — seconds
+	// per keystroke — where they are linear now.
+	rc := runeCounter{line: text}
 	if q.re != nil {
-		for _, m := range q.re.FindAllStringIndex(line, -1) {
+		for _, m := range q.re.FindAllStringIndex(text, -1) {
 			if m[0] == m[1] {
 				continue // skip empty matches
 			}
-			spans = append(spans, Span{Line: i, Start: runeCol(line, m[0]), End: runeCol(line, m[1])})
+			spans = append(spans, Span{Line: i, Start: base + rc.col(m[0]), End: base + rc.col(m[1])})
 		}
 		return spans
 	}
 	from := 0
 	for {
-		idx := strings.Index(line[from:], q.Pattern)
+		idx := strings.Index(text[from:], q.Pattern)
 		if idx < 0 {
 			break
 		}
 		bs := from + idx
-		spans = append(spans, Span{Line: i, Start: runeCol(line, bs), End: runeCol(line, bs+len(q.Pattern))})
+		spans = append(spans, Span{Line: i, Start: base + rc.col(bs), End: base + rc.col(bs+len(q.Pattern))})
 		from = bs + len(q.Pattern)
 	}
 	return spans
+}
+
+// firstIn returns the byte range of the first non-empty match in text.
+func (q Query) firstIn(text string) (bs, be int, ok bool) {
+	if q.re == nil {
+		idx := strings.Index(text, q.Pattern)
+		if idx < 0 {
+			return 0, 0, false
+		}
+		return idx, idx + len(q.Pattern), true
+	}
+	for off := 0; off <= len(text); {
+		m := q.re.FindStringIndex(text[off:])
+		if m == nil {
+			return 0, 0, false
+		}
+		if m[0] != m[1] {
+			return off + m[0], off + m[1], true
+		}
+		// An empty match: step one rune past it and look again.
+		_, size := utf8.DecodeRuneInString(text[off+m[0]:])
+		if size == 0 {
+			size = 1
+		}
+		off += m[0] + size
+	}
+	return 0, 0, false
+}
+
+// byteOffset converts rune column col of line to its byte offset, clamped
+// to the line end.
+func byteOffset(line string, col int) int {
+	off := 0
+	for n := 0; n < col && off < len(line); n++ {
+		_, size := utf8.DecodeRuneInString(line[off:])
+		off += size
+	}
+	return off
+}
+
+// runeCounter converts ascending byte offsets of one line to rune columns in
+// a single forward pass; an offset before the last one restarts the walk.
+type runeCounter struct {
+	line  string
+	at    int // the byte offset the walk reached
+	runes int // its rune column
+}
+
+func (c *runeCounter) col(byteOff int) int {
+	if byteOff < c.at {
+		c.at, c.runes = 0, 0
+	}
+	for c.at < byteOff && c.at < len(c.line) {
+		_, size := utf8.DecodeRuneInString(c.line[c.at:])
+		c.at += size
+		c.runes++
+	}
+	return c.runes
 }
 
 // AllMatches returns every match in the buffer in reading order — one span per
@@ -191,42 +293,17 @@ func (q Query) AllMatches(b *buffer.Buffer) []Span {
 }
 
 // Next finds the count-th match from the cursor in dir, wrapping around the
-// buffer ends. ok is false when the pattern matches nothing.
+// buffer ends. ok is false when the pattern matches nothing. It is the
+// unbudgeted landing scan (landing.go, #2734): the walk stops at the match
+// it lands on, so its cost is the distance to that match, not the buffer —
+// but a pattern matching nowhere still costs the whole buffer, which is why
+// the editor steps the scan under a budget instead of calling this.
 func (q Query) Next(b *buffer.Buffer, from buffer.Position, dir Direction, count int) (buffer.Position, bool) {
-	all := q.AllMatches(b)
-	if len(all) == 0 {
+	l := q.Step(b, q.Begin(from, dir, count), 0)
+	if !l.Found {
 		return from, false
 	}
-	if count < 1 {
-		count = 1
-	}
-	idx := -1
-	if dir == Forward {
-		for i, s := range all {
-			if s.Line > from.Line || (s.Line == from.Line && s.Start > from.Col) {
-				idx = i
-				break
-			}
-		}
-		if idx < 0 {
-			idx = 0 // wrap to first
-		}
-		idx = (idx + count - 1) % len(all)
-	} else {
-		for i := len(all) - 1; i >= 0; i-- {
-			s := all[i]
-			if s.Line < from.Line || (s.Line == from.Line && s.Start < from.Col) {
-				idx = i
-				break
-			}
-		}
-		if idx < 0 {
-			idx = len(all) - 1 // wrap to last
-		}
-		idx = ((idx-(count-1))%len(all) + len(all)) % len(all)
-	}
-	m := all[idx]
-	return buffer.Position{Line: m.Line, Col: m.Start}, true
+	return l.Pos, true
 }
 
 // Match-tally caps (#2145). A tally must not cost a full scan of a very large
@@ -237,6 +314,10 @@ const (
 	MaxMatches = 999
 	// MaxScanLines bounds how many buffer lines one tally scans.
 	MaxScanLines = 20000
+	// MaxScanBytes bounds the line text one tally scans (#2734): a file of a
+	// few very long lines stays under the line budget while its bytes do
+	// not, and the tally runs on the event loop.
+	MaxScanBytes = 2 << 20
 )
 
 // Tally is a capped match count for the search counter (#2145): the 1-based
@@ -252,8 +333,9 @@ type Tally struct {
 
 // ScanMatches returns q's matches in reading order, spending at most
 // maxMatches matches and maxLines lines (non-positive values fall back to the
-// MaxMatches / MaxScanLines defaults). capped reports that a budget ran out,
-// so the result is a prefix of the buffer's matches rather than all of them.
+// MaxMatches / MaxScanLines defaults) — and never more than MaxScanBytes of
+// line text. capped reports that a budget ran out, so the result is a prefix
+// of the buffer's matches rather than all of them.
 func (q Query) ScanMatches(b *buffer.Buffer, maxMatches, maxLines int) (spans []Span, capped bool) {
 	if maxMatches <= 0 {
 		maxMatches = MaxMatches
@@ -267,12 +349,9 @@ func (q Query) ScanMatches(b *buffer.Buffer, maxMatches, maxLines int) (spans []
 	if q.jq != nil {
 		return q.structuralScan()
 	}
+	lines, capped := scanExtent(b, maxLines, MaxScanBytes)
 	if q.multi {
-		return q.multiScan(b, maxMatches, maxLines)
-	}
-	lines := b.LineCount()
-	if lines > maxLines {
-		lines, capped = maxLines, true
+		return q.multiScan(b, maxMatches, lines, capped)
 	}
 	for i := 0; i < lines; i++ {
 		for _, s := range q.LineMatches(b, i) {
@@ -283,6 +362,22 @@ func (q Query) ScanMatches(b *buffer.Buffer, maxMatches, maxLines int) (spans []
 		}
 	}
 	return spans, capped
+}
+
+// scanExtent is how many leading lines a tally scans under the line and
+// byte budgets, and whether either cut the buffer short.
+func scanExtent(b *buffer.Buffer, maxLines, maxBytes int) (lines int, capped bool) {
+	lines = b.LineCount()
+	if lines > maxLines {
+		lines, capped = maxLines, true
+	}
+	bytes := 0
+	for i := 0; i < lines; i++ {
+		if bytes += len(b.Line(i)) + 1; bytes > maxBytes && i > 0 {
+			return i, true
+		}
+	}
+	return lines, capped
 }
 
 // IndexOf returns the 1-based position of the span starting at pos within

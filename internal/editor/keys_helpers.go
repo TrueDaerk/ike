@@ -132,7 +132,13 @@ func (m *Model) searchWord(forward bool) {
 	} else {
 		m.searchDir = search.Backward
 	}
-	if p, ok := m.query.Next(m.buf, m.cursor, m.searchDir, 1); ok {
+	p, ok, pending := m.searchLand(m.query, m.cursor, m.searchDir, 1, scanRepeat)
+	if pending {
+		m.cmdMsg = searchingMsg // the landing arrives in the background (#2734)
+		m.hlActive = true
+		return
+	}
+	if ok {
 		m.hlActive = true
 		m.jumpTo(p) // "*"/"#" landings are jumps (Roadmap 0220)
 		m.landOnMatch(m.query)

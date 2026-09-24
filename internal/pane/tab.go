@@ -180,6 +180,8 @@ func (t *Tab) update(msg tea.Msg) tea.Cmd {
 // release.
 func (t *Tab) close() {
 	switch {
+	case t.ed != nil:
+		t.ed.Close() // a pending background search scan stops with the tab (#2734)
 	case t.term != nil:
 		t.term.Close()
 	case t.inst != nil:
