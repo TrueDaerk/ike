@@ -1,5 +1,24 @@
 # Log
 
+## 2026-09-24 (Editor: Complete Current Statement, #2726)
+
+- **`editor.completeStatement`** (`cmd+shift+enter` / `ctrl+shift+enter`, Edit
+  menu, palette): JetBrains' Complete Current Statement. The buffer language's
+  new optional `lang.StatementCompleter` Toolchain extension
+  (`internal/lang/statement.go`) balances the line's unclosed brackets, appends
+  the block opener and names the closing lines; the editor (`statement.go`)
+  applies it as one undo unit, indents the body by the buffer's settings and
+  leaves the caret in insert mode where the body goes. Already-complete
+  headers only move the caret into the block (idempotent); unsupported
+  languages raise a notice. Rules ship for python (`:`), php / go /
+  typescript (` {` … `}`, `;` for simple statements in PHP and JS/TS, `});`
+  for callbacks) and shell (`then/fi`, `do/done`, `in/esac`, `{ }`); the table
+  is guarded by `cmd/ike/statement_audit_test.go`.
+- **Keymap**: `http.showResponse`'s `cmd+shift+enter` row is scoped to
+  `editor[http]` so `.http` buffers keep it and every other editor completes
+  the statement; allowlisted default shadow, `reachableAlternatives` entry,
+  `EditorCompleteStatement` import mapping.
+
 ## 2026-09-23 (YAML: inline Ansible `!vault` values, #2712)
 
 - **Inline vault stand-in**: a `!vault |` block in a YAML/Ansible buffer

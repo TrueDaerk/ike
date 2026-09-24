@@ -787,6 +787,9 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 			m.commitInsert()
 		}
 		m.duplicateLine()
+	case "complete_statement":
+		cmd := m.completeStatement()
+		return m, cmd
 	// Line-set commands (#2417, lineset.go): the selection's lines, or the
 	// whole buffer, reordered in one edit and left selected.
 	case "sort_lines":

@@ -94,6 +94,10 @@ The motivating case: `"editor[http].cmd+e" = "http.selectEnvironment"` runs
 the environment picker only in `.http` buffers; every other editor keeps the
 global default `cmd+e` → `palette.recentFiles`. Before #1876 the narrowest
 available scope was `editor.cmd+e`, which took the chord in **every** editor.
+The default set uses the scope too since #2726: `http.showResponse`'s
+`cmd+shift+enter` row is `editor[http]`, leaving the plain `editor` row to
+`editor.completeStatement` — see
+[Complete Current Statement takes `cmd+shift+enter`](#complete-current-statement-takes-cmdshiftenter-2726).
 
 ### One chord, three playgrounds (#2415)
 
@@ -1253,6 +1257,32 @@ binding, so the palette and the **Navigate** menu are the recorded fallback.
 See [editor.md](editor.md#go-to-line-2486) for the prompt and its target
 grammar.
 
+## Complete Current Statement takes `cmd+shift+enter` (#2726)
+
+JetBrains' Complete Current Statement is `cmd+shift+enter` on the macOS keymap
+and `ctrl+shift+enter` elsewhere. IKE binds `editor.completeStatement`
+(see [editor](./editor.md#complete-statement-2726)) to both, in the plain
+`editor` context: the cmd chord is the primary and the ctrl chord the twin
+that survives the Cmd→Ctrl fold, like the other cmd/ctrl pairs. Both are
+**fragile** — modified enter is a C0 key, so the shift disambiguation needs
+the Kitty protocol — and the palette (or the Edit menu) is the recorded
+escape (`reachableAlternatives`).
+
+The chord was already taken: since #1831 `http.showResponse` had it in the
+editor context, although the command only means something in an `.http`
+buffer. That row is now scoped to **`editor[http]`** — the first shipped
+default in a language-qualified context (#1876) — so in an `.http` buffer the
+stored-response view keeps winning (`editor[lang]` beats `editor`), and every
+other editor completes the statement. The pair is an allowlisted default
+shadow (`intentionalDefaultShadows`, on `cmd+shift+enter` and, off macOS, on
+the folded `ctrl+shift+enter`); `http.showResponse`'s delivered
+`ctrl+shift+f9` stays editor-wide. `TestDefaultShadowsAreIntentional`'s
+stale-entry scan now walks `Context.Shadows` rather than Global-hidden pairs
+only, so a `editor[lang]`-over-`editor` entry is verified like the rest.
+
+The JetBrains XML import maps `EditorCompleteStatement` onto the command
+(`jbimport`).
+
 ## Unbound chords that name a removed default (#2539)
 
 Telemetry recorded `alt+shift+up` / `alt+shift+down` — the Editor-context
@@ -1492,6 +1522,7 @@ JetBrains is:
 | `editor.closeTab` | `cmd+w` | fragile | `palette` | live via palette |
 | `editor.commentBlock` | `cmd+shift+7` | fragile | `palette` | live via palette |
 | `editor.commentLine` | `cmd+7` | fragile | `palette` | live via palette |
+| `editor.completeStatement` | `cmd+shift+enter` | fragile | `palette` | live via palette |
 | `editor.copy` | `cmd+c` | fragile | `vim y` | live via vim y |
 | `editor.copyDocPath` | `cmd+alt+shift+c` | fragile | `palette` | live via palette |
 | `editor.cut` | `cmd+x` | fragile | `vim d` | live via vim d |

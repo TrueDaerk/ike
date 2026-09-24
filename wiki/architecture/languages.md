@@ -322,6 +322,7 @@ grammar_cgo.go   //go:build cgo  -> grammar() = highlight.NewGrammar(ts.NewLangu
 grammar_stub.go  //go:build !cgo -> grammar() = nil
 queries/<lang>.scm
 toolchain.go     optional Toolchain detector
+statement.go     optional StatementCompleter (Complete Current Statement, #2726)
 ```
 
 Ships with `go`, `python`, `php`, `sql` (grammar from
@@ -645,6 +646,26 @@ Implemented today: **python** (`uv init` + `uv sync`, or `python -m venv .venv`
 plus a `main.py` seed — the guided venv creation), **go** (`go mod init` +
 `main.go`), **php** (plain `index.php`). See
 [Project Switching](./project-switching.md) for the wizard flow.
+
+A fourth optional extension backs the editor's **Complete Current Statement**
+command (#2726, `internal/lang/statement.go`):
+
+```go
+type StatementCompleter interface {
+    CompleteStatement(line string) (StatementCompletion, bool) // Head, Body, Tail
+}
+```
+
+The language returns the caret line with its unclosed brackets balanced and
+the block opener appended (`Head`), whether the caret goes into an indented
+body (`Body`) and the closing lines (`Tail`); the editor owns indentation,
+undo and caret placement. `lang.CompleteStatement(langID, line)` reports
+*not supported* for a language without the extension. Shared helpers —
+`BraceCompletion` for the C-family shape, `CloseBrackets`, `LeadingKeyword`,
+`TopLevelIndex` — keep the per-language rules to a keyword table and a
+header callback. Implemented by python, php, go, typescript (JS/TS) and
+shell; the per-language rules and the audit test guarding that table are in
+[editor](./editor.md#complete-statement-2726).
 
 ## Why compile-in
 

@@ -87,6 +87,10 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			// and the label key moves the caret there.
 			action("editor.labelJump", "Jump to Visible Text (Label Jump)", "label_jump", "gs"),
 			action("editor.duplicateLine", "Duplicate Line", "duplicate_line", ""),
+			// Complete Current Statement (#2726): the language finishes the
+			// caret line's syntactic shell (closers, colon or brace, closing
+			// line) and the caret lands in the body, in insert mode.
+			action("editor.completeStatement", "Complete Current Statement", "complete_statement", ""),
 			// Line-set commands (#2417): the selection's lines — or the whole
 			// buffer without a selection — reordered or thinned in one undo
 			// step, the palette/keybind half of the ":sort" family. The doc

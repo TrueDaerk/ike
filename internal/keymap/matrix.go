@@ -132,16 +132,16 @@ var reachableAlternatives = map[string]string{
 	"debug.breakpoints":    "palette / Run menu",
 	// #2673: both index operations sit on a cmd+alt+shift chord that needs a
 	// terminal forwarding Option; the palette carries them everywhere else.
-	"php.traitIndex.status":            "palette",
-	"php.traitIndex.rebuild":           "palette",
-	"lsp.goToSuper":                    "palette / Navigate menu / context menu",
-	"lsp.implementations":              "palette / Navigate menu / context menu",
-	"nav.pins":                         "palette",
-	"window.hideAllTools":              "palette",
-	"nav.pinGoto1":                     "palette (or the cmd+2 picker)",
-	"nav.pinGoto2":                     "palette (or the cmd+2 picker)",
-	"nav.pinGoto3":                     "palette (or the cmd+2 picker)",
-	"nav.pinGoto4":                     "palette (or the cmd+2 picker)",
+	"php.traitIndex.status":  "palette",
+	"php.traitIndex.rebuild": "palette",
+	"lsp.goToSuper":          "palette / Navigate menu / context menu",
+	"lsp.implementations":    "palette / Navigate menu / context menu",
+	"nav.pins":               "palette",
+	"window.hideAllTools":    "palette",
+	"nav.pinGoto1":           "palette (or the cmd+2 picker)",
+	"nav.pinGoto2":           "palette (or the cmd+2 picker)",
+	"nav.pinGoto3":           "palette (or the cmd+2 picker)",
+	"nav.pinGoto4":           "palette (or the cmd+2 picker)",
 	// #2697's cmd+d is a darwinRows chord *and* a Cmd chord: off macOS it does
 	// not ship at all (ctrl+d is the tree's half-page-down), and on macOS a
 	// terminal may swallow it — the palette and the node's context menu carry
@@ -243,6 +243,10 @@ var reachableAlternatives = map[string]string{
 	"coverage.toggle":       "palette",
 	"lsp.diagnosticInfo":    "palette",
 	"http.run":              "palette",
+	// #2726: Complete Current Statement sits on JetBrains' cmd+shift+enter
+	// with a ctrl twin; modified enter is a C0 key, so both are fragile
+	// without the Kitty protocol and the palette is the escape.
+	"editor.completeStatement": "palette",
 	// Second unbound-command audit (#2305): every new default is a Cmd- or
 	// Alt-modified chord, so all of them escape through the palette; the ones
 	// with a menu or context-menu home name it too.

@@ -46,7 +46,7 @@ func TestDefaultShadowsAreIntentional(t *testing.T) {
 				continue
 			}
 			for _, h := range table.Bindings() {
-				if h.Context == Global && h.Chord.String() == w.Chord.String() && h.Command != w.Command {
+				if w.Context.Shadows(h.Context) && h.Chord.String() == w.Chord.String() && h.Command != w.Command {
 					used[shadowKey(w.Chord.String(), w.Command, h.Command)] = true
 				}
 			}

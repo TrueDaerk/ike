@@ -591,8 +591,19 @@ var jetbrainsRows = []row{
 	// http.run's chord above, same primary/fallback split, so looking at a
 	// stored response without dispatching is one modifier away from running
 	// the request.
-	{"cmd+shift+enter", "http.showResponse", "Show stored HTTP response", Editor, "HTTP client (0450)"},
+	// Since #2726 the cmd+shift+enter row is scoped to editor[http]: in an
+	// .http buffer the stored response keeps winning (editor[lang] beats
+	// editor), everywhere else the chord is JetBrains' Complete Current
+	// Statement below. ctrl+shift+f9 stays editor-wide as before.
+	{"cmd+shift+enter", "http.showResponse", "Show stored HTTP response", WithLang(Editor, "http"), "HTTP client (0450)"},
 	{"ctrl+shift+f9", "http.showResponse", "Show stored HTTP response", Editor, "HTTP client (0450)"},
+	// Complete Current Statement (#2726): JetBrains' cmd+shift+enter, with
+	// the ctrl twin as the everywhere-deliverable secondary like the other
+	// cmd/ctrl pairs above (both are fragile without the Kitty protocol —
+	// modified enter is a C0 key — so the palette is the documented escape).
+	// Editor-wide; the .http buffer keeps http.showResponse on the same chord.
+	{"cmd+shift+enter", "editor.completeStatement", "Complete current statement", Editor, "Editor (#2726)"},
+	{"ctrl+shift+enter", "editor.completeStatement", "Complete current statement", Editor, "Editor (#2726)"},
 	// http.diffPreviousRun default keybinding (#2060): "d" for diff, mirroring
 	// the response pane's own "D" single-key story one level up. Both chords
 	// are Fragile (ctrl+shift+letter collapses without the Kitty protocol,

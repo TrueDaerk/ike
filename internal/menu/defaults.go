@@ -66,6 +66,8 @@ func Defaults() []Menu {
 			{Title: "Copy Value Under Caret", Command: "editor.yankValue"},
 			{Title: "Copy Key and Value Under Caret", Command: "editor.yankValueOuter"},
 			{Title: "Duplicate Line", Command: "editor.duplicateLine"},
+			// Complete Current Statement (#2726), JetBrains' Code menu entry.
+			{Title: "Complete Current Statement", Command: "editor.completeStatement"},
 			// The #2417 line-set family; the remaining sort flavours live in
 			// the palette.
 			{Title: "Sort Lines", Command: "editor.sortLines"},

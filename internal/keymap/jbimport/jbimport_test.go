@@ -28,7 +28,7 @@ const macFixture = `<?xml version="1.0" encoding="UTF-8"?>
   <action id="SaveAll">
     <keyboard-shortcut first-keystroke="meta pressed K" second-keystroke="meta pressed S"/>
   </action>
-  <action id="EditorCompleteStatement">
+  <action id="SurroundWith">
     <keyboard-shortcut first-keystroke="shift meta ENTER"/>
   </action>
   <action id="GotoNextError">
@@ -117,7 +117,7 @@ func TestPlanMacOSFixture(t *testing.T) {
 		}
 	}
 	// The unmapped action is collected, not fatal.
-	if len(res.Unmapped) != 1 || res.Unmapped[0] != "EditorCompleteStatement" {
+	if len(res.Unmapped) != 1 || res.Unmapped[0] != "SurroundWith" {
 		t.Fatalf("Unmapped = %v", res.Unmapped)
 	}
 	// The PERIOD keystroke is skipped with a reason, its action stays mapped.
