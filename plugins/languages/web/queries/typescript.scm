@@ -7,6 +7,16 @@
 ; (upstream relies on last-wins and lists them first). constructor -> type,
 ; punctuation.*/string.special/etc. resolve via the theme's dotted fallback.
 
+; --- Decorators (#2727) ----------------------------------------------------
+; The @ sigil and the (dotted) name / call target as @attribute — never the
+; whole (decorator) node, whose span would swallow the argument list.
+
+(decorator "@" @attribute)
+(decorator (identifier) @attribute)
+(decorator (member_expression) @attribute)
+(decorator (call_expression function: (identifier) @attribute))
+(decorator (call_expression function: (member_expression) @attribute))
+
 ; --- TypeScript types ------------------------------------------------------
 
 (type_identifier) @type

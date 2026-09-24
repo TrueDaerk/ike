@@ -100,7 +100,7 @@ func TestPythonSelfClsCaptures(t *testing.T) {
 }
 
 // TestPythonDecoratorArguments guards #928: only the @ sigil and the dotted
-// name carry the decorator color; the argument list highlights like a normal
+// name carry the attribute (decorator) color; the argument list highlights like a normal
 // call — strings as strings, kwarg names as plain identifiers — for
 // single-line and multi-line decorators alike.
 func TestPythonDecoratorArguments(t *testing.T) {
@@ -131,15 +131,15 @@ func TestPythonDecoratorArguments(t *testing.T) {
 		word string
 		want string
 	}{
-		{"sigil", 0, "@", "function"},
-		{"dotted name", 0, "router.get", "function"},
+		{"sigil", 0, "@", "attribute"},
+		{"dotted name", 0, "router.get", "attribute"},
 		{"string argument", 0, `"/users"`, "string"},
 		{"kwarg name", 0, "summary", "variable"},
 		{"kwarg string value", 0, `"List"`, "string"},
 		{"multi-line string arg", 5, `"/users"`, "string"},
 		{"multi-line kwarg name", 6, "description", "variable"},
 		{"multi-line kwarg value", 6, `"Create a user"`, "string"},
-		{"bare decorator", 11, "staticmethod", "function"},
+		{"bare decorator", 11, "staticmethod", "attribute"},
 	}
 	for _, c := range cases {
 		col := strings.Index(lines[c.line], c.word)
@@ -152,7 +152,7 @@ func TestPythonDecoratorArguments(t *testing.T) {
 	}
 	// The closing paren of the argument list must not carry the decorator
 	// color (the old whole-node capture painted it too).
-	if got := ix.CaptureAt(0, len(lines[0])-1); got == "function" {
+	if got := ix.CaptureAt(0, len(lines[0])-1); got == "attribute" {
 		t.Errorf("closing paren: still decorator-colored (%q)", got)
 	}
 }

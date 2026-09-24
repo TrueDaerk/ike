@@ -1,5 +1,13 @@
 # Log
 
+## 2026-09-24 (Highlighting: decorators/attributes as `@attribute`, #2727)
+
+- Python decorators (formerly `@function`, #928), PHP `#[...]` attributes and
+  JS/TS decorators now use the `attribute` capture for sigil/brackets and
+  name; arguments keep their colours. Built-in themes whose `attribute`
+  matched or sat too close to `function` (dracula, ayu ×3, gruvbox-light,
+  zenburn) got a distinct colour; a theme test enforces it.
+
 ## 2026-09-24 (Editor: Complete Current Statement, #2726)
 
 - **`editor.completeStatement`** (`cmd+shift+enter` / `ctrl+shift+enter`, Edit

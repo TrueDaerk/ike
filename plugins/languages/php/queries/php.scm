@@ -3,6 +3,15 @@
   (php_end_tag)
 ] @tag
 
+; Attributes (#2727): #[, ] and the attribute name as @attribute — never the
+; whole (attribute) node, whose span would swallow the (arguments), which keep
+; their normal colours. Before the name/identifier catch-alls (first span wins).
+
+(attribute_group "#[" @attribute "]" @attribute)
+(attribute (name) @attribute)
+(attribute (qualified_name) @attribute)
+(attribute (relative_name) @attribute)
+
 ; Keywords
 
 [
