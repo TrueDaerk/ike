@@ -1,5 +1,15 @@
 # Log
 
+## 2026-09-25 (HTML preview: render core, #2739)
+
+- New UI-free package `internal/htmlrender` (Epic 0530, §1): tolerant
+  tokenizer parse with source offsets, block/inline flow with HTML whitespace
+  collapsing and word wrap, palette styling aligned with the markdown
+  preview, OSC 8 links, and the link/image/anchor indexes plus a two-way
+  source map for cursor sync. Tables and images are placeholders until
+  0530/4 and 0530/5; nothing in the app uses it yet (0530/2 wires the pane).
+  Indexed from `architecture/index.md`; the concept doc follows in 0530/9.
+
 ## 2026-09-24 (Image viewer: zoom keeps magnifying past the pane, #2730)
 
 - Kitty and Ghostty ignore a Unicode-placeholder placement's source rectangle

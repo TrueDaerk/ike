@@ -1,0 +1,9 @@
+title: ""
+----
+<tag> & "quotes" 'apos' © été ☺ — …
+
+non breaking space and &amp; literal, bare & ampersand, &unknown; entity.
+
+Wide: 日本語のテキストは折り返されます。漢字仮名交じり文の長い行です。
+
+Escape  [31m smuggling  ]8;;evil  stays inert.

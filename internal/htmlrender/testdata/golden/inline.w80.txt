@@ -1,0 +1,9 @@
+title: ""
+----
+Plain strong and bold, em and italic, code, Ctrl+C, output, underline, struck,
+deleted, marked, H2O and E=mc2, a span and a “quotation”.
+
+Visit Example or read the installation guide with a long label that wraps. A
+named anchor is not a link, and bold mixed is.
+
+bold bold italic link with code
