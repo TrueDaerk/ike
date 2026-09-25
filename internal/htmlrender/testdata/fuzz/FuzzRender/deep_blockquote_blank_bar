@@ -1,0 +1,3 @@
+go test fuzz v1
+[]byte("<BloCkquote><BloCkquote><BloCkquote>0<p>0")
+int(120)

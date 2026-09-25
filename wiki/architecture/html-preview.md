@@ -1,10 +1,10 @@
 ---
 type: concept
 title: HTML Preview
-description: "Epic 0530 — rendered reading view of .html/.htm/.xhtml buffers (and .html.gz through the gz viewer) beside the editor, text-mode-browser style. #2739 the UI-free render core internal/htmlrender; #2740 the preview pane (KindHTMLPreview), html.preview on cmd+alt+h (macOS) / cmd+alt+shift+h, debounced re-render, source-mapped line-accurate cursor sync, / search, layout and session restore; #2741 following links (tab/shift+tab/enter/y, click, #anchor/file/browser) and the reverse cursor sync; #2743 local <img> inline over Kitty graphics (Options.ImageBlock, preview.html_images); #2742 tables as bordered grids (content-sized columns, colspan/rowspan, ellipsis truncation). Stub — 0530/9 completes it."
+description: "Epic 0530 — rendered reading view of .html/.htm/.xhtml buffers (and .html.gz through the gz viewer) beside the editor, text-mode-browser style. #2739 the UI-free render core internal/htmlrender; #2740 the preview pane (KindHTMLPreview), html.preview on cmd+alt+h (macOS) / cmd+alt+shift+h, debounced re-render, source-mapped line-accurate cursor sync, / search, layout and session restore; #2741 following links (tab/shift+tab/enter/y, click, #anchor/file/browser) and the reverse cursor sync; #2743 local <img> inline over Kitty graphics (Options.ImageBlock, preview.html_images); #2742 tables as bordered grids (content-sized columns, colspan/rowspan, ellipsis truncation); #2744 a minimal CSS subset (display/visibility hiding, font-weight, font-style, text-decoration, color, text-align). Stub — 0530/9 completes it."
 resource: internal/htmlpreview
-tags: [architecture, html, preview, pane, viewer, gzip, kitty, images, tables]
-timestamp: 2026-09-25T18:00:00Z
+tags: [architecture, html, preview, pane, viewer, gzip, kitty, images, tables, css]
+timestamp: 2026-09-25T20:00:00Z
 ---
 
 # HTML Preview (Epic 0530)
@@ -214,8 +214,52 @@ Unicode placeholder cells, the root model's reconcile pass).
   it on every construction path and `Reconfigure` pushes a change into open
   panes (`pane.applyHTMLPreviewCfg`).
 
+## CSS subset (#2744)
+
+The reading view applies a deliberately tiny CSS subset
+(`internal/htmlrender/css.go`) so hidden content stays hidden and simple
+emphasis survives. There is no layout engine: box model, fonts, positioning,
+backgrounds and every other property are ignored.
+
+- **Sources.** Inline `style=""` attributes and `<style>` blocks (those with a
+  `media` attribute only when it names `screen` or `all`). External
+  stylesheets are never fetched; `@media`, `@import`, `@font-face` and every
+  other at-rule are skipped.
+- **Supported properties.**
+
+  | Property | Values | Effect |
+  |---|---|---|
+  | `display` | `none` (any other value reverts it) | element not rendered |
+  | `visibility` | `hidden`, `collapse` (`visible` reverts) | element not rendered |
+  | `font-weight` | `bold`, `bolder`, number ≥ 600 / `normal`, `lighter`, < 600 | bold on / off |
+  | `font-style` | `italic`, `oblique` / `normal` | italic on / off |
+  | `text-decoration`, `text-decoration-line` | `underline`, `line-through`, `none` | underline / strike added; `none` clears both (a link's underline too) |
+  | `color` | named, `#rgb[a]`, `#rrggbb[aa]`, `rgb()`/`rgba()` | text colour |
+  | `text-align` | `center`, `right`/`end` (`left`/`start`/`justify` reset) | block lines centred / flush right |
+
+- **Colour.** CSS colours are emitted as true colour like the theme's own;
+  bubbletea's screen downsamples every colour to the nearest palette entry
+  on a 256- or 16-colour terminal. Fully transparent colours,
+  `currentcolor`, `inherit`, `hsl()` and `var()` are ignored.
+- **Cascade.** Rules sort by cascadia's specificity, then source order;
+  inline style wins over any rule; `!important` declarations win over normal
+  ones (inline important over stylesheet important). An invalid value leaves
+  the property as it was. The look inherits along the render walk and is
+  applied after the tag's own, so `b { font-weight: normal }` or
+  `a { color: … }` override the built-in styling. `text-align` counts only
+  on block elements and inherits into nested blocks and table cells (padded
+  within the cell's column; the measuring pass ignores it).
+- **Malformed CSS.** A stylesheet with unbalanced braces or an unterminated
+  comment or string is ignored as a whole and the document still renders; a
+  rule whose selector cascadia rejects (a pseudo-element) is dropped alone;
+  dynamic pseudo-classes (`:hover`, `:focus`) never match.
+- **Cost.** A document without CSS builds no cascade. Otherwise selectors are
+  indexed by their subject's id, class or tag and skipped when an ancestor
+  compound names a key no ancestor carries — a 256 KB page behind a
+  3000-selector sheet renders in about 36 ms, 11 ms of it without the sheet
+  (`BenchmarkRenderStyled`).
+
 ## Still to come
 
-The
-minimal CSS subset (0530/6), bounded async rendering (0530/7), the browser
-screenshot mode (0530/8) and the full concept doc (0530/9).
+Bounded async rendering (0530/7), the browser screenshot mode (0530/8) and
+the full concept doc (0530/9).

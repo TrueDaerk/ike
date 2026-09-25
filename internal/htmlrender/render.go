@@ -25,7 +25,10 @@
 // renders as "[alt]" unless the caller's Options.ImageBlock hands back a block
 // of lines for it (the pane's Kitty placeholder cells, 0530/5, #2743): the
 // block then stands on its own lines at the image's place, so the source map,
-// links and anchors stay line-accurate around it.
+// links and anchors stay line-accurate around it. A minimal CSS subset
+// (css.go, 0530/6) from <style> blocks and style="" attributes hides
+// display:none/visibility:hidden elements and carries emphasis, colour and
+// text-align into the walk's inline context.
 //
 // Rendering is pure: no bubbletea, no I/O, no shared state, so a pane can run
 // it on a goroutine (whatever ImageBlock does is the caller's business).
@@ -114,8 +117,10 @@ func Render(doc []byte, opts Options) Document {
 	if width <= 0 {
 		width = DefaultWidth
 	}
+	t := parse(doc)
 	r := &renderer{
-		t:       parse(doc),
+		t:       t,
+		css:     newCascade(t),
 		width:   max(width, minWidth),
 		sty:     newStyles(opts.Palette),
 		imgBlk:  opts.ImageBlock,
@@ -167,6 +172,7 @@ type frag struct {
 	img     int // index into renderer.images, -1 for none
 	off     int // source byte offset, -1 for none
 	anchors []string
+	align   uint8 // the text-align of its block (alignNone, alignLeft, ...)
 }
 
 // indent is one level of block indentation: the text a line opens with at
@@ -189,10 +195,18 @@ type listState struct {
 	width   int // marker width, so "9." and "10." align
 }
 
-// ctx is the inline context an element hands its children.
+// ctx is the inline context an element hands its children. align is the
+// inherited CSS text-align (css.go).
 type ctx struct {
-	st   style
-	link int
+	st    style
+	link  int
+	align uint8
+}
+
+// with returns c with the attribute bits in a added to its look.
+func (c ctx) with(a uint8) ctx {
+	c.st = c.st.with(a)
+	return c
 }
 
 type linkBuild struct {
@@ -204,6 +218,7 @@ type linkBuild struct {
 
 type renderer struct {
 	t     *tree
+	css   cascade // the document's CSS subset, nil without CSS
 	width int
 	sty   styles
 	sgr   map[style]string
@@ -241,8 +256,12 @@ type renderer struct {
 	captured             []cellLine
 }
 
-// walk renders n's children.
+// walk renders n's children in n's CSS look (css.go): the look applies
+// after the tag's own, so a stylesheet overrides a tag default.
 func (r *renderer) walk(n *html.Node, c ctx) {
+	if r.css != nil {
+		c = r.css.apply(n, c)
+	}
 	for k := n.FirstChild; k != nil; k = k.NextSibling {
 		switch k.Type {
 		case html.TextNode:
@@ -277,7 +296,7 @@ var blockTags = map[string]bool{
 
 func (r *renderer) element(n *html.Node, c ctx) {
 	tag := n.Data
-	if _, hidden := attr(n, "hidden"); hidden || skipped[tag] {
+	if _, hidden := attr(n, "hidden"); hidden || skipped[tag] || r.css.hidden(n) {
 		return
 	}
 	r.preStart = false
@@ -328,7 +347,7 @@ func (r *renderer) element(n *html.Node, c ctx) {
 		r.gap()
 	case "dt":
 		r.flush()
-		r.walk(n, ctx{st: c.st.with(attrBold), link: c.link})
+		r.walk(n, c.with(attrBold))
 		r.flush()
 	case "dd":
 		r.indented(n, c, 4)
@@ -338,13 +357,13 @@ func (r *renderer) element(n *html.Node, c ctx) {
 		r.gap()
 	case "figcaption", "caption":
 		r.flush()
-		r.walk(n, ctx{st: c.st.with(r.sty.caption.attrs), link: c.link})
+		r.walk(n, c.with(r.sty.caption.attrs))
 		r.flush()
 	case "summary":
 		r.flush()
-		r.word("▾", off, ctx{st: r.sty.summary, link: -1}, -1)
+		r.word("▾", off, ctx{st: r.sty.summary, link: -1, align: c.align}, -1)
 		r.softSpace(c)
-		r.walk(n, ctx{st: c.st.with(attrBold), link: c.link})
+		r.walk(n, c.with(attrBold))
 		r.flush()
 	case "hr":
 		r.gap()
@@ -371,15 +390,15 @@ func (r *renderer) element(n *html.Node, c ctx) {
 	case "td", "th":
 		r.cell(n, c)
 	case "thead":
-		r.walk(n, ctx{st: c.st.with(attrBold), link: c.link})
+		r.walk(n, c.with(attrBold))
 	case "strong", "b":
-		r.walk(n, ctx{st: c.st.with(attrBold), link: c.link})
+		r.walk(n, c.with(attrBold))
 	case "em", "i", "cite", "dfn", "var":
-		r.walk(n, ctx{st: c.st.with(attrItalic), link: c.link})
+		r.walk(n, c.with(attrItalic))
 	case "u", "ins":
-		r.walk(n, ctx{st: c.st.with(attrUnderline), link: c.link})
+		r.walk(n, c.with(attrUnderline))
 	case "s", "del", "strike":
-		r.walk(n, ctx{st: c.st.with(attrStrike), link: c.link})
+		r.walk(n, c.with(attrStrike))
 	case "mark":
 		c.st.fg, c.st.bg = r.sty.mark.fg, r.sty.mark.bg
 		r.walk(n, c)
@@ -516,7 +535,7 @@ func (r *renderer) cell(n *html.Node, c ctx) {
 	if k := len(r.cells); k > 0 {
 		if r.cells[k-1] > 0 {
 			r.softSpace(c)
-			r.word("│", r.t.start[n], ctx{st: r.sty.sep, link: -1}, -1)
+			r.word("│", r.t.start[n], ctx{st: r.sty.sep, link: -1, align: c.align}, -1)
 			r.softSpace(c)
 		}
 		r.cells[k-1]++
@@ -570,7 +589,7 @@ func (r *renderer) image(n *html.Node, c ctx) {
 	if c.link >= 0 {
 		st = st.with(attrUnderline)
 	}
-	r.words("["+label+"]", r.t.start[n], ctx{st: st, link: c.link}, id)
+	r.words("["+label+"]", r.t.start[n], ctx{st: st, link: c.link, align: c.align}, id)
 }
 
 // imageBlock lays an image out as the block Options.ImageBlock returns for
@@ -600,7 +619,7 @@ func (r *renderer) imageBlock(n *html.Node, c ctx, id int) bool {
 // svg renders an inline <svg> as a placeholder: the vector markup has no
 // text form, but a reader should see that a picture stands there.
 func (r *renderer) svg(n *html.Node, c ctx) {
-	r.words("[svg]", r.t.start[n], ctx{st: r.sty.image, link: c.link}, -1)
+	r.words("[svg]", r.t.start[n], ctx{st: r.sty.image, link: c.link, align: c.align}, -1)
 }
 
 // imageName is the short name an alt-less image is shown by.
@@ -838,10 +857,10 @@ func (r *renderer) word(text string, off int, c ctx, img int) {
 		r.space = false
 		if n := len(r.frags); n > 0 && r.frags[n-1].kind != fBreak {
 			sc := r.spaceCtx
-			r.add(frag{kind: fSpace, text: " ", w: 1, st: sc.st, link: sc.link, img: -1, off: off}, sc)
+			r.add(frag{kind: fSpace, text: " ", w: 1, st: sc.st, link: sc.link, img: -1, off: off, align: sc.align}, sc)
 		}
 	}
-	r.add(frag{kind: fWord, text: text, w: width(text), st: c.st, link: c.link, img: img, off: off}, c)
+	r.add(frag{kind: fWord, text: text, w: width(text), st: c.st, link: c.link, img: img, off: off, align: c.align}, c)
 }
 
 // words appends text split at its spaces, all words at offset off.
@@ -947,7 +966,7 @@ func (r *renderer) layoutFlow(frags []frag) {
 	w := 0
 	var sp *frag
 	emit := func(fallback int) {
-		r.emit(line, lineSource(line, fallback))
+		r.emit(r.align(line, avail), lineSource(line, fallback))
 		line, w, sp = line[:0], 0, nil
 	}
 	for i := 0; i < len(frags); {
@@ -1057,6 +1076,34 @@ func (r *renderer) layoutPre(frags []frag) {
 	if len(line) > 0 {
 		emit(-1)
 	}
+}
+
+// align pads a laid-out flow line for its block's CSS text-align (the first
+// word's): centred or flush right within avail. A measuring pass in a table
+// cell keeps lines unpadded, or every aligned cell would want the full width.
+func (r *renderer) align(line []frag, avail int) []frag {
+	if r.measuring {
+		return line
+	}
+	a := alignNone
+	for _, f := range line {
+		if f.kind == fWord {
+			a = f.align
+			break
+		}
+	}
+	if a != alignCenter && a != alignRight {
+		return line
+	}
+	pad := avail - fragsWidth(line)
+	if a == alignCenter {
+		pad /= 2
+	}
+	if pad <= 0 {
+		return line
+	}
+	lead := frag{text: strings.Repeat(" ", pad), w: pad, link: -1, img: -1, off: -1}
+	return append([]frag{lead}, line...)
 }
 
 // lineSource is the source offset a laid-out line maps to: its first word's.
@@ -1205,6 +1252,12 @@ func (r *renderer) prefixFrags() []frag {
 		out = append(out, frag{text: text, w: in.w, st: in.st, link: -1, img: -1, off: -1})
 		w += in.w
 	}
+	return r.clipPrefix(out, w)
+}
+
+// clipPrefix cuts the leftmost columns off an indent w cells wide so it
+// keeps to maxPrefix.
+func (r *renderer) clipPrefix(out []frag, w int) []frag {
 	for drop := w - r.maxPrefix(); drop > 0 && len(out) > 0; {
 		if out[0].w <= drop {
 			drop -= out[0].w
@@ -1262,11 +1315,14 @@ func (r *renderer) blankFrags(d int) []frag {
 		return nil
 	}
 	var fs []frag
+	w := 0
 	for i := 0; i < k; i++ {
 		fs = append(fs, frag{text: r.prefix[i].rest, w: r.prefix[i].w, link: -1, img: -1, off: -1, st: r.prefix[i].st})
+		w += r.prefix[i].w
 	}
 	fs = append(fs, frag{text: r.prefix[k].bar, w: width(r.prefix[k].bar), link: -1, img: -1, off: -1, st: r.prefix[k].st})
-	return fs
+	// Cut as the content lines' indent is, so the bar keeps their column.
+	return r.clipPrefix(fs, w+r.prefix[k].w)
 }
 
 // compose renders runs into one styled line: adjacent runs with the same look

@@ -1,0 +1,16 @@
+<html><head><style>
+  p { display: none }
+  p.keep { display: block }
+  #show { display: block }
+  .late { display: block }
+  .late { display: none }
+  p.over { display: block }
+</style></head><body>
+<p>Hidden by the tag rule.</p>
+<p class="keep">Kept by a class rule, more specific than the tag rule.</p>
+<p id="show" class="late">Shown by an id rule, the most specific.</p>
+<p class="late">Hidden: the later of two equal rules wins.</p>
+<p class="keep" style="display:none">Hidden by the inline style over the class rule.</p>
+<p style="display:block">Shown by the inline style over the tag rule.</p>
+<p class="over" style="display:none">Hidden: inline wins over any rule.</p>
+</body></html>

@@ -1,0 +1,7 @@
+Malformed stylesheets are ignored as a whole: this paragraph stays.
+
+No colour either.
+
+\e]8;id=ike-0;#\e[4;38;2;215;175;135mA link\e[0m\e]8;; survives a hover rule.
+
+Kept: a declaration without a value.

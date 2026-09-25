@@ -1,0 +1,28 @@
+title: ""
+----
+bold w700 b-normal strong-normal
+
+italic underline strike both
+
+link plain link
+
+red hex hex6 rgb pct clear bad
+
+inline red bold
+
+             centered text
+
+                              right text
+
+            inherited centre
+
+left again
+
+       inline span ignores align
+
+•                             right item
+
+┌────────────────┬───────────────────┐
+│      mid       │ a much wider cell │
+│ wide cell here │               end │
+└────────────────┴───────────────────┘

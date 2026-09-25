@@ -1,0 +1,3 @@
+go test fuzz v1
+[]byte("<stYle></stYle><A 0 00 stYle=\"0:0000000A000\\\\\\\\\\\\\\\"0X080708>")
+int(30)

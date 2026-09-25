@@ -52,6 +52,7 @@ type gridCell struct {
 // gridRow is one row of the grid, its cells covering every column in order.
 type gridRow struct {
 	n     *html.Node // the <tr>, nil for cells outside one
+	group *html.Node // its <thead>/<tbody>/<tfoot>, nil for none
 	off   int
 	head  bool
 	foot  bool
@@ -65,7 +66,9 @@ type tableParts struct {
 	captions []*html.Node
 	foster   []*html.Node
 	rows     []gridRow
-	open     bool // the last row is an implicit one stray cells may join
+	open     bool       // the last row is an implicit one stray cells may join
+	css      cascade    // hides elements, as in the flow
+	group    *html.Node // the row group being collected
 }
 
 // collect sorts n's children into p; sect is the row group they sit in.
@@ -81,23 +84,23 @@ func (p *tableParts) collect(n *html.Node, sect string) {
 		default:
 			continue
 		}
-		if _, hidden := attr(k, "hidden"); hidden || skipped[k.Data] {
+		if _, hidden := attr(k, "hidden"); hidden || skipped[k.Data] || p.css.hidden(k) {
 			continue
 		}
 		switch k.Data {
 		case "caption":
 			p.captions = append(p.captions, k)
 		case "thead", "tbody", "tfoot":
-			p.open = false
+			p.open, p.group = false, k
 			p.collect(k, k.Data)
-			p.open = false
+			p.open, p.group = false, nil
 		case "tr":
-			p.rows = append(p.rows, gridRow{n: k, head: sect == "thead", foot: sect == "tfoot"})
+			p.rows = append(p.rows, gridRow{n: k, group: p.group, head: sect == "thead", foot: sect == "tfoot"})
 			p.open = false
 			p.collectCells(k, &p.rows[len(p.rows)-1])
 		case "td", "th":
 			if !p.open {
-				p.rows = append(p.rows, gridRow{head: sect == "thead", foot: sect == "tfoot"})
+				p.rows = append(p.rows, gridRow{group: p.group, head: sect == "thead", foot: sect == "tfoot"})
 				p.open = true
 			}
 			row := &p.rows[len(p.rows)-1]
@@ -120,7 +123,7 @@ func (p *tableParts) collectCells(n *html.Node, row *gridRow) {
 				p.foster = append(p.foster, k)
 			}
 		case html.ElementNode:
-			if _, hidden := attr(k, "hidden"); hidden || skipped[k.Data] {
+			if _, hidden := attr(k, "hidden"); hidden || skipped[k.Data] || p.css.hidden(k) {
 				continue
 			}
 			switch k.Data {
@@ -158,7 +161,7 @@ func (r *renderer) table(n *html.Node, c ctx) {
 		r.gap()
 		return
 	}
-	var p tableParts
+	p := tableParts{css: r.css}
 	p.collect(n, "")
 	for _, k := range p.foster {
 		if k.Type == html.TextNode {
@@ -168,6 +171,7 @@ func (r *renderer) table(n *html.Node, c ctx) {
 		}
 	}
 	r.flush()
+	c = r.css.apply(n, c) // the grid is not walked: the table's look by hand
 	for _, k := range p.captions {
 		r.element(k, c)
 	}
@@ -342,9 +346,11 @@ func allHeaderCells(row gridRow) bool {
 	return seen
 }
 
-// cellCtx is the inline context a cell's content starts in: header rows and
-// <th> cells are bold.
+// cellCtx is the inline context a cell's content starts in: the CSS look of
+// its row group and row (the cell's own applies as its content is walked);
+// header rows and <th> cells are bold.
 func (r *renderer) cellCtx(row gridRow, cell *gridCell, c ctx) ctx {
+	c = r.css.apply(row.n, r.css.apply(row.group, c))
 	if row.head || cell.n.Data == "th" {
 		c.st = c.st.with(attrBold)
 	}
