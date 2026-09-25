@@ -52,13 +52,13 @@ func (m *Model) togglePanel(key string, open func() tea.Cmd) tea.Cmd {
 // something extra when the pane is merely refocused: the issues window views
 // its pending forge events, the LSP doctor starts a fresh check run.
 func (m *Model) togglePanelWith(key string, open func() tea.Cmd, onFocus func() tea.Cmd) tea.Cmd {
-	if !m.activeWS().Panes.Has(key) {
+	if !m.panelOpen(key) {
 		m.setPanelReturn(key, m.activeWS().Panes.Focused())
 		return open()
 	}
-	if m.activeWS().Panes.Focused() != key {
+	if !m.panelFocused(key) {
 		m.setPanelReturn(key, m.activeWS().Panes.Focused())
-		m.setFocus(key)
+		m.focusPanel(key)
 		if onFocus != nil {
 			return onFocus()
 		}
@@ -73,7 +73,7 @@ func (m *Model) togglePanelWith(key string, open func() tea.Cmd, onFocus func() 
 // or not — is left exactly as it is; the message-driven openers that fill a
 // pane with a result decide focus for themselves afterwards.
 func (m *Model) ensurePanel(key string, open func() tea.Cmd) tea.Cmd {
-	if m.activeWS().Panes.Has(key) {
+	if m.panelOpen(key) {
 		return nil
 	}
 	m.setPanelReturn(key, m.activeWS().Panes.Focused())
@@ -84,15 +84,45 @@ func (m *Model) ensurePanel(key string, open func() tea.Cmd) tea.Cmd {
 // the focus half of togglePanel, without its third (toggle-off) branch — for
 // the notification paths that reveal a window rather than toggle it.
 func (m *Model) showPanel(key string, open func() tea.Cmd) tea.Cmd {
-	if !m.activeWS().Panes.Has(key) {
+	if !m.panelOpen(key) {
 		m.setPanelReturn(key, m.activeWS().Panes.Focused())
 		return open()
 	}
-	if m.activeWS().Panes.Focused() != key {
+	if !m.panelFocused(key) {
 		m.setPanelReturn(key, m.activeWS().Panes.Focused())
-		m.setFocus(key)
+		m.focusPanel(key)
 	}
 	return nil
+}
+
+// panelOpen reports whether the pane behind a toggle key exists: a singleton
+// tool window wherever it lives — dedicated pane or hosted tab (#2736) — and
+// any other key by registry membership.
+func (m Model) panelOpen(key string) bool {
+	if kind, ok := pane.SingletonKind(key); ok {
+		return m.toolWindowOpen(kind)
+	}
+	return m.activeWS().Panes.Has(key)
+}
+
+// panelFocused is the nest-aware "the keyboard is already in this panel"
+// test behind the toggle's third branch: a hosted window counts as focused
+// only while its tab is the host's active one, so toggling a window whose
+// host shows another tab switches to the window instead of dismissing it.
+func (m Model) panelFocused(key string) bool {
+	if kind, ok := pane.SingletonKind(key); ok {
+		return m.toolWindowFocused(kind)
+	}
+	return m.activeWS().Panes.Focused() == key
+}
+
+// focusPanel focuses the pane behind a toggle key, activating a hosted
+// window's tab (#2736).
+func (m *Model) focusPanel(key string) {
+	if kind, ok := pane.SingletonKind(key); ok && m.focusToolWindow(kind) {
+		return
+	}
+	m.setFocus(key)
 }
 
 // fixedZone adapts a constant placement to openToolPane's zone seam, for the

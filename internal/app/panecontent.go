@@ -84,12 +84,13 @@ func (m Model) focusedContent() *pane.Instance {
 	return inst
 }
 
-// focusedTabHost returns the focused pane's key when that pane can host tabs
-// (#1825): an editor, a terminal or a viewer pane, all of which convert into a
-// tab host on demand. The explorer, the tool windows and the merge view report
-// "", which leaves a viewer open on its #1779 split.
+// focusedTabHost returns the focused pane's key when a viewer may open into
+// it as a tab (#1825): an editor, a terminal or a viewer pane, all of which
+// convert into a tab host on demand. The explorer, the tool windows and the
+// merge view report "", which leaves a viewer open on its #1779 split — a
+// tool window only takes tabs the user drags onto it (#2736).
 func (m Model) focusedTabHost() string {
-	if !canHostTabs(m.activeWS().Panes.FocusedInstance()) {
+	if !canAutoJoinTabs(m.activeWS().Panes.FocusedInstance()) {
 		return ""
 	}
 	return m.activeWS().Panes.Focused()
@@ -102,7 +103,7 @@ func (m Model) focusedTabHost() string {
 func (m *Model) takeViewerTabHost() string {
 	key := m.viewerTabHost
 	m.viewerTabHost = ""
-	if key == "" || !canHostTabs(m.activeWS().Panes.Get(key)) {
+	if key == "" || !canAutoJoinTabs(m.activeWS().Panes.Get(key)) {
 		return ""
 	}
 	return key
@@ -120,7 +121,7 @@ func (m *Model) openContentTab(key string, kind pane.Kind, path string) (*pane.I
 		return nil, false
 	}
 	scratch := inst.IsEmptyEditor()
-	if !m.ensureTabHost(key) {
+	if !m.joinableHost(key) {
 		return nil, false
 	}
 	nested := m.activeWS().Panes.NewContentPane(kind, path, "", "", "")

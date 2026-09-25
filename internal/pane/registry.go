@@ -735,187 +735,160 @@ func (r *Registry) AddMerge(path string) string {
 	return key
 }
 
+// newToolWindow builds the model of a singleton tool window kind under its
+// fixed key without registering it (#2736) — shared by the Add* constructors
+// below and by NewContentPane, so a window restored as a content tab is built
+// exactly like a dedicated pane. nil for any other kind.
+func (r *Registry) newToolWindow(kind Kind) *Instance {
+	key := SingletonKey(kind)
+	if key == "" {
+		return nil
+	}
+	inst := &Instance{key: key, kind: kind, cfg: r.cfg, pal: r.pal}
+	switch kind {
+	case KindVCS:
+		inst.vp = vcspanel.New(r.pal)
+	case KindDebug:
+		inst.dp = debugpanel.New(r.pal)
+	case KindProblems:
+		inst.pp = problems.New(r.pal)
+	case KindStructure:
+		inst.sp = structpanel.New(r.pal)
+	case KindUsages:
+		inst.up = usages.New(r.pal)
+	case KindTests:
+		inst.tr = testresults.New(r.pal)
+	case KindIssues:
+		inst.gi = ghissues.New(r.pal)
+		inst.gi.Configure(r.cfg)
+	case KindDOM:
+		inst.dm = domview.New(r.pal)
+	case KindDoctor:
+		inst.xd = debugdoctor.New(r.pal)
+	case KindLSPDoctor:
+		inst.ld = lspdoctor.New(r.pal)
+	case KindDeps:
+		inst.dep = depspanel.New(r.pal)
+	case KindTime:
+		inst.tp = timepanel.New(r.pal)
+	case KindUsage:
+		inst.usg = usagepanel.New(r.pal)
+	case KindBreakpoints:
+		inst.bp = breakpanel.New(r.pal)
+	case KindHTTP:
+		inst.hp = httppane.New(r.pal)
+	}
+	return inst
+}
+
+// AddToolWindow registers the tool window of kind under its fixed key and
+// returns that key (#2736); a second call returns the existing key. The
+// per-kind AddVCS/AddHTTP/... constructors are its named forms. The window may
+// instead live as a content tab of a tab host (#2736) — the registry does
+// not see nested content, so the app's nest-aware lookups run first and only
+// call here when no instance exists anywhere.
+func (r *Registry) AddToolWindow(kind Kind) string {
+	key := SingletonKey(kind)
+	if _, ok := r.instances[key]; ok {
+		return key
+	}
+	r.put(r.newToolWindow(kind))
+	return key
+}
+
 // AddVCS creates the singleton VCS tool window under VCSKey (Roadmap 0330)
 // and returns its key; a second call returns the existing key.
-func (r *Registry) AddVCS() string {
-	if _, ok := r.instances[VCSKey]; ok {
-		return VCSKey
-	}
-	inst := &Instance{key: VCSKey, kind: KindVCS, cfg: r.cfg, pal: r.pal}
-	inst.vp = vcspanel.New(r.pal)
-	r.put(inst)
-	return VCSKey
-}
+func (r *Registry) AddVCS() string { return r.AddToolWindow(KindVCS) }
 
 // AddDebug creates the singleton debug tool window under DebugKey (0350,
 // #580) and returns its key; a second call returns the existing key.
-func (r *Registry) AddDebug() string {
-	if _, ok := r.instances[DebugKey]; ok {
-		return DebugKey
-	}
-	inst := &Instance{key: DebugKey, kind: KindDebug, cfg: r.cfg, pal: r.pal}
-	inst.dp = debugpanel.New(r.pal)
-	r.put(inst)
-	return DebugKey
-}
+func (r *Registry) AddDebug() string { return r.AddToolWindow(KindDebug) }
 
 // AddProblems creates the singleton Problems tool window under ProblemsKey
 // (#1024) and returns its key; a second call returns the existing key.
-func (r *Registry) AddProblems() string {
-	if _, ok := r.instances[ProblemsKey]; ok {
-		return ProblemsKey
-	}
-	inst := &Instance{key: ProblemsKey, kind: KindProblems, cfg: r.cfg, pal: r.pal}
-	inst.pp = problems.New(r.pal)
-	r.put(inst)
-	return ProblemsKey
-}
+func (r *Registry) AddProblems() string { return r.AddToolWindow(KindProblems) }
 
 // AddStructure creates the singleton Structure tool window under StructureKey
 // (#1025) and returns its key; a second call returns the existing key.
-func (r *Registry) AddStructure() string {
-	if _, ok := r.instances[StructureKey]; ok {
-		return StructureKey
-	}
-	inst := &Instance{key: StructureKey, kind: KindStructure, cfg: r.cfg, pal: r.pal}
-	inst.sp = structpanel.New(r.pal)
-	r.put(inst)
-	return StructureKey
-}
+func (r *Registry) AddStructure() string { return r.AddToolWindow(KindStructure) }
 
 // AddUsages creates the singleton Usages tool window under UsagesKey (#1155)
 // and returns its key; a second call returns the existing key.
-func (r *Registry) AddUsages() string {
-	if _, ok := r.instances[UsagesKey]; ok {
-		return UsagesKey
-	}
-	inst := &Instance{key: UsagesKey, kind: KindUsages, cfg: r.cfg, pal: r.pal}
-	inst.up = usages.New(r.pal)
-	r.put(inst)
-	return UsagesKey
-}
+func (r *Registry) AddUsages() string { return r.AddToolWindow(KindUsages) }
 
 // AddTests creates the singleton Test Results tool window under TestsKey
 // (#1911) and returns its key; a second call returns the existing key.
-func (r *Registry) AddTests() string {
-	if _, ok := r.instances[TestsKey]; ok {
-		return TestsKey
-	}
-	inst := &Instance{key: TestsKey, kind: KindTests, cfg: r.cfg, pal: r.pal}
-	inst.tr = testresults.New(r.pal)
-	r.put(inst)
-	return TestsKey
-}
+func (r *Registry) AddTests() string { return r.AddToolWindow(KindTests) }
 
 // AddIssues creates the singleton GitHub Issues tool window under IssuesKey
 // (#1934) and returns its key; a second call returns the existing key.
-func (r *Registry) AddIssues() string {
-	if _, ok := r.instances[IssuesKey]; ok {
-		return IssuesKey
-	}
-	inst := &Instance{key: IssuesKey, kind: KindIssues, cfg: r.cfg, pal: r.pal}
-	inst.gi = ghissues.New(r.pal)
-	inst.gi.Configure(r.cfg)
-	r.put(inst)
-	return IssuesKey
-}
+func (r *Registry) AddIssues() string { return r.AddToolWindow(KindIssues) }
 
 // AddDOM creates the singleton DOM inspector tool window under DOMKey (#1929)
 // and returns its key; a second call returns the existing key.
-func (r *Registry) AddDOM() string {
-	if _, ok := r.instances[DOMKey]; ok {
-		return DOMKey
-	}
-	inst := &Instance{key: DOMKey, kind: KindDOM, cfg: r.cfg, pal: r.pal}
-	inst.dm = domview.New(r.pal)
-	r.put(inst)
-	return DOMKey
-}
+func (r *Registry) AddDOM() string { return r.AddToolWindow(KindDOM) }
 
 // AddDoctor creates the singleton Xdebug Doctor tool window under DoctorKey
 // (#1991) and returns its key; a second call returns the existing key.
-func (r *Registry) AddDoctor() string {
-	if _, ok := r.instances[DoctorKey]; ok {
-		return DoctorKey
-	}
-	inst := &Instance{key: DoctorKey, kind: KindDoctor, cfg: r.cfg, pal: r.pal}
-	inst.xd = debugdoctor.New(r.pal)
-	r.put(inst)
-	return DoctorKey
-}
+func (r *Registry) AddDoctor() string { return r.AddToolWindow(KindDoctor) }
 
 // AddLSPDoctor creates the singleton LSP Doctor tool window under
 // LSPDoctorKey (#2164) and returns its key; a second call returns the
 // existing key.
-func (r *Registry) AddLSPDoctor() string {
-	if _, ok := r.instances[LSPDoctorKey]; ok {
-		return LSPDoctorKey
-	}
-	inst := &Instance{key: LSPDoctorKey, kind: KindLSPDoctor, cfg: r.cfg, pal: r.pal}
-	inst.ld = lspdoctor.New(r.pal)
-	r.put(inst)
-	return LSPDoctorKey
-}
+func (r *Registry) AddLSPDoctor() string { return r.AddToolWindow(KindLSPDoctor) }
 
 // AddDeps creates the singleton Dependencies tool window under DepsKey
 // (#2419) and returns its key; a second call returns the existing key.
-func (r *Registry) AddDeps() string {
-	if _, ok := r.instances[DepsKey]; ok {
-		return DepsKey
-	}
-	inst := &Instance{key: DepsKey, kind: KindDeps, cfg: r.cfg, pal: r.pal}
-	inst.dep = depspanel.New(r.pal)
-	r.put(inst)
-	return DepsKey
-}
+func (r *Registry) AddDeps() string { return r.AddToolWindow(KindDeps) }
 
 // AddTime creates the singleton Time tool window under TimeKey (#2426),
 // returning the existing key when it is already open.
-func (r *Registry) AddTime() string {
-	if _, ok := r.instances[TimeKey]; ok {
-		return TimeKey
-	}
-	inst := &Instance{key: TimeKey, kind: KindTime, cfg: r.cfg, pal: r.pal}
-	inst.tp = timepanel.New(r.pal)
-	r.put(inst)
-	return TimeKey
-}
+func (r *Registry) AddTime() string { return r.AddToolWindow(KindTime) }
 
 // AddUsage creates the singleton Usage tool window under UsageKey (#2552),
 // returning the existing key when it is already open.
-func (r *Registry) AddUsage() string {
-	if _, ok := r.instances[UsageKey]; ok {
-		return UsageKey
-	}
-	inst := &Instance{key: UsageKey, kind: KindUsage, cfg: r.cfg, pal: r.pal}
-	inst.usg = usagepanel.New(r.pal)
-	r.put(inst)
-	return UsageKey
-}
+func (r *Registry) AddUsage() string { return r.AddToolWindow(KindUsage) }
 
 // AddBreakpoints creates the singleton Breakpoints tool window under
 // BreakpointsKey (#1377) and returns its key; a second call returns the
 // existing key.
-func (r *Registry) AddBreakpoints() string {
-	if _, ok := r.instances[BreakpointsKey]; ok {
-		return BreakpointsKey
-	}
-	inst := &Instance{key: BreakpointsKey, kind: KindBreakpoints, cfg: r.cfg, pal: r.pal}
-	inst.bp = breakpanel.New(r.pal)
-	r.put(inst)
-	return BreakpointsKey
-}
+func (r *Registry) AddBreakpoints() string { return r.AddToolWindow(KindBreakpoints) }
 
 // AddHTTP creates the singleton HTTP response viewer under HTTPKey (#1250)
 // and returns its key; a second call returns the existing key.
-func (r *Registry) AddHTTP() string {
-	if _, ok := r.instances[HTTPKey]; ok {
-		return HTTPKey
+func (r *Registry) AddHTTP() string { return r.AddToolWindow(KindHTTP) }
+
+// RehostSingleton converts the singleton tool window registered under key
+// into a tab host (#2736) and re-registers that host under a freshly minted
+// editor key, returning the new key. The window's live model becomes the
+// host's first tab as a nested instance that keeps the singleton key — the
+// key is the window's identity, not the pane's — so the fixed key is free
+// again for the tab to split back out into a dedicated pane, and no
+// key-based lookup mistakes the host for the window. The host keeps the old
+// key's position in the iteration order and its focus. Refused for any key
+// that is not a registered singleton tool window.
+func (r *Registry) RehostSingleton(key string) (string, bool) {
+	inst, ok := r.instances[key]
+	if !ok || SingletonKey(inst.kind) != key {
+		return "", false
 	}
-	inst := &Instance{key: HTTPKey, kind: KindHTTP, cfg: r.cfg, pal: r.pal}
-	inst.hp = httppane.New(r.pal)
-	r.put(inst)
-	return HTTPKey
+	if !inst.ConvertToTabHost() {
+		return "", false
+	}
+	newKey := r.mintEditorKey()
+	delete(r.instances, key)
+	inst.key = newKey
+	r.instances[newKey] = inst
+	for i, k := range r.order {
+		if k == key {
+			r.order[i] = newKey
+			break
+		}
+	}
+	if r.focused == key {
+		r.focused = newKey
+	}
+	return newKey, true
 }
 
 // AddDiffHead creates a diff viewer comparing a file's HEAD blob (left)
@@ -1084,10 +1057,17 @@ func suffixedKey(base string, n int) string {
 
 // mintContentKey allocates the next key of a viewer kind (#1778) — the same
 // counters the Add* constructors advance, so tab-detached content re-keys
-// without collisions. Unknown kinds — the HTTP viewer included, which is a
-// fixed-position tool window and never lives in a tab (#2042) — yield "".
+// without collisions. A singleton tool window (#2736) has no counter: its
+// fixed key is the key. The per-endpoint kinds (ES, remote) mint from their
+// identity instead, in NewContentPane/AddContentPaneFrom; here they yield "".
 func (r *Registry) mintContentKey(kind Kind) string {
+	if key := SingletonKey(kind); key != "" {
+		return key
+	}
 	switch kind {
+	case KindMerge:
+		r.merges++
+		return suffixedKey(mergeKeyBase, r.merges)
 	case KindMarkdown:
 		r.previews++
 		return suffixedKey(previewKeyBase, r.previews)
@@ -1117,10 +1097,14 @@ func (r *Registry) mintContentKey(kind Kind) string {
 // it (#1778): the tab restore's constructor, mirroring what the Add*Key
 // restore paths build for dedicated panes. path/path2/rev/rev2 follow the
 // paneIdentity conventions (diff panes use all four, the others just path).
-// It returns nil for kinds that cannot live in tabs — the HTTP viewer
-// included since #2042, so a legacy layout.json with a nested "http" tab
-// restores without that tab instead of crashing.
+// A tool window (#2736) rebuilds under its fixed key. It returns nil for the
+// kinds that never persist — a merge view is session state — and for kinds
+// a newer build wrote, so a layout.json restores without that tab instead
+// of crashing.
 func (r *Registry) NewContentPane(kind Kind, path, path2, rev, rev2 string) *Instance {
+	if kind == KindMerge || kind == KindEditor || kind == KindTerminal || kind == KindExplorer {
+		return nil
+	}
 	if kind == KindES {
 		// The console's identity is its endpoint name (carried as path), like
 		// the HTTP viewer's singleton key — no counter to mint (#1927).
@@ -1128,6 +1112,16 @@ func (r *Registry) NewContentPane(kind Kind, path, path2, rev, rev2 string) *Ins
 		inst := &Instance{key: key, kind: KindES, cfg: r.cfg, pal: r.pal}
 		inst.es = espane.New(key, path, r.pal)
 		return inst
+	}
+	if kind == KindRemote {
+		// The browser's identity is its host alias (carried as path), one
+		// per host like the ES console (#1997).
+		return r.newRemoteInstance(remoteKeyBase+":"+path, path)
+	}
+	if KindToolWindow(kind) {
+		// A tool window hosted as a tab (#2736) rebuilds under its fixed key
+		// exactly like the dedicated pane; the app wires it afterwards.
+		return r.newToolWindow(kind)
 	}
 	key := r.mintContentKey(kind)
 	if key == "" {
@@ -1171,11 +1165,18 @@ func (r *Registry) AddContentPaneFrom(inst *Instance) (string, bool) {
 		return "", false
 	}
 	key := r.mintContentKey(inst.kind)
-	if inst.kind == KindES {
-		// Per-endpoint identity, like the HTTP singleton: refused while a
-		// dedicated console for that cluster already exists (#1927).
+	switch inst.kind {
+	case KindES:
+		// Per-endpoint identity, like a tool window's singleton key: refused
+		// while a dedicated console for that cluster already exists (#1927).
 		key = esKeyBase + ":" + inst.ES().Endpoint()
+	case KindRemote:
+		// Per-host identity the same way (#1997).
+		key = remoteKeyBase + ":" + inst.Remote().Alias()
 	}
+	// A singleton tool window (#2736) re-registers under its fixed key —
+	// free again since RehostSingleton moved the host off it — and is
+	// refused while a dedicated window of that kind already exists.
 	if key == "" || r.Has(key) {
 		return "", false
 	}

@@ -37,10 +37,10 @@ func (m *Model) toggleUsagePanel() tea.Cmd {
 
 // usagePanel returns the singleton panel model, or nil when it is not open.
 func (m Model) usagePanel() *usagepanel.Model {
-	if !m.activeWS().Panes.Has(pane.UsageKey) {
-		return nil
+	if inst := m.toolWindow(pane.KindUsage); inst != nil {
+		return inst.Usage()
 	}
-	return m.activeWS().Panes.Get(pane.UsageKey).Usage()
+	return nil
 }
 
 // openUsagePanel splits the active editor (fallback: focused leaf) at the

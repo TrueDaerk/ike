@@ -81,8 +81,8 @@ func (m Model) applyVCSSnapshot(msg vcs.SnapshotMsg) tea.Cmd {
 			m.explorer().SetVCS(msg.Snap)
 		}
 		// The VCS tool window re-reads the snapshot (0330, #482).
-		if m.activeWS().Panes.Has(pane.VCSKey) {
-			m.activeWS().Panes.Get(pane.VCSKey).VCS().SetVCS(msg.Snap)
+		if inst := m.toolWindow(pane.KindVCS); inst != nil { // pane or hosted tab (#2736)
+			inst.VCS().SetVCS(msg.Snap)
 		}
 	}
 	if m.vcs.dirty {

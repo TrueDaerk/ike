@@ -166,7 +166,7 @@ func (m *Model) openRunAtRememberedHome(sp toolSpawn) bool {
 	}
 	ws.ReturnFocus = ws.Panes.Focused()
 	if h.Tab {
-		if !canHostTabs(ws.Panes.Get(h.Anchor)) || !m.ensureTabHost(h.Anchor) {
+		if !canAutoJoinTabs(ws.Panes.Get(h.Anchor)) || !m.joinableHost(h.Anchor) {
 			return false
 		}
 		ws.Panes.Get(h.Anchor).AddTerminalTab(m.newToolTab(sp))

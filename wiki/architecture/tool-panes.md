@@ -141,7 +141,8 @@ docking only applies to tools without a slot:
   (`Registry.NewToolSession` + `AddTerminalTab`) instead of forcing another
   split. An editor showing documents at the edge is main content, not a dock
   occupant — the tool docks beside it.
-- **Non-tabbable occupant** (explorer, singleton tool windows) — the tool
+- **Non-joinable occupant** (explorer, singleton tool windows — tabbable by
+  drag since #2736, but never auto-joined, `canAutoJoinTabs`) — the tool
   stacks into the same dock via a perpendicular split: side docks stack
   vertically (occupant above), top/bottom strips split side by side.
 - **No slot at the workspace edge at all** (`Model.toolRegionLeaf`, #2191) —
@@ -159,6 +160,18 @@ docking only applies to tools without a slot:
   the real workspace-edge slot. `Model.dockNewPane` is the shared tail of all
   three placements (fresh open, global-tool attach, post-apply re-place).
 
+  **The boundary with #2736.** #1905 governs *automatic* placement — what a
+  command does with a tool it opens. Every automatic tab-join (home dock,
+  slot resident, global-tool attach, run home, viewer-into-focused-pane)
+  asks `canAutoJoinTabs` (`internal/app/app.go`): editors, terminals and
+  content viewers take the tab; a **singleton tool window never does**, so
+  Problems or the HTTP viewer never silently grows a lazygit tab. What the
+  user does **explicitly by dragging** is the other rule: `canHostTabs` is
+  `pane.KindTabbable`, which since #2736 is everything but the explorer, so a
+  title drag released in a tool window's center merges the dragged pane as a
+  tab there (and a tool window dragged onto a tool pane merges into it).
+  See [Pane Layout › Universal tabs](./pane-layout.md).
+
 Placement is **intent, not state**: the `Move`/`Dock` drag mechanics stay
 untouched and never rewrite it, so a moved tool returns to its configured home
 on the next close + reopen. Where the tool currently *is* keeps persisting
@@ -171,7 +184,15 @@ keep the pre-#1889 behavior exactly.
 One instance per tool by default — the toggle finds the tool wherever it
 lives, dedicated pane **or** editor-hosted terminal tab (a tool moved into a
 tab list via the #708 center drop; focusing a tab-hosted tool activates its
-tab), so `tool.<name>` never spawns a duplicate.
+tab), so `tool.<name>` never spawns a duplicate. Since #2736 the **singleton
+tool windows** follow the same tool-tab rules: a Problems, HTTP, Tests or
+Debug window dragged into a tab strip keeps its singleton key as the nested
+instance, `problems.toggle`, `http`, the number chords and the result
+routers resolve it through the nest-aware `toolWindow` lookups
+(`internal/app/toolwindow.go`) and focus that tab, a hosted window detaches
+back into a dedicated pane with its state (`DetachContent` moves the model,
+nothing reloads), and the debug session-end close closes the window's tab
+rather than its host.
 
 `multiple = true` on the entry opts the tool into concurrent instances (e.g.
 several embedded `claude` sessions): a second command

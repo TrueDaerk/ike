@@ -43,12 +43,13 @@ func viewerPanes(t *testing.T, r *Registry) map[Kind]string {
 	}
 }
 
-// TestKindTabbable pins the tabbable set: editors, terminals and the viewer
-// kinds are in; the explorer, the singleton tool windows — the HTTP response
-// viewer included (#2042) — and the merge view stay out.
+// TestKindTabbable pins the tabbable set: editors, terminals, the viewer
+// kinds, the merge view and the singleton tool windows — the HTTP response
+// viewer included — are in (#2736); only the explorer stays out.
 func TestKindTabbable(t *testing.T) {
-	in := []Kind{KindEditor, KindTerminal, KindMarkdown, KindImage, KindDiff, KindArchive, KindData, KindHex, KindNotebook}
-	out := []Kind{KindExplorer, KindVCS, KindDebug, KindProblems, KindStructure, KindUsages, KindBreakpoints, KindMerge, KindHTTP}
+	in := []Kind{KindEditor, KindTerminal, KindMarkdown, KindImage, KindDiff, KindArchive, KindData, KindHex, KindNotebook,
+		KindVCS, KindDebug, KindProblems, KindStructure, KindUsages, KindBreakpoints, KindMerge, KindHTTP}
+	out := []Kind{KindExplorer}
 	for _, k := range in {
 		if !KindTabbable(k) {
 			t.Errorf("kind %d must be tabbable", k)
@@ -89,18 +90,25 @@ func TestConvertViewerPaneToTabHost(t *testing.T) {
 	}
 }
 
-// TestConvertRefusedOutsideTabbableSet: the singleton tool windows and the
-// explorer never convert.
+// TestConvertRefusedOutsideTabbableSet: the explorer never converts; a tool
+// window and the merge view do since #2736, their live model becoming the
+// first tab.
 func TestConvertRefusedOutsideTabbableSet(t *testing.T) {
 	r := newReg()
 	if r.Get(r.AddExplorer()).ConvertToTabHost() {
 		t.Fatal("the explorer must not convert")
 	}
-	if r.Get(r.AddVCS()).ConvertToTabHost() {
-		t.Fatal("the VCS tool window must not convert")
+	if _, ok := r.Get(r.AddExplorer()).DetachContent(); ok {
+		t.Fatal("the explorer must not detach into a tab")
 	}
-	if r.Get(r.AddMerge(tmpFile(t, "c.txt", "x\n"))).ConvertToTabHost() {
-		t.Fatal("the merge view must not convert")
+	vcs := r.Get(r.AddVCS())
+	if !vcs.ConvertToTabHost() || vcs.TabContent(0) == nil || vcs.TabContent(0).Kind() != KindVCS {
+		t.Fatal("the VCS tool window must convert with its window as the first tab")
+	}
+	path := tmpFile(t, "c.txt", "x\n")
+	mg := r.Get(r.AddMerge(path))
+	if !mg.ConvertToTabHost() || mg.TabContent(0) == nil || mg.TabContent(0).Merge().Path() != path {
+		t.Fatal("the merge view must convert with its live model as the first tab")
 	}
 }
 
@@ -178,21 +186,23 @@ func TestDetachContentTabRoundtrip(t *testing.T) {
 	}
 }
 
-// TestHTTPViewerNeverNests (#2042): the HTTP response viewer is a tool
-// window with a fixed position in the layout model, not editor content — it
-// refuses to detach into a tab, to convert into a tab host, and to restore
-// as a content tab (the legacy layout.json migration path).
-func TestHTTPViewerNeverNests(t *testing.T) {
+// TestToolWindowsRestoreAsContentTabs (#2736): every tool window rebuilds
+// as a nested content instance under its fixed key from a kind-only
+// identity — the layout.json round trip of a window hosted as a tab. The
+// merge view stays session state and restores as nothing.
+func TestToolWindowsRestoreAsContentTabs(t *testing.T) {
 	r := newReg()
-	src := r.Get(r.AddHTTP())
-	if _, ok := src.DetachContent(); ok {
-		t.Fatal("the HTTP viewer must not detach into a tab")
+	for _, k := range ToolWindowKinds() {
+		nested := r.NewContentPane(k, "", "", "", "")
+		if nested == nil || nested.Kind() != k || nested.Key() != SingletonKey(k) {
+			t.Fatalf("kind %d: NewContentPane must rebuild the window under its fixed key", k)
+		}
 	}
-	if src.ConvertToTabHost() {
-		t.Fatal("the HTTP viewer must not convert into a tab host")
+	if r.NewContentPane(KindMerge, "", "", "", "") != nil {
+		t.Fatal("a merge view must not restore as a content tab")
 	}
-	if nested := r.NewContentPane(KindHTTP, "", "", "", ""); nested != nil {
-		t.Fatal("a legacy nested-http tab must restore as nothing")
+	if nested := r.NewContentPane(KindRemote, "box", "", "", ""); nested == nil || nested.Remote().Alias() != "box" {
+		t.Fatal("a remote browser must restore from its alias")
 	}
 }
 

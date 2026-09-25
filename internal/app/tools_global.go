@@ -242,7 +242,7 @@ func (m *Model) attachGlobalToolIn(entry config.ToolEntry, term terminal.Model, 
 	// occupant, or — with no configured position — any live tool pane / tool
 	// host, so unplaced tools group instead of scattering (#2042).
 	adoptInto := func(host string) bool {
-		if host == "" || !canHostTabs(ws.Panes.Get(host)) || !m.ensureTabHost(host) {
+		if host == "" || !canAutoJoinTabs(ws.Panes.Get(host)) || !m.joinableHost(host) {
 			return false
 		}
 		term.SetParked(false)

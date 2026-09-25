@@ -141,7 +141,7 @@ func (m *Model) armForgePoll() tea.Cmd {
 	// a tool window can appear or vanish (toggle, layout restore, project
 	// switch, pane close): Has() is a map lookup, and SetPaneOpen only reports
 	// work on the edge, so an ordinary pass costs nothing.
-	if m.forgePoller().SetPaneOpen(m.activeWS().Panes.Has(pane.IssuesKey)) {
+	if m.forgePoller().SetPaneOpen(m.toolWindowOpen(pane.KindIssues)) {
 		m.sendForgeRearm()
 	}
 	if !m.forgePoll.rearm {

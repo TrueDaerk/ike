@@ -31,10 +31,10 @@ func (m *Model) toggleDoctorPanel() {
 
 // doctorPanel returns the singleton panel model, or nil when it is not open.
 func (m Model) doctorPanel() *debugdoctor.Model {
-	if !m.activeWS().Panes.Has(pane.DoctorKey) {
-		return nil
+	if inst := m.toolWindow(pane.KindDoctor); inst != nil {
+		return inst.Doctor()
 	}
-	return m.activeWS().Panes.Get(pane.DoctorKey).Doctor()
+	return nil
 }
 
 // openDoctorPanel splits the active editor (fallback: focused leaf) at the

@@ -580,6 +580,11 @@ func (i *Instance) ActiveTerminal() *terminal.Model {
 		return nil
 	}
 	if t := i.activeTab(); t != nil {
+		if t.inst != nil {
+			// A nested debug area (#2736) reaches its console the same way
+			// the dedicated pane does.
+			return t.inst.ActiveTerminal()
+		}
 		return t.Terminal()
 	}
 	return nil
@@ -771,19 +776,101 @@ func (i *Instance) AddTerminalTab(term terminal.Model) *terminal.Model {
 
 // KindTabbable reports whether kind's content can live in a tab slot and, by
 // the same token, whether its pane can convert into a tab host (#1778):
-// editors and terminals natively, plus the viewer kinds. The explorer and the
-// singleton tool windows (VCS, Debug, Problems, Structure, Usages,
-// Breakpoints) keep their fixed toggle-driven roles, and a merge view stays a
-// dedicated pane — its conflict workflow is session-bound. The HTTP response
-// viewer is a tool window with a fixed position in the layout model (#2042),
-// not editor content: it never nests as a tab, so a layout apply always
-// treats it as the singleton "http" tool pane.
+// everything but the explorer (#2736). Editors and terminals host natively;
+// the viewer kinds, the merge view and every singleton tool window — the
+// HTTP response viewer included — move their live model into a content tab
+// and back out again without reloading, so any two panes the user drags
+// together stack as tabs. The explorer is the single exception: it is the
+// file tree's fixed home, never a merge target and never a tab.
 func KindTabbable(k Kind) bool {
+	return k != KindExplorer
+}
+
+// KindViewer reports whether kind is a content viewer (#2736): a pane bound
+// to a document, database, cluster or host rather than a tool window. These
+// are the kinds automatic placement may tab-join into (#1905 keeps the tool
+// windows split beside, never tabbed into) and the kinds the flexible editor
+// region is made of.
+func KindViewer(k Kind) bool {
 	switch k {
-	case KindEditor, KindTerminal, KindMarkdown, KindImage, KindDiff, KindArchive, KindData, KindES, KindHex, KindNotebook:
+	case KindMarkdown, KindImage, KindDiff, KindArchive, KindData, KindES, KindHex, KindNotebook, KindRemote:
 		return true
 	}
 	return false
+}
+
+// KindToolWindow reports whether kind is one of the singleton tool windows
+// (#2736): the panes with a fixed key that open by toggle command, exist at
+// most once per workspace and persist as kind-only identities. A tool window
+// keeps that identity when it lives as a content tab — its nested instance
+// carries the singleton key — which is how `SingletonKey` and the app's
+// nest-aware lookups find it wherever it is.
+func KindToolWindow(k Kind) bool {
+	return SingletonKey(k) != ""
+}
+
+// SingletonKey returns the fixed registry key of a singleton tool window
+// kind, "" for every other kind.
+func SingletonKey(k Kind) string {
+	switch k {
+	case KindVCS:
+		return VCSKey
+	case KindDebug:
+		return DebugKey
+	case KindProblems:
+		return ProblemsKey
+	case KindStructure:
+		return StructureKey
+	case KindUsages:
+		return UsagesKey
+	case KindHTTP:
+		return HTTPKey
+	case KindBreakpoints:
+		return BreakpointsKey
+	case KindTests:
+		return TestsKey
+	case KindIssues:
+		return IssuesKey
+	case KindDOM:
+		return DOMKey
+	case KindDoctor:
+		return DoctorKey
+	case KindLSPDoctor:
+		return LSPDoctorKey
+	case KindDeps:
+		return DepsKey
+	case KindTime:
+		return TimeKey
+	case KindUsage:
+		return UsageKey
+	}
+	return ""
+}
+
+// SingletonKind is the inverse of SingletonKey: the tool-window kind behind a
+// fixed key, ok=false for the explorer and every minted key.
+func SingletonKind(key string) (Kind, bool) {
+	for _, k := range toolWindowKinds {
+		if SingletonKey(k) == key {
+			return k, true
+		}
+	}
+	return 0, false
+}
+
+// toolWindowKinds lists every singleton tool window kind, in Kind order.
+var toolWindowKinds = []Kind{
+	KindVCS, KindDebug, KindProblems, KindStructure, KindUsages, KindHTTP, KindBreakpoints,
+	KindTests, KindIssues, KindDOM, KindDoctor, KindLSPDoctor, KindDeps, KindTime, KindUsage,
+}
+
+// ToolWindowKinds returns every singleton tool window kind (#2736), for the
+// callers that enumerate the windows — the layout apply adopting live windows
+// into their saved tab hosts, and the audits pinning the tabbable set.
+func ToolWindowKinds() []Kind {
+	out := make([]Kind, len(toolWindowKinds))
+	copy(out, toolWindowKinds)
+	return out
 }
 
 // ConvertToTabHost turns a terminal (or tool, #741) or viewer (#1778) pane
@@ -839,6 +926,45 @@ func (i *Instance) DetachContent() (*Instance, bool) {
 		nested.hv, i.hv = i.hv, hexview.Model{}
 	case KindNotebook:
 		nested.nv, i.nv = i.nv, nbview.Model{}
+	case KindRemote:
+		nested.rm, i.rm = i.rm, remote.Model{}
+	case KindMerge:
+		nested.mg, i.mg = i.mg, merge.Model{}
+	// The tool windows (#2736) move the same way: the model — and with it
+	// the response history, test results, debugger state or SFTP session —
+	// changes slot, never identity. The zero value left behind releases
+	// nothing (a debug area's console pointer and a remote browser's
+	// connection travel with the model).
+	case KindVCS:
+		nested.vp, i.vp = i.vp, vcspanel.Model{}
+	case KindDebug:
+		nested.dp, i.dp = i.dp, debugpanel.Model{}
+	case KindProblems:
+		nested.pp, i.pp = i.pp, problems.Model{}
+	case KindStructure:
+		nested.sp, i.sp = i.sp, structpanel.Model{}
+	case KindUsages:
+		nested.up, i.up = i.up, usages.Model{}
+	case KindHTTP:
+		nested.hp, i.hp = i.hp, httppane.Model{}
+	case KindBreakpoints:
+		nested.bp, i.bp = i.bp, breakpanel.Model{}
+	case KindTests:
+		nested.tr, i.tr = i.tr, testresults.Model{}
+	case KindIssues:
+		nested.gi, i.gi = i.gi, ghissues.Model{}
+	case KindDOM:
+		nested.dm, i.dm = i.dm, domview.Model{}
+	case KindDoctor:
+		nested.xd, i.xd = i.xd, debugdoctor.Model{}
+	case KindLSPDoctor:
+		nested.ld, i.ld = i.ld, lspdoctor.Model{}
+	case KindDeps:
+		nested.dep, i.dep = i.dep, depspanel.Model{}
+	case KindTime:
+		nested.tp, i.tp = i.tp, timepanel.Model{}
+	case KindUsage:
+		nested.usg, i.usg = i.usg, usagepanel.Model{}
 	default:
 		return nil, false
 	}
@@ -937,8 +1063,81 @@ func (i *Instance) ContentTitle() string {
 			return t
 		}
 		return "http"
+	case KindRemote:
+		if a := i.rm.Alias(); a != "" {
+			return a
+		}
+		return "sftp"
+	case KindMerge:
+		if p := i.mg.Path(); p != "" {
+			return filepath.Base(p)
+		}
+		return "merge"
+	}
+	// The tool windows (#2736) label their tab by the name that opens them
+	// — the same word the palette and the status line use.
+	switch i.kind {
+	case KindDoctor:
+		return "xdebug doctor"
+	case KindLSPDoctor:
+		return "lsp doctor"
+	}
+	if name := ToolWindowName(i.kind); name != "" {
+		return name
 	}
 	return "pane"
+}
+
+// ToolWindowName is the short lower-case label of a singleton tool window
+// kind (#2736) — its tab title and the identity a persisted content tab
+// carries. It is the persisted kind string of the dedicated pane, so a
+// layout.json written by an older build reads back unchanged. "" for every
+// other kind.
+func ToolWindowName(k Kind) string {
+	switch k {
+	case KindVCS:
+		return "vcs"
+	case KindDebug:
+		return "debug"
+	case KindProblems:
+		return "problems"
+	case KindStructure:
+		return "structure"
+	case KindUsages:
+		return "usages"
+	case KindHTTP:
+		return "http"
+	case KindBreakpoints:
+		return "breakpoints"
+	case KindTests:
+		return "tests"
+	case KindIssues:
+		return "issues"
+	case KindDOM:
+		return "dom"
+	case KindDoctor:
+		return "xdoctor"
+	case KindLSPDoctor:
+		return "lspdoctor"
+	case KindDeps:
+		return "deps"
+	case KindTime:
+		return "time"
+	case KindUsage:
+		return "usage"
+	}
+	return ""
+}
+
+// ToolWindowKind is the inverse of ToolWindowName, ok=false for any other
+// string.
+func ToolWindowKind(name string) (Kind, bool) {
+	for _, k := range toolWindowKinds {
+		if ToolWindowName(k) == name {
+			return k, true
+		}
+	}
+	return 0, false
 }
 
 // releaseContent ends the background resources the instance's component holds

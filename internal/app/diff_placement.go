@@ -21,7 +21,9 @@ import (
 // take over the tool strip the user reads results in. The popup terminal and
 // the floating panels are no layout leaves at all, so they never apply.
 func flexPane(inst *pane.Instance) bool {
-	if inst == nil || !pane.KindTabbable(inst.Kind()) || inst.Kind() == pane.KindTerminal {
+	if inst == nil || (inst.Kind() != pane.KindEditor && !pane.KindViewer(inst.Kind())) {
+		// Tool windows are tabbable since #2736 but stay outside the
+		// flexible region: a document never opens into Problems.
 		return false
 	}
 	return !toolTabHost(inst)
@@ -122,7 +124,7 @@ func (m *Model) nestDiffTab(key, target string) (*pane.Instance, bool) {
 			return inst, true
 		}
 	}
-	if !m.ensureTabHost(target) {
+	if !m.joinableHost(target) {
 		return nil, false
 	}
 	nested, ok := inst.DetachContent()

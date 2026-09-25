@@ -147,7 +147,7 @@ func TestTabHostPersistsToolTabAndRestores(t *testing.T) {
 	out, _ = m.Update(ToolOpenMsg{Name: "watcher"})
 	m = out.(Model)
 	toolKey := m.activeWS().Panes.Focused()
-	if !m.ensureTabHost(toolKey) {
+	if _, ok := m.ensureTabHost(toolKey); !ok {
 		t.Fatal("setup: tool pane must convert to a tab host")
 	}
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)

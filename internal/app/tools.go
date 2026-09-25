@@ -429,7 +429,7 @@ func (m *Model) openToolAtHome(sp toolSpawn, zone layout.Zone) bool {
 	occupant := m.dockOccupant(zone)
 	// Global tools (#1890) tab-join too (#2042): the project switch detaches
 	// tab-hosted global sessions tab-wise, so sharing the dock is safe.
-	if occupant != "" && canHostTabs(ws.Panes.Get(occupant)) && m.ensureTabHost(occupant) {
+	if occupant != "" && canAutoJoinTabs(ws.Panes.Get(occupant)) && m.joinableHost(occupant) {
 		ws.Panes.Get(occupant).AddTerminalTab(m.newToolTab(sp))
 		m.setFocus(occupant)
 		m.rememberTool(sp.name, occupant)

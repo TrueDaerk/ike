@@ -47,6 +47,24 @@ and the [notebook viewer](./notebook-viewer.md) (`KindNotebook`, #2425) —
 each with its own key base (`hex`, `hex:2`, …; `notebook`, `notebook:2`, …)
 and the shared content-tab/persistence conventions (#1778).
 
+**Every kind but the explorer is tabbable (#2736).** `pane.KindTabbable`
+is `k != KindExplorer`: the viewer kinds, the merge view and the singleton
+tool windows all `DetachContent` into a nested instance (the model moves,
+the husk keeps zero values so a following `Close` releases nothing) and
+`ConvertToTabHost` in place. Two predicates split the set for the callers
+that care: `KindViewer` (the content kinds automatic placement may tab-join
+and the flexible region is made of) and `KindToolWindow` (the singletons,
+enumerated by `ToolWindowKinds`, keyed by `SingletonKey`/`SingletonKind` and
+persisted by `ToolWindowName`/`ToolWindowKind`). A tool window's nested
+instance **keeps the singleton key** — that key is the window's identity, not
+the pane's — so when a window pane converts into a host the registry
+re-registers the host under a fresh editor key (`Registry.RehostSingleton`)
+and the fixed key stays free for `AddContentPaneFrom` to split the tab back
+out under it. `NewContentPane` rebuilds a window from its kind alone for the
+tab restore (`newToolWindow`, the constructor behind `AddVCS`, `AddHTTP`, …
+and the generic `AddToolWindow`); a merge view is session state and restores
+as nothing.
+
 The capability carries both halves of the gesture:
 
 | method | issue | what it does |
@@ -128,7 +146,15 @@ the same three-branch toggle, so it lives once in
   focus back. `togglePanelWith(key, open, onFocus)` adds the hook the two
   windows that do something on a mere refocus need: the Issues window clears
   the forge unread badge (#2086), the LSP Doctor starts a fresh check run
-  (#2164).
+  (#2164). All three branches are **nest-aware** (#2736): `panelOpen`,
+  `panelFocused` and `focusPanel` resolve a singleton key through
+  `toolWindowAt`, so a window living as a tab of a host counts as open,
+  counts as focused only while its tab is the host's active one (toggling
+  it while the host shows another tab switches to the window), and is
+  focused by activating that tab — never reopened as a second instance.
+  `ensurePanel`/`showPanel` follow the same lookups, and the per-window
+  accessors (`problemsPanel()`, `debugPanel()`, …) are `toolWindow(kind)`
+  calls rather than `Panes.Get(pane.XKey)`.
 - `panelReturnTarget(key)` is the toggle-off fallback chain: the remembered
   pane while it is still part of the layout, else `activeEditorKey`, else the
   explorer. The remembered pane per window lives in one

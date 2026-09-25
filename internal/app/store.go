@@ -143,15 +143,26 @@ func contentIdentity(inst *pane.Instance) (paneIdentity, bool) {
 		lr, rr := inst.Diff().Revs()
 		return paneIdentity{Kind: "diff", Path: inst.Diff().LeftPath(), Path2: inst.Diff().RightPath(), Rev: lr, Rev2: rr}, true
 	}
+	if name := pane.ToolWindowName(inst.Kind()); name != "" {
+		// A tool window persists as its kind alone (#2736), exactly like its
+		// dedicated pane: what it showed is session state, its place in the
+		// tab strip is layout.
+		return paneIdentity{Kind: name}, true
+	}
 	return paneIdentity{}, false
 }
 
 // contentKindFromString maps a persisted content kind back to its pane.Kind
-// (#1778); ok=false for unknown strings (a newer build's kind) and for
-// "http" — the HTTP viewer stopped nesting as a tab (#2042), so a legacy
-// nested-http tab restores as nothing (the viewer restored empty anyway).
+// (#1778); ok=false for unknown strings (a newer build's kind). The tool
+// windows read back by their kind names (#2736) — "http" again included,
+// which #2042 had dropped while the viewer could not nest.
 func contentKindFromString(s string) (pane.Kind, bool) {
+	if k, ok := pane.ToolWindowKind(s); ok {
+		return k, true
+	}
 	switch s {
+	case "remote":
+		return pane.KindRemote, true
 	case "markdown":
 		return pane.KindMarkdown, true
 	case "image":

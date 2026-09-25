@@ -2263,6 +2263,7 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 	// prunes too (#1903): the manager, not this stale layout entry, decides
 	// whether the tool is open.
 	prunedTerm := map[string]bool{}
+	hosted := hostedToolWindows(ids)
 	for _, key := range leaves {
 		// A persisted "scratch" pane (#1932) no longer exists: the list became
 		// the explorer's Scratches section (#1963), so its leaf prunes.
@@ -2272,6 +2273,12 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			if entry, ok := toolEntry(ids[key].Tool); ok && m.staleGlobalTool(entry) {
 				drop = true
 			}
+		}
+		if kind, ok := pane.ToolWindowKind(ids[key].Kind); !drop && ok && hosted[kind] {
+			// A tool window is one instance (#2736): a file naming it both
+			// as a dedicated leaf and as a content tab of a host restores
+			// it in the host, and the dedicated leaf prunes.
+			drop = true
 		}
 		if drop {
 			if pruned, ok := layout.Close(tree, key); ok {
@@ -2346,111 +2353,19 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			}
 			continue
 		}
-		if id := ids[key]; id.Kind == "vcs" {
-			// The VCS panel restores empty in its saved slot; the first
-			// status snapshot re-feeds it (0330, #482).
-			panes.AddVCS()
-			continue
-		}
-		if id := ids[key]; id.Kind == "debug" {
-			// The debug panel restores empty (#580): sessions never
-			// resurrect, the next stop re-feeds it.
-			panes.AddDebug()
-			continue
-		}
-		if id := ids[key]; id.Kind == "problems" {
-			// The Problems panel restores empty in its saved slot (#1024):
-			// diagnostics are session state; the live store re-feeds it as
-			// the language servers publish.
-			p := panes.Get(panes.AddProblems()).Problems()
-			p.SetDisplayPath(displayPath)
-			p.SetStore(m.probStore)
-			continue
-		}
-		if id := ids[key]; id.Kind == "time" {
-			// The Time panel restores empty in its saved slot (#2426): the
-			// aggregate is re-read from the usage log in the background.
-			panes.Get(panes.AddTime()).Time().SetLoading(true)
-			continue
-		}
-		if id := ids[key]; id.Kind == "usage" {
-			// The Usage panel restores empty in its saved slot (#2552): the
-			// aggregate is re-read from the usage log in the background.
-			panes.Get(panes.AddUsage()).Usage().SetLoading(true)
-			continue
-		}
-		if id := ids[key]; id.Kind == "deps" {
-			// The Dependencies panel restores empty in its saved slot
-			// (#2419): the auto-scan (or 'r') re-fills it.
-			p := panes.Get(panes.AddDeps()).Deps()
-			p.SetDisplayPath(displayPath)
-			continue
-		}
-		if id := ids[key]; id.Kind == "usages" {
-			// The Usages panel restores empty in its saved slot (#1155):
-			// find-references results are session state; the next
-			// lsp.referencesPanel run re-fills it.
-			panes.Get(panes.AddUsages()).Usages().SetDisplayPath(displayPath)
-			continue
-		}
-		if id := ids[key]; id.Kind == "tests" {
-			// The Test Results panel restores empty in its saved slot
-			// (#1911): the next captured test run re-fills it.
-			panes.AddTests()
-			continue
-		}
-		if id := ids[key]; id.Kind == "issues" {
-			// The GitHub Issues panel restores empty in its saved slot
-			// (#1934) with the same factories openIssuesPanel injects —
-			// refresh, timeline (#2084), mutations (#2088) and the metadata
-			// probe the edit gating reads (#2087). Without them a restored
-			// pane would come back read-only; 'r' re-fetches the listing and
-			// runs the probe.
-			p := panes.Get(panes.AddIssues()).Issues()
-			p.SetRefresh(forge.RefreshFactory("."))
-			p.SetTimeline(forge.TimelineFactory("."))
-			p.SetMutate(forge.MutateFactory("."))
-			p.SetMeta(forge.MetaFactory("."))
-			p.SetPRDetailFetch(forge.PRDetailFactory("."))
-			p.SetPRAction(forge.PRActionFactory("."))
-			continue
-		}
-		if id := ids[key]; id.Kind == "http" {
-			// The HTTP response viewer restores empty in its saved slot
-			// (#1250): the next http.run dispatch re-fills it.
-			panes.AddHTTP()
-			continue
-		}
-		if id := ids[key]; id.Kind == "breakpoints" {
-			// The Breakpoints panel restores in its saved slot (#1377),
-			// seeded from the persisted store loaded at start.
-			m.wireBreakpointsPanel(panes.Get(panes.AddBreakpoints()).Breakpoints())
-			continue
-		}
-		if id := ids[key]; id.Kind == "xdoctor" {
-			// The Xdebug Doctor restores in its saved slot (#1991), sharing
-			// the app-owned trace log (empty at start; connection attempts
-			// are session state).
-			m.wireDoctorPanel(panes.Get(panes.AddDoctor()).Doctor())
-			continue
-		}
-		if id := ids[key]; id.Kind == "lspdoctor" {
-			// The LSP Doctor restores in its saved slot (#2164), sharing the
-			// app-owned report (empty at start; check runs are session
-			// state — lsp.doctor or 'r' starts a fresh one).
-			m.wireLSPDoctorPanel(panes.Get(panes.AddLSPDoctor()).LSPDoctor())
-			continue
-		}
-		if id := ids[key]; id.Kind == "structure" {
-			// The Structure panel restores empty (#1025); the first
-			// buffer-change sync re-requests the symbols.
-			panes.AddStructure()
-			continue
-		}
-		if id := ids[key]; id.Kind == "dom" {
-			// The DOM inspector restores empty (#1929); the first
-			// buffer-change sync reparses the focused HTML buffer.
-			panes.AddDOM()
+		if kind, ok := pane.ToolWindowKind(ids[key].Kind); ok {
+			// A singleton tool window restores empty in its saved slot —
+			// its content is session state (diagnostics, responses, test
+			// results, the debug session) and the live feeds re-fill it —
+			// with the same app hooks its open path injects (wireToolWindow:
+			// stores, forge factories, loading flags, the breakpoints and
+			// doctor wiring). One branch for every kind since #2736. A
+			// window a tab host of this layout carries as a content tab
+			// restores there instead: its dedicated leaf was pruned above.
+			if prunedTerm[key] {
+				continue
+			}
+			m.wireToolWindow(panes.Get(panes.AddToolWindow(kind)))
 			continue
 		}
 		if id := ids[key]; id.Kind == "diff" {
@@ -2646,6 +2561,13 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			if nested == nil {
 				continue
 			}
+			if pane.KindToolWindow(kind) && toolWindowRestored(panes, kind) {
+				// A singleton (#2736) restores once: a dedicated leaf or an
+				// earlier host already brought it back, so a malformed file
+				// naming it twice does not spawn a second instance.
+				continue
+			}
+			m.wireToolWindow(nested) // the hooks a dedicated restore gives a tool window (#2736)
 			switch kind {
 			case pane.KindMarkdown:
 				if data, err := os.ReadFile(ct.Path); err == nil {
@@ -7880,8 +7802,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			*s.resultEd, cmd = s.resultEd.Update(msg)
 			return m, cmd
 		}
-		if inst := m.activeWS().Panes.FocusedInstance(); inst != nil && inst.Kind() == pane.KindMerge {
-			return m, inst.Update(msg)
+		if inst := m.focusedContent(); inst != nil && inst.Kind() == pane.KindMerge {
+			return m, inst.Update(msg) // dedicated view or hosted tab (#2736)
 		}
 		if key := m.activeEditorKey(); key != "" {
 			cmd := m.activeWS().Panes.Get(key).Update(msg)
@@ -12599,7 +12521,7 @@ func (m *Model) commitMove(x, y int) {
 			// (#708), a viewer pane its live content as a content tab (#1778).
 			// A terminal/tool or viewer target converts into a tab host first
 			// (#836), its running content becoming the first tab.
-			if !m.ensureTabHost(target) {
+			if target, ok = m.ensureTabHost(target); !ok {
 				return
 			}
 			if m.dragCarriesTerminal(m.drag) {
@@ -12684,7 +12606,7 @@ func (m *Model) commitTabMove(x, y int) {
 			m.splitTabTo(target, zone, path, ed, srcPinned)
 			return
 		}
-		if !m.ensureTabHost(target) {
+		if target, ok = m.ensureTabHost(target); !ok {
 			return
 		}
 		if m.openInTab(target, path) && srcPinned {
@@ -12735,7 +12657,7 @@ func (m *Model) commitTerminalTabMove(x, y int, inst *pane.Instance, r layout.Re
 		m.splitTerminalTabTo(target, zone)
 		return
 	}
-	if !m.ensureTabHost(target) {
+	if target, ok = m.ensureTabHost(target); !ok {
 		return
 	}
 	term, ok := inst.DetachTerminalTab(m.drag.srcTab)
@@ -12780,7 +12702,7 @@ func (m *Model) commitContentTabMove(x, y int, inst *pane.Instance, r layout.Rec
 		m.splitContentTabTo(target, zone)
 		return
 	}
-	if !m.ensureTabHost(target) {
+	if target, ok = m.ensureTabHost(target); !ok {
 		return
 	}
 	srcPinned := inst.TabPinned(m.drag.srcTab)
@@ -14227,25 +14149,100 @@ func (m Model) dropZoneFor(d *dragState, key string, r layout.Rect) (layout.Zone
 }
 
 // canHostTabs reports whether the pane can take a merged tab (#836, #1778):
-// an editor pane natively, every other tabbable kind (terminal/tool, viewer)
-// after in-place conversion. The explorer and the singleton tool windows —
-// the HTTP response viewer included (#2042) — stay edge-only targets.
+// an editor pane natively, every other tabbable kind after in-place
+// conversion — since #2736 that is everything but the explorer, the
+// singleton tool windows and the HTTP response viewer included. This is the
+// explicit-drag rule; automatic placement asks canAutoJoinTabs instead.
 func canHostTabs(inst *pane.Instance) bool {
 	return inst != nil && pane.KindTabbable(inst.Kind())
 }
 
-// ensureTabHost makes the target pane tab-hosting in place (#836): editors
-// already are; a terminal/tool or viewer pane (#1778) converts, its live
-// content becoming the first tab. Reports whether the pane can now take tabs.
-func (m *Model) ensureTabHost(key string) bool {
-	inst := m.activeWS().Panes.Get(key)
+// canAutoJoinTabs reports whether a pane may be tab-joined *without* the
+// user dragging (#2736): a tool opened by command at an occupied home dock
+// or slot (#1889, #1897), a global tool re-attaching (#1901), a run session
+// (#1905) or a viewer opening into the focused pane (#1825). Editors,
+// terminals and content viewers take the tab; a singleton tool window never
+// does — #1905's "split beside, never tabbed into" rule keeps a Problems or
+// HTTP pane from silently growing a lazygit tab. The user can still stack
+// them by dragging (canHostTabs).
+func canAutoJoinTabs(inst *pane.Instance) bool {
 	if inst == nil {
 		return false
 	}
-	if inst.Kind() == pane.KindEditor {
+	switch inst.Kind() {
+	case pane.KindEditor, pane.KindTerminal:
 		return true
 	}
-	return inst.ConvertToTabHost()
+	return pane.KindViewer(inst.Kind())
+}
+
+// ensureTabHost makes the target pane tab-hosting in place (#836): editors
+// already are; a terminal/tool, viewer or tool-window pane (#1778, #2736)
+// converts, its live content becoming the first tab. It returns the key the
+// host is registered under afterwards and whether the pane can now take
+// tabs. The key changes exactly when a singleton tool window converts: its
+// fixed key is the window's identity and stays with the nested tab
+// (Registry.RehostSingleton), so the host takes a fresh editor key and the
+// layout leaf, focus and drag source follow it.
+func (m *Model) ensureTabHost(key string) (string, bool) {
+	ws := m.activeWS()
+	inst := ws.Panes.Get(key)
+	if inst == nil {
+		return "", false
+	}
+	if inst.Kind() == pane.KindEditor {
+		return key, true
+	}
+	if pane.SingletonKey(inst.Kind()) != key {
+		return key, inst.ConvertToTabHost()
+	}
+	newKey, ok := ws.Panes.RehostSingleton(key)
+	if !ok {
+		return "", false
+	}
+	if _, ok := layout.Replace(ws.Tree, key, newKey); !ok {
+		// A leafless window (hidden via window.hideAllTools) converts all
+		// the same; it re-attaches under its new key.
+		m.forgetLeaf(key)
+	}
+	if m.drag != nil && m.drag.srcPane == key {
+		m.drag.srcPane = newKey
+	}
+	if m.recentEditor == key {
+		m.recentEditor = newKey
+	}
+	if m.recentFlex == key {
+		m.recentFlex = newKey
+	}
+	if r, ok := m.lay.Panes[key]; ok {
+		delete(m.lay.Panes, key)
+		m.lay.Panes[newKey] = r
+	}
+	return newKey, true
+}
+
+// joinableHost is ensureTabHost for the automatic tab-joins (#2736): the
+// caller already checked canAutoJoinTabs, so the pane is never a singleton
+// window and its key never changes — only the success matters.
+func (m *Model) joinableHost(key string) bool {
+	_, ok := m.ensureTabHost(key)
+	return ok
+}
+
+// forgetLeaf drops key from the hide-all-tools snapshot (#791) when a
+// converted pane changes key while leafless (#2736); the restore skips keys
+// it no longer finds, so the host simply stays where its toggle puts it.
+func (m *Model) forgetLeaf(key string) {
+	if m.toolHide == nil {
+		return
+	}
+	kept := m.toolHide.hidden[:0]
+	for _, k := range m.toolHide.hidden {
+		if k != key {
+			kept = append(kept, k)
+		}
+	}
+	m.toolHide.hidden = kept
 }
 
 // dragCarriesTerminal reports whether the drag moves a whole terminal pane
@@ -14259,10 +14256,11 @@ func (m Model) dragCarriesTerminal(d *dragState) bool {
 	return inst != nil && inst.Kind() == pane.KindTerminal
 }
 
-// dragCarriesContent reports whether the drag moves a whole viewer pane
-// (#1778) — markdown, image, diff, archive, data — whose content a tab-host
-// target could adopt as a content tab. The HTTP response viewer is a tool
-// window (#2042): its drag keeps the edge-only relocate zones.
+// dragCarriesContent reports whether the drag moves a whole content pane
+// (#1778) — a viewer, the merge view or, since #2736, any singleton tool
+// window, the HTTP response viewer included — whose live model a tab-host
+// target adopts as a content tab. Only an explorer drag keeps the edge-only
+// relocate zones.
 func (m Model) dragCarriesContent(d *dragState) bool {
 	if d.kind != dragMove {
 		return false
@@ -14602,39 +14600,12 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 			} else {
 				title = m.terminalTitle(inst)
 			}
-		case pane.KindMarkdown, pane.KindImage, pane.KindArchive, pane.KindData, pane.KindHex, pane.KindNotebook, pane.KindES, pane.KindDiff, pane.KindRemote:
-			title = contentPaneTitle(inst)
-		case pane.KindVCS:
-			title = "VCS"
-		case pane.KindDebug:
-			// The combined area (#2190) keeps its console reviewable after
-			// the debuggee ended; the chrome names that state (#2192) so the
-			// pane is not mistaken for a live session.
-			title = "DEBUG" + termExitedTitle(inst.Debug().Term())
-		case pane.KindProblems:
-			title = "PROBLEMS"
-		case pane.KindDeps:
-			title = "DEPENDENCIES"
-		case pane.KindTime:
-			title = "TIME"
-		case pane.KindUsage:
-			title = "USAGE"
-		case pane.KindTests:
-			title = "TESTS"
-		case pane.KindIssues:
-			title = "ISSUES"
-		case pane.KindBreakpoints:
-			title = "BREAKPOINTS"
-		case pane.KindStructure:
-			title = "STRUCTURE"
-		case pane.KindDOM:
-			title = "DOM"
-		case pane.KindDoctor:
-			title = "XDEBUG DOCTOR"
-		case pane.KindUsages:
-			title = "USAGES"
-		case pane.KindHTTP:
-			title = contentPaneTitle(inst)
+		default:
+			// Viewers and tool windows share one title table (#1778,
+			// #2736) so a pane and its hosted-tab twin are chromed alike.
+			if t := contentPaneTitle(inst); t != "" {
+				title = t
+			}
 		}
 	}
 
@@ -14755,6 +14726,39 @@ func contentPaneTitle(inst *pane.Instance) string {
 		return title
 	case pane.KindHTTP:
 		return strings.ToUpper(inst.HTTP().Title())
+	case pane.KindMerge:
+		return "MERGE " + baseName(inst.Merge().Path())
+	case pane.KindVCS:
+		return "VCS"
+	case pane.KindDebug:
+		// The combined area (#2190) keeps its console reviewable after the
+		// debuggee ended; the chrome names that state (#2192) so the pane
+		// is not mistaken for a live session.
+		return "DEBUG" + termExitedTitle(inst.Debug().Term())
+	case pane.KindProblems:
+		return "PROBLEMS"
+	case pane.KindDeps:
+		return "DEPENDENCIES"
+	case pane.KindTime:
+		return "TIME"
+	case pane.KindUsage:
+		return "USAGE"
+	case pane.KindTests:
+		return "TESTS"
+	case pane.KindIssues:
+		return "ISSUES"
+	case pane.KindBreakpoints:
+		return "BREAKPOINTS"
+	case pane.KindStructure:
+		return "STRUCTURE"
+	case pane.KindDOM:
+		return "DOM"
+	case pane.KindDoctor:
+		return "XDEBUG DOCTOR"
+	case pane.KindLSPDoctor:
+		return "LSP DOCTOR"
+	case pane.KindUsages:
+		return "USAGES"
 	}
 	return ""
 }

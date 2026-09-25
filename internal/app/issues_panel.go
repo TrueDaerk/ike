@@ -35,10 +35,10 @@ func (m *Model) toggleIssuesPanel() tea.Cmd {
 
 // issuesPanel returns the singleton panel model, or nil when it is not open.
 func (m Model) issuesPanel() *ghissues.Model {
-	if !m.activeWS().Panes.Has(pane.IssuesKey) {
-		return nil
+	if inst := m.toolWindow(pane.KindIssues); inst != nil {
+		return inst.Issues()
 	}
-	return m.activeWS().Panes.Get(pane.IssuesKey).Issues()
+	return nil
 }
 
 // openIssuesPanel splits the active editor (fallback: focused leaf) at the
