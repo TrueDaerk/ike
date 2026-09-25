@@ -1,0 +1,26 @@
+\e[1mbold\e[0m \e[1mw700\e[0m b-normal strong-normal
+
+\e[3mitalic\e[0m \e[4munderline\e[0m \e[9mstrike\e[0m \e[4;9mboth\e[0m
+
+\e]8;id=ike-0;x.html\e[4;38;2;215;175;135mlink\e[0m\e]8;; \e]8;id=ike-1;y.html\e[38;2;215;175;135mplain link\e[0m\e]8;;
+
+\e[38;2;255;0;0mred\e[0m \e[38;2;0;170;136mhex\e[0m \e[38;2;51;102;153mhex6\e[0m \e[38;2;255;128;0mrgb\e[0m \e[38;2;255;0;128mpct\e[0m clear bad
+
+\e[1;38;2;255;0;0minline red bold\e[0m
+
+                                 centered text
+
+                                                                      right text
+
+                                inherited centre
+
+left again
+
+                           inline span ignores align
+
+•                                                                     right item
+
+\e[38;2;88;88;88m┌────────────────┬───────────────────┐\e[0m
+\e[38;2;88;88;88m│ \e[0m     mid      \e[38;2;88;88;88m │ \e[0ma much wider cell\e[38;2;88;88;88m │\e[0m
+\e[38;2;88;88;88m│ \e[0mwide cell here\e[38;2;88;88;88m │ \e[0m              end\e[38;2;88;88;88m │\e[0m
+\e[38;2;88;88;88m└────────────────┴───────────────────┘\e[0m

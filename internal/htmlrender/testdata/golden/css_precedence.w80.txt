@@ -1,0 +1,7 @@
+title: ""
+----
+Kept by a class rule, more specific than the tag rule.
+
+Shown by an id rule, the most specific.
+
+Shown by the inline style over the tag rule.

@@ -1,0 +1,29 @@
+<html><head>
+<style>
+  p { display: none
+  .x { color: red }
+</style>
+<style>
+  /* unterminated comment
+  p { display: none }
+</style>
+<style>
+  } p { display: none }
+</style>
+<style>
+  a::before { content: "x" }
+  a:hover { display: none }
+  .fine { display: none }
+  .gone { font-weight bold; display: none; }
+  .str { font-family: "a;b}"; display: none }
+</style>
+</head><body>
+<p>Malformed stylesheets are ignored as a whole: this paragraph stays.</p>
+<p class="x">No colour either.</p>
+<p><a href="#">A link</a> survives a hover rule.</p>
+<p class="fine">Hidden: its rule sits in a valid sheet.</p>
+<p class="gone">Hidden: a broken declaration is skipped alone.</p>
+<p class="str">Hidden: braces in strings do not confuse the parser.</p>
+<p style="display:none; ; color: ;">Hidden by a messy inline style.</p>
+<p style="display">Kept: a declaration without a value.</p>
+</body></html>

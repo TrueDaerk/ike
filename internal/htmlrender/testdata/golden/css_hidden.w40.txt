@@ -1,0 +1,18 @@
+title: "Hidden"
+----
+Visible paragraph ends here.
+
+• Home
+• About
+
+Only shown on screen.
+
+Revealed again by a later declaration.
+
+┌──────┐
+│ Name │
+╞══════╡
+│ Ada  │
+└──────┘
+
+After the table.

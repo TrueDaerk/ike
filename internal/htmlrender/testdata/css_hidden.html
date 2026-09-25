@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html><head><title>Hidden</title>
+<style>
+  .sr-only { display: none }
+  #banner { visibility: hidden; }
+  nav ul li.skip { display:none !important }
+  @media print { .screen-only { display: none } }
+  @import url("print.css");
+</style>
+<style media="print">.screen-only { display: none }</style>
+</head><body>
+<p>Visible paragraph <span class="sr-only">screen reader text</span> ends here.</p>
+<div id="banner">Cookie banner nobody should read</div>
+<nav><ul><li>Home</li><li class="skip" style="display:block">Skipped</li><li>About</li></ul></nav>
+<p class="screen-only">Only shown on screen.</p>
+<p style="display:none">Inline hidden paragraph.</p>
+<p style="display:none; display:block">Revealed again by a later declaration.</p>
+<table>
+  <tr><th>Name</th><th style="display:none">Secret</th></tr>
+  <tr style="display: none"><td>hidden row</td><td>x</td></tr>
+  <tr><td>Ada</td><td class="sr-only">42</td></tr>
+</table>
+<p>After the table.</p>
+</body></html>

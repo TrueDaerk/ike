@@ -1,0 +1,16 @@
+Visible paragraph ends here.
+
+• Home
+• About
+
+Only shown on screen.
+
+Revealed again by a later declaration.
+
+\e[38;2;88;88;88m┌──────┐\e[0m
+\e[38;2;88;88;88m│ \e[0m\e[1mName\e[0m\e[38;2;88;88;88m │\e[0m
+\e[38;2;88;88;88m╞══════╡\e[0m
+\e[38;2;88;88;88m│ \e[0mAda \e[38;2;88;88;88m │\e[0m
+\e[38;2;88;88;88m└──────┘\e[0m
+
+After the table.

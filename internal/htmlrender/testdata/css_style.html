@@ -1,0 +1,32 @@
+<html><head><style>
+  .b { font-weight: bold }
+  .w700 { font-weight: 700 }
+  .w400 { font-weight: 400 }
+  .i { font-style: italic }
+  .u { text-decoration: underline }
+  .s { text-decoration-line: line-through }
+  .us { text-decoration: underline line-through }
+  a.plain { text-decoration: none; color: inherit }
+  .red { color: red }
+  .hex { color: #0a8 }
+  .hex6 { color: #336699 }
+  .rgb { color: rgb(255, 128, 0) }
+  .rgbpct { color: rgb(100% 0% 50% / 0.5) }
+  .clear { color: rgba(0,0,0,0) }
+  .bad { color: nosuchcolour }
+  strong.normal { font-weight: normal }
+  .c { text-align: center }
+  .r { text-align: right }
+  .l { text-align: left }
+</style></head><body>
+<p><span class="b">bold</span> <span class="w700">w700</span> <b class="w400">b-normal</b> <strong class="normal">strong-normal</strong></p>
+<p><span class="i">italic</span> <span class="u">underline</span> <span class="s">strike</span> <span class="us">both</span></p>
+<p><a href="x.html">link</a> <a class="plain" href="y.html">plain link</a></p>
+<p><span class="red">red</span> <span class="hex">hex</span> <span class="hex6">hex6</span> <span class="rgb">rgb</span> <span class="rgbpct">pct</span> <span class="clear">clear</span> <span class="bad">bad</span></p>
+<p style="color:#ff0000;font-weight:bold">inline red bold</p>
+<p class="c">centered text</p>
+<p class="r">right text</p>
+<div class="c"><p>inherited centre</p><p class="l">left again</p><span class="r">inline span ignores align</span></div>
+<ul><li class="r">right item</li></ul>
+<table><tr><td class="c">mid</td><td>a much wider cell</td></tr><tr><td>wide cell here</td><td class="r">end</td></tr></table>
+</body></html>
