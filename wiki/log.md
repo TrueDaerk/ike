@@ -1,5 +1,17 @@
 # Log
 
+## 2026-09-25 (HTML preview: tables as bordered grids, #2742)
+
+- `<table>` in the HTML preview renders as a box-drawing grid in the
+  palette's border colour: caption above, bold header rows under a double
+  rule, cells laid out by the ordinary flow at their column's width (links,
+  anchors and the source map work inside cells). Columns are sized by
+  content with a 3-cell minimum and the pane width as the cap; a word too
+  wide for its column ends in `…`, a grid too wide for the pane is cut with
+  `›`. `colspan` spans columns, `rowspan` leaves an empty cell below, a
+  nested table is flattened into its cell.
+  [HTML Preview](/architecture/html-preview.md) gains "Tables".
+
 ## 2026-09-25 (HTML preview: inline local images via Kitty, #2743)
 
 - A local `<img>` (relative to the page, absolute, or `file://`) shows inline
