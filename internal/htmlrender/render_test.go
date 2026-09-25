@@ -64,6 +64,38 @@ func TestLinkIndex(t *testing.T) {
 	}
 }
 
+// TestLinkSpans pins the per-line label pieces (#2741): every span's bytes
+// are exactly its label text and its cells are where that text is drawn; a
+// wrapped label has one span per line, and spans name the Document.Links
+// index even when an earlier <a href> was dropped.
+func TestLinkSpans(t *testing.T) {
+	src := `<p><a href="gone.html"></a>See <a href="a.html">first link</a> and then
+<a href="b.html">a label that is long enough to wrap</a>.</p>
+<ul><li><a href="c.html">item</a></li></ul>`
+	doc := Render([]byte(src), Options{Width: 24})
+	lines := plainLines(doc)
+	pieces := map[int][]string{}
+	for _, s := range doc.LinkSpans {
+		label := ansi.Strip(doc.Lines[s.Line][s.Start:s.End])
+		pieces[s.Link] = append(pieces[s.Link], label)
+		if got := ansi.Cut(doc.Lines[s.Line], s.Col, s.EndCol); ansi.Strip(got) != label {
+			t.Errorf("span %+v covers cells %q, want %q", s, ansi.Strip(got), label)
+		}
+		if s.Line < doc.Links[s.Link].FirstLine || s.Line > doc.Links[s.Link].LastLine {
+			t.Errorf("span %+v outside its link's lines %+v", s, doc.Links[s.Link])
+		}
+	}
+	want := map[int]string{0: "first link", 1: "a label that is long enough to wrap", 2: "item"}
+	for i, w := range want {
+		if got := strings.Join(pieces[i], " "); got != w {
+			t.Errorf("link %d pieces %q, want %q\n%s", i, pieces[i], w, strings.Join(lines, "\n"))
+		}
+	}
+	if len(pieces[1]) < 2 {
+		t.Errorf("the wrapped label should have a span per line, got %q", pieces[1])
+	}
+}
+
 // sourceMapFixture has one construct per source line so the expected
 // mapping is readable off the line numbers.
 const sourceMapFixture = `<h1>Title</h1>

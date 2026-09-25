@@ -85,6 +85,10 @@ type Model struct {
 	cursor int // last known source cursor line (0-based), for follow scroll
 	top    int // first rendered line shown
 
+	// Link following (#2741): the selected link of doc.Links plus one, 0
+	// while nothing is selected (so the zero value selects nothing).
+	sel int
+
 	// In-pane search: the prompt on the last row and the matching rendered
 	// lines. It lives behind a pointer so the value-receiver View copies
 	// share it, like the markdown preview's; nil means no search is open.
@@ -164,7 +168,8 @@ func (m *Model) SetCursorLine(line int) {
 	m.follow()
 }
 
-// Update handles the debounce tick and, when focused, scroll and search keys.
+// Update handles the debounce tick and, when focused, scroll, search and link
+// keys.
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case RenderTickMsg:
@@ -177,8 +182,10 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-// handleKey scrolls the rendered document. The preview is read-only, so the
-// vim motions map straight to view movement, as in the markdown preview.
+// handleKey scrolls the rendered document and drives the links. The preview
+// is read-only, so the vim motions map straight to view movement, as in the
+// markdown preview; tab/shift+tab walk the links, enter follows the selected
+// one (or, none selected, syncs the editor caret back) and y copies it.
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	// The open search prompt owns the keyboard: every key is query text
 	// until enter applies it or esc abandons the search.
@@ -199,7 +206,18 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.stepMatch(-1)
 		}
 	case "esc":
+		if m.search == nil {
+			m.clearSelection()
+		}
 		m.closeSearch()
+	case "tab":
+		m.selectLink(1)
+	case "shift+tab":
+		m.selectLink(-1)
+	case "enter":
+		return m.enter()
+	case "y":
+		return m.copySelected()
 	case "up", "k":
 		m.scrollTo(m.top - 1)
 	case "down", "j":
@@ -244,7 +262,7 @@ func (m Model) View() string {
 			b.WriteByte('\n')
 		}
 		if i := m.top + row; i >= 0 && i < len(m.doc.Lines) {
-			b.WriteString(ansi.Truncate(m.doc.Lines[i], m.w, "…"))
+			b.WriteString(ansi.Truncate(m.highlightLink(i), m.w, "…"))
 		}
 	}
 	if body < m.h {
@@ -271,6 +289,9 @@ func (m *Model) render() {
 		return
 	}
 	m.doc = Render(m.src, m.w, m.palette())
+	if m.sel > len(m.doc.Links) {
+		m.sel = len(m.doc.Links) // an edit dropped links: keep the last
+	}
 	if m.search != nil {
 		m.recomputeMatches()
 	}

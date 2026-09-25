@@ -521,6 +521,12 @@ func (m Model) statusLine() string {
 			if title := inst.HTMLPreview().Title(); title != "" {
 				left += " │ " + title
 			}
+			// The selected link (#2741), as in the markdown preview.
+			if target, ok := inst.HTMLPreview().SelectedTarget(); ok {
+				left += " │ → " + target
+			} else if inst.HTMLPreview().HasLinks() {
+				left += " │ tab: links"
+			}
 		case inst.Kind() == pane.KindMerge:
 			// The remaining-conflict counter (#2258): the caret's place in
 			// the ]n/[n cycle while it stands in a block, the unresolved

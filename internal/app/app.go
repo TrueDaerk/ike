@@ -6309,6 +6309,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// editor, the preview itself (anchors) or the platform opener.
 		return m.followPreviewLink(msg)
 
+	case htmlpreview.LinkMsg:
+		// enter/y/click on an HTML preview link (#2741): anchor, file or
+		// browser, by the same policy as the markdown preview's.
+		return m.followHTMLPreviewLink(msg)
+
+	case htmlpreview.SourceLineMsg:
+		// enter on no selected link: the reverse cursor sync (#2741).
+		return m.syncEditorToHTMLPreview(msg)
+
 	case TerminalToggleMsg:
 		// terminal.toggle (alt+f12 / palette / menu): the JetBrains state
 		// machine — create, focus, or return focus (#97).
@@ -10390,13 +10399,22 @@ func (m Model) dataPaneFocused() bool {
 }
 
 // previewLinkPaneFocused reports whether tab belongs to a focused markdown
-// preview (#2180), where it walks the document's links. Only a preview that
-// actually has links claims the key — a link-free document keeps tab's global
-// focus-cycling meaning rather than swallowing it — and ctrl+tab cycles panes
-// either way.
+// (#2180) or HTML (#2741) preview, where it walks the document's links. Only
+// a preview that actually has links claims the key — a link-free document
+// keeps tab's global focus-cycling meaning rather than swallowing it — and
+// ctrl+tab cycles panes either way.
 func (m Model) previewLinkPaneFocused() bool {
 	inst := m.focusedContent()
-	return inst != nil && inst.Kind() == pane.KindMarkdown && inst.Preview().HasLinks()
+	if inst == nil {
+		return false
+	}
+	switch inst.Kind() {
+	case pane.KindMarkdown:
+		return inst.Preview().HasLinks()
+	case pane.KindHTMLPreview:
+		return inst.HTMLPreview().HasLinks()
+	}
+	return false
 }
 
 // paneSelectionCopy reports whether the focused pane holds a live text
@@ -13277,6 +13295,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		if msg.Button == tea.MouseLeft {
 			inst.Image().MousePress(localX, localY)
 			m.drag = &dragState{kind: dragImagePan, srcPane: key, curX: msg.X, curY: msg.Y}
+		}
+	case pane.KindHTMLPreview:
+		// HTML-preview clicks (#2741): a left press on a link follows it;
+		// anywhere else it only focuses the pane.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.HTMLPreview().Click(localX, localY)
 		}
 	case pane.KindArchive:
 		// Archive-pane clicks (#1852): a click selects the row, a press on a

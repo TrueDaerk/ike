@@ -1,7 +1,7 @@
 ---
 type: concept
 title: HTML Preview
-description: "Epic 0530 — rendered reading view of .html/.htm/.xhtml buffers (and .html.gz through the gz viewer) beside the editor, text-mode-browser style. #2739 the UI-free render core internal/htmlrender; #2740 the preview pane (KindHTMLPreview), html.preview on cmd+alt+h (macOS) / cmd+alt+shift+h, debounced re-render, source-mapped line-accurate cursor sync, / search, layout and session restore. Stub — 0530/9 completes it."
+description: "Epic 0530 — rendered reading view of .html/.htm/.xhtml buffers (and .html.gz through the gz viewer) beside the editor, text-mode-browser style. #2739 the UI-free render core internal/htmlrender; #2740 the preview pane (KindHTMLPreview), html.preview on cmd+alt+h (macOS) / cmd+alt+shift+h, debounced re-render, source-mapped line-accurate cursor sync, / search, layout and session restore; #2741 following links (tab/shift+tab/enter/y, click, #anchor/file/browser) and the reverse cursor sync. Stub — 0530/9 completes it."
 resource: internal/htmlpreview
 tags: [architecture, html, preview, pane, viewer, gzip]
 timestamp: 2026-09-25T12:00:00Z
@@ -85,8 +85,42 @@ it.
   an anonymous content slot like every viewer (`pane.KindViewer`); it is
   tabbable (`pane.KindTabbable`).
 
+## Following links (#2741)
+
+The markdown preview's link model (#2180) carried over, fed by the render
+core's own index instead of a scan of the output.
+
+- **Index.** `Document.Links` names each `<a href>` (label, href, first and
+  last line); `Document.LinkSpans` places every piece of a label — one per
+  rendered line when it wraps — as a byte range of the styled line (the
+  selection highlight) and a cell range (the click hit-test).
+  `Document.Anchors` maps each `id` and `<a name>` to its rendered line.
+- **Keys.** Focused, `tab`/`shift+tab` walk the links in reading order,
+  wrapping, scrolling the selected one into view and drawing its label in
+  reverse video; `enter` follows the selection, `y` copies its destination,
+  `esc` drops it. Only a document with links claims `tab` — a link-free page
+  keeps the global focus cycle, and `ctrl+tab` cycles panes either way. The
+  status line shows `→ <href>` for the selection, `tab: links` otherwise.
+- **Mouse.** A left click on a label selects and follows it; a click
+  anywhere else only focuses the pane. The wheel scrolls.
+- **Follow rules** (`internal/app/htmlpreviewlinks.go`, from an
+  `htmlpreview.LinkMsg`): `#anchor` scrolls the preview to the element
+  whose `id`/`name` matches (percent-decoded as a fallback), an unknown one
+  toasts; a destination with a scheme other than `file:` (`http(s)`,
+  `mailto`, …) goes to the open-in-browser opener; anything else is a local
+  path — percent-decoded, query dropped — resolved against the previewed
+  page (for a gz buffer, against the archive's directory). An `.html` target
+  opens in an editor with a preview of its own beside it, landing on the
+  fragment's anchor; a markdown target opens at the fragment's heading;
+  other kinds go through the normal open funnel. A missing target toasts.
+- **Reverse cursor sync.** `enter` with no link selected emits an
+  `htmlpreview.SourceLineMsg` for the rendered line at the sync row (a third
+  down the viewport — where the forward sync puts the caret's line, so the
+  two round-trip); the root model focuses the editor holding the buffer and
+  moves its caret to that line's source line through the source map.
+
 ## Still to come
 
-Links and navigation (0530/3), tables (0530/4), inline images (0530/5), the
+Tables (0530/4), inline images (0530/5), the
 minimal CSS subset (0530/6), bounded async rendering (0530/7), the browser
 screenshot mode (0530/8) and the full concept doc (0530/9).
