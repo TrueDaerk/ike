@@ -2069,21 +2069,33 @@ func (i *Instance) configure(cfg host.Config) {
 	case KindHTMLPreview:
 		// preview.html_images turns the HTML preview's inline images on
 		// and off (#2743), preview.html_render_budget_kb bounds its render
-		// (#2745), in every open pane.
+		// (#2745), preview.html_browser* drive its browser mode (#2746), in
+		// every open pane.
 		applyHTMLPreviewCfg(cfg, i)
 	}
 }
 
-// applyHTMLPreviewCfg threads preview.html_images and
-// preview.html_render_budget_kb into one HTML preview instance (#2743,
-// #2745). Without a config layer, or with a key absent or malformed, the
-// shipped defaults apply: images on, a 2048 KB budget.
+// applyHTMLPreviewCfg threads preview.html_images,
+// preview.html_render_budget_kb and the browser mode's preview.html_browser
+// and preview.html_browser_timeout_s into one HTML preview instance (#2743,
+// #2745, #2746). Without a config layer, or with a key absent or malformed,
+// the shipped defaults apply: images on, a 2048 KB budget, an auto-detected
+// browser with a 20 s timeout.
 func applyHTMLPreviewCfg(cfg host.Config, inst *Instance) {
 	if inst == nil || inst.kind != KindHTMLPreview {
 		return
 	}
 	on, budget := true, config.DefaultHTMLRenderBudgetKB
+	browser, timeout := "", config.DefaultHTMLBrowserTimeoutS
 	if cfg != nil {
+		if v, ok := cfg.Get("preview.html_browser"); ok {
+			browser = v
+		}
+		if v, ok := cfg.Get("preview.html_browser_timeout_s"); ok {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				timeout = n
+			}
+		}
 		if v, ok := cfg.Get("preview.html_images"); ok {
 			if b, err := strconv.ParseBool(v); err == nil {
 				on = b
@@ -2097,6 +2109,7 @@ func applyHTMLPreviewCfg(cfg host.Config, inst *Instance) {
 	}
 	inst.hpv.SetImagesEnabled(on)
 	inst.hpv.SetRenderBudget(budget)
+	inst.hpv.SetBrowser(browser, timeout)
 }
 
 // defaultNotebookImageMaxCols mirrors config's default for

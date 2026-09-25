@@ -326,6 +326,9 @@ func defaults() *Config {
 			HTMLImages: true,
 			// The HTML preview renders the first 2 MiB of a page (#2745).
 			HTMLRenderBudgetKB: DefaultHTMLRenderBudgetKB,
+			// The browser screenshot mode (#2746) auto-detects a headless
+			// browser and gives one screenshot 20 seconds.
+			HTMLBrowserTimeoutS: DefaultHTMLBrowserTimeoutS,
 		},
 		Notebook: Notebook{
 			// An image output is capped at 80 columns (#2683): a plot that

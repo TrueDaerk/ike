@@ -4,7 +4,7 @@ title: Custom TUI Tool Panes
 description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking, docking into the layout's own tool region when the workspace edge is no slot, #2191), named slot templates pinning runtime tool opens to exact layout positions (#1897; #1946 adds `terminal`/`run`/`debug` as assignable targets; since #2042 saved layouts win over the template on apply), global process-wide instances shared across workspaces (#1890) whose panes follow project switches grouped at their configured positions (#1903, #2042) and return to the pane the project's saved layout recorded (#2141), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, IKE_THEME_* env for theme following, the per-tool close-guard opt-out `guard = false` (#2704), and the built-in Run tool that owns run output (#1905)."
 resource: internal/app/tools.go
 tags: [architecture, tools, terminal, panes, lazygit]
-timestamp: 2026-09-23T12:00:00Z
+timestamp: 2026-09-25T23:00:00Z
 ---
 
 # Custom TUI Tool Panes (#741)
@@ -99,6 +99,13 @@ Two surfaces draw from the catalog:
 
 A failed install keeps the written config entry — the tool works as soon as
 the binary is installed by hand.
+
+The Tools page only holds TUI panes. External *renderer* binaries that never
+become a pane — mermaid-cli for the markdown preview's diagrams (#2421) and
+the headless browser behind the HTML preview's screenshot mode (#2746,
+`preview.html_browser` and its timeout) — are configured on the Markdown
+Preview settings page next to the feature they serve; see
+[HTML preview](./html-preview.md#browser-screenshot-mode-2746).
 
 ## Commands & toggle semantics
 

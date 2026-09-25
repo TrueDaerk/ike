@@ -588,7 +588,7 @@ func (t *textEditor) View(w, h int) []string {
 // --- path ---
 
 // pathEditor is free text with live completion from the real filesystem, and
-// an existence check on commit.
+// an existence check on commit, followed by the entry's ValidateString.
 type pathEditor struct {
 	m       *Model
 	e       Entry
@@ -666,6 +666,12 @@ func (p *pathEditor) Update(key tea.KeyPressMsg) tea.Cmd {
 				p.err = "not a directory"
 			}
 			return nil
+		}
+		if path != "" && p.e.ValidateString != nil {
+			if msg := p.e.ValidateString(path); msg != "" {
+				p.err = msg
+				return nil
+			}
 		}
 		p.err = ""
 		p.suggest.clear()

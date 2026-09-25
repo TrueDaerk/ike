@@ -42,7 +42,7 @@ type SourceLineMsg struct {
 // HasLinks reports whether the rendered document holds a followable link —
 // the condition under which the pane claims the tab key, as the markdown
 // preview does (#2180).
-func (m Model) HasLinks() bool { return len(m.doc.Links) > 0 }
+func (m Model) HasLinks() bool { return !m.browserShown() && len(m.doc.Links) > 0 }
 
 // selected returns the index of the selected link. sel counts from 1 so the
 // zero-value model selects nothing.
@@ -151,6 +151,9 @@ func (m Model) LinkAt(x, y int) (int, bool) {
 // follows it; anywhere else it does nothing — the press has already focused
 // the pane, and a stray click must not move the editor's caret.
 func (m *Model) Click(x, y int) tea.Cmd {
+	if m.browserShown() {
+		return nil // a screenshot has no links to follow (#2746)
+	}
 	i, ok := m.LinkAt(x, y)
 	if !ok {
 		return nil

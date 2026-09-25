@@ -205,6 +205,9 @@ func (m *Model) forgetUnplaced() {
 // when it changes: a placeholder block and "[alt]" occupy different numbers
 // of lines, so the source map has to be rebuilt with them.
 func (m *Model) SetGraphics(ok bool) {
+	if m.br.shot != nil {
+		m.br.shot.SetGraphics(ok)
+	}
 	if ok == m.gfx {
 		return
 	}
@@ -227,12 +230,20 @@ func (m *Model) ImagesEnabled() bool { return m.imagesOn }
 
 // HasImages reports whether the latest render found at least one decodable
 // local image — the signal the app uses to fire the Kitty capability probe.
-func (m *Model) HasImages() bool { return len(m.placed) > 0 }
+// A shown browser screenshot (#2746) counts too.
+func (m *Model) HasImages() bool { return m.browserShown() || len(m.placed) > 0 }
 
 // ImageIDs returns the Kitty image ids the latest render drew as pixels —
 // the desired live set the app's reconcile pass diffs against. It is empty
 // while the terminal's support is unknown or absent.
 func (m *Model) ImageIDs() []int {
+	if m.browserShown() {
+		// Browser mode (#2746): the screenshot is the pane's one placement.
+		if !m.gfx {
+			return nil
+		}
+		return []int{m.br.shot.ID()}
+	}
 	var out []int
 	for _, im := range m.placed {
 		if im.Cols > 0 {
@@ -244,6 +255,12 @@ func (m *Model) ImageIDs() []int {
 
 // TransmittedIDs returns the ids the terminal currently holds a placement for.
 func (m *Model) TransmittedIDs() []int {
+	if m.browserShown() {
+		if m.br.shot.Transmitted() {
+			return []int{m.br.shot.ID()}
+		}
+		return nil
+	}
 	var out []int
 	for _, im := range m.placed {
 		if im.SentCols > 0 {
@@ -256,12 +273,26 @@ func (m *Model) TransmittedIDs() []int {
 // SyncSeqs returns the raw sequences bringing the terminal's placements in
 // line with the latest render (imgview.SyncSeqs). Called by the app's
 // reconcile pass, only on supporting terminals.
-func (m *Model) SyncSeqs() []string { return imgview.SyncSeqs(m.placed) }
+func (m *Model) SyncSeqs() []string {
+	if m.browserShown() {
+		return m.br.shot.SyncSeqs()
+	}
+	return imgview.SyncSeqs(m.placed)
+}
 
 // ResetImages forgets every applied transmission (#1547's rule): the app
 // deleted this preview's placements because the workspace parked or was torn
 // down, so the next reconcile pass must transmit again.
 func (m *Model) ResetImages() {
+	m.resetTextImages()
+	if m.br.shot != nil {
+		m.br.shot.Reset()
+	}
+}
+
+// resetTextImages forgets the applied transmissions of the text rendering's
+// inline images.
+func (m *Model) resetTextImages() {
 	for _, im := range m.images {
 		im.SentCols, im.SentRows = 0, 0
 	}

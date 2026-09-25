@@ -26,6 +26,10 @@
 // a "rendering…" notice. The image hook runs on the render goroutine against
 // a private copy of the decoded-image cache (images.go), adopted with the
 // document on the loop.
+//
+// Browser mode (0530/8, #2746, browser.go) swaps the text rendering for a
+// headless browser's screenshot of the page, shown through imgview's zoom
+// and pan; b toggles it, r re-renders it.
 package htmlpreview
 
 import (
@@ -100,6 +104,10 @@ var renderGen atomic.Int64
 // document stays on screen under it until the new one lands.
 const renderingNotice = " rendering… "
 
+// shotNotice marks a pane in browser mode whose first screenshot is being
+// taken (#2746): the text rendering shows under it until the shot lands.
+const shotNotice = " screenshot… "
+
 // Model is one live HTML preview bound to a source buffer path. It is a value
 // type with pointer-receiver mutators, mirroring the other pane components,
 // and is embedded in a pane.Instance.
@@ -143,6 +151,9 @@ type Model struct {
 	placed   []*imgview.PlacedImage
 	gfx      bool
 	imagesOn bool
+
+	// Browser screenshot mode (#2746), see browser.go.
+	br browserState
 }
 
 // New returns a preview bound to path. Content arrives via SetSourceImmediate
@@ -150,7 +161,9 @@ type Model struct {
 // start enabled and the render budget at its default, the shipped
 // preview.html_images and preview.html_render_budget_kb.
 func New(key, path string, pal *theme.Palette) Model {
-	return Model{key: key, path: path, pal: pal, imagesOn: true, budget: config.DefaultHTMLRenderBudgetKB * 1024}
+	m := Model{key: key, path: path, pal: pal, imagesOn: true, budget: config.DefaultHTMLRenderBudgetKB * 1024}
+	m.SetBrowser("", 0)
+	return m
 }
 
 // SetRenderBudget applies preview.html_render_budget_kb: a render stops
@@ -189,11 +202,19 @@ func (m Model) Lines() []string { return m.doc.Lines }
 func (m Model) Top() int { return m.top }
 
 // SetFocused marks the preview focused; a focused preview consumes scroll keys.
-func (m *Model) SetFocused(f bool) { m.focused = f }
+func (m *Model) SetFocused(f bool) {
+	m.focused = f
+	if m.br.shot != nil {
+		m.br.shot.SetFocused(f)
+	}
+}
 
 // SetPalette re-themes the preview and re-renders in the new colours.
 func (m *Model) SetPalette(p *theme.Palette) {
 	m.pal = p
+	if m.br.shot != nil {
+		m.br.shot.SetPalette(p)
+	}
 	m.invalidate()
 }
 
@@ -205,6 +226,9 @@ func (m *Model) SetSize(w, h int) {
 	}
 	widthChanged := w != m.w
 	m.w, m.h = w, h
+	if m.br.shot != nil {
+		m.br.shot.SetSize(w, h)
+	}
 	// An image block is fitted to the pane height too, so a height change
 	// re-renders a document that draws one.
 	if widthChanged || len(m.ImageIDs()) > 0 {
@@ -257,6 +281,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		if msg.Key == m.key && msg.Gen == m.gen && m.inflight {
 			m.apply(msg)
 		}
+	case ShotMsg:
+		// Only the newest dispatched screenshot lands (#2746).
+		if msg.Key == m.key && msg.Gen == m.br.gen && m.br.running {
+			return m.applyShot(msg)
+		}
 	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 	}
@@ -272,6 +301,17 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	// until enter applies it or esc abandons the search.
 	if m.search != nil && m.search.Open {
 		return m.searchKey(msg)
+	}
+	// Browser mode (#2746): b toggles it, r re-renders the screenshot, and
+	// while the screenshot shows every other key zooms and pans it.
+	switch msg.String() {
+	case "b":
+		return m.ToggleBrowser()
+	case "r":
+		return m.Rerender()
+	}
+	if m.browserShown() {
+		return m.br.shot.Update(msg)
 	}
 	switch msg.String() {
 	case "/", "ctrl+f", "cmd+f", "super+f":
@@ -318,8 +358,15 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 // pageStep is one page-scroll increment: just under a viewport of lines.
 func (m Model) pageStep() int { return max(1, m.h-1) }
 
-// ScrollBy scrolls the rendered view by delta lines (mouse wheel).
-func (m *Model) ScrollBy(delta int) { m.scrollTo(m.top + delta) }
+// ScrollBy scrolls the rendered view by delta lines (mouse wheel) — in
+// browser mode, pans the screenshot (#2746).
+func (m *Model) ScrollBy(delta int) {
+	if m.browserShown() {
+		m.br.shot.Wheel(delta)
+		return
+	}
+	m.scrollTo(m.top + delta)
+}
 
 // scrollTo clamps and applies a new top line.
 func (m *Model) scrollTo(top int) {
@@ -336,6 +383,9 @@ func (m Model) View() string {
 	if m.w <= 0 || m.h <= 0 {
 		return ""
 	}
+	if m.browserShown() {
+		return m.br.shot.View()
+	}
 	var b strings.Builder
 	body := m.viewHeight()
 	for row := 0; row < body; row++ {
@@ -346,7 +396,7 @@ func (m Model) View() string {
 		if i := m.top + row; i >= 0 && i < len(m.doc.Lines) {
 			line = m.highlightLink(i)
 		}
-		if row == 0 && m.Pending() {
+		if row == 0 && (m.Pending() || m.br.running) {
 			b.WriteString(m.withNotice(line))
 			continue
 		}
@@ -371,14 +421,18 @@ func (m Model) viewHeight() int {
 // withNotice right-aligns the rendering notice over line, the first visible
 // row, cutting the line short to make room.
 func (m Model) withNotice(line string) string {
-	nw := ansi.StringWidth(renderingNotice)
+	notice := renderingNotice
+	if m.br.running {
+		notice = shotNotice
+	}
+	nw := ansi.StringWidth(notice)
 	if m.w <= nw {
 		return ansi.Truncate(line, m.w, "")
 	}
 	line = ansi.Truncate(line, m.w-nw, "")
 	pad := m.w - nw - ansi.StringWidth(line)
 	st := lipgloss.NewStyle().Foreground(m.palette().Background).Background(m.palette().Hint)
-	return line + "\x1b[0m" + strings.Repeat(" ", pad) + st.Render(renderingNotice)
+	return line + "\x1b[0m" + strings.Repeat(" ", pad) + st.Render(notice)
 }
 
 // invalidate marks the pane as owing a render: its inputs — source, width,
@@ -391,6 +445,16 @@ func (m *Model) invalidate() { m.dirty = true }
 // render still in flight is cancelled, and its result — should it finish
 // anyway — carries an older generation and is dropped by Update.
 func (m *Model) RenderCmd() tea.Cmd {
+	// A browser screenshot owed since the mode came back from a layout
+	// restore (#2746) rides along.
+	if shot := m.shotCmd(false); shot != nil {
+		return tea.Batch(m.textRenderCmd(), shot)
+	}
+	return m.textRenderCmd()
+}
+
+// textRenderCmd is RenderCmd's text rendering half.
+func (m *Model) textRenderCmd() tea.Cmd {
 	if !m.dirty || m.w <= 0 {
 		return nil
 	}
@@ -430,6 +494,11 @@ func (m *Model) Interrupt() {
 		m.CancelRender()
 		m.dirty = true
 	}
+	// So does a browser screenshot in flight (#2746).
+	if m.br.running {
+		m.cancelShot()
+		m.br.owed = true
+	}
 }
 
 // Close releases the pane's background work: a closed pane cancels its
@@ -437,6 +506,7 @@ func (m *Model) Interrupt() {
 func (m *Model) Close() {
 	m.CancelRender()
 	m.dirty = false
+	m.closeBrowser()
 }
 
 // Flush finishes an owed or in-flight render synchronously on the caller's

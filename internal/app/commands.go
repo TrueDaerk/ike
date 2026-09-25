@@ -420,6 +420,12 @@ type MarkdownPreviewMsg struct{}
 // Dispatched by html.preview.
 type HTMLPreviewMsg struct{}
 
+// HTMLPreviewBrowserMsg asks the root model to switch the focused HTML
+// preview (or the one of the active HTML buffer) between text mode and the
+// browser screenshot mode (#2746). Dispatched by html.preview.browser; the
+// pane's own b does the same.
+type HTMLPreviewBrowserMsg struct{}
+
 // RerenderDiagramsMsg asks every open markdown preview to forget its cached
 // diagram renderings and run the external renderers again (#2421). Dispatched
 // by preview.rerenderDiagrams.
@@ -722,6 +728,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),
 			langCommand(appCommand("markdown.preview", "Markdown Preview", MarkdownPreviewMsg{}), []string{"markdown"}),
 			langCommand(appCommand("html.preview", "HTML Preview", HTMLPreviewMsg{}), []string{"html"}),
+			langCommand(appCommand("html.preview.browser", "HTML preview: render in browser", HTMLPreviewBrowserMsg{}), []string{"html"}),
 			appCommand("preview.rerenderDiagrams", "Re-render Preview Diagrams", RerenderDiagramsMsg{}),
 			// JetBrains' Basic Completion (#2695): ctrl+space opens the
 			// popup at the caret on demand — after an esc dismissed it, at a

@@ -9,6 +9,7 @@ package settings
 
 import (
 	"image/color"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -408,10 +409,12 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "network.mdns", Type: Bool, Title: "Announce over mDNS", Description: "Advertise the running endpoint on the local network as an _ike._tcp service (Bonjour / Avahi / DNS-SD), so a client browses for IKE instead of typing an address. Only while the endpoint is enabled, and skipped when the bind address is loopback — nothing else could reach it. Off keeps the endpoint silent: clients need the address", Scope: config.UserScope},
 			{Key: "network.name", Type: String, Title: "Announced name", Description: "The instance label other devices see when browsing (\"geants-mac\"); empty announces the host's short name. One DNS label: no dots, no control characters, at most 63 bytes", Scope: config.UserScope, ValidateString: networkNameValidate},
 		}},
-		{Title: "Markdown Preview", Description: "The rendered markdown and HTML preview panes: how the diagram fences inside a document — ```mermaid blocks in READMEs and design docs — are drawn, whether an HTML page's local images show inline, and how much of a large page the HTML preview renders.", Entries: []Entry{
+		{Title: "Markdown Preview", Description: "The rendered markdown and HTML preview panes: how the diagram fences inside a document — ```mermaid blocks in READMEs and design docs — are drawn, whether an HTML page's local images show inline, and how much of a large page the HTML preview renders, and which headless browser its screenshot mode uses.", Entries: []Entry{
 			{Key: "preview.diagrams", Type: Enum, Title: "Diagram rendering", Description: "How a fenced diagram block renders in the preview. \"ascii\" pipes it through the mermaid-ascii renderer and shows its text in place of the code block; \"image\" renders a PNG with mermaid-cli (mmdc) and embeds it over the Kitty graphics path, falling back to ascii where the terminal cannot show pixels; \"off\" leaves every fence the syntax-highlighted code block it is. Rendering is asynchronous and cached per fence, so typing around a diagram never re-runs the renderer; a renderer that is not installed leaves the code block with a one-line install hint, and \"Re-render Preview Diagrams\" retries once it is", Scope: config.UserScope, Options: []string{"ascii", "image", "off"}},
 			{Key: "preview.html_images", Type: Bool, Title: "Render images in HTML preview", Description: "Show the local images an HTML page references (an <img> src relative to the file, absolute, or file://) inline in the HTML preview over the Kitty graphics path, sized to the pane width like the markdown preview's images. A remote src is never fetched and, like an unsupported format or a terminal without Kitty graphics, keeps its [alt] placeholder. Off, every image shows as [alt]", Scope: config.UserScope},
 			{Key: "preview.html_render_budget_kb", Type: Int, Title: "HTML preview render budget (KB)", Description: "How much of an HTML page the preview renders, in KiB of source. Rendering runs off the UI loop and a newer edit cancels a render still in flight; past the budget it stops and the preview ends with a \"… truncated after N KB\" line, so a multi-MB report neither freezes IKE nor keeps the pane busy. The editor still holds the whole file", Scope: config.UserScope, Min: config.HTMLRenderBudgetKBMin, Max: config.HTMLRenderBudgetKBMax},
+			{Key: "preview.html_browser", Type: Path, Title: "HTML preview browser", Description: "Headless browser the HTML preview's browser mode (b in the pane, \"HTML preview: render in browser\") screenshots the page with: a Chrome, Chromium or Edge executable; \"~\" expands and a bare name resolves on PATH. Empty auto-detects google-chrome, chromium, chrome or microsoft-edge on PATH (and the standard app bundles on macOS). A directory is refused — for an .app bundle name the binary inside Contents/MacOS. Without a browser the toggle stays in text mode with a notice", Scope: config.UserScope, ValidateString: htmlBrowserValidate},
+			{Key: "preview.html_browser_timeout_s", Type: Int, Title: "HTML preview browser timeout (s)", Description: "Seconds one browser-mode screenshot may take before the browser is killed and the preview falls back to text mode with a notice", Scope: config.UserScope, Min: config.HTMLBrowserTimeoutSMin, Max: config.HTMLBrowserTimeoutSMax},
 		}},
 		{Title: "Notebook Viewer", Description: "The read-only Jupyter notebook pane: how wide an image output — a plot, a rendered figure — may grow next to the cell it belongs to.", Entries: []Entry{
 			{Key: "notebook.image_max_cols", Type: Int, Title: "Image width cap", Description: "Terminal columns an image output may occupy at most. The picture is fitted into the smaller of the pane width and this cap, keeps its aspect ratio and stays bounded by the pane height, so a wide plot no longer stretches across a 200-column pane and pushes the next cells off screen. It stays left-aligned under its metadata label. 0 lifts the cap and uses the full pane width", Scope: config.UserScope, Min: 0, Max: config.NotebookImageMaxColsMax, ValidateInt: notebookImageMaxColsValidate},
@@ -586,6 +589,16 @@ func forgePollValidate(v int) string {
 func notebookImageMaxColsValidate(v int) string {
 	if v < 0 {
 		return "0 lifts the cap; a width is 0\u2013" + strconv.Itoa(config.NotebookImageMaxColsMax) + " columns"
+	}
+	return ""
+}
+
+// htmlBrowserValidate is the form check for preview.html_browser (#2746) on
+// top of the path editor's existence check: the value is an executable, so a
+// directory — typically a macOS .app bundle — is refused with the fix.
+func htmlBrowserValidate(v string) string {
+	if st, err := os.Stat(expandHome(v)); err == nil && st.IsDir() {
+		return "a directory, not a browser binary (in an .app bundle: Contents/MacOS/<name>)"
 	}
 	return ""
 }

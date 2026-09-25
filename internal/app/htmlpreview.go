@@ -80,20 +80,29 @@ func (m Model) htmlPreviewsForPath(path string) []*pane.Instance {
 
 // htmlPreviewRenderCmd collects the renders the active workspace's HTML
 // previews owe (#2745) — each an off-loop Cmd tagged with its generation —
-// or nil. A workspace that never opened an HTML preview skips the walk.
+// or nil. A workspace that never opened an HTML preview skips the walk. A
+// preview whose browser mode flipped (#2746) — b, the command, a fallback —
+// gets the layout persisted, so the mode is remembered per pane.
 func (m *Model) htmlPreviewRenderCmd() tea.Cmd {
 	if !m.activeWS().Panes.HTMLPreviewsMinted() {
 		return nil
 	}
 	var cmds []tea.Cmd
+	flipped := false
 	m.contentInstances(func(_ string, _ int, c *pane.Instance) bool {
 		if c.Kind() == pane.KindHTMLPreview {
 			if cmd := c.HTMLPreview().RenderCmd(); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
+			if c.HTMLPreview().TakeModeChange() {
+				flipped = true
+			}
 		}
 		return true
 	})
+	if flipped && m.activeWS().Tree != nil {
+		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+	}
 	if len(cmds) == 0 {
 		return nil
 	}
@@ -138,11 +147,44 @@ func (m *Model) htmlPreviewSource(path string) (string, bool) {
 	return string(data), true
 }
 
-// restoreHTMLPreview fills a restored HTML preview from its source file.
-func (m *Model) restoreHTMLPreview(inst *pane.Instance) {
+// restoreHTMLPreview fills a restored HTML preview from its source file and
+// brings back its persisted mode: "browser" re-enters the browser screenshot
+// mode (#2746), whose screenshot the next render pass dispatches.
+func (m *Model) restoreHTMLPreview(inst *pane.Instance, mode string) {
 	if text, ok := m.htmlPreviewSource(inst.HTMLPreview().Path()); ok {
 		inst.HTMLPreview().SetSourceImmediate(text)
 	}
+	if mode == htmlPreviewBrowserMode {
+		inst.HTMLPreview().SetBrowserMode(true)
+	}
+}
+
+// htmlPreviewBrowserMode is the persisted mode of an HTML preview in browser
+// screenshot mode (#2746) — paneIdentity.Mode.
+const htmlPreviewBrowserMode = "browser"
+
+// htmlPreviewNeedsPane is the toast of html.preview.browser with no HTML
+// preview to switch.
+const htmlPreviewNeedsPane = "HTML preview: open one first (html.preview)"
+
+// toggleHTMLPreviewBrowser is html.preview.browser (#2746), the palette
+// doorway to the pane's b: the focused HTML preview, else the first one bound
+// to the active editor's buffer, switches between text and browser mode.
+func (m *Model) toggleHTMLPreviewBrowser() tea.Cmd {
+	inst := m.focusedContent()
+	if inst == nil || inst.Kind() != pane.KindHTMLPreview {
+		inst = nil
+		if path := m.activeFilePath(); path != "" {
+			if found := m.htmlPreviewsForPath(path); len(found) > 0 {
+				inst = found[0]
+			}
+		}
+	}
+	if inst == nil {
+		m.host.Notify(host.Info, htmlPreviewNeedsPane)
+		return nil
+	}
+	return inst.HTMLPreview().ToggleBrowser()
 }
 
 // withHTMLPreviewItem appends the "HTML Preview" entry to the tab context
