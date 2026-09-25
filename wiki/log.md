@@ -1,5 +1,17 @@
 # Log
 
+## 2026-09-25 (HTML preview: follow links, reverse cursor sync, #2741)
+
+- The HTML preview follows links like the markdown preview (#2180):
+  `tab`/`shift+tab` select (only when the page has links), `enter` follows,
+  `y` copies, a click on a label follows. `#anchor` scrolls to the
+  `id`/`name` element, local paths open in IKE (`.html` with its own
+  preview), `http(s)`/`mailto` go to the browser opener.
+- `enter` with no selected link is the reverse cursor sync: the editor caret
+  moves to the source line of the rendered line at the sync row.
+- `htmlrender.Document.LinkSpans` gives each label piece's byte and cell
+  range. [HTML Preview](/architecture/html-preview.md) gains "Following links".
+
 ## 2026-09-25 (HTML preview: the pane, #2740)
 
 - New pane kind `KindHTMLPreview` wrapping `internal/htmlpreview` (Epic 0530,

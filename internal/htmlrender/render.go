@@ -62,6 +62,17 @@ type Link struct {
 	LastLine  int    // last rendered line (differs when the label wraps)
 }
 
+// LinkSpan is one line's piece of a link's label: where the selection
+// highlight goes (Start/End, byte offsets inside Lines[Line], the OSC 8
+// sequences excluded) and where a mouse click hits it (Col/EndCol, display
+// cells, EndCol exclusive). A wrapped label has one span per line.
+type LinkSpan struct {
+	Link        int // index into Document.Links
+	Line        int
+	Start, End  int
+	Col, EndCol int
+}
+
 // Image is one <img> of the rendered document.
 type Image struct {
 	Src  string
@@ -75,6 +86,9 @@ type Document struct {
 	Lines  []string // styled lines, each at most Options.Width cells wide
 	Links  []Link   // in reading order
 	Images []Image  // in reading order
+	// LinkSpans places every piece of every link label, in rendered order —
+	// the selection highlight and the click hit-test of the preview (#2741).
+	LinkSpans []LinkSpan
 	// Anchors maps an element id (or an <a name>) to the rendered line its
 	// content starts on — where an in-document "#anchor" link lands.
 	Anchors map[string]int
@@ -102,13 +116,19 @@ func Render(doc []byte, opts Options) Document {
 		r.claimAnchor(id, max(0, len(r.lines)-1))
 	}
 	out := Document{Title: r.title, Lines: r.lines, Images: r.images, Anchors: r.anchorL}
+	index := make([]int, len(r.links)) // build id -> Document.Links index
 	for i := range r.links {
 		l := r.links[i].Link
 		if l.FirstLine < 0 {
 			continue // nothing of it was rendered
 		}
+		index[i] = len(out.Links)
 		l.Label = strings.TrimSpace(string(r.links[i].label))
 		out.Links = append(out.Links, l)
+	}
+	for _, s := range r.spans {
+		s.Link = index[s.Link]
+		out.LinkSpans = append(out.LinkSpans, s)
 	}
 	out.sourceMap = newSourceMap(doc, r.src)
 	return out
@@ -194,6 +214,10 @@ type renderer struct {
 	links   []linkBuild
 	images  []Image
 	anchorL map[string]int
+	// spans are the link spans of the emitted lines; composed holds the
+	// last compose call's, keyed by build id, until emit names their line.
+	spans    []LinkSpan
+	composed []LinkSpan
 }
 
 // walk renders n's children.
@@ -1055,6 +1079,10 @@ func (r *renderer) emit(body []frag, src int) {
 	line := r.compose(append(r.prefixFrags(), body...))
 	r.lines = append(r.lines, line)
 	r.src = append(r.src, src)
+	for _, s := range r.composed {
+		s.Line = idx
+		r.spans = append(r.spans, s)
+	}
 	r.lastBlank = false
 	for _, f := range body {
 		if f.link >= 0 {
@@ -1131,6 +1159,17 @@ func (r *renderer) blankLine(d int) string {
 func (r *renderer) compose(fs []frag) string {
 	var b strings.Builder
 	cur := -1
+	col := 0
+	r.composed = r.composed[:0]
+	// endLink closes the open link's span (recorded for the link index) and
+	// its OSC 8 sequence.
+	endLink := func() {
+		if cur >= 0 {
+			s := &r.composed[len(r.composed)-1]
+			s.End, s.EndCol = b.Len(), col
+			b.WriteString(ansi.ResetHyperlink())
+		}
+	}
 	for i := 0; i < len(fs); {
 		f := fs[i]
 		j := i + 1
@@ -1138,11 +1177,10 @@ func (r *renderer) compose(fs []frag) string {
 			j++
 		}
 		if f.link != cur {
-			if cur >= 0 {
-				b.WriteString(ansi.ResetHyperlink())
-			}
+			endLink()
 			if f.link >= 0 {
 				b.WriteString(r.links[f.link].open)
+				r.composed = append(r.composed, LinkSpan{Link: f.link, Start: b.Len(), Col: col})
 			}
 			cur = f.link
 		}
@@ -1154,14 +1192,13 @@ func (r *renderer) compose(fs []frag) string {
 		b.WriteString(sgr)
 		for k := i; k < j; k++ {
 			b.WriteString(fs[k].text)
+			col += fs[k].w
 		}
 		if sgr != "" {
 			b.WriteString(sgrReset)
 		}
 		i = j
 	}
-	if cur >= 0 {
-		b.WriteString(ansi.ResetHyperlink())
-	}
+	endLink()
 	return b.String()
 }
