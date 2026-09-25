@@ -265,6 +265,15 @@ any entry whose key the typed schema does not expose (no dead keys).
   stops arming deadlines while the terminal window has no focus, and `false`
   restores the always-polling behaviour. See
   [Forge Layer](./forge.md).
+- **Markdown Preview** (#2421, #2743) — `preview.diagrams`, how a fenced
+  diagram block renders (`ascii` / `image` / `off`), and
+  `preview.html_images` ("Render images in HTML preview", Bool, default on),
+  whether the HTML preview draws a local `<img>` inline over Kitty graphics
+  or keeps every image its `[alt]` placeholder. The markdown preview's own
+  images have no switch, so the HTML toggle joins the page that already
+  holds the preview's image-related setting. A write re-renders every open
+  HTML preview (`pane.applyHTMLPreviewCfg`, see
+  [HTML preview](./html-preview.md#inline-images-2743)).
 - **Notebook Viewer** (#2683) — `notebook.image_max_cols`, the column cap an
   image output in a notebook pane is fitted into (default 80, `0` lifts it).
   Like the forge interval it carries the `Entry.ValidateInt` hook, and for

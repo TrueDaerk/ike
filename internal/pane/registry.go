@@ -493,6 +493,7 @@ func (r *Registry) AddHTMLPreview(path string) string {
 	key := suffixedKey(htmlPreviewKeyBase, r.htmlPrevs)
 	inst := &Instance{key: key, kind: KindHTMLPreview, cfg: r.cfg, pal: r.pal}
 	inst.hpv = htmlpreview.New(key, path, r.pal)
+	applyHTMLPreviewCfg(r.cfg, inst)
 	r.put(inst)
 	return key
 }
@@ -502,6 +503,7 @@ func (r *Registry) AddHTMLPreview(path string) string {
 func (r *Registry) AddHTMLPreviewKey(key, path string) *Instance {
 	inst := &Instance{key: key, kind: KindHTMLPreview, cfg: r.cfg, pal: r.pal}
 	inst.hpv = htmlpreview.New(key, path, r.pal)
+	applyHTMLPreviewCfg(r.cfg, inst)
 	r.put(inst)
 	advanceCounter(key, htmlPreviewKeyBase, &r.htmlPrevs)
 	return inst
@@ -1168,6 +1170,7 @@ func (r *Registry) NewContentPane(kind Kind, path, path2, rev, rev2 string) *Ins
 		inst.md.SetSender(r.send)
 	case KindHTMLPreview:
 		inst.hpv = htmlpreview.New(key, path, r.pal)
+		applyHTMLPreviewCfg(r.cfg, inst)
 	case KindImage:
 		inst.iv = imgview.New(key, path, r.pal)
 	case KindArchive:
@@ -1270,6 +1273,11 @@ func (r *Registry) ImagesMinted() bool { return r != nil && r.images > 0 }
 // the Kitty reconcile walk has to run for them too — and can still be skipped
 // entirely by a workspace that has neither kind.
 func (r *Registry) PreviewsMinted() bool { return r != nil && r.previews > 0 }
+
+// HTMLPreviewsMinted reports whether this registry ever created an HTML
+// preview (#2743), whose inline images are placements the Kitty reconcile
+// walk has to visit like the markdown preview's.
+func (r *Registry) HTMLPreviewsMinted() bool { return r != nil && r.htmlPrevs > 0 }
 
 // Keys returns the instance keys in insertion order.
 func (r *Registry) Keys() []string {

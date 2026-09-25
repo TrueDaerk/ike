@@ -19,12 +19,15 @@
 // preview's glamour output), the link index (label, href, first/last line),
 // the image index (src, alt, line), the id/name anchors, and the source map
 // (rendered line ↔ source offset/line, nearest-match both ways) the pane's
-// cursor sync reads. Tables and images get placeholder treatment here — a
-// row per line with "│" between cells, and "[alt]" — until the pane grows the
-// grid (0530/4) and inline pixels (0530/5).
+// cursor sync reads. Tables get placeholder treatment here — a row per line
+// with "│" between cells — until the pane grows the grid (0530/4). An image
+// renders as "[alt]" unless the caller's Options.ImageBlock hands back a block
+// of lines for it (the pane's Kitty placeholder cells, 0530/5, #2743): the
+// block then stands on its own lines at the image's place, so the source map,
+// links and anchors stay line-accurate around it.
 //
 // Rendering is pure: no bubbletea, no I/O, no shared state, so a pane can run
-// it on a goroutine.
+// it on a goroutine (whatever ImageBlock does is the caller's business).
 package htmlrender
 
 import (
@@ -46,6 +49,13 @@ type Options struct {
 	Width int
 	// Palette colours the output; nil uses the default theme.
 	Palette *theme.Palette
+	// ImageBlock, when set, is asked for every <img> with the content width
+	// left beside the current indent. Non-empty lines replace the "[alt]"
+	// placeholder: the image ends the current line and each returned line is
+	// laid out as one rendered line of cols cells (cols <= maxCols), under
+	// the image's link when it sits inside one. Nil lines keep the
+	// placeholder — a remote src, an undecodable file, no pixel support.
+	ImageBlock func(img Image, maxCols int) (lines []string, cols int)
 }
 
 // DefaultWidth is the wrap width when Options.Width is unset.
@@ -77,7 +87,8 @@ type LinkSpan struct {
 type Image struct {
 	Src  string
 	Alt  string
-	Line int // rendered line of its placeholder
+	Line int // rendered line of its placeholder (the block's first line)
+	Rows int // lines of its Options.ImageBlock block, 0 for the placeholder
 }
 
 // Document is a rendered HTML document.
@@ -106,6 +117,7 @@ func Render(doc []byte, opts Options) Document {
 		t:       parse(doc),
 		width:   max(width, minWidth),
 		sty:     newStyles(opts.Palette),
+		imgBlk:  opts.ImageBlock,
 		sgr:     map[style]string{},
 		blank:   -1,
 		anchorL: map[string]int{},
@@ -213,6 +225,7 @@ type renderer struct {
 	title   string
 	links   []linkBuild
 	images  []Image
+	imgBlk  func(Image, int) ([]string, int)
 	anchorL map[string]int
 	// spans are the link spans of the emitted lines; composed holds the
 	// last compose call's, keyed by build id, until emit names their line.
@@ -237,7 +250,7 @@ func (r *renderer) walk(n *html.Node, c ctx) {
 // controls that only make sense in an interactive widget.
 var skipped = map[string]bool{
 	"script": true, "style": true, "template": true, "noscript": true,
-	"meta": true, "link": true, "base": true, "svg": true, "iframe": true,
+	"meta": true, "link": true, "base": true, "iframe": true,
 	"object": true, "embed": true, "canvas": true, "audio": true,
 	"video": true, "datalist": true, "option": true, "optgroup": true,
 	"param": true, "source": true, "track": true, "map": true, "area": true,
@@ -332,6 +345,8 @@ func (r *renderer) element(n *html.Node, c ctx) {
 		r.lineBreak(off)
 	case "img":
 		r.image(n, c)
+	case "svg":
+		r.svg(n, c)
 	case "a":
 		r.link(n, c)
 	case "tr":
@@ -530,6 +545,9 @@ func (r *renderer) image(n *html.Node, c ctx) {
 	alt = collapse(sanitize(alt, false))
 	id := len(r.images)
 	r.images = append(r.images, Image{Src: src, Alt: alt, Line: -1})
+	if r.imageBlock(n, c, id) {
+		return
+	}
 	label := alt
 	if label == "" {
 		label = "image: " + imageName(src)
@@ -539,6 +557,35 @@ func (r *renderer) image(n *html.Node, c ctx) {
 		st = st.with(attrUnderline)
 	}
 	r.words("["+label+"]", r.t.start[n], ctx{st: st, link: c.link}, id)
+}
+
+// imageBlock lays an image out as the block Options.ImageBlock returns for
+// it, reporting false (nothing emitted) when there is no block. The block
+// breaks the flow: pending inline content ends its line first, and whatever
+// follows the image starts a fresh one. Inside a table row the placeholder
+// stays: a block would tear the row's one line apart.
+func (r *renderer) imageBlock(n *html.Node, c ctx, id int) bool {
+	if r.imgBlk == nil || len(r.cells) > 0 {
+		return false
+	}
+	lines, cols := r.imgBlk(r.images[id], r.avail())
+	if len(lines) == 0 {
+		return false
+	}
+	cols = min(max(cols, 0), r.avail())
+	r.flush()
+	off := r.t.start[n]
+	for _, l := range lines {
+		r.emit([]frag{{kind: fWord, text: l, w: cols, link: c.link, img: id, off: off}}, off)
+	}
+	r.images[id].Rows = len(lines)
+	return true
+}
+
+// svg renders an inline <svg> as a placeholder: the vector markup has no
+// text form, but a reader should see that a picture stands there.
+func (r *renderer) svg(n *html.Node, c ctx) {
+	r.words("[svg]", r.t.start[n], ctx{st: r.sty.image, link: c.link}, -1)
 }
 
 // imageName is the short name an alt-less image is shown by.

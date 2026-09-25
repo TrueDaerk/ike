@@ -80,7 +80,8 @@ func (m *Model) imageSyncCmd() tea.Cmd {
 	// without touching an instance — and neither can one whose placements are
 	// already released.
 	if !m.activeWS().Panes.ImagesMinted() && !m.activeWS().Panes.PreviewsMinted() &&
-		!m.activeWS().Panes.NotebooksMinted() && len(m.liveImages) == 0 {
+		!m.activeWS().Panes.NotebooksMinted() && !m.activeWS().Panes.HTMLPreviewsMinted() &&
+		len(m.liveImages) == 0 {
 		return nil
 	}
 	supported := m.kittyGfx != nil && *m.kittyGfx
@@ -125,6 +126,26 @@ func (m *Model) imageSyncCmd() tea.Cmd {
 			if seqs := pv.SyncSeqs(); len(seqs) > 0 {
 				raw = append(raw, seqs...)
 				for _, id := range pv.TransmittedIDs() {
+					m.liveImages[id] = true
+				}
+			}
+		case pane.KindHTMLPreview:
+			// An HTML preview holds one placement per local <img> file
+			// (#2743) — the markdown preview's reconcile, over the render
+			// core's image blocks.
+			hv := inst.HTMLPreview()
+			hv.SetGraphics(supported)
+			if !hv.HasImages() {
+				return true
+			}
+			hasImages = true
+			if !supported {
+				return true
+			}
+			mark(hv.ImageIDs()...)
+			if seqs := hv.SyncSeqs(); len(seqs) > 0 {
+				raw = append(raw, seqs...)
+				for _, id := range hv.TransmittedIDs() {
 					m.liveImages[id] = true
 				}
 			}
@@ -199,6 +220,14 @@ func (m *Model) releaseWorkspaceImages(w *workspace.Workspace) tea.Cmd {
 				delete(m.liveImages, id)
 			}
 			pv.ResetImages()
+		case pane.KindHTMLPreview:
+			// So are the HTML preview's inline images (#2743).
+			hv := inst.HTMLPreview()
+			for _, id := range hv.TransmittedIDs() {
+				raw = append(raw, imgview.Delete(id))
+				delete(m.liveImages, id)
+			}
+			hv.ResetImages()
 		case pane.KindNotebook:
 			// A notebook's image outputs (#2425) are placements for the
 			// same reason and leak the same way.

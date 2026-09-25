@@ -11,9 +11,14 @@
 // source map, so the caret's source line maps to its rendered line exactly
 // instead of being interpolated between heading anchors.
 //
+// Local <img> sources show inline as Kitty graphics (images.go, #2743) —
+// the markdown preview's reconcile and lifecycle, fed through the render
+// core's Options.ImageBlock hook.
+//
 // The render runs synchronously on the update loop for now, behind the one
 // function Render; the bounded, off-loop render of 0530/7 (#2745) replaces
-// that function and nothing else.
+// that function and nothing else (its image hook then runs off-loop too, so
+// the image cache must be guarded or pre-decoded there).
 package htmlpreview
 
 import (
@@ -25,6 +30,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/htmlrender"
+	"ike/internal/imgview"
 	"ike/internal/preview"
 	"ike/internal/theme"
 	"ike/internal/ui"
@@ -60,12 +66,12 @@ func IsHTMLPath(path string) bool {
 	return false
 }
 
-// Render lays the document out for a pane of the given interior width in the
-// palette's colours. It is the single render seam of the pane: 0530/7 moves
-// it off the update loop behind a generation counter without touching the
-// callers.
-func Render(src string, width int, pal *theme.Palette) htmlrender.Document {
-	return htmlrender.Render([]byte(src), htmlrender.Options{Width: width, Palette: pal})
+// Render lays the document out with opts (the pane's interior width, its
+// palette and its image hook). It is the single render seam of the pane:
+// 0530/7 moves it off the update loop behind a generation counter without
+// touching the callers.
+func Render(src string, opts htmlrender.Options) htmlrender.Document {
+	return htmlrender.Render([]byte(src), opts)
 }
 
 // Model is one live HTML preview bound to a source buffer path. It is a value
@@ -93,12 +99,21 @@ type Model struct {
 	// lines. It lives behind a pointer so the value-receiver View copies
 	// share it, like the markdown preview's; nil means no search is open.
 	search *ui.LineSearch
+
+	// Inline images (#2743): decoded local images by resolved path, the
+	// ones the latest render found (in reading order, each once), the
+	// terminal's Kitty graphics support and preview.html_images.
+	images   map[string]*imgview.PlacedImage
+	placed   []*imgview.PlacedImage
+	gfx      bool
+	imagesOn bool
 }
 
 // New returns a preview bound to path. Content arrives via SetSourceImmediate
-// (on open/restore) or SetSource (debounced live updates).
+// (on open/restore) or SetSource (debounced live updates). Inline images
+// start enabled, the preview.html_images default.
 func New(key, path string, pal *theme.Palette) Model {
-	return Model{key: key, path: path, pal: pal}
+	return Model{key: key, path: path, pal: pal, imagesOn: true}
 }
 
 // Key returns the owning pane key.
@@ -133,7 +148,9 @@ func (m *Model) SetSize(w, h int) {
 	}
 	widthChanged := w != m.w
 	m.w, m.h = w, h
-	if widthChanged {
+	// An image block is fitted to the pane height too, so a height change
+	// re-renders a document that draws one.
+	if widthChanged || len(m.ImageIDs()) > 0 {
 		m.render()
 		return
 	}
@@ -288,7 +305,9 @@ func (m *Model) render() {
 	if m.w <= 0 {
 		return
 	}
-	m.doc = Render(m.src, m.w, m.palette())
+	m.beginImages()
+	m.doc = Render(m.src, htmlrender.Options{Width: m.w, Palette: m.palette(), ImageBlock: m.imageBlock})
+	m.forgetUnplaced()
 	if m.sel > len(m.doc.Links) {
 		m.sel = len(m.doc.Links) // an edit dropped links: keep the last
 	}

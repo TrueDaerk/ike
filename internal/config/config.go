@@ -374,6 +374,7 @@ func (c *Config) Flat() map[string]string {
 	put("todo.patterns", strings.Join(c.Todo.Patterns, ","))
 
 	put("preview.diagrams", c.Preview.Diagrams)
+	put("preview.html_images", c.Preview.HTMLImages)
 
 	put("notebook.image_max_cols", c.Notebook.ImageMaxCols)
 
