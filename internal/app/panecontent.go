@@ -29,7 +29,14 @@ func forEachContent(reg *pane.Registry, fn func(hostKey string, tabIdx int, inst
 			continue
 		}
 		for i := 0; i < inst.TabCount(); i++ {
-			if c := inst.TabContent(i); c != nil {
+			c := inst.TabContent(i)
+			if c == nil {
+				// A document tab in Preview view (#2766) renders, follows the
+				// caret and places images like a preview content tab; a
+				// hidden one is parked and skipped until it shows again.
+				c = inst.ShownTabView(i)
+			}
+			if c != nil {
 				if !fn(key, i, c) {
 					return
 				}

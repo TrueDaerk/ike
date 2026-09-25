@@ -64,7 +64,8 @@ func TestHTMLLinkPathClassifies(t *testing.T) {
 }
 
 // TestHTMLPreviewRelativeHTMLLinkOpensWithPreview: a relative .html link opens
-// the page in an editor with a preview of its own, landing on the fragment.
+// the page in an editor with a preview of its own, landing on the fragment —
+// its tab's Preview view (#2766), since HTML files open rendered.
 func TestHTMLPreviewRelativeHTMLLinkOpensWithPreview(t *testing.T) {
 	var other strings.Builder
 	other.WriteString("<p>top</p>\n")
@@ -80,12 +81,32 @@ func TestHTMLPreviewRelativeHTMLLinkOpensWithPreview(t *testing.T) {
 	if m.editorForPath(target) == nil {
 		t.Fatal("following a relative HTML link must open the page in an editor")
 	}
-	pk := htmlPreviewKeyFor(m, target)
-	if pk == "" {
-		t.Fatal("the followed page should get its own preview")
+	pv := m.tabViewForPath(target)
+	if pv == nil {
+		t.Fatal("the followed page should open in its tab's Preview view")
 	}
-	if v := ansi.Strip(m.activeWS().Panes.Get(pk).View()); !strings.Contains(v, "## Install") {
+	if pk := htmlPreviewKeyFor(m, target); pk != "" {
+		t.Fatalf("the tab's own preview is the rendering: no split pane (%s)", pk)
+	}
+	if v := ansi.Strip(pv.View()); !strings.Contains(v, "## Install") {
 		t.Fatalf("the new preview should land on the #install anchor:\n%s", v)
+	}
+}
+
+// TestHTMLPreviewRelativeHTMLLinkSourceModeSplits: with
+// preview.html_open_mode = source the followed page opens in Source view and
+// gets a split preview beside it, as before #2766.
+func TestHTMLPreviewRelativeHTMLLinkSourceModeSplits(t *testing.T) {
+	m, key, path := openHTMLPreviewIn(t, `<p><a href="other.html">other</a></p>`,
+		map[string]string{"other.html": "<p>other page</p>\n"})
+	withHTMLOpenMode(t, "source")
+	target := filepath.Join(filepath.Dir(path), "other.html")
+	m = stepHTML(m, htmlpreview.LinkMsg{Key: key, Path: path, Target: "other.html"})
+	if m.tabViewForPath(target) != nil {
+		t.Fatal("source mode must open the page in Source view")
+	}
+	if htmlPreviewKeyFor(m, target) == "" {
+		t.Fatal("the followed page should get a split preview")
 	}
 }
 

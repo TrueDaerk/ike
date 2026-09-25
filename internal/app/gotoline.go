@@ -172,6 +172,9 @@ func (m Model) updateGoToLinePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// The jump is a navigation departure like go-to-definition's (Roadmap
 		// 0220): nav.back returns to where the caret stood.
 		m.recordNavFrom(m.currentNavPos())
+		if ed.HasFile() {
+			m.showSourceFor(ed.Path()) // an HTML tab shows the caret (#2766)
+		}
 		ed.JumpTo(line, col)
 		return m, nil
 	case msg.Code == 'u' && msg.Mod == tea.ModCtrl:

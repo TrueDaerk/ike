@@ -39,6 +39,13 @@ type Tab struct {
 	// Both clear together, so a tab is deferred exactly once.
 	deferred *Deferred
 	load     func(*editor.Model, Deferred)
+	// alt is a document tab's rendered body (#2766, tabview.go): the HTML
+	// preview of the tab's page, shown instead of the editor while mode is
+	// ViewPreview. stripRows is how many rows of the pane body the view
+	// strip took when the tab was last sized.
+	alt       *Instance
+	mode      ViewMode
+	stripRows int
 }
 
 // newEditorTab wraps an editor model as a tab slot.
@@ -99,7 +106,9 @@ func (t *Tab) Title() string {
 	return "terminal"
 }
 
-// setSize pushes the pane's interior size into the tab's component.
+// setSize pushes the pane's interior size into the tab's component. A tab
+// with a Preview view (#2766) gives the bottom row to the view strip and the
+// rest to both of its bodies, so a switch never renders a stale viewport.
 func (t *Tab) setSize(w, h int) {
 	switch {
 	case t.term != nil:
@@ -107,7 +116,11 @@ func (t *Tab) setSize(w, h int) {
 	case t.inst != nil:
 		t.inst.SetSize(w, h)
 	default:
-		t.ed.SetSize(w, h)
+		t.stripRows = t.stripRowsFor(h)
+		t.ed.SetSize(w, h-t.stripRows)
+		if t.alt != nil {
+			t.alt.SetSize(w, h-t.stripRows)
+		}
 	}
 }
 
@@ -119,7 +132,12 @@ func (t *Tab) setFocused(on bool) {
 	case t.inst != nil:
 		t.inst.SetFocused(on)
 	default:
-		t.ed.SetFocused(on)
+		// Only the body on screen carries focus (#2766).
+		v := t.shownView()
+		t.ed.SetFocused(on && v == nil)
+		if t.alt != nil {
+			t.alt.SetFocused(on && v != nil)
+		}
 	}
 }
 
@@ -132,6 +150,9 @@ func (t *Tab) setPalette(p *theme.Palette) {
 		t.inst.setPalette(p)
 	default:
 		t.ed.SetPalette(p)
+		if t.alt != nil {
+			t.alt.setPalette(p)
+		}
 	}
 }
 
@@ -140,6 +161,9 @@ func (t *Tab) configure(cfg host.Config) {
 	switch {
 	case t.ed != nil:
 		t.ed.Configure(cfg)
+		if t.alt != nil {
+			t.alt.configure(cfg)
+		}
 	case t.term != nil:
 		t.term.SetAutoSuggest(autosuggestOn(cfg))
 	case t.inst != nil:
@@ -154,6 +178,9 @@ func (t *Tab) view() string {
 		return t.term.View()
 	case t.inst != nil:
 		return t.inst.View()
+	}
+	if v := t.shownView(); v != nil {
+		return v.View()
 	}
 	return t.ed.View()
 }
@@ -170,6 +197,15 @@ func (t *Tab) update(msg tea.Msg) tea.Cmd {
 	case t.inst != nil:
 		return t.inst.Update(msg)
 	}
+	if v := t.shownView(); v != nil {
+		return t.updateView(v, msg)
+	}
+	return t.updateEditor(msg)
+}
+
+// updateEditor dispatches a message to a document tab's editor whichever view
+// shows (#2766): the path- and parse-routed results belong to the buffer.
+func (t *Tab) updateEditor(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
 	*t.ed, cmd = t.ed.Update(msg)
 	return cmd
@@ -182,6 +218,9 @@ func (t *Tab) close() {
 	switch {
 	case t.ed != nil:
 		t.ed.Close() // a pending background search scan stops with the tab (#2734)
+		if t.alt != nil {
+			t.alt.releaseContent() // the preview view closes with its tab (#2766)
+		}
 	case t.term != nil:
 		t.term.Close()
 	case t.inst != nil:

@@ -378,6 +378,7 @@ func (c *Config) Flat() map[string]string {
 	put("preview.html_render_budget_kb", c.Preview.HTMLRenderBudgetKB)
 	put("preview.html_browser", c.Preview.HTMLBrowser)
 	put("preview.html_browser_timeout_s", c.Preview.HTMLBrowserTimeoutS)
+	put("preview.html_open_mode", c.Preview.HTMLOpenMode)
 
 	put("notebook.image_max_cols", c.Notebook.ImageMaxCols)
 

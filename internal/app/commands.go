@@ -426,6 +426,15 @@ type HTMLPreviewMsg struct{}
 // pane's own b does the same.
 type HTMLPreviewBrowserMsg struct{}
 
+// HTMLViewMsg switches the HTML file tab in focus (else the active editor's)
+// between its Source and Preview views (#2766). Toggle flips it — dispatched
+// by html.view.toggle; otherwise Preview picks the view — html.view.preview
+// (true) and html.view.source (false).
+type HTMLViewMsg struct {
+	Toggle  bool
+	Preview bool
+}
+
 // RerenderDiagramsMsg asks every open markdown preview to forget its cached
 // diagram renderings and run the external renderers again (#2421). Dispatched
 // by preview.rerenderDiagrams.
@@ -729,6 +738,11 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			langCommand(appCommand("markdown.preview", "Markdown Preview", MarkdownPreviewMsg{}), []string{"markdown"}),
 			langCommand(appCommand("html.preview", "HTML Preview", HTMLPreviewMsg{}), []string{"html"}),
 			langCommand(appCommand("html.preview.browser", "HTML preview: render in browser", HTMLPreviewBrowserMsg{}), []string{"html"}),
+			// The HTML tab's own two views (#2766): the toggle is the chord's,
+			// the two directions are palette entries.
+			langCommand(appCommand("html.view.toggle", "HTML: toggle Source/Preview", HTMLViewMsg{Toggle: true}), []string{"html"}),
+			langCommand(appCommand("html.view.source", "HTML: show Source", HTMLViewMsg{}), []string{"html"}),
+			langCommand(appCommand("html.view.preview", "HTML: show Preview", HTMLViewMsg{Preview: true}), []string{"html"}),
 			appCommand("preview.rerenderDiagrams", "Re-render Preview Diagrams", RerenderDiagramsMsg{}),
 			// JetBrains' Basic Completion (#2695): ctrl+space opens the
 			// popup at the caret on demand — after an esc dismissed it, at a

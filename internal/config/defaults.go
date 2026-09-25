@@ -329,6 +329,8 @@ func defaults() *Config {
 			// The browser screenshot mode (#2746) auto-detects a headless
 			// browser and gives one screenshot 20 seconds.
 			HTMLBrowserTimeoutS: DefaultHTMLBrowserTimeoutS,
+			// An opened HTML file shows the rendered page first (#2766).
+			HTMLOpenMode: HTMLOpenPreview,
 		},
 		Notebook: Notebook{
 			// An image output is capped at 80 columns (#2683): a plot that

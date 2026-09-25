@@ -163,6 +163,28 @@ func TestRetiredDefaults(t *testing.T) {
 	}
 }
 
+// TestHTMLViewToggleChords (#2766): html.view.toggle answers cmd+alt+shift+v
+// and ctrl+alt+shift+v in the editor (Source view) and the preview (Preview
+// view) on both platforms, and the spec's cmd+alt+shift+p stays
+// scratch.promote's everywhere.
+func TestHTMLViewToggleChords(t *testing.T) {
+	for _, goos := range []string{"darwin", "linux"} {
+		table := BuildTable(DefaultsFor(PresetJetBrains, goos), nil, goos)
+		for _, ctx := range []Context{Editor, Preview} {
+			for _, c := range []string{"cmd+alt+shift+v", "ctrl+alt+shift+v"} {
+				chord := NormalizeChord(MustParseChord(c), goos)
+				if b, ok := table.Lookup(chord, ctx); !ok || b.Command != "html.view.toggle" {
+					t.Errorf("%s %s in %s = %+v ok=%v, want html.view.toggle", goos, c, ctx, b, ok)
+				}
+			}
+			chord := NormalizeChord(MustParseChord("cmd+alt+shift+p"), goos)
+			if b, ok := table.Lookup(chord, ctx); !ok || b.Command != "scratch.promote" {
+				t.Errorf("%s cmd+alt+shift+p in %s = %+v ok=%v, want scratch.promote", goos, ctx, b, ok)
+			}
+		}
+	}
+}
+
 // TestHTMLPreviewChords (#2740): html.preview answers cmd+alt+shift+h on both
 // platforms and cmd+alt+h on macOS only; off macOS the fold of cmd+alt+h is
 // ctrl+alt+h, which must stay lsp.callHierarchy's.

@@ -476,6 +476,17 @@ var jetbrainsRows = []row{
 	// ctrl+alt+h, which lsp.callHierarchy owns — so the shift layer is the
 	// spelling that is free on every platform.
 	{"cmd+alt+shift+h", "html.preview", "HTML preview", Editor, "HTML preview (#2740)"},
+	// The HTML tab's Source ↔ Preview switch (#2766). The spec's
+	// cmd+alt+shift+p is scratch.promote's (Global; an Editor row would
+	// shadow it in every scratch buffer), so the toggle takes the nearest
+	// free letter, v for "view", with the delivered ctrl secondary. It ships
+	// in the editor context (Source view) and the preview context (Preview
+	// view, which a tab showing its page advertises), so one chord flips
+	// both ways.
+	{"cmd+alt+shift+v", "html.view.toggle", "HTML: toggle Source/Preview", Editor, "HTML view modes (#2766)"},
+	{"ctrl+alt+shift+v", "html.view.toggle", "HTML: toggle Source/Preview", Editor, "HTML view modes (#2766)"},
+	{"cmd+alt+shift+v", "html.view.toggle", "HTML: toggle Source/Preview", Preview, "HTML view modes (#2766)"},
+	{"ctrl+alt+shift+v", "html.view.toggle", "HTML: toggle Source/Preview", Preview, "HTML view modes (#2766)"},
 	// TODO index (#61): cmd+6 is JetBrains' TODO tool-window chord.
 	{"cmd+6", "todo.list", "TODO index", Global, "TODO index (#61)"},
 	// Editor-scoped since the #1794 context audit: splitting the focused

@@ -241,6 +241,8 @@ Active when an editor pane has focus.
 | Go to super | `cmd+u` | `ctrl+u` | `lsp.goToSuper` |
 | HTML preview | `cmd+alt+h` | — | `html.preview` |
 | HTML preview | `cmd+alt+shift+h` | `ctrl+alt+shift+h` | `html.preview` |
+| HTML: toggle Source/Preview | `cmd+alt+shift+v` | `ctrl+alt+shift+v` | `html.view.toggle` |
+| HTML: toggle Source/Preview | `ctrl+alt+shift+v` | `ctrl+alt+shift+v` | `html.view.toggle` |
 | Insert live template | `cmd+j` | `ctrl+j` | `snippets.insert` |
 | Markdown preview | `cmd+alt+m` | `ctrl+alt+m` | `markdown.preview` |
 | Move line down | `cmd+shift+down` | `ctrl+shift+down` | `editor.moveLineDown` |
@@ -401,6 +403,8 @@ Active when the markdown preview, the HTML preview or the image viewer has focus
 
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|
+| HTML: toggle Source/Preview | `cmd+alt+shift+v` | `ctrl+alt+shift+v` | `html.view.toggle` |
+| HTML: toggle Source/Preview | `ctrl+alt+shift+v` | `ctrl+alt+shift+v` | `html.view.toggle` |
 | New empty editor tab | `ctrl+t` | `ctrl+t` | `editor.tab.new` |
 | Pin/unpin tab | `alt+shift+p` | `alt+shift+p` | `editor.tab.togglePin` |
 | Recent files | `ctrl+e` | `ctrl+e` | `palette.recentFiles` |

@@ -55,6 +55,11 @@ func (m Model) breadcrumbRows(inst *pane.Instance) int {
 	if inst == nil || m.zen || inst.Kind() != pane.KindEditor || inst.ActiveTerminal() != nil {
 		return 0
 	}
+	// A tab showing its rendered Preview view (#2766) has no caret for the
+	// symbol chain to follow.
+	if inst.ActiveContent() != nil {
+		return 0
+	}
 	// The inline playground (#1970) replaces the pane's content with its
 	// own header plus the result buffer; the document's breadcrumbs would
 	// caption content that is not on screen.

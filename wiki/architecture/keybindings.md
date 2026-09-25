@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts plus language-scoped editor bindings, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-09-23T20:00:00Z
+timestamp: 2026-09-26T00:30:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -1478,6 +1478,29 @@ name, enter"; esc keeps the `-copy` name rather than undoing the copy. The
 mechanics are the explorer's — see
 [explorer.md](./explorer.md#file-operations).
 
+## HTML: toggle Source/Preview (#2766)
+
+An HTML file's tab shows either its source or the rendered page (see
+[HTML preview](./html-preview.md#view-modes-2766)); `html.view.toggle` flips
+it. The spec asked for `cmd+alt+shift+p`, which is `scratch.promote`'s
+(Global): an Editor-scoped row would shadow it in every scratch buffer, the one
+place it means anything. The nearest free letter is `v` for "view":
+
+| chord | context | command |
+|---|---|---|
+| `cmd+alt+shift+v`, `ctrl+alt+shift+v` | Editor, Preview | `html.view.toggle` |
+
+The rows ship in both contexts because the toggle has to answer from both
+views: a tab in Source view advertises the editor context, a tab in Preview
+view the preview context its preview carries. `ctrl+alt+shift+v` is the
+delivered secondary (off macOS the `Cmd`→`Ctrl` fold makes the two rows one);
+the recorded fallback is the tab's `[Source] [Preview]` buttons, the palette
+and the tab context menu. The one-way palette entries `html.view.source` and
+`html.view.preview` stay keybind-less in the ledger as flavours of the toggle.
+Like `html.preview` the command is not on the terminal allowlist
+(`terminalGlobalCommands`): it is pane-scoped and means nothing while a
+terminal holds the keyboard.
+
 ## The line-editing family and the pane chords (#2400)
 
 A second telemetry export (two sessions, ~9,900 events) left 37 presses on
@@ -1590,6 +1613,7 @@ JetBrains is:
 | `file.rename` | `shift+f6` | delivered | `—` | live |
 | `find.openInPanel` | `cmd+enter` | fragile | `ctrl+enter` | live via ctrl+enter |
 | `html.preview` | `cmd+alt+h` | fragile | `palette / tab context menu` | live via palette / tab context menu |
+| `html.view.toggle` | `cmd+alt+shift+v` | fragile | `the tab's [Source] [Preview] buttons / palette / tab context menu` | live via the tab's [Source] [Preview] buttons / palette / tab context menu |
 | `http.cancel` | `cmd+.` | fragile | `ctrl+.` | live via ctrl+. |
 | `http.copyResponse` | `cmd+c` | fragile | `response pane "y" / palette` | live via response pane "y" / palette |
 | `http.diffPreviousRun` | `cmd+shift+d` | fragile | `palette` | live via palette |

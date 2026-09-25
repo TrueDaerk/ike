@@ -118,6 +118,14 @@ func (m Model) openHTMLWithPreview(path, frag string) (tea.Model, tea.Cmd) {
 	if !ok || mm.editorForPath(canonicalPath(path)) == nil {
 		return model, cmd
 	}
+	if v := mm.tabViewForPath(canonicalPath(path)); v != nil {
+		// The page opened in its tab's Preview view (#2766): that is the
+		// rendering, no split beside it.
+		if frag != "" {
+			v.HTMLPreview().LandOnAnchor(frag)
+		}
+		return mm, cmd
+	}
 	mm.openHTMLPreview()
 	if frag != "" {
 		for _, inst := range mm.htmlPreviewsForPath(canonicalPath(path)) {
@@ -137,6 +145,9 @@ func (m Model) syncEditorToHTMLPreview(msg htmlpreview.SourceLineMsg) (tea.Model
 		return m, nil
 	}
 	m.setFocus(key)
+	// A tab showing the page rendered (#2766) — the preview that asked,
+	// or the source's own tab — switches to Source so the caret shows.
+	m.showSourceFor(msg.Path)
 	if ed := m.activeWS().Panes.Get(key).Editor(); ed != nil {
 		ed.JumpTo(msg.Line, 0)
 	}

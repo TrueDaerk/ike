@@ -245,6 +245,9 @@ type Instance struct {
 	regs    *register.Store
 	w, h    int
 	focused bool
+	// tabView marks an HTML preview attached to an editor tab as its
+	// Preview view (#2766, tabview.go) rather than a pane or content tab.
+	tabView bool
 
 	// Box render cache (#612): the app hands CachedBox a signature that includes
 	// a hash of the freshly-computed content plus the chrome. While the signature
@@ -312,6 +315,11 @@ func (i *Instance) ContextID() string {
 			}
 			if t.inst != nil {
 				return t.inst.ContextID()
+			}
+			// A document tab in Preview view (#2766) resolves under the
+			// preview's context, like a preview content tab.
+			if v := t.shownView(); v != nil {
+				return v.ContextID()
 			}
 		}
 		return ctxEditor
@@ -1005,13 +1013,17 @@ func (i *Instance) AddContentTab(nested *Instance) bool {
 // ActiveContent returns the nested content instance of the active tab
 // (#1778): non-nil only for an editor-kind pane whose active tab carries
 // viewer content. The seam mouse/status routing uses to treat the tab's body
-// like the equivalent dedicated pane.
+// like the equivalent dedicated pane. A document tab in Preview view (#2766)
+// reports its preview the same way, while Editor keeps reporting its buffer.
 func (i *Instance) ActiveContent() *Instance {
 	if i.kind != KindEditor {
 		return nil
 	}
 	if t := i.activeTab(); t != nil {
-		return t.inst
+		if t.inst != nil {
+			return t.inst
+		}
+		return t.shownView()
 	}
 	return nil
 }
@@ -1687,17 +1699,12 @@ func (i *Instance) View() string {
 			// cached here; the app-level box cache still applies.
 			return t.view()
 		}
-		// Skip recomputing the editor's View when nothing it renders changed
-		// (#615): a scroll of another pane, or an idle frame, reuses the cached
-		// string. RenderVersion is a complete identity of everything View draws,
-		// so this can never serve a stale frame.
-		ver := t.ed.RenderVersion()
-		if i.cvValid && i.cvTab == i.active && i.cvVer == ver {
-			return i.cvView
+		// An HTML tab's view strip (#2766) takes the body's bottom row.
+		i.syncStrip(t)
+		if t.stripRows > 0 {
+			return fitRows(i.documentView(t), i.h-t.stripRows) + "\n" + t.strip().View(i.w, i.pal)
 		}
-		v := t.view()
-		i.cvView, i.cvVer, i.cvTab, i.cvValid = v, ver, i.active, true
-		return v
+		return i.documentView(t)
 	case KindTerminal:
 		return i.term.View()
 	case KindMarkdown:
@@ -1760,6 +1767,24 @@ func (i *Instance) View() string {
 	return ""
 }
 
+// documentView renders a document tab's body: its preview while it shows one
+// (#2766), else the editor — skipping the editor's View when nothing it
+// renders changed (#615): a scroll of another pane, or an idle frame, reuses
+// the cached string. RenderVersion is a complete identity of everything View
+// draws, so this can never serve a stale frame.
+func (i *Instance) documentView(t *Tab) string {
+	if t.shownView() != nil {
+		return t.view() // the preview draws from its own state
+	}
+	ver := t.ed.RenderVersion()
+	if i.cvValid && i.cvTab == i.active && i.cvVer == ver {
+		return i.cvView
+	}
+	v := t.view()
+	i.cvView, i.cvVer, i.cvTab, i.cvValid = v, ver, i.active, true
+	return v
+}
+
 // Update dispatches a message to the wrapped component — for editors, to the
 // active tab — mutating it in place and returning any resulting command.
 func (i *Instance) Update(msg tea.Msg) tea.Cmd {
@@ -1768,6 +1793,9 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 	case KindExplorer:
 		i.exp, cmd = i.exp.Update(msg)
 	case KindEditor:
+		// A tab that just turned out to be an HTML page (#2766) gives its
+		// bottom row to the view strip before the key moves its viewport.
+		i.syncStrip(i.tabs[i.active])
 		cmd = i.tabs[i.active].update(msg)
 	case KindTerminal:
 		if k, ok := msg.(tea.KeyPressMsg); ok {
@@ -1856,7 +1884,7 @@ func (i *Instance) UpdateForPath(path string, skip *editor.Model, msg tea.Msg) t
 		if ed == nil || ed == skip || !ed.HasFile() || ed.Path() != path {
 			continue
 		}
-		if cmd := t.update(msg); cmd != nil {
+		if cmd := t.updateEditor(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	}
@@ -1881,7 +1909,7 @@ func (i *Instance) UpdateForParseKey(key string, msg tea.Msg) tea.Cmd {
 		if ed == nil || ed.ParseKey() != key {
 			continue
 		}
-		if cmd := t.update(msg); cmd != nil {
+		if cmd := t.updateEditor(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
 	}

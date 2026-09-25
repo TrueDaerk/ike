@@ -113,6 +113,11 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	// place it means anything; the chord the spec suggested
 	// (cmd+alt+shift+h) is html.preview's own.
 	{"html.preview.browser", reasonPaneKey},
+	// #2766's HTML tab views: html.view.toggle carries the chord and the
+	// tab's [Source] [Preview] buttons are the mouse doorway; the two
+	// one-way palette entries are flavours of the toggle.
+	{"html.view.source", reasonFlavour},
+	{"html.view.preview", reasonFlavour},
 	{"keymap.", reasonOccasional},                // keymap doctor and the JetBrains import
 	{"diag.", reasonOccasional},                  // heap dump and memory statistics
 	{"json.jqFilters", reasonPaneKey},            // the playground's ctrl+l library
