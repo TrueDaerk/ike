@@ -19,8 +19,9 @@
 // preview's glamour output), the link index (label, href, first/last line),
 // the image index (src, alt, line), the id/name anchors, and the source map
 // (rendered line ↔ source offset/line, nearest-match both ways) the pane's
-// cursor sync reads. Tables get placeholder treatment here — a row per line
-// with "│" between cells — until the pane grows the grid (0530/4). An image
+// cursor sync reads. A table renders as a bordered grid (table.go, 0530/4):
+// each cell is laid out by the same flow at its column's width, so links,
+// anchors and the source map work inside cells too. An image
 // renders as "[alt]" unless the caller's Options.ImageBlock hands back a block
 // of lines for it (the pane's Kitty placeholder cells, 0530/5, #2743): the
 // block then stands on its own lines at the image's place, so the source map,
@@ -221,7 +222,7 @@ type renderer struct {
 	preStart bool // the next text is the first inside <pre>
 
 	lists   []listState
-	cells   []int // placeholder tables: cells seen per open row
+	cells   []int // flattened (nested) tables: cells seen per open row
 	title   string
 	links   []linkBuild
 	images  []Image
@@ -231,6 +232,13 @@ type renderer struct {
 	// last compose call's, keyed by build id, until emit names their line.
 	spans    []LinkSpan
 	composed []LinkSpan
+
+	// capturing is set while a table cell is laid out (table.go): emitted
+	// lines collect in captured as runs instead of being written out, and a
+	// word wider than the cell is cut with an ellipsis rather than broken.
+	// measuring marks the first, measuring pass over a cell.
+	capturing, measuring bool
+	captured             []cellLine
 }
 
 // walk renders n's children.
@@ -312,7 +320,9 @@ func (r *renderer) element(n *html.Node, c ctx) {
 		r.list(n, c)
 	case "li":
 		r.item(n, c)
-	case "dl", "details", "table":
+	case "table":
+		r.table(n, c)
+	case "dl", "details":
 		r.gap()
 		r.walk(n, c)
 		r.gap()
@@ -339,6 +349,9 @@ func (r *renderer) element(n *html.Node, c ctx) {
 	case "hr":
 		r.gap()
 		avail := r.avail()
+		if r.measuring {
+			avail = 1 // a rule takes any width: it must not widen its column
+		}
 		r.emit([]frag{{text: strings.Repeat("─", avail), w: avail, st: r.sty.rule, link: -1, img: -1, off: off}}, off)
 		r.gap()
 	case "br":
@@ -496,8 +509,9 @@ func (r *renderer) indented(n *html.Node, c ctx, w int) {
 	r.pop()
 }
 
-// cell renders a table cell as part of its row's line (placeholder table
-// layout until 0530/4): cells after the first are set off by a "│".
+// cell renders a cell of a flattened table (one nested inside a grid cell,
+// or a stray cell outside any table) as part of its row's line: cells after
+// the first are set off by a "│".
 func (r *renderer) cell(n *html.Node, c ctx) {
 	if k := len(r.cells); k > 0 {
 		if r.cells[k-1] > 0 {
@@ -562,10 +576,11 @@ func (r *renderer) image(n *html.Node, c ctx) {
 // imageBlock lays an image out as the block Options.ImageBlock returns for
 // it, reporting false (nothing emitted) when there is no block. The block
 // breaks the flow: pending inline content ends its line first, and whatever
-// follows the image starts a fresh one. Inside a table row the placeholder
-// stays: a block would tear the row's one line apart.
+// follows the image starts a fresh one. Inside a table cell the placeholder
+// stays: the grid lays cells out twice (measure, then place), and a block of
+// image cells would dwarf the columns around it.
 func (r *renderer) imageBlock(n *html.Node, c ctx, id int) bool {
-	if r.imgBlk == nil || len(r.cells) > 0 {
+	if r.imgBlk == nil || r.capturing || len(r.cells) > 0 {
 		return false
 	}
 	lines, cols := r.imgBlk(r.images[id], r.avail())
@@ -965,6 +980,12 @@ func (r *renderer) layoutFlow(frags []frag) {
 			w += sp.w
 			sp = nil
 		}
+		if r.capturing && gw > avail-w {
+			line = append(line, clipWord(frags[i:j], avail-w)...)
+			w = avail
+			i = j
+			continue
+		}
 		for k := i; k < j; k++ {
 			f := frags[k]
 			for f.w > avail-w {
@@ -994,6 +1015,19 @@ func (r *renderer) layoutFlow(frags []frag) {
 	if len(line) > 0 {
 		emit(-1)
 	}
+}
+
+// clipWord cuts a word wider than a table cell to n cells, the last one an
+// ellipsis. The ellipsis keeps the word's look and link, and the anchors of
+// the part cut away.
+func clipWord(word []frag, n int) []frag {
+	out := cutFrags(word, max(n-1, 0))
+	last := word[len(word)-1]
+	ell := frag{text: "…", w: 1, st: last.st, link: last.link, img: -1, off: -1}
+	for _, f := range word {
+		ell.anchors = append(ell.anchors, f.anchors...)
+	}
+	return append(out, ell)
 }
 
 // layoutPre lays out preformatted content: one line per source line, never
@@ -1115,9 +1149,13 @@ func cutFrags(line []frag, n int) []frag {
 // indent (consuming list markers), then body. It records where the line's
 // links, images and anchors landed.
 func (r *renderer) emit(body []frag, src int) {
+	if r.capturing {
+		r.capture(body, src)
+		return
+	}
 	if r.blank >= 0 {
 		if len(r.lines) > 0 && !r.lastBlank {
-			r.lines = append(r.lines, r.blankLine(min(r.blank, len(r.prefix))))
+			r.lines = append(r.lines, r.compose(r.blankFrags(min(r.blank, len(r.prefix)))))
 			r.src = append(r.src, -1)
 		}
 		r.blank = -1
@@ -1180,9 +1218,39 @@ func (r *renderer) prefixFrags() []frag {
 	return out
 }
 
-// blankLine is a separator line at indent depth d: empty, except that a
+// capture is emit inside a table cell: the line is kept as runs — indent
+// and body, the pending blank line before it — for the grid to place. Its
+// links, images and anchors are recorded when the grid emits the row.
+func (r *renderer) capture(body []frag, src int) {
+	if r.blank >= 0 {
+		if len(r.captured) > 0 {
+			fs := r.blankFrags(min(r.blank, len(r.prefix)))
+			r.captured = append(r.captured, cellLine{frags: fs, indent: len(fs), w: fragsWidth(fs), src: -1})
+		}
+		r.blank = -1
+	}
+	fs := r.prefixFrags()
+	indent := len(fs)
+	fs = append(fs, body...) // a copy: layout reuses body's array
+	if len(r.anchors) > 0 {
+		fs = append(fs, frag{anchors: r.anchors, link: -1, img: -1, off: -1})
+		r.anchors = nil
+	}
+	r.captured = append(r.captured, cellLine{frags: fs, indent: indent, w: fragsWidth(fs), src: src})
+}
+
+// fragsWidth is the display width of a run of fragments.
+func fragsWidth(fs []frag) int {
+	w := 0
+	for _, f := range fs {
+		w += f.w
+	}
+	return w
+}
+
+// blankFrags is a separator line at indent depth d: empty, except that a
 // blockquote bar at or below d carries on through it.
-func (r *renderer) blankLine(d int) string {
+func (r *renderer) blankFrags(d int) []frag {
 	k := -1
 	for i := d - 1; i >= 0; i-- {
 		if r.prefix[i].bar != "" {
@@ -1191,14 +1259,14 @@ func (r *renderer) blankLine(d int) string {
 		}
 	}
 	if k < 0 {
-		return ""
+		return nil
 	}
 	var fs []frag
 	for i := 0; i < k; i++ {
-		fs = append(fs, frag{text: r.prefix[i].rest, w: r.prefix[i].w, link: -1, st: r.prefix[i].st})
+		fs = append(fs, frag{text: r.prefix[i].rest, w: r.prefix[i].w, link: -1, img: -1, off: -1, st: r.prefix[i].st})
 	}
-	fs = append(fs, frag{text: r.prefix[k].bar, w: width(r.prefix[k].bar), link: -1, st: r.prefix[k].st})
-	return r.compose(fs)
+	fs = append(fs, frag{text: r.prefix[k].bar, w: width(r.prefix[k].bar), link: -1, img: -1, off: -1, st: r.prefix[k].st})
+	return fs
 }
 
 // compose renders runs into one styled line: adjacent runs with the same look

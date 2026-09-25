@@ -14,8 +14,10 @@ stray end tags
 
 • item four
 
-a │ b
-c
+┌───┬───┐
+│ a │ b │
+│ c │   │
+└───┴───┘
 
 Broken link
 

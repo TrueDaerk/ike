@@ -1,10 +1,10 @@
 ---
 type: concept
 title: HTML Preview
-description: "Epic 0530 — rendered reading view of .html/.htm/.xhtml buffers (and .html.gz through the gz viewer) beside the editor, text-mode-browser style. #2739 the UI-free render core internal/htmlrender; #2740 the preview pane (KindHTMLPreview), html.preview on cmd+alt+h (macOS) / cmd+alt+shift+h, debounced re-render, source-mapped line-accurate cursor sync, / search, layout and session restore; #2741 following links (tab/shift+tab/enter/y, click, #anchor/file/browser) and the reverse cursor sync; #2743 local <img> inline over Kitty graphics (Options.ImageBlock, preview.html_images). Stub — 0530/9 completes it."
+description: "Epic 0530 — rendered reading view of .html/.htm/.xhtml buffers (and .html.gz through the gz viewer) beside the editor, text-mode-browser style. #2739 the UI-free render core internal/htmlrender; #2740 the preview pane (KindHTMLPreview), html.preview on cmd+alt+h (macOS) / cmd+alt+shift+h, debounced re-render, source-mapped line-accurate cursor sync, / search, layout and session restore; #2741 following links (tab/shift+tab/enter/y, click, #anchor/file/browser) and the reverse cursor sync; #2743 local <img> inline over Kitty graphics (Options.ImageBlock, preview.html_images); #2742 tables as bordered grids (content-sized columns, colspan/rowspan, ellipsis truncation). Stub — 0530/9 completes it."
 resource: internal/htmlpreview
-tags: [architecture, html, preview, pane, viewer, gzip, kitty, images]
-timestamp: 2026-09-25T12:00:00Z
+tags: [architecture, html, preview, pane, viewer, gzip, kitty, images, tables]
+timestamp: 2026-09-25T18:00:00Z
 ---
 
 # HTML Preview (Epic 0530)
@@ -26,6 +26,56 @@ parses the bytes tolerantly (`golang.org/x/net/html`), lays the block/inline
 flow out word-wrapped at the width, and returns a `Document` — styled lines,
 the link, image and anchor indexes, and a two-way **source map** (rendered
 line ↔ source offset/line). No I/O, no bubbletea, no shared state.
+
+## Tables (#2742)
+
+A `<table>` renders as a bordered box-drawing grid (`internal/htmlrender/table.go`)
+in the palette's border colour, the look of the markdown preview's tables:
+
+```
+┌─────────┬─────────┬──────────────┐
+│ Quarter │ Revenue │ Notes        │
+╞═════════╪═════════╪══════════════╡
+│ Q1      │ 100     │ Start        │
+└─────────┴─────────┴──────────────┘
+```
+
+- **Structure.** `<caption>`s render above the grid; `thead`/`tbody`/`tfoot`
+  rows in order, footer rows moved to the end; cells outside a `<tr>` form
+  an implicit row; wrappers between rows (a `<form>`) are transparent, and
+  stray text is rendered before the grid, as a browser fosters it. Rows of a
+  `<thead>` — or, without one, the leading rows made only of `<th>` — are the
+  header: bold, with a double rule under them when body rows follow. `<th>`
+  cells are bold anywhere. Body rows get a rule between them once any cell
+  of the table takes more than one line.
+- **Cells.** Each cell is laid out by the ordinary flow in *capture mode* at
+  its column's width, so inline styling, paragraphs, lists and `<br>` work
+  inside it, and its links, anchors (the cell's and row's `id` included) and
+  source offsets are recorded when the grid emits the row. A word wider than
+  its column is cut with an ellipsis (`…`) instead of being broken. An image
+  in a cell keeps its `[alt]` placeholder. A table nested in a cell is
+  flattened into the cell's flow — a row per line, `│` between its cells.
+- **Column widths.** A first capture at the table's full width measures each
+  cell's widest line (want) and widest unbreakable word (need). All wants
+  fit: every column gets its want. Else, if the needs fit, every column gets
+  its need and the rest grows columns in proportion to what they still want.
+  Else every column gets a fair share: a need at most an even share is met in
+  full, the others split the remainder evenly, never below the minimum
+  column width (3 cells, less for narrower content). A `colspan` cell counts
+  over its columns (its want and need spread evenly); a `rowspan` cell shows
+  in its first row and leaves an empty cell below. Spans are capped at
+  HTML's limits (1000 columns, 65534 rows; `rowspan=0` reaches the last row).
+- **Overflow.** A grid still wider than the pane at the minimum widths is cut
+  at the right edge with the `hscroll` overflow glyph `›`, like a long `<pre>`
+  line.
+- **Source map.** The top border maps to the `<table>` tag, every row line to
+  the first word it shows (the row's `<tr>` when it shows none); rules and the
+  bottom border take the nearest line's.
+- **Cost.** Every cell is laid out twice (measure, place); a 500-row table
+  renders in a few milliseconds (`TestLargeTable`, `BenchmarkRenderTable500`).
+  The `gridview` building block is not used: it draws interactive data grids
+  from strings, while table cells here are laid-out flow with links and a
+  source map.
 
 ## The pane (#2740)
 
@@ -131,7 +181,7 @@ Unicode placeholder cells, the root model's reconcile pass).
   and each line is one rendered line (under the image's link, inside the
   indent), so the source map, link spans and anchors stay line-accurate
   around the block; `Image.Line`/`Image.Rows` record where it landed. A table
-  row keeps the placeholder — a block would tear its line apart. The core
+  cell keeps the placeholder — a block would dwarf the grid's columns. The core
   stays I/O-free; decoding is the hook's business.
 - **Resolution** (`internal/htmlpreview/images.go`). A src relative to the
   document's file (URL path: query and fragment dropped, escapes decoded),
@@ -166,6 +216,6 @@ Unicode placeholder cells, the root model's reconcile pass).
 
 ## Still to come
 
-Tables (0530/4), the
+The
 minimal CSS subset (0530/6), bounded async rendering (0530/7), the browser
 screenshot mode (0530/8) and the full concept doc (0530/9).

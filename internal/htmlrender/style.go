@@ -84,7 +84,7 @@ type styles struct {
 	mark              style
 	rule, quote, edge style // hr, blockquote bar, pre overflow marker
 	image, caption    style
-	sep, summary      style // placeholder table cell separator, details marker
+	sep, summary      style // table borders and separators, details marker
 }
 
 // newStyles derives the element looks from pal (nil: the default theme).

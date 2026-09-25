@@ -1,0 +1,22 @@
+title: ""
+----
+┌───────────────────┬────────────┐
+│ Outer             │ Inner      │
+╞═══════════════════╪════════════╡
+│ Row with a link   │ x │ y      │
+│                   │ z │ w      │
+├───────────────────┼────────────┤
+│ First paragraph.  │ • item one │
+│                   │ • item two │
+│ Second paragraph. │            │
+└───────────────────┴────────────┘
+
+• List item holding a table:
+
+  ┌───┬───┐
+  │ K │ V │
+  ╞═══╪═══╡
+  │ a │ 1 │
+  └───┴───┘
+
+• After
