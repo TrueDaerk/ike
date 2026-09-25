@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-09-25T22:00:00Z
+timestamp: 2026-09-26T00:30:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -292,7 +292,14 @@ any entry whose key the typed schema does not expose (no dead keys).
   Contents/MacOS/<name>)`; the timeout is refused when non-numeric and clamps
   to its range, and the config validator snaps a hand-edited out-of-range
   value back to 20. Both reach every open HTML preview on write (see
-  [HTML preview](./html-preview.md#browser-screenshot-mode-2746)).
+  [HTML preview](./html-preview.md#browser-screenshot-mode-2746)). The HTML
+  tab's view modes (#2766) add `preview.html_open_mode` ("Open HTML files
+  in", Enum `preview` / `source`, default `preview`): the view a freshly
+  opened HTML file's tab starts in. The enum editor offers only the two
+  values; the config validator snaps any other hand-edited value back to
+  `preview` with a diagnostic. It applies to the next open — tabs already
+  open keep their view (see
+  [HTML preview](./html-preview.md#view-modes-2766)).
 - **Notebook Viewer** (#2683) — `notebook.image_max_cols`, the column cap an
   image output in a notebook pane is fitted into (default 80, `0` lifts it).
   Like the forge interval it carries the `Entry.ValidateInt` hook, and for

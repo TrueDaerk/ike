@@ -124,12 +124,15 @@ type Config struct {
 // HTMLBrowser and HTMLBrowserTimeoutS drive the HTML preview's browser
 // screenshot mode (#2746): the headless Chrome/Chromium/Edge binary (empty
 // auto-detects one) and how many seconds one screenshot may take.
+// HTMLOpenMode is the view an opened HTML file's tab starts in (#2766):
+// "preview" (the rendered page) or "source" (the editor).
 type Preview struct {
 	Diagrams            string `toml:"diagrams"`
 	HTMLImages          bool   `toml:"html_images"`
 	HTMLRenderBudgetKB  int    `toml:"html_render_budget_kb"`
 	HTMLBrowser         string `toml:"html_browser"`
 	HTMLBrowserTimeoutS int    `toml:"html_browser_timeout_s"`
+	HTMLOpenMode        string `toml:"html_open_mode"`
 }
 
 // Notebook holds the notebook viewer pane's settings (#2683). ImageMaxCols

@@ -119,6 +119,8 @@ func (m *Model) showGzipBuffer(path, inner, text, notice string) tea.Cmd {
 		m.watcher.Track(path) // the *outer* file is what changes on disk
 	}
 	m.setFocus(key)
+	// A compressed page opens rendered like a plain one (#2766).
+	m.openInHTMLView(key)
 	m.layout()
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	return ed.Reparse()

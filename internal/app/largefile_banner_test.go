@@ -29,7 +29,11 @@ func largeModel(t *testing.T) (Model, string) {
 		t.Fatal(err)
 	}
 	out, _ := m.openPath(path, false)
-	return out.(Model), path
+	mm := out.(Model)
+	// The fixture is an HTML page, which opens rendered since #2766; the
+	// large-file surfaces live on the editor, so show the Source view.
+	mm.showSourceFor(path)
+	return mm, path
 }
 
 // TestLargeFileBannerShowsAndDismisses guards #1124.

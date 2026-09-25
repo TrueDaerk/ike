@@ -121,6 +121,7 @@ type Model struct {
 
 	src    string // latest source text (pending or rendered)
 	seq    int    // debounce sequence; a tick renders only when it matches
+	ticked int    // the seq whose source a render was last owed for (Resync)
 	doc    htmlrender.Document
 	cursor int // last known source cursor line (0-based), for follow scroll
 	top    int // first rendered line shown
@@ -256,7 +257,22 @@ func (m *Model) SetSource(text string) tea.Cmd {
 func (m *Model) SetSourceImmediate(text string) {
 	m.src = text
 	m.seq++
+	m.ticked = m.seq
 	m.invalidate()
+}
+
+// Resync brings a preview that was hidden back up to date with its source
+// (#2766: an editor tab switching back to its Preview view): a changed text,
+// or a debounce tick that never reached the hidden pane, owes a render right
+// away, and a moved caret re-syncs the scroll. With neither, the pane shows
+// exactly what it showed when it was hidden, at the same scroll.
+func (m *Model) Resync(text string, line int) {
+	if text != m.src || m.ticked != m.seq {
+		m.SetSourceImmediate(text)
+	}
+	if line != m.cursor {
+		m.SetCursorLine(line)
+	}
 }
 
 // SetCursorLine records the source cursor line and scrolls the rendered view
@@ -272,6 +288,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case RenderTickMsg:
 		if msg.Key == m.key && msg.Seq == m.seq {
+			m.ticked = m.seq
 			m.invalidate()
 			return m.RenderCmd()
 		}

@@ -123,6 +123,9 @@ bring their own.
 | Show Project History Timeline | `history.projectTimeline` | — | — | everywhere |
 | HTML Preview | `html.preview` | `cmd+alt+h` | — | everywhere |
 | HTML preview: render in browser | `html.preview.browser` | — | — | everywhere |
+| HTML: show Preview | `html.view.preview` | — | — | everywhere |
+| HTML: show Source | `html.view.source` | — | — | everywhere |
+| HTML: toggle Source/Preview | `html.view.toggle` | `cmd+alt+shift+v` | — | everywhere |
 | Cancel Running HTTP Request | `http.cancel` | `cmd+.` | — | everywhere |
 | Copy HTTP Request as curl | `http.copyAsCurl` | — | — | everywhere |
 | Copy HTTP Request as httpie | `http.copyAsHttpie` | — | — | everywhere |

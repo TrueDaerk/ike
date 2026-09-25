@@ -4,7 +4,7 @@ title: Shared Building Blocks
 description: The catalog of reusable pieces every new pane, prompt, list, search line or tool window MUST be built from — one table per family with the helper, when it is mandatory, the guard test that enforces it, and the concept doc that explains it (0500 consolidation sweep, Epic #2458).
 resource: internal/ui
 tags: [architecture, ui, conventions, reuse, guard-tests]
-timestamp: 2026-09-18T18:00:00Z
+timestamp: 2026-09-26T00:30:00Z
 ---
 
 # Shared Building Blocks
@@ -117,6 +117,7 @@ Doc: [Pane Registry](/architecture/pane-registry.md),
 | `codepreview.TargetFrom[T]` | `internal/codepreview` | building a preview target from match ranges |
 | `imgview.PlacedImage`, `SyncSeqs` | `internal/imgview` | inline images placed in a scrolling view |
 | `ui.InputRow`, `ui.TogglesRow` | `internal/ui/formrow.go` | the find-in-path / all-projects form rows |
+| `ui.Segmented{Segments: []ui.Segment{{Label, On}}}` with `View(width, pal)`, `At(x, width)`, `Width` | `internal/ui/segmented.go` | a clickable segmented toggle drawn inside a pane body: a one-row strip of `[Label]` buttons, the "on" ones in the palette's accent style, hit-tested by the same arithmetic that draws it (buttons that do not fit are left out of both). Built from the owner's state on every View and click. First user: the HTML tab's `[Source] [Preview] [Browser]` strip (#2766) |
 
 Doc: [Hierarchy Tree](/architecture/hiertree.md),
 [Data Viewer](/architecture/data-viewer.md),

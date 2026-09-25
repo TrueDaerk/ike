@@ -53,7 +53,12 @@ type paneIdentity struct {
 	// first. Older builds ignore the key and restore without recency, which
 	// is what made the eviction recycle one fixed slot.
 	Recent []int `json:"recent,omitempty"`
-	Active int   `json:"active,omitempty"`
+	// Views holds the document tabs shown in their rendered view rather than
+	// the editor (#2766) as indexes into Tabs, each with its mode: "preview",
+	// or "browser" for the preview in browser screenshot mode (#2746). Tabs
+	// not listed restore in Source view, which older builds always did.
+	Views  []tabViewIdentity `json:"views,omitempty"`
+	Active int               `json:"active,omitempty"`
 	// CTabs holds a tab host's content tabs (#1778) — previews, diffs, data
 	// viewers and the like living in the tab strip — each with the identity
 	// its dedicated-pane persistence would carry plus its position in the
@@ -82,6 +87,26 @@ type contentTabIdentity struct {
 	Mode   string `json:"mode,omitempty"` // paneIdentity.Mode (#2746)
 	Index  int    `json:"index"`
 	Pinned bool   `json:"pinned,omitempty"`
+}
+
+// tabViewIdentity is the persisted view of one document tab (#2766): its
+// index into paneIdentity.Tabs and the mode it restores in.
+type tabViewIdentity struct {
+	Index int    `json:"index"`
+	Mode  string `json:"mode"`
+}
+
+// tabViewMode is the persisted mode of document tab idx of inst (#2766): ""
+// for Source view, "preview" for the rendered page, "browser" for the page
+// in the preview's browser screenshot mode.
+func tabViewMode(inst *pane.Instance, idx int) string {
+	if inst.TabViewMode(idx) != pane.ViewPreview {
+		return ""
+	}
+	if v := inst.TabView(idx); v != nil && v.HTMLPreview().BrowserMode() {
+		return htmlPreviewBrowserMode
+	}
+	return htmlViewPreviewMode
 }
 
 // tabRecency pairs a persisted tab (its index in paneIdentity.Tabs) with the
@@ -564,6 +589,10 @@ func encodeLayoutState(root layout.Node, reg *pane.Registry) ([]byte, bool) {
 					// a restart keeps knowing which tab the user last worked
 					// in and which one the limit may drop.
 					recency = append(recency, tabRecency{tab: len(id.Tabs), used: used})
+				}
+				if mode := tabViewMode(inst, i); mode != "" {
+					// The tab's view (#2766) in the same index space.
+					id.Views = append(id.Views, tabViewIdentity{Index: len(id.Tabs), Mode: mode})
 				}
 				id.Tabs = append(id.Tabs, path)
 			}

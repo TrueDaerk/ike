@@ -197,6 +197,7 @@ var reachableAlternatives = map[string]string{
 	"notifications.history":            "palette",
 	"markdown.preview":                 "palette",
 	"html.preview":                     "palette / tab context menu",
+	"html.view.toggle":                 "the tab's [Source] [Preview] buttons / palette / tab context menu",
 	"todo.list":                        "palette",
 	"vcs.revertFile":                   "palette",
 	"vcs.panel":                        "palette",

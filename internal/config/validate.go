@@ -222,6 +222,14 @@ const (
 	HTMLBrowserTimeoutSMax     = 300
 )
 
+// HTMLOpenPreview and HTMLOpenSource are the values of preview.html_open_mode
+// (#2766): the view an opened HTML file's tab starts in. An unknown value
+// falls back to HTMLOpenPreview.
+const (
+	HTMLOpenPreview = "preview"
+	HTMLOpenSource  = "source"
+)
+
 // DefaultBranchIssuePattern is the branch-name regexp behind the status
 // line's branch-issue segment (#2544): IKE's own change workflow branches
 // work on issue/<number>, and the first capture group is read as that number.
@@ -792,6 +800,13 @@ func validate(c *Config) []Diagnostic {
 	if c.Preview.HTMLBrowserTimeoutS < HTMLBrowserTimeoutSMin || c.Preview.HTMLBrowserTimeoutS > HTMLBrowserTimeoutSMax {
 		diags = append(diags, Diagnostic{Field: "preview.html_browser_timeout_s", Message: fmt.Sprintf("html_browser_timeout_s %d out of range (%d–%d s), using %d", c.Preview.HTMLBrowserTimeoutS, HTMLBrowserTimeoutSMin, HTMLBrowserTimeoutSMax, DefaultHTMLBrowserTimeoutS)})
 		c.Preview.HTMLBrowserTimeoutS = DefaultHTMLBrowserTimeoutS
+	}
+	// The view an opened HTML file starts in (#2766).
+	switch c.Preview.HTMLOpenMode {
+	case HTMLOpenPreview, HTMLOpenSource:
+	default:
+		diags = append(diags, Diagnostic{Field: "preview.html_open_mode", Message: fmt.Sprintf("unknown html_open_mode %q, using %q", c.Preview.HTMLOpenMode, HTMLOpenPreview)})
+		c.Preview.HTMLOpenMode = HTMLOpenPreview
 	}
 	// Notebook image cap (#2683): 0 is "no cap, use the pane width"; a
 	// negative or absurd column count falls back to the default.

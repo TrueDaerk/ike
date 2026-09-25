@@ -44,8 +44,10 @@ func (m *Model) openHTMLPreview() {
 		return
 	}
 	path := ed.Path()
+	// A tab showing its own Preview view (#2766) is not a preview pane: the
+	// split still opens beside it, pointless as a second rendering is.
 	if hostKey, tabIdx, _, ok := m.findContent(func(c *pane.Instance) bool {
-		return c.Kind() == pane.KindHTMLPreview && c.HTMLPreview().Path() == path
+		return c.Kind() == pane.KindHTMLPreview && !c.IsTabView() && c.HTMLPreview().Path() == path
 	}); ok {
 		m.focusContentAt(hostKey, tabIdx) // may live in a tab (#1778)
 		return
@@ -189,10 +191,13 @@ func (m *Model) toggleHTMLPreviewBrowser() tea.Cmd {
 
 // withHTMLPreviewItem appends the "HTML Preview" entry to the tab context
 // menu when the clicked tab holds an HTML buffer — the menu doorway to
-// html.preview next to the palette and the chord.
+// html.preview next to the palette and the chord — and the tab's own
+// Source/Preview switch (#2766).
 func withHTMLPreviewItem(items []menu.Item, path string) []menu.Item {
 	if !htmlpreview.IsHTMLPath(path) {
 		return items
 	}
-	return append(items, menu.Item{Title: "HTML Preview", Command: "html.preview"})
+	return append(items,
+		menu.Item{Title: "HTML Preview", Command: "html.preview"},
+		menu.Item{Title: "Toggle Source/Preview", Command: "html.view.toggle"})
 }

@@ -232,6 +232,10 @@ type Model struct {
 	// command is queued and consumed by the first viewer open that follows
 	// (takeViewerTabHost); "" restores the split behaviour.
 	viewerTabHost string
+	// htmlSourceNav marks an open that targets a source position — a jump
+	// to a line (openPathAt) — which lands an HTML file in Source view
+	// whatever preview.html_open_mode says (#2766).
+	htmlSourceNav bool
 	// httpFlight tracks the .http requests currently in flight (#1272), keyed
 	// by source file + request key: the duplicate-dispatch guard, the
 	// statusline indicator and the cancel action all read it.
@@ -2512,6 +2516,12 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 		for pos, n := range id.Recent {
 			if slot, ok := slots[n]; ok {
 				inst.SetTabRecency(slot, len(id.Recent)-pos)
+			}
+		}
+		// Tabs saved in their rendered view come back in it (#2766).
+		for _, v := range id.Views {
+			if slot, ok := slots[v.Index]; ok {
+				m.restoreTabView(panes, inst, slot, v.Mode)
 			}
 		}
 		if v, ok := views[inst.TabPath(active)]; ok && (v.Top != 0 || v.Left != 0) {
@@ -6235,6 +6245,19 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// screenshot mode (#2746).
 		return m, m.toggleHTMLPreviewBrowser()
 
+	case HTMLViewMsg:
+		// html.view.toggle / .source / .preview: the HTML tab's own
+		// Source ↔ Preview switch (#2766).
+		switch {
+		case msg.Toggle:
+			m.toggleHTMLView()
+		case msg.Preview:
+			m.setHTMLView(pane.ViewPreview)
+		default:
+			m.setHTMLView(pane.ViewSource)
+		}
+		return m, nil
+
 	case htmlpreview.ShotMsg:
 		// A browser screenshot finished (#2746): the HUD books it like a
 		// render, and the owning preview adopts it (or falls back to text
@@ -9582,11 +9605,17 @@ func (m Model) openPathMode(path string, newPane, forceEditor bool) (tea.Model, 
 		if key == "" || (newPane && !m.activeWS().Panes.Get(key).IsEmptyEditor()) {
 			key = m.spawnEditor()
 		}
+		fresh := m.activeWS().Panes.Get(key).TabForPath(path) < 0
 		if m.openInTab(key, path) {
 			// Opening onto a restored tab loads it through the deferred
 			// loader (#2177); the wiring below is that load's wiring, so the
 			// lazy drain must not repeat it.
 			m.forgetLazyLoad(path)
+			if fresh && !forceEditor {
+				// A newly opened HTML page shows rendered (#2766), per
+				// preview.html_open_mode; a tab already open keeps its view.
+				m.openInHTMLView(key)
+			}
 			if forceEditor && isBinary(readHead(path)) {
 				// The explicit "as text" pick of a binary file keeps this
 				// buffer's insight off (#2420): no highlighting, no LSP —
@@ -11092,6 +11121,13 @@ func (m Model) openPathAtWith(path string, line, col int, focused bool) (tea.Mod
 	if cur := m.currentNavPos(); cur.Path == path && cur.Line != line {
 		m.recordNavFrom(cur)
 	}
+	// A jump to a source position lands in Source view (#2766): an HTML page
+	// opened here never starts rendered, and one already showing its
+	// rendered view switches back, so the caret is where the jump points. A
+	// line-less target (a CLI path or deep link without :line) is a plain
+	// open and keeps preview.html_open_mode.
+	jump := line >= 0
+	m.htmlSourceNav = jump
 	open := m.openPath
 	if focused {
 		open = func(p string, _ bool) (tea.Model, tea.Cmd) { return m.openPathFocused(p) }
@@ -11100,6 +11136,10 @@ func (m Model) openPathAtWith(path string, line, col int, focused bool) (tea.Mod
 	mm, ok := model.(Model)
 	if !ok {
 		return model, cmd
+	}
+	mm.htmlSourceNav = false
+	if jump {
+		mm.showSourceFor(path)
 	}
 	if ed := mm.editorForPath(path); ed != nil {
 		// Navigation landings frame the target near the top edge (#996);
@@ -13069,6 +13109,15 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 	if inst.Kind() == pane.KindEditor && localY == -1 && m.breadcrumbRows(inst) == 1 {
 		if msg.Button == tea.MouseLeft {
 			return m.breadcrumbClick(key, inst, localX)
+		}
+		return m, nil
+	}
+	// An HTML tab's view strip (#2766) is the body's bottom row: a left
+	// press on [Source] / [Preview] / [Browser] acts, any other press on the
+	// row is swallowed so it can't reach the text above.
+	if act, ok := inst.ViewStripAt(localX, localY); ok {
+		if msg.Button == tea.MouseLeft {
+			return m, m.viewStripClick(inst, act)
 		}
 		return m, nil
 	}

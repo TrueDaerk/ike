@@ -1,10 +1,10 @@
 ---
 type: concept
 title: HTML Preview
-description: "Epic 0530 — a rendered reading view of .html/.htm/.xhtml buffers (and .html.gz through the gz viewer) beside the editor, text-mode-browser style: a UI-free render core (internal/htmlrender) with tables, a minimal CSS subset and a two-way source map; the pane (KindHTMLPreview, html.preview) with link following, inline Kitty images, off-loop generation-cancelled rendering under a size budget, and an optional headless-browser screenshot mode."
+description: "Epic 0530 — a rendered reading view of .html/.htm/.xhtml buffers (and .html.gz through the gz viewer), in the file's own tab (Source/Preview view modes, #2766) or beside the editor, text-mode-browser style: a UI-free render core (internal/htmlrender) with tables, a minimal CSS subset and a two-way source map; the pane (KindHTMLPreview, html.preview) with link following, inline Kitty images, off-loop generation-cancelled rendering under a size budget, and an optional headless-browser screenshot mode."
 resource: internal/htmlpreview
-tags: [architecture, html, preview, pane, viewer, gzip, kitty, images, tables, css, async, performance, browser, screenshot, security]
-timestamp: 2026-09-25T23:30:00Z
+tags: [architecture, html, preview, pane, view-modes, viewer, gzip, kitty, images, tables, css, async, performance, browser, screenshot, security]
+timestamp: 2026-09-26T00:30:00Z
 ---
 
 # HTML Preview (Epic 0530)
@@ -25,7 +25,8 @@ Splitting, moving and resizing the preview pane itself follows the general
 The epic shipped in nine parts: the render core (#2739), the pane (#2740),
 link following (#2741), tables (#2742), inline images (#2743), a CSS subset
 (#2744), off-loop rendering (#2745), browser mode (#2746) and this
-consolidated doc (#2747).
+consolidated doc (#2747). A follow-up (#2766) made HTML files open rendered
+in their own tab, with Source/Preview [view modes](#view-modes-2766).
 
 ## Render core (#2739)
 
@@ -418,15 +419,106 @@ settings, `exec.LookPath`, off the loop, cached, with a fallback
   into every open pane (`Model.SetBrowser`). See
   [Settings UI](./settings-ui.md).
 
+## View modes (#2766)
+
+An HTML file opens **rendered, in its own tab** — the JetBrains experience —
+rather than as source with a chord to get the preview. The tab has two
+views, **Source** (the editor) and **Preview** (the rendered page), and a
+one-row button strip in the **bottom-left corner of the pane body**:
+
+```
+│ Some bold text and a link.                              │
+│                                                         │
+│ [Source] [Preview] [Browser]                            │
+╰─────────────────────────────────────────────────────────╯
+```
+
+- **One tab, one buffer.** The Preview view is the pane's
+  `htmlpreview.Model` — live updates, cursor sync, links, images, browser
+  mode, off-loop render exactly as above — held as a nested
+  `KindHTMLPreview` instance *beside* the editor in the same tab slot
+  (`internal/pane/tabview.go`), not a content tab of its own. The app mints
+  it through the registry on the first switch (`ensureTabView`) and the tab
+  attaches it (`Instance.AttachTabView`). Switching keeps the buffer, undo
+  history, LSP session, the pane's tab identity and each view's own scroll;
+  closing the tab closes both. While the page shows, the tab answers the
+  body-level questions like a preview content tab (`ActiveContent`,
+  `ContextID` = `preview`, `Searchable`, key routing, mouse, title band
+  `HTML PREVIEW <file>`, status line), while `Editor()`, `TabPath`, the
+  dirty sweeps, save and persistence keep seeing the editor. Keys go to the
+  preview — nothing typed in Preview view reaches the hidden buffer — and the
+  editor's own async results still reach it. The breadcrumbs row hides.
+- **Hidden views park.** Leaving Preview interrupts the preview's render or
+  screenshot in flight (owed again, `Model.Interrupt`) and forgets its sent
+  Kitty images (`ResetImages`), and the app's content walks
+  (`forEachContent`) skip a hidden view — it neither renders nor receives the
+  buffer sync while the editor shows. Showing it again runs
+  `Model.Resync(text, caretLine)`: a changed text, or a debounce tick the
+  hidden pane never received, owes a render; a moved caret re-syncs the
+  scroll; with neither, the page is exactly where it was left.
+- **The strip.** Drawn by `ui.Segmented` (see
+  [Shared Building Blocks](./shared-building-blocks.md#structured-views)):
+  `[Source] [Preview]`, the current one in the palette's accent style, plus
+  `[Browser]` in Preview view, lit while browser mode is on and toggling it
+  exactly like `b`. It takes the pane body's bottom row of an HTML document
+  tab (loaded or still deferred) in either view — both bodies are sized one
+  row shorter, the text is padded so the strip sits on the bottom row — and
+  hides below `pane.ViewStripMinHeight` (6 rows) rather than steal a text
+  row from a small pane. A tab that turns out to be HTML after it was sized
+  (a file loaded into a scratch tab) re-sizes on its next View or Update.
+  A left click on a button acts (`Instance.ViewStripAt` → `viewStripClick`,
+  ahead of the body's own click routing); any other press on the row is
+  swallowed. Hover is not needed.
+- **Opening.** An open of an `.html`/`.htm`/`.xhtml` file — explorer, palette,
+  go-to-file, a CLI path, a followed `.html` link — and an `.html.gz` through
+  the gz viewer lands a *new* tab in the view `preview.html_open_mode` names
+  (`preview` by default, `source`); a tab already open keeps its view. "Open
+  File As… → Text editor" stays in Source. A navigation that targets a
+  source position — go to definition, a search result, the Problems pane, a
+  `file:line` CLI target or deep link, go to line, the preview's reverse
+  cursor sync (`enter` on no link) — always lands in **Source**, switching a
+  tab that shows the page back, so a jump never ends on a rendered page
+  without the caret (`openPathAtWith`: a line ≥ 0 is a jump; a line-less
+  target is a plain open). A followed `.html` link that opened in Preview
+  view lands on its `#fragment` there instead of splitting a preview beside
+  it.
+- **Commands.** `html.view.toggle` ("HTML: toggle Source/Preview",
+  `cmd+alt+shift+v` / `ctrl+alt+shift+v` in the editor and preview contexts
+  — the spec's `cmd+alt+shift+p` is `scratch.promote`'s, see
+  [Keybindings](./keybindings.md#html-toggle-sourcepreview-2766)), plus the
+  palette entries `html.view.source` / `html.view.preview` ("HTML: show
+  Source" / "HTML: show Preview", keybind-less as flavours of the toggle).
+  All three are language-gated to `html` and act on the focused pane's
+  active tab (else the active editor's); a non-HTML tab toasts. The tab
+  context menu of an HTML tab offers "Toggle Source/Preview" next to "HTML
+  Preview".
+- **With `html.preview`.** The split keeps its meaning: it opens a preview
+  pane beside the tab even while the tab shows its own Preview view (its
+  dedupe skips tab views, `Instance.IsTabView`). Two renderings of one page
+  side by side are allowed but pointless; use the split with the tab in
+  Source view for the source-beside-page layout.
+- **Persistence.** A document tab's view is part of its layout identity:
+  `paneIdentity.Views` lists `{index, mode}` for tabs not in Source view,
+  `mode` `preview` or `browser` (the preview in browser screenshot mode),
+  indexes into `Tabs` like `Pinned`. Restore attaches the preview right away,
+  rendered from the file on disk even while the tab is still deferred
+  (#2177) — the restored content-tab preview's path — and older builds
+  ignore the key and restore Source. A named saved layout carries no tab
+  lists; applying one moves the live editor pane, tabs and views included,
+  into its slot, so the view survives it the same way.
+
 ## Keybinds and settings
 
 | Command | Default keybind | Where |
 |---|---|---|
 | `html.preview` | `cmd+alt+h` (macOS) / `cmd+alt+shift+h` (`ctrl+alt+shift+h` off macOS) | palette, editor tab context menu |
 | `html.preview.browser` | keybind-less (ledger entry: the spec's suggested chord is `html.preview`'s) | palette |
+| `html.view.toggle` | `cmd+alt+shift+v` / `ctrl+alt+shift+v` (Editor and Preview contexts) | the tab's `[Source] [Preview]` strip, palette, tab context menu |
+| `html.view.source`, `html.view.preview` | keybind-less (ledger: flavours of the toggle) | palette |
 
 | Setting | Default | Page |
 |---|---|---|
+| `preview.html_open_mode` | `preview` (`preview` / `source`) | Settings UI → Markdown Preview |
 | `preview.html_images` | on | Settings UI → Markdown Preview |
 | `preview.html_render_budget_kb` | 2048 (64–65536) | Settings UI → Markdown Preview |
 | `preview.html_browser` | auto-detected | Settings UI → Markdown Preview |

@@ -38,7 +38,11 @@ func openHTMLFile(t *testing.T, content string) (Model, string) {
 		t.Fatal(err)
 	}
 	tm, _ := m.openPath(path, false)
-	return tm.(Model), path
+	m = tm.(Model)
+	// The split-pane tests start where an HTML open landed before #2766: in
+	// the tab's Source view, the editor holding the keyboard.
+	m.showSourceFor(path)
+	return m, path
 }
 
 // stepHTML is step for a message that may leave HTML previews owing a render

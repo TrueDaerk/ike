@@ -63,6 +63,9 @@ func (i *Instance) Searchable() Searchable {
 			if t.inst != nil {
 				return t.inst.Searchable()
 			}
+			if v := t.shownView(); v != nil {
+				return v.Searchable() // a tab in Preview view (#2766)
+			}
 		}
 		return nil
 	case KindTerminal:
