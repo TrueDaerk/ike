@@ -4438,6 +4438,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if gfx := mm.imageSyncCmd(); gfx != nil {
 		cmd = tea.Batch(cmd, gfx)
 	}
+	// HTML previews dispatch the renders they owe here (#2745), after the
+	// reconcile above — which may itself owe one by pushing graphics support
+	// in: open, restore, resize, theme and setting changes only mark a pane,
+	// since their call sites cannot return a Cmd.
+	if render := mm.htmlPreviewRenderCmd(); render != nil {
+		cmd = tea.Batch(cmd, render)
+	}
 	// The breadcrumbs bar (#1153) claims or releases its editor row here,
 	// once the pass settled: symbol data arriving, tab/zen switches and the
 	// config toggle all change the row's visibility without a layout event.
@@ -6226,6 +6233,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case htmlpreview.RenderTickMsg:
 		// An HTML preview's debounce timer fired: route it to the owning
 		// viewer, which renders only when the tick is still the newest.
+		if inst := m.htmlPreviewByKey(msg.Key); inst != nil {
+			return m, inst.Update(msg)
+		}
+		return m, nil
+
+	case htmlpreview.RenderedMsg:
+		// An HTML preview's off-loop render finished (#2745). The HUD books
+		// its cost like a pane's render, under its own row, and the owning
+		// viewer adopts it only if it is still the newest generation.
+		if perfhud.Enabled() {
+			perfhud.RecordPane(msg.Key+" render", msg.Took)
+		}
 		if inst := m.htmlPreviewByKey(msg.Key); inst != nil {
 			return m, inst.Update(msg)
 		}
@@ -9931,6 +9950,11 @@ func (m *Model) drainClosedFileViews() tea.Cmd {
 		// every poll for the rest of the session (#1537).
 		delete(m.docSymbols, path)
 		delete(m.largeToasted, path)
+		// An HTML preview of the closed buffer stops rendering it (#2745):
+		// the render in flight is cancelled, the shown page stays.
+		for _, inst := range m.htmlPreviewsForPath(path) {
+			inst.HTMLPreview().CancelRender()
+		}
 		if m.watcher != nil {
 			m.watcher.Untrack(path)
 		}

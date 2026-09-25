@@ -96,6 +96,7 @@ func TestWrappedLinkHighlightsEveryPiece(t *testing.T) {
 	m := New("htmlpreview", "/tmp/page.html", nil)
 	m.SetSize(20, 10)
 	m.SetSourceImmediate(`<p>go <a href="x.html">a label long enough to wrap twice</a></p>`)
+	m.Flush()
 	key(&m, tabKey)
 	if n := strings.Count(m.View(), "\x1b[7m"); n < 2 {
 		t.Fatalf("a wrapped label needs a highlight per line, got %d:\n%s", n, ansi.Strip(m.View()))
@@ -217,6 +218,7 @@ func TestSelectionSurvivesRerender(t *testing.T) {
 		key(&m, tabKey)
 	}
 	m.SetSourceImmediate(`<p><a href="only.html">only</a></p>`)
+	m.Flush()
 	if got, _ := m.SelectedTarget(); got != "only.html" {
 		t.Fatalf("selection should clamp to the remaining link, got %q", got)
 	}

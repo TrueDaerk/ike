@@ -1,5 +1,23 @@
 # Log
 
+## 2026-09-25 (HTML preview: off-loop render with a budget, #2745)
+
+- The HTML preview no longer renders on the update loop: input changes owe
+  a render, which runs as a generation-tagged `tea.Cmd`
+  (`htmlrender.RenderContext`); a stale result is dropped, and a newer
+  render, closing the pane or closing the source buffer cancels the one in
+  flight. Meanwhile the pane shows the previous page under a
+  `rendering…` notice. The image hook works on a per-render copy of the
+  decoded-image cache.
+- New setting `preview.html_render_budget_kb` ("HTML preview render budget
+  (KB)", default 2048) on the Markdown Preview settings page: the render
+  stops there and ends with `… truncated after N KB`
+  (`htmlrender.Options.Budget`). A 5 MB page opens its preview in ~1.5 ms.
+- The performance HUD books each off-loop render as `<pane key> render`.
+  [HTML Preview](/architecture/html-preview.md) gains "Off-loop render";
+  [Performance](/architecture/performance.md) and
+  [Settings UI](/architecture/settings-ui.md) updated.
+
 ## 2026-09-25 (HTML preview: tables as bordered grids, #2742)
 
 - `<table>` in the HTML preview renders as a box-drawing grid in the

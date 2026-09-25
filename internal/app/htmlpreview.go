@@ -12,6 +12,8 @@ import (
 	"os"
 	"strings"
 
+	tea "charm.land/bubbletea/v2"
+
 	"ike/internal/gzfile"
 	"ike/internal/host"
 	"ike/internal/htmlpreview"
@@ -74,6 +76,28 @@ func (m Model) htmlPreviewsForPath(path string) []*pane.Instance {
 		return true
 	})
 	return out
+}
+
+// htmlPreviewRenderCmd collects the renders the active workspace's HTML
+// previews owe (#2745) — each an off-loop Cmd tagged with its generation —
+// or nil. A workspace that never opened an HTML preview skips the walk.
+func (m *Model) htmlPreviewRenderCmd() tea.Cmd {
+	if !m.activeWS().Panes.HTMLPreviewsMinted() {
+		return nil
+	}
+	var cmds []tea.Cmd
+	m.contentInstances(func(_ string, _ int, c *pane.Instance) bool {
+		if c.Kind() == pane.KindHTMLPreview {
+			if cmd := c.HTMLPreview().RenderCmd(); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+		}
+		return true
+	})
+	if len(cmds) == 0 {
+		return nil
+	}
+	return tea.Batch(cmds...)
 }
 
 // htmlPreviewByKey finds the HTML preview whose model answers to key, the

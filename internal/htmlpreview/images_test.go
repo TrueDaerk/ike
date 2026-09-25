@@ -57,6 +57,7 @@ func newImaged(dir, src string, gfx bool) Model {
 	m.SetSize(60, 20)
 	m.gfx = gfx
 	m.SetSourceImmediate(src)
+	m.Flush()
 	return m
 }
 
@@ -121,6 +122,7 @@ func TestInlineImageRetransmitsOnResize(t *testing.T) {
 	m := newImaged(dir, `<img src="logo.png">`, true)
 	m.SyncSeqs()
 	m.SetSize(24, 20)
+	m.Flush()
 	seqs := m.SyncSeqs()
 	if len(seqs) != 2 || !strings.Contains(seqs[0], "a=d") || !strings.Contains(seqs[1], "a=T") {
 		t.Fatalf("a resize must delete then transmit, got %d sequences", len(seqs))
@@ -152,6 +154,7 @@ func TestInlineImageFallback(t *testing.T) {
 		t.Fatalf("the fallback must transmit nothing, got %d sequences", len(seqs))
 	}
 	m.SetGraphics(true)
+	m.Flush()
 	if placeholders(m.Lines()) == 0 {
 		t.Fatal("SetGraphics(true) should re-render with the image block")
 	}
@@ -245,6 +248,7 @@ func TestImagesDisabledSetting(t *testing.T) {
 	m := newImaged(dir, `<img src="a.png" alt="pic">`, true)
 	m.SyncSeqs()
 	m.SetImagesEnabled(false)
+	m.Flush()
 	if m.HasImages() || len(m.ImageIDs()) != 0 || len(m.TransmittedIDs()) != 0 {
 		t.Fatal("disabled images must leave no placement behind")
 	}
@@ -252,6 +256,7 @@ func TestImagesDisabledSetting(t *testing.T) {
 		t.Fatal("disabled images render their placeholder")
 	}
 	m.SetImagesEnabled(true)
+	m.Flush()
 	if len(m.ImageIDs()) != 1 || placeholders(m.Lines()) == 0 {
 		t.Fatal("re-enabling must draw the image again")
 	}
@@ -268,6 +273,7 @@ func TestUnreferencedImageLosesItsPlacement(t *testing.T) {
 		t.Fatal("the image should be resident before the edit")
 	}
 	m.SetSourceImmediate("<p>no image any more</p>")
+	m.Flush()
 	if ids := m.ImageIDs(); len(ids) != 0 {
 		t.Fatalf("the dropped image must leave the live set, got %v", ids)
 	}

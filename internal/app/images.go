@@ -228,6 +228,9 @@ func (m *Model) releaseWorkspaceImages(w *workspace.Workspace) tea.Cmd {
 				delete(m.liveImages, id)
 			}
 			hv.ResetImages()
+			// A render in flight (#2745) would come back to a workspace
+			// nothing routes to: cancel it, and owe it to the resume.
+			hv.Interrupt()
 		case pane.KindNotebook:
 			// A notebook's image outputs (#2425) are placements for the
 			// same reason and leak the same way.

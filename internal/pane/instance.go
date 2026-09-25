@@ -11,6 +11,7 @@ import (
 	"ike/internal/archview"
 	"ike/internal/breakpanel"
 	"ike/internal/clipboard"
+	"ike/internal/config"
 	"ike/internal/dataview"
 	"ike/internal/debugdoctor"
 	"ike/internal/debugpanel"
@@ -1177,6 +1178,9 @@ func (i *Instance) releaseContent() {
 	case KindNotebook:
 		// Releases the decoded pixels of the image outputs (#2425).
 		i.nv.Close()
+	case KindHTMLPreview:
+		// Cancels an off-loop render still in flight (#2745).
+		i.hpv.Close()
 	case KindRemote:
 		// Ends the SFTP session and its ssh subprocess (#1997).
 		i.rm.Close()
@@ -2064,27 +2068,35 @@ func (i *Instance) configure(cfg host.Config) {
 		applyNotebookCfg(cfg, i)
 	case KindHTMLPreview:
 		// preview.html_images turns the HTML preview's inline images on
-		// and off (#2743) in every open pane.
+		// and off (#2743), preview.html_render_budget_kb bounds its render
+		// (#2745), in every open pane.
 		applyHTMLPreviewCfg(cfg, i)
 	}
 }
 
-// applyHTMLPreviewCfg threads preview.html_images into one HTML preview
-// instance (#2743). Without a config layer, or with the key absent or
-// malformed, images stay on — the shipped default.
+// applyHTMLPreviewCfg threads preview.html_images and
+// preview.html_render_budget_kb into one HTML preview instance (#2743,
+// #2745). Without a config layer, or with a key absent or malformed, the
+// shipped defaults apply: images on, a 2048 KB budget.
 func applyHTMLPreviewCfg(cfg host.Config, inst *Instance) {
 	if inst == nil || inst.kind != KindHTMLPreview {
 		return
 	}
-	on := true
+	on, budget := true, config.DefaultHTMLRenderBudgetKB
 	if cfg != nil {
 		if v, ok := cfg.Get("preview.html_images"); ok {
 			if b, err := strconv.ParseBool(v); err == nil {
 				on = b
 			}
 		}
+		if v, ok := cfg.Get("preview.html_render_budget_kb"); ok {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				budget = n
+			}
+		}
 	}
 	inst.hpv.SetImagesEnabled(on)
+	inst.hpv.SetRenderBudget(budget)
 }
 
 // defaultNotebookImageMaxCols mirrors config's default for

@@ -121,7 +121,7 @@ func (m Model) openHTMLWithPreview(path, frag string) (tea.Model, tea.Cmd) {
 	mm.openHTMLPreview()
 	if frag != "" {
 		for _, inst := range mm.htmlPreviewsForPath(canonicalPath(path)) {
-			inst.HTMLPreview().ScrollToAnchor(frag)
+			inst.HTMLPreview().LandOnAnchor(frag)
 		}
 	}
 	return mm, cmd

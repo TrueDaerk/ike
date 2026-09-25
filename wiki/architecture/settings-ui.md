@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-09-18T00:00:00Z
+timestamp: 2026-09-25T22:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -273,7 +273,14 @@ any entry whose key the typed schema does not expose (no dead keys).
   images have no switch, so the HTML toggle joins the page that already
   holds the preview's image-related setting. A write re-renders every open
   HTML preview (`pane.applyHTMLPreviewCfg`, see
-  [HTML preview](./html-preview.md#inline-images-2743)).
+  [HTML preview](./html-preview.md#inline-images-2743)). Beside it (#2745),
+  `preview.html_render_budget_kb` ("HTML preview render budget (KB)", Int,
+  default 2048, range 64–65536): how much of a page's source the HTML
+  preview renders before it stops with a `… truncated after N KB` line.
+  Non-numeric input is refused in the form and an out-of-range value clamps
+  with a notice; the config validator snaps a hand-edited out-of-range value
+  back to 2048 with a diagnostic. A write re-renders every open HTML preview
+  (see [HTML preview](./html-preview.md#off-loop-render-2745)).
 - **Notebook Viewer** (#2683) — `notebook.image_max_cols`, the column cap an
   image output in a notebook pane is fitted into (default 80, `0` lifts it).
   Like the forge interval it carries the `Entry.ValidateInt` hook, and for

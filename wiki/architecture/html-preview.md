@@ -1,10 +1,10 @@
 ---
 type: concept
 title: HTML Preview
-description: "Epic 0530 — rendered reading view of .html/.htm/.xhtml buffers (and .html.gz through the gz viewer) beside the editor, text-mode-browser style. #2739 the UI-free render core internal/htmlrender; #2740 the preview pane (KindHTMLPreview), html.preview on cmd+alt+h (macOS) / cmd+alt+shift+h, debounced re-render, source-mapped line-accurate cursor sync, / search, layout and session restore; #2741 following links (tab/shift+tab/enter/y, click, #anchor/file/browser) and the reverse cursor sync; #2743 local <img> inline over Kitty graphics (Options.ImageBlock, preview.html_images); #2742 tables as bordered grids (content-sized columns, colspan/rowspan, ellipsis truncation); #2744 a minimal CSS subset (display/visibility hiding, font-weight, font-style, text-decoration, color, text-align). Stub — 0530/9 completes it."
+description: "Epic 0530 — rendered reading view of .html/.htm/.xhtml buffers (and .html.gz through the gz viewer) beside the editor, text-mode-browser style. #2739 the UI-free render core internal/htmlrender; #2740 the preview pane (KindHTMLPreview), html.preview on cmd+alt+h (macOS) / cmd+alt+shift+h, debounced re-render, source-mapped line-accurate cursor sync, / search, layout and session restore; #2741 following links (tab/shift+tab/enter/y, click, #anchor/file/browser) and the reverse cursor sync; #2743 local <img> inline over Kitty graphics (Options.ImageBlock, preview.html_images); #2742 tables as bordered grids (content-sized columns, colspan/rowspan, ellipsis truncation); #2744 a minimal CSS subset (display/visibility hiding, font-weight, font-style, text-decoration, color, text-align); #2745 the off-loop render (a tea.Cmd per generation, stale results dropped, cancelled on a newer render or a close) bounded by preview.html_render_budget_kb with a truncation line. Stub — 0530/9 completes it."
 resource: internal/htmlpreview
-tags: [architecture, html, preview, pane, viewer, gzip, kitty, images, tables, css]
-timestamp: 2026-09-25T20:00:00Z
+tags: [architecture, html, preview, pane, viewer, gzip, kitty, images, tables, css, async, performance]
+timestamp: 2026-09-25T22:00:00Z
 ---
 
 # HTML Preview (Epic 0530)
@@ -108,11 +108,10 @@ it.
 - **Live updates.** Every `editor.SyncMsg` for the path hands the
   originating editor's text to `SetSource`, which arms a
   `preview.Debounce` (200ms) tick carrying a sequence number; only the
-  newest `htmlpreview.RenderTickMsg` renders. Open and restore render
-  synchronously via `SetSourceImmediate`.
-- **Single render seam.** Every render goes through `htmlpreview.Render`,
-  synchronous on the update loop for now; the bounded, off-loop render of
-  0530/7 (#2745) replaces that one function.
+  newest `htmlpreview.RenderTickMsg` renders. Open and restore skip the
+  debounce via `SetSourceImmediate`.
+- **Off the loop.** No render runs on the update loop; see
+  [Off-loop render](#off-loop-render-2745).
 - **Cursor sync.** The editor emitter's `preview.CursorMsg` reaches HTML
   previews too (the `previewBound` gate of #2540 counts them). The caret's
   source line maps through `Document.LineForSourceLine` — content starting
@@ -259,7 +258,61 @@ backgrounds and every other property are ignored.
   3000-selector sheet renders in about 36 ms, 11 ms of it without the sheet
   (`BenchmarkRenderStyled`).
 
+## Off-loop render (#2745)
+
+A multi-MB report must not freeze the IDE, so the render never runs on the
+update loop and never reads more than a budget of the page — the Tree-sitter
+`docVersion` and project-search pattern.
+
+- **Owe, then dispatch.** Every input change — source (the debounce tick,
+  `SetSourceImmediate` on open and restore), width, height with an image on
+  the page, theme, Kitty support, `preview.html_images`, the budget — only
+  marks the pane as owing a render. `RenderCmd` dispatches it as a `tea.Cmd`
+  tagged with the next generation over a snapshot of those inputs. The
+  debounce tick returns it directly; everything else is picked up by
+  `htmlPreviewRenderCmd` on Update's settled pass, right after the Kitty
+  reconcile (which may itself owe one), since resize, theme and setting call
+  sites cannot return a Cmd.
+- **Generation and cancellation.** The Cmd runs
+  `htmlrender.RenderContext` and returns an `htmlpreview.RenderedMsg{Key,
+  Gen, Took}`; the pane adopts it only when `Gen` is still the newest
+  dispatched. Generations are minted process-wide, so a result of a parked
+  workspace's pane still queued never matches the rebuilt pane that took
+  over its key. A newer dispatch cancels the older render's context, as do
+  closing the pane (`Instance.releaseContent` → `Model.Close`) and closing
+  the last view of the source buffer (`drainClosedFileViews` →
+  `CancelRender`, which keeps the shown page). The render core polls the
+  context every 256 nodes and a cancelled render returns no message — no
+  wake. A workspace that parks interrupts its previews' renders and owes
+  them again, so the resume renders the newest source.
+- **Budget.** `htmlrender.Options.Budget` cuts the source at
+  `preview.html_render_budget_kb` KiB (default 2048, 64–65536) before
+  parsing — backing off to a character boundary and off a half-open tag —
+  and ends the document with a blank line and a faint
+  `… truncated after N KB` line mapped to the cut; `Document.Truncated`
+  reports it. The focused pane's status line says `truncated at N KB`. The
+  editor still holds the whole file.
+- **While pending.** The pane keeps drawing the previous document with a
+  static ` rendering… ` notice right-aligned on its first row (no spinner
+  tick: a pending render must not add wakes), and the status line shows
+  `rendering…`. A followed link's `#fragment` (`LandOnAnchor`) waits for the
+  document to land.
+- **Images off the loop.** The `ImageBlock` hook runs on the render
+  goroutine against an `imageRun`: a copy of the decoded-image cache (pixels
+  and ids never change), its own decodes and a private grid map. The loop
+  adopts cache, placements and grids with the document, so the reconcile
+  pass's placement state is only ever touched on the loop; decoding a new
+  image no longer blocks it either.
+- **Cost.** A 5 MB page opens its preview in a ~1.5 ms update pass; the
+  off-loop render of its first 2 MB takes ~100 ms
+  (`TestBudgetBoundsLargePage`, `BenchmarkRenderBudget`). The performance
+  HUD books each delivered render under `<pane key> render` (see
+  [Performance](./performance.md#the-performance-hud-internalperfhud-1999)).
+- **Setting.** `preview.html_render_budget_kb` ("HTML preview render budget
+  (KB)") on the Settings UI's Markdown Preview page; out-of-range typed
+  values clamp to the range, and `pane.applyHTMLPreviewCfg` pushes a change
+  into open panes, which re-render.
+
 ## Still to come
 
-Bounded async rendering (0530/7), the browser screenshot mode (0530/8) and
-the full concept doc (0530/9).
+The browser screenshot mode (0530/8) and the full concept doc (0530/9).
