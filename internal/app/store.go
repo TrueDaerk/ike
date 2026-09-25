@@ -113,6 +113,11 @@ func contentIdentity(inst *pane.Instance) (paneIdentity, bool) {
 	case pane.KindMarkdown:
 		// Path names the previewed source file; restore re-reads it (#62).
 		return paneIdentity{Kind: "markdown", Path: inst.Preview().Path()}, true
+	case pane.KindHTMLPreview:
+		// Path names the previewed HTML source — for a compressed page the
+		// gz viewer's "<file>.html.gz!<inner>" buffer path; restore re-reads
+		// (and decompresses) it (#2740).
+		return paneIdentity{Kind: "htmlpreview", Path: inst.HTMLPreview().Path()}, true
 	case pane.KindImage:
 		// Path names the previewed image; restore re-decodes it (#1479).
 		return paneIdentity{Kind: "image", Path: inst.Image().Path()}, true
@@ -165,6 +170,8 @@ func contentKindFromString(s string) (pane.Kind, bool) {
 		return pane.KindRemote, true
 	case "markdown":
 		return pane.KindMarkdown, true
+	case "htmlpreview":
+		return pane.KindHTMLPreview, true
 	case "image":
 		return pane.KindImage, true
 	case "archive":
@@ -360,7 +367,7 @@ func isTerminalKey(key string) bool {
 // ("preview", "diff:2", …) — an editor identity may live under one when a
 // viewer pane was converted into a tab host (#1778).
 func isContentHostKey(key string) bool {
-	for _, base := range []string{"preview", "image", "diff", "archive", "data", "es", "http", "hex", "notebook"} {
+	for _, base := range []string{"preview", "image", "diff", "archive", "data", "es", "http", "hex", "notebook", "htmlpreview"} {
 		if key == base || strings.HasPrefix(key, base+":") {
 			return true
 		}
@@ -402,7 +409,7 @@ func encodeLayoutState(root layout.Node, reg *pane.Registry) ([]byte, bool) {
 		switch inst.Kind() {
 		case pane.KindExplorer:
 			ids[key] = paneIdentity{Kind: "explorer"}
-		case pane.KindMarkdown, pane.KindImage, pane.KindArchive, pane.KindData, pane.KindHex, pane.KindNotebook, pane.KindES, pane.KindDiff, pane.KindRemote:
+		case pane.KindMarkdown, pane.KindHTMLPreview, pane.KindImage, pane.KindArchive, pane.KindData, pane.KindHex, pane.KindNotebook, pane.KindES, pane.KindDiff, pane.KindRemote:
 			// Viewer panes persist their per-kind identity — the shared
 			// convention content tabs reuse (#1778).
 			if id, ok := contentIdentity(inst); ok {

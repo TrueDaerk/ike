@@ -14,6 +14,7 @@ var allKinds = []Kind{
 	KindProblems, KindStructure, KindUsages, KindHTTP, KindBreakpoints, KindImage, KindMerge,
 	KindArchive, KindData, KindES, KindTests, KindIssues, KindDOM, KindDoctor, KindRemote,
 	KindLSPDoctor, KindDeps, KindHex, KindNotebook, KindTime, KindUsage,
+	KindHTMLPreview,
 }
 
 // convertiblePanes builds one registered pane for every kind that converts

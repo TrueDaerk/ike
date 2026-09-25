@@ -163,7 +163,8 @@ editor — keep the four-zone relocate behaviour everywhere.
 **Universal tabs (#1778, #2736).** Which kinds take part is one predicate,
 `pane.KindTabbable`, and since #2736 it reads **everything but the
 explorer**: editors and terminals natively, the viewer kinds (markdown
-preview, image, diff, archive, data, ES, hex, notebook, remote), the merge
+preview, HTML preview, image, diff, archive, data, ES, hex, notebook,
+remote), the merge
 view and every **singleton tool window** — VCS, Debug, Problems, Structure,
 Usages, Breakpoints, Tests, Issues, DOM, the doctors, Deps, Time, Usage and
 the **HTTP response viewer** (back in the set; #2042 had removed it). Any two
@@ -479,7 +480,7 @@ The **flexible region** is the editor area: the part of the layout that is
 neither the explorer, nor a tool window, nor a terminal pane, nor a pure
 tool-tab host (#1989) — the panes a *document* may open into. `flexPane`
 (`internal/app/diff_placement.go`) decides membership by pane kind: the
-content kinds (editor plus the viewer panes — markdown, diff, image,
+content kinds (editor plus the viewer panes — markdown, HTML, diff, image,
 archive, data, hex, notebook, ES, remote; `pane.KindViewer`) are in,
 everything else is out — the tool windows stay out even though they are
 tabbable since #2736, so a document never opens into Problems. The popup

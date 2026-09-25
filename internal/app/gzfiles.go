@@ -170,6 +170,11 @@ func (m *Model) refreshGzipBuffers(path string) tea.Cmd {
 			cmds = append(cmds, cmd)
 		}
 	}
+	// A read-only buffer never sends the change sync an HTML preview of a
+	// compressed page (#2740) re-renders off, so the refresh feeds it here.
+	for _, inst := range m.htmlPreviewsForPath(archiveEntryPath(path, c.Name)) {
+		inst.HTMLPreview().SetSourceImmediate(text)
+	}
 	return tea.Batch(cmds...)
 }
 

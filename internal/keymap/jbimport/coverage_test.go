@@ -55,6 +55,7 @@ var noCounterpart = map[string]string{
 	"json.jqQueryView":                 "IKE-only concept (#2032): the inline jq playground has no JetBrains equivalent",
 	"time.toggle":                      "IKE-only concept (#2426): JetBrains has no time report; time tracking lives in third-party plugins an exported keymap does not carry",
 	"markdown.preview":                 "no default JetBrains keymap action",
+	"html.preview":                     "no default JetBrains keymap action",
 	"file.openAs":                      "IKE-only concept (#2420): JetBrains' Override File Type is a context-menu popup, not a keymap action",
 	"search.open":                      "IKE-only concept (#2409): JetBrains' Find is the editor find, already mapped to editor.find; the pane-wide chord has no keymap action",
 	"view.toggleFollow":                "tail -f follow mode is an IKE concept; JetBrains consoles auto-scroll without a keymap action",

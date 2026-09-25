@@ -32,14 +32,16 @@ func viewerPanes(t *testing.T, r *Registry) map[Kind]string {
 	db := tmpFile(t, "d.sqlite", "db")
 	bin := tmpFile(t, "b.bin", "\x00\x01\x02")
 	nb := tmpFile(t, "n.ipynb", `{"cells": [], "nbformat": 4, "metadata": {}}`)
+	page := tmpFile(t, "page.html", "<p>hi</p>\n")
 	return map[Kind]string{
-		KindMarkdown: r.AddMarkdownPreview(md),
-		KindImage:    r.AddImagePreview(img),
-		KindDiff:     r.AddDiff(l, rr),
-		KindArchive:  r.AddArchiveView(arch),
-		KindData:     r.AddDataView(db),
-		KindHex:      r.AddHexView(bin),
-		KindNotebook: r.AddNotebookView(nb),
+		KindMarkdown:    r.AddMarkdownPreview(md),
+		KindHTMLPreview: r.AddHTMLPreview(page),
+		KindImage:       r.AddImagePreview(img),
+		KindDiff:        r.AddDiff(l, rr),
+		KindArchive:     r.AddArchiveView(arch),
+		KindData:        r.AddDataView(db),
+		KindHex:         r.AddHexView(bin),
+		KindNotebook:    r.AddNotebookView(nb),
 	}
 }
 
@@ -47,7 +49,7 @@ func viewerPanes(t *testing.T, r *Registry) map[Kind]string {
 // kinds, the merge view and the singleton tool windows — the HTTP response
 // viewer included — are in (#2736); only the explorer stays out.
 func TestKindTabbable(t *testing.T) {
-	in := []Kind{KindEditor, KindTerminal, KindMarkdown, KindImage, KindDiff, KindArchive, KindData, KindHex, KindNotebook,
+	in := []Kind{KindEditor, KindTerminal, KindMarkdown, KindHTMLPreview, KindImage, KindDiff, KindArchive, KindData, KindHex, KindNotebook,
 		KindVCS, KindDebug, KindProblems, KindStructure, KindUsages, KindBreakpoints, KindMerge, KindHTTP}
 	out := []Kind{KindExplorer}
 	for _, k := range in {

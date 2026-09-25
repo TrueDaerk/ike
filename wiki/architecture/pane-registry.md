@@ -42,9 +42,11 @@ the tab holds, exactly as `ContextID` does; a plain editor tab is deliberately
 
 Beyond explorer and editors, the registry mints the **viewer kinds** the file
 handlers route to — markdown preview, image, diff, archive, data,
-Elasticsearch, remote, the [hex viewer](./hex-viewer.md) (`KindHex`, #2420)
-and the [notebook viewer](./notebook-viewer.md) (`KindNotebook`, #2425) —
-each with its own key base (`hex`, `hex:2`, …; `notebook`, `notebook:2`, …)
+Elasticsearch, remote, the [hex viewer](./hex-viewer.md) (`KindHex`, #2420),
+the [notebook viewer](./notebook-viewer.md) (`KindNotebook`, #2425) and the
+[HTML preview](./html-preview.md) (`KindHTMLPreview`, #2740) —
+each with its own key base (`hex`, `hex:2`, …; `notebook`, `notebook:2`, …;
+`htmlpreview`, `htmlpreview:2`, …)
 and the shared content-tab/persistence conventions (#1778).
 
 **Every kind but the explorer is tabbable (#2736).** `pane.KindTabbable`

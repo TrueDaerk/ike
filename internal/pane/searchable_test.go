@@ -40,6 +40,7 @@ func TestOpenSearchPerKind(t *testing.T) {
 		{"diff", func(r *Registry) *Instance { return r.Get(r.AddDiff("", "")) }, true},
 		{"archive", func(r *Registry) *Instance { return r.Get(r.AddArchiveView(md)) }, true},
 		{"markdown", func(r *Registry) *Instance { return r.Get(r.AddMarkdownPreview(md)) }, true},
+		{"html preview", func(r *Registry) *Instance { return r.Get(r.AddHTMLPreview(md)) }, true},
 		// The data viewer only filters once a table is selected; a viewer over
 		// a file that never loaded reports "no search right now" rather than
 		// opening an input over nothing.

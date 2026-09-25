@@ -101,8 +101,8 @@ func (m *Model) noteTerminalOutput(key string) {
 	}
 }
 
-// syncPreviewBound publishes whether any markdown preview pane is open
-// (#2540), so the editor emitter can skip the preview.CursorMsg it would
+// syncPreviewBound publishes whether any markdown or HTML preview pane is
+// open (#2540, #2740), so the editor emitter can skip the preview.CursorMsg it would
 // otherwise send on every caret move — a message, and so an Update+View
 // pass, that had no consumer in the common no-preview session. Runs on the
 // settled pass, where pane opens and closes have landed.
@@ -112,7 +112,7 @@ func (m *Model) syncPreviewBound() {
 	}
 	bound := false
 	m.contentInstances(func(_ string, _ int, c *pane.Instance) bool {
-		if c.Kind() == pane.KindMarkdown {
+		if c.Kind() == pane.KindMarkdown || c.Kind() == pane.KindHTMLPreview {
 			bound = true
 			return false
 		}

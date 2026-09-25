@@ -134,6 +134,8 @@ func TestRetiredDefaults(t *testing.T) {
 		{[]string{"cmd+alt+z"}, Global, "vcs.revertFile"},
 		{[]string{"cmd+9"}, Global, "vcs.panel"},
 		{[]string{"cmd+alt+m"}, Editor, "markdown.preview"},
+		{[]string{"cmd+alt+h"}, Editor, "html.preview"},
+		{[]string{"cmd+alt+shift+h"}, Editor, "html.preview"},
 		{[]string{"cmd+alt+t"}, Global, "terminal.popup"},
 		{[]string{"cmd+alt+shift+t"}, Global, "terminal.new"},
 		{[]string{"cmd+alt+n"}, Global, "notifications.history"},
@@ -158,6 +160,28 @@ func TestRetiredDefaults(t *testing.T) {
 	r := NewResolver(BuildTable(DefaultsFor(PresetJetBrains, "darwin"), nil, "darwin"))
 	if res := r.Feed(key(t, "space"), Global); res.Status == Pending {
 		t.Error("bare space must not open a pending sequence anymore")
+	}
+}
+
+// TestHTMLPreviewChords (#2740): html.preview answers cmd+alt+shift+h on both
+// platforms and cmd+alt+h on macOS only; off macOS the fold of cmd+alt+h is
+// ctrl+alt+h, which must stay lsp.callHierarchy's.
+func TestHTMLPreviewChords(t *testing.T) {
+	cases := []struct {
+		goos, chord, cmd string
+	}{
+		{"darwin", "cmd+alt+h", "html.preview"},
+		{"darwin", "cmd+alt+shift+h", "html.preview"},
+		{"darwin", "ctrl+alt+h", "lsp.callHierarchy"},
+		{"linux", "cmd+alt+shift+h", "html.preview"},
+		{"linux", "ctrl+alt+h", "lsp.callHierarchy"},
+	}
+	for _, c := range cases {
+		table := BuildTable(DefaultsFor(PresetJetBrains, c.goos), nil, c.goos)
+		chord := NormalizeChord(MustParseChord(c.chord), c.goos)
+		if b, ok := table.Lookup(chord, Editor); !ok || b.Command != c.cmd {
+			t.Errorf("%s: %s = %+v ok=%v, want %s", c.goos, c.chord, b, ok, c.cmd)
+		}
 	}
 }
 

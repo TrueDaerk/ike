@@ -471,6 +471,11 @@ var jetbrainsRows = []row{
 	{"alt+shift+u", "editor.case.cycle", "Cycle case (camel/snake/kebab)", Editor, "Editor (#2418)"},
 	// Rendered markdown preview (#62): single chord since #711 (was cmd+k m).
 	{"cmd+alt+m", "markdown.preview", "Markdown preview", Editor, "Markdown preview (#62)"},
+	// Rendered HTML preview (#2740), the markdown preview's sibling. The
+	// spec's cmd+alt+h is a darwinRows entry below — off macOS it folds onto
+	// ctrl+alt+h, which lsp.callHierarchy owns — so the shift layer is the
+	// spelling that is free on every platform.
+	{"cmd+alt+shift+h", "html.preview", "HTML preview", Editor, "HTML preview (#2740)"},
 	// TODO index (#61): cmd+6 is JetBrains' TODO tool-window chord.
 	{"cmd+6", "todo.list", "TODO index", Global, "TODO index (#61)"},
 	// Editor-scoped since the #1794 context audit: splitting the focused
@@ -934,6 +939,11 @@ var darwinRows = []row{
 	// jumps own everywhere else (keys_normal.go).
 	{"cmd+up", "editor.docStart", "Go to document start", Editor, "Editor (#2699)"},
 	{"cmd+down", "editor.docEnd", "Go to document end", Editor, "Editor (#2699)"},
+	// The HTML preview's primary chord (#2740), cmd+alt+m's neighbour for
+	// the markdown preview. macOS only — the Cmd→Ctrl fold would land it on
+	// ctrl+alt+h, lsp.callHierarchy's chord; cmd+alt+shift+h above is the
+	// cross-platform spelling.
+	{"cmd+alt+h", "html.preview", "HTML preview", Editor, "HTML preview (#2740)"},
 	// Centre the caret line (#2700). ctrl+l is vim's redraw and has no
 	// JetBrains default at all, so the key is free to mean the thing ike has
 	// that is worth a chord: `zz` — until now reachable only through the vim

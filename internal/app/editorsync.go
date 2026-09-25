@@ -124,7 +124,9 @@ func (m *Model) applyEditorSync(msg editor.SyncMsg) tea.Cmd {
 	}
 	// Markdown previews of the document re-render debounced off the same
 	// seam (#62), pulling the text fresh from the originating editor.
-	if previews := m.previewsForPath(msg.Path); len(previews) > 0 {
+	previews := m.previewsForPath(msg.Path)
+	htmlPreviews := m.htmlPreviewsForPath(msg.Path)
+	if len(previews) > 0 || len(htmlPreviews) > 0 {
 		src := skip
 		if src == nil {
 			if key := m.editorWithFile(msg.Path); key != "" {
@@ -139,6 +141,13 @@ func (m *Model) applyEditorSync(msg editor.SyncMsg) tea.Cmd {
 					cmds = append(cmds, cmd)
 				}
 				inst.Preview().SetCursorLine(line)
+			}
+			// HTML previews (#2740) ride the same seam and debounce.
+			for _, inst := range htmlPreviews {
+				if cmd := inst.HTMLPreview().SetSource(text); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
+				inst.HTMLPreview().SetCursorLine(line)
 			}
 		}
 	}

@@ -97,6 +97,8 @@ func (i *Instance) Searchable() Searchable {
 		// The image viewer shares the "preview" context but has no text to
 		// search, so only the markdown half is Searchable.
 		return &i.md
+	case KindHTMLPreview:
+		return &i.hpv
 	}
 	return nil
 }
