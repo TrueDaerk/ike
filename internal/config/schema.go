@@ -118,9 +118,13 @@ type Config struct {
 // pixels — and "off" leaves every fence the code block it is without them.
 // HTMLImages lets the HTML preview draw a local <img> inline over the Kitty
 // graphics path (#2743); off, every image stays its "[alt]" placeholder.
+// HTMLRenderBudgetKB bounds how much of an HTML page the preview renders
+// (#2745): past that many KiB of source the render stops and ends with a
+// "truncated" line, so a multi-MB report cannot keep the pane busy.
 type Preview struct {
-	Diagrams   string `toml:"diagrams"`
-	HTMLImages bool   `toml:"html_images"`
+	Diagrams           string `toml:"diagrams"`
+	HTMLImages         bool   `toml:"html_images"`
+	HTMLRenderBudgetKB int    `toml:"html_render_budget_kb"`
 }
 
 // Notebook holds the notebook viewer pane's settings (#2683). ImageMaxCols

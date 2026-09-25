@@ -178,6 +178,17 @@ func (m *Model) ScrollToAnchor(name string) bool {
 	return true
 }
 
+// LandOnAnchor is ScrollToAnchor for a preview that may not have rendered
+// yet — a page just opened from a followed link (#2745): while a render is
+// owed or in flight the anchor waits and is applied when the document lands.
+func (m *Model) LandOnAnchor(name string) {
+	if m.Pending() {
+		m.anchor = name
+		return
+	}
+	m.ScrollToAnchor(name)
+}
+
 // reveal scrolls the minimum amount that brings rendered line row into the
 // viewport, keeping a line of context on the side it entered from.
 func (m *Model) reveal(row int) {

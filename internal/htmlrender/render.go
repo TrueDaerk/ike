@@ -31,14 +31,19 @@
 // text-align into the walk's inline context.
 //
 // Rendering is pure: no bubbletea, no I/O, no shared state, so a pane can run
-// it on a goroutine (whatever ImageBlock does is the caller's business).
+// it on a goroutine (whatever ImageBlock does is the caller's business). The
+// pane does (0530/7, #2745): Options.Budget bounds the bytes a render reads,
+// ending the document with a "truncated" line, and RenderContext abandons a
+// render its caller no longer wants.
 package htmlrender
 
 import (
 	"bytes"
+	"context"
 	"path"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/x/ansi"
 	"golang.org/x/net/html"
@@ -60,6 +65,11 @@ type Options struct {
 	// the image's link when it sits inside one. Nil lines keep the
 	// placeholder — a remote src, an undecodable file, no pixel support.
 	ImageBlock func(img Image, maxCols int) (lines []string, cols int)
+	// Budget bounds the render (#2745): only the first Budget bytes of the
+	// source are parsed and laid out, and the document ends with a
+	// "… truncated after N KB" line (Document.Truncated). The cut never
+	// splits a character or leaves half a tag. <= 0 renders everything.
+	Budget int
 }
 
 // DefaultWidth is the wrap width when Options.Width is unset.
@@ -107,18 +117,35 @@ type Document struct {
 	// Anchors maps an element id (or an <a name>) to the rendered line its
 	// content starts on — where an in-document "#anchor" link lands.
 	Anchors map[string]int
+	// Truncated reports that Options.Budget cut the source: the last line
+	// is the "… truncated after N KB" notice.
+	Truncated bool
 	sourceMap
 }
 
 // Render lays doc out at opts.Width. It never fails: malformed markup renders
 // whatever structure could be recovered.
 func Render(doc []byte, opts Options) Document {
+	out, _ := RenderContext(context.Background(), doc, opts)
+	return out
+}
+
+// RenderContext is Render, abandoned once cx is done (#2745): the walk polls
+// cx every few hundred nodes and returns an empty Document with its cause, so
+// a pane that moved on — a newer edit, a closed tab — stops paying for a
+// render nobody will show.
+func RenderContext(cx context.Context, doc []byte, opts Options) (Document, error) {
+	if err := cx.Err(); err != nil {
+		return Document{}, context.Cause(cx) // cancelled before it started
+	}
 	width := opts.Width
 	if width <= 0 {
 		width = DefaultWidth
 	}
+	doc, truncated := cutBudget(doc, opts.Budget)
 	t := parse(doc)
 	r := &renderer{
+		done:    cx.Done(),
 		t:       t,
 		css:     newCascade(t),
 		width:   max(width, minWidth),
@@ -129,7 +156,15 @@ func Render(doc []byte, opts Options) Document {
 		anchorL: map[string]int{},
 	}
 	r.walk(r.t.root, ctx{link: -1})
+	if r.aborted {
+		return Document{}, context.Cause(cx)
+	}
 	r.flush()
+	if truncated {
+		r.gap()
+		r.words("… truncated after "+strconv.Itoa(opts.Budget/1024)+" KB", len(doc), ctx{st: r.sty.caption, link: -1}, -1)
+		r.flush()
+	}
 	for _, id := range r.anchors {
 		r.claimAnchor(id, max(0, len(r.lines)-1))
 	}
@@ -149,7 +184,26 @@ func Render(doc []byte, opts Options) Document {
 		out.LinkSpans = append(out.LinkSpans, s)
 	}
 	out.sourceMap = newSourceMap(doc, r.src)
-	return out
+	out.Truncated = truncated
+	return out, nil
+}
+
+// cutBudget returns the first budget bytes of doc and whether anything was
+// cut. The cut backs off to a character boundary, and off a tag it would
+// split — a "<di" at the end would render as text.
+func cutBudget(doc []byte, budget int) ([]byte, bool) {
+	if budget <= 0 || len(doc) <= budget {
+		return doc, false
+	}
+	n := budget
+	for n > 0 && !utf8.RuneStart(doc[n]) {
+		n--
+	}
+	cut := doc[:n]
+	if lt := bytes.LastIndexByte(cut, '<'); lt >= 0 && bytes.IndexByte(cut[lt:], '>') < 0 {
+		cut = cut[:lt]
+	}
+	return cut, true
 }
 
 // fragKind distinguishes the pieces of an inline flow.
@@ -254,6 +308,34 @@ type renderer struct {
 	// measuring marks the first, measuring pass over a cell.
 	capturing, measuring bool
 	captured             []cellLine
+
+	// done is the render's cancellation (RenderContext), nil when it cannot
+	// be cancelled; walk polls it every cancelStride nodes and, once it
+	// closed, aborted unwinds the whole walk.
+	done    <-chan struct{}
+	steps   int
+	aborted bool
+}
+
+// cancelStride is how many nodes the walk visits between two polls of the
+// cancellation channel: a select per node would cost more than most nodes.
+const cancelStride = 256
+
+// cancelled reports whether the render was cancelled, polling done every
+// cancelStride calls. Once true it stays true, so every open walk returns.
+func (r *renderer) cancelled() bool {
+	if r.done == nil || r.aborted {
+		return r.aborted
+	}
+	r.steps++
+	if r.steps%cancelStride == 0 {
+		select {
+		case <-r.done:
+			r.aborted = true
+		default:
+		}
+	}
+	return r.aborted
 }
 
 // walk renders n's children in n's CSS look (css.go): the look applies
@@ -263,6 +345,9 @@ func (r *renderer) walk(n *html.Node, c ctx) {
 		c = r.css.apply(n, c)
 	}
 	for k := n.FirstChild; k != nil; k = k.NextSibling {
+		if r.cancelled() {
+			return
+		}
 		switch k.Type {
 		case html.TextNode:
 			r.text(k, c)

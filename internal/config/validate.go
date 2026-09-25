@@ -201,6 +201,17 @@ const (
 	NotebookImageMaxColsMax     = 1000
 )
 
+// DefaultHTMLRenderBudgetKB is how many KiB of an HTML page the preview
+// renders before it stops with a "truncated" line (#2745), and the value an
+// out-of-range preview.html_render_budget_kb falls back to.
+// HTMLRenderBudgetKBMin/Max bound the setting: 64 KiB still shows a page's
+// start, 64 MiB is past anything the preview lays out interactively.
+const (
+	DefaultHTMLRenderBudgetKB = 2048
+	HTMLRenderBudgetKBMin     = 64
+	HTMLRenderBudgetKBMax     = 65536
+)
+
 // DefaultBranchIssuePattern is the branch-name regexp behind the status
 // line's branch-issue segment (#2544): IKE's own change workflow branches
 // work on issue/<number>, and the first capture group is read as that number.
@@ -759,6 +770,12 @@ func validate(c *Config) []Diagnostic {
 	if c.LSP.WarmupNoticeMs < 0 || c.LSP.WarmupNoticeMs > 600000 {
 		diags = append(diags, Diagnostic{Field: "lsp.warmup_notice_ms", Message: fmt.Sprintf("threshold %d out of range (0\u2013600000 ms, 0 = off), using 15000", c.LSP.WarmupNoticeMs)})
 		c.LSP.WarmupNoticeMs = 15000
+	}
+	// HTML preview render budget (#2745): below the floor a page shows next
+	// to nothing, above the ceiling the budget stops bounding anything.
+	if c.Preview.HTMLRenderBudgetKB < HTMLRenderBudgetKBMin || c.Preview.HTMLRenderBudgetKB > HTMLRenderBudgetKBMax {
+		diags = append(diags, Diagnostic{Field: "preview.html_render_budget_kb", Message: fmt.Sprintf("html_render_budget_kb %d out of range (%d–%d KB), using %d", c.Preview.HTMLRenderBudgetKB, HTMLRenderBudgetKBMin, HTMLRenderBudgetKBMax, DefaultHTMLRenderBudgetKB)})
+		c.Preview.HTMLRenderBudgetKB = DefaultHTMLRenderBudgetKB
 	}
 	// Notebook image cap (#2683): 0 is "no cap, use the pane width"; a
 	// negative or absurd column count falls back to the default.

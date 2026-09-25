@@ -28,6 +28,7 @@ func sized(t *testing.T, src string) Model {
 	m := New("htmlpreview", "/tmp/page.html", theme.DefaultPalette())
 	m.SetSize(60, 10)
 	m.SetSourceImmediate(src)
+	m.Flush()
 	return m
 }
 
@@ -76,6 +77,7 @@ func TestUnsizedPaneRendersOnFirstSize(t *testing.T) {
 		t.Fatal("an unsized pane renders nothing")
 	}
 	m.SetSize(40, 5)
+	m.Flush()
 	if !strings.Contains(plain(m), "late") {
 		t.Fatalf("first SetSize must render the pending source:\n%s", plain(m))
 	}
@@ -92,15 +94,15 @@ func TestDebouncedRenderDropsStaleTicks(t *testing.T) {
 	if !strings.Contains(plain(m), "first") {
 		t.Fatal("nothing re-renders before the tick fires")
 	}
-	m.Update(RenderTickMsg{Key: "htmlpreview", Seq: m.seq - 1})
+	settle(&m, m.Update(RenderTickMsg{Key: "htmlpreview", Seq: m.seq - 1}))
 	if !strings.Contains(plain(m), "first") {
 		t.Fatal("a stale tick must not render")
 	}
-	m.Update(RenderTickMsg{Key: "other", Seq: m.seq})
+	settle(&m, m.Update(RenderTickMsg{Key: "other", Seq: m.seq}))
 	if !strings.Contains(plain(m), "first") {
 		t.Fatal("another pane's tick must not render")
 	}
-	m.Update(RenderTickMsg{Key: "htmlpreview", Seq: m.seq})
+	settle(&m, m.Update(RenderTickMsg{Key: "htmlpreview", Seq: m.seq}))
 	if v := plain(m); !strings.Contains(v, "third") || strings.Contains(v, "second") {
 		t.Fatalf("the newest tick renders the newest source:\n%s", v)
 	}
@@ -133,7 +135,7 @@ func TestCursorSyncSurvivesRerender(t *testing.T) {
 	m.SetCursorLine(52)
 	top := m.Top()
 	m.SetSource(longDoc(80) + "<p>tail</p>")
-	m.Update(RenderTickMsg{Key: "htmlpreview", Seq: m.seq})
+	settle(&m, m.Update(RenderTickMsg{Key: "htmlpreview", Seq: m.seq}))
 	if m.Top() != top {
 		t.Fatalf("re-render moved the view from %d to %d", top, m.Top())
 	}
@@ -168,6 +170,7 @@ func TestResizeRewraps(t *testing.T) {
 	m := sized(t, "<p>"+strings.Repeat("word ", 40)+"</p>")
 	wide := len(m.Lines())
 	m.SetSize(20, 10)
+	m.Flush()
 	if len(m.Lines()) <= wide {
 		t.Fatalf("narrowing the pane must re-wrap: %d lines at 60, %d at 20", wide, len(m.Lines()))
 	}
@@ -185,6 +188,7 @@ func TestPaletteSwitchRerenders(t *testing.T) {
 	light.Accent = nil
 	light.Dark = !light.Dark
 	m.SetPalette(&light)
+	m.Flush()
 	if strings.Join(m.Lines(), "\n") == before {
 		t.Fatal("a palette switch must re-render in the new colours")
 	}

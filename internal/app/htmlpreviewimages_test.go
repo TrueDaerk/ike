@@ -22,7 +22,7 @@ func openHTMLPreviewWithImage(t *testing.T) (Model, string) {
 	if err := os.Rename(png, filepath.Join(filepath.Dir(path), "pic.png")); err != nil {
 		t.Fatal(err)
 	}
-	m = step(m, HTMLPreviewMsg{})
+	m = stepHTML(m, HTMLPreviewMsg{})
 	key := htmlPreviewKeyFor(m, path)
 	if key == "" {
 		t.Fatal("html.preview should open a pane")
@@ -49,9 +49,16 @@ func TestHTMLPreviewInlineImagesReconcile(t *testing.T) {
 		t.Fatal("without known support the image renders as [alt]")
 	}
 
-	// Support confirmed: the placement goes out and is tracked.
+	// Support confirmed: the reconcile pushes it in, which owes a render
+	// with the image block (#2745); once that lands, the next reconcile
+	// sends the placement and tracks it.
 	ok := true
 	m.kittyGfx = &ok
+	m.imageSyncCmd()
+	if !hv.Pending() {
+		t.Fatal("confirmed support must owe a re-render with the image block")
+	}
+	hv.Flush()
 	raw := rawStrings(m.imageSyncCmd())
 	ids := hv.ImageIDs()
 	if len(ids) != 1 || !strings.Contains(raw, "a=T") {
@@ -92,7 +99,13 @@ func TestHTMLPreviewImagesSettingOff(t *testing.T) {
 	m.imageSyncCmd()
 	inst := m.activeWS().Panes.Get(key)
 	hv := inst.HTMLPreview()
+	hv.Flush()
+	m.imageSyncCmd()
+	if len(m.liveImages) != 1 {
+		t.Fatalf("setup: the placement must be resident, got %v", m.liveImages)
+	}
 	hv.SetImagesEnabled(false)
+	hv.Flush()
 	for _, id := range hv.ImageIDs() {
 		t.Fatalf("disabled images must place nothing, got %d", id)
 	}

@@ -521,6 +521,12 @@ func (m Model) statusLine() string {
 			if title := inst.HTMLPreview().Title(); title != "" {
 				left += " │ " + title
 			}
+			// The off-loop render (#2745): in flight, or cut at the budget.
+			if inst.HTMLPreview().Pending() {
+				left += " │ rendering…"
+			} else if inst.HTMLPreview().Truncated() {
+				left += " │ truncated at " + strconv.Itoa(inst.HTMLPreview().RenderBudgetKB()) + " KB"
+			}
 			// The selected link (#2741), as in the markdown preview.
 			if target, ok := inst.HTMLPreview().SelectedTarget(); ok {
 				left += " │ → " + target

@@ -36,3 +36,43 @@ func TestHTMLPreviewFollowsImagesConfig(t *testing.T) {
 		t.Fatal("a reload must reach an open pane")
 	}
 }
+
+// TestHTMLPreviewFollowsRenderBudget (#2745): preview.html_render_budget_kb
+// reaches new and restored HTML previews and, on a reload, the open ones; a
+// missing or malformed value keeps the 2048 KB default.
+func TestHTMLPreviewFollowsRenderBudget(t *testing.T) {
+	r := NewRegistry(host.MapConfig{"preview.html_render_budget_kb": "nope"}, nil)
+	pv := r.Get(r.AddHTMLPreview("/tmp/a.html")).HTMLPreview()
+	if pv.RenderBudgetKB() != 2048 {
+		t.Fatalf("budget = %d, want the 2048 KB default", pv.RenderBudgetKB())
+	}
+	r2 := NewRegistry(host.MapConfig{"preview.html_render_budget_kb": "256"}, nil)
+	if got := r2.Get(r2.AddHTMLPreview("/tmp/a.html")).HTMLPreview().RenderBudgetKB(); got != 256 {
+		t.Fatalf("new pane budget = %d, want 256", got)
+	}
+	if got := r2.NewContentPane(KindHTMLPreview, "/tmp/b.html", "", "", "").HTMLPreview().RenderBudgetKB(); got != 256 {
+		t.Fatalf("tab restore budget = %d, want 256", got)
+	}
+	r.Reconfigure(host.MapConfig{"preview.html_render_budget_kb": "512"})
+	if pv.RenderBudgetKB() != 512 {
+		t.Fatalf("a reload must reach an open pane, budget = %d", pv.RenderBudgetKB())
+	}
+}
+
+// TestClosingHTMLPreviewCancelsRender (#2745): closing the pane cancels the
+// render it has in flight.
+func TestClosingHTMLPreviewCancelsRender(t *testing.T) {
+	r := NewRegistry(host.MapConfig{}, nil)
+	key := r.AddHTMLPreview("/tmp/a.html")
+	inst := r.Get(key)
+	inst.SetSize(40, 10)
+	inst.HTMLPreview().SetSourceImmediate("<p>body</p>")
+	cmd := inst.HTMLPreview().RenderCmd()
+	if cmd == nil {
+		t.Fatal("setup: the render must dispatch")
+	}
+	r.Close(key)
+	if msg := cmd(); msg != nil {
+		t.Fatalf("a closed pane's render must be cancelled, got %T", msg)
+	}
+}

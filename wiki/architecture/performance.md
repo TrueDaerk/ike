@@ -4,7 +4,7 @@ title: Performance & Diagnostics
 description: Idle-behavior rules (who may wake the render loop, and how often), the render budget and the always-on per-message-type pass accounting, the per-keystroke fan-out budget while typing (#2541), the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, the heartbeat freeze dump (#2627), the opt-in update-loop trace log, the freeze-triage procedure, the selection-overlay rule for drag latency (#2495), and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/perfhud
 tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog, startup, freeze, render-budget]
-timestamp: 2026-09-24T16:00:00Z
+timestamp: 2026-09-25T22:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -333,7 +333,15 @@ by the very frames it explains — showing, per refresh interval:
 - **Per-pane render cost**, avg per frame, most expensive first: the answer to
   "which pane is burning CPU". Attribution sits in `renderPane`, so a leaf's
   chrome *and* its content are booked against its registry key (`editor:2`,
-  `explorer`, `terminal`).
+  `explorer`, `terminal`). A render that runs off the loop is booked too, so
+  moving work to a goroutine does not hide it: the markdown preview renders
+  inside its `preview.RenderTickMsg` pass (counted as that message, timed by
+  the slow-update log), while the HTML preview's render (#2745) runs in a
+  Cmd and its `htmlpreview.RenderedMsg` carries the wall time, booked as a
+  row of its own, `<pane key> render` (`htmlpreview render`,
+  `htmlpreview:2 render`) — one "frame" per delivered render. The result
+  message itself is counted like any other, so a render storm shows in the
+  message types as well.
 - **Runtime gauges**: goroutines, armed tickers, GCs and pause in the window,
   heap in use, and RSS. Only Linux exposes a current RSS (`/proc/self/statm`);
   macOS falls back to `getrusage`'s peak, which the HUD and the snapshot label
@@ -889,7 +897,11 @@ The rules this adds:
   version still match (`editor/searchscan.go`). The status line's large-file
   slot reads `searching…` meanwhile, and Esc, retyping and closing the tab
   cancel it — a closed tab never keeps a scan alive (`editor.Model.Close`,
-  called from the pane's tab close).
+  called from the pane's tab close). The HTML preview's render (#2745) is
+  the same shape on the viewer side: a generation-tagged Cmd, cancelled by
+  a newer render, a pane close or the source buffer closing, and bounded by
+  `preview.html_render_budget_kb` — a 5 MB page opens its preview in a
+  ~1.5 ms pass (see [HTML Preview](./html-preview.md#off-loop-render-2745)).
 - **A per-line scan on the render path is windowed past `longLineRunes`
   (4096):** colour swatches, identifier colours, hyperlinks and the
   search-match highlight (`search.LineMatchesIn`) cover the rendered span

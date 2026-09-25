@@ -15,6 +15,7 @@ import (
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
+	"maps"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -69,26 +70,47 @@ func localImagePath(docPath, src string) (string, bool) {
 	return filepath.Clean(path), true
 }
 
-// loadImage decodes the image src references and caches the decoded pixels
-// on the model. A remote src, or a file that cannot be opened or decoded,
-// returns nil and keeps the placeholder. Failures are not cached, so an image
-// added or fixed while the preview is open shows up on the next render.
-func (m *Model) loadImage(src string) *imgview.PlacedImage {
-	path, ok := localImagePath(m.path, src)
+// imageRun is the image state of one off-loop render (#2745). The render
+// goroutine must not touch the pane's cache or the placements the app's
+// reconcile pass mutates, so it works on a private copy of the cache (the
+// decoded pixels and ids of a PlacedImage never change, only its grid and
+// sent state do) and records the grids it decides in its own map; apply
+// adopts all of it on the loop, with the document.
+type imageRun struct {
+	path    string // the previewed document, which relative srcs resolve against
+	h       int    // pane height, the block's height bound
+	on, gfx bool   // preview.html_images and Kitty graphics support
+
+	cache  map[string]*imgview.PlacedImage // the pane's cache plus this run's decodes
+	placed []*imgview.PlacedImage          // drawn or decodable, reading order, each once
+	grids  map[*imgview.PlacedImage][2]int // cols, rows of each drawn block
+}
+
+// newImageRun snapshots the pane's image inputs for one render.
+func (m *Model) newImageRun() *imageRun {
+	return &imageRun{path: m.path, h: m.h, on: m.imagesOn, gfx: m.gfx, cache: maps.Clone(m.images)}
+}
+
+// load decodes the image src references, through the run's cache. A remote
+// src, or a file that cannot be opened or decoded, returns nil and keeps the
+// placeholder. Failures are not cached, so an image added or fixed while the
+// preview is open shows up on the next render.
+func (r *imageRun) load(src string) *imgview.PlacedImage {
+	path, ok := localImagePath(r.path, src)
 	if !ok {
 		return nil
 	}
-	if im := m.images[path]; im != nil {
+	if im := r.cache[path]; im != nil {
 		return im
 	}
 	im := decodeImage(path)
 	if im == nil {
 		return nil
 	}
-	if m.images == nil {
-		m.images = map[string]*imgview.PlacedImage{}
+	if r.cache == nil {
+		r.cache = map[string]*imgview.PlacedImage{}
 	}
-	m.images[path] = im
+	r.cache[path] = im
 	return im
 }
 
@@ -109,47 +131,62 @@ func decodeImage(path string) *imgview.PlacedImage {
 	return &imgview.PlacedImage{ID: int(nextImageID.Add(1)), Img: img}
 }
 
-// imageBlock is the render core's Options.ImageBlock hook: a decodable local
+// block is the render core's Options.ImageBlock hook: a decodable local
 // image becomes a block of placeholder rows fitted to the width the core
 // offers and to the pane height; everything else keeps "[alt]". Decoded
-// images join m.placed even without graphics support — that is what makes
+// images join r.placed even without graphics support — that is what makes
 // HasImages fire the capability probe — but only a drawn block gives them a
-// grid, so the fallback never looks live to the reconcile pass.
-func (m *Model) imageBlock(img htmlrender.Image, maxCols int) ([]string, int) {
-	if !m.imagesOn {
+// grid, so the fallback never looks live to the reconcile pass. It runs on
+// the render goroutine and touches only the run.
+func (r *imageRun) block(img htmlrender.Image, maxCols int) ([]string, int) {
+	if !r.on {
 		return nil, 0
 	}
-	im := m.loadImage(img.Src)
+	im := r.load(img.Src)
 	if im == nil {
 		return nil, 0
 	}
 	// One file referenced twice is one placement drawn at both places —
 	// placeholder cells carry the id — but it must be listed once.
-	if !slices.Contains(m.placed, im) {
-		m.placed = append(m.placed, im)
+	if !slices.Contains(r.placed, im) {
+		r.placed = append(r.placed, im)
 	}
-	if !m.gfx {
+	if !r.gfx {
 		return nil, 0
 	}
 	b := im.Img.Bounds()
-	cols, rows := imgview.FitGrid(b.Dx(), b.Dy(), max(1, maxCols), max(1, m.h-1))
-	if im.Cols > 0 && (im.Cols != cols || im.Rows != rows) {
+	cols, rows := imgview.FitGrid(b.Dx(), b.Dy(), max(1, maxCols), max(1, r.h-1))
+	if g, ok := r.grids[im]; ok {
 		// Drawn twice at different widths (say once inside a list): one
 		// placement has one grid, so the later draw reuses the first's.
-		cols, rows = im.Cols, im.Rows
+		cols, rows = g[0], g[1]
+	} else {
+		if r.grids == nil {
+			r.grids = map[*imgview.PlacedImage][2]int{}
+		}
+		r.grids[im] = [2]int{cols, rows}
 	}
-	im.Cols, im.Rows = cols, rows
 	return imgview.PlaceholderGrid(im.ID, cols, rows), cols
 }
 
-// beginImages clears the per-render placement state before a render: the
-// grids are re-derived by imageBlock, so an image the new render does not
-// draw loses its grid.
-func (m *Model) beginImages() {
-	m.placed = nil
+// adoptImages takes a finished run's image state over on the loop: its cache
+// (with the decodes it added), its placements and their grids. An image the
+// render did not draw loses its grid.
+func (m *Model) adoptImages(r *imageRun) {
+	if r == nil {
+		return
+	}
+	if r.cache != nil {
+		m.images = r.cache
+	}
 	for _, im := range m.images {
 		im.Cols, im.Rows = 0, 0
 	}
+	for im, g := range r.grids {
+		im.Cols, im.Rows = g[0], g[1]
+	}
+	m.placed = r.placed
+	m.forgetUnplaced()
 }
 
 // forgetUnplaced drops the terminal-side state of every cached image the
@@ -172,7 +209,7 @@ func (m *Model) SetGraphics(ok bool) {
 		return
 	}
 	m.gfx = ok
-	m.render()
+	m.invalidate()
 }
 
 // SetImagesEnabled applies preview.html_images: off, every <img> stays its
@@ -182,7 +219,7 @@ func (m *Model) SetImagesEnabled(on bool) {
 		return
 	}
 	m.imagesOn = on
-	m.render()
+	m.invalidate()
 }
 
 // ImagesEnabled reports whether preview.html_images is on for this pane.

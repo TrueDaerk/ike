@@ -30,7 +30,7 @@ func openHTMLPreviewIn(t *testing.T, doc string, extra map[string]string) (Model
 			t.Fatal(err)
 		}
 	}
-	m = step(m, HTMLPreviewMsg{})
+	m = stepHTML(m, HTMLPreviewMsg{})
 	key := htmlPreviewKeyFor(m, path)
 	if key == "" {
 		t.Fatal("the HTML preview should have opened")
@@ -76,7 +76,7 @@ func TestHTMLPreviewRelativeHTMLLinkOpensWithPreview(t *testing.T) {
 		map[string]string{"sub/other.html": other.String()})
 	target := filepath.Join(filepath.Dir(path), "sub", "other.html")
 
-	m = step(m, htmlpreview.LinkMsg{Key: key, Path: path, Target: "sub/other.html#install"})
+	m = stepHTML(m, htmlpreview.LinkMsg{Key: key, Path: path, Target: "sub/other.html#install"})
 	if m.editorForPath(target) == nil {
 		t.Fatal("following a relative HTML link must open the page in an editor")
 	}
