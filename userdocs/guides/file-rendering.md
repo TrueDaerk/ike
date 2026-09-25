@@ -92,6 +92,18 @@ rejects the diagram, its error appears under the block.
 Installed a renderer while IKE was already running? **Re-render Preview
 Diagrams** from the palette throws away every cached picture and tries again.
 
+## HTML
+
+**HTML Preview** (++cmd+alt+h++ on macOS, ++cmd+alt+shift+h++ everywhere, the
+palette, or the tab's context menu) opens a rendered reading view of an
+`.html`, `.htm` or `.xhtml` buffer beside it — the page read the way a
+text-mode browser shows it. A compressed `page.html.gz` opens decompressed
+and previews the same way. Pressing it again focuses the open preview.
+
+The preview re-renders a moment after you stop typing, and follows the caret:
+the rendered line of the source line you are on stays in view. `/` searches
+the rendered page, `n` / `N` step through the matches.
+
 ## CSV and TSV
 
 `editor.csv_rendering` turns a delimited file into a table: fields aligned into

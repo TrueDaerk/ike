@@ -413,6 +413,13 @@ type DiffFilesMsg struct{}
 // Dispatched by markdown.preview.
 type MarkdownPreviewMsg struct{}
 
+// HTMLPreviewMsg asks the root model to open a rendered HTML preview pane
+// split right of the active editor, bound to its .html/.htm/.xhtml (or gz
+// viewer .html.gz) buffer (#2740) — MarkdownPreviewMsg's rules: with a
+// preview for the buffer already open it focuses that pane instead.
+// Dispatched by html.preview.
+type HTMLPreviewMsg struct{}
+
 // RerenderDiagramsMsg asks every open markdown preview to forget its cached
 // diagram renderings and run the external renderers again (#2421). Dispatched
 // by preview.rerenderDiagrams.
@@ -714,6 +721,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("file.copy", "Copy File", CopyFileMsg{}),
 			appCommand("explorer.toggle", "Focus Explorer / Editor", ToggleExplorerFocusMsg{}),
 			langCommand(appCommand("markdown.preview", "Markdown Preview", MarkdownPreviewMsg{}), []string{"markdown"}),
+			langCommand(appCommand("html.preview", "HTML Preview", HTMLPreviewMsg{}), []string{"html"}),
 			appCommand("preview.rerenderDiagrams", "Re-render Preview Diagrams", RerenderDiagramsMsg{}),
 			// JetBrains' Basic Completion (#2695): ctrl+space opens the
 			// popup at the caret on demand — after an esc dismissed it, at a

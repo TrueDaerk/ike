@@ -207,6 +207,8 @@ Active when an editor pane has focus.
 | Clone caret below | `alt+shift+down` | `alt+shift+down` | `editor.caret.addBelow` |
 | Comment block | `cmd+shift+7` | `ctrl+shift+7` | `editor.commentBlock` |
 | Comment line | `cmd+7` | `ctrl+7` | `editor.commentLine` |
+| Complete current statement | `cmd+shift+enter` | `ctrl+shift+enter` | `editor.completeStatement` |
+| Complete current statement | `ctrl+shift+enter` | `ctrl+shift+enter` | `editor.completeStatement` |
 | Copy | `cmd+c` | `ctrl+c` | `editor.copy` |
 | Copy JSON/YAML path | `cmd+alt+shift+c` | `ctrl+alt+shift+c` | `editor.copyDocPath` |
 | Cut | `cmd+x` | `ctrl+x` | `editor.cut` |
@@ -237,6 +239,8 @@ Active when an editor pane has focus.
 | Go to implementations | `cmd+alt+b` | `ctrl+alt+b` | `lsp.implementations` |
 | Go to line | `cmd+l` | `ctrl+l` | `editor.goToLine` |
 | Go to super | `cmd+u` | `ctrl+u` | `lsp.goToSuper` |
+| HTML preview | `cmd+alt+h` | — | `html.preview` |
+| HTML preview | `cmd+alt+shift+h` | `ctrl+alt+shift+h` | `html.preview` |
 | Insert live template | `cmd+j` | `ctrl+j` | `snippets.insert` |
 | Markdown preview | `cmd+alt+m` | `ctrl+alt+m` | `markdown.preview` |
 | Move line down | `cmd+shift+down` | `ctrl+shift+down` | `editor.moveLineDown` |
@@ -276,7 +280,6 @@ Active when an editor pane has focus.
 | Send selection to terminal | `cmd+alt+shift+enter` | `ctrl+alt+shift+enter` | `terminal.sendSelection` |
 | Send selection to terminal and run | `cmd+alt+enter` | `ctrl+alt+enter` | `terminal.sendSelectionRun` |
 | Show intention actions | `alt+enter` | `alt+enter` | `lsp.codeAction` |
-| Show stored HTTP response | `cmd+shift+enter` | `ctrl+shift+enter` | `http.showResponse` |
 | Show stored HTTP response | `ctrl+shift+f9` | `ctrl+shift+f9` | `http.showResponse` |
 | Shrink selection | `alt+down` | `alt+down` | `editor.selection.shrink` |
 | Sort lines | `alt+shift+s` | `alt+shift+s` | `editor.sortLines` |
@@ -394,7 +397,7 @@ Active when a data grid pane has focus.
 
 ## Preview
 
-Active when the markdown preview or the image viewer has focus.
+Active when the markdown preview, the HTML preview or the image viewer has focus.
 
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|

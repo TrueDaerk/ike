@@ -54,8 +54,8 @@ than as a typo.
 `Context` (`context.go`) values equal the context ids panes advertise
 (`internal/pane`'s `ContextID`); the zero value `Global` matches everywhere.
 Since #1794 **every focusable pane kind has a context**: `editor`, `explorer`,
-`palette`, `diff`, `terminal`, `preview` (markdown preview and image viewer
-share the advertised `preview` id), `vcs`, `debug`, `problems`, `structure`,
+`palette`, `diff`, `terminal`, `preview` (markdown preview, HTML preview and
+image viewer share the advertised `preview` id), `vcs`, `debug`, `problems`, `structure`,
 `usages`, `http`, `breakpoints`, `archive` and `data`. A chord resolves
 against the **active** focus context, preferring the most specific match: a
 pane-scoped binding shadows a `Global` one for the same chord while that pane
@@ -1543,6 +1543,7 @@ JetBrains is:
 | `editor.redo` | `cmd+shift+z` | fragile | `vim ctrl+r` | live via vim ctrl+r |
 | `editor.replace` | `cmd+r` | fragile | `palette` | live via palette |
 | `editor.saveAll` | `cmd+shift+s` | fragile | `palette` | live via palette |
+| `editor.scrollCaretCenter` | `ctrl+l` | delivered | `—` | live |
 | `editor.selectAll` | `cmd+a` | fragile | `vim ggVG` | live via vim ggVG |
 | `editor.selectLineEnd` | `shift+end` | delivered | `—` | live |
 | `editor.selectLineStart` | `shift+home` | delivered | `—` | live |
@@ -1588,6 +1589,7 @@ JetBrains is:
 | `file.openInBrowser` | `alt+f2` | fragile | `palette / context menu` | live via palette / context menu |
 | `file.rename` | `shift+f6` | delivered | `—` | live |
 | `find.openInPanel` | `cmd+enter` | fragile | `ctrl+enter` | live via ctrl+enter |
+| `html.preview` | `cmd+alt+h` | fragile | `palette / tab context menu` | live via palette / tab context menu |
 | `http.cancel` | `cmd+.` | fragile | `ctrl+.` | live via ctrl+. |
 | `http.copyResponse` | `cmd+c` | fragile | `response pane "y" / palette` | live via response pane "y" / palette |
 | `http.diffPreviousRun` | `cmd+shift+d` | fragile | `palette` | live via palette |

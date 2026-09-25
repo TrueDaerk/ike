@@ -515,6 +515,12 @@ func (m Model) statusLine() string {
 			} else if inst.Preview().HasLinks() {
 				left += " │ tab: links"
 			}
+		case inst.Kind() == pane.KindHTMLPreview:
+			// The page's <title> says what the rendering is of (#2740).
+			left += "HTML PREVIEW │ " + filepath.Base(inst.HTMLPreview().Path())
+			if title := inst.HTMLPreview().Title(); title != "" {
+				left += " │ " + title
+			}
 		case inst.Kind() == pane.KindMerge:
 			// The remaining-conflict counter (#2258): the caret's place in
 			// the ]n/[n cycle while it stands in a block, the unresolved

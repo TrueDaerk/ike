@@ -67,6 +67,7 @@ import (
 	"ike/internal/highlight"
 	"ike/internal/histories"
 	"ike/internal/host"
+	"ike/internal/htmlpreview"
 	"ike/internal/httppane"
 	"ike/internal/idcolor"
 	"ike/internal/jqplay"
@@ -2190,6 +2191,8 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			continue // restored below restarting the configured tool (#741)
 		} else if ids[key].Kind == "markdown" {
 			continue // restored below re-reading the source file (#62)
+		} else if ids[key].Kind == "htmlpreview" {
+			continue // restored below re-reading the source file (#2740)
 		} else if ids[key].Kind == "image" {
 			continue // restored below re-decoding the image file (#1479)
 		} else if ids[key].Kind == "archive" {
@@ -2394,6 +2397,13 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			}
 			continue
 		}
+		if id := ids[key]; id.Kind == "htmlpreview" {
+			// An HTML preview restores like the markdown one (#2740), from
+			// disk — decompressed for a gz viewer buffer path; a vanished
+			// file restores as an empty preview.
+			m.restoreHTMLPreview(panes.AddHTMLPreviewKey(key, id.Path))
+			continue
+		}
 		if id := ids[key]; id.Kind == "image" {
 			// An image preview restores by re-decoding the file (#1479); a
 			// vanished file restores as the pane's own decode-error fallback.
@@ -2573,6 +2583,8 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 				if data, err := os.ReadFile(ct.Path); err == nil {
 					nested.Preview().SetSourceImmediate(string(data))
 				}
+			case pane.KindHTMLPreview:
+				m.restoreHTMLPreview(nested)
 			case pane.KindDiff:
 				if ct.Rev != "" || ct.Rev2 != "" {
 					nested.Diff().SetContents(revContentOrFile(ct.Rev, ct.Path, ct.Path2), revContentOrFile(ct.Rev2, ct.Path2, ct.Path2))
@@ -6205,6 +6217,20 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openMarkdownPreview()
 		return m, nil
 
+	case HTMLPreviewMsg:
+		// html.preview (cmd+alt+h / palette / tab context menu): the same
+		// split beside the editor for its HTML buffer (#2740).
+		m.openHTMLPreview()
+		return m, nil
+
+	case htmlpreview.RenderTickMsg:
+		// An HTML preview's debounce timer fired: route it to the owning
+		// viewer, which renders only when the tick is still the newest.
+		if inst := m.htmlPreviewByKey(msg.Key); inst != nil {
+			return m, inst.Update(msg)
+		}
+		return m, nil
+
 	case DiffFilesMsg:
 		// diff.files (palette): compare two files picked one after the other
 		// via the "@" finder (#60); the picks land as palette.OpenFileMsg and
@@ -6270,6 +6296,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// to follow (#62).
 		for _, inst := range m.previewsForPath(msg.Path) {
 			inst.Preview().SetCursorLine(msg.Line)
+		}
+		// HTML previews follow the same caret, line-accurately through the
+		// render's source map (#2740).
+		for _, inst := range m.htmlPreviewsForPath(msg.Path) {
+			inst.HTMLPreview().SetCursorLine(msg.Line)
 		}
 		return m, nil
 
@@ -11863,6 +11894,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.Preview().ScrollBy(lines)
 			}
+		case pane.KindHTMLPreview:
+			// Same for the HTML preview (#2740).
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.HTMLPreview().ScrollBy(-lines)
+			case tea.MouseWheelDown:
+				inst.HTMLPreview().ScrollBy(lines)
+			}
 		case pane.KindDiff:
 			// The wheel scrolls the diff by visual rows (#60); the horizontal
 			// wheel and shift+wheel shift both sides in lockstep (#1700).
@@ -12215,7 +12254,11 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 					inst := m.activeWS().Panes.Get(key)
 					m.setFocus(key)
 					m.switchTab(inst, idx)
-					m.ctxMenu.Open(tabContextItems(inst.TabPinned(idx)), msg.X, msg.Y, m.width, m.height)
+					items := tabContextItems(inst.TabPinned(idx))
+					if ed := inst.TabEditor(idx); ed != nil && ed.HasFile() {
+						items = withHTMLPreviewItem(items, ed.Path())
+					}
+					m.ctxMenu.Open(items, msg.X, msg.Y, m.width, m.height)
 					return m, nil
 				}
 				m.setFocus(hit.Pane)
@@ -14701,6 +14744,8 @@ func contentPaneTitle(inst *pane.Instance) string {
 	switch inst.Kind() {
 	case pane.KindMarkdown:
 		return "PREVIEW " + baseName(inst.Preview().Path())
+	case pane.KindHTMLPreview:
+		return "HTML PREVIEW " + baseName(inst.HTMLPreview().Path())
 	case pane.KindImage:
 		return "IMAGE " + baseName(inst.Image().Path())
 	case pane.KindArchive:

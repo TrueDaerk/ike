@@ -31,8 +31,9 @@ const (
 	// Terminal-scoped bindings resolve before PTY forwarding (#1794); see
 	// internal/app's terminalContextChord for the shell-reserved guard rails.
 	Terminal Context = "terminal"
-	// Preview covers the markdown preview and the image viewer, which both
-	// advertise the shared "preview" context id (internal/pane).
+	// Preview covers the markdown preview, the HTML preview (#2740) and the
+	// image viewer, which all advertise the shared "preview" context id
+	// (internal/pane).
 	Preview Context = "preview"
 	// The tool-window and viewer pane contexts (#1794), one per advertised id.
 	VCS         Context = "vcs"

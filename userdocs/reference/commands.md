@@ -121,6 +121,7 @@ bring their own.
 | Open Results in Find Window | `find.openInPanel` | `cmd+enter` | — | everywhere |
 | Welcome Tour | `help.welcomeTour` | — | — | everywhere |
 | Show Project History Timeline | `history.projectTimeline` | — | — | everywhere |
+| HTML Preview | `html.preview` | `cmd+alt+h` | — | everywhere |
 | Cancel Running HTTP Request | `http.cancel` | `cmd+.` | — | everywhere |
 | Copy HTTP Request as curl | `http.copyAsCurl` | — | — | everywhere |
 | Copy HTTP Request as httpie | `http.copyAsHttpie` | — | — | everywhere |
@@ -350,6 +351,7 @@ bring their own.
 | Upper Case | `editor.case.upper` | — | `gU` | `editor` pane |
 | Toggle Block Comment | `editor.commentBlock` | `cmd+shift+7` | — | `editor` pane |
 | Toggle Line Comment | `editor.commentLine` | `cmd+7` | — | `editor` pane |
+| Complete Current Statement | `editor.completeStatement` | `cmd+shift+enter` | — | `editor` pane |
 | Copy | `editor.copy` | `cmd+c` | `y` | `editor` pane |
 | Copy JSON/YAML Path | `editor.copyDocPath` | `cmd+alt+shift+c` | — | `editor` pane |
 | Copy JSON/YAML Path as jq Expression | `editor.copyDocPathJQ` | — | — | `editor` pane |

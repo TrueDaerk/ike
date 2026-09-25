@@ -20,6 +20,7 @@ import (
 	"ike/internal/ghissues"
 	"ike/internal/hexview"
 	"ike/internal/host"
+	"ike/internal/htmlpreview"
 	"ike/internal/httppane"
 	"ike/internal/imgview"
 	"ike/internal/lspdoctor"
@@ -75,6 +76,10 @@ const hexKeyBase = "hex"
 // nbKeyBase is the key of the first notebook viewer; later ones append ":N"
 // (#2425).
 const nbKeyBase = "notebook"
+
+// htmlPreviewKeyBase is the key of the first HTML preview; later ones append
+// ":N" (#2740).
+const htmlPreviewKeyBase = "htmlpreview"
 
 // esKeyBase prefixes Elasticsearch console keys (#1927): one console per
 // configured endpoint, keyed "es:<endpoint>" — the endpoint name is the
@@ -156,6 +161,7 @@ type Registry struct {
 	datas     int      // count of data viewers ever allocated, for key minting
 	hexes     int      // count of hex viewers ever allocated, for key minting
 	notebooks int      // count of notebook viewers ever allocated, for key minting
+	htmlPrevs int      // count of HTML previews ever allocated, for key minting
 	// loaded collects the files deferred tabs (#2177) read since the last
 	// drain, so the root model can give each the wiring a freshly opened
 	// buffer gets. It lives on the registry rather than the model because
@@ -301,6 +307,8 @@ func (r *Registry) advancePastKey(key string) {
 		advanceCounter(key, hexKeyBase, &r.hexes)
 	case nbKeyBase:
 		advanceCounter(key, nbKeyBase, &r.notebooks)
+	case htmlPreviewKeyBase:
+		advanceCounter(key, htmlPreviewKeyBase, &r.htmlPrevs)
 	default:
 		r.advancePast(key)
 	}
@@ -473,6 +481,29 @@ func (r *Registry) AddMarkdownKey(key, path string) *Instance {
 	inst.md.SetSender(r.send)
 	r.put(inst)
 	r.advancePastPreview(key)
+	return inst
+}
+
+// AddHTMLPreview creates an HTML preview instance bound to the source buffer
+// at path, returning the new instance's key ("htmlpreview", then
+// "htmlpreview:N") (#2740). Content arrives afterwards via the preview
+// model's setters, as for the markdown preview.
+func (r *Registry) AddHTMLPreview(path string) string {
+	r.htmlPrevs++
+	key := suffixedKey(htmlPreviewKeyBase, r.htmlPrevs)
+	inst := &Instance{key: key, kind: KindHTMLPreview, cfg: r.cfg, pal: r.pal}
+	inst.hpv = htmlpreview.New(key, path, r.pal)
+	r.put(inst)
+	return key
+}
+
+// AddHTMLPreviewKey recreates an HTML preview under an exact key, used by
+// layout restore. The minting counter advances past the key.
+func (r *Registry) AddHTMLPreviewKey(key, path string) *Instance {
+	inst := &Instance{key: key, kind: KindHTMLPreview, cfg: r.cfg, pal: r.pal}
+	inst.hpv = htmlpreview.New(key, path, r.pal)
+	r.put(inst)
+	advanceCounter(key, htmlPreviewKeyBase, &r.htmlPrevs)
 	return inst
 }
 
@@ -1089,6 +1120,9 @@ func (r *Registry) mintContentKey(kind Kind) string {
 	case KindNotebook:
 		r.notebooks++
 		return suffixedKey(nbKeyBase, r.notebooks)
+	case KindHTMLPreview:
+		r.htmlPrevs++
+		return suffixedKey(htmlPreviewKeyBase, r.htmlPrevs)
 	}
 	return ""
 }
@@ -1132,6 +1166,8 @@ func (r *Registry) NewContentPane(kind Kind, path, path2, rev, rev2 string) *Ins
 	case KindMarkdown:
 		inst.md = preview.New(key, path, r.pal)
 		inst.md.SetSender(r.send)
+	case KindHTMLPreview:
+		inst.hpv = htmlpreview.New(key, path, r.pal)
 	case KindImage:
 		inst.iv = imgview.New(key, path, r.pal)
 	case KindArchive:

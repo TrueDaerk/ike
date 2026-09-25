@@ -187,7 +187,7 @@ func tabLabels(inst *pane.Instance) []string {
 // the ⚙/⌨ convention terminal tabs already use.
 func contentTabGlyph(k pane.Kind) string {
 	switch k {
-	case pane.KindMarkdown:
+	case pane.KindMarkdown, pane.KindHTMLPreview:
 		return "◫ "
 	case pane.KindImage:
 		return "▣ "

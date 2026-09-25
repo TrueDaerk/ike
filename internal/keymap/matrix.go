@@ -196,6 +196,7 @@ var reachableAlternatives = map[string]string{
 	"terminal.rerunLast":               "palette",
 	"notifications.history":            "palette",
 	"markdown.preview":                 "palette",
+	"html.preview":                     "palette / tab context menu",
 	"todo.list":                        "palette",
 	"vcs.revertFile":                   "palette",
 	"vcs.panel":                        "palette",

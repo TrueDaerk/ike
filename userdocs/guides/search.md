@@ -194,7 +194,7 @@ memory works whichever pane happens to hold the focus:
 | HTTP response | The in-pane search over status line, headers and body |
 | Archive viewer | The filter row (`name:`, `type:`) |
 | Diff viewer | A search over the diff, with `n` / `N` stepping matches |
-| Markdown preview | A search over the rendered document |
+| Markdown preview, HTML preview | A search over the rendered document |
 | DOM inspector | The CSS selector line |
 | Data viewer | The SQL filter clause |
 | Terminal | The scrollback search — or copy mode's own search while copy mode is on |

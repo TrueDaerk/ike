@@ -1,5 +1,20 @@
 # Log
 
+## 2026-09-25 (HTML preview: the pane, #2740)
+
+- New pane kind `KindHTMLPreview` wrapping `internal/htmlpreview` (Epic 0530,
+  §2), a sibling of the markdown preview rather than a renderer switch inside
+  it. `html.preview` opens it beside the active `.html`/`.htm`/`.xhtml`
+  buffer — or the gz viewer's decompressed `.html.gz` buffer — with
+  `markdown.preview`'s open/focus semantics; chords `cmd+alt+h` (macOS only:
+  off macOS it folds onto `lsp.callHierarchy`'s `ctrl+alt+h`) and
+  `cmd+alt+shift+h` everywhere, plus the palette and the tab context menu.
+- Debounced re-render off the editor change seam, line-accurate cursor sync
+  through the render core's source map, `/` search via `ui.LineSearch`,
+  layout/session restore (gz sources decompressed), tabbable and a named-layout
+  content slot. Concept stub [HTML Preview](/architecture/html-preview.md);
+  keybindings matrix and userdocs regenerated.
+
 ## 2026-09-25 (HTML preview: render core, #2739)
 
 - New UI-free package `internal/htmlrender` (Epic 0530, §1): tolerant

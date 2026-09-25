@@ -24,6 +24,7 @@ import (
 	"ike/internal/ghissues"
 	"ike/internal/hexview"
 	"ike/internal/host"
+	"ike/internal/htmlpreview"
 	"ike/internal/httppane"
 	"ike/internal/imgview"
 	"ike/internal/lspdoctor"
@@ -151,6 +152,10 @@ const (
 	// panel reporting top commands, unbound chords, palette dismissal rates
 	// and slow operations from the local usage log, under key "usage".
 	KindUsage
+	// KindHTMLPreview is a rendered HTML preview pane (Epic 0530, #2740); any
+	// number may exist, each bound to one .html/.htm/.xhtml (or .html.gz)
+	// source buffer path, the markdown preview's sibling.
+	KindHTMLPreview
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -197,6 +202,7 @@ type Instance struct {
 	exp  explorer.Model
 	term terminal.Model
 	md   preview.Model
+	hpv  htmlpreview.Model
 	iv   imgview.Model
 	df   diff.Model
 	vp   vcspanel.Model
@@ -310,7 +316,7 @@ func (i *Instance) ContextID() string {
 		return ctxEditor
 	case KindTerminal:
 		return ctxTerminal
-	case KindMarkdown, KindImage:
+	case KindMarkdown, KindImage, KindHTMLPreview:
 		return ctxPreview
 	case KindMerge:
 		// The result editor owns the keys: resolve under the editor context
@@ -394,6 +400,10 @@ func (i *Instance) ReplaceTerminal(t terminal.Model) {
 // Preview returns the underlying markdown preview model. It is only valid for
 // a markdown instance; callers gate on Kind first.
 func (i *Instance) Preview() *preview.Model { return &i.md }
+
+// HTMLPreview returns the underlying HTML preview model (#2740). It is only
+// valid for an HTML preview instance; callers gate on Kind first.
+func (i *Instance) HTMLPreview() *htmlpreview.Model { return &i.hpv }
 
 // Image returns the wrapped image preview model (image panes only).
 func (i *Instance) Image() *imgview.Model { return &i.iv }
@@ -793,7 +803,7 @@ func KindTabbable(k Kind) bool {
 // region is made of.
 func KindViewer(k Kind) bool {
 	switch k {
-	case KindMarkdown, KindImage, KindDiff, KindArchive, KindData, KindES, KindHex, KindNotebook, KindRemote:
+	case KindMarkdown, KindHTMLPreview, KindImage, KindDiff, KindArchive, KindData, KindES, KindHex, KindNotebook, KindRemote:
 		return true
 	}
 	return false
@@ -911,6 +921,8 @@ func (i *Instance) DetachContent() (*Instance, bool) {
 	switch i.kind {
 	case KindMarkdown:
 		nested.md, i.md = i.md, preview.Model{}
+	case KindHTMLPreview:
+		nested.hpv, i.hpv = i.hpv, htmlpreview.Model{}
 	case KindImage:
 		nested.iv, i.iv = i.iv, imgview.Model{}
 	case KindDiff:
@@ -1022,6 +1034,11 @@ func (i *Instance) ContentTitle() string {
 			return filepath.Base(p)
 		}
 		return "preview"
+	case KindHTMLPreview:
+		if p := i.hpv.Path(); p != "" {
+			return filepath.Base(p)
+		}
+		return "html preview"
 	case KindImage:
 		if p := i.iv.Path(); p != "" {
 			return filepath.Base(p)
@@ -1525,6 +1542,8 @@ func (i *Instance) SetSize(w, h int) {
 		i.term.SetSize(w, h)
 	case KindMarkdown:
 		i.md.SetSize(w, h)
+	case KindHTMLPreview:
+		i.hpv.SetSize(w, h)
 	case KindImage:
 		i.iv.SetSize(w, h)
 	case KindDiff:
@@ -1592,6 +1611,8 @@ func (i *Instance) SetFocused(f bool) {
 		i.term.SetFocused(f)
 	case KindMarkdown:
 		i.md.SetFocused(f)
+	case KindHTMLPreview:
+		i.hpv.SetFocused(f)
 	case KindImage:
 		i.iv.SetFocused(f)
 	case KindDiff:
@@ -1677,6 +1698,8 @@ func (i *Instance) View() string {
 		return i.term.View()
 	case KindMarkdown:
 		return i.md.View()
+	case KindHTMLPreview:
+		return i.hpv.View()
 	case KindImage:
 		return i.iv.View()
 	case KindDiff:
@@ -1748,6 +1771,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		}
 	case KindMarkdown:
 		cmd = i.md.Update(msg)
+	case KindHTMLPreview:
+		cmd = i.hpv.Update(msg)
 	case KindImage:
 		cmd = i.iv.Update(msg)
 	case KindDiff:
@@ -1958,6 +1983,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		}
 	case KindMarkdown:
 		i.md.SetPalette(p)
+	case KindHTMLPreview:
+		i.hpv.SetPalette(p)
 	case KindImage:
 		i.iv.SetPalette(p)
 	case KindDiff:
