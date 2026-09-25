@@ -1,23 +1,31 @@
 ---
 type: concept
 title: HTML Preview
-description: "Epic 0530 — rendered reading view of .html/.htm/.xhtml buffers (and .html.gz through the gz viewer) beside the editor, text-mode-browser style. #2739 the UI-free render core internal/htmlrender; #2740 the preview pane (KindHTMLPreview), html.preview on cmd+alt+h (macOS) / cmd+alt+shift+h, debounced re-render, source-mapped line-accurate cursor sync, / search, layout and session restore; #2741 following links (tab/shift+tab/enter/y, click, #anchor/file/browser) and the reverse cursor sync; #2743 local <img> inline over Kitty graphics (Options.ImageBlock, preview.html_images); #2742 tables as bordered grids (content-sized columns, colspan/rowspan, ellipsis truncation); #2744 a minimal CSS subset (display/visibility hiding, font-weight, font-style, text-decoration, color, text-align); #2745 the off-loop render (a tea.Cmd per generation, stale results dropped, cancelled on a newer render or a close) bounded by preview.html_render_budget_kb with a truncation line; #2746 the browser screenshot mode (b / html.preview.browser: a headless Chrome/Chromium/Edge screenshot shown through imgview's zoom and pan, preview.html_browser / preview.html_browser_timeout_s, a throwaway profile and temp dir under the scratch area, text-mode fallbacks, the mode persisted per pane). Stub — 0530/9 completes it."
+description: "Epic 0530 — a rendered reading view of .html/.htm/.xhtml buffers (and .html.gz through the gz viewer) beside the editor, text-mode-browser style: a UI-free render core (internal/htmlrender) with tables, a minimal CSS subset and a two-way source map; the pane (KindHTMLPreview, html.preview) with link following, inline Kitty images, off-loop generation-cancelled rendering under a size budget, and an optional headless-browser screenshot mode."
 resource: internal/htmlpreview
 tags: [architecture, html, preview, pane, viewer, gzip, kitty, images, tables, css, async, performance, browser, screenshot, security]
-timestamp: 2026-09-25T23:00:00Z
+timestamp: 2026-09-25T23:30:00Z
 ---
 
 # HTML Preview (Epic 0530)
 
 An HTML document opened in IKE can show a **rendered reading view** next to
 its source, the way a text-mode browser (w3m, lynx) shows a page: headings,
-paragraphs, lists, links, code blocks — theme-aware, scrollable, searchable,
-without leaving the terminal. It is the sibling of the
-[markdown preview](./markdown-preview.md) and keeps its seams.
+paragraphs, lists, links, tables, images — theme-aware, scrollable,
+searchable, without leaving the terminal. It is the sibling of the
+[markdown preview](./markdown-preview.md) and keeps its seams: same split
+semantics, same debounced re-render, same [image preview](./image-preview.md)
+Kitty-graphics path, its own render core instead of glamour. A `.html.gz`
+opens through the [gz viewer](./gz-viewer.md) and previews like a plain page;
+writing HTML parsers or extractors against a page's structure is the job of
+the [DOM inspector](./dom-inspector.md) tool pane instead, not this preview.
+Splitting, moving and resizing the preview pane itself follows the general
+[pane layout](./pane-layout.md) model.
 
-This page is a stub written with the pane (#2740); the complete concept doc
-is 0530/9 (#2747). Until then the render core is described by the package
-doc comment of `internal/htmlrender`.
+The epic shipped in nine parts: the render core (#2739), the pane (#2740),
+link following (#2741), tables (#2742), inline images (#2743), a CSS subset
+(#2744), off-loop rendering (#2745), browser mode (#2746) and this
+consolidated doc (#2747).
 
 ## Render core (#2739)
 
@@ -410,6 +418,31 @@ settings, `exec.LookPath`, off the loop, cached, with a fallback
   into every open pane (`Model.SetBrowser`). See
   [Settings UI](./settings-ui.md).
 
-## Still to come
+## Keybinds and settings
 
-The full concept doc (0530/9).
+| Command | Default keybind | Where |
+|---|---|---|
+| `html.preview` | `cmd+alt+h` (macOS) / `cmd+alt+shift+h` (`ctrl+alt+shift+h` off macOS) | palette, editor tab context menu |
+| `html.preview.browser` | keybind-less (ledger entry: the spec's suggested chord is `html.preview`'s) | palette |
+
+| Setting | Default | Page |
+|---|---|---|
+| `preview.html_images` | on | Settings UI → Markdown Preview |
+| `preview.html_render_budget_kb` | 2048 (64–65536) | Settings UI → Markdown Preview |
+| `preview.html_browser` | auto-detected | Settings UI → Markdown Preview |
+| `preview.html_browser_timeout_s` | 20 (1–300) | Settings UI → Markdown Preview |
+
+See [Settings UI](./settings-ui.md) for the form itself.
+
+## Related
+
+- [Markdown Preview](./markdown-preview.md) — the sibling preview this pane's
+  pane semantics, debounce and cursor sync are modeled on.
+- [Image Preview](./image-preview.md) — the Kitty graphics path inline
+  `<img>`s and the browser screenshot both reuse.
+- [Gz Viewer](./gz-viewer.md) — how `.html.gz` reaches this preview as a
+  decompressed buffer.
+- [DOM Inspector](./dom-inspector.md) — the tool pane for exploring an HTML
+  buffer's parsed structure and testing CSS selectors, rather than reading it.
+- [Pane Layout & Drag](./pane-layout.md) — the split/resize/persistence model
+  the preview pane lives in.
