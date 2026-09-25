@@ -116,8 +116,11 @@ type Config struct {
 // "image" renders a PNG through mermaid-cli and embeds it over the Kitty
 // graphics path — falling back to ascii wherever the terminal cannot show
 // pixels — and "off" leaves every fence the code block it is without them.
+// HTMLImages lets the HTML preview draw a local <img> inline over the Kitty
+// graphics path (#2743); off, every image stays its "[alt]" placeholder.
 type Preview struct {
-	Diagrams string `toml:"diagrams"`
+	Diagrams   string `toml:"diagrams"`
+	HTMLImages bool   `toml:"html_images"`
 }
 
 // Notebook holds the notebook viewer pane's settings (#2683). ImageMaxCols

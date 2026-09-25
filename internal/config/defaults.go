@@ -321,6 +321,9 @@ func defaults() *Config {
 			// no terminal capability and degrades to the plain code block
 			// when the external renderer is not installed.
 			Diagrams: "ascii",
+			// The HTML preview shows local <img> files inline (#2743),
+			// like the markdown preview's images.
+			HTMLImages: true,
 		},
 		Notebook: Notebook{
 			// An image output is capped at 80 columns (#2683): a plot that

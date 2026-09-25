@@ -2062,7 +2062,29 @@ func (i *Instance) configure(cfg host.Config) {
 		// notebook.image_max_cols resizes the image placements of every open
 		// notebook (#2683), so a settings change re-renders the panes.
 		applyNotebookCfg(cfg, i)
+	case KindHTMLPreview:
+		// preview.html_images turns the HTML preview's inline images on
+		// and off (#2743) in every open pane.
+		applyHTMLPreviewCfg(cfg, i)
 	}
+}
+
+// applyHTMLPreviewCfg threads preview.html_images into one HTML preview
+// instance (#2743). Without a config layer, or with the key absent or
+// malformed, images stay on — the shipped default.
+func applyHTMLPreviewCfg(cfg host.Config, inst *Instance) {
+	if inst == nil || inst.kind != KindHTMLPreview {
+		return
+	}
+	on := true
+	if cfg != nil {
+		if v, ok := cfg.Get("preview.html_images"); ok {
+			if b, err := strconv.ParseBool(v); err == nil {
+				on = b
+			}
+		}
+	}
+	inst.hpv.SetImagesEnabled(on)
 }
 
 // defaultNotebookImageMaxCols mirrors config's default for

@@ -1,5 +1,18 @@
 # Log
 
+## 2026-09-25 (HTML preview: inline local images via Kitty, #2743)
+
+- A local `<img>` (relative to the page, absolute, or `file://`) shows inline
+  in the HTML preview over the markdown preview's Kitty path: same reconcile
+  pass, deleted on close, released on park and re-sent on resume. Remote
+  sources are never fetched; they, unsupported formats and non-Kitty
+  terminals keep `[alt]` (`[image: name]`). `<picture>` uses its `<img>`,
+  inline `<svg>` renders `[svg]`.
+- New render-core hook `htmlrender.Options.ImageBlock`; new setting
+  `preview.html_images` ("Render images in HTML preview", default on) on the
+  Markdown Preview settings page. [HTML Preview](/architecture/html-preview.md)
+  gains "Inline images"; [Settings UI](/architecture/settings-ui.md) lists the page.
+
 ## 2026-09-25 (HTML preview: follow links, reverse cursor sync, #2741)
 
 - The HTML preview follows links like the markdown preview (#2180):

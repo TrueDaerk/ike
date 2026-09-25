@@ -1,9 +1,9 @@
 ---
 type: concept
 title: HTML Preview
-description: "Epic 0530 — rendered reading view of .html/.htm/.xhtml buffers (and .html.gz through the gz viewer) beside the editor, text-mode-browser style. #2739 the UI-free render core internal/htmlrender; #2740 the preview pane (KindHTMLPreview), html.preview on cmd+alt+h (macOS) / cmd+alt+shift+h, debounced re-render, source-mapped line-accurate cursor sync, / search, layout and session restore; #2741 following links (tab/shift+tab/enter/y, click, #anchor/file/browser) and the reverse cursor sync. Stub — 0530/9 completes it."
+description: "Epic 0530 — rendered reading view of .html/.htm/.xhtml buffers (and .html.gz through the gz viewer) beside the editor, text-mode-browser style. #2739 the UI-free render core internal/htmlrender; #2740 the preview pane (KindHTMLPreview), html.preview on cmd+alt+h (macOS) / cmd+alt+shift+h, debounced re-render, source-mapped line-accurate cursor sync, / search, layout and session restore; #2741 following links (tab/shift+tab/enter/y, click, #anchor/file/browser) and the reverse cursor sync; #2743 local <img> inline over Kitty graphics (Options.ImageBlock, preview.html_images). Stub — 0530/9 completes it."
 resource: internal/htmlpreview
-tags: [architecture, html, preview, pane, viewer, gzip]
+tags: [architecture, html, preview, pane, viewer, gzip, kitty, images]
 timestamp: 2026-09-25T12:00:00Z
 ---
 
@@ -21,7 +21,7 @@ doc comment of `internal/htmlrender`.
 
 ## Render core (#2739)
 
-`internal/htmlrender` is UI-free: `Render(doc, Options{Width, Palette})`
+`internal/htmlrender` is UI-free: `Render(doc, Options{Width, Palette, ImageBlock})`
 parses the bytes tolerantly (`golang.org/x/net/html`), lays the block/inline
 flow out word-wrapped at the width, and returns a `Document` — styled lines,
 the link, image and anchor indexes, and a two-way **source map** (rendered
@@ -119,8 +119,53 @@ core's own index instead of a scan of the output.
   two round-trip); the root model focuses the editor holding the buffer and
   moves its caret to that line's source line through the source map.
 
+## Inline images (#2743)
+
+A local `<img>` shows as pixels, the way the markdown preview's images do
+(#2180), through the same Kitty graphics path (`imgview.PlacedImage`,
+Unicode placeholder cells, the root model's reconcile pass).
+
+- **Render hook.** `htmlrender.Options.ImageBlock(img, maxCols)` is asked
+  for every `<img>` with the width left beside the current indent. Lines it
+  returns replace the `[alt]` placeholder: the image ends the current line
+  and each line is one rendered line (under the image's link, inside the
+  indent), so the source map, link spans and anchors stay line-accurate
+  around the block; `Image.Line`/`Image.Rows` record where it landed. A table
+  row keeps the placeholder — a block would tear its line apart. The core
+  stays I/O-free; decoding is the hook's business.
+- **Resolution** (`internal/htmlpreview/images.go`). A src relative to the
+  document's file (URL path: query and fragment dropped, escapes decoded),
+  an absolute path, or a `file://` URL (empty or `localhost` host) is local.
+  Anything with another scheme (`http(s)`, `data:`, …) and the
+  scheme-relative `//host/x` is remote and **never fetched**. A local file is
+  decoded once (PNG, JPEG, GIF, WebP) and cached by path; failures are not
+  cached, so a fixed file shows on the next render.
+- **Placement.** The block is `imgview.FitGrid` into the offered width and
+  the pane height minus one, then `imgview.PlaceholderGrid`. One file
+  referenced twice is one placement drawn at both places. Ids come from the
+  pane's own range (90000+), clear of the image pane (9000), the markdown
+  preview (30000) and the notebook (60000). A height change re-renders a page
+  that draws an image.
+- **Fallback.** A remote src, an unsupported or missing file, a terminal
+  without Kitty graphics (or support still unknown), and
+  `preview.html_images = false` all render the core's `[alt]` —
+  `[image: <basename>]` without alt. `<picture>` shows its `<img>` (the
+  `<source>`s are skipped); an inline `<svg>` renders `[svg]`.
+- **Lifecycle.** `imageSyncCmd` visits `KindHTMLPreview` like
+  `KindMarkdown` (gated by `Registry.HTMLPreviewsMinted`): `SetGraphics`
+  pushes support in, a decodable image fires the capability probe
+  (`HasImages`), `ImageIDs` is the live set, `SyncSeqs` transmits and
+  re-transmits after a resize. An id leaving the live set — the image edited
+  out, images turned off, the pane closed — is deleted.
+  `releaseWorkspaceImages` deletes the placements on park/teardown and
+  `ResetImages` makes the resume re-send them.
+- **Setting.** `preview.html_images` ("Render images in HTML preview", on by
+  default) on the Settings UI's Markdown Preview page; the registry applies
+  it on every construction path and `Reconfigure` pushes a change into open
+  panes (`pane.applyHTMLPreviewCfg`).
+
 ## Still to come
 
-Tables (0530/4), inline images (0530/5), the
+Tables (0530/4), the
 minimal CSS subset (0530/6), bounded async rendering (0530/7), the browser
 screenshot mode (0530/8) and the full concept doc (0530/9).

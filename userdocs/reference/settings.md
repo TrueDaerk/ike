@@ -132,6 +132,7 @@ secrets — are documented together, with screenshots, in
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
 | Diagram rendering | `preview.diagrams` | enum: `ascii`, `image`, `off` | `ascii` | user | How a fenced diagram block renders in the preview. "ascii" pipes it through the mermaid-ascii renderer and shows its text in place of the code block; "image" renders a PNG with mermaid-cli (mmdc) and embeds it over the Kitty graphics path, falling back to ascii where the terminal cannot show pixels; "off" leaves every fence the syntax-highlighted code block it is. Rendering is asynchronous and cached per fence, so typing around a diagram never re-runs the renderer; a renderer that is not installed leaves the code block with a one-line install hint, and "Re-render Preview Diagrams" retries once it is |
+| Render images in HTML preview | `preview.html_images` | boolean | `true` | user | Show the local images an HTML page references (an <img> src relative to the file, absolute, or file://) inline in the HTML preview over the Kitty graphics path, sized to the pane width like the markdown preview's images. A remote src is never fetched and, like an unsupported format or a terminal without Kitty graphics, keeps its [alt] placeholder. Off, every image shows as [alt] |
 
 ### Notebook Viewer
 
