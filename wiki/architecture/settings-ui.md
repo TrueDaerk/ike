@@ -280,7 +280,19 @@ any entry whose key the typed schema does not expose (no dead keys).
   Non-numeric input is refused in the form and an out-of-range value clamps
   with a notice; the config validator snaps a hand-edited out-of-range value
   back to 2048 with a diagnostic. A write re-renders every open HTML preview
-  (see [HTML preview](./html-preview.md#off-loop-render-2745)).
+  (see [HTML preview](./html-preview.md#off-loop-render-2745)). The HTML
+  preview's browser screenshot mode (#2746) adds `preview.html_browser`
+  ("HTML preview browser", Path, empty = auto-detect Chrome/Chromium/Edge)
+  and `preview.html_browser_timeout_s` ("HTML preview browser timeout (s)",
+  Int, default 20, range 1–300). They live here beside the diagram renderer
+  they mirror rather than on the Tools page, which edits `[[tools.custom]]`
+  TUI panes. The browser path gets the path editor's existence check plus an
+  `Entry.ValidateString` hook refusing a directory — a macOS `.app` bundle —
+  with `a directory, not a browser binary (in an .app bundle:
+  Contents/MacOS/<name>)`; the timeout is refused when non-numeric and clamps
+  to its range, and the config validator snaps a hand-edited out-of-range
+  value back to 20. Both reach every open HTML preview on write (see
+  [HTML preview](./html-preview.md#browser-screenshot-mode-2746)).
 - **Notebook Viewer** (#2683) — `notebook.image_max_cols`, the column cap an
   image output in a notebook pane is fitted into (default 80, `0` lifts it).
   Like the forge interval it carries the `Entry.ValidateInt` hook, and for
@@ -799,8 +811,8 @@ a list is possible.
 
   `boolEditor` (◉/○ radio rows), `intEditor` (`‹ n ›` stepper plus typed
   entry, both clamped), `enumEditor` (**type-to-filter** option list, current
-  value marked `●`), `pathEditor` (text plus live `pathcomplete` candidates and
-  an existence check), `listEditor` (indexed rows, `enter` edits, `d` removes,
+  value marked `●`), `pathEditor` (text plus live `pathcomplete` candidates,
+  an existence check and — since #2746 — the entry's `ValidateString`), `listEditor` (indexed rows, `enter` edits, `d` removes,
   `+ add value…`), `chordEditor` (hands off to the shared capture sub-panel)
   and `textEditor` (the last-resort free text). Adding a setting needs a type
   and documentation, never new UI.

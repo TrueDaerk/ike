@@ -34,12 +34,15 @@ import (
 // editor placement can tell it from a real editor slot; older files with the
 // pre-#1989 "editor"+Tools shape restore identically.
 type paneIdentity struct {
-	Kind   string   `json:"kind"`
-	Path   string   `json:"path,omitempty"`
-	Path2  string   `json:"path2,omitempty"` // diff panes: the right-hand file (#60)
-	Rev    string   `json:"rev,omitempty"`   // diff panes: revision backing the left side (#508)
-	Rev2   string   `json:"rev2,omitempty"`  // diff panes: revision backing the right side
-	Tool   string   `json:"tool,omitempty"`  // tool panes: the configured tool name (#741)
+	Kind  string `json:"kind"`
+	Path  string `json:"path,omitempty"`
+	Path2 string `json:"path2,omitempty"` // diff panes: the right-hand file (#60)
+	Rev   string `json:"rev,omitempty"`   // diff panes: revision backing the left side (#508)
+	Rev2  string `json:"rev2,omitempty"`  // diff panes: revision backing the right side
+	Tool  string `json:"tool,omitempty"`  // tool panes: the configured tool name (#741)
+	// Mode is a viewer's persisted display mode: "browser" for an HTML
+	// preview in browser screenshot mode (#2746), empty for the default.
+	Mode   string   `json:"mode,omitempty"`
 	Tabs   []string `json:"tabs,omitempty"`
 	Tools  []string `json:"tools,omitempty"`  // editor panes: tool sessions hosted as tabs (#836), restarted on restore
 	Pinned []int    `json:"pinned,omitempty"` // editor panes: indexes into Tabs of pinned tabs (#1172)
@@ -76,6 +79,7 @@ type contentTabIdentity struct {
 	Path2  string `json:"path2,omitempty"`
 	Rev    string `json:"rev,omitempty"`
 	Rev2   string `json:"rev2,omitempty"`
+	Mode   string `json:"mode,omitempty"` // paneIdentity.Mode (#2746)
 	Index  int    `json:"index"`
 	Pinned bool   `json:"pinned,omitempty"`
 }
@@ -117,7 +121,12 @@ func contentIdentity(inst *pane.Instance) (paneIdentity, bool) {
 		// Path names the previewed HTML source — for a compressed page the
 		// gz viewer's "<file>.html.gz!<inner>" buffer path; restore re-reads
 		// (and decompresses) it (#2740).
-		return paneIdentity{Kind: "htmlpreview", Path: inst.HTMLPreview().Path()}, true
+		// Mode remembers the browser screenshot mode (#2746).
+		id := paneIdentity{Kind: "htmlpreview", Path: inst.HTMLPreview().Path()}
+		if inst.HTMLPreview().BrowserMode() {
+			id.Mode = htmlPreviewBrowserMode
+		}
+		return id, true
 	case pane.KindImage:
 		// Path names the previewed image; restore re-decodes it (#1479).
 		return paneIdentity{Kind: "image", Path: inst.Image().Path()}, true
@@ -521,7 +530,7 @@ func encodeLayoutState(root layout.Node, reg *pane.Registry) ([]byte, bool) {
 					}
 					id.CTabs = append(id.CTabs, contentTabIdentity{
 						Kind: cid.Kind, Path: cid.Path, Path2: cid.Path2,
-						Rev: cid.Rev, Rev2: cid.Rev2,
+						Rev: cid.Rev, Rev2: cid.Rev2, Mode: cid.Mode,
 						Index: i, Pinned: inst.TabPinned(i),
 					})
 					if i == inst.ActiveTab() {

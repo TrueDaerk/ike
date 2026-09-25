@@ -309,3 +309,34 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	}
 	return nil
 }
+
+// ZoomWidth zooms so the image fills the pane width and pans to its top-left
+// corner: the reading position of a tall page screenshot (#2746), which at
+// fit would be a narrow strip down the middle. An image already filling the
+// width at fit stays at fit; the zoom is capped like ZoomIn's.
+func (m *Model) ZoomWidth() {
+	m.panX, m.panY = 0, 0
+	fc, _ := m.fitGrid()
+	if fc <= 0 || m.w <= fc {
+		m.zoom = 1
+		return
+	}
+	m.zoom = math.Min(float64(m.w)/float64(fc), m.maxZoom())
+}
+
+// ViewState is the zoom factor and pan origin, for a model replacing another
+// showing a new version of the same picture (#2746: a re-rendered page
+// screenshot keeps the reading position).
+type ViewState struct {
+	Zoom, PanX, PanY float64
+}
+
+// ViewState returns the current zoom and pan.
+func (m *Model) ViewState() ViewState { return ViewState{Zoom: m.zoom, PanX: m.panX, PanY: m.panY} }
+
+// SetViewState restores a zoom and pan taken from ViewState; the next
+// geometry pass clamps them to this image.
+func (m *Model) SetViewState(v ViewState) {
+	m.zoom = min(v.Zoom, m.maxZoom())
+	m.panX, m.panY = v.PanX, v.PanY
+}

@@ -2,6 +2,7 @@ package pane
 
 import (
 	"testing"
+	"time"
 
 	"ike/internal/host"
 )
@@ -74,5 +75,31 @@ func TestClosingHTMLPreviewCancelsRender(t *testing.T) {
 	r.Close(key)
 	if msg := cmd(); msg != nil {
 		t.Fatalf("a closed pane's render must be cancelled, got %T", msg)
+	}
+}
+
+// TestHTMLPreviewFollowsBrowserConfig (#2746): preview.html_browser and
+// preview.html_browser_timeout_s reach new and restored HTML previews and,
+// on a reload, the open ones; a malformed timeout keeps the 20 s default.
+func TestHTMLPreviewFollowsBrowserConfig(t *testing.T) {
+	r := NewRegistry(host.MapConfig{"preview.html_browser_timeout_s": "soon"}, nil)
+	pv := r.Get(r.AddHTMLPreview("/tmp/a.html")).HTMLPreview()
+	if bin, timeout := pv.BrowserSetting(); bin != "" || timeout != 20*time.Second {
+		t.Fatalf("browser = %q, %s; want auto-detect, 20s", bin, timeout)
+	}
+	cfg := host.MapConfig{"preview.html_browser": "/opt/chrome", "preview.html_browser_timeout_s": "45"}
+	r2 := NewRegistry(cfg, nil)
+	for name, inst := range map[string]*Instance{
+		"new":         r2.Get(r2.AddHTMLPreview("/tmp/a.html")),
+		"restore":     r2.AddHTMLPreviewKey("htmlpreview:5", "/tmp/c.html"),
+		"tab restore": r2.NewContentPane(KindHTMLPreview, "/tmp/b.html", "", "", ""),
+	} {
+		if bin, timeout := inst.HTMLPreview().BrowserSetting(); bin != "/opt/chrome" || timeout != 45*time.Second {
+			t.Errorf("%s pane: browser = %q, %s", name, bin, timeout)
+		}
+	}
+	r.Reconfigure(cfg)
+	if bin, timeout := pv.BrowserSetting(); bin != "/opt/chrome" || timeout != 45*time.Second {
+		t.Fatalf("a reload must reach an open pane: %q, %s", bin, timeout)
 	}
 }

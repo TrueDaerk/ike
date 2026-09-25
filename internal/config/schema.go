@@ -121,10 +121,15 @@ type Config struct {
 // HTMLRenderBudgetKB bounds how much of an HTML page the preview renders
 // (#2745): past that many KiB of source the render stops and ends with a
 // "truncated" line, so a multi-MB report cannot keep the pane busy.
+// HTMLBrowser and HTMLBrowserTimeoutS drive the HTML preview's browser
+// screenshot mode (#2746): the headless Chrome/Chromium/Edge binary (empty
+// auto-detects one) and how many seconds one screenshot may take.
 type Preview struct {
-	Diagrams           string `toml:"diagrams"`
-	HTMLImages         bool   `toml:"html_images"`
-	HTMLRenderBudgetKB int    `toml:"html_render_budget_kb"`
+	Diagrams            string `toml:"diagrams"`
+	HTMLImages          bool   `toml:"html_images"`
+	HTMLRenderBudgetKB  int    `toml:"html_render_budget_kb"`
+	HTMLBrowser         string `toml:"html_browser"`
+	HTMLBrowserTimeoutS int    `toml:"html_browser_timeout_s"`
 }
 
 // Notebook holds the notebook viewer pane's settings (#2683). ImageMaxCols

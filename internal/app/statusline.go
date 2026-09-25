@@ -521,6 +521,10 @@ func (m Model) statusLine() string {
 			if title := inst.HTMLPreview().Title(); title != "" {
 				left += " │ " + title
 			}
+			// Browser mode (#2746): the screenshot's state and zoom level.
+			if st := inst.HTMLPreview().BrowserStatus(); st != "" {
+				left += " │ " + st
+			}
 			// The off-loop render (#2745): in flight, or cut at the budget.
 			if inst.HTMLPreview().Pending() {
 				left += " │ rendering…"

@@ -232,3 +232,19 @@ func (m *Model) metadataView() string {
 // ui.HumanSize (which also covers a GB branch this package never hit in
 // practice), kept as a thin alias for its external callers.
 func HumanSize(n int64) string { return ui.HumanSize(n) }
+
+// NewFromImage wraps pixels decoded elsewhere as a preview model — the HTML
+// preview's browser screenshot (#2746), decoded off the update loop from a
+// PNG that is gone by the time the model exists. name labels the footer in
+// place of a file name; size is the encoded byte count for the metadata card.
+func NewFromImage(key, name string, img image.Image, format string, size int64, pal *theme.Palette) Model {
+	m := Model{key: key, path: name, pal: pal, id: int(nextID.Add(1)), format: format, size: size}
+	if img == nil {
+		m.err = fmt.Errorf("no image")
+		return m
+	}
+	m.imgRef = &img
+	b := img.Bounds()
+	m.imgW, m.imgH = b.Dx(), b.Dy()
+	return m
+}

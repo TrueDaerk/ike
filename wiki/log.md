@@ -1,5 +1,27 @@
 # Log
 
+## 2026-09-25 (HTML preview: browser screenshot mode, #2746)
+
+- The HTML preview gains a browser mode: `b` in the pane (or
+  `html.preview.browser`, "HTML preview: render in browser", palette,
+  keybind-less with a pane-key ledger entry) screenshots the page with a
+  headless Chrome/Chromium/Edge and shows the PNG through `imgview`'s zoom
+  and pan, opened at the pane width as one tall image; `r` re-renders. The
+  screenshot runs off the loop, is cached by document text, browser and
+  width, and is persisted per pane as `mode: "browser"` in the layout.
+- Renders use a fresh `--user-data-dir` and page copy under the scratch
+  area's `.html-preview/`, removed after every render; `--disable-gpu
+  --no-first-run --no-default-browser-check`; the process group is killed
+  on timeout. No browser, an error or the timeout falls back to text mode
+  with a toast.
+- New settings `preview.html_browser` and `preview.html_browser_timeout_s`
+  (default 20 s) on the Markdown Preview page; the settings path editor now
+  runs an entry's `ValidateString` (a directory is refused as a browser).
+  `imgview` gains `NewFromImage`, `ZoomWidth` and `ViewState`.
+  [HTML Preview](/architecture/html-preview.md) gains "Browser screenshot
+  mode"; [Settings UI](/architecture/settings-ui.md) and
+  [Tool panes](/architecture/tool-panes.md) updated.
+
 ## 2026-09-25 (HTML preview: off-loop render with a budget, #2745)
 
 - The HTML preview no longer renders on the update loop: input changes owe

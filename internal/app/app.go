@@ -2401,7 +2401,7 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			// An HTML preview restores like the markdown one (#2740), from
 			// disk — decompressed for a gz viewer buffer path; a vanished
 			// file restores as an empty preview.
-			m.restoreHTMLPreview(panes.AddHTMLPreviewKey(key, id.Path))
+			m.restoreHTMLPreview(panes.AddHTMLPreviewKey(key, id.Path), id.Mode)
 			continue
 		}
 		if id := ids[key]; id.Kind == "image" {
@@ -2584,7 +2584,7 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 					nested.Preview().SetSourceImmediate(string(data))
 				}
 			case pane.KindHTMLPreview:
-				m.restoreHTMLPreview(nested)
+				m.restoreHTMLPreview(nested, ct.Mode)
 			case pane.KindDiff:
 				if ct.Rev != "" || ct.Rev2 != "" {
 					nested.Diff().SetContents(revContentOrFile(ct.Rev, ct.Path, ct.Path2), revContentOrFile(ct.Rev2, ct.Path2, ct.Path2))
@@ -6228,6 +6228,29 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// html.preview (cmd+alt+h / palette / tab context menu): the same
 		// split beside the editor for its HTML buffer (#2740).
 		m.openHTMLPreview()
+		return m, nil
+
+	case HTMLPreviewBrowserMsg:
+		// html.preview.browser (palette; b in the pane): text ↔ browser
+		// screenshot mode (#2746).
+		return m, m.toggleHTMLPreviewBrowser()
+
+	case htmlpreview.ShotMsg:
+		// A browser screenshot finished (#2746): the HUD books it like a
+		// render, and the owning preview adopts it (or falls back to text
+		// mode with a notice).
+		if perfhud.Enabled() {
+			perfhud.RecordPane(msg.Key+" screenshot", msg.Took)
+		}
+		if inst := m.htmlPreviewByKey(msg.Key); inst != nil {
+			return m, inst.Update(msg)
+		}
+		return m, nil
+
+	case htmlpreview.NoticeMsg:
+		// A browser-mode fallback (#2746): no browser, a failed or timed-out
+		// render. The pane is already back in text mode.
+		m.host.Notify(host.Warn, msg.Text)
 		return m, nil
 
 	case htmlpreview.RenderTickMsg:

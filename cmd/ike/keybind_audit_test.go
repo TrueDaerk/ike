@@ -109,6 +109,10 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	// #2421's diagram fences render by themselves and cache; the manual
 	// re-render is for the day a renderer is installed mid-session.
 	{"preview.rerenderDiagrams", reasonOccasional},
+	// #2746's browser screenshot mode is b inside the HTML preview, the only
+	// place it means anything; the chord the spec suggested
+	// (cmd+alt+shift+h) is html.preview's own.
+	{"html.preview.browser", reasonPaneKey},
 	{"keymap.", reasonOccasional},                // keymap doctor and the JetBrains import
 	{"diag.", reasonOccasional},                  // heap dump and memory statistics
 	{"json.jqFilters", reasonPaneKey},            // the playground's ctrl+l library

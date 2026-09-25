@@ -1,10 +1,10 @@
 ---
 type: concept
 title: HTML Preview
-description: "Epic 0530 — rendered reading view of .html/.htm/.xhtml buffers (and .html.gz through the gz viewer) beside the editor, text-mode-browser style. #2739 the UI-free render core internal/htmlrender; #2740 the preview pane (KindHTMLPreview), html.preview on cmd+alt+h (macOS) / cmd+alt+shift+h, debounced re-render, source-mapped line-accurate cursor sync, / search, layout and session restore; #2741 following links (tab/shift+tab/enter/y, click, #anchor/file/browser) and the reverse cursor sync; #2743 local <img> inline over Kitty graphics (Options.ImageBlock, preview.html_images); #2742 tables as bordered grids (content-sized columns, colspan/rowspan, ellipsis truncation); #2744 a minimal CSS subset (display/visibility hiding, font-weight, font-style, text-decoration, color, text-align); #2745 the off-loop render (a tea.Cmd per generation, stale results dropped, cancelled on a newer render or a close) bounded by preview.html_render_budget_kb with a truncation line. Stub — 0530/9 completes it."
+description: "Epic 0530 — rendered reading view of .html/.htm/.xhtml buffers (and .html.gz through the gz viewer) beside the editor, text-mode-browser style. #2739 the UI-free render core internal/htmlrender; #2740 the preview pane (KindHTMLPreview), html.preview on cmd+alt+h (macOS) / cmd+alt+shift+h, debounced re-render, source-mapped line-accurate cursor sync, / search, layout and session restore; #2741 following links (tab/shift+tab/enter/y, click, #anchor/file/browser) and the reverse cursor sync; #2743 local <img> inline over Kitty graphics (Options.ImageBlock, preview.html_images); #2742 tables as bordered grids (content-sized columns, colspan/rowspan, ellipsis truncation); #2744 a minimal CSS subset (display/visibility hiding, font-weight, font-style, text-decoration, color, text-align); #2745 the off-loop render (a tea.Cmd per generation, stale results dropped, cancelled on a newer render or a close) bounded by preview.html_render_budget_kb with a truncation line; #2746 the browser screenshot mode (b / html.preview.browser: a headless Chrome/Chromium/Edge screenshot shown through imgview's zoom and pan, preview.html_browser / preview.html_browser_timeout_s, a throwaway profile and temp dir under the scratch area, text-mode fallbacks, the mode persisted per pane). Stub — 0530/9 completes it."
 resource: internal/htmlpreview
-tags: [architecture, html, preview, pane, viewer, gzip, kitty, images, tables, css, async, performance]
-timestamp: 2026-09-25T22:00:00Z
+tags: [architecture, html, preview, pane, viewer, gzip, kitty, images, tables, css, async, performance, browser, screenshot, security]
+timestamp: 2026-09-25T23:00:00Z
 ---
 
 # HTML Preview (Epic 0530)
@@ -313,6 +313,103 @@ update loop and never reads more than a budget of the page — the Tree-sitter
   values clamp to the range, and `pane.applyHTMLPreviewCfg` pushes a change
   into open panes, which re-render.
 
+## Browser screenshot mode (#2746)
+
+The text rendering is a reading view. For CSS- and JS-accurate output the
+pane has an optional **browser mode**: a headless Chrome, Chromium or Edge
+screenshots the page and the pane shows the PNG — the mermaid PNG renderer's
+pattern (`internal/preview/diagrams.go`, #2421): an external binary from the
+settings, `exec.LookPath`, off the loop, cached, with a fallback
+(`internal/htmlpreview/browser.go`).
+
+- **Toggle.** `b` in the focused pane, or `html.preview.browser` ("HTML
+  preview: render in browser", palette, language-gated to `html` like
+  `html.preview`; it switches the focused HTML preview, else the one bound to
+  the active editor's buffer). It ships keybind-less with a pane-key ledger
+  entry: the chord the spec suggested, `cmd+alt+shift+h`, is `html.preview`'s.
+  Text mode is always the default; the mode is remembered per pane in the
+  layout state (`paneIdentity.Mode = "browser"`, content tabs included),
+  written on the settled pass after every flip (`TakeModeChange`), and a
+  restored pane in browser mode takes its screenshot on the first render
+  pass.
+- **Render.** The current buffer text (unbudgeted — the timeout bounds the
+  browser) is written as `page.html` into a fresh `shot-*` directory under
+  the scratch area's hidden `.html-preview/` folder (`$IKE_CONFIG_DIR` or
+  `~/.ike/scratches`; the scratch listing skips directories), with a
+  `<base href>` naming the document's own directory injected after `<head>`
+  so its relative stylesheets, scripts and images still resolve. The browser
+  runs as
+
+  ```
+  <browser> --headless=new --disable-gpu --no-first-run --no-default-browser-check
+            --user-data-dir=<dir>/profile --hide-scrollbars --screenshot=<dir>/shot.png
+            --window-size=<w>,4096 file://<dir>/page.html
+  ```
+
+  with `w` the pane width × 16 px (800–1920). The PNG is decoded on the
+  Cmd goroutine, the page background below the last content row is trimmed
+  (a 16 px margin stays), and the whole directory — page copy, profile, PNG
+  — is removed before the Cmd returns, on success, error, timeout and
+  cancellation alike.
+- **Display.** The screenshot becomes an `imgview.Model`
+  (`imgview.NewFromImage`) opened zoomed to the pane width at the top
+  (`ZoomWidth`), so the page is one tall image the user pans: `j/k`, arrows,
+  `ctrl+d/ctrl+u` and the wheel pan, `h/l` pan sideways, `+`/`-` zoom,
+  `0` fits the whole page — the image pane's keys (#2688). `r` re-renders
+  and keeps the zoom and pan (`SetViewState`). The footer names
+  `<file> (browser)`, the status line shows `browser`, `screenshot…` while
+  one is taken, `stale — r re-renders` after an edit, and the zoom level.
+  While the screenshot shows, the pane's Kitty lifecycle (`ImageIDs`,
+  `SyncSeqs`, `TransmittedIDs`, `ResetImages`) is the screenshot's one
+  placement; switching mode forgets the sent state of whichever side leaves,
+  so it transmits again when it comes back. Links, `tab` and search belong to
+  text mode.
+- **Async and cache.** The screenshot runs as a `tea.Cmd` tagged with a
+  generation from the render counter; `htmlpreview.ShotMsg` lands only when
+  still the newest, and leaving the mode or closing the pane cancels it (the
+  context kills the browser's whole process group); a workspace that parks
+  interrupts it and owes it to the resume, like the text render. A
+  screenshot is cached
+  under the hash of the document text, the browser binary and the pixel
+  width: toggling back with an unchanged key shows the cached shot without
+  running the browser. Edits never re-run the browser on their own (a
+  browser launch costs a second or more); `r` does, unconditionally. Until
+  the first screenshot lands the pane keeps drawing the text rendering under
+  a ` screenshot… ` notice. The performance HUD books it as
+  `<pane key> screenshot`.
+- **Fallbacks.** No browser resolves → the toggle stays in text mode and
+  toasts a warning naming `preview.html_browser`; a render error (the last
+  non-empty line of the browser's stderr) or the timeout → a toast and back
+  to text mode (`htmlpreview.NoticeMsg`). Browser mode is never entered
+  implicitly.
+- **Browser lookup.** `preview.html_browser` when set (`~` expands, a bare
+  name resolves on PATH; a configured browser that does not resolve is
+  reported, never replaced by auto-detection); else the first of
+  `google-chrome`, `google-chrome-stable`, `chromium`, `chromium-browser`,
+  `chrome`, `microsoft-edge`, `microsoft-edge-stable`, `msedge`,
+  `chrome-headless-shell` on PATH, then on macOS the Chrome, Chromium and Edge
+  app bundles under `/Applications`. Chrome's `chrome-headless-shell` (the
+  Playwright/Chrome-for-Testing download) is the lightest option; a full
+  Chrome needs a window-server session on macOS and otherwise runs into the
+  timeout.
+- **Security.** The page runs with JavaScript in a real browser engine —
+  that is the point of the mode — so it is sandboxed as far as the command
+  line allows: a fresh `--user-data-dir` per render (no cookies, logins,
+  extensions or history of the user's own profile, deleted afterwards),
+  `--no-first-run --no-default-browser-check` (no first-run UI, no
+  default-browser prompt), `--disable-gpu` (no GPU process), headless (no
+  window), the process group killed on timeout and after exit so no helper
+  outlives the render, and the temp files readable only by the user
+  (`0700`/`0600`). Unlike text mode, which never fetches anything, the
+  browser loads whatever the page references — remote stylesheets, scripts,
+  images and requests its scripts make. Use text mode for untrusted pages.
+- **Settings.** `preview.html_browser` ("HTML preview browser", Path) and
+  `preview.html_browser_timeout_s` ("HTML preview browser timeout (s)",
+  Int, default 20, 1–300) on the Settings UI's Markdown Preview page, next to
+  the diagram renderer they mirror; `pane.applyHTMLPreviewCfg` threads both
+  into every open pane (`Model.SetBrowser`). See
+  [Settings UI](./settings-ui.md).
+
 ## Still to come
 
-The browser screenshot mode (0530/8) and the full concept doc (0530/9).
+The full concept doc (0530/9).

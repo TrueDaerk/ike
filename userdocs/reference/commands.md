@@ -122,6 +122,7 @@ bring their own.
 | Welcome Tour | `help.welcomeTour` | — | — | everywhere |
 | Show Project History Timeline | `history.projectTimeline` | — | — | everywhere |
 | HTML Preview | `html.preview` | `cmd+alt+h` | — | everywhere |
+| HTML preview: render in browser | `html.preview.browser` | — | — | everywhere |
 | Cancel Running HTTP Request | `http.cancel` | `cmd+.` | — | everywhere |
 | Copy HTTP Request as curl | `http.copyAsCurl` | — | — | everywhere |
 | Copy HTTP Request as httpie | `http.copyAsHttpie` | — | — | everywhere |

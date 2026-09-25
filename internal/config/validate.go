@@ -212,6 +212,16 @@ const (
 	HTMLRenderBudgetKBMax     = 65536
 )
 
+// DefaultHTMLBrowserTimeoutS is how many seconds one headless-browser
+// screenshot of the HTML preview's browser mode may take (#2746), and the
+// value an out-of-range preview.html_browser_timeout_s falls back to.
+// HTMLBrowserTimeoutSMin/Max bound the setting.
+const (
+	DefaultHTMLBrowserTimeoutS = 20
+	HTMLBrowserTimeoutSMin     = 1
+	HTMLBrowserTimeoutSMax     = 300
+)
+
 // DefaultBranchIssuePattern is the branch-name regexp behind the status
 // line's branch-issue segment (#2544): IKE's own change workflow branches
 // work on issue/<number>, and the first capture group is read as that number.
@@ -776,6 +786,12 @@ func validate(c *Config) []Diagnostic {
 	if c.Preview.HTMLRenderBudgetKB < HTMLRenderBudgetKBMin || c.Preview.HTMLRenderBudgetKB > HTMLRenderBudgetKBMax {
 		diags = append(diags, Diagnostic{Field: "preview.html_render_budget_kb", Message: fmt.Sprintf("html_render_budget_kb %d out of range (%d–%d KB), using %d", c.Preview.HTMLRenderBudgetKB, HTMLRenderBudgetKBMin, HTMLRenderBudgetKBMax, DefaultHTMLRenderBudgetKB)})
 		c.Preview.HTMLRenderBudgetKB = DefaultHTMLRenderBudgetKB
+	}
+	// HTML preview browser screenshot timeout (#2746): a zero timeout kills
+	// every render, one past the ceiling leaves a hung browser for minutes.
+	if c.Preview.HTMLBrowserTimeoutS < HTMLBrowserTimeoutSMin || c.Preview.HTMLBrowserTimeoutS > HTMLBrowserTimeoutSMax {
+		diags = append(diags, Diagnostic{Field: "preview.html_browser_timeout_s", Message: fmt.Sprintf("html_browser_timeout_s %d out of range (%d–%d s), using %d", c.Preview.HTMLBrowserTimeoutS, HTMLBrowserTimeoutSMin, HTMLBrowserTimeoutSMax, DefaultHTMLBrowserTimeoutS)})
+		c.Preview.HTMLBrowserTimeoutS = DefaultHTMLBrowserTimeoutS
 	}
 	// Notebook image cap (#2683): 0 is "no cap, use the pane width"; a
 	// negative or absurd column count falls back to the default.
