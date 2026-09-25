@@ -71,7 +71,7 @@ func (m *Model) openMergePane(msg vcs.MergeStagesMsg) {
 // mergeApply saves the focused merge view's result, stages the file and
 // closes the view. Unresolved conflicts block with a notification.
 func (m Model) mergeApply() (tea.Model, tea.Cmd) {
-	inst := m.activeWS().Panes.FocusedInstance()
+	inst := m.focusedContent() // the view may be a hosted tab (#2736)
 	if inst == nil || inst.Kind() != pane.KindMerge {
 		m.host.Notify(host.Info, "no merge view focused")
 		return m, nil

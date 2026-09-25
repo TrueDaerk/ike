@@ -42,10 +42,10 @@ func (m *Model) toggleDOMPanel() {
 
 // domPanel returns the singleton panel model, or nil when it is not open.
 func (m Model) domPanel() *domview.Model {
-	if !m.activeWS().Panes.Has(pane.DOMKey) {
-		return nil
+	if inst := m.toolWindow(pane.KindDOM); inst != nil {
+		return inst.DOM()
 	}
-	return m.activeWS().Panes.Get(pane.DOMKey).DOM()
+	return nil
 }
 
 // openDOMPanel splits the active editor (fallback: focused leaf) at the right

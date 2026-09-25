@@ -25,10 +25,10 @@ func (m *Model) toggleProblemsPanel() {
 
 // problemsPanel returns the singleton panel model, or nil when it is not open.
 func (m Model) problemsPanel() *problems.Model {
-	if !m.activeWS().Panes.Has(pane.ProblemsKey) {
-		return nil
+	if inst := m.toolWindow(pane.KindProblems); inst != nil {
+		return inst.Problems()
 	}
-	return m.activeWS().Panes.Get(pane.ProblemsKey).Problems()
+	return nil
 }
 
 // openProblemsPanel splits the active editor (fallback: focused leaf) at the

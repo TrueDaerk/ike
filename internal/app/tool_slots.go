@@ -234,7 +234,7 @@ func (m *Model) insertToolPane(key, target string, zone layout.Zone) bool {
 func (m *Model) openToolAtSlot(sp toolSpawn, tpl *layout.Template, slot string) bool {
 	ws := m.activeWS()
 	if resident := m.slotResidents()[slot]; resident != "" &&
-		canHostTabs(ws.Panes.Get(resident)) && m.ensureTabHost(resident) {
+		canAutoJoinTabs(ws.Panes.Get(resident)) && m.joinableHost(resident) {
 		ws.Panes.Get(resident).AddTerminalTab(m.newToolTab(sp))
 		m.setFocus(resident)
 		m.rememberTool(sp.name, resident)
@@ -263,7 +263,7 @@ func (m *Model) openToolAtSlot(sp toolSpawn, tpl *layout.Template, slot string) 
 func (m *Model) openShellAtSlot(tpl *layout.Template, slot string) bool {
 	ws := m.activeWS()
 	if resident := m.slotResidents()[slot]; resident != "" &&
-		canHostTabs(ws.Panes.Get(resident)) && m.ensureTabHost(resident) {
+		canAutoJoinTabs(ws.Panes.Get(resident)) && m.joinableHost(resident) {
 		ws.Panes.Get(resident).AddTerminalTab(m.newShellTab())
 		m.setFocus(resident)
 		m.layout()

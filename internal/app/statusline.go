@@ -590,6 +590,14 @@ func (m Model) statusLine() string {
 			if snap := m.vcs.snap; snap != nil && snap.Branch != "" {
 				left += " │ ⎇ " + snap.Branch
 			}
+		case inst.Kind() == pane.KindStructure:
+			left += "STRUCTURE"
+		case inst.Kind() == pane.KindUsages:
+			left += "USAGES"
+		case inst.Kind() == pane.KindLSPDoctor:
+			left += "LSP DOCTOR"
+		case inst.Kind() == pane.KindRemote:
+			left += "SFTP │ " + inst.Remote().Alias()
 		default:
 			left += "EXPLORER"
 		}

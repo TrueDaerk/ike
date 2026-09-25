@@ -81,13 +81,14 @@ func (m *Model) openProblemQuickFixes(msg ilsp.CodeActionsMsg) tea.Cmd {
 // caller to the centered palette.
 func (m Model) problemsPopupAnchor(rows int) (x, y, w int, ok bool) {
 	p := m.problemsPanel()
-	r, found := m.lay.Panes[pane.ProblemsKey]
-	if p == nil || !found {
+	leaf, shown := m.toolWindowLeaf(pane.KindProblems) // pane or active hosted tab (#2736)
+	r, found := m.lay.Panes[leaf]
+	if p == nil || !shown || !found {
 		return 0, 0, 0, false
 	}
 	x = r.X + paneContentX
 	// +1 for the pane's scope header, +1 to sit *below* the marked row.
-	y = r.Y + m.contentYOff(pane.ProblemsKey) + p.CursorRow() + 2
+	y = r.Y + m.contentYOff(leaf) + p.CursorRow() + 2
 	x, y, w = m.fitPopupAnchor(x, y, rows)
 	return x, y, w, true
 }

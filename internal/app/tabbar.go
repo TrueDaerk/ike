@@ -203,6 +203,15 @@ func contentTabGlyph(k pane.Kind) string {
 		return "⇄ "
 	case pane.KindHTTP:
 		return "⇅ "
+	case pane.KindMerge:
+		return "⑂ "
+	case pane.KindRemote:
+		return "⇌ "
+	}
+	if pane.KindToolWindow(k) {
+		// A hosted tool window (#2736) wears the tool glyph its dedicated
+		// pane's number badge uses, distinct from the ⚙ of a tool session.
+		return "▦ "
 	}
 	return ""
 }

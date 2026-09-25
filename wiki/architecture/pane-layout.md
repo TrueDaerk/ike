@@ -136,8 +136,9 @@ preserving ordering against clicks, keys and motion; a stale flush after an
 inline flush is a no-op.
 
 **Center merge zone (#318).** During a move or tab drag a **tab-capable**
-target — an editor pane, a **terminal/tool pane** (#836) or a **viewer pane**
-(#1778) — whose drag carries tab content shows five zones, resolved by
+target — an editor pane, a **terminal/tool pane** (#836), a **viewer pane**
+(#1778) or, since #2736, a **tool window** (any pane but the explorer) —
+whose drag carries tab content shows five zones, resolved by
 `layout.DropZoneWithCenter`: the outer `CenterBand` (30%) of either axis is
 the four edge zones (split/relocate exactly as before), the interior is
 `ZoneCenter`, which **merges as tab** JetBrains-style. A whole-pane title
@@ -159,22 +160,39 @@ stack as tabs in one panel this way, or a tool and a file, or a preview and the
 file it renders. Drags with nothing to merge — an explorer pane or an empty
 editor — keep the four-zone relocate behaviour everywhere.
 
-**Universal tabs (#1778).** Which kinds take part is one predicate,
-`pane.KindTabbable`: editors and terminals natively, plus the viewer kinds
-(markdown preview, image, diff, archive, data viewer). The **explorer**
-and the **singleton tool windows** (VCS, Debug, Problems, Structure, Usages,
-Breakpoints, **HTTP**) keep their fixed toggle-driven roles and stay
-edge-only targets, as does the merge view, whose conflict workflow is
-session-bound — their drags show edge zones only, never a silent no-op
-center drop. The HTTP response viewer left the tabbable set in #2042: in the
-layout model it is a **tool with a fixed position**, and nesting it as a
-content tab made every later save/apply treat the response pane as anonymous
-editor content (a legacy layout.json with a nested `http` tab restores
-without that tab — the viewer restores empty anyway). A whole
-viewer pane dropped in a center zone hands its live content over
-(`dragCarriesContent` → `adoptContentPane`); the per-drag capability check is
-the kind-agnostic `dragCarriesTab` (files, terminal session or viewer content)
-that replaced the old `dragCarriesFiles`/`dragCarriesTerminal` pair.
+**Universal tabs (#1778, #2736).** Which kinds take part is one predicate,
+`pane.KindTabbable`, and since #2736 it reads **everything but the
+explorer**: editors and terminals natively, the viewer kinds (markdown
+preview, image, diff, archive, data, ES, hex, notebook, remote), the merge
+view and every **singleton tool window** — VCS, Debug, Problems, Structure,
+Usages, Breakpoints, Tests, Issues, DOM, the doctors, Deps, Time, Usage and
+the **HTTP response viewer** (back in the set; #2042 had removed it). Any two
+of them stack as tabs by dragging, in both directions: a tool pane onto the
+HTTP viewer, the HTTP viewer onto Problems, Problems onto a terminal. The
+**explorer** is the single exception — it is never a merge target and never
+merges; its drags and drops keep the four edge zones. A whole content pane
+dropped in a center zone hands its live model over (`dragCarriesContent` →
+`adoptContentPane`), never a copy: the response history, test results,
+debugger state or SFTP session moves with it. The per-drag capability check
+is the kind-agnostic `dragCarriesTab` (files, terminal session or content).
+
+A **tool window keeps its identity as a tab.** Its nested instance carries
+the singleton key (`vcs`, `http`, …), so the toggle commands
+(`problems.toggle`, `http`, the focus-by-number chords, …) find it wherever
+it lives and focus that tab instead of opening a second instance
+(`toolWindow`/`toolWindowAt` in `internal/app/toolwindow.go`, the
+nest-aware form of `Panes.Has(pane.XKey)`). When a tool window converts into
+a host, the host takes a **fresh editor key** (`Registry.RehostSingleton`,
+`ensureTabHost` returns the key the caller must use from then on) and the
+layout leaf, focus and drag source follow it — the fixed key belongs to the
+window, and stays free for the tab to split back out into a dedicated pane
+(`AddContentPaneFrom` re-registers it under the same key). Dragging is the
+only way a tool window gains tabs: the automatic tab-joins — a tool opening
+at an occupied home dock or slot, a global tool re-attaching, a viewer
+opening into the focused pane — ask `canAutoJoinTabs` (editors, terminals,
+viewers) so #1905's "split beside, never tabbed into" still governs where
+commands put things. See [Custom TUI Tool Panes › Tab-join
+rules](./tool-panes.md).
 
 **Self-edge spawn (Roadmap 0037).** A title-bar drag dropped on *another* pane
 relocates (above). A drag dropped on the **source pane's own edge** — within an
@@ -461,8 +479,10 @@ The **flexible region** is the editor area: the part of the layout that is
 neither the explorer, nor a tool window, nor a terminal pane, nor a pure
 tool-tab host (#1989) — the panes a *document* may open into. `flexPane`
 (`internal/app/diff_placement.go`) decides membership by pane kind: the
-tabbable content kinds (editor plus the viewer panes — markdown, diff, image,
-archive, data, hex, notebook) are in, everything else is out. The popup
+content kinds (editor plus the viewer panes — markdown, diff, image,
+archive, data, hex, notebook, ES, remote; `pane.KindViewer`) are in,
+everything else is out — the tool windows stay out even though they are
+tabbable since #2736, so a document never opens into Problems. The popup
 terminal and the floating panels are not layout leaves, so they never qualify.
 
 Focus keeps an **MRU of one** over that region: `setFocus` records every
@@ -663,6 +683,22 @@ slot-template rewrite.
   #2124 each slot kind only matched its own pane shape, so a tool open in the
   "wrong" shape (e.g. tab-hosted after a home-dock open) grafted into the
   flexible region while the slot restarted a second instance.
+- **Tool windows hosted as tabs (#2736):** both persistence paths carry a
+  window living in a tab strip. The per-project `layout.json` lists it among
+  the host's `ctabs` as a kind-only identity (`{kind: "problems"}`, the same
+  string its dedicated leaf uses), and the restore rebuilds it as a nested
+  instance under its singleton key with the app hooks a dedicated restore
+  gets (`wireToolWindow`); a file naming a window both as a leaf and as a
+  tab restores it once, in the host, and the leaf prunes. A **named layout**
+  snapshots the hosted windows on the host's slot the same way — a host of
+  nothing but tool sessions and windows is a `tools` slot, one with files an
+  `editor` slot with `ctabs` — and the apply puts every saved window back as
+  a tab (`restoreWindowTabs`), **adopting the live instance across shapes**
+  before building one: a hosted window re-slots into a dedicated singleton
+  slot by detaching (`dedicatedToolWindow`), a dedicated pane the layout
+  hosts as a tab moves in whole and its husk closes, and only a closed
+  window is built fresh. Host matching for `tools` slots scores tool names
+  and window kinds together (`hostToolIDs`).
 - **Selective layouts (#1568):** deselecting panes in the save step stores
   only the selected ones. The deselected leaves are pruned from the snapshot
   tree and the **largest deselected region** survives as a single flexible

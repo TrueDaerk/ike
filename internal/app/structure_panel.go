@@ -62,10 +62,10 @@ func (m *Model) toggleStructurePanel() {
 
 // structPanel returns the singleton panel model, or nil when it is not open.
 func (m Model) structPanel() *structpanel.Model {
-	if !m.activeWS().Panes.Has(pane.StructureKey) {
-		return nil
+	if inst := m.toolWindow(pane.KindStructure); inst != nil {
+		return inst.Structure()
 	}
-	return m.activeWS().Panes.Get(pane.StructureKey).Structure()
+	return nil
 }
 
 // openStructurePanel splits the active editor (fallback: focused leaf) at the

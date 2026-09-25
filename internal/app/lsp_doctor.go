@@ -34,10 +34,10 @@ func (m *Model) handleLSPDoctor(msg ilsp.DoctorMsg) tea.Cmd {
 
 // lspDoctorPanel returns the singleton panel model, or nil when it is not open.
 func (m Model) lspDoctorPanel() *lspdoctor.Model {
-	if !m.activeWS().Panes.Has(pane.LSPDoctorKey) {
-		return nil
+	if inst := m.toolWindow(pane.KindLSPDoctor); inst != nil {
+		return inst.LSPDoctor()
 	}
-	return m.activeWS().Panes.Get(pane.LSPDoctorKey).LSPDoctor()
+	return nil
 }
 
 // openLSPDoctorPanel splits the active editor (fallback: focused leaf) at the

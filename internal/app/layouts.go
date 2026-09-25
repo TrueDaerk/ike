@@ -7,8 +7,6 @@ import (
 	"sort"
 	"strconv"
 
-	"ike/internal/deps"
-	"ike/internal/forge"
 	"ike/internal/host"
 	"ike/internal/layout"
 	"ike/internal/pane"
@@ -280,17 +278,20 @@ func (st *snapState) leafIdentity(key string) (string, paneIdentity, bool) {
 		// apply can restart them as tabs (#1277).
 		if inst.Kind() == pane.KindEditor {
 			tools, files := editorPaneTools(inst)
-			if len(tools) == 1 && files == 0 {
+			// Tool windows hosted as tabs (#2736) ride along as kind-only
+			// content identities: the apply puts each back into this host.
+			windows := hostedWindowTabs(inst)
+			if len(tools) == 1 && files == 0 && len(windows) == 0 {
 				return st.mintTerminal(), paneIdentity{Kind: "tool", Tool: tools[0]}, true
 			}
 			if toolTabHost(inst) {
 				// A host holding nothing but tool tabs is a tools pane, not an
 				// editor slot (#1989): its own kind keeps editor placement and
 				// slot resolution away from the layout's editor area.
-				return st.mintEditor(), paneIdentity{Kind: "tools", Tools: tools}, true
+				return st.mintEditor(), paneIdentity{Kind: "tools", Tools: tools, CTabs: windows}, true
 			}
-			if len(tools) > 0 {
-				return st.mintEditor(), paneIdentity{Kind: "editor", Tools: tools}, true
+			if len(tools) > 0 || len(windows) > 0 {
+				return st.mintEditor(), paneIdentity{Kind: "editor", Tools: tools, CTabs: windows}, true
 			}
 		}
 		return st.mintEditor(), paneIdentity{Kind: "editor"}, true
@@ -788,6 +789,18 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 		st.used[key] = true
 		return key, true
 	}
+	if kind, ok := pane.ToolWindowKind(id.Kind); ok {
+		// A singleton tool window slot (#2736): the live window re-slots
+		// wherever it is — its dedicated pane, or a tab of a host it is
+		// detached from — and only a closed window is built fresh, with the
+		// same app hooks its open path injects. One branch for every kind;
+		// the restore-empty semantics per kind are wireToolWindow's.
+		key, ok := singleton(func() string { return m.dedicatedToolWindow(st, kind) })
+		if ok {
+			m.wireToolWindow(reg.Get(key))
+		}
+		return key, ok
+	}
 	switch id.Kind {
 	case "flex":
 		// The flexible placeholder (#1568) resolves after the walk: graftFlex
@@ -799,85 +812,6 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 		return flexKey, true
 	case "explorer":
 		return singleton(reg.AddExplorer)
-	case "vcs":
-		return singleton(reg.AddVCS)
-	case "debug":
-		return singleton(reg.AddDebug)
-	case "problems":
-		key, ok := singleton(reg.AddProblems)
-		if ok {
-			p := reg.Get(key).Problems()
-			p.SetDisplayPath(displayPath)
-			p.SetStore(m.probStore)
-		}
-		return key, ok
-	case "time":
-		key, ok := singleton(reg.AddTime)
-		if ok {
-			// A restored pane comes up empty (#2426); the next read fills it.
-			reg.Get(key).Time().SetLoading(true)
-		}
-		return key, ok
-	case "usage":
-		key, ok := singleton(reg.AddUsage)
-		if ok {
-			// A restored pane comes up empty (#2552); the next read fills it.
-			reg.Get(key).Usage().SetLoading(true)
-		}
-		return key, ok
-	case "deps":
-		key, ok := singleton(reg.AddDeps)
-		if ok {
-			// A restored pane re-seeds from the last snapshot; the
-			// auto-scan (or 'r') refreshes it (#2419).
-			p := reg.Get(key).Deps()
-			p.SetDisplayPath(displayPath)
-			p.Set(deps.Snapshot())
-		}
-		return key, ok
-	case "structure":
-		return singleton(reg.AddStructure)
-	case "dom":
-		return singleton(reg.AddDOM)
-	case "xdoctor":
-		key, ok := singleton(reg.AddDoctor)
-		if ok {
-			m.wireDoctorPanel(reg.Get(key).Doctor())
-		}
-		return key, ok
-	case "lspdoctor":
-		key, ok := singleton(reg.AddLSPDoctor)
-		if ok {
-			m.wireLSPDoctorPanel(reg.Get(key).LSPDoctor())
-		}
-		return key, ok
-	case "tests":
-		return singleton(reg.AddTests)
-	case "issues":
-		key, ok := singleton(reg.AddIssues)
-		if ok {
-			// A restored pane re-arms its refresh so 'r' works before any
-			// open-path injection (#1934).
-			reg.Get(key).Issues().SetRefresh(forge.RefreshFactory("."))
-			reg.Get(key).Issues().SetTimeline(forge.TimelineFactory("."))
-			reg.Get(key).Issues().SetPRDetailFetch(forge.PRDetailFactory("."))
-			reg.Get(key).Issues().SetPRAction(forge.PRActionFactory("."))
-		}
-		return key, ok
-	case "usages":
-		key, ok := singleton(reg.AddUsages)
-		if ok {
-			reg.Get(key).Usages().SetDisplayPath(displayPath)
-		}
-		return key, ok
-	case "http":
-		return singleton(reg.AddHTTP)
-	case "breakpoints":
-		key, ok := singleton(reg.AddBreakpoints)
-		if ok {
-			m.wireBreakpointsPanel(reg.Get(key).Breakpoints())
-		}
-		return key, ok
 	case "terminal":
 		if len(st.shells) > 0 {
 			key := st.shells[0]
@@ -933,12 +867,14 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 		// back exactly as saved. With no live host the saved tools restart as
 		// tabs of a fresh host. The content queue is never consumed — the
 		// layout's editor slots keep their panes.
-		if key := takeBestHost(reg, st, id.Tools); key != "" {
+		if key := takeBestHost(reg, st, savedToolIDs(id)); key != "" {
 			m.restoreMissingToolTabs(reg, st, key, id.Tools)
+			m.restoreWindowTabs(reg, st, key, id.CTabs, false)
 			return key, true
 		}
 		key := reg.AddEditor()
 		m.restartToolTabs(reg, st, key, id.Tools)
+		m.restoreWindowTabs(reg, st, key, id.CTabs, true) // hosted tool windows (#2736)
 		return key, true
 	case "editor", "":
 		if len(id.Tools) > 0 && len(st.hosts) > 0 {
@@ -946,14 +882,19 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 			// (pre-#1989): a live tool host re-slots there before any content
 			// pane is consumed, so the tools pane never swaps places with an
 			// editor.
-			if key := takeBestHost(reg, st, id.Tools); key != "" {
+			if key := takeBestHost(reg, st, savedToolIDs(id)); key != "" {
 				m.restoreMissingToolTabs(reg, st, key, id.Tools)
+				m.restoreWindowTabs(reg, st, key, id.CTabs, false)
 				return key, true
 			}
 		}
 		if len(st.content) > 0 {
 			key := st.content[0]
 			st.content = st.content[1:]
+			// A re-slotted content pane keeps its own tabs; the tool windows
+			// the slot hosted still join it (#2736), moving in from wherever
+			// they live.
+			m.restoreWindowTabs(reg, st, key, id.CTabs, false)
 			return key, true
 		}
 		key := reg.AddEditor()
@@ -963,6 +904,7 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 		if len(id.Tools) > 0 {
 			m.restartToolTabs(reg, st, key, id.Tools)
 		}
+		m.restoreWindowTabs(reg, st, key, id.CTabs, true)
 		return key, true
 	}
 	return "", false
@@ -1036,7 +978,7 @@ func takeBestHost(reg *pane.Registry, st *applyState, saved []string) string {
 		if inst == nil {
 			continue
 		}
-		tools, _ := editorPaneTools(inst)
+		tools := hostToolIDs(inst) // tool sessions plus hosted windows (#2736)
 		have := map[string]int{}
 		for _, tool := range tools {
 			have[tool]++
@@ -1341,10 +1283,11 @@ func editorPaneTools(inst *pane.Instance) (tools []string, files int) {
 	return tools, files
 }
 
-// toolTabHost reports whether an editor-kind pane hosts nothing but terminal
-// tabs with at least one tool session among them — no editor tabs (scratch
-// included) and no content tabs (#1989). Such a pane is the layout's tools
-// area, not an editor slot: persistence marks it "tools" and editor placement
+// toolTabHost reports whether an editor-kind pane hosts nothing but tool
+// tabs — terminal tabs and hosted tool windows (#2736) — with at least one
+// tool session or window among them: no editor tabs (scratch included) and
+// no viewer content tabs (#1989). Such a pane is the layout's tools area,
+// not an editor slot: persistence marks it "tools" and editor placement
 // never targets it.
 func toolTabHost(inst *pane.Instance) bool {
 	if inst == nil || inst.Kind() != pane.KindEditor {
@@ -1352,8 +1295,15 @@ func toolTabHost(inst *pane.Instance) bool {
 	}
 	tools := 0
 	for i := 0; i < inst.TabCount(); i++ {
-		if inst.TabEditor(i) != nil || inst.TabContent(i) != nil {
+		if inst.TabEditor(i) != nil {
 			return false
+		}
+		if c := inst.TabContent(i); c != nil {
+			if !pane.KindToolWindow(c.Kind()) {
+				return false
+			}
+			tools++
+			continue
 		}
 		if tt := inst.TabTerminal(i); tt != nil && tt.Tool() != "" {
 			tools++

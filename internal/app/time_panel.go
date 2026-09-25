@@ -64,10 +64,10 @@ func (m *Model) toggleTimePanel() tea.Cmd {
 
 // timePanel returns the singleton panel model, or nil when it is not open.
 func (m Model) timePanel() *timepanel.Model {
-	if !m.activeWS().Panes.Has(pane.TimeKey) {
-		return nil
+	if inst := m.toolWindow(pane.KindTime); inst != nil {
+		return inst.Time()
 	}
-	return m.activeWS().Panes.Get(pane.TimeKey).Time()
+	return nil
 }
 
 // openTimePanel splits the active editor (fallback: focused leaf) at the

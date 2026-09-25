@@ -840,10 +840,10 @@ func (m *Model) debugStep(kind string) {
 
 // debugPanel returns the singleton panel model, nil while it is not open.
 func (m Model) debugPanel() *debugpanel.Model {
-	if !m.activeWS().Panes.Has(pane.DebugKey) {
-		return nil
+	if inst := m.toolWindow(pane.KindDebug); inst != nil {
+		return inst.Debug()
 	}
-	return m.activeWS().Panes.Get(pane.DebugKey).Debug()
+	return nil
 }
 
 // debugPanelEditing reports whether the focused pane is the debug panel with
@@ -851,7 +851,7 @@ func (m Model) debugPanel() *debugpanel.Model {
 // refinement editor (#1914) — so the app routes every key straight to it
 // (#627).
 func (m Model) debugPanelEditing() bool {
-	inst := m.activeWS().Panes.FocusedInstance()
+	inst := m.focusedContent() // the panel may be a hosted tab (#2736)
 	if inst == nil {
 		return false
 	}
@@ -870,11 +870,11 @@ func (m Model) debugPanelEditing() bool {
 // adaptive placement (auxZone, #1588) — without stealing focus; the stop
 // already moved the caret to the paused line.
 func (m *Model) openDebugPanel() {
-	if m.activeWS().Panes.Has(pane.DebugKey) {
-		// The area already exists — restored from a saved layout, or left
-		// open across stops. The session still attaches to it: the editable
-		// gate must reach the panel too (#640).
-		m.attachDebugPanel(m.activeWS().Panes.Get(pane.DebugKey).Debug())
+	if p := m.debugPanel(); p != nil {
+		// The area already exists — restored from a saved layout, left open
+		// across stops, or hosted as a tab (#2736). The session still
+		// attaches to it: the editable gate must reach the panel too (#640).
+		m.attachDebugPanel(p)
 		m.ensureDebugConsole()
 		return
 	}
@@ -1022,8 +1022,8 @@ func (m *Model) finishParkedDebugSession(w *workspace.Workspace, root string, ex
 			}
 		}
 	}
-	if w.Panes.Has(pane.DebugKey) {
-		if p := w.Panes.Get(pane.DebugKey).Debug(); p != nil {
+	if _, _, inst, ok := toolWindowIn(w.Panes, pane.KindDebug); ok {
+		if p := inst.Debug(); p != nil {
 			p.SetFinished(exitCode, hasCode)
 		}
 	}
@@ -1045,10 +1045,14 @@ func (m *Model) finishParkedDebugSession(w *workspace.Workspace, root string, ex
 // parkedDebugConsole returns a parked workspace's embedded console terminal
 // (#2190), nil while its debug area is closed or console-less.
 func parkedDebugConsole(w *workspace.Workspace) *terminal.Model {
-	if w == nil || w.Panes == nil || !w.Panes.Has(pane.DebugKey) {
+	if w == nil || w.Panes == nil {
 		return nil
 	}
-	return w.Panes.Get(pane.DebugKey).Debug().Term()
+	_, _, inst, ok := toolWindowIn(w.Panes, pane.KindDebug)
+	if !ok {
+		return nil
+	}
+	return inst.Debug().Term()
 }
 
 // flushDebugOutput drains the pre-console output buffer into the debug area's
@@ -1278,27 +1282,35 @@ func (m Model) debugSessionEndClose() bool {
 // debug.session_end = "close" the combined area leaves the active workspace;
 // the default keeps it open in the finished state.
 func (m *Model) applyDebugSessionEnd() {
-	if !m.debugSessionEndClose() || !m.activeWS().Panes.Has(pane.DebugKey) {
+	if !m.debugSessionEndClose() {
 		return
 	}
-	m.closePane(pane.DebugKey)
+	m.closeToolWindow(pane.KindDebug) // a hosted tab closes as a tab (#2736)
 }
 
 // applyDebugSessionEndAt is applyDebugSessionEnd for a parked workspace
 // (#1544): the close edits the parked tree/registry directly — no relayout,
 // no focus repair; both happen on resume.
 func (m *Model) applyDebugSessionEndAt(w *workspace.Workspace) {
-	if !m.debugSessionEndClose() || w == nil || w.Panes == nil || w.Tree == nil ||
-		!w.Panes.Has(pane.DebugKey) {
+	if !m.debugSessionEndClose() || w == nil || w.Panes == nil || w.Tree == nil {
 		return
 	}
-	tree, ok := layout.Close(w.Tree, pane.DebugKey)
+	hostKey, tabIdx, _, found := toolWindowIn(w.Panes, pane.KindDebug)
+	if !found {
+		return
+	}
+	if host := w.Panes.Get(hostKey); tabIdx >= 0 && host != nil && host.TabCount() > 1 {
+		// A hosted debug tab (#2736) closes as a tab; the host stays.
+		host.CloseTab(tabIdx)
+		return
+	}
+	tree, ok := layout.Close(w.Tree, hostKey)
 	if !ok {
 		return
 	}
 	w.Tree = tree
-	w.Panes.Close(pane.DebugKey)
-	if w.ReturnFocus == pane.DebugKey {
+	w.Panes.Close(hostKey)
+	if w.ReturnFocus == hostKey {
 		w.ReturnFocus = ""
 	}
 }

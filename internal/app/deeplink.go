@@ -287,12 +287,12 @@ func (m Model) deepLinkOpenTool(name string) (Model, tea.Cmd) {
 	}
 	switch name {
 	case "http":
-		if !m.activeWS().Panes.Has(pane.HTTPKey) {
+		if !m.toolWindowOpen(pane.KindHTTP) {
 			m.openHTTPPanel()
 		}
 		return m, nil
 	case "debug":
-		if !m.activeWS().Panes.Has(pane.DebugKey) {
+		if !m.toolWindowOpen(pane.KindDebug) {
 			m.openDebugPanel()
 		}
 		return m, nil

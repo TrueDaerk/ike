@@ -32,10 +32,10 @@ func (m *Model) toggleBreakpointsPanel() {
 
 // breakpointsPanel returns the singleton panel model, or nil when it is not open.
 func (m Model) breakpointsPanel() *breakpanel.Model {
-	if !m.activeWS().Panes.Has(pane.BreakpointsKey) {
-		return nil
+	if inst := m.toolWindow(pane.KindBreakpoints); inst != nil {
+		return inst.Breakpoints()
 	}
-	return m.activeWS().Panes.Get(pane.BreakpointsKey).Breakpoints()
+	return nil
 }
 
 // openBreakpointsPanel splits the active editor (fallback: focused leaf) at

@@ -172,11 +172,11 @@ func TestHTTPViewerSnapshotsAsToolAndReslotsOnApply(t *testing.T) {
 	}
 }
 
-// TestLegacyHTTPContentTabRestoresAsNothing (#2042): a pre-#2042 layout.json
-// with the HTTP viewer nested as a content tab restores without the tab and
-// without crashing — the viewer is a tool window now and reopens empty via
-// http.run anyway.
-func TestLegacyHTTPContentTabRestoresAsNothing(t *testing.T) {
+// TestHTTPContentTabRestoresAsTab (#2042, #2736): a layout.json with the HTTP
+// viewer nested as a content tab — the pre-#2042 shape, legitimate again
+// since every tool window may be hosted as a tab — restores the viewer as
+// that tab, wired and under its singleton key.
+func TestHTTPContentTabRestoresAsTab(t *testing.T) {
 	conf, dir := t.TempDir(), t.TempDir()
 	t.Chdir(dir)
 	tree := &layout.Split{Orient: layout.Horizontal, Ratio: 0.3,
@@ -202,10 +202,17 @@ func TestLegacyHTTPContentTabRestoresAsNothing(t *testing.T) {
 	if inst == nil || inst.Kind() != pane.KindEditor {
 		t.Fatalf("editor pane must restore, got %+v", inst)
 	}
+	found := false
 	for i := 0; i < inst.TabCount(); i++ {
 		if c := inst.TabContent(i); c != nil && c.Kind() == pane.KindHTTP {
-			t.Fatal("a legacy nested http tab must restore as nothing")
+			found = true
+			if c.Key() != pane.HTTPKey || inst.ActiveTab() != i {
+				t.Fatal("the nested http tab must restore under its singleton key and active")
+			}
 		}
+	}
+	if !found || m.httpPanel() == nil || m.activeWS().Panes.Has(pane.HTTPKey) {
+		t.Fatal("the nested http tab must restore as a hosted tab, once, with no dedicated pane")
 	}
 }
 

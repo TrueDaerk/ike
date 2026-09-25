@@ -191,7 +191,7 @@ func TestSingletonPaneStaysEdgeOnlyTarget(t *testing.T) {
 	if zone, can := m.dropZoneFor(d, pane.ExplorerKey, r); can && zone == layout.ZoneCenter {
 		t.Fatal("a singleton pane must not offer the center merge zone")
 	}
-	if m.ensureTabHost(pane.ExplorerKey) {
+	if _, ok := m.ensureTabHost(pane.ExplorerKey); ok {
 		t.Fatal("a singleton pane must not convert into a tab host")
 	}
 	if m.activeWS().Panes.Get(pane.ExplorerKey).Kind() != pane.KindExplorer {

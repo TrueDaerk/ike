@@ -297,7 +297,7 @@ func (m Model) handlePaste(text string) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
-	inst := m.activeWS().Panes.FocusedInstance()
+	inst := m.focusedContent() // a tool window may be a hosted tab (#2736)
 	if inst == nil {
 		return m, nil
 	}
