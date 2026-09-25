@@ -1,0 +1,7 @@
+title: ""
+----
+Quarterly numbers
+Quarter │ Revenue │ Notes
+Q1 │ 100 │ Start
+Q2 │ 250 │ details
+Q3 │ 300 │ implied cell ends

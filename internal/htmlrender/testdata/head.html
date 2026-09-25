@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>  The   page
+  title </title>
+  <style>body { color: red; }</style>
+  <script>document.write("never shown");</script>
+  <link rel="stylesheet" href="x.css">
+</head>
+<body>
+<!-- a comment -->
+<p>Visible paragraph.</p>
+<script>alert("<p>not rendered</p>")</script>
+<template><p>template content</p></template>
+<noscript><p>noscript content</p></noscript>
+<p hidden>Hidden paragraph.</p>
+<div hidden><p>Hidden div content.</p></div>
+<p>Visible <span hidden>hidden span</span>again.</p>
+<p id="end">End.</p>
+</body>
+</html>

@@ -1,0 +1,15 @@
+title: ""
+----
+Inline fmt.Println call.
+
+  func main() {
+          fmt.Println("hello, <world>")
+          // a very long comment line t›
+  }
+
+    indented
+
+  x := 1
+  y := 2
+
+After.

@@ -1,0 +1,41 @@
+title: ""
+----
+ Main title of the page
+
+An opening paragraph with enough words
+to wrap at forty columns and keep going.
+
+## Second level
+
+### Third level
+
+#### Fourth
+
+##### Fifth
+
+###### Sixth
+
+Header text
+Main text
+Footer text
+First div
+Second div
+Navigation
+Aside
+
+Line one
+Line two
+
+After an empty line
+
+────────────────────────────────────────
+
+  [Sales chart]
+  Figure 1: the sales chart
+
+▾ More details
+
+Hidden by default in a browser, expanded
+here.
+
+Contact: someone

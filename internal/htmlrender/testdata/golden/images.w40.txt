@@ -1,0 +1,11 @@
+title: ""
+----
+An inline [star] icon.
+
+[image: cat.jpg] without alt.
+
+[thumbnail of the big picture]
+
+[picture fallback]
+
+[image: data]
