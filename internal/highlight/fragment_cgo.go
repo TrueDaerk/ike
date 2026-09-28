@@ -48,12 +48,20 @@ func detectFragments(g lang.Grammar, lines []string) []Fragment {
 	if err := parser.SetLanguage(tsLang); err != nil {
 		return nil
 	}
+	parseCount.Add(1)
 	tree := parser.Parse(src, nil)
 	if tree == nil {
 		return nil
 	}
 	defer tree.Close()
+	return detectFragmentsTree(tree, query, src, lines)
+}
 
+// detectFragmentsTree is detectFragments over an already parsed tree (#2770):
+// the highlight pass hands its own tree over, so a host buffer is parsed once
+// per pass instead of once per query. src is the joined text the tree was
+// parsed from and lines its line split, for the rune-column conversion.
+func detectFragmentsTree(tree *ts.Tree, query *ts.Query, src []byte, lines []string) []Fragment {
 	conv := newColMapper(lines)
 	cursor := ts.NewQueryCursor()
 	defer cursor.Close()

@@ -4,7 +4,7 @@ title: Syntax Highlighting
 description: The Tree-sitter lexical highlighting layer — per-language grammars parsed off the event loop into capture spans, cached by document version, resolved to theme colours, and applied per cell in the editor's renderLine; plus the pure-Go bracket-pair tracker behind rainbow brackets, unmatched-bracket errors and depth-coloured indent guides.
 resource: internal/highlight
 tags: [architecture, highlighting, tree-sitter, syntax, editor, theme, cgo, brackets]
-timestamp: 2026-08-30T00:00:00Z
+timestamp: 2026-09-28T14:00:00Z
 ---
 
 # Syntax Highlighting
@@ -116,7 +116,21 @@ parsed with its own language's registered grammar and the resulting spans are
 shifted into host coordinates (`injection.go`). Injected spans are prepended to
 the host span set, so inside a fragment they win over the host's enclosing
 `string` capture in `Index.CaptureAt`, while gaps between injected tokens fall
-back to the host colour. Hosts shipping an `injections.scm` today: **Python**
+back to the host colour. **One parse per text** (#2770): the host's
+highlight query and its injection query run on the same Tree-sitter tree
+(`parseScopedFragments` in `parse_cgo.go`, reached through `hostParse` in
+`injection.go`), and so do every fragment's spans and its own nested
+fragments — a host used to be parsed once for its spans and once more for
+its injections, each fragment likewise. The completion layer's `Segments` /
+`Embedded` (`segments.go`) go through the same single pass and a short
+per-text memo (`segmentmemo.go`, keyed by language and content hash) so the
+engine's effective-language lookup and the word and symbol sources share one
+segmentation of a buffer per keystroke instead of three; concurrent callers
+for the same text wait for the pass in flight. Filtered project scans
+(`Segments` with an `only` filter, `EmbeddedLangs`) bypass the memo.
+`sharedparse_cgo_test.go` pins the parse budget: one highlight pass of a host
+with one fragment is exactly two parses, a repeated segmentation none.
+Hosts shipping an `injections.scm` today: **Python**
 (SQL and HTML strings, guess-gated), **PHP** (#995: single/double-quoted
 strings, heredoc and nowdoc bodies, guess-gated), **Go** (#995: raw and
 interpreted string literals, guess-gated), **TypeScript** (#1625: HTML and SQL
@@ -233,7 +247,22 @@ Parsing runs **off the event loop**. The editor owns a monotonic `docVersion`
 returns a `tea.Cmd` that runs the CGo parse on a goroutine and yields a
 `highlight.SpansMsg{Path, Version, Spans, Scopes, Folds}`. The app routes it back to the editor
 leaf owning the path; the editor caches the spans **only if the version still
-matches** (a newer edit drops stale results). Before delivery,
+matches** (a newer edit drops stale results). **One parse at a time per
+view, newest snapshot first** (#2770, `internal/editor/parsegate.go`):
+`parseCmd` stores the snapshot it took as the gate's latest and still
+returns a command; commands take turns on the gate's work lock, and each
+one, on its turn, parses whatever snapshot is pending — the newest — or
+yields nil (bubbletea skips nil messages) when an earlier turn already
+parsed it. Bubbletea runs commands concurrently, so without the gate a
+typing burst in a few-thousand-line HTML buffer piled up one CGo parse
+goroutine per keystroke (each ~100 ms: host grammar plus every injected
+`<style>`/`<script>` fragment), all but the last one dropped on arrival, and
+the event loop starved behind them — seconds of latency per character. With
+the gate a burst of N keystrokes during one parse costs two parses (the
+running one and one of the text as it stands when it finishes), both
+delivered; the N-2 superseded snapshots are never parsed; and the lock
+releases when a parse finishes — not when its result is delivered — so a
+result routed nowhere cannot wedge it. Before delivery,
 `HighlightScoped` overlays any Go-computed spans the language registers
 (`lang.Language.Spans`, #1585 — see `/architecture/languages.md`) by
 prepending them, so they beat the grammar's coarser captures the way

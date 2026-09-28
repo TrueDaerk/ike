@@ -172,6 +172,13 @@ type Engine struct {
 	// delayTimer is the armed identifier-rune trigger; a newer trigger of
 	// any kind replaces or cancels it, so only the resting position fires.
 	delayTimer *time.Timer
+	// passMu serializes the per-dispatch text pass (#2770): resolving the
+	// effective language segments the whole buffer — a Tree-sitter parse of
+	// the host and every embedded fragment — and a keystroke burst used to
+	// start one such pass per key, all but the last superseded before they
+	// finished. A dispatch waits its turn here and, once it is, skips the
+	// pass when a newer dispatch has already cancelled it.
+	passMu sync.Mutex
 	// texts is the latest text of every observed buffer, keyed by BufKey,
 	// from which a dispatch resolves the effective language at the cursor
 	// (#2652). Fragment detection is cached per text generation and runs
@@ -448,7 +455,15 @@ func (e *Engine) dispatch(req Request, sources []Source) {
 	// a parse: resolve it off this goroutine — dispatch is reached from the
 	// UI's Update or a timer — then fan the sources out.
 	go func() {
+		// One text pass at a time (#2770): a dispatch superseded while it
+		// waited does not parse at all.
+		e.passMu.Lock()
+		if ctx.Err() != nil {
+			e.passMu.Unlock()
+			return
+		}
 		req.Lang = e.effectiveLang(req)
+		e.passMu.Unlock()
 		if ctx.Err() != nil {
 			return
 		}

@@ -41,8 +41,40 @@ func overlayFragmentsAt(l lang.Language, lines []string, host []Span, depth int)
 	if depth > maxInjectionDepth {
 		return host, nil
 	}
-	frags := fragmentsFor(l, lines)
-	if len(frags) == 0 {
+	return overlayDetected(l, lines, host, fragmentsFor(l, lines), depth)
+}
+
+// hostParse parses lines under l once and returns its spans, scopes and
+// folds together with the fragments the same tree's injection query detects
+// (#2770) — or, for a host registering a Go-level region detector (#1303),
+// the detector's regions. wantSpans false skips the highlight query,
+// wantFrags false the fragment detection; both are pure cost savings, the
+// results are the ones parseScoped and fragmentsFor produce separately.
+func hostParse(l lang.Language, lines []string, scopeKinds, foldKinds []string, wantSpans, wantFrags bool) ([]Span, []Scope, []Fold, []Fragment) {
+	if l.Regions != nil {
+		var spans []Span
+		var scopes []Scope
+		var folds []Fold
+		if l.Grammar != nil {
+			spans, scopes, folds, _ = parseScopedFragments(l.Grammar, scopeKinds, foldKinds, lines, wantSpans, false)
+		}
+		var frags []Fragment
+		if wantFrags {
+			frags = regionFragments(l.Regions(lines), lines)
+		}
+		return spans, scopes, folds, frags
+	}
+	if l.Grammar == nil {
+		return nil, nil, nil, nil
+	}
+	return parseScopedFragments(l.Grammar, scopeKinds, foldKinds, lines, wantSpans, wantFrags)
+}
+
+// overlayDetected is overlayFragmentsAt over fragments the caller already
+// detected — the ones the host's own parse yielded (hostParse), so the host
+// is not parsed a second time for its injection query.
+func overlayDetected(l lang.Language, lines []string, host []Span, frags []Fragment, depth int) ([]Span, []Fold) {
+	if depth > maxInjectionDepth || len(frags) == 0 {
 		return host, nil
 	}
 	var injected []Span
@@ -63,9 +95,12 @@ func overlayFragmentsAt(l lang.Language, lines []string, host []Span, depth int)
 		// wrapper, on lines of its own, so the snippet reaches the grammar as
 		// the construct it expects; the wrapper lines are stripped back out
 		// before the spans return to host coordinates.
+		// One parse per fragment (#2770): its highlight spans, folds and
+		// its own nested fragments come off the same tree; the nested
+		// detection is skipped at the depth limit where it would be unused.
 		src, wrapped := wrapFragment(f)
-		spans, _, ff := parseScoped(el.Grammar, nil, foldKinds(el), src)
-		spans, nested := overlayFragmentsAt(el, src, spans, depth+1)
+		spans, _, ff, nestedFrags := hostParse(el, src, nil, foldKinds(el), true, depth+1 <= maxInjectionDepth)
+		spans, nested := overlayDetected(el, src, spans, nestedFrags, depth+1)
 		if wrapped {
 			spans = unwrapSpans(spans, len(f.Lines))
 			ff = unwrapFolds(ff, len(f.Lines))

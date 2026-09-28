@@ -48,6 +48,9 @@ type deepFragment struct {
 	Fragment
 	depth  int
 	parent int
+	// spans are the fragment's own grammar's spans in its own (unwrapped)
+	// coordinates, attached by resolveDeep when the language was wanted.
+	spans []Span
 }
 
 // CodeLanguage reports whether id names a language whose grammar tokens
@@ -81,32 +84,55 @@ func Segments(langID string, lines []string, only func(langID string) bool) []Se
 	if !ok || l.Grammar == nil {
 		return nil
 	}
-	frags := embeddedDeep(l, lines, 1, -1, nil)
+	if only == nil {
+		// An open buffer's segments are asked for by every completion
+		// source per keystroke (#2770): the memo answers all of them from
+		// one pass over the text.
+		return segmentMemo.get(l, lines).segments
+	}
+	return buildSegments(l, lines, only).segments
+}
+
+// segmentation is one pass over a text: its resolved fragments (with each
+// fragment's own spans attached, when its language was wanted) and the
+// segments built from them.
+type segmentation struct {
+	deep     []deepFragment
+	segments []Segment
+}
+
+// wantedLang reports whether langID's spans are needed: a code language the
+// only filter (nil: every language) accepts.
+func wantedLang(langID string, only func(string) bool) bool {
+	return CodeLanguage(langID) && (only == nil || only(langID))
+}
+
+// buildSegments is Segments without the memo: the host and every fragment
+// are parsed once each (#2770) — spans and nested fragments off the same
+// tree — where they used to be parsed once for detection and once more for
+// their spans.
+func buildSegments(l lang.Language, lines []string, only func(langID string) bool) segmentation {
+	want := func(id string) bool { return wantedLang(id, only) }
+	hostSpans, _, _, hostFrags := hostParse(l, lines, nil, nil, want(l.ID), true)
+	frags := resolveDeep(hostFrags, 1, -1, nil, want)
 	var out []Segment
-	if CodeLanguage(l.ID) && (only == nil || only(l.ID)) {
+	if want(l.ID) {
 		last := len(lines) - 1
 		endCol := 0
 		if last >= 0 {
 			endCol = len([]rune(lines[last]))
 		}
-		spans := parse(l.Grammar, lines)
 		out = append(out, Segment{
 			Lang: l.ID, StartLine: 0, StartCol: 0, EndLine: last, EndCol: endCol,
-			Spans:  spans,
-			Masked: append(maskedSpans(spans), childRegions(frags, -1, lines)...),
+			Spans:  hostSpans,
+			Masked: append(maskedSpans(hostSpans), childRegions(frags, -1, lines)...),
 		})
 	}
 	for i, f := range frags {
-		if !CodeLanguage(f.Lang) || (only != nil && !only(f.Lang)) {
+		if !want(f.Lang) {
 			continue
 		}
-		el, _ := lang.ByID(f.Lang)
-		src, wrapped := wrapFragment(f.Fragment)
-		spans := parse(el.Grammar, src)
-		if wrapped {
-			spans = unwrapSpans(spans, len(f.Lines))
-		}
-		spans = offsetSpans(spans, f.Fragment)
+		spans := offsetSpans(f.spans, f.Fragment)
 		out = append(out, Segment{
 			Lang: f.Lang, StartLine: f.StartLine, StartCol: f.StartCol, EndLine: f.EndLine, EndCol: f.EndCol,
 			Depth:  f.depth,
@@ -114,7 +140,7 @@ func Segments(langID string, lines []string, only func(langID string) bool) []Se
 			Masked: append(maskedSpans(spans), childRegions(frags, i, lines)...),
 		})
 	}
-	return out
+	return segmentation{deep: frags, segments: out}
 }
 
 // EmbeddedLangs lists the languages of every fragment embedded in lines, a
@@ -146,7 +172,15 @@ func Embedded(langID string, lines []string) []Fragment {
 	if !ok {
 		return nil
 	}
-	deep := embeddedDeep(l, lines, 1, -1, nil)
+	var deep []deepFragment
+	if l.Grammar != nil {
+		// The memo's pass (#2770): the completion engine asks for a
+		// buffer's fragments right before its sources ask for the same
+		// text's segments, so one entry answers both.
+		deep = segmentMemo.get(l, lines).deep
+	} else {
+		deep = embeddedDeep(l, lines, 1, -1, nil)
+	}
 	out := make([]Fragment, len(deep))
 	for i, f := range deep {
 		out[i] = f.Fragment
@@ -202,12 +236,26 @@ func fragmentCovers(f Fragment, line, col int) bool {
 // recursing into each fragment's own language (a Python string that is
 // HTML, whose <script> is JavaScript) until maxInjectionDepth, and appends
 // them to acc in host coordinates. parent is acc's index of the fragment
-// lines belong to, -1 for the host buffer.
+// lines belong to, -1 for the host buffer. Detection only: no fragment
+// carries spans.
 func embeddedDeep(l lang.Language, lines []string, depth, parent int, acc []deepFragment) []deepFragment {
 	if depth > maxInjectionDepth {
 		return acc
 	}
-	for _, f := range fragmentsFor(l, lines) {
+	return resolveDeep(fragmentsFor(l, lines), depth, parent, acc, nil)
+}
+
+// resolveDeep is embeddedDeep over fragments already detected at nesting
+// level depth: each fragment is parsed once (#2770) for its own spans — when
+// want accepts its language; nil wants none — and for its nested fragments,
+// which come off the same tree and recurse until maxInjectionDepth. The
+// attached spans are in the fragment's own (unwrapped) coordinates;
+// offsetSpans with the fragment shifts them to the host's.
+func resolveDeep(frags []Fragment, depth, parent int, acc []deepFragment, want func(string) bool) []deepFragment {
+	if depth > maxInjectionDepth {
+		return acc
+	}
+	for _, f := range frags {
 		acc = append(acc, deepFragment{Fragment: f, depth: depth, parent: parent})
 		self := len(acc) - 1
 		el, ok := lang.ByID(f.Lang)
@@ -215,7 +263,15 @@ func embeddedDeep(l lang.Language, lines []string, depth, parent int, acc []deep
 			continue
 		}
 		src, wrapped := wrapFragment(f)
-		nested := embeddedDeep(el, src, depth+1, -1, nil)
+		wantSpans := want != nil && want(f.Lang)
+		spans, _, _, nestedFrags := hostParse(el, src, nil, nil, wantSpans, depth+1 <= maxInjectionDepth)
+		if wantSpans {
+			if wrapped {
+				spans = unwrapSpans(spans, len(f.Lines))
+			}
+			acc[self].spans = spans
+		}
+		nested := resolveDeep(nestedFrags, depth+1, -1, nil, want)
 		for _, n := range nested {
 			if wrapped {
 				// Wrapper lines are synthetic: a fragment touching them is

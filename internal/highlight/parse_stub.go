@@ -35,3 +35,12 @@ func ExpressionEndingAt(path string, lines []string, line, col int, kinds []stri
 // (gy / gY, #2499); without CGo there is no tree, and both commands report
 // that there is no value under the cursor.
 func SyntaxChainAt(path string, lines []string, line, col int) []structval.Node { return nil }
+
+// parseScopedFragments is the matching no-op fallback for the shared
+// highlight + injection parse (#2770); without CGo there is no tree.
+func parseScopedFragments(g lang.Grammar, scopeKinds, foldKinds []string, lines []string, wantSpans, wantFrags bool) ([]Span, []Scope, []Fold, []Fragment) {
+	return nil, nil, nil, nil
+}
+
+// parses is the matching no-op fallback for the parse counter (#2770).
+func parses() int64 { return 0 }

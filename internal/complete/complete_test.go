@@ -3,6 +3,7 @@ package complete
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -219,4 +220,42 @@ func TestExclusiveSourceSilencesTheRest(t *testing.T) {
 	if len(collect(t, ch, 2)) != 2 {
 		t.Fatal("unclaimed buffers must still dispatch every source")
 	}
+}
+
+// TestDispatchBurstRunsOnePass (#2770): dispatches queue behind the text
+// pass, and a dispatch superseded while it waited never runs — a keystroke
+// burst that lands while a pass is in flight fans out once, for the last
+// trigger only.
+func TestDispatchBurstRunsOnePass(t *testing.T) {
+	e, ch := newTestEngine()
+	var calls atomic.Int32
+	e.Register(countingSource{name: "words", prio: ilsp.PriorityWords, calls: &calls})
+	e.passMu.Lock()
+	for i := 0; i < 5; i++ {
+		e.Emit(trigger("a"))
+	}
+	e.passMu.Unlock()
+	got := collect(t, ch, 1)
+	if got[0].Source != "words" {
+		t.Fatalf("batch = %+v", got[0])
+	}
+	// Let any superseded dispatch that still fanned out surface.
+	time.Sleep(50 * time.Millisecond)
+	if n := calls.Load(); n != 1 {
+		t.Fatalf("the source ran %d times for a burst of 5, want 1", n)
+	}
+}
+
+// countingSource counts its Complete calls.
+type countingSource struct {
+	name  string
+	prio  int
+	calls *atomic.Int32
+}
+
+func (c countingSource) Name() string  { return c.name }
+func (c countingSource) Priority() int { return c.prio }
+func (c countingSource) Complete(ctx context.Context, req Request) ([]ilsp.CompletionItem, error) {
+	c.calls.Add(1)
+	return []ilsp.CompletionItem{{Label: c.name + "-item", InsertText: c.name + "-item"}}, nil
 }
