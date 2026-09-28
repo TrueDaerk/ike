@@ -4,7 +4,7 @@ title: Performance & Diagnostics
 description: Idle-behavior rules (who may wake the render loop, and how often), the render budget and the always-on per-message-type pass accounting, the per-keystroke fan-out budget while typing (#2541), the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, the heartbeat freeze dump (#2627), the opt-in update-loop trace log, the freeze-triage procedure, the selection-overlay rule for drag latency (#2495), and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/perfhud
 tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog, startup, freeze, render-budget]
-timestamp: 2026-09-25T22:00:00Z
+timestamp: 2026-09-28T14:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -855,6 +855,48 @@ Two guards keep typing flat regardless of file size:
   than the small-file case (which still schedules a parse). The deterministic
   companion `TestKeystrokeAvoidsFullBufferWorkWhenLarge` asserts no change
   text ships and no parse schedules on the degraded path.
+
+## Long HTML buffers: bounding the per-keystroke parse fan-out (#2770)
+
+Typing at the end of a ~5k-line HTML file (below every large-file cliff)
+took seconds per character. The event loop was clean — `Update` for the
+keystroke is ~0.1–0.2 ms at any cursor position, `View` under 1 ms — but
+every keystroke fanned out **five or six whole-buffer Tree-sitter parses**
+on background goroutines with nothing bounding their concurrency: the
+editor's highlight pass (host parse, a second host parse for the injection
+query, then every `<style>`/`<script>` fragment twice again), the completion
+engine's effective-language lookup, the word source's and the symbol
+source's segmentation of the same text, and the LSP manager's fragment
+re-detection. Bubbletea runs each command on its own goroutine, so a burst
+typed faster than a pass completes (~140 ms here) stacked a dozen CGo-bound
+parsers against the render loop; all but the newest result was dropped on
+arrival. The "worse near the end of the file" symptom is that pile-up, not a
+cursor-dependent path — the benchmarks show no position dependence.
+
+Four bounds, each with a deterministic test:
+
+- **Editor parse gate** (`internal/editor/parsegate.go`,
+  `parsegate_test.go`): one parse at a time per view; a burst's commands
+  take turns, each parsing the newest pending snapshot or yielding nil when
+  an earlier turn already did. See `/architecture/highlighting.md`.
+- **One parse per text** (`internal/highlight`, `sharedparse_cgo_test.go`):
+  highlight and injection queries share one tree per host and per fragment
+  (a 4.8k-line HTML pass dropped 140 ms → 108 ms), and the completion
+  layer's segmentation is memoized per text so its three consumers share one
+  pass.
+- **Completion dispatch serialization** (`internal/complete`, `passMu`,
+  `TestDispatchBurstRunsOnePass`): dispatches queue behind the text pass and
+  a dispatch superseded while it waited never parses.
+- **LSP fragment re-detection coalescing** (`internal/lsp/manager`,
+  `TestFragmentSyncCoalescesBurst`): one detection run per host at a time,
+  re-run once from the latest text after a burst.
+
+`BenchmarkKeystrokeHTML*` (`internal/editor/htmlkeystroke_bench_test.go`)
+measures the pieces on a generated 4.8k-line page: the synchronous `Update`
+(~0.17 ms), the off-loop parse per pass, applying a `SpansMsg` (~6 ms) and
+`View` (~0.7 ms). Tree-sitter's incremental parsing (`old tree` + edits) is
+still unused — the parse is now bounded, not incremental — and remains the
+next lever if a single pass ever needs to get cheaper.
 
 ## Huge-file responsiveness: search landings and long lines (#2734)
 

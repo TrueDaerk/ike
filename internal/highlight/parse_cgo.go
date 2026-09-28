@@ -4,6 +4,7 @@ package highlight
 
 import (
 	"strings"
+	"sync/atomic"
 
 	ts "github.com/tree-sitter/go-tree-sitter"
 
@@ -27,26 +28,53 @@ func parse(g lang.Grammar, lines []string) []Span {
 // Scopes / Folds in pre-order (outer before inner). Sharing the parse keeps both
 // features free — no second CGo pass per edit.
 func parseScoped(g lang.Grammar, scopeKinds, foldKinds []string, lines []string) ([]Span, []Scope, []Fold) {
+	spans, scopes, folds, _ := parseScopedFragments(g, scopeKinds, foldKinds, lines, true, false)
+	return spans, scopes, folds
+}
+
+// parseCount counts Tree-sitter parses (tests assert that a text is parsed
+// once per pass, #2770). Read it with parses().
+var parseCount atomic.Int64
+
+// parses returns the number of Tree-sitter parses run so far.
+func parses() int64 { return parseCount.Load() }
+
+// parseScopedFragments is parseScoped plus injection detection on the same
+// tree (#2770): a host buffer used to be parsed twice per pass — once for its
+// highlight query, once more for its injection query — and every embedded
+// fragment twice again. One parse now serves both queries. wantSpans false
+// skips the highlight query (a project scan that only needs the fragment
+// map); wantFrags false skips the injection query (a fragment at the
+// injection-depth limit, whose own fragments would never be resolved).
+func parseScopedFragments(g lang.Grammar, scopeKinds, foldKinds []string, lines []string, wantSpans, wantFrags bool) ([]Span, []Scope, []Fold, []Fragment) {
 	gi, ok := g.(*grammarImpl)
 	if !ok {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	tsLang, query, ok := gi.compiled()
 	if !ok {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
 	src := []byte(strings.Join(lines, "\n"))
 	parser := ts.NewParser()
 	defer parser.Close()
 	if err := parser.SetLanguage(tsLang); err != nil {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
+	parseCount.Add(1)
 	tree := parser.Parse(src, nil)
 	if tree == nil {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	defer tree.Close()
+
+	var frags []Fragment
+	if wantFrags {
+		if _, injQuery, ok := gi.compiledInjections(); ok {
+			frags = detectFragmentsTree(tree, injQuery, src, lines)
+		}
+	}
 
 	var scopes []Scope
 	if len(scopeKinds) > 0 {
@@ -63,6 +91,10 @@ func parseScoped(g lang.Grammar, scopeKinds, foldKinds []string, lines []string)
 			kinds[k] = true
 		}
 		collectFolds(tree.RootNode(), kinds, &folds)
+	}
+
+	if !wantSpans {
+		return nil, scopes, folds, frags
 	}
 
 	// byteToRune[line] maps a byte offset within that line to a rune column.
@@ -90,7 +122,7 @@ func parseScoped(g lang.Grammar, scopeKinds, foldKinds []string, lines []string)
 	// in pure Go, using the string/comment captures above as its mask, so
 	// bracket depth, indent-guide depth and unmatched-bracket detection all
 	// come from one tracker.
-	return spans, scopes, folds
+	return spans, scopes, folds, frags
 }
 
 // collectScopes walks the tree depth-first and appends every multi-line node

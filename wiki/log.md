@@ -1,5 +1,19 @@
 # Log
 
+## 2026-09-28 (Editor: per-keystroke parse fan-out bounded, #2770)
+
+- Typing in a long HTML buffer no longer stalls: every keystroke used to fan
+  out five or six unbounded whole-buffer Tree-sitter parses (highlight pass
+  with a separate injection parse, completion engine, word and symbol
+  sources, LSP fragment re-detection). The editor now runs one parse per
+  view at a time, newest snapshot first, and never parses a superseded one
+  (`internal/editor/parsegate.go`); the highlight and injection queries
+  share one tree per host and per fragment; the completion layer's
+  segmentation is memoized per text and dispatches queue behind it; the LSP
+  manager coalesces fragment re-detection per host. Docs:
+  `/architecture/performance.md`, `/architecture/highlighting.md`,
+  `/architecture/completion.md`, `/architecture/lsp.md`.
+
 ## 2026-09-25 (HTML preview: browser screenshot mode, #2746)
 
 - The HTML preview gains a browser mode: `b` in the pane (or

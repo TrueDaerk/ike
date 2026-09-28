@@ -74,14 +74,39 @@ func (m *Manager) SetFragmentDetector(fn FragmentDetector) {
 // goroutine (Change runs on the UI thread, and fragment servers may need a
 // blocking initialize). A generation counter makes the newest schedule win, so
 // a slow detection run never clobbers fresher state.
+//
+// Runs coalesce per host (#2770): detection is a whole-buffer Tree-sitter
+// parse, and every keystroke of an HTML buffer used to spawn one — a burst
+// piled up a goroutine per key, all but the last of them wasted. While a run
+// is in flight a schedule only marks the host dirty; the run then re-detects
+// once more from the latest lines before it retires.
 func (m *Manager) scheduleFragmentSync(hostPath string) {
 	m.mu.Lock()
 	detect := m.detect
-	m.mu.Unlock()
 	if detect == nil {
+		m.mu.Unlock()
 		return
 	}
-	go m.syncFragments(hostPath)
+	if m.fragBusy[hostPath] {
+		m.fragDirty[hostPath] = true
+		m.mu.Unlock()
+		return
+	}
+	m.fragBusy[hostPath] = true
+	m.mu.Unlock()
+	go func() {
+		for {
+			m.syncFragments(hostPath)
+			m.mu.Lock()
+			if !m.fragDirty[hostPath] {
+				delete(m.fragBusy, hostPath)
+				m.mu.Unlock()
+				return
+			}
+			delete(m.fragDirty, hostPath)
+			m.mu.Unlock()
+		}
+	}()
 }
 
 func (m *Manager) syncFragments(hostPath string) {

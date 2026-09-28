@@ -66,26 +66,31 @@ func (m *Model) parseCmd() tea.Cmd {
 	// The result travels under this view's parse key: the file path, or —
 	// for a buffer with no file — the view's own tag, which is what lets the
 	// app route it back to exactly this buffer (#2033).
-	key := m.ParseKey()
-	version := m.docVersion
-	lines := m.buf.Lines()
-	return func() tea.Msg {
-		var spans []highlight.Span
-		var scopes []highlight.Scope
-		var folds []highlight.Fold
-		var notes []lang.Note
-		if supported {
-			spans, scopes, folds = highlight.HighlightScoped(langPath, lines)
-			// The Go-computed linter (#1623) rides the same off-loop pass as
-			// the parse: same snapshot, same version guard, no second schedule.
-			notes = highlight.Lint(langPath, lines)
-		}
-		// Invisible/deceptive Unicode findings (#1654) merge into the same
-		// note stream, so every buffer — with or without a language — marks
-		// zero-width characters, bidi controls and confusable identifiers.
-		notes = append(notes, unihint.Notes(lines)...)
-		return highlight.SpansMsg{Path: key, Version: version, Spans: spans, Scopes: scopes, Folds: folds, Notes: notes}
+	// One parse at a time per view, newest snapshot first (#2770,
+	// parsegate.go): a burst of changes during a parse costs one more
+	// parse, of the text as it stands when the running one finishes.
+	snap := parseSnapshot{key: m.ParseKey(), langPath: langPath, version: m.docVersion, lines: m.buf.Lines()}
+	return m.parseGate.schedule(snap, func(s parseSnapshot) tea.Msg { return parseSnapshotMsg(s, supported) })
+}
+
+// parseSnapshotMsg parses one snapshot into its SpansMsg — the body of the
+// off-loop parse command.
+func parseSnapshotMsg(s parseSnapshot, supported bool) tea.Msg {
+	var spans []highlight.Span
+	var scopes []highlight.Scope
+	var folds []highlight.Fold
+	var notes []lang.Note
+	if supported {
+		spans, scopes, folds = highlight.HighlightScoped(s.langPath, s.lines)
+		// The Go-computed linter (#1623) rides the same off-loop pass as
+		// the parse: same snapshot, same version guard, no second schedule.
+		notes = highlight.Lint(s.langPath, s.lines)
 	}
+	// Invisible/deceptive Unicode findings (#1654) merge into the same
+	// note stream, so every buffer — with or without a language — marks
+	// zero-width characters, bidi controls and confusable identifiers.
+	notes = append(notes, unihint.Notes(s.lines)...)
+	return highlight.SpansMsg{Path: s.key, Version: s.version, Spans: spans, Scopes: scopes, Folds: folds, Notes: notes}
 }
 
 // SyntaxCapture returns the Tree-sitter capture cached for the rune at

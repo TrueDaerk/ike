@@ -65,9 +65,13 @@ func HighlightScoped(path string, lines []string) ([]Span, []Scope, []Fold) {
 	var scopes []Scope
 	var folds []Fold
 	if l.Grammar != nil {
-		spans, scopes, folds = parseScoped(l.Grammar, l.ScopeNodes, foldKinds(l), lines)
+		// One parse serves the highlight query and the injection query
+		// (#2770): the host tree is built once, its fragments come off it,
+		// and overlayDetected parses only the fragments themselves.
+		var frags []Fragment
+		spans, scopes, folds, frags = hostParse(l, lines, l.ScopeNodes, foldKinds(l), true, true)
 		var injected []Fold
-		spans, injected = overlayFragments(l, lines, spans)
+		spans, injected = overlayDetected(l, lines, spans, frags, 1)
 		// An embedded region folds by its own language's rules (#1329): a
 		// .http request body that is JSON collapses like a JSON buffer's
 		// objects do.

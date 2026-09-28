@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions/code-lenses/folding-ranges/semantic-tokens/selection-ranges/willRenameFiles rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-09-21T18:00:00Z
+timestamp: 2026-09-28T14:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -992,7 +992,10 @@ exactly the host text of its range, so host↔fragment position mapping is a
 pure offset shift. Lifecycle follows the host document: fragments re-detect
 after every open/change on a manager goroutine (generation-guarded — the
 newest sync wins; `Change` runs on the UI thread and detection/spawning must
-not), matching slots update in place via didChange, vanished fragments close,
+not). Runs coalesce per host (#2770): detection is a whole-buffer parse, so
+while one run is in flight a further change only marks the host dirty and
+the run re-detects once more from the latest lines before it retires — a
+keystroke burst costs two detections, not one per key. Matching slots update in place via didChange, vanished fragments close,
 crash restart re-opens them. Position-based requests (completion, hover,
 definition, references) whose position falls inside a fragment route to the
 fragment's server with positions mapped both ways: request positions become

@@ -406,6 +406,10 @@ type Model struct {
 	docVersion int
 	hlVersion  int
 	hlIndex    highlight.Index
+	// parseGate runs this view's parses one at a time, newest snapshot
+	// first (#2770, parsegate.go); a pointer so every value copy of the
+	// Model shares it.
+	parseGate *parseGate
 	// Rich inline rendering. conceal holds the per-line concealed column
 	// ranges split out of the same parse as hlIndex — markdown marker chrome
 	// (@conceal captures, #881) and stand-in replacements like decoded
@@ -843,6 +847,7 @@ func New() Model {
 		buf:                buffer.New(nil),
 		parseTag:           nextParseTag(),
 		sbcache:            &sbCache{},
+		parseGate:          &parseGate{},
 		stickyCache:        &stickyStore{},
 		foldIdx:            &foldIndex{},
 		mode:               Normal,

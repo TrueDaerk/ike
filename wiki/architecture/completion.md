@@ -4,7 +4,7 @@ title: Completion Engine
 description: Multi-source autocomplete (Roadmap 0410) — the LSP server plus local index sources answer each trigger as independent tagged batches; the editor merges them into one popup with priority-based de-dup and stable selection. Identifier-rune triggers wait lsp.completion_delay_ms and one dispatch's local batches travel as a single message (#2541); ctrl+space (completion.trigger, #2695) asks on demand without any of that gating. The popup and the local sources filter with the JetBrains-style hump matcher under completion.case_sensitivity (#2650). The word and symbol indexes hold code tokens of one language at a time, scanned lazily per language, and every source resolves the effective language at the cursor — an embedded fence's inside one (#2652).
 resource: internal/complete
 tags: [architecture, completion, autocomplete, lsp, sources, postfix]
-timestamp: 2026-09-23T12:00:00Z
+timestamp: 2026-09-28T14:00:00Z
 ---
 
 # Completion Engine
@@ -218,7 +218,9 @@ fragment covering the position — a ```` ```python ```` fence in Markdown, the
 language's id otherwise (`""` for a buffer no language claims). The engine
 computes it once per dispatch, off the UI goroutine, from the text it stashes
 per buffer on every `EditorChange`: `highlight.Embedded` resolves the
-fragments recursively (cached per text generation) and
+fragments recursively (cached per text generation, and answered from the
+highlight layer's per-text segment memo, so the word and symbol sources'
+`highlight.Segments` calls for the same text reuse the pass — #2770) and
 `highlight.InnermostAt` picks the deepest one whose language is a *buffer
 language* — a registered language with extensions or file names. The
 Markdown grammar's `markdown_inline` pass and the regex mini-grammar are
@@ -226,7 +228,10 @@ injection targets, not languages a buffer is in, so prose stays `markdown`
 and a regex literal stays JavaScript. The end of a fragment counts as inside
 it, since that is where typing appends. Sources read it through
 `req.LangID()` (which falls back to `lang.ByPath(LangName())` for a request
-built without it) and `req.Langs()` — the id plus the language's
+built without it) and `req.Langs()`. Dispatches queue behind that text pass
+(`Engine.passMu`, #2770): a keystroke burst that lands while a pass is in
+flight fans out once, for the last trigger only — a dispatch cancelled by a
+newer one while it waited never parses. `req.Langs()` is the id plus the language's
 `lang.Language.CompletionPeers`, an optional list for families that share
 identifiers (JS/TS, C and its headers); the default is empty, i.e. strict
 same-language, and no registered language populates it yet. The word and

@@ -106,6 +106,11 @@ type Manager struct {
 	frags   map[string]map[int]*fragmentDoc
 	fragGen map[string]int
 	fragMu  sync.Mutex
+	// fragBusy marks hosts with a detection run in flight and fragDirty the
+	// ones changed meanwhile (#2770): a keystroke burst re-detects once after
+	// the running pass instead of once per keystroke.
+	fragBusy  map[string]bool
+	fragDirty map[string]bool
 
 	// Diagnostics state (#415): the host server's last publish per host path
 	// and each fragment server's last publish per (host, slot), merged into
@@ -189,6 +194,8 @@ func New(resolve func(lang string) (lsp.ServerSpec, bool), connect Connector, cb
 		companionsHinted: make(map[string]bool),
 		frags:            make(map[string]map[int]*fragmentDoc),
 		fragGen:          make(map[string]int),
+		fragBusy:         make(map[string]bool),
+		fragDirty:        make(map[string]bool),
 
 		hostDiags: make(map[string][]protocol.Diagnostic),
 		published: make(map[string]map[string]bool),
