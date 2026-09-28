@@ -1957,7 +1957,7 @@ func (m *Model) scroll() {
 			// a display-cell offset there — keeps it inside the window.
 			col = m.svDisplayCol(m.cursor.Line, col)
 		}
-		left := m.view.Left
+		left, top := m.view.Left, m.view.Top
 		m.view.ScrollWidth(m.cursor.Line, col, m.buf.LineCount(), m.scrollTextWidth())
 		if !m.svActive() {
 			// Conceal stand-ins render at a width of their own (#1585/#1623),
@@ -1966,7 +1966,7 @@ func (m *Model) scroll() {
 			m.concealScrollFix(left)
 		}
 		m.matchScrollFix()
-		m.foldScrollFix()
+		m.foldScrollFix(top)
 	}
 	m.landMatchOK = false
 	m.unhideCursor()
