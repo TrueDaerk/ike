@@ -415,39 +415,70 @@ func (m Model) displayLineAt(n int) int {
 	return line
 }
 
-// foldScrollFix refines the viewport's cursor-follow scroll when folds are
-// collapsed: viewport.Scroll counts buffer lines, so a window spanning folds
-// holds more content than its height suggests and Top would move too early.
-// This recounts the Top→cursor distance in visible rows and advances Top only
-// while the cursor is actually below the last visible row. It also lifts a
-// Top that landed inside a collapsed body up onto its header.
-func (m *Model) foldScrollFix() {
+// foldScrollFix redoes the viewport's vertical cursor-follow in visible rows
+// when folds are collapsed (#2768): viewport.ScrollWidth counts buffer lines,
+// so a collapsed fold between Top and the cursor makes the cursor look further
+// down than the row it renders on, and Top would be pushed forward although
+// the cursor row is on screen — a click below a fold then scrolled the file.
+// prev is Top before ScrollWidth ran; the vertical follow restarts from it
+// (lifted out of any collapsed body onto its header) and moves Top only while
+// the cursor row plus the ScrollOff margin — both counted in visible rows, a
+// collapsed fold as one — is outside the rendered window.
+func (m *Model) foldScrollFix(prev int) {
 	if !m.hasFolds() {
 		return
 	}
-	for m.view.Top > 0 && m.lineHidden(m.view.Top) {
-		m.view.Top--
-	}
 	h := m.view.Height()
-	if h <= 0 || m.cursor.Line < m.view.Top {
+	if h <= 0 {
 		return
 	}
+	lc := m.buf.LineCount()
+	top := prev
+	if top > lc-1 {
+		top = lc - 1
+	}
+	if top < 0 {
+		top = 0
+	}
+	for top > 0 && m.lineHidden(top) {
+		top--
+	}
+	off := m.view.ScrollOff
+	if max := (h - 1) / 2; off > max {
+		off = max
+	}
+	// Above: the first rendered row must be at least off visible rows above
+	// the cursor.
+	upper := m.cursor.Line
+	for i := 0; i < off; i++ {
+		n, ok := m.visibleStep(upper, -1)
+		if !ok {
+			break
+		}
+		upper = n
+	}
+	if top > upper {
+		top = upper
+	}
+	// Below: the cursor's row (1-based) plus the margin must fit the height.
+	// Margin rows past the end of the buffer count too, as in ScrollWidth.
 	rows := 1
-	for l := m.view.Top; l < m.cursor.Line; rows++ {
+	for l := top; l < m.cursor.Line; rows++ {
 		n, ok := m.visibleStep(l, 1)
 		if !ok || n > m.cursor.Line {
 			break
 		}
 		l = n
 	}
-	for rows > h {
-		n, ok := m.visibleStep(m.view.Top, 1)
+	for rows+off > h {
+		n, ok := m.visibleStep(top, 1)
 		if !ok {
-			return
+			break
 		}
-		m.view.Top = n
+		top = n
 		rows--
 	}
+	m.view.Top = top
 }
 
 // foldCopyGlyph is the copy affordance a collapsed fold header carries

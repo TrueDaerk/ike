@@ -436,7 +436,13 @@ Cluster-aware motion is a possible follow-up, not part of this change.
   of a shared document fold independently, like the cursor). A collapsed
   fold renders as one row — the header plus a dimmed `⋯ N lines` placeholder
   — and counts as one row for `j`/`k` (and counts), mouse clicks and wheel
-  scrolling. Jumping *into* a fold (search landing, `G`, go-to-definition)
+  scrolling. Cursor-follow scrolling is fold-aware too (#2768): the generic
+  `viewport.ScrollWidth` counts buffer lines, so with folds collapsed
+  `foldScrollFix` (`fold.go`) redoes the vertical follow from the pre-scroll
+  `Top` in visible rows — `Top` moves only while the cursor row plus the
+  `ScrollOff` margin (also in visible rows) leaves the rendered window, so a
+  click or `j` onto an on-screen line below a fold never scrolls, and `Top`
+  never rests inside a collapsed body. Jumping *into* a fold (search landing, `G`, go-to-definition)
   auto-unfolds it via the `scroll()` choke point; an edit landing in a fold
   dissolves it, edits above shift it, and every accepted reparse reconciles
   the collapsed set against the fresh ranges (version-gated like the spans).
