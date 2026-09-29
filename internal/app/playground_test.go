@@ -29,9 +29,9 @@ import (
 // human-scale delay, so a test drives the dialog without sleeping.
 func noDebounce(t *testing.T) {
 	t.Helper()
-	prev, prevDim, prevSpin := playDebounce, playDimDelay, playSpinDelay
-	playDebounce, playDimDelay, playSpinDelay = 0, 0, 0
-	t.Cleanup(func() { playDebounce, playDimDelay, playSpinDelay = prev, prevDim, prevSpin })
+	prev, prevDim, prevSpin, prevIdle := playDebounce, playDimDelay, playSpinDelay, playHintIdle
+	playDebounce, playDimDelay, playSpinDelay, playHintIdle = 0, 0, 0, 0
+	t.Cleanup(func() { playDebounce, playDimDelay, playSpinDelay, playHintIdle = prev, prevDim, prevSpin, prevIdle })
 }
 
 // playApp opens body as a .json file in the focused editor and returns the

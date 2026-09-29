@@ -7444,6 +7444,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// a stale generation means the user kept typing.
 		return m, m.firePlayDebounce(msg)
 
+	case playHintIdleMsg:
+		// The query line went idle long enough to show the key hints again
+		// (#2776); a stale generation means the user typed since.
+		return m, m.firePlayHintIdle(msg)
+
 	case playEvalDoneMsg:
 		// An off-loop jq evaluation came back (#1936); a stale generation is
 		// dropped by finishPlayEval, a current one refreshes the result buffer.
