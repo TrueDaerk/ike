@@ -47,7 +47,18 @@ func (e *ShellWordsError) Error() string { return e.Msg }
 
 // Check is Compile with the error's position: it compiles program in dialect
 // d without running it and reports what, if anything, is wrong and where.
-func Check(d Dialect, program string) Diagnostic {
+func Check(d Dialect, program string) Diagnostic { return CheckWith(d, program, "") }
+
+// CheckWith is Check with the variables line vars (#2786) bound: a program
+// naming `$id` compiles once `id=…` is on the line, and a line that does not
+// parse is itself the diagnostic — without a span, since it is not about the
+// program. The xmq dialect judges the line the same way; its variables only
+// reach the CLI's environment.
+func CheckWith(d Dialect, program, vars string) Diagnostic {
+	vs, err := ParseVars(vars)
+	if err != nil {
+		return Diagnostic{Msg: err.Error()}
+	}
 	if d == DialectXMQ {
 		_, err := ShellWords(program)
 		if err == nil {
@@ -68,7 +79,7 @@ func Check(d Dialect, program string) Diagnostic {
 	if err != nil {
 		return parseDiagnostic(program, err)
 	}
-	if _, err := gojq.Compile(query); err != nil {
+	if _, err := compileWith(query, vs); err != nil {
 		return compileDiagnostic(program, err)
 	}
 	return Diagnostic{}

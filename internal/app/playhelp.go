@@ -153,6 +153,7 @@ func (m Model) playgroundChordHelp() help.Group {
 	add("playground.structure", "Structure strip: the result's top-level keys as jump targets (#2793)")
 	add("playground.stageNext", "Step to the next pipeline stage: the result up to it (#2785)")
 	add("playground.stagePrev", "Step to the previous pipeline stage; esc returns to the full program")
+	add("playground.variables", "Variables line: name=value entries bound as $name (#2786)")
 	add("editor.copy", "Copy the result buffer's selection (from either focus)")
 	add("lsp.codeAction", "Not available in the playground — says so instead of doing nothing")
 	return g

@@ -88,9 +88,14 @@ func Scopes() []Scope { return []Scope{ScopeProject, ScopeGlobal} }
 // filter's optional self-test (#2792); its fields sit flat in the entry's JSON
 // object and are all omitempty, so a store written before #2792 loads as
 // filters without one, and a filter without one writes exactly the old shape.
+//
+// Vars is the variables line (#2786) the program was saved with — `$id` in a
+// saved `select(.id == $id)` means nothing without it — restored with the
+// program on pick; omitempty for the same reason.
 type Filter struct {
 	Name    string `json:"name"`
 	Program string `json:"program"`
+	Vars    string `json:"vars,omitempty"`
 	SelfTest
 }
 
@@ -225,6 +230,21 @@ func (l *Library) SetSample(name string, s SelfTest) error {
 	for i, f := range l.Filters {
 		if f.Name == name {
 			l.Filters[i].SelfTest = s
+			return nil
+		}
+	}
+	return ErrNotFound
+}
+
+// SetVars records the variables line (#2786) the entry saved under name runs
+// with, "" for none. Unlike the sample it belongs to the program itself, so
+// the save prompt writes it on every save — an edited program saved without
+// variables must not keep bindings it no longer names.
+func (l *Library) SetVars(name, vars string) error {
+	name = strings.TrimSpace(name)
+	for i, f := range l.Filters {
+		if f.Name == name {
+			l.Filters[i].Vars = strings.TrimSpace(vars)
 			return nil
 		}
 	}

@@ -201,7 +201,7 @@ func playCompLabel(it jqplay.Candidate) string {
 // cross the bottom.
 func (m Model) compositePlayCompletion(base string) string {
 	s := m.play
-	if s == nil || s.comp == nil || s.bufFocus || !m.playFocused() {
+	if s == nil || s.comp == nil || s.bufFocus || s.varsFocus || !m.playFocused() {
 		return base
 	}
 	r, ok := m.lay.Panes[s.paneKey]

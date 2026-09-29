@@ -524,10 +524,11 @@ func TestJQPlaygroundZeroValuesWarn(t *testing.T) {
 func TestJQPlaygroundNarrowInfoRowDropsWholeHints(t *testing.T) {
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = setProgram(m, ".")
-	// 240 cells: the full hint tail is ~220 wide since the cheatsheet chord
-	// joined it (#2382), and the point of the assertion is that nothing is
-	// dropped when there is room, not what the exact tally happens to be.
-	wide := ansi.Strip(m.playInfoRow(240))
+	// 260 cells: the full hint tail is ~240 wide since the cheatsheet chord
+	// (#2382) and the variables line (#2786) joined it, and the point of the
+	// assertion is that nothing is dropped when there is room, not what the
+	// exact tally happens to be.
+	wide := ansi.Strip(m.playInfoRow(260))
 	if !strings.Contains(wide, "esc close") {
 		t.Fatalf("a wide row should hold every hint, got %q", wide)
 	}

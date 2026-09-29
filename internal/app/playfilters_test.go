@@ -343,7 +343,7 @@ func pickerGlyphs(t *testing.T, m Model) (Model, map[string]string) {
 	m = drainCmd(asModel(tm), cmd)
 	out := map[string]string{}
 	for _, it := range m.playFilters.Results("", palette.Context{}) {
-		out[it.Title] = it.Hint
+		out[it.Title] = strings.TrimSuffix(strings.TrimRight(it.Hint, " "), " $") // the self-test mark without the variables column (#2786)
 	}
 	return m, out
 }
@@ -418,7 +418,7 @@ func TestJQFilterCheckStates(t *testing.T) {
 		t.Fatal("the picker must start the lazy checks as commands")
 	}
 	for _, it := range m.playFilters.Results("", palette.Context{}) {
-		if it.Title == "good" && it.Hint != "…" {
+		if it.Title == "good" && strings.TrimSpace(it.Hint) != "…" {
 			t.Fatalf("an unchecked sample must show …, got %q", it.Hint)
 		}
 	}

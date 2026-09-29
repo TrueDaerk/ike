@@ -89,8 +89,9 @@ func parseXMQ(text string) (*Input, error) {
 // binary with the snapshot on stdin, and shape stdout/stderr into the Result
 // the playground renders. ctx carries the host's EvalTimeout and is cancelled
 // when a newer keystroke supersedes the run; CommandContext kills the process
-// then.
-func runXMQ(ctx context.Context, program string, in *Input) Result {
+// then. vars are the variables line (#2786), exported to the binary's
+// environment — xmq has no `$name` of its own.
+func runXMQ(ctx context.Context, program string, in *Input, vars Vars) Result {
 	args, err := ShellWords(program)
 	if err != nil {
 		return Result{Err: err.Error(), dialect: DialectXMQ}
@@ -98,6 +99,9 @@ func runXMQ(ctx context.Context, program string, in *Input) Result {
 	res := Result{dialect: DialectXMQ, ext: xmqOutputExt(args)}
 	cmd := exec.CommandContext(ctx, XMQBinary(), args...)
 	cmd.Stdin = strings.NewReader(in.raw)
+	if len(vars) > 0 {
+		cmd.Env = vars.Environ()
+	}
 	cmd.WaitDelay = xmqWaitDelay
 	var stdout capWriter
 	var stderr bytes.Buffer

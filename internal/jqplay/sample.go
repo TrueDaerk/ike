@@ -137,7 +137,9 @@ func CheckFilter(ctx context.Context, d Dialect, f Filter) CheckState {
 	}
 	ctx, cancel := context.WithTimeout(ctx, EvalTimeout)
 	defer cancel()
-	res := RunWith(ctx, f.Program, in, ParseFlags(f.Flags))
+	opts := ParseFlags(f.Flags)
+	opts.Vars = f.Vars
+	res := RunWith(ctx, f.Program, in, opts)
 	if res.Err != "" || res.Truncated {
 		return CheckFail
 	}

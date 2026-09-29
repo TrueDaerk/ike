@@ -231,6 +231,12 @@ type playState struct {
 	// opts are jq's -r / -c / -s toggles (#2784), handed to every run; the
 	// info row's chips show them. Always zero for xmq.
 	opts jqplay.Options
+	// vars is the variables line (#2786, playvars.go): `name=value` entries
+	// bound as `$name` while varsShown; varsFocus gives it the keyboard
+	// (bufFocus is then false). opts.Vars stays empty — runOpts joins them.
+	vars      ui.Field
+	varsShown bool
+	varsFocus bool
 
 	// qgoal is the column a run of vertical motions through the expanded
 	// view's rows aims for (#2038), -1 when none is in flight. It is what
@@ -353,6 +359,8 @@ type playState struct {
 func (s *playState) setBufFocus(v bool) {
 	s.bufFocus = v
 	s.stripFocus = false // any focus move takes the keyboard off the structure strip (#2793)
+	s.varsFocus = false  // … and off the variables line (#2786); focusPlayVars sets it after
+	s.vars.Deselect()
 	// A focus move is not the find chord's round trip (#2411): tab, a click
 	// or a paste all end the "esc goes back to the query line" state, and
 	// beginPlayResultSearch re-arms it right after moving the focus itself.
@@ -385,7 +393,12 @@ func (m *Model) startPlayground(d jqplay.Dialect, atPath bool) tea.Cmd {
 		return nil
 	}
 	m.closePlayground()
-	s := &playState{dialect: d, paneKey: src.paneKey, source: src.label, srcKey: src.key, srcPath: src.path, srcEd: src.ed, srcInst: src.inst, csv: src.csv, csvSep: src.csvSep, histIdx: -1, qgoal: -1, hist: m.playHist(), program: ui.NewField(m.playSeedProgram(d, src, atPath)), opts: m.playSeedOptions(d, src, atPath)}
+	s := &playState{dialect: d, paneKey: src.paneKey, source: src.label, srcKey: src.key, srcPath: src.path, srcEd: src.ed, srcInst: src.inst, csv: src.csv, csvSep: src.csvSep, histIdx: -1, qgoal: -1, hist: m.playHist(), program: ui.NewField(m.playSeedProgram(d, src, atPath))}
+	// The remembered variables (#2786) come back with the remembered program,
+	// on their own line: opts carries the toggles only.
+	s.opts = m.playSeedOptions(d, src, atPath)
+	s.seedVars(s.opts.Vars)
+	s.opts.Vars = ""
 	ed := editor.New()
 	ed.SetRegisters(m.regs) // app-wide registers (#1540): yanks in the result reach every buffer
 	ed.SetPalette(m.themePal)
@@ -613,7 +626,7 @@ func playIdentity(d jqplay.Dialect) string {
 // path-keyed entries are worth surviving one.
 //
 // opts are the toggles the program ran with (#2784), remembered alongside it
-// and restored by playSeedOptions.
+// and restored by playSeedOptions — the variables line (#2786) with them.
 func (m *Model) rememberPlayProgram(key, path, program string, opts jqplay.Options) {
 	program = strings.TrimSpace(program)
 	if key == "" || program == "" || program == "." {
@@ -628,7 +641,7 @@ func (m *Model) rememberPlayProgram(key, path, program string, opts jqplay.Optio
 	}
 	m.playLastOpts[key] = opts
 	if path != "" {
-		m.playLastStoreOf().SetWithFlags(key, program, opts.Flags())
+		m.playLastStoreOf().SetWithOptions(key, program, opts)
 	}
 }
 
@@ -771,10 +784,11 @@ func (m Model) playInlineActive(key string) bool {
 // the breadcrumbRows analogue (#1153) the mouse translation keys off. With the
 // expanded query view up (#2032) it grows with the wrapped program, so the
 // mouse translation and the result buffer's height follow the header instead
-// of assuming the two-row default.
+// of assuming the two-row default. The variables line (#2786) adds its row
+// only while it is shown.
 func (m Model) playHeaderRowsFor(key string) int {
 	if m.playInlineActive(key) {
-		return m.playQueryRowCount() + playInfoRows + m.playStaleRows()
+		return m.playQueryRowCount() + m.playVarsRows() + playInfoRows + m.playStaleRows()
 	}
 	return 0
 }
@@ -809,7 +823,7 @@ func (m Model) playQueryRowsFor(width int) int {
 	rows := len(jqplay.Wrap(s.program.Text, m.playQueryWidth(width)))
 	limit := playMaxQueryRows
 	if r, ok := m.lay.Panes[s.paneKey]; ok {
-		if fits := paneInterior(r.H, paneChromeH) - playInfoRows - m.playStaleRows() - playMinResultRows; fits < limit {
+		if fits := paneInterior(r.H, paneChromeH) - m.playVarsRows() - playInfoRows - m.playStaleRows() - playMinResultRows; fits < limit {
 			limit = fits
 		}
 	}
@@ -933,7 +947,7 @@ func (m *Model) sizePlayResult() {
 	// The structure strip (#2793) takes its cells off the result's right edge,
 	// so the text, its scrollbar and every click on it map onto the narrower
 	// editor.
-	s.resultEd.SetSize(width-m.playStripW(width), paneInterior(r.H, paneChromeH+m.playQueryRowCount()+playInfoRows+m.playStaleRows()))
+	s.resultEd.SetSize(width-m.playStripW(width), paneInterior(r.H, paneChromeH+m.playQueryRowCount()+m.playVarsRows()+playInfoRows+m.playStaleRows()))
 }
 
 // closePlayground records the program in the session history, aborts a run
@@ -1194,7 +1208,10 @@ func (m *Model) firePlayDebounce(msg playDebounceMsg) tea.Cmd {
 // screen under the stale banner exactly as after a failed run (#2412).
 func (m *Model) compilePlay() bool {
 	s := m.play
-	diag := jqplay.Check(s.dialect, s.playEvalProgram())
+	// The shown variables line (#2786) is bound for the check, so `$id`
+	// compiles once `id=…` is on it — and a line that does not parse is the
+	// error itself.
+	diag := jqplay.CheckWith(s.dialect, s.playEvalProgram(), s.playVarsText())
 	err := diag.Msg
 	if err == "" {
 		if s.compileBad {
@@ -1240,7 +1257,7 @@ func (m *Model) runPlay() tea.Cmd {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), jqplay.EvalTimeout)
 	s.cancel = cancel
-	program, in, gen, opts := s.playEvalProgram(), s.input, s.gen, s.opts
+	program, in, gen, opts := s.playEvalProgram(), s.input, s.gen, s.runOpts()
 	parse := s.parseDur
 	// The change diff (#2787) compares against the installed good result;
 	// with none — the first run, or the first after a clear — there is
@@ -1471,6 +1488,9 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	if s.bufFocus {
 		return m.updatePlayBufferKey(msg)
+	}
+	if s.varsFocus {
+		return m.updatePlayVarsKey(msg)
 	}
 	// The copy chord reaches the result buffer's selection even while the
 	// query line owns the keyboard (#2062): a drag in the result selects and
@@ -1967,6 +1987,10 @@ func (m *Model) pastePlayground(text string) tea.Cmd {
 	if s.bufFocus && s.resultEd != nil && s.resultEd.PasteIntoPrompt(text) {
 		return nil
 	}
+	// The variables line (#2786) takes a paste while it has the keyboard.
+	if cmd, ok := m.pastePlayVars(text); ok {
+		return cmd
+	}
 	if !s.program.Paste(text) {
 		return nil
 	}
@@ -2034,6 +2058,9 @@ func (m Model) playPaneClick(key string, msg mouseEvent, x, y int) (tea.Model, t
 			if cmd, hit := m.clickPlayChip(x, y); hit {
 				return m, cmd
 			}
+			if m.clickPlayVarsRow(x, y) {
+				return m, nil
+			}
 			s.setBufFocus(false)
 			m.clickPlayQueryRow(x, y)
 		}
@@ -2076,7 +2103,7 @@ func (m *Model) clickPlayQueryRow(x, y int) {
 	}
 	width := paneInterior(r.W, paneChromeW)
 	lines, rows, start := m.playQueryWindow(width)
-	idx := y + rows + playInfoRows // the clicked query row, 0-based
+	idx := y + m.playHeaderRowsFor(s.paneKey) // the clicked query row, 0-based: the query rows head the header
 	col := x - m.playPrefixW()
 	if idx < 0 || idx >= rows || col < 0 {
 		return
@@ -2210,7 +2237,11 @@ func (m Model) playInlineBody(width int) string {
 	if width < 20 {
 		width = 20
 	}
-	body := strings.Join(m.playQueryRows(width), "\n") + "\n" + m.playInfoRow(width) + "\n"
+	body := strings.Join(m.playQueryRows(width), "\n") + "\n"
+	if s.varsShown {
+		body += m.playVarsRow(width) + "\n" // the variables line (#2786), between the query and the info row
+	}
+	body += m.playInfoRow(width) + "\n"
 	if s.playStale() {
 		body += m.playStaleBanner(width) + "\n"
 	}
@@ -2357,6 +2388,9 @@ func (m Model) playFocusHints() []string {
 	if s.expanded {
 		view = m.playQueryViewChord() + " one-line query"
 	}
+	if s.varsFocus {
+		return m.playVarsHints()
+	}
 	if s.bufFocus {
 		// za/zM/zR are the editor's own fold keys (#1741), listed here
 		// because folding a big result (#2029) is the reason to be in the
@@ -2379,7 +2413,10 @@ func (m Model) playFocusHints() []string {
 	// matters: a program too wide for the row raises the "query cut" marker.
 	out := []string{"ctrl+g cheatsheet", "tab result", "enter run", view}
 	out = append(out, hist...)
-	return append(out, "ctrl+s save filter", "ctrl+l filters", "ctrl+y copy", "ctrl+o scratch", "esc close", playHelpHint)
+	// The variables line (#2786) is named by its live chord, like the view
+	// toggle, late in the list: it is the rarer need, and the hints drop from
+	// the right.
+	return append(out, "ctrl+s save filter", "ctrl+l filters", "ctrl+y copy", "ctrl+o scratch", m.playCommandChord("playground.variables")+" $vars", "esc close", playHelpHint)
 }
 
 // playHelpHint is the hint tail's last segment (#2237): the one key that lists
@@ -2394,10 +2431,14 @@ const playHelpHint = "f1 keys"
 // hints, resolved against the live binding table so a rebind is reflected
 // rather than a hard-coded default being advertised. With the command unbound
 // — a user may unbind it — the palette is what is left to name.
-func (m Model) playQueryViewChord() string {
+func (m Model) playQueryViewChord() string { return m.playCommandChord("json.jqQueryView") }
+
+// playCommandChord names the chord bound to command for a hint, "palette"
+// when it is unbound — playQueryViewChord's lookup for any command.
+func (m Model) playCommandChord(command string) string {
 	if m.bindings != nil && m.bindings.Table() != nil {
 		for _, b := range m.bindings.Table().Bindings() {
-			if b.Command == "json.jqQueryView" {
+			if b.Command == command {
 				return b.Chord.String()
 			}
 		}
@@ -2479,7 +2520,7 @@ func (m Model) playQueryRow(width int) string {
 	pal := m.pal()
 	badge := m.playDialectBadge(s.dialect)
 	arrow := "> "
-	if s.bufFocus || !m.playFocused() {
+	if s.bufFocus || s.varsFocus || !m.playFocused() {
 		pos = -1
 		arrow = "  "
 	}
@@ -2510,7 +2551,7 @@ func (m Model) playQueryRows(width int) []string {
 	label := lipgloss.NewStyle().Foreground(pal.Secondary)
 	badge := m.playDialectBadge(s.dialect)
 	arrow, pos := "> ", s.program.Cur
-	if s.bufFocus || !m.playFocused() {
+	if s.bufFocus || s.varsFocus || !m.playFocused() {
 		arrow, pos = "  ", -1
 	}
 	prefix := label.Render(arrow) + badge + label.Render(": ")
@@ -2632,6 +2673,13 @@ func (m Model) playHighlighted(program string, pos, width int) string {
 // surface, not buffer text, and the chrome slots are the ones every theme
 // guarantees to contrast against it.
 func (m Model) playKindStyles() map[jqplay.Kind]lipgloss.Style {
+	s := m.play
+	return m.playFieldStyles(s != nil && s.program.Selected() && !s.bufFocus && !s.varsFocus && m.playFocused())
+}
+
+// playFieldStyles is playKindStyles for a header field whose select-all is
+// armed or not — the variables line (#2786) asks with its own.
+func (m Model) playFieldStyles(selected bool) map[jqplay.Kind]lipgloss.Style {
 	pal := m.pal()
 	style := lipgloss.NewStyle()
 	// A select-all (cmd+a, #2633) paints the whole program as selected
@@ -2639,7 +2687,7 @@ func (m Model) playKindStyles() map[jqplay.Kind]lipgloss.Style {
 	// make invisibly. The highlighting steps aside for the one render it is
 	// armed — the colors say what the program *is*, the reverse video says
 	// what the next key will do to it.
-	if s := m.play; s != nil && s.program.Selected() && !s.bufFocus && m.playFocused() {
+	if selected {
 		sel := ui.SelectionStyle()
 		out := map[jqplay.Kind]lipgloss.Style{}
 		for k := jqplay.KindPlain; k <= jqplay.KindComment; k++ {
@@ -2746,7 +2794,7 @@ func (s *playState) spinSuffix() string {
 func (m Model) playStructurePainter(program string, tokens []jqplay.Token, styles map[jqplay.Kind]lipgloss.Style) func(int) lipgloss.Style {
 	plain := func(i int) lipgloss.Style { return styles[jqplay.KindAt(tokens, i)] }
 	s := m.play
-	if s != nil && s.program.Selected() && !s.bufFocus && m.playFocused() {
+	if s != nil && s.program.Selected() && !s.bufFocus && !s.varsFocus && m.playFocused() {
 		return plain
 	}
 	pal := m.pal()

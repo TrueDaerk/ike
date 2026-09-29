@@ -50,6 +50,7 @@ type LastPrograms struct {
 	order  []string
 	items  map[string]string
 	flags  map[string]string
+	vars   map[string]string
 	file   string
 	loaded bool
 }
@@ -65,6 +66,9 @@ type lastProgramEntry struct {
 	// Flags are the run toggles (#2784) the program last ran with, spelled
 	// as Options.Flags; absent in files written before they existed.
 	Flags string `json:"flags,omitempty"`
+	// Vars is the variables line (#2786) the program last ran with; absent
+	// when there was none.
+	Vars string `json:"vars,omitempty"`
 }
 
 // lastProgramEnvelope is the on-disk schema, newest first.
@@ -105,6 +109,9 @@ func (l *LastPrograms) ensure() {
 		if e.Flags != "" {
 			l.flagMap()[key] = e.Flags
 		}
+		if e.Vars != "" {
+			l.varMap()[key] = e.Vars
+		}
 		l.order = append(l.order, key)
 	}
 }
@@ -116,7 +123,7 @@ func (l *LastPrograms) save() {
 	}
 	env := lastProgramEnvelope{Version: lastProgramVersion, Entries: make([]lastProgramEntry, 0, len(l.order))}
 	for _, key := range l.order {
-		env.Entries = append(env.Entries, lastProgramEntry{Key: key, Program: l.items[key], Flags: l.flags[key]})
+		env.Entries = append(env.Entries, lastProgramEntry{Key: key, Program: l.items[key], Flags: l.flags[key], Vars: l.vars[key]})
 	}
 	data, err := json.Marshal(env)
 	if err != nil {
@@ -142,6 +149,16 @@ func (l *LastPrograms) Flags(key string) string {
 	return l.flags[key]
 }
 
+// Options returns everything key's last program ran with: the toggles
+// (#2784) and the variables line (#2786). The zero value when nothing is
+// remembered.
+func (l *LastPrograms) Options(key string) Options {
+	l.ensure()
+	o := ParseFlags(l.flags[key])
+	o.Vars = l.vars[key]
+	return o
+}
+
 // flagMap is the toggle map, allocated on first write.
 func (l *LastPrograms) flagMap() map[string]string {
 	if l.flags == nil {
@@ -150,14 +167,29 @@ func (l *LastPrograms) flagMap() map[string]string {
 	return l.flags
 }
 
+// varMap is the variables-line map, allocated on first write.
+func (l *LastPrograms) varMap() map[string]string {
+	if l.vars == nil {
+		l.vars = map[string]string{}
+	}
+	return l.vars
+}
+
 // Set records program as key's last program, moving it to the front of the
 // LRU order, and persists the store when a file is attached. An empty key or
 // program is ignored.
-func (l *LastPrograms) Set(key, program string) { l.SetWithFlags(key, program, "") }
+func (l *LastPrograms) Set(key, program string) { l.SetWithOptions(key, program, Options{}) }
 
 // SetWithFlags is Set that also records the run toggles the program ran with
 // (#2784), spelled as Options.Flags.
 func (l *LastPrograms) SetWithFlags(key, program, flags string) {
+	l.SetWithOptions(key, program, ParseFlags(flags))
+}
+
+// SetWithOptions is Set that also records what the program ran with: the
+// toggles (#2784) and the variables line (#2786).
+func (l *LastPrograms) SetWithOptions(key, program string, opts Options) {
+	flags, vars := opts.Flags(), strings.TrimSpace(opts.Vars)
 	key = strings.TrimSpace(key)
 	program = strings.TrimSpace(program)
 	if key == "" || program == "" {
@@ -175,16 +207,22 @@ func (l *LastPrograms) SetWithFlags(key, program, flags string) {
 	}
 	l.order = append([]string{key}, l.order...)
 	l.items[key] = program
-	if flags = strings.TrimSpace(flags); flags != "" {
+	if flags != "" {
 		l.flagMap()[key] = flags
 	} else {
 		delete(l.flags, key)
+	}
+	if vars != "" {
+		l.varMap()[key] = vars
+	} else {
+		delete(l.vars, key)
 	}
 	for len(l.order) > LastProgramLimit {
 		last := l.order[len(l.order)-1]
 		l.order = l.order[:len(l.order)-1]
 		delete(l.items, last)
 		delete(l.flags, last)
+		delete(l.vars, last)
 	}
 	l.save()
 }
