@@ -167,6 +167,13 @@ func (s *Store) All(bucket string) []string {
 	return append([]string(nil), s.buckets[bucket]...)
 }
 
+// Has reports whether bucket holds any entry, without All's copy — cheap
+// enough for a render path (the search line's "↑ history" hint, #2826).
+func (s *Store) Has(bucket string) bool {
+	s.ensure()
+	return len(s.buckets[bucket]) > 0
+}
+
 // SaveFindState persists the find-in-path overlay's last state (#2054),
 // replacing whatever was there before, and persists.
 func (s *Store) SaveFindState(st FindState) {

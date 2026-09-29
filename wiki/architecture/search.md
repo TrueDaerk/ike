@@ -4,7 +4,7 @@ title: Project Search (Find in Path)
 description: Streaming project-wide search engine — rg --json backend with a pure-Go walker fallback, generation-based cancellation, bounded results — and the shared in-pane "/" search (ui.LineSearch) every viewer pane jumps through its matches with.
 resource: internal/search
 tags: [architecture, search, find-in-path, in-pane-search, ui]
-timestamp: 2026-09-24T16:00:00Z
+timestamp: 2026-09-29T12:00:00Z
 ---
 
 # Project Search (Find in Path)
@@ -137,6 +137,35 @@ Not adopters, by design (allowlisted in the guard test): the editor's own vim
 `/` (regex, history, direction), the terminal copy mode's `/` and `?`
 (directional accept-then-repeat), the settings and TODO-index *filters* and
 the DOM inspector's CSS-selector matches.
+
+## Editor search line (`/`, `?`, `cmd+f`)
+
+The editor's own vim search line is not a `ui.LineSearch` adopter (regex,
+direction, history — see [editor](editor.md)), but it follows the same
+"refine, don't retype" rule:
+
+- **Prefill (#2826).** `/`, `?` and `cmd+f` (`editor.find`, the same line)
+  open on a preselected prefill, picked in order: a single-line visual
+  selection (#2063, `cmd+f`); the editor's last committed search line, markers
+  (`\v`, `\c`, `\j`) included, whichever direction committed it; the
+  project's last search — the newest entry of the `search` history bucket,
+  which every editor of the project pushes to; a query the app seeded for
+  `f3`/`cmd+g` (#2623). With none of them the line opens empty. The
+  incremental preview runs on the prefill immediately. The first typed
+  character replaces it, backspace clears it, `end`/`→`/`←` drop the mark and
+  keep the text for editing, `enter` re-commits it (vim's `/<CR>`), and `esc`
+  restores cursor and viewport to where the line was opened (#255).
+- **History (#1171).** `↑`/`↓` walk the shared `/` `?` bucket, newest
+  first; `↓` past the newest restores the live (prefilled or typed) line. A
+  recall skips entries equal to the text already on the line, so the first
+  `↑` from a prefill lands on the *previous* query instead of repeating it,
+  and it re-runs the preview. The store is per project (`.ike/histories.json`)
+  and attached to every editor the app wires (`installEmitter`: open, new
+  pane, restore, project switch and resume).
+- **Hint.** While the bucket holds entries, a faint `↑ history` sits
+  right-aligned at the end of the line, never over the pattern: it is dropped
+  when the row has no room for it, and absent with an empty bucket or no
+  store.
 
 ## Matching across line boundaries (#2600)
 

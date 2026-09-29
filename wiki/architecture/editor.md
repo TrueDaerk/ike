@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-09-24T16:00:00Z
+timestamp: 2026-09-29T12:00:00Z
 ---
 
 # Editor
@@ -591,8 +591,13 @@ Cluster-aware motion is a possible follow-up, not part of this change.
   preselection above. Backspace/Delete clear the preselected text without a
   second keystroke; any other key (arrows, history recall, `ctrl+c`) just drops
   the mark and edits normally. A selection spanning more than one line has no
-  single-line text to offer, so `cmd+f` opens empty, same as with no selection
-  at all. The `/` `?` and `:` lines share the single-line editing helper
+  single-line text to offer, so `cmd+f` falls back to the last-query prefill
+  below, same as with no selection at all. Without a selection, `/`, `?` and
+  `cmd+f` open **prefilled with the last committed query** (#2826) — this
+  editor's last `/`/`?` line (markers included), else the project's last
+  search — preselected the same way, so the first typed key replaces it and
+  `end`/`→` keep it for refining; see [project search](search.md)'s
+  editor-search-line section. The `/` `?` and `:` lines share the single-line editing helper
   (`internal/ui.EditKey`, #763, #1110): left/right move the cursor, typing
   inserts at it, alt+backspace deletes the previous word, cmd+backspace
   clears the line, and the incremental preview keeps tracking mid-query
@@ -617,7 +622,11 @@ Cluster-aware motion is a possible follow-up, not part of this change.
   `histories.json` under the state store, `marks.json` pattern: lazy load,
   save on push, dedupe + 50-entry cap, malformed reads as empty; the
   find-in-path overlay keeps a third `findInPath` bucket there), injected
-  per editor via `SetHistories` — nil (tests) disables recall.
+  per editor via `SetHistories` — nil (tests) disables recall. Since the
+  line opens prefilled with the newest entry (#2826), a recall **skips entries
+  equal to the text already on the line**, so every `up` visibly changes it;
+  while the `search` bucket holds entries the line trails a faint,
+  right-aligned `↑ history` hint (dropped on a row too narrow for it).
 - **excmd** — parses the `:` line into a typed `Command{Range, Name, Bang, Args}`
   AST and resolves its range. The grammar is `[range] name[!] [args]`: a range is
   one or two comma-separated *addresses* (or `%` = whole file), and an address is
