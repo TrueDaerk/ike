@@ -7444,6 +7444,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// dropped by finishPlayEval, a current one refreshes the result buffer.
 		return m, m.finishPlayEval(msg)
 
+	case playDimMsg:
+		// A pending evaluation has run long enough to dim the result body
+		// (#2777); a stale generation means it already finished.
+		return m, m.firePlayDim(msg)
+
 	case project.OpenNewProjectMsg:
 		// project.new (palette / File menu, #1718): the new-project wizard.
 		m.startNewProjectPrompt()

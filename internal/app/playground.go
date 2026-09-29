@@ -105,6 +105,12 @@ func (m Model) playPrefixW() int {
 // var, not a const, so tests drive the evaluation without sleeping.
 var playDebounce = 120 * time.Millisecond
 
+// playDimDelay is how long an evaluation must stay pending before the result
+// body dims (#2777): most runs finish inside the debounce and never reach it,
+// so a fast one never flickers the buffer's colour. A var like playDebounce,
+// for the same reason.
+var playDimDelay = 300 * time.Millisecond
+
 // playState is the open playground. paneKey names the hosting pane and
 // resultEd is the substitute read-only editor showing the live result;
 // bufFocus routes the keyboard into it (tab toggles). input is the parsed
@@ -183,6 +189,11 @@ type playState struct {
 	runErr     string
 	haveResult bool
 	pending    bool
+	// dimming reports whether the pending evaluation has been running long
+	// enough (playDimDelay) to dim the result body (#2777) — set by
+	// firePlayDim, cleared whenever a new run starts or one finishes, so a
+	// fast keystroke-to-result round trip never flickers the buffer's colour.
+	dimming bool
 
 	hist     *jqplay.History
 	histIdx  int
@@ -823,6 +834,35 @@ type playEvalDoneMsg struct {
 	res jqplay.Result
 }
 
+// playDimMsg fires playDimDelay after an evaluation started; a stale
+// generation means it already finished (or a newer one superseded it) and the
+// buffer never needed dimming for it.
+type playDimMsg struct {
+	st  *playState
+	gen int
+}
+
+// armPlayDim schedules the tick that dims the result body if the run stamped
+// gen is still pending playDimDelay from now (#2777).
+func armPlayDim(s *playState) tea.Cmd {
+	gen := s.gen
+	return tea.Tick(playDimDelay, func(time.Time) tea.Msg {
+		return playDimMsg{st: s, gen: gen}
+	})
+}
+
+// firePlayDim marks a long-pending evaluation as dim-worthy once playDimDelay
+// has passed with no result yet; a superseded or finished generation is
+// dropped, same as firePlayDebounce.
+func (m *Model) firePlayDim(msg playDimMsg) tea.Cmd {
+	s := m.play
+	if s == nil || msg.st != s || msg.gen != s.gen || !s.pending {
+		return nil
+	}
+	s.dimming = true
+	return nil
+}
+
 // parsePlayInput decodes the snapshot: inline for a screenful, off the event
 // loop past jqplay.AsyncThreshold so opening the playground over a large
 // response cannot stall a frame.
@@ -876,8 +916,8 @@ func (m *Model) finishPlayParse(msg playParseDoneMsg) tea.Cmd {
 	s.parsing = false
 	s.inputErr = msg.err
 	if s.inputErr != "" {
-		s.pending = false  // nothing will run against this text; no evaluation is in flight
-		m.sizePlayResult() // the stale banner (#2412) costs a row while it is up
+		s.pending, s.dimming = false, false // nothing will run against this text; no evaluation is in flight
+		m.sizePlayResult()                  // the stale banner (#2412) costs a row while it is up
 		return nil
 	}
 	m.sizePlayResult()
@@ -895,11 +935,11 @@ func (m *Model) schedulePlayEval() tea.Cmd {
 	}
 	s.cancelRun()
 	s.gen++
-	s.pending = true
+	s.pending, s.dimming = true, false
 	gen := s.gen
-	return tea.Tick(playDebounce, func(time.Time) tea.Msg {
+	return tea.Batch(tea.Tick(playDebounce, func(time.Time) tea.Msg {
 		return playDebounceMsg{st: s, gen: gen}
-	})
+	}), armPlayDim(s))
 }
 
 // firePlayDebounce starts the run the tick was scheduled for, unless a newer
@@ -921,8 +961,8 @@ func (m *Model) runPlayNow() tea.Cmd {
 	}
 	s.cancelRun()
 	s.gen++
-	s.pending = true
-	return m.runPlay()
+	s.pending, s.dimming = true, false
+	return tea.Batch(m.runPlay(), armPlayDim(s))
 }
 
 // runPlay evaluates the current program off the event loop under a cancellable
@@ -952,7 +992,7 @@ func (m *Model) finishPlayEval(msg playEvalDoneMsg) tea.Cmd {
 	if s == nil || msg.st != s || msg.gen != s.gen {
 		return nil
 	}
-	s.pending, s.cancel = false, nil
+	s.pending, s.dimming, s.cancel = false, false, nil
 	if msg.res.Err != "" {
 		// A failed run keeps the previous result on screen (#2412): the error
 		// takes the info row and the stale banner marks the buffer, but the
@@ -975,6 +1015,14 @@ func (m *Model) finishPlayEval(msg playEvalDoneMsg) tea.Cmd {
 // empty, and calling that "stale" would describe content that is not there.
 func (s *playState) playStale() bool {
 	return s != nil && s.haveResult && (s.inputErr != "" || s.runErr != "")
+}
+
+// playDimmed reports whether the result body should render faint (#2777): a
+// stale result (playStale) reads as such the moment the error lands, while a
+// merely pending one only dims once firePlayDim has judged it long enough not
+// to flicker on ordinary keystrokes.
+func (s *playState) playDimmed() bool {
+	return s.playStale() || (s != nil && s.pending && s.dimming)
 }
 
 // playStaleRows is the vertical space the stale banner takes inside the hosting
@@ -1831,6 +1879,7 @@ func (m Model) playInlineBody(width int) string {
 	if s.playStale() {
 		body += m.playStaleBanner(width) + "\n"
 	}
+	s.resultEd.SetDimmed(s.playDimmed())
 	return body + s.resultEd.View()
 }
 

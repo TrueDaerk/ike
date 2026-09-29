@@ -361,8 +361,13 @@ type Model struct {
 	// buffer per append would be the exact cost the flag avoids.
 	docBytes int64
 	focused  bool
-	width    int
-	height   int
+	// dimmed renders the whole buffer body faint, above the syntax colour but
+	// below the cursor/selection/search styling that already wins the cell
+	// switch in render.go — a caller-driven "this content is stale" cue
+	// (playground's #2412 last-good result while the query has an error, #2777).
+	dimmed bool
+	width  int
+	height int
 
 	// sbGrab is the pointer's offset within the scrollbar thumb at press time
 	// (#1022), so a thumb drag keeps the grab point under the pointer.
@@ -1629,6 +1634,16 @@ func (m *Model) SetSize(width, height int) {
 	m.height = height
 	m.view.SetSize(width, height)
 	m.scroll()
+}
+
+// SetDimmed toggles the whole-buffer faint rendering (#2777): callers use it to
+// mark the content as stale without touching the cursor or search highlights,
+// which already win the cell styling above the dim.
+func (m *Model) SetDimmed(v bool) {
+	if v != m.dimmed {
+		m.bumpRender()
+	}
+	m.dimmed = v
 }
 
 // SetFocused toggles whether this pane receives key input.
