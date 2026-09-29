@@ -157,7 +157,8 @@ context view and the flat reference — sets the `*help.Help` as the shell's con
 the shell; while open the shell swallows all input and the root composites it
 centered via `overlay.Center`. It is reached three ways: the registered
 `palette.keymapHelp` command (default `f1`, also
-palette-invokable), the plain `?` key, and a hardcoded `f1` fallback for
+palette-invokable), the plain `?` key (except with a text editor focused,
+where `?` is vim's backward search — #2827), and a hardcoded `f1` fallback for
 registries without the app plugin. Scrolling, chrome, sizing, and dismissal now live
 in the shell, not in help.
 

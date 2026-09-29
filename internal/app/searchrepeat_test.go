@@ -149,14 +149,17 @@ func TestMatchStepRecencyBetweenInFileAndFindInPath(t *testing.T) {
 	if line, col := cursorOf(t, m); line != 2 || col != 1 {
 		t.Fatalf("cmd+g cursor at %d,%d, want 2,1", line, col)
 	}
-	// A new find-in-path scan reclaims the chord.
+	// A new find-in-path search — typed, not a reopen's replay (#2827) —
+	// reclaims the chord.
 	tm, _ := m.Update(OpenFindInPathMsg{})
 	m = tm.(Model)
-	tm, _ = m.Update(search.BatchMsg{Matches: []search.Match{
+	m = typeKeys(m, "needle")
+	gen := m.searcher.Gen()
+	tm, _ = m.Update(search.BatchMsg{Gen: gen, Matches: []search.Match{
 		{Path: hitPath, Line: 2, Text: "two needle", StartCol: 4, EndCol: 10},
 	}})
 	m = tm.(Model)
-	tm, _ = m.Update(search.DoneMsg{Total: 1})
+	tm, _ = m.Update(search.DoneMsg{Gen: gen, Total: 1})
 	m = tm.(Model)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = stepMatch(m, 1)

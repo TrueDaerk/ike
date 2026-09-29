@@ -114,3 +114,34 @@ func TestOpenReplacePrefilled(t *testing.T) {
 		t.Fatalf("replace prefill: query=%q replaceMode=%v preselect=%v", m.query.Text, m.replaceMode, m.preselect)
 	}
 }
+
+// TestNewSearchSkipsReopenReplay guards #2827: the scan a plain reopen starts
+// for the remembered query is a replay, not a new search; typing or a
+// selection prefill is one, and stale generations never are.
+func TestNewSearchSkipsReopenReplay(t *testing.T) {
+	m := opened(t)
+	typeText(m, "old")
+	typed := m.gen
+	if !m.NewSearch(typed) {
+		t.Fatal("a typed query is a new search")
+	}
+	m.Update(key("esc"))
+
+	m.Open(t.TempDir())
+	if m.NewSearch(m.gen) {
+		t.Fatal("reopening with the remembered query must be a replay")
+	}
+	if m.NewSearch(typed) {
+		t.Fatal("a stale generation is never the new search")
+	}
+	typeText(m, "x")
+	if !m.NewSearch(m.gen) {
+		t.Fatal("editing the reopened query is a new search")
+	}
+	m.Update(key("esc"))
+
+	m.OpenPrefilled(t.TempDir(), "fresh")
+	if !m.NewSearch(m.gen) {
+		t.Fatal("a selection prefill is a new search")
+	}
+}

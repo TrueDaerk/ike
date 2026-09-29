@@ -137,19 +137,23 @@ func TestMatchStepRepeatsInFileSearchWhenMostRecent(t *testing.T) {
 func TestMatchStepMostRecentSearchWins(t *testing.T) {
 	m, hitPath := finderApp(t)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = dismissOnboarding(m) // or it swallows the "/foo" commit keys
 	path := filepath.Join(t.TempDir(), "local.txt")
 	if err := os.WriteFile(path, []byte("foo one foo two\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	m = commitInFileSearch(t, m, path)
-	// A new find-in-path scan makes path results the most recent search again.
+	// A new find-in-path scan — typed, not a reopen's replay (#2827) — makes
+	// path results the most recent search again.
 	tm, _ := m.Update(OpenFindInPathMsg{})
 	m = tm.(Model)
-	tm, _ = m.Update(search.BatchMsg{Matches: []search.Match{
+	m = typeKeys(m, "needle")
+	gen := m.searcher.Gen()
+	tm, _ = m.Update(search.BatchMsg{Gen: gen, Matches: []search.Match{
 		{Path: hitPath, Line: 2, Text: "two needle", StartCol: 4, EndCol: 10},
 	}})
 	m = tm.(Model)
-	tm, _ = m.Update(search.DoneMsg{Total: 1})
+	tm, _ = m.Update(search.DoneMsg{Gen: gen, Total: 1})
 	m = tm.(Model)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
 	tm, cmd := m.Update(MatchStepMsg{Delta: 1})
