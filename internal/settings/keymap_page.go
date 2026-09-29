@@ -454,6 +454,12 @@ func (k *KeymapPage) commitRebindTo(b keymapRow, chord keymap.Chord, newCtx keym
 	opts := k.opts
 	newKey := keymap.BindingConfigKey(newCtx, chord.String(), qualified)
 	oldKey := keymap.BindingConfigKey(b.Context, b.Chord.String(), qualified)
+	if !qualified {
+		// A plain rebind unbinds the old chord in the row's context alone
+		// when another context shares it (#2820): moving the explorer's
+		// alt+enter must not drop the editor's.
+		oldKey = k.unbindKeyFor(b)
+	}
 	command := b.Command
 	sameChord := chord.Equal(b.Chord)
 	unbound := b.unbound || b.nobind
@@ -743,20 +749,12 @@ func (k *KeymapPage) overrideKeyFor(b keymapRow) string {
 }
 
 // unbindKeyFor returns the config key that drops exactly this binding. A flat
-// chord→"" unbinds every context at once, so a pane-scoped binding whose chord
-// another context also uses is unbound through its qualified key instead —
-// otherwise "unbind" on one half of a "keep both" pair would silently remove
-// the other half too (#1312).
+// chord→"" unbinds every context at once, so a binding whose chord another
+// context also uses is unbound through its qualified key instead — otherwise
+// "unbind" on one half of a "keep both" pair would silently remove the other
+// half too (#1312, #2820).
 func (k *KeymapPage) unbindKeyFor(b keymapRow) string {
-	chord := b.Chord.String()
-	if b.Context != keymap.Global {
-		for _, other := range k.table().Bindings() {
-			if other.Chord.String() == chord && other.Context != b.Context {
-				return keymap.BindingConfigKey(b.Context, chord, true)
-			}
-		}
-	}
-	return "keymap.bindings." + chord
+	return keymap.ScopedOverrideKey(b.Context, b.Chord.String(), k.table().Bindings())
 }
 
 // separableContexts reports whether two bindings can share a chord without

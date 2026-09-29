@@ -4,7 +4,7 @@ title: Keybindings & Shortcuts
 description: The keybinding layer between the registry and config — a chord/key model, JetBrains-like default set, context-scoped resolution (per-pane contexts plus language-scoped editor bindings, one chord per context) with multi-step chords and timeout, build-time conflict detection, platform normalisation, and a cheatsheet view. Binds keys to command ids; defines no commands.
 resource: internal/keymap
 tags: [architecture, keymap, keybindings, chords, contexts, jetbrains, bubbletea]
-timestamp: 2026-09-26T00:30:00Z
+timestamp: 2026-09-29T12:00:00Z
 ---
 
 # Keybindings & Shortcuts
@@ -275,6 +275,23 @@ nested slot-map tables per layer before merging, `config/load.go`):
 
 `BindingConfigKey(ctx, chord, qualified)` renders the dotted config key the
 settings page writes back through.
+
+**Moving one binding off a shared chord writes a qualified key (#2820).** Since
+the bare form matches the chord in every context, a bare `= ""` meant to
+release one command's chord also unbinds every *other* context's command on
+it. That is how the explorer's `alt+enter` (`explorer.contextMenu`, #2805) —
+the first default sharing the editor's `lsp.codeAction` chord — made `alt+enter`
+do nothing in the editor: moving the explorer binding (the keymap doctor
+offers it, `alt+enter` being at risk in many terminals) wrote
+`keymap.bindings."alt+enter" = ""`. Every override writer therefore renders
+the key through `ScopedOverrideKey(ctx, chord, bindings)`: qualified with the
+binding's context whenever `ChordInOtherContext` finds another context on the
+chord, the historical bare spelling otherwise. Its users are the settings
+page's unbind and plain rebind, the keymap doctor's rebind (`RebindMsg`
+carries the finding's `Context`) and the JetBrains import. The general rule
+the defaults obey — two defaults on one chord in different contexts each
+resolve in their own context, with no conflict, shadow or dropped verdict —
+is pinned by `sharedchord_test.go`.
 
 ## Resolver
 
@@ -602,7 +619,8 @@ Two consequences for the other page keys:
   exactly this chord+context, else the flat one (`overrideKeyFor`).
 - `u` (unbind) writes the *qualified* `= ""` when the chord is also bound in
   another context (`unbindKeyFor`) — a flat unbind would drop the other half of
-  a keep-both pair too.
+  a keep-both pair too. A plain rebind releases its old chord through the same
+  key (#2820), so moving the explorer's `alt+enter` leaves the editor's.
 
 The detail column lists both sides of a shared chord with their contexts, and
 says `↔ … resolved by context` (with no replacement suggestions) instead of
@@ -633,11 +651,15 @@ first-keystroke="meta pressed S"/></action></keymap>`) into
   (`coverage_test.go`): every default-set command must be an `actionMap`
   value or excused in its `noCounterpart` list — a new default command
   fails the test until the import knows about it (#1496).
-- **Semantics** — `Plan` yields `Bind` (chord→command overrides) and `Unbind`:
+- **Semantics** — `Plan` yields `Bind` (override key→command) and `Unbind`:
   preset-default chords of imported commands the export did not keep are
   written `= ""`, so the imported chord *replaces* the default rather than
-  joining it (matching the keymap page's unbind semantics — an unbind drops
-  the whole chord across contexts). `Apply` writes both sets through the
+  joining it. Keys are bare chords unless another command's default shares
+  the chord from another context (#2820): then an unbind is qualified with the
+  imported command's context, and so is a bind when the command lives in one
+  context — IntelliJ's `alt+enter` imports as `editor.alt+enter =
+  lsp.codeAction`, leaving the explorer's `alt+enter` menu (#2805) alone.
+  `Apply` writes both sets through the
   caller's writer (config.WriteKey at **user scope**) and the normal reload
   pipeline re-resolves the table.
 - **Entry points** — the palette command `keymap.importJetBrains`
@@ -803,8 +825,10 @@ applying every offer stays conflict-free.
 
 **Applying** emits `keydoctor.RebindMsg`, which the root model runs through
 the ordinary customization path (`internal/app/deadbindings.go`): the new
-chord binds the command at user scope, the dead chord unbinds, one config
-reload rebuilds the table. The report stays open and re-audits on that reload,
+chord binds the command at user scope, the dead chord unbinds — qualified
+with the finding's context when another context shares the chord (#2820),
+so another command on it keeps its key — and one config reload rebuilds the
+table. The report stays open and re-audits on that reload,
 so a repaired binding drops off the list and the remaining suggestions are
 re-checked against the keymap as it now stands.
 
