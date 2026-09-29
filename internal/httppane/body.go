@@ -207,6 +207,11 @@ func (m *Model) JQInput() string {
 // Content-Type mapping, not a content sniff, and deliberately does *not*
 // follow the PrettyLimit cap that drops the tag for highlighting: a body too
 // large to paint is still a document the playground can query.
+//
+// A CSV or TSV body answers "csv" / "tsv" here (#2791) even though the viewer
+// paints it plain: the jq playground reads such a body as rows, and the tag is
+// how the dispatcher learns it. contentTag stays silent on those types, so
+// the pane does not announce a missing highlighter for them.
 func (m *Model) BodyLang() string {
 	if !m.HasBodyText() {
 		return ""
@@ -215,7 +220,24 @@ func (m *Model) BodyLang() string {
 	if resp == nil {
 		return ""
 	}
-	return contentTag(resp.Headers.Get("Content-Type"))
+	ct := resp.Headers.Get("Content-Type")
+	if tag := contentTag(ct); tag != "" {
+		return tag
+	}
+	return separatedTag(ct)
+}
+
+// separatedTag classifies the separator-delimited content types: text/csv
+// (and the application/csv some servers send) as "csv", the IANA
+// tab-separated type as "tsv"; "" for anything else.
+func separatedTag(ct string) string {
+	switch strings.ToLower(strings.TrimSpace(strings.SplitN(ct, ";", 2)[0])) {
+	case "text/csv", "application/csv":
+		return "csv"
+	case "text/tab-separated-values":
+		return "tsv"
+	}
+	return ""
 }
 
 // formatBody renders the response body for display: pretty-printed JSON, raw

@@ -194,6 +194,10 @@ type playState struct {
 	input    *jqplay.Input
 	inputErr string
 	parsing  bool
+	// csv / csvSep are the source's CSV adapter (#2791, see playInputSource),
+	// kept so every re-parse of the followed file reads it as rows again.
+	csv    bool
+	csvSep rune
 
 	// srcPath is the file the snapshot is followed on (#2356), empty when
 	// there is nothing to follow: an HTTP response, a selection, an unsaved
@@ -357,7 +361,7 @@ func (m *Model) startPlayground(d jqplay.Dialect, atPath bool) tea.Cmd {
 		return nil
 	}
 	m.closePlayground()
-	s := &playState{dialect: d, paneKey: src.paneKey, source: src.label, srcKey: src.key, srcPath: src.path, srcEd: src.ed, srcInst: src.inst, histIdx: -1, qgoal: -1, hist: m.playHist(), program: ui.NewField(m.playSeedProgram(d, src, atPath)), opts: m.playSeedOptions(d, src, atPath)}
+	s := &playState{dialect: d, paneKey: src.paneKey, source: src.label, srcKey: src.key, srcPath: src.path, srcEd: src.ed, srcInst: src.inst, csv: src.csv, csvSep: src.csvSep, histIdx: -1, qgoal: -1, hist: m.playHist(), program: ui.NewField(m.playSeedProgram(d, src, atPath)), opts: m.playSeedOptions(d, src, atPath)}
 	ed := editor.New()
 	ed.SetRegisters(m.regs) // app-wide registers (#1540): yanks in the result reach every buffer
 	ed.SetPalette(m.themePal)
@@ -404,6 +408,20 @@ type playInputSource struct {
 	// still showing my document".
 	ed   *editor.Model
 	inst *pane.Instance
+	// csv routes the text through the jq playground's CSV adapter (#2791) —
+	// a csv/tsv/psv buffer or a CSV-typed response — with csvSep its
+	// separator (0 sniffs it). Never set for yq or xmq.
+	csv    bool
+	csvSep rune
+}
+
+// adapt marks a jq source of language lang (the buffer's id, or a response's
+// BodyLang) for the CSV adapter when lang is separator-delimited (#2791).
+func (src playInputSource) adapt(d jqplay.Dialect, lang string) playInputSource {
+	if d == jqplay.DialectJQ {
+		src.csvSep, src.csv = playCSVAdapter(lang)
+	}
+	return src
 }
 
 // playSource resolves what the playground of dialect d queries. For jq the
@@ -430,7 +448,7 @@ func (m Model) playSource(d jqplay.Dialect) (playInputSource, bool) {
 		if c.HTTP().HasBodyText() {
 			if body := c.HTTP().JQInput(); strings.TrimSpace(body) != "" {
 				paneKey := m.activeWS().Panes.Focused()
-				return playInputSource{text: body, label: "HTTP response", key: "http:" + paneKey, paneKey: paneKey, tabIdx: -1, inst: c}, true
+				return playInputSource{text: body, label: "HTTP response", key: "http:" + paneKey, paneKey: paneKey, tabIdx: -1, inst: c}.adapt(d, c.HTTP().BodyLang()), true
 			}
 		}
 	}
@@ -439,10 +457,10 @@ func (m Model) playSource(d jqplay.Dialect) (playInputSource, bool) {
 		key := m.activeEditorKey()
 		docKey := playDocKey(d, ed, key)
 		if sel, has := ed.SelectionText(); has && strings.TrimSpace(sel) != "" {
-			return playInputSource{text: sel, label: name + " (selection)", key: docKey, paneKey: key, tabIdx: -1, ed: ed}, true
+			return playInputSource{text: sel, label: name + " (selection)", key: docKey, paneKey: key, tabIdx: -1, ed: ed}.adapt(d, ed.LangID()), true
 		}
 		if body := ed.Text(); strings.TrimSpace(body) != "" {
-			return playInputSource{text: body, label: name, key: docKey, path: ed.Path(), paneKey: key, tabIdx: -1, fullFile: true, ed: ed}, true
+			return playInputSource{text: body, label: name, key: docKey, path: ed.Path(), paneKey: key, tabIdx: -1, fullFile: true, ed: ed}.adapt(d, ed.LangID()), true
 		}
 	}
 	// The response pane may be open without being focused — an editor holding
@@ -453,7 +471,7 @@ func (m Model) playSource(d jqplay.Dialect) (playInputSource, bool) {
 	}); ok && m.leafVisible(hostKey) {
 		if inst.HTTP().HasBodyText() {
 			if body := inst.HTTP().JQInput(); strings.TrimSpace(body) != "" {
-				return playInputSource{text: body, label: "HTTP response", key: "http:" + hostKey, paneKey: hostKey, tabIdx: tabIdx, inst: inst}, true
+				return playInputSource{text: body, label: "HTTP response", key: "http:" + hostKey, paneKey: hostKey, tabIdx: tabIdx, inst: inst}.adapt(d, inst.HTTP().BodyLang()), true
 			}
 		}
 	}
@@ -1048,14 +1066,19 @@ func (m *Model) parsePlayInput(text string) tea.Cmd {
 	// never install the input it was started for.
 	s.pgen++
 	d, gen := s.dialect, s.pgen
+	parse := d.Parse
+	if s.csv {
+		sep := s.csvSep
+		parse = func(text string) (*jqplay.Input, error) { return jqplay.ParseCSV(text, sep) }
+	}
 	if len(text) <= jqplay.AsyncThreshold {
-		in, err := d.Parse(text)
+		in, err := parse(text)
 		return m.finishPlayParse(playParseDoneMsg{st: s, gen: gen, in: in, err: errText(err)})
 	}
 	s.parsing = true
 	s.parseAt = time.Now()
 	return func() tea.Msg {
-		in, err := d.Parse(text)
+		in, err := parse(text)
 		return playParseDoneMsg{st: s, gen: gen, in: in, err: errText(err)}
 	}
 }
@@ -2338,6 +2361,11 @@ func (m Model) playInputSegment() string {
 	line := fmt.Sprintf("Input: %s — %s", s.source, humanBytes(int64(s.input.Size())))
 	if n := s.input.Len(); n > 1 {
 		line += fmt.Sprintf(", %d values", n)
+	}
+	// An adapted input says what it was read as (#2791): "csv rows: 1234" is
+	// the count a CSV reader checks, and the reason `.` is an array.
+	if origin := s.input.Origin(); origin != "" {
+		line += " · " + origin
 	}
 	out := hint.Render(line)
 	if s.input.Truncated {

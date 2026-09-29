@@ -19,6 +19,9 @@ func TestBodyLangNamesTheShownBody(t *testing.T) {
 		{"yaml suffix", "application/vnd.k8s+yaml", "a: 1\n", "yaml"},
 		{"xml", "text/xml", "<a/>", "xml"},
 		{"html", "text/html; charset=utf-8", "<html></html>", "html"},
+		{"csv", "text/csv; charset=utf-8", "a,b\n1,2\n", "csv"},
+		{"csv application", "application/csv", "a,b\n1,2\n", "csv"},
+		{"tsv", "text/tab-separated-values", "a\tb\n1\t2\n", "tsv"},
 		{"plain text", "text/plain", "hello", ""},
 		{"unknown type", "application/octet-stream", "hello", ""},
 	} {

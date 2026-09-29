@@ -78,6 +78,10 @@ type Input struct {
 	// xmqTree is the xmq input's element tree, built at parse for the
 	// query line's XPath completion (#2790).
 	xmqTree *xmqNode
+	// origin says what the values were adapted from when the buffer was not
+	// the dialect's own document language — "csv rows: 12" for the CSV
+	// adapter (#2791) — and is empty otherwise.
+	origin string
 	// Truncated reports that the stream held more than MaxInputValues values
 	// and the tail was dropped.
 	Truncated bool
@@ -137,10 +141,17 @@ type InputError struct {
 	// Dialect names the language that failed to parse. The zero value is jq,
 	// so every caller outside the yq path (#2039) keeps its JSON wording.
 	Dialect Dialect
+	// Format overrides the dialect's format name for an input read through an
+	// adapter (#2791): a malformed CSV row is not "invalid JSON".
+	Format string
 }
 
 func (e *InputError) Error() string {
-	return "input is not valid " + e.Dialect.Format() + ": " + e.Detail
+	format := e.Format
+	if format == "" {
+		format = e.Dialect.Format()
+	}
+	return "input is not valid " + format + ": " + e.Detail
 }
 
 // decodeError renders a decode failure with the line it happened on, which a
@@ -162,6 +173,15 @@ func lineOf(text string, off int) int {
 		off = 0
 	}
 	return 1 + strings.Count(text[:off], "\n")
+}
+
+// Origin names the adapter the input was read through ("csv rows: 12"), or
+// "" for a document read in the dialect's own language.
+func (in *Input) Origin() string {
+	if in == nil {
+		return ""
+	}
+	return in.origin
 }
 
 // Len reports how many top-level values the input holds.
