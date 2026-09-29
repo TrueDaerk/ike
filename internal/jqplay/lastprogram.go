@@ -49,6 +49,7 @@ func LastProgramFile() string {
 type LastPrograms struct {
 	order  []string
 	items  map[string]string
+	flags  map[string]string
 	file   string
 	loaded bool
 }
@@ -61,6 +62,9 @@ func NewLastPrograms(file string) *LastPrograms { return &LastPrograms{file: fil
 type lastProgramEntry struct {
 	Key     string `json:"key"`
 	Program string `json:"program"`
+	// Flags are the run toggles (#2784) the program last ran with, spelled
+	// as Options.Flags; absent in files written before they existed.
+	Flags string `json:"flags,omitempty"`
 }
 
 // lastProgramEnvelope is the on-disk schema, newest first.
@@ -98,6 +102,9 @@ func (l *LastPrograms) ensure() {
 			continue
 		}
 		l.items[key] = program
+		if e.Flags != "" {
+			l.flagMap()[key] = e.Flags
+		}
 		l.order = append(l.order, key)
 	}
 }
@@ -109,7 +116,7 @@ func (l *LastPrograms) save() {
 	}
 	env := lastProgramEnvelope{Version: lastProgramVersion, Entries: make([]lastProgramEntry, 0, len(l.order))}
 	for _, key := range l.order {
-		env.Entries = append(env.Entries, lastProgramEntry{Key: key, Program: l.items[key]})
+		env.Entries = append(env.Entries, lastProgramEntry{Key: key, Program: l.items[key], Flags: l.flags[key]})
 	}
 	data, err := json.Marshal(env)
 	if err != nil {
@@ -128,10 +135,29 @@ func (l *LastPrograms) Get(key string) (string, bool) {
 	return p, ok
 }
 
+// Flags returns the run toggles (#2784) key's last program ran with, "" when
+// none were on or nothing is remembered.
+func (l *LastPrograms) Flags(key string) string {
+	l.ensure()
+	return l.flags[key]
+}
+
+// flagMap is the toggle map, allocated on first write.
+func (l *LastPrograms) flagMap() map[string]string {
+	if l.flags == nil {
+		l.flags = map[string]string{}
+	}
+	return l.flags
+}
+
 // Set records program as key's last program, moving it to the front of the
 // LRU order, and persists the store when a file is attached. An empty key or
 // program is ignored.
-func (l *LastPrograms) Set(key, program string) {
+func (l *LastPrograms) Set(key, program string) { l.SetWithFlags(key, program, "") }
+
+// SetWithFlags is Set that also records the run toggles the program ran with
+// (#2784), spelled as Options.Flags.
+func (l *LastPrograms) SetWithFlags(key, program, flags string) {
 	key = strings.TrimSpace(key)
 	program = strings.TrimSpace(program)
 	if key == "" || program == "" {
@@ -149,10 +175,16 @@ func (l *LastPrograms) Set(key, program string) {
 	}
 	l.order = append([]string{key}, l.order...)
 	l.items[key] = program
+	if flags = strings.TrimSpace(flags); flags != "" {
+		l.flagMap()[key] = flags
+	} else {
+		delete(l.flags, key)
+	}
 	for len(l.order) > LastProgramLimit {
 		last := l.order[len(l.order)-1]
 		l.order = l.order[:len(l.order)-1]
 		delete(l.items, last)
+		delete(l.flags, last)
 	}
 	l.save()
 }

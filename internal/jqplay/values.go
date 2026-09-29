@@ -13,7 +13,7 @@ func (r Result) ValueStarts() []int {
 	if len(r.Outputs) == 0 || (r.dialect == DialectXMQ && r.ext != "json") {
 		return nil
 	}
-	sepLines := strings.Count(r.dialect.separator(), "\n")
+	sepLines := strings.Count(r.separator(), "\n")
 	starts := make([]int, len(r.Outputs))
 	line := 0
 	for i, o := range r.Outputs {

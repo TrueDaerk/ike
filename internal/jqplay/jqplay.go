@@ -199,6 +199,9 @@ type Result struct {
 	// `to-html` HTML — where the gojq dialects always write their own format.
 	// Empty means the dialect's default.
 	ext string
+	// opts are the toggles the run applied (#2784): a raw result is text,
+	// and neither a raw nor a compact one folds.
+	opts Options
 }
 
 // Dialect reports which document language the outputs are written in.
@@ -207,6 +210,9 @@ func (r Result) Dialect() Dialect { return r.dialect }
 // Ext is the file extension this result's text is written under — the
 // dialect's default unless the run named its own output language (#2414).
 func (r Result) Ext() string {
+	if r.opts.Raw {
+		return "txt"
+	}
 	if r.ext != "" {
 		return r.ext
 	}
@@ -222,6 +228,9 @@ func (r Result) ResultPath() string { return r.dialect.Name() + " result." + r.E
 // their own encoder wrote; an xmq result folds only when its command produced
 // a language the structural scans read (`to-json`, #2414).
 func (r Result) Folds() []Fold {
+	if r.opts.Raw || r.opts.Compact {
+		return nil
+	}
 	if r.dialect == DialectXMQ {
 		if r.ext == "json" {
 			return jsonFolds(r.Text())
@@ -234,7 +243,16 @@ func (r Result) Folds() []Fold {
 // Text joins the outputs into the document the result buffer shows, which is
 // also what the copy and open-as-scratch actions write: jq's stdout puts one
 // value per line, a YAML stream separates its documents with `---`.
-func (r Result) Text() string { return strings.Join(r.Outputs, r.dialect.separator()) }
+func (r Result) Text() string { return strings.Join(r.Outputs, r.separator()) }
+
+// separator joins two outputs: the dialect's, except that raw output (#2784)
+// is plain text, one value per line the way `jq -r` prints it.
+func (r Result) separator() string {
+	if r.opts.Raw {
+		return "\n"
+	}
+	return r.dialect.separator()
+}
 
 // Lines splits the result into display rows.
 func (r Result) Lines() []string {
@@ -278,6 +296,11 @@ func EvaluateWith(d Dialect, program, text string) Result {
 // result the user was looking at, so it is run as if `.` had been typed (jq,
 // yq) — xmq already treats its own empty command line this way.
 func Run(ctx context.Context, program string, in *Input) Result {
+	return RunWith(ctx, program, in, Options{})
+}
+
+// run is Run under the toggles; RunWith has already slurped the input.
+func run(ctx context.Context, program string, in *Input, opts Options) Result {
 	program = strings.TrimSpace(program)
 	if in.Dialect() == DialectXMQ {
 		// The xmq dialect (#2414) runs the external binary instead of gojq —
@@ -299,7 +322,7 @@ func Run(ctx context.Context, program string, in *Input) Result {
 	if err != nil {
 		return Result{Err: err.Error(), dialect: in.dialect}
 	}
-	res := Result{dialect: in.dialect}
+	res := Result{dialect: in.dialect, opts: opts}
 	size := 0
 	for _, v := range in.values {
 		iter := code.RunWithContext(ctx, v)
@@ -320,7 +343,7 @@ func Run(ctx context.Context, program string, in *Input) Result {
 				res.Truncated = true
 				return res
 			}
-			text := in.dialect.encode(out)
+			text := in.dialect.encodeWith(out, opts)
 			size += len(text)
 			res.Outputs = append(res.Outputs, text)
 		}

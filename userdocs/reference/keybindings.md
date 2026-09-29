@@ -183,7 +183,10 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Toggle VCS tool window | `cmd+9` | `ctrl+9` | `vcs.panel` |
 | Toggle breakpoint | `cmd+f8` | `ctrl+f8` | `debug.toggleBreakpoint` |
 | Toggle breakpoint | `ctrl+f8` | `ctrl+f8` | `debug.toggleBreakpoint` |
+| Toggle compact output (-c) | `ctrl+alt+c` | `ctrl+alt+c` | `json.jqToggleCompact` |
 | Toggle project tree | `cmd+1` | `ctrl+1` | `explorer.toggle` |
+| Toggle raw output (-r) | `ctrl+alt+q` | `ctrl+alt+q` | `json.jqToggleRaw` |
+| Toggle slurp input (-s) | `ctrl+alt+s` | `ctrl+alt+s` | `json.jqToggleSlurp` |
 | Toggle terminal | `alt+f12` | `alt+f12` | `terminal.toggle` |
 | Usage report | `cmd+alt+u` | `ctrl+alt+u` | `usage.toggle` |
 | Window layouts | `alt+shift+f12` | `alt+shift+f12` | `window.layouts` |

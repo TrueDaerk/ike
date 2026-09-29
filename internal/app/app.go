@@ -549,7 +549,10 @@ type Model struct {
 	playChord       bool
 	playHistory     *jqplay.History
 	playLastProgram map[string]string
-	playLastStore   *jqplay.LastPrograms
+	// playLastOpts are the -r / -c / -s toggles (#2784) each playLastProgram
+	// entry last ran with, restored with it.
+	playLastOpts  map[string]jqplay.Options
+	playLastStore *jqplay.LastPrograms
 	// playFilters is the palette mode listing the named saved filters of both
 	// scopes (#1995), kept on the model so the insert and rename entry
 	// commands can flip its action before opening it locked; playName is the
@@ -7420,6 +7423,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A picked cheatsheet row reached the query line (#2382): a whole
 		// program replaces it, a builtin's name lands at the caret.
 		return m, m.insertPlayCheat(msg)
+
+	case TogglePlayOptionMsg:
+		// json.jqToggleRaw / …Compact / …Slurp (ctrl+alt+q / c / s, or a click
+		// on the info row's chips, #2784): flip jq's -r / -c / -s and rerun.
+		return m, m.togglePlayOption(msg.Option)
 
 	case AppendPlayPathMsg:
 		// json.jqAppendPath / json.jqAppendPathAny (ctrl+. / ctrl+shift+.,

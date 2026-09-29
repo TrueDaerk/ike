@@ -1646,6 +1646,9 @@ JetBrains is:
 | `json.jqAppendPathAny` | `ctrl+shift+.` | fragile | `palette` | live via palette |
 | `json.jqPlayground` | `ctrl+alt+j` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `json.jqQueryView` | `ctrl+alt+e` | fragile | `palette / Tools menu` | live via palette / Tools menu |
+| `json.jqToggleCompact` | `ctrl+alt+c` | fragile | `palette / info-row chip click` | live via palette / info-row chip click |
+| `json.jqToggleRaw` | `ctrl+alt+q` | fragile | `palette / info-row chip click` | live via palette / info-row chip click |
+| `json.jqToggleSlurp` | `ctrl+alt+s` | fragile | `palette / info-row chip click` | live via palette / info-row chip click |
 | `lsp.callHierarchy` | `ctrl+alt+h` | fragile | `palette` | live via palette |
 | `lsp.codeAction` | `alt+enter` | fragile | `palette` | live via palette |
 | `lsp.definition` | `f4` | delivered | `—` | live |

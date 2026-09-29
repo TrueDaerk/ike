@@ -40,6 +40,9 @@ func TestPlayValueGlyphMap(t *testing.T) {
 // value under the result cursor as it moves.
 func TestPlayValueSignsJQ(t *testing.T) {
 	m := openJQ(t, dismissOnboarding(playApp(t, `{"items":[{"a":1},2,null]}`)))
+	// Room for the -r/-c/-s chips (#2784) and the whole summary beside them.
+	tm, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m = tm.(Model)
 	m = setProgram(m, ".items[]")
 	if got := m.play.valueStarts; len(got) != 3 || got[0] != 0 || got[1] != 3 || got[2] != 4 {
 		t.Fatalf("value starts = %v, want [0 3 4]", got)

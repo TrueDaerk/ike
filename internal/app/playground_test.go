@@ -259,6 +259,9 @@ func TestJQPlaygroundCapsHugeResult(t *testing.T) {
 	if !m.play.result.Truncated {
 		t.Fatal("an infinite program must report a truncated result")
 	}
+	// Room for the -r/-c/-s chips (#2784) and the whole summary beside them.
+	tm, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	m = tm.(Model)
 	v := ansi.Strip(m.render())
 	if !strings.Contains(v, "stopped at") {
 		t.Errorf("the dialog should mark the capped result, got:\n%s", v)
@@ -289,7 +292,7 @@ func TestJQPlaygroundErrorKeepsLastGoodResult(t *testing.T) {
 	if !s.playStale() {
 		t.Error("a failed run over a good result must be marked stale")
 	}
-	row := ansi.Strip(m.playInfoRow(200))
+	row := playInfoLineText(m, 200)
 	if !strings.HasPrefix(row, "E: ") {
 		t.Errorf("the error must render, got %q", row)
 	}
@@ -525,7 +528,7 @@ func TestJQPlaygroundNarrowInfoRowDropsWholeHints(t *testing.T) {
 	if !strings.Contains(wide, "esc close") {
 		t.Fatalf("a wide row should hold every hint, got %q", wide)
 	}
-	narrow := ansi.Strip(m.playInfoRow(60))
+	narrow := playInfoLineText(m, 60)
 	if !strings.Contains(narrow, "Result — 1 value(s)") {
 		t.Errorf("the summary must survive a narrow row, got %q", narrow)
 	}

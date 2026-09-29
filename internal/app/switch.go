@@ -388,6 +388,7 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	// keeps that pointer the live list after a resume.
 	fresh.playHistory = m.playHistory
 	fresh.playLastProgram = m.playLastProgram
+	fresh.playLastOpts = m.playLastOpts
 	fresh.playLastStore = m.playLastStore
 	// The all-projects search (#2394) is session state on the same terms: its
 	// scan spans projects, so the service (an in-flight scan keeps streaming

@@ -145,6 +145,9 @@ func (m Model) playgroundChordHelp() help.Group {
 	add("json.jqQueryView", "Toggle the full (multi-line) query view")
 	add("json.jqAppendPath", "Append the result cursor's path to the query (#2783)")
 	add("json.jqAppendPathAny", "Append the result cursor's path with every index as []")
+	add("json.jqToggleRaw", "Toggle raw output: strings without quotes (jq -r, #2784)")
+	add("json.jqToggleCompact", "Toggle compact output: one line per value (jq -c)")
+	add("json.jqToggleSlurp", "Toggle slurp: run over the whole input as one array (jq -s)")
 	add("editor.copy", "Copy the result buffer's selection (from either focus)")
 	add("lsp.codeAction", "Not available in the playground — says so instead of doing nothing")
 	return g
