@@ -430,6 +430,10 @@ func encodeLayoutState(root layout.Node, reg *pane.Registry) ([]byte, bool) {
 	if root == nil {
 		return nil, false
 	}
+	// The playground's detached result pane (#2797) is session state: its
+	// leaf is pruned from the saved tree, so a restore never meets a kind it
+	// cannot rebuild and the next split re-creates the pane.
+	root = prunePlayResultLeaves(root, reg)
 	treeData, err := layout.Encode(root)
 	if err != nil {
 		return nil, false

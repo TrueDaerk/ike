@@ -161,6 +161,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Show all-projects search results | `cmd+alt+shift+r` | `ctrl+alt+shift+r` | `project.findInAllProjectsResults` |
 | Split down | `cmd+k down` | `ctrl+k down` | `pane.splitDown` |
 | Split left | `cmd+k left` | `ctrl+k left` | `pane.splitLeft` |
+| Split playground result into a pane | `ctrl+alt+\` | `ctrl+alt+\` | `playground.splitResult` |
 | Split right | `cmd+k right` | `ctrl+k right` | `pane.splitRight` |
 | Split up | `cmd+k up` | `ctrl+k up` | `pane.splitUp` |
 | Step into | `f7` | `f7` | `debug.stepInto` |

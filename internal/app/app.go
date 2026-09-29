@@ -4516,6 +4516,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// (#2355): tab closes, pane closes and explorer deletions all settle in
 	// this pass, so no mounted mode is left pointing at a gone document.
 	mm.syncPlaygroundSource()
+	// The detached result pane (#2797) settles here as well: a pane closed
+	// from outside re-attaches the result, and the pane focus and the
+	// query-line / result focus are reconciled after every pass.
+	mm.syncPlayResultPane()
 	// The merge views' remaining-conflict counters settle here too (#2258):
 	// a view whose last conflict just went — by chord, palette command or
 	// plain typing — offers save/finish.
@@ -7474,6 +7478,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.togglePlayTable()
 		return m, nil
 
+	case SplitPlayResultMsg:
+		// playground.splitResult (ctrl+alt+\, #2797): the result into a pane
+		// of its own beside the source, or back under the query header.
+		m.togglePlaySplit()
+		return m, nil
+
 	case ChainPlayResultMsg:
 		// playground.chainResult (ctrl+alt+shift+↓, #2795): the result
 		// becomes the next input and the program starts over at `.`.
@@ -10380,6 +10390,9 @@ func (m Model) helpContext() string {
 // The help snapshot and the palette's command ranking read it to decide which
 // file-type-gated commands (plugin.Command.Languages) apply right now.
 func (m Model) focusLang() string {
+	if m.playResultPaneIs(m.activeWS().Panes.Focused()) {
+		return m.playSourceLang() // the detached result pane's document is its source (#2797)
+	}
 	if c := m.focusedContent(); c != nil && c.Kind() == pane.KindHTTP {
 		if p := c.HTTP(); p != nil {
 			return p.BodyLang()
@@ -10854,8 +10867,18 @@ func (m *Model) setFocus(key string) {
 	// The inline playground survives focus leaving its pane (#1980); the
 	// substitute editor's cursor cell tracks whether the pane holds the
 	// keyboard, so an unfocused playground draws no caret.
+	// With the result in its own pane (#2797) the pane focus *is* the
+	// query-line / result split: focusing the result pane is a tab into the
+	// result, focusing the source pane a tab back.
 	if s := m.play; s != nil && s.resultEd != nil {
-		s.resultEd.SetFocused(key == s.paneKey && s.bufFocus && !s.stripFocus && m.playSrcShown())
+		if s.resultKey != "" {
+			if key == s.resultKey && !s.bufFocus {
+				s.setBufFocus(true)
+			} else if key == s.paneKey && s.bufFocus {
+				s.setBufFocus(false)
+			}
+		}
+		s.resultEd.SetFocused(key == s.resultHost() && s.bufFocus && !s.stripFocus && (s.resultKey != "" || m.playSrcShown()))
 	}
 }
 
@@ -11630,7 +11653,13 @@ func (m *Model) layout() {
 		// The breadcrumbs bar (#1153) is one extra vertical chrome row for
 		// the editor panes showing it; breadcrumbRows is the shared predicate
 		// renderPane and the mouse translation (contentYOff) key off too.
-		inst.SetSize(paneInterior(r.W, paneChromeW), paneInterior(r.H, paneChromeH+m.breadcrumbRows(inst)))
+		chrome := m.breadcrumbRows(inst)
+		if s := m.play; s != nil && s.detached() {
+			// The query header is pinned over the document while the result
+			// is in its own pane (#2797): the document renders under it.
+			chrome += m.playHeaderRowsFor(key)
+		}
+		inst.SetSize(paneInterior(r.W, paneChromeW), paneInterior(r.H, paneChromeH+chrome))
 		if inst.Kind() == pane.KindEditor && len(m.pendingScroll) > 0 {
 			m.applyPendingScroll(key, inst)
 		}
@@ -12072,9 +12101,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		// The wheel scrolls the inline playground result buffer (#1970) while the
-		// mode owns the pane; horizontal wheel and shift+wheel sideways,
-		// like the editor (#230).
-		if s := m.play; s != nil && m.playInlineActive(key) {
+		// mode owns the pane — or the detached result pane (#2797);
+		// horizontal wheel and shift+wheel sideways, like the editor (#230).
+		if s := m.play; s != nil && m.playResultShownIn(key) {
 			// The table view (#2794) scrolls rows and columns instead.
 			if s.table != nil {
 				switch {
@@ -13265,8 +13294,18 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 	// the focus (#1980) — the playground stays mounted with its query and
 	// result intact, and its key routing is scoped to its pane, so the
 	// clicked pane takes typing normally.
+	if m.playResultPaneIs(key) {
+		return m.playResultClick(key, msg, localX, localY) // the detached result pane (#2797)
+	}
 	if m.playInlineActive(key) {
-		return m.playPaneClick(key, msg, localX, localY)
+		if !m.play.detached() {
+			return m.playPaneClick(key, msg, localX, localY)
+		}
+		// Detached (#2797): the header is the playground's, the rows under
+		// it are the document's and take the click like any pane.
+		if localY < 0 {
+			return m.playHeaderClick(msg, localX, localY)
+		}
 	}
 	// The breadcrumbs row (#1153) sits between the title row and the content
 	// (content-local y = -1): a left press on a symbol segment jumps there, any
@@ -14946,6 +14985,10 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 	if m.playInlineActive(key) && !m.paneTabBarShown(inst) {
 		title = strings.ToUpper(m.play.dialect.Name()) + " — " + m.play.source
 	}
+	// The detached result pane (#2797) names what it is the result of.
+	if m.playResultPaneIs(key) {
+		title = m.playResultPaneTitle()
+	}
 
 	border := m.pal().Border
 	if focused {
@@ -14956,8 +14999,8 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 		// border always means "this pane is doing something other than
 		// navigating" — green insert, yellow visual, red replace, blue command.
 		// The playground result buffer signals its mode the same way while it holds
-		// the keyboard (#1970).
-		if s := m.play; s != nil && m.playInlineActive(key) {
+		// the keyboard (#1970) — in whichever pane draws it (#2797).
+		if s := m.play; s != nil && m.playResultShownIn(key) {
 			if md := s.resultEd.ModeName(); s.bufFocus && md != editor.Normal {
 				border = editor.ModeColor(md, m.pal())
 			}
@@ -14994,10 +15037,15 @@ func (m Model) renderPaneBox(key string, r layout.Rect) string {
 	// padding, per-line width measurement) when the pane's output is identical to
 	// the last frame — the common case for the panes the user is not touching.
 	var content string
-	if m.playInlineActive(key) {
+	if m.playResultPaneIs(key) {
+		// The detached result pane (#2797): the placeholder leaf draws the
+		// playground's result buffer.
+		content = m.playResultPaneBody(r.W - paneChromeW)
+	} else if m.playInlineActive(key) {
 		// The inline playground (#1970): the query header plus the
 		// read-only result buffer replace the pane's own content; the pane's
-		// component keeps its state untouched underneath.
+		// component keeps its state untouched underneath. With the result
+		// detached (#2797) the header sits over the pane's own content.
 		content = m.playInlineBody(r.W - paneChromeW)
 	} else {
 		content = inst.View()

@@ -157,6 +157,7 @@ func (m Model) playgroundChordHelp() help.Group {
 	add("playground.chainResult", "Chain: the result becomes the input, the program starts over at . (#2795)")
 	add("playground.chainBack", "Chain back one level: the previous input and program return")
 	add("playground.variables", "Variables line: name=value entries bound as $name (#2786)")
+	add("playground.splitResult", "Split the result into its own pane beside the source; again to re-attach (#2797)")
 	add("editor.copy", "Copy the result buffer's selection (from either focus)")
 	add("lsp.codeAction", "Not available in the playground — says so instead of doing nothing")
 	return g

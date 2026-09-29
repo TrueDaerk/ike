@@ -490,6 +490,12 @@ var jetbrainsRows = []row{
 	// playground never resolves. m (matrix) is ctrl+alt+enter on a legacy
 	// terminal, where ctrl+m is a carriage return.
 	{"ctrl+alt+l", "playground.tableView", "Toggle playground table view", Global, "jq/yq playground (#2794)"},
+	// The detached result pane (#2797), Global like its siblings. Every
+	// ctrl+alt letter is claimed by now; the issue's ctrl+alt+\ is free in
+	// every context, has a legacy encoding (ESC + FS, the C0 byte ctrl+\
+	// already produces) and reads as the split it makes — the vertical bar
+	// between the source and its result, leaning.
+	{"ctrl+alt+\\", "playground.splitResult", "Split playground result into a pane", Global, "jq/yq playground (#2797)"},
 	// Go to Line:Column (#2486): JetBrains' cmd+l. The Cmd→Ctrl fold puts it
 	// on ctrl+l off macOS, which no other default claims. JetBrains' Linux
 	// chord (ctrl+g) is *not* bound: editor.caret.addNext already owns it in

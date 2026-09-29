@@ -830,6 +830,9 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			langCommand(appCommand("playground.chainBack", "Playground: Chain Back One Level", ChainPlayBackMsg{}), playgroundLangs()),
 			// The variables line (#2786): `name=value` entries bound as $name.
 			langCommand(appCommand("playground.variables", "Toggle Playground Variables Line", TogglePlayVarsMsg{}), playgroundLangs()),
+			// The detached result pane (#2797): the result beside the source,
+			// or back under the query header.
+			langCommand(appCommand("playground.splitResult", "Playground: Split Result into a Pane", SplitPlayResultMsg{}), playgroundLangs()),
 			langCommand(appCommand("log.openRotatedSet", "Open Rotated Log Set (Merged Timeline)", OpenMergedLogMsg{}), []string{"log"}),
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
 			appCommand("terminal.newTab", "New Terminal Tab", TerminalNewTabMsg{}),

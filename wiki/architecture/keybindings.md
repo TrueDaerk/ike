@@ -1735,6 +1735,7 @@ JetBrains is:
 | `playground.checkFilters` | `ctrl+alt+a` | fragile | `palette` | live via palette |
 | `playground.export` | `ctrl+alt+v` | fragile | `palette` | live via palette |
 | `playground.open` | `cmd+shift+j` | fragile | `palette / Tools menu` | live via palette / Tools menu |
+| `playground.splitResult` | `ctrl+alt+\` | fragile | `palette` | live via palette |
 | `playground.stageNext` | `ctrl+alt+shift+right` | fragile | `palette` | live via palette |
 | `playground.stagePrev` | `ctrl+alt+shift+left` | fragile | `palette` | live via palette |
 | `playground.structure` | `ctrl+alt+g` | fragile | `palette` | live via palette |

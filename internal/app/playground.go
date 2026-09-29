@@ -180,6 +180,14 @@ type playState struct {
 	paneKey  string
 	resultEd *editor.Model
 	bufFocus bool
+	// resultKey is the detached result pane (#2797, playsplit.go) while the
+	// result lives in a layout leaf of its own beside the source pane, ""
+	// while it renders inline under the query header. syncedFocus /
+	// syncedBuf are the pane focus and bufFocus as of the last settled pass,
+	// the two the detached layout keeps in step (syncPlayResultPane).
+	resultKey   string
+	syncedFocus string
+	syncedBuf   bool
 
 	source string
 	srcKey string
@@ -694,8 +702,18 @@ func (m Model) playOpen() bool { return m.play != nil }
 // The mode is bound to its *document*, not to the pane alone (#2355): a pane
 // that switched to another file takes keys as itself, and the mounted-but-
 // hidden playground routes nothing.
+// The detached result pane (#2797) is the mode's too: focused, it routes
+// keys whether or not the source pane still shows the document.
 func (m Model) playFocused() bool {
-	return m.play != nil && m.activeWS().Panes.Focused() == m.play.paneKey && m.playSrcShown()
+	s := m.play
+	if s == nil {
+		return false
+	}
+	focused := m.activeWS().Panes.Focused()
+	if s.resultKey != "" && focused == s.resultKey {
+		return true
+	}
+	return focused == s.paneKey && m.playSrcShown()
 }
 
 // playSrcShown reports whether the hosting pane still shows the document the
@@ -810,9 +828,16 @@ func (m Model) playInlineActive(key string) bool {
 // mouse translation and the result buffer's height follow the header instead
 // of assuming the two-row default. The variables line (#2786) adds its row
 // only while it is shown.
+// With the result detached (#2797) the stale banner goes with the result
+// into its pane (playResultChromeRows), so the header is the query, the
+// variables line and the info row alone.
 func (m Model) playHeaderRowsFor(key string) int {
 	if m.playInlineActive(key) {
-		return m.playQueryRowCount() + m.playVarsRows() + playInfoRows + m.playStaleRows()
+		rows := m.playQueryRowCount() + m.playVarsRows() + playInfoRows
+		if !m.play.detached() {
+			rows += m.playStaleRows()
+		}
+		return rows
 	}
 	return 0
 }
@@ -847,7 +872,13 @@ func (m Model) playQueryRowsFor(width int) int {
 	rows := len(jqplay.Wrap(s.program.Text, m.playQueryWidth(width)))
 	limit := playMaxQueryRows
 	if r, ok := m.lay.Panes[s.paneKey]; ok {
-		if fits := paneInterior(r.H, paneChromeH) - m.playVarsRows() - playInfoRows - m.playStaleRows() - playMinResultRows; fits < limit {
+		// Detached (#2797), the rows left standing are the document's, not
+		// the result's, and the stale banner is in the result pane.
+		stale := m.playStaleRows()
+		if s.detached() {
+			stale = 0
+		}
+		if fits := paneInterior(r.H, paneChromeH) - m.playVarsRows() - playInfoRows - stale - playMinResultRows; fits < limit {
 			limit = fits
 		}
 	}
@@ -958,9 +989,20 @@ func (m Model) playPaneQueryWidth() (int, bool) {
 // sizePlayResult fits the substitute result editor under the query header in
 // the hosting pane's interior. Called at open and from layout(), so a resize
 // or zoom keeps the buffer in step.
+// Detached (#2797), the buffer fills its own pane's interior under the stale
+// banner's row instead.
 func (m *Model) sizePlayResult() {
 	s := m.play
 	if s == nil || s.resultEd == nil {
+		return
+	}
+	if s.detached() {
+		r, ok := m.lay.Panes[s.resultKey]
+		if !ok {
+			return
+		}
+		width := paneInterior(r.W, paneChromeW)
+		s.resultEd.SetSize(width-m.playStripW(width), paneInterior(r.H, paneChromeH+m.playStaleRows()))
 		return
 	}
 	r, ok := m.lay.Panes[s.paneKey]
@@ -979,12 +1021,19 @@ func (m *Model) sizePlayResult() {
 // but its own untouched content, so leaving the mode *is* the restore. The
 // history is the root model's shared list (#1977), so reopening offers the
 // last programs again — over any buffer, not just the one they were run on.
+// A detached result pane (#2797) leaves the layout with the mode: it exists
+// to show this playground's result, and nothing else could draw into it.
 func (m *Model) closePlayground() {
-	if s := m.play; s != nil {
-		s.cancelRun()
-		s.hist.Add(s.program.Text)
+	s := m.play
+	if s == nil {
+		return
 	}
+	s.cancelRun()
+	s.hist.Add(s.program.Text)
 	m.play = nil
+	if s.resultKey != "" {
+		m.removePlayResultPane(s.resultKey, s.paneKey)
+	}
 }
 
 // leavePlaygroundOnEsc is the mode's esc: it closes the playground *and* arms
@@ -1614,7 +1663,7 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// (#2633) is dropped on the way out rather than left painted over a
 		// program the next keystroke no longer replaces.
 		s.program.Deselect()
-		s.setBufFocus(true)
+		m.playFocusResult() // the detached result pane takes the focus with it (#2797)
 		return m, nil
 	case "ctrl+space":
 		// The editor's manual completion request: open the popup without a
@@ -1758,7 +1807,7 @@ func (m Model) updatePlayBufferKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	switch msg.String() {
 	case "tab":
-		s.setBufFocus(false)
+		m.playFocusQuery() // back to the source pane's query line when detached (#2797)
 		return m, nil
 	case "ctrl+y":
 		m.copyPlayResult()
@@ -1877,7 +1926,7 @@ func (m Model) beginPlayResultSearch() (tea.Model, tea.Cmd) {
 		s.beginPlayTableSearch(fromQuery) // the table searches its cells (#2794)
 		return m, nil
 	}
-	s.setBufFocus(true)
+	m.playFocusResult() // into the detached pane when split (#2797)
 	// Remember the trip (#2411) — setBufFocus clears the flag, so it is armed
 	// after it, never before.
 	s.findQuery = fromQuery
@@ -1902,7 +1951,7 @@ func (m Model) endPlayFindReturnToQuery() (tea.Model, tea.Cmd) {
 	if s.resultEd.ModeName() != editor.Normal {
 		*s.resultEd, cmd = s.resultEd.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	}
-	s.setBufFocus(false)
+	m.playFocusQuery() // and back onto the source pane when split (#2797)
 	return m, cmd
 }
 
@@ -2137,22 +2186,40 @@ func (m *Model) stepPlayHistory(delta int) tea.Cmd {
 // scrollbar column outranks the content like in any editor pane (#1022).
 // x/y are content-local, so the header rows sit at negative y.
 func (m Model) playPaneClick(key string, msg mouseEvent, x, y int) (tea.Model, tea.Cmd) {
+	if y < 0 {
+		return m.playHeaderClick(msg, x, y)
+	}
+	return m.playResultClick(key, msg, x, y)
+}
+
+// playHeaderClick is a click on the query header (content-local y < 0): a
+// chip, the variables line, or a query row — which returns the keyboard to
+// the query line. With the result detached (#2797) the header is the source
+// pane's only playground chrome, and the clicks below it are the document's.
+func (m Model) playHeaderClick(msg mouseEvent, x, y int) (tea.Model, tea.Cmd) {
+	s := m.play
+	if msg.Button == tea.MouseLeft {
+		if cmd, hit := m.clickPlayChip(x, y); hit {
+			return m, cmd
+		}
+		if m.clickPlayVarsRow(x, y) {
+			return m, nil
+		}
+		s.setBufFocus(false)
+		m.clickPlayQueryRow(x, y)
+	}
+	return m, nil
+}
+
+// playResultClick is a click on the result body: the table, the structure
+// strip, the scrollbar or the buffer itself, which takes the keyboard and
+// starts a selection drag in pane key — the hosting pane inline, the result
+// pane when detached (#2797). A click on the detached pane's stale banner
+// (y < 0 there) does nothing.
+func (m Model) playResultClick(key string, msg mouseEvent, x, y int) (tea.Model, tea.Cmd) {
 	s := m.play
 	ed := s.resultEd
-	if y < 0 {
-		if msg.Button == tea.MouseLeft {
-			if cmd, hit := m.clickPlayChip(x, y); hit {
-				return m, cmd
-			}
-			if m.clickPlayVarsRow(x, y) {
-				return m, nil
-			}
-			s.setBufFocus(false)
-			m.clickPlayQueryRow(x, y)
-		}
-		return m, nil
-	}
-	if msg.Button != tea.MouseLeft {
+	if msg.Button != tea.MouseLeft || y < 0 {
 		return m, nil
 	}
 	if m.clickPlayTable(x, y) {
@@ -2238,8 +2305,8 @@ func playOneLinePos(program string, pos, width, col int) int {
 // — which may be an HTTP pane with no editor of its own — else the pane's
 // active document editor.
 func (m Model) dragEditor(key string) *editor.Model {
-	if s := m.play; s != nil && s.paneKey == key {
-		return s.resultEd
+	if s := m.play; s != nil && m.playResultShownIn(key) {
+		return s.resultEd // the detached pane's, or the inline host's (#2797)
 	}
 	if inst := m.activeWS().Panes.Get(key); inst != nil {
 		return inst.Editor()
@@ -2332,6 +2399,14 @@ func (m Model) playInlineBody(width int) string {
 		body += m.playVarsRow(width) + "\n" // the variables line (#2786), between the query and the info row
 	}
 	body += m.playInfoRow(width) + "\n"
+	if s.detached() {
+		// The result is in its own pane (#2797): the header is pinned over
+		// the document it queries, which layout() sized under it.
+		if inst := m.activeWS().Panes.Get(s.paneKey); inst != nil {
+			return body + inst.View()
+		}
+		return body
+	}
 	if s.playStale() {
 		body += m.playStaleBanner(width) + "\n"
 	}
