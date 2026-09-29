@@ -80,7 +80,8 @@ func (m *Model) routeOverlayPaste(text string) (cmd tea.Cmd, handled bool) {
 		// The playground query line is one line; a pasted program is flattened into
 		// it like every other single-field prompt (#1936). An unfocused
 		// playground (#1980) never captures — the paste belongs to the
-		// focused pane then.
+		// focused pane then. An open result search line takes the paste
+		// instead of the query line (#2772).
 		return m.pastePlayground(text), true
 	case m.newProjectPromptOpen():
 		return nil, m.pasteNewProjectPrompt(text)

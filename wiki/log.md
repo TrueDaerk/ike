@@ -1,5 +1,15 @@
 # Log
 
+## 2026-09-29 (jq playground: paste reaches the open result search line, #2772)
+
+- A paste (bracketed or `cmd+v`) in a focused playground with the result's
+  search line open used to land in the query line, pull the focus back there
+  and re-run the program. `pastePlayground` now offers it to the result
+  editor's open prompt first (`editor.Model.PasteIntoPrompt`, the editor's own
+  #1380 prompt paste): flattened into the search line, focus and the #2411
+  return trip kept, no evaluation. Without a prompt the query-line paste is
+  unchanged (#1936). Docs: `/architecture/jq-playground.md`.
+
 ## 2026-09-28 (Editor: per-keystroke parse fan-out bounded, #2770)
 
 - Typing in a long HTML buffer no longer stalls: every keystroke used to fan

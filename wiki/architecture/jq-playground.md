@@ -1132,10 +1132,23 @@ step, a prefill or a restored draft goes through `Field.Set`, which starts a
 fresh history: `ctrl+z` undoes what was typed *into* a program, never the act
 of putting it there — the history has its own arrows for that.
 
-A bracketed paste lands in the query line, **flattened** to one line, like
-every other single-field prompt — the result buffer refuses pastes with
-everything else. It lands there only while the playground's own pane holds the
-focus, though: the mode stays mounted when the focus moves (#1980, see
+A paste (bracketed or `cmd+v`) goes to whatever takes the playground's typed
+input (#2772):
+
+- **An open result prompt** — the search line, opened with `/` or the find
+  chord from either focus — takes it through the editor's own prompt paste
+  (`editor.Model.PasteIntoPrompt`), flattened and previewed exactly like
+  typing. The keyboard stays in the result, the find chord's "esc returns to
+  the query line" trip survives, and the program is neither touched nor
+  re-evaluated.
+- **Otherwise the query line** takes it, **flattened** to one line like every
+  other single-field prompt, resetting the history walk and re-running the
+  program (#1936). That includes the result buffer focused without a prompt:
+  the buffer is read-only and refuses pastes with everything else, so the
+  program takes the block and the keyboard follows it back to the query line.
+
+The playground captures a paste only while its own pane holds the focus,
+though: the mode stays mounted when the focus moves (#1980, see
 [The inline mount](#the-inline-mount)), and the paste router follows the key chain
 rather than the mounted mode, so an open [popup terminal
 layer](./terminal.md) — box or floating panel — takes it instead, and a focused
