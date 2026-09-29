@@ -62,6 +62,8 @@ var noCounterpart = map[string]string{
 	"playground.export":                "IKE-only concept (#2788): the inline jq playground has no JetBrains equivalent",
 	"playground.checkFilters":          "IKE-only concept (#2792): the inline jq playground has no JetBrains equivalent",
 	"playground.structure":             "IKE-only concept (#2793): the inline jq playground has no JetBrains equivalent",
+	"playground.stageNext":             "IKE-only concept (#2785): the inline jq playground has no JetBrains equivalent",
+	"playground.stagePrev":             "IKE-only concept (#2785): the inline jq playground has no JetBrains equivalent",
 	"time.toggle":                      "IKE-only concept (#2426): JetBrains has no time report; time tracking lives in third-party plugins an exported keymap does not carry",
 	"markdown.preview":                 "no default JetBrains keymap action",
 	"html.preview":                     "no default JetBrains keymap action",

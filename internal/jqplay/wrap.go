@@ -46,7 +46,7 @@ func Wrap(program string, width int) []Line {
 			open = false
 		}
 	}
-	for _, seg := range pipeSegments(program, r) {
+	for _, seg := range pipeSegments(program, r, false) {
 		start, end := seg.Start, seg.End
 		atStage := true
 		for start < end {
@@ -107,20 +107,35 @@ func LineAt(lines []Line, pos int) int {
 	return len(lines) - 1
 }
 
-// pipeSegments splits the program after every top-level `|`, so each segment
-// is one pipeline stage including the pipe that ends it. The split uses the
+// pipeSegments splits the program after every `|`, so each segment is one
+// pipeline stage including the pipe that ends it. The split uses the
 // scanner's tokens rather than a rune search: a `|` inside a string literal or
 // a comment is text, not a stage boundary, and `||` is the or-operator.
-func pipeSegments(program string, r []rune) []Line {
+//
+// top restricts the split to the pipes at the program's own level (#2785):
+// a `|` inside brackets (`map(.a | .b)`, `select(...)`), inside an
+// `if … end` or in a `def …;` body belongs to that construct and does not
+// end a stage of the outer pipeline, and `|=` is the update operator. The
+// wrap passes false — a long stage may still break its row at an inner pipe;
+// the stage stepping passes true, because cutting the program there would
+// leave a construct half open.
+func pipeSegments(program string, r []rune, top bool) []Line {
 	var out []Line
 	start := 0
 	tokens := Tokens(program)
+	var nest []rune // open constructs: brackets, 'i' for if, 'd' for def
 	for _, t := range tokens {
+		if top && nestToken(r, t, &nest) {
+			continue
+		}
 		if t.Kind != KindOperator || t.End != t.Start+1 || r[t.Start] != '|' {
 			continue
 		}
 		if (t.Start > 0 && r[t.Start-1] == '|') || (t.Start+1 < len(r) && r[t.Start+1] == '|') {
 			continue // `||` is one operator, not two stage boundaries
+		}
+		if top && (len(nest) > 0 || (t.Start+1 < len(r) && r[t.Start+1] == '=')) {
+			continue
 		}
 		out = append(out, Line{Start: start, End: t.Start + 1})
 		start = t.Start + 1

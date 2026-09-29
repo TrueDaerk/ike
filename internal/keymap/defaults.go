@@ -460,6 +460,14 @@ var jetbrainsRows = []row{
 	// Editor context, which would shadow a Global chord in every editor); g —
 	// go to a node — is the one ctrl+alt letter nothing else claims.
 	{"ctrl+alt+g", "playground.structure", "Toggle playground structure strip", Global, "jq/yq playground (#2793)"},
+	// Pipeline stepping (#2785), Global like its siblings. The issue's
+	// ctrl+alt+←/→ is editor tab cycling (Global), so shift joins in: the
+	// arrows keep their direction, and the chord has a legacy xterm encoding
+	// (CSI 1;8C/D) that needs no Kitty protocol. Off macOS the right arrow
+	// meets editor.splitViewRight's folded cmd+alt+shift+right in the Editor
+	// context — no clash inside the playground, which resolves Global only.
+	{"ctrl+alt+shift+right", "playground.stageNext", "Next pipeline stage", Global, "jq/yq playground (#2785)"},
+	{"ctrl+alt+shift+left", "playground.stagePrev", "Previous pipeline stage", Global, "jq/yq playground (#2785)"},
 	// Go to Line:Column (#2486): JetBrains' cmd+l. The Cmd→Ctrl fold puts it
 	// on ctrl+l off macOS, which no other default claims. JetBrains' Linux
 	// chord (ctrl+g) is *not* bound: editor.caret.addNext already owns it in
