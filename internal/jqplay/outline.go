@@ -37,6 +37,9 @@ func (r Result) Outline() []OutlineItem {
 	if r.dialect == DialectXMQ && r.ext != "json" {
 		return nil
 	}
+	if r.dialect == DialectXMQ {
+		return jsonOutline(r.Text()) // one document in line chunks (#2796)
+	}
 	if len(r.Outputs) > 1 {
 		starts := r.ValueStarts()
 		out := make([]OutlineItem, len(starts))

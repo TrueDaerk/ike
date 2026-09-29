@@ -195,14 +195,16 @@ func TestXMQTimeout(t *testing.T) {
 // TestXMQSizeCap: stdout is capped at MaxResultBytes like the gojq dialects'
 // output, and the cap is reported, never silent.
 func TestXMQSizeCap(t *testing.T) {
-	fakeXMQ(t, `i=0
-while [ $i -lt 40000 ]; do printf '0123456789'; i=$((i+1)); done`)
+	// 9 MB against the 8 MiB budget (#2796): 1 KB per write, 9,000 writes.
+	fakeXMQ(t, `chunk=$(printf "%0256d" 0)$(printf "%0256d" 0)$(printf "%0256d" 0)$(printf "%0256d" 0)
+i=0
+while [ $i -lt 9000 ]; do printf "%s" "$chunk"; i=$((i+1)); done`)
 	res := EvaluateWith(DialectXMQ, "to-text", "<r/>")
 	if res.Err != "" {
 		t.Fatalf("unexpected error: %s", res.Err)
 	}
 	if !res.Truncated {
-		t.Fatal("a 400 KB output must report truncation")
+		t.Fatal("a 9 MB output must report truncation")
 	}
 	if n := len(res.Text()); n > MaxResultBytes {
 		t.Fatalf("result holds %d bytes, cap is %d", n, MaxResultBytes)

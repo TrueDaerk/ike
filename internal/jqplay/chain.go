@@ -45,6 +45,8 @@ func (r Result) Chain() (*Input, string, error) {
 	origin := "chained"
 	if r.Truncated {
 		origin = "chained from a capped result"
+	} else if r.partial {
+		origin = "chained from a partial result" // the pages loaded so far (#2796)
 	}
 	in := &Input{
 		values:  append([]any(nil), r.values...),

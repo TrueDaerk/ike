@@ -13,6 +13,9 @@ func (r Result) ValueStarts() []int {
 	if len(r.Outputs) == 0 || (r.dialect == DialectXMQ && r.ext != "json") {
 		return nil
 	}
+	if r.dialect == DialectXMQ {
+		return []int{0} // one CLI result, paged into line chunks (#2796)
+	}
 	sepLines := strings.Count(r.separator(), "\n")
 	starts := make([]int, len(r.Outputs))
 	line := 0

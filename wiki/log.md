@@ -1,5 +1,18 @@
 # Log
 
+## 2026-09-30 (jq playground: progressive result rendering, #2796)
+
+- The evaluation is a resumable producer (`jqplay.Start`, `internal/jqplay/page.go`)
+  yielding pages of 200 values / 64 KiB; the first page is installed at once
+  and further pages append in place (`editor.AppendReadOnly`) as the result
+  cursor or viewport nears the loaded end, or on `G`. The total budget grew
+  to 10,000 values / 8 MiB and still ends in `(stopped at N)`; the info row
+  counts `200+ value(s)` until exhausted. Folds, value glyphs, outline, table
+  and search cover appended pages; cancellation (program change, ctrl+l,
+  close, park) ends the producer goroutine; the 5 s deadline is per page and
+  ignores time spent suspended. xmq pages its one CLI result by lines.
+  Docs: `/architecture/jq-playground.md`.
+
 ## 2026-09-29 (jq playground: chaining results, #2795)
 
 - `playground.chainResult` / `playground.chainBack` (`ctrl+alt+shift+↓` / `↑`)
