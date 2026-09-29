@@ -397,7 +397,10 @@ Consequences of the boundary, each deliberate:
   same hint.
 - **The identity program is the empty line.** `xmq` with no command
   pretty-prints the input in its own notation, so the ordinary open runs
-  exactly that — where jq and yq open on `.`.
+  exactly that — where jq and yq open on `.`. `Dialect.identity()`
+  (`internal/jqplay/dialect.go`) names the substitution `Run` makes for a
+  blank query line (#2807, below): empty for xmq — a no-op, since xmq already
+  treats it that way — `.` for jq and yq.
 - **The at-path open seeds an XPath.** `xml.xmqPlaygroundAtPath` (intention
   menu on an element; palette) prefills `select <xpath>` for the element under
   the caret: HTML resolves through the DOM inspector's parser
@@ -590,6 +593,22 @@ Two things override the identity:
 The per-file recall is in-memory for the session, unlike the [history](#history),
 which is per user and persisted: the recall is a bookmark into one file of one
 project, and persisting it into the project state would be noise.
+
+### A blank query line runs as the identity (#2807)
+
+Deleting the seeded `.` — `cmd+a` then backspace, to start a new program from
+nothing — is not the same as never having run anything: `jqplay.Run` treats an
+empty or whitespace-only program as the dialect's `identity()`
+([above](#the-xmq-dialect-2414)), so the result buffer keeps showing the
+document exactly as `.` would. Everything downstream sees the same result an
+explicit `.` gets: the info row's summary reports the real value count instead
+of an idle "no program yet" placeholder (that message is gone), folds and
+`cmd+f` search work over it, and the [stale banner](#a-failed-run-keeps-the-last-good-result-2412)
+does not fire — a blank line is a valid run, not a broken one. It is still not
+worth remembering: the last-program memory's guard already treats `""` the
+same as `.` (never recorded, since `.` is the default anyway), and pressing
+`enter` on a blank line adds nothing to the [history](#history) — `History.Add`
+already ignores an empty program.
 
 ## Debounce, generations, cancellation
 

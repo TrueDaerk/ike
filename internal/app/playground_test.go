@@ -101,6 +101,31 @@ func TestJQPlaygroundTypingReEvaluates(t *testing.T) {
 	}
 }
 
+// TestJQPlaygroundClearedQueryShowsIdentity (#2807): clearing the query line
+// to start a new program must not blank the result — it runs as `.` until the
+// user types something else, so the document the user was looking at stays on
+// screen.
+func TestJQPlaygroundClearedQueryShowsIdentity(t *testing.T) {
+	m := openJQ(t, playApp(t, `{"name":"ike"}`))
+	m = setProgram(m, ".")
+	want := m.play.result.Text()
+
+	m.play.program.Clear()
+	m = drainCmd(m, m.schedulePlayEval())
+
+	s := m.play
+	if s.result.Err != "" {
+		t.Fatalf("blank program reported %q", s.result.Err)
+	}
+	if got := s.result.Text(); got != want {
+		t.Fatalf("blank program result = %q, want the identity result %q", got, want)
+	}
+	v := ansi.Strip(m.render())
+	if strings.Contains(v, "no program yet") {
+		t.Errorf("info row should not say 'no program yet', got:\n%s", v)
+	}
+}
+
 // playCaretApp opens a JSON file with the caret parked on the "name" key, whose
 // document path is .spec.name — the input the two path-seeding cases need.
 func playCaretApp(t *testing.T) Model {

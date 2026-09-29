@@ -273,9 +273,10 @@ func EvaluateWith(d Dialect, program, text string) Result {
 // output until the iterators are exhausted, a runtime error stops the run, a
 // cap is hit, or ctx ends.
 //
-// An empty program is idle, not an error: the playground opens on one, and a
-// half-typed program should not paint the query line red before there is
-// anything to compile.
+// A blank (empty or whitespace-only) program is the dialect's identity
+// (#2807): clearing the query line to start a new program must not blank the
+// result the user was looking at, so it is run as if `.` had been typed (jq,
+// yq) — xmq already treats its own empty command line this way.
 func Run(ctx context.Context, program string, in *Input) Result {
 	program = strings.TrimSpace(program)
 	if in.Dialect() == DialectXMQ {
@@ -285,7 +286,7 @@ func Run(ctx context.Context, program string, in *Input) Result {
 		return runXMQ(ctx, program, in)
 	}
 	if program == "" {
-		return Result{dialect: in.Dialect()}
+		program = in.Dialect().identity()
 	}
 	if in == nil || len(in.values) == 0 {
 		return Result{Err: in.Dialect().emptyInput(), dialect: in.Dialect()}

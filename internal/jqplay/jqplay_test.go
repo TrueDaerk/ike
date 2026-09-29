@@ -48,14 +48,22 @@ func TestEvaluatePrettyPrints(t *testing.T) {
 	}
 }
 
-// TestEmptyProgramIsIdle: an empty query line is not an error. The playground
-// opens on one whenever the seed path is blank, and painting it red would be
-// noise.
-func TestEmptyProgramIsIdle(t *testing.T) {
+// TestBlankProgramIsIdentity (#2807): a blank or whitespace-only query line
+// runs as `.` rather than yielding an empty result, so clearing the line to
+// start a new program does not blank the result the user was looking at.
+func TestBlankProgramIsIdentity(t *testing.T) {
+	const doc = `{"a":{"b":1}}`
+	want := Evaluate(".", doc)
+	if want.Err != "" {
+		t.Fatalf("identity reported %q", want.Err)
+	}
 	for _, p := range []string{"", "   "} {
-		res := Evaluate(p, `{"a":1}`)
-		if res.Err != "" || len(res.Outputs) != 0 {
-			t.Fatalf("Evaluate(%q) = %+v, want idle", p, res)
+		res := Evaluate(p, doc)
+		if res.Err != "" {
+			t.Fatalf("Evaluate(%q) reported %q", p, res.Err)
+		}
+		if res.Text() != want.Text() {
+			t.Errorf("Evaluate(%q) = %q, want identity output %q", p, res.Text(), want.Text())
 		}
 	}
 }
