@@ -81,7 +81,7 @@ func TestXMQPlaygroundEvaluates(t *testing.T) {
 		t.Errorf("the buffer must arrive on stdin, got %q", text)
 	}
 	v := ansi.Strip(m.render())
-	if !strings.Contains(v, "xmq:") {
+	if !strings.Contains(v, "XMQ:") {
 		t.Errorf("the query line should carry the xmq label, got:\n%s", v)
 	}
 }

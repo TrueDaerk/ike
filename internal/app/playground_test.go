@@ -690,7 +690,7 @@ func TestJQPlaygroundInlineEnterExit(t *testing.T) {
 		t.Fatalf("the mode must mount in the focused pane, got %q vs %q", got, want)
 	}
 	v := ansi.Strip(m.render())
-	if !strings.Contains(v, "> jq:") {
+	if !strings.Contains(v, "> JQ:") {
 		t.Errorf("the query line must render inside the pane, got:\n%s", v)
 	}
 	if ed := m.activeEditor(); ed.Text() != body {
@@ -918,10 +918,10 @@ func TestJQPlaygroundSurvivesFocusChange(t *testing.T) {
 		t.Fatalf("result = %q, must survive the focus change", got)
 	}
 	v := ansi.Strip(m.render())
-	if !strings.Contains(v, "jq:") {
+	if !strings.Contains(v, "JQ:") {
 		t.Errorf("the unfocused playground must keep rendering, got:\n%s", v)
 	}
-	if strings.Contains(v, "> jq:") {
+	if strings.Contains(v, "> JQ:") {
 		t.Errorf("the unfocused query line must blank its `>` marker (#1978), got:\n%s", v)
 	}
 
@@ -1286,7 +1286,7 @@ func TestJQPlaygroundExpandedQueryCaps(t *testing.T) {
 	}
 	// The cursor sits at the end of the program, so the last rows are the ones
 	// on screen — the window follows the caret like the one-line view.
-	if got := ansi.Strip(rows[0]); !strings.HasPrefix(got, "> jq: …") {
+	if got := ansi.Strip(rows[0]); !strings.HasPrefix(got, "> JQ: …") {
 		t.Errorf("the capped view must window around the cursor, got %q", got)
 	}
 	if got := strings.TrimRight(playQueryText(m, 60), " "); !strings.HasSuffix(got, "| .a") {

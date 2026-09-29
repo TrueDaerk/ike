@@ -104,10 +104,16 @@ While the mode is active on a pane:
   wide glyph in the source label cannot overflow the row.
 - The query line's `> ` marker is **blanked while the line does not hold the
   keyboard** — the result buffer has it, or the focus is on another pane —
-  the same inactive affordance the regex tester's field labels use; the `jq:`
-  (or `yq:`) label renders in the chrome's Secondary either way. Both dialect
-  names are two cells wide and the prefix width never changes, so the cursor
-  window math is independent of both focus and dialect.
+  the same inactive affordance the regex tester's field labels use; the `JQ:`
+  (or `YQ:`) label renders as a **coloured badge** either way (#2779):
+  `playDialectBadge` paints the uppercased dialect name as a chip — jq on
+  `pal.Warning`, yq on `pal.Info`, xmq on `pal.Success` — with a foreground
+  `theme.Readable` picks for contrast against whichever of those three the
+  active theme resolves to, so the chip stays legible in a light or a dark
+  theme without a hard-coded ANSI color. Both dialect names are two cells wide
+  and the prefix width never changes, so the cursor window math is
+  independent of both focus and dialect; the chip is exactly as wide as the
+  plain name it replaces, so `playPrefixW` needs no separate badge-width term.
 - The rest of the pane shows a **substitute read-only editor**
   (`ShowReadOnly`, the #1762 buffer) holding the result under the virtual
   path `jq result.json` — `yq result.yaml` in the other dialect — so the
@@ -128,11 +134,14 @@ While the mode is active on a pane:
   what `renderPaneBox` draws, what `tabBarHit` resolves, and whether the
   playground claims the row — so the bar can never be drawn without being
   clickable, or hit-tested without being drawn. The dialect and the source are
-  not lost with the title: `playModeSegment` puts `JQ — data.json` at the head
-  of the info row exactly while the bar owns the title row, ahead of the
+  not lost with the title: `playModeSegment` puts the same `playDialectBadge`
+  chip — `JQ — data.json` with `JQ` painted as the coloured badge — at the
+  head of the info row exactly while the bar owns the title row, ahead of the
   summary and before every other segment, so it survives an error or a
-  transient status too. On a pane too narrow to carry both, the label wins —
-  nothing else on screen would name the queried snapshot.
+  transient status too, and the mode reads in the same colour whether it is
+  named on the query line or in the info row. On a pane too narrow to carry
+  both, the label wins — nothing else on screen would name the queried
+  snapshot.
 
 The keyboard is modal **while the hosting pane is focused** and starts on the
 query line; **tab** moves it into the result buffer and back. A mouse click
