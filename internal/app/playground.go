@@ -202,8 +202,14 @@ type playState struct {
 	// "what was that field called again?" lookup the playground exists for.
 	// haveResult records that a good result was installed at all, so the
 	// stale banner is only claimed over content that really is one.
-	result     jqplay.Result
-	runErr     string
+	result jqplay.Result
+	runErr string
+	// compileBad reports that runErr is the current program's compile error
+	// (#2780), found synchronously on the keystroke rather than by a run. No
+	// run is scheduled for such a program, and a result still in flight for
+	// an earlier one — or a debounce tick left over from it — is dropped, so
+	// nothing overwrites the error until the program compiles again.
+	compileBad bool
 	haveResult bool
 	pending    bool
 	// dimming reports whether the pending evaluation has been running long
@@ -1038,6 +1044,9 @@ func (m *Model) schedulePlayEval() tea.Cmd {
 	if s == nil || s.inputErr != "" {
 		return nil
 	}
+	if !m.compilePlay() {
+		return nil
+	}
 	s.cancelRun()
 	s.gen++
 	s.pending, s.dimming, s.spinning, s.spinFrame = true, false, false, 0
@@ -1051,10 +1060,36 @@ func (m *Model) schedulePlayEval() tea.Cmd {
 // keystroke already superseded it.
 func (m *Model) firePlayDebounce(msg playDebounceMsg) tea.Cmd {
 	s := m.play
-	if s == nil || msg.st != s || msg.gen != s.gen {
+	if s == nil || msg.st != s || msg.gen != s.gen || s.compileBad {
 		return nil
 	}
 	return m.runPlay()
+}
+
+// compilePlay is the synchronous syntax check ahead of every run (#2780): it
+// compiles the current program — no input involved, so its cost is the
+// program's, not the snapshot's — and reports whether a run may start. A
+// compile error takes the info row at once, the run in flight for an earlier
+// program is abandoned, and the eval generation stays where it is: nothing is
+// scheduled for a program that cannot run. The last good result stays on
+// screen under the stale banner exactly as after a failed run (#2412).
+func (m *Model) compilePlay() bool {
+	s := m.play
+	err := jqplay.Compile(s.dialect, s.program.Text)
+	if err == "" {
+		if s.compileBad {
+			// The error was this check's, so it goes with the fix; the run
+			// about to start replaces it with its own outcome either way.
+			s.compileBad, s.runErr = false, ""
+			m.sizePlayResult()
+		}
+		return true
+	}
+	s.cancelRun()
+	s.compileBad, s.runErr = true, err
+	s.pending, s.dimming, s.spinning = false, false, false
+	m.sizePlayResult() // the stale banner costs a row while it is up
+	return false
 }
 
 // runPlayNow skips the debounce — the enter key and the initial evaluation want
@@ -1063,6 +1098,9 @@ func (m *Model) runPlayNow() tea.Cmd {
 	s := m.play
 	if s == nil || s.inputErr != "" || s.input == nil {
 		return nil // still parsing, or the input never became one
+	}
+	if !m.compilePlay() {
+		return nil
 	}
 	s.cancelRun()
 	s.gen++
@@ -1097,7 +1135,7 @@ func (m *Model) runPlay() tea.Cmd {
 // prefills.
 func (m *Model) finishPlayEval(msg playEvalDoneMsg) tea.Cmd {
 	s := m.play
-	if s == nil || msg.st != s || msg.gen != s.gen {
+	if s == nil || msg.st != s || msg.gen != s.gen || s.compileBad {
 		return nil
 	}
 	s.pending, s.dimming, s.spinning, s.cancel = false, false, false, nil
@@ -1927,7 +1965,7 @@ func (m *Model) clearPlayResult() tea.Cmd {
 	if s == nil {
 		return nil
 	}
-	s.result, s.haveResult, s.runErr = jqplay.Empty(s.dialect), false, ""
+	s.result, s.haveResult, s.runErr, s.compileBad = jqplay.Empty(s.dialect), false, "", false
 	m.sizePlayResult() // the stale banner's row goes back to the result
 	s.status = "cleared the output — the next run fills it again"
 	return m.syncPlayResultBuffer()
