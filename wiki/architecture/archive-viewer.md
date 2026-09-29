@@ -4,7 +4,7 @@ title: Archive Viewer
 description: "#1762 — archive files (tar, tar.gz/.tgz, tar.bz2, zip — #2594) open as a collapsible entry list instead of a raw text buffer; Enter (or a double-click) extracts one member into a read-only editor buffer with syntax highlighting from the member's own file name; gzip members open decompressed (#1948); e/E write members or the whole archive to a directory on disk under path, overwrite and size guards (#2249), picked in a live directory autocomplete (#2689); ctrl+r re-lists the file in place (archive.reload, #2314)."
 resource: internal/archview
 tags: [architecture, archive, tar, zip, viewer, pane, read-only, mouse, extract, reload]
-timestamp: 2026-09-23T18:00:00Z
+timestamp: 2026-09-29T12:00:00Z
 ---
 
 # Archive Viewer (#1762)
@@ -198,10 +198,19 @@ and it never writes *out* of one either: `e`/`E` (or the palette's
 only emit `archview.ExtractMsg`, naming the archive and the members. Everything
 else is the root model's, in three steps:
 
+**Entry points.** The viewer (`e`/`E` and the two palette commands) and, since
+#2805, the explorer: *Extract To…* on an archive row opens step 1 exactly as
+`E` does, and *Extract Here* skips the prompt and plans straight into the
+proposed directory. Both explorer entries end with the tree rescanned and the
+target directory selected; everything below — plan, guard, cap, refusals — is
+shared. A plain `.gz` (not an archive) extracts through `gzfile.Extract`
+instead, under the same cap (see [explorer](./explorer.md#archive-actions-2805)).
+
 1. **Target-directory prompt** — a live directory autocomplete (#2689,
    `internal/app/dirprompt.go`). It is prefilled with a directory *next to the
    archive*, named after it without its archive suffix (`backup.tar.gz` →
-   `./backup`), so the default never scatters members beside the file. Under
+   `./backup`; any other extension is dropped the same way, `x.zip` → `./x`,
+   #2805), so the default never scatters members beside the file. Under
    the input line the matching directories are listed and re-filtered on
    *every* keystroke — `pathcomplete.DirsFrom` against the project root, so
    **directories only**: the target can never be a file. The keys:

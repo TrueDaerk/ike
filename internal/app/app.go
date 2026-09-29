@@ -685,6 +685,15 @@ type Model struct {
 	archExtractArchive string
 	archExtractMembers []string
 	archExtractPlan    *archive.Plan
+	// archExtractReveal marks an extraction the explorer started (#2805): it
+	// ends with the tree refreshed and the target selected. archExtractGzip
+	// marks the prompt as the explorer's Extract To… on a plain .gz, which
+	// has one file to write instead of a member plan.
+	archExtractReveal bool
+	archExtractGzip   bool
+	// packPending is the explorer extraction/compression (#2805) waiting on
+	// its overwrite guard; nil when none is.
+	packPending *packJob
 	// archExtractLimit overrides the extraction byte cap (0 = the package
 	// default), the seam the cap's test drives.
 	archExtractLimit int64
@@ -7646,6 +7655,27 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.startArchiveExtractCommand(true)
 		return m, nil
 
+	case ExplorerContextMenuMsg:
+		// explorer.contextMenu (alt+enter, #2805): the right-click menu at
+		// the cursor row.
+		m.openExplorerContextMenu()
+		return m, nil
+
+	case ExplorerExtractHereMsg:
+		return m, m.explorerExtract(false)
+
+	case ExplorerExtractToMsg:
+		return m, m.explorerExtract(true)
+
+	case ExplorerCompressGzipMsg:
+		return m, m.explorerCompress(false)
+
+	case ExplorerCompressZipMsg:
+		return m, m.explorerCompress(true)
+
+	case packDoneMsg:
+		return m, m.finishPack(msg)
+
 	case ArchiveReloadMsg:
 		// archive.reload (ctrl+r in the viewer, palette — #2314): re-read the
 		// focused archive from disk.
@@ -9341,6 +9371,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.archiveExtractGuardOpen() {
 			return m.updateArchiveExtractGuard(msg)
+		}
+		// The explorer's extract/compress overwrite guard (#2805) answers
+		// the same way.
+		if m.packGuardOpen() {
+			return m.updatePackGuard(msg)
 		}
 		// file.copy's destination prompt (#2696) is the extract prompt's twin
 		// — same directory autocomplete — and its overwrite guard answers on
@@ -13155,7 +13190,7 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// the pointer is selected first, so the menu's actions target it.
 		if msg.Button == tea.MouseRight {
 			if exp.ContextClick(localX, localY) {
-				m.ctxMenu.Open(explorerContextItems(), msg.X, msg.Y, m.width, m.height)
+				m.ctxMenu.Open(m.explorerMenuItems(), msg.X, msg.Y, m.width, m.height)
 			}
 			return m, nil
 		}

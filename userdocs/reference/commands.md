@@ -106,6 +106,11 @@ bring their own.
 | Go to Tab 9 | `editor.tab.select9` | `alt+9` | — | everywhere |
 | Pin/Unpin Tab | `editor.tab.togglePin` | `alt+shift+p` | — | everywhere |
 | ES: Run Query Buffer | `es.run` | — | — | `editor` pane |
+| Explorer: Compress (gzip) | `explorer.compressGzip` | — | — | `explorer` pane |
+| Explorer: Compress (zip) | `explorer.compressZip` | — | — | `explorer` pane |
+| Explorer: Show Context Menu | `explorer.contextMenu` | `alt+enter` | — | `explorer` pane |
+| Explorer: Extract Here | `explorer.extractHere` | — | — | `explorer` pane |
+| Explorer: Extract To… | `explorer.extractTo` | — | — | `explorer` pane |
 | Focus Explorer / Editor | `explorer.toggle` | `cmd+1` | — | everywhere |
 | Copy File | `file.copy` | `f5` | — | everywhere |
 | Copy Path | `file.copyPath` | `cmd+shift+c` | — | everywhere |
