@@ -90,7 +90,7 @@ func init() {
 func jsonSpans(lines []string) []lang.Span {
 	// The number hints step aside where a timestamp already claimed the digits,
 	// and win where the member name names the unit itself (#1685).
-	hints, stamps := numhint.SpansWith(lines, epochtime.Spans(lines, epochtime.JSONValue))
+	hints, stamps := numhint.SpansWith(lines, epochtime.Spans(lines, epochtime.JSONValue), numhint.CommentLeaders("json")...)
 	// Base64 decoding (#2345): the data: values of a Kubernetes Secret
 	// manifest written as JSON decode like their YAML siblings — after the
 	// masks, so a masked credential never renders decoded.

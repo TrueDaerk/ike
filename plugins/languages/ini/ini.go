@@ -59,7 +59,7 @@ func iniSpans(lines []string) []lang.Span {
 	// number hints. Network literals (#1653): CIDR prefixes and punycode
 	// hosts — an ini/conf file is where most allow-lists live.
 	// A key that names the unit wins over the epoch reading (#1685).
-	hints, stamps := numhint.SpansWith(lines, epochtime.Spans(lines, epochtime.Value))
+	hints, stamps := numhint.SpansWith(lines, epochtime.Spans(lines, epochtime.Value), numhint.CommentLeaders("ini")...)
 	out = append(out, stamps...)
 	out = append(out, hints...)
 	return append(out, nethint.Spans(lines)...)

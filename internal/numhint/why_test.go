@@ -10,6 +10,44 @@ import (
 // The explain popover reports exactly this, so a wrong attribution is a wrong
 // explanation.
 
+// TestWhyComment: a comment override reports its own level, the word that
+// named the unit and the comment it was read from (#2816).
+func TestWhyComment(t *testing.T) {
+	SetFieldUnits([]string{"timeout=ms"})
+	defer SetFieldUnits(nil)
+	hs := Hints([]string{`"timeout": 500,  # seconds`})
+	if len(hs) != 1 {
+		t.Fatalf("hints = %+v", hs)
+	}
+	why := hs[0].Why
+	if why.Source != SourceComment {
+		t.Fatalf("source = %v, want SourceComment", why.Source)
+	}
+	if why.Pattern != "seconds" || why.Comment != "# seconds" || why.Key != "timeout" {
+		t.Fatalf("pattern/comment/key = %q/%q/%q", why.Pattern, why.Comment, why.Key)
+	}
+	if why.Unit.Kind != UnitDuration || why.Unit.Base != time.Second {
+		t.Fatalf("unit = %v", why.Unit)
+	}
+}
+
+// TestHintInSeesCommentAbove: the explain entry point reads the comment
+// stack above the line the way the scan does.
+func TestHintInSeesCommentAbove(t *testing.T) {
+	SetFieldUnits(nil)
+	lines := []string{"a = 1", "// microseconds", "# seconds", "timeout = 500"}
+	h, ok := HintIn(lines, 3, 11)
+	if !ok || h.Why.Source != SourceComment || h.Why.Comment != "# seconds" || h.Span.Line != 3 {
+		t.Fatalf("HintIn = %+v %v, want the # seconds comment", h, ok)
+	}
+	if h, ok := HintIn([]string{"# seconds", "", "timeout = 90000"}, 2, 11); !ok || h.Why.Source != SourceKeyWord {
+		t.Fatalf("HintIn across a blank = %+v %v, want the key word", h, ok)
+	}
+	if h, ok := HintAt(0, "timeout = 90000", 11); !ok || h.Why.Source != SourceKeyWord {
+		t.Fatalf("HintAt = %+v %v", h, ok)
+	}
+}
+
 func TestWhyKeyWord(t *testing.T) {
 	SetFieldUnits(nil)
 	hs := LineHints(0, "max_buffer_size: 10485760")

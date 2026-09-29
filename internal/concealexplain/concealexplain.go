@@ -83,6 +83,10 @@ const (
 	// a built-in public marker that cleared an otherwise-suspect key.
 	SourceSecretBuiltin
 	SourceSecretPublic
+	// SourceComment marks a reading a line comment named (#2816) — a
+	// trailing `# seconds` or a unit comment directly above the line. It
+	// outranks the field rule.
+	SourceComment
 )
 
 // Explanation is one value's provenance, in the terms the popover shows it.
@@ -113,6 +117,10 @@ type Request struct {
 	Capture string
 	Display string
 	Lang    string
+	// Above holds the buffer lines directly above Line, nearest last, so a
+	// unit comment on the line above is seen the way the producers see it
+	// (#2816). Empty means Line is read on its own.
+	Above []string
 }
 
 // Explain resolves the value the request points at. It reports false only when
@@ -200,7 +208,9 @@ func explainSecret(ex Explanation) Explanation {
 func explainNumber(ex Explanation, req Request) Explanation {
 	ex.Kind = KindNumber
 	ex.Family = familyOf(req.Capture)
-	if h, ok := numhint.HintAt(0, req.Line, ex.Start); ok && h.Span.StartCol == ex.Start {
+	lines := append(append([]string(nil), req.Above...), req.Line)
+	leaders := numhint.CommentLeaders(req.Lang)
+	if h, ok := numhint.HintIn(lines, len(lines)-1, ex.Start, leaders...); ok && h.Span.StartCol == ex.Start {
 		return fromWhy(ex, h.Why)
 	}
 	if unit, ok := epochtime.Unit(ex.Raw); ok {
@@ -240,6 +250,10 @@ func fromWhy(ex Explanation, why numhint.Why) Explanation {
 		ex.Key = why.Key
 	}
 	switch why.Source {
+	case numhint.SourceComment:
+		ex.Source = SourceComment
+		ex.Rule = fmt.Sprintf("unit from comment `%s`: the word %q names %s",
+			why.Comment, why.Pattern, ex.Reading)
 	case numhint.SourceFieldRule:
 		ex.Source = SourceFieldRule
 		ex.Rule = fmt.Sprintf("your field rule %q maps the field %q to %s",

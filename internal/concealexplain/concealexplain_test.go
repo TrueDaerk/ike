@@ -48,6 +48,33 @@ func TestExplainKeyWordHint(t *testing.T) {
 	}
 }
 
+// TestExplainCommentOverride (#2816): a unit comment — trailing or on the line
+// above — is reported as the rule, with the comment text, over the field rule.
+func TestExplainCommentOverride(t *testing.T) {
+	numhint.SetFieldUnits([]string{"timeout=ms"})
+	defer numhint.SetFieldUnits(nil)
+	line := "timeout = 500  # seconds"
+	start, end := spanOf(t, line, "500")
+	ex, _ := Explain(Request{Line: line, Start: start, End: end, Capture: numhint.DurationCapture, Display: "8m20s"})
+	if ex.Source != SourceComment {
+		t.Fatalf("source = %v, want SourceComment", ex.Source)
+	}
+	if !strings.Contains(ex.Rule, "unit from comment `# seconds`") || ex.Unit != "s" {
+		t.Fatalf("rule/unit = %q/%q", ex.Rule, ex.Unit)
+	}
+	line = "$timeout = 500;"
+	start, end = spanOf(t, line, "500")
+	ex, _ = Explain(Request{Line: line, Start: start, End: end, Capture: numhint.DurationCapture,
+		Display: "8m20s", Lang: "php", Above: []string{"$x = 1;", "// seconds"}})
+	if ex.Source != SourceComment || !strings.Contains(ex.Rule, "`// seconds`") {
+		t.Fatalf("above: source/rule = %v/%q", ex.Source, ex.Rule)
+	}
+	ex, _ = Explain(Request{Line: line, Start: start, End: end, Lang: "php"})
+	if ex.Source == SourceComment {
+		t.Fatalf("no context: source = %v, want no comment override", ex.Source)
+	}
+}
+
 // TestExplainFieldRuleWins (#1998): a configured field rule is reported as the
 // rule that fired, with its own pattern — the precedence over the built-in key
 // word has to be visible in the explanation, not just in the rendering.

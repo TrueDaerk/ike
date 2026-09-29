@@ -54,17 +54,19 @@ import (
 func PythonSpans(lines []string) []lang.Span {
 	var out []lang.Span
 	sc := callScan{f: FlavorPython}
+	cs := numhint.NewCommentScan(FlavorPython.leaders()...)
 	for li, line := range lines {
 		runes := []rune(line)
+		cmt := cs.Line(runes)
 		// Inside an open call or an open string a line is not a statement, so
 		// the assignment shapes stay out of it — the kwarg scan owns those
 		// lines and would otherwise double-report `f(\n  duration=5000\n)`.
 		if !sc.open() {
-			if s, ok := pythonLine(li, runes); ok {
+			if s, ok := pythonLine(li, cmt, runes); ok {
 				out = append(out, s)
 			}
 		}
-		out = append(out, sc.line(li, runes)...)
+		out = append(out, sc.line(li, cmt, runes)...)
 	}
 	return out
 }
@@ -74,21 +76,23 @@ func PythonSpans(lines []string) []lang.Span {
 func GoSpans(lines []string) []lang.Span {
 	var out []lang.Span
 	inBlock := false
+	cs := numhint.NewCommentScan(FlavorGo.leaders()...)
 	for li, line := range lines {
 		runes := []rune(line)
+		cmt := cs.Line(runes)
 		t := strings.TrimSpace(line)
 		switch {
 		case inBlock && strings.HasPrefix(t, ")"):
 			inBlock = false
 		case inBlock:
-			if s, ok := goConstLine(li, runes, 0); ok {
+			if s, ok := goConstLine(li, cmt, runes, 0); ok {
 				out = append(out, s)
 			}
 		case strings.HasPrefix(t, "const ("):
 			inBlock = true
 		case strings.HasPrefix(t, "const "):
 			from := skipSpace(runes, 0) + len("const ")
-			if s, ok := goConstLine(li, runes, from); ok {
+			if s, ok := goConstLine(li, cmt, runes, from); ok {
 				out = append(out, s)
 			}
 		}
@@ -101,18 +105,20 @@ func GoSpans(lines []string) []lang.Span {
 func PHPSpans(lines []string) []lang.Span {
 	var out []lang.Span
 	sc := callScan{f: FlavorPHP}
+	cs := numhint.NewCommentScan(FlavorPHP.leaders()...)
 	for li, line := range lines {
 		runes := []rune(line)
+		cmt := cs.Line(runes)
 		if !sc.open() {
-			if s, ok := phpConstLine(li, runes); ok {
+			if s, ok := phpConstLine(li, cmt, runes); ok {
 				out = append(out, s)
-			} else if s, ok := phpDefineLine(li, runes); ok {
+			} else if s, ok := phpDefineLine(li, cmt, runes); ok {
 				out = append(out, s)
-			} else if s, ok := phpVarLine(li, runes); ok {
+			} else if s, ok := phpVarLine(li, cmt, runes); ok {
 				out = append(out, s)
 			}
 		}
-		out = append(out, sc.line(li, runes)...)
+		out = append(out, sc.line(li, cmt, runes)...)
 	}
 	return out
 }
@@ -125,8 +131,10 @@ func PHPSpans(lines []string) []lang.Span {
 // optional TS type annotation between name and `=`.
 func ScriptSpans(lines []string) []lang.Span {
 	var out []lang.Span
+	cs := numhint.NewCommentScan(FlavorScript.leaders()...)
 	for li, line := range lines {
-		if s, ok := scriptLine(li, []rune(line)); ok {
+		runes := []rune(line)
+		if s, ok := scriptLine(li, cs.Line(runes), runes); ok {
 			out = append(out, s)
 		}
 	}
@@ -140,7 +148,7 @@ var scriptKeywords = map[string]bool{
 
 // scriptLine reads one `[export] [const|let|var] NAME[: type] = expr[;]`
 // line under the Python gate.
-func scriptLine(li int, runes []rune) (lang.Span, bool) {
+func scriptLine(li int, c numhint.Comment, runes []rune) (lang.Span, bool) {
 	i := skipSpace(runes, 0)
 	var name string
 	for {
@@ -180,7 +188,7 @@ func scriptLine(li int, runes []rune) (lang.Span, bool) {
 	if start >= end {
 		return lang.Span{}, false
 	}
-	return hintSpan(li, start, end, string(runes[start:end]), name, FlavorScript)
+	return hintSpan(li, c, start, end, string(runes[start:end]), name, FlavorScript)
 }
 
 // scriptAnnotationRune is the rune set a skipped TS annotation may hold.
@@ -198,7 +206,7 @@ func scriptAnnotationRune(r rune) bool {
 // name must be CONST_CASE — Python's only constant marker — or, since #1761,
 // carry a recognised unit context (`duration = 5000`), so ordinary locals
 // without one never produce a span.
-func pythonLine(li int, runes []rune) (lang.Span, bool) {
+func pythonLine(li int, c numhint.Comment, runes []rune) (lang.Span, bool) {
 	i := skipSpace(runes, 0)
 	name, j := identAt(runes, i)
 	if !pythonConstName(name) && !unitContextName(name) {
@@ -223,7 +231,7 @@ func pythonLine(li int, runes []rune) (lang.Span, bool) {
 	if start >= end {
 		return lang.Span{}, false
 	}
-	return hintSpan(li, start, end, string(runes[start:end]), name, FlavorPython)
+	return hintSpan(li, c, start, end, string(runes[start:end]), name, FlavorPython)
 }
 
 // pythonConstName reports whether name is CONST_CASE: leading underscores
@@ -286,9 +294,10 @@ func unitContextName(name string) bool {
 type callScan struct {
 	f      Flavor
 	depth  int
-	argPos bool // the previous significant rune opened an argument slot
-	triple rune // quote of an open Python triple-quoted string, 0 when none
-	block  bool // inside an open PHP /* … */ comment
+	argPos bool            // the previous significant rune opened an argument slot
+	triple rune            // quote of an open Python triple-quoted string, 0 when none
+	block  bool            // inside an open PHP /* … */ comment
+	c      numhint.Comment // the unit comment deciding the current line (#2816)
 }
 
 // open reports whether the scanner sits inside a call, a string or a comment
@@ -303,7 +312,8 @@ func (c *callScan) reset() {
 }
 
 // line scans one line, continuing whatever state the previous line left.
-func (c *callScan) line(li int, runes []rune) []lang.Span {
+func (c *callScan) line(li int, cm numhint.Comment, runes []rune) []lang.Span {
+	c.c = cm
 	var out []lang.Span
 	i := 0
 	if c.triple != 0 {
@@ -375,7 +385,7 @@ func (c *callScan) line(li int, runes []rune) []lang.Span {
 		case isSpace(r):
 			i++
 		case c.argPos && c.depth > 0 && (isLetter(r) || r == '_'):
-			s, next, ok := kwargAt(li, runes, i, c.f)
+			s, next, ok := kwargAt(li, c.c, runes, i, c.f)
 			if ok {
 				out = append(out, s)
 			}
@@ -395,7 +405,7 @@ func (c *callScan) line(li int, runes []rune) []lang.Span {
 // returned index is the end of the (bracket-balanced) value expression; on
 // failure it is just past the identifier, so the caller rescans the value —
 // including any parentheses — itself.
-func kwargAt(li int, runes []rune, i int, f Flavor) (lang.Span, int, bool) {
+func kwargAt(li int, c numhint.Comment, runes []rune, i int, f Flavor) (lang.Span, int, bool) {
 	name, j := identAt(runes, i)
 	sep := '='
 	if f == FlavorPHP {
@@ -441,7 +451,7 @@ scan:
 	if start >= e || d != 0 {
 		return lang.Span{}, j, false
 	}
-	s, ok := hintSpan(li, start, e, string(runes[start:e]), name, f)
+	s, ok := hintSpan(li, c, start, e, string(runes[start:e]), name, f)
 	if !ok {
 		return lang.Span{}, j, false
 	}
@@ -497,7 +507,7 @@ func blockEnd(runes []rune, i int) (int, bool) {
 // `const` keyword is the constant marker, so any identifier case qualifies;
 // an `iota` or any other identifier on the right-hand side fails the
 // evaluator and produces nothing.
-func goConstLine(li int, runes []rune, from int) (lang.Span, bool) {
+func goConstLine(li int, c numhint.Comment, runes []rune, from int) (lang.Span, bool) {
 	end := cutAtSlashes(runes, from)
 	i := skipSpace(runes, from)
 	name, j := identAt(runes, i)
@@ -524,7 +534,7 @@ func goConstLine(li int, runes []rune, from int) (lang.Span, bool) {
 	if start >= e {
 		return lang.Span{}, false
 	}
-	return hintSpan(li, start, e, string(runes[start:e]), name, FlavorGo)
+	return hintSpan(li, c, start, e, string(runes[start:e]), name, FlavorGo)
 }
 
 // --- PHP ---------------------------------------------------------------------
@@ -537,7 +547,7 @@ var phpModifiers = map[string]bool{
 // phpConstLine reads one `const [type] NAME = expr;` declaration, with any
 // visibility/final modifiers in front. The identifier directly before the `=`
 // is the name; the words between `const` and it are the optional type.
-func phpConstLine(li int, runes []rune) (lang.Span, bool) {
+func phpConstLine(li int, c numhint.Comment, runes []rune) (lang.Span, bool) {
 	i := skipSpace(runes, 0)
 	for {
 		w, j := identAt(runes, i)
@@ -573,11 +583,11 @@ func phpConstLine(li int, runes []rune) (lang.Span, bool) {
 	if start >= end {
 		return lang.Span{}, false
 	}
-	return hintSpan(li, start, end, string(runes[start:end]), name, FlavorPHP)
+	return hintSpan(li, c, start, end, string(runes[start:end]), name, FlavorPHP)
 }
 
 // phpDefineLine reads one `define('NAME', expr)` call at the start of a line.
-func phpDefineLine(li int, runes []rune) (lang.Span, bool) {
+func phpDefineLine(li int, c numhint.Comment, runes []rune) (lang.Span, bool) {
 	i := skipSpace(runes, 0)
 	if i < len(runes) && runes[i] == '\\' {
 		i++ // a fully-qualified \define()
@@ -629,7 +639,7 @@ func phpDefineLine(li int, runes []rune) (lang.Span, bool) {
 	if start >= end {
 		return lang.Span{}, false
 	}
-	return hintSpan(li, start, end, string(runes[start:end]), name, FlavorPHP)
+	return hintSpan(li, c, start, end, string(runes[start:end]), name, FlavorPHP)
 }
 
 // phpVarLine reads one statement-level `$name = expr;` assignment (#1761).
@@ -637,7 +647,7 @@ func phpDefineLine(li int, runes []rune) (lang.Span, bool) {
 // lowercase assignments applies: the name must carry a unit context, and the
 // right-hand side must survive the evaluator. `==`/`=>`/compound assignments
 // never match — only a bare `=` directly after the variable does.
-func phpVarLine(li int, runes []rune) (lang.Span, bool) {
+func phpVarLine(li int, c numhint.Comment, runes []rune) (lang.Span, bool) {
 	i := skipSpace(runes, 0)
 	if i >= len(runes) || runes[i] != '$' {
 		return lang.Span{}, false
@@ -656,7 +666,7 @@ func phpVarLine(li int, runes []rune) (lang.Span, bool) {
 	if start >= end {
 		return lang.Span{}, false
 	}
-	return hintSpan(li, start, end, string(runes[start:end]), name, FlavorPHP)
+	return hintSpan(li, c, start, end, string(runes[start:end]), name, FlavorPHP)
 }
 
 // phpExprEnd returns the end of a `const` right-hand side: the terminating
@@ -683,9 +693,9 @@ func phpExprEnd(runes []rune, from int) int {
 // config value with that key gets, user mapping included (#1685). Everything
 // else is evaluated; the computed value then renders in the name's unit, or
 // by shape (a 1024-multiple as bytes, anything else with its digits grouped).
-func hintSpan(li, start, end int, raw, name string, f Flavor) (lang.Span, bool) {
+func hintSpan(li int, c numhint.Comment, start, end int, raw, name string, f Flavor) (lang.Span, bool) {
 	if isPlainDecimal(raw) {
-		h, ok := numhint.LiteralHint(li, start, end, raw, name)
+		h, ok := numhint.LiteralHint(li, start, end, raw, name, c)
 		if !ok || h.Span.Capture == "" {
 			return lang.Span{}, false
 		}
@@ -705,6 +715,12 @@ func hintSpan(li, start, end int, raw, name string, f Flavor) (lang.Span, bool) 
 		}, true
 	}
 	dec := strconv.FormatUint(res.Value, 10)
+	if c.Found() {
+		// A comment naming the unit (#2816) is the most specific word
+		// there is: it outranks the mapping exactly as it does for a
+		// literal.
+		return mappedValue(span, raw, dec, res, c.Unit)
+	}
 	if u, ok := numhint.FieldUnit(name); ok {
 		return mappedValue(span, raw, dec, res, u)
 	}
@@ -878,3 +894,16 @@ func trimEnd(runes []rune, start, end int) int {
 func isSpace(r rune) bool { return r == ' ' || r == '\t' }
 
 func isUpper(r rune) bool { return r >= 'A' && r <= 'Z' }
+
+// leaders are the flavor's line-comment leaders, for the unit comments that
+// override a constant's reading (#2816) — the same ones numhint.CommentLeaders
+// reports for the language.
+func (f Flavor) leaders() []string {
+	switch f {
+	case FlavorPython:
+		return []string{"#"}
+	case FlavorPHP:
+		return []string{"//", "#"}
+	}
+	return []string{"//"}
+}

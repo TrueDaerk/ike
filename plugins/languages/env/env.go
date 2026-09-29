@@ -63,7 +63,7 @@ func envSpans(lines []string) []lang.Span {
 	// sizes, durations, digit grouping and radix readings over the
 	// `KEY=value` pairs, with the epochs taking their columns out of the
 	// number hints — unless the key names the unit itself (#1685).
-	hints, stamps := numhint.SpansWith(lines, epochtime.Spans(lines, epochtime.Value))
+	hints, stamps := numhint.SpansWith(lines, epochtime.Spans(lines, epochtime.Value), numhint.CommentLeaders("dotenv")...)
 	out = append(out, stamps...)
 	out = append(out, hints...)
 	// Network literals (#1653): CIDR prefixes and punycode hosts in values.
