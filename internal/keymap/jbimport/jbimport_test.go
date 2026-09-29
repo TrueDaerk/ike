@@ -151,9 +151,11 @@ func TestPlanWindowsFixture(t *testing.T) {
 		"ctrl+s":     "editor.write",
 		"ctrl+alt+l": "lsp.format",
 		"alt+f7":     "lsp.references",
-		"alt+enter":  "lsp.codeAction",
-		"ctrl+/":     "editor.commentLine",
-		"alt+f12":    "terminal.toggle",
+		// The explorer binds alt+enter too (#2805): the import scopes the
+		// intention chord to the editor so the tree keeps its menu (#2820).
+		"editor.alt+enter": "lsp.codeAction",
+		"ctrl+/":           "editor.commentLine",
+		"alt+f12":          "terminal.toggle",
 	}
 	for chord, cmd := range want {
 		if got := res.Bind[chord]; got != cmd {
@@ -220,5 +222,33 @@ func TestApplyEndToEnd(t *testing.T) {
 	}
 	if !strings.Contains(res.Summary(), "imported") {
 		t.Fatalf("Summary = %q", res.Summary())
+	}
+}
+
+// TestApplySharedChordKeepsOtherContext guards #2820: importing IntelliJ's
+// alt+enter (ShowIntentionActions) must not rewrite the explorer's alt+enter
+// context menu (#2805) — the flat keymap.bindings.alt+enter key would have
+// bound lsp.codeAction in the tree too.
+func TestApplySharedChordKeepsOtherContext(t *testing.T) {
+	opts := config.Options{UserPath: filepath.Join(t.TempDir(), "settings.toml")}
+	defaults := keymap.DefaultsFor(keymap.PresetJetBrains, "linux")
+	if _, err := Apply(strings.NewReader(winFixture), defaults, func(key, value string) error {
+		return config.WriteKey(opts, config.UserScope, key, value)
+	}); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	c, diags := config.Load(opts)
+	for _, d := range diags {
+		t.Fatalf("Load diagnostic: %+v", d)
+	}
+	table := keymap.BuildTable(defaults, c.Keymap.Bindings, "linux")
+	chord := keymap.MustParseChord("alt+enter")
+	for ctx, want := range map[keymap.Context]string{
+		keymap.Editor:   "lsp.codeAction",
+		keymap.Explorer: "explorer.contextMenu",
+	} {
+		if b, ok := table.Lookup(chord, ctx); !ok || b.Command != want {
+			t.Fatalf("alt+enter in %s = %+v (ok=%v), want %s", ctx, b, ok, want)
+		}
 	}
 }

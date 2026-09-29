@@ -19,9 +19,12 @@ import (
 
 // RebindMsg asks the app to persist a suggested rebind: New binds Command,
 // Old unbinds. Both writes land before one reload, exactly like the settings
-// keymap page's rebind, so the table re-resolves atomically.
+// keymap page's rebind, so the table re-resolves atomically. Context is the
+// finding's context: Old unbinds there alone when another context shares the
+// chord (#2820).
 type RebindMsg struct {
 	Command string
+	Context keymap.Context
 	Old     keymap.Chord
 	New     keymap.Chord
 }
@@ -135,7 +138,7 @@ func (m *Model) applySelected() tea.Cmd {
 	chord := f.Suggestions[m.pick[m.sel]]
 	m.applied[f.Binding.Chord.String()] = true
 	m.note = "rebound " + f.Binding.Command + ": " + f.Binding.Chord.String() + " → " + chord.String()
-	msg := RebindMsg{Command: f.Binding.Command, Old: f.Binding.Chord, New: chord}
+	msg := RebindMsg{Command: f.Binding.Command, Context: f.Binding.Context, Old: f.Binding.Chord, New: chord}
 	return func() tea.Msg { return msg }
 }
 

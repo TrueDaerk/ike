@@ -57,7 +57,10 @@ func (m *Model) applyKeymapRebind(msg keydoctor.RebindMsg) tea.Cmd {
 	opts := m.cfgOpts
 	command := msg.Command
 	newKey := keymap.BindingConfigKey(keymap.Global, msg.New.String(), false)
-	oldKey := keymap.BindingConfigKey(keymap.Global, msg.Old.String(), false)
+	// The old chord unbinds in the finding's context alone when another
+	// context shares it (#2820): moving the explorer's alt+enter must not
+	// drop the editor's lsp.codeAction.
+	oldKey := keymap.ScopedOverrideKey(msg.Context, msg.Old.String(), m.effectiveBindings())
 	dropOld := msg.Old.Len() > 0 && !msg.Old.Equal(msg.New)
 	m.host.Notify(host.Info, "keymap doctor: "+command+" rebound to "+msg.New.String())
 	return func() tea.Msg {

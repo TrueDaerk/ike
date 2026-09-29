@@ -160,3 +160,25 @@ func BindingConfigKey(ctx Context, chord string, qualified bool) string {
 	}
 	return fmt.Sprintf("keymap.bindings.%s.%s", ContextName(ctx), chord)
 }
+
+// ScopedOverrideKey renders the override key that touches only the binding of
+// chord in ctx (#2820). The flat "keymap.bindings.<chord>" spelling matches
+// the chord in every context, so writing "" there to move one command off a
+// chord also unbinds every other context's command on it — the explorer's
+// alt+enter (#2805) rebound that way silenced the editor's lsp.codeAction.
+// The key is qualified whenever another context binds the same chord and
+// stays flat otherwise, the spelling every override writer used before.
+func ScopedOverrideKey(ctx Context, chord string, all []Binding) string {
+	return BindingConfigKey(ctx, chord, ChordInOtherContext(ctx, chord, all))
+}
+
+// ChordInOtherContext reports whether any binding in all puts chord in a
+// context other than ctx.
+func ChordInOtherContext(ctx Context, chord string, all []Binding) bool {
+	for _, b := range all {
+		if b.Context != ctx && b.Chord.String() == chord {
+			return true
+		}
+	}
+	return false
+}

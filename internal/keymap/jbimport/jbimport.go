@@ -21,6 +21,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"slices"
 	"sort"
 	"strings"
 
@@ -51,14 +52,17 @@ type xmlShortcut struct {
 type Result struct {
 	// Name is the keymap's display name from the export ("" when absent).
 	Name string
-	// Bind maps chord string → IKE command id: the keymap.bindings.* overrides
-	// to write. Chords are canonical (keymap.Chord.String) and logical
-	// (cmd stays cmd; platform normalisation happens at table build).
+	// Bind maps override key → IKE command id: the keymap.bindings.* overrides
+	// to write. A key is the chord, canonical (keymap.Chord.String) and
+	// logical (cmd stays cmd; platform normalisation happens at table build),
+	// or "<context>.<chord>" when another command shares the chord from
+	// another context (#2820).
 	Bind map[string]string
-	// Unbind lists default chords of imported commands the export replaces:
-	// chords bound to an imported command in the preset defaults but absent
-	// from the export. Writing chord→"" drops them, so the imported chord
-	// becomes the command's binding rather than one of several.
+	// Unbind lists the override keys of default chords of imported commands
+	// the export replaces: chords bound to an imported command in the preset
+	// defaults but absent from the export. Writing key→"" drops them, so the
+	// imported chord becomes the command's binding rather than one of
+	// several; a shared chord is qualified the same way Bind's are.
 	Unbind []string
 	// Unmapped lists action ids that carried keyboard shortcuts but have no
 	// IKE counterpart, sorted and de-duplicated.
@@ -392,8 +396,9 @@ func parseShortcut(sc xmlShortcut) (string, error) {
 }
 
 // Plan parses a JetBrains keymap XML document and plans the import against
-// the given preset defaults: Bind holds the chord→command overrides, Unbind
-// the replaced default chords, Unmapped/Skipped the diagnostics.
+// the given preset defaults: Bind holds the override-key→command overrides,
+// Unbind the replaced default chords' override keys, Unmapped/Skipped the
+// diagnostics.
 func Plan(r io.Reader, defaults []keymap.Binding) (*Result, error) {
 	var doc xmlKeymap
 	if err := xml.NewDecoder(r).Decode(&doc); err != nil {
@@ -401,8 +406,10 @@ func Plan(r io.Reader, defaults []keymap.Binding) (*Result, error) {
 	}
 	res := &Result{Name: doc.Name, Bind: map[string]string{}}
 	unmapped := map[string]bool{}
-	// imported tracks which commands the export rebinds, for the unbind pass.
+	// imported tracks which commands the export rebinds, for the unbind pass;
+	// bound maps each imported chord to its command.
 	imported := map[string]bool{}
+	bound := map[string]string{}
 	for _, a := range doc.Actions {
 		if len(a.Shortcuts) == 0 {
 			continue // mouse-only or cleared action: nothing to translate.
@@ -418,31 +425,70 @@ func Plan(r io.Reader, defaults []keymap.Binding) (*Result, error) {
 				res.Skipped = append(res.Skipped, fmt.Sprintf("%s: %s: %v", a.ID, sc.First, err))
 				continue
 			}
-			res.Bind[chord] = cmd
+			bound[chord] = cmd
 			imported[cmd] = true
 		}
+	}
+	for chord, cmd := range bound {
+		res.Bind[bindKey(chord, cmd, defaults)] = cmd
 	}
 	for id := range unmapped {
 		res.Unmapped = append(res.Unmapped, id)
 	}
 	sort.Strings(res.Unmapped)
 	// Unbind pass: default chords of imported commands the export did not
-	// keep. The chord may carry other-context bindings too (unbinding drops
-	// the whole chord); that matches the keymap page's unbind semantics.
+	// keep. A chord another command shares from another context unbinds in
+	// the imported command's context only (#2820) — the flat key would drop
+	// the other command's binding too.
 	seen := map[string]bool{}
 	for _, b := range defaults {
 		cs := b.Chord.String()
-		if !imported[b.Command] || seen[cs] {
+		if !imported[b.Command] {
 			continue
 		}
-		if _, kept := res.Bind[cs]; kept {
+		if _, kept := bound[cs]; kept {
 			continue
 		}
-		seen[cs] = true
-		res.Unbind = append(res.Unbind, cs)
+		key := scopedKey(b.Context, cs, b.Command, defaults)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		res.Unbind = append(res.Unbind, key)
 	}
 	sort.Strings(res.Unbind)
 	return res, nil
+}
+
+// bindKey is the override key an imported chord binds cmd under. It stays the
+// flat chord unless the defaults bind the chord to another command in another
+// context — IntelliJ's alt+enter (ShowIntentionActions) against the explorer's
+// alt+enter context menu (#2805) — and cmd lives in exactly one context: then
+// the key is qualified with it, so the import does not rewrite the other
+// context's binding too (#2820).
+func bindKey(chord, cmd string, defaults []keymap.Binding) string {
+	var ctxs []keymap.Context
+	for _, b := range defaults {
+		if b.Command == cmd && !slices.Contains(ctxs, b.Context) {
+			ctxs = append(ctxs, b.Context)
+		}
+	}
+	if len(ctxs) != 1 {
+		return chord
+	}
+	return scopedKey(ctxs[0], chord, cmd, defaults)
+}
+
+// scopedKey is keymap.ScopedOverrideKey against the defaults of every command
+// but cmd, without the "keymap.bindings." prefix Apply adds.
+func scopedKey(ctx keymap.Context, chord, cmd string, defaults []keymap.Binding) string {
+	others := make([]keymap.Binding, 0, len(defaults))
+	for _, b := range defaults {
+		if b.Command != cmd {
+			others = append(others, b)
+		}
+	}
+	return strings.TrimPrefix(keymap.ScopedOverrideKey(ctx, chord, others), "keymap.bindings.")
 }
 
 // Apply plans the import and writes it through the caller's key writer
