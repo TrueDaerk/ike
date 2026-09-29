@@ -1,5 +1,22 @@
 # Log
 
+## 2026-09-30 (yq playground: opt-in round-trip output, #2798)
+
+- `playground.yqRoundTrip` (`ctrl+alt+shift+y`, the `rt` chip after `-r -c
+  -s` on the yq info row) renders a yq output by patching the source
+  document's own `yaml.Node` tree (`internal/jqplay/roundtrip.go`) instead of
+  re-serialising the value: untouched parts keep comments, anchors, quoting
+  style and key order; a changed scalar keeps its comments; a deleted key
+  goes with its comments; new keys are appended. `Input` now keeps the
+  decoded documents' node trees; `Options.RoundTrip` carries the toggle
+  (session-only, not spelled by `Flags`). The stream looks one output ahead
+  so only a document's single, same-shaped output is patched; the patched
+  text is verified by re-decoding. Reshaping or multi-output programs, `-c`,
+  `-s` and unverifiable patches fall back to the plain form with a
+  `round-trip skipped: …` note (`Page.Note` / `Result.Note`) on the info row.
+  Wiki: the yq non-goal paragraph and a new "Round-trip output" section in
+  `jq-playground.md`.
+
 ## 2026-09-30 (jq playground: detached result pane, #2797)
 
 - `playground.splitResult` (`ctrl+alt+\`) moves the playground's result into

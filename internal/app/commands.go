@@ -814,6 +814,10 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			langCommand(appCommand("json.jqToggleRaw", "Toggle Playground Raw Output (-r)", TogglePlayOptionMsg{Option: PlayOptRaw}), playgroundLangs()),
 			langCommand(appCommand("json.jqToggleCompact", "Toggle Playground Compact Output (-c)", TogglePlayOptionMsg{Option: PlayOptCompact}), playgroundLangs()),
 			langCommand(appCommand("json.jqToggleSlurp", "Toggle Playground Slurp Input (-s)", TogglePlayOptionMsg{Option: PlayOptSlurp}), playgroundLangs()),
+			// The yq round-trip (#2798): the output patched onto the source
+			// document's own tree, comments and anchors kept. Offered where
+			// the yq playground is; the other dialects answer with a notice.
+			langCommand(appCommand("playground.yqRoundTrip", "Toggle yq Playground Round-Trip Output", TogglePlayOptionMsg{Option: PlayOptRoundTrip}), playgroundLangs()),
 			// The export picker (#2788): save to a file, copy as CSV / TSV, use
 			// as an HTTP request body.
 			langCommand(appCommand("playground.export", "Export Playground Result…", ShowPlayExportMsg{}), playgroundLangs()),

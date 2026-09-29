@@ -2931,6 +2931,12 @@ func (m Model) playResultSegment() string {
 	if s.result.Truncated {
 		out += warn.Render(fmt.Sprintf(" (stopped at %d)", n))
 	}
+	if note := s.result.Note(); note != "" {
+		// The yq round-trip (#2798) fell back to the plain form for some
+		// output: say why, in the Warning the other "less than you asked
+		// for" markers use, ahead of the counters it would otherwise trail.
+		out += warn.Render(" · " + note)
+	}
 	if s.table != nil {
 		out += hint.Render(" · " + s.table.counter())
 	} else if c := s.playValueCounter(); c != "" {

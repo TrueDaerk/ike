@@ -17,7 +17,11 @@ import (
 // per-source memory that restores them with the last program. The toggles
 // belong to the jq and yq dialects; xmq's engine is an external binary with
 // options of its own, so its playground shows no chips and the commands say
-// so instead of flipping state that would change nothing.
+// so instead of flipping state that would change nothing. The yq playground
+// has a fourth chip, `rt` (#2798, playground.yqRoundTrip): the round-trip
+// output that patches the source document's own tree instead of
+// re-serialising the value, kept for the session with the other toggles but
+// never persisted.
 
 // PlayOption names one of the toggles.
 type PlayOption int
@@ -27,6 +31,11 @@ const (
 	PlayOptRaw PlayOption = iota
 	PlayOptCompact
 	PlayOptSlurp
+	// PlayOptRoundTrip is the yq round-trip (#2798, playground.yqRoundTrip):
+	// the output patched onto the source document's own node tree, so
+	// comments, anchors, quoting and key order survive an edit. Its chip
+	// follows the three flags on the yq playground only.
+	PlayOptRoundTrip
 )
 
 // TogglePlayOptionMsg flips one toggle of the open playground and reruns it.
@@ -39,6 +48,23 @@ var playChips = [...]string{"-r", "-c", "-s"}
 // playChipsW is the chips' width in cells: "-r -c -s".
 const playChipsW = 8
 
+// playRoundTripChip is the yq round-trip's chip (#2798), two cells like the
+// flags so the click grid stays one division.
+const playRoundTripChip = "rt"
+
+// playChipsFor lists the chips a dialect's playground shows, in PlayOption
+// order: the three flags, and for yq the round-trip chip after them.
+func playChipsFor(d jqplay.Dialect) []string {
+	if d == jqplay.DialectYQ {
+		return append(append([]string(nil), playChips[:]...), playRoundTripChip)
+	}
+	return playChips[:]
+}
+
+// playChipsWidth is the cells the dialect's chips take: two per chip, one
+// space apart.
+func playChipsWidth(d jqplay.Dialect) int { return 3*len(playChipsFor(d)) - 1 }
+
 // playOptionName is a toggle's spelled-out name for the status line.
 func playOptionName(o PlayOption) string {
 	switch o {
@@ -46,6 +72,8 @@ func playOptionName(o PlayOption) string {
 		return "compact output (-c)"
 	case PlayOptSlurp:
 		return "slurp input (-s)"
+	case PlayOptRoundTrip:
+		return "round-trip output (rt)"
 	}
 	return "raw output (-r)"
 }
@@ -57,6 +85,8 @@ func playOptionOn(opts jqplay.Options, o PlayOption) bool {
 		return opts.Compact
 	case PlayOptSlurp:
 		return opts.Slurp
+	case PlayOptRoundTrip:
+		return opts.RoundTrip
 	}
 	return opts.Raw
 }
@@ -68,6 +98,8 @@ func flipPlayOption(opts jqplay.Options, o PlayOption) jqplay.Options {
 		opts.Compact = !opts.Compact
 	case PlayOptSlurp:
 		opts.Slurp = !opts.Slurp
+	case PlayOptRoundTrip:
+		opts.RoundTrip = !opts.RoundTrip
 	default:
 		opts.Raw = !opts.Raw
 	}
@@ -84,6 +116,10 @@ func (m *Model) togglePlayOption(o PlayOption) tea.Cmd {
 	}
 	if s.dialect == jqplay.DialectXMQ {
 		m.host.Notify(host.Info, "the xmq playground has no -r / -c / -s toggles")
+		return nil
+	}
+	if o == PlayOptRoundTrip && s.dialect != jqplay.DialectYQ {
+		m.host.Notify(host.Info, "round-trip output is a yq toggle: it patches the YAML document the playground was opened over")
 		return nil
 	}
 	s.opts = flipPlayOption(s.opts, o)
@@ -124,20 +160,26 @@ func (m Model) playSeedOptions(d jqplay.Dialect, src playInputSource, atPath boo
 // toggles, or on a row too narrow to keep a readable line beside them.
 func (m Model) playChipsPrefix(width int) (string, int) {
 	s := m.play
-	if s == nil || s.dialect == jqplay.DialectXMQ || width-playChipsW-1 < playInfoMinLine {
+	if s == nil || s.dialect == jqplay.DialectXMQ {
 		return "", width
 	}
-	return m.playOptionChips() + " ", width - playChipsW - 1
+	w := playChipsWidth(s.dialect)
+	if width-w-1 < playInfoMinLine {
+		return "", width
+	}
+	return m.playOptionChips() + " ", width - w - 1
 }
 
-// playOptionChips renders `-r -c -s` with the active toggles highlighted.
+// playOptionChips renders `-r -c -s` (and yq's `rt`, #2798) with the active
+// toggles highlighted.
 func (m Model) playOptionChips() string {
 	pal := m.pal()
 	off := lipgloss.NewStyle().Foreground(pal.Hint)
 	fg := theme.Readable(pal.Accent, pal.Background, pal.Surface, pal.Foreground)
 	on := lipgloss.NewStyle().Bold(true).Foreground(fg).Background(pal.Accent)
-	parts := make([]string, len(playChips))
-	for i, c := range playChips {
+	chips := playChipsFor(m.play.dialect)
+	parts := make([]string, len(chips))
+	for i, c := range chips {
 		if playOptionOn(m.play.opts, PlayOption(i)) {
 			parts[i] = on.Render(c)
 		} else {
@@ -148,9 +190,9 @@ func (m Model) playOptionChips() string {
 }
 
 // playChipAt maps a content-local x on the info row to the chip under it.
-// x is relative to the chips' first cell.
-func playChipAt(x int) (PlayOption, bool) {
-	if x < 0 || x >= playChipsW || x%3 == 2 {
+// x is relative to the chips' first cell; d decides how many there are.
+func playChipAt(x int, d jqplay.Dialect) (PlayOption, bool) {
+	if x < 0 || x >= playChipsWidth(d) || x%3 == 2 {
 		return 0, false
 	}
 	return PlayOption(x / 3), true
@@ -172,7 +214,7 @@ func (m *Model) clickPlayChip(x, y int) (tea.Cmd, bool) {
 	if cx < 0 {
 		return nil, false
 	}
-	o, ok := playChipAt(x - cx)
+	o, ok := playChipAt(x-cx, s.dialect)
 	if !ok {
 		return nil, false
 	}

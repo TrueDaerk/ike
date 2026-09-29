@@ -81,6 +81,7 @@ func parseYAML(text string) (*Input, error) {
 			return nil, err
 		}
 		in.values = append(in.values, v)
+		in.docs = append(in.docs, &doc) // kept for the round-trip output (#2798)
 		if len(in.values) >= MaxInputValues {
 			in.Truncated = true
 			break

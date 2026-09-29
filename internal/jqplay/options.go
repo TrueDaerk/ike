@@ -37,6 +37,12 @@ type Options struct {
 	// line that does not parse fails the run with its message. Flags does
 	// not spell it.
 	Vars string
+	// RoundTrip renders a yq output by patching the input document's own
+	// node tree (#2798, roundtrip.go), so comments, anchors, quoting and key
+	// order survive an edit-style program; a reshaping program falls back to
+	// the plain form with a note. Ignored by the other dialects and not
+	// spelled by Flags: it is remembered for the session, not persisted.
+	RoundTrip bool
 }
 
 // Flags spells the active toggles the way the command line does, in `-r -c
@@ -80,11 +86,19 @@ func RunWith(ctx context.Context, program string, in *Input, opts Options) Resul
 		opts = Options{Vars: opts.Vars}
 	}
 	if opts.Slurp && in != nil && len(in.values) > 0 {
-		slurped := *in
-		slurped.values = []any{append([]any(nil), in.values...)}
-		in = &slurped
+		in = in.slurped()
 	}
 	return run(ctx, program, in, opts)
+}
+
+// slurped is the input as `-s` sees it: one array holding every value. The
+// original document trees do not come along — the array is no document the
+// round-trip (#2798) could patch.
+func (in *Input) slurped() *Input {
+	slurped := *in
+	slurped.values = []any{append([]any(nil), in.values...)}
+	slurped.docs = nil
+	return &slurped
 }
 
 // Options reports the toggles the result was produced with.

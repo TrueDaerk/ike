@@ -119,6 +119,7 @@ var reachableAlternatives = map[string]string{
 	"playground.chainBack":      "palette",
 	"playground.variables":      "palette",
 	"playground.splitResult":    "palette",
+	"playground.yqRoundTrip":    "palette / info-row chip click",
 	"view.toggleFollow":         "palette",
 	"view.followFilter":         "palette",
 	"editor.tab.next":           "palette",

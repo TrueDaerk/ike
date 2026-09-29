@@ -496,6 +496,14 @@ var jetbrainsRows = []row{
 	// already produces) and reads as the split it makes — the vertical bar
 	// between the source and its result, leaning.
 	{"ctrl+alt+\\", "playground.splitResult", "Split playground result into a pane", Global, "jq/yq playground (#2797)"},
+	// The yq round-trip output (#2798), Global like its siblings. Every
+	// ctrl+alt letter is claimed and ctrl+alt+] is project.group.next's
+	// folded cmd+alt+] off macOS; shift on the yq playground's own chord
+	// (ctrl+alt+y, #2305) is free in every context and on both platforms —
+	// the yq chord, one step further. Like project.group.open's
+	// ctrl+alt+shift+g it needs the Kitty protocol: a legacy terminal folds
+	// it to ctrl+alt+y, the playground it toggles the output of.
+	{"ctrl+alt+shift+y", "playground.yqRoundTrip", "Toggle yq round-trip output", Global, "yq playground (#2798)"},
 	// Go to Line:Column (#2486): JetBrains' cmd+l. The Cmd→Ctrl fold puts it
 	// on ctrl+l off macOS, which no other default claims. JetBrains' Linux
 	// chord (ctrl+g) is *not* bound: editor.caret.addNext already owns it in

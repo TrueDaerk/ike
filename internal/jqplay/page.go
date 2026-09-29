@@ -61,6 +61,10 @@ type Page struct {
 	// failed, or capped. A page is Done rather than followed by an empty
 	// one, so a result of exactly one page never claims to have more.
 	Done bool
+	// Note is a remark about how the outputs were rendered (#2798): the
+	// round-trip's reason for falling back to the plain form, "" when it
+	// applied or was off.
+	Note string
 	// values are the decoded values behind Outputs (nil for xmq).
 	values []any
 }
@@ -92,9 +96,7 @@ func Start(ctx context.Context, program string, in *Input, opts Options) *Produc
 	if in.Dialect() == DialectXMQ {
 		opts = Options{Vars: opts.Vars}
 	} else if opts.Slurp && in != nil && len(in.values) > 0 {
-		slurped := *in
-		slurped.values = []any{append([]any(nil), in.values...)}
-		in = &slurped
+		in = in.slurped()
 	}
 	p.first = Result{dialect: in.Dialect(), opts: opts}
 	if in.Dialect() == DialectXMQ {
@@ -199,8 +201,15 @@ func (r *Result) Append(pg Page) {
 	if pg.Truncated {
 		r.Truncated = true
 	}
+	if pg.Note != "" {
+		r.note = pg.Note
+	}
 	r.partial = !pg.Done
 }
+
+// Note is the remark the run left about its rendering (#2798): why the
+// round-trip fell back to the plain form for some output, "" otherwise.
+func (r Result) Note() string { return r.note }
 
 // Partial reports that the result is the pages loaded so far and the
 // producer holds more (#2796) — what the info row's `+` says.
@@ -296,7 +305,7 @@ func openPageSource(program string, in *Input, opts Options) pageSource {
 	if err != nil {
 		return failedSource{err.Error()}
 	}
-	return &stream{in: in, code: code, args: vars.Values(), opts: opts}
+	return &stream{in: in, code: code, args: vars.Values(), opts: opts, rt: newRoundTripper(in, opts)}
 }
 
 // failedSource is a compile failure as a source: one page, the error.
@@ -320,9 +329,29 @@ type stream struct {
 	// size, checked against MaxOutputs / MaxResultBytes.
 	total, bytes int
 	// head is an output pulled ahead of its page: the one that proved the
-	// stream had more after a page filled.
-	head    any
-	hasHead bool
+	// stream had more after a page filled, with its rendered text.
+	head     any
+	headText string
+	hasHead  bool
+	// lastIdx is the input value the last pulled output came from.
+	lastIdx int
+	// rt is the round-trip state (#2798), nil when the toggle is off.
+	rt *roundTripper
+}
+
+// next yields the next output with its rendered text, or the runtime error
+// that ended the stream, or exhaustion. The round-trip (#2798) renders by
+// patching the source document; everything else is the dialect's encoding
+// under the toggles.
+func (s *stream) next(ctx context.Context) (out any, text string, errMsg string, ok bool) {
+	if s.rt != nil {
+		return s.rt.next(ctx, s)
+	}
+	out, errMsg, ok = s.pull(ctx)
+	if !ok {
+		return nil, "", errMsg, false
+	}
+	return out, s.in.dialect.encodeWith(out, s.opts), "", true
 }
 
 // pull yields the next raw output, or the runtime error that ended the
@@ -334,6 +363,7 @@ func (s *stream) pull(ctx context.Context) (out any, errMsg string, ok bool) {
 				return nil, "", false
 			}
 			s.iter = s.code.RunWithContext(ctx, s.in.values[s.idx], s.args...)
+			s.lastIdx = s.idx
 			s.idx++
 		}
 		out, ok := s.iter.Next()
@@ -363,16 +393,19 @@ func (s *stream) pull(ctx context.Context) (out any, errMsg string, ok bool) {
 // keeps that output as the next page's head; a budget hit marks the page
 // Truncated and Done, the way a whole run used to be capped.
 func (s *stream) collect(ctx context.Context, pg *Page, maxOutputs, maxBytes int) {
-	d := s.in.dialect
+	if s.rt != nil {
+		defer func() { pg.Note = s.rt.note }()
+	}
 	n, size := 0, 0
 	for {
 		var out any
+		var text string
 		if s.hasHead {
-			out, s.hasHead = s.head, false
+			out, text, s.hasHead = s.head, s.headText, false
 		} else {
 			var errMsg string
 			var ok bool
-			out, errMsg, ok = s.pull(ctx)
+			out, text, errMsg, ok = s.next(ctx)
 			if !ok {
 				pg.Err, pg.Done = errMsg, true
 				return
@@ -382,7 +415,6 @@ func (s *stream) collect(ctx context.Context, pg *Page, maxOutputs, maxBytes int
 			pg.Truncated, pg.Done = true, true
 			return
 		}
-		text := d.encodeWith(out, s.opts)
 		pg.Outputs = append(pg.Outputs, text)
 		pg.values = append(pg.values, out)
 		s.total++
@@ -390,7 +422,7 @@ func (s *stream) collect(ctx context.Context, pg *Page, maxOutputs, maxBytes int
 		n++
 		size += len(text)
 		if n >= maxOutputs || size >= maxBytes {
-			out, errMsg, ok := s.pull(ctx)
+			out, text, errMsg, ok := s.next(ctx)
 			if !ok {
 				pg.Err, pg.Done = errMsg, true
 				return
@@ -399,7 +431,7 @@ func (s *stream) collect(ctx context.Context, pg *Page, maxOutputs, maxBytes int
 				pg.Truncated, pg.Done = true, true
 				return
 			}
-			s.head, s.hasHead = out, true
+			s.head, s.headText, s.hasHead = out, text, true
 			return
 		}
 	}
