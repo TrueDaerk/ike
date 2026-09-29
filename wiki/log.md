@@ -1,5 +1,16 @@
 # Log
 
+## 2026-09-29 (jq playground: raw / compact / slurp toggles, #2784)
+
+- jq's `-r`, `-c` and `-s` are now toggles of the jq and yq playgrounds
+  (`jqplay.Options` / `RunWith`): chips `-r -c -s` lead the info row and flip
+  on click, `json.jqToggleRaw` / `…Compact` / `…Slurp` default to
+  `ctrl+alt+q` / `ctrl+alt+c` / `ctrl+alt+s`. A raw result opens as `.txt`,
+  raw and compact results do not fold, and the toggles are remembered with
+  the source's last program (persisted as `flags`). xmq hides the chips.
+  The "no raw output mode" boundary is gone. Docs:
+  `/architecture/jq-playground.md`, `/architecture/keybindings.md`.
+
 ## 2026-09-29 (jq playground: paste reaches the open result search line, #2772)
 
 - A paste (bracketed or `cmd+v`) in a focused playground with the result's

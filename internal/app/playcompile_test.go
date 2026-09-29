@@ -37,7 +37,7 @@ func TestPlayCompileErrorShowsBeforeDebounce(t *testing.T) {
 	if s.gen != gen || s.pending {
 		t.Fatalf("a program that does not compile must not schedule a run (gen %d → %d, pending %v)", gen, s.gen, s.pending)
 	}
-	row := ansi.Strip(m.playInfoRow(200))
+	row := playInfoLineText(m, 200)
 	if !strings.HasPrefix(row, "E: ") {
 		t.Errorf("the compile error should take the info row, got %q", row)
 	}
@@ -136,7 +136,7 @@ func TestPlayCompileErrorUnderlinesPosition(t *testing.T) {
 	if got := m.playQueryRow(200); !strings.Contains(got, want) {
 		t.Errorf("the one-line row must mark `selct`, got %q", got)
 	}
-	if !strings.HasPrefix(ansi.Strip(m.playInfoRow(200)), "E: ") {
+	if !strings.HasPrefix(playInfoLineText(m, 200), "E: ") {
 		t.Error("the info-row message must stay")
 	}
 	m = toggleJQView(m)

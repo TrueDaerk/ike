@@ -440,6 +440,12 @@ var jetbrainsRows = []row{
 	// shift generalises every index to `[]`.
 	{"ctrl+.", "json.jqAppendPath", "Append result path to query", Global, "jq/yq playground (#2783)"},
 	{"ctrl+shift+.", "json.jqAppendPathAny", "Append result path (all items)", Global, "jq/yq playground (#2783)"},
+	// jq's -r / -c / -s as toggles (#2784), Global for the same reason. c and
+	// s are the flag letters; r is taken by pane.resizeMode (ctrl+alt+r), so
+	// raw sits on q — the quotes it drops.
+	{"ctrl+alt+q", "json.jqToggleRaw", "Toggle raw output (-r)", Global, "jq/yq playground (#2784)"},
+	{"ctrl+alt+c", "json.jqToggleCompact", "Toggle compact output (-c)", Global, "jq/yq playground (#2784)"},
+	{"ctrl+alt+s", "json.jqToggleSlurp", "Toggle slurp input (-s)", Global, "jq/yq playground (#2784)"},
 	// Go to Line:Column (#2486): JetBrains' cmd+l. The Cmd→Ctrl fold puts it
 	// on ctrl+l off macOS, which no other default claims. JetBrains' Linux
 	// chord (ctrl+g) is *not* bound: editor.caret.addNext already owns it in

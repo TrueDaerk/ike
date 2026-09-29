@@ -212,6 +212,9 @@ type playState struct {
 	pgen int
 
 	program ui.Field
+	// opts are jq's -r / -c / -s toggles (#2784), handed to every run; the
+	// info row's chips show them. Always zero for xmq.
+	opts jqplay.Options
 
 	// qgoal is the column a run of vertical motions through the expanded
 	// view's rows aims for (#2038), -1 when none is in flight. It is what
@@ -348,7 +351,7 @@ func (m *Model) startPlayground(d jqplay.Dialect, atPath bool) tea.Cmd {
 		return nil
 	}
 	m.closePlayground()
-	s := &playState{dialect: d, paneKey: src.paneKey, source: src.label, srcKey: src.key, srcPath: src.path, srcEd: src.ed, srcInst: src.inst, histIdx: -1, qgoal: -1, hist: m.playHist(), program: ui.NewField(m.playSeedProgram(d, src, atPath))}
+	s := &playState{dialect: d, paneKey: src.paneKey, source: src.label, srcKey: src.key, srcPath: src.path, srcEd: src.ed, srcInst: src.inst, histIdx: -1, qgoal: -1, hist: m.playHist(), program: ui.NewField(m.playSeedProgram(d, src, atPath)), opts: m.playSeedOptions(d, src, atPath)}
 	ed := editor.New()
 	ed.SetRegisters(m.regs) // app-wide registers (#1540): yanks in the result reach every buffer
 	ed.SetPalette(m.themePal)
@@ -560,7 +563,10 @@ func playIdentity(d jqplay.Dialect) string {
 // persisted store (#2774) — the scope the issue asks for: a restart cannot
 // distinguish two unsaved buffers or replay an HTTP response, so only the
 // path-keyed entries are worth surviving one.
-func (m *Model) rememberPlayProgram(key, path, program string) {
+//
+// opts are the toggles the program ran with (#2784), remembered alongside it
+// and restored by playSeedOptions.
+func (m *Model) rememberPlayProgram(key, path, program string, opts jqplay.Options) {
 	program = strings.TrimSpace(program)
 	if key == "" || program == "" || program == "." {
 		return
@@ -569,8 +575,12 @@ func (m *Model) rememberPlayProgram(key, path, program string) {
 		m.playLastProgram = map[string]string{}
 	}
 	m.playLastProgram[key] = program
+	if m.playLastOpts == nil {
+		m.playLastOpts = map[string]jqplay.Options{}
+	}
+	m.playLastOpts[key] = opts
 	if path != "" {
-		m.playLastStoreOf().Set(key, program)
+		m.playLastStoreOf().SetWithFlags(key, program, opts.Flags())
 	}
 }
 
@@ -1161,12 +1171,12 @@ func (m *Model) runPlay() tea.Cmd {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), jqplay.EvalTimeout)
 	s.cancel = cancel
-	program, in, gen := s.program.Text, s.input, s.gen
+	program, in, gen, opts := s.program.Text, s.input, s.gen, s.opts
 	parse := s.parseDur
 	return func() tea.Msg {
 		defer cancel()
 		start := time.Now()
-		res := jqplay.Run(ctx, program, in)
+		res := jqplay.RunWith(ctx, program, in, opts)
 		return playEvalDoneMsg{st: s, gen: gen, res: res, dur: parse + time.Since(start)}
 	}
 }
@@ -1194,7 +1204,7 @@ func (m *Model) finishPlayEval(msg playEvalDoneMsg) tea.Cmd {
 	s.runErr = ""
 	s.result, s.haveResult = msg.res, true
 	s.elapsed, s.parseDur = msg.dur, 0
-	m.rememberPlayProgram(s.srcKey, s.srcPath, s.program.Text)
+	m.rememberPlayProgram(s.srcKey, s.srcPath, s.program.Text, msg.res.Options())
 	m.sizePlayResult()
 	return m.syncPlayResultBuffer()
 }
@@ -1923,6 +1933,9 @@ func (m Model) playPaneClick(key string, msg mouseEvent, x, y int) (tea.Model, t
 	ed := s.resultEd
 	if y < 0 {
 		if msg.Button == tea.MouseLeft {
+			if cmd, hit := m.clickPlayChip(x, y); hit {
+				return m, cmd
+			}
 			s.setBufFocus(false)
 			m.clickPlayQueryRow(x, y)
 		}
@@ -2108,19 +2121,23 @@ func (m Model) playInlineBody(width int) string {
 // an error beats a transient status beats the input/result summary with the
 // key hints. One fixed row — the buffer below must not resize when an error
 // appears mid-keystroke.
+//
+// The -r / -c / -s chips (#2784) lead the row, ahead of everything else, so
+// they are always in the same cells whatever the line says (clickPlayChip).
 func (m Model) playInfoRow(width int) string {
+	chips, width := m.playChipsPrefix(width)
 	seg := m.playModeSegment()
 	if seg == "" {
-		return m.playInfoLine(width)
+		return chips + m.playInfoLine(width)
 	}
 	segW := ansi.StringWidth(seg)
 	if rest := width - segW - 3; rest >= playInfoMinLine {
 		sep := lipgloss.NewStyle().Foreground(m.pal().Hint).Render(" · ")
-		return seg + sep + m.playInfoLine(rest)
+		return chips + seg + sep + m.playInfoLine(rest)
 	}
 	// Too narrow for both: the label wins. Nothing else on screen names the
 	// dialect and the queried snapshot once the tab bar has the title row.
-	return ansi.Truncate(seg, width, "…")
+	return chips + ansi.Truncate(seg, width, "…")
 }
 
 // playInfoMinLine is the room the info line proper needs before the mode label

@@ -805,6 +805,11 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			// path to the program, as written or with every index as `[]`.
 			langCommand(appCommand("json.jqAppendPath", "Append Result Path to Playground Query", AppendPlayPathMsg{}), playgroundLangs()),
 			langCommand(appCommand("json.jqAppendPathAny", "Append Result Path to Playground Query (All Items)", AppendPlayPathMsg{Any: true}), playgroundLangs()),
+			// jq's -r / -c / -s (#2784): raw strings, one line per output,
+			// the whole input stream as one array.
+			langCommand(appCommand("json.jqToggleRaw", "Toggle Playground Raw Output (-r)", TogglePlayOptionMsg{Option: PlayOptRaw}), playgroundLangs()),
+			langCommand(appCommand("json.jqToggleCompact", "Toggle Playground Compact Output (-c)", TogglePlayOptionMsg{Option: PlayOptCompact}), playgroundLangs()),
+			langCommand(appCommand("json.jqToggleSlurp", "Toggle Playground Slurp Input (-s)", TogglePlayOptionMsg{Option: PlayOptSlurp}), playgroundLangs()),
 			langCommand(appCommand("log.openRotatedSet", "Open Rotated Log Set (Merged Timeline)", OpenMergedLogMsg{}), []string{"log"}),
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
 			appCommand("terminal.newTab", "New Terminal Tab", TerminalNewTabMsg{}),

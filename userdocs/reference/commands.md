@@ -175,6 +175,9 @@ bring their own.
 | Toggle Full Query View | `json.jqQueryView` | `ctrl+alt+e` | — | everywhere |
 | Rename Saved jq Filter… | `json.jqRenameFilter` | — | — | everywhere |
 | Save Playground Filter… | `json.jqSaveFilter` | — | — | everywhere |
+| Toggle Playground Compact Output (-c) | `json.jqToggleCompact` | `ctrl+alt+c` | — | everywhere |
+| Toggle Playground Raw Output (-r) | `json.jqToggleRaw` | `ctrl+alt+q` | — | everywhere |
+| Toggle Playground Slurp Input (-s) | `json.jqToggleSlurp` | `ctrl+alt+s` | — | everywhere |
 | Keymap Doctor: Dead Bindings | `keymap.deadBindings` | — | — | everywhere |
 | Keymap Doctor: Probe Chord Delivery | `keymap.doctor` | — | — | everywhere |
 | Import JetBrains Keymap XML… | `keymap.importJetBrains` | — | — | everywhere |
