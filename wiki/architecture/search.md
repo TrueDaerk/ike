@@ -347,10 +347,22 @@ the palette):
   B finds the next `foo` in B; a file without a match toasts
   `no match for "foo"` and the view stays put — the chord never falls
   through to older find-in-path or all-projects results while an in-file
-  search is the most recent one. The recency rule stays symmetric: a
-  find-in-path scan, an all-projects scan or an all-projects hit opened
-  (`Model.markAllFindRecent`) makes those results the walked set again; the
-  next in-file commit takes it back.
+  search is the most recent one. The recency rule stays symmetric, but only
+  a search the user *runs* moves it (#2827): a find-in-path search that was
+  typed, recalled, toggled or prefilled from a selection
+  (`finder.NewSearch` — the replay a plain reopen of the overlay starts for
+  the remembered query does not count, nor does a stale scan generation), or
+  an all-projects scan (`Model.markAllFindRecent`, at start and finish),
+  makes those results the walked set again; the next in-file commit takes
+  it back (and also outranks earlier all-projects results). **Opening a
+  file never steals the chord:** the file picker, Search Everywhere, a
+  find-in-path hit or an all-projects hit (in this project) leave the recency
+  as it was — search `foo` in A, open B any of those ways, and cmd+g finds
+  `foo` in B. A cross-project all-projects hit keeps the all-projects results
+  the walked set in the landing project only if they were the most recent
+  search before the switch. The chord works the same in **insert mode**
+  (#2622: modifier chords reach the keymap there) and in any split. `?` in a
+  focused editor is the backward search, not the help overlay (`f1` is).
   **Per project:** the last query and its recency flag are workspace state —
   they park in `wsExtras` with the debug session and popup terminal and
   resume with the workspace — so switching to project P and pressing cmd+g

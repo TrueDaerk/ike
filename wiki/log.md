@@ -1,5 +1,18 @@
 # Log
 
+## 2026-09-30 (search: cmd+g keeps the in-file query across picker opens, #2827)
+
+- Opening a file never steals `cmd+g` / `cmd+shift+g` from the last committed
+  in-file query: the find-in-path scan a plain reopen of the overlay starts
+  for the remembered query is a replay (`finder.NewSearch`), stale scan
+  generations are ignored, and re-showing the all-projects results or opening
+  one of their hits no longer calls `markAllFindRecent`. An in-file commit
+  also clears `allFindRecent`.
+- `?` in a focused text editor is vim's backward search again instead of the
+  help overlay (`f1` still opens help), so `?` commits reach `cmd+g`.
+- Wiki: recency rule in `search.md` (Find in Path navigation), `?` note in
+  `help-overlay.md`.
+
 ## 2026-09-30 (yq playground: opt-in round-trip output, #2798)
 
 - `playground.yqRoundTrip` (`ctrl+alt+shift+y`, the `rt` chip after `-r -c

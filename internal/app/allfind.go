@@ -215,7 +215,7 @@ func (m *Model) showAllFindResults() {
 		m.host.Notify(host.Info, "all-projects search still running — no hits yet")
 		return
 	}
-	m.markAllFindRecent()
+	// Re-opening the overlay is not a new search (#2827): recency stays.
 	m.allResults.SetSize(m.width, m.height)
 	m.allResults.Open()
 }
@@ -226,7 +226,7 @@ func (m *Model) showAllFindResults() {
 // the model rebuild via the carry-over block in performSwitchOpts, as does the
 // result set itself, so the hits stay walkable after the switch (#2413).
 func (m Model) openAllFindMatch(msg allfind.OpenMatchMsg) (tea.Model, tea.Cmd) {
-	m.markAllFindRecent()
+	// Opening a hit is not a new search (#2827): recency stays as it was.
 	if cwd, err := os.Getwd(); err == nil && cwd == msg.Root {
 		return m.openPathAt(msg.Path, msg.Line-1, msg.Col)
 	}

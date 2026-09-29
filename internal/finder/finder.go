@@ -104,7 +104,11 @@ type Model struct {
 	histStore  *histories.Store
 	histLoaded bool
 
-	gen       int // generation of the scan whose results we accept
+	gen int // generation of the scan whose results we accept
+	// replay marks the current scan as the passive re-run an Open starts for
+	// the remembered query (#2827) — not a search the user ran, so it must
+	// not take cmd+g away from a committed in-file search (see NewSearch).
+	replay    bool
 	scanning  bool
 	truncated bool
 	errText   string
@@ -198,11 +202,13 @@ func (m *Model) openWith(root, sel string) {
 	} else if m.list.Total() > 0 {
 		restoreCursor = m.list.Cursor()
 	}
+	prefilled := false
 	if q, ok := prefillQuery(sel, m.regex); ok {
 		// A prefill outranks both the remembered query and the restored
 		// result cursor: the reopened scan is a different search.
 		m.query.Set(q)
 		restoreCursor = -1
+		prefilled = true
 	}
 	m.open = true
 	m.replaceMode = false
@@ -213,6 +219,7 @@ func (m *Model) openWith(root, sel string) {
 	m.errText = ""
 	m.preselect = !m.query.Empty()
 	m.rescan()
+	m.replay = !prefilled
 	m.pendingCursor = restoreCursor
 }
 
@@ -266,6 +273,13 @@ func (m *Model) Close() {
 		})
 	}
 }
+
+// NewSearch reports whether gen is the current scan and one the user ran —
+// typed, recalled, toggled or prefilled from a selection — rather than the
+// replay of the remembered query that merely reopening the overlay starts
+// (#2827). Only a new search makes find-in-path the most recent search for
+// the match-step chord; stale generations never do.
+func (m *Model) NewSearch(gen int) bool { return gen == m.gen && !m.replay }
 
 // IsOpen reports whether the overlay is shown.
 func (m *Model) IsOpen() bool { return m.open }
@@ -340,6 +354,7 @@ func (m *Model) Apply(msg tea.Msg) {
 func (m *Model) rescan() {
 	m.list.Reset()
 	m.pendingCursor = -1
+	m.replay = false
 	m.truncated = false
 	m.errText = ""
 	m.mtimes = map[string]time.Time{}

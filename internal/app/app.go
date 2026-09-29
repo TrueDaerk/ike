@@ -3988,10 +3988,23 @@ func (m *Model) repeatLastSearch(reverse bool) tea.Cmd {
 
 // markAllFindRecent makes the all-projects results the set cmd+g walks
 // (#2413): they win over this project's last in-file search until the next
-// commit makes that the most recent one again (#2623).
+// commit makes that the most recent one again (#2623). Only running a scan
+// marks them (#2827) — re-opening the results overlay or opening one of its
+// hits is not a new search and leaves the recency as it was.
 func (m *Model) markAllFindRecent() {
 	m.allFindRecent = true
 	m.inFileSearchRecent = false
+}
+
+// scanGen is the generation of a find-in-path scan message.
+func scanGen(msg tea.Msg) (int, bool) {
+	switch msg := msg.(type) {
+	case search.BatchMsg:
+		return msg.Gen, true
+	case search.DoneMsg:
+		return msg.Gen, true
+	}
+	return 0, false
 }
 
 // currentTerminal returns the focused regular terminal instance, else the
@@ -4931,10 +4944,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case search.BatchMsg, search.DoneMsg:
 		// Streamed scan results (generation-filtered inside the finder). A scan
-		// makes find-in-path the most recent search again for f3/shift+f3 —
-		// and for the retained-results reading of cmd+g (#2413).
-		m.inFileSearchRecent = false
-		m.allFindRecent = false
+		// the user ran makes find-in-path the most recent search again for
+		// f3/shift+f3 — and for the retained-results reading of cmd+g
+		// (#2413). The replay a mere reopen of the overlay starts, and a stale
+		// generation, leave the recency alone (#2827): opening file B through
+		// a find-in-path hit must not steal cmd+g from the in-file query.
+		if gen, ok := scanGen(msg); ok && m.finder.NewSearch(gen) {
+			m.inFileSearchRecent = false
+			m.allFindRecent = false
+		}
 		m.finder.Apply(msg)
 		return m, nil
 
@@ -4942,7 +4960,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A committed "/", "?" or cmd+f search: f3/shift+f3 repeat it until the
 		// next find-in-path scan (#376). The query is the project's last
 		// search from here on (#2623), repeatable from any of its editors.
+		// It outranks the all-projects results too (#2827), so a later open
+		// through one of their hits does not hand cmd+g back to them.
 		m.inFileSearchRecent = true
+		m.allFindRecent = false
 		m.lastSearch = inFileSearch{query: msg.Query, dir: msg.Dir}
 		return m, nil
 
@@ -7687,9 +7708,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// carry-over block in performSwitchOpts.
 		if po := m.allPendingOpen; po != nil && po.Root == msg.Root {
 			m.allPendingOpen = nil
-			// The hit lands in this project through the all-projects results,
-			// which stay the most recent search here too (#2623).
-			m.markAllFindRecent()
+			// The hit lands in this project through the all-projects results;
+			// when they were the most recent search (carried over the
+			// switch) they stay it here too (#2623) — otherwise this
+			// project's own recency stands, as a picker open never steals
+			// it (#2827).
+			if m.allFindRecent {
+				m.markAllFindRecent()
+			}
 			m.host.Notify(host.Info, "switched to "+msg.Root)
 			return m.openPathAt(po.Path, po.Line-1, po.Col)
 		}
@@ -9624,8 +9650,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// "?" stays a plain non-capturing key outside the chord table; f1
 		// normally resolves through the keymap layer above (palette.keymapHelp)
-		// and only lands here when that command is not registered.
-		if keys == "?" || keys == "f1" {
+		// and only lands here when that command is not registered. A focused
+		// editor keeps "?" — vim's backward search (#2827); f1 still opens
+		// help there.
+		if (keys == "?" && !m.editorFocused()) || keys == "f1" {
 			m.openHelp()
 			return m, nil
 		}
@@ -10515,6 +10543,13 @@ func (m Model) editorCapturing() bool {
 	}
 	ed := inst.Editor()
 	return ed != nil && ed.Capturing()
+}
+
+// editorFocused reports whether the focused content is a text editor, whose
+// normal mode owns "?" as the backward search (#2827).
+func (m Model) editorFocused() bool {
+	inst := m.focusedContent()
+	return inst != nil && inst.Kind() == pane.KindEditor && inst.Editor() != nil
 }
 
 // editorFindField reports whether the focused editor has a find/replace field
