@@ -471,6 +471,11 @@ func (m Model) playSeedProgram(d jqplay.Dialect, src playInputSource, atPath boo
 	if last := m.playLastProgram[src.key]; last != "" {
 		return last
 	}
+	if src.path != "" {
+		if last, ok := m.playLastStoreOf().Get(src.key); ok && last != "" {
+			return last
+		}
+	}
 	return playIdentity(d)
 }
 
@@ -489,7 +494,13 @@ func playIdentity(d jqplay.Dialect) string {
 // again. Only a program that actually ran — it compiled and raised no runtime
 // error — is worth reoffering; the identity program is the default anyway and
 // is not stored, so it never displaces an earlier real program.
-func (m *Model) rememberPlayProgram(key, program string) {
+//
+// path is the source's file, empty for an unsaved buffer, a selection or an
+// HTTP response. Only a file-backed source is also written through to the
+// persisted store (#2774) — the scope the issue asks for: a restart cannot
+// distinguish two unsaved buffers or replay an HTTP response, so only the
+// path-keyed entries are worth surviving one.
+func (m *Model) rememberPlayProgram(key, path, program string) {
 	program = strings.TrimSpace(program)
 	if key == "" || program == "" || program == "." {
 		return
@@ -498,6 +509,9 @@ func (m *Model) rememberPlayProgram(key, program string) {
 		m.playLastProgram = map[string]string{}
 	}
 	m.playLastProgram[key] = program
+	if path != "" {
+		m.playLastStoreOf().Set(key, program)
+	}
 }
 
 // playDocKey identifies the queried document for the per-file last-program
@@ -611,6 +625,16 @@ func (m *Model) playHist() *jqplay.History {
 		m.playHistory = &jqplay.History{}
 	}
 	return m.playHistory
+}
+
+// playLastStoreOf returns the persisted per-path last-program store,
+// allocating it on first use — a Model assembled by hand in a test must not
+// panic on the first lookup, the same reason playHist allocates lazily.
+func (m *Model) playLastStoreOf() *jqplay.LastPrograms {
+	if m.playLastStore == nil {
+		m.playLastStore = jqplay.NewLastPrograms("")
+	}
+	return m.playLastStore
 }
 
 // playInlineActive reports whether the inline playground owns pane key: its
@@ -980,7 +1004,7 @@ func (m *Model) finishPlayParse(msg playParseDoneMsg) tea.Cmd {
 	s.inputErr = msg.err
 	if s.inputErr != "" {
 		s.pending, s.dimming, s.spinning = false, false, false // nothing will run against this text; no evaluation is in flight
-		m.sizePlayResult()                  // the stale banner (#2412) costs a row while it is up
+		m.sizePlayResult()                                     // the stale banner (#2412) costs a row while it is up
 		return nil
 	}
 	m.sizePlayResult()
@@ -1067,7 +1091,7 @@ func (m *Model) finishPlayEval(msg playEvalDoneMsg) tea.Cmd {
 	}
 	s.runErr = ""
 	s.result, s.haveResult = msg.res, true
-	m.rememberPlayProgram(s.srcKey, s.program.Text)
+	m.rememberPlayProgram(s.srcKey, s.srcPath, s.program.Text)
 	m.sizePlayResult()
 	return m.syncPlayResultBuffer()
 }
