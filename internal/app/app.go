@@ -7449,6 +7449,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// (#2777); a stale generation means it already finished.
 		return m, m.firePlayDim(msg)
 
+	case playSpinMsg:
+		// A pending evaluation has run long enough to show the spinner, or an
+		// already-spinning one is animating its next frame (#2778); a stale
+		// generation means it already finished.
+		return m, m.firePlaySpin(msg)
+
 	case project.OpenNewProjectMsg:
 		// project.new (palette / File menu, #1718): the new-project wizard.
 		m.startNewProjectPrompt()

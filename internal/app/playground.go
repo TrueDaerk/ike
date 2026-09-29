@@ -111,6 +111,23 @@ var playDebounce = 120 * time.Millisecond
 // for the same reason.
 var playDimDelay = 300 * time.Millisecond
 
+// playSpinDelay is how long an evaluation must stay pending before the
+// animated spinner appears in the result segment (#2778): a run that finishes
+// inside this window never shows it, so ordinary keystrokes never flicker.
+// Shorter than playDimDelay — the spinner is the "still working" signal for
+// the slow-but-not-yet-worrying middle stretch, before the body itself dims.
+// A var like playDebounce, for the same reason.
+var playSpinDelay = 150 * time.Millisecond
+
+// playSpinInterval is the animation frame rate once the spinner is showing,
+// matching the venv wizard's spinner (internal/settings/venv_wizard.go).
+var playSpinInterval = 200 * time.Millisecond
+
+// playSpinFrames are the spinner's frames — the same braille cycle the venv
+// wizard uses for its run step, so every async indicator in the app animates
+// the same way.
+var playSpinFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
 // playState is the open playground. paneKey names the hosting pane and
 // resultEd is the substitute read-only editor showing the live result;
 // bufFocus routes the keyboard into it (tab toggles). input is the parsed
@@ -194,6 +211,13 @@ type playState struct {
 	// firePlayDim, cleared whenever a new run starts or one finishes, so a
 	// fast keystroke-to-result round trip never flickers the buffer's colour.
 	dimming bool
+	// spinning reports whether the pending evaluation has run long enough
+	// (playSpinDelay) to show the animated spinner in the result segment
+	// (#2778) — set by firePlaySpin, cleared with dimming whenever a new run
+	// starts or one finishes. spinFrame is the current frame into
+	// playSpinFrames, advanced on every tick while spinning.
+	spinning  bool
+	spinFrame int
 
 	hist     *jqplay.History
 	histIdx  int
@@ -863,6 +887,45 @@ func (m *Model) firePlayDim(msg playDimMsg) tea.Cmd {
 	return nil
 }
 
+// playSpinMsg drives the result segment's spinner (#2778): the first delivery
+// (playSpinDelay after the run started) turns the spinner on, and every one
+// after that (playSpinInterval apart) advances its frame — both share one
+// message and one handler, since both must stop for the same reasons: a
+// finished, superseded or parked run.
+type playSpinMsg struct {
+	st  *playState
+	gen int
+}
+
+// armPlaySpin schedules the tick that starts the spinner if the run stamped
+// gen is still pending playSpinDelay from now (#2778).
+func armPlaySpin(s *playState) tea.Cmd {
+	gen := s.gen
+	return tea.Tick(playSpinDelay, func(time.Time) tea.Msg {
+		return playSpinMsg{st: s, gen: gen}
+	})
+}
+
+// firePlaySpin turns the spinner on (or advances its frame) for a still-
+// pending run and reschedules the next frame — unless the playground closed
+// or parked (m.play nil or now a different state), a newer run superseded
+// this one, the run finished, or the hosting pane no longer shows the
+// playground (#2355 — no point animating what is not drawn).
+func (m *Model) firePlaySpin(msg playSpinMsg) tea.Cmd {
+	s := m.play
+	if s == nil || msg.st != s || msg.gen != s.gen || !s.pending {
+		return nil
+	}
+	s.spinning = true
+	s.spinFrame++
+	if !m.playSrcShown() {
+		return nil
+	}
+	return tea.Tick(playSpinInterval, func(time.Time) tea.Msg {
+		return playSpinMsg{st: s, gen: s.gen}
+	})
+}
+
 // parsePlayInput decodes the snapshot: inline for a screenful, off the event
 // loop past jqplay.AsyncThreshold so opening the playground over a large
 // response cannot stall a frame.
@@ -916,7 +979,7 @@ func (m *Model) finishPlayParse(msg playParseDoneMsg) tea.Cmd {
 	s.parsing = false
 	s.inputErr = msg.err
 	if s.inputErr != "" {
-		s.pending, s.dimming = false, false // nothing will run against this text; no evaluation is in flight
+		s.pending, s.dimming, s.spinning = false, false, false // nothing will run against this text; no evaluation is in flight
 		m.sizePlayResult()                  // the stale banner (#2412) costs a row while it is up
 		return nil
 	}
@@ -935,11 +998,11 @@ func (m *Model) schedulePlayEval() tea.Cmd {
 	}
 	s.cancelRun()
 	s.gen++
-	s.pending, s.dimming = true, false
+	s.pending, s.dimming, s.spinning, s.spinFrame = true, false, false, 0
 	gen := s.gen
 	return tea.Batch(tea.Tick(playDebounce, func(time.Time) tea.Msg {
 		return playDebounceMsg{st: s, gen: gen}
-	}), armPlayDim(s))
+	}), armPlayDim(s), armPlaySpin(s))
 }
 
 // firePlayDebounce starts the run the tick was scheduled for, unless a newer
@@ -961,8 +1024,8 @@ func (m *Model) runPlayNow() tea.Cmd {
 	}
 	s.cancelRun()
 	s.gen++
-	s.pending, s.dimming = true, false
-	return tea.Batch(m.runPlay(), armPlayDim(s))
+	s.pending, s.dimming, s.spinning, s.spinFrame = true, false, false, 0
+	return tea.Batch(m.runPlay(), armPlayDim(s), armPlaySpin(s))
 }
 
 // runPlay evaluates the current program off the event loop under a cancellable
@@ -992,7 +1055,7 @@ func (m *Model) finishPlayEval(msg playEvalDoneMsg) tea.Cmd {
 	if s == nil || msg.st != s || msg.gen != s.gen {
 		return nil
 	}
-	s.pending, s.dimming, s.cancel = false, false, nil
+	s.pending, s.dimming, s.spinning, s.cancel = false, false, false, nil
 	if msg.res.Err != "" {
 		// A failed run keeps the previous result on screen (#2412): the error
 		// takes the info row and the stale banner marks the buffer, but the
@@ -2294,7 +2357,7 @@ func (m Model) playResultSegment() string {
 	}
 	n := len(s.result.Outputs)
 	if s.pending && n == 0 {
-		return hint.Render("Result — evaluating…")
+		return hint.Render("Result — evaluating…" + s.spinSuffix())
 	}
 	st := hint
 	if n == 0 {
@@ -2305,7 +2368,18 @@ func (m Model) playResultSegment() string {
 		out += warn.Render(fmt.Sprintf(" (stopped at %d)", jqplay.MaxOutputs))
 	}
 	if s.pending {
-		out += hint.Render(" · evaluating…")
+		out += hint.Render(" · evaluating…" + s.spinSuffix())
 	}
 	return out
+}
+
+// spinSuffix is the animated spinner frame appended after "evaluating…"
+// (#2778) once the run has been pending long enough (playSpinDelay) to show
+// it — "" before then and once it finished, so it never appears fast runs or
+// outlasts them.
+func (s *playState) spinSuffix() string {
+	if !s.spinning {
+		return ""
+	}
+	return " " + playSpinFrames[s.spinFrame%len(playSpinFrames)]
 }
