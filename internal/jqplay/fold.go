@@ -27,6 +27,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Fold is one foldable node of a result: the line it starts on, the line it
@@ -45,7 +47,19 @@ type Fold struct {
 	// Closer is the delimiter the placeholder ends with, so a folded JSON row
 	// still reads as a complete value. YAML closes nothing and leaves it "".
 	Closer string
+	// Keys are the first keys of a mapping, in document order and capped at
+	// maxPreviewKeys (#2782): LabelWithin previews as many as its width
+	// budget allows, so a reader sees *what* is folded, not only how much.
+	Keys []string
+	// ElemType names the scalar type every item of a sequence shares
+	// ("string", "number", …), "" when the items are mixed or containers.
+	// Label then says `12 × string` instead of `12 items`.
+	ElemType string
 }
+
+// maxPreviewKeys bounds how many keys a fold remembers for its preview: no
+// pane is wide enough to show more, and a 10k-key object must not copy them.
+const maxPreviewKeys = 16
 
 // The units a fold counts its members in.
 const (
@@ -58,15 +72,47 @@ const (
 // member count in its own unit, and — in JSON — the closing delimiter, so a
 // folded row still reads as a complete value (`"users": { ⋯ 3 keys }`).
 func (f Fold) Label() string {
-	unit := f.Unit
-	if f.Items == 1 {
-		unit = strings.TrimSuffix(unit, "s")
+	label := "⋯ " + strconv.Itoa(f.Items) + " "
+	if f.ElemType != "" {
+		label = "⋯ " + strconv.Itoa(f.Items) + " × " + f.ElemType
+	} else if f.Items == 1 {
+		label += strings.TrimSuffix(f.Unit, "s")
+	} else {
+		label += f.Unit
 	}
-	label := "⋯ " + strconv.Itoa(f.Items) + " " + unit
 	if f.Closer != "" {
 		label += " " + f.Closer
 	}
 	return label
+}
+
+// LabelWithin is Label with a preview of the mapping's first keys in front
+// (`id, name, tags ⋯ 3 keys }`, #2782), as many as fit in budget cells; keys
+// that did not fit are marked with a trailing `…`. The count always stays, so
+// when not even one key fits the result is the plain Label.
+func (f Fold) LabelWithin(budget int) string {
+	base := f.Label()
+	if len(f.Keys) == 0 {
+		return base
+	}
+	baseW := ansi.StringWidth(base)
+	best := base
+	preview := ""
+	for i, k := range f.Keys {
+		if i > 0 {
+			preview += ", "
+		}
+		preview += k
+		shown := preview
+		if i+1 < f.Items {
+			shown += ", …"
+		}
+		if ansi.StringWidth(shown)+1+baseW > budget {
+			break
+		}
+		best = shown + " " + base
+	}
+	return best
 }
 
 // Folds returns the foldable objects and arrays of a JSON result — the jq
@@ -84,21 +130,51 @@ func jsonFolds(text string) []Fold {
 		object bool
 		commas int
 		filled bool
+		// fresh is set right after the opener and after every comma: the
+		// next token starts a member — an object's key, an array's item.
+		fresh bool
+		keys  []string
+		// elem is the scalar type the array's items share so far; mixed
+		// once two differ or one is a container (#2782).
+		elem  string
+		mixed bool
 	}
 	var stack []frame
 	var out []Fold
 	line, inString, escaped := 0, false, false
-	content := func() {
-		if n := len(stack); n > 0 {
-			stack[n-1].filled = true
+	// key collects the object key being read when the string started one.
+	var key *strings.Builder
+	// member is called on the first rune of every token: it marks the
+	// enclosing node non-empty and, when the token starts a member, records
+	// the key preview or the item's type.
+	member := func(typ string) bool {
+		n := len(stack)
+		if n == 0 {
+			return false
 		}
+		f := &stack[n-1]
+		f.filled = true
+		if !f.fresh {
+			return false
+		}
+		f.fresh = false
+		if f.object {
+			return typ == "string" && len(f.keys) < maxPreviewKeys
+		}
+		switch {
+		case typ == "" || (f.elem != "" && f.elem != typ):
+			f.mixed = true
+		default:
+			f.elem = typ
+		}
+		return false
 	}
 	for _, r := range text {
 		switch {
 		case r == '\n':
 			// A JSON string never carries a raw newline; resetting here keeps
 			// an unterminated quote from swallowing the rest of the document.
-			line, inString, escaped = line+1, false, false
+			line, inString, escaped, key = line+1, false, false, nil
 		case inString:
 			switch {
 			case escaped:
@@ -107,13 +183,24 @@ func jsonFolds(text string) []Fold {
 				escaped = true
 			case r == '"':
 				inString = false
+				if key != nil {
+					f := &stack[len(stack)-1]
+					f.keys = append(f.keys, key.String())
+					key = nil
+				}
+				continue
+			}
+			if key != nil {
+				key.WriteRune(r)
 			}
 		case r == '"':
 			inString = true
-			content()
+			if member("string") {
+				key = &strings.Builder{}
+			}
 		case r == '{' || r == '[':
-			content()
-			stack = append(stack, frame{line: line, object: r == '{'})
+			member("")
+			stack = append(stack, frame{line: line, object: r == '{', fresh: true})
 		case r == '}' || r == ']':
 			if len(stack) == 0 {
 				continue // unbalanced tail: nothing to close
@@ -127,16 +214,19 @@ func jsonFolds(text string) []Fold {
 				}
 				fold := Fold{HeaderLine: f.line, EndLine: line, Items: items, Unit: UnitItems, Closer: "]"}
 				if f.object {
-					fold.Unit, fold.Closer = UnitKeys, "}"
+					fold.Unit, fold.Closer, fold.Keys = UnitKeys, "}", f.keys
+				} else if !f.mixed {
+					fold.ElemType = f.elem
 				}
 				out = append(out, fold)
 			}
 		case r == ',':
 			if n := len(stack); n > 0 {
 				stack[n-1].commas++
+				stack[n-1].fresh = true
 			}
-		case r != ' ' && r != '\t' && r != '\r':
-			content()
+		case r != ' ' && r != '\t' && r != '\r' && r != ':':
+			member(jsonScalarType(r))
 		}
 	}
 	// The walk closes inner nodes first; the consumers want pre-order.
@@ -147,4 +237,16 @@ func jsonFolds(text string) []Fold {
 		return out[i].EndLine > out[j].EndLine
 	})
 	return out
+}
+
+// jsonScalarType names the type of the scalar whose first rune is r, the way
+// jq's `type` does. Only called for runes outside strings and delimiters.
+func jsonScalarType(r rune) string {
+	switch r {
+	case 't', 'f':
+		return "boolean"
+	case 'n':
+		return "null"
+	}
+	return "number"
 }

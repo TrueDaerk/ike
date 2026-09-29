@@ -491,11 +491,21 @@ const foldCopyGlyph = "⧉"
 // how the jq result window says "3 keys" where a file says "3 lines".
 func (m Model) foldTag(line, end int) string {
 	if m.foldSummary != nil {
-		if s := m.foldSummary(line, end); s != "" {
+		if s := m.foldSummary(line, end, m.foldTagBudget(line)); s != "" {
 			return " " + s
 		}
 	}
 	return " ⋯ " + strconv.Itoa(end-line) + " lines"
+}
+
+// foldTagBudget is how many cells a host fold summary may fill on the header
+// row (#2782): the annotation column minus the header's own text, the copy
+// affordance and the gaps around them. A summary wider than this is the
+// host's cue to fall back to its short form; the renderer still truncates as
+// the last resort.
+func (m Model) foldTagBudget(line int) int {
+	budget := m.annotColumnWidth() - lipgloss.Width(m.buf.Line(line)) - lipgloss.Width(foldCopyGlyph) - 3
+	return max(budget, 0)
 }
 
 // annotColumnWidth is the width right-aligned row annotations budget against:

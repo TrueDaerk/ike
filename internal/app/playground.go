@@ -1205,12 +1205,12 @@ func (s *playState) setResultFolds(folds []jqplay.Fold) {
 // count in its own unit, `{ ⋯ 3 keys }` rather than the file buffer's
 // "⋯ 3 lines" — how big the value is, which is what a reader skimming a
 // result wants to know. An unknown header falls back to the editor's default.
-func (s *playState) playFoldSummary(header, end int) string {
+func (s *playState) playFoldSummary(header, end, budget int) string {
 	f, ok := s.folds[header]
 	if !ok || f.EndLine != end {
 		return ""
 	}
-	return f.Label()
+	return f.LabelWithin(budget)
 }
 
 // updatePlayground consumes every key while the playground's pane is
