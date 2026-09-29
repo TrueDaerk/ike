@@ -1569,13 +1569,26 @@ func (m Model) playChordPending() bool {
 	return m.playChord && m.keys != nil && m.keys.Pending()
 }
 
-// pastePlayground inserts a bracketed paste into the query line, flattened:
-// the query line is one line, and a pasted multi-line program would otherwise
-// smuggle newlines into it. The result buffer never takes a paste — it is
-// read-only.
+// pastePlayground delivers a paste (bracketed or cmd+v) to whatever takes the
+// playground's keyboard input (#2772):
+//
+//   - With the keyboard in the result buffer and one of its prompts open (the
+//     search line, whether "/" or the find chord opened it, #2383/#2411), the
+//     prompt takes it through the editor's own prompt paste — flattened to one
+//     line and previewed like typing. The focus, the find chord's "esc returns
+//     to the query line" state and the program stay untouched, and nothing is
+//     re-evaluated.
+//   - Otherwise it goes into the query line, flattened: the query line is one
+//     line, and a pasted multi-line program would otherwise smuggle newlines
+//     into it (#1936). That includes the result buffer focused without a
+//     prompt — the buffer is read-only and never takes a paste, so the program
+//     does, and the keyboard follows it back to the query line.
 func (m *Model) pastePlayground(text string) tea.Cmd {
 	s := m.play
 	if s == nil || text == "" {
+		return nil
+	}
+	if s.bufFocus && s.resultEd != nil && s.resultEd.PasteIntoPrompt(text) {
 		return nil
 	}
 	if !s.program.Paste(text) {

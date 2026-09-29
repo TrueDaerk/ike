@@ -70,3 +70,16 @@ func (m *Model) pasteReplacePanel(text string) {
 		m.previewPanelFind()
 	}
 }
+
+// PasteIntoPrompt delivers a paste to an open editor-internal input only —
+// never the buffer — and reports whether one took it. A host that keeps the
+// buffer itself off-limits (the read-only jq playground result, #2772) routes
+// through this so an open search line gets the block exactly as the editor's
+// own paste path would give it, while a paste with no prompt open is left to
+// the host to place.
+func (m *Model) PasteIntoPrompt(text string) bool {
+	if text == "" {
+		return false
+	}
+	return m.pasteIntoPrompt(text)
+}
