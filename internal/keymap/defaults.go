@@ -468,6 +468,15 @@ var jetbrainsRows = []row{
 	// context — no clash inside the playground, which resolves Global only.
 	{"ctrl+alt+shift+right", "playground.stageNext", "Next pipeline stage", Global, "jq/yq playground (#2785)"},
 	{"ctrl+alt+shift+left", "playground.stagePrev", "Previous pipeline stage", Global, "jq/yq playground (#2785)"},
+	// Result chaining (#2795), the stepping arrows' vertical pair: down into
+	// the result, up back out. The issue's ctrl+shift+backspace is
+	// nav.lastEdit's (Global — a real conflict), and ctrl+shift+enter has no
+	// legacy encoding (it arrives as enter, the run key); these have one
+	// (CSI 1;8B/A). Off macOS the down arrow meets editor.splitViewDown's
+	// folded cmd+alt+shift+down in the Editor context — no clash inside the
+	// playground, which resolves Global only.
+	{"ctrl+alt+shift+down", "playground.chainResult", "Chain playground result", Global, "jq/yq playground (#2795)"},
+	{"ctrl+alt+shift+up", "playground.chainBack", "Chain back one level", Global, "jq/yq playground (#2795)"},
 	// The variables line (#2786), Global like its siblings. The issue's
 	// ctrl+alt+v is playground.export's (#2788) and every other ctrl+alt
 	// letter is claimed; b — the line *binds* $name — meets

@@ -347,6 +347,14 @@ type playState struct {
 	shownText string
 	changes   map[int]vcs.LineMark
 
+	// chain is the result chaining's stack (#2795, playchain.go): one frame
+	// per level left behind, the root's first; empty when not chained.
+	// chainSwitch marks the next run as the first on a level the chain just
+	// moved to, whose output is not an edit of the one on screen and so
+	// carries no change marks (#2787).
+	chain       []playChainFrame
+	chainSwitch bool
+
 	gen    int
 	cancel context.CancelFunc
 	status string
@@ -1267,7 +1275,8 @@ func (m *Model) runPlay() tea.Cmd {
 	// The change diff (#2787) compares against the installed good result;
 	// with none — the first run, or the first after a clear — there is
 	// nothing to compare and the result carries no marks.
-	prev, diffable := s.shownText, s.haveResult
+	prev, diffable := s.shownText, s.haveResult && !s.chainSwitch
+	s.chainSwitch = false
 	return func() tea.Msg {
 		defer cancel()
 		start := time.Now()
@@ -1308,8 +1317,9 @@ func (m *Model) finishPlayEval(msg playEvalDoneMsg) tea.Cmd {
 	s.shownText, s.changes = msg.text, msg.changes
 	s.elapsed, s.parseDur = msg.dur, 0
 	// A stage's cut is not the user's program (#2785): only a full run
-	// becomes the input's last valid one.
-	if _, _, stepping := s.playStepping(); !stepping {
+	// becomes the input's last valid one — and only on the root level of a
+	// chain (#2795), whose input is the file rather than a result.
+	if _, _, stepping := s.playStepping(); !stepping && !s.playChained() {
 		m.rememberPlayProgram(s.srcKey, s.srcPath, s.program.Text, msg.res.Options())
 	}
 	m.sizePlayResult()
@@ -2344,7 +2354,25 @@ func (m Model) playModeSegment() string {
 // While stepping through the stages (#2785) the `stage k/n` counter leads the
 // line whatever follows it — an error in the cut program included, which is
 // exactly when the reader needs to know it is not the full program failing.
+//
+// A chain's breadcrumb (#2795) leads ahead of that: which snapshot the
+// program runs over is the first thing to know. It keeps playInfoMinLine
+// cells for the rest of the row while half the width allows it, and is cut
+// from the left to fit.
 func (m Model) playInfoLine(width int) string {
+	if !m.play.playChained() {
+		return m.playStageLine(width)
+	}
+	seg := m.playChainSegment(max(width-3-playInfoMinLine, width/2))
+	rest := width - ansi.StringWidth(seg) - 3
+	if rest < 1 {
+		return m.playChainSegment(width)
+	}
+	return seg + lipgloss.NewStyle().Foreground(m.pal().Hint).Render(" · ") + m.playStageLine(rest)
+}
+
+// playStageLine is playInfoLine without the chain's breadcrumb.
+func (m Model) playStageLine(width int) string {
 	stage := m.playStageSegment()
 	if stage == "" {
 		return m.playInfoText(width)
@@ -2409,10 +2437,15 @@ func (m Model) playInfoText(width int) string {
 //
 // While stepping through the stages (#2785) the way back to the full program
 // leads: esc no longer closes the mode first, and the hint says so.
+//
+// On a chained level (#2795) the way back up the chain leads the same way.
 func (m Model) playHints() []string {
 	hints := m.playFocusHints()
 	if _, _, ok := m.play.playStepping(); ok {
 		return append([]string{"esc full program"}, hints...)
+	}
+	if m.play.playChained() {
+		return append([]string{m.playCommandChord("playground.chainBack") + " chain back"}, hints...)
 	}
 	return hints
 }
@@ -2538,7 +2571,7 @@ func (m Model) playInputSegment() string {
 	// The refresh stamp (#2356) outlives the transient status line, which the
 	// next keystroke clears: "is this still the file on disk?" is answered by
 	// a time, not by a message that was on screen a minute ago.
-	if !s.reloadedAt.IsZero() {
+	if !s.reloadedAt.IsZero() && !s.playChained() {
 		out += hint.Render(" · reloaded " + s.reloadedAt.Format("15:04:05"))
 	}
 	return out

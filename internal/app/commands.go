@@ -825,6 +825,9 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			langCommand(appCommand("playground.tableView", "Toggle Playground Table View", TogglePlayTableMsg{}), playgroundLangs()),
 			langCommand(appCommand("playground.stageNext", "Playground: Step to Next Pipeline Stage", StepPlayStageMsg{Delta: 1}), playgroundLangs()),
 			langCommand(appCommand("playground.stagePrev", "Playground: Step to Previous Pipeline Stage", StepPlayStageMsg{Delta: -1}), playgroundLangs()),
+			// Result chaining (#2795): the result as the next input, and back.
+			langCommand(appCommand("playground.chainResult", "Playground: Chain Result as Input", ChainPlayResultMsg{}), playgroundLangs()),
+			langCommand(appCommand("playground.chainBack", "Playground: Chain Back One Level", ChainPlayBackMsg{}), playgroundLangs()),
 			// The variables line (#2786): `name=value` entries bound as $name.
 			langCommand(appCommand("playground.variables", "Toggle Playground Variables Line", TogglePlayVarsMsg{}), playgroundLangs()),
 			langCommand(appCommand("log.openRotatedSet", "Open Rotated Log Set (Merged Timeline)", OpenMergedLogMsg{}), []string{"log"}),

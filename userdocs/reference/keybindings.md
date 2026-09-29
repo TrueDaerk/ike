@@ -36,6 +36,8 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Breakpoint properties | `cmd+alt+f8` | `ctrl+alt+f8` | `debug.breakpointProperties` |
 | Breakpoint properties | `ctrl+alt+f8` | `ctrl+alt+f8` | `debug.breakpointProperties` |
 | Breakpoints | `cmd+shift+f8` | `ctrl+shift+f8` | `debug.breakpoints` |
+| Chain back one level | `ctrl+alt+shift+up` | `ctrl+alt+shift+up` | `playground.chainBack` |
+| Chain playground result | `ctrl+alt+shift+down` | `ctrl+alt+shift+down` | `playground.chainResult` |
 | Check saved playground filters | `ctrl+alt+a` | `ctrl+alt+a` | `playground.checkFilters` |
 | Close active tab | `cmd+w` | `ctrl+w` | `editor.closeTab` |
 | Close other tabs | `cmd+alt+w` | — | `editor.tab.closeOthers` |
