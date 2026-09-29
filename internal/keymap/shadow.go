@@ -77,6 +77,8 @@ var intentionalDefaultShadows = map[string]string{
 	// context; the playground resolves Global only, so the stage step keeps
 	// the chord where it means something.
 	shadowKey("ctrl+alt+shift+right", "editor.splitViewRight", "playground.stageNext"): "linux Cmd-fold: split view over the playground-only stage step",
+	// … and for the result chaining (#2795) under editor.splitViewDown.
+	shadowKey("ctrl+alt+shift+down", "editor.splitViewDown", "playground.chainResult"): "linux Cmd-fold: split view over the playground-only chain",
 	// And for the variables line (#2786): off macOS lsp.implementations'
 	// cmd+alt+b folds onto ctrl+alt+b in the Editor context; the playground
 	// resolves Global only, so the toggle keeps the chord there.

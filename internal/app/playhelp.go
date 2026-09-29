@@ -154,6 +154,8 @@ func (m Model) playgroundChordHelp() help.Group {
 	add("playground.tableView", "Table view: an array of objects as a sortable, searchable grid (#2794)")
 	add("playground.stageNext", "Step to the next pipeline stage: the result up to it (#2785)")
 	add("playground.stagePrev", "Step to the previous pipeline stage; esc returns to the full program")
+	add("playground.chainResult", "Chain: the result becomes the input, the program starts over at . (#2795)")
+	add("playground.chainBack", "Chain back one level: the previous input and program return")
 	add("playground.variables", "Variables line: name=value entries bound as $name (#2786)")
 	add("editor.copy", "Copy the result buffer's selection (from either focus)")
 	add("lsp.codeAction", "Not available in the playground — says so instead of doing nothing")

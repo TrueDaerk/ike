@@ -115,6 +115,8 @@ var reachableAlternatives = map[string]string{
 	"playground.stageNext":      "palette",
 	"playground.tableView":      "palette",
 	"playground.stagePrev":      "palette",
+	"playground.chainResult":    "palette",
+	"playground.chainBack":      "palette",
 	"playground.variables":      "palette",
 	"view.toggleFollow":         "palette",
 	"view.followFilter":         "palette",

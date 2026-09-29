@@ -59,6 +59,12 @@ func (m *Model) playWatchEvent(msg watch.EventMsg) tea.Cmd {
 		return nil
 	}
 	text, ok := m.playSourceText(s)
+	if ok && s.playChained() && undostore.Hash([]byte(text)) != s.srcHash {
+		// Following pauses while chained (#2795): the level on screen queries
+		// a result, not the file; the pop to the root re-reads it.
+		s.playChainPausedWatch()
+		return nil
+	}
 	if !ok || undostore.Hash([]byte(text)) == s.srcHash {
 		// Nothing readable, or the bytes the parser already saw: a stale
 		// dirty buffer, auto-reload switched off, or a touch that wrote the

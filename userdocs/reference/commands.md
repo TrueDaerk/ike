@@ -228,6 +228,8 @@ bring their own.
 | Copy Performance Snapshot | `perf.snapshot` | — | — | everywhere |
 | PHP Index: Rebuild | `php.traitIndex.rebuild` | `cmd+alt+shift+b` | — | everywhere |
 | PHP Index: Status | `php.traitIndex.status` | `cmd+alt+shift+i` | — | everywhere |
+| Playground: Chain Back One Level | `playground.chainBack` | `ctrl+alt+shift+up` | — | everywhere |
+| Playground: Chain Result as Input | `playground.chainResult` | `ctrl+alt+shift+down` | — | everywhere |
 | Check Saved Playground Filters | `playground.checkFilters` | `ctrl+alt+a` | — | everywhere |
 | Export Playground Result… | `playground.export` | `ctrl+alt+v` | — | everywhere |
 | Open Playground for This File | `playground.open` | `cmd+shift+j` | — | everywhere |

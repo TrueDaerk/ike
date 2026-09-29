@@ -87,7 +87,9 @@ func (m *Model) resumePlayRun() tea.Cmd {
 		s.pending = false
 		return nil
 	}
-	if s.srcPath != "" {
+	// A chained playground (#2795) does not follow its file until it is
+	// back on the root level, which re-reads it then.
+	if s.srcPath != "" && !s.playChained() {
 		if text, ok := m.playSourceText(s); ok && undostore.Hash([]byte(text)) != s.srcHash {
 			return m.playRefreshInput(text)
 		}

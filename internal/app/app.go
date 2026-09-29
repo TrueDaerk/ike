@@ -7474,6 +7474,20 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.togglePlayTable()
 		return m, nil
 
+	case ChainPlayResultMsg:
+		// playground.chainResult (ctrl+alt+shift+↓, #2795): the result
+		// becomes the next input and the program starts over at `.`.
+		cmd := m.chainPlayResult()
+		m.sizePlayResult()
+		return m, cmd
+
+	case ChainPlayBackMsg:
+		// playground.chainBack (ctrl+alt+shift+↑, #2795): pop one chained
+		// level, restoring its snapshot and program.
+		cmd := m.chainPlayBack()
+		m.sizePlayResult()
+		return m, cmd
+
 	case StepPlayStageMsg:
 		// playground.stageNext / stagePrev (ctrl+alt+shift+→ / ←, #2785):
 		// select a pipeline stage and show the program's output up to it.

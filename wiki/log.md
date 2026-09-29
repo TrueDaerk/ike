@@ -1,5 +1,16 @@
 # Log
 
+## 2026-09-29 (jq playground: chaining results, #2795)
+
+- `playground.chainResult` / `playground.chainBack` (`ctrl+alt+shift+↓` / `↑`)
+  make the result's values the next input (`jqplay.Result.Chain`), resetting
+  the program to `.`, and pop back restoring snapshot, program, caret and
+  toggles. The info row leads with the breadcrumb, cut from the left.
+  Following the source file pauses while chained and re-reads on the way back
+  to the root; xmq refuses with a notice. The issue's `ctrl+shift+backspace`
+  is `nav.lastEdit`'s, `ctrl+shift+enter` has no legacy encoding.
+  Docs: `/architecture/jq-playground.md`, `/architecture/keybindings.md`.
+
 ## 2026-09-29 (jq playground: table view, #2794)
 
 - `playground.tableView` (`ctrl+alt+l`) draws a result that is an array (or
