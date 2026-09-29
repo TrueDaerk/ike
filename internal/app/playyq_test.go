@@ -70,6 +70,26 @@ func TestYQPlaygroundEvaluatesLive(t *testing.T) {
 	}
 }
 
+// TestYQPlaygroundClearedQueryShowsIdentity (#2807): clearing the yq query
+// line must not blank the result either — it runs as `.` until the user types
+// something else.
+func TestYQPlaygroundClearedQueryShowsIdentity(t *testing.T) {
+	m := openYQ(t, yqApp(t, "spec:\n  replicas: 3\n"))
+	m = setProgram(m, ".")
+	want := m.play.result.Text()
+
+	m.play.program.Clear()
+	m = drainCmd(m, m.schedulePlayEval())
+
+	s := m.play
+	if s.result.Err != "" {
+		t.Fatalf("blank program reported %q", s.result.Err)
+	}
+	if got := s.result.Text(); got != want {
+		t.Fatalf("blank program result = %q, want the identity result %q", got, want)
+	}
+}
+
 // TestYQPlaygroundRendersYAML: the result buffer holds YAML, not the JSON the
 // engine works in — the whole point of the second dialect.
 func TestYQPlaygroundRendersYAML(t *testing.T) {

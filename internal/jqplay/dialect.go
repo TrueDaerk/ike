@@ -136,3 +136,15 @@ func (d Dialect) separator() string {
 func (d Dialect) emptyInput() string {
 	return "no " + d.Format() + " input — the buffer is empty"
 }
+
+// identity is the program Run substitutes for a blank query line (#2807), so
+// clearing the line to start a new program does not blank the result: jq and
+// yq spell "just show me the document" as `.`; xmq already treats its empty
+// command line as the identity — the CLI with no command pretty-prints the
+// input — so its identity is the empty string, a no-op substitution.
+func (d Dialect) identity() string {
+	if d == DialectXMQ {
+		return ""
+	}
+	return "."
+}

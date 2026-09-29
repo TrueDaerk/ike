@@ -2476,11 +2476,8 @@ func (m Model) playResultSegment() string {
 	pal := m.pal()
 	hint := lipgloss.NewStyle().Foreground(pal.Hint)
 	warn := lipgloss.NewStyle().Foreground(pal.Warning)
-	switch {
-	case s.parsing:
+	if s.parsing {
 		return "" // the input segment already says so
-	case strings.TrimSpace(s.program.Text) == "":
-		return hint.Render("Result — no program yet")
 	}
 	n := len(s.result.Outputs)
 	if s.pending && n == 0 {
