@@ -71,7 +71,7 @@ func Complete(program string, pos int, in *Input, manual bool) (items []Candidat
 	if in.Dialect() == DialectXMQ {
 		// The xmq query line holds a CLI command line, not a jq program
 		// (#2414): the offers are the xmq commands, not gojq's builtins.
-		return completeXMQ(program, pos, manual)
+		return completeXMQ(program, pos, in, manual)
 	}
 	r := []rune(program)
 	if pos < 0 {

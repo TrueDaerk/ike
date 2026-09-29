@@ -75,6 +75,9 @@ type Input struct {
 	// its engine is the external `xmq` binary, which reads the document
 	// itself from stdin — there is nothing to decode on this side.
 	raw string
+	// xmqTree is the xmq input's element tree, built at parse for the
+	// query line's XPath completion (#2790).
+	xmqTree *xmqNode
 	// Truncated reports that the stream held more than MaxInputValues values
 	// and the tail was dropped.
 	Truncated bool
