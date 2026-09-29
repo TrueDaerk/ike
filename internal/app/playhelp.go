@@ -42,8 +42,8 @@ var playQueryHelpKeys = []struct{ Key, Title string }{
 	{"ctrl+z / cmd+z", "Undo the last edit of the program"},
 	{"tab", "Move the keyboard into the result buffer"},
 	{"pgup / pgdn", "Page the result without leaving the query line"},
-	{"ctrl+s", "Save the program as a named filter"},
-	{"ctrl+l", "Open the saved-filter picker — in the result buffer the same key clears the output"},
+	{"ctrl+s", "Save the program as a named filter — ctrl+t in the prompt attaches the input and result as its self-test"},
+	{"ctrl+l", "Open the saved-filter picker (✓ / ✗ / – per filter's self-test) — in the result buffer the same key clears the output"},
 	{"ctrl+g", "Open the language cheatsheet — syntax, examples, builtins"},
 	{"ctrl+y", "Copy the whole result"},
 	{"ctrl+o", "Open the result as a scratch file"},
@@ -149,6 +149,7 @@ func (m Model) playgroundChordHelp() help.Group {
 	add("json.jqToggleCompact", "Toggle compact output: one line per value (jq -c)")
 	add("json.jqToggleSlurp", "Toggle slurp: run over the whole input as one array (jq -s)")
 	add("playground.export", "Export the result: save as file, CSV / TSV, HTTP request body (#2788)")
+	add("playground.checkFilters", "Re-run every saved filter's sample check (#2792)")
 	add("editor.copy", "Copy the result buffer's selection (from either focus)")
 	add("lsp.codeAction", "Not available in the playground — says so instead of doing nothing")
 	return g

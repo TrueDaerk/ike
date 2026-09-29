@@ -1,6 +1,8 @@
 package app
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -309,5 +311,174 @@ func TestJQFilterPickerEmptyExplains(t *testing.T) {
 	m = asModel(tm)
 	if m.palette.IsOpen() {
 		t.Fatal("an empty library must not open the picker")
+	}
+}
+
+// saveFilterWithSample is saveFilter with the prompt's second step (#2792):
+// ctrl+t attaches the input snapshot and the current result.
+func saveFilterWithSample(t *testing.T, m Model, name string) Model {
+	t.Helper()
+	tm, _ := m.Update(tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
+	m = typeName(asModel(tm), name)
+	if !m.playName.sample.Has() {
+		t.Fatalf("the prompt captured no sample: %q", m.playName.sampleWhy)
+	}
+	tm, _ = m.Update(tea.KeyPressMsg{Code: 't', Mod: tea.ModCtrl})
+	m = asModel(tm)
+	if !m.playName.withSample {
+		t.Fatal("ctrl+t must attach the sample")
+	}
+	m = pressKey(m, tea.KeyEnter)
+	if m.playNamePromptOpen() {
+		t.Fatalf("the prompt stayed open: %q", m.playName.err)
+	}
+	return m
+}
+
+// pickerGlyphs opens the jq picker, drains its lazy checks and returns each
+// row's self-test mark by name.
+func pickerGlyphs(t *testing.T, m Model) (Model, map[string]string) {
+	t.Helper()
+	tm, cmd := m.Update(ShowFiltersMsg{})
+	m = drainCmd(asModel(tm), cmd)
+	out := map[string]string{}
+	for _, it := range m.playFilters.Results("", palette.Context{}) {
+		out[it.Title] = it.Hint
+	}
+	return m, out
+}
+
+// TestJQFilterSampleRoundTrip: a save with the sample step writes the input
+// and the expectation next to the program, and a fresh read finds them.
+func TestJQFilterSampleRoundTrip(t *testing.T) {
+	body := `{"items":[{"id":1},{"id":2}]}`
+	m := openJQ(t, playApp(t, body))
+	m = setProgram(m, ".items[].id")
+	m = saveFilterWithSample(t, m, "ids")
+	m = setProgram(m, ".items | length")
+	m = saveFilter(t, m, "count", false)
+
+	lib := loadPlayFilters(jqplay.DialectJQ, jqplay.ScopeProject)
+	f, ok := lib.Get("ids")
+	if !ok || f.Input != body || f.Expect != "1\n2" {
+		t.Fatalf("the saved sample is %+v (ok=%v)", f.SelfTest, ok)
+	}
+	if g, _ := lib.Get("count"); g.SelfTest.Has() {
+		t.Fatalf("a save without ctrl+t must not attach a sample: %+v", g.SelfTest)
+	}
+}
+
+// TestJQFilterSampleOldStoreLoads: a store written before #2792 — no sample
+// fields at all — loads as filters without one, and the picker marks them –.
+func TestJQFilterSampleOldStoreLoads(t *testing.T) {
+	m := openJQ(t, playApp(t, `{"a":1}`))
+	path := playFilterFile(jqplay.DialectJQ, jqplay.ScopeProject)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := `{"filters":[{"name":"legacy","program":".a"}]}`
+	if err := os.WriteFile(path, []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	f, ok := loadPlayFilters(jqplay.DialectJQ, jqplay.ScopeProject).Get("legacy")
+	if !ok || f.Program != ".a" || f.SelfTest.Has() {
+		t.Fatalf("the old entry loaded as %+v (ok=%v)", f, ok)
+	}
+	_, glyphs := pickerGlyphs(t, m)
+	if glyphs["legacy"] != "–" {
+		t.Fatalf("a filter without a sample must show –, got %q", glyphs["legacy"])
+	}
+}
+
+// TestJQFilterCheckStates is the picker's acceptance case: ✓ while the program
+// still prints the expectation over its sample, ✗ once it does not, – without
+// a sample — the verdicts arriving through commands, not on the open itself.
+func TestJQFilterCheckStates(t *testing.T) {
+	m := openJQ(t, playApp(t, `{"a":{"b":3}}`))
+	m = setProgram(m, ".a.b")
+	m = saveFilterWithSample(t, m, "good")
+	m = setProgram(m, ".a")
+	m = saveFilterWithSample(t, m, "rotted")
+	m = setProgram(m, ".a | keys")
+	m = saveFilter(t, m, "plain", false)
+
+	// The data shape moved on: the stored program no longer matches.
+	lib := loadPlayFilters(jqplay.DialectJQ, jqplay.ScopeProject)
+	if err := lib.Set("rotted", ".a.c"); err != nil {
+		t.Fatal(err)
+	}
+	if !m.savePlayFilters(jqplay.DialectJQ, jqplay.ScopeProject, lib) {
+		t.Fatal("saving the store failed")
+	}
+
+	// The open itself answers nothing yet: the checks are commands.
+	tm, cmd := m.Update(ShowFiltersMsg{})
+	m = asModel(tm)
+	if cmd == nil {
+		t.Fatal("the picker must start the lazy checks as commands")
+	}
+	for _, it := range m.playFilters.Results("", palette.Context{}) {
+		if it.Title == "good" && it.Hint != "…" {
+			t.Fatalf("an unchecked sample must show …, got %q", it.Hint)
+		}
+	}
+	m = drainCmd(m, cmd)
+
+	_, glyphs := pickerGlyphs(t, m)
+	want := map[string]string{"good": "✓", "rotted": "✗", "plain": "–"}
+	for name, g := range want {
+		if glyphs[name] != g {
+			t.Fatalf("%s shows %q, want %q (all: %v)", name, glyphs[name], g, glyphs)
+		}
+	}
+	// Cached for the session: a reopen starts no second check.
+	if cmd := m.playFilters.pendingChecks(); cmd != nil {
+		t.Fatal("a reopen re-ran cached checks")
+	}
+}
+
+// TestJQFilterCheckAllCommand: playground.checkFilters drops the cache and
+// re-runs every self-test, recording the rotted filter's ✗.
+func TestJQFilterCheckAllCommand(t *testing.T) {
+	m := openJQ(t, playApp(t, `{"a":1}`))
+	m = setProgram(m, ".a")
+	m = saveFilterWithSample(t, m, "one")
+	lib := loadPlayFilters(jqplay.DialectJQ, jqplay.ScopeProject)
+	if err := lib.Set("one", ".a + 1"); err != nil {
+		t.Fatal(err)
+	}
+	if !m.savePlayFilters(jqplay.DialectJQ, jqplay.ScopeProject, lib) {
+		t.Fatal("saving the store failed")
+	}
+
+	tm, cmd := m.Update(CheckPlayFiltersMsg{})
+	m = drainCmd(asModel(tm), cmd)
+	f, _ := loadPlayFilters(jqplay.DialectJQ, jqplay.ScopeProject).Get("one")
+	if st := m.playFilters.checks[playFilterCheckKey(jqplay.DialectJQ, f)]; st != jqplay.CheckFail {
+		t.Fatalf("the sweep recorded %v for the rotted filter", st)
+	}
+	if len(m.playFilters.running) != 0 {
+		t.Fatalf("the sweep left checks marked in flight: %v", m.playFilters.running)
+	}
+}
+
+// TestJQFilterSampleBudget: an input over jqplay.MaxSampleBytes is refused at
+// capture — the prompt says why and ctrl+t attaches nothing.
+func TestJQFilterSampleBudget(t *testing.T) {
+	big := `{"pad":"` + strings.Repeat("x", jqplay.MaxSampleBytes) + `","a":1}`
+	m := openJQ(t, playApp(t, big))
+	m = setProgram(m, ".a")
+	tm, _ := m.Update(tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
+	m = typeName(asModel(tm), "big")
+	if m.playName.sample.Has() || !strings.Contains(m.playName.sampleWhy, "budget") {
+		t.Fatalf("an over-budget input must be refused, got why=%q", m.playName.sampleWhy)
+	}
+	if m.play.srcText != "" {
+		t.Fatal("an over-budget snapshot must not be kept for capture")
+	}
+	tm, _ = m.Update(tea.KeyPressMsg{Code: 't', Mod: tea.ModCtrl})
+	m = pressKey(asModel(tm), tea.KeyEnter)
+	if f, _ := loadPlayFilters(jqplay.DialectJQ, jqplay.ScopeProject).Get("big"); f.SelfTest.Has() {
+		t.Fatal("no sample may be written past the budget")
 	}
 }

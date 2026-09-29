@@ -451,6 +451,10 @@ var jetbrainsRows = []row{
 	// needs the Kitty protocol besides; v sits in the ctrl+alt family next to
 	// c, the clipboard pair's other half — the result goes somewhere else.
 	{"ctrl+alt+v", "playground.export", "Export playground result", Global, "jq/yq playground (#2788)"},
+	// Re-run every saved filter's self-test (#2792). Global like its siblings;
+	// a for assert — one of the two ctrl+alt letters no default (and no
+	// folded cmd+alt chord) claims yet.
+	{"ctrl+alt+a", "playground.checkFilters", "Check saved playground filters", Global, "jq/yq playground (#2792)"},
 	// Go to Line:Column (#2486): JetBrains' cmd+l. The Cmd→Ctrl fold puts it
 	// on ctrl+l off macOS, which no other default claims. JetBrains' Linux
 	// chord (ctrl+g) is *not* bound: editor.caret.addNext already owns it in
