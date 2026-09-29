@@ -241,8 +241,15 @@ type playState struct {
 	// an earlier one — or a debounce tick left over from it — is dropped, so
 	// nothing overwrites the error until the program compiles again.
 	compileBad bool
-	haveResult bool
-	pending    bool
+	// compileDiag places the compile error in the program (#2781), for the
+	// query line to underline; compileProg is the program text it was found
+	// in. The mark is drawn only while compileBad holds and the text is still
+	// that program, so it clears with the fix and can never point into an
+	// edit the check has not seen.
+	compileDiag jqplay.Diagnostic
+	compileProg string
+	haveResult  bool
+	pending     bool
 	// dimming reports whether the pending evaluation has been running long
 	// enough (playDimDelay) to dim the result body (#2777) — set by
 	// firePlayDim, cleared whenever a new run starts or one finishes, so a
@@ -1106,7 +1113,8 @@ func (m *Model) firePlayDebounce(msg playDebounceMsg) tea.Cmd {
 // screen under the stale banner exactly as after a failed run (#2412).
 func (m *Model) compilePlay() bool {
 	s := m.play
-	err := jqplay.Compile(s.dialect, s.program.Text)
+	diag := jqplay.Check(s.dialect, s.program.Text)
+	err := diag.Msg
 	if err == "" {
 		if s.compileBad {
 			// The error was this check's, so it goes with the fix; the run
@@ -1118,6 +1126,7 @@ func (m *Model) compilePlay() bool {
 	}
 	s.cancelRun()
 	s.compileBad, s.runErr = true, err
+	s.compileDiag, s.compileProg = diag, s.program.Text
 	s.pending, s.dimming, s.spinning = false, false, false
 	m.sizePlayResult() // the stale banner costs a row while it is up
 	return false
@@ -2359,6 +2368,8 @@ func (m Model) playQueryRows(width int) []string {
 		}
 		if cur == l.End && idx == curRow {
 			row += cursor.Render(" ")
+		} else if l.End == len(r) {
+			row += m.playErrorEndCell(s.program.Text, len(r))
 		}
 		if idx == start+rows-1 && idx < len(lines)-1 {
 			row += "…"
@@ -2420,6 +2431,8 @@ func (m Model) playHighlighted(program string, pos, width int) string {
 	}
 	if pos >= 0 && pos >= end {
 		b.WriteString(cursor.Render(" "))
+	} else if end == len(r) {
+		b.WriteString(m.playErrorEndCell(program, len(r)))
 	}
 	if end < len(r) {
 		b.WriteString("…")
@@ -2539,13 +2552,58 @@ func (s *playState) spinSuffix() string {
 // the editor's rainbow cycle by depth, an unpaired bracket in the error
 // colour, a top-level `|` bold in the accent colour so the pipeline's stages
 // stand out. xmq programs are shell words, not pipelines: they get the
-// brackets only. A select-all keeps its uniform selection style.
+// brackets only. The current compile error's span (#2781) is painted over all
+// of it. A select-all keeps its uniform selection style.
 func (m Model) playStructurePainter(program string, tokens []jqplay.Token, styles map[jqplay.Kind]lipgloss.Style) func(int) lipgloss.Style {
 	plain := func(i int) lipgloss.Style { return styles[jqplay.KindAt(tokens, i)] }
 	s := m.play
 	if s != nil && s.program.Selected() && !s.bufFocus && m.playFocused() {
 		return plain
 	}
+	pal := m.pal()
+	// The compile error's span (#2781) wins over everything but the cursor:
+	// it is the one mark that says where to look.
+	if start, end, ok := m.playErrorSpan(program); ok {
+		base := m.playStructureOnly(program, tokens, plain)
+		errMark := lipgloss.NewStyle().Foreground(pal.Error).Underline(true).Bold(true)
+		return func(i int) lipgloss.Style {
+			if i >= start && i < end {
+				return errMark
+			}
+			return base(i)
+		}
+	}
+	return m.playStructureOnly(program, tokens, plain)
+}
+
+// playErrorSpan is the rune span of program the query line marks as the
+// compile error (#2781): only while the program does not compile, only for
+// the text the check placed the error in, and only when the error has a
+// position at all — an unplaceable error stays an info-row message. The span
+// may end one past the program: an unexpected end marks the cell after it.
+func (m Model) playErrorSpan(program string) (start, end int, ok bool) {
+	s := m.play
+	if s == nil || !s.compileBad || s.compileProg != program || !s.compileDiag.HasSpan() {
+		return 0, 0, false
+	}
+	return s.compileDiag.Start, s.compileDiag.End, true
+}
+
+// playErrorEndCell renders the cell past the program's last rune when the
+// compile error points there (an unexpected end, #2781): a blank in the
+// error colour, standing where the missing text would go. It is "" when the
+// span does not reach that cell; a cursor drawn there takes the cell instead.
+func (m Model) playErrorEndCell(program string, n int) string {
+	if start, end, ok := m.playErrorSpan(program); ok && start <= n && n < end {
+		return lipgloss.NewStyle().Background(m.pal().Error).Render(" ")
+	}
+	return ""
+}
+
+// playStructureOnly is playStructurePainter's structure half: plain overridden
+// by the bracket and pipe marks.
+func (m Model) playStructureOnly(program string, tokens []jqplay.Token, plain func(int) lipgloss.Style) func(int) lipgloss.Style {
+	s := m.play
 	marks := jqplay.Structure(program, tokens, s == nil || s.dialect != jqplay.DialectXMQ)
 	if len(marks) == 0 {
 		return plain

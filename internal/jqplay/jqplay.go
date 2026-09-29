@@ -343,27 +343,9 @@ func Run(ctx context.Context, program string, in *Input) Result {
 // it is the shell-word split runXMQ starts with, the only part of an xmq
 // command line the playground can judge without running the binary. An empty
 // program compiles in every dialect: Run treats it as idle (jq, yq) or as the
-// bare pretty-print (xmq).
-func Compile(d Dialect, program string) string {
-	program = strings.TrimSpace(program)
-	if d == DialectXMQ {
-		if _, err := ShellWords(program); err != nil {
-			return err.Error()
-		}
-		return ""
-	}
-	if program == "" {
-		return ""
-	}
-	query, err := gojq.Parse(program)
-	if err != nil {
-		return err.Error()
-	}
-	if _, err := gojq.Compile(query); err != nil {
-		return err.Error()
-	}
-	return ""
-}
+// bare pretty-print (xmq). Check is the same check with the error's position
+// in the program (#2781).
+func Compile(d Dialect, program string) string { return Check(d, program).Msg }
 
 // runtimeError renders the error a jq program raised. A cancelled context
 // surfaces as its own message: gojq reports the abort as an ordinary error

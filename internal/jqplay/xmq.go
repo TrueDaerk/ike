@@ -198,7 +198,8 @@ func xmqOutputExt(args []string) string {
 // double quotes group with backslash escapes, a bare backslash escapes the
 // next rune. It is what lets `select //item[@name='a b']` arrive at the CLI
 // as one argument. An unterminated quote is an error the query line shows
-// rather than a guess.
+// rather than a guess; it is a *ShellWordsError naming where the problem sits
+// (#2781).
 func ShellWords(line string) ([]string, error) {
 	var (
 		args    []string
@@ -223,7 +224,7 @@ func ShellWords(line string) ([]string, error) {
 				j++
 			}
 			if j >= len(r) {
-				return nil, errors.New("unterminated ' quote")
+				return nil, &ShellWordsError{Msg: "unterminated ' quote", Start: i, End: len(r)}
 			}
 			i = j
 		case c == '"':
@@ -237,12 +238,12 @@ func ShellWords(line string) ([]string, error) {
 				j++
 			}
 			if j >= len(r) {
-				return nil, errors.New(`unterminated " quote`)
+				return nil, &ShellWordsError{Msg: `unterminated " quote`, Start: i, End: len(r)}
 			}
 			i = j
 		case c == '\\':
 			if i+1 >= len(r) {
-				return nil, errors.New("trailing backslash")
+				return nil, &ShellWordsError{Msg: "trailing backslash", Start: i, End: i + 1}
 			}
 			started = true
 			i++
