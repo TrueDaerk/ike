@@ -657,6 +657,28 @@ the rest — a late result from a superseded run is dropped before any of this,
 whether it succeeded or failed, so an old error can never raise a banner over
 a newer good result.
 
+**The result body itself dims while it is stale (#2777)**, since text that
+looks identical to a fresh result is easy to misread as current. `playState`
+tracks two conditions and ORs them into `playDimmed`:
+
+- `playStale` (above) dims immediately — a failed run or broken input is
+  already stale the moment the error lands;
+- a still-**pending** evaluation dims only once it has run longer than
+  `playDimDelay` (300ms) without landing. `armPlayDim` schedules a
+  generation-stamped `playDimMsg` tick alongside every run's start
+  (`schedulePlayEval`, `runPlayNow`); `firePlayDim` sets `dimming` if that
+  generation is still the current one and still pending. Most keystrokes
+  finish well inside the delay and the buffer never flickers; a genuinely
+  slow evaluation dims in place of a fresh-looking stale value.
+
+The dim itself lives in `editor.Model.SetDimmed`, not the playground: it
+renders the whole buffer body **faint**, the same idiom used for other
+disabled/muted text in the app. It is applied in the render pipeline's
+per-cell default case, below the cursor, selection and search-match cases in
+the `switch` — those already fully render and `continue` before reaching it,
+so a stale result's search highlights and cursor stay at full brightness
+while the surrounding text dims.
+
 ## Syntax highlighting
 
 The query line is colorized by a **single-pass rune scanner** (`jqplay.Tokens`),

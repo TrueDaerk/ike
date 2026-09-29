@@ -1404,6 +1404,14 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 				st = st.Underline(true).UnderlineColor(m.diagColor(sev))
 				styled = true
 			}
+			if m.dimmed {
+				// Stale-content cue (#2777): faint composes over whatever the
+				// syntax/identifier/swatch colour above chose. Cursor,
+				// selection and search already rendered and returned in the
+				// earlier cases, so they never reach here.
+				st = st.Faint(true)
+				styled = true
+			}
 			if styled {
 				b.WriteString(st.Render(cell))
 			} else {

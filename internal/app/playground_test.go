@@ -29,9 +29,9 @@ import (
 // human-scale delay, so a test drives the dialog without sleeping.
 func noDebounce(t *testing.T) {
 	t.Helper()
-	prev := playDebounce
-	playDebounce = 0
-	t.Cleanup(func() { playDebounce = prev })
+	prev, prevDim := playDebounce, playDimDelay
+	playDebounce, playDimDelay = 0, 0
+	t.Cleanup(func() { playDebounce, playDimDelay = prev, prevDim })
 }
 
 // playApp opens body as a .json file in the focused editor and returns the
@@ -270,6 +270,82 @@ func TestJQPlaygroundErrorKeepsLastGoodResult(t *testing.T) {
 	}
 	if !strings.Contains(row, "showing the last good result (1 value(s))") {
 		t.Errorf("the error row should name the result on screen, got %q", row)
+	}
+}
+
+// TestJQPlaygroundStaleResultDimmed (#2777): a failed run dims the result
+// body so a stale value does not read as a fresh one, and fixing the program
+// restores normal colour.
+func TestJQPlaygroundStaleResultDimmed(t *testing.T) {
+	m := openJQ(t, playApp(t, `[{"x":1},3]`))
+	m = setProgram(m, ".[0]")
+	good := m.play.result.Text()
+	_ = m.playInlineBody(200) // triggers SetDimmed for the rendered view below
+	freshFaint := strings.Count(m.play.resultEd.View(), "\x1b[2m")
+	if m.play.playDimmed() {
+		t.Fatal("a fresh result must not be dimmed")
+	}
+
+	m = setProgram(m, ".[] | .x") // fails against the second, non-object element
+	if m.play.runErr == "" {
+		t.Fatal("the failing program must report a runtime error")
+	}
+	if !m.play.playDimmed() {
+		t.Fatal("a stale result (failed run) must be dimmed")
+	}
+	if got := m.play.result.Text(); got != good {
+		t.Errorf("the stale body must still show the last good result %q, got %q", good, got)
+	}
+	_ = m.playInlineBody(200)
+	staleFaint := strings.Count(m.play.resultEd.View(), "\x1b[2m")
+	if staleFaint <= freshFaint {
+		t.Errorf("a stale result must render its body faint (%d faint spans, want more than the fresh result's %d)", staleFaint, freshFaint)
+	}
+
+	m = setProgram(m, ".[0]") // back to a valid query
+	if m.play.playDimmed() {
+		t.Fatal("fixing the program must clear the dim")
+	}
+	_ = m.playInlineBody(200)
+	if got := strings.Count(m.play.resultEd.View(), "\x1b[2m"); got != freshFaint {
+		t.Errorf("a restored result must render like the original fresh one (%d faint spans, want %d)", got, freshFaint)
+	}
+}
+
+// TestJQPlaygroundPendingDimDelay (#2777): a pending evaluation shorter than
+// playDimDelay must not dim the buffer, only one that outlasts it.
+func TestJQPlaygroundPendingDimDelay(t *testing.T) {
+	m := openJQ(t, playApp(t, `{"foo":1}`))
+	s := m.play
+
+	// A run that finishes before the tick lands: finishPlayEval clears
+	// pending, so the tick's arrival is a no-op.
+	s.gen++
+	s.pending, s.dimming = true, false
+	s.pending = false // the run completed before the delay elapsed
+	if cmd := m.firePlayDim(playDimMsg{st: s, gen: s.gen}); cmd != nil {
+		t.Fatal("firePlayDim must not return a follow-up command")
+	}
+	if s.dimming {
+		t.Error("a tick delivered after the run finished must not dim it")
+	}
+
+	// A run still pending when the tick lands is long-running enough to dim.
+	s.gen++
+	s.pending, s.dimming = true, false
+	m.firePlayDim(playDimMsg{st: s, gen: s.gen})
+	if !s.dimming {
+		t.Error("a tick delivered while still pending must dim the result")
+	}
+	if !s.playDimmed() {
+		t.Error("playDimmed must report the long-pending run as dim")
+	}
+
+	// A superseded generation is dropped.
+	s.dimming = false
+	m.firePlayDim(playDimMsg{st: s, gen: s.gen - 1})
+	if s.dimming {
+		t.Error("a stale generation must not dim the result")
 	}
 }
 
