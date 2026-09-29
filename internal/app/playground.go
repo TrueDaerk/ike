@@ -223,6 +223,11 @@ type playState struct {
 	srcLen  int
 
 	program ui.Field
+	// stage is the pipeline stage the stepping mode (#2785) cut the program
+	// after, 1-based, 0 when off; stageProg is the program text it was picked
+	// over, so an edit ends the mode (playstage.go).
+	stage     int
+	stageProg string
 	// opts are jq's -r / -c / -s toggles (#2784), handed to every run; the
 	// info row's chips show them. Always zero for xmq.
 	opts jqplay.Options
@@ -1157,6 +1162,7 @@ func (m *Model) schedulePlayEval() tea.Cmd {
 	if s == nil || s.inputErr != "" {
 		return nil
 	}
+	s.syncPlayStage()
 	if !m.compilePlay() {
 		return nil
 	}
@@ -1188,7 +1194,7 @@ func (m *Model) firePlayDebounce(msg playDebounceMsg) tea.Cmd {
 // screen under the stale banner exactly as after a failed run (#2412).
 func (m *Model) compilePlay() bool {
 	s := m.play
-	diag := jqplay.Check(s.dialect, s.program.Text)
+	diag := jqplay.Check(s.dialect, s.playEvalProgram())
 	err := diag.Msg
 	if err == "" {
 		if s.compileBad {
@@ -1214,6 +1220,7 @@ func (m *Model) runPlayNow() tea.Cmd {
 	if s == nil || s.inputErr != "" || s.input == nil {
 		return nil // still parsing, or the input never became one
 	}
+	s.syncPlayStage()
 	if !m.compilePlay() {
 		return nil
 	}
@@ -1233,7 +1240,7 @@ func (m *Model) runPlay() tea.Cmd {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), jqplay.EvalTimeout)
 	s.cancel = cancel
-	program, in, gen, opts := s.program.Text, s.input, s.gen, s.opts
+	program, in, gen, opts := s.playEvalProgram(), s.input, s.gen, s.opts
 	parse := s.parseDur
 	// The change diff (#2787) compares against the installed good result;
 	// with none — the first run, or the first after a clear — there is
@@ -1278,7 +1285,11 @@ func (m *Model) finishPlayEval(msg playEvalDoneMsg) tea.Cmd {
 	s.result, s.haveResult = msg.res, true
 	s.shownText, s.changes = msg.text, msg.changes
 	s.elapsed, s.parseDur = msg.dur, 0
-	m.rememberPlayProgram(s.srcKey, s.srcPath, s.program.Text, msg.res.Options())
+	// A stage's cut is not the user's program (#2785): only a full run
+	// becomes the input's last valid one.
+	if _, _, stepping := s.playStepping(); !stepping {
+		m.rememberPlayProgram(s.srcKey, s.srcPath, s.program.Text, msg.res.Options())
+	}
 	m.sizePlayResult()
 	return m.syncPlayResultBuffer()
 }
@@ -1505,6 +1516,11 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	switch msg.String() {
 	case "esc":
+		// Stepping through the stages (#2785) is left first: esc goes back
+		// to the full program before it closes the mode.
+		if cmd, ok := m.leavePlayStepping(); ok {
+			return m, cmd
+		}
 		m.leavePlaygroundOnEsc()
 		return m, nil
 	case "tab":
@@ -1677,6 +1693,9 @@ func (m Model) updatePlayBufferKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.endPlayFindReturnToQuery()
 		}
 		if s.resultEd.ModeName() == editor.Normal {
+			if cmd, ok := m.leavePlayStepping(); ok {
+				return m, cmd
+			}
 			m.leavePlaygroundOnEsc()
 			return m, nil
 		}
@@ -2254,7 +2273,24 @@ func (m Model) playModeSegment() string {
 // whole `·`-separated segments on a narrow pane instead of being cut
 // mid-word. Truncation is cell-aware (ansi.Truncate), so a wide glyph in the
 // source label cannot overflow the row.
+//
+// While stepping through the stages (#2785) the `stage k/n` counter leads the
+// line whatever follows it — an error in the cut program included, which is
+// exactly when the reader needs to know it is not the full program failing.
 func (m Model) playInfoLine(width int) string {
+	stage := m.playStageSegment()
+	if stage == "" {
+		return m.playInfoText(width)
+	}
+	rest := width - ansi.StringWidth(stage) - 3
+	if rest < 1 {
+		return ansi.Truncate(stage, width, "…")
+	}
+	return stage + lipgloss.NewStyle().Foreground(m.pal().Hint).Render(" · ") + m.playInfoText(rest)
+}
+
+// playInfoText is playInfoLine without the stage counter.
+func (m Model) playInfoText(width int) string {
 	s := m.play
 	pal := m.pal()
 	hint := lipgloss.NewStyle().Foreground(pal.Hint)
@@ -2303,7 +2339,19 @@ func (m Model) playInfoLine(width int) string {
 // json.jqQueryView, so a rebind renames the hint with it, and it sits early in
 // the list: a program that does not fit the row is exactly the situation in
 // which the hint has to survive a narrow pane.
+//
+// While stepping through the stages (#2785) the way back to the full program
+// leads: esc no longer closes the mode first, and the hint says so.
 func (m Model) playHints() []string {
+	hints := m.playFocusHints()
+	if _, _, ok := m.play.playStepping(); ok {
+		return append([]string{"esc full program"}, hints...)
+	}
+	return hints
+}
+
+// playFocusHints is playHints for the focus holding the keyboard.
+func (m Model) playFocusHints() []string {
 	s := m.play
 	view := m.playQueryViewChord() + " full query"
 	if s.expanded {
@@ -2704,8 +2752,10 @@ func (m Model) playStructurePainter(program string, tokens []jqplay.Token, style
 	pal := m.pal()
 	// The compile error's span (#2781) wins over everything but the cursor:
 	// it is the one mark that says where to look.
+	// The stepping highlight (#2785) lies under all of it: a background on the
+	// selected stage, the dropped tail faint.
+	base := m.playStagePainter(program, m.playStructureOnly(program, tokens, plain))
 	if start, end, ok := m.playErrorSpan(program); ok {
-		base := m.playStructureOnly(program, tokens, plain)
 		errMark := lipgloss.NewStyle().Foreground(pal.Error).Underline(true).Bold(true)
 		return func(i int) lipgloss.Style {
 			if i >= start && i < end {
@@ -2714,7 +2764,7 @@ func (m Model) playStructurePainter(program string, tokens []jqplay.Token, style
 			return base(i)
 		}
 	}
-	return m.playStructureOnly(program, tokens, plain)
+	return base
 }
 
 // playErrorSpan is the rune span of program the query line marks as the

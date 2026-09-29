@@ -7463,6 +7463,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.togglePlayStructure()
 		return m, nil
 
+	case StepPlayStageMsg:
+		// playground.stageNext / stagePrev (ctrl+alt+shift+→ / ←, #2785):
+		// select a pipeline stage and show the program's output up to it.
+		cmd := m.stepPlayStage(msg.Delta)
+		m.sizePlayResult()
+		return m, cmd
+
 	case TogglePlayOptionMsg:
 		// json.jqToggleRaw / …Compact / …Slurp (ctrl+alt+q / c / s, or a click
 		// on the info row's chips, #2784): flip jq's -r / -c / -s and rerun.

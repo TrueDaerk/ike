@@ -231,6 +231,8 @@ bring their own.
 | Check Saved Playground Filters | `playground.checkFilters` | `ctrl+alt+a` | — | everywhere |
 | Export Playground Result… | `playground.export` | `ctrl+alt+v` | — | everywhere |
 | Open Playground for This File | `playground.open` | `cmd+shift+j` | — | everywhere |
+| Playground: Step to Next Pipeline Stage | `playground.stageNext` | `ctrl+alt+shift+right` | — | everywhere |
+| Playground: Step to Previous Pipeline Stage | `playground.stagePrev` | `ctrl+alt+shift+left` | — | everywhere |
 | Toggle Playground Structure Strip | `playground.structure` | `ctrl+alt+g` | — | everywhere |
 | Re-render Preview Diagrams | `preview.rerenderDiagrams` | — | — | everywhere |
 | Problems | `problems.toggle` | `cmd+8` | — | everywhere |

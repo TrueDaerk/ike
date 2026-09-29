@@ -1,5 +1,16 @@
 # Log
 
+## 2026-09-29 (jq playground: pipeline stepping, #2785)
+
+- `playground.stageNext` / `playground.stagePrev` (`ctrl+alt+shift+→` / `←`)
+  select a top-level pipeline stage; the result shows the program cut after
+  it (`jqplay.StageProgram`, ` | .` completing a dangling `as` binding), the
+  info row leads with `stage k/n`, and both query views highlight the stage.
+  Any edit, or `esc`, returns to the full program; xmq notifies. Stage
+  boundaries reuse the wrap's `pipeSegments`, restricted to the top level.
+  `ctrl+alt+←/→` is editor tab cycling, hence the shift.
+  Docs: `/architecture/jq-playground.md`, `/architecture/keybindings.md`.
+
 ## 2026-09-29 (jq playground: structure strip, #2793)
 
 - `playground.structure` (`ctrl+alt+g`) toggles a strip on the result's right

@@ -103,6 +103,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | New scratch from selection | `cmd+alt+shift+s` | `ctrl+alt+shift+s` | `scratch.newFromSelection` |
 | New terminal | `cmd+alt+shift+t` | `ctrl+alt+shift+t` | `terminal.new` |
 | Next bookmark | `shift+f11` | `shift+f11` | `bookmark.next` |
+| Next pipeline stage | `ctrl+alt+shift+right` | `ctrl+alt+shift+right` | `playground.stageNext` |
 | Next project in group | `cmd+alt+right-bracket` | `ctrl+alt+right-bracket` | `project.group.next` |
 | Next project in group | `ctrl+alt+right-bracket` | `ctrl+alt+right-bracket` | `project.group.next` |
 | Next search match | `cmd+g` | `ctrl+g` | `search.nextMatch` |
@@ -122,6 +123,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Pinned files | `cmd+2` | `ctrl+2` | `nav.pins` |
 | Popup terminal | `cmd+alt+t` | `ctrl+alt+t` | `terminal.popup` |
 | Previous bookmark | `ctrl+shift+f11` | `ctrl+shift+f11` | `bookmark.previous` |
+| Previous pipeline stage | `ctrl+alt+shift+left` | `ctrl+alt+shift+left` | `playground.stagePrev` |
 | Previous project in group | `cmd+alt+left-bracket` | `ctrl+alt+left-bracket` | `project.group.prev` |
 | Previous project in group | `ctrl+alt+left-bracket` | `ctrl+alt+left-bracket` | `project.group.prev` |
 | Previous search match | `cmd+shift+g` | `ctrl+shift+g` | `search.prevMatch` |

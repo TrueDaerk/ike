@@ -72,6 +72,11 @@ var intentionalDefaultShadows = map[string]string{
 	// or HTTP pane the request cancel (#2404) keeps the chord — the append
 	// has no meaning there.
 	shadowKey("ctrl+.", "http.cancel", "json.jqAppendPath"): "playground-only append-path under the HTTP cancel",
+	// The same shape for the pipeline stepping (#2785): off macOS the Cmd→Ctrl
+	// fold lands editor.splitViewRight on ctrl+alt+shift+right in the Editor
+	// context; the playground resolves Global only, so the stage step keeps
+	// the chord where it means something.
+	shadowKey("ctrl+alt+shift+right", "editor.splitViewRight", "playground.stageNext"): "linux Cmd-fold: split view over the playground-only stage step",
 	// The shared find chord (#2409): search.open is the Global fallback that
 	// opens whatever the focused pane calls its search, and with an editor
 	// focused the editor's own find deliberately wins — the editor *is* the
