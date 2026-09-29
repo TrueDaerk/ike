@@ -1741,6 +1741,7 @@ JetBrains is:
 | `playground.structure` | `ctrl+alt+g` | fragile | `palette` | live via palette |
 | `playground.tableView` | `ctrl+alt+l` | fragile | `palette` | live via palette |
 | `playground.variables` | `ctrl+alt+b` | fragile | `palette` | live via palette |
+| `playground.yqRoundTrip` | `ctrl+alt+shift+y` | fragile | `palette / info-row chip click` | live via palette / info-row chip click |
 | `problems.toggle` | `cmd+8` | fragile | `palette` | live via palette |
 | `project.close` | `cmd+shift+w` | fragile | `palette / File menu` | live via palette / File menu |
 | `project.findInAllProjects` | `cmd+alt+shift+f` | fragile | `palette` | live via palette |

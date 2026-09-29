@@ -1,6 +1,7 @@
 package jqplay
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -213,5 +214,235 @@ func TestJQPathIsUnchanged(t *testing.T) {
 	}
 	if _, err := Parse("nope"); err == nil || !strings.Contains(err.Error(), "not valid JSON") {
 		t.Errorf("the jq input error = %v, want the original JSON wording", err)
+	}
+}
+
+// rtManifest is the round-trip fixture (#2798): a commented, anchored
+// manifest in the encoder's own layout, so a round-tripped edit is the
+// fixture with one line changed.
+const rtManifest = `# Deployment for the api
+apiVersion: apps/v1
+kind: Deployment # the kind
+metadata:
+  name: api
+  labels: # inline labels comment
+    app: api
+  # annotations block
+  annotations:
+    team: "core"
+spec:
+  replicas: 1 # scale me
+  template: &tpl
+    image: 'alpine:3'
+    ports: [80, 443]
+  other: *tpl
+`
+
+// runRT runs program over text with the round-trip on.
+func runRT(t *testing.T, program, text string) Result {
+	t.Helper()
+	return runOpts(t, DialectYQ, program, text, Options{RoundTrip: true})
+}
+
+// TestYQRoundTripEditKeepsEverythingElse is the acceptance case: an
+// assignment on a commented manifest keeps every comment, anchor, alias,
+// quoting style, flow sequence and key order; only that scalar changes.
+func TestYQRoundTripEditKeepsEverythingElse(t *testing.T) {
+	res := runRT(t, ".spec.replicas = 3", rtManifest)
+	if res.Err != "" {
+		t.Fatalf("unexpected error %q", res.Err)
+	}
+	want := strings.TrimRight(strings.Replace(rtManifest, "replicas: 1", "replicas: 3", 1), "\n")
+	if res.Text() != want {
+		t.Errorf("round-trip = \n%s\nwant\n%s", res.Text(), want)
+	}
+	if res.Note() != "" {
+		t.Errorf("note = %q, want none", res.Note())
+	}
+	// Off, the plain serializer drops the comments and sorts the keys.
+	plain := runOpts(t, DialectYQ, ".spec.replicas = 3", rtManifest, Options{})
+	if strings.Contains(plain.Text(), "#") || !strings.HasPrefix(plain.Text(), "apiVersion") || strings.Contains(plain.Text(), "&tpl") {
+		t.Errorf("plain = \n%s\nwant no comments and no anchors", plain.Text())
+	}
+}
+
+// TestYQRoundTripDeleteTakesItsComment: deleting a mapping removes the
+// mapping and its inline comment, nothing else — the head comment of the
+// key after it stays.
+func TestYQRoundTripDeleteTakesItsComment(t *testing.T) {
+	res := runRT(t, "del(.metadata.labels)", rtManifest)
+	if res.Err != "" {
+		t.Fatalf("unexpected error %q", res.Err)
+	}
+	want := strings.TrimRight(strings.Replace(rtManifest, "  labels: # inline labels comment\n    app: api\n", "", 1), "\n")
+	if res.Text() != want {
+		t.Errorf("round-trip = \n%s\nwant\n%s", res.Text(), want)
+	}
+}
+
+// TestYQRoundTripStringEditKeepsQuoting: a changed string keeps the quoting
+// style it was written in, and its line comment.
+func TestYQRoundTripStringEditKeepsQuoting(t *testing.T) {
+	res := runRT(t, `.spec.template.image = "alpine:4"`, rtManifest)
+	if !strings.Contains(res.Text(), "template: &tpl\n    image: 'alpine:4'\n    ports: [80, 443]\n") {
+		t.Errorf("round-trip = \n%s\nwant the single-quoted style and the anchor kept", res.Text())
+	}
+	// The program ran over the expanded tree, so `other: *tpl` still holds
+	// the old value: the alias is written out as a copy of it.
+	if !strings.Contains(res.Text(), "  other:\n    image: 'alpine:3'\n    ports: [80, 443]") || res.Note() != "" {
+		t.Errorf("round-trip = \n%s\n(note %q) want the alias written out with its old value", res.Text(), res.Note())
+	}
+	res = runRT(t, `.kind = "StatefulSet"`, rtManifest)
+	if !strings.Contains(res.Text(), "kind: StatefulSet # the kind") {
+		t.Errorf("round-trip = \n%s\nwant the line comment kept on the new value", res.Text())
+	}
+}
+
+// TestYQRoundTripAddsNewKeysAtTheEnd: a key the program adds is appended
+// after the written ones; the written order is kept.
+func TestYQRoundTripAddsNewKeysAtTheEnd(t *testing.T) {
+	res := runRT(t, `.metadata.namespace = "prod"`, rtManifest)
+	want := "  annotations:\n    team: \"core\"\n  namespace: prod\nspec:"
+	if !strings.Contains(res.Text(), want) {
+		t.Errorf("round-trip = \n%s\nwant the new key appended to metadata", res.Text())
+	}
+}
+
+// TestYQRoundTripSequenceEdits: deleting an item keeps its neighbours'
+// comments, inserting one shifts the rest instead of rewriting them.
+func TestYQRoundTripSequenceEdits(t *testing.T) {
+	in := "items:\n  - a # first\n  - b # second\n  - c # third\n"
+	res := runRT(t, "del(.items[0])", in)
+	if want := "items:\n  - b # second\n  - c # third"; res.Text() != want {
+		t.Errorf("delete = %q, want %q", res.Text(), want)
+	}
+	res = runRT(t, `.items = ["z"] + .items`, in)
+	if want := "items:\n  - z\n  - a # first\n  - b # second\n  - c # third"; res.Text() != want {
+		t.Errorf("insert = %q, want %q", res.Text(), want)
+	}
+	res = runRT(t, `.items[1] = "B"`, in)
+	if want := "items:\n  - a # first\n  - B # second\n  - c # third"; res.Text() != want {
+		t.Errorf("edit = %q, want %q", res.Text(), want)
+	}
+}
+
+// TestYQRoundTripReshapeFallsBack: a program that reshapes the document, or
+// produces several outputs, renders plainly with a note — never a crash.
+func TestYQRoundTripReshapeFallsBack(t *testing.T) {
+	cases := []struct{ program, note string }{
+		{"to_entries", rtSkipReshaped},
+		{".spec, .metadata", rtSkipMulti},
+		{".metadata | keys", rtSkipReshaped},
+		{"[.kind]", rtSkipReshaped},
+		{"empty", ""},
+	}
+	for _, c := range cases {
+		res := runRT(t, c.program, rtManifest)
+		if res.Err != "" {
+			t.Errorf("%s: unexpected error %q", c.program, res.Err)
+		}
+		plain := runOpts(t, DialectYQ, c.program, rtManifest, Options{})
+		if res.Text() != plain.Text() {
+			t.Errorf("%s: fallback = %q, want the plain form %q", c.program, res.Text(), plain.Text())
+		}
+		want := ""
+		if c.note != "" {
+			want = roundTripSkipped(c.note)
+		}
+		if res.Note() != want {
+			t.Errorf("%s: note = %q, want %q", c.program, res.Note(), want)
+		}
+	}
+}
+
+// TestYQRoundTripVerifiesTheResult: a change the tree cannot express —
+// deleting a key a merge supplies — falls back rather than showing a
+// document that reads back differently; editing such a key writes it out
+// explicitly, which wins over the merge.
+func TestYQRoundTripVerifiesTheResult(t *testing.T) {
+	in := "base: &b\n  image: alpine\n  pull: always\nsvc:\n  <<: *b\n  pull: never\n"
+	res := runRT(t, "del(.svc.image)", in)
+	if res.Note() != roundTripSkipped(rtSkipDiffers) {
+		t.Errorf("note = %q, want the verification fallback", res.Note())
+	}
+	if strings.Contains(res.Text(), "<<") {
+		t.Errorf("fallback = %q, want the plain form", res.Text())
+	}
+	res = runRT(t, `.svc.image = "busybox"`, in)
+	if res.Note() != "" {
+		t.Fatalf("note = %q, want none", res.Note())
+	}
+	if want := "base: &b\n  image: alpine\n  pull: always\nsvc:\n  <<: *b\n  pull: never\n  image: busybox"; res.Text() != want {
+		t.Errorf("merged edit = %q, want %q", res.Text(), want)
+	}
+	// An untouched merged mapping stays as written — no explicit copies of
+	// the keys the merge supplies.
+	res = runRT(t, `.base.pull = "never"`, in)
+	if want := "base: &b\n  image: alpine\n  pull: never\nsvc:\n  <<: *b\n  pull: never"; res.Text() != want {
+		t.Errorf("anchor edit = %q, want %q", res.Text(), want)
+	}
+}
+
+// TestYQRoundTripMultiDocument: every document of a stream is patched
+// against its own tree.
+func TestYQRoundTripMultiDocument(t *testing.T) {
+	in := "# one\nkind: Service # svc\n---\n# two\nkind: Deployment\n"
+	res := runRT(t, `.kind = "X"`, in)
+	if want := "# one\nkind: X # svc\n---\n# two\nkind: X"; res.Text() != want {
+		t.Errorf("round-trip = %q, want %q", res.Text(), want)
+	}
+	// One output per document, delivered page by page, patches the same way.
+	parsed, err := DialectYQ.Parse(in)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := Start(context.Background(), `.kind = "X"`, parsed, Options{RoundTrip: true})
+	defer p.Stop()
+	shape := p.Shape()
+	for {
+		pg, ok := p.Next(context.Background())
+		if !ok {
+			break
+		}
+		shape.Append(pg)
+	}
+	if want := "# one\nkind: X # svc\n---\n# two\nkind: X"; shape.Text() != want || shape.Note() != "" {
+		t.Errorf("paged round-trip = %q (note %q)", shape.Text(), shape.Note())
+	}
+}
+
+// TestYQRoundTripSkipsUnderOtherToggles: compact output and a slurped input
+// have no document to patch; the note says which toggle is in the way. Raw
+// output of a string is the string, as asked.
+func TestYQRoundTripSkipsUnderOtherToggles(t *testing.T) {
+	res := runOpts(t, DialectYQ, ".", rtManifest, Options{RoundTrip: true, Compact: true})
+	if res.Note() != roundTripSkipped(rtSkipCompact) || strings.Contains(res.Text(), "#") {
+		t.Errorf("compact: note %q text %q", res.Note(), res.Text())
+	}
+	res = runOpts(t, DialectYQ, ".", rtManifest, Options{RoundTrip: true, Slurp: true})
+	if res.Note() != roundTripSkipped(rtSkipSlurp) || !strings.HasPrefix(res.Text(), "- ") {
+		t.Errorf("slurp: note %q text %q", res.Note(), res.Text())
+	}
+	res = runOpts(t, DialectYQ, ".kind", rtManifest, Options{RoundTrip: true, Raw: true})
+	if res.Text() != "Deployment" {
+		t.Errorf("raw string = %q", res.Text())
+	}
+	if res := runOpts(t, DialectJQ, ".", `{"a":1}`, Options{RoundTrip: true}); res.Note() != "" || res.Text() != "{\n  \"a\": 1\n}" {
+		t.Errorf("jq ignores the toggle: note %q text %q", res.Note(), res.Text())
+	}
+}
+
+// TestYQRoundTripIdentityIsTheDocument: `.` round-trips to the document as
+// written, comments and all — the whole point for a reader who only wants
+// to look.
+func TestYQRoundTripIdentityIsTheDocument(t *testing.T) {
+	res := runRT(t, ".", rtManifest)
+	if want := strings.TrimRight(rtManifest, "\n"); res.Text() != want {
+		t.Errorf("identity = \n%s\nwant the document", res.Text())
+	}
+	// Numbers written in another base stay as written when untouched.
+	res = runRT(t, ".b = 2", "a: 0x1f # hex\nb: 1\n")
+	if want := "a: 0x1f # hex\nb: 2"; res.Text() != want {
+		t.Errorf("hex kept = %q, want %q", res.Text(), want)
 	}
 }

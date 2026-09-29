@@ -158,6 +158,7 @@ func (m Model) playgroundChordHelp() help.Group {
 	add("playground.chainBack", "Chain back one level: the previous input and program return")
 	add("playground.variables", "Variables line: name=value entries bound as $name (#2786)")
 	add("playground.splitResult", "Split the result into its own pane beside the source; again to re-attach (#2797)")
+	add("playground.yqRoundTrip", "yq round-trip output: patch the YAML document itself, keeping comments, anchors and key order (#2798)")
 	add("editor.copy", "Copy the result buffer's selection (from either focus)")
 	add("lsp.codeAction", "Not available in the playground — says so instead of doing nothing")
 	return g

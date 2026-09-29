@@ -34,6 +34,7 @@ import (
 	"time"
 
 	"github.com/itchyny/gojq"
+	"gopkg.in/yaml.v3"
 )
 
 // MaxOutputs caps how many values one evaluation collects in total. A program
@@ -84,6 +85,10 @@ type Input struct {
 	// the dialect's own document language — "csv rows: 12" for the CSV
 	// adapter (#2791) — and is empty otherwise.
 	origin string
+	// docs are the yq input's original node trees (#2798), one per value in
+	// values' order, kept for the round-trip output that patches them; nil
+	// for the other dialects and for a slurped run.
+	docs []*yaml.Node
 	// Truncated reports that the stream held more than MaxInputValues values
 	// and the tail was dropped.
 	Truncated bool
@@ -235,6 +240,8 @@ type Result struct {
 	// progressive run (#2796) whose producer holds more; Append maintains
 	// it. A Run result is never partial.
 	partial bool
+	// note is the pages' rendering remark (#2798, Page.Note).
+	note string
 }
 
 // Dialect reports which document language the outputs are written in.
@@ -365,7 +372,7 @@ func run(ctx context.Context, program string, in *Input, opts Options) Result {
 	// producer (#2796) pages, collected in one go.
 	res := Result{dialect: in.dialect, opts: opts}
 	var pg Page
-	s := &stream{in: in, code: code, args: vars.Values(), opts: opts}
+	s := &stream{in: in, code: code, args: vars.Values(), opts: opts, rt: newRoundTripper(in, opts)}
 	s.collect(ctx, &pg, MaxOutputs, MaxResultBytes)
 	res.Append(pg)
 	res.partial = false
