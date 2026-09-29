@@ -1,5 +1,20 @@
 # Log
 
+## 2026-09-29 (jq playground: named variables, #2786)
+
+- `playground.variables` (`ctrl+alt+b`) shows / focuses / hides a variables
+  line under the query holding `name=value` entries bound as `$name` —
+  `--argjson` when the value parses as JSON, `--arg` otherwise
+  (`jqplay.ParseVars`, `Options.Vars`, `gojq.WithVariables`; `CheckWith` for
+  the compile check). A malformed line takes the info row; only a shown line
+  binds; xmq exports the variables to the CLI's environment. The header grows
+  by the row only while shown (`playVarsRows` in `playHeaderRowsFor`), and the
+  query-row click now maps through `playHeaderRowsFor` (also right under the
+  stale banner). Saved filters and the per-source last program store the line
+  (`vars`); the picker marks such filters `$`. The issue's `ctrl+alt+v` is
+  `playground.export`'s, hence `b`.
+  Docs: `/architecture/jq-playground.md`, `/architecture/keybindings.md`.
+
 ## 2026-09-29 (jq playground: pipeline stepping, #2785)
 
 - `playground.stageNext` / `playground.stagePrev` (`ctrl+alt+shift+→` / `←`)

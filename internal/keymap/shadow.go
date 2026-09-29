@@ -77,6 +77,10 @@ var intentionalDefaultShadows = map[string]string{
 	// context; the playground resolves Global only, so the stage step keeps
 	// the chord where it means something.
 	shadowKey("ctrl+alt+shift+right", "editor.splitViewRight", "playground.stageNext"): "linux Cmd-fold: split view over the playground-only stage step",
+	// And for the variables line (#2786): off macOS lsp.implementations'
+	// cmd+alt+b folds onto ctrl+alt+b in the Editor context; the playground
+	// resolves Global only, so the toggle keeps the chord there.
+	shadowKey("ctrl+alt+b", "lsp.implementations", "playground.variables"): "linux Cmd-fold: implementations over the playground-only variables line",
 	// The shared find chord (#2409): search.open is the Global fallback that
 	// opens whatever the focused pane calls its search, and with an editor
 	// focused the editor's own find deliberately wins — the editor *is* the

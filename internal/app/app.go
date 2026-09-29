@@ -7463,6 +7463,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.togglePlayStructure()
 		return m, nil
 
+	case TogglePlayVarsMsg:
+		// playground.variables (ctrl+alt+b, #2786): show / focus / hide the
+		// variables line under the query.
+		return m, m.togglePlayVars()
+
 	case StepPlayStageMsg:
 		// playground.stageNext / stagePrev (ctrl+alt+shift+→ / ←, #2785):
 		// select a pipeline stage and show the program's output up to it.

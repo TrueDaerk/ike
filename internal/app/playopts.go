@@ -98,20 +98,25 @@ func (m *Model) togglePlayOption(o PlayOption) tea.Cmd {
 // playSeedOptions is the toggles a fresh playground starts with: those the
 // source's remembered last program ran with (#1982/#2774), exactly when
 // playSeedProgram restores that program — a path-seeded or identity open
-// starts with every toggle off.
+// starts with every toggle off. The variables line (#2786) comes back the same
+// way, in Options.Vars — for xmq too, which has no toggles but does export
+// variables.
 func (m Model) playSeedOptions(d jqplay.Dialect, src playInputSource, atPath bool) jqplay.Options {
-	if atPath || d == jqplay.DialectXMQ {
+	if atPath {
 		return jqplay.Options{}
 	}
+	var o jqplay.Options
 	if last := m.playLastProgram[src.key]; last != "" {
-		return m.playLastOpts[src.key]
-	}
-	if src.path != "" {
+		o = m.playLastOpts[src.key]
+	} else if src.path != "" {
 		if last, ok := m.playLastStoreOf().Get(src.key); ok && last != "" {
-			return jqplay.ParseFlags(m.playLastStoreOf().Flags(src.key))
+			o = m.playLastStoreOf().Options(src.key)
 		}
 	}
-	return jqplay.Options{}
+	if d == jqplay.DialectXMQ {
+		o = jqplay.Options{Vars: o.Vars}
+	}
+	return o
 }
 
 // playChipsPrefix renders the chips that lead the info row, and the width

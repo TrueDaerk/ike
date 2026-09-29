@@ -234,6 +234,7 @@ bring their own.
 | Playground: Step to Next Pipeline Stage | `playground.stageNext` | `ctrl+alt+shift+right` | — | everywhere |
 | Playground: Step to Previous Pipeline Stage | `playground.stagePrev` | `ctrl+alt+shift+left` | — | everywhere |
 | Toggle Playground Structure Strip | `playground.structure` | `ctrl+alt+g` | — | everywhere |
+| Toggle Playground Variables Line | `playground.variables` | `ctrl+alt+b` | — | everywhere |
 | Re-render Preview Diagrams | `preview.rerenderDiagrams` | — | — | everywhere |
 | Problems | `problems.toggle` | `cmd+8` | — | everywhere |
 | Find in All Projects | `project.findInAllProjects` | `cmd+alt+shift+f` | — | everywhere |

@@ -329,11 +329,17 @@ func Run(ctx context.Context, program string, in *Input) Result {
 // run is Run under the toggles; RunWith has already slurped the input.
 func run(ctx context.Context, program string, in *Input, opts Options) Result {
 	program = strings.TrimSpace(program)
+	vars, err := ParseVars(opts.Vars)
+	if err != nil {
+		return Result{Err: err.Error(), dialect: in.Dialect()}
+	}
 	if in.Dialect() == DialectXMQ {
 		// The xmq dialect (#2414) runs the external binary instead of gojq —
 		// including on an empty program, which is `xmq` with no command:
 		// the input pretty-printed in xmq's own notation.
-		return runXMQ(ctx, program, in)
+		res := runXMQ(ctx, program, in, vars)
+		res.opts = Options{Vars: opts.Vars}
+		return res
 	}
 	if program == "" {
 		program = in.Dialect().identity()
@@ -345,14 +351,15 @@ func run(ctx context.Context, program string, in *Input, opts Options) Result {
 	if err != nil {
 		return Result{Err: err.Error(), dialect: in.dialect}
 	}
-	code, err := gojq.Compile(query)
+	code, err := compileWith(query, vars)
 	if err != nil {
 		return Result{Err: err.Error(), dialect: in.dialect}
 	}
 	res := Result{dialect: in.dialect, opts: opts}
 	size := 0
+	values := vars.Values()
 	for _, v := range in.values {
-		iter := code.RunWithContext(ctx, v)
+		iter := code.RunWithContext(ctx, v, values...)
 		for {
 			out, ok := iter.Next()
 			if !ok {

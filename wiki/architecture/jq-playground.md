@@ -1,7 +1,7 @@
 ---
 type: concept
 title: jq, yq & xmq Playground
-description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; three dialects over one implementation (jq for JSON buffers and HTTP responses — plus CSV/TSV buffers and CSV-typed responses read through an input adapter as an array of row objects keyed by the header, separator from the language or sniffed, cells kept as strings, a malformed row reported with its line and the row count on the info row, yq for YAML buffers and a focused YAML response, xmq for XML/HTML buffers and a focused XML/HTML response — the one external-engine dialect, shelling out to the xmq CLI with the buffer on stdin, the query line split into shell words, the output language named per command for the result's highlighting and scratch extension, a missing binary answered at open with a centered install-hint dialog and configurable via playground.xmq.path, and the at-path open seeding a select over the caret element's XPath), one chord dispatching over the three dialects from the focused editor's language or the focused HTTP response's content type, gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation behind a synchronous compile check that shows a syntax error on the keystroke, underlines its position in the query line, and never starts a run for a program that cannot compile, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors that leave the last successful result in the buffer under a stale banner instead of clearing it, result cap, copy and open-as-scratch in the dialect's own extension, an export picker that saves the result to a chosen file (asking before an overwrite), copies a list of objects or scalars as RFC 4180 CSV or TSV, or writes the result into a request body of an open .http buffer, showing a target the result cannot serve as unavailable with the reason, opening on `.` or the input's last valid program with the caret's path behind its own command, one per-user program history shared by every buffer and every dialect and persisted across restarts, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier — for xmq the commands, and after a path-taking command the element names, attributes and root steps that exist at the typed XPath in the parsed XML/HTML document, within the same node budget — per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them and marks each ✓ / ✗ / – by an optional self-test (a budgeted input sample and its expected output captured by the save prompt, checked lazily off the loop and cached per session, all re-run by one command), vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, a muted type glyph in the gutter on each output value's first line with a `value i/n` counter for the value under the result cursor, Info-tone gutter bars on the lines a run changed against the previous result (diffed off the loop within a 5,000-line budget, held until the next result, cleared with the output), and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, inserting a picked row into the query line, and leading with guide rows that say what enter does with each kind of row, showing every example's actual output beside its program, every builtin's call form beside its arity, and the sample document the examples are written against as rows of the sheet itself; it opens from the query line while a query is being written, dismissing the completion popup rather than letting it cover the sheet, and its chord is named early enough in the info row's hint tail to survive a narrow pane — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing, while the query line selects all on cmd+a, undoes its last edit on ctrl+z and lets a Global leader sequence (cmd+k …) run to completion instead of swallowing it, while the find chord opens the result buffer's search from either focus with `esc` handing the keyboard back to the query line — its program and caret untouched, the matches left highlighted until the next query re-renders the result — and the match-step chords walk those matches from either focus; a chord appends the result cursor's path (as written, or with every index generalised to `[]`) to the program as a pipeline stage and reruns it — the inverse of the at-path open; jq's `-r`, `-c` and `-s` are per-session toggles (raw strings, one line per output, the whole input stream as one array) shown as clickable chips leading the info row, flipped by chords, remembered with the source's last program, the raw form opening as `.txt` and neither raw nor compact output folding, and absent from xmq; a toggleable structure strip on the result's right edge lists the result's top-level keys, indices or stream values with the on-screen part highlighted and jumps the caret to the one clicked or chosen with enter, hiding itself on narrow panes and structureless results; two chords step through the program's top-level pipeline stages, showing the result of the program cut after the selected stage with a `stage k/n` counter and the stage highlighted in either query view, typing or esc returning to the full program, and xmq answering with a notification; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace; it parks and resumes with its document across a project switch, re-driving work the switch interrupted.
+description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; three dialects over one implementation (jq for JSON buffers and HTTP responses — plus CSV/TSV buffers and CSV-typed responses read through an input adapter as an array of row objects keyed by the header, separator from the language or sniffed, cells kept as strings, a malformed row reported with its line and the row count on the info row, yq for YAML buffers and a focused YAML response, xmq for XML/HTML buffers and a focused XML/HTML response — the one external-engine dialect, shelling out to the xmq CLI with the buffer on stdin, the query line split into shell words, the output language named per command for the result's highlighting and scratch extension, a missing binary answered at open with a centered install-hint dialog and configurable via playground.xmq.path, and the at-path open seeding a select over the caret element's XPath), one chord dispatching over the three dialects from the focused editor's language or the focused HTTP response's content type, gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation behind a synchronous compile check that shows a syntax error on the keystroke, underlines its position in the query line, and never starts a run for a program that cannot compile, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors that leave the last successful result in the buffer under a stale banner instead of clearing it, result cap, copy and open-as-scratch in the dialect's own extension, an export picker that saves the result to a chosen file (asking before an overwrite), copies a list of objects or scalars as RFC 4180 CSV or TSV, or writes the result into a request body of an open .http buffer, showing a target the result cannot serve as unavailable with the reason, opening on `.` or the input's last valid program with the caret's path behind its own command, one per-user program history shared by every buffer and every dialect and persisted across restarts, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier — for xmq the commands, and after a path-taking command the element names, attributes and root steps that exist at the typed XPath in the parsed XML/HTML document, within the same node budget — per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them and marks each ✓ / ✗ / – by an optional self-test (a budgeted input sample and its expected output captured by the save prompt, checked lazily off the loop and cached per session, all re-run by one command), vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, a muted type glyph in the gutter on each output value's first line with a `value i/n` counter for the value under the result cursor, Info-tone gutter bars on the lines a run changed against the previous result (diffed off the loop within a 5,000-line budget, held until the next result, cleared with the output), and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, inserting a picked row into the query line, and leading with guide rows that say what enter does with each kind of row, showing every example's actual output beside its program, every builtin's call form beside its arity, and the sample document the examples are written against as rows of the sheet itself; it opens from the query line while a query is being written, dismissing the completion popup rather than letting it cover the sheet, and its chord is named early enough in the info row's hint tail to survive a narrow pane — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing, while the query line selects all on cmd+a, undoes its last edit on ctrl+z and lets a Global leader sequence (cmd+k …) run to completion instead of swallowing it, while the find chord opens the result buffer's search from either focus with `esc` handing the keyboard back to the query line — its program and caret untouched, the matches left highlighted until the next query re-renders the result — and the match-step chords walk those matches from either focus; a chord appends the result cursor's path (as written, or with every index generalised to `[]`) to the program as a pipeline stage and reruns it — the inverse of the at-path open; jq's `-r`, `-c` and `-s` are per-session toggles (raw strings, one line per output, the whole input stream as one array) shown as clickable chips leading the info row, flipped by chords, remembered with the source's last program, the raw form opening as `.txt` and neither raw nor compact output folding, and absent from xmq; a toggleable structure strip on the result's right edge lists the result's top-level keys, indices or stream values with the on-screen part highlighted and jumps the caret to the one clicked or chosen with enter, hiding itself on narrow panes and structureless results; two chords step through the program's top-level pipeline stages, showing the result of the program cut after the selected stage with a `stage k/n` counter and the stage highlighted in either query view, typing or esc returning to the full program, and xmq answering with a notification; a toggleable variables line under the query binds `name=value` entries as `$name` — JSON when the value parses as JSON, a string otherwise, exported to the CLI's environment for xmq — reports a malformed line on the info row, adds its header row only while shown, and travels with the program into saved filters (marked `$` in the picker) and the source's remembered last program; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace; it parks and resumes with its document across a project switch, re-driving work the switch interrupted.
 resource: internal/jqplay/jqplay.go
 tags: [architecture, json, csv, yaml, xml, html, jq, yq, xmq, tools, inline, editor, http, completion, folding]
 timestamp: 2026-09-29T23:59:00Z
@@ -56,6 +56,8 @@ internal/jqplay/
                  examples with their outputs, every builtin with its call form, and the sample document's own rows (#2482)
   wrap.go        the multi-line view's line breaking and caret coordinates: Wrap/LineAt/RowCol/PosAt
   stages.go      the pipeline stepping's cut (#2785): Stages/StageAt/StageProgram over the top-level pipes
+  vars.go        the variables line (#2786): ParseVars (JSON, else string), VarTokens, the gojq binding
+                 and the xmq environment export
 internal/app/
   playground.go   the inline mode: query header, result buffer, key routing, debounce and async eval
   playcomplete.go the completion popup: state, keys, rendering and compositing
@@ -77,6 +79,7 @@ internal/app/
                   the seed from the source's remembered last program
   playstage.go    the pipeline stepping (#2785): playground.stageNext / stagePrev, the stage state,
                   the info-row counter and the query-line highlight
+  playvars.go     the variables line (#2786): playground.variables, its row, keys, click and paste
 internal/htmldom/
   xpath.go        the at-path seed's location spelling (#2414): Document.XPath over the HTML tree,
                   XMLXPathAt/XMLOffset scanning XML source as itself
@@ -1256,6 +1259,54 @@ the items array, stage 2 the mapped array, stage 3 the sum. The issue's
 - **xmq.** Its command line is shell words, not a pipeline: both commands
   answer with a notification and change nothing.
 
+## Variables (#2786)
+
+A program that needs a parameter — `select(.id == $id)` — used to be one the
+playground could not run: jq takes `$id` from `--arg` / `--argjson`. The
+**variables line** is that command line as a header row: **`playground.variables`**
+(`ctrl+alt+b`, palette "Toggle Playground Variables Line") shows it under the
+query, holding blank-separated `name=value` entries —
+`id=42 name="alice" tags=["a", "b"]` — bound as `$name` for every run.
+
+- **Values.** A value is **JSON when it parses as JSON** (`--argjson`) and a
+  **string otherwise** (`--arg`): `id=42` binds a number, `name="alice"` and
+  `name=alice` the same string, `tags=["a", "b"]` an array. A JSON value may
+  hold blanks inside its quotes and brackets; one that is malformed (`x=[abc`)
+  falls back to the word as a string, like `--arg`. A leading `$` on the name
+  is accepted. `jqplay.ParseVars` rejects an entry without `=`, a name jq
+  cannot spell as `$name` (including gojq's own `ENV` and `__loc__`) and a
+  name bound twice — the message (`variables: …`) takes the info row through
+  the [compile check](#compile-before-the-run-2780), and the row's `$:` label
+  turns Error. `$ENV` / `env` stay what gojq provides.
+- **Binding.** `jqplay.Options.Vars` carries the line as written (so
+  `Options` stays comparable and persists as one string); `RunWith` parses it,
+  compiles with `gojq.WithVariables` and hands the values to every
+  `RunWithContext`. `CheckWith` binds the same names for the per-keystroke
+  check, so `$id` compiles once `id=` is on the line and a missing variable
+  shows gojq's own `variable not defined: $id`, underlined in the query line.
+  jq and yq alike; **xmq** has no `$name`, so its variables are **exported to
+  the CLI's environment** (a string as its characters, any other value as
+  written).
+- **The toggle.** The first press shows the line and gives it the keyboard; a
+  press while it is up but unfocused focuses it; a press from the line hides
+  it. **Only a shown line binds** — hiding keeps the text for the next show
+  but reruns without it, so the header always says what the result was
+  computed with. On the line, `enter` runs and returns to the query line,
+  `esc` / `↑` return without running, `tab` moves to the result buffer; typing
+  reruns debounced, and a paste lands on the line. A click on its row focuses
+  it and places the caret.
+- **Geometry.** The row sits between the query rows and the info row and
+  exists only while shown: `playVarsRows` is part of `playHeaderRowsFor`,
+  `playQueryRowsFor`'s height bound and `sizePlayResult`, so the mouse
+  translation, the rendered body and the result height stay in step. The
+  query-row click maps through `playHeaderRowsFor` too, which also keeps it
+  right under the stale banner.
+- **Remembered.** The line travels with the program: the source's
+  [last valid program](#what-the-query-line-opens-on) records it (`vars` in
+  `playground-last.json`) and reopening shows it again, and a
+  [saved filter](#the-saved-filter-library) stores it (`vars` in the store,
+  also bound by its self-test).
+
 ## Completion
 
 The query line has a typing aid (#1979), synchronous and bounded, with the
@@ -1360,11 +1411,12 @@ above win):
 | `ctrl+alt+v` | the [export picker](#exporting-the-result-2788): save as file, copy as CSV / TSV, use as HTTP request body (`playground.export`) |
 | `ctrl+alt+a` | re-run every saved filter's [self-test](#self-tests-a-sample-and-its-expectation-2792) and report the tally (`playground.checkFilters`) |
 | `ctrl+alt+g` | show / focus / hide the [structure strip](#the-structure-strip-2793) (`playground.structure`) |
+| `ctrl+alt+b` | show / focus / hide the [variables line](#variables-2786) (`playground.variables`); on the line `enter` runs and `esc` returns here |
 | `esc` | close (recording the program in the history) |
 | `esc esc` | close **and** open the command palette (#2237) |
 | `f1` | the cheatsheet, opened on the playground's own context (#2237) |
 
-`ctrl+alt+e`, `ctrl+.` / `ctrl+shift+.`, `ctrl+alt+v`, `ctrl+alt+a`, `ctrl+alt+g`, `ctrl+g`, `cmd+f`, the match-step chords and the `cmd+k` leader
+`ctrl+alt+e`, `ctrl+.` / `ctrl+shift+.`, `ctrl+alt+v`, `ctrl+alt+a`, `ctrl+alt+g`, `ctrl+alt+b`, `ctrl+g`, `cmd+f`, the match-step chords and the `cmd+k` leader
 sequences work from the result buffer too; `cmd+a` and `ctrl+z` are the query
 line's, since the result buffer is read-only and has the editor's own keys.
 
@@ -1757,7 +1809,9 @@ is refused: `.` is the playground's default, not a filter. A name already taken
 **in the target scope** holds the prompt open for a second `enter`, the
 save-layout store's guard (#1175) — and that confirmed overwrite is also how a
 filter is *edited*: insert it, change it on the query line, save it under the
-same name.
+same name. A shown [variables line](#variables-2786) is saved with the program
+(the prompt previews it as `vars:`), and a save without one clears the
+variables an overwritten filter had.
 
 ### The picker
 
@@ -1775,6 +1829,10 @@ open playground's, each command its own:
   tells the two apart at a glance. A name may exist in both scopes — they are
   separate stores, and shadowing one with the other would hide a filter that
   was saved deliberately — so both rows are listed.
+- A filter saved with variables shows a **`$`** beside its self-test mark
+  (other rows pad the cell, so the names stay in one column); picking it
+  restores its variables line, shown. A filter without variables leaves the
+  line as it was.
 - `enter` puts the program on the query line and runs it. With no playground up
   — or with the *other* dialect's open — the command still completes: it opens
   one of the filter's own dialect over the document at hand first (and says so
@@ -2019,9 +2077,10 @@ unbound-command audit ledger (`cmd/ike/keybind_audit_test.go`, #2305).
 
 ## Boundaries
 
-- **No `--arg`, no other command-line flags.** Since #2784 the playground has
-  jq's three most used flags as [toggles](#output-toggles-2784) (`-r`, `-c`,
-  `-s`); variables and the rest (`--arg`, `--tab`, `-n`, …) stay a shell's job.
+- **No other command-line flags.** Since #2784 the playground has jq's three
+  most used flags as [toggles](#output-toggles-2784) (`-r`, `-c`, `-s`), and
+  since #2786 `--arg` / `--argjson` as the [variables line](#variables-2786);
+  the rest (`--tab`, `-n`, `--rawfile`, `--args`, …) stays a shell's job.
 - **No yq-only operators.** The yq dialect speaks jq, not mikefarah's
   extensions: no comment or anchor *preservation*, no `style`/`tag` operators,
   no in-place edit. The playground reads documents; a program that needs to
@@ -2055,8 +2114,7 @@ unbound-command audit ledger (`cmd/ike/keybind_audit_test.go`, #2305).
   the row whole is left off rather than shown as a truncated fragment, and
   nothing on a row is ever truncated to make room for one.
   Nor does it document command-line flags: `-r` / `-c` / `-s` are the info
-  row's chips, not language, and `--arg` the playground does not have — a sheet
-  listing what the tool cannot do would be worse than none.
+  row's chips and `--arg` the variables line, not language.
 - **No second builtin list, ever.** The function rows are `Builtins()`; the
   descriptions are `builtinDocs`, the map the completion popup already reads.
   Anything else would be a copy with its own decay schedule.

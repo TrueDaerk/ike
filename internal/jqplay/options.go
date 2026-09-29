@@ -31,6 +31,12 @@ type Options struct {
 	// (`jq -s`) instead of once per value — the way to count, sort or group
 	// the lines of a JSONL stream.
 	Slurp bool
+	// Vars is the variables line (#2786), `name=value` entries bound as
+	// `$name` (see ParseVars) — jq's `--arg` / `--argjson`. It is kept as
+	// written, so Options stays comparable and persists as one string; a
+	// line that does not parse fails the run with its message. Flags does
+	// not spell it.
+	Vars string
 }
 
 // Flags spells the active toggles the way the command line does, in `-r -c
@@ -68,10 +74,10 @@ func ParseFlags(s string) Options {
 
 // RunWith is Run with the toggles applied. The xmq dialect ignores them: its
 // engine is the external binary, whose command line has output options of
-// its own.
+// its own. The variables line applies to every dialect (#2786).
 func RunWith(ctx context.Context, program string, in *Input, opts Options) Result {
 	if in.Dialect() == DialectXMQ {
-		opts = Options{}
+		opts = Options{Vars: opts.Vars}
 	}
 	if opts.Slurp && in != nil && len(in.values) > 0 {
 		slurped := *in

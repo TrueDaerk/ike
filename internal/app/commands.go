@@ -823,6 +823,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			// Pipeline stepping (#2785): the result up to a chosen stage.
 			langCommand(appCommand("playground.stageNext", "Playground: Step to Next Pipeline Stage", StepPlayStageMsg{Delta: 1}), playgroundLangs()),
 			langCommand(appCommand("playground.stagePrev", "Playground: Step to Previous Pipeline Stage", StepPlayStageMsg{Delta: -1}), playgroundLangs()),
+			// The variables line (#2786): `name=value` entries bound as $name.
+			langCommand(appCommand("playground.variables", "Toggle Playground Variables Line", TogglePlayVarsMsg{}), playgroundLangs()),
 			langCommand(appCommand("log.openRotatedSet", "Open Rotated Log Set (Merged Timeline)", OpenMergedLogMsg{}), []string{"log"}),
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
 			appCommand("terminal.newTab", "New Terminal Tab", TerminalNewTabMsg{}),

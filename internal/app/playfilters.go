@@ -224,7 +224,7 @@ func playFilterCheckKey(d jqplay.Dialect, f jqplay.Filter) string {
 	if t.CSV {
 		csv = "csv" + t.Sep
 	}
-	return d.Name() + ":" + undostore.Hash([]byte(strings.Join([]string{f.Program, t.Input, t.Expect, t.Flags, csv}, "\x00")))
+	return d.Name() + ":" + undostore.Hash([]byte(strings.Join([]string{f.Program, f.Vars, t.Input, t.Expect, t.Flags, csv}, "\x00")))
 }
 
 // checkGlyph is the row's self-test mark: the cached verdict, `…` while a
@@ -366,7 +366,7 @@ func (j *playFiltersMode) Results(query string, _ palette.Context) []palette.Ite
 			Spans:  res.Positions,
 			Score:  res.Score,
 			Badge:  e.Scope.String(),
-			Hint:   j.checkGlyph(e.Filter),
+			Hint:   j.checkGlyph(e.Filter) + playFilterVarsMark(e.Filter),
 			Detail: jqplay.Preview(e.Program, playFilterPreviewWidth),
 			Aux:    DeleteFilterMsg{Dialect: j.dialect, Scope: e.Scope, Name: e.Name},
 		}
@@ -378,6 +378,16 @@ func (j *playFiltersMode) Results(query string, _ palette.Context) []palette.Ite
 		items = append(items, it)
 	}
 	return items
+}
+
+// playFilterVarsMark is the picker's `$` beside the self-test mark for a
+// filter saved with a variables line (#2786) — picking it restores the line
+// too. Rows without one pad the cell, so every title starts in one column.
+func playFilterVarsMark(f jqplay.Filter) string {
+	if f.Vars != "" {
+		return " $"
+	}
+	return "  "
 }
 
 // openPlayFilterPicker fills and opens the picker locked to the filters mode,
@@ -422,6 +432,9 @@ func (m *Model) insertPlayFilter(msg InsertFilterMsg) tea.Cmd {
 	}
 	s := m.play
 	s.program.Set(f.Program)
+	// A filter saved with variables (#2786) brings its line back, shown; one
+	// without leaves the line as it was.
+	s.seedVars(f.Vars)
 	s.histIdx, s.comp = -1, nil
 	s.setBufFocus(false)
 	s.status = "inserted filter " + f.Name
@@ -456,6 +469,7 @@ type playNamePrompt struct {
 	dialect jqplay.Dialect // which pair of libraries the name lands in (#2039)
 	scope   jqplay.Scope
 	program string // save: the query line snapshot the name is given to
+	vars    string // save: the shown variables line (#2786), saved with the program
 	from    string // rename: the entry's current name
 	// sample is the self-test captured when the save prompt opened (#2792):
 	// the playground's input snapshot and the result the program produced
@@ -486,7 +500,7 @@ func (m *Model) startPlaySavePrompt() {
 		m.play.status = "nothing to save — write a program first"
 		return
 	}
-	m.playName = playNamePrompt{open: true, program: program, dialect: m.play.dialect, scope: jqplay.ScopeProject}
+	m.playName = playNamePrompt{open: true, program: program, vars: strings.TrimSpace(m.play.playVarsText()), dialect: m.play.dialect, scope: jqplay.ScopeProject}
 	m.playName.sample, m.playName.sampleWhy = m.play.captureSample()
 	m.openPlayNamePrompt()
 }
@@ -547,6 +561,9 @@ func (m *Model) renderPlayNamePrompt() {
 		body += "\n\nrenaming the " + p.scope.String() + " filter " + p.from
 	} else {
 		body += "\n\nprogram: " + jqplay.Preview(p.program, playFilterPreviewWidth)
+		if p.vars != "" {
+			body += "\nvars:    " + jqplay.Preview(p.vars, playFilterPreviewWidth)
+		}
 		body += "\nscope:   " + p.scope.String()
 		body += "\nsample:  " + p.sampleLine()
 	}
@@ -665,6 +682,10 @@ func (m *Model) commitPlayNamePrompt() bool {
 		return false
 	}
 	if err := lib.Set(name, p.program); err != nil {
+		p.err = err.Error()
+		return false
+	}
+	if err := lib.SetVars(name, p.vars); err != nil {
 		p.err = err.Error()
 		return false
 	}

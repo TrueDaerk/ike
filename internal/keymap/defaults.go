@@ -468,6 +468,12 @@ var jetbrainsRows = []row{
 	// context — no clash inside the playground, which resolves Global only.
 	{"ctrl+alt+shift+right", "playground.stageNext", "Next pipeline stage", Global, "jq/yq playground (#2785)"},
 	{"ctrl+alt+shift+left", "playground.stagePrev", "Previous pipeline stage", Global, "jq/yq playground (#2785)"},
+	// The variables line (#2786), Global like its siblings. The issue's
+	// ctrl+alt+v is playground.export's (#2788) and every other ctrl+alt
+	// letter is claimed; b — the line *binds* $name — meets
+	// lsp.implementations' folded cmd+alt+b only off macOS, in the Editor
+	// context the playground never resolves.
+	{"ctrl+alt+b", "playground.variables", "Toggle playground variables line", Global, "jq/yq playground (#2786)"},
 	// Go to Line:Column (#2486): JetBrains' cmd+l. The Cmd→Ctrl fold puts it
 	// on ctrl+l off macOS, which no other default claims. JetBrains' Linux
 	// chord (ctrl+g) is *not* bound: editor.caret.addNext already owns it in
