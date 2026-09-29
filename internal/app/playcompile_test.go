@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/jqplay"
@@ -107,5 +108,94 @@ func TestPlayCompileXMQUnterminatedQuote(t *testing.T) {
 	gen := s.gen
 	if m.runPlayNow() != nil || s.gen != gen || !s.compileBad {
 		t.Fatalf("an unterminated quote must stop the run (gen %d → %d, err %q)", gen, s.gen, s.runErr)
+	}
+}
+
+// playErrMarked renders text rune by rune in the compile error's mark — the
+// way the query line paints a span it underlines (#2781).
+func playErrMarked(m Model, text string) string {
+	st := lipgloss.NewStyle().Foreground(m.pal().Error).Underline(true).Bold(true)
+	var b strings.Builder
+	for _, r := range text {
+		b.WriteString(st.Render(string(r)))
+	}
+	return b.String()
+}
+
+// TestPlayCompileErrorUnderlinesPosition (#2781): the compile error's token is
+// marked in the query line — one-line window and multi-line view alike —
+// an unexpected end marks the cell past the program, and the mark clears as
+// soon as the program compiles again.
+func TestPlayCompileErrorUnderlinesPosition(t *testing.T) {
+	m := openJQ(t, playApp(t, `{"a":{"x":1}}`))
+	m = setProgram(m, ".a | selct(.x)")
+	if !m.play.compileBad {
+		t.Fatal("an unknown function must fail the compile check")
+	}
+	want := playErrMarked(m, "selct")
+	if got := m.playQueryRow(200); !strings.Contains(got, want) {
+		t.Errorf("the one-line row must mark `selct`, got %q", got)
+	}
+	if !strings.HasPrefix(ansi.Strip(m.playInfoRow(200)), "E: ") {
+		t.Error("the info-row message must stay")
+	}
+	m = toggleJQView(m)
+	if rows := strings.Join(m.playQueryRows(30), "\n"); !strings.Contains(rows, want) {
+		t.Errorf("the multi-line view must mark `selct`, got %q", rows)
+	}
+	m = toggleJQView(m)
+
+	// An unexpected end marks the cell past the program — visible while the
+	// cursor is elsewhere (the cursor cell takes it otherwise).
+	m = setProgram(m, ".a | (")
+	end := lipgloss.NewStyle().Background(m.pal().Error).Render(" ")
+	m.play.program.Cur = 0
+	if got := m.playQueryRow(200); !strings.HasSuffix(got, end) {
+		t.Errorf("an unexpected end must mark the end cell, got %q", got)
+	}
+
+	// Fixed: the mark goes with the error.
+	m = setProgram(m, ".a | select(.x)")
+	if m.play.compileBad {
+		t.Fatalf("the fixed program should compile, got %q", m.play.runErr)
+	}
+	m.play.program.Cur = 0
+	if got := m.playQueryRow(200); strings.Contains(got, playErrMarked(m, "s")) || strings.HasSuffix(got, end) {
+		t.Errorf("the mark must clear once the program compiles, got %q", got)
+	}
+}
+
+// TestPlayCompileErrorMarkNeedsItsProgram: a mark belongs to the program the
+// check placed it in; a text the check has not seen (or an error without a
+// position) renders unmarked and never indexes out of range.
+func TestPlayCompileErrorMarkNeedsItsProgram(t *testing.T) {
+	m := openJQ(t, playApp(t, `{"a":1}`))
+	m = setProgram(m, ".a | selct(.x)")
+	s := m.play
+	s.program.Set(".a")
+	if _, _, ok := m.playErrorSpan(s.program.Text); ok {
+		t.Error("a mark must not outlive the program it was found in")
+	}
+	_ = m.playQueryRow(200)
+	s.program.Set(".a | selct(.x)")
+	s.compileDiag = jqplay.Diagnostic{Msg: "no position"}
+	s.compileProg = s.program.Text
+	if _, _, ok := m.playErrorSpan(s.program.Text); ok {
+		t.Error("an error without a position must not mark anything")
+	}
+	_ = m.playQueryRow(200)
+}
+
+// TestPlayCompileXMQMarksOpenQuote (#2781): the xmq dialect marks an
+// unterminated quote from the quote to the end of the line.
+func TestPlayCompileXMQMarksOpenQuote(t *testing.T) {
+	m := openJQ(t, playApp(t, `{"a":1}`))
+	s := m.play
+	s.dialect = jqplay.DialectXMQ
+	s.program.Set(`select "//a`)
+	m.compilePlay()
+	s.program.Cur = 0
+	if got := m.playQueryRow(200); !strings.Contains(got, playErrMarked(m, `"//a`)) {
+		t.Errorf("the open quote must be marked, got %q", got)
 	}
 }
