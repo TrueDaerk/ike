@@ -800,6 +800,10 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			// The save prompt and the query-view toggle act on whichever
 			// playground is open, so their gate is the union of the families.
 			langCommand(appCommand("json.jqSaveFilter", "Save Playground Filter…", SaveFilterPromptMsg{}), playgroundLangs()),
+			// Re-run every saved filter's self-test (#2792), in all three
+			// dialects' libraries — a check of the library, not of one buffer,
+			// so it is offered everywhere.
+			appCommand("playground.checkFilters", "Check Saved Playground Filters", CheckPlayFiltersMsg{}),
 			langCommand(appCommand("json.jqQueryView", "Toggle Full Query View", TogglePlaygroundQueryViewMsg{}), playgroundLangs()),
 			// Drill in from the result (#2783): append the result cursor's
 			// path to the program, as written or with every index as `[]`.

@@ -1706,6 +1706,7 @@ JetBrains is:
 | `perf.hud` | `ctrl+alt+p` | fragile | `palette / View menu` | live via palette / View menu |
 | `php.traitIndex.rebuild` | `cmd+alt+shift+b` | fragile | `palette` | live via palette |
 | `php.traitIndex.status` | `cmd+alt+shift+i` | fragile | `palette` | live via palette |
+| `playground.checkFilters` | `ctrl+alt+a` | fragile | `palette` | live via palette |
 | `playground.export` | `ctrl+alt+v` | fragile | `palette` | live via palette |
 | `playground.open` | `cmd+shift+j` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `problems.toggle` | `cmd+8` | fragile | `palette` | live via palette |

@@ -1,7 +1,9 @@
 package app
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +15,7 @@ import (
 	"ike/internal/jqplay"
 	"ike/internal/palette"
 	"ike/internal/ui"
+	"ike/internal/undostore"
 )
 
 // playfilters.go is the user-facing half of the named saved-filter library
@@ -44,6 +47,13 @@ import (
 // The store itself (load, save, add, rename, delete) is jqplay.Library — pure
 // and path-agnostic, so all four libraries share one implementation; this file
 // owns the paths, the prompt and the picker.
+//
+// Since #2792 a filter can carry a self-test: the save prompt's ctrl+t
+// attaches the playground's input snapshot and current result as its sample
+// and expectation, and the picker marks each row ✓ (the program still prints
+// the expectation over the sample), ✗ (it does not) or – (no sample). The
+// checks run lazily as commands on the picker's open and are cached for the
+// session; playground.checkFilters drops the cache and re-runs them all.
 
 // playFiltersPrefix selects the filter picker inside the palette. The root model
 // only ever opens it locked, so the rune has no user-facing prefix story; it
@@ -83,6 +93,33 @@ type DeleteFilterMsg struct {
 	Dialect jqplay.Dialect
 	Scope   jqplay.Scope
 	Name    string
+}
+
+// CheckPlayFiltersMsg is playground.checkFilters (#2792): re-run every saved
+// filter's self-test in every dialect and scope, dropping the session's cached
+// verdicts first, and report the tally.
+type CheckPlayFiltersMsg struct{}
+
+// playFilterCheckMsg carries one lazily run self-test back to the event loop:
+// the picker asked for it, and its row's mark is what it updates.
+type playFilterCheckMsg struct {
+	key   string
+	state jqplay.CheckState
+}
+
+// playFilterCheckAllMsg carries the checkFilters sweep's verdicts back, in
+// dialect / scope / name order.
+type playFilterCheckAllMsg struct {
+	results []playFilterCheckResult
+}
+
+// playFilterCheckResult is one filter's verdict from the sweep.
+type playFilterCheckResult struct {
+	dialect jqplay.Dialect
+	scope   jqplay.Scope
+	name    string
+	key     string
+	state   jqplay.CheckState
 }
 
 // playFilterFile returns the store path of one dialect's scope, following the
@@ -164,9 +201,137 @@ type playFiltersMode struct {
 	entries []playFilterEntry
 	dialect jqplay.Dialect
 	rename  bool
+	// checks caches each self-test's verdict for the session (#2792), keyed
+	// by what decides it (playFilterCheckKey) rather than by name, so an
+	// edited program or a re-captured sample is checked afresh while a rename
+	// keeps its mark. running holds the keys whose check is in flight, so a
+	// reopened picker does not start a second one. Both are touched on the
+	// event loop only; the checks themselves run in commands.
+	checks  map[string]jqplay.CheckState
+	running map[string]bool
 }
 
-func newPlayFiltersMode() *playFiltersMode { return &playFiltersMode{} }
+func newPlayFiltersMode() *playFiltersMode {
+	return &playFiltersMode{checks: map[string]jqplay.CheckState{}, running: map[string]bool{}}
+}
+
+// playFilterCheckKey identifies one self-test by its content: the dialect,
+// the program and every field of the sample. Two filters that would run the
+// same check share its verdict.
+func playFilterCheckKey(d jqplay.Dialect, f jqplay.Filter) string {
+	t := f.SelfTest
+	csv := ""
+	if t.CSV {
+		csv = "csv" + t.Sep
+	}
+	return d.Name() + ":" + undostore.Hash([]byte(strings.Join([]string{f.Program, t.Input, t.Expect, t.Flags, csv}, "\x00")))
+}
+
+// checkGlyph is the row's self-test mark: the cached verdict, `…` while a
+// check has not answered yet, `–` for a filter without a sample.
+func (j *playFiltersMode) checkGlyph(f jqplay.Filter) string {
+	if !f.SelfTest.Has() {
+		return jqplay.CheckNone.Glyph()
+	}
+	if st, ok := j.checks[playFilterCheckKey(j.dialect, f)]; ok {
+		return st.Glyph()
+	}
+	return "…"
+}
+
+// pendingChecks starts the self-tests of the listed filters that have neither
+// a verdict nor a check in flight — lazily, on the picker's open, one command
+// each so a slow program never holds up the other rows' marks.
+func (j *playFiltersMode) pendingChecks() tea.Cmd {
+	var cmds []tea.Cmd
+	for _, e := range j.entries {
+		if !e.SelfTest.Has() {
+			continue
+		}
+		key := playFilterCheckKey(j.dialect, e.Filter)
+		if _, done := j.checks[key]; done || j.running[key] {
+			continue
+		}
+		j.running[key] = true
+		d, f := j.dialect, e.Filter
+		cmds = append(cmds, func() tea.Msg {
+			return playFilterCheckMsg{key: key, state: jqplay.CheckFilter(context.Background(), d, f)}
+		})
+	}
+	return tea.Batch(cmds...)
+}
+
+// finishPlayFilterCheck records one lazy verdict and redraws the picker's
+// rows in place, keeping the user's selection.
+func (m *Model) finishPlayFilterCheck(msg playFilterCheckMsg) {
+	m.playFilters.checks[msg.key] = msg.state
+	delete(m.playFilters.running, msg.key)
+	m.palette.RefreshRows()
+}
+
+// checkAllPlayFilters is playground.checkFilters: every dialect's two
+// libraries, cached verdicts dropped, checked one after another in a single
+// command — the sweep is a report, so it answers once, with the tally.
+func (m *Model) checkAllPlayFilters() tea.Cmd {
+	j := m.playFilters
+	j.checks = map[string]jqplay.CheckState{}
+	type job struct {
+		res playFilterCheckResult
+		f   jqplay.Filter
+	}
+	var jobs []job
+	for _, d := range []jqplay.Dialect{jqplay.DialectJQ, jqplay.DialectYQ, jqplay.DialectXMQ} {
+		for _, scope := range jqplay.Scopes() {
+			for _, f := range loadPlayFilters(d, scope).All() {
+				key := playFilterCheckKey(d, f)
+				if f.SelfTest.Has() {
+					j.running[key] = true
+				}
+				jobs = append(jobs, job{res: playFilterCheckResult{dialect: d, scope: scope, name: f.Name, key: key}, f: f})
+			}
+		}
+	}
+	if len(jobs) == 0 {
+		m.host.Notify(host.Info, "filter checks: no saved filters")
+		return nil
+	}
+	m.palette.RefreshRows() // the dropped verdicts show as in flight
+	return func() tea.Msg {
+		out := make([]playFilterCheckResult, len(jobs))
+		for i, jb := range jobs {
+			out[i] = jb.res
+			out[i].state = jqplay.CheckFilter(context.Background(), jb.res.dialect, jb.f)
+		}
+		return playFilterCheckAllMsg{results: out}
+	}
+}
+
+// finishPlayFilterCheckAll records the sweep's verdicts and reports the tally,
+// naming the failing filters — the ones the user has to go and look at.
+func (m *Model) finishPlayFilterCheckAll(msg playFilterCheckAllMsg) {
+	var pass, none int
+	var failed []string
+	for _, r := range msg.results {
+		delete(m.playFilters.running, r.key)
+		switch r.state {
+		case jqplay.CheckNone:
+			none++
+			continue
+		case jqplay.CheckPass:
+			pass++
+		default:
+			failed = append(failed, r.dialect.Name()+" "+r.scope.String()+" "+r.name)
+		}
+		m.playFilters.checks[r.key] = r.state
+	}
+	m.palette.RefreshRows()
+	text := fmt.Sprintf("filter checks: %d ✓ · %d ✗ · %d without a sample", pass, len(failed), none)
+	if len(failed) == 0 {
+		m.host.Notify(host.Info, text)
+		return
+	}
+	m.host.Notify(host.Warn, text+" — failing: "+strings.Join(failed, ", "))
+}
 
 // Prefix implements palette.Mode.
 func (j *playFiltersMode) Prefix() rune { return playFiltersPrefix }
@@ -201,6 +366,7 @@ func (j *playFiltersMode) Results(query string, _ palette.Context) []palette.Ite
 			Spans:  res.Positions,
 			Score:  res.Score,
 			Badge:  e.Scope.String(),
+			Hint:   j.checkGlyph(e.Filter),
 			Detail: jqplay.Preview(e.Program, playFilterPreviewWidth),
 			Aux:    DeleteFilterMsg{Dialect: j.dialect, Scope: e.Scope, Name: e.Name},
 		}
@@ -219,16 +385,19 @@ func (j *playFiltersMode) Results(query string, _ palette.Context) []palette.Ite
 // yaml.yqFilters); the query line's ctrl+l passes the open playground's, which
 // is what makes the chord mean "my filters" in either mode. An empty library
 // explains where filters come from instead of showing an empty list — the
-// layout picker's rule.
-func (m *Model) openPlayFilterPicker(d jqplay.Dialect, rename bool) {
+// layout picker's rule. The returned command runs the self-tests (#2792) the
+// session has no verdict for yet, off the event loop: the picker is up at
+// once, and each row's `…` turns into its ✓ or ✗ as its check answers.
+func (m *Model) openPlayFilterPicker(d jqplay.Dialect, rename bool) tea.Cmd {
 	m.playFilters.dialect, m.playFilters.rename = d, rename
 	m.playFilters.Refresh()
 	if len(m.playFilters.entries) == 0 {
 		m.host.Notify(host.Info, "no saved "+d.Name()+" filters — use \"Save Playground Filter\" in the playground first")
-		return
+		return nil
 	}
 	m.palette.SetSize(m.width, m.height)
 	m.palette.OpenLocked(m.paletteContext(), playFiltersPrefix)
+	return m.playFilters.pendingChecks()
 }
 
 // insertPlayFilter puts the saved program on the query line and evaluates it.
@@ -288,6 +457,14 @@ type playNamePrompt struct {
 	scope   jqplay.Scope
 	program string // save: the query line snapshot the name is given to
 	from    string // rename: the entry's current name
+	// sample is the self-test captured when the save prompt opened (#2792):
+	// the playground's input snapshot and the result the program produced
+	// over it, the pair the name is being given for. sampleWhy says why none
+	// could be captured (over budget, no current result); withSample is the
+	// ctrl+t toggle that attaches it — off by default, a sample is opt-in.
+	sample     jqplay.SelfTest
+	sampleWhy  string
+	withSample bool
 }
 
 // playNamePromptOpen reports whether the shell shows the filter name prompt.
@@ -310,7 +487,34 @@ func (m *Model) startPlaySavePrompt() {
 		return
 	}
 	m.playName = playNamePrompt{open: true, program: program, dialect: m.play.dialect, scope: jqplay.ScopeProject}
+	m.playName.sample, m.playName.sampleWhy = m.play.captureSample()
 	m.openPlayNamePrompt()
+}
+
+// captureSample snapshots the playground's input and current result as a
+// filter self-test (#2792), or says why it cannot: only a result that is the
+// current program's answer over the current input is an expectation — not
+// one still computing, one standing stale under an error, or one over an
+// input that no longer parses. The budget is enforced here, at capture.
+func (s *playState) captureSample() (jqplay.SelfTest, string) {
+	switch {
+	case s.parsing || s.input == nil:
+		return jqplay.SelfTest{}, "the input is still being read"
+	case s.inputErr != "":
+		return jqplay.SelfTest{}, "the input does not parse"
+	case s.pending:
+		return jqplay.SelfTest{}, "the result is still being computed"
+	case s.runErr != "" || !s.haveResult:
+		return jqplay.SelfTest{}, "there is no current result"
+	}
+	if err := jqplay.SampleBudget("input", s.srcLen); err != nil {
+		return jqplay.SelfTest{}, err.Error()
+	}
+	st, err := jqplay.NewSample(s.srcText, s.result, s.csv, s.csvSep)
+	if err != nil {
+		return jqplay.SelfTest{}, err.Error()
+	}
+	return st, ""
 }
 
 // startPlayRenamePrompt opens the prompt over an existing entry, prefilled with
@@ -344,13 +548,18 @@ func (m *Model) renderPlayNamePrompt() {
 	} else {
 		body += "\n\nprogram: " + jqplay.Preview(p.program, playFilterPreviewWidth)
 		body += "\nscope:   " + p.scope.String()
+		body += "\nsample:  " + p.sampleLine()
 	}
 	if p.err != "" {
 		body += "\n\n" + p.err
 	}
 	hint := "\n\nenter save · esc cancel"
 	if !p.rename {
-		hint = "\n\nenter save · tab " + p.scope.Other().String() + " scope · esc cancel"
+		hint = "\n\nenter save · tab " + p.scope.Other().String() + " scope"
+		if p.sample.Has() {
+			hint += " · ctrl+t sample"
+		}
+		hint += " · esc cancel"
 	}
 	heading := "Save " + p.dialect.Name() + " filter as"
 	if p.rename {
@@ -360,6 +569,27 @@ func (m *Model) renderPlayNamePrompt() {
 		Heading: heading,
 		Body:    func() string { return body + hint },
 	})
+}
+
+// sampleLine is the save prompt's self-test row (#2792): what ctrl+t would
+// attach, that it is attached, or why there is nothing to attach.
+func (p playNamePrompt) sampleLine() string {
+	if !p.sample.Has() {
+		return "none — " + p.sampleWhy
+	}
+	what := fmt.Sprintf("%d B input → %d lines expected", len(p.sample.Input), playLineCount(p.sample.Expect))
+	if p.withSample {
+		return what
+	}
+	return "off (ctrl+t attaches " + what + ")"
+}
+
+// playLineCount counts the rows of a result text, 0 for an empty one.
+func playLineCount(text string) int {
+	if text == "" {
+		return 0
+	}
+	return strings.Count(text, "\n") + 1
 }
 
 // updatePlayNamePrompt consumes every key while the prompt is open: enter
@@ -375,6 +605,14 @@ func (m Model) updatePlayNamePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.playName.scope = m.playName.scope.Other()
 		m.playName.err = "" // the other scope's store re-arms the overwrite guard
 		m.renderPlayNamePrompt()
+		return m, nil
+	case msg.String() == "ctrl+t" && !m.playName.rename:
+		// The prompt's second step (#2792): attach the captured sample and
+		// expectation. tab is the scope toggle, so the sample has its own key.
+		if m.playName.sample.Has() {
+			m.playName.withSample = !m.playName.withSample
+			m.renderPlayNamePrompt()
+		}
 		return m, nil
 	case msg.Code == tea.KeyEnter:
 		if m.commitPlayNamePrompt() {
@@ -429,6 +667,12 @@ func (m *Model) commitPlayNamePrompt() bool {
 	if err := lib.Set(name, p.program); err != nil {
 		p.err = err.Error()
 		return false
+	}
+	if p.withSample {
+		if err := lib.SetSample(name, p.sample); err != nil {
+			p.err = err.Error()
+			return false
+		}
 	}
 	if !m.savePlayFilters(p.dialect, p.scope, lib) {
 		return false

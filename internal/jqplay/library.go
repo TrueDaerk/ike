@@ -84,10 +84,14 @@ func (s Scope) Other() Scope {
 func Scopes() []Scope { return []Scope{ScopeProject, ScopeGlobal} }
 
 // Filter is one saved entry: the name it is listed and picked under, and the
-// jq program it inserts into the query line.
+// jq program it inserts into the query line. The embedded SelfTest is the
+// filter's optional self-test (#2792); its fields sit flat in the entry's JSON
+// object and are all omitempty, so a store written before #2792 loads as
+// filters without one, and a filter without one writes exactly the old shape.
 type Filter struct {
 	Name    string `json:"name"`
 	Program string `json:"program"`
+	SelfTest
 }
 
 // Library is one scope's saved filters, held sorted by name so the picker's
@@ -209,6 +213,22 @@ func (l *Library) Set(name, program string) error {
 	l.Filters = append(l.Filters, Filter{Name: name, Program: program})
 	l.sort()
 	return nil
+}
+
+// SetSample attaches the self-test to the entry saved under name (#2792),
+// replacing any it had. It is a separate step from Set on purpose: a save that
+// captured no sample leaves the one the filter already carries in place, so an
+// edited program written back under its name is checked against the old
+// expectation — which is exactly the "does it still do what it did" question.
+func (l *Library) SetSample(name string, s SelfTest) error {
+	name = strings.TrimSpace(name)
+	for i, f := range l.Filters {
+		if f.Name == name {
+			l.Filters[i].SelfTest = s
+			return nil
+		}
+	}
+	return ErrNotFound
 }
 
 // Rename moves the entry from to to, refusing a name that is already taken —

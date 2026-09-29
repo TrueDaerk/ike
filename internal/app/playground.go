@@ -215,6 +215,12 @@ type playState struct {
 	// while an earlier parse of the same playground is still decoding must
 	// win, whichever of the two finishes first.
 	pgen int
+	// srcText is the text last handed to the parser — the snapshot input
+	// holds once that parse lands, which the save prompt captures as a
+	// filter's sample (#2792) — kept only within jqplay.MaxSampleBytes;
+	// srcLen is its length either way, for the prompt's refusal.
+	srcText string
+	srcLen  int
 
 	program ui.Field
 	// opts are jq's -r / -c / -s toggles (#2784), handed to every run; the
@@ -1061,6 +1067,12 @@ func (m *Model) parsePlayInput(text string) tea.Cmd {
 	// the next watcher event compares against it, so a second event carrying
 	// the same bytes does not start a second parse (#2356).
 	s.srcHash = undostore.Hash([]byte(text))
+	// Only a snapshot within the sample budget is kept (#2792): a large one
+	// could never be captured, and holding it would pin the whole document.
+	s.srcText, s.srcLen = "", len(text)
+	if len(text) <= jqplay.MaxSampleBytes {
+		s.srcText = text
+	}
 	// Parses carry their own counter, not the run generation: typing during a
 	// long parse bumps gen (the debounce), and a parse dropped over that would
 	// never install the input it was started for.
@@ -1537,8 +1549,7 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+l":
 		// The saved-filter picker (#1995) — json.jqFilters' chord, over this
 		// playground's own library (#2039).
-		m.openPlayFilterPicker(s.dialect, false)
-		return m, nil
+		return m, m.openPlayFilterPicker(s.dialect, false)
 	case "ctrl+g":
 		// The language cheatsheet (#2382) — json.jqCheatsheet's chord, the
 		// library's sibling: ctrl+l is where *your* programs live, ctrl+g

@@ -7425,7 +7425,21 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// the query line, palette / Tools menu, #1995): the saved-filter
 		// picker over one dialect's two libraries, in its insert or its
 		// rename spelling.
-		m.openPlayFilterPicker(msg.Dialect, msg.Rename)
+		return m, m.openPlayFilterPicker(msg.Dialect, msg.Rename)
+
+	case playFilterCheckMsg:
+		// One saved filter's self-test answered (#2792): its picker row's
+		// `…` becomes ✓ or ✗.
+		m.finishPlayFilterCheck(msg)
+		return m, nil
+
+	case CheckPlayFiltersMsg:
+		// playground.checkFilters (ctrl+alt+a, palette, #2792): re-run
+		// every saved filter's self-test and report the tally.
+		return m, m.checkAllPlayFilters()
+
+	case playFilterCheckAllMsg:
+		m.finishPlayFilterCheckAll(msg)
 		return m, nil
 
 	case ShowCheatsheetMsg:
