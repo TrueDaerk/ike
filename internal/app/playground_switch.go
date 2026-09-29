@@ -42,6 +42,12 @@ func (m *Model) parkPlayground() *playState {
 	if s == nil {
 		return nil
 	}
+	// A paged result whose producer still held pages (#2796) cannot carry
+	// it across: the goroutine is bound to this model's run. It re-runs on
+	// resume like any interrupted run, which starts a fresh producer.
+	if s.producer != nil {
+		s.pending = true
+	}
 	s.cancelRun()
 	m.play = nil
 	return s

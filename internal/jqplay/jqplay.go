@@ -36,14 +36,16 @@ import (
 	"github.com/itchyny/gojq"
 )
 
-// MaxOutputs caps how many values one evaluation collects. A program like
-// `range(infinite)` or `.[]` over a large array would otherwise produce more
-// rows than the window could ever show; Result.Truncated marks a capped run.
-const MaxOutputs = 500
+// MaxOutputs caps how many values one evaluation collects in total. A program
+// like `range(infinite)` would otherwise produce values without end;
+// Result.Truncated marks a capped run. The playground reaches the cap page by
+// page (#2796, page.go), so it is a memory budget rather than a screen's
+// worth: the first page is on screen at once whatever the total.
+const MaxOutputs = 10000
 
-// MaxResultBytes caps the total size of the collected output, so 500 values
-// that each happen to be a megabyte cannot blow up the model either.
-const MaxResultBytes = 256 << 10
+// MaxResultBytes caps the total size of the collected output, so 10,000
+// values that each happen to be a megabyte cannot blow up the model either.
+const MaxResultBytes = 8 << 20
 
 // MaxInputValues caps how many top-level values Parse reads out of an input
 // stream (a `.jsonl` export is one value per line, a YAML file one per `---`).
@@ -229,6 +231,10 @@ type Result struct {
 	// what the CSV / TSV export tabulates, independent of the -r / -c form
 	// Outputs are rendered in. nil for an xmq run: its outputs are text.
 	values []any
+	// partial reports that the result is the pages loaded so far of a
+	// progressive run (#2796) whose producer holds more; Append maintains
+	// it. A Run result is never partial.
+	partial bool
 }
 
 // Dialect reports which document language the outputs are written in.
@@ -355,38 +361,14 @@ func run(ctx context.Context, program string, in *Input, opts Options) Result {
 	if err != nil {
 		return Result{Err: err.Error(), dialect: in.dialect}
 	}
+	// One page as large as the whole budget: the same stream the progressive
+	// producer (#2796) pages, collected in one go.
 	res := Result{dialect: in.dialect, opts: opts}
-	size := 0
-	values := vars.Values()
-	for _, v := range in.values {
-		iter := code.RunWithContext(ctx, v, values...)
-		for {
-			out, ok := iter.Next()
-			if !ok {
-				break
-			}
-			if err, ok := out.(error); ok {
-				var halt *gojq.HaltError
-				if errors.As(err, &halt) && halt.Value() == nil {
-					return res // `halt`: a clean stop, not a diagnostic
-				}
-				res.Err = runtimeError(ctx, err)
-				return res
-			}
-			if len(res.Outputs) >= MaxOutputs || size >= MaxResultBytes {
-				res.Truncated = true
-				return res
-			}
-			text := in.dialect.encodeWith(out, opts)
-			size += len(text)
-			res.Outputs = append(res.Outputs, text)
-			res.values = append(res.values, out)
-		}
-		if ctx.Err() != nil {
-			res.Err = contextError(ctx)
-			return res
-		}
-	}
+	var pg Page
+	s := &stream{in: in, code: code, args: vars.Values(), opts: opts}
+	s.collect(ctx, &pg, MaxOutputs, MaxResultBytes)
+	res.Append(pg)
+	res.partial = false
 	return res
 }
 
@@ -441,4 +423,15 @@ func encodeJSON(v any) string {
 
 // Size is the byte length of the result document (#2776), the joined outputs
 // the result buffer shows — what the info row reports next to the count.
-func (r Result) Size() int { return len(r.Text()) }
+func (r Result) Size() int {
+	if len(r.Outputs) == 0 {
+		return 0
+	}
+	// Summed rather than joined: the row is rendered every frame, and a
+	// paged result (#2796) can hold megabytes.
+	size := len(r.separator()) * (len(r.Outputs) - 1)
+	for _, o := range r.Outputs {
+		size += len(o)
+	}
+	return size
+}

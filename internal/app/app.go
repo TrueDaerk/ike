@@ -7547,6 +7547,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// dropped by finishPlayEval, a current one refreshes the result buffer.
 		return m, m.finishPlayEval(msg)
 
+	case playPageMsg:
+		// A further page of a progressive result came back (#2796); a stale
+		// generation is dropped, a current one is appended to the buffer.
+		return m, m.finishPlayPage(msg)
+
 	case playDimMsg:
 		// A pending evaluation has run long enough to dim the result body
 		// (#2777); a stale generation means it already finished.
@@ -12098,7 +12103,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case msg.Button == tea.MouseWheelDown:
 				s.resultEd.ScrollBy(lines)
 			}
-			return m, nil
+			return m, m.playPageCmd() // near the loaded end: pull the next page (#2796)
 		}
 		if c := inst.ActiveContent(); c != nil {
 			// A tab host's body scrolls like the equivalent dedicated pane
@@ -12611,6 +12616,9 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			if _, ly, ok := m.termLocal(m.drag.srcPane, msg); ok {
 				if ed := m.dragEditor(m.drag.srcPane); ed != nil {
 					ed.ScrollbarDrag(ly)
+					if m.play != nil && ed == m.play.resultEd {
+						return m, m.playPageCmd() // the thumb reached the loaded end (#2796)
+					}
 				}
 			}
 		case dragExplScroll:

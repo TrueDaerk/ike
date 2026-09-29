@@ -1,10 +1,10 @@
 ---
 type: concept
 title: jq, yq & xmq Playground
-description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; three dialects over one implementation (jq for JSON buffers and HTTP responses — plus CSV/TSV buffers and CSV-typed responses read through an input adapter as an array of row objects keyed by the header, separator from the language or sniffed, cells kept as strings, a malformed row reported with its line and the row count on the info row, yq for YAML buffers and a focused YAML response, xmq for XML/HTML buffers and a focused XML/HTML response — the one external-engine dialect, shelling out to the xmq CLI with the buffer on stdin, the query line split into shell words, the output language named per command for the result's highlighting and scratch extension, a missing binary answered at open with a centered install-hint dialog and configurable via playground.xmq.path, and the at-path open seeding a select over the caret element's XPath), one chord dispatching over the three dialects from the focused editor's language or the focused HTTP response's content type, gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation behind a synchronous compile check that shows a syntax error on the keystroke, underlines its position in the query line, and never starts a run for a program that cannot compile, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors that leave the last successful result in the buffer under a stale banner instead of clearing it, result cap, copy and open-as-scratch in the dialect's own extension, an export picker that saves the result to a chosen file (asking before an overwrite), copies a list of objects or scalars as RFC 4180 CSV or TSV, or writes the result into a request body of an open .http buffer, showing a target the result cannot serve as unavailable with the reason, opening on `.` or the input's last valid program with the caret's path behind its own command, one per-user program history shared by every buffer and every dialect and persisted across restarts, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier — for xmq the commands, and after a path-taking command the element names, attributes and root steps that exist at the typed XPath in the parsed XML/HTML document, within the same node budget — per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them and marks each ✓ / ✗ / – by an optional self-test (a budgeted input sample and its expected output captured by the save prompt, checked lazily off the loop and cached per session, all re-run by one command), vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, a muted type glyph in the gutter on each output value's first line with a `value i/n` counter for the value under the result cursor, Info-tone gutter bars on the lines a run changed against the previous result (diffed off the loop within a 5,000-line budget, held until the next result, cleared with the output), and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, inserting a picked row into the query line, and leading with guide rows that say what enter does with each kind of row, showing every example's actual output beside its program, every builtin's call form beside its arity, and the sample document the examples are written against as rows of the sheet itself; it opens from the query line while a query is being written, dismissing the completion popup rather than letting it cover the sheet, and its chord is named early enough in the info row's hint tail to survive a narrow pane — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing, while the query line selects all on cmd+a, undoes its last edit on ctrl+z and lets a Global leader sequence (cmd+k …) run to completion instead of swallowing it, while the find chord opens the result buffer's search from either focus with `esc` handing the keyboard back to the query line — its program and caret untouched, the matches left highlighted until the next query re-renders the result — and the match-step chords walk those matches from either focus; a chord appends the result cursor's path (as written, or with every index generalised to `[]`) to the program as a pipeline stage and reruns it — the inverse of the at-path open; jq's `-r`, `-c` and `-s` are per-session toggles (raw strings, one line per output, the whole input stream as one array) shown as clickable chips leading the info row, flipped by chords, remembered with the source's last program, the raw form opening as `.txt` and neither raw nor compact output folding, and absent from xmq; a toggleable structure strip on the result's right edge lists the result's top-level keys, indices or stream values with the on-screen part highlighted and jumps the caret to the one clicked or chosen with enter, hiding itself on narrow panes and structureless results, a table view toggle drawing an array of objects or scalars as a sortable, searchable gridview grid in the result's place with cell copy and row drill-in, falling back to text with a notice when a new result does not fit; two chords step through the program's top-level pipeline stages, showing the result of the program cut after the selected stage with a `stage k/n` counter and the stage highlighted in either query view, typing or esc returning to the full program, and xmq answering with a notification; two more chords chain the result — its values become the next input snapshot, the program starts over at `.`, a breadcrumb leading the info row names the trail cut from the left on a narrow pane, going back restores the previous snapshot, program, caret and toggles, following the source file pauses while chained and re-reads it on the way back to the root, every chained program lands in the history, and xmq refuses with a notice; a toggleable variables line under the query binds `name=value` entries as `$name` — JSON when the value parses as JSON, a string otherwise, exported to the CLI's environment for xmq — reports a malformed line on the info row, adds its header row only while shown, and travels with the program into saved filters (marked `$` in the picker) and the source's remembered last program; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace; it parks and resumes with its document across a project switch, re-driving work the switch interrupted.
+description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; three dialects over one implementation (jq for JSON buffers and HTTP responses — plus CSV/TSV buffers and CSV-typed responses read through an input adapter as an array of row objects keyed by the header, separator from the language or sniffed, cells kept as strings, a malformed row reported with its line and the row count on the info row, yq for YAML buffers and a focused YAML response, xmq for XML/HTML buffers and a focused XML/HTML response — the one external-engine dialect, shelling out to the xmq CLI with the buffer on stdin, the query line split into shell words, the output language named per command for the result's highlighting and scratch extension, a missing binary answered at open with a centered install-hint dialog and configurable via playground.xmq.path, and the at-path open seeding a select over the caret element's XPath), one chord dispatching over the three dialects from the focused editor's language or the focused HTTP response's content type, gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation behind a synchronous compile check that shows a syntax error on the keystroke, underlines its position in the query line, and never starts a run for a program that cannot compile, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors that leave the last successful result in the buffer under a stale banner instead of clearing it, a progressive result — the first page of 200 values installed at once, further pages pulled and appended as the reader scrolls or presses G, within a 10,000-value / 8 MiB budget that still reports its cap, the producer cancelled with the run — copy and open-as-scratch in the dialect's own extension, an export picker that saves the result to a chosen file (asking before an overwrite), copies a list of objects or scalars as RFC 4180 CSV or TSV, or writes the result into a request body of an open .http buffer, showing a target the result cannot serve as unavailable with the reason, opening on `.` or the input's last valid program with the caret's path behind its own command, one per-user program history shared by every buffer and every dialect and persisted across restarts, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier — for xmq the commands, and after a path-taking command the element names, attributes and root steps that exist at the typed XPath in the parsed XML/HTML document, within the same node budget — per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them and marks each ✓ / ✗ / – by an optional self-test (a budgeted input sample and its expected output captured by the save prompt, checked lazily off the loop and cached per session, all re-run by one command), vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, a muted type glyph in the gutter on each output value's first line with a `value i/n` counter for the value under the result cursor, Info-tone gutter bars on the lines a run changed against the previous result (diffed off the loop within a 5,000-line budget, held until the next result, cleared with the output), and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, inserting a picked row into the query line, and leading with guide rows that say what enter does with each kind of row, showing every example's actual output beside its program, every builtin's call form beside its arity, and the sample document the examples are written against as rows of the sheet itself; it opens from the query line while a query is being written, dismissing the completion popup rather than letting it cover the sheet, and its chord is named early enough in the info row's hint tail to survive a narrow pane — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing, while the query line selects all on cmd+a, undoes its last edit on ctrl+z and lets a Global leader sequence (cmd+k …) run to completion instead of swallowing it, while the find chord opens the result buffer's search from either focus with `esc` handing the keyboard back to the query line — its program and caret untouched, the matches left highlighted until the next query re-renders the result — and the match-step chords walk those matches from either focus; a chord appends the result cursor's path (as written, or with every index generalised to `[]`) to the program as a pipeline stage and reruns it — the inverse of the at-path open; jq's `-r`, `-c` and `-s` are per-session toggles (raw strings, one line per output, the whole input stream as one array) shown as clickable chips leading the info row, flipped by chords, remembered with the source's last program, the raw form opening as `.txt` and neither raw nor compact output folding, and absent from xmq; a toggleable structure strip on the result's right edge lists the result's top-level keys, indices or stream values with the on-screen part highlighted and jumps the caret to the one clicked or chosen with enter, hiding itself on narrow panes and structureless results, a table view toggle drawing an array of objects or scalars as a sortable, searchable gridview grid in the result's place with cell copy and row drill-in, falling back to text with a notice when a new result does not fit; two chords step through the program's top-level pipeline stages, showing the result of the program cut after the selected stage with a `stage k/n` counter and the stage highlighted in either query view, typing or esc returning to the full program, and xmq answering with a notification; two more chords chain the result — its values become the next input snapshot, the program starts over at `.`, a breadcrumb leading the info row names the trail cut from the left on a narrow pane, going back restores the previous snapshot, program, caret and toggles, following the source file pauses while chained and re-reads it on the way back to the root, every chained program lands in the history, and xmq refuses with a notice; a toggleable variables line under the query binds `name=value` entries as `$name` — JSON when the value parses as JSON, a string otherwise, exported to the CLI's environment for xmq — reports a malformed line on the info row, adds its header row only while shown, and travels with the program into saved filters (marked `$` in the picker) and the source's remembered last program; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace; it parks and resumes with its document across a project switch, re-driving work the switch interrupted.
 resource: internal/jqplay/jqplay.go
 tags: [architecture, json, csv, yaml, xml, html, jq, yq, xmq, tools, inline, editor, http, completion, folding, table]
-timestamp: 2026-09-29T23:59:00Z
+timestamp: 2026-09-30T00:00:00Z
 ---
 
 # jq, yq & xmq Playground
@@ -115,7 +115,7 @@ While the mode is active on a pane:
   [stale banner](#a-failed-run-keeps-the-last-good-result-2412) are the only
   things that grow it.
 - The info row is composed of **styled segments** (#1978): the summary in the
-  theme's Hint, the caps — `(stopped at 500)`, `(first 10000 only)` — and a
+  theme's Hint, the caps — `(stopped at 10000)`, `(first 10000 only)` — and a
   zero-value result in **Warning** (the buffer is blank then, and the summary
   is the only signal that nothing matched). On a narrow pane the key hints are
   **dropped as whole `·`-separated segments** instead of being cut mid-word;
@@ -416,7 +416,8 @@ escapes; an unterminated quote is a query-line error, not a guess). Everything
 around the process boundary is the shared machinery: the same debounce and
 generation stamping, the same `EvalTimeout` (the run context kills the process,
 `WaitDelay` bounds the pipe drain), the same `MaxResultBytes` cap on stdout
-(`Truncated` on the info row), the same history, library
+(`Truncated` on the info row) — the one CLI result paged into the buffer by
+lines (#2796) — the same history, library
 (`xmqfilters.json` / `xmqfilters-global.json`) and stale-result contract.
 
 Consequences of the boundary, each deliberate:
@@ -699,12 +700,16 @@ Evaluation never runs on the event loop:
 - Each program change **cancels the run in flight**, bumps a generation and
   schedules a `tea.Tick` (120 ms) stamped with it. Only the tick still holding
   the current generation starts a run — that is the debounce.
-- The run itself is a `tea.Cmd` under a `context.WithTimeout(EvalTimeout)`; its
-  `jqEvalDoneMsg` carries both the generation and the state it belongs to, so a
-  result superseded by a newer keystroke — or one arriving after the mode
-  closed — is dropped instead of overwriting the current one. A current one
-  reinstalls the result buffer's content (cursor and scroll reset with it —
-  the text they pointed into just changed).
+- The run itself is a `tea.Cmd` that starts a producer under a cancellable
+  context and waits for its **first page** (#2796, [limits](#evaluation-limits-pages-a-budget-a-deadline-2796));
+  the `EvalTimeout` deadline is the producer's own, per page. Its
+  `playEvalDoneMsg` carries both the generation and the state it belongs to,
+  so a result superseded by a newer keystroke — or one arriving after the
+  mode closed — is dropped instead of overwriting the current one. A current
+  one reinstalls the result buffer's content (cursor and scroll reset with it
+  — the text they pointed into just changed) and keeps the producer for the
+  pages still pending; a later page (`playPageMsg`) is stamped the same way
+  and *appends* rather than reinstalls.
 - `enter` and the initial evaluation skip the debounce; the result is wanted
   now, not a tick later.
 
@@ -754,20 +759,69 @@ found in (`compileProg`), so it clears the moment the program compiles and can
 never point into an edit the check has not seen. Both the one-row window and
 the multi-line view draw it; the window does not scroll to reveal it.
 
-Three independent bounds keep a hostile program from hanging the IDE, because
-no single one covers all of them:
+### Evaluation limits: pages, a budget, a deadline (#2796)
 
-| Bound | Constant | Catches |
+A run does not collect its whole output before the buffer shows a line. The
+evaluation is a **resumable producer** (`jqplay.Start`, `internal/jqplay/page.go`)
+that yields the output in **pages** and stays suspended on its goroutine
+between them:
+
+| Bound | Constant | Meaning |
 | --- | --- | --- |
-| Output count | `MaxOutputs` (500) | `range(infinite)`, `repeat(0)` |
-| Output size | `MaxResultBytes` (256 KiB) | few values, each enormous |
-| Wall clock | `EvalTimeout` (5 s) | `def f: f; f` — loops emitting *nothing* |
+| Page | `PageOutputs` (200) / `PageBytes` (64 KiB) | what one pull hands over — the first page is the run's result as far as the reader is concerned |
+| Total budget | `MaxOutputs` (10,000) / `MaxResultBytes` (8 MiB) | how much one result may ever hold; `Truncated` past it |
+| Wall clock | `EvalTimeout` (5 s) | per *page*, computing time only — `def f: f; f` (loops emitting *nothing*) fails its page with the timeout message |
 
-A capped run is **not an error**: the result summary says `(stopped at 500)`
-— in the theme's Warning color, since the user is seeing less than the run
-produced — and the values collected stand. Opening the playground over an
-input larger than `AsyncThreshold` (64 KiB) parses off the loop too, so even
-the open is not a stall.
+- **The first page lands at once.** `.items[]` over a big file shows its
+  first 200 values as soon as they are rendered; the run's `elapsed` is the
+  time to that page. The info row counts what is loaded with a `+` while
+  the producer holds more — `Result — 200+ value(s)` — and the exact count
+  once the last page landed.
+- **Pages append as the reader approaches the end.** After every key, wheel
+  tick and scrollbar drag in the result, and after each page lands, the
+  playground asks whether the viewport or the cursor is within one screen
+  of the loaded end (`playWantsPage`, `internal/app/playpage.go`); if so it
+  pulls the next page off the loop and **appends** it: the result editor
+  grows in place (`editor.AppendReadOnly`), so the cursor, the scroll
+  position, the folds already collapsed and the search with its highlights
+  are untouched. The folds of the new values are added to the installed
+  ones (`Result.FoldsSince`), the value glyphs and the structure strip's
+  entries extend, the table view re-reads the grown result, and the search
+  finds matches in a page the moment it is loaded (the buffer version
+  changes, so the match tally re-scans). `G` walks to the *true* end: a
+  cursor on the last line follows each appended page and asks for the
+  next, until the stream is exhausted or the budget spent.
+- **Memory stays bounded.** A page is computed only when asked for, so a
+  half-read result costs the pages read; the total budget is the ceiling.
+  A capped run is **not an error**: the summary says `(stopped at 10000)`
+  (the count it stopped at) in the theme's Warning color, and the values
+  collected stand. The copy, scratch, export and chain actions work on the
+  pages loaded; a chained input's origin says `chained from a partial
+  result` then.
+- **Cancellation ends the producer, never leaks it.** The run context
+  carries no deadline of its own — `cancelRun` cancels it, and the
+  producer's goroutine exits whether it is computing or suspended. Every
+  path that abandons a run goes through it: a program change, `ctrl+l`, a
+  compile error, closing the mode, and parking for a project switch (a
+  parked producer cannot follow its result into another model, so the run
+  is marked pending and re-runs on resume). A page that outlives its run —
+  the generation moved on — is dropped like a stale result.
+- **The deadline counts computing time only.** A `pageContext` runs the
+  `EvalTimeout` timer while a page is being computed and stops it between
+  pages, so a result left half-loaded for an hour is not timed out for
+  waiting on the reader; the timeout message reads exactly as it did for a
+  whole run.
+- **yq shares the jq path; xmq is paged by lines.** The xmq CLI's stdout is
+  one text (still capped at `MaxResultBytes`), cut at line ends into
+  `PageBytes` chunks that count as **one** value, fold and outline as one
+  document, and rejoin with the dialect's separator into the text the CLI
+  wrote. The three dialects share the whole mechanism; only the page source
+  differs. `Run` — the synchronous form the capture directive, the
+  self-tests and the tests use — is the same stream collected in one page as
+  large as the budget.
+
+Opening the playground over an input larger than `AsyncThreshold` (64 KiB)
+parses off the loop too, so even the open is not a stall.
 
 While a re-run is pending the summary keeps the **previous count** with an
 `· evaluating…` suffix rather than replacing it (#1978): pending is set the
@@ -1340,7 +1394,8 @@ result, up back out. The issue's `ctrl+shift+backspace` is `nav.lastEdit`'s
 - **What is chained.** The result's **values** (`jqplay.Result.Chain`), never
   its text re-parsed: `-r` / `-c` are views, so the strings of a raw result
   chain as strings. The chained input's origin (`chained`, or `chained from a
-  capped result` when the run hit its cap) is on the input segment. `-r` / `-c`
+  capped result` when the run hit its cap, `chained from a partial result`
+  when pages were still pending, #2796) is on the input segment. `-r` / `-c`
   stay with the next level; `-s`, which reshapes the input, starts off. A
   saved filter's self-test sample on a chained level is the chained input.
 - **When it refuses.** With nothing run yet, a stale result under an error, a

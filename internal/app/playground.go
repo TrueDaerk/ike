@@ -357,7 +357,18 @@ type playState struct {
 
 	gen    int
 	cancel context.CancelFunc
-	status string
+	// runCtx is the run context cancel ends; producer is the progressive
+	// run's page source (#2796, playpage.go) while it holds more pages, nil
+	// once the last one landed or the run was abandoned. loading marks a page
+	// pull in flight; toEnd that the cursor stood on the last line when it
+	// was asked for (`G`), so it follows the new end. foldRanges are the
+	// editor's host folds as installed, extended page by page.
+	runCtx     context.Context
+	producer   *jqplay.Producer
+	loading    bool
+	toEnd      bool
+	foldRanges []highlight.Fold
+	status     string
 	// statusWarn renders the status line as a warning rather than a
 	// confirmation (#2237): "that key does nothing here" is not good news,
 	// and painting it in the same green as "copied the result" would read as
@@ -996,12 +1007,14 @@ func (m *Model) leavePlaygroundOnEsc() {
 	m.lastEscAt = m.clock()
 }
 
-// cancelRun aborts the evaluation in flight, if any.
+// cancelRun aborts the evaluation in flight, if any — and with it the
+// producer of a paged result (#2796), whose goroutine ends with the context.
 func (s *playState) cancelRun() {
 	if s.cancel != nil {
 		s.cancel()
 		s.cancel = nil
 	}
+	s.runCtx, s.producer, s.loading = nil, nil, false
 }
 
 // playParseDoneMsg carries the parsed input snapshot back to the model. It
@@ -1030,6 +1043,9 @@ type playEvalDoneMsg struct {
 	gen int
 	res jqplay.Result
 	dur time.Duration
+	// producer is the run's page source (#2796) when res is its first page
+	// and more are pending; nil when res is the whole result.
+	producer *jqplay.Producer
 	// text is res.Text(), joined off the loop; changes its marks against
 	// the result it replaces (#2787).
 	text    string
@@ -1268,8 +1284,12 @@ func (m *Model) runPlay() tea.Cmd {
 	if s == nil || s.input == nil {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), jqplay.EvalTimeout)
-	s.cancel = cancel
+	// The context carries no deadline of its own: the producer (#2796) times
+	// each *page* by jqplay.EvalTimeout, so a result left half-loaded is not
+	// timed out for waiting on the reader. cancelRun ends it — and with it
+	// the producer's goroutine — on a new program, a clear, a close, a park.
+	ctx, cancel := context.WithCancel(context.Background())
+	s.cancel, s.runCtx = cancel, ctx
 	program, in, gen, opts := s.playEvalProgram(), s.input, s.gen, s.runOpts()
 	parse := s.parseDur
 	// The change diff (#2787) compares against the installed good result;
@@ -1277,11 +1297,19 @@ func (m *Model) runPlay() tea.Cmd {
 	// nothing to compare and the result carries no marks.
 	prev, diffable := s.shownText, s.haveResult && !s.chainSwitch
 	s.chainSwitch = false
+	p := jqplay.Start(ctx, program, in, opts)
 	return func() tea.Msg {
-		defer cancel()
 		start := time.Now()
-		res := jqplay.RunWith(ctx, program, in, opts)
+		pg, ok := p.Next(ctx)
+		if !ok {
+			return nil // cancelled before its first page: nothing to install
+		}
+		res := p.Shape()
+		res.Append(pg)
 		msg := playEvalDoneMsg{st: s, gen: gen, res: res, dur: parse + time.Since(start)}
+		if !pg.Done {
+			msg.producer = p
+		}
 		if res.Err == "" {
 			msg.text = res.Text()
 			if diffable {
@@ -1302,15 +1330,24 @@ func (m *Model) finishPlayEval(msg playEvalDoneMsg) tea.Cmd {
 	if s == nil || msg.st != s || msg.gen != s.gen || s.compileBad {
 		return nil
 	}
-	s.pending, s.dimming, s.spinning, s.cancel = false, false, false, nil
+	s.pending, s.dimming, s.spinning = false, false, false
 	if msg.res.Err != "" {
 		// A failed run keeps the previous result on screen (#2412): the error
 		// takes the info row and the stale banner marks the buffer, but the
 		// buffer itself — its text, its scroll position, its find highlights —
 		// is left exactly as the last good run left it.
+		s.cancelRun()
 		s.runErr = msg.res.Err
 		m.sizePlayResult() // the banner costs a row while it is up
 		return nil
+	}
+	// A first page with more behind it keeps its producer — and the run
+	// context that ends it — until the last page lands (#2796, playpage.go);
+	// a whole result releases both now.
+	if msg.producer != nil {
+		s.producer, s.loading, s.toEnd = msg.producer, false, false
+	} else {
+		s.cancelRun()
 	}
 	s.runErr = ""
 	s.result, s.haveResult = msg.res, true
@@ -1323,7 +1360,7 @@ func (m *Model) finishPlayEval(msg playEvalDoneMsg) tea.Cmd {
 		m.rememberPlayProgram(s.srcKey, s.srcPath, s.program.Text, msg.res.Options())
 	}
 	m.sizePlayResult()
-	return m.syncPlayResultBuffer()
+	return tea.Batch(m.syncPlayResultBuffer(), m.playPageCmd())
 }
 
 // playStale reports whether the result buffer is showing an output the current
@@ -1413,6 +1450,7 @@ func (s *playState) setResultFolds(folds []jqplay.Fold) {
 		s.folds[f.HeaderLine] = f
 		ranges = append(ranges, highlight.Fold{HeaderLine: f.HeaderLine, EndLine: f.EndLine})
 	}
+	s.foldRanges = ranges // extended page by page (#2796)
 	if s.resultEd != nil {
 		s.resultEd.SetHostFolds(ranges)
 	}
@@ -1468,6 +1506,11 @@ func (m Model) updatePlayground(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	out, cmd := m.updatePlaygroundKey(msg)
 	if mm, ok := out.(Model); ok {
 		mm.sizePlayResult()
+		// A motion may have brought the reader near the end of a paged result
+		// (#2796): the next page is pulled before the edge is reached.
+		if page := mm.playPageCmd(); page != nil {
+			cmd = tea.Batch(cmd, page)
+		}
 		return mm, cmd
 	}
 	return out, cmd
@@ -2225,6 +2268,7 @@ func (m *Model) clearPlayResult() tea.Cmd {
 	if s == nil {
 		return nil
 	}
+	s.cancelRun() // a half-loaded result's producer goes with it (#2796)
 	s.result, s.haveResult, s.runErr, s.compileBad = jqplay.Empty(s.dialect), false, "", false
 	s.shownText, s.changes = "", nil
 	m.sizePlayResult() // the stale banner's row goes back to the result
@@ -2798,7 +2842,7 @@ func (m Model) playResultSegment() string {
 	if s.parsing {
 		return "" // the input segment already says so
 	}
-	n := len(s.result.Outputs)
+	n := s.result.Count()
 	if s.pending && n == 0 {
 		return hint.Render("Result — evaluating…" + s.spinSuffix())
 	}
@@ -2806,9 +2850,11 @@ func (m Model) playResultSegment() string {
 	if n == 0 {
 		st = warn
 	}
-	out := st.Render(fmt.Sprintf("Result — %d value(s)", n))
+	// A paged result (#2796) counts what is loaded with a `+` until its last
+	// page landed; the budget's cap names the count it stopped at.
+	out := st.Render("Result — " + s.playCountLabel() + " value(s)")
 	if s.result.Truncated {
-		out += warn.Render(fmt.Sprintf(" (stopped at %d)", jqplay.MaxOutputs))
+		out += warn.Render(fmt.Sprintf(" (stopped at %d)", n))
 	}
 	if s.table != nil {
 		out += hint.Render(" · " + s.table.counter())

@@ -2,6 +2,9 @@ package editor
 
 import (
 	"errors"
+	"strings"
+
+	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/history"
@@ -82,6 +85,37 @@ func (m *Model) ShowReadOnly(path, text string) {
 	m.bumpRender()
 	m.applyConfig()
 	m.scroll()
+}
+
+// AppendReadOnly grows a read-only buffer by text without resetting the view
+// (#2796): the cursor, the scroll position, the folds, the search and its
+// highlights all stay where they are, and the new lines hang below the last
+// one — a page of a progressive playground result landing under the page the
+// reader is looking at. text is appended verbatim, so a caller that wants the
+// new content on its own lines starts it with "\n"; the returned command
+// re-parses the buffer for highlighting. A buffer that is not read-only is
+// left alone: this is a host's append, not an edit.
+func (m *Model) AppendReadOnly(text string) tea.Cmd {
+	if !m.readOnly || text == "" {
+		return nil
+	}
+	segs := strings.Split(text, "\n")
+	m.buf.AppendToLastLine(segs[0])
+	for _, s := range segs[1:] {
+		m.buf.AppendLine(s)
+	}
+	m.docBytes += int64(len(text))
+	if !m.largeFile && m.limits().Exceeded(m.docBytes, m.buf.LineCount()) {
+		m.largeFile = true
+	}
+	// A new version: the line cache, the search tally (#2145) and the
+	// structural query all key on it, so the appended lines are searched
+	// and rendered rather than served from the previous content's caches.
+	m.docVersion++
+	m.bumpRender()
+	m.reconcileFolds()
+	m.scroll()
+	return m.parseCmd()
 }
 
 // ReadOnly reports whether the buffer refuses edits and writes (#1762).

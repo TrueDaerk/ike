@@ -253,9 +253,15 @@ func TestJQPlaygroundInvalidInputShowsError(t *testing.T) {
 
 // TestJQPlaygroundCapsHugeResult: an unbounded program stops at the cap and
 // says so, and the dialog stays responsive (the run is off the event loop).
+// The cap is reached page by page (#2796): the first page is partial, and
+// `G` walks the pages in until the budget ends the stream.
 func TestJQPlaygroundCapsHugeResult(t *testing.T) {
-	m := openJQ(t, playApp(t, "null"))
+	m := playNoOnboarding(openJQ(t, playApp(t, "null")))
 	m = setProgram(m, "range(infinite)")
+	if !m.play.result.Partial() || m.play.result.Truncated {
+		t.Fatal("an infinite program's first page is partial, not yet capped")
+	}
+	m = walkToEnd(m)
 	if !m.play.result.Truncated {
 		t.Fatal("an infinite program must report a truncated result")
 	}
