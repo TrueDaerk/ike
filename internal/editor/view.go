@@ -19,6 +19,7 @@ import (
 	"ike/internal/theme"
 	"ike/internal/ui"
 	"ike/internal/unihint"
+	"ike/internal/vcs"
 )
 
 // ModeColor is the accent colour that identifies an input mode (#1323), shared
@@ -661,8 +662,24 @@ func (m Model) View() string {
 			}
 		} else if g, ok := m.hostSigns[i]; ok {
 			// Host glyphs (#2789): informational, below every built-in marker.
+			// A host change mark on the same line (#2787) recolours the glyph
+			// rather than replacing it, so the value boundary stays visible.
 			sign = g
 			signStyle = lipgloss.NewStyle().Foreground(m.theme().Hint)
+			if mk, ok := m.hostChanges[i]; ok {
+				signStyle = lipgloss.NewStyle().Foreground(m.theme().Info).Bold(true)
+				if mk != vcs.LineDeleted {
+					gs = lipgloss.NewStyle().Foreground(m.theme().Info)
+				}
+			}
+		} else if mk, ok := m.hostChanges[i]; ok {
+			// Host change marks (#2787): the playground's "changed since the
+			// previous run" bars, in the Info tone.
+			sign = hostChangeSign(mk)
+			signStyle = lipgloss.NewStyle().Foreground(m.theme().Info)
+			if mk != vcs.LineDeleted {
+				gs = lipgloss.NewStyle().Foreground(m.theme().Info)
+			}
 		} else if sev, ok := m.worstSeverityOnLine(i); ok {
 			gs = lipgloss.NewStyle().Foreground(m.diagColor(sev))
 		} else if mk, ok := m.gitMarks[i]; ok && m.gitVisible(mk) {

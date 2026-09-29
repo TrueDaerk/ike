@@ -628,9 +628,11 @@ type Model struct {
 	// the same way and winning on a shared header; foldSummary overrides the
 	// collapsed header's placeholder text so it can name what the node holds
 	// ("3 keys") instead of how tall it is.
-	hostFolds   []highlight.Fold
+	hostFolds []highlight.Fold
 	// hostSigns are sign-column glyphs a host installed (#2789, hostsigns.go).
 	hostSigns map[int]string
+	// hostChanges are host-computed line-change marks (#2787, hostsigns.go).
+	hostChanges map[int]vcs.LineMark
 	foldSummary func(header, end, budget int) string
 	// selRange is the extend/shrink-selection ladder state (#1912,
 	// selrange.go): the innermost-first range ladder of the last request plus

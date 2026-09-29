@@ -25,6 +25,7 @@ import (
 	"ike/internal/theme"
 	"ike/internal/ui"
 	"ike/internal/undostore"
+	"ike/internal/vcs"
 )
 
 // playground.go is the UI half of the jq and yq playgrounds (#1936, inline
@@ -302,6 +303,11 @@ type playState struct {
 	// valueStarts is the first result line of each output value (#2789):
 	// the gutter's type glyphs and the info row's `value i/n` read it.
 	valueStarts []int
+	// shownText is the text of the installed good result (#2787), the side
+	// the next run diffs against; changes are the installed result's marks
+	// against the one it replaced (playchanges.go), nil when there are none.
+	shownText string
+	changes   map[int]vcs.LineMark
 
 	gen    int
 	cancel context.CancelFunc
@@ -951,6 +957,10 @@ type playEvalDoneMsg struct {
 	gen int
 	res jqplay.Result
 	dur time.Duration
+	// text is res.Text(), joined off the loop; changes its marks against
+	// the result it replaces (#2787).
+	text    string
+	changes map[int]vcs.LineMark
 }
 
 // playDimMsg fires playDimDelay after an evaluation started; a stale
@@ -1173,11 +1183,22 @@ func (m *Model) runPlay() tea.Cmd {
 	s.cancel = cancel
 	program, in, gen, opts := s.program.Text, s.input, s.gen, s.opts
 	parse := s.parseDur
+	// The change diff (#2787) compares against the installed good result;
+	// with none — the first run, or the first after a clear — there is
+	// nothing to compare and the result carries no marks.
+	prev, diffable := s.shownText, s.haveResult
 	return func() tea.Msg {
 		defer cancel()
 		start := time.Now()
 		res := jqplay.RunWith(ctx, program, in, opts)
-		return playEvalDoneMsg{st: s, gen: gen, res: res, dur: parse + time.Since(start)}
+		msg := playEvalDoneMsg{st: s, gen: gen, res: res, dur: parse + time.Since(start)}
+		if res.Err == "" {
+			msg.text = res.Text()
+			if diffable {
+				msg.changes = playChangeMarks(prev, msg.text)
+			}
+		}
+		return msg
 	}
 }
 
@@ -1203,6 +1224,7 @@ func (m *Model) finishPlayEval(msg playEvalDoneMsg) tea.Cmd {
 	}
 	s.runErr = ""
 	s.result, s.haveResult = msg.res, true
+	s.shownText, s.changes = msg.text, msg.changes
 	s.elapsed, s.parseDur = msg.dur, 0
 	m.rememberPlayProgram(s.srcKey, s.srcPath, s.program.Text, msg.res.Options())
 	m.sizePlayResult()
@@ -1270,6 +1292,7 @@ func (m *Model) syncPlayResultBuffer() tea.Cmd {
 	s.resultEd.ClearSearch()
 	s.setResultFolds(s.result.Folds())
 	s.setResultValueSigns()
+	s.resultEd.SetHostChanges(s.changes)
 	s.resultEd.SetFocused(s.bufFocus)
 	return s.resultEd.Reparse()
 }
@@ -2052,6 +2075,7 @@ func (m *Model) clearPlayResult() tea.Cmd {
 		return nil
 	}
 	s.result, s.haveResult, s.runErr, s.compileBad = jqplay.Empty(s.dialect), false, "", false
+	s.shownText, s.changes = "", nil
 	m.sizePlayResult() // the stale banner's row goes back to the result
 	s.status = "cleared the output — the next run fills it again"
 	return m.syncPlayResultBuffer()
