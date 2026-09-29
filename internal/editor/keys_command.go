@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"ike/internal/editor/buffer"
 	"ike/internal/editor/excmd"
@@ -316,6 +317,9 @@ func (m Model) updateCommandLine(key tea.KeyPressMsg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.searching {
+			if m.cmdline != "" {
+				m.lastSearchLine = m.cmdline // the next "/" or "?" prefill (#2826)
+			}
 			m.pushCmdHistory()
 			m.commitSearch()
 			m.mode = Normal
@@ -598,6 +602,10 @@ func (m *Model) commitSearch() {
 // standalone in tests without touching the state store.
 func (m *Model) SetHistories(h *histories.Store) { m.histStore = h }
 
+// Histories returns the attached query-history store (nil when detached), so
+// the host can verify every editor it wires shares its store (#2826).
+func (m Model) Histories() *histories.Store { return m.histStore }
+
 // cmdHistBucket names the open command line's history bucket: the search
 // line ("/" and "?") shares one bucket, the ex line has its own — separate
 // recall lists like vim's / and : histories.
@@ -626,13 +634,16 @@ func (m *Model) recallHistory(dir int) {
 		return
 	}
 	next := m.cmdHistIdx + dir
+	// Skip entries showing exactly the text already on the line (#2826): the
+	// line opens prefilled with the last query, which is usually the newest
+	// entry, and a recall that changes nothing reads as a dead key.
+	for next >= 0 && next < len(entries) && entries[next] == m.cmdline {
+		next += dir
+	}
 	if next < -1 {
 		next = -1
 	}
-	if next >= len(entries) {
-		next = len(entries) - 1
-	}
-	if next == m.cmdHistIdx {
+	if next >= len(entries) || next == m.cmdHistIdx {
 		return
 	}
 	if m.cmdHistIdx == -1 {
@@ -662,6 +673,47 @@ func (m *Model) pushCmdHistory() {
 	if m.histStore != nil && m.cmdline != "" {
 		m.histStore.Push(m.cmdHistBucket(), m.cmdline)
 	}
+}
+
+// searchPrefill picks the text a fresh "/", "?" or editor.find line opens
+// with, selected (#2063, #2826): a single-line visual selection wins; else
+// this editor's last committed search line; else the project's last search —
+// the newest entry of the search history, which every editor of the project
+// pushes to (#1171) — and finally a query the app seeded for f3/cmd+g
+// (#2623). "" opens the line empty.
+func (m *Model) searchPrefill() string {
+	if p := m.visualSearchPrefill(); p != "" {
+		return p
+	}
+	if m.lastSearchLine != "" {
+		return m.lastSearchLine
+	}
+	if m.histStore != nil {
+		if e := m.histStore.All(histories.Search); len(e) > 0 {
+			return e[0]
+		}
+	}
+	if !m.query.IsStructural() {
+		return m.query.Pattern
+	}
+	return ""
+}
+
+// searchHistoryHint renders the right-aligned "↑ history" hint of the open
+// search line (#2826) when the shared "/" "?" bucket has entries to recall,
+// padded so it ends at the editor's right edge (one column is left for the
+// scrollbar). left is the rendered row it trails; the hint is dropped when
+// the row leaves no room for it, so it never pushes into the pattern text.
+func (m Model) searchHistoryHint(left string) string {
+	if !m.searching || m.filtering || m.histStore == nil || !m.histStore.Has(histories.Search) {
+		return ""
+	}
+	const hint = "↑ history"
+	pad := m.width - 1 - lipgloss.Width(left) - lipgloss.Width(hint)
+	if pad < 2 {
+		return ""
+	}
+	return strings.Repeat(" ", pad) + lipgloss.NewStyle().Faint(true).Render(hint)
 }
 
 // runExLine parses and executes a ":" command, returning any resulting tea.Cmd.

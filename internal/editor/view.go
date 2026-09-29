@@ -823,7 +823,8 @@ func (m Model) commandLineRow() string {
 		selStyle := lipgloss.NewStyle().Background(m.theme().Selection).Foreground(m.theme().SelectionText)
 		line = ui.CursorViewSel(m.cmdline, m.cmdCur, m.cmdSelStart, m.cmdSelEnd, selStyle)
 	}
-	return m.cmdPrefix() + line + m.searchCounter() + m.filterHint() + m.suggestRow()
+	row := m.cmdPrefix() + line + m.searchCounter() + m.filterHint() + m.suggestRow()
+	return row + m.searchHistoryHint(row)
 }
 
 // filterHint trails the open follow-filter line (#2255) with what the pattern

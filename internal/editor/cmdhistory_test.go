@@ -2,9 +2,12 @@ package editor
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/histories"
 )
@@ -39,7 +42,7 @@ func TestSearchHistoryRecallOrder(t *testing.T) {
 	m = commitSearchLine(m, "beta")
 	m = commitSearchLine(m, "gamma")
 
-	m = typeKeys(m, "/")
+	m = typeKeys(m, "/x") // replaces the "gamma" prefill (#2826)
 	m = send(m, up())
 	if m.cmdline != "gamma" {
 		t.Fatalf("first up = %q, want the most recent query", m.cmdline)
@@ -59,9 +62,75 @@ func TestSearchHistoryRecallOrder(t *testing.T) {
 	if m.cmdline != "gamma" {
 		t.Fatalf("down = %q, want the newer query", m.cmdline)
 	}
-	m = send(m, down()) // back to the live (empty) line
-	if m.cmdline != "" {
+	m = send(m, down()) // back to the live line
+	if m.cmdline != "x" {
 		t.Fatalf("down past the newest = %q, want the live line", m.cmdline)
+	}
+}
+
+// TestSearchRecallFromPrefill (#2826): the line opens prefilled with the
+// newest query, so the first up skips that duplicate and lands on the older
+// one — every recall changes the line — and down returns to the prefill.
+// Recalled text re-runs the incremental preview.
+func TestSearchRecallFromPrefill(t *testing.T) {
+	m, _ := histEditor(t, "alpha\nbeta\ngamma\n")
+	m = commitSearchLine(m, "beta")
+	m = commitSearchLine(m, "gamma")
+
+	m = typeKeys(m, "/")
+	if m.cmdline != "gamma" {
+		t.Fatalf("prefill = %q, want the last query", m.cmdline)
+	}
+	m = send(m, up())
+	if m.cmdline != "beta" {
+		t.Fatalf("up from the prefill = %q, want the older query", m.cmdline)
+	}
+	if m.cmdSelStart != m.cmdSelEnd {
+		t.Fatal("a recall must drop the prefill selection")
+	}
+	if m.preview.Pattern != "beta" || m.cursor.Line != 1 {
+		t.Fatalf("recall preview = %q at line %d, want beta on line 1", m.preview.Pattern, m.cursor.Line)
+	}
+	m = send(m, down())
+	if m.cmdline != "gamma" {
+		t.Fatalf("down = %q, want the live (prefilled) line", m.cmdline)
+	}
+	if m.preview.Pattern != "gamma" || m.cursor.Line != 2 {
+		t.Fatalf("live preview = %q at line %d, want gamma on line 2", m.preview.Pattern, m.cursor.Line)
+	}
+}
+
+// TestSearchHistoryHint (#2826): the open search line trails a
+// right-aligned "↑ history" hint while the bucket has entries, nothing on an
+// empty bucket or without a store, and drops it on a row too narrow for it.
+func TestSearchHistoryHint(t *testing.T) {
+	m, _ := histEditor(t, "alpha\nbeta\n")
+	m = typeKeys(m, "/")
+	if row := ansi.Strip(m.commandLineRow()); strings.Contains(row, "history") {
+		t.Fatalf("empty bucket rendered a hint: %q", row)
+	}
+	m = send(m, special(tea.KeyEscape))
+	m = commitSearchLine(m, "beta")
+	m = typeKeys(m, "?")
+	row := ansi.Strip(m.commandLineRow())
+	if !strings.HasSuffix(row, "↑ history") {
+		t.Fatalf("row %q must end in the history hint", row)
+	}
+	if w := lipgloss.Width(row); w != m.width-1 {
+		t.Fatalf("hint row width = %d, want right-aligned at %d", w, m.width-1)
+	}
+	if !strings.HasPrefix(row, "?beta") {
+		t.Fatalf("row %q must keep the pattern text ahead of the hint", row)
+	}
+	m.width = 12
+	if row := ansi.Strip(m.commandLineRow()); strings.Contains(row, "history") {
+		t.Fatalf("narrow row still rendered the hint: %q", row)
+	}
+
+	bare, _ := loaded(t, "alpha\n")
+	bare = typeKeys(bare, "/")
+	if row := ansi.Strip(bare.commandLineRow()); strings.Contains(row, "history") {
+		t.Fatalf("no store rendered a hint: %q", row)
 	}
 }
 

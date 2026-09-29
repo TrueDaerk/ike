@@ -1023,8 +1023,9 @@ func TestCommitSearchEmitsSearchCommittedMsg(t *testing.T) {
 	if m.cursor.Col != 8 {
 		t.Fatalf("RepeatSearch(true) col=%d want 8", m.cursor.Col)
 	}
-	// An empty pattern commit clears the query and announces nothing.
-	m = send(m, key('/'))
+	// An empty pattern commit clears the query and announces nothing. The
+	// line opens prefilled with the last query (#2826); backspace clears it.
+	m = send(m, key('/'), special(tea.KeyBackspace))
 	m, cmd = m.Update(special(tea.KeyEnter))
 	if cmd != nil {
 		t.Fatal("empty search commit must not announce SearchCommittedMsg")

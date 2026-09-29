@@ -179,9 +179,13 @@ type Model struct {
 	histStore   *histories.Store
 	cmdHistIdx  int
 	cmdHistLive string
-	searching   bool
-	searchDir   search.Direction
-	query       search.Query
+	// lastSearchLine is the text of this editor's last committed "/" or "?"
+	// line, markers included (#2826): the next search line opens prefilled
+	// with it, selected, so refining the previous query needs no retyping.
+	lastSearchLine string
+	searching      bool
+	searchDir      search.Direction
+	query          search.Query
 	// searchIgnoreCase mirrors editor.search_ignore_case (#1111): in-file
 	// searches fold case by default; \C in the query forces exact matching.
 	searchIgnoreCase bool
