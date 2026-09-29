@@ -810,6 +810,9 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			langCommand(appCommand("json.jqToggleRaw", "Toggle Playground Raw Output (-r)", TogglePlayOptionMsg{Option: PlayOptRaw}), playgroundLangs()),
 			langCommand(appCommand("json.jqToggleCompact", "Toggle Playground Compact Output (-c)", TogglePlayOptionMsg{Option: PlayOptCompact}), playgroundLangs()),
 			langCommand(appCommand("json.jqToggleSlurp", "Toggle Playground Slurp Input (-s)", TogglePlayOptionMsg{Option: PlayOptSlurp}), playgroundLangs()),
+			// The export picker (#2788): save to a file, copy as CSV / TSV, use
+			// as an HTTP request body.
+			langCommand(appCommand("playground.export", "Export Playground Result…", ShowPlayExportMsg{}), playgroundLangs()),
 			langCommand(appCommand("log.openRotatedSet", "Open Rotated Log Set (Merged Timeline)", OpenMergedLogMsg{}), []string{"log"}),
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
 			appCommand("terminal.newTab", "New Terminal Tab", TerminalNewTabMsg{}),

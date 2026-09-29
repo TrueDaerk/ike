@@ -241,7 +241,7 @@ func (m Model) overlayCapturesAbovePopup() bool {
 // only consume a paste when its own pane holds it.
 func (m Model) overlayCapturesBelowPopup() bool {
 	return m.renameOpen() || m.clonePromptOpen() || m.groupSavePromptOpen() || m.regexTesterOpen() ||
-		m.playNamePromptOpen() || m.playFocused() ||
+		m.playNamePromptOpen() || m.playSaveFileOpen() || m.playFocused() ||
 		m.newProjectPromptOpen() || m.generateScratchOpen() ||
 		m.scratchManagerOpen() || m.saveAsOpen() || m.promoteScratchOpen() ||
 		m.scratchCustomExtOpen() ||

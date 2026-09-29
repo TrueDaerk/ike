@@ -547,3 +547,18 @@ func TestResolveSubstitutesTheBodyPath(t *testing.T) {
 		t.Fatalf("BodyFile = %q, want ./order.json", out.BodyFile)
 	}
 }
+
+// TestHeadEnd: HeadEnd is the last line of the request head — past folded
+// query lines and headers, before the body's blank line (#2788).
+func TestHeadEnd(t *testing.T) {
+	f := Parse("### a\nPOST https://x.test/a\n    ?q=1\nAccept: */*\n\n{}\n\n### b\nGET https://x.test/b\n")
+	if len(f.Requests) != 2 {
+		t.Fatalf("got %d requests", len(f.Requests))
+	}
+	if got := f.Requests[0].HeadEnd; got != 4 {
+		t.Errorf("request a HeadEnd = %d, want 4", got)
+	}
+	if got := f.Requests[1].HeadEnd; got != 9 {
+		t.Errorf("request b HeadEnd = %d, want 9", got)
+	}
+}

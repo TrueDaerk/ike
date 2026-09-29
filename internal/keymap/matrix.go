@@ -109,6 +109,7 @@ var reachableAlternatives = map[string]string{
 	"json.jqToggleRaw":          "palette / info-row chip click",
 	"json.jqToggleCompact":      "palette / info-row chip click",
 	"json.jqToggleSlurp":        "palette / info-row chip click",
+	"playground.export":         "palette",
 	"view.toggleFollow":         "palette",
 	"view.followFilter":         "palette",
 	"editor.tab.next":           "palette",

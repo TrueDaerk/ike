@@ -51,6 +51,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Dependencies tool window | `cmd+0` | `ctrl+0` | `deps.toggle` |
 | Diff file against HEAD | `cmd+alt+d` | `ctrl+alt+d` | `vcs.diff` |
 | Evaluate expression | `alt+f8` | `alt+f8` | `debug.evaluate` |
+| Export playground result | `ctrl+alt+v` | `ctrl+alt+v` | `playground.export` |
 | Find in all projects | `cmd+alt+shift+f` | `ctrl+alt+shift+f` | `project.findInAllProjects` |
 | Find in pane | `cmd+f` | `ctrl+f` | `search.open` |
 | Find in path | `cmd+shift+f` | `ctrl+shift+f` | `project.findInPath` |

@@ -228,6 +228,7 @@ bring their own.
 | Copy Performance Snapshot | `perf.snapshot` | — | — | everywhere |
 | PHP Index: Rebuild | `php.traitIndex.rebuild` | `cmd+alt+shift+b` | — | everywhere |
 | PHP Index: Status | `php.traitIndex.status` | `cmd+alt+shift+i` | — | everywhere |
+| Export Playground Result… | `playground.export` | `ctrl+alt+v` | — | everywhere |
 | Open Playground for This File | `playground.open` | `cmd+shift+j` | — | everywhere |
 | Re-render Preview Diagrams | `preview.rerenderDiagrams` | — | — | everywhere |
 | Problems | `problems.toggle` | `cmd+8` | — | everywhere |

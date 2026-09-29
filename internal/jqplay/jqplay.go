@@ -202,6 +202,10 @@ type Result struct {
 	// opts are the toggles the run applied (#2784): a raw result is text,
 	// and neither a raw nor a compact one folds.
 	opts Options
+	// values are the produced values themselves (#2788), in output order —
+	// what the CSV / TSV export tabulates, independent of the -r / -c form
+	// Outputs are rendered in. nil for an xmq run: its outputs are text.
+	values []any
 }
 
 // Dialect reports which document language the outputs are written in.
@@ -346,6 +350,7 @@ func run(ctx context.Context, program string, in *Input, opts Options) Result {
 			text := in.dialect.encodeWith(out, opts)
 			size += len(text)
 			res.Outputs = append(res.Outputs, text)
+			res.values = append(res.values, out)
 		}
 		if ctx.Err() != nil {
 			res.Err = contextError(ctx)

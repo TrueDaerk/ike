@@ -76,6 +76,9 @@ func (m *Model) routeOverlayPaste(text string) (cmd tea.Cmd, handled bool) {
 		// playground: it is a modal shell prompt opened from it, and the
 		// mode's pane still holds the focus while it is up.
 		return nil, m.pastePlayNamePrompt(text)
+	case m.playSaveFileOpen():
+		// The export's save-to-file path prompt (#2788), same reason.
+		return nil, m.pastePlaySaveFilePrompt(text)
 	case m.playFocused():
 		// The playground query line is one line; a pasted program is flattened into
 		// it like every other single-field prompt (#1936). An unfocused

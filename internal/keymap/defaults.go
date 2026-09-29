@@ -446,6 +446,11 @@ var jetbrainsRows = []row{
 	{"ctrl+alt+q", "json.jqToggleRaw", "Toggle raw output (-r)", Global, "jq/yq playground (#2784)"},
 	{"ctrl+alt+c", "json.jqToggleCompact", "Toggle compact output (-c)", Global, "jq/yq playground (#2784)"},
 	{"ctrl+alt+s", "json.jqToggleSlurp", "Toggle slurp input (-s)", Global, "jq/yq playground (#2784)"},
+	// The export picker (#2788), Global for the same reason. The issue's
+	// ctrl+shift+o is project.goToFile off macOS (cmd+shift+o folded) and
+	// needs the Kitty protocol besides; v sits in the ctrl+alt family next to
+	// c, the clipboard pair's other half — the result goes somewhere else.
+	{"ctrl+alt+v", "playground.export", "Export playground result", Global, "jq/yq playground (#2788)"},
 	// Go to Line:Column (#2486): JetBrains' cmd+l. The Cmd→Ctrl fold puts it
 	// on ctrl+l off macOS, which no other default claims. JetBrains' Linux
 	// chord (ctrl+g) is *not* bound: editor.caret.addNext already owns it in

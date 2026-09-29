@@ -566,6 +566,10 @@ type Model struct {
 	// flipped in before each locked open. Its content is generated from
 	// jqplay.Cheatsheet per open, so there is nothing to cache either.
 	playCheat *playCheatMode
+	// playExport is the export picker (#2788), its rows filled per open from
+	// the result; playSaveFile is its save-to-file path prompt.
+	playExport   *playExportMode
+	playSaveFile playSaveFilePrompt
 
 	// layoutSaveOpen marks the window.saveLayout name prompt (#1175) while the
 	// shell shows it; input/pos are the typed name and cursor, err the
@@ -1535,6 +1539,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	remotePicker := newRemoteMode()                          // SFTP browse host picker (#1997)
 	playFilters := newPlayFiltersMode()                      // named saved jq filters (#1995)
 	playCheat := newPlayCheatMode()                          // the jq/yq language cheatsheet (#2382)
+	playExport := &playExportMode{}                          // playground export targets (#2788)
 	projGit := project.NewGitCache()                         // picker branch/dirty context (#2178)
 	cmdUsage := palette.LoadUsage(usageFile())               // most-used ranking (#773)
 	fileUsage := palette.LoadUsage(fileUsageFile())          // most-used file ranking (#1419)
@@ -1622,7 +1627,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		shell:           ui.New(shellConfig(cfg)),
 		vcs:             vcsSt,
 		forgePoll:       forgeSt,
-		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, recentLocsPicker, vcsSt, cmdUsage, fileUsage, cmdFrec, fileFrec, projFrec, pick, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, tabPicker, snippetPicker, sshPicker, remotePicker, playFilters, playCheat, projGit),
+		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, recentLocsPicker, vcsSt, cmdUsage, fileUsage, cmdFrec, fileFrec, projFrec, pick, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, tabPicker, snippetPicker, sshPicker, remotePicker, playFilters, playCheat, playExport, projGit),
 		projGit:         projGit,
 		layoutsPicker:   layoutsPicker,
 		httpRequests:    httpRequests,
@@ -1636,6 +1641,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		remote:          remotePicker,
 		playFilters:     playFilters,
 		playCheat:       playCheat,
+		playExport:      playExport,
 		httpEnv:         loadHTTPEnv(),                      // selected HTTP environments (#1867)
 		httpVarsDeb:     backup.NewDebouncer(httpVarsQuiet), // unknown-variable lint (#2158)
 		refs:            refs,
@@ -3239,7 +3245,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, recentLocs *recentLocationsMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, cmdFrec, fileFrec, projFrec *frecency.Store, pick *recentPick, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, tabs *tabPickerMode, snippetPick *snippetPickerMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode, playCheat *playCheatMode, projGit *project.GitCache) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, recentLocs *recentLocationsMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, cmdFrec, fileFrec, projFrec *frecency.Store, pick *recentPick, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, tabs *tabPickerMode, snippetPick *snippetPickerMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode, playCheat *playCheatMode, playExport *playExportMode, projGit *project.GitCache) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -3352,7 +3358,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, projPeek, groups, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, recentLocs, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, tabs, snippetPick, ssh, remoteHosts, playFilters, playCheat, bufLang, openAs)
+	return palette.New(pcfg, cmd, file, dir, proj, projPeek, groups, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, recentLocs, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, tabs, snippetPick, ssh, remoteHosts, playFilters, playCheat, playExport, bufLang, openAs)
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -7396,6 +7402,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// dialect's own spelling (#1660) — a `select <xpath>` for xmq.
 		return m, m.openPlaygroundDialect(msg.Dialect, true)
 
+	case ShowPlayExportMsg:
+		// playground.export (ctrl+shift+o, palette, #2788): the export
+		// picker over the open playground's result.
+		m.openPlayExportPicker()
+		return m, nil
+
+	case PlayExportMsg:
+		// One picked export target (#2788).
+		return m.runPlayExport(msg)
+
 	case SaveFilterPromptMsg:
 		// json.jqSaveFilter (ctrl+s in the query line, palette / Tools menu,
 		// #1995): name the program on the query line and store it in the
@@ -9290,6 +9306,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// pane still holds the focus while it is up.
 		if m.playNamePromptOpen() {
 			return m.updatePlayNamePrompt(msg)
+		}
+		if m.playSaveFileOpen() {
+			return m.updatePlaySaveFilePrompt(msg)
 		}
 		if m.playFocused() {
 			return m.updatePlayground(msg)
