@@ -1,7 +1,7 @@
 ---
 type: concept
 title: jq, yq & xmq Playground
-description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; three dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers and a focused YAML response, xmq for XML/HTML buffers and a focused XML/HTML response — the one external-engine dialect, shelling out to the xmq CLI with the buffer on stdin, the query line split into shell words, the output language named per command for the result's highlighting and scratch extension, a missing binary answered at open with a centered install-hint dialog and configurable via playground.xmq.path, and the at-path open seeding a select over the caret element's XPath), one chord dispatching over the three dialects from the focused editor's language or the focused HTTP response's content type, gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation behind a synchronous compile check that shows a syntax error on the keystroke, underlines its position in the query line, and never starts a run for a program that cannot compile, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors that leave the last successful result in the buffer under a stale banner instead of clearing it, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one per-user program history shared by every buffer and every dialect and persisted across restarts, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, inserting a picked row into the query line, and leading with guide rows that say what enter does with each kind of row, showing every example's actual output beside its program, every builtin's call form beside its arity, and the sample document the examples are written against as rows of the sheet itself; it opens from the query line while a query is being written, dismissing the completion popup rather than letting it cover the sheet, and its chord is named early enough in the info row's hint tail to survive a narrow pane — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing, while the query line selects all on cmd+a, undoes its last edit on ctrl+z and lets a Global leader sequence (cmd+k …) run to completion instead of swallowing it, while the find chord opens the result buffer's search from either focus with `esc` handing the keyboard back to the query line — its program and caret untouched, the matches left highlighted until the next query re-renders the result — and the match-step chords walk those matches from either focus; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace; it parks and resumes with its document across a project switch, re-driving work the switch interrupted.
+description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; three dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers and a focused YAML response, xmq for XML/HTML buffers and a focused XML/HTML response — the one external-engine dialect, shelling out to the xmq CLI with the buffer on stdin, the query line split into shell words, the output language named per command for the result's highlighting and scratch extension, a missing binary answered at open with a centered install-hint dialog and configurable via playground.xmq.path, and the at-path open seeding a select over the caret element's XPath), one chord dispatching over the three dialects from the focused editor's language or the focused HTTP response's content type, gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation behind a synchronous compile check that shows a syntax error on the keystroke, underlines its position in the query line, and never starts a run for a program that cannot compile, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors that leave the last successful result in the buffer under a stale banner instead of clearing it, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one per-user program history shared by every buffer and every dialect and persisted across restarts, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, inserting a picked row into the query line, and leading with guide rows that say what enter does with each kind of row, showing every example's actual output beside its program, every builtin's call form beside its arity, and the sample document the examples are written against as rows of the sheet itself; it opens from the query line while a query is being written, dismissing the completion popup rather than letting it cover the sheet, and its chord is named early enough in the info row's hint tail to survive a narrow pane — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing, while the query line selects all on cmd+a, undoes its last edit on ctrl+z and lets a Global leader sequence (cmd+k …) run to completion instead of swallowing it, while the find chord opens the result buffer's search from either focus with `esc` handing the keyboard back to the query line — its program and caret untouched, the matches left highlighted until the next query re-renders the result — and the match-step chords walk those matches from either focus; a chord appends the result cursor's path (as written, or with every index generalised to `[]`) to the program as a pipeline stage and reruns it — the inverse of the at-path open; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace; it parks and resumes with its document across a project switch, re-driving work the switch interrupted.
 resource: internal/jqplay/jqplay.go
 tags: [architecture, json, yaml, xml, html, jq, yq, xmq, tools, inline, editor, http, completion, folding]
 timestamp: 2026-09-29T12:00:00Z
@@ -65,7 +65,10 @@ internal/app/
   commands.go     {json.jq,yaml.yq,xml.xmq}Playground / …AtPath → the two open messages,
                   json.jqSaveFilter / {json.jq,yaml.yq,xml.xmq}Filters / …RenameFilter → the libraries,
                   {json.jq,yaml.yq,xml.xmq}Cheatsheet → the language sheet,
-                  json.jqQueryView → the multi-line view toggle
+                  json.jqQueryView → the multi-line view toggle,
+                  json.jqAppendPath / json.jqAppendPathAny → the append-path command
+  playpath.go     the append-path command (#2783): the result cursor's docpath, generalised or not,
+                  joined onto the program as a stage; the xmq no-op
 internal/htmldom/
   xpath.go        the at-path seed's location spelling (#2414): Document.XPath over the HTML tree,
                   XMLXPathAt/XMLOffset scanning XML source as itself
@@ -920,6 +923,40 @@ None of these keys is a keymap binding: they are the mode's own, like `tab`,
 (`json.jqQueryView`), because only a toggle is worth reaching from the palette
 or rebinding.
 
+## Drilling in from the result
+
+`…PlaygroundAtPath` seeds the query from the *editor* caret's path; the
+inverse works inside the result (#2783). **`json.jqAppendPath`** (`ctrl+.`)
+takes the structural path of the **result cursor** — the same
+`internal/docpath` scan the status-line breadcrumb runs, over the read-only
+result buffer, whose display extension (`jq result.json`,
+`yq result.yaml`) names the language — and appends it to the program as a
+pipeline stage: standing on `"name"` in the fourth item of `.items` turns the
+program into `.items | .[3].name`. **`json.jqAppendPathAny`**
+(`ctrl+shift+.`) writes every index as `[]` (`docpath.Generalize`), so the
+stage reaches the same key in all items: `.items | .[].name`.
+
+- The path is **relative to the value the cursor is in**: a result stream
+  (`.items[]`, a YAML stream) is scanned per value, which is exactly what the
+  appended stage is applied to.
+- **Spelling follows the dialect**: jq brackets a key needing quotes
+  (`.["my-key"]`), yq writes `."my-key"`.
+- The identity program (and the [blank one](#a-blank-query-line-runs-as-the-identity-2807))
+  is **replaced**, not piped into; a last program line with a `#` comment
+  gets the stage on a new line, where the comment cannot swallow it.
+- Afterwards the **query line** has the focus with the caret at the end, the
+  info row says `appended <path>`, and the run is scheduled like after typing.
+- Nothing to append is **a no-op with a warning** on the info row: the cursor
+  at the document root, a result without a path scanner (large-file mode,
+  raw text), and every **xmq** result — its own notation has no JSON path,
+  and even a `to-json` result only gets its jq path *named*, since an xmq
+  command line is CLI arguments, not a pipeline a jq stage could join.
+
+Both chords are Global rows resolved through the playground's
+[Global fallback](#keys), so they work from the result buffer and the query
+line alike. `ctrl+.` is `http.cancel` in the Editor/HTTP scopes; the
+playground never consults those, and the shadow is allowlisted as intentional.
+
 ## Folding the result
 
 A result is regularly taller than the pane, and reading its *shape* before
@@ -1050,6 +1087,7 @@ above win):
 | `cmd+f` | search the **result buffer** from here (`editor.find`) — the keyboard moves in with it, and `esc` brings it back |
 | `cmd+g` / `cmd+shift+g` | step the result's matches without leaving the query line (`search.nextMatch` / `search.prevMatch`) |
 | `ctrl+alt+e` | toggle the [multi-line view](#the-multi-line-view) (`json.jqQueryView`) |
+| `ctrl+.` / `ctrl+shift+.` | [append the result cursor's path](#drilling-in-from-the-result) to the program, as written / with every index as `[]` (`json.jqAppendPath` / `json.jqAppendPathAny`) |
 | `pgup` / `pgdn` | page the result buffer without leaving the query line |
 | `ctrl+s` | save the program as a **named filter** (`json.jqSaveFilter`) |
 | `ctrl+l` | open the **saved-filter picker** over this playground's library (`json.jqFilters` / `yaml.yqFilters`) — in the **result buffer** the same key [clears the output](#clearing-the-output) instead (#2700) |
@@ -1060,7 +1098,7 @@ above win):
 | `esc esc` | close **and** open the command palette (#2237) |
 | `f1` | the cheatsheet, opened on the playground's own context (#2237) |
 
-`ctrl+alt+e`, `ctrl+g`, `cmd+f`, the match-step chords and the `cmd+k` leader
+`ctrl+alt+e`, `ctrl+.` / `ctrl+shift+.`, `ctrl+g`, `cmd+f`, the match-step chords and the `cmd+k` leader
 sequences work from the result buffer too; `cmd+a` and `ctrl+z` are the query
 line's, since the result buffer is read-only and has the editor's own keys.
 

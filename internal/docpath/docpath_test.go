@@ -282,6 +282,25 @@ func TestRendering(t *testing.T) {
 	}
 }
 
+// TestGeneralize (#2783): every sequence index renders as `[]`, keys stay,
+// and the input slice is left alone.
+func TestGeneralize(t *testing.T) {
+	steps := []Step{{Seq: true, Index: 3}, {Key: "items"}, {Seq: true, Index: 0}, {Key: "my-key"}}
+	gen := Generalize(steps)
+	if got, want := JQ(gen), `.[].items[]["my-key"]`; got != want {
+		t.Errorf("JQ = %q, want %q", got, want)
+	}
+	if got, want := YQ(gen), `.[].items[]."my-key"`; got != want {
+		t.Errorf("YQ = %q, want %q", got, want)
+	}
+	if got, want := Dotted(gen), "[].items[].my-key"; got != want {
+		t.Errorf("Dotted = %q, want %q", got, want)
+	}
+	if got, want := JQ(steps), `.[3].items[0]["my-key"]`; got != want {
+		t.Errorf("the input must not change, JQ = %q, want %q", got, want)
+	}
+}
+
 // TestCaretPastEnd (#1660): a caret line beyond the buffer clamps instead of
 // panicking — the editor clamps too, but the package is used directly.
 func TestCaretPastEnd(t *testing.T) {

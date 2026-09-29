@@ -7421,6 +7421,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// program replaces it, a builtin's name lands at the caret.
 		return m, m.insertPlayCheat(msg)
 
+	case AppendPlayPathMsg:
+		// json.jqAppendPath / json.jqAppendPathAny (ctrl+. / ctrl+shift+.,
+		// #2783): the result cursor's path becomes the program's next stage.
+		return m, m.appendPlayPath(msg)
+
 	case TogglePlaygroundQueryViewMsg:
 		// json.jqQueryView (ctrl+alt+e, palette / Tools menu, #2032): show the
 		// whole program over several wrapped rows, or fold it back to the one

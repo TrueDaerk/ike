@@ -105,6 +105,7 @@ var reachableAlternatives = map[string]string{
 	"view.zenMode":              "palette / View menu",
 	"perf.hud":                  "palette / View menu",
 	"json.jqQueryView":          "palette / Tools menu",
+	"json.jqAppendPathAny":      "palette",
 	"view.toggleFollow":         "palette",
 	"view.followFilter":         "palette",
 	"editor.tab.next":           "palette",

@@ -110,6 +110,16 @@ func (m Model) DocPath(kind DocPathKind) (string, bool) {
 	}
 }
 
+// DocPathSteps returns the caret's structural path, outermost step first, for
+// callers that render it themselves — the playground's append-path command
+// generalises its indices before rendering (#2783). DocPathAvailable tells an
+// empty path at the document root apart from a buffer without a scanner.
+func (m Model) DocPathSteps() []docpath.Step { return m.docPathSteps() }
+
+// DocPathAvailable reports whether the buffer has a path scanner at all: a
+// JSON or YAML language, not in large-file mode.
+func (m Model) DocPathAvailable() bool { return m.docPathLang() != "" }
+
 // copyDocPath puts the caret's path on the system clipboard with a toast, the
 // #1173 copy-path pattern applied to a position inside the document instead of
 // to the file.
