@@ -19,6 +19,7 @@ var noCounterpart = map[string]string{
 	"explorer.clipCopy":                "project-view copy rides $Copy in JetBrains, already mapped to editor.copy (#2660)",
 	"explorer.clipCut":                 "project-view cut rides $Cut in JetBrains, already mapped to editor.cut (#2660)",
 	"explorer.clipPaste":               "project-view paste rides $Paste in JetBrains, already mapped to editor.paste (#2660)",
+	"explorer.contextMenu":             "JetBrains opens the project-view menu with the context-menu key / shift+f10 (ShowPopupMenu), which has no IKE command (#2805)",
 	"explorer.undo":                    "project-view undo rides $Undo in JetBrains, already mapped to editor.undo",
 	"explorer.redo":                    "project-view redo rides $Redo in JetBrains, already mapped to editor.redo",
 	"file.rename":                      "RenameElement covers symbol and file renames, mapped to lsp.rename",
