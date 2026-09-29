@@ -24,9 +24,16 @@ import (
 // Cell is one grid value, already rendered to display text. Null marks a
 // value that is absent (SQL NULL, a field a document does not carry) — the
 // grid draws it as NullCell, faint, so it never reads as an empty string.
+//
+// Cursor and Match are the cell-level marks of a grid that walks cells rather
+// than rows (the playground's table view, #2794): the cell cursor draws
+// reversed while the pane is focused, a search hit on the occurrence colour.
+// Only the cell's own text takes the mark, never the gap after it.
 type Cell struct {
-	Text string
-	Null bool
+	Text   string
+	Null   bool
+	Cursor bool
+	Match  bool
 }
 
 // NullCell is the glyph a Null cell draws as — visibly distinct from the
@@ -63,6 +70,17 @@ func DataRow(pal *theme.Palette, cells []Cell, widths []int, colOff, w int, sele
 			text, style = NullCell, nullStyle
 		}
 		chunk := PadTo(text, widths[c])
+		if cell.Cursor || cell.Match {
+			chunk = ClipTo(chunk, budget)
+			b.WriteString(markStyle(pal, style, cell, focused).Render(chunk))
+			budget -= lipgloss.Width(chunk)
+			if c < len(cells)-1 && budget > 0 {
+				gap := ClipTo("  ", budget)
+				b.WriteString(base.Render(gap))
+				budget -= lipgloss.Width(gap)
+			}
+			continue
+		}
 		if c < len(cells)-1 {
 			chunk += "  "
 		}
@@ -74,6 +92,17 @@ func DataRow(pal *theme.Palette, cells []Cell, widths []int, colOff, w int, sele
 		b.WriteString(base.Render(strings.Repeat(" ", budget)))
 	}
 	return b.String()
+}
+
+// markStyle is the style of a Cursor or Match cell on top of the row's.
+func markStyle(pal *theme.Palette, style lipgloss.Style, cell Cell, focused bool) lipgloss.Style {
+	if cell.Match {
+		style = style.Background(pal.OccurrenceRead)
+	}
+	if cell.Cursor && focused {
+		style = style.Reverse(true)
+	}
+	return style
 }
 
 // HeaderRow draws the column labels from colOff on — each padded to its

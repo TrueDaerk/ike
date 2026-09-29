@@ -81,6 +81,9 @@ var intentionalDefaultShadows = map[string]string{
 	// cmd+alt+b folds onto ctrl+alt+b in the Editor context; the playground
 	// resolves Global only, so the toggle keeps the chord there.
 	shadowKey("ctrl+alt+b", "lsp.implementations", "playground.variables"): "linux Cmd-fold: implementations over the playground-only variables line",
+	// The table view (#2794) the same way: lsp.format's cmd+alt+l folds onto
+	// ctrl+alt+l in the Editor context off macOS.
+	shadowKey("ctrl+alt+l", "lsp.format", "playground.tableView"): "linux Cmd-fold: reformat over the playground-only table view",
 	// The shared find chord (#2409): search.open is the Global fallback that
 	// opens whatever the focused pane calls its search, and with an editor
 	// focused the editor's own find deliberately wins — the editor *is* the

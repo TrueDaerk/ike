@@ -474,6 +474,13 @@ var jetbrainsRows = []row{
 	// lsp.implementations' folded cmd+alt+b only off macOS, in the Editor
 	// context the playground never resolves.
 	{"ctrl+alt+b", "playground.variables", "Toggle playground variables line", Global, "jq/yq playground (#2786)"},
+	// The table view (#2794), Global like its siblings. The issue's
+	// ctrl+alt+t is terminal.popup off macOS (cmd+alt+t folded, Global — a
+	// real conflict, not a shadow); l — the result *laid out* — meets
+	// lsp.format's folded cmd+alt+l only off macOS, in the Editor context the
+	// playground never resolves. m (matrix) is ctrl+alt+enter on a legacy
+	// terminal, where ctrl+m is a carriage return.
+	{"ctrl+alt+l", "playground.tableView", "Toggle playground table view", Global, "jq/yq playground (#2794)"},
 	// Go to Line:Column (#2486): JetBrains' cmd+l. The Cmd→Ctrl fold puts it
 	// on ctrl+l off macOS, which no other default claims. JetBrains' Linux
 	// chord (ctrl+g) is *not* bound: editor.caret.addNext already owns it in

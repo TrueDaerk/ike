@@ -189,6 +189,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Toggle breakpoint | `ctrl+f8` | `ctrl+f8` | `debug.toggleBreakpoint` |
 | Toggle compact output (-c) | `ctrl+alt+c` | `ctrl+alt+c` | `json.jqToggleCompact` |
 | Toggle playground structure strip | `ctrl+alt+g` | `ctrl+alt+g` | `playground.structure` |
+| Toggle playground table view | `ctrl+alt+l` | `ctrl+alt+l` | `playground.tableView` |
 | Toggle playground variables line | `ctrl+alt+b` | `ctrl+alt+b` | `playground.variables` |
 | Toggle project tree | `cmd+1` | `ctrl+1` | `explorer.toggle` |
 | Toggle raw output (-r) | `ctrl+alt+q` | `ctrl+alt+q` | `json.jqToggleRaw` |

@@ -151,6 +151,7 @@ func (m Model) playgroundChordHelp() help.Group {
 	add("playground.export", "Export the result: save as file, CSV / TSV, HTTP request body (#2788)")
 	add("playground.checkFilters", "Re-run every saved filter's sample check (#2792)")
 	add("playground.structure", "Structure strip: the result's top-level keys as jump targets (#2793)")
+	add("playground.tableView", "Table view: an array of objects as a sortable, searchable grid (#2794)")
 	add("playground.stageNext", "Step to the next pipeline stage: the result up to it (#2785)")
 	add("playground.stagePrev", "Step to the previous pipeline stage; esc returns to the full program")
 	add("playground.variables", "Variables line: name=value entries bound as $name (#2786)")

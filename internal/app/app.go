@@ -7468,6 +7468,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// variables line under the query.
 		return m, m.togglePlayVars()
 
+	case TogglePlayTableMsg:
+		// playground.tableView (ctrl+alt+l, #2794): the result as a grid, or
+		// back to the text.
+		m.togglePlayTable()
+		return m, nil
+
 	case StepPlayStageMsg:
 		// playground.stageNext / stagePrev (ctrl+alt+shift+→ / ←, #2785):
 		// select a pipeline stage and show the program's output up to it.
@@ -12050,6 +12056,20 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		// mode owns the pane; horizontal wheel and shift+wheel sideways,
 		// like the editor (#230).
 		if s := m.play; s != nil && m.playInlineActive(key) {
+			// The table view (#2794) scrolls rows and columns instead.
+			if s.table != nil {
+				switch {
+				case msg.Button == tea.MouseWheelLeft, msg.Button == tea.MouseWheelUp && shift:
+					m.wheelPlayTable(-msg.ticks(), 0)
+				case msg.Button == tea.MouseWheelRight, msg.Button == tea.MouseWheelDown && shift:
+					m.wheelPlayTable(msg.ticks(), 0)
+				case msg.Button == tea.MouseWheelUp:
+					m.wheelPlayTable(0, -lines)
+				case msg.Button == tea.MouseWheelDown:
+					m.wheelPlayTable(0, lines)
+				}
+				return m, nil
+			}
 			switch {
 			case msg.Button == tea.MouseWheelLeft:
 				s.resultEd.ScrollXBy(-lines)

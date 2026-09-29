@@ -1,5 +1,19 @@
 # Log
 
+## 2026-09-29 (jq playground: table view, #2794)
+
+- `playground.tableView` (`ctrl+alt+l`) draws a result that is an array (or
+  stream) of objects or scalars as a `gridview` grid in the result editor's
+  rectangle: one column per key (the CSV export's union), nested values as
+  compact JSON, `∅` for a missing key. `s` / a header click sorts, `y` / the
+  copy chord copies a cell, `Y` a row, `enter` appends `.[i]` like
+  `json.jqAppendPath`, `cmd+f` / `/` search the cells (`ui.LineSearch`).
+  A result that does not fit notifies; a new one re-checks and falls back to
+  text with a notice. `jqplay.Result.Grid` / `CompareCells` hold the shape and
+  the sort order; `gridview.Cell` gained `Cursor` / `Match` marks. The issue's
+  `ctrl+alt+t` is `terminal.popup` off macOS.
+  Docs: `/architecture/jq-playground.md`, `/architecture/keybindings.md`.
+
 ## 2026-09-29 (jq playground: named variables, #2786)
 
 - `playground.variables` (`ctrl+alt+b`) shows / focuses / hides a variables

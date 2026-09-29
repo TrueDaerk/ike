@@ -821,6 +821,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			// jump targets beside it.
 			langCommand(appCommand("playground.structure", "Toggle Playground Structure Strip", TogglePlayStructureMsg{}), playgroundLangs()),
 			// Pipeline stepping (#2785): the result up to a chosen stage.
+			// The table view (#2794): an array of objects as a grid.
+			langCommand(appCommand("playground.tableView", "Toggle Playground Table View", TogglePlayTableMsg{}), playgroundLangs()),
 			langCommand(appCommand("playground.stageNext", "Playground: Step to Next Pipeline Stage", StepPlayStageMsg{Delta: 1}), playgroundLangs()),
 			langCommand(appCommand("playground.stagePrev", "Playground: Step to Previous Pipeline Stage", StepPlayStageMsg{Delta: -1}), playgroundLangs()),
 			// The variables line (#2786): `name=value` entries bound as $name.
