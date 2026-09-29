@@ -536,7 +536,10 @@ type Model struct {
 	// (#1982). The ordinary open prefills it instead of `.`, so reopening a
 	// file resumes the look that was interrupted — something the one shared,
 	// buffer-agnostic history cannot express. In memory for the session, like
-	// the history itself.
+	// the history itself. playLastStore is the persisted half (#2774): only
+	// file-backed sources (an absolute path) are written through to it, so a
+	// restart resumes those, while an unsaved buffer or an HTTP response stays
+	// session-only in playLastProgram.
 	play *playState
 	// playChord marks a partial multi-step chord the playground fed to the
 	// resolver (#2633). The mode owns the keyboard, so it resolves keys in
@@ -546,6 +549,7 @@ type Model struct {
 	playChord       bool
 	playHistory     *jqplay.History
 	playLastProgram map[string]string
+	playLastStore   *jqplay.LastPrograms
 	// playFilters is the palette mode listing the named saved filters of both
 	// scopes (#1995), kept on the model so the insert and rename entry
 	// commands can flip its action before opening it locked; playName is the
@@ -1588,8 +1592,9 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		navHist:         &nav.History{},
 		previewBound:    new(atomic.Bool),
 		editorSyncs:     &editorSyncQueue{},
-		playHistory:     jqplay.NewHistory(jqplay.HistoryFile()), // one per-user program list (#1977, persisted since #2536)
-		playLastProgram: map[string]string{},                     // per-file last valid program (#1982)
+		playHistory:     jqplay.NewHistory(jqplay.HistoryFile()),          // one per-user program list (#1977, persisted since #2536)
+		playLastProgram: map[string]string{},                              // per-file last valid program (#1982)
+		playLastStore:   jqplay.NewLastPrograms(jqplay.LastProgramFile()), // persisted per-path last program (#2774)
 		compMRU:         mru.Load(mru.DefaultFile()),
 		bpts:            debug.Load(),
 		watches:         debug.LoadWatches(), // per-project watch expressions (#2174)

@@ -1295,6 +1295,18 @@ history answers "what did I run recently, anywhere", the recall answers "where
 was I in *this* file". The list is not keyed by file precisely because a
 program written against one response is usually worth trying against the next.
 
+The recall survives a restart for **file-backed sources** (#2774): a program
+that ran clean against a path is also written through to
+`~/.ike/playground-last.json`, keyed by the absolute path and the dialect —
+the same two things `playDocKey` already folds into the in-memory key — and
+capped at 200 entries, LRU. An unsaved buffer, a visual selection and an HTTP
+response have no such key and stay session-only, like before; there is
+nothing on disk that would let a restart tell one unsaved buffer from
+another, or replay a response that no longer exists. The write happens at the
+same two points the session map already updates at: a clean run (`enter`, or
+the debounce settling) and the mode's close — never per keystroke, on the
+history file's own terms (#2536).
+
 ## The saved-filter library
 
 The history above is the playground's *short* memory. #1995 adds the long one:
