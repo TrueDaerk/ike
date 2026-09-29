@@ -364,3 +364,7 @@ func encodeJSON(v any) string {
 	}
 	return pretty.String()
 }
+
+// Size is the byte length of the result document (#2776), the joined outputs
+// the result buffer shows — what the info row reports next to the count.
+func (r Result) Size() int { return len(r.Text()) }

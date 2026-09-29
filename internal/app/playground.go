@@ -219,6 +219,19 @@ type playState struct {
 	spinning  bool
 	spinFrame int
 
+	// elapsed is the wall clock of the last finished run (#2776): the
+	// evaluation itself, plus the async input parse that preceded it when the
+	// run was the first against a freshly parsed snapshot (parseDur, consumed
+	// by that run). An xmq run's elapsed is the CLI round trip.
+	elapsed  time.Duration
+	parseAt  time.Time
+	parseDur time.Duration
+	// typing hides the key hints while the query line is being edited
+	// (#2776); playHintIdle after the last keystroke, hgen's tick shows them
+	// again, so the meta data has the row while the user is busy.
+	typing bool
+	hgen   int
+
 	hist     *jqplay.History
 	histIdx  int
 	draft    string
@@ -880,6 +893,7 @@ type playEvalDoneMsg struct {
 	st  *playState
 	gen int
 	res jqplay.Result
+	dur time.Duration
 }
 
 // playDimMsg fires playDimDelay after an evaluation started; a stale
@@ -972,6 +986,7 @@ func (m *Model) parsePlayInput(text string) tea.Cmd {
 		return m.finishPlayParse(playParseDoneMsg{st: s, gen: gen, in: in, err: errText(err)})
 	}
 	s.parsing = true
+	s.parseAt = time.Now()
 	return func() tea.Msg {
 		in, err := d.Parse(text)
 		return playParseDoneMsg{st: s, gen: gen, in: in, err: errText(err)}
@@ -1001,6 +1016,9 @@ func (m *Model) finishPlayParse(msg playParseDoneMsg) tea.Cmd {
 		return nil
 	}
 	s.parsing = false
+	if !s.parseAt.IsZero() {
+		s.parseDur, s.parseAt = time.Since(s.parseAt), time.Time{}
+	}
 	s.inputErr = msg.err
 	if s.inputErr != "" {
 		s.pending, s.dimming, s.spinning = false, false, false // nothing will run against this text; no evaluation is in flight
@@ -1063,9 +1081,12 @@ func (m *Model) runPlay() tea.Cmd {
 	ctx, cancel := context.WithTimeout(context.Background(), jqplay.EvalTimeout)
 	s.cancel = cancel
 	program, in, gen := s.program.Text, s.input, s.gen
+	parse := s.parseDur
 	return func() tea.Msg {
 		defer cancel()
-		return playEvalDoneMsg{st: s, gen: gen, res: jqplay.Run(ctx, program, in)}
+		start := time.Now()
+		res := jqplay.Run(ctx, program, in)
+		return playEvalDoneMsg{st: s, gen: gen, res: res, dur: parse + time.Since(start)}
 	}
 }
 
@@ -1091,6 +1112,7 @@ func (m *Model) finishPlayEval(msg playEvalDoneMsg) tea.Cmd {
 	}
 	s.runErr = ""
 	s.result, s.haveResult = msg.res, true
+	s.elapsed, s.parseDur = msg.dur, 0
 	m.rememberPlayProgram(s.srcKey, s.srcPath, s.program.Text)
 	m.sizePlayResult()
 	return m.syncPlayResultBuffer()
@@ -1388,7 +1410,7 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	s.histIdx = -1
 	m.refreshPlayCompletion(msg.Text, false)
-	return m, m.schedulePlayEval()
+	return m, tea.Batch(m.schedulePlayEval(), m.playTyped())
 }
 
 // updatePlayBufferKey routes a key into the result buffer: the full editor
@@ -2041,16 +2063,18 @@ func (m Model) playInfoLine(width int) string {
 		return ansi.Truncate(lipgloss.NewStyle().Foreground(col).Render(s.status), width, "…")
 	}
 	line := m.playInputSegment()
-	if res := m.playResultSegment(); res != "" {
-		line += hint.Render(" · ") + res
-	}
 	if m.playQueryCut(width) {
 		// The `…` at the row's edge alone is too easy to miss (#2032): say
 		// that the program on screen is not all of it, in the same Warning the
-		// other "you are seeing less than there is" markers use.
+		// other "you are seeing less than there is" markers use. It sits ahead
+		// of the result summary, whose size and runtime (#2776) would
+		// otherwise push it off a narrow row.
 		line += lipgloss.NewStyle().Foreground(pal.Warning).Render(" · query cut")
 	}
-	for _, h := range m.playHints() {
+	if res := m.playResultSegment(); res != "" {
+		line += hint.Render(" · ") + res
+	}
+	for _, h := range m.playShownHints() {
 		seg := hint.Render(" · " + h)
 		if ansi.StringWidth(line)+ansi.StringWidth(seg) > width {
 			break
@@ -2084,14 +2108,15 @@ func (m Model) playHints() []string {
 	if s.expanded {
 		hist = []string{"↑/↓ lines", "alt+↑/↓ history"}
 	}
-	// The cheatsheet hint sits third (#2482), ahead of the view toggle. The
+	// The cheatsheet hint leads (#2482, first since the summary grew a size
+	// and a runtime in #2776), ahead of the view toggle. The
 	// hints drop from the right on a narrow pane, and at the widths a
 	// playground is actually opened at — a pane beside an explorer — every
 	// segment from the view toggle on was being cut, so the one chord that
 	// answers "I do not know how to write this query" was the one never on
 	// screen. The toggle it displaces still advertises itself when it
 	// matters: a program too wide for the row raises the "query cut" marker.
-	out := []string{"tab result", "enter run", "ctrl+g cheatsheet", view}
+	out := []string{"ctrl+g cheatsheet", "tab result", "enter run", view}
 	out = append(out, hist...)
 	return append(out, "ctrl+s save filter", "ctrl+l filters", "ctrl+y copy", "ctrl+o scratch", "esc close", playHelpHint)
 }
@@ -2393,10 +2418,36 @@ func (m Model) playResultSegment() string {
 	if s.result.Truncated {
 		out += warn.Render(fmt.Sprintf(" (stopped at %d)", jqplay.MaxOutputs))
 	}
+	if n > 0 {
+		out += hint.Render(" · " + humanBytes(int64(s.result.Size())))
+	}
+	if s.haveResult {
+		st := hint
+		if s.elapsed >= playSlowRun {
+			st = warn
+		}
+		out += hint.Render(" · ") + st.Render(playDuration(s.elapsed))
+	}
 	if s.pending {
 		out += hint.Render(" · evaluating…" + s.spinSuffix())
 	}
 	return out
+}
+
+// playSlowRun is the runtime from which the info row paints the evaluation
+// time in Warning (#2776).
+const playSlowRun = 500 * time.Millisecond
+
+// playDuration formats a run's wall clock for the info row (#2776): `<1 ms`,
+// whole milliseconds below a second, one decimal of seconds above.
+func playDuration(d time.Duration) string {
+	switch {
+	case d < time.Millisecond:
+		return "<1 ms"
+	case d < time.Second:
+		return fmt.Sprintf("%d ms", d/time.Millisecond)
+	}
+	return fmt.Sprintf("%.1f s", d.Seconds())
 }
 
 // spinSuffix is the animated spinner frame appended after "evaluating…"
@@ -2451,4 +2502,49 @@ func (m Model) playStructurePainter(program string, tokens []jqplay.Token, style
 		}
 		return plain(i)
 	}
+}
+
+// playHintIdle is how long the query line must stay quiet before the key
+// hints come back (#2776). A var like playDebounce, for the same reason.
+var playHintIdle = 2 * time.Second
+
+// playHintIdleMsg brings the key hints back once the query line has been idle
+// playHintIdle; a stale generation means the user typed again since.
+type playHintIdleMsg struct {
+	st  *playState
+	gen int
+}
+
+// playTyped hides the key hints for a keystroke in the query line (#2776) and
+// arms the idle tick that shows them again.
+func (m *Model) playTyped() tea.Cmd {
+	s := m.play
+	if s == nil {
+		return nil
+	}
+	s.typing = true
+	s.hgen++
+	st, gen := s, s.hgen
+	return tea.Tick(playHintIdle, func(time.Time) tea.Msg {
+		return playHintIdleMsg{st: st, gen: gen}
+	})
+}
+
+// firePlayHintIdle shows the key hints again unless a newer keystroke re-armed
+// the timer.
+func (m *Model) firePlayHintIdle(msg playHintIdleMsg) tea.Cmd {
+	if s := m.play; s != nil && msg.st == s && msg.gen == s.hgen {
+		s.typing = false
+	}
+	return nil
+}
+
+// playShownHints is playHints unless the user is typing in the query line
+// (#2776): the hints then give the row to the meta data until playHintIdle
+// has passed. f1 still opens the full key sheet either way.
+func (m Model) playShownHints() []string {
+	if s := m.play; s.typing && !s.bufFocus {
+		return nil
+	}
+	return m.playHints()
 }

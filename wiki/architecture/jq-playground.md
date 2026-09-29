@@ -103,6 +103,15 @@ While the mode is active on a pane:
   **dropped as whole `·`-separated segments** instead of being cut mid-word;
   the input and result summary always survive. Truncation is cell-aware, so a
   wide glyph in the source label cannot overflow the row.
+- The result summary carries the **result size and the run's wall clock**
+  (#2776): `Result — 12 value(s) · 4.1 KiB · 38 ms`. The time spans the
+  evaluation — for xmq the CLI round trip — plus the async input parse when
+  the run is the first against a freshly parsed snapshot; it reads `<1 ms`,
+  `38 ms` or `1.2 s`, and a run of 500 ms or more renders it in **Warning**.
+- The key hints **hide while the query line is being typed in** (#2776) and
+  come back after 2 s idle (a generation-stamped tick, so only the last
+  keystroke's tick counts); the meta data has the row meanwhile, and `f1`
+  still opens the full key sheet.
 - The query line's `> ` marker is **blanked while the line does not hold the
   keyboard** — the result buffer has it, or the focus is on another pane —
   the same inactive affordance the regex tester's field labels use; the `jq:`
