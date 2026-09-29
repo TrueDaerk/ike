@@ -629,6 +629,8 @@ type Model struct {
 	// collapsed header's placeholder text so it can name what the node holds
 	// ("3 keys") instead of how tall it is.
 	hostFolds   []highlight.Fold
+	// hostSigns are sign-column glyphs a host installed (#2789, hostsigns.go).
+	hostSigns map[int]string
 	foldSummary func(header, end, budget int) string
 	// selRange is the extend/shrink-selection ladder state (#1912,
 	// selrange.go): the innermost-first range ladder of the last request plus

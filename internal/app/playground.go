@@ -296,6 +296,9 @@ type playState struct {
 	// lookup behind the collapsed placeholder's member count; the ranges
 	// themselves live on the result editor.
 	folds map[int]jqplay.Fold
+	// valueStarts is the first result line of each output value (#2789):
+	// the gutter's type glyphs and the info row's `value i/n` read it.
+	valueStarts []int
 
 	gen    int
 	cancel context.CancelFunc
@@ -1256,6 +1259,7 @@ func (m *Model) syncPlayResultBuffer() tea.Cmd {
 	// exactly until the buffer they were found in is replaced.
 	s.resultEd.ClearSearch()
 	s.setResultFolds(s.result.Folds())
+	s.setResultValueSigns()
 	s.resultEd.SetFocused(s.bufFocus)
 	return s.resultEd.Reparse()
 }
@@ -1277,6 +1281,35 @@ func (s *playState) setResultFolds(folds []jqplay.Fold) {
 	if s.resultEd != nil {
 		s.resultEd.SetHostFolds(ranges)
 	}
+}
+
+// setResultValueSigns marks the first line of each output value with its type
+// glyph in the result gutter's sign column (#2789), so value boundaries in a
+// multi-output stream are visible, and keeps the boundaries for the info
+// row's `value i/n` counter.
+func (s *playState) setResultValueSigns() {
+	s.valueStarts = s.result.ValueStarts()
+	var signs map[int]string
+	if len(s.valueStarts) > 0 {
+		signs = make(map[int]string, len(s.valueStarts))
+		for i, line := range s.valueStarts {
+			signs[line] = jqplay.ValueGlyph(s.result.Outputs[i])
+		}
+	}
+	if s.resultEd != nil {
+		s.resultEd.SetHostSigns(signs)
+	}
+}
+
+// playValueCounter is the info row's `value i/n` for the value under the
+// result cursor (#2789); "" with fewer than two values, where it says nothing.
+func (s *playState) playValueCounter() string {
+	if len(s.valueStarts) < 2 || s.resultEd == nil {
+		return ""
+	}
+	line, _ := s.resultEd.Cursor()
+	i := jqplay.ValueIndex(s.valueStarts, line)
+	return fmt.Sprintf("value %d/%d", i+1, len(s.valueStarts))
 }
 
 // playFoldSummary is the placeholder a collapsed node renders as: its member
@@ -2503,6 +2536,9 @@ func (m Model) playResultSegment() string {
 	out := st.Render(fmt.Sprintf("Result — %d value(s)", n))
 	if s.result.Truncated {
 		out += warn.Render(fmt.Sprintf(" (stopped at %d)", jqplay.MaxOutputs))
+	}
+	if c := s.playValueCounter(); c != "" {
+		out += hint.Render(" · " + c)
 	}
 	if n > 0 {
 		out += hint.Render(" · " + humanBytes(int64(s.result.Size())))
