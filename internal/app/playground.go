@@ -336,6 +336,11 @@ type playState struct {
 	stripFrom  bool
 	stripSel   int
 	stripTop   int
+	// tableOn is the table view toggle (#2794, playtable.go); table is the
+	// grid of the installed result while it is shown — nil in the text view,
+	// including while the toggle is on but the result does not fit.
+	tableOn bool
+	table   *playTable
 	// shownText is the text of the installed good result (#2787), the side
 	// the next run diffs against; changes are the installed result's marks
 	// against the one it replaced (playchanges.go), nil when there are none.
@@ -1374,6 +1379,11 @@ func (m *Model) syncPlayResultBuffer() tea.Cmd {
 	s.setResultValueSigns()
 	s.resultEd.SetHostChanges(s.changes)
 	s.setOutline(s.result.Outline())
+	// The table view (#2794) re-checks every new result's shape, falling back
+	// to the text with a notice when it no longer fits.
+	if notice := s.syncPlayTable(); notice != "" {
+		s.status, s.statusWarn = notice, true
+	}
 	s.resultEd.SetFocused(s.bufFocus && !s.stripFocus)
 	m.sizePlayResult() // the structure strip (#2793) comes and goes with the outline
 	return s.resultEd.Reparse()
@@ -1487,6 +1497,9 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.updatePlayStripKey(msg)
 	}
 	if s.bufFocus {
+		if s.table != nil {
+			return m.updatePlayTableKey(msg) // the table view (#2794)
+		}
 		return m.updatePlayBufferKey(msg)
 	}
 	if s.varsFocus {
@@ -1592,6 +1605,12 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "pgup", "pgdown":
 		// Paging works from the query line without moving the focus.
+		if t := s.table; t != nil {
+			width, height := m.playTableSize()
+			ui.ListNav(msg.String(), &t.cur, len(t.order), t.dataRows(height), ui.NavDefault)
+			t.clamp(width, height)
+			return m, nil
+		}
 		var cmd tea.Cmd
 		*s.resultEd, cmd = s.resultEd.Update(msg)
 		return m, cmd
@@ -1801,6 +1820,10 @@ func (m Model) beginPlayResultSearch() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	fromQuery := !s.bufFocus
+	if s.table != nil {
+		s.beginPlayTableSearch(fromQuery) // the table searches its cells (#2794)
+		return m, nil
+	}
 	s.setBufFocus(true)
 	// Remember the trip (#2411) — setBufFocus clears the flag, so it is armed
 	// after it, never before.
@@ -1840,6 +1863,9 @@ func (m Model) endPlayFindReturnToQuery() (tea.Model, tea.Cmd) {
 // Global meaning.
 func (m Model) stepPlayResultSearch(delta int) (tea.Model, tea.Cmd, bool) {
 	s := m.play
+	if s != nil && s.table != nil {
+		return m, nil, m.stepPlayTableSearch(delta)
+	}
 	if s == nil || s.resultEd == nil || !s.resultEd.HasSearch() {
 		return m, nil, false
 	}
@@ -1984,6 +2010,13 @@ func (m *Model) pastePlayground(text string) tea.Cmd {
 	if s == nil || text == "" {
 		return nil
 	}
+	if t := s.table; t != nil && s.bufFocus && t.search.Open {
+		if t.search.Paste(text) {
+			t.recomputeSearch()
+			t.gotoMatch()
+		}
+		return nil
+	}
 	if s.bufFocus && s.resultEd != nil && s.resultEd.PasteIntoPrompt(text) {
 		return nil
 	}
@@ -2067,6 +2100,9 @@ func (m Model) playPaneClick(key string, msg mouseEvent, x, y int) (tea.Model, t
 		return m, nil
 	}
 	if msg.Button != tea.MouseLeft {
+		return m, nil
+	}
+	if m.clickPlayTable(x, y) {
 		return m, nil
 	}
 	if m.clickPlayStrip(x, y) {
@@ -2390,6 +2426,9 @@ func (m Model) playFocusHints() []string {
 	}
 	if s.varsFocus {
 		return m.playVarsHints()
+	}
+	if s.table != nil && s.bufFocus {
+		return []string{"tab query line", "enter drill in", "s sort", "y copy cell", "Y copy row", "/ search", m.playCommandChord("playground.tableView") + " text view", "ctrl+y copy", "esc close", playHelpHint}
 	}
 	if s.bufFocus {
 		// za/zM/zR are the editor's own fold keys (#1741), listed here
@@ -2738,7 +2777,9 @@ func (m Model) playResultSegment() string {
 	if s.result.Truncated {
 		out += warn.Render(fmt.Sprintf(" (stopped at %d)", jqplay.MaxOutputs))
 	}
-	if c := s.playValueCounter(); c != "" {
+	if s.table != nil {
+		out += hint.Render(" · " + s.table.counter())
+	} else if c := s.playValueCounter(); c != "" {
 		out += hint.Render(" · " + c)
 	}
 	if n > 0 {

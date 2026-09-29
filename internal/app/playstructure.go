@@ -64,7 +64,8 @@ func (s *playState) setOutline(items []jqplay.OutlineItem) {
 // is not shown: toggled off, nothing to list, or the pane too narrow.
 func (m Model) playStripW(width int) int {
 	s := m.play
-	if s == nil || !m.playStructure || len(s.outline) == 0 || width < playStripMinPane {
+	// The strip's entries are result lines; the table view (#2794) has none.
+	if s == nil || !m.playStructure || len(s.outline) == 0 || width < playStripMinPane || s.table != nil {
 		return 0
 	}
 	w := s.outlineW + 2 // the separator and a leading space
@@ -138,6 +139,9 @@ func (m *Model) togglePlayStructure() {
 		s.status, s.statusWarn = "structure strip: the pane is too narrow to show it", true
 		if len(s.outline) == 0 {
 			s.status = "structure strip: this result has no keys or items to list"
+		}
+		if s.table != nil {
+			s.status = "structure strip: hidden while the table view is up"
 		}
 		return
 	}
@@ -274,6 +278,9 @@ func (m Model) playStripView(sw int) []string {
 // sizePlayResult, so each of its rows is padded to that and the strip starts
 // in the same column on every row.
 func (m Model) playResultView(width int) string {
+	if m.play.table != nil {
+		return m.playTableView() // the table view (#2794) draws in the editor's place
+	}
 	view := m.play.resultEd.View()
 	sw := m.playStripW(width)
 	if sw == 0 {

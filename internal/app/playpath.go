@@ -39,6 +39,14 @@ func (m *Model) appendPlayPath(msg AppendPlayPathMsg) tea.Cmd {
 		s.status, s.statusWarn = reason, true
 		return nil
 	}
+	return m.appendPlayStage(path)
+}
+
+// appendPlayStage appends path to the program as a pipeline stage, hands the
+// keyboard back to the query line and runs — the drill-in shared by the
+// result cursor's path and the table view's row (#2794).
+func (m *Model) appendPlayStage(path string) tea.Cmd {
+	s := m.play
 	s.program.Set(playAppendStage(s.program.Text, path))
 	s.histIdx, s.comp = -1, nil
 	s.setBufFocus(false)

@@ -62,6 +62,7 @@ var noCounterpart = map[string]string{
 	"playground.export":                "IKE-only concept (#2788): the inline jq playground has no JetBrains equivalent",
 	"playground.checkFilters":          "IKE-only concept (#2792): the inline jq playground has no JetBrains equivalent",
 	"playground.structure":             "IKE-only concept (#2793): the inline jq playground has no JetBrains equivalent",
+	"playground.tableView":             "IKE-only concept (#2794): the inline jq playground has no JetBrains equivalent",
 	"playground.stageNext":             "IKE-only concept (#2785): the inline jq playground has no JetBrains equivalent",
 	"playground.stagePrev":             "IKE-only concept (#2785): the inline jq playground has no JetBrains equivalent",
 	"playground.variables":             "IKE-only concept (#2786): the inline jq playground has no JetBrains equivalent",

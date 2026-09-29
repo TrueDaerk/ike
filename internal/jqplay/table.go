@@ -121,12 +121,32 @@ func EncodeDelimited(rows []any, sep rune) (string, error) {
 
 // encodeObjects writes the header row and one record per object.
 func encodeObjects(rows []any, sep rune) (string, error) {
+	cols, err := objectColumns(rows)
+	if err != nil {
+		return "", err
+	}
+	var b strings.Builder
+	writeRecord(&b, cols, sep)
+	cells := make([]string, len(cols))
+	for _, row := range rows {
+		obj := row.(map[string]any)
+		for i, k := range cols {
+			cells[i] = cellText(obj[k])
+		}
+		writeRecord(&b, cells, sep)
+	}
+	return b.String(), nil
+}
+
+// objectColumns is the union of the rows' keys in order of first appearance,
+// sorted within one object; a row that is not an object is an error.
+func objectColumns(rows []any) ([]string, error) {
 	var cols []string
 	seen := map[string]bool{}
 	for i, row := range rows {
 		obj, ok := row.(map[string]any)
 		if !ok {
-			return "", rowError(i, row)
+			return nil, rowError(i, row)
 		}
 		keys := make([]string, 0, len(obj))
 		for k := range obj {
@@ -140,17 +160,7 @@ func encodeObjects(rows []any, sep rune) (string, error) {
 			cols = append(cols, k)
 		}
 	}
-	var b strings.Builder
-	writeRecord(&b, cols, sep)
-	cells := make([]string, len(cols))
-	for _, row := range rows {
-		obj := row.(map[string]any)
-		for i, k := range cols {
-			cells[i] = cellText(obj[k])
-		}
-		writeRecord(&b, cells, sep)
-	}
-	return b.String(), nil
+	return cols, nil
 }
 
 // rowError names why row i does not fit the table the first row started.

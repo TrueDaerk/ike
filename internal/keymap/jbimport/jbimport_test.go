@@ -148,9 +148,11 @@ func TestPlanWindowsFixture(t *testing.T) {
 		t.Fatalf("Plan: %v", err)
 	}
 	want := map[string]string{
-		"ctrl+s":     "editor.write",
-		"ctrl+alt+l": "lsp.format",
-		"alt+f7":     "lsp.references",
+		"ctrl+s": "editor.write",
+		// The playground's table view (#2794) holds ctrl+alt+l in the Global
+		// context, so the import scopes Reformat Code to the editor (#2820).
+		"editor.ctrl+alt+l": "lsp.format",
+		"alt+f7":            "lsp.references",
 		// The explorer binds alt+enter too (#2805): the import scopes the
 		// intention chord to the editor so the tree keeps its menu (#2820).
 		"editor.alt+enter": "lsp.codeAction",
