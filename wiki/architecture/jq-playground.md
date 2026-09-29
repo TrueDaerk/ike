@@ -679,6 +679,33 @@ the `switch` — those already fully render and `continue` before reaching it,
 so a stale result's search highlights and cursor stay at full brightness
 while the surrounding text dims.
 
+**A spinner animates next to `evaluating…` once a run has run long enough
+(#2778)**, so a slow evaluation — a large stream, the xmq CLI, anything
+approaching the 5s timeout — shows motion instead of leaving the info row
+static and looking hung. It reuses the venv wizard's own spinner (braille
+frames, `internal/settings/venv_wizard.go`), the app's one style for an
+async indicator, rather than inventing a second one:
+
+- `armPlaySpin` schedules a generation-stamped `playSpinMsg` tick
+  `playSpinDelay` (150ms) after every run's start (`schedulePlayEval`,
+  `runPlayNow`) — shorter than `playDimDelay`, since the spinner is the
+  earlier "still working" signal and the dim is the later "this is taking a
+  while" one.
+- `firePlaySpin` turns `spinning` on for a still-pending run of the current
+  generation, advances `spinFrame`, and reschedules itself every
+  `playSpinInterval` (200ms) for the next frame — until the run finishes
+  (`finishPlayEval`/`finishPlayParse` clear `spinning`), a newer keystroke
+  supersedes the generation, or the hosting pane no longer shows the
+  playground (`playSrcShown`, #2355), so a parked or hidden playground never
+  keeps ticking for nothing.
+- `playResultSegment` appends the current frame (`playState.spinSuffix`)
+  right after `evaluating…`, in both the bare and the previous-count forms —
+  the query line's caret and the program text are never touched, only the
+  info row's own trailing text.
+
+Most runs finish inside `playSpinDelay` and the spinner never appears —
+the same no-flicker rule the dim delay follows.
+
 ## Syntax highlighting
 
 The query line is colorized by a **single-pass rune scanner** (`jqplay.Tokens`),

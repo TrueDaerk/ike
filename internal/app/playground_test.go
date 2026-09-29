@@ -29,9 +29,9 @@ import (
 // human-scale delay, so a test drives the dialog without sleeping.
 func noDebounce(t *testing.T) {
 	t.Helper()
-	prev, prevDim := playDebounce, playDimDelay
-	playDebounce, playDimDelay = 0, 0
-	t.Cleanup(func() { playDebounce, playDimDelay = prev, prevDim })
+	prev, prevDim, prevSpin := playDebounce, playDimDelay, playSpinDelay
+	playDebounce, playDimDelay, playSpinDelay = 0, 0, 0
+	t.Cleanup(func() { playDebounce, playDimDelay, playSpinDelay = prev, prevDim, prevSpin })
 }
 
 // playApp opens body as a .json file in the focused editor and returns the
@@ -346,6 +346,65 @@ func TestJQPlaygroundPendingDimDelay(t *testing.T) {
 	m.firePlayDim(playDimMsg{st: s, gen: s.gen - 1})
 	if s.dimming {
 		t.Error("a stale generation must not dim the result")
+	}
+}
+
+// TestJQPlaygroundSpinner (#2778): the result segment's spinner appears only
+// once a pending run outlasts playSpinDelay, animates on later ticks, and
+// stops (dropping its frame) the moment the run finishes, is superseded, or
+// the pane no longer shows the playground.
+func TestJQPlaygroundSpinner(t *testing.T) {
+	m := openJQ(t, playApp(t, `{"foo":1}`))
+	s := m.play
+
+	// A run that finishes before the spin-delay tick lands never spins.
+	s.gen++
+	s.pending, s.spinning = true, false
+	s.pending = false // the run completed before the delay elapsed
+	if cmd := m.firePlaySpin(playSpinMsg{st: s, gen: s.gen}); cmd != nil {
+		t.Fatal("firePlaySpin must not return a follow-up command for a finished run")
+	}
+	if s.spinning {
+		t.Error("a tick delivered after the run finished must not start the spinner")
+	}
+	if got := s.spinSuffix(); got != "" {
+		t.Errorf("spinSuffix on a non-spinning state = %q, want empty", got)
+	}
+
+	// A run still pending when the tick lands starts the spinner and
+	// reschedules the next frame.
+	s.gen++
+	s.pending, s.spinning, s.spinFrame = true, false, 0
+	cmd := m.firePlaySpin(playSpinMsg{st: s, gen: s.gen})
+	if !s.spinning {
+		t.Fatal("a tick delivered while still pending must start the spinner")
+	}
+	if cmd == nil {
+		t.Fatal("a still-pending, still-shown spinner must reschedule its next frame")
+	}
+	if got := s.spinSuffix(); got == "" {
+		t.Error("a spinning state must render a non-empty spinner suffix")
+	}
+	frame1 := s.spinFrame
+	m.firePlaySpin(playSpinMsg{st: s, gen: s.gen})
+	if s.spinFrame == frame1 {
+		t.Error("a further tick must advance the spinner frame")
+	}
+
+	// The run finishing clears the spinner.
+	m = drainCmd(m, m.finishPlayEval(playEvalDoneMsg{st: s, gen: s.gen, res: s.result}))
+	if s.spinning || s.spinSuffix() != "" {
+		t.Error("a finished run must stop the spinner")
+	}
+
+	// A superseded generation is dropped.
+	s.gen++
+	s.pending, s.spinning = true, false
+	if cmd := m.firePlaySpin(playSpinMsg{st: s, gen: s.gen - 1}); cmd != nil {
+		t.Error("a stale generation must not reschedule")
+	}
+	if s.spinning {
+		t.Error("a stale generation must not start the spinner")
 	}
 }
 
