@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-09-23T20:00:00Z
+timestamp: 2026-09-29T12:00:00Z
 ---
 
 # File Explorer
@@ -403,7 +403,18 @@ padding, and title row) before calling the explorer:
   Delete, Copy Path(s), Open in Browser, Open File As… (the #2420 viewer
   chooser, see [hex viewer](./hex-viewer.md)), Refresh, Expand All, Reveal —
   entries dispatch the registered explorer commands, availability/shortcuts
-  resolve like the menu bar.
+  resolve like the menu bar. The tail of the menu depends on the selection
+  (#2805, see [Archive actions](#archive-actions-2805)): *Extract Here* /
+  *Extract To…* on an archive or a plain `.gz`, *Compress (gzip)* on any other
+  file, *Compress (zip)* on a directory or a multi-selection.
+- **`alt+enter`** (`explorer.contextMenu`, #2805) is the keyboard doorway to
+  the same menu: it opens anchored one row below the cursor row
+  (`Model.ContextRow`, which scrolls the row into view first; a Scratches row
+  anchors the same way), with the selection untouched — a shift range or
+  marked multi-select stays, so the menu's actions see it exactly as after a
+  right-click inside the selection. `↑`/`↓` pick, `enter` runs, `esc` closes.
+  The chord is Explorer-scoped; the editor's `alt+enter` stays
+  `lsp.codeAction`.
 - **Left press** on a scrollbar track jumps that axis proportionally; a press
   on the **vertical thumb grabs it** and dragging follows the pointer
   (#1036, `dragExplScroll`, mirroring the editor scrollbar #1022).
@@ -522,6 +533,16 @@ these are defaults.
 | `explorer.search` | `/` | open the type-to-select speed search (`SearchMsg`, #1087); the Global `search.open` chord reaches it through `pane.Searchable` (#2409) |
 | `explorer.undo` | `Ctrl+Z` | reverse the last file operation instantly (`UndoMsg`) |
 | `explorer.redo` | `Ctrl+Shift+Z` / `Cmd+Shift+Z` | re-apply the last undone file operation (`RedoMsg`) |
+| `explorer.contextMenu` | `alt+enter` | open the node context menu at the cursor row (#2805) |
+| `explorer.extractHere` | — (context menu) | unpack the selected archive / `.gz` beside it (#2805) |
+| `explorer.extractTo` | — (context menu) | unpack it into a directory picked in the extraction prompt (#2805) |
+| `explorer.compressGzip` | — (context menu) | gzip the selected file into `<name>.gz` (#2805) |
+| `explorer.compressZip` | — (context menu) | zip the selected directory or multi-selection (#2805) |
+
+The last five are app commands (`internal/app/explorerpack.go`), scoped to the
+explorer pane like the tree's own; the four archive actions are keybind-less
+by design (`reasonMenu` in the audit ledger) — the menu offers them exactly
+where they apply.
 
 `explorer.toggle` (global, `cmd+1`) is the JetBrains cmd+1 state
 machine (#268, `internal/app/explorer_toggle.go`): a focused tree **hides**
@@ -555,6 +576,43 @@ warning and the tree keeps the flipped state for this session.
 applies the value to every parked background workspace's explorer directly
 (`applyShowHiddenToBackground` → `Model.ApplyShowHidden`); switching back never
 shows a tree contradicting the toggle.
+
+## Archive actions (#2805)
+
+The node menu's archive entries are gated on what the selection is, using the
+viewers' own routing so the menu and the file handlers never disagree
+(`classifyPack`): `archive.IsArchive` (zip, tar, tar.gz, tar.bz2, sniffed from
+content) → *Extract Here* / *Extract To…*; `gzfile.IsPlain` (a lone `.gz`) →
+the same pair; any other regular file → *Compress (gzip)*; a directory, or any
+multi-select (marks or a shift range, `Model.OpTargetPaths`) → *Compress
+(zip)*. Scratches rows and the root get none of them.
+
+- **Extract Here** on an archive runs the archive viewer's extraction pipeline
+  directly into `defaultExtractDir` — `x.zip` / `x.tar.gz` → `./x/` — with its
+  plan, byte cap, path-traversal and link refusals and its overwrite guard
+  (see [archive viewer](./archive-viewer.md#extraction-to-disk-2249)). On a
+  plain `.gz` it streams `gzfile.Extract` into the sibling file without the
+  suffix (`app.log.gz` → `app.log`; a suffix-less gzip gains `.out`), under the
+  same cap (`extractLimit`); the output goes through a temporary file, so a
+  refused or failed run leaves nothing behind.
+- **Extract To…** opens the same target-directory prompt the viewer's `E`
+  does, prefilled with that proposal (the `.gz`'s own directory for a plain
+  gzip, whose file then lands in the chosen directory).
+- **Compress (gzip)** writes `<file>.gz` beside the file (`archive.WriteGzip`,
+  `compress/gzip` default level, original kept, header carries name and
+  mtime). **Compress (zip)** writes `<dir>.zip` beside a directory, or
+  `archive.zip` beside a multi-selection (`archive.WriteZip`): member names are
+  relative to the sources' parent, so a directory keeps its own name as the
+  top folder; nothing is excluded, symlinks are neither followed nor stored and
+  special files are skipped (both counted in the summary).
+
+A target that already exists raises a guard first (`[s/enter]` keep it ·
+`[o]` overwrite · `[esc]` cancel — keeping is the primary answer); a directory
+in the way is refused outright. Compression and gzip extraction run off the
+event loop as a `tea.Cmd` (a directory zip, or an input past a few MiB,
+announces itself with a progress notice) and report through the host
+notifier. Every action ends with `explorer.SelectPathMsg`: the containing
+directory is rescanned and the produced file or directory selected.
 
 ## File operations
 

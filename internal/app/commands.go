@@ -843,6 +843,13 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("archive.extractEntry", "Extract Selected Archive Entry…", ArchiveExtractEntryMsg{}),
 			appCommand("archive.extractAll", "Extract Whole Archive…", ArchiveExtractAllMsg{}),
 			appCommand("archive.reload", "Reload Archive Listing", ArchiveReloadMsg{}),
+			// The explorer's keyboard context menu and archive actions
+			// (#2805): tree-scoped, like the explorer's own commands.
+			paneCommand("explorer.contextMenu", "Explorer: Show Context Menu", "explorer", ExplorerContextMenuMsg{}),
+			paneCommand("explorer.extractHere", "Explorer: Extract Here", "explorer", ExplorerExtractHereMsg{}),
+			paneCommand("explorer.extractTo", "Explorer: Extract To…", "explorer", ExplorerExtractToMsg{}),
+			paneCommand("explorer.compressGzip", "Explorer: Compress (gzip)", "explorer", ExplorerCompressGzipMsg{}),
+			paneCommand("explorer.compressZip", "Explorer: Compress (zip)", "explorer", ExplorerCompressZipMsg{}),
 			appCommand("notebook.run", "Run Notebook (nbconvert --execute)", NotebookRunMsg{}),
 			appCommand("http.toggleRawBody", "Toggle Raw / Pretty HTTP Response Body", HTTPToggleRawBodyMsg{}),
 			langCommand(appCommand("http.jqPlayground", "Open jq Playground on HTTP Response", HTTPJQPlaygroundMsg{}), jqLangs),

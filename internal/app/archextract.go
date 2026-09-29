@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -10,6 +11,7 @@ import (
 
 	"ike/internal/archive"
 	"ike/internal/archview"
+	"ike/internal/gzfile"
 	"ike/internal/host"
 	"ike/internal/pane"
 	"ike/internal/pathcomplete"
@@ -64,10 +66,18 @@ func (m *Model) startArchiveExtract(msg archview.ExtractMsg) {
 	if msg.Archive == "" {
 		return
 	}
-	m.archExtractArchive = msg.Archive
-	m.archExtractMembers = append([]string(nil), msg.Members...)
+	m.openArchiveExtractPrompt(msg.Archive, msg.Members, defaultExtractDir(msg.Archive))
+}
+
+// openArchiveExtractPrompt opens the target-directory prompt for archivePath,
+// prefilled with dir. It is the shared body of the viewer's request and the
+// explorer's Extract To… (#2805), which re-arms the explorer flags after it.
+func (m *Model) openArchiveExtractPrompt(archivePath string, members []string, dir string) {
+	m.archExtractArchive = archivePath
+	m.archExtractMembers = append([]string(nil), members...)
 	m.archExtractOpen = true
-	m.archExtractDir = newDirPrompt(projectRoot(), displayPath(defaultExtractDir(msg.Archive)))
+	m.archExtractReveal, m.archExtractGzip = false, false
+	m.archExtractDir = newDirPrompt(projectRoot(), displayPath(dir))
 	m.renderArchiveExtractPrompt()
 	m.shell.SetSize(m.width, m.height)
 	m.shell.Open()
@@ -75,17 +85,30 @@ func (m *Model) startArchiveExtract(msg archview.ExtractMsg) {
 
 // defaultExtractDir is the proposal the prompt opens with: a directory next to
 // the archive, named after it without its archive suffix — so backup.tar.gz
-// unpacks into ./backup/ instead of scattering members beside the file.
+// unpacks into ./backup/ instead of scattering members beside the file. Any
+// other extension (.zip, .jar, …) is dropped the same way (#2805); a name
+// that would come out as the archive itself gains "-extracted".
 func defaultExtractDir(archivePath string) string {
-	base := filepath.Base(archivePath)
+	full := filepath.Base(archivePath)
+	base := full
+	stripped := false
 	for _, suffix := range []string{".tar.gz", ".tar.bz2", ".tar.z", ".tgz", ".tbz", ".tbz2", ".tar"} {
 		if len(base) > len(suffix) && strings.EqualFold(base[len(base)-len(suffix):], suffix) {
 			base = base[:len(base)-len(suffix)]
+			stripped = true
 			break
 		}
 	}
+	if ext := filepath.Ext(base); !stripped && ext != "" && len(ext) < len(base) {
+		base = strings.TrimSuffix(base, ext)
+	}
 	if base == "" {
 		base = "extracted"
+	}
+	if base == full && full != "extracted" {
+		if _, err := os.Lstat(archivePath); err == nil {
+			base += "-extracted"
+		}
 	}
 	return filepath.Join(filepath.Dir(archivePath), base)
 }
@@ -138,22 +161,29 @@ func (m Model) updateArchiveExtractPrompt(msg tea.KeyPressMsg) (tea.Model, tea.C
 		m.closeArchiveExtractPrompt()
 		return m, nil
 	case dirPromptAccept:
-		m.acceptArchiveExtractTarget(target)
-		return m, nil
+		return m, m.acceptArchiveExtractTarget(target)
 	}
 	m.renderArchiveExtractPrompt()
 	return m, nil
 }
 
 // acceptArchiveExtractTarget closes the prompt and plans the extraction into
-// target — the shared tail of enter and a click on a candidate.
-func (m *Model) acceptArchiveExtractTarget(target string) {
+// target — the shared tail of enter and a click on a candidate. A plain .gz
+// from the explorer (#2805) has no members to plan: its one file lands in the
+// chosen directory under its unsuffixed name.
+func (m *Model) acceptArchiveExtractTarget(target string) tea.Cmd {
 	archivePath, members := m.archExtractArchive, m.archExtractMembers
+	reveal, gz := m.archExtractReveal, m.archExtractGzip
 	m.closeArchiveExtractPrompt()
 	if strings.TrimSpace(target) == "" {
-		return
+		return nil
 	}
-	m.planArchiveExtract(archivePath, members, target)
+	if gz {
+		dest := filepath.Join(archiveExtractPath(target), gzfile.ExtractName(archivePath))
+		return m.startGunzip(archivePath, dest)
+	}
+	m.archExtractReveal = reveal
+	return m.planArchiveExtract(archivePath, members, target)
 }
 
 // archiveExtractClickRow accepts the clicked candidate (#2689): a click on a
@@ -163,8 +193,7 @@ func (m Model) archiveExtractClickRow(row int) (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	m.acceptArchiveExtractTarget(cand)
-	return m, nil
+	return m, m.acceptArchiveExtractTarget(cand)
 }
 
 // closeArchiveExtractPrompt drops the prompt state and the shell.
@@ -187,8 +216,9 @@ func (m *Model) pasteArchiveExtractPrompt(text string) bool {
 // planArchiveExtract turns the typed directory into a plan and either runs it
 // or asks about the files it would replace. The cap is checked here, before a
 // single byte is written, so an archive that unpacks past the ceiling is
-// refused with a size the user can act on.
-func (m *Model) planArchiveExtract(archivePath string, members []string, target string) {
+// refused with a size the user can act on. The returned Cmd selects the
+// target in the explorer when the extraction started there (#2805).
+func (m *Model) planArchiveExtract(archivePath string, members []string, target string) tea.Cmd {
 	dest := archiveExtractPath(target)
 	limit := m.extractLimit()
 	pl, err := archive.PlanExtract(archivePath, dest, members, limit)
@@ -196,21 +226,21 @@ func (m *Model) planArchiveExtract(archivePath string, members []string, target 
 		m.host.Notify(host.Error, fmt.Sprintf(
 			"archive: extraction refused — %s exceeds the %s extraction cap",
 			archview.HumanSize(pl.Bytes), archview.HumanSize(limit)))
-		return
+		return nil
 	}
 	if err != nil && pl.Empty() {
 		m.host.Notify(host.Error, "archive: cannot read "+displayPath(archivePath)+": "+err.Error())
-		return
+		return nil
 	}
 	if pl.Empty() {
 		m.host.Notify(host.Warn, "archive: nothing to extract"+skipSuffix(pl.Skipped))
-		return
+		return nil
 	}
 	if len(pl.Conflicts) > 0 {
 		m.openArchiveExtractGuard(pl)
-		return
+		return nil
 	}
-	m.runArchiveExtract(pl, false)
+	return m.runArchiveExtract(pl, false)
 }
 
 // archiveExtractPath resolves the typed target directory: "~" expands and a
@@ -272,10 +302,10 @@ func (m Model) updateArchiveExtractGuard(msg tea.KeyPressMsg) (tea.Model, tea.Cm
 	switch guardAnswer(msg, "s") {
 	case "o":
 		m.closeArchiveExtractGuard()
-		m.runArchiveExtract(*pl, true)
+		return m, m.runArchiveExtract(*pl, true)
 	case "s":
 		m.closeArchiveExtractGuard()
-		m.runArchiveExtract(*pl, false)
+		return m, m.runArchiveExtract(*pl, false)
 	case "esc":
 		m.closeArchiveExtractGuard()
 		m.host.Notify(host.Info, "archive: extraction cancelled")
@@ -290,19 +320,23 @@ func (m *Model) closeArchiveExtractGuard() {
 }
 
 // runArchiveExtract performs the extraction and reports it. The cap is passed
-// again: the plan trusted the headers, the write does not.
-func (m *Model) runArchiveExtract(pl archive.Plan, overwrite bool) {
+// again: the plan trusted the headers, the write does not. An extraction the
+// explorer started (#2805) ends with the tree refreshed and the target
+// directory selected.
+func (m *Model) runArchiveExtract(pl archive.Plan, overwrite bool) tea.Cmd {
+	reveal := m.archExtractReveal
+	m.archExtractReveal = false
 	limit := m.extractLimit()
 	res, err := archive.Extract(pl, archive.Options{Overwrite: overwrite, MaxBytes: limit})
 	if errors.Is(err, archive.ErrExtractTooLarge) {
 		m.host.Notify(host.Error, fmt.Sprintf(
 			"archive: extraction stopped — the %s cap was reached after %d file(s)",
 			archview.HumanSize(limit), res.Files))
-		return
+		return nil
 	}
 	if err != nil {
 		m.host.Notify(host.Error, "archive: extraction failed — "+err.Error())
-		return
+		return nil
 	}
 	level := host.Info
 	if len(res.Skipped) > 0 {
@@ -310,6 +344,10 @@ func (m *Model) runArchiveExtract(pl archive.Plan, overwrite bool) {
 	}
 	m.host.Notify(level, fmt.Sprintf("archive: extracted %d file(s), %s to %s",
 		res.Files, archview.HumanSize(res.Bytes), displayPath(pl.Dest))+skipSuffix(res.Skipped))
+	if !reveal {
+		return nil
+	}
+	return selectInExplorer(pl.Dest)
 }
 
 // skipSuffix appends the skipped-entry tail of a summary: the count plus the

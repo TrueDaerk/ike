@@ -536,7 +536,10 @@ type Model struct {
 	// (#1982). The ordinary open prefills it instead of `.`, so reopening a
 	// file resumes the look that was interrupted — something the one shared,
 	// buffer-agnostic history cannot express. In memory for the session, like
-	// the history itself.
+	// the history itself. playLastStore is the persisted half (#2774): only
+	// file-backed sources (an absolute path) are written through to it, so a
+	// restart resumes those, while an unsaved buffer or an HTTP response stays
+	// session-only in playLastProgram.
 	play *playState
 	// playChord marks a partial multi-step chord the playground fed to the
 	// resolver (#2633). The mode owns the keyboard, so it resolves keys in
@@ -546,6 +549,7 @@ type Model struct {
 	playChord       bool
 	playHistory     *jqplay.History
 	playLastProgram map[string]string
+	playLastStore   *jqplay.LastPrograms
 	// playFilters is the palette mode listing the named saved filters of both
 	// scopes (#1995), kept on the model so the insert and rename entry
 	// commands can flip its action before opening it locked; playName is the
@@ -681,6 +685,15 @@ type Model struct {
 	archExtractArchive string
 	archExtractMembers []string
 	archExtractPlan    *archive.Plan
+	// archExtractReveal marks an extraction the explorer started (#2805): it
+	// ends with the tree refreshed and the target selected. archExtractGzip
+	// marks the prompt as the explorer's Extract To… on a plain .gz, which
+	// has one file to write instead of a member plan.
+	archExtractReveal bool
+	archExtractGzip   bool
+	// packPending is the explorer extraction/compression (#2805) waiting on
+	// its overwrite guard; nil when none is.
+	packPending *packJob
 	// archExtractLimit overrides the extraction byte cap (0 = the package
 	// default), the seam the cap's test drives.
 	archExtractLimit int64
@@ -1588,8 +1601,9 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		navHist:         &nav.History{},
 		previewBound:    new(atomic.Bool),
 		editorSyncs:     &editorSyncQueue{},
-		playHistory:     jqplay.NewHistory(jqplay.HistoryFile()), // one per-user program list (#1977, persisted since #2536)
-		playLastProgram: map[string]string{},                     // per-file last valid program (#1982)
+		playHistory:     jqplay.NewHistory(jqplay.HistoryFile()),          // one per-user program list (#1977, persisted since #2536)
+		playLastProgram: map[string]string{},                              // per-file last valid program (#1982)
+		playLastStore:   jqplay.NewLastPrograms(jqplay.LastProgramFile()), // persisted per-path last program (#2774)
 		compMRU:         mru.Load(mru.DefaultFile()),
 		bpts:            debug.Load(),
 		watches:         debug.LoadWatches(), // per-project watch expressions (#2174)
@@ -7439,6 +7453,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// a stale generation means the user kept typing.
 		return m, m.firePlayDebounce(msg)
 
+	case playHintIdleMsg:
+		// The query line went idle long enough to show the key hints again
+		// (#2776); a stale generation means the user typed since.
+		return m, m.firePlayHintIdle(msg)
+
 	case playEvalDoneMsg:
 		// An off-loop jq evaluation came back (#1936); a stale generation is
 		// dropped by finishPlayEval, a current one refreshes the result buffer.
@@ -7448,6 +7467,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A pending evaluation has run long enough to dim the result body
 		// (#2777); a stale generation means it already finished.
 		return m, m.firePlayDim(msg)
+
+	case playSpinMsg:
+		// A pending evaluation has run long enough to show the spinner, or an
+		// already-spinning one is animating its next frame (#2778); a stale
+		// generation means it already finished.
+		return m, m.firePlaySpin(msg)
 
 	case project.OpenNewProjectMsg:
 		// project.new (palette / File menu, #1718): the new-project wizard.
@@ -7629,6 +7654,27 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// archive.extractAll (palette, #2249): the same flow as "E".
 		m.startArchiveExtractCommand(true)
 		return m, nil
+
+	case ExplorerContextMenuMsg:
+		// explorer.contextMenu (alt+enter, #2805): the right-click menu at
+		// the cursor row.
+		m.openExplorerContextMenu()
+		return m, nil
+
+	case ExplorerExtractHereMsg:
+		return m, m.explorerExtract(false)
+
+	case ExplorerExtractToMsg:
+		return m, m.explorerExtract(true)
+
+	case ExplorerCompressGzipMsg:
+		return m, m.explorerCompress(false)
+
+	case ExplorerCompressZipMsg:
+		return m, m.explorerCompress(true)
+
+	case packDoneMsg:
+		return m, m.finishPack(msg)
 
 	case ArchiveReloadMsg:
 		// archive.reload (ctrl+r in the viewer, palette — #2314): re-read the
@@ -9325,6 +9371,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.archiveExtractGuardOpen() {
 			return m.updateArchiveExtractGuard(msg)
+		}
+		// The explorer's extract/compress overwrite guard (#2805) answers
+		// the same way.
+		if m.packGuardOpen() {
+			return m.updatePackGuard(msg)
 		}
 		// file.copy's destination prompt (#2696) is the extract prompt's twin
 		// — same directory autocomplete — and its overwrite guard answers on
@@ -13139,7 +13190,7 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// the pointer is selected first, so the menu's actions target it.
 		if msg.Button == tea.MouseRight {
 			if exp.ContextClick(localX, localY) {
-				m.ctxMenu.Open(explorerContextItems(), msg.X, msg.Y, m.width, m.height)
+				m.ctxMenu.Open(m.explorerMenuItems(), msg.X, msg.Y, m.width, m.height)
 			}
 			return m, nil
 		}

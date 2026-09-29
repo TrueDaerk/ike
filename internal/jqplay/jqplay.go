@@ -331,6 +331,39 @@ func Run(ctx context.Context, program string, in *Input) Result {
 	return res
 }
 
+// Compile checks program without running it (#2780) and returns the error Run
+// would report for it, "" when it compiles. It is what the playground calls on
+// every query-line keystroke, ahead of the debounced run: a syntax error shows
+// at once and a program that cannot compile never starts a run.
+//
+// The check has no input dependency, so its cost is bounded by the program's
+// length alone — a pathological input cannot put it on the hot path. For jq and
+// yq it is gojq's parse + compile, the same two steps Run starts with; for xmq
+// it is the shell-word split runXMQ starts with, the only part of an xmq
+// command line the playground can judge without running the binary. An empty
+// program compiles in every dialect: Run treats it as idle (jq, yq) or as the
+// bare pretty-print (xmq).
+func Compile(d Dialect, program string) string {
+	program = strings.TrimSpace(program)
+	if d == DialectXMQ {
+		if _, err := ShellWords(program); err != nil {
+			return err.Error()
+		}
+		return ""
+	}
+	if program == "" {
+		return ""
+	}
+	query, err := gojq.Parse(program)
+	if err != nil {
+		return err.Error()
+	}
+	if _, err := gojq.Compile(query); err != nil {
+		return err.Error()
+	}
+	return ""
+}
+
 // runtimeError renders the error a jq program raised. A cancelled context
 // surfaces as its own message: gojq reports the abort as an ordinary error
 // value, and "context canceled" would read as a jq diagnostic.
@@ -364,3 +397,7 @@ func encodeJSON(v any) string {
 	}
 	return pretty.String()
 }
+
+// Size is the byte length of the result document (#2776), the joined outputs
+// the result buffer shows — what the info row reports next to the count.
+func (r Result) Size() int { return len(r.Text()) }

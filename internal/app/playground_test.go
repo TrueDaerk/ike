@@ -29,9 +29,9 @@ import (
 // human-scale delay, so a test drives the dialog without sleeping.
 func noDebounce(t *testing.T) {
 	t.Helper()
-	prev, prevDim := playDebounce, playDimDelay
-	playDebounce, playDimDelay = 0, 0
-	t.Cleanup(func() { playDebounce, playDimDelay = prev, prevDim })
+	prev, prevDim, prevSpin, prevIdle := playDebounce, playDimDelay, playSpinDelay, playHintIdle
+	playDebounce, playDimDelay, playSpinDelay, playHintIdle = 0, 0, 0, 0
+	t.Cleanup(func() { playDebounce, playDimDelay, playSpinDelay, playHintIdle = prev, prevDim, prevSpin, prevIdle })
 }
 
 // playApp opens body as a .json file in the focused editor and returns the
@@ -346,6 +346,65 @@ func TestJQPlaygroundPendingDimDelay(t *testing.T) {
 	m.firePlayDim(playDimMsg{st: s, gen: s.gen - 1})
 	if s.dimming {
 		t.Error("a stale generation must not dim the result")
+	}
+}
+
+// TestJQPlaygroundSpinner (#2778): the result segment's spinner appears only
+// once a pending run outlasts playSpinDelay, animates on later ticks, and
+// stops (dropping its frame) the moment the run finishes, is superseded, or
+// the pane no longer shows the playground.
+func TestJQPlaygroundSpinner(t *testing.T) {
+	m := openJQ(t, playApp(t, `{"foo":1}`))
+	s := m.play
+
+	// A run that finishes before the spin-delay tick lands never spins.
+	s.gen++
+	s.pending, s.spinning = true, false
+	s.pending = false // the run completed before the delay elapsed
+	if cmd := m.firePlaySpin(playSpinMsg{st: s, gen: s.gen}); cmd != nil {
+		t.Fatal("firePlaySpin must not return a follow-up command for a finished run")
+	}
+	if s.spinning {
+		t.Error("a tick delivered after the run finished must not start the spinner")
+	}
+	if got := s.spinSuffix(); got != "" {
+		t.Errorf("spinSuffix on a non-spinning state = %q, want empty", got)
+	}
+
+	// A run still pending when the tick lands starts the spinner and
+	// reschedules the next frame.
+	s.gen++
+	s.pending, s.spinning, s.spinFrame = true, false, 0
+	cmd := m.firePlaySpin(playSpinMsg{st: s, gen: s.gen})
+	if !s.spinning {
+		t.Fatal("a tick delivered while still pending must start the spinner")
+	}
+	if cmd == nil {
+		t.Fatal("a still-pending, still-shown spinner must reschedule its next frame")
+	}
+	if got := s.spinSuffix(); got == "" {
+		t.Error("a spinning state must render a non-empty spinner suffix")
+	}
+	frame1 := s.spinFrame
+	m.firePlaySpin(playSpinMsg{st: s, gen: s.gen})
+	if s.spinFrame == frame1 {
+		t.Error("a further tick must advance the spinner frame")
+	}
+
+	// The run finishing clears the spinner.
+	m = drainCmd(m, m.finishPlayEval(playEvalDoneMsg{st: s, gen: s.gen, res: s.result}))
+	if s.spinning || s.spinSuffix() != "" {
+		t.Error("a finished run must stop the spinner")
+	}
+
+	// A superseded generation is dropped.
+	s.gen++
+	s.pending, s.spinning = true, false
+	if cmd := m.firePlaySpin(playSpinMsg{st: s, gen: s.gen - 1}); cmd != nil {
+		t.Error("a stale generation must not reschedule")
+	}
+	if s.spinning {
+		t.Error("a stale generation must not start the spinner")
 	}
 }
 
@@ -1394,12 +1453,12 @@ func TestJQResultFoldsNested(t *testing.T) {
 	}
 	m = playKeys(m, "zo") // one level open again
 	view := ansi.Strip(m.render())
-	if !strings.Contains(view, `"spec": { ⋯ 1 key }`) {
+	if !strings.Contains(view, `"spec": { ports ⋯ 1 key }`) {
 		t.Fatalf("zo must reveal one level, with the node inside it still folded, got:\n%s", view)
 	}
 	m = playKeys(m, "jzo") // and the node inside it opens on its own
 	view = ansi.Strip(m.render())
-	if !strings.Contains(view, "⋯ 3 items ]") {
+	if !strings.Contains(view, "⋯ 3 × number ]") {
 		t.Errorf("the nested array must fold with its item count, got:\n%s", view)
 	}
 	if strings.Contains(view, "443") {
@@ -1706,4 +1765,43 @@ func TestJQPlaygroundMultiLineHints(t *testing.T) {
 	if got := ansi.Strip(m.playInfoRow(240)); !strings.Contains(got, "↑/↓ history") {
 		t.Errorf("the one-line hints = %q, want the history keys", got)
 	}
+}
+
+// TestJQPlaygroundQueryStructure (#2775): brackets render in rainbow depth
+// colours and top-level pipes emphasised, in the one-line window (cut at the
+// `…` edges) and the multi-line view; an unbalanced program renders the
+// unpaired bracket in its own style without panicking.
+func TestJQPlaygroundQueryStructure(t *testing.T) {
+	m := openJQ(t, playApp(t, `{"a":1}`))
+	const prog = `.a | map(select(.x > 1)) | {n: .name}`
+	m = setProgram(m, prog)
+	op := m.playKindStyles()[jqplay.KindOperator]
+	paint := m.playStructurePainter(prog, jqplay.Tokens(prog), m.playKindStyles())
+	pipe := paint(3).Render("|")
+	if pipe == op.Render("|") {
+		t.Fatal("a top-level pipe must be emphasised")
+	}
+	d0, d1 := paint(8).Render("("), paint(15).Render("(")
+	if d0 == d1 {
+		t.Fatal("nested brackets must differ in colour by depth")
+	}
+	got := m.playHighlighted(prog, -1, 200)
+	if strings.Count(got, pipe) != 2 || !strings.Contains(got, d0) || !strings.Contains(got, d1) {
+		t.Errorf("one-line render lacks the structure: %q", got)
+	}
+	if cut := m.playHighlighted(prog, len(prog)-1, 12); !strings.HasPrefix(ansi.Strip(cut), "…") {
+		t.Errorf("windowed render must keep its edge, got %q", ansi.Strip(cut))
+	}
+	m = toggleJQView(m)
+	m.play.program.Cur = 0
+	if rows := strings.Join(m.playQueryRows(30), ""); !strings.Contains(rows, pipe) || !strings.Contains(rows, d1) {
+		t.Errorf("the multi-line view must carry the structure: %q", rows)
+	}
+
+	const bad = `.a | (]`
+	pb := m.playStructurePainter(bad, jqplay.Tokens(bad), m.playKindStyles())
+	if pb(6).Render("]") == op.Render("]") {
+		t.Error("an unpaired bracket must stand out")
+	}
+	_ = m.playHighlighted(bad, 3, 5)
 }

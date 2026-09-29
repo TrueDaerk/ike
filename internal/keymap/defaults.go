@@ -331,6 +331,11 @@ var jetbrainsRows = []row{
 	// terminal's option-as-meta setting, hence fragile; 0081 owns the final
 	// reachability call.
 	{"alt+enter", "lsp.codeAction", "Show intention actions", Editor, "LSP (0100)"},
+	// The explorer's twin (#2805): alt+enter opens the node context menu at
+	// the cursor row — the keyboard doorway to everything the right-click
+	// menu offers, including the extract/compress actions that live only
+	// there. Explorer context, so the editor's intention popup is untouched.
+	{"alt+enter", "explorer.contextMenu", "Show the node context menu", Explorer, "Explorer (#2805)"},
 	// JetBrains Basic Completion (#2695): ctrl+space opens the completion
 	// popup at the caret on demand, so a dismissed popup or a position no
 	// trigger character reaches is one chord away. Ghostty, Kitty and WezTerm

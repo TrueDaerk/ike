@@ -142,6 +142,23 @@ var playDebounce = 120 * time.Millisecond
 // for the same reason.
 var playDimDelay = 300 * time.Millisecond
 
+// playSpinDelay is how long an evaluation must stay pending before the
+// animated spinner appears in the result segment (#2778): a run that finishes
+// inside this window never shows it, so ordinary keystrokes never flicker.
+// Shorter than playDimDelay — the spinner is the "still working" signal for
+// the slow-but-not-yet-worrying middle stretch, before the body itself dims.
+// A var like playDebounce, for the same reason.
+var playSpinDelay = 150 * time.Millisecond
+
+// playSpinInterval is the animation frame rate once the spinner is showing,
+// matching the venv wizard's spinner (internal/settings/venv_wizard.go).
+var playSpinInterval = 200 * time.Millisecond
+
+// playSpinFrames are the spinner's frames — the same braille cycle the venv
+// wizard uses for its run step, so every async indicator in the app animates
+// the same way.
+var playSpinFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
 // playState is the open playground. paneKey names the hosting pane and
 // resultEd is the substitute read-only editor showing the live result;
 // bufFocus routes the keyboard into it (tab toggles). input is the parsed
@@ -216,8 +233,14 @@ type playState struct {
 	// "what was that field called again?" lookup the playground exists for.
 	// haveResult records that a good result was installed at all, so the
 	// stale banner is only claimed over content that really is one.
-	result     jqplay.Result
-	runErr     string
+	result jqplay.Result
+	runErr string
+	// compileBad reports that runErr is the current program's compile error
+	// (#2780), found synchronously on the keystroke rather than by a run. No
+	// run is scheduled for such a program, and a result still in flight for
+	// an earlier one — or a debounce tick left over from it — is dropped, so
+	// nothing overwrites the error until the program compiles again.
+	compileBad bool
 	haveResult bool
 	pending    bool
 	// dimming reports whether the pending evaluation has been running long
@@ -225,6 +248,26 @@ type playState struct {
 	// firePlayDim, cleared whenever a new run starts or one finishes, so a
 	// fast keystroke-to-result round trip never flickers the buffer's colour.
 	dimming bool
+	// spinning reports whether the pending evaluation has run long enough
+	// (playSpinDelay) to show the animated spinner in the result segment
+	// (#2778) — set by firePlaySpin, cleared with dimming whenever a new run
+	// starts or one finishes. spinFrame is the current frame into
+	// playSpinFrames, advanced on every tick while spinning.
+	spinning  bool
+	spinFrame int
+
+	// elapsed is the wall clock of the last finished run (#2776): the
+	// evaluation itself, plus the async input parse that preceded it when the
+	// run was the first against a freshly parsed snapshot (parseDur, consumed
+	// by that run). An xmq run's elapsed is the CLI round trip.
+	elapsed  time.Duration
+	parseAt  time.Time
+	parseDur time.Duration
+	// typing hides the key hints while the query line is being edited
+	// (#2776); playHintIdle after the last keystroke, hgen's tick shows them
+	// again, so the meta data has the row while the user is busy.
+	typing bool
+	hgen   int
 
 	hist     *jqplay.History
 	histIdx  int
@@ -478,6 +521,11 @@ func (m Model) playSeedProgram(d jqplay.Dialect, src playInputSource, atPath boo
 	if last := m.playLastProgram[src.key]; last != "" {
 		return last
 	}
+	if src.path != "" {
+		if last, ok := m.playLastStoreOf().Get(src.key); ok && last != "" {
+			return last
+		}
+	}
 	return playIdentity(d)
 }
 
@@ -496,7 +544,13 @@ func playIdentity(d jqplay.Dialect) string {
 // again. Only a program that actually ran — it compiled and raised no runtime
 // error — is worth reoffering; the identity program is the default anyway and
 // is not stored, so it never displaces an earlier real program.
-func (m *Model) rememberPlayProgram(key, program string) {
+//
+// path is the source's file, empty for an unsaved buffer, a selection or an
+// HTTP response. Only a file-backed source is also written through to the
+// persisted store (#2774) — the scope the issue asks for: a restart cannot
+// distinguish two unsaved buffers or replay an HTTP response, so only the
+// path-keyed entries are worth surviving one.
+func (m *Model) rememberPlayProgram(key, path, program string) {
 	program = strings.TrimSpace(program)
 	if key == "" || program == "" || program == "." {
 		return
@@ -505,6 +559,9 @@ func (m *Model) rememberPlayProgram(key, program string) {
 		m.playLastProgram = map[string]string{}
 	}
 	m.playLastProgram[key] = program
+	if path != "" {
+		m.playLastStoreOf().Set(key, program)
+	}
 }
 
 // playDocKey identifies the queried document for the per-file last-program
@@ -618,6 +675,16 @@ func (m *Model) playHist() *jqplay.History {
 		m.playHistory = &jqplay.History{}
 	}
 	return m.playHistory
+}
+
+// playLastStoreOf returns the persisted per-path last-program store,
+// allocating it on first use — a Model assembled by hand in a test must not
+// panic on the first lookup, the same reason playHist allocates lazily.
+func (m *Model) playLastStoreOf() *jqplay.LastPrograms {
+	if m.playLastStore == nil {
+		m.playLastStore = jqplay.NewLastPrograms("")
+	}
+	return m.playLastStore
 }
 
 // playInlineActive reports whether the inline playground owns pane key: its
@@ -863,6 +930,7 @@ type playEvalDoneMsg struct {
 	st  *playState
 	gen int
 	res jqplay.Result
+	dur time.Duration
 }
 
 // playDimMsg fires playDimDelay after an evaluation started; a stale
@@ -894,6 +962,45 @@ func (m *Model) firePlayDim(msg playDimMsg) tea.Cmd {
 	return nil
 }
 
+// playSpinMsg drives the result segment's spinner (#2778): the first delivery
+// (playSpinDelay after the run started) turns the spinner on, and every one
+// after that (playSpinInterval apart) advances its frame — both share one
+// message and one handler, since both must stop for the same reasons: a
+// finished, superseded or parked run.
+type playSpinMsg struct {
+	st  *playState
+	gen int
+}
+
+// armPlaySpin schedules the tick that starts the spinner if the run stamped
+// gen is still pending playSpinDelay from now (#2778).
+func armPlaySpin(s *playState) tea.Cmd {
+	gen := s.gen
+	return tea.Tick(playSpinDelay, func(time.Time) tea.Msg {
+		return playSpinMsg{st: s, gen: gen}
+	})
+}
+
+// firePlaySpin turns the spinner on (or advances its frame) for a still-
+// pending run and reschedules the next frame — unless the playground closed
+// or parked (m.play nil or now a different state), a newer run superseded
+// this one, the run finished, or the hosting pane no longer shows the
+// playground (#2355 — no point animating what is not drawn).
+func (m *Model) firePlaySpin(msg playSpinMsg) tea.Cmd {
+	s := m.play
+	if s == nil || msg.st != s || msg.gen != s.gen || !s.pending {
+		return nil
+	}
+	s.spinning = true
+	s.spinFrame++
+	if !m.playSrcShown() {
+		return nil
+	}
+	return tea.Tick(playSpinInterval, func(time.Time) tea.Msg {
+		return playSpinMsg{st: s, gen: s.gen}
+	})
+}
+
 // parsePlayInput decodes the snapshot: inline for a screenful, off the event
 // loop past jqplay.AsyncThreshold so opening the playground over a large
 // response cannot stall a frame.
@@ -916,6 +1023,7 @@ func (m *Model) parsePlayInput(text string) tea.Cmd {
 		return m.finishPlayParse(playParseDoneMsg{st: s, gen: gen, in: in, err: errText(err)})
 	}
 	s.parsing = true
+	s.parseAt = time.Now()
 	return func() tea.Msg {
 		in, err := d.Parse(text)
 		return playParseDoneMsg{st: s, gen: gen, in: in, err: errText(err)}
@@ -945,10 +1053,13 @@ func (m *Model) finishPlayParse(msg playParseDoneMsg) tea.Cmd {
 		return nil
 	}
 	s.parsing = false
+	if !s.parseAt.IsZero() {
+		s.parseDur, s.parseAt = time.Since(s.parseAt), time.Time{}
+	}
 	s.inputErr = msg.err
 	if s.inputErr != "" {
-		s.pending, s.dimming = false, false // nothing will run against this text; no evaluation is in flight
-		m.sizePlayResult()                  // the stale banner (#2412) costs a row while it is up
+		s.pending, s.dimming, s.spinning = false, false, false // nothing will run against this text; no evaluation is in flight
+		m.sizePlayResult()                                     // the stale banner (#2412) costs a row while it is up
 		return nil
 	}
 	m.sizePlayResult()
@@ -964,23 +1075,52 @@ func (m *Model) schedulePlayEval() tea.Cmd {
 	if s == nil || s.inputErr != "" {
 		return nil
 	}
+	if !m.compilePlay() {
+		return nil
+	}
 	s.cancelRun()
 	s.gen++
-	s.pending, s.dimming = true, false
+	s.pending, s.dimming, s.spinning, s.spinFrame = true, false, false, 0
 	gen := s.gen
 	return tea.Batch(tea.Tick(playDebounce, func(time.Time) tea.Msg {
 		return playDebounceMsg{st: s, gen: gen}
-	}), armPlayDim(s))
+	}), armPlayDim(s), armPlaySpin(s))
 }
 
 // firePlayDebounce starts the run the tick was scheduled for, unless a newer
 // keystroke already superseded it.
 func (m *Model) firePlayDebounce(msg playDebounceMsg) tea.Cmd {
 	s := m.play
-	if s == nil || msg.st != s || msg.gen != s.gen {
+	if s == nil || msg.st != s || msg.gen != s.gen || s.compileBad {
 		return nil
 	}
 	return m.runPlay()
+}
+
+// compilePlay is the synchronous syntax check ahead of every run (#2780): it
+// compiles the current program — no input involved, so its cost is the
+// program's, not the snapshot's — and reports whether a run may start. A
+// compile error takes the info row at once, the run in flight for an earlier
+// program is abandoned, and the eval generation stays where it is: nothing is
+// scheduled for a program that cannot run. The last good result stays on
+// screen under the stale banner exactly as after a failed run (#2412).
+func (m *Model) compilePlay() bool {
+	s := m.play
+	err := jqplay.Compile(s.dialect, s.program.Text)
+	if err == "" {
+		if s.compileBad {
+			// The error was this check's, so it goes with the fix; the run
+			// about to start replaces it with its own outcome either way.
+			s.compileBad, s.runErr = false, ""
+			m.sizePlayResult()
+		}
+		return true
+	}
+	s.cancelRun()
+	s.compileBad, s.runErr = true, err
+	s.pending, s.dimming, s.spinning = false, false, false
+	m.sizePlayResult() // the stale banner costs a row while it is up
+	return false
 }
 
 // runPlayNow skips the debounce — the enter key and the initial evaluation want
@@ -990,10 +1130,13 @@ func (m *Model) runPlayNow() tea.Cmd {
 	if s == nil || s.inputErr != "" || s.input == nil {
 		return nil // still parsing, or the input never became one
 	}
+	if !m.compilePlay() {
+		return nil
+	}
 	s.cancelRun()
 	s.gen++
-	s.pending, s.dimming = true, false
-	return tea.Batch(m.runPlay(), armPlayDim(s))
+	s.pending, s.dimming, s.spinning, s.spinFrame = true, false, false, 0
+	return tea.Batch(m.runPlay(), armPlayDim(s), armPlaySpin(s))
 }
 
 // runPlay evaluates the current program off the event loop under a cancellable
@@ -1007,9 +1150,12 @@ func (m *Model) runPlay() tea.Cmd {
 	ctx, cancel := context.WithTimeout(context.Background(), jqplay.EvalTimeout)
 	s.cancel = cancel
 	program, in, gen := s.program.Text, s.input, s.gen
+	parse := s.parseDur
 	return func() tea.Msg {
 		defer cancel()
-		return playEvalDoneMsg{st: s, gen: gen, res: jqplay.Run(ctx, program, in)}
+		start := time.Now()
+		res := jqplay.Run(ctx, program, in)
+		return playEvalDoneMsg{st: s, gen: gen, res: res, dur: parse + time.Since(start)}
 	}
 }
 
@@ -1020,10 +1166,10 @@ func (m *Model) runPlay() tea.Cmd {
 // prefills.
 func (m *Model) finishPlayEval(msg playEvalDoneMsg) tea.Cmd {
 	s := m.play
-	if s == nil || msg.st != s || msg.gen != s.gen {
+	if s == nil || msg.st != s || msg.gen != s.gen || s.compileBad {
 		return nil
 	}
-	s.pending, s.dimming, s.cancel = false, false, nil
+	s.pending, s.dimming, s.spinning, s.cancel = false, false, false, nil
 	if msg.res.Err != "" {
 		// A failed run keeps the previous result on screen (#2412): the error
 		// takes the info row and the stale banner marks the buffer, but the
@@ -1035,7 +1181,8 @@ func (m *Model) finishPlayEval(msg playEvalDoneMsg) tea.Cmd {
 	}
 	s.runErr = ""
 	s.result, s.haveResult = msg.res, true
-	m.rememberPlayProgram(s.srcKey, s.program.Text)
+	s.elapsed, s.parseDur = msg.dur, 0
+	m.rememberPlayProgram(s.srcKey, s.srcPath, s.program.Text)
 	m.sizePlayResult()
 	return m.syncPlayResultBuffer()
 }
@@ -1127,12 +1274,12 @@ func (s *playState) setResultFolds(folds []jqplay.Fold) {
 // count in its own unit, `{ ⋯ 3 keys }` rather than the file buffer's
 // "⋯ 3 lines" — how big the value is, which is what a reader skimming a
 // result wants to know. An unknown header falls back to the editor's default.
-func (s *playState) playFoldSummary(header, end int) string {
+func (s *playState) playFoldSummary(header, end, budget int) string {
 	f, ok := s.folds[header]
 	if !ok || f.EndLine != end {
 		return ""
 	}
-	return f.Label()
+	return f.LabelWithin(budget)
 }
 
 // updatePlayground consumes every key while the playground's pane is
@@ -1332,7 +1479,7 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	s.histIdx = -1
 	m.refreshPlayCompletion(msg.Text, false)
-	return m, m.schedulePlayEval()
+	return m, tea.Batch(m.schedulePlayEval(), m.playTyped())
 }
 
 // updatePlayBufferKey routes a key into the result buffer: the full editor
@@ -1849,7 +1996,7 @@ func (m *Model) clearPlayResult() tea.Cmd {
 	if s == nil {
 		return nil
 	}
-	s.result, s.haveResult, s.runErr = jqplay.Empty(s.dialect), false, ""
+	s.result, s.haveResult, s.runErr, s.compileBad = jqplay.Empty(s.dialect), false, "", false
 	m.sizePlayResult() // the stale banner's row goes back to the result
 	s.status = "cleared the output — the next run fills it again"
 	return m.syncPlayResultBuffer()
@@ -1987,16 +2134,18 @@ func (m Model) playInfoLine(width int) string {
 		return ansi.Truncate(lipgloss.NewStyle().Foreground(col).Render(s.status), width, "…")
 	}
 	line := m.playInputSegment()
-	if res := m.playResultSegment(); res != "" {
-		line += hint.Render(" · ") + res
-	}
 	if m.playQueryCut(width) {
 		// The `…` at the row's edge alone is too easy to miss (#2032): say
 		// that the program on screen is not all of it, in the same Warning the
-		// other "you are seeing less than there is" markers use.
+		// other "you are seeing less than there is" markers use. It sits ahead
+		// of the result summary, whose size and runtime (#2776) would
+		// otherwise push it off a narrow row.
 		line += lipgloss.NewStyle().Foreground(pal.Warning).Render(" · query cut")
 	}
-	for _, h := range m.playHints() {
+	if res := m.playResultSegment(); res != "" {
+		line += hint.Render(" · ") + res
+	}
+	for _, h := range m.playShownHints() {
 		seg := hint.Render(" · " + h)
 		if ansi.StringWidth(line)+ansi.StringWidth(seg) > width {
 			break
@@ -2030,14 +2179,15 @@ func (m Model) playHints() []string {
 	if s.expanded {
 		hist = []string{"↑/↓ lines", "alt+↑/↓ history"}
 	}
-	// The cheatsheet hint sits third (#2482), ahead of the view toggle. The
+	// The cheatsheet hint leads (#2482, first since the summary grew a size
+	// and a runtime in #2776), ahead of the view toggle. The
 	// hints drop from the right on a narrow pane, and at the widths a
 	// playground is actually opened at — a pane beside an explorer — every
 	// segment from the view toggle on was being cut, so the one chord that
 	// answers "I do not know how to write this query" was the one never on
 	// screen. The toggle it displaces still advertises itself when it
 	// matters: a program too wide for the row raises the "query cut" marker.
-	out := []string{"tab result", "enter run", "ctrl+g cheatsheet", view}
+	out := []string{"ctrl+g cheatsheet", "tab result", "enter run", view}
 	out = append(out, hist...)
 	return append(out, "ctrl+s save filter", "ctrl+l filters", "ctrl+y copy", "ctrl+o scratch", "esc close", playHelpHint)
 }
@@ -2176,6 +2326,7 @@ func (m Model) playQueryRows(width int) []string {
 	r := []rune(s.program.Text)
 	tokens := jqplay.Tokens(s.program.Text)
 	styles := m.playKindStyles()
+	paint := m.playStructurePainter(s.program.Text, tokens, styles)
 	cursor := lipgloss.NewStyle().Reverse(true)
 	out := make([]string, 0, rows)
 	for i := 0; i < rows; i++ {
@@ -2204,7 +2355,7 @@ func (m Model) playQueryRows(width int) []string {
 				row += cursor.Render(string(r[j]))
 				continue
 			}
-			row += styles[jqplay.KindAt(tokens, j)].Render(string(r[j]))
+			row += paint(j).Render(string(r[j]))
 		}
 		if cur == l.End && idx == curRow {
 			row += cursor.Render(" ")
@@ -2253,6 +2404,7 @@ func (m Model) playHighlighted(program string, pos, width int) string {
 	end := min(start+width, len(r))
 	tokens := jqplay.Tokens(program)
 	styles := m.playKindStyles()
+	paint := m.playStructurePainter(program, tokens, styles)
 	cursor := lipgloss.NewStyle().Reverse(true)
 	var b strings.Builder
 	if start > 0 {
@@ -2264,7 +2416,7 @@ func (m Model) playHighlighted(program string, pos, width int) string {
 			b.WriteString(cursor.Render(cell))
 			continue
 		}
-		b.WriteString(styles[jqplay.KindAt(tokens, i)].Render(cell))
+		b.WriteString(paint(i).Render(cell))
 	}
 	if pos >= 0 && pos >= end {
 		b.WriteString(cursor.Render(" "))
@@ -2332,7 +2484,7 @@ func (m Model) playResultSegment() string {
 	}
 	n := len(s.result.Outputs)
 	if s.pending && n == 0 {
-		return hint.Render("Result — evaluating…")
+		return hint.Render("Result — evaluating…" + s.spinSuffix())
 	}
 	st := hint
 	if n == 0 {
@@ -2342,8 +2494,133 @@ func (m Model) playResultSegment() string {
 	if s.result.Truncated {
 		out += warn.Render(fmt.Sprintf(" (stopped at %d)", jqplay.MaxOutputs))
 	}
+	if n > 0 {
+		out += hint.Render(" · " + humanBytes(int64(s.result.Size())))
+	}
+	if s.haveResult {
+		st := hint
+		if s.elapsed >= playSlowRun {
+			st = warn
+		}
+		out += hint.Render(" · ") + st.Render(playDuration(s.elapsed))
+	}
 	if s.pending {
-		out += hint.Render(" · evaluating…")
+		out += hint.Render(" · evaluating…" + s.spinSuffix())
 	}
 	return out
+}
+
+// playSlowRun is the runtime from which the info row paints the evaluation
+// time in Warning (#2776).
+const playSlowRun = 500 * time.Millisecond
+
+// playDuration formats a run's wall clock for the info row (#2776): `<1 ms`,
+// whole milliseconds below a second, one decimal of seconds above.
+func playDuration(d time.Duration) string {
+	switch {
+	case d < time.Millisecond:
+		return "<1 ms"
+	case d < time.Second:
+		return fmt.Sprintf("%d ms", d/time.Millisecond)
+	}
+	return fmt.Sprintf("%.1f s", d.Seconds())
+}
+
+// spinSuffix is the animated spinner frame appended after "evaluating…"
+// (#2778) once the run has been pending long enough (playSpinDelay) to show
+// it — "" before then and once it finished, so it never appears fast runs or
+// outlasts them.
+func (s *playState) spinSuffix() string {
+	if !s.spinning {
+		return ""
+	}
+	return " " + playSpinFrames[s.spinFrame%len(playSpinFrames)]
+}
+
+// playStructurePainter returns the style of rune i of program: its token's
+// kind style, overridden by the query line's structure (#2775) — brackets in
+// the editor's rainbow cycle by depth, an unpaired bracket in the error
+// colour, a top-level `|` bold in the accent colour so the pipeline's stages
+// stand out. xmq programs are shell words, not pipelines: they get the
+// brackets only. A select-all keeps its uniform selection style.
+func (m Model) playStructurePainter(program string, tokens []jqplay.Token, styles map[jqplay.Kind]lipgloss.Style) func(int) lipgloss.Style {
+	plain := func(i int) lipgloss.Style { return styles[jqplay.KindAt(tokens, i)] }
+	s := m.play
+	if s != nil && s.program.Selected() && !s.bufFocus && m.playFocused() {
+		return plain
+	}
+	marks := jqplay.Structure(program, tokens, s == nil || s.dialect != jqplay.DialectXMQ)
+	if len(marks) == 0 {
+		return plain
+	}
+	pal := m.pal()
+	// The editor's own resolution: rainbow.N slots derive from the palette's
+	// captures unless the theme sets them, so both surfaces share one cycle.
+	th := highlight.NewThemeKeys(pal.Captures, nil, nil)
+	var rainbow []lipgloss.Style
+	for d := 0; d < highlight.RainbowColors; d++ {
+		if st, ok := th.Style(highlight.RainbowCapture(d)); ok {
+			rainbow = append(rainbow, st)
+		}
+	}
+	unmatched := lipgloss.NewStyle().Foreground(pal.Error).Underline(true)
+	pipe := lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
+	return func(i int) lipgloss.Style {
+		mk, ok := marks[i]
+		switch {
+		case !ok:
+		case mk.Pipe:
+			return pipe
+		case mk.Unmatched:
+			return unmatched
+		case mk.Bracket && len(rainbow) > 0:
+			return rainbow[mk.Depth%len(rainbow)]
+		}
+		return plain(i)
+	}
+}
+
+// playHintIdle is how long the query line must stay quiet before the key
+// hints come back (#2776). A var like playDebounce, for the same reason.
+var playHintIdle = 2 * time.Second
+
+// playHintIdleMsg brings the key hints back once the query line has been idle
+// playHintIdle; a stale generation means the user typed again since.
+type playHintIdleMsg struct {
+	st  *playState
+	gen int
+}
+
+// playTyped hides the key hints for a keystroke in the query line (#2776) and
+// arms the idle tick that shows them again.
+func (m *Model) playTyped() tea.Cmd {
+	s := m.play
+	if s == nil {
+		return nil
+	}
+	s.typing = true
+	s.hgen++
+	st, gen := s, s.hgen
+	return tea.Tick(playHintIdle, func(time.Time) tea.Msg {
+		return playHintIdleMsg{st: st, gen: gen}
+	})
+}
+
+// firePlayHintIdle shows the key hints again unless a newer keystroke re-armed
+// the timer.
+func (m *Model) firePlayHintIdle(msg playHintIdleMsg) tea.Cmd {
+	if s := m.play; s != nil && msg.st == s && msg.gen == s.hgen {
+		s.typing = false
+	}
+	return nil
+}
+
+// playShownHints is playHints unless the user is typing in the query line
+// (#2776): the hints then give the row to the meta data until playHintIdle
+// has passed. f1 still opens the full key sheet either way.
+func (m Model) playShownHints() []string {
+	if s := m.play; s.typing && !s.bufFocus {
+		return nil
+	}
+	return m.playHints()
 }

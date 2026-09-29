@@ -878,6 +878,8 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		return m, cmd
 	case DuplicateMsg:
 		return m, m.duplicateEntry()
+	case SelectPathMsg:
+		return m, m.selectPath(msg.Path)
 	case lsp.WillRenameDoneMsg:
 		// The willRenameFiles round trip finished (#1912): any server
 		// refactoring edits were applied, perform the deferred FS rename.

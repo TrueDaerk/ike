@@ -1,10 +1,10 @@
 ---
 type: concept
 title: jq, yq & xmq Playground
-description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; three dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers and a focused YAML response, xmq for XML/HTML buffers and a focused XML/HTML response — the one external-engine dialect, shelling out to the xmq CLI with the buffer on stdin, the query line split into shell words, the output language named per command for the result's highlighting and scratch extension, a missing binary answered at open with a centered install-hint dialog and configurable via playground.xmq.path, and the at-path open seeding a select over the caret element's XPath), one chord dispatching over the three dialects from the focused editor's language or the focused HTTP response's content type, gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors that leave the last successful result in the buffer under a stale banner instead of clearing it, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one per-user program history shared by every buffer and every dialect and persisted across restarts, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, inserting a picked row into the query line, and leading with guide rows that say what enter does with each kind of row, showing every example's actual output beside its program, every builtin's call form beside its arity, and the sample document the examples are written against as rows of the sheet itself; it opens from the query line while a query is being written, dismissing the completion popup rather than letting it cover the sheet, and its chord is named early enough in the info row's hint tail to survive a narrow pane — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing, while the query line selects all on cmd+a, undoes its last edit on ctrl+z and lets a Global leader sequence (cmd+k …) run to completion instead of swallowing it, while the find chord opens the result buffer's search from either focus with `esc` handing the keyboard back to the query line — its program and caret untouched, the matches left highlighted until the next query re-renders the result — and the match-step chords walk those matches from either focus; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace; it parks and resumes with its document across a project switch, re-driving work the switch interrupted.
+description: Inline query line mounted in the pane it queries — the pane's body becomes a read-only editor buffer holding the live result; three dialects over one implementation (jq for JSON buffers and HTTP responses, yq for YAML buffers and a focused YAML response, xmq for XML/HTML buffers and a focused XML/HTML response — the one external-engine dialect, shelling out to the xmq CLI with the buffer on stdin, the query line split into shell words, the output language named per command for the result's highlighting and scratch extension, a missing binary answered at open with a centered install-hint dialog and configurable via playground.xmq.path, and the at-path open seeding a select over the caret element's XPath), one chord dispatching over the three dialects from the focused editor's language or the focused HTTP response's content type, gojq as the shared engine with YAML as a second input/output path, debounced generation-stamped evaluation behind a synchronous compile check that shows a syntax error on the keystroke and never starts a run for a program that cannot compile, the input snapshot re-read and re-run when the source file changes externally (whole-file editor sources only, last valid result kept on a broken parse, a removed file ending the mode definitely), inline compile/runtime errors that leave the last successful result in the buffer under a stale banner instead of clearing it, result cap, copy and open-as-scratch in the dialect's own extension, opening on `.` or the input's last valid program with the caret's path behind its own command, one per-user program history shared by every buffer and every dialect and persisted across restarts, a completion popup offering the snapshot's keys after a dot (pipeline-aware: pipe segments, select/map arguments and object constructions set the context) and gojq's builtins on an identifier, per-dialect libraries of named saved filters in a project and a global scope with a picker that inserts, renames and deletes them, vim-style folding of the result's objects, arrays and YAML blocks with member-counting placeholders, and a toggleable multi-line view laying a program too wide for the query line out over several pipe-broken rows and editing it there — caret motion across the rows with a goal column, row-local home/end, click-to-place, history on alt+arrows and the completion popup anchored on the caret's row, while the program itself stays one line; the mode's keyboard is documented as its own cheatsheet context and its *language* has a second, searchable cheatsheet of syntax, one-line example programs and every builtin — generated from the engine's own list, dialect-aware, inserting a picked row into the query line, and leading with guide rows that say what enter does with each kind of row, showing every example's actual output beside its program, every builtin's call form beside its arity, and the sample document the examples are written against as rows of the sheet itself; it opens from the query line while a query is being written, dismissing the completion popup rather than letting it cover the sheet, and its chord is named early enough in the info row's hint tail to survive a narrow pane — `esc esc` reaches the command palette out of the query line, and the code-action chord answers with a plain "not available here" instead of a silent nothing, while the query line selects all on cmd+a, undoes its last edit on ctrl+z and lets a Global leader sequence (cmd+k …) run to completion instead of swallowing it, while the find chord opens the result buffer's search from either focus with `esc` handing the keyboard back to the query line — its program and caret untouched, the matches left highlighted until the next query re-renders the result — and the match-step chords walk those matches from either focus; the mode is bound to the document it queries, not to its pane alone, so a pane switched to another file or tab shows that file at once while the playground stays mounted and hidden, and it closes when its document leaves the workspace; it parks and resumes with its document across a project switch, re-driving work the switch interrupted.
 resource: internal/jqplay/jqplay.go
 tags: [architecture, json, yaml, xml, html, jq, yq, xmq, tools, inline, editor, http, completion, folding]
-timestamp: 2026-09-18T12:00:00Z
+timestamp: 2026-09-29T12:00:00Z
 ---
 
 # jq, yq & xmq Playground
@@ -46,6 +46,7 @@ internal/jqplay/
   raw.go         EvaluateRaw: the `jq -r`-shaped single-value form (used by .http captures, #1993)
   fold.go        Fold + jsonFolds: the JSON result's foldable objects/arrays with their member counts (#2029)
   highlight.go   the query line's jq scanner: Tokens/KindAt, single pass, never fails
+  structure.go   bracket depth / unmatched brackets / top-level pipes over Tokens (#2775)
   complete.go    the typing aid: Complete — snapshot keys at a path, gojq's builtin list
   library.go     the named saved-filter store: Library, Filter, Scope — path-agnostic, one type for every store
   cheatsheet.go  the language sheet (#2382): Cheatsheet, CheatEntry, Sample — the guide rows, syntax, one-line
@@ -102,6 +103,15 @@ While the mode is active on a pane:
   **dropped as whole `·`-separated segments** instead of being cut mid-word;
   the input and result summary always survive. Truncation is cell-aware, so a
   wide glyph in the source label cannot overflow the row.
+- The result summary carries the **result size and the run's wall clock**
+  (#2776): `Result — 12 value(s) · 4.1 KiB · 38 ms`. The time spans the
+  evaluation — for xmq the CLI round trip — plus the async input parse when
+  the run is the first against a freshly parsed snapshot; it reads `<1 ms`,
+  `38 ms` or `1.2 s`, and a run of 500 ms or more renders it in **Warning**.
+- The key hints **hide while the query line is being typed in** (#2776) and
+  come back after 2 s idle (a generation-stamped tick, so only the last
+  keystroke's tick counts); the meta data has the row meanwhile, and `f1`
+  still opens the full key sheet.
 - The query line's `> ` marker is **blanked while the line does not hold the
   keyboard** — the result buffer has it, or the focus is on another pane —
   the same inactive affordance the regex tester's field labels use; the `JQ:`
@@ -302,7 +312,7 @@ the program runs over each document, and the outputs come back separated by
 | Query-line label | `> jq: ` | `> yq: ` | `> xmq: ` (three cells — `playPrefixW`) |
 | Result | pretty JSON, outputs joined by a newline | block YAML, documents joined by `---` | the CLI's stdout — xmq notation, or the `to-*` command's language |
 | `ctrl+o` scratch | `.json` | `.yaml` | the result's own extension (`.xmq`, `.json`, …) |
-| Folding | multi-line objects / arrays, `{ ⋯ 3 keys }` | indented blocks and block scalars, `⋯ 3 keys` (YAML closes nothing) | only a `to-json` result folds (the JSON scan) |
+| Folding | multi-line objects / arrays, `{ id, name ⋯ 3 keys }`, `[ ⋯ 12 × string ]` | indented blocks and block scalars, `id, name ⋯ 3 keys` (YAML closes nothing) | only a `to-json` result folds (the JSON scan) |
 | Filter library | `jqfilters.json` / `jqfilters-global.json` | `yqfilters.json` / `yqfilters-global.json` | `xmqfilters.json` / `xmqfilters-global.json` |
 | Seeded path | `.spec.["my-key"]` (`DocPathJQ`) | `.spec."my-key"` (`DocPathYQ`) | `select /root/item[2]` (XPath) |
 | Identity program | `.` | `.` | the empty command line |
@@ -597,6 +607,28 @@ Evaluation never runs on the event loop:
 - `enter` and the initial evaluation skip the debounce; the result is wanted
   now, not a tick later.
 
+### Compile before the run (#2780)
+
+Compiling is split from running. Before a run is scheduled — on every
+query-line keystroke, and on `enter` or any other immediate run — the program
+is **compiled synchronously** on the event loop (`jqplay.Compile`): gojq's
+parse + compile for jq and yq, the shell-word split for xmq (the only part of
+an xmq command line the playground can judge without running the binary). The
+check has no input dependency, so its cost is the program's alone — measured
+on an M4 at ~3 µs for a typical program, ~50 µs for a 1 000-character one, and
+under 0.5 µs for a broken one, which fails early. A pathological input cannot
+put it on the hot path.
+
+- A **compile error** takes the info row at once, without waiting for the
+  debounce, and schedules nothing: the run in flight is cancelled, the
+  generation stays where it was, and `compileBad` makes both a leftover
+  debounce tick and a late result for an earlier program drop instead of
+  overwriting the error. It lands in `runErr` like any failed run, so the
+  [last good result](#a-failed-run-keeps-the-last-good-result-2412) stays on
+  screen under the stale banner.
+- A program that **compiles** clears a compile error and schedules the run as
+  before; the run reports its own runtime or input errors on the usual paths.
+
 Three independent bounds keep a hostile program from hanging the IDE, because
 no single one covers all of them:
 
@@ -688,6 +720,33 @@ the `switch` — those already fully render and `continue` before reaching it,
 so a stale result's search highlights and cursor stay at full brightness
 while the surrounding text dims.
 
+**A spinner animates next to `evaluating…` once a run has run long enough
+(#2778)**, so a slow evaluation — a large stream, the xmq CLI, anything
+approaching the 5s timeout — shows motion instead of leaving the info row
+static and looking hung. It reuses the venv wizard's own spinner (braille
+frames, `internal/settings/venv_wizard.go`), the app's one style for an
+async indicator, rather than inventing a second one:
+
+- `armPlaySpin` schedules a generation-stamped `playSpinMsg` tick
+  `playSpinDelay` (150ms) after every run's start (`schedulePlayEval`,
+  `runPlayNow`) — shorter than `playDimDelay`, since the spinner is the
+  earlier "still working" signal and the dim is the later "this is taking a
+  while" one.
+- `firePlaySpin` turns `spinning` on for a still-pending run of the current
+  generation, advances `spinFrame`, and reschedules itself every
+  `playSpinInterval` (200ms) for the next frame — until the run finishes
+  (`finishPlayEval`/`finishPlayParse` clear `spinning`), a newer keystroke
+  supersedes the generation, or the hosting pane no longer shows the
+  playground (`playSrcShown`, #2355), so a parked or hidden playground never
+  keeps ticking for nothing.
+- `playResultSegment` appends the current frame (`playState.spinSuffix`)
+  right after `evaluating…`, in both the bare and the previous-count forms —
+  the query line's caret and the program text are never touched, only the
+  info row's own trailing text.
+
+Most runs finish inside `playSpinDelay` and the spinner never appears —
+the same no-flicker rule the dim delay follows.
+
 ## Syntax highlighting
 
 The query line is colorized by a **single-pass rune scanner** (`jqplay.Tokens`),
@@ -698,7 +757,17 @@ runs to the end of the line, an unknown rune is punctuation. It classifies
 paths, strings, numbers, keywords, functions, `$variables`, `@formats`,
 operators and comments, mapped onto the **chrome** palette (Accent, Success,
 Info, Secondary, Warning, Hint) rather than the editor's capture colors — the
-header is chrome over the pane surface, not buffer text. The **result** is
+header is chrome over the pane surface, not buffer text.
+
+Over those runs `jqplay.Structure` adds the program's **shape** (#2775):
+brackets outside strings and comments take the editor's **rainbow** cycle by
+nesting depth (the same `rainbow.N` slots, resolved through
+`highlight.NewThemeKeys`), an unpaired or mismatched bracket is drawn in the
+Error colour underlined, and a `|` at depth zero — a pipeline stage break, not
+`|=` — is bold Accent, so the stages read at a glance. jq and yq get both;
+xmq's shell words get the brackets only. It applies to the one-row window and
+the multi-line view alike; a select-all keeps its uniform selection style.
+The **result** is
 highlighted separately, as JSON, by the substitute editor's ordinary pipeline.
 
 ## The multi-line view
@@ -825,7 +894,14 @@ the result buffer (`tab`):
 A collapsed node is **one row** carrying a placeholder that names its size —
 `"spec": { ⋯ 3 keys }`, `"ports": [ ⋯ 12 items ]`, and in YAML `spec: ⋯ 3 keys`
 with no closer, because YAML has none to restore. A block scalar counts its
-`⋯ 7 lines`, since "3 keys" over a shell script would be nonsense. The row
+`⋯ 7 lines`, since "3 keys" over a shell script would be nonsense. A mapping's
+placeholder also **previews its first keys** (#2782) — `{ image, ports, tag ⋯ 3 keys }`,
+YAML `spec: image, ports, tag ⋯ 3 keys` — as many as fit the room left on the
+row, with `, …` when some are cut off; the editor hands the summary that budget
+(`SetFoldSummary`'s third argument) and `Fold.LabelWithin` drops keys rather
+than the count, so the row never overflows the pane and the `⧉` affordance
+keeps its cell. An array whose items share one scalar type names it instead of
+"items": `[ ⋯ 12 × string ]` (JSON only — xmq `to-json` included). The row
 still reads as a complete value, and every fold-aware behaviour of an ordinary buffer (`j`/`k`
 stepping over a fold as one row, scrolling, the mouse map, a linewise operator
 taking the whole fold, #1741) applies unchanged. Folding **nests**: opening a
@@ -1276,6 +1352,18 @@ The history and the per-file recall are **different memories on purpose**: the
 history answers "what did I run recently, anywhere", the recall answers "where
 was I in *this* file". The list is not keyed by file precisely because a
 program written against one response is usually worth trying against the next.
+
+The recall survives a restart for **file-backed sources** (#2774): a program
+that ran clean against a path is also written through to
+`~/.ike/playground-last.json`, keyed by the absolute path and the dialect —
+the same two things `playDocKey` already folds into the in-memory key — and
+capped at 200 entries, LRU. An unsaved buffer, a visual selection and an HTTP
+response have no such key and stay session-only, like before; there is
+nothing on disk that would let a restart tell one unsaved buffer from
+another, or replay a response that no longer exists. The write happens at the
+same two points the session map already updates at: a clean run (`enter`, or
+the debounce settling) and the mode's close — never per keystroke, on the
+history file's own terms (#2536).
 
 ## The saved-filter library
 

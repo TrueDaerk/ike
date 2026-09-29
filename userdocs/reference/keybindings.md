@@ -310,6 +310,7 @@ Active when the file explorer has focus.
 | Paste into the selected directory | `cmd+v` | `ctrl+v` | `explorer.clipPaste` |
 | Redo file operation | `cmd+shift+z` | `ctrl+shift+z` | `explorer.redo` |
 | Redo file operation | `ctrl+shift+z` | `ctrl+shift+z` | `explorer.redo` |
+| Show the node context menu | `alt+enter` | `alt+enter` | `explorer.contextMenu` |
 | Undo file operation | `cmd+z` | `ctrl+z` | `explorer.undo` |
 | Undo file operation | `ctrl+z` | `ctrl+z` | `explorer.undo` |
 
