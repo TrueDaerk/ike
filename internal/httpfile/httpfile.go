@@ -93,6 +93,10 @@ type Request struct {
 	// by its own language (#1304).
 	BodyStart int
 	BodyEnd   int
+	// HeadEnd is the 1-based line of the head's last line — the request
+	// line, a folded query line or the last header — the line after which a
+	// body is inserted into a request that has none (#2788).
+	HeadEnd int
 }
 
 // Key returns the stable identifier used to address the request across
@@ -350,6 +354,8 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 		})
 		i++
 	}
+
+	req.HeadEnd = i
 
 	// Body: everything after the blank line, surrounding blank lines trimmed.
 	if i < end {

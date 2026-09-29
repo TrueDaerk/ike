@@ -148,6 +148,7 @@ func (m Model) playgroundChordHelp() help.Group {
 	add("json.jqToggleRaw", "Toggle raw output: strings without quotes (jq -r, #2784)")
 	add("json.jqToggleCompact", "Toggle compact output: one line per value (jq -c)")
 	add("json.jqToggleSlurp", "Toggle slurp: run over the whole input as one array (jq -s)")
+	add("playground.export", "Export the result: save as file, CSV / TSV, HTTP request body (#2788)")
 	add("editor.copy", "Copy the result buffer's selection (from either focus)")
 	add("lsp.codeAction", "Not available in the playground — says so instead of doing nothing")
 	return g
