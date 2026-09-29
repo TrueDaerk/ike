@@ -1453,12 +1453,12 @@ func TestJQResultFoldsNested(t *testing.T) {
 	}
 	m = playKeys(m, "zo") // one level open again
 	view := ansi.Strip(m.render())
-	if !strings.Contains(view, `"spec": { ⋯ 1 key }`) {
+	if !strings.Contains(view, `"spec": { ports ⋯ 1 key }`) {
 		t.Fatalf("zo must reveal one level, with the node inside it still folded, got:\n%s", view)
 	}
 	m = playKeys(m, "jzo") // and the node inside it opens on its own
 	view = ansi.Strip(m.render())
-	if !strings.Contains(view, "⋯ 3 items ]") {
+	if !strings.Contains(view, "⋯ 3 × number ]") {
 		t.Errorf("the nested array must fold with its item count, got:\n%s", view)
 	}
 	if strings.Contains(view, "443") {

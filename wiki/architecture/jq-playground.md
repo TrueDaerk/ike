@@ -303,7 +303,7 @@ the program runs over each document, and the outputs come back separated by
 | Query-line label | `> jq: ` | `> yq: ` | `> xmq: ` (three cells — `playPrefixW`) |
 | Result | pretty JSON, outputs joined by a newline | block YAML, documents joined by `---` | the CLI's stdout — xmq notation, or the `to-*` command's language |
 | `ctrl+o` scratch | `.json` | `.yaml` | the result's own extension (`.xmq`, `.json`, …) |
-| Folding | multi-line objects / arrays, `{ ⋯ 3 keys }` | indented blocks and block scalars, `⋯ 3 keys` (YAML closes nothing) | only a `to-json` result folds (the JSON scan) |
+| Folding | multi-line objects / arrays, `{ id, name ⋯ 3 keys }`, `[ ⋯ 12 × string ]` | indented blocks and block scalars, `id, name ⋯ 3 keys` (YAML closes nothing) | only a `to-json` result folds (the JSON scan) |
 | Filter library | `jqfilters.json` / `jqfilters-global.json` | `yqfilters.json` / `yqfilters-global.json` | `xmqfilters.json` / `xmqfilters-global.json` |
 | Seeded path | `.spec.["my-key"]` (`DocPathJQ`) | `.spec."my-key"` (`DocPathYQ`) | `select /root/item[2]` (XPath) |
 | Identity program | `.` | `.` | the empty command line |
@@ -863,7 +863,14 @@ the result buffer (`tab`):
 A collapsed node is **one row** carrying a placeholder that names its size —
 `"spec": { ⋯ 3 keys }`, `"ports": [ ⋯ 12 items ]`, and in YAML `spec: ⋯ 3 keys`
 with no closer, because YAML has none to restore. A block scalar counts its
-`⋯ 7 lines`, since "3 keys" over a shell script would be nonsense. The row
+`⋯ 7 lines`, since "3 keys" over a shell script would be nonsense. A mapping's
+placeholder also **previews its first keys** (#2782) — `{ image, ports, tag ⋯ 3 keys }`,
+YAML `spec: image, ports, tag ⋯ 3 keys` — as many as fit the room left on the
+row, with `, …` when some are cut off; the editor hands the summary that budget
+(`SetFoldSummary`'s third argument) and `Fold.LabelWithin` drops keys rather
+than the count, so the row never overflows the pane and the `⧉` affordance
+keeps its cell. An array whose items share one scalar type names it instead of
+"items": `[ ⋯ 12 × string ]` (JSON only — xmq `to-json` included). The row
 still reads as a complete value, and every fold-aware behaviour of an ordinary buffer (`j`/`k`
 stepping over a fold as one row, scrolling, the mouse map, a linewise operator
 taking the whole fold, #1741) applies unchanged. Folding **nests**: opening a

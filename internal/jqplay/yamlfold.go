@@ -40,6 +40,9 @@ func yamlFolds(text string) []Fold {
 			if fold.Unit == "" {
 				fold.Unit = unit
 			}
+			if fold.Unit == UnitKeys {
+				fold.Keys = yamlKeysOf(lines, i, end, op)
+			}
 		}
 		out = append(out, fold)
 	}
@@ -78,15 +81,7 @@ func yamlBlockEnd(lines []string, i, indent int) int {
 // child's, which may be a nested block's body sitting above its siblings —
 // and a leading dash on the first of them makes the block a sequence.
 func yamlMembers(lines []string, i, end int) (items int, unit string) {
-	child := -1
-	for j := i + 1; j <= end; j++ {
-		if strings.TrimSpace(lines[j]) == "" {
-			continue
-		}
-		if in := yamlIndentOf(lines[j]); child < 0 || in < child {
-			child = in
-		}
-	}
+	child := yamlChildIndent(lines, i, end)
 	unit = UnitKeys
 	for j := i + 1; j <= end; j++ {
 		if strings.TrimSpace(lines[j]) == "" || yamlIndentOf(lines[j]) != child {
@@ -98,6 +93,20 @@ func yamlMembers(lines []string, i, end int) (items int, unit string) {
 		items++
 	}
 	return items, unit
+}
+
+// yamlChildIndent is the shallowest indent among the block's non-blank lines.
+func yamlChildIndent(lines []string, i, end int) int {
+	child := -1
+	for j := i + 1; j <= end; j++ {
+		if strings.TrimSpace(lines[j]) == "" {
+			continue
+		}
+		if in := yamlIndentOf(lines[j]); child < 0 || in < child {
+			child = in
+		}
+	}
+	return child
 }
 
 // yamlOpener reports whether line opens a foldable block. See the file
@@ -162,4 +171,39 @@ func yamlIndentOf(line string) int {
 		n++
 	}
 	return n
+}
+
+// yamlKeysOf returns the first keys of the mapping block opened on line i
+// (#2782): the key sharing a `- key: value` header's row, then each direct
+// child's, capped at maxPreviewKeys.
+func yamlKeysOf(lines []string, i, end int, op yamlOpen) []string {
+	var keys []string
+	if op.extra > 0 {
+		s := strings.TrimLeft(strings.TrimPrefix(strings.TrimLeft(lines[i], " "), "-"), " ")
+		if k, ok := yamlRowKey(s); ok {
+			keys = append(keys, k)
+		}
+	}
+	child := yamlChildIndent(lines, i, end)
+	for j := i + 1; j <= end && len(keys) < maxPreviewKeys; j++ {
+		if strings.TrimSpace(lines[j]) == "" || yamlIndentOf(lines[j]) != child {
+			continue
+		}
+		if k, ok := yamlRowKey(lines[j][child:]); ok {
+			keys = append(keys, k)
+		}
+	}
+	return keys
+}
+
+// yamlRowKey is the key of a `key:` / `key: value` row, "" and false for any
+// other shape.
+func yamlRowKey(s string) (string, bool) {
+	if strings.HasSuffix(s, ":") {
+		return s[:len(s)-1], true
+	}
+	if k, _, ok := strings.Cut(s, ": "); ok {
+		return k, true
+	}
+	return "", false
 }

@@ -27,7 +27,9 @@ func (m *Model) SetHostFolds(folds []highlight.Fold) {
 }
 
 // SetFoldSummary installs the text a collapsed fold header renders as, given
-// the fold's header and end line; returning "" falls back to the default
-// "⋯ N lines" tag. It is a property of the view, not of the document, so it
-// survives ShowReadOnly — a host sets it once when it builds the editor.
-func (m *Model) SetFoldSummary(fn func(header, end int) string) { m.foldSummary = fn }
+// the fold's header and end line and the cells the summary may fill on the
+// row (#2782) — a host with a long and a short form picks the one that fits;
+// returning "" falls back to the default "⋯ N lines" tag. It is a property of
+// the view, not of the document, so it survives ShowReadOnly — a host sets it
+// once when it builds the editor.
+func (m *Model) SetFoldSummary(fn func(header, end, budget int) string) { m.foldSummary = fn }

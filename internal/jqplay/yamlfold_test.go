@@ -30,8 +30,8 @@ func TestYAMLFoldsSequenceOfMappings(t *testing.T) {
 	text := EvaluateWith(DialectYQ, ".people", "people:\n  - name: ada\n    age: 36\n  - name: bob\n    age: 41\n").Text()
 	got := DialectYQ.Folds(text)
 	want := []Fold{
-		{HeaderLine: 0, EndLine: 1, Items: 2, Unit: UnitKeys},
-		{HeaderLine: 2, EndLine: 3, Items: 2, Unit: UnitKeys},
+		{HeaderLine: 0, EndLine: 1, Items: 2, Unit: UnitKeys, Keys: []string{"age", "name"}},
+		{HeaderLine: 2, EndLine: 3, Items: 2, Unit: UnitKeys, Keys: []string{"age", "name"}},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Folds(%q) = %+v, want %+v", text, got, want)
@@ -83,8 +83,8 @@ func TestYAMLFoldsSpanSeveralDocuments(t *testing.T) {
 	text := EvaluateWith(DialectYQ, ".[]", "- {a: {x: 1, y: 2}}\n- {b: {z: 3}}\n").Text()
 	got := DialectYQ.Folds(text)
 	want := []Fold{
-		{HeaderLine: 0, EndLine: 2, Items: 2, Unit: UnitKeys},
-		{HeaderLine: 4, EndLine: 5, Items: 1, Unit: UnitKeys},
+		{HeaderLine: 0, EndLine: 2, Items: 2, Unit: UnitKeys, Keys: []string{"x", "y"}},
+		{HeaderLine: 4, EndLine: 5, Items: 1, Unit: UnitKeys, Keys: []string{"z"}},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Folds(%q) = %+v, want %+v", text, got, want)
@@ -97,7 +97,7 @@ func TestYAMLFoldsSpanSeveralDocuments(t *testing.T) {
 func TestYAMLFoldsTopLevelHasNoHeader(t *testing.T) {
 	text := EvaluateWith(DialectYQ, ".", "a: 1\nb:\n  c: 2\n").Text()
 	got := DialectYQ.Folds(text)
-	want := []Fold{{HeaderLine: 1, EndLine: 2, Items: 1, Unit: UnitKeys}}
+	want := []Fold{{HeaderLine: 1, EndLine: 2, Items: 1, Unit: UnitKeys, Keys: []string{"c"}}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("Folds(%q) = %+v, want %+v", text, got, want)
 	}
@@ -118,5 +118,17 @@ func TestYAMLFoldLabel(t *testing.T) {
 		if got := c.fold.Label(); got != c.want {
 			t.Errorf("Label(%+v) = %q, want %q", c.fold, got, c.want)
 		}
+	}
+}
+
+// TestYAMLFoldKeyPreview (#2782): a YAML mapping previews its keys like JSON
+// does, including the key that shares a `- key: value` row with its dash.
+func TestYAMLFoldKeyPreview(t *testing.T) {
+	folds := yamlFolds("- name: ada\n  age: 36\n  tags:\n    - x\n")
+	if len(folds) == 0 {
+		t.Fatal("no folds")
+	}
+	if got := folds[0].LabelWithin(40); got != "name, age, tags ⋯ 3 keys" {
+		t.Errorf("LabelWithin = %q", got)
 	}
 }
