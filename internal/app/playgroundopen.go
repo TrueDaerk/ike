@@ -9,6 +9,7 @@ import (
 	"ike/internal/httppane"
 	"ike/internal/jqplay"
 	"ike/internal/pane"
+	"ike/internal/sv"
 )
 
 // playgroundopen.go is the dialect dispatcher over the playgrounds (#2415):
@@ -36,7 +37,7 @@ type playKind string
 
 const (
 	playKindNone playKind = ""    // no playground speaks this language
-	playKindJQ   playKind = "jq"  // json, jsonc, ndjson/jsonl
+	playKindJQ   playKind = "jq"  // json, jsonc, ndjson/jsonl; csv/tsv/psv as rows (#2791)
 	playKindYQ   playKind = "yq"  // yaml and its ansible flavour
 	playKindXMQ  playKind = "xmq" // xml, html
 )
@@ -53,14 +54,19 @@ var (
 	jqLangs  = []string{"json", "jsonc", "ndjson"}
 	yqLangs  = []string{"yaml", "ansible"}
 	xmqLangs = []string{"xml", "html"}
+	// csvLangs are the separator-delimited languages (internal/sv) the jq
+	// playground reads through its CSV adapter (#2791): not a dialect of
+	// their own, but an input jq queries once the rows are objects.
+	csvLangs = []string{"csv", "tsv", "psv"}
 )
 
 // playgroundLangs is every language some playground speaks — the gate for the
 // commands that act on whichever playground is at hand (playground.open, the
 // save prompt, the query-view toggle).
 func playgroundLangs() []string {
-	out := make([]string, 0, len(jqLangs)+len(yqLangs)+len(xmqLangs))
+	out := make([]string, 0, len(jqLangs)+len(csvLangs)+len(yqLangs)+len(xmqLangs))
 	out = append(out, jqLangs...)
+	out = append(out, csvLangs...)
 	out = append(out, yqLangs...)
 	return append(out, xmqLangs...)
 }
@@ -70,7 +76,7 @@ func playgroundLangs() []string {
 // reports rather than silently opening jq on it.
 func playKindFor(langID string) playKind {
 	switch {
-	case slices.Contains(jqLangs, langID):
+	case slices.Contains(jqLangs, langID), slices.Contains(csvLangs, langID):
 		return playKindJQ
 	case slices.Contains(yqLangs, langID):
 		return playKindYQ
@@ -78,6 +84,18 @@ func playKindFor(langID string) playKind {
 		return playKindXMQ
 	}
 	return playKindNone
+}
+
+// playCSVAdapter reports whether a jq input of language lang (an editor
+// buffer's id, or a response's BodyLang) is read through the CSV adapter
+// (#2791), and with which separator: the language's own (tab for tsv, pipe
+// for psv) or 0 — sniffed from the header row — for csv, whose files use ','
+// or ';' depending on the locale that wrote them.
+func playCSVAdapter(lang string) (sep rune, ok bool) {
+	if !slices.Contains(csvLangs, lang) {
+		return 0, false
+	}
+	return sv.Langs[lang], true
 }
 
 // startXMQPlayground is the dispatcher's door to the xmq playground. It grew
