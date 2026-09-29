@@ -146,10 +146,13 @@ var reachableAlternatives = map[string]string{
 	// not ship at all (ctrl+d is the tree's half-page-down), and on macOS a
 	// terminal may swallow it — the palette and the node's context menu carry
 	// it either way.
-	"explorer.duplicate":               "palette / explorer context menu",
-	"explorer.clipCopy":                "palette / explorer context menu",
-	"explorer.clipCut":                 "palette / explorer context menu",
-	"explorer.clipPaste":               "palette / explorer context menu",
+	"explorer.duplicate": "palette / explorer context menu",
+	"explorer.clipCopy":  "palette / explorer context menu",
+	"explorer.clipCut":   "palette / explorer context menu",
+	"explorer.clipPaste": "palette / explorer context menu",
+	// #2805: alt+enter needs a terminal forwarding Option; a right-click
+	// opens the same menu, and the palette carries the command anyway.
+	"explorer.contextMenu":             "right-click / palette",
 	"explorer.undo":                    "palette",
 	"explorer.redo":                    "palette",
 	"explorer.reveal":                  "palette",

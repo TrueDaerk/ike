@@ -1067,6 +1067,20 @@ The two rules from the copy-chord pass hold unchanged: **no `ctrl+c`
 secondary** (it stays the global quit chord on macOS, #2062), and off macOS
 `cmd+x`/`cmd+v` fold onto `ctrl+x`/`ctrl+v` exactly like the editor's rows.
 
+## `alt+enter` in the explorer (#2805)
+
+The explorer's node context menu was mouse-only. `alt+enter` —
+JetBrains' "show what I can do here" chord, already the editor's
+`lsp.codeAction` — now opens it at the tree's cursor row
+(`explorer.contextMenu`, Explorer context). The two rows never meet: the
+editor row is Editor-scoped, this one Explorer-scoped. Like every Alt chord it
+is fragile (the terminal must forward Option as Meta), so the matrix records
+the right-click and the palette as its reachable alternatives. The four
+archive actions the menu gained in the same change (`explorer.extractHere`,
+`explorer.extractTo`, `explorer.compressGzip`, `explorer.compressZip`) are
+keybind-less under `reasonMenu`: the menu offers each exactly where it
+applies.
+
 ## The find chord outside the editor (#2409)
 
 `cmd+f` is the same story as the copy chord one section up. `/` starts a search
@@ -1599,6 +1613,7 @@ JetBrains is:
 | `explorer.clipCopy` | `cmd+c` | fragile | `palette / explorer context menu` | live via palette / explorer context menu |
 | `explorer.clipCut` | `cmd+x` | fragile | `palette / explorer context menu` | live via palette / explorer context menu |
 | `explorer.clipPaste` | `cmd+v` | fragile | `palette / explorer context menu` | live via palette / explorer context menu |
+| `explorer.contextMenu` | `alt+enter` | fragile | `right-click / palette` | live via right-click / palette |
 | `explorer.duplicate` | `cmd+d` | fragile | `palette / explorer context menu` | live via palette / explorer context menu |
 | `explorer.newFile` | `cmd+n` | fragile | `palette (or a in the explorer)` | live via palette (or a in the explorer) |
 | `explorer.redo` | `cmd+shift+z` | fragile | `palette` | live via palette |

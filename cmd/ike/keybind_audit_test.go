@@ -142,6 +142,10 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	{"run.testsWithCoverage", reasonOccasional},  // #2081: the run family's chord budget is spent
 	{"lsp.formatRange", reasonFlavour},           // cmd+alt+l already reformats a selection
 	{"project.peek.keep", reasonMenu},            // offered by the peek pane itself
+	{"explorer.extractHere", reasonMenu},         // #2805: the node menu offers it on archives and .gz
+	{"explorer.extractTo", reasonMenu},           //
+	{"explorer.compressGzip", reasonMenu},        // #2805: the node menu offers it on plain files
+	{"explorer.compressZip", reasonMenu},         // #2805: … on directories and multi-selections
 	{"view.exportWindowScreenshot", reasonMenu},  // View menu, next to the pane flavour
 	{"view.exportScreenshot", reasonMenu},        //
 	{"view.clearFollowFilter", reasonFlavour},    // alt+shift+g sets and clears the filter
