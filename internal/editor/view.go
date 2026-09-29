@@ -659,6 +659,10 @@ func (m Model) View() string {
 			default:
 				signStyle = lipgloss.NewStyle().Foreground(m.theme().Success)
 			}
+		} else if g, ok := m.hostSigns[i]; ok {
+			// Host glyphs (#2789): informational, below every built-in marker.
+			sign = g
+			signStyle = lipgloss.NewStyle().Foreground(m.theme().Hint)
 		} else if sev, ok := m.worstSeverityOnLine(i); ok {
 			gs = lipgloss.NewStyle().Foreground(m.diagColor(sev))
 		} else if mk, ok := m.gitMarks[i]; ok && m.gitVisible(mk) {
