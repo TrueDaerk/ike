@@ -67,6 +67,11 @@ var intentionalDefaultShadows = map[string]string{
 	// delivered match-stepping keys everywhere.
 	shadowKey("ctrl+g", "editor.caret.addNext", "search.nextMatch"):      "linux Cmd-fold: add-next-caret over find-next (f3 remains)",
 	shadowKey("ctrl+shift+g", "editor.caret.addAll", "search.prevMatch"): "linux Cmd-fold: add-all-carets over find-previous (shift+f3 remains)",
+	// ctrl+. appends the result cursor's path in the playground (#2783),
+	// which resolves its left-over chords against Global only; in an editor
+	// or HTTP pane the request cancel (#2404) keeps the chord — the append
+	// has no meaning there.
+	shadowKey("ctrl+.", "http.cancel", "json.jqAppendPath"): "playground-only append-path under the HTTP cancel",
 	// The shared find chord (#2409): search.open is the Global fallback that
 	// opens whatever the focused pane calls its search, and with an editor
 	// focused the editor's own find deliberately wins — the editor *is* the

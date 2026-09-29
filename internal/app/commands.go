@@ -801,6 +801,10 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			// playground is open, so their gate is the union of the families.
 			langCommand(appCommand("json.jqSaveFilter", "Save Playground Filter…", SaveFilterPromptMsg{}), playgroundLangs()),
 			langCommand(appCommand("json.jqQueryView", "Toggle Full Query View", TogglePlaygroundQueryViewMsg{}), playgroundLangs()),
+			// Drill in from the result (#2783): append the result cursor's
+			// path to the program, as written or with every index as `[]`.
+			langCommand(appCommand("json.jqAppendPath", "Append Result Path to Playground Query", AppendPlayPathMsg{}), playgroundLangs()),
+			langCommand(appCommand("json.jqAppendPathAny", "Append Result Path to Playground Query (All Items)", AppendPlayPathMsg{Any: true}), playgroundLangs()),
 			langCommand(appCommand("log.openRotatedSet", "Open Rotated Log Set (Merged Timeline)", OpenMergedLogMsg{}), []string{"log"}),
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
 			appCommand("terminal.newTab", "New Terminal Tab", TerminalNewTabMsg{}),

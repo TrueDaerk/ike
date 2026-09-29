@@ -166,6 +166,8 @@ bring their own.
 | Issues: Next Issue | `issues.selectNext` | `down` | — | `issues` pane |
 | Issues: Previous Issue | `issues.selectPrev` | `up` | — | `issues` pane |
 | GitHub Issues | `issues.toggle` | — | — | everywhere |
+| Append Result Path to Playground Query | `json.jqAppendPath` | `ctrl+.` | — | everywhere |
+| Append Result Path to Playground Query (All Items) | `json.jqAppendPathAny` | `ctrl+shift+.` | — | everywhere |
 | jq Cheatsheet… | `json.jqCheatsheet` | — | — | everywhere |
 | Saved jq Filters… | `json.jqFilters` | — | — | everywhere |
 | jq Playground… | `json.jqPlayground` | `ctrl+alt+j` | — | everywhere |

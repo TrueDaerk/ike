@@ -433,6 +433,13 @@ var jetbrainsRows = []row{
 	// rebindable, unlike the mode's hard-wired ctrl+s/ctrl+l. ctrl+alt+e joins
 	// the ctrl+alt view-toggle family above; e for expand.
 	{"ctrl+alt+e", "json.jqQueryView", "Full query view", Global, "jq/yq playground (#2032)"},
+	// Drill in from the result (#2783): the result cursor's path is appended
+	// to the program. Global for the same reason as the row above — the
+	// playground resolves its left-over chords there. ctrl+. is http.cancel
+	// only in the Editor/HTTP scopes, which the playground never consults;
+	// shift generalises every index to `[]`.
+	{"ctrl+.", "json.jqAppendPath", "Append result path to query", Global, "jq/yq playground (#2783)"},
+	{"ctrl+shift+.", "json.jqAppendPathAny", "Append result path (all items)", Global, "jq/yq playground (#2783)"},
 	// Go to Line:Column (#2486): JetBrains' cmd+l. The Cmd→Ctrl fold puts it
 	// on ctrl+l off macOS, which no other default claims. JetBrains' Linux
 	// chord (ctrl+g) is *not* bound: editor.caret.addNext already owns it in

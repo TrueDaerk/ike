@@ -1642,6 +1642,8 @@ JetBrains is:
 | `issues.prevTab` | `left` | delivered | `—` | live |
 | `issues.selectNext` | `down` | delivered | `—` | live |
 | `issues.selectPrev` | `up` | delivered | `—` | live |
+| `json.jqAppendPath` | `ctrl+.` | delivered | `—` | live |
+| `json.jqAppendPathAny` | `ctrl+shift+.` | fragile | `palette` | live via palette |
 | `json.jqPlayground` | `ctrl+alt+j` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `json.jqQueryView` | `ctrl+alt+e` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `lsp.callHierarchy` | `ctrl+alt+h` | fragile | `palette` | live via palette |

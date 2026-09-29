@@ -32,11 +32,35 @@ import (
 )
 
 // Step is one element of a path: a mapping key, or — when Seq is set — a
-// sequence element at Index (0-based, as jq and yq count).
+// sequence element at Index (0-based, as jq and yq count). Any generalises a
+// sequence step to every element: it renders as `[]` instead of `[Index]`
+// (#2783), the "same key in all items" spelling of the path.
 type Step struct {
 	Key   string
 	Index int
 	Seq   bool
+	Any   bool
+}
+
+// Generalize returns a copy of steps with every sequence index replaced by
+// the all-elements iterator `[]` (#2783).
+func Generalize(steps []Step) []Step {
+	out := make([]Step, len(steps))
+	for i, s := range steps {
+		if s.Seq {
+			s.Any = true
+		}
+		out[i] = s
+	}
+	return out
+}
+
+// index renders a sequence step's brackets: `[3]`, or `[]` for Any.
+func (s Step) index() string {
+	if s.Any {
+		return "[]"
+	}
+	return "[" + strconv.Itoa(s.Index) + "]"
 }
 
 // Source is the buffer view a scan reads. The editor passes its buffer
@@ -111,7 +135,7 @@ func Dotted(steps []Step) string {
 	var b strings.Builder
 	for _, s := range steps {
 		if s.Seq {
-			b.WriteString("[" + strconv.Itoa(s.Index) + "]")
+			b.WriteString(s.index())
 			continue
 		}
 		if b.Len() > 0 {
@@ -134,7 +158,7 @@ func JQ(steps []Step) string {
 			if b.Len() == 0 {
 				b.WriteByte('.')
 			}
-			b.WriteString("[" + strconv.Itoa(s.Index) + "]")
+			b.WriteString(s.index())
 		case plainKey(s.Key):
 			b.WriteByte('.')
 			b.WriteString(s.Key)
@@ -162,7 +186,7 @@ func YQ(steps []Step) string {
 			if b.Len() == 0 {
 				b.WriteByte('.')
 			}
-			b.WriteString("[" + strconv.Itoa(s.Index) + "]")
+			b.WriteString(s.index())
 		case plainKey(s.Key):
 			b.WriteByte('.')
 			b.WriteString(s.Key)
