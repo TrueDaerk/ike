@@ -2225,6 +2225,7 @@ func (m Model) playQueryRows(width int) []string {
 	r := []rune(s.program.Text)
 	tokens := jqplay.Tokens(s.program.Text)
 	styles := m.playKindStyles()
+	paint := m.playStructurePainter(s.program.Text, tokens, styles)
 	cursor := lipgloss.NewStyle().Reverse(true)
 	out := make([]string, 0, rows)
 	for i := 0; i < rows; i++ {
@@ -2253,7 +2254,7 @@ func (m Model) playQueryRows(width int) []string {
 				row += cursor.Render(string(r[j]))
 				continue
 			}
-			row += styles[jqplay.KindAt(tokens, j)].Render(string(r[j]))
+			row += paint(j).Render(string(r[j]))
 		}
 		if cur == l.End && idx == curRow {
 			row += cursor.Render(" ")
@@ -2302,6 +2303,7 @@ func (m Model) playHighlighted(program string, pos, width int) string {
 	end := min(start+width, len(r))
 	tokens := jqplay.Tokens(program)
 	styles := m.playKindStyles()
+	paint := m.playStructurePainter(program, tokens, styles)
 	cursor := lipgloss.NewStyle().Reverse(true)
 	var b strings.Builder
 	if start > 0 {
@@ -2313,7 +2315,7 @@ func (m Model) playHighlighted(program string, pos, width int) string {
 			b.WriteString(cursor.Render(cell))
 			continue
 		}
-		b.WriteString(styles[jqplay.KindAt(tokens, i)].Render(cell))
+		b.WriteString(paint(i).Render(cell))
 	}
 	if pos >= 0 && pos >= end {
 		b.WriteString(cursor.Render(" "))
@@ -2406,4 +2408,47 @@ func (s *playState) spinSuffix() string {
 		return ""
 	}
 	return " " + playSpinFrames[s.spinFrame%len(playSpinFrames)]
+}
+
+// playStructurePainter returns the style of rune i of program: its token's
+// kind style, overridden by the query line's structure (#2775) — brackets in
+// the editor's rainbow cycle by depth, an unpaired bracket in the error
+// colour, a top-level `|` bold in the accent colour so the pipeline's stages
+// stand out. xmq programs are shell words, not pipelines: they get the
+// brackets only. A select-all keeps its uniform selection style.
+func (m Model) playStructurePainter(program string, tokens []jqplay.Token, styles map[jqplay.Kind]lipgloss.Style) func(int) lipgloss.Style {
+	plain := func(i int) lipgloss.Style { return styles[jqplay.KindAt(tokens, i)] }
+	s := m.play
+	if s != nil && s.program.Selected() && !s.bufFocus && m.playFocused() {
+		return plain
+	}
+	marks := jqplay.Structure(program, tokens, s == nil || s.dialect != jqplay.DialectXMQ)
+	if len(marks) == 0 {
+		return plain
+	}
+	pal := m.pal()
+	// The editor's own resolution: rainbow.N slots derive from the palette's
+	// captures unless the theme sets them, so both surfaces share one cycle.
+	th := highlight.NewThemeKeys(pal.Captures, nil, nil)
+	var rainbow []lipgloss.Style
+	for d := 0; d < highlight.RainbowColors; d++ {
+		if st, ok := th.Style(highlight.RainbowCapture(d)); ok {
+			rainbow = append(rainbow, st)
+		}
+	}
+	unmatched := lipgloss.NewStyle().Foreground(pal.Error).Underline(true)
+	pipe := lipgloss.NewStyle().Foreground(pal.Accent).Bold(true)
+	return func(i int) lipgloss.Style {
+		mk, ok := marks[i]
+		switch {
+		case !ok:
+		case mk.Pipe:
+			return pipe
+		case mk.Unmatched:
+			return unmatched
+		case mk.Bracket && len(rainbow) > 0:
+			return rainbow[mk.Depth%len(rainbow)]
+		}
+		return plain(i)
+	}
 }

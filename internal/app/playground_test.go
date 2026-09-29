@@ -1766,3 +1766,42 @@ func TestJQPlaygroundMultiLineHints(t *testing.T) {
 		t.Errorf("the one-line hints = %q, want the history keys", got)
 	}
 }
+
+// TestJQPlaygroundQueryStructure (#2775): brackets render in rainbow depth
+// colours and top-level pipes emphasised, in the one-line window (cut at the
+// `…` edges) and the multi-line view; an unbalanced program renders the
+// unpaired bracket in its own style without panicking.
+func TestJQPlaygroundQueryStructure(t *testing.T) {
+	m := openJQ(t, playApp(t, `{"a":1}`))
+	const prog = `.a | map(select(.x > 1)) | {n: .name}`
+	m = setProgram(m, prog)
+	op := m.playKindStyles()[jqplay.KindOperator]
+	paint := m.playStructurePainter(prog, jqplay.Tokens(prog), m.playKindStyles())
+	pipe := paint(3).Render("|")
+	if pipe == op.Render("|") {
+		t.Fatal("a top-level pipe must be emphasised")
+	}
+	d0, d1 := paint(8).Render("("), paint(15).Render("(")
+	if d0 == d1 {
+		t.Fatal("nested brackets must differ in colour by depth")
+	}
+	got := m.playHighlighted(prog, -1, 200)
+	if strings.Count(got, pipe) != 2 || !strings.Contains(got, d0) || !strings.Contains(got, d1) {
+		t.Errorf("one-line render lacks the structure: %q", got)
+	}
+	if cut := m.playHighlighted(prog, len(prog)-1, 12); !strings.HasPrefix(ansi.Strip(cut), "…") {
+		t.Errorf("windowed render must keep its edge, got %q", ansi.Strip(cut))
+	}
+	m = toggleJQView(m)
+	m.play.program.Cur = 0
+	if rows := strings.Join(m.playQueryRows(30), ""); !strings.Contains(rows, pipe) || !strings.Contains(rows, d1) {
+		t.Errorf("the multi-line view must carry the structure: %q", rows)
+	}
+
+	const bad = `.a | (]`
+	pb := m.playStructurePainter(bad, jqplay.Tokens(bad), m.playKindStyles())
+	if pb(6).Render("]") == op.Render("]") {
+		t.Error("an unpaired bracket must stand out")
+	}
+	_ = m.playHighlighted(bad, 3, 5)
+}

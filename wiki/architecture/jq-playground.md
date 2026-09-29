@@ -46,6 +46,7 @@ internal/jqplay/
   raw.go         EvaluateRaw: the `jq -r`-shaped single-value form (used by .http captures, #1993)
   fold.go        Fold + jsonFolds: the JSON result's foldable objects/arrays with their member counts (#2029)
   highlight.go   the query line's jq scanner: Tokens/KindAt, single pass, never fails
+  structure.go   bracket depth / unmatched brackets / top-level pipes over Tokens (#2775)
   complete.go    the typing aid: Complete — snapshot keys at a path, gojq's builtin list
   library.go     the named saved-filter store: Library, Filter, Scope — path-agnostic, one type for every store
   cheatsheet.go  the language sheet (#2382): Cheatsheet, CheatEntry, Sample — the guide rows, syntax, one-line
@@ -716,7 +717,17 @@ runs to the end of the line, an unknown rune is punctuation. It classifies
 paths, strings, numbers, keywords, functions, `$variables`, `@formats`,
 operators and comments, mapped onto the **chrome** palette (Accent, Success,
 Info, Secondary, Warning, Hint) rather than the editor's capture colors — the
-header is chrome over the pane surface, not buffer text. The **result** is
+header is chrome over the pane surface, not buffer text.
+
+Over those runs `jqplay.Structure` adds the program's **shape** (#2775):
+brackets outside strings and comments take the editor's **rainbow** cycle by
+nesting depth (the same `rainbow.N` slots, resolved through
+`highlight.NewThemeKeys`), an unpaired or mismatched bracket is drawn in the
+Error colour underlined, and a `|` at depth zero — a pipeline stage break, not
+`|=` — is bold Accent, so the stages read at a glance. jq and yq get both;
+xmq's shell words get the brackets only. It applies to the one-row window and
+the multi-line view alike; a select-all keeps its uniform selection style.
+The **result** is
 highlighted separately, as JSON, by the substitute editor's ordinary pipeline.
 
 ## The multi-line view
