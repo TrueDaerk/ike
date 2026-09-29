@@ -307,6 +307,9 @@ func TestJQPlaygroundErrorKeepsLastGoodResult(t *testing.T) {
 func TestJQPlaygroundStaleResultDimmed(t *testing.T) {
 	m := openJQ(t, playApp(t, `[{"x":1},3]`))
 	m = setProgram(m, ".[0]")
+	// Run it again so the baseline carries no change marks (#2787), exactly
+	// like the restored result at the end, which matches the last good one.
+	m = setProgram(m, ".[0]")
 	good := m.play.result.Text()
 	_ = m.playInlineBody(200) // triggers SetDimmed for the rendered view below
 	freshFaint := strings.Count(m.play.resultEd.View(), "\x1b[2m")
