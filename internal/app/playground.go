@@ -313,6 +313,18 @@ type playState struct {
 	// valueStarts is the first result line of each output value (#2789):
 	// the gutter's type glyphs and the info row's `value i/n` read it.
 	valueStarts []int
+	// outline is the result's depth-1 nodes (#2793), the structure strip's
+	// entries; outlineW the widest label, which sizes the strip.
+	outline  []jqplay.OutlineItem
+	outlineW int
+	// stripFocus gives the structure strip the keyboard (bufFocus stays set,
+	// the result editor unfocused); stripFrom is the bufFocus it was taken
+	// from, restored by esc. stripSel is the strip's selection, stripTop its
+	// scroll window's first entry.
+	stripFocus bool
+	stripFrom  bool
+	stripSel   int
+	stripTop   int
 	// shownText is the text of the installed good result (#2787), the side
 	// the next run diffs against; changes are the installed result's marks
 	// against the one it replaced (playchanges.go), nil when there are none.
@@ -335,6 +347,7 @@ type playState struct {
 // typing, and the keyboard just went elsewhere.
 func (s *playState) setBufFocus(v bool) {
 	s.bufFocus = v
+	s.stripFocus = false // any focus move takes the keyboard off the structure strip (#2793)
 	// A focus move is not the find chord's round trip (#2411): tab, a click
 	// or a paste all end the "esc goes back to the query line" state, and
 	// beginPlayResultSearch re-arms it right after moving the focus itself.
@@ -911,7 +924,11 @@ func (m *Model) sizePlayResult() {
 	if !ok {
 		return
 	}
-	s.resultEd.SetSize(paneInterior(r.W, paneChromeW), paneInterior(r.H, paneChromeH+m.playQueryRowCount()+playInfoRows+m.playStaleRows()))
+	width := paneInterior(r.W, paneChromeW)
+	// The structure strip (#2793) takes its cells off the result's right edge,
+	// so the text, its scrollbar and every click on it map onto the narrower
+	// editor.
+	s.resultEd.SetSize(width-m.playStripW(width), paneInterior(r.H, paneChromeH+m.playQueryRowCount()+playInfoRows+m.playStaleRows()))
 }
 
 // closePlayground records the program in the session history, aborts a run
@@ -1328,7 +1345,9 @@ func (m *Model) syncPlayResultBuffer() tea.Cmd {
 	s.setResultFolds(s.result.Folds())
 	s.setResultValueSigns()
 	s.resultEd.SetHostChanges(s.changes)
-	s.resultEd.SetFocused(s.bufFocus)
+	s.setOutline(s.result.Outline())
+	s.resultEd.SetFocused(s.bufFocus && !s.stripFocus)
+	m.sizePlayResult() // the structure strip (#2793) comes and goes with the outline
 	return s.resultEd.Reparse()
 }
 
@@ -1435,6 +1454,9 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if dir, ok := m.focusKeys[msg.String()]; ok {
 		m.FocusDir(dir)
 		return m, nil
+	}
+	if s.stripFocus {
+		return m.updatePlayStripKey(msg)
 	}
 	if s.bufFocus {
 		return m.updatePlayBufferKey(msg)
@@ -2001,6 +2023,9 @@ func (m Model) playPaneClick(key string, msg mouseEvent, x, y int) (tea.Model, t
 	if msg.Button != tea.MouseLeft {
 		return m, nil
 	}
+	if m.clickPlayStrip(x, y) {
+		return m, nil
+	}
 	if ed.ScrollbarHit(x, y) {
 		if ed.ScrollbarPress(y) {
 			m.drag = &dragState{kind: dragEditScroll, srcPane: key, curX: msg.X, curY: msg.Y}
@@ -2171,7 +2196,7 @@ func (m Model) playInlineBody(width int) string {
 		body += m.playStaleBanner(width) + "\n"
 	}
 	s.resultEd.SetDimmed(s.playDimmed())
-	return body + s.resultEd.View()
+	return body + m.playResultView(width)
 }
 
 // playInfoRow is the header's second line: the mode/source label where the

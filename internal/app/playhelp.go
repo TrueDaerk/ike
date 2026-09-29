@@ -150,6 +150,7 @@ func (m Model) playgroundChordHelp() help.Group {
 	add("json.jqToggleSlurp", "Toggle slurp: run over the whole input as one array (jq -s)")
 	add("playground.export", "Export the result: save as file, CSV / TSV, HTTP request body (#2788)")
 	add("playground.checkFilters", "Re-run every saved filter's sample check (#2792)")
+	add("playground.structure", "Structure strip: the result's top-level keys as jump targets (#2793)")
 	add("editor.copy", "Copy the result buffer's selection (from either focus)")
 	add("lsp.codeAction", "Not available in the playground — says so instead of doing nothing")
 	return g

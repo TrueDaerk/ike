@@ -455,6 +455,11 @@ var jetbrainsRows = []row{
 	// a for assert — one of the two ctrl+alt letters no default (and no
 	// folded cmd+alt chord) claims yet.
 	{"ctrl+alt+a", "playground.checkFilters", "Check saved playground filters", Global, "jq/yq playground (#2792)"},
+	// The structure strip beside the result (#2793), Global like its siblings.
+	// The issue's ctrl+alt+m is markdown.preview off macOS (cmd+alt+m folded,
+	// Editor context, which would shadow a Global chord in every editor); g —
+	// go to a node — is the one ctrl+alt letter nothing else claims.
+	{"ctrl+alt+g", "playground.structure", "Toggle playground structure strip", Global, "jq/yq playground (#2793)"},
 	// Go to Line:Column (#2486): JetBrains' cmd+l. The Cmd→Ctrl fold puts it
 	// on ctrl+l off macOS, which no other default claims. JetBrains' Linux
 	// chord (ctrl+g) is *not* bound: editor.caret.addNext already owns it in

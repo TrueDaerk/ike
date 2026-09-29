@@ -1,5 +1,16 @@
 # Log
 
+## 2026-09-29 (jq playground: structure strip, #2793)
+
+- `playground.structure` (`ctrl+alt+g`) toggles a strip on the result's right
+  edge listing its top-level keys / indices / stream values
+  (`jqplay.Result.Outline`), the on-screen part highlighted
+  (`editor.Model.VisibleLines`); a click or `enter` jumps the caret to the
+  node. It narrows the result editor, hides below 60 cells and on
+  structureless results, and works in all three dialects. The issue's
+  `ctrl+alt+m` is markdown.preview's folded chord off macOS, hence `g`.
+  Docs: `/architecture/jq-playground.md`, `/architecture/keybindings.md`.
+
 ## 2026-09-29 (jq playground: raw / compact / slurp toggles, #2784)
 
 - jq's `-r`, `-c` and `-s` are now toggles of the jq and yq playgrounds
