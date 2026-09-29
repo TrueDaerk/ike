@@ -81,6 +81,11 @@ const nbKeyBase = "notebook"
 // ":N" (#2740).
 const htmlPreviewKeyBase = "htmlpreview"
 
+// playResultKeyBase is the key of the first playground result pane (#2797);
+// later ones append ":N". Only one exists at a time, but the counter keeps a
+// re-split from reusing a key the layout may still remember from a drag.
+const playResultKeyBase = "playresult"
+
 // esKeyBase prefixes Elasticsearch console keys (#1927): one console per
 // configured endpoint, keyed "es:<endpoint>" — the endpoint name is the
 // identity, so no counter is minted.
@@ -162,6 +167,7 @@ type Registry struct {
 	hexes     int      // count of hex viewers ever allocated, for key minting
 	notebooks int      // count of notebook viewers ever allocated, for key minting
 	htmlPrevs int      // count of HTML previews ever allocated, for key minting
+	playRes   int      // count of playground result panes ever allocated, for key minting (#2797)
 	// loaded collects the files deferred tabs (#2177) read since the last
 	// drain, so the root model can give each the wiring a freshly opened
 	// buffer gets. It lives on the registry rather than the model because
@@ -630,6 +636,17 @@ func (r *Registry) AddHexKey(key, path string) *Instance {
 		r.hexes = 1
 	}
 	return inst
+}
+
+// AddPlayResult creates the playground's detached result pane (#2797),
+// returning its key ("playresult", then "playresult:N"). The instance is a
+// placeholder: the app renders the playground's result buffer into the leaf
+// and routes its keys and mouse, so there is nothing to construct here.
+func (r *Registry) AddPlayResult() string {
+	r.playRes++
+	key := suffixedKey(playResultKeyBase, r.playRes)
+	r.put(&Instance{key: key, kind: KindPlayResult, cfg: r.cfg, pal: r.pal})
+	return key
 }
 
 // AddNotebookView creates a notebook viewer instance bound to the .ipynb file

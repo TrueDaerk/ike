@@ -103,6 +103,7 @@ func snapshotLayout(tree layout.Node, reg *pane.Registry) (persistedLayout, bool
 	if tree == nil {
 		return persistedLayout{}, false
 	}
+	tree = prunePlayResultLeaves(tree, reg) // session state, never a layout's (#2797)
 	st := &snapState{reg: reg, ids: map[string]paneIdentity{}}
 	normalized, ok := st.rebuild(tree)
 	if !ok {
@@ -124,6 +125,7 @@ func snapshotLayoutSelected(tree layout.Node, reg *pane.Registry, sel map[string
 	if tree == nil {
 		return persistedLayout{}, false
 	}
+	tree = prunePlayResultLeaves(tree, reg) // session state, never a layout's (#2797)
 	leaves := layout.Leaves(tree)
 	selected := 0
 	for _, key := range leaves {

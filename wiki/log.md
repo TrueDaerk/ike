@@ -1,5 +1,21 @@
 # Log
 
+## 2026-09-30 (jq playground: detached result pane, #2797)
+
+- `playground.splitResult` (`ctrl+alt+\`) moves the playground's result into
+  a real layout leaf of its own (`pane.KindPlayResult`, key `playresult`,
+  `internal/app/playsplit.go`) split to the right of the source pane, with
+  the query header pinned on the source pane over the document; run again it
+  re-attaches. The pane resizes, moves, zooms and closes with the workspace
+  machinery but is never tabbed and never persisted (`saveLayout` and the
+  named layouts prune its leaf). `tab` crosses the two panes; pane focus and
+  `bufFocus` are reconciled on the settled pass. Closing the pane re-attaches
+  the result inline, closing the playground removes the pane, and the
+  detached layout parks and resumes with the workspace across a project
+  switch. Every result action (search, folds, copy, export, strip, table,
+  stepping, chaining) works unchanged in the detached state.
+  Docs: `/architecture/jq-playground.md`, `/architecture/keybindings.md`.
+
 ## 2026-09-30 (jq playground: progressive result rendering, #2796)
 
 - The evaluation is a resumable producer (`jqplay.Start`, `internal/jqplay/page.go`)

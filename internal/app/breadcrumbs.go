@@ -86,7 +86,7 @@ func (m Model) breadcrumbRows(inst *pane.Instance) int {
 // through it.
 func (m Model) contentYOff(key string) int {
 	inst := m.activeWS().Panes.Get(key)
-	return paneContentY + m.breadcrumbRows(inst) + m.playHeaderRowsFor(key) + debugConsoleRows(inst)
+	return paneContentY + m.breadcrumbRows(inst) + m.playHeaderRowsFor(key) + m.playResultChromeRows(key) + debugConsoleRows(inst)
 }
 
 // debugConsoleRows is the debug area's internal tab-bar row while its console

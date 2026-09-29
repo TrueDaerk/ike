@@ -157,6 +157,15 @@ const (
 	// number may exist, each bound to one .html/.htm/.xhtml (or .html.gz)
 	// source buffer path, the markdown preview's sibling.
 	KindHTMLPreview
+	// KindPlayResult is the jq/yq/xmq playground's detached result pane
+	// (#2797): a layout leaf the app renders the playground's result buffer
+	// into while the query header stays on the source pane. It holds no
+	// component of its own — the result editor lives in the app's playground
+	// state — so it is a placeholder in the tree: splittable, movable,
+	// resizable and closable like any pane, but never tabbed (its content is
+	// not detachable) and never persisted (the playground re-creates it on
+	// the next split). At most one exists per workspace.
+	KindPlayResult
 )
 
 // Context ids an Instance advertises for context-scoped command/keymap
@@ -381,6 +390,11 @@ func (i *Instance) ContextID() string {
 		return ctxHex
 	case KindNotebook:
 		return ctxNotebook
+	case KindPlayResult:
+		// The playground's result is a read-only editor buffer (#2797), and
+		// the mode routes its own keys ahead of the keymap; the editor
+		// context is what the mode indicator and the palette scope see.
+		return ctxEditor
 	}
 	return ctxEditor
 }
@@ -800,9 +814,12 @@ func (i *Instance) AddTerminalTab(term terminal.Model) *terminal.Model {
 // HTTP response viewer included — move their live model into a content tab
 // and back out again without reloading, so any two panes the user drags
 // together stack as tabs. The explorer is the single exception: it is the
-// file tree's fixed home, never a merge target and never a tab.
+// file tree's fixed home, never a merge target and never a tab. The
+// playground's detached result pane (#2797) is the other: it has no component
+// to move into a tab — the app draws the playground's result into it — so it
+// is neither a merge target nor a tab.
 func KindTabbable(k Kind) bool {
-	return k != KindExplorer
+	return k != KindExplorer && k != KindPlayResult
 }
 
 // KindViewer reports whether kind is a content viewer (#2736): a pane bound
