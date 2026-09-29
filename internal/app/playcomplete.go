@@ -96,12 +96,13 @@ func (m *Model) acceptPlayCompletion() tea.Cmd {
 // refreshPlayCompletion recomputes the popup after a program change. An open
 // popup follows the new partial and closes when nothing matches (the
 // editor's after-typing rule); a closed one opens only when the change typed
-// a trigger rune — a `.` or an identifier character — or on the explicit
+// a trigger rune — a `.` or an identifier character, and for xmq the `/`,
+// `@` and space that start an XPath step (#2790) — or on the explicit
 // ctrl+space request, which also opens the full builtin list on an empty
 // partial. The selection resets to the top: the list under it changed.
 func (m *Model) refreshPlayCompletion(typed string, manual bool) {
 	s := m.play
-	if s.comp == nil && !manual && !playCompletionTrigger(typed) {
+	if s.comp == nil && !manual && !playCompletionTrigger(typed, s.dialect) {
 		return
 	}
 	items, start := jqplay.Complete(s.program.Text, s.program.Cur, s.input, manual)
@@ -114,13 +115,18 @@ func (m *Model) refreshPlayCompletion(typed string, manual bool) {
 
 // playCompletionTrigger reports whether the typed text is a rune that opens
 // the popup on its own: the `.` of a path, or an identifier rune starting a
-// builtin name.
-func playCompletionTrigger(typed string) bool {
+// builtin name. On the xmq line the XPath step runes `/` and `@` and the
+// space after a path-taking command trigger too; the engine stays silent
+// wherever they are not in a path (#2790).
+func playCompletionTrigger(typed string, d jqplay.Dialect) bool {
 	r := []rune(typed)
 	if len(r) != 1 {
 		return false
 	}
 	c := r[0]
+	if d == jqplay.DialectXMQ && (c == '/' || c == '@' || c == ' ') {
+		return true
+	}
 	return c == '.' || c == '_' ||
 		(c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }

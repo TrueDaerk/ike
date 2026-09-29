@@ -294,3 +294,75 @@ func TestJQCompletionAnchorsOnTheCaretsRow(t *testing.T) {
 		t.Errorf("the one-line view's popup hangs under row %d, want 0", got)
 	}
 }
+
+// TestXMQCompletionHTMLPath is #2790's acceptance case over an HTML
+// document: `select /html/body/` lists body's child elements, `@` the
+// attributes of the element the path names, and an accept writes the step in
+// place. HTML is recognized by content (the doctype), as the xmq CLI does;
+// the fixture uses an .xml path because an .html file opens in its rendered
+// preview, where the query line does not take keys.
+func TestXMQCompletionHTMLPath(t *testing.T) {
+	fakeXMQOnPath(t)
+	m := openXMQ(t, dismissOnboarding(xmqApp(t, "xml", "<!DOCTYPE html>\n<html><head></head><body class=\"x\" id=\"b\"><main></main><div></div></body></html>\n")))
+	m.play.program.Clear()
+	m = typeInto(m, "select ")
+	if got := strings.Join(playCompLabels(m), " "); got != "/html //" {
+		t.Fatalf("`select ` offered %q, want the root step", got)
+	}
+	m = typeInto(m, "/html/body/")
+	if got := strings.Join(playCompLabels(m), " "); got != "main div" {
+		t.Fatalf("`select /html/body/` offered %q, want body's children", got)
+	}
+	m = typeInto(m, "@")
+	if got := strings.Join(playCompLabels(m), " "); got != "@class @id" {
+		t.Fatalf("`@` offered %q, want body's attributes", got)
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyDown})
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
+	if got := m.play.program.Text; got != "select /html/body/@id" {
+		t.Errorf("accept wrote %q", got)
+	}
+}
+
+// TestXMQCompletionXMLPath: the same walk over an XML buffer, filtering as
+// the step name is typed.
+func TestXMQCompletionXMLPath(t *testing.T) {
+	fakeXMQOnPath(t)
+	m := openXMQ(t, dismissOnboarding(xmqApp(t, "xml", "<root><meta page=\"1\"/><items><item id=\"3\"/></items></root>\n")))
+	m.play.program.Clear()
+	m = typeInto(m, "delete /root/")
+	if got := strings.Join(playCompLabels(m), " "); got != "meta items" {
+		t.Fatalf("`/root/` offered %q", got)
+	}
+	m = typeInto(m, "it")
+	if got := strings.Join(playCompLabels(m), " "); got != "items" {
+		t.Fatalf("`/root/it` offered %q", got)
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
+	m = typeInto(m, "/item/@")
+	if got := strings.Join(playCompLabels(m), " "); got != "@id" {
+		t.Fatalf("`/root/items/item/@` offered %q", got)
+	}
+}
+
+// TestXMQCompletionSilentOutsidePaths: a space or slash outside a path
+// argument opens nothing; ctrl+space still forces the popup open.
+func TestXMQCompletionSilentOutsidePaths(t *testing.T) {
+	fakeXMQOnPath(t)
+	m := openXMQ(t, dismissOnboarding(xmqApp(t, "xml", "<root><item/></root>\n")))
+	m.play.program.Clear()
+	m = typeInto(m, "to-json ")
+	m = dismissJQPopup(m)
+	m = typeInto(m, " ")
+	if m.play.comp != nil {
+		t.Fatalf("a space after a non-path command must stay silent, got %v", playCompLabels(m))
+	}
+	m = setProgram(m, "select /root/it")
+	if m.play.comp != nil {
+		t.Fatal("setting the program must not open the popup")
+	}
+	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeySpace, Mod: tea.ModCtrl})
+	if got := strings.Join(playCompLabels(m), " "); got != "item" {
+		t.Fatalf("ctrl+space offered %q, want the matching child", got)
+	}
+}

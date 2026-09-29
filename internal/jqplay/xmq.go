@@ -75,13 +75,14 @@ func LookupXMQ() (string, error) { return exec.LookPath(XMQBinary()) }
 
 // parseXMQ is the xmq half of Dialect.Parse: no decoding happens on this
 // side — the binary reads the document itself — so the "parse" keeps the raw
-// text and rejects only emptiness. values carries one placeholder so the
+// text and rejects only emptiness; the one structure built is the element
+// tree the XPath completion walks (#2790). values carries one placeholder so the
 // shared "did the input hold anything" checks count it as a document.
 func parseXMQ(text string) (*Input, error) {
 	if strings.TrimSpace(text) == "" {
 		return nil, errors.New(DialectXMQ.emptyInput())
 	}
-	return &Input{values: []any{nil}, size: len(text), dialect: DialectXMQ, raw: text}, nil
+	return &Input{values: []any{nil}, size: len(text), dialect: DialectXMQ, raw: text, xmqTree: buildXMQTree(text)}, nil
 }
 
 // runXMQ is the xmq engine: split the command line into arguments, run the
@@ -271,15 +272,18 @@ type XMQCommand struct {
 // completeXMQ is the xmq half of Complete (#2414): the candidates are the
 // CLI's commands, offered on the word under the cursor. A word mid-typing
 // filters the list by prefix; the manual request (ctrl+space) opens the full
-// list on an empty word. Inside a quoted argument nothing is offered — an
-// XPath is not a command.
-func completeXMQ(program string, pos int, manual bool) (items []Candidate, start int) {
+// list on an empty word. The argument of a path-taking command completes as
+// an XPath over the parsed document instead (#2790, completeXMQPath).
+func completeXMQ(program string, pos int, in *Input, manual bool) (items []Candidate, start int) {
 	r := []rune(program)
 	if pos < 0 {
 		pos = 0
 	}
 	if pos > len(r) {
 		pos = len(r)
+	}
+	if items, start, ok := completeXMQPath(r, pos, in.xmqTree); ok {
+		return items, start
 	}
 	start = pos
 	for start > 0 && xmqWordRune(r[start-1]) {
