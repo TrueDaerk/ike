@@ -131,7 +131,7 @@ func TestPlaygroundSurvivesProjectSwitch(t *testing.T) {
 		t.Error("the resumed state must point at the model's session history")
 	}
 	v := m.render()
-	if !strings.Contains(v, "jq:") || !strings.Contains(v, "3") {
+	if !strings.Contains(v, "JQ") || !strings.Contains(v, "3") {
 		t.Errorf("the resumed playground does not render, got:\n%s", v)
 	}
 }

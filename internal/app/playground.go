@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"os"
 	"strconv"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"ike/internal/pane"
 	"ike/internal/scratch"
 	"ike/internal/telemetry"
+	"ike/internal/theme"
 	"ike/internal/ui"
 	"ike/internal/undostore"
 )
@@ -99,6 +101,35 @@ func (m Model) playPrefixW() int {
 		return playQueryPrefixW
 	}
 	return len(m.play.dialect.Name()) + 4
+}
+
+// playDialectBadgeBG is the dialect's coloured-badge background (#2779): a
+// distinct semantic hue per dialect (jq amber, yq blue, xmq green) drawn from
+// slots every theme already declares, so no built-in theme needs to grow a
+// new accent to support the badge and a third-party theme still gets legible
+// colours for free.
+func playDialectBadgeBG(pal *theme.Palette, d jqplay.Dialect) color.Color {
+	switch d {
+	case jqplay.DialectYQ:
+		return pal.Info
+	case jqplay.DialectXMQ:
+		return pal.Success
+	default:
+		return pal.Warning
+	}
+}
+
+// playDialectBadge renders the dialect's name as a coloured chip. The
+// query-line prefix and the tab-bar info row's mode label both call this, so
+// the badge always means the same colour and text in either spot. The chip's
+// text is exactly len(d.Name()) cells — same as the plain name it replaces —
+// so playPrefixW's geometry does not need to change with it.
+func (m Model) playDialectBadge(d jqplay.Dialect) string {
+	pal := m.pal()
+	bg := playDialectBadgeBG(pal, d)
+	fg := theme.Readable(bg, pal.Background, pal.Surface, pal.Foreground)
+	return lipgloss.NewStyle().Bold(true).Foreground(fg).Background(bg).
+		Render(strings.ToUpper(d.Name()))
 }
 
 // playDebounce is how long the query line stays quiet before a program runs. A
@@ -2067,7 +2098,9 @@ func (m Model) playModeSegment() string {
 	if !m.paneTabBarShown(m.activeWS().Panes.Get(s.paneKey)) {
 		return ""
 	}
-	return lipgloss.NewStyle().Foreground(m.pal().Secondary).Bold(true).Render(strings.ToUpper(s.dialect.Name()) + " — " + s.source)
+	badge := m.playDialectBadge(s.dialect)
+	tail := lipgloss.NewStyle().Foreground(m.pal().Secondary).Bold(true).Render(" — " + s.source)
+	return badge + tail
 }
 
 // playInfoLine is the info row's line proper: an error beats a transient
@@ -2248,12 +2281,15 @@ func (m Model) playInputSegment() string {
 func (m Model) playQueryRow(width int) string {
 	s := m.play
 	pos := s.program.Cur
-	prefix := "> " + s.dialect.Name() + ": "
+	pal := m.pal()
+	badge := m.playDialectBadge(s.dialect)
+	arrow := "> "
 	if s.bufFocus || !m.playFocused() {
 		pos = -1
-		prefix = "  " + s.dialect.Name() + ": "
+		arrow = "  "
 	}
-	label := lipgloss.NewStyle().Foreground(m.pal().Secondary).Render(prefix)
+	label := lipgloss.NewStyle().Foreground(pal.Secondary).Render(arrow) + badge +
+		lipgloss.NewStyle().Foreground(pal.Secondary).Render(": ")
 	return label + m.playHighlighted(s.program.Text, pos, m.playQueryWidth(width))
 }
 
@@ -2277,10 +2313,12 @@ func (m Model) playQueryRows(width int) []string {
 	}
 	pal := m.pal()
 	label := lipgloss.NewStyle().Foreground(pal.Secondary)
-	prefix, pos := "> "+s.dialect.Name()+": ", s.program.Cur
+	badge := m.playDialectBadge(s.dialect)
+	arrow, pos := "> ", s.program.Cur
 	if s.bufFocus || !m.playFocused() {
-		prefix, pos = "  "+s.dialect.Name()+": ", -1
+		arrow, pos = "  ", -1
 	}
+	prefix := label.Render(arrow) + badge + label.Render(": ")
 	curRow := -1
 	if pos >= 0 {
 		curRow, _ = jqplay.RowCol(lines, pos)
@@ -2292,7 +2330,7 @@ func (m Model) playQueryRows(width int) []string {
 	cursor := lipgloss.NewStyle().Reverse(true)
 	out := make([]string, 0, rows)
 	for i := 0; i < rows; i++ {
-		row := label.Render(prefix)
+		row := prefix
 		if i > 0 {
 			row = strings.Repeat(" ", m.playPrefixW())
 		}

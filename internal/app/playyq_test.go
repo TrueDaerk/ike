@@ -88,13 +88,13 @@ func TestYQPlaygroundRendersYAML(t *testing.T) {
 func TestYQPlaygroundLabelsItself(t *testing.T) {
 	m := openYQ(t, yqApp(t, "a: 1\n"))
 	v := ansi.Strip(m.render())
-	if !strings.Contains(v, "> yq: ") {
+	if !strings.Contains(v, "> YQ: ") {
 		t.Errorf("the query line should carry the yq label, got:\n%s", v)
 	}
 	if !strings.Contains(v, "YQ — ") {
 		t.Errorf("the pane title should name the mode, got:\n%s", v)
 	}
-	if strings.Contains(v, "> jq: ") {
+	if strings.Contains(v, "> JQ: ") {
 		t.Errorf("the jq label must not appear in a yq playground, got:\n%s", v)
 	}
 }
@@ -315,7 +315,7 @@ func TestJQPlaygroundStillOpensOverJSON(t *testing.T) {
 	if got := m.play.result.Text(); got != "{\n  \"b\": 1\n}" {
 		t.Errorf("jq result = %q, want pretty JSON", got)
 	}
-	if v := ansi.Strip(m.render()); !strings.Contains(v, "> jq: ") || !strings.Contains(v, "JQ — ") {
+	if v := ansi.Strip(m.render()); !strings.Contains(v, "> JQ: ") || !strings.Contains(v, "JQ — ") {
 		t.Errorf("the jq chrome changed:\n%s", v)
 	}
 }
