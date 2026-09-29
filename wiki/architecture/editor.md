@@ -3125,6 +3125,34 @@ channel and `decodeOn` gates it, exactly like the decode families (#1620).
   entry can also be written from the buffer: `g?` on a literal explains which
   rule read it and reclassifies the field into this very list — see
   *Conceal explain popover*.
+- **Comment override** (#2816) — the most specific word on a unit, above the
+  field-unit mapping: real configs reuse one key with different units and
+  write the unit in a comment, which a per-key mapping cannot express. A
+  **trailing** line comment names the unit of the literals on its line; a
+  **full-line comment directly above** names it for the next line only — a
+  blank line or any other statement breaks the link, in a stack of comment
+  lines the nearest one naming a unit wins, and a trailing comment beats the
+  one above. The comment is matched word by word, case-insensitively and
+  whole-word only (`# msg` names nothing, `it's` is no seconds comment), the
+  first recognised word winning; the words are the duration unit words,
+  `bytes`/`byte`, `octal` and `hex` (`numhint.CommentUnit`) — the
+  duration, byte-size and radix families, never digit grouping or the
+  timestamp/`none` mapping words. `us` and `min` are left out as prose
+  ("let us know", "min 1, max 10"); `micros`/`mins` say the same. The
+  override behaves like a mapping entry: the unit is final, the literal
+  claims its columns (epoch decoding included), and a value the unit renders
+  nothing for stays bare — `500  # milliseconds` is already readable. The
+  family toggles still gate the drawing; there is no setting of its own.
+  Leaders are language-aware: `numhint.CommentLeaders(id)` is the registry's
+  `LineComment` plus the extras a language accepts (ini `;`, PHP `#`, JSON
+  `//`), defaulting to `#` and `//`; producers pass them to
+  `SpansWith(lines, stamps, leaders...)`/`Hints`. A leader only opens a
+  comment at the line start or after a blank and outside a quoted string.
+  `numhint.CommentScan` carries the context for producers that walk lines
+  themselves (the code-constant scan, #1701 — Python `#`, PHP `//`/`#`, Go and
+  JS/TS `//`), where the comment outranks the name's mapping for computed
+  right-hand sides too. Single-line entry points (`LineHints`, the log
+  renderer) see only a trailing comment.
 - **Contexts** are every position the highlighting already recognises as a
   *value* (#1684), never a key: the config formats, where keys carry the
   intent — JSON/ndjson, YAML, TOML, ini/conf and dotenv — plus `.http` query
@@ -3756,11 +3784,15 @@ and offers the one-key corrections.
 
 **Provenance comes from the producers, not from a second guess.** Each hint
 source now reports which rule it applied: `numhint.Hint.Why` records the level
-(`SourceFieldRule` / `SourceKeyWord` / `SourceShape`), the pattern or key word
-it matched and the unit it chose — filled in on the same branches that pick the
+(`SourceComment` > `SourceFieldRule` > `SourceKeyWord` > `SourceShape`), the
+pattern or key word it matched — for a comment override (#2816) the unit word
+and the comment itself, worded as "unit from comment `# seconds`" — and the
+unit it chose — filled in on the same branches that pick the
 family, so it cannot drift from the rendering — with `numhint.FieldRule` and
 `KeyWord` naming the entry or word behind a reading, `ValueAt`/`HintAt`
-resolving a column back to a value or a hint, `secret.Explain` replaying the
+resolving a column back to a value or a hint (`HintIn` with the lines above,
+which the popover passes up to the nearest blank line, so a unit comment on
+the line above explains too), `secret.Explain` replaying the
 key tables in order (user pattern, strong word, public marker, marker, suffix,
 exact name), `epochtime.Unit` reporting the digit-count reading, and
 `consthint.Eval` re-evaluating a computed constant right-hand side.

@@ -55,6 +55,20 @@ func TestExplainNumberHintNamesHeuristic(t *testing.T) {
 	}
 }
 
+// TestExplainNumberHintNamesComment (#2816): a unit comment on the line above
+// the value reaches the popover, which names the comment as the rule.
+func TestExplainNumberHintNamesComment(t *testing.T) {
+	numhint.SetFieldUnits(nil)
+	m, path := mdLoaded(t, "# seconds\ntimeout: 500\n")
+	span := highlight.Span{Line: 1, StartCol: 9, EndCol: 12, Capture: numhint.DurationCapture, Replace: "8m20s"}
+	m, _ = m.Update(highlight.SpansMsg{Path: path, Version: m.docVersion, Spans: []highlight.Span{span}})
+	m.cursor = buffer.Position{Line: 1, Col: 10}
+	_, view := explainView(t, m)
+	if !strings.Contains(view, "unit from comment `# seconds`") {
+		t.Fatalf("popover does not name the comment, view:\n%s", view)
+	}
+}
+
 // TestExplainSecretNamesPattern (#1998): on a masked value the popover names
 // the secret pattern that matched the key.
 func TestExplainSecretNamesPattern(t *testing.T) {

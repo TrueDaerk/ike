@@ -97,7 +97,7 @@ func yamlSpans(lines []string) []lang.Span {
 	// 10-digit value is a timestamp more often than a gigabyte count.
 	// A key that names the unit wins the other way round (#1685) — a `bytes`
 	// key holding a value in the epoch range still reads as a byte size.
-	hints, stamps := numhint.SpansWith(lines, epochtime.Spans(lines, epochtime.Value))
+	hints, stamps := numhint.SpansWith(lines, epochtime.Spans(lines, epochtime.Value), numhint.CommentLeaders("yaml")...)
 	out = append(out, stamps...)
 	out = append(out, numhint.Except(hints, perms)...)
 	out = append(out, nethint.Spans(lines)...)

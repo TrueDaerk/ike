@@ -90,7 +90,7 @@ func (m *Model) ConcealExplainAtCaret() (family string, ok bool) {
 		return "", false
 	}
 	ex, ok := concealexplain.Explain(concealexplain.Request{
-		Line: m.buf.Line(line), Col: m.cursor.Col, Lang: m.langID(),
+		Line: m.buf.Line(line), Col: m.cursor.Col, Lang: m.langID(), Above: m.linesAbove(line),
 		Start: r.start, End: r.end, Capture: capture, Display: r.repl,
 	})
 	if !ok {

@@ -35,8 +35,9 @@ import (
 // applies; Claims marks the literals whose reading the field name decided
 // (#1685) — a mapped field or a built-in key word — and those claim their
 // columns whether or not a hint was produced: no other family may draw a
-// stand-in where the field already said what the number means. Why records
-// which of the three rule levels decided it (#1998).
+// stand-in where the field already said what the number means. A unit comment
+// (#2816) claims the same way. Why records which rule level decided it
+// (#1998): comment, field rule, key word or shape, in that precedence.
 type Hint struct {
 	Span   lang.Span
 	Claims bool
@@ -59,6 +60,11 @@ const (
 	// SourceShape marks a reading the value's own shape decided — a multiple
 	// of 1024, a `0x` literal, a long digit run.
 	SourceShape
+	// SourceComment marks a reading a line comment named (#2816) — a
+	// trailing `# seconds` or a `// bytes` line directly above. It is the
+	// most specific statement there is and beats even SourceFieldRule; it
+	// sits last only so the older values keep their numbers.
+	SourceComment
 )
 
 // Why is one hint's provenance: the rule level that fired, the pattern or word
@@ -69,6 +75,7 @@ type Why struct {
 	Key     string // the field name the literal hangs off ("" when unkeyed)
 	Pattern string // the mapping entry's pattern, or the key word that matched
 	Shape   string // the shape rule that fired, for SourceShape
+	Comment string // the comment that named the unit, for SourceComment
 	Unit    Unit   // the reading applied
 }
 
@@ -87,17 +94,26 @@ func LineSpans(li int, line string) []lang.Span { return spansOf(LineHints(li, l
 // Hints is Spans down one level, for producers that also have to honour the
 // field-name precedence (#1685): every literal is reported, including the ones
 // a mapped field silenced, so Allowed can drop the other families' stand-ins
-// over them.
-func Hints(lines []string) []Hint {
+// over them. leaders are the language's line-comment leaders (#2816,
+// CommentLeaders); none given means DefaultLeaders.
+func Hints(lines []string, leaders ...string) []Hint {
+	return hintsOf(lines, 0, leaders)
+}
+
+// hintsOf scans lines, reporting them from line index first on.
+func hintsOf(lines []string, first int, leaders []string) []Hint {
 	var out []Hint
+	cs := NewCommentScan(leaders...)
 	for li, line := range lines {
-		out = appendLine(out, li, []rune(line))
+		runes := []rune(line)
+		out = appendLine(out, first+li, runes, cs.leaders, cs.Line(runes))
 	}
 	return out
 }
 
-// LineHints is Hints for a single line, reported at line index li.
-func LineHints(li int, line string) []Hint { return appendLine(nil, li, []rune(line)) }
+// LineHints is Hints for a single line, reported at line index li. With no
+// line above, only a trailing comment can override a unit (#2816).
+func LineHints(li int, line string) []Hint { return hintsOf([]string{line}, li, nil) }
 
 // HintSpans keeps the hints that produced a stand-in, for producers that scan
 // through Hints and emit the spans themselves (#1685).
@@ -141,8 +157,10 @@ func Allowed(other []lang.Span, hints []Hint) []lang.Span {
 // field-pinned hint wins over the incoming span (#1685), the incoming span
 // wins over a hint the value's shape alone produced (#1627), and both are
 // dropped where a field is mapped to `none`.
-func SpansWith(lines []string, other []lang.Span) (hints, kept []lang.Span) {
-	hs := Hints(lines)
+//
+// leaders are the language's line-comment leaders (#2816, CommentLeaders).
+func SpansWith(lines []string, other []lang.Span, leaders ...string) (hints, kept []lang.Span) {
+	hs := Hints(lines, leaders...)
 	kept = Allowed(other, hs)
 	return Except(spansOf(hs), kept), kept
 }
@@ -182,10 +200,11 @@ func overlapsAny(s lang.Span, taken []lang.Span) bool {
 	return false
 }
 
-// appendLine scans one line, tracking the key the current value hangs off.
-func appendLine(out []Hint, li int, runes []rune) []Hint {
-	scanLine(runes, func(v Value) bool {
-		if h, ok := literalHint(li, v.Start, v.End, v.Text, v.Key); ok {
+// appendLine scans one line, tracking the key the current value hangs off; c
+// is the comment deciding the line's unit (#2816), zero when none does.
+func appendLine(out []Hint, li int, runes []rune, leaders []string, c Comment) []Hint {
+	scanLine(runes, leaders, func(v Value) bool {
+		if h, ok := literalHint(li, v.Start, v.End, v.Text, v.Key, c); ok {
 			out = append(out, h)
 		}
 		return true
@@ -206,9 +225,10 @@ type Value struct {
 
 // scanLine walks a line's value tokens left to right — every token that is not
 // itself a key — reporting each with the key it hangs off. fn stops the scan
-// by returning false.
-func scanLine(runes []rune, fn func(Value) bool) {
-	runes = runes[:contentEnd(runes)]
+// by returning false. A trailing comment opened by one of leaders ends the
+// line's content, so numbers in prose after the value are left alone.
+func scanLine(runes []rune, leaders []string, fn func(Value) bool) {
+	runes = runes[:commentAt(runes, leaders)]
 	if start := skipSpace(runes, 0); start >= len(runes) || isCommentStart(runes, start) {
 		return
 	}
@@ -263,7 +283,7 @@ func scanLine(runes []rune, fn func(Value) bool) {
 func ValueAt(line string, col int) (Value, bool) {
 	var inside, after Value
 	var okIn, okAfter bool
-	scanLine([]rune(line), func(v Value) bool {
+	scanLine([]rune(line), DefaultLeaders, func(v Value) bool {
 		switch {
 		case col >= v.Start && col < v.End:
 			inside, okIn = v, true
@@ -283,7 +303,36 @@ func ValueAt(line string, col int) (Value, bool) {
 // provenance included — the explain popover's entry point into the same scan
 // the producers run (#1998).
 func HintAt(li int, line string, col int) (Hint, bool) {
-	for _, h := range LineHints(li, line) {
+	return hintAtIn(LineHints(li, line), col)
+}
+
+// HintIn is HintAt with the buffer around the line (#2816): lines[li] is the
+// line, and the comment lines directly above it are consulted the way the
+// producers' scan consults them, so the explain popover names a preceding
+// `# seconds` comment too. leaders are the language's line-comment leaders.
+func HintIn(lines []string, li, col int, leaders ...string) (Hint, bool) {
+	if li < 0 || li >= len(lines) {
+		return Hint{}, false
+	}
+	lead := leaders
+	if len(lead) == 0 {
+		lead = DefaultLeaders
+	}
+	first := li
+	for first > 0 && fullLineComment([]rune(lines[first-1]), lead) {
+		first--
+	}
+	var own []Hint
+	for _, h := range hintsOf(lines[first:li+1], first, lead) {
+		if h.Span.Line == li {
+			own = append(own, h)
+		}
+	}
+	return hintAtIn(own, col)
+}
+
+func hintAtIn(hints []Hint, col int) (Hint, bool) {
+	for _, h := range hints {
 		if h.Span.StartCol <= col && col < h.Span.EndCol {
 			return h, true
 		}
@@ -297,9 +346,10 @@ func HintAt(li int, line string, col int) (Hint, bool) {
 // is fixed — radix, byte size, duration, grouping — so a literal never carries
 // two hints and rendering is deterministic.
 //
-// A key the user mapped to a unit (#1685) short-circuits all of it: that unit
-// is applied and the literal claims its columns either way.
-func literalHint(li, start, end int, text, key string) (Hint, bool) {
+// A comment naming a unit (#2816) or a key the user mapped to a unit (#1685)
+// short-circuits all of it, in that order: that unit is applied and the
+// literal claims its columns either way.
+func literalHint(li, start, end int, text, key string, c Comment) (Hint, bool) {
 	bare := lang.Span{Line: li, StartCol: start, EndCol: end}
 	span := func(capture, replace string) (lang.Span, bool) {
 		s := bare
@@ -323,21 +373,26 @@ func literalHint(li, start, end int, text, key string) (Hint, bool) {
 			return Hint{Span: s, Claims: true, Why: why}, true
 		}
 	}
-	if pattern, u, ok := FieldRule(key); ok {
+	pinned := func(why Why) (Hint, bool) {
 		if !isDecimal(text) {
 			if _, hex := hexLiteral(text); !hex {
 				return Hint{}, false
 			}
 		}
-		s, ok := mappedSpan(span, text, u)
+		s, ok := mappedSpan(span, text, why.Unit)
 		if !ok {
 			// The unit renders nothing for this value — a `bytes` field
 			// holding 512. The field still claimed the digits: no other
 			// family may read them as something else.
 			s = bare
 		}
-		why := Why{Source: SourceFieldRule, Key: key, Pattern: pattern, Unit: u}
 		return Hint{Span: s, Claims: true, Why: why}, true
+	}
+	if c.Found() {
+		return pinned(Why{Source: SourceComment, Key: key, Pattern: c.Word, Comment: c.Text, Unit: c.Unit})
+	}
+	if pattern, u, ok := FieldRule(key); ok {
+		return pinned(Why{Source: SourceFieldRule, Key: key, Pattern: pattern, Unit: u})
 	}
 	if hexDigits, ok := hexLiteral(text); ok {
 		dec, ok := DecimalOf(hexDigits)
@@ -424,10 +479,11 @@ func radixUnit(r radix) Unit {
 
 // LiteralHint is literalHint exported for the code-constant producer (#1701):
 // a constant assignment's single-literal right-hand side reads exactly like a
-// keyed config value — user mapping first, built-in key words second, the
-// value's shape third.
-func LiteralHint(li, start, end int, text, key string) (Hint, bool) {
-	return literalHint(li, start, end, text, key)
+// keyed config value — a unit-naming comment first (#2816), user mapping
+// second, built-in key words third, the value's shape last. c is the zero
+// Comment when no comment names a unit for the line.
+func LiteralHint(li, start, end int, text, key string, c Comment) (Hint, bool) {
+	return literalHint(li, start, end, text, key, c)
 }
 
 // KeyUnit returns the unit the built-in key heuristics read off a field name —
@@ -692,20 +748,6 @@ func keyAhead(runes []rune, i int) bool {
 		return true
 	}
 	return false
-}
-
-// contentEnd cuts a trailing ` #` or ` //` comment off a line, so numbers in
-// prose after the value are left alone.
-func contentEnd(runes []rune) int {
-	for i := 1; i < len(runes); i++ {
-		if !isSpace(runes[i-1]) {
-			continue
-		}
-		if runes[i] == '#' || (runes[i] == '/' && i+1 < len(runes) && runes[i+1] == '/') {
-			return i
-		}
-	}
-	return len(runes)
 }
 
 // isCommentStart reports whether a line's first non-blank rune opens a comment

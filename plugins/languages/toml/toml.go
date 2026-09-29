@@ -57,7 +57,7 @@ func tomlSpans(lines []string) []lang.Span {
 	// The epochs take their columns out of the number hints, as in the JSON
 	// producer: two stand-ins over one literal would fight for the same cells.
 	// A key that names the unit wins the other way round (#1685).
-	hints, stamps := numhint.SpansWith(lines, epochtime.Spans(lines, epochtime.Value))
+	hints, stamps := numhint.SpansWith(lines, epochtime.Spans(lines, epochtime.Value), numhint.CommentLeaders("toml")...)
 	// The secret masks (#2345) come first: overlapping spans resolve
 	// first-covering-wins, so the mask must precede any decode of the value.
 	out := append(secret.PairSpans(lines, "="), cronhint.QuotedSpans(lines)...)

@@ -77,7 +77,7 @@ func (m *Model) explainConceal() tea.Cmd {
 		return nil
 	}
 	text := m.buf.Line(line)
-	req := concealexplain.Request{Line: text, Col: m.cursor.Col, Lang: m.langID()}
+	req := concealexplain.Request{Line: text, Col: m.cursor.Col, Lang: m.langID(), Above: m.linesAbove(line)}
 	st := &explainState{line: line}
 	if capture, r, ok := m.concealAtCaret(); ok {
 		req.Start, req.End, req.Capture, req.Display = r.start, r.end, capture, r.repl
@@ -90,6 +90,26 @@ func (m *Model) explainConceal() tea.Cmd {
 	st.ex = ex
 	m.explain = st
 	return nil
+}
+
+// explainAboveMax caps how far linesAbove walks back: a unit comment above a
+// value (#2816) sits in the stack of comment lines directly over it, and no
+// real stack is this tall.
+const explainAboveMax = 64
+
+// linesAbove returns the non-blank lines directly above line, nearest last —
+// the context a unit comment on the line above is read from (#2816). A blank
+// line breaks that link, so the walk stops there.
+func (m *Model) linesAbove(line int) []string {
+	first := line
+	for first > 0 && line-first < explainAboveMax && strings.TrimSpace(m.buf.Line(first-1)) != "" {
+		first--
+	}
+	out := make([]string, 0, line-first)
+	for i := first; i < line; i++ {
+		out = append(out, m.buf.Line(i))
+	}
+	return out
 }
 
 // explainCaptures are the stand-in families the popover speaks for: the four
