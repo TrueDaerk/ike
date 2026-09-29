@@ -2178,3 +2178,40 @@ func (m Model) GitMarks() map[int]vcs.LineMark {
 // HasGitMarks reports whether the view shows any gutter diff markers — a
 // clearing message is only worth sending while it does (#2541).
 func (m Model) HasGitMarks() bool { return len(m.gitMarks) > 0 }
+
+// VisibleLines returns the first and last buffer line (0-based) the viewport
+// shows right now, stepping over collapsed folds (a header is one row, its
+// body none) and counting soft-wrapped lines by their rows. Hosts that draw an
+// overview beside the buffer — the playground's structure strip (#2793) —
+// read it to mark which part of the document is on screen.
+func (m Model) VisibleLines() (first, last int) {
+	lc := m.buf.LineCount()
+	first = m.view.Top
+	if first >= lc {
+		first = lc - 1
+	}
+	if first < 0 {
+		first = 0
+	}
+	last = first
+	rows := m.view.Height()
+	for line := first; line < lc && rows > 0; line++ {
+		n := 1
+		switch {
+		case m.softWrap:
+			n = m.wrapRows(line)
+		case m.hasFolds() && m.lineHidden(line):
+			n = 0
+		}
+		if n == 0 {
+			continue
+		}
+		last = line
+		rows -= n
+	}
+	return first, last
+}
+
+// Width and Height return the size the editor was last given by SetSize.
+func (m Model) Width() int  { return m.width }
+func (m Model) Height() int { return m.height }

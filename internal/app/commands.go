@@ -817,6 +817,9 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			// The export picker (#2788): save to a file, copy as CSV / TSV, use
 			// as an HTTP request body.
 			langCommand(appCommand("playground.export", "Export Playground Result…", ShowPlayExportMsg{}), playgroundLangs()),
+			// The structure strip (#2793): the result's top-level keys as
+			// jump targets beside it.
+			langCommand(appCommand("playground.structure", "Toggle Playground Structure Strip", TogglePlayStructureMsg{}), playgroundLangs()),
 			langCommand(appCommand("log.openRotatedSet", "Open Rotated Log Set (Merged Timeline)", OpenMergedLogMsg{}), []string{"log"}),
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),
 			appCommand("terminal.newTab", "New Terminal Tab", TerminalNewTabMsg{}),

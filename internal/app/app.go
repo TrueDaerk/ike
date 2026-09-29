@@ -551,7 +551,10 @@ type Model struct {
 	playLastProgram map[string]string
 	// playLastOpts are the -r / -c / -s toggles (#2784) each playLastProgram
 	// entry last ran with, restored with it.
-	playLastOpts  map[string]jqplay.Options
+	playLastOpts map[string]jqplay.Options
+	// playStructure is the playground's structure strip toggle (#2793), a
+	// session setting every playground (any dialect) opens with.
+	playStructure bool
 	playLastStore *jqplay.LastPrograms
 	// playFilters is the palette mode listing the named saved filters of both
 	// scopes (#1995), kept on the model so the insert and rename entry
@@ -7454,6 +7457,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// program replaces it, a builtin's name lands at the caret.
 		return m, m.insertPlayCheat(msg)
 
+	case TogglePlayStructureMsg:
+		// playground.structure (ctrl+alt+g, #2793): show / focus / hide the
+		// structure strip beside the result.
+		m.togglePlayStructure()
+		return m, nil
+
 	case TogglePlayOptionMsg:
 		// json.jqToggleRaw / …Compact / …Slurp (ctrl+alt+q / c / s, or a click
 		// on the info row's chips, #2784): flip jq's -r / -c / -s and rerun.
@@ -10809,7 +10818,7 @@ func (m *Model) setFocus(key string) {
 	// substitute editor's cursor cell tracks whether the pane holds the
 	// keyboard, so an unfocused playground draws no caret.
 	if s := m.play; s != nil && s.resultEd != nil {
-		s.resultEd.SetFocused(key == s.paneKey && s.bufFocus && m.playSrcShown())
+		s.resultEd.SetFocused(key == s.paneKey && s.bufFocus && !s.stripFocus && m.playSrcShown())
 	}
 }
 
