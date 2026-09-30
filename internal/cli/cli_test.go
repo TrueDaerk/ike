@@ -128,3 +128,21 @@ func TestParseDeepLinkURL(t *testing.T) {
 		t.Fatalf("got %+v, %v", inv, err)
 	}
 }
+
+// TestParseAgentHook covers `ike agent-hook <event>` (#2843): the subcommand
+// only counts as the first argument and takes exactly one event name.
+func TestParseAgentHook(t *testing.T) {
+	inv, err := Parse([]string{"agent-hook", "SessionStart"})
+	if err != nil || inv.AgentHook != "SessionStart" || len(inv.Targets) != 0 {
+		t.Errorf("Parse(agent-hook SessionStart) = %+v, %v", inv, err)
+	}
+	for _, args := range [][]string{{"agent-hook"}, {"agent-hook", ""}, {"agent-hook", "A", "B"}} {
+		if _, err := Parse(args); err == nil {
+			t.Errorf("Parse(%q) accepted", args)
+		}
+	}
+	inv, err = Parse([]string{"main.go", "agent-hook"})
+	if err != nil || inv.AgentHook != "" || len(inv.Targets) != 2 {
+		t.Errorf("agent-hook after a path must stay a path: %+v, %v", inv, err)
+	}
+}

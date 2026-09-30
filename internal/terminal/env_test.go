@@ -3,6 +3,7 @@ package terminal
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -271,4 +272,19 @@ func TestSessionEnvInjection(t *testing.T) {
 	waitFor(t, "env echo", func() bool {
 		return strings.Contains(plainView(s), "mark=active")
 	})
+}
+
+// TestSessionAgentHookEnv: every spawn carries its routing key and the IDE's
+// pid, which `ike agent-hook` reports back to bind an agent session (#2843).
+func TestSessionAgentHookEnv(t *testing.T) {
+	c := &collector{}
+	s, err := StartCommandSession("tool",
+		[]string{"/bin/sh", "-c", `printf 'sess=%s pid=%s\n' "$IKE_SESSION" "$IKE_PID"; sleep 30`},
+		t.TempDir(), 80, 24, nil, c.send)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(s.Close)
+	want := "sess=" + s.key + " pid=" + strconv.Itoa(os.Getpid())
+	waitFor(t, "env printf", func() bool { return strings.Contains(plainView(s), want) })
 }

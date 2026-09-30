@@ -337,7 +337,10 @@ func startSession(key string, argv []string, isCommand bool, dir string, w, h in
 	}
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = dir
-	cmd.Env = MergeEnv(append(os.Environ(), "TERM=xterm-256color"), extraEnv)
+	cmd.Env = MergeEnv(append(os.Environ(), "TERM=xterm-256color"), append(extraEnv[:len(extraEnv):len(extraEnv)],
+		// The agent hook (#2843) reports these back so IKE can bind a coding
+		// agent's session to the pane it runs in.
+		"IKE_SESSION="+key, "IKE_PID="+strconv.Itoa(os.Getpid())))
 	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)})
 	if err != nil {
 		return nil, fmt.Errorf("terminal: start %s: %w", argv[0], err)

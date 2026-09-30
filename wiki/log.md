@@ -1,5 +1,21 @@
 # Log
 
+## 2026-09-30 (agent trace: Claude hook installer, `ike agent-hook`, deeplink `event`, #2843)
+
+- `agent.hooks.install` / `agent.hooks.uninstall` (palette) write/remove
+  IKE's `SessionStart` / `SessionEnd` / `UserPromptSubmit` command hooks in
+  `~/.claude/settings.json` — idempotent, key order and foreign hooks kept,
+  IKE entries recognised by the exact `<ike exe> agent-hook <Event>` shape.
+- `ike agent-hook <event>` forwards the hook JSON as a new deeplink socket
+  message `event {json}` (validated, length-capped like `open`), routed to
+  the IDE whose terminal the agent runs in first; always exits 0.
+- Every terminal spawn carries `IKE_SESSION` / `IKE_PID`; the app binds the
+  session to that terminal, else to a terminal with the same cwd, and falls
+  back to discovery otherwise.
+- Wiki: [Agent Trace](/architecture/agent-trace.md),
+  [Deep Links](/architecture/deep-links.md),
+  [Tool Panes](/architecture/tool-panes.md).
+
 ## 2026-09-30 (agent trace: transcript parser + session discovery, #2842)
 
 - New pure package `internal/agenttrace` (Epic 0540): Claude Code JSONL →

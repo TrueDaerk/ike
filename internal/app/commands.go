@@ -698,6 +698,12 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			// The newest crash report (#2836): the next-launch notice names it as
 			// its action, and the palette is its other doorway.
 			appCommand("crash.openLastLog", "Open Last Crash Log", OpenCrashLogMsg{}),
+			// Claude Code lifecycle hooks for the agent trace (#2843): a
+			// one-off setup step — the palette is its doorway.
+			withAliases(appCommand("agent.hooks.install", "Agent Trace: Install Claude Hooks", AgentHooksInstallMsg{}),
+				"claude", "hook", "settings"),
+			withAliases(appCommand("agent.hooks.uninstall", "Agent Trace: Uninstall Claude Hooks", AgentHooksUninstallMsg{}),
+				"claude", "hook", "remove"),
 			// The PHP declaration index's operations surface (0520, #2673).
 			// Global rather than PHP-scoped: the reason to rebuild — a branch
 			// switch, a generator run — is felt with the explorer or a terminal

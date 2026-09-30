@@ -113,6 +113,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: ike [+N] [path[:line[:col]]]... [-]")
 		fmt.Fprintln(os.Stderr, "       ike [--url-send-only] ike://open?...")
 		fmt.Fprintln(os.Stderr, "       ike --version")
+		fmt.Fprintln(os.Stderr, "       ike agent-hook <event>   (Claude Code hook; JSON on stdin)")
+		if len(os.Args) > 1 && os.Args[1] == "agent-hook" {
+			// Exit 2 from a UserPromptSubmit hook blocks the prompt (#2843).
+			os.Exit(1)
+		}
 		os.Exit(2)
 	}
 	// `ike --version` prints the banner and exits before any terminal setup —
@@ -120,6 +125,15 @@ func main() {
 	// run in.
 	if inv.Version {
 		fmt.Println(version.Full())
+		return
+	}
+	// `ike agent-hook <event>` (#2843): a Claude Code hook forwarding the
+	// session lifecycle to a running instance. Always exits 0 — a failing
+	// hook must never block the agent.
+	if inv.AgentHook != "" {
+		if err := runAgentHook(os.Stdin, inv.AgentHook, os.Getenv, deeplink.DefaultDir()); err != nil {
+			fmt.Fprintln(os.Stderr, "ike agent-hook:", err)
+		}
 		return
 	}
 	// `ike ike://…` (#2396): hand the deep link to the most recently focused

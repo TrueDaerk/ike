@@ -551,6 +551,11 @@ values follows the IDE theme:
 `BACKGROUND`, `FOREGROUND`, `ACCENT`, `SELECTION`, `BORDER`, `SUCCESS`,
 `WARNING`, `ERROR`, `INFO`.
 
+Every terminal spawn — tool panes included — also carries `IKE_SESSION` (the
+terminal's routing key) and `IKE_PID` (the IDE's pid), which `ike agent-hook`
+reports back so a coding agent's session binds to the pane it runs in
+([Agent Trace](./agent-trace.md#claude-code-hooks-2843), #2843).
+
 IKE never rewrites a tool's own config files; the setup surfaces (#751–#753,
 #759) write only `[[tools.custom]]` entries and install binaries — wiring the
 variables into e.g. a lazygit theme config stays the user's choice.
