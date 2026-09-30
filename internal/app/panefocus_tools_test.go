@@ -45,6 +45,7 @@ func toolWindowKinds() map[string]toolWindowKind {
 		"deps":        {pane.KindDeps, func(m *Model) string { return m.activeWS().Panes.AddDeps() }},
 		"time":        {pane.KindTime, func(m *Model) string { return m.activeWS().Panes.AddTime() }},
 		"usage":       {pane.KindUsage, func(m *Model) string { return m.activeWS().Panes.AddUsage() }},
+		"agenttrace":  {pane.KindAgentTrace, func(m *Model) string { return m.activeWS().Panes.AddAgentTrace() }},
 	}
 }
 

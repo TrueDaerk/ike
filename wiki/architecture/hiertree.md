@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Hierarchy Tree
-description: The lazily-expanding tree the call-hierarchy and type-hierarchy overlays share — node shape, expand/collapse/parent-walk keys, stale-reply bookkeeping and the row renderer live once in internal/hiertree; each host keeps only its LSP messages and direction.
+description: The lazily-expanding tree the call-hierarchy and type-hierarchy overlays and the Agent Trace tool window share — node shape, expand/collapse/parent-walk keys, stale-reply bookkeeping and the row renderer live once in internal/hiertree; the in-memory side (Static fetch, Refresh keeping expansion and selection by key, ExpandDeep, mouse helpers) was added for the trace window (#2840); each host keeps only its messages and direction.
 resource: internal/hiertree/hiertree.go
-tags: [architecture, lsp, overlay, tree, reusable, consolidation]
-timestamp: 2026-09-03T12:00:00Z
+tags: [architecture, lsp, overlay, tree, reusable, consolidation, agents]
+timestamp: 2026-09-30T22:00:00Z
 ---
 
 # Hierarchy Tree
@@ -51,6 +51,32 @@ the row loading and runs the host's `Fetch(reqID, item)`.
 pending is dropped; one the host flags `stale` is retired but not applied;
 otherwise the row unfolds onto the children at depth+1.
 
+### In-memory trees (#2840)
+
+The Agent Trace tool window has its whole tree in memory, so it needs
+neither a round trip nor a rebuild that forgets state:
+
+- `Static(tree, children)` builds a `Fetch` that answers from the item and
+  calls `Apply` inside `Expand`, so a row unfolds before the caller's next
+  line runs and no command travels through the Update loop. `SetFetch`
+  (re)installs it — a host whose `Tree` lives by value inside a model that
+  may be moved (a tool window detached into a tab) re-points the closure
+  before use.
+- `Refresh(roots, key)` replaces the roots and keeps what the user did:
+  every row whose key was expanded is expanded again (synchronously with a
+  `Static` fetch, else the returned command carries the fetches), the
+  cursor lands on the row carrying the previously selected key — or stays
+  clamped where it was when that row is gone — and the scroll window is
+  kept. New rows come up collapsed; the host expands the ones it wants
+  shown.
+- `ExpandDeep(row)` expands a row and, as far as the fetch answers
+  synchronously, every descendant.
+- `Toggle(row)` folds an expanded row and expands a collapsed one — the
+  enter action of a row that has nothing to open.
+- `Roots`, `HasNodes`, `SetCursor`, `Top`, `Wheel(delta, height)` (through
+  `ui.WheelWindow`), and `Row.Expanded` / `Depth` / `Leaf` give a pane host
+  what its mouse handling and tests need.
+
 ## Keys
 
 `Key(key, page, onEnter, onToggle) (tea.Cmd, bool)` routes one key and
@@ -75,8 +101,10 @@ tree that shrank under the cursor keeps a selection), then the window follows
 it (`ui.ScrollToShow`). Markers: `…` loading, `▾` expanded, `·` a loaded
 leaf, `▸` otherwise; two spaces of indent per depth; name bold, marker,
 detail and `path:line` faint; the cursor row on `SelectionMuted`; every row
-clipped to `width`. An empty tree renders the host's `empty` text (`no
-calls`, `no types`) faint as its single row.
+clipped to `width`. A row without a `Path` prints no location and one with
+a negative `Line` prints the path alone (#2840: turn and decision rows, a
+file whose line the parser could not resolve). An empty tree renders the
+host's `empty` text (`no calls`, `no types`) faint as its single row.
 
 ## Hosts
 
@@ -92,6 +120,13 @@ Each host keeps what differs and nothing else:
 - its overlay chrome: heading, hint row, box width — and in `callhier` the
   [code-preview column](./lsp.md) (#2053) beside the tree, which reads the
   selected row through `Tree.Current`.
+
+The [Agent Trace tool window](./agent-trace.md#trace-tool-window-2840)
+(`internal/tracepanel`, #2840) is the first non-LSP host: a pane rather
+than an overlay, `Static` over `agenttrace.Node` children, `Refresh` on
+every incremental read, `ExpandDeep` on the newest turn, and mouse handling
+through `ui.RowAt` / `ui.ClickTracker` against `Top`, `SetCursor` and
+`Wheel`.
 
 Both hosts carry golden tests that pin the rendered overlay byte-for-byte;
 the tree mechanics (expand/collapse, parent walk, scroll window, stale

@@ -40,6 +40,7 @@ import (
 	"ike/internal/testresults"
 	"ike/internal/theme"
 	"ike/internal/timepanel"
+	"ike/internal/tracepanel"
 	"ike/internal/usagepanel"
 	"ike/internal/usages"
 	"ike/internal/vcspanel"
@@ -153,6 +154,10 @@ const (
 	// panel reporting top commands, unbound chords, palette dismissal rates
 	// and slow operations from the local usage log, under key "usage".
 	KindUsage
+	// KindAgentTrace is the Agent Trace tool window (#2840, epic 0540): a
+	// singleton panel showing the coding-agent session of a tool pane as a
+	// turn → decision → tool call → file tree, under key "agenttrace".
+	KindAgentTrace
 	// KindHTMLPreview is a rendered HTML preview pane (Epic 0530, #2740); any
 	// number may exist, each bound to one .html/.htm/.xhtml (or .html.gz)
 	// source buffer path, the markdown preview's sibling.
@@ -195,6 +200,7 @@ const (
 	ctxDeps     = "deps"
 	ctxTime     = "time"
 	ctxUsage    = "usage"
+	ctxTrace    = "agenttrace"
 	ctxHex      = "hex"
 	ctxNotebook = "notebook"
 )
@@ -236,6 +242,7 @@ type Instance struct {
 	dep  depspanel.Model
 	tp   timepanel.Model
 	usg  usagepanel.Model
+	at   tracepanel.Model
 	rm   remote.Model
 	// dfEdit is the diff pane's edit-mode editor (0340, #496): non-nil while
 	// the right column is a live editor of the underlying file.
@@ -384,6 +391,8 @@ func (i *Instance) ContextID() string {
 		return ctxTime
 	case KindUsage:
 		return ctxUsage
+	case KindAgentTrace:
+		return ctxTrace
 	case KindRemote:
 		return ctxRemote
 	case KindHex:
@@ -482,6 +491,10 @@ func (i *Instance) Time() *timepanel.Model { return &i.tp }
 // Usage returns the Usage tool window model (#2552). It is only meaningful
 // for KindUsage instances.
 func (i *Instance) Usage() *usagepanel.Model { return &i.usg }
+
+// AgentTrace returns the Agent Trace tool window model (#2840). It is only
+// meaningful for KindAgentTrace instances.
+func (i *Instance) AgentTrace() *tracepanel.Model { return &i.at }
 
 // Remote returns the underlying SFTP remote browser model (#1997). It is
 // only valid for a remote instance; callers gate on Kind first.
@@ -879,6 +892,8 @@ func SingletonKey(k Kind) string {
 		return TimeKey
 	case KindUsage:
 		return UsageKey
+	case KindAgentTrace:
+		return AgentTraceKey
 	}
 	return ""
 }
@@ -898,6 +913,7 @@ func SingletonKind(key string) (Kind, bool) {
 var toolWindowKinds = []Kind{
 	KindVCS, KindDebug, KindProblems, KindStructure, KindUsages, KindHTTP, KindBreakpoints,
 	KindTests, KindIssues, KindDOM, KindDoctor, KindLSPDoctor, KindDeps, KindTime, KindUsage,
+	KindAgentTrace,
 }
 
 // ToolWindowKinds returns every singleton tool window kind (#2736), for the
@@ -1003,6 +1019,8 @@ func (i *Instance) DetachContent() (*Instance, bool) {
 		nested.tp, i.tp = i.tp, timepanel.Model{}
 	case KindUsage:
 		nested.usg, i.usg = i.usg, usagepanel.Model{}
+	case KindAgentTrace:
+		nested.at, i.at = i.at, tracepanel.Model{}
 	default:
 		return nil, false
 	}
@@ -1172,6 +1190,8 @@ func ToolWindowName(k Kind) string {
 		return "time"
 	case KindUsage:
 		return "usage"
+	case KindAgentTrace:
+		return "agenttrace"
 	}
 	return ""
 }
@@ -1624,6 +1644,8 @@ func (i *Instance) SetSize(w, h int) {
 		i.tp.SetSize(w, h)
 	case KindUsage:
 		i.usg.SetSize(w, h)
+	case KindAgentTrace:
+		i.at.SetSize(w, h)
 	case KindRemote:
 		i.rm.SetSize(w, h)
 	}
@@ -1696,6 +1718,8 @@ func (i *Instance) SetFocused(f bool) {
 		i.tp.SetFocused(f)
 	case KindUsage:
 		i.usg.SetFocused(f)
+	case KindAgentTrace:
+		i.at.SetFocused(f)
 	case KindRemote:
 		i.rm.SetFocused(f)
 	}
@@ -1778,6 +1802,8 @@ func (i *Instance) View() string {
 		return i.tp.View()
 	case KindUsage:
 		return i.usg.View()
+	case KindAgentTrace:
+		return i.at.View()
 	case KindRemote:
 		return i.rm.View()
 	}
@@ -1881,6 +1907,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		cmd = i.tp.Update(msg)
 	case KindUsage:
 		cmd = i.usg.Update(msg)
+	case KindAgentTrace:
+		cmd = i.at.Update(msg)
 	case KindRemote:
 		cmd = i.rm.Update(msg)
 	}
@@ -2080,6 +2108,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		i.tp.SetPalette(p)
 	case KindUsage:
 		i.usg.SetPalette(p)
+	case KindAgentTrace:
+		i.at.SetPalette(p)
 	case KindRemote:
 		i.rm.SetPalette(p)
 	}

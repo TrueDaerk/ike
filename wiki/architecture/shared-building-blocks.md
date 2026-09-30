@@ -111,7 +111,7 @@ Doc: [Pane Registry](/architecture/pane-registry.md),
 
 | Helper | Package | Use it for |
 | --- | --- | --- |
-| `hiertree.Tree[T]` | `internal/hiertree` | a lazily expanding hierarchy (call hierarchy, type hierarchy): rows, expand/collapse, parent walk, stale-reply bookkeeping, renderer |
+| `hiertree.Tree[T]` | `internal/hiertree` | a lazily expanding hierarchy (call hierarchy, type hierarchy) or an in-memory one (the Agent Trace window, #2840): rows, expand/collapse, parent walk, stale-reply bookkeeping, renderer; `Static` for synchronous children, `Refresh` to rebuild without losing expansion/selection, `Wheel`/`SetCursor`/`Top` for the list-mouse helpers |
 | `gridview.DataRow`, `HeaderRow`, `Sidebar` | `internal/gridview` | a column grid with a sidebar (data viewer, Elasticsearch console) |
 | `palette.FuzzyItems[T]`, `SortByScore` | `internal/palette/fuzzyitems.go` | a palette mode that fuzzy-matches a slice into items |
 | `codepreview.TargetFrom[T]` | `internal/codepreview` | building a preview target from match ranges |

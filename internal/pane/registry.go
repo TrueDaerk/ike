@@ -34,6 +34,7 @@ import (
 	"ike/internal/testresults"
 	"ike/internal/theme"
 	"ike/internal/timepanel"
+	"ike/internal/tracepanel"
 	"ike/internal/usagepanel"
 	"ike/internal/usages"
 	"ike/internal/vcspanel"
@@ -140,6 +141,10 @@ const TimeKey = "time"
 
 // UsageKey is the stable key of the singleton Usage tool window (#2552).
 const UsageKey = "usage"
+
+// AgentTraceKey is the stable key of the singleton Agent Trace tool window
+// (#2840).
+const AgentTraceKey = "agenttrace"
 
 // Registry maps stable instance keys to live pane components and tracks which
 // key currently holds focus. The explorer is a singleton under ExplorerKey;
@@ -823,6 +828,8 @@ func (r *Registry) newToolWindow(kind Kind) *Instance {
 		inst.tp = timepanel.New(r.pal)
 	case KindUsage:
 		inst.usg = usagepanel.New(r.pal)
+	case KindAgentTrace:
+		inst.at = tracepanel.New(r.pal)
 	case KindBreakpoints:
 		inst.bp = breakpanel.New(r.pal)
 	case KindHTTP:
@@ -898,6 +905,10 @@ func (r *Registry) AddTime() string { return r.AddToolWindow(KindTime) }
 // AddUsage creates the singleton Usage tool window under UsageKey (#2552),
 // returning the existing key when it is already open.
 func (r *Registry) AddUsage() string { return r.AddToolWindow(KindUsage) }
+
+// AddAgentTrace creates the singleton Agent Trace tool window under
+// AgentTraceKey (#2840), returning the existing key when it is already open.
+func (r *Registry) AddAgentTrace() string { return r.AddToolWindow(KindAgentTrace) }
 
 // AddBreakpoints creates the singleton Breakpoints tool window under
 // BreakpointsKey (#1377) and returns its key; a second call returns the

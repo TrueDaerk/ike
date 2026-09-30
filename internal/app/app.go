@@ -23,6 +23,7 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 
+	"ike/internal/agenttrace"
 	"ike/internal/allfind"
 	"ike/internal/archive"
 	"ike/internal/archview"
@@ -114,6 +115,7 @@ import (
 	"ike/internal/todoindex"
 	"ike/internal/toolcatalog"
 	"ike/internal/tour"
+	"ike/internal/tracepanel"
 	"ike/internal/typehier"
 	"ike/internal/ui"
 	"ike/internal/undotree"
@@ -1007,6 +1009,20 @@ type Model struct {
 	// agentSessions binds a coding-agent session to the terminal it runs in,
 	// keyed by terminal session key; fed by `ike agent-hook` events (#2843).
 	agentSessions map[string]agentSession
+	// Agent Trace tool window state (#2840): the transcript reader, the
+	// session it tails, the terminal it follows and the poll bookkeeping.
+	// traceGen retires in-flight lookups and reads of a superseded session;
+	// traceTickGen retires a superseded poll chain.
+	traceGen     int64
+	traceTickGen int64
+	traceReader  *agenttrace.Reader
+	traceSession agentSession
+	traceFollow  traceTarget
+	traceBusy    bool
+	traceTicks   int
+	// recentToolTerm is the session key of the tool terminal the keyboard
+	// last sat in — what the trace follows when the focus is elsewhere.
+	recentToolTerm string
 	// The project.open_link paste prompt (#2396): one URL line.
 	dlLinkOpen bool
 	dlLinkText ui.Field
@@ -4394,6 +4410,9 @@ func (m Model) initUnguarded() tea.Cmd {
 	// The project-time status-line segment (#2426): one background read of
 	// the usage log plus its refresh ticker, nil while the segment is off.
 	cmds = append(cmds, m.timeSegmentCmd())
+	// A restored Agent Trace pane (#2840) locates its session and starts
+	// polling; nil while the pane is not part of the layout.
+	cmds = append(cmds, m.traceInitCmd())
 	// Highlight any files restored from the previous session at startup, before
 	// the user edits them, and announce each to the plugin hooks (#332): the
 	// restore paths (restoreLayout/restoreSession) load editors directly via
@@ -6540,6 +6559,33 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case usagepanel.ExportMsg:
 		// 'e' in the Usage pane (#2552): the current tab as a CSV scratch.
 		return m.handleUsageExport(msg)
+
+	case AgentTraceToggleMsg:
+		// agent.trace.toggle (#2840): the tool-window state machine over the
+		// followed agent pane's transcript.
+		return m, m.toggleAgentTracePanel()
+
+	case traceLocatedMsg:
+		return m.handleTraceLocated(msg)
+
+	case traceReadMsg:
+		return m.handleTraceRead(msg)
+
+	case traceTickMsg:
+		return m.handleTraceTick(msg)
+
+	case tracepanel.OpenLocationMsg:
+		// Enter / double click on a trace row with a file (#2840): the same
+		// path:line pipeline the terminal's file links use.
+		return m.openPathAt(msg.Path, msg.Line, msg.Col)
+
+	case tracepanel.RefreshMsg:
+		// 'r' in the trace pane, or its dialog's Rescan: look again now.
+		return m, m.traceRelocateCmd()
+
+	case tracepanel.InstallHooksMsg:
+		// The empty state's action: install the Claude hooks (#2843).
+		return m, agentHooksCmd(true)
 
 	case TestsToggleMsg:
 		// tests.toggle (#1911): same state machine for the Test Results pane.
@@ -10856,7 +10902,7 @@ func (m Model) viewerSplitTarget() string {
 		case pane.KindExplorer, pane.KindVCS, pane.KindDebug, pane.KindProblems,
 			pane.KindStructure, pane.KindUsages, pane.KindHTTP, pane.KindBreakpoints,
 			pane.KindTests, pane.KindIssues, pane.KindDOM, pane.KindDoctor, pane.KindDeps,
-			pane.KindTime, pane.KindUsage:
+			pane.KindTime, pane.KindUsage, pane.KindAgentTrace:
 			return false
 		}
 		return true
@@ -10910,6 +10956,8 @@ func (m *Model) setFocus(key string) {
 	}
 	m.autosaveOnBlur(key)
 	m.activeWS().Panes.SetFocused(key)
+	// The Agent Trace follows the tool pane the keyboard last sat in (#2840).
+	m.noteToolFocus(m.activeWS().Panes.Get(key))
 	// The flexible region's MRU (#2507) tracks every content pane, not just
 	// the editor kinds, so a diff opened from a tool window returns to the
 	// viewer the user came from.
@@ -12340,6 +12388,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.Usage().Wheel(lines)
 			}
+		case pane.KindAgentTrace:
+			// The wheel scrolls the trace tree (#2840).
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.AgentTrace().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.AgentTrace().Wheel(lines)
+			}
 		case pane.KindTests:
 			// The wheel scrolls the Test Results tree or detail (#1911).
 			switch msg.Button {
@@ -13596,6 +13652,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// header's tab bar or period selector switches the view.
 		if msg.Button == tea.MouseLeft {
 			return m, inst.Usage().Click(localX, localY)
+		}
+	case pane.KindAgentTrace:
+		// Trace-tree clicks (#2840): a click selects, the marker cell folds,
+		// a double click opens the row's file; the empty state's buttons act.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.AgentTrace().Click(localX, localY)
 		}
 	case pane.KindTests:
 		// Test-tree clicks (#1911): a click selects (a detail-column click
@@ -15183,6 +15245,8 @@ func contentPaneTitle(inst *pane.Instance) string {
 		return "TIME"
 	case pane.KindUsage:
 		return "USAGE"
+	case pane.KindAgentTrace:
+		return "AGENT TRACE"
 	case pane.KindTests:
 		return "TESTS"
 	case pane.KindIssues:

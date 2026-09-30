@@ -71,6 +71,7 @@ var noCounterpart = map[string]string{
 	"playground.yqRoundTrip":           "IKE-only concept (#2798): the inline yq playground has no JetBrains equivalent",
 	"playground.variables":             "IKE-only concept (#2786): the inline jq playground has no JetBrains equivalent",
 	"time.toggle":                      "IKE-only concept (#2426): JetBrains has no time report; time tracking lives in third-party plugins an exported keymap does not carry",
+	"agent.trace.toggle":               "IKE-only concept (0540, #2840): JetBrains has no coding-agent trace window",
 	"markdown.preview":                 "no default JetBrains keymap action",
 	"html.preview":                     "no default JetBrains keymap action",
 	"html.view.toggle":                 "no default JetBrains keymap action: the IDE switches an HTML editor's Text/Preview views with the editor's toolbar buttons",

@@ -158,6 +158,12 @@ func (m *Model) wireToolWindow(inst *pane.Instance) {
 	case pane.KindUsage:
 		// Same for the Usage panel (#2552).
 		inst.Usage().SetLoading(true)
+	case pane.KindAgentTrace:
+		// The trace pane (#2840) re-locates its session on Init / the next
+		// tick; until then it shows the locating notice.
+		p := inst.AgentTrace()
+		p.SetDisplayPath(displayPath)
+		p.SetLoading(true)
 	case pane.KindDeps:
 		// The panel re-seeds from the last snapshot; the auto-scan (or 'r')
 		// refreshes it (#2419).

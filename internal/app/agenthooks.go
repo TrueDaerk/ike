@@ -74,7 +74,8 @@ func (m Model) handleAgentEvent(ev deeplink.Event) (tea.Model, tea.Cmd) {
 	}
 	s.Ended = ev.Event == "SessionEnd"
 	m.agentSessions[key] = s
-	return m, nil
+	// An open trace pane (#2840) looks its session up again right away.
+	return m, m.traceRelocateCmd()
 }
 
 // agentTerm is one terminal an agent may run in.
@@ -257,5 +258,6 @@ func (m Model) handleAgentHooksDone(msg agentHooksDoneMsg) (tea.Model, tea.Cmd) 
 	default:
 		m.host.Notify(host.Info, "no IKE Claude hooks in "+where)
 	}
-	return m, nil
+	// The trace pane's install action (#2840) rescans once the hooks are in.
+	return m, m.traceRelocateCmd()
 }

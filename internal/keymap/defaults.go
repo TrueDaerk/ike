@@ -781,6 +781,11 @@ var jetbrainsRows = []row{
 	// to the time report in the alt layer; cmd+alt+u is free on both
 	// platforms (ctrl+alt+u off macOS).
 	{"cmd+alt+u", "usage.toggle", "Usage report", Global, "Usage report (#2552)"},
+	// Agent Trace tool window (#2840): every cmd+alt+<letter> is taken on
+	// one platform or the other (ctrl+alt+a is the playground's filter
+	// check), so the trace takes the shift layer; cmd+alt+shift+a is free
+	// on both platforms (ctrl+alt+shift+a off macOS).
+	{"cmd+alt+shift+a", "agent.trace.toggle", "Agent trace", Global, "Agent trace (#2840)"},
 	// The issue behind the current issue/<n> branch (#2544). It is a doorway
 	// into the same Issues window, so it sits next to it in the alt layer;
 	// cmd+alt+i is free on both platforms (ctrl+alt+i off macOS).

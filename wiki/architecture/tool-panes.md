@@ -556,6 +556,14 @@ terminal's routing key) and `IKE_PID` (the IDE's pid), which `ike agent-hook`
 reports back so a coding agent's session binds to the pane it runs in
 ([Agent Trace](./agent-trace.md#claude-code-hooks-2843), #2843).
 
+The **Agent Trace** tool window (`agent.trace.toggle`, `cmd+alt+shift+a`,
+Tools menu; [Agent Trace](./agent-trace.md#trace-tool-window-2840), #2840)
+follows the focused — else the most recently focused — tool pane and shows
+that pane's agent session as a turn → decision → tool call → file tree, with
+file rows opening in the editor. It is a singleton tool window like the
+others on this page (toggle semantics, layout persistence, slot numbering,
+tab hosting), under key `agenttrace`.
+
 IKE never rewrites a tool's own config files; the setup surfaces (#751–#753,
 #759) write only `[[tools.custom]]` entries and install binaries — wiring the
 variables into e.g. a lazygit theme config stays the user's choice.

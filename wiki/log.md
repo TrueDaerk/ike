@@ -1,5 +1,25 @@
 # Log
 
+## 2026-09-30 (agent trace: tool window on hiertree with click-to-code, #2840)
+
+- `agent.trace.toggle` (`cmd+alt+shift+a`, Tools menu) opens the singleton
+  **Agent Trace** tool window (`internal/tracepanel`): the followed agent
+  pane's session as a turn → assistant decision → tool call → file tree
+  (`agenttrace.BuildTree`, keys stable across appends).
+- Enter or a double click on a row with a file reference opens `path:line`
+  through `openPathAt` — the terminal `file:line` link pipeline.
+- Live: a one-second poll runs the incremental reader off the loop and
+  `hiertree.Refresh` keeps expansion and selection; new turns expand whole;
+  the pane follows the focused / last-focused tool pane and re-locates on
+  hook pushes.
+- No session → centered dialog with `[Install Claude hooks] [Rescan]`.
+- `hiertree` grew `Static`, `Refresh`, `ExpandDeep`, `Toggle`, `Wheel`,
+  `SetCursor`, `Top`; rows without a path print no location.
+- Wiki: [Agent Trace](/architecture/agent-trace.md),
+  [Hierarchy Tree](/architecture/hiertree.md),
+  [Tool Panes](/architecture/tool-panes.md),
+  [Shared Building Blocks](/architecture/shared-building-blocks.md).
+
 ## 2026-09-30 (agent trace: Claude hook installer, `ike agent-hook`, deeplink `event`, #2843)
 
 - `agent.hooks.install` / `agent.hooks.uninstall` (palette) write/remove

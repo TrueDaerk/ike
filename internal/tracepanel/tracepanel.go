@@ -1,0 +1,524 @@
+// Package tracepanel is the Agent Trace tool window (#2840, epic 0540): the
+// coding-agent session of a tool pane as a tree of turn → assistant decision
+// → tool call → file, built on hiertree. Rows that carry a file reference
+// open it in the editor on enter or a double click, through the same
+// path:line pipeline the terminal's file links use; the root model owns that
+// pipeline and the session lookup, this package only draws and asks.
+//
+// The panel never reads the transcript itself. The host tails it
+// (agenttrace.Reader) off the Update loop, groups the events
+// (agenttrace.BuildTree) and hands the finished tree in through Set; the
+// tree's node keys are stable across appends, so hiertree.Refresh keeps the
+// user's expansion and selection while the agent keeps working.
+package tracepanel
+
+import (
+	"strings"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+
+	"ike/internal/agenttrace"
+	"ike/internal/hiertree"
+	"ike/internal/theme"
+	"ike/internal/ui"
+)
+
+// OpenLocationMsg asks the root model to open a file at a 0-based line and
+// column — Line is -1 when the trace knows the file but not the line, which
+// opens the file without a jump.
+type OpenLocationMsg struct {
+	Path string
+	Line int
+	Col  int
+}
+
+// RefreshMsg asks the root model to look the session up again and re-read
+// it now ('r', or the dialog's Rescan).
+type RefreshMsg struct{}
+
+// InstallHooksMsg asks the root model to run agent.hooks.install — the
+// dialog's action while no session is found ('i').
+type InstallHooksMsg struct{}
+
+// Info describes the session the tree was built from.
+type Info struct {
+	ID         string
+	Transcript string
+	CWD        string
+	// FromHook is true when a Claude Code hook announced the session; false
+	// when discovery found it by working directory.
+	FromHook bool
+	// Ended is set once the harness reported SessionEnd.
+	Ended bool
+	Turns int
+}
+
+// Model is the tool window.
+type Model struct {
+	pal     *theme.Palette
+	width   int
+	height  int
+	focused bool
+
+	tree hiertree.Tree[agenttrace.Node]
+	// seenTurns is how many turns the last Set showed; every newer one is
+	// expanded whole when it arrives.
+	seenTurns int
+
+	info       Info
+	hasSession bool
+	loading    bool
+	cwd        string
+	err        string
+
+	displayPath func(string) string
+	now         func() time.Time
+	clicks      ui.ClickTracker
+}
+
+// New builds an empty panel: nothing located yet.
+func New(pal *theme.Palette) Model {
+	return Model{pal: pal, loading: true, now: time.Now}
+}
+
+// SetPalette follows a theme switch.
+func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
+
+// SetSize records the pane's content size.
+func (m *Model) SetSize(w, h int) { m.width, m.height = w, h }
+
+// SetFocused records whether the pane holds the keyboard.
+func (m *Model) SetFocused(f bool) { m.focused = f }
+
+// SetDisplayPath installs the project-relative path formatter.
+func (m *Model) SetDisplayPath(f func(string) string) { m.displayPath = f }
+
+// SetNow installs the clock the double-click window reads (tests).
+func (m *Model) SetNow(f func() time.Time) { m.now = f }
+
+// SetLoading marks a lookup or read in flight; the empty state says so
+// instead of offering the install action.
+func (m *Model) SetLoading(b bool) { m.loading = b }
+
+// HasSession reports whether a tree is shown.
+func (m *Model) HasSession() bool { return m.hasSession }
+
+// Info returns the session the tree was built from.
+func (m *Model) Info() Info { return m.info }
+
+// Set replaces the tree with a fresh grouping of the session (#2840). Rows
+// the user expanded stay expanded and the selection stays on the same node
+// (by key); turns the panel has not shown before — the newest one on the
+// first Set, every new one afterwards — are expanded whole so the latest
+// activity is visible without a keystroke.
+func (m *Model) Set(nodes []agenttrace.Node, info Info) {
+	m.loading = false
+	m.err = ""
+	m.hasSession = true
+	m.info = info
+	m.ensureFetch()
+	first := !m.tree.HasNodes()
+	m.tree.Refresh(rows(nodes), nodeKey)
+	roots := m.tree.Roots()
+	from := m.seenTurns
+	if first && len(roots) > 0 {
+		from = len(roots) - 1
+	}
+	for i := from; i < len(roots); i++ {
+		m.tree.ExpandDeep(roots[i])
+	}
+	m.seenTurns = len(roots)
+}
+
+// SetNoSession switches to the empty state: no transcript for cwd. err is
+// shown when it is more than "not found".
+func (m *Model) SetNoSession(cwd string, err error) {
+	m.loading = false
+	m.hasSession = false
+	m.cwd = cwd
+	m.err = ""
+	if err != nil && err != agenttrace.ErrNotFound {
+		m.err = err.Error()
+	}
+	m.tree.Clear()
+	m.seenTurns = 0
+}
+
+// Reset forgets the shown session ahead of a switch to another transcript:
+// node keys are per session, so the expansion state must not carry over.
+// The pane shows the locating notice until the next Set.
+func (m *Model) Reset() {
+	m.tree.Clear()
+	m.seenTurns = 0
+	m.hasSession = false
+	m.loading = true
+	m.err = ""
+}
+
+// Current returns the selected node, nil on an empty tree.
+func (m *Model) Current() *agenttrace.Node {
+	r := m.tree.Current()
+	if r == nil {
+		return nil
+	}
+	return &r.Item
+}
+
+// Rows returns the visible tree rows as "depth:key" strings (tests).
+func (m *Model) Rows() []string {
+	var out []string
+	for _, r := range m.tree.Visible() {
+		out = append(out, strings.Repeat(" ", r.Depth())+r.Item.Key)
+	}
+	return out
+}
+
+// nodeKey is the identity hiertree.Refresh carries state by.
+func nodeKey(n agenttrace.Node) string { return n.Key }
+
+// rows converts trace nodes to tree rows; the fetch below expands them from
+// the children they already carry.
+func rows(nodes []agenttrace.Node) []hiertree.Row[agenttrace.Node] {
+	out := make([]hiertree.Row[agenttrace.Node], len(nodes))
+	for i, n := range nodes {
+		out[i] = hiertree.Row[agenttrace.Node]{Entry: entry(n), Item: n}
+	}
+	return out
+}
+
+// entry is the hiertree presentation of a node: the label, the faint detail
+// and — for the rows that carry a file — the location, with the 1-based
+// FileRef line mapped onto hiertree's 0-based Line (-1 = unknown).
+func entry(n agenttrace.Node) hiertree.Entry {
+	e := hiertree.Entry{Name: n.Label, Detail: n.Detail, Line: -1}
+	if n.Path != "" {
+		e.Path = n.Path
+		if n.Ref != nil && n.Ref.Line > 0 {
+			e.Line = n.Ref.Line - 1
+		}
+	}
+	return e
+}
+
+// Update handles one key while the pane is focused.
+func (m *Model) Update(msg tea.Msg) tea.Cmd {
+	k, ok := msg.(tea.KeyPressMsg)
+	if !ok {
+		return nil
+	}
+	return m.handleKey(k)
+}
+
+func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+	key := msg.String()
+	if !m.hasSession {
+		switch key {
+		case "i", "enter":
+			if m.loading {
+				return nil
+			}
+			return func() tea.Msg { return InstallHooksMsg{} }
+		case "r":
+			return func() tea.Msg { return RefreshMsg{} }
+		}
+		return nil
+	}
+	m.ensureFetch()
+	onEnter := func(r hiertree.Row[agenttrace.Node]) tea.Cmd {
+		if cmd := m.open(r.Item); cmd != nil {
+			return cmd
+		}
+		if cur := m.tree.Current(); cur != nil {
+			return m.tree.Toggle(cur)
+		}
+		return nil
+	}
+	if cmd, ok := m.tree.Key(key, m.treeHeight(), onEnter, func() tea.Cmd { return nil }); ok {
+		return cmd
+	}
+	switch key {
+	case "r":
+		return func() tea.Msg { return RefreshMsg{} }
+	case "i":
+		return func() tea.Msg { return InstallHooksMsg{} }
+	}
+	return nil
+}
+
+// ensureFetch wires the tree's synchronous expansion; the Tree is a value
+// inside the Model, so the closure over its address is taken lazily, after
+// the model has settled in the pane instance.
+func (m *Model) ensureFetch() {
+	m.tree.SetFetch(hiertree.Static(&m.tree, func(n agenttrace.Node) []hiertree.Row[agenttrace.Node] {
+		return rows(n.Children)
+	}))
+}
+
+// open is the click-to-code half: a node with a file reference yields the
+// OpenLocationMsg the root model turns into openPathAt. nil for the rest.
+func (m *Model) open(n agenttrace.Node) tea.Cmd {
+	if n.Ref == nil || n.Ref.Path == "" {
+		return nil
+	}
+	ref := *n.Ref
+	return func() tea.Msg {
+		return OpenLocationMsg{Path: ref.Path, Line: ref.Line - 1, Col: 0}
+	}
+}
+
+// Wheel scrolls the tree by delta rows.
+func (m *Model) Wheel(delta int) {
+	if !m.hasSession {
+		return
+	}
+	m.ensureFetch()
+	m.tree.Wheel(delta, m.treeHeight())
+}
+
+// Click handles a left click at pane-content-local (x, y): on the tree a
+// click selects, a click on a row's marker cell toggles it, and a second
+// click on the same row within ui.DoubleClickWindow opens its file (or
+// toggles a row without one). In the empty state the dialog's buttons act.
+func (m *Model) Click(x, y int) tea.Cmd {
+	if !m.hasSession {
+		return m.dialogClick(x, y)
+	}
+	m.ensureFetch()
+	visible := m.tree.Visible()
+	i, ok := ui.RowAt(y, m.tree.Top(), headerRows, m.treeHeight(), len(visible))
+	if !ok {
+		m.clicks.Reset()
+		return nil
+	}
+	row := visible[i]
+	double := m.clicks.Double(i, m.now())
+	m.tree.SetCursor(i)
+	if x >= row.Depth()*2 && x < row.Depth()*2+2 && !double {
+		// The marker cell: unfold or fold like the tree's own arrow.
+		m.clicks.Reset()
+		return m.tree.Toggle(row)
+	}
+	if !double {
+		return nil
+	}
+	m.clicks.Reset()
+	if cmd := m.open(row.Item); cmd != nil {
+		return cmd
+	}
+	return m.tree.Toggle(row)
+}
+
+// headerRows is the session line above the tree.
+const headerRows = 1
+
+// treeHeight is the rows the tree lays out into: everything between the
+// header and the hint line.
+func (m *Model) treeHeight() int {
+	h := m.height - headerRows - 1
+	if h < 1 {
+		h = 1
+	}
+	return h
+}
+
+func (m *Model) theme() *theme.Palette {
+	if m.pal != nil {
+		return m.pal
+	}
+	return theme.DefaultPalette()
+}
+
+func (m *Model) display(p string) string {
+	if m.displayPath != nil {
+		return m.displayPath(p)
+	}
+	return p
+}
+
+// View draws the session line, the tree and the hint row, or the empty
+// state's centered dialog.
+func (m *Model) View() string {
+	if m.width <= 0 || m.height <= 0 {
+		return ""
+	}
+	pal := m.theme()
+	if !m.hasSession {
+		return m.emptyView(pal)
+	}
+	m.ensureFetch()
+	clip := lipgloss.NewStyle().MaxWidth(m.width)
+	lines := []string{clip.Render(m.headerLine(pal))}
+	rows := m.tree.RenderRows(m.width, m.treeHeight(), pal, m.display, "(no events yet)")
+	lines = append(lines, rows...)
+	for len(lines) < headerRows+m.treeHeight() {
+		lines = append(lines, "")
+	}
+	hint := "enter/double-click opens · space expands · h/l fold · r rescan"
+	lines = append(lines, clip.Render(lipgloss.NewStyle().Faint(true).Render(hint)))
+	return strings.Join(lines, "\n")
+}
+
+// headerLine names the session: id, how it was found, turn count, file.
+func (m *Model) headerLine(pal *theme.Palette) string {
+	id := m.info.ID
+	if len(id) > 8 {
+		id = id[:8]
+	}
+	source := "scan"
+	if m.info.FromHook {
+		source = "hook"
+	}
+	state := ""
+	if m.info.Ended {
+		state = " · ended"
+	}
+	turns := " · " + itoa(m.info.Turns) + " turn"
+	if m.info.Turns != 1 {
+		turns += "s"
+	}
+	title := lipgloss.NewStyle().Foreground(pal.Accent).Bold(m.focused).Render(" " + id)
+	return title + lipgloss.NewStyle().Faint(true).Render(" · "+source+turns+state+"  "+m.display(m.info.Transcript))
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	neg := n < 0
+	if neg {
+		n = -n
+	}
+	var b [20]byte
+	i := len(b)
+	for n > 0 {
+		i--
+		b[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if neg {
+		i--
+		b[i] = '-'
+	}
+	return string(b[i:])
+}
+
+// dialog is the empty state's box: heading, explanation, the action strip
+// and the key hints. It is laid out once per View/Click so the click hit
+// test uses the geometry that was drawn.
+type dialog struct {
+	lines   []string // content lines, unstyled widths
+	actions ui.Segmented
+	actRow  int // index into lines of the action strip
+	x, y    int // top-left of the content area on the pane
+	w       int // content width
+}
+
+// actions of the dialog, in strip order.
+const (
+	actInstall = iota
+	actRescan
+)
+
+func (m *Model) layoutDialog() (dialog, bool) {
+	d := dialog{actions: ui.Segmented{Segments: []ui.Segment{
+		{Label: "Install Claude hooks", On: true},
+		{Label: "Rescan"},
+	}}}
+	where := m.cwd
+	if where == "" {
+		where = "this project"
+	} else {
+		where = m.display(where)
+	}
+	d.lines = []string{
+		"No agent session",
+		"",
+		"No Claude Code transcript was found for " + where + ".",
+		"Run claude in a tool pane, or install the hooks so sessions",
+		"announce themselves to IKE the moment they start.",
+	}
+	if m.err != "" {
+		d.lines = append(d.lines, "", m.err)
+	}
+	d.lines = append(d.lines, "")
+	d.actRow = len(d.lines)
+	// The strip itself is drawn from d.actions; the placeholder keeps the row.
+	d.lines = append(d.lines, "", "", "i install · r rescan")
+	for _, l := range d.lines {
+		if w := lipgloss.Width(l); w > d.w {
+			d.w = w
+		}
+	}
+	if w := d.actions.Width(); w > d.w {
+		d.w = w
+	}
+	// Rounded border + two cells of padding each side.
+	boxW, boxH := d.w+6, len(d.lines)+2
+	if boxW > m.width || boxH > m.height {
+		return d, false
+	}
+	d.x = (m.width-boxW)/2 + 3
+	d.y = (m.height-boxH)/2 + 1
+	return d, true
+}
+
+// emptyView is the centered dialog (#2840): the missing session is
+// actionable — start the agent or install the hooks — so it gets the
+// prominent box the missing-tool states use, never a one-line notice. A
+// pane too small for the box falls back to the plain notice.
+func (m *Model) emptyView(pal *theme.Palette) string {
+	if m.loading {
+		note := lipgloss.NewStyle().Faint(true).Render("(locating the agent session…)")
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, note)
+	}
+	d, fits := m.layoutDialog()
+	if !fits {
+		note := lipgloss.NewStyle().Foreground(pal.Warning).Render("no agent session · i installs the Claude hooks · r rescans")
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center,
+			lipgloss.NewStyle().MaxWidth(m.width).Render(note))
+	}
+	// Lines are padded by hand rather than through Style.Width, which would
+	// re-wrap them and move the action strip off the row the click test uses.
+	styled := make([]string, len(d.lines))
+	for i, l := range d.lines {
+		pad := strings.Repeat(" ", max(0, d.w-lipgloss.Width(l)))
+		switch {
+		case i == 0:
+			styled[i] = lipgloss.NewStyle().Bold(true).Foreground(pal.Warning).Render(l) + pad
+		case i == d.actRow:
+			styled[i] = d.actions.View(d.w, pal)
+		case i == len(d.lines)-1:
+			styled[i] = lipgloss.NewStyle().Faint(true).Render(l) + pad
+		case m.err != "" && l == m.err:
+			styled[i] = lipgloss.NewStyle().Foreground(pal.Error).Render(l) + pad
+		default:
+			styled[i] = lipgloss.NewStyle().Foreground(pal.Foreground).Render(l) + pad
+		}
+	}
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(pal.Border).
+		Padding(0, 2).
+		Render(strings.Join(styled, "\n"))
+	return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, box)
+}
+
+// dialogClick maps a click onto the dialog's action strip.
+func (m *Model) dialogClick(x, y int) tea.Cmd {
+	if m.loading {
+		return nil
+	}
+	d, fits := m.layoutDialog()
+	if !fits || y != d.y+d.actRow {
+		return nil
+	}
+	switch d.actions.At(x-d.x, d.w) {
+	case actInstall:
+		return func() tea.Msg { return InstallHooksMsg{} }
+	case actRescan:
+		return func() tea.Msg { return RefreshMsg{} }
+	}
+	return nil
+}
