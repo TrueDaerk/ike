@@ -1023,6 +1023,11 @@ type Model struct {
 	// recentToolTerm is the session key of the tool terminal the keyboard
 	// last sat in — what the trace follows when the focus is elsewhere.
 	recentToolTerm string
+	// traceLinks is the last change-feed linking of the trace (#2838), kept
+	// while the pane is closed so the feed can still jump back; traceJump is
+	// a node key the next read selects (a jump that had to open the pane).
+	traceLinks agenttrace.Links
+	traceJump  string
 	// The project.open_link paste prompt (#2396): one URL line.
 	dlLinkOpen bool
 	dlLinkText ui.Field
@@ -6582,6 +6587,21 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tracepanel.RefreshMsg:
 		// 'r' in the trace pane, or its dialog's Rescan: look again now.
 		return m, m.traceRelocateCmd()
+
+	case tracepanel.ChangeDiffMsg:
+		// D on a trace row linked to a change-feed entry (#2838): the feed
+		// panel opens on that entry, showing its mini-diff.
+		if _, ok := m.traceChangeEntry(msg.Path); ok {
+			m.openChangeFeedAt(msg.Path)
+		}
+		return m, nil
+
+	case tracepanel.ChangeRevertMsg:
+		// V on a linked trace row: the feed's own revert confirmation.
+		if e, ok := m.traceChangeEntry(msg.Path); ok {
+			m.openChangeFeedRevertPrompt(e)
+		}
+		return m, nil
 
 	case tracepanel.InstallHooksMsg:
 		// The empty state's action: install the Claude hooks (#2843).

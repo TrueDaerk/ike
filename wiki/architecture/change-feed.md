@@ -1,10 +1,10 @@
 ---
 type: concept
 title: External-Change Feed
-description: Session-scoped list of files changed by other processes (coding agents, git, formatters) with a mini-diff per entry, per-entry and batch open / reload / revert actions, per-process grouping, filtered by the watcher's own ignore rules
+description: Session-scoped list of files changed by other processes (coding agents, git, formatters) with a mini-diff per entry, per-entry and batch open / reload / revert actions, per-process grouping, links to the agent-trace node that caused a write, filtered by the watcher's own ignore rules
 resource: internal/changefeed/changefeed.go
-tags: [watch, agents, diff, revert, local-history, panel]
-timestamp: 2026-08-28T00:00:00Z
+tags: [watch, agents, diff, revert, local-history, panel, agent-trace]
+timestamp: 2026-09-30T23:00:00Z
 ---
 
 # External-Change Feed
@@ -45,7 +45,11 @@ pre-change text and the noise predicate.
   once is never rewritten by a later event — the row is one *file*, and the
   process that first touched it is what the group is about — but an entry that
   started out unattributed adopts a later event's source, because some
-  attribution beats none.
+  attribution beats none. `SourceKey` travels with it: the session key of
+  the one terminal the source names, which the agent trace matches against
+  (#2838).
+- **`First`** is when the oldest coalesced event landed (`Time` is the newest);
+  the span is what an agent trace matches its tool calls' windows against.
 - **Origin** records how far the revert can be trusted: `FromBuffer` (the open,
   unmodified buffer held exactly the bytes the write replaced), `FromSnapshot`
   (the newest local-history snapshot — what IKE last *wrote* there, so anything
@@ -95,7 +99,10 @@ never costs 300 disk reads on the Update loop.
   unattributed rather than pinning an agent's write on the formatter that
   happened to run beside it. An idle shell is never a candidate: it wrote
   nothing. The batch path resolves the source once per watcher flush, not once
-  per file.
+  per file. Alongside the name it returns the terminal's session key — but
+  only when one terminal is the answer: the same program busy in two panes
+  shares a name, so the key stays empty and no agent trace can claim the
+  write (#2838).
 - The feed lives on the root model, not on the panel, so it survives pane
   switches, panel closes and focus moves for the whole session.
 
@@ -133,7 +140,8 @@ Keys: `j`/`k` move (the mini-diff follows the selection), `enter` opens the
 file, `d` sends the before/after pair to the reusable diff pane (#60), `R`
 reloads the buffer, `r` reverts the external change, `space` marks a row for a
 batch, `m` marks the selection's whole group, `A` reloads and `V` reverts the
-batch, `x` dismisses the row, `c` clears the feed, `esc`/`q` closes. An action that cannot apply — reverting a
+batch, `t` jumps to the agent-trace node that caused the write, `x` dismisses
+the row, `c` clears the feed, `esc`/`q` closes. An action that cannot apply — reverting a
 created file, reloading one that is not open — notifies and leaves the panel
 up; closing a modal only to toast a refusal would cost the user the list they
 were reading.
@@ -164,6 +172,16 @@ The command is `watch.changeFeed`, reachable from the palette and from
   - An entry with no pre-change content (a created file, a released one) offers
     no revert; there is nothing to restore to.
 - A reverted entry leaves the feed — it has been dealt with.
+- **Agent trace** (`t`, #2838) is the back-link to the
+  [Agent Trace](./agent-trace.md) node whose tool call made the entry's newest
+  write: the trace pane is focused (opened when closed) with that node
+  selected and its ancestors unfolded. The detail line says `t: agent trace`
+  when a link exists; an entry with none notifies and leaves the panel up. The
+  other direction reuses this panel's own handlers: `D` on a linked trace row
+  opens the panel on its entry (the mini-diff), `V` raises the revert
+  confirmation above. Matching — path, the call's time window, and the
+  entry's `SourceKey` against the terminal the trace follows — is documented
+  on the agent-trace page; an unattributed entry never links.
 
 ## Batch actions
 
@@ -210,3 +228,5 @@ over-long existing list.
 - [Local History](/architecture/local-history.md) — the snapshot store the feed
   falls back to for pre-change content, and the restore path revert reuses.
 - [Diff Viewer](/architecture/diff-viewer.md) — the reusable pane `d` targets.
+- [Agent Trace](/architecture/agent-trace.md) — the trace whose file nodes
+  link to feed entries and back (#2838).

@@ -104,6 +104,8 @@ type Tool struct {
 	Truncated bool
 	// Done reports that a result has arrived for this call.
 	Done bool
+	// DoneAt is when the result arrived; zero until Done.
+	DoneAt time.Time
 	// Paths are the files this call touched, in input order.
 	Paths []FileRef
 }

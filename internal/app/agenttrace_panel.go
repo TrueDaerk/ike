@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/agenttrace"
+	"ike/internal/changefeed"
 	"ike/internal/host"
 	"ike/internal/pane"
 	"ike/internal/tracepanel"
@@ -226,6 +227,7 @@ func (m Model) handleTraceRead(msg traceReadMsg) (tea.Model, tea.Cmd) {
 	if msg.added > 0 || !p.HasSession() {
 		p.Set(msg.nodes, msg.info)
 	}
+	m.syncTraceLinks()
 	return m, nil
 }
 
@@ -279,4 +281,68 @@ func (m *Model) noteToolFocus(inst *pane.Instance) {
 	if t := inst.ActiveTerminal(); t != nil && t.Tool() != "" && t.SessionKey() != "" {
 		m.recentToolTerm = t.SessionKey()
 	}
+}
+
+// Change-feed linking (#2838): the trace's writing file nodes resolve to the
+// change-feed entries they caused (agenttrace.Link — path, the tool call's
+// time window and the terminal the trace follows as the source process).
+// Linked rows answer D with the feed's mini-diff and V with its revert, and
+// the feed jumps back to the node with t. The links are recomputed on every
+// read, i.e. once per poll tick, so a write the watcher records after the
+// transcript line landed links within a second.
+
+// traceChanges converts the feed into the facts matching reads.
+func (m Model) traceChanges() []agenttrace.Change {
+	entries := m.feed.Entries()
+	out := make([]agenttrace.Change, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, agenttrace.Change{Path: e.Path, First: e.First, Last: e.Time, SourceKey: e.SourceKey})
+	}
+	return out
+}
+
+// syncTraceLinks relinks the shown tree against the feed and applies a
+// pending jump from the feed once the tree is there.
+func (m *Model) syncTraceLinks() {
+	p := m.agentTracePanel()
+	if p == nil || !p.HasSession() {
+		return
+	}
+	links := agenttrace.Link(p.Nodes(), m.traceChanges(), m.traceFollow.key, p.Info().CWD)
+	p.SetLinks(links)
+	m.traceLinks = links
+	if key := m.traceJump; key != "" {
+		m.traceJump = ""
+		if !p.Select(key) {
+			m.host.Notify(host.Info, traceNodeGone)
+		}
+	}
+}
+
+// traceNodeGone is the notice for a back-link whose node the pane does not
+// show (the pane now follows another session).
+const traceNodeGone = "agent trace: the node behind that change is not in the shown session"
+
+// traceChangeEntry resolves a linked node's path to its live feed entry.
+func (m Model) traceChangeEntry(path string) (changefeed.Entry, bool) {
+	e, ok := m.feed.Get(path)
+	if !ok {
+		m.host.Notify(host.Info, "change feed no longer lists "+displayPath(path))
+	}
+	return e, ok
+}
+
+// jumpToTraceNode is the feed's back-link: reveal the trace node that caused
+// the entry's newest write. An open pane is focused and selects it right
+// away; a closed one opens and selects it once the first read lands.
+func (m *Model) jumpToTraceNode(key string) tea.Cmd {
+	if p := m.agentTracePanel(); p != nil && p.HasSession() {
+		cmd := m.showPanel(pane.AgentTraceKey, m.openAgentTracePanel)
+		if !p.Select(key) {
+			m.host.Notify(host.Info, traceNodeGone)
+		}
+		return cmd
+	}
+	m.traceJump = key
+	return m.showPanel(pane.AgentTraceKey, m.openAgentTracePanel)
 }

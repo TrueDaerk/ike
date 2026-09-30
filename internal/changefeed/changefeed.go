@@ -102,6 +102,13 @@ type Entry struct {
 	// rather than having somebody else's write pinned on whatever process
 	// happened to be running.
 	Source string
+	// SourceKey is the session key of the one terminal Source names — set
+	// only when exactly one terminal was busy, so an agent trace can tell its
+	// own writes from a same-named process in another pane (#2838).
+	SourceKey string
+	// First is when the oldest coalesced event landed; Time is the newest.
+	// Add fills it from Time when the caller leaves it zero.
+	First time.Time
 }
 
 // HasBefore reports whether the entry can still produce a diff and a revert.
@@ -191,6 +198,9 @@ func (f *Feed) Add(e Entry) bool {
 	if e.Count < 1 {
 		e.Count = 1
 	}
+	if e.First.IsZero() {
+		e.First = e.Time
+	}
 	if !e.HasBefore() {
 		e.Before = "" // an origin without content must not retain any
 	}
@@ -207,7 +217,7 @@ func (f *Feed) Add(e Entry) bool {
 			// one could tell. Adopt that source — some attribution beats none.
 			// An existing one is never overwritten: a row is one file, and the
 			// process that first touched it is the one the group is about.
-			merged.Source = e.Source
+			merged.Source, merged.SourceKey = e.Source, e.SourceKey
 		}
 		if !old.HasBefore() && e.HasBefore() {
 			// The first event caught the file with nothing to compare

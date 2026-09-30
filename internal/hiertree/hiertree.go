@@ -52,6 +52,9 @@ func (r *Row[T]) Expanded() bool { return r.expanded }
 // Depth is the row's nesting level, 0 for a root.
 func (r *Row[T]) Depth() int { return r.depth }
 
+// Children returns the loaded child rows (nil until the row was expanded).
+func (r *Row[T]) Children() []*Row[T] { return r.children }
+
 // Leaf reports whether the row was expanded and turned out to have no
 // children.
 func (r *Row[T]) Leaf() bool { return r.loaded && len(r.children) == 0 }
