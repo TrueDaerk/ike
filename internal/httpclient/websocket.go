@@ -15,6 +15,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"ike/internal/httpfile"
+	"ike/internal/safego"
 )
 
 // websocket.go dispatches `WEBSOCKET <url>` blocks (#2422): the connection
@@ -276,7 +277,7 @@ func dispatchWS(ctx context.Context, key, target string, resolved *httpfile.Requ
 	// The reader is the session's heartbeat: every server frame lands in the
 	// transcript, wakes wait-for-server, and counts. It ends the session.
 	readErr := make(chan error, 1)
-	go func() {
+	safego.Go("httpclient.dispatchWS", func() {
 		for {
 			kind, payload, err := conn.ReadMessage()
 			if err != nil {
@@ -291,7 +292,7 @@ func dispatchWS(ctx context.Context, key, target string, resolved *httpfile.Requ
 			default:
 			}
 		}
-	}()
+	})
 
 	// The initial messages, in file order; a wait-for-server gate pauses until
 	// the server has said something since the previous send.

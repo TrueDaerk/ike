@@ -33,6 +33,7 @@ import (
 	"time"
 
 	"github.com/itchyny/gojq"
+	"ike/internal/safego"
 )
 
 // PageOutputs is how many values one page collects at most.
@@ -106,7 +107,7 @@ func Start(ctx context.Context, program string, in *Input, opts Options) *Produc
 			p.first.ext = xmqOutputExt(args)
 		}
 	}
-	go p.serve(ctx, program, in, opts)
+	safego.Go("jqplay.Start", func() { p.serve(ctx, program, in, opts) })
 	return p
 }
 
@@ -510,13 +511,13 @@ type pageContext struct {
 
 func newPageContext(parent context.Context) *pageContext {
 	c := &pageContext{parent: parent, done: make(chan struct{})}
-	go func() {
+	safego.Go("jqplay.newPageContext", func() {
 		select {
 		case <-parent.Done():
 			c.fail(parent.Err())
 		case <-c.done:
 		}
-	}()
+	})
 	return c
 }
 

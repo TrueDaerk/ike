@@ -25,6 +25,7 @@ import (
 
 	"ike/internal/dbgp"
 	"ike/internal/lsp/jsonrpc"
+	"ike/internal/safego"
 )
 
 // acceptTimeout bounds the wait for the PHP process to dial back after the
@@ -43,10 +44,10 @@ var teardownTimeout = 5 * time.Second
 // spawned goroutine always exits.
 func callBounded(dc *dbgp.Conn, call func()) {
 	done := make(chan struct{})
-	go func() {
+	safego.Go("bridge.callBounded", func() {
 		defer close(done)
 		call()
-	}()
+	})
 	select {
 	case <-done:
 	case <-time.After(teardownTimeout):
@@ -59,7 +60,7 @@ func callBounded(dc *dbgp.Conn, call func()) {
 func New(php string) io.ReadWriteCloser {
 	client, server := net.Pipe()
 	b := &bridge{php: php, rwc: server, revPending: map[int]chan revReply{}}
-	go b.serve()
+	safego.Go("bridge.New", func() { b.serve() })
 	return client
 }
 
@@ -132,10 +133,12 @@ func (b *bridge) serve() {
 		}
 		switch msg.Type {
 		case "request":
-			go func(msg envelope) {
-				defer b.recoverClose()
-				b.handleRequest(msg)
-			}(msg)
+			safego.Go("bridge.bridge.serve", func() {
+				func(msg envelope) {
+					defer b.recoverClose()
+					b.handleRequest(msg)
+				}(msg)
+			})
 		case "response":
 			b.mu.Lock()
 			ch := b.revPending[msg.RequestSeq]
@@ -170,14 +173,16 @@ func (b *bridge) shutdown() {
 	}
 	b.mu.Unlock()
 	if dc != nil {
-		go callBounded(dc, func() {
-			if listen {
-				// A web request being debugged when the user stops listening
-				// (#823) runs to completion instead of dying mid-response.
-				_ = dc.Detach()
-			} else {
-				_, _ = dc.Stop() // best effort: ends the script if still alive
-			}
+		safego.Go("bridge.bridge.shutdown", func() {
+			callBounded(dc, func() {
+				if listen {
+					// A web request being debugged when the user stops listening
+					// (#823) runs to completion instead of dying mid-response.
+					_ = dc.Detach()
+				} else {
+					_, _ = dc.Stop() // best effort: ends the script if still alive
+				}
+			})
 		})
 	}
 	if l != nil {
@@ -279,19 +284,19 @@ func (b *bridge) handleRequest(req envelope) {
 		b.handleSetBreakpoints(req)
 	case "configurationDone":
 		b.respond(req, map[string]any{})
-		go b.resume(req, "breakpoint", (*dbgp.Conn).Run)
+		safego.Go("bridge.bridge.handleRequest", func() { b.resume(req, "breakpoint", (*dbgp.Conn).Run) })
 	case "continue":
 		b.respond(req, map[string]any{"allThreadsContinued": true})
-		go b.resume(req, "breakpoint", (*dbgp.Conn).Run)
+		safego.Go("bridge.bridge.handleRequest", func() { b.resume(req, "breakpoint", (*dbgp.Conn).Run) })
 	case "next":
 		b.respond(req, map[string]any{})
-		go b.resume(req, "step", (*dbgp.Conn).StepOver)
+		safego.Go("bridge.bridge.handleRequest", func() { b.resume(req, "step", (*dbgp.Conn).StepOver) })
 	case "stepIn":
 		b.respond(req, map[string]any{})
-		go b.resume(req, "step", (*dbgp.Conn).StepInto)
+		safego.Go("bridge.bridge.handleRequest", func() { b.resume(req, "step", (*dbgp.Conn).StepInto) })
 	case "stepOut":
 		b.respond(req, map[string]any{})
-		go b.resume(req, "step", (*dbgp.Conn).StepOut)
+		safego.Go("bridge.bridge.handleRequest", func() { b.resume(req, "step", (*dbgp.Conn).StepOut) })
 	case "threads":
 		b.respond(req, map[string]any{"threads": []map[string]any{{"id": 1, "name": "main thread"}}})
 	case "stackTrace":
@@ -486,7 +491,7 @@ func (b *bridge) handleListen(req envelope, args launchArgs) {
 		"hostname": args.Hostname,
 		"mappings": len(args.PathMappings),
 	})
-	go b.acceptLoop(l)
+	safego.Go("bridge.bridge.handleListen", func() { b.acceptLoop(l) })
 }
 
 // acceptLoop accepts DBGp connections until the listener closes (disconnect
@@ -518,10 +523,12 @@ func (b *bridge) acceptLoop(l net.Listener) {
 			}
 			return // listener closed: shutdown owns the teardown
 		}
-		go func(conn net.Conn) {
-			defer b.recoverClose()
-			b.handleIncoming(conn)
-		}(conn)
+		safego.Go("bridge.bridge.acceptLoop", func() {
+			func(conn net.Conn) {
+				defer b.recoverClose()
+				b.handleIncoming(conn)
+			}(conn)
+		})
 	}
 }
 
@@ -751,7 +758,7 @@ func (b *bridge) adoptConn(dc *dbgp.Conn, init *dbgp.Init, att attempt) {
 	// "unmapped file path" diagnosis: the request is debugged anyway, but
 	// breakpoints cannot bind until a path mapping exists.
 	b.connEvent("accepted", att, map[string]any{"local": local, "mapped": mapped})
-	go b.resume(envelope{}, "breakpoint", (*dbgp.Conn).Run)
+	safego.Go("bridge.bridge.adoptConn", func() { b.resume(envelope{}, "breakpoint", (*dbgp.Conn).Run) })
 }
 
 // endRun ends one request's debugging. Launch mode: the session is over.

@@ -11,6 +11,7 @@ import (
 	"ike/internal/debug"
 	"ike/internal/host"
 	"ike/internal/pane"
+	"ike/internal/safego"
 )
 
 // breakpoints_panel.go wires the Breakpoints tool window (#1377): a singleton
@@ -159,11 +160,11 @@ func (m *Model) syncSessionBreakpoints(abs string) tea.Cmd {
 	bps := dapBreakpoints(m.sessionSpecs(bpKey(abs)))
 	send := m.host.Send
 	sess := dbg.sess
-	go func() {
+	safego.Go("app.Model.syncSessionBreakpoints", func() {
 		if _, err := sess.SetBreakpoints(abs, bps); err != nil {
 			send(debugErrMsg{err: err})
 		}
-	}()
+	})
 	return nil
 }
 

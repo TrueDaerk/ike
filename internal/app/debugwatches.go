@@ -8,6 +8,7 @@ import (
 	"ike/internal/host"
 
 	tea "charm.land/bubbletea/v2"
+	"ike/internal/safego"
 )
 
 // debugwatches.go wires watch expressions and inline variable values (#1914).
@@ -106,7 +107,7 @@ func (m *Model) evaluateWatches(frameID int) {
 	}
 	sess := dbg.sess
 	send := m.host.Send
-	go func() {
+	safego.Go("app.Model.evaluateWatches", func() {
 		results := make([]debugpanel.WatchResult, len(exprs))
 		for i, e := range exprs {
 			res, err := sess.Evaluate(e, frameID, "watch")
@@ -122,7 +123,7 @@ func (m *Model) evaluateWatches(frameID int) {
 		// discovered (#2174): the session latches the verdict, so ask it
 		// rather than pattern-matching the per-row errors.
 		send(debugWatchesMsg{sess: sess, results: results, unsupported: !sess.SupportsEvaluate()})
-	}()
+	})
 }
 
 // handleWatchMsg applies one panel watch mutation; handled reports whether

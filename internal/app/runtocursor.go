@@ -10,6 +10,7 @@ import (
 	"ike/internal/dap"
 	"ike/internal/debug"
 	"ike/internal/host"
+	"ike/internal/safego"
 	"ike/internal/ui"
 )
 
@@ -147,7 +148,7 @@ func (m *Model) resumeAfterBreakpoints(files []string) {
 		p.SetRunning()
 	}
 	sess, threadID, send := dbg.sess, dbg.threadID, m.host.Send
-	go func() {
+	safego.Go("app.Model.resumeAfterBreakpoints", func() {
 		for _, p := range pushes {
 			if _, err := sess.SetBreakpoints(p.abs, p.bps); err != nil {
 				send(debugErrMsg{err: err})
@@ -157,7 +158,7 @@ func (m *Model) resumeAfterBreakpoints(files []string) {
 		if err := sess.Continue(threadID); err != nil {
 			send(debugErrMsg{err: err})
 		}
-	}()
+	})
 }
 
 // clearTempBreakpoint drops the run-to-cursor breakpoint and re-pushes its

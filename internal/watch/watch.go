@@ -18,6 +18,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/fsnotify/fsnotify"
+	"ike/internal/safego"
 )
 
 // Kind classifies one filesystem event.
@@ -266,7 +267,7 @@ func (s *Service) Start(root string) error {
 		return nil
 	}
 	if watched >= maxWatchDirs && s.send != nil {
-		go s.send(TruncatedMsg{Watched: watched})
+		safego.Go("watch.Service.Start", func() { s.send(TruncatedMsg{Watched: watched}) })
 	}
 	s.watchGitDir(root)
 	s.watchConfigDir(root)
@@ -274,7 +275,7 @@ func (s *Service) Start(root string) error {
 	// not silently stop reporting the files an open diff is following — so
 	// they re-register on the fresh watcher.
 	s.armExtras()
-	go s.loop(w)
+	safego.Go("watch.Service.Start", func() { s.loop(w) })
 	return nil
 }
 

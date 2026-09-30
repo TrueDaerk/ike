@@ -29,6 +29,7 @@ import (
 	"ike/internal/host"
 	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
+	"ike/internal/safego"
 )
 
 // Request is one completion query: the file, the 0-based editor position, and
@@ -454,7 +455,7 @@ func (e *Engine) dispatch(req Request, sources []Source) {
 	// The effective language (#2652) needs the buffer's fragments, which is
 	// a parse: resolve it off this goroutine — dispatch is reached from the
 	// UI's Update or a timer — then fan the sources out.
-	go func() {
+	safego.Go("complete.Engine.dispatch", func() {
 		// One text pass at a time (#2770): a dispatch superseded while it
 		// waited does not parse at all.
 		e.passMu.Lock()
@@ -468,7 +469,7 @@ func (e *Engine) dispatch(req Request, sources []Source) {
 			return
 		}
 		e.fanOut(ctx, req, sources)
-	}()
+	})
 }
 
 // observeText stashes a buffer's latest text for effective-language
@@ -529,27 +530,29 @@ func (e *Engine) effectiveLang(req Request) string {
 func (e *Engine) fanOut(ctx context.Context, req Request, sources []Source) {
 	results := make(chan ilsp.CompletionMsg, len(sources))
 	for _, s := range sources {
-		go func(s Source) {
-			items, err := s.Complete(ctx, req)
-			if err != nil || ctx.Err() != nil {
-				results <- ilsp.CompletionMsg{} // a dropped answer still counts down
-				return
-			}
-			for i := range items {
-				items[i].Source = s.Name()
-			}
-			results <- ilsp.CompletionMsg{
-				Path:           req.Path,
-				Key:            req.BufKey(),
-				Line:           req.Line,
-				Col:            req.Col,
-				Items:          items,
-				Source:         s.Name(),
-				SourcePriority: s.Priority(),
-			}
-		}(s)
+		safego.Go("complete.Engine.fanOut", func() {
+			func(s Source) {
+				items, err := s.Complete(ctx, req)
+				if err != nil || ctx.Err() != nil {
+					results <- ilsp.CompletionMsg{} // a dropped answer still counts down
+					return
+				}
+				for i := range items {
+					items[i].Source = s.Name()
+				}
+				results <- ilsp.CompletionMsg{
+					Path:           req.Path,
+					Key:            req.BufKey(),
+					Line:           req.Line,
+					Col:            req.Col,
+					Items:          items,
+					Source:         s.Name(),
+					SourcePriority: s.Priority(),
+				}
+			}(s)
+		})
 	}
-	go e.gather(ctx, results, len(sources))
+	safego.Go("complete.Engine.fanOut", func() { e.gather(ctx, results, len(sources)) })
 }
 
 // gather collects the dispatch's answers: everything that lands before all

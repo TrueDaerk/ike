@@ -7,6 +7,7 @@ import (
 
 	"ike/internal/lsp"
 	"ike/internal/lsp/protocol"
+	"ike/internal/safego"
 )
 
 // restart.go implements crash recovery: when a server's connection ends
@@ -227,6 +228,6 @@ func (m *Manager) refreshDecorations() {
 	for _, kind := range []string{"semanticTokens", "inlayHint", "codeLens"} {
 		// Off the caller's goroutine, like the server-initiated refresh
 		// (manager.go's onRequest): the host re-requests per open document.
-		go m.cb.Refresh(kind)
+		safego.Go("manager.Manager.refreshDecorations", func() { m.cb.Refresh(kind) })
 	}
 }

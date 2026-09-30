@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"ike/internal/lsp/transport"
+	"ike/internal/safego"
 )
 
 // Session is one live debug-adapter session: the adapter process plus the
@@ -172,9 +173,9 @@ func (s *Session) OnRunInTerminal(fn func(seq int, args RunInTerminalArgs)) {
 			// a diagnostic — silently dropping it would hang the adapter, and
 			// the generic "unsupported" refusal would hide the cause (#638).
 			// Reply off the read loop, like every other reverse reply.
-			go func() {
+			safego.Go("dap.Session.OnRunInTerminal", func() {
 				_ = s.conn.RefuseRequest(seq, command, "invalid runInTerminal arguments: "+err.Error())
-			}()
+			})
 			return true
 		}
 		fn(seq, args)
@@ -199,10 +200,10 @@ func (s *Session) RefuseReverse(seq int, command, message string) error {
 // channel instead of blocking the sequencing.
 func (s *Session) LaunchAsync(args map[string]any) <-chan error {
 	done := make(chan error, 1)
-	go func() {
+	safego.Go("dap.Session.LaunchAsync", func() {
 		_, err := s.conn.Call("launch", args)
 		done <- err
-	}()
+	})
 	return done
 }
 

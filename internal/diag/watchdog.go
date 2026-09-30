@@ -2,6 +2,7 @@ package diag
 
 import (
 	"fmt"
+	"ike/internal/safego"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -175,7 +176,7 @@ func ConfigureWatchdog(seconds int, dir func() string, logf func(string)) {
 	wd.mu.Unlock()
 	wd.thresholdNanos.Store(int64(seconds) * int64(time.Second))
 	if seconds > 0 {
-		wd.once.Do(func() { go watchdogMonitor() })
+		wd.once.Do(func() { safego.Go("diag.ConfigureWatchdog", func() { watchdogMonitor() }) })
 	}
 }
 

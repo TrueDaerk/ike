@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
+	"ike/internal/safego"
 )
 
 // multi.go is the all-projects fan-out (#2394): one MultiQuery scans several
@@ -87,7 +88,7 @@ func (s *MultiService) ScanMulti(q MultiQuery) int {
 	s.cancel = cancel
 	s.mu.Unlock()
 
-	go s.run(ctx, gen, q)
+	safego.Go("search.MultiService.ScanMulti", func() { s.run(ctx, gen, q) })
 	return gen
 }
 

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"ike/internal/safego"
 	"net"
 	"os"
 	"path/filepath"
@@ -69,7 +70,7 @@ func Serve(dir string, deliver func(url string)) (*Server, error) {
 	_ = os.Chmod(sock, 0o600)
 	s := &Server{dir: dir, sock: sock, ln: ln}
 	s.Touch()
-	go s.accept(deliver)
+	safego.Go("deeplink.Serve", func() { s.accept(deliver) })
 	return s, nil
 }
 
@@ -80,7 +81,7 @@ func (s *Server) accept(deliver func(url string)) {
 		if err != nil {
 			return
 		}
-		go handleConn(conn, deliver)
+		safego.Go("deeplink.Server.accept", func() { handleConn(conn, deliver) })
 	}
 }
 

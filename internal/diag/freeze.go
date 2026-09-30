@@ -2,6 +2,7 @@ package diag
 
 import (
 	"fmt"
+	"ike/internal/safego"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -195,10 +196,10 @@ func (w *FreezeWatch) Beat(snapshot map[string]string) FreezeReport {
 	if dump {
 		header := freezeHeader(rep, snapshot)
 		w.wg.Add(1)
-		go func() {
+		safego.Go("diag.FreezeWatch.Beat", func() {
 			defer w.wg.Done()
 			w.writeDump(header, nth)
-		}()
+		})
 	}
 	return rep
 }

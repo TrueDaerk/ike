@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/vt"
 
 	"ike/internal/overlay"
+	"ike/internal/safego"
 )
 
 // complete.go is the JetBrains-style command completion popup (#740): while
@@ -73,7 +74,7 @@ func (c *exeCache) cached(env string, done func()) ([]string, bool) {
 	}
 	if !c.scanning {
 		c.scanning = true
-		go func() {
+		safego.Go("terminal.exeCache.cached", func() {
 			names := scanPathExecutables(env)
 			c.mu.Lock()
 			c.env, c.names, c.when = env, names, time.Now()
@@ -82,7 +83,7 @@ func (c *exeCache) cached(env string, done func()) ([]string, bool) {
 			if done != nil {
 				done()
 			}
-		}()
+		})
 	}
 	return c.names, hit
 }

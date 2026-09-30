@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"ike/internal/safego"
 	"io"
 	"sync"
 )
@@ -91,8 +92,8 @@ func NewConn(rwc io.ReadWriteCloser, handler Handler) *Conn {
 		done:    make(chan struct{}),
 	}
 	c.sendCond = sync.NewCond(&c.sendMu)
-	go c.readLoop()
-	go c.writeLoop()
+	safego.Go("jsonrpc.NewConn", func() { c.readLoop() })
+	safego.Go("jsonrpc.NewConn", func() { c.writeLoop() })
 	return c
 }
 

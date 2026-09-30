@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"ike/internal/lsp/jsonrpc"
+	"ike/internal/safego"
 )
 
 // Conn is one DAP connection: it frames requests out and dispatches
@@ -66,7 +67,7 @@ var ErrClosed = errors.New("dap: connection closed")
 // NewConn starts a connection over rwc; onEvent may be nil.
 func NewConn(rwc io.ReadWriteCloser, onEvent func(event string, body json.RawMessage)) *Conn {
 	c := &Conn{rwc: rwc, pending: map[int]chan envelope{}, onEvent: onEvent}
-	go c.readLoop()
+	safego.Go("dap.NewConn", func() { c.readLoop() })
 	return c
 }
 
@@ -167,9 +168,11 @@ func (c *Conn) readLoop() {
 			if h == nil || !h(msg.Seq, msg.Command, msg.Arguments) {
 				// Refuse off the read loop: a synchronous write here can
 				// deadlock against an adapter that is itself mid-write (#638).
-				go func(seq int, command string) {
-					_ = c.RefuseRequest(seq, command, "unsupported")
-				}(msg.Seq, msg.Command)
+				safego.Go("dap.Conn.readLoop", func() {
+					func(seq int, command string) {
+						_ = c.RefuseRequest(seq, command, "unsupported")
+					}(msg.Seq, msg.Command)
+				})
 			}
 		}
 	}

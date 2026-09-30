@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	tea "charm.land/bubbletea/v2"
+	"ike/internal/safego"
 )
 
 // Query describes one project scan.
@@ -104,7 +105,7 @@ func (s *Service) Scan(q Query) int {
 	s.cancel = cancel
 	s.mu.Unlock()
 
-	go s.run(ctx, gen, q)
+	safego.Go("search.Service.Scan", func() { s.run(ctx, gen, q) })
 	return gen
 }
 

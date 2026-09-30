@@ -695,6 +695,9 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("project.findInAllProjectsResults", "Show All-Projects Search Results", ShowAllFindResultsMsg{}),
 			appCommand("project.findInGroup", "Find in Project Group…", OpenFindInProjectGroupMsg{}),
 			appCommand("todo.list", "TODO Index", OpenTodoIndexMsg{}),
+			// The newest crash report (#2836): the next-launch notice names it as
+			// its action, and the palette is its other doorway.
+			appCommand("crash.openLastLog", "Open Last Crash Log", OpenCrashLogMsg{}),
 			// The PHP declaration index's operations surface (0520, #2673).
 			// Global rather than PHP-scoped: the reason to rebuild — a branch
 			// switch, a generator run — is felt with the explorer or a terminal

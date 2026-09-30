@@ -9,6 +9,7 @@ import (
 	"ike/internal/host"
 	ilsp "ike/internal/lsp"
 	"ike/internal/lsp/protocol"
+	"ike/internal/safego"
 )
 
 // features.go wires the #1912 protocol features through the bridge: code
@@ -88,7 +89,7 @@ func (b *bridge) requestCodeLenses(path string) {
 	b.lensInFlight[path] = true
 	b.mu.Unlock()
 
-	go func() {
+	safego.Go("lsp.bridge.requestCodeLenses", func() {
 		for {
 			lenses, err := mgr.CodeLenses(context.Background(), path)
 			if err == nil {
@@ -113,7 +114,7 @@ func (b *bridge) requestCodeLenses(path string) {
 			b.mu.Unlock()
 			return
 		}
-	}()
+	})
 }
 
 // codeLensPick lists the lenses on the cursor line — or, when the line has
@@ -166,7 +167,7 @@ func (b *bridge) executeCodeLens(h host.API, path string, lens ilsp.CodeLens) te
 	if mgr == nil {
 		return nil
 	}
-	go func() {
+	safego.Go("lsp.bridge.executeCodeLens", func() {
 		if lens.Command == "" {
 			resolved, err := mgr.ResolveCodeLens(context.Background(), path, lens)
 			if err != nil || resolved.Command == "" {
@@ -181,7 +182,7 @@ func (b *bridge) executeCodeLens(h host.API, path string, lens ilsp.CodeLens) te
 			return
 		}
 		h.Send(ilsp.ServerStatusMsg{Text: "'" + lens.Title + "' executed", Kind: ilsp.ServerEventInfo})
-	}()
+	})
 	return nil
 }
 
@@ -209,7 +210,7 @@ func (b *bridge) requestFoldingRanges(path string) {
 	b.foldInFlight[path] = true
 	b.mu.Unlock()
 
-	go func() {
+	safego.Go("lsp.bridge.requestFoldingRanges", func() {
 		for {
 			folds, err := mgr.FoldingRanges(context.Background(), path)
 			if err == nil && folds != nil && b.h != nil && !b.dropEmptyRepeat("folds", path, len(folds) == 0) {
@@ -225,7 +226,7 @@ func (b *bridge) requestFoldingRanges(path string) {
 			b.mu.Unlock()
 			return
 		}
-	}()
+	})
 }
 
 // --- selection ranges (seam provider, editor-driven) ---

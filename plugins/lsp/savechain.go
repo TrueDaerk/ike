@@ -14,6 +14,7 @@ import (
 	ilsp "ike/internal/lsp"
 	"ike/internal/lsp/manager"
 	"ike/internal/lsp/protocol"
+	"ike/internal/safego"
 )
 
 // savechain.go runs the pre-save LSP steps for format/organize-imports on
@@ -70,7 +71,7 @@ func (b *bridge) saveChainCmd(req ilsp.SaveChainRequest) tea.Cmd {
 	b.saveChains[path] = true
 	b.mu.Unlock()
 	return func() tea.Msg {
-		go b.runSaveChain(h, mgr, req, organize, doFormat)
+		safego.Go("lsp.bridge.saveChainCmd", func() { b.runSaveChain(h, mgr, req, organize, doFormat) })
 		return nil
 	}
 }
@@ -262,6 +263,6 @@ func (b *bridge) organizeImports(h host.API) tea.Cmd {
 		h.Notify(host.Info, "organize imports: not offered by the language server for this file")
 		return nil
 	}
-	go b.organizeImportsStep(h, mgr, path)
+	safego.Go("lsp.bridge.organizeImports", func() { b.organizeImportsStep(h, mgr, path) })
 	return nil
 }

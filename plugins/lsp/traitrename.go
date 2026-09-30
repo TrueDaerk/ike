@@ -39,6 +39,7 @@ import (
 	"ike/internal/host"
 	ilsp "ike/internal/lsp"
 	"ike/internal/lsp/manager"
+	"ike/internal/safego"
 )
 
 // phpIdentRE is a PHP identifier, optionally with a property's `$`: the
@@ -258,7 +259,7 @@ func (b *bridge) applyTraitIndexRename(h host.API, plan host.TraitRenamePlan, ne
 		return nil
 	}
 	mgr := b.manager()
-	go func() {
+	safego.Go("lsp.bridge.applyTraitIndexRename", func() {
 		files, n := traitRenameFiles(mgr, plan, newName, nil)
 		preview := previewFiles(mgr, files)
 		if len(preview) == 0 {
@@ -270,13 +271,13 @@ func (b *bridge) applyTraitIndexRename(h host.API, plan host.TraitRenamePlan, ne
 			NewName: strings.TrimPrefix(newName, "$"),
 			Files:   preview,
 			Apply: func() tea.Cmd {
-				go func() {
+				safego.Go("lsp.bridge.applyTraitIndexRename", func() {
 					dispatchRenameEdits(h, files)
 					b.traitRenameApplied(h, host.TraitRenameIndex, n)
-				}()
+				})
 				return nil
 			},
 		})
-	}()
+	})
 	return nil
 }

@@ -9,6 +9,7 @@ import (
 	"ike/internal/forge"
 	"ike/internal/host"
 	"ike/internal/pane"
+	"ike/internal/safego"
 )
 
 // forgepoll.go is the app half of background forge polling (#2085): one
@@ -119,11 +120,11 @@ func (m Model) StartForgePoll() {
 	if cmd == nil {
 		return
 	}
-	go func() {
+	safego.Go("app.Model.StartForgePoll", func() {
 		if msg := cmd(); msg != nil {
 			m.host.Send(msg)
 		}
-	}()
+	})
 }
 
 // armForgePoll is the settled-pass hook, and it only fires on edges the
@@ -167,11 +168,11 @@ func (m *Model) sendForgeRearm() {
 		return
 	}
 	h := m.host
-	go func() {
+	safego.Go("app.Model.sendForgeRearm", func() {
 		if msg := cmd(); msg != nil {
 			h.Send(msg)
 		}
-	}()
+	})
 }
 
 // forgePollTick handles one deadline: dispatch the fetch (never wait on it)

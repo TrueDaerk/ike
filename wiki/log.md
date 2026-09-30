@@ -1,5 +1,32 @@
 # Log
 
+## 2026-09-30 (crash reporting: every panic leaves a crash log, find-in-path nil deref fixed, #2836)
+
+- New `internal/crashlog`: `~/.ike/logs/crash-<timestamp>-<session>.log` with
+  version, panic value, panicking-goroutine and all-goroutine dumps, key
+  context, focused pane and the last 50 telemetry events (in-memory ring,
+  `Recorder.Recent`); at most 20 files, three reports per panic message per
+  process.
+- `internal/app/crash.go`: `Update`, `View`, `Init` and every `Cmd` run under
+  a recover — the session keeps running with an error toast (action
+  `crash.openLastLog`) instead of exiting; a failing View draws a fallback
+  frame.
+- New `internal/safego`: `safego.Go(name, fn)` / `Recover(name)` guard the 148
+  goroutines IKE starts itself (search, LSP bridge, watcher, terminal, host
+  pump, …); `goguard_test.go` fails on any bare `go` statement under
+  `internal/`, `plugins/`, `cmd/ike` outside an allowlist with reasons.
+- `cmd/ike`: stderr is teed for the process lifetime; a `Run` ending in
+  bubbletea's `ErrProgramPanic` writes a crash log holding the captured tail
+  and prints `ike: crashed — crash log: …`. Next launch announces an
+  unacknowledged crash log once, with *Open Last Crash Log* as its action.
+- Fix: `cmd+shift+f` / `cmd+shift+r` with a viewer content tab (image, data,
+  hex, archive, notebook, HTTP response) active in an editor pane crashed in
+  `activeSelectionText` (nil editor). Regression tests for every viewer kind
+  and for the reported telemetry sequence (playground → find in path → hit →
+  `f4` → `cmd+f`, all playground layouts).
+- Wiki: new `crash-reporting.md`; cross-links in `crash-recovery.md`,
+  `usage-telemetry.md`, `search.md`.
+
 ## 2026-09-30 (search: cmd+g keeps the in-file query across picker opens, #2827)
 
 - Opening a file never steals `cmd+g` / `cmd+shift+g` from the last committed

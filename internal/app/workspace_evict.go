@@ -10,6 +10,7 @@ import (
 	"ike/internal/workspace"
 
 	tea "charm.land/bubbletea/v2"
+	"ike/internal/safego"
 )
 
 // workspace_evict.go bounds the background workspace set (0370 M4, #780):
@@ -161,7 +162,7 @@ func teardownWorkspace(w *workspace.Workspace) {
 		if extras.dbg != nil && extras.dbg.sess != nil {
 			sess := extras.dbg.sess
 			_ = sess.Disconnect()
-			go sess.Close()
+			safego.Go("app.teardownWorkspace", func() { sess.Close() })
 		}
 		for _, inst := range parkedPopupInstances(extras) {
 			// Parked popup terminal and floating-panel shells (#1407, #1793)
@@ -179,7 +180,7 @@ func teardownWorkspace(w *workspace.Workspace) {
 	// on macOS freed-but-retained pages otherwise stay counted against the
 	// process footprint until memory pressure (#1537). Async: FreeOSMemory
 	// forces a full GC and can take tens of milliseconds.
-	go debug.FreeOSMemory()
+	safego.Go("app.teardownWorkspace", func() { debug.FreeOSMemory() })
 }
 
 // closeWorkspace tears w down and fires the workspace-closed hooks (#825), so

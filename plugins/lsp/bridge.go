@@ -24,6 +24,7 @@ import (
 	"ike/internal/lsp/protocol"
 	"ike/internal/lsp/transport"
 	"ike/internal/plugin"
+	"ike/internal/safego"
 )
 
 // bridge is the long-lived glue between the editor and the LSP manager. It is a
@@ -232,7 +233,7 @@ func (b *bridge) Emit(ev host.EditorEvent) {
 			// close it instead of syncing emptiness; unopened paths no-op.
 			if mgr := b.manager(); mgr != nil {
 				path := ev.Path
-				go func() { _ = mgr.Close(path) }()
+				safego.Go("lsp.bridge.Emit", func() { _ = mgr.Close(path) })
 			}
 			return
 		}
@@ -334,7 +335,7 @@ func (b *bridge) fileOpened(h host.API, path string) {
 	if wd, err := os.Getwd(); err == nil && mgr != nil {
 		mgr.SetProjectRoot(wd)
 	}
-	go func() {
+	safego.Go("lsp.bridge.fileOpened", func() {
 		// The disk read runs off the caller too (#2260): Init fires this hook
 		// once per restored file, and a session full of large files would
 		// otherwise stack synchronous reads before the first frame.
@@ -383,7 +384,7 @@ func (b *bridge) fileOpened(h host.API, path string) {
 		b.requestInheritanceMarks(path)
 		b.requestCodeLenses(path)
 		b.requestFoldingRanges(path)
-	}()
+	})
 }
 
 // largeFileGated reports whether path's document crosses the large-file
@@ -410,7 +411,7 @@ func (b *bridge) fileSaved(h host.API, path string) {
 	// bytes now on disk (#595).
 	b.flushChange(path)
 	if mgr := b.manager(); mgr != nil {
-		go func() { _ = mgr.Save(path) }()
+		safego.Go("lsp.bridge.fileSaved", func() { _ = mgr.Save(path) })
 		// Announce the on-disk change to watching servers too (#1144): the
 		// 0140 watcher suppresses IKE's own writes (MarkSaved), so without
 		// this a server watching the file — possibly another language's
@@ -488,7 +489,7 @@ func (b *bridge) fileClosed(path string) {
 	}
 	b.mu.Unlock()
 	if mgr := b.manager(); mgr != nil {
-		go func() { _ = mgr.Close(path) }()
+		safego.Go("lsp.bridge.fileClosed", func() { _ = mgr.Close(path) })
 	}
 }
 
@@ -535,7 +536,7 @@ func (b *bridge) requestHover(h host.API, path string, line, col int, mouse bool
 		b.traitHover(h, path, line, col, mouse)
 		return
 	}
-	go func() {
+	safego.Go("lsp.bridge.requestHover", func() {
 		hv, err := mgr.Hover(context.Background(), path, buffer.Position{Line: line, Col: col})
 		if requestFailed(h, "hover", err) {
 			return
@@ -550,7 +551,7 @@ func (b *bridge) requestHover(h host.API, path string, line, col int, mouse bool
 		// expected answer for a consumer's member, so the index fills the
 		// card (#2670); everywhere else this is inert.
 		b.traitHover(h, path, line, col, mouse)
-	}()
+	})
 }
 
 // parameterInfo requests signature help at the current cursor on demand
@@ -602,7 +603,7 @@ func (b *bridge) definitionRequest(h host.API, peek bool) tea.Cmd {
 		b.traitDefinition(h, path, line, col, peek)
 		return nil
 	}
-	go func() {
+	safego.Go("lsp.bridge.definitionRequest", func() {
 		locs, err := mgr.Definition(context.Background(), path, buffer.Position{Line: line, Col: col})
 		if requestFailed(h, "go to definition", err) {
 			return
@@ -646,7 +647,7 @@ func (b *bridge) definitionRequest(h host.API, peek bool) tea.Cmd {
 		} else {
 			h.Send(ilsp.DefinitionMsg{Path: target, Line: tline, Col: tcol})
 		}
-	}()
+	})
 	return nil
 }
 
@@ -728,7 +729,7 @@ func (b *bridge) references(h host.API) tea.Cmd {
 		}
 		return nil
 	}
-	go b.findReferences(h, path, line, col, true)
+	safego.Go("lsp.bridge.references", func() { b.findReferences(h, path, line, col, true) })
 	return nil
 }
 
@@ -780,7 +781,7 @@ func (b *bridge) referencesPanel(h host.API) tea.Cmd {
 		}
 		return nil
 	}
-	go b.findUsages(h, symbol, path, line, col)
+	safego.Go("lsp.bridge.referencesPanel", func() { b.findUsages(h, symbol, path, line, col) })
 	return nil
 }
 
@@ -802,7 +803,7 @@ func (b *bridge) localUsages(h host.API, symbol, path string, line, col int) boo
 			if b.localUsages(h, symbol, path, line, col) {
 				return nil
 			}
-			go b.findUsages(h, symbol, path, line, col)
+			safego.Go("lsp.bridge.localUsages", func() { b.findUsages(h, symbol, path, line, col) })
 			return nil
 		},
 	})
@@ -830,7 +831,7 @@ func (b *bridge) findUsages(h host.API, symbol, path string, line, col int) {
 		// Index rows (#2671) carry the `trait` badge the pane shows.
 		Refs: b.mergeTraitReferences(h, path, line, col, true, locationsToRefs(mgr, path, locs)),
 		Refresh: func() tea.Msg {
-			go b.findUsages(h, symbol, path, line, col)
+			safego.Go("lsp.bridge.findUsages", func() { b.findUsages(h, symbol, path, line, col) })
 			return nil
 		},
 	})
@@ -874,7 +875,7 @@ func (b *bridge) callHierarchy(h host.API) tea.Cmd {
 	if path == "" || mgr == nil {
 		return nil
 	}
-	go func() {
+	safego.Go("lsp.bridge.callHierarchy", func() {
 		items, err := mgr.PrepareCallHierarchy(context.Background(), path, buffer.Position{Line: line, Col: col})
 		if requestFailed(h, "call hierarchy", err) {
 			return
@@ -894,7 +895,7 @@ func (b *bridge) callHierarchy(h host.API) tea.Cmd {
 				return b.fetchCalls(h, path, reqID, item, incoming)
 			},
 		})
-	}()
+	})
 	return nil
 }
 
@@ -905,7 +906,7 @@ func (b *bridge) fetchCalls(h host.API, path string, reqID int, item protocol.Ca
 	if mgr == nil {
 		return nil
 	}
-	go func() {
+	safego.Go("lsp.bridge.fetchCalls", func() {
 		var entries []ilsp.CallHierarchyEntry
 		if incoming {
 			calls, err := mgr.IncomingCalls(context.Background(), path, item)
@@ -931,7 +932,7 @@ func (b *bridge) fetchCalls(h host.API, path string, reqID int, item protocol.Ca
 			}
 		}
 		h.Send(ilsp.CallHierarchyCallsMsg{ReqID: reqID, Incoming: incoming, Calls: entries})
-	}()
+	})
 	return nil
 }
 
@@ -972,7 +973,7 @@ func (b *bridge) workspaceSymbols(h host.API, query string) tea.Cmd {
 	if mgr == nil {
 		return nil
 	}
-	go func() {
+	safego.Go("lsp.bridge.workspaceSymbols", func() {
 		syms, ok := mgr.WorkspaceSymbols(context.Background(), query)
 		if !ok {
 			h.Send(ilsp.SymbolResultsMsg{Query: query, NoProvider: true})
@@ -993,7 +994,7 @@ func (b *bridge) workspaceSymbols(h host.API, query string) tea.Cmd {
 			hits[i] = ilsp.SymbolHit{Name: syms[i].Name, Kind: syms[i].Kind, Ref: ref}
 		}
 		h.Send(ilsp.SymbolResultsMsg{Query: query, Hits: hits})
-	}()
+	})
 	return nil
 }
 
@@ -1010,13 +1011,13 @@ func (b *bridge) documentSymbols(h host.API) tea.Cmd {
 	}
 	// Sync pending edits first so the answered positions match the buffer.
 	b.flushChange(path)
-	go func() {
+	safego.Go("lsp.bridge.documentSymbols", func() {
 		syms, ok, err := mgr.DocumentSymbols(context.Background(), path)
 		if err != nil {
 			return
 		}
 		h.Send(ilsp.DocumentSymbolsMsg{Path: path, Symbols: syms, NoProvider: !ok})
-	}()
+	})
 	return nil
 }
 
@@ -1068,7 +1069,7 @@ func (b *bridge) rename(h host.API) tea.Cmd {
 		return nil
 	}
 	pos := buffer.Position{Line: line, Col: col}
-	go func() {
+	safego.Go("lsp.bridge.rename", func() {
 		if gated, ok, known := b.takeRenameGate(path, line, col); known && ok {
 			b.promptRename(h, path, pos, gated)
 			return
@@ -1094,7 +1095,7 @@ func (b *bridge) rename(h host.API) tea.Cmd {
 			return
 		}
 		b.promptRename(h, path, pos, placeholder)
-	}()
+	})
 	return nil
 }
 
@@ -1139,7 +1140,7 @@ func (b *bridge) applyRename(h host.API, path string, pos buffer.Position, oldNa
 	if mgr == nil || strings.TrimSpace(newName) == "" {
 		return nil
 	}
-	go func() {
+	safego.Go("lsp.bridge.applyRename", func() {
 		files, err := mgr.Rename(context.Background(), path, pos, newName)
 		if err != nil {
 			h.Send(ilsp.ServerStatusMsg{Text: "rename failed: " + err.Error(), Kind: ilsp.ServerEventError})
@@ -1157,10 +1158,10 @@ func (b *bridge) applyRename(h host.API, path string, pos buffer.Position, oldNa
 				NewName: strings.TrimSpace(newName),
 				Files:   preview,
 				Apply: func() tea.Cmd {
-					go func() {
+					safego.Go("lsp.bridge.applyRename", func() {
 						dispatchRenameEdits(h, files)
 						b.traitRenameApplied(h, host.TraitRenameExtend, extra)
-					}()
+					})
 					return nil
 				},
 			})
@@ -1168,7 +1169,7 @@ func (b *bridge) applyRename(h host.API, path string, pos buffer.Position, oldNa
 		}
 		dispatchRenameEdits(h, files)
 		b.traitRenameApplied(h, host.TraitRenameExtend, extra)
-	}()
+	})
 	return nil
 }
 
@@ -1219,13 +1220,13 @@ func (b *bridge) codeAction(h host.API) tea.Cmd {
 		start, end = s, e
 	}
 	diags := b.diagsOverlapping(path, start.Line, end.Line)
-	go func() {
+	safego.Go("lsp.bridge.codeAction", func() {
 		// The caret, not the selection: rename acts where lsp.rename would.
 		gated := make(chan struct{})
-		go func() {
+		safego.Go("lsp.bridge.codeAction", func() {
 			defer close(gated)
 			b.refreshRenameGate(path, buffer.Position{Line: line, Col: col})
-		}()
+		})
 		actions, err := mgr.CodeActions(context.Background(), path, start, end, diags)
 		<-gated
 		if requestFailed(h, "code actions", err) {
@@ -1241,7 +1242,7 @@ func (b *bridge) codeAction(h host.API) tea.Cmd {
 			Apply:      func(i int) tea.Cmd { return set.applyCmd(h, b, i) },
 			Preview:    func(i int) tea.Cmd { return set.previewCmd(h, mgr, i) },
 		})
-	}()
+	})
 	return nil
 }
 
@@ -1267,7 +1268,7 @@ func (b *bridge) quickFixAt(h host.API, req ilsp.QuickFixRequest) tea.Cmd {
 	}
 	start, end := req.Range.Start, req.Range.End
 	diags := b.diagsOverlapping(path, start.Line, end.Line)
-	go func() {
+	safego.Go("lsp.bridge.quickFixAt", func() {
 		actions, err := mgr.CodeActions(context.Background(), path, start, end, diags)
 		if requestFailed(h, "quick fixes", err) {
 			// The failure toast reported already; the empty offer keeps the
@@ -1283,7 +1284,7 @@ func (b *bridge) quickFixAt(h host.API, req ilsp.QuickFixRequest) tea.Cmd {
 			Apply:    func(i int) tea.Cmd { return set.applyCmd(h, b, i) },
 			Preview:  func(i int) tea.Cmd { return set.previewCmd(h, mgr, i) },
 		})
-	}()
+	})
 	return nil
 }
 
@@ -1292,7 +1293,7 @@ func (b *bridge) applyAction(h host.API, path string, action protocol.CodeAction
 	if b.manager() == nil {
 		return nil
 	}
-	go b.runAction(h, path, action)
+	safego.Go("lsp.bridge.applyAction", func() { b.runAction(h, path, action) })
 	return nil
 }
 
@@ -1370,7 +1371,7 @@ func (b *bridge) requestSignature(path string, line, col int, manual bool) {
 	if mgr == nil {
 		return
 	}
-	go func() {
+	safego.Go("lsp.bridge.requestSignature", func() {
 		sh, err := mgr.SignatureHelp(context.Background(), path, buffer.Position{Line: line, Col: col})
 		if err != nil {
 			return
@@ -1403,7 +1404,7 @@ func (b *bridge) requestSignature(path string, line, col int, manual bool) {
 		if b.h != nil {
 			b.h.Send(msg)
 		}
-	}()
+	})
 }
 
 // stringRetryCols scans line (a single line of source) and, when rune column
@@ -1587,7 +1588,7 @@ func (b *bridge) requestSemanticTokens(path string) {
 	b.semInFlight[path] = true
 	b.mu.Unlock()
 
-	go func() {
+	safego.Go("lsp.bridge.requestSemanticTokens", func() {
 		for {
 			spans, err := mgr.SemanticTokens(context.Background(), path)
 			if err == nil && spans != nil && b.h != nil && !b.dropEmptyRepeat("semantic", path, len(spans) == 0) {
@@ -1603,7 +1604,7 @@ func (b *bridge) requestSemanticTokens(path string) {
 			b.mu.Unlock()
 			return
 		}
-	}()
+	})
 }
 
 // inlayHintsEnabled reads the lsp.inlay_hints config toggle (#171); unset
@@ -1660,7 +1661,7 @@ func (b *bridge) requestInlayHints(path string) {
 	b.hintInFlight[path] = true
 	b.mu.Unlock()
 
-	go func() {
+	safego.Go("lsp.bridge.requestInlayHints", func() {
 		for {
 			hints, err := mgr.InlayHints(context.Background(), path)
 			if err == nil && b.h != nil && !b.dropEmptyRepeat("hints", path, len(hints) == 0) {
@@ -1676,7 +1677,7 @@ func (b *bridge) requestInlayHints(path string) {
 			b.mu.Unlock()
 			return
 		}
-	}()
+	})
 }
 
 // scheduleChange stores the latest change for a path and (re)arms the coalescing
@@ -1928,7 +1929,7 @@ func (b *bridge) requestCompletion(path string, line, col int, triggerChar strin
 		return
 	}
 	h := b.h
-	go func() {
+	safego.Go("lsp.bridge.requestCompletion", func() {
 		items, incomplete, err := mgr.Completion(context.Background(), path, buffer.Position{Line: line, Col: col}, triggerChar)
 		if err != nil || len(items) == 0 {
 			return
@@ -1952,7 +1953,7 @@ func (b *bridge) requestCompletion(path string, line, col int, triggerChar strin
 			Source:         ilsp.SourceLSP,
 			SourcePriority: ilsp.PriorityLSP,
 		})
-	}()
+	})
 }
 
 // scheduleResolve debounces a completionItem/resolve for the selected item
@@ -1991,7 +1992,7 @@ func (b *bridge) resolveNow(path string, id, seq int) {
 		b.resolveTimer.Stop()
 		b.resolveTimer = nil
 	}
-	go b.fireResolve(path, id, seq)
+	safego.Go("lsp.bridge.resolveNow", func() { b.fireResolve(path, id, seq) })
 }
 
 // resolvableLocked reports whether (path, id, seq) names an item of the
