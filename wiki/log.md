@@ -1,5 +1,22 @@
 # Log
 
+## 2026-09-30 (agent trace: transcript parser + session discovery, #2842)
+
+- New pure package `internal/agenttrace` (Epic 0540): Claude Code JSONL →
+  harness-neutral `Session` / `Event` / `Tool` / `FileRef`; `Edit`, `Write`,
+  `MultiEdit`, `NotebookEdit` inputs yield file refs with op, the edit line
+  from the recorded `structuredPatch`, else `new_string` / `old_string`
+  searched in the file as it is now.
+- `Reader` tails a transcript by byte offset, holds back a half-written
+  trailing line, restarts on truncation.
+- `Discover(cwd)` picks the newest non-fork transcript under
+  `~/.claude/projects/<encoded-cwd>/` whose recorded cwd matches (symlinked
+  spellings tolerated). Verified: `claude -p --resume <id> --fork-session`
+  works while the original runs, writes no parent marker, copies the parent's
+  lines verbatim — forks are detected by their shared root uuid, the older
+  file (birth time, first timestamp, mtime) is the original.
+- Wiki: [Agent Trace](/architecture/agent-trace.md).
+
 ## 2026-09-30 (crash reporting: every panic leaves a crash log, find-in-path nil deref fixed, #2836)
 
 - New `internal/crashlog`: `~/.ike/logs/crash-<timestamp>-<session>.log` with
