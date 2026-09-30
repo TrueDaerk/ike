@@ -87,7 +87,7 @@ const MaxLabel = 80
 
 // BuildTree groups the session's events into turns. Events before the first
 // prompt (a resumed session's compaction, for instance) form a leading
-// "session start" turn.
+// "session start" turn. Turns agent.ask prompted (IsAskPrompt) are left out.
 func BuildTree(s *Session) []Node {
 	if s == nil {
 		return nil
@@ -115,8 +115,18 @@ func BuildTree(s *Session) []Node {
 		}
 		return cur
 	}
+	// asked is the turn of a question agent.ask put to this session (#2844)
+	// — only ever present in a fork IKE created; its turns stay out of the
+	// tree.
+	asked := -1
 	for i := range s.Events {
 		ev := s.Events[i]
+		if ev.Kind == KindUser && IsAskPrompt(ev.Text) {
+			asked = ev.Turn
+		}
+		if ev.Turn == asked {
+			continue
+		}
 		t := turnFor(ev, i)
 		switch ev.Kind {
 		case KindUser:

@@ -14,7 +14,6 @@ import (
 	"ike/internal/agentask"
 	"ike/internal/agenttrace"
 	"ike/internal/config"
-	"ike/internal/diff"
 	"ike/internal/host"
 	"ike/internal/ui"
 )
@@ -34,6 +33,13 @@ import (
 // into the fork's own file. The fork ids are remembered (askForks) and
 // passed to discovery as exclusions, so the trace keeps following the
 // original even while the fork is the newest file in the directory.
+//
+// Follow-ups (#2844): `f` on an answer asks again on the same fork —
+// `claude -p --resume <fork-id>` without --fork-session, so the fork's
+// conversation continues and the original is never named. The fork id is
+// kept per traced session and node (askNodeForks) for the IKE session, so
+// asking about the same node later continues that conversation too (ctrl+n
+// in the prompt starts a fresh fork instead).
 
 // AgentAskMsg runs agent.ask.
 type AgentAskMsg struct{}
@@ -76,6 +82,31 @@ type agentAskState struct {
 	err    error
 	// startedAt stamps the run for the elapsed time in the running view.
 	startedAt time.Time
+	// forkKey names the node's slot in askNodeForks; followUp is the fork
+	// the next question resumes, "" to fork the original afresh.
+	forkKey  string
+	followUp string
+	// history holds the earlier exchanges of this overlay, oldest first.
+	history []askExchange
+	// historyCache is the rendered history at historyW for historyN
+	// exchanges.
+	historyCache       string
+	historyW, historyN int
+}
+
+// askExchange is one answered question of a follow-up chain.
+type askExchange struct {
+	question string
+	answer   string
+}
+
+// askForkKey is the askNodeForks key of a node of a traced session; a nil
+// node stands for the session as a whole.
+func askForkKey(sessionID string, node *agenttrace.Node) string {
+	if node == nil {
+		return sessionID
+	}
+	return sessionID + "\x00" + node.Key
 }
 
 // askDoneMsg is the finished run.
@@ -84,6 +115,8 @@ type askDoneMsg struct {
 	ctx agentask.Context
 	res agentask.Result
 	err error
+	// followUp is the fork the run resumed, "" for a fresh fork.
+	followUp string
 }
 
 // askSpinMsg advances the running view's spinner.
@@ -132,6 +165,7 @@ func (m *Model) openAgentAsk() tea.Cmd {
 		node = &cp
 	}
 	m.askGen++
+	key := askForkKey(sess.ID, node)
 	m.agentAsk = &agentAskState{
 		phase:      askPrompting,
 		gen:        m.askGen,
@@ -141,6 +175,8 @@ func (m *Model) openAgentAsk() tea.Cmd {
 		session:    sess,
 		transcript: sess.Transcript,
 		model:      askOptions().Model,
+		forkKey:    key,
+		followUp:   m.askNodeForks[key],
 	}
 	m.shell.SetAccent(nil)
 	m.renderAgentAsk()
@@ -180,7 +216,7 @@ func (m Model) traceAskHunk(node *agenttrace.Node) string {
 	if problem != "" {
 		return ""
 	}
-	return agentask.UnifiedHunks(diff.Compute(e.Before, after), agentask.MaxHunkLines)
+	return agentask.Hunk(e.Before, after)
 }
 
 // closeAgentAsk dismisses the prompt or answer, cancelling a running fork.
@@ -206,8 +242,14 @@ func (m *Model) startAgentAsk(question string) tea.Cmd {
 	s.cancel = cancel
 	opts := askOptions()
 	s.model = opts.Model
-	gen, sess, transcript, node, hunk := s.gen, s.session, s.transcript, s.node, s.hunk
+	gen, sess, transcript, node, hunk, fork := s.gen, s.session, s.transcript, s.node, s.hunk, s.followUp
 	run := func() tea.Msg {
+		if fork != "" {
+			// A follow-up: the fork already holds the context.
+			argv := agentask.FollowUp(fork, opts, agentask.Prompt(agentask.Context{}, question))
+			res, err := agentask.Run(ctx, sess.CWD, argv)
+			return askDoneMsg{gen: gen, res: res, err: err, followUp: fork}
+		}
 		c := agentask.Context{}
 		if node != nil {
 			var parsed *agenttrace.Session
@@ -250,7 +292,10 @@ func (m Model) handleAskDone(msg askDoneMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	s.cancel = nil
-	s.ctx = msg.ctx
+	if msg.followUp == "" {
+		// A follow-up keeps the context of the ask that forked.
+		s.ctx = msg.ctx
+	}
 	s.result = msg.res
 	if msg.res.ForkID != "" {
 		m.noteAskFork(msg.res.ForkID)
@@ -259,16 +304,49 @@ func (m Model) handleAskDone(msg askDoneMsg) (tea.Model, tea.Cmd) {
 		if errors.Is(msg.err, context.Canceled) {
 			return m, nil
 		}
+		var re *agentask.ResumeError
+		if msg.followUp != "" && errors.As(msg.err, &re) {
+			// The fork is gone: the next ask about the node forks afresh.
+			delete(m.askNodeForks, s.forkKey)
+		}
 		s.err = msg.err
 		s.phase = askFailed
 		m.shell.SetAccent(m.pal().Error)
 		m.renderAgentAsk()
 		return m, nil
 	}
+	// The fork this answer lives in is what the node's next question resumes.
+	if fork := msg.res.ForkID; fork != "" || msg.followUp != "" {
+		if fork == "" {
+			fork = msg.followUp
+			s.result.ForkID = fork
+		}
+		if m.askNodeForks == nil {
+			m.askNodeForks = map[string]string{}
+		}
+		m.askNodeForks[s.forkKey] = fork
+	}
 	s.phase = askAnswered
 	m.shell.SetAccent(nil)
 	m.renderAgentAsk()
 	return m, nil
+}
+
+// followUpAgentAsk turns the answer overlay back into the prompt, the next
+// question resuming the answer's fork; the answer moves into the history.
+func (m *Model) followUpAgentAsk() {
+	s := m.agentAsk
+	if s.result.ForkID == "" {
+		return
+	}
+	s.history = append(s.history, askExchange{question: s.question, answer: s.result.Answer})
+	s.followUp = s.result.ForkID
+	s.phase = askPrompting
+	s.input.Clear()
+	s.problem = ""
+	s.question = ""
+	s.result = agentask.Result{}
+	m.renderAgentAsk()
 }
 
 // noteAskFork remembers a fork id so discovery skips it.
@@ -283,7 +361,9 @@ func (m *Model) noteAskFork(id string) {
 
 // updateAgentAsk consumes every key while the ask is up. Prompting: typing
 // edits the question, enter asks, esc cancels. Running: esc cancels the
-// fork. Answered / failed: esc or q closes, the rest scrolls the shell.
+// fork. Answered / failed: esc or q closes, f (answered) follows up on the
+// fork, the rest scrolls the shell. ctrl+n in a follow-up prompt drops the
+// fork for a fresh one.
 func (m Model) updateAgentAsk(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	s := m.agentAsk
 	switch s.phase {
@@ -303,6 +383,10 @@ func (m Model) updateAgentAsk(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		case msg.Code == 'u' && msg.Mod == tea.ModCtrl:
 			s.input.Clear()
 			s.problem = ""
+		case msg.Code == 'n' && msg.Mod == tea.ModCtrl && s.followUp != "":
+			// Start over on a fresh fork of the original.
+			s.followUp = ""
+			s.history = nil
 		default:
 			s.input.Key(msg)
 			s.problem = ""
@@ -318,6 +402,10 @@ func (m Model) updateAgentAsk(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "esc", "q":
 			m.closeAgentAsk()
+		case "f":
+			if s.phase == askAnswered {
+				m.followUpAgentAsk()
+			}
 		default:
 			m.shell.Update(msg)
 		}
@@ -384,17 +472,29 @@ func (c *askContent) Render(width int) string {
 		if len(about) == 0 {
 			about = []string{"the whole session"}
 		}
+		sb.WriteString(c.historyView(width))
 		sb.WriteString(faint.Render("about: "+strings.Join(about, " · ")) + "\n")
+		if s.followUp != "" {
+			sb.WriteString(faint.Render("follow-up on fork "+shortID(s.followUp)) + "\n")
+		}
 		sb.WriteString("> " + s.input.View() + "\n")
 		if s.problem != "" {
 			sb.WriteString(lipgloss.NewStyle().Foreground(pal.Warning).Render(s.problem) + "\n")
 		}
-		sb.WriteString("\n" + faint.Render("enter ask on "+s.model+" (a fork; the session is not touched) · esc cancel"))
+		hint := "enter ask on " + s.model + " (a fork; the session is not touched) · esc cancel"
+		if s.followUp != "" {
+			hint = "enter continue the fork on " + s.model + " · ctrl+n new fork · esc cancel"
+		}
+		sb.WriteString("\n" + faint.Render(hint))
 		return lipgloss.NewStyle().Width(width).Render(sb.String())
 	case askRunning:
 		frame := playSpinFrames[s.frame%len(playSpinFrames)]
 		elapsed := time.Since(s.startedAt).Round(time.Second)
-		sb.WriteString(frame + " forking the session on " + s.model + "… " + faint.Render(elapsed.String()) + "\n")
+		doing := "forking the session"
+		if s.followUp != "" {
+			doing = "asking fork " + shortID(s.followUp)
+		}
+		sb.WriteString(frame + " " + doing + " on " + s.model + "… " + faint.Render(elapsed.String()) + "\n")
 		sb.WriteString(faint.Render("Q: "+s.question) + "\n\n")
 		sb.WriteString(faint.Render("esc cancels"))
 		return lipgloss.NewStyle().Width(width).Render(sb.String())
@@ -415,6 +515,7 @@ func (c *askContent) Render(width int) string {
 	// Answered.
 	if c.cacheW != width || c.cache == "" {
 		var body strings.Builder
+		body.WriteString(c.historyView(width))
 		body.WriteString(lipgloss.NewStyle().Bold(true).Render("Q: "+s.question) + "\n")
 		if askOptions().ShowContext {
 			if lines := s.ctx.DisplayLines(displayPath); len(lines) > 0 {
@@ -437,11 +538,36 @@ func (c *askContent) Render(width int) string {
 		if s.result.ForkID != "" {
 			meta = append(meta, "fork "+shortID(s.result.ForkID))
 		}
-		body.WriteString("\n" + faint.Render(strings.Join(append(meta, "esc close"), " · ")))
+		keys := "esc close"
+		if s.result.ForkID != "" {
+			keys = "f follow up · " + keys
+		}
+		body.WriteString("\n" + faint.Render(strings.Join(append(meta, keys), " · ")))
 		c.cache = lipgloss.NewStyle().Width(width).Render(body.String())
 		c.cacheW = width
 	}
 	return c.cache
+}
+
+// historyView renders the earlier exchanges of a follow-up chain, each
+// question over its markdown answer, "" without any. The render is cached
+// on the state per width and history length: the prompt re-renders on every
+// key.
+func (c *askContent) historyView(width int) string {
+	s := c.s
+	if len(s.history) == 0 {
+		return ""
+	}
+	if s.historyW == width && s.historyN == len(s.history) {
+		return s.historyCache
+	}
+	var sb strings.Builder
+	for _, ex := range s.history {
+		sb.WriteString(lipgloss.NewStyle().Bold(true).Render("Q: "+ex.question) + "\n\n")
+		sb.WriteString(agentask.RenderMarkdown(ex.answer, width, c.m.pal()) + "\n\n")
+	}
+	s.historyCache, s.historyW, s.historyN = sb.String(), width, len(s.history)
+	return s.historyCache
 }
 
 // shortID trims a session id to its first block.

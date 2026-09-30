@@ -6,6 +6,7 @@ import (
 	"io"
 	"strconv"
 
+	"ike/internal/agentask"
 	"ike/internal/deeplink"
 )
 
@@ -55,7 +56,12 @@ func buildHookEvent(r io.Reader, event string, getenv func(string) string) (deep
 }
 
 // runAgentHook is the whole subcommand; the returned error is only printed.
+// A fork agent.ask runs (#2844) carries agentask.EnvAsk: its events are
+// dropped so the fork never binds to — and hijacks — a terminal's trace.
 func runAgentHook(r io.Reader, event string, getenv func(string) string, dir string) error {
+	if getenv(agentask.EnvAsk) != "" {
+		return nil
+	}
 	ev, err := buildHookEvent(r, event, getenv)
 	if err != nil {
 		return err

@@ -8,7 +8,9 @@
 // The original session's transcript is never written to. The fork is a new
 // session id with the parent's conversation copied in (see the fork notes in
 // wiki/architecture/agent-trace.md); the answer lands in the fork's own
-// file, and the app hides forks from discovery by their ids.
+// file, and the app hides forks from discovery by their ids and — across
+// restarts — by agenttrace.AskMarker, which opens every prompt. A follow-up
+// question (#2844) resumes the fork, never the original.
 package agentask
 
 import (
@@ -17,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -52,7 +55,24 @@ const (
 	MaxAssistant = 2000
 	// MaxHunkLines caps the diff hunk lines injected as context.
 	MaxHunkLines = 60
+	// MaxHunkBytes caps the diff hunk as a whole; MaxHunkLine one row of it
+	// in runes — a minified line would otherwise fill the budget alone.
+	MaxHunkBytes = 4000
+	MaxHunkLine  = 200
+	// MaxDiffInput is the largest file side a hunk is computed for; a bigger
+	// file is left out of the context (the diff would be slow and useless).
+	MaxDiffInput = 256 << 10
+	// MaxTool caps the tool-call line (name and title) in runes.
+	MaxTool = 300
+	// MaxOutput caps the tool output injected as context, in runes; a longer
+	// or binary output is replaced by a note.
+	MaxOutput = 1500
 )
+
+// EnvAsk is set in the environment of every fork agent.ask runs, so IKE's
+// own agent hooks (`ike agent-hook`) drop the fork's lifecycle events
+// instead of binding the fork to a terminal (#2844).
+const EnvAsk = "IKE_AGENT_ASK"
 
 // Context is what a question is about: the facts of the selected trace node
 // the prompt is prefixed with. Every field is optional; an empty Context asks
@@ -68,8 +88,14 @@ type Context struct {
 	Path string
 	Line int
 	Op   string
-	// Tool names the tool call (name and title) of a tool or file node.
+	// Tool names the tool call (name and title) of a tool or file node,
+	// on one line and clipped to MaxTool.
 	Tool string
+	// Output is the tool call's result text, clipped to MaxOutput; a binary,
+	// harness-truncated or oversized output leaves it empty and says why in
+	// OutputNote.
+	Output     string
+	OutputNote string
 	// Assistant is the assistant text the node belongs to: the decision's
 	// own text, or the text that preceded the tool call.
 	Assistant string
@@ -80,7 +106,7 @@ type Context struct {
 
 // Empty reports a context with nothing to say.
 func (c Context) Empty() bool {
-	return c.Turn == 0 && c.Path == "" && c.Tool == "" && c.Assistant == "" && c.Hunk == "" && c.Label == ""
+	return c.Turn == 0 && c.Path == "" && c.Tool == "" && c.Assistant == "" && c.Hunk == "" && c.Label == "" && c.Output == "" && c.OutputNote == ""
 }
 
 // Lines renders the context as the bullet lines the prompt carries.
@@ -123,20 +149,29 @@ func (c Context) DisplayLines(display func(string) string) []string {
 	if c.Assistant != "" {
 		out = append(out, "assistant said: "+strings.TrimSpace(c.Assistant))
 	}
+	switch {
+	case c.Output != "":
+		out = append(out, "tool output:\n```\n"+strings.TrimRight(c.Output, "\n")+"\n```")
+	case c.OutputNote != "":
+		out = append(out, "tool output: "+c.OutputNote)
+	}
 	if c.Hunk != "" {
 		out = append(out, "diff:\n```diff\n"+strings.TrimRight(c.Hunk, "\n")+"\n```")
 	}
 	return out
 }
 
-// Prompt is the text handed to `claude -p`: the context, then the question.
+// Prompt is the text handed to `claude -p`: the ask marker, the context,
+// then the question. A follow-up passes an empty Context — the fork already
+// has it.
 func Prompt(c Context, question string) string {
 	question = strings.TrimSpace(question)
 	lines := c.Lines()
 	if len(lines) == 0 {
-		return question
+		return agenttrace.AskMarker + "\n" + question
 	}
 	var sb strings.Builder
+	sb.WriteString(agenttrace.AskMarker + "\n")
 	sb.WriteString("Context from the session trace (the node the question is about):\n")
 	for _, l := range lines {
 		sb.WriteString("- " + l + "\n")
@@ -182,7 +217,8 @@ func NodeContext(s *agenttrace.Session, n *agenttrace.Node) Context {
 	case ev.Kind == agenttrace.KindAssistant:
 		c.Assistant = clip(ev.Text, MaxAssistant)
 	case ev.Kind == agenttrace.KindTool && ev.Tool != nil:
-		c.Tool = strings.TrimSpace(ev.Tool.Name + " " + ev.Tool.Title)
+		c.Tool = clip(strings.Join(strings.Fields(ev.Tool.Name+" "+ev.Tool.Title), " "), MaxTool)
+		c.Output, c.OutputNote = toolOutput(ev.Tool)
 		// The assistant text that preceded the call in the same turn is the
 		// decision it followed from.
 		for i := n.Event - 1; i >= 0; i-- {
@@ -203,6 +239,28 @@ func NodeContext(s *agenttrace.Session, n *agenttrace.Node) Context {
 		c.Label = ""
 	}
 	return c
+}
+
+// toolOutput is the output a tool call contributes to the context: the text
+// when it is small and textual, else a note saying why it was dropped.
+func toolOutput(t *agenttrace.Tool) (text, note string) {
+	out := strings.TrimSpace(t.Output)
+	switch {
+	case out == "":
+		return "", ""
+	case IsBinary(out):
+		return "", "omitted (binary)"
+	case t.Truncated:
+		return "", "omitted (over " + strconv.Itoa(len(t.Output)) + " bytes, too large)"
+	case utf8.RuneCountInString(out) > MaxOutput:
+		return "", "omitted (" + strconv.Itoa(len(out)) + " bytes, too large)"
+	}
+	return out, ""
+}
+
+// IsBinary reports text that is not worth a prompt: invalid UTF-8 or a NUL.
+func IsBinary(text string) bool {
+	return !utf8.ValidString(text) || strings.IndexByte(text, 0) >= 0
 }
 
 // clip cuts text to max runes with an ellipsis.
@@ -247,6 +305,40 @@ func UnifiedHunks(res diff.Result, maxLines int) string {
 	return strings.Join(lines, "\n")
 }
 
+// Hunk is the context diff of a change: UnifiedHunks of before → after,
+// capped to MaxHunkLines lines of MaxHunkLine runes and MaxHunkBytes in
+// all. "" when either side is binary or larger than MaxDiffInput — such a
+// diff says nothing a question needs.
+func Hunk(before, after string) string {
+	if len(before) > MaxDiffInput || len(after) > MaxDiffInput || IsBinary(before) || IsBinary(after) {
+		return ""
+	}
+	return capHunk(UnifiedHunks(diff.Compute(before, after), MaxHunkLines))
+}
+
+// capHunk clips each hunk line to MaxHunkLine runes and the whole to
+// MaxHunkBytes, cutting at a line boundary with a trailing "…" line.
+func capHunk(h string) string {
+	if h == "" {
+		return ""
+	}
+	var sb strings.Builder
+	for i, l := range strings.Split(h, "\n") {
+		if utf8.RuneCountInString(l) > MaxHunkLine {
+			l = string([]rune(l)[:MaxHunkLine-1]) + "…"
+		}
+		if i > 0 && sb.Len()+len(l)+1 > MaxHunkBytes {
+			sb.WriteString("\n…")
+			return sb.String()
+		}
+		if i > 0 {
+			sb.WriteByte('\n')
+		}
+		sb.WriteString(l)
+	}
+	return sb.String()
+}
+
 // Command assembles the argv of one ask: a print-mode fork of sessionID on
 // opts.Model, without tools, bounded to opts.MaxTurns, answering as JSON,
 // with the explain-only system prompt appended. Zero option fields take the
@@ -271,6 +363,20 @@ func Command(sessionID string, opts Options, prompt string) []string {
 		"--append-system-prompt", SystemPrompt,
 		prompt,
 	}
+}
+
+// FollowUp assembles the argv of a follow-up question: Command, but
+// resuming forkID — the fork an earlier ask created — itself instead of
+// forking again, so the conversation continues where the answer left off.
+// It never names the original session.
+func FollowUp(forkID string, opts Options, prompt string) []string {
+	var out []string
+	for _, a := range Command(forkID, opts, prompt) {
+		if a != "--fork-session" {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // Result is the parsed `--output-format json` output of one ask.
@@ -376,6 +482,7 @@ func Run(ctx context.Context, dir string, argv []string) (Result, error) {
 	}
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = dir
+	cmd.Env = append(os.Environ(), EnvAsk+"=1")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()

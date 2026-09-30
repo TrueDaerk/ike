@@ -91,11 +91,16 @@ func TestNodeContextDecisionTurnAndNil(t *testing.T) {
 }
 
 func TestPromptAndCommand(t *testing.T) {
-	if got := Prompt(Context{}, "  why?  "); got != "why?" {
+	if got := Prompt(Context{}, "  why?  "); got != agenttrace.AskMarker+"\nwhy?" {
 		t.Fatalf("empty context prompt = %q", got)
 	}
 	c := Context{Turn: 3, Path: "a.go", Line: 7, Op: "edit", Hunk: "-a\n+b\n"}
 	p := Prompt(c, "Why this way?")
+	// Every prompt is tagged, so discovery and the tree can tell a fork IKE
+	// created (#2844).
+	if !agenttrace.IsAskPrompt(p) {
+		t.Fatalf("prompt not tagged: %q", p)
+	}
 	for _, want := range []string{"Context from the session trace", "- turn: #3", "- file: a.go:7 (edit)", "```diff\n-a\n+b\n```", "\nQuestion: Why this way?"} {
 		if !strings.Contains(p, want) {
 			t.Errorf("prompt lacks %q:\n%s", want, p)
@@ -110,6 +115,83 @@ func TestPromptAndCommand(t *testing.T) {
 	argv = Command("s", Options{}, "q")
 	if argv[6] != "sonnet" || argv[10] != "1" {
 		t.Fatalf("defaults not applied: %q", argv)
+	}
+	// A follow-up resumes the fork itself: no second fork, no original id.
+	argv = FollowUp("fork-1", Options{Model: "opus", MaxTurns: 2}, "and then?")
+	want = []string{"claude", "-p", "--resume", "fork-1", "--model", "opus", "--tools", "", "--max-turns", "2", "--output-format", "json", "--append-system-prompt", SystemPrompt, "and then?"}
+	if strings.Join(argv, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("follow-up argv = %q", argv)
+	}
+}
+
+func TestNodeContextToolOutput(t *testing.T) {
+	s := session()
+	tool := s.Events[3].Tool
+	tool.Title = "/proj/main.go\n  with   spaces"
+	tool.Output = "ok: 3 lines changed"
+	tree := agenttrace.BuildTree(s)
+	c := NodeContext(s, find(tree, "e3"))
+	if c.Tool != "Edit /proj/main.go with spaces" || c.Output != "ok: 3 lines changed" || c.OutputNote != "" {
+		t.Fatalf("context = %+v", c)
+	}
+	if !strings.Contains(strings.Join(c.Lines(), "\n"), "tool output:\n```\nok: 3 lines changed\n```") {
+		t.Fatalf("lines = %q", c.Lines())
+	}
+	cases := []struct {
+		out       string
+		truncated bool
+		note      string
+	}{
+		{"PNG\x00\x01", false, "omitted (binary)"},
+		{"\xff\xfe", false, "omitted (binary)"},
+		{strings.Repeat("y", MaxOutput+1), false, "too large"},
+		{"short but cut", true, "too large"},
+	}
+	for _, tc := range cases {
+		tool.Output, tool.Truncated = tc.out, tc.truncated
+		c := NodeContext(s, find(tree, "e3"))
+		if c.Output != "" || !strings.Contains(c.OutputNote, tc.note) {
+			t.Errorf("output %q: context output=%q note=%q", tc.out, c.Output, c.OutputNote)
+		}
+		if !strings.Contains(strings.Join(c.Lines(), "\n"), "tool output: omitted") {
+			t.Errorf("output %q: note missing from lines", tc.out)
+		}
+	}
+	// A huge title is clipped.
+	tool.Title = strings.Repeat("z", MaxTool*2)
+	if c := NodeContext(s, find(tree, "e3")); len([]rune(c.Tool)) != MaxTool {
+		t.Fatalf("tool not clipped: %d runes", len([]rune(c.Tool)))
+	}
+}
+
+func TestHunkCaps(t *testing.T) {
+	if got := Hunk("a\n", "b\n"); got != "-a\n+b" {
+		t.Fatalf("hunk = %q", got)
+	}
+	// Binary or oversized sides give no hunk at all.
+	if Hunk("a\x00", "b") != "" || Hunk("a", "\xff") != "" {
+		t.Fatal("binary side must drop the hunk")
+	}
+	big := strings.Repeat("x\n", MaxDiffInput)
+	if Hunk(big, "y\n") != "" {
+		t.Fatal("oversized side must drop the hunk")
+	}
+	// A long line is clipped per line.
+	long := strings.Repeat("w", MaxHunkLine*3)
+	h := Hunk("a\n", long+"\n")
+	for _, l := range strings.Split(h, "\n") {
+		if n := len([]rune(l)); n > MaxHunkLine {
+			t.Fatalf("line of %d runes survived", n)
+		}
+	}
+	// Many mid-sized lines hit the byte cap before the line cap.
+	var after strings.Builder
+	for i := 0; i < MaxHunkLines; i++ {
+		after.WriteString(strings.Repeat("m", MaxHunkLine-10) + "\n")
+	}
+	h = Hunk("", after.String())
+	if len(h) > MaxHunkBytes+len("\n…") || !strings.HasSuffix(h, "\n…") {
+		t.Fatalf("byte cap: %d bytes, tail %q", len(h), h[max(0, len(h)-5):])
 	}
 }
 
@@ -162,7 +244,7 @@ func fakeClaude(t *testing.T, body string, code int) (argsFile, cwdFile string) 
 	dir := t.TempDir()
 	argsFile = filepath.Join(dir, "args")
 	cwdFile = filepath.Join(dir, "cwd")
-	script := "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\0' \"$a\"; done > \"$FAKE_CLAUDE_ARGS\"\npwd > \"$FAKE_CLAUDE_CWD\"\n"
+	script := "#!/bin/sh\nfor a in \"$@\"; do printf '%s\\0' \"$a\"; done > \"$FAKE_CLAUDE_ARGS\"\npwd > \"$FAKE_CLAUDE_CWD\"\necho \"$" + EnvAsk + "\" > \"$FAKE_CLAUDE_CWD.env\"\n"
 	if code != 0 {
 		script += "echo 'No conversation found with session ID: sess-1' >&2\n"
 	}
@@ -190,6 +272,10 @@ func TestRunForksInSessionDir(t *testing.T) {
 	got := strings.Split(strings.TrimSuffix(string(args), "\x00"), "\x00")
 	if strings.Join(got, "\x00") != strings.Join(argv[1:], "\x00") {
 		t.Fatalf("fake received %q", got)
+	}
+	// The fork is flagged for IKE's own agent hooks (#2844).
+	if env, _ := os.ReadFile(cwdFile + ".env"); strings.TrimSpace(string(env)) != "1" {
+		t.Fatalf("%s = %q in the fork's environment", EnvAsk, env)
 	}
 	cwd, _ := os.ReadFile(cwdFile)
 	if got, _ := filepath.EvalSymlinks(strings.TrimSpace(string(cwd))); got != mustEval(dir) {

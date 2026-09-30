@@ -183,6 +183,46 @@ func TestDiscoverSymlinkedCWD(t *testing.T) {
 	}
 }
 
+// TestDiscoverSkipsAskedFork: a fork agent.ask created is tagged in its
+// preamble queue line (#2844). Even with no original to group it with —
+// the original deleted, or the root rewritten — it is never discovered,
+// whereas an untagged fork with the same history is.
+func TestDiscoverSkipsAskedFork(t *testing.T) {
+	projects := t.TempDir()
+	cwd := "/Users/dev/src/proj"
+	base := time.Date(2026, 9, 30, 14, 0, 0, 0, time.UTC)
+	older := fixture(t, projects, "basic.jsonl", cwd, origID, base)
+	rewrite(t, older, "u-root", "u-older-root")
+	asked := fixture(t, projects, "fork.jsonl", cwd, forkID, base.Add(5*time.Minute))
+	rewrite(t, asked, `"content":"Why did you add hello.go?"`, `"content":"`+AskMarker+`\nWhy did you add hello.go?"`)
+
+	all, err := ListIn(projects, cwd)
+	if err != nil || len(all) != 2 {
+		t.Fatalf("ListIn = %+v, %v", all, err)
+	}
+	if all[0].ID != forkID || !all[0].Asked || all[0].ParentID != "" || all[1].Asked {
+		t.Fatalf("tags = %+v", all)
+	}
+	if got, err := DiscoverIn(projects, cwd); err != nil || got.ID != origID {
+		t.Fatalf("Discover = %+v, %v; want the older untagged session", got, err)
+	}
+
+	// The same fork without the tag is a live session again.
+	rewrite(t, asked, AskMarker+`\n`, "")
+	if got, err := DiscoverIn(projects, cwd); err != nil || got.ID != forkID {
+		t.Fatalf("untagged Discover = %+v, %v", got, err)
+	}
+}
+
+func TestIsAskPrompt(t *testing.T) {
+	if !IsAskPrompt(AskMarker+"\nwhy?") || !IsAskPrompt("  "+AskMarker) {
+		t.Fatal("tagged prompt not recognised")
+	}
+	if IsAskPrompt("why? "+AskMarker) || IsAskPrompt("") {
+		t.Fatal("marker must open the prompt")
+	}
+}
+
 func TestMarkForksOrdersByCreation(t *testing.T) {
 	ts := func(s int) time.Time { return time.Date(2026, 9, 30, 14, 0, s, 0, time.UTC) }
 	// Birth time wins over first timestamp and mtime.

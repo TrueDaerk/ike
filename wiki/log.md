@@ -1,5 +1,22 @@
 # Log
 
+## 2026-10-01 (agent trace: follow-ups on the ask fork, fork tagging, trimmed context, #2844)
+
+- `f` on an `agent.ask` answer asks a follow-up on the **fork**
+  (`agentask.FollowUp`: `--resume <fork-id>` without `--fork-session`),
+  the chain shown in the overlay; the fork id is kept per session and node,
+  so asking about the node again continues it (`ctrl+n` forks afresh).
+- Forks are tagged: every ask prompt opens with `agenttrace.AskMarker`,
+  which lands in the fork's preamble queue line — discovery skips tagged
+  transcripts (`Located.Asked`), `BuildTree` drops ask turns, and `ike
+  agent-hook` stays silent under `IKE_AGENT_ASK=1`, which `agentask.Run`
+  sets, so a fork never binds to the traced pane.
+- Context trimmed: tool title on one line capped at 300 runes, tool output
+  included when small and textual (else a binary / too-large note), diff
+  hunk capped at 200 runes per line and 4000 bytes, dropped for binary or
+  >256 KiB sides.
+- Docs: [Agent Trace](/architecture/agent-trace.md).
+
 ## 2026-10-01 (agent trace: `agent.ask` on a fork with a cheaper model, #2845)
 
 - `agent.ask` (`cmd+alt+shift+q`, `a` in the trace pane, Tools menu) asks a
