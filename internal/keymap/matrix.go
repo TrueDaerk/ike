@@ -224,6 +224,7 @@ var reachableAlternatives = map[string]string{
 	"time.toggle":                      "palette / Tools menu",
 	"usage.toggle":                     "palette / Tools menu",
 	"agent.trace.toggle":               "palette / Tools menu",
+	"agent.ask":                        "palette / Tools menu / a in the Agent Trace pane",
 	"palette.bindLastPick":             "palette / the bind-a-key toast after repeated palette picks",
 	"issues.openCurrentBranch":         "palette / click the status line's branch-issue segment",
 	"lsp.ignoreDiagnostic":             "palette",

@@ -156,8 +156,10 @@ func (m *Model) traceLocateCmd() tea.Cmd {
 	bound, ok := m.agentSessions[target.key]
 	projects := agenttrace.ProjectsDir()
 	gen := m.traceGen
+	// The forks agent.ask spawned (#2845) are never the traced session.
+	forks := append([]string(nil), m.askForks...)
 	return func() tea.Msg {
-		s, err := locateAgentSession(bound, ok && target.key != "", projects, target.cwd)
+		s, err := locateAgentSession(bound, ok && target.key != "", projects, target.cwd, forks...)
 		return traceLocatedMsg{gen: gen, target: target, sess: s, err: err}
 	}
 }

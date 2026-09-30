@@ -59,6 +59,9 @@ type Config struct {
 	Debug Debug `toml:"debug"`
 	// Completion holds the completion popup's filter behaviour (#2650).
 	Completion Completion `toml:"completion"`
+	// Agent holds the coding-agent integration settings (epic 0540): today the
+	// agent.ask fork question (#2845).
+	Agent Agent `toml:"agent"`
 	// PHP holds the PHP trait-consumer intelligence settings (0520, #2667).
 	PHP PHP `toml:"php"`
 	// Tools holds user-defined TUI tool panes (#741).
@@ -431,6 +434,22 @@ type ESEndpoint struct {
 	Username string `toml:"username"`
 	Password string `toml:"password"`
 	APIKey   string `toml:"api_key"`
+}
+
+// Agent holds the coding-agent integration settings (epic 0540).
+type Agent struct {
+	Ask AgentAsk `toml:"ask"`
+}
+
+// AgentAsk configures agent.ask (#2845): the question about a trace node
+// that a *fork* of the agent session answers on a cheaper model. Model is
+// "sonnet", "opus" or a full model id; MaxTurns bounds the fork's agentic
+// turns (1-5); ShowContext shows the injected node context in the answer
+// overlay.
+type AgentAsk struct {
+	Model       string `toml:"model"`
+	MaxTurns    int    `toml:"max_turns"`
+	ShowContext bool   `toml:"show_context"`
 }
 
 // Completion holds the completion popup's filter settings (#2650). The popup

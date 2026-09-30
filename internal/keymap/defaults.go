@@ -786,6 +786,11 @@ var jetbrainsRows = []row{
 	// check), so the trace takes the shift layer; cmd+alt+shift+a is free
 	// on both platforms (ctrl+alt+shift+a off macOS).
 	{"cmd+alt+shift+a", "agent.trace.toggle", "Agent trace", Global, "Agent trace (#2840)"},
+	// Ask the agent about the selected trace node (#2845): the trace's
+	// neighbour in the same shift layer; cmd+alt+shift+q is free on both
+	// platforms (ctrl+alt+shift+q off macOS). The pane's own 'a' is the
+	// short way from inside the trace.
+	{"cmd+alt+shift+q", "agent.ask", "Ask the agent about a trace node", Global, "Agent ask (#2845)"},
 	// The issue behind the current issue/<n> branch (#2544). It is a doorway
 	// into the same Issues window, so it sits next to it in the alt layer;
 	// cmd+alt+i is free on both platforms (ctrl+alt+i off macOS).

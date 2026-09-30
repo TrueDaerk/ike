@@ -46,6 +46,10 @@ type InstallHooksMsg struct{}
 // entry a linked node resolved to ('D', #2838).
 type ChangeDiffMsg struct{ Path string }
 
+// AskMsg is 'a' in the pane (#2845): ask a fork of the traced session about
+// the selected node — the root model runs agent.ask.
+type AskMsg struct{}
+
 // ChangeRevertMsg asks the root model to run the change feed's revert of the
 // entry a linked node resolved to ('V', #2838).
 type ChangeRevertMsg struct{ Path string }
@@ -352,6 +356,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return func() tea.Msg { return RefreshMsg{} }
 	case "i":
 		return func() tea.Msg { return InstallHooksMsg{} }
+	case "a":
+		return func() tea.Msg { return AskMsg{} }
 	case "D", "V":
 		cur := m.Current()
 		if cur == nil {
@@ -477,7 +483,7 @@ func (m *Model) View() string {
 	for len(lines) < headerRows+m.treeHeight() {
 		lines = append(lines, "")
 	}
-	hint := "enter/double-click opens · space expands · h/l fold · r rescan · Δ: D diff · V revert"
+	hint := "enter/double-click opens · space expands · h/l fold · a ask · r rescan · Δ: D diff · V revert"
 	lines = append(lines, clip.Render(lipgloss.NewStyle().Faint(true).Render(hint)))
 	return strings.Join(lines, "\n")
 }

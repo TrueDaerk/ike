@@ -390,6 +390,11 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "terminal.popup_on_switch", Type: Enum, Title: "Popup terminal on project switch", Description: "What the popup terminal does after a project switch: \"restore\" brings the incoming project's popup back exactly as it was left, \"always-open\" opens it every time — resuming the parked instance if one exists, spawning a fresh shell otherwise", Scope: config.UserScope, Options: []string{"restore", "always-open"}},
 			{Key: "terminal.popup_scope", Type: Enum, Title: "Popup terminal scope", Description: "Who owns the popup terminal: \"project\" gives every project its own popup, parked with the project and back exactly as left; \"global\" keeps one popup shell for the whole app — it follows you across project switches with its scrollback and running processes, and is asked to cd into the new project root whenever its shell sits idle at a prompt", Scope: config.UserScope, Options: []string{"project", "global"}},
 		}},
+		{Title: "Agent Trace", Description: "The coding-agent trace window and its Ask command: which model answers a question about a trace node, how many turns the forked session may take and whether the injected context is shown.", Entries: []Entry{
+			{Key: "agent.ask.model", Type: String, Title: "Ask model", Description: "Model the forked session answers Ask the Agent (agent.ask) on: \"sonnet\" (the default, the cheaper choice), \"opus\" or a full model id such as claude-sonnet-5-5. The fork inherits the whole session context either way; the original session's history is never touched", Scope: config.UserScope, ValidateString: agentAskModelValidate},
+			{Key: "agent.ask.max_turns", Type: Int, Title: "Ask max turns", Description: "Agentic turns the forked session may take to answer (claude --max-turns); 1 is a single reply, up to 5 lets it reason in several steps at more cost", Scope: config.UserScope, Min: 1, Max: 5},
+			{Key: "agent.ask.show_context", Type: Bool, Title: "Ask shows context", Description: "Show the node context the question was prefixed with (file, line, diff hunk, turn time, assistant text) above the answer in the Ask overlay", Scope: config.UserScope},
+		}},
 		{Title: "Screenshots", Description: "The in-IDE PNG export: Export Screenshot paints the focused pane — or the whole window — as it is rendered, and copies the written path to the clipboard.", Entries: []Entry{
 			{Key: "screenshot.directory", Type: Path, Dirs: true, Title: "Screenshot directory", Description: "Directory the exported PNGs are written to, created on the first capture; \"~\" expands and a relative path resolves against the project directory. Empty means the built-in default, ~/.ike/screenshots", Scope: config.UserScope},
 		}},
@@ -571,6 +576,10 @@ func networkBindValidate(v string) string { return config.NetworkBindError(v) }
 // networkNameValidate refuses an mDNS instance name the announcer could not
 // use as one label (#2522), with the shared validator's message.
 func networkNameValidate(v string) string { return config.NetworkNameError(v) }
+
+// agentAskModelValidate refuses an agent.ask.model that is not one word
+// (#2845), with the shared validator's message.
+func agentAskModelValidate(v string) string { return config.AgentAskModelError(v) }
 
 // forgePollValidate is the strict form check for forge.poll_interval_seconds
 // (#2085): the config validator has to be lenient with a file on disk and

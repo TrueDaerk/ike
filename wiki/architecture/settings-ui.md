@@ -255,6 +255,10 @@ any entry whose key the typed schema does not expose (no dead keys).
   (`telemetry.enabled`, default on): command/keybind/layout events as
   per-session JSONL under `~/.ike/telemetry`, never leaving the machine (see
   [usage telemetry](./usage-telemetry.md)).
+- **Agent Trace** (#2845) — the `agent.ask` fork question: `agent.ask.model`
+  (a validated free-text model — `sonnet`, `opus` or a full id, one word),
+  `agent.ask.max_turns` (1–5) and `agent.ask.show_context` (see
+  [agent trace](./agent-trace.md)).
 - **Forge** (#2085) — `forge.poll_interval_seconds`, how often the code forge
   is re-read in the background (default 20s, `0` off). Its valid set has a
   hole — 0, then 10 and up — so it carries the `Entry.ValidateInt` hook: a
