@@ -69,6 +69,7 @@ var paneSlotDefs = []paneSlotDef{
 	{id: "deps", kind: pane.KindDeps, label: "Dependencies", open: func(m *Model) tea.Cmd { return m.toggleDepsPanel() }},
 	{id: "time", kind: pane.KindTime, label: "Project Time", open: func(m *Model) tea.Cmd { return m.toggleTimePanel() }},
 	{id: "usage", kind: pane.KindUsage, label: "Usage Report", open: func(m *Model) tea.Cmd { return m.toggleUsagePanel() }},
+	{id: "agenttrace", kind: pane.KindAgentTrace, label: "Agent Trace", open: func(m *Model) tea.Cmd { return m.toggleAgentTracePanel() }},
 	{id: "debug", kind: pane.KindDebug, label: "Debug"},
 	{id: "http", kind: pane.KindHTTP, label: "HTTP Response"},
 }

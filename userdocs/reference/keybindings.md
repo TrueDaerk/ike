@@ -29,6 +29,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|
+| Agent trace | `cmd+alt+shift+a` | `ctrl+alt+shift+a` | `agent.trace.toggle` |
 | Append result path (all items) | `ctrl+shift+.` | `ctrl+shift+.` | `json.jqAppendPathAny` |
 | Append result path to query | `ctrl+.` | `ctrl+.` | `json.jqAppendPath` |
 | Bind key for last palette command | `cmd+alt+k` | `ctrl+alt+k` | `palette.bindLastPick` |
@@ -198,6 +199,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Toggle raw output (-r) | `ctrl+alt+q` | `ctrl+alt+q` | `json.jqToggleRaw` |
 | Toggle slurp input (-s) | `ctrl+alt+s` | `ctrl+alt+s` | `json.jqToggleSlurp` |
 | Toggle terminal | `alt+f12` | `alt+f12` | `terminal.toggle` |
+| Toggle yq round-trip output | `ctrl+alt+shift+y` | `ctrl+alt+shift+y` | `playground.yqRoundTrip` |
 | Usage report | `cmd+alt+u` | `ctrl+alt+u` | `usage.toggle` |
 | Window layouts | `alt+shift+f12` | `alt+shift+f12` | `window.layouts` |
 | Zen mode | `ctrl+alt+f` | `ctrl+alt+f` | `view.zenMode` |

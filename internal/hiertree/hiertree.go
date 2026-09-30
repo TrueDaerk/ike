@@ -46,10 +46,33 @@ type Row[T any] struct {
 	loading  bool
 }
 
+// Expanded reports whether the row currently shows its children.
+func (r *Row[T]) Expanded() bool { return r.expanded }
+
+// Depth is the row's nesting level, 0 for a root.
+func (r *Row[T]) Depth() int { return r.depth }
+
+// Leaf reports whether the row was expanded and turned out to have no
+// children.
+func (r *Row[T]) Leaf() bool { return r.loaded && len(r.children) == 0 }
+
 // Fetch is the host-built continuation that expands one row: it issues the
 // request under reqID and the host's Apply later feeds the reply back through
 // Tree.Apply with the same id.
 type Fetch[T any] func(reqID int, item T) tea.Cmd
+
+// Static builds a Fetch over an in-memory tree (#2840): children answers
+// synchronously from the item, and the reply is applied inside the Expand
+// call, so the row unfolds before the caller's next line runs and no command
+// travels through the Update loop. The trace tool window, whose whole tree
+// is a grouping of an already-parsed transcript, uses it; the LSP hierarchies
+// keep their asynchronous fetches.
+func Static[T any](t *Tree[T], children func(item T) []Row[T]) Fetch[T] {
+	return func(reqID int, item T) tea.Cmd {
+		t.Apply(reqID, false, children(item))
+		return nil
+	}
+}
 
 // Tree is the expandable tree state: the roots it was opened on, the current
 // node set, the cursor and scroll window, and the in-flight requests.
@@ -98,6 +121,124 @@ func (t *Tree[T]) Rebuild() tea.Cmd {
 		return nil
 	}
 	return t.Expand(t.nodes[0])
+}
+
+// Refresh replaces the roots without losing what the user did to the tree
+// (#2840): every row whose key was expanded before is expanded again, the
+// cursor lands on the row that carries the previously selected key (or stays
+// clamped where it was when that row is gone), and the scroll window is
+// kept. key names a row by its item; it must be stable across refreshes for
+// the state to carry over. Rows that were not in the old tree come up
+// collapsed — the host expands the ones it wants shown (ExpandDeep). With a
+// Static fetch the re-expansion completes inside this call; with an
+// asynchronous one the returned command carries the fetches.
+func (t *Tree[T]) Refresh(roots []Row[T], key func(item T) string) tea.Cmd {
+	expanded := map[string]bool{}
+	var remember func(rs []*Row[T])
+	remember = func(rs []*Row[T]) {
+		for _, r := range rs {
+			if r.expanded {
+				expanded[key(r.Item)] = true
+			}
+			remember(r.children)
+		}
+	}
+	remember(t.nodes)
+	selected, hadSelection := "", false
+	if cur := t.Current(); cur != nil {
+		selected, hadSelection = key(cur.Item), true
+	}
+	top := t.top
+
+	t.roots = roots
+	t.pending = map[int]*Row[T]{}
+	t.nodes = make([]*Row[T], len(roots))
+	for i := range roots {
+		r := roots[i]
+		t.nodes[i] = &Row[T]{Entry: r.Entry, Item: r.Item}
+	}
+	var cmds []tea.Cmd
+	var reopen func(rs []*Row[T])
+	reopen = func(rs []*Row[T]) {
+		for _, r := range rs {
+			if !expanded[key(r.Item)] {
+				continue
+			}
+			if cmd := t.Expand(r); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
+			// Children exist here only after a synchronous fetch; an
+			// asynchronous one leaves nothing to walk yet.
+			reopen(r.children)
+		}
+	}
+	reopen(t.nodes)
+
+	rows := t.Visible()
+	t.cursor = ui.ClampIndex(t.cursor, len(rows))
+	if hadSelection {
+		for i, r := range rows {
+			if key(r.Item) == selected {
+				t.cursor = i
+				break
+			}
+		}
+	}
+	t.top = top
+	return tea.Batch(cmds...)
+}
+
+// ExpandDeep expands r and, as far as the fetch answers synchronously, every
+// descendant — the "show the newest turn whole" gesture of the trace window.
+// Asynchronous children expand only one level.
+func (t *Tree[T]) ExpandDeep(r *Row[T]) tea.Cmd {
+	var cmds []tea.Cmd
+	var walk func(r *Row[T])
+	walk = func(r *Row[T]) {
+		if cmd := t.Expand(r); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		for _, c := range r.children {
+			walk(c)
+		}
+	}
+	walk(r)
+	return tea.Batch(cmds...)
+}
+
+// Roots returns the live root rows, in order.
+func (t *Tree[T]) Roots() []*Row[T] { return t.nodes }
+
+// HasNodes reports whether the tree holds any row.
+func (t *Tree[T]) HasNodes() bool { return len(t.nodes) > 0 }
+
+// SetFetch installs (or replaces) the expansion continuation without
+// touching the rows — for a host whose Tree lives by value inside a model
+// that may be moved (a tool window detached into a tab) and therefore
+// re-points a Static fetch at the tree's current address before use.
+func (t *Tree[T]) SetFetch(f Fetch[T]) { t.fetch = f }
+
+// SetCursor moves the selection onto visible row i (clamped).
+func (t *Tree[T]) SetCursor(i int) { t.cursor = ui.ClampIndex(i, len(t.Visible())) }
+
+// Top is the first visible row of the render window.
+func (t *Tree[T]) Top() int { return t.top }
+
+// Wheel scrolls the render window (height rows) by delta rows, dragging the
+// cursor along when it would leave the window — the shared list-mouse
+// convention (ui.WheelWindow).
+func (t *Tree[T]) Wheel(delta, height int) {
+	ui.WheelWindow(&t.top, &t.cursor, delta, len(t.Visible()), height)
+}
+
+// Toggle flips a row between expanded and collapsed: the enter action of a
+// row that has nothing to open. It returns the expansion's command.
+func (t *Tree[T]) Toggle(r *Row[T]) tea.Cmd {
+	if r.expanded {
+		r.expanded = false
+		return nil
+	}
+	return t.Expand(r)
 }
 
 // Expand fetches (or re-shows) a row's children: a loaded row just unfolds,
@@ -221,7 +362,9 @@ func (t *Tree[T]) Key(key string, page int, onEnter func(Row[T]) tea.Cmd, onTogg
 // cursor row stays in the window (the cursor is clamped first, so a tree that
 // shrank under it still has a selection). An empty tree renders the dim
 // empty notice as its single row. displayPath formats the row's path; nil
-// prints it verbatim.
+// prints it verbatim. A row without a Path prints no location, one with a
+// negative Line prints the path alone (#2840: a trace file node whose line
+// could not be resolved).
 func (t *Tree[T]) RenderRows(width, height int, pal *theme.Palette, displayPath func(string) string, empty string) []string {
 	rows := t.Visible()
 	if len(rows) == 0 {
@@ -252,18 +395,24 @@ func (t *Tree[T]) RenderRows(width, height int, pal *theme.Palette, displayPath 
 			marker = "·"
 		}
 		indent := strings.Repeat("  ", r.depth)
-		loc := displayPath(r.Entry.Path) + ":" + strconv.Itoa(r.Entry.Line+1)
+		loc := ""
+		if r.Entry.Path != "" {
+			loc = "  " + displayPath(r.Entry.Path)
+			if r.Entry.Line >= 0 {
+				loc += ":" + strconv.Itoa(r.Entry.Line+1)
+			}
+		}
 		detail := ""
 		if r.Entry.Detail != "" {
 			detail = " " + r.Entry.Detail
 		}
 		if i == t.cursor {
-			row := indent + marker + " " + r.Entry.Name + detail + "  " + loc
+			row := indent + marker + " " + r.Entry.Name + detail + loc
 			out = append(out, clip.Render(sel.Render(row)))
 			continue
 		}
 		row := dim.Render(indent+marker+" ") + name.Render(r.Entry.Name) +
-			dim.Render(detail+"  "+loc)
+			dim.Render(detail+loc)
 		out = append(out, clip.Render(row))
 	}
 	return out

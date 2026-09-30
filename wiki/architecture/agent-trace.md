@@ -1,10 +1,10 @@
 ---
 type: architecture
 title: Agent Trace
-description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), and the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843); the tool window, change-feed links and "ask" follow in their own sub-issues.
+description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840); change-feed links and "ask" follow in their own sub-issues.
 resource: internal/agenttrace
-tags: [architecture, agents, claude, transcript, trace, discovery, hooks]
-timestamp: 2026-09-30T20:00:00Z
+tags: [architecture, agents, claude, transcript, trace, discovery, hooks, tool-window, hiertree]
+timestamp: 2026-09-30T22:00:00Z
 ---
 
 # Agent Trace
@@ -246,7 +246,117 @@ it. `agentSessionLocator(t)` is what the trace window (#2840) calls off the
 Update loop: a live hook binding wins, otherwise `agenttrace.Discover` on the
 terminal's cwd.
 
+## Trace tool window (#2840)
+
+`agent.trace.toggle` (`cmd+alt+shift+a`, Tools menu, palette) opens the
+singleton **Agent Trace** tool window (`pane.KindAgentTrace`, key
+`agenttrace`, context `agenttrace`) through the shared
+[tool-window wiring](./tool-panes.md) — `togglePanelWith` / `openToolPane`
+at the adaptive `auxZone`, restored with the layout like every other
+singleton, tabbable, numbered by the pane slots. The pane component is
+`internal/tracepanel`; the app half is `internal/app/agenttrace_panel.go`.
+
+### Tree
+
+`agenttrace.BuildTree(session)` groups the flat timeline into
+**turn → assistant decision → tool call → file**, a pure function the app
+runs after every read:
+
+- a **turn** row per user prompt (`#3 <first line of the prompt>`, the time
+  as detail); events before the first prompt form a leading `session start`
+  turn;
+- a **decision** row per assistant text or thinking block (`thinking` as
+  detail); tool calls issued before any assistant text of the turn nest
+  under an implicit `tool calls` decision;
+- a **tool** row per call: the tool name, then either its single file as the
+  location (`Edit  main.go:3`), `N files`, or the call's title (`Bash Build
+  and vet the module`); `✗ error` marks a failed result, `…` one that has
+  not arrived;
+- a **file** row per `FileRef` below the call (`edit  main.go:3`, `create
+  hello.go`); a line the parser could not resolve shows the path alone;
+- a **separator** row for a compaction (`— context compacted —`).
+
+Node keys come from event indices (`t3`, `e17`, `e17/f0`, `e17/x`), which the
+append-only `Events` slice keeps stable, so the tree host can carry state
+across rebuilds by key.
+
+### Pane
+
+The panel is a [hiertree](./hiertree.md) host over `agenttrace.Node` with
+the synchronous `hiertree.Static` fetch — the children are already in
+memory. Every `Set` goes through `Tree.Refresh`, which keeps expanded rows
+expanded and the cursor on the same key; the newest turn on the first
+`Set` and every turn that appears later are expanded whole (`ExpandDeep`),
+so the latest activity is visible without a keystroke. A header line names
+the session (`11111111 · hook · 3 turns · ~/.claude/projects/…`, `· ended`
+after SessionEnd; `scan` when discovery found it), a hint row closes the
+pane.
+
+Keys: the tree's own (`j/k`, page keys, `space`/`l` expand, `h` fold or
+walk to the parent), `enter` opens the row's file — or folds/unfolds a row
+that has none — `r` looks the session up again, `i` installs the Claude
+hooks. Mouse: a click selects, a click on the marker cell folds, a second
+click within `ui.DoubleClickWindow` opens (the shared list-mouse gesture),
+the wheel scrolls through `Tree.Wheel`.
+
+**Click to code.** A row with a `FileRef` — every file row, and a tool row
+whose call touched exactly one file — yields `tracepanel.OpenLocationMsg`
+with the 0-based line (−1 when unknown), which the root model routes into
+`openPathAt`: the same pipeline as the terminal's `file:line` links and the
+`ike://open` deep link, so navigation history, the Source-view switch and
+the focused-pane rules all apply.
+
+### Following the agent pane and reading live
+
+The trace follows one terminal, picked on every lookup (`traceTargetNow`):
+the focused pane's tool terminal; else the tool terminal the keyboard last
+sat in (`setFocus` records it); else the best live terminal — one with a
+live hook binding, then any tool pane, then a plain terminal; else no
+terminal and the project root. The session is then the terminal's hook
+binding when live, otherwise `agenttrace.Discover` on its cwd
+(`locateAgentSession`, off the Update loop).
+
+One `agenttrace.Reader` tails the located transcript. While the pane is open
+a one-second tick (`traceTickMsg`, generation-guarded like the other
+tickers) runs an incremental `Update()` and regroups the tree **off the
+loop** — at most one read in flight, and the on-loop side only ever sees the
+finished `[]Node`, so the reader's session is never shared. A read that
+added nothing leaves the pane untouched. The tick re-locates when the
+followed terminal changed, every fifth tick while nothing is found or the
+session has ended, and immediately on a hook push (`AgentEventMsg`), on the
+pane's `r`, when the pane is re-focused through its toggle, and after a
+hook install finished. Closing the pane ends the chain; a pane restored
+with the layout starts it from `Init`.
+
+### Empty state
+
+No transcript for the followed directory is actionable — start the agent
+or install the hooks — so the pane draws the **centered dialog** the
+missing-tool states use, not a one-line notice: heading, the directory
+looked at, and an action strip built from `ui.Segmented`
+(`[Install Claude hooks] [Rescan]`, the primary in accent) that takes
+clicks at the drawn position; `i` / `enter` install, `r` rescans. A read
+error is shown in the box; a pane too small for it falls back to a
+one-line notice. While the lookup runs the pane says so and offers nothing.
+
 ## Tests
+
+`internal/agenttrace/tree_test.go` builds the tree from `basic.jsonl` (the
+full outline, details and refs, the implicit decision and the pending mark)
+and checks that keys and rows survive an incremental append;
+`internal/hiertree/static_test.go` covers `Static`, `Refresh` keeping
+expansion and selection (and clamping when the selected row is gone),
+`ExpandDeep`, `Toggle`, `Wheel` and path-less rows;
+`internal/tracepanel/tracepanel_test.go` the newest-turn expansion, enter
+on tool and file rows (line −1 for a create), the live append keeping a
+collapsed row collapsed and the cursor in place, click/double-click/marker
+clicks, and the dialog's keys and button hit test against the drawn
+columns; `internal/app/agenttrace_panel_test.go` the toggle lifecycle, the
+lookup → read → tree pipeline against a transcript under a temporary
+`CLAUDE_CONFIG_DIR`, enter opening the editor at the hunk line, the tick
+reading an appended turn without losing the selection (and dying when
+stale or after close), the empty state's actions, and the followed
+terminal (focused tool pane, last tool pane, hook binding, project root).
 
 `internal/agenttrace/hooks_test.go` round-trips install → install →
 uninstall against a settings file with foreign hooks and unrelated keys
@@ -278,8 +388,12 @@ points at one.
 - [External-Change Feed](/architecture/change-feed.md) — the diff/revert
   side that file nodes will link to (#2838).
 - [Hierarchy Tree](/architecture/hiertree.md) — the tree the trace tool
-  window is built on (#2840).
+  window is built on: `Static`, `Refresh`, `ExpandDeep` were added for it
+  (#2840).
 - [Deep Links](/architecture/deep-links.md) — the socket the hook push
   extends with an `event` message (#2843).
 - [Tool Panes](/architecture/tool-panes.md) — the tool panes a hook binds a
-  session to.
+  session to and the shared wiring the trace window is opened through.
+- [Shared Building Blocks](/architecture/shared-building-blocks.md) — the
+  catalog the pane is assembled from (`hiertree`, `ui.Segmented`, the
+  list-mouse helpers, `togglePanel` / `openToolPane`).

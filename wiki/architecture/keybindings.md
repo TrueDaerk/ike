@@ -1550,6 +1550,7 @@ registry command in `internal/editor` (`lineops.go`), selection-aware wherever
 JetBrains is:
 | command | primary | reachability | fallback | status |
 |---|---|---|---|---|
+| `agent.trace.toggle` | `cmd+alt+shift+a` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `archive.reload` | `ctrl+r` | delivered | `—` | live |
 | `bookmark.next` | `shift+f11` | delivered | `—` | live |
 | `bookmark.previous` | `ctrl+shift+f11` | delivered | `—` | live |

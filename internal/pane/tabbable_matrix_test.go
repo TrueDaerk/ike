@@ -14,7 +14,7 @@ var allKinds = []Kind{
 	KindProblems, KindStructure, KindUsages, KindHTTP, KindBreakpoints, KindImage, KindMerge,
 	KindArchive, KindData, KindES, KindTests, KindIssues, KindDOM, KindDoctor, KindRemote,
 	KindLSPDoctor, KindDeps, KindHex, KindNotebook, KindTime, KindUsage,
-	KindHTMLPreview,
+	KindHTMLPreview, KindAgentTrace,
 }
 
 // convertiblePanes builds one registered pane for every kind that converts
@@ -54,8 +54,8 @@ func TestEveryKindButExplorerIsTabbable(t *testing.T) {
 			}
 		}
 	}
-	if len(ToolWindowKinds()) != 15 {
-		t.Fatalf("tool window kinds = %d, want 15", len(ToolWindowKinds()))
+	if len(ToolWindowKinds()) != 16 {
+		t.Fatalf("tool window kinds = %d, want 16", len(ToolWindowKinds()))
 	}
 }
 

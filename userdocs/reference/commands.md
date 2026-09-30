@@ -28,6 +28,9 @@ bring their own.
 
 | Command | ID | Chord | In the editor | Available in |
 |---|---|---|---|---|
+| Agent Trace: Install Claude Hooks | `agent.hooks.install` | — | — | everywhere |
+| Agent Trace: Uninstall Claude Hooks | `agent.hooks.uninstall` | — | — | everywhere |
+| Agent Trace | `agent.trace.toggle` | `cmd+alt+shift+a` | — | everywhere |
 | Extract Whole Archive… | `archive.extractAll` | — | — | everywhere |
 | Extract Selected Archive Entry… | `archive.extractEntry` | — | — | everywhere |
 | Reload Archive Listing | `archive.reload` | `ctrl+r` | — | everywhere |
@@ -40,6 +43,7 @@ bring their own.
 | Toggle Bookmark with Mnemonic | `bookmark.toggleMnemonic` | `alt+f3` | — | everywhere |
 | Basic Completion | `completion.trigger` | `ctrl+space` | — | `editor` pane |
 | Toggle Coverage Marks | `coverage.toggle` | — | — | everywhere |
+| Open Last Crash Log | `crash.openLastLog` | — | — | everywhere |
 | CSV: Column Profile | `csv.columnProfile` | — | — | `editor` pane |
 | Data: Column Profile | `data.columnProfile` | — | — | `data` pane |
 | Data: Export Rows… | `data.export` | — | — | `data` pane |
@@ -239,6 +243,7 @@ bring their own.
 | Toggle Playground Structure Strip | `playground.structure` | `ctrl+alt+g` | — | everywhere |
 | Toggle Playground Table View | `playground.tableView` | `ctrl+alt+l` | — | everywhere |
 | Toggle Playground Variables Line | `playground.variables` | `ctrl+alt+b` | — | everywhere |
+| Toggle yq Playground Round-Trip Output | `playground.yqRoundTrip` | `ctrl+alt+shift+y` | — | everywhere |
 | Re-render Preview Diagrams | `preview.rerenderDiagrams` | — | — | everywhere |
 | Problems | `problems.toggle` | `cmd+8` | — | everywhere |
 | Find in All Projects | `project.findInAllProjects` | `cmd+alt+shift+f` | — | everywhere |

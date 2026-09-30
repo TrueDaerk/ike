@@ -704,6 +704,10 @@ func (appCommands) Capabilities() plugin.Capabilities {
 				"claude", "hook", "settings"),
 			withAliases(appCommand("agent.hooks.uninstall", "Agent Trace: Uninstall Claude Hooks", AgentHooksUninstallMsg{}),
 				"claude", "hook", "remove"),
+			// The trace tool window itself (#2840): the followed agent pane's
+			// session as a turn → decision → tool call → file tree.
+			withAliases(appCommand("agent.trace.toggle", "Agent Trace", AgentTraceToggleMsg{}),
+				"claude", "trace", "session"),
 			// The PHP declaration index's operations surface (0520, #2673).
 			// Global rather than PHP-scoped: the reason to rebuild — a branch
 			// switch, a generator run — is felt with the explorer or a terminal
