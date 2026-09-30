@@ -708,6 +708,9 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			// session as a turn → decision → tool call → file tree.
 			withAliases(appCommand("agent.trace.toggle", "Agent Trace", AgentTraceToggleMsg{}),
 				"claude", "trace", "session"),
+			// Ask a fork of the traced session about the selected node (#2845).
+			withAliases(appCommand("agent.ask", "Agent Trace: Ask the Agent", AgentAskMsg{}),
+				"claude", "why", "question", "fork"),
 			// The PHP declaration index's operations surface (0520, #2673).
 			// Global rather than PHP-scoped: the reason to rebuild — a branch
 			// switch, a generator run — is felt with the explorer or a terminal

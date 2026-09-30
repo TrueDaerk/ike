@@ -147,6 +147,7 @@ func Defaults() []Menu {
 			{Title: "Project Time Report", Command: "time.toggle"},
 			{Title: "Usage Report", Command: "usage.toggle"},
 			{Title: "Agent Trace", Command: "agent.trace.toggle"},
+			{Title: "Ask the Agent…", Command: "agent.ask"},
 			{Title: "Test Results", Command: "tests.toggle"},
 			{Title: "GitHub Issues", Command: "issues.toggle"},
 			{Title: "DOM Inspector", Command: "dom.toggle"},

@@ -717,6 +717,12 @@ type Model struct {
 	// lspRename is the open symbol-rename prompt (Roadmap 0100, #6); nil when
 	// no rename is in flight.
 	lspRename *lspRenameState
+	// agentAsk is the open agent.ask prompt / answer (#2845); askGen retires
+	// a superseded ask's messages; askForks are the fork session ids asks
+	// spawned, excluded from trace discovery.
+	agentAsk *agentAskState
+	askGen   int64
+	askForks []string
 	// lspRenamePreview is the multi-file rename confirmation (#2149); nil
 	// while no previewed rename waits for an answer.
 	lspRenamePreview *lspRenamePreviewState
@@ -6570,6 +6576,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// followed agent pane's transcript.
 		return m, m.toggleAgentTracePanel()
 
+	case AgentAskMsg, tracepanel.AskMsg:
+		// agent.ask (#2845), also 'a' in the trace pane: ask a fork of the
+		// traced session about the selected node.
+		return m, m.openAgentAsk()
+
+	case askDoneMsg:
+		return m.handleAskDone(msg)
+
+	case askSpinMsg:
+		return m.handleAskSpin(msg)
+
 	case traceLocatedMsg:
 		return m.handleTraceLocated(msg)
 
@@ -9606,6 +9623,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if m.fileCopyGuardOpen() {
 			return m.updateFileCopyGuard(msg)
+		}
+		// The agent.ask prompt and answer (#2845) own the keyboard the same
+		// way: typing edits the question, enter asks, esc closes.
+		if m.agentAskOpen() {
+			return m.updateAgentAsk(msg)
 		}
 		// The symbol-rename prompt (0100, #6) mirrors it.
 		if m.lspRenameOpen() {

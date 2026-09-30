@@ -439,6 +439,14 @@ advertises formatting.
 | Popup terminal on project switch | `terminal.popup_on_switch` | enum: `restore`, `always-open` | `restore` | user | What the popup terminal does after a project switch: "restore" brings the incoming project's popup back exactly as it was left, "always-open" opens it every time — resuming the parked instance if one exists, spawning a fresh shell otherwise |
 | Popup terminal scope | `terminal.popup_scope` | enum: `project`, `global` | `project` | user | Who owns the popup terminal: "project" gives every project its own popup, parked with the project and back exactly as left; "global" keeps one popup shell for the whole app — it follows you across project switches with its scrollback and running processes, and is asked to cd into the new project root whenever its shell sits idle at a prompt |
 
+### Agent Trace
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Ask model | `agent.ask.model` | string | `sonnet` | user | Model the forked session answers Ask the Agent (agent.ask) on: "sonnet" (the default, the cheaper choice), "opus" or a full model id such as claude-sonnet-5-5. The fork inherits the whole session context either way; the original session's history is never touched |
+| Ask max turns | `agent.ask.max_turns` | integer (1–5) | `1` | user | Agentic turns the forked session may take to answer (claude --max-turns); 1 is a single reply, up to 5 lets it reason in several steps at more cost |
+| Ask shows context | `agent.ask.show_context` | boolean | `true` | user | Show the node context the question was prefixed with (file, line, diff hunk, turn time, assistant text) above the answer in the Ask overlay |
+
 ### HTTP Client
 
 | Setting | Key | Type | Default | Scope | Description |

@@ -128,6 +128,8 @@ func (m *Model) routeOverlayPaste(text string) (cmd tea.Cmd, handled bool) {
 		return nil, m.pasteFileCopyPrompt(text)
 	case m.lspRenameOpen():
 		return nil, m.pasteLSPRenamePrompt(text)
+	case m.agentAskOpen():
+		return nil, m.pasteAgentAskPrompt(text)
 	case m.explorerCapturing():
 		inst := m.activeWS().Panes.FocusedInstance()
 		if inst == nil || inst.Kind() != pane.KindExplorer {

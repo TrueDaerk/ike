@@ -1,10 +1,10 @@
 ---
 type: architecture
 title: Agent Trace
-description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840), and the links from writing file nodes to change-feed entries with diff/revert and the feed's jump back (#2838); "ask" follows in its own sub-issue.
+description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840), the links from writing file nodes to change-feed entries with diff/revert and the feed's jump back (#2838), and `agent.ask` — a question about a node answered by a fork of the same session on a cheaper model, with its node context, settings and answer overlay (internal/agentask, #2845).
 resource: internal/agenttrace
-tags: [architecture, agents, claude, transcript, trace, discovery, hooks, tool-window, hiertree, change-feed]
-timestamp: 2026-09-30T23:00:00Z
+tags: [architecture, agents, claude, transcript, trace, discovery, hooks, tool-window, hiertree, change-feed, ask, settings]
+timestamp: 2026-10-01T00:00:00Z
 ---
 
 # Agent Trace
@@ -296,7 +296,7 @@ pane.
 Keys: the tree's own (`j/k`, page keys, `space`/`l` expand, `h` fold or
 walk to the parent), `enter` opens the row's file — or folds/unfolds a row
 that has none — `r` looks the session up again, `i` installs the Claude
-hooks, `D` / `V` show the mini-diff / revert of a linked row (below). Mouse: a click selects, a click on the marker cell folds, a second
+hooks, `D` / `V` show the mini-diff / revert of a linked row (below), `a` asks the agent about the row (#2845, below). Mouse: a click selects, a click on the marker cell folds, a second
 click within `ui.DoubleClickWindow` opens (the shared list-mouse gesture),
 the wheel scrolls through `Tree.Wheel`.
 
@@ -376,6 +376,106 @@ clicks at the drawn position; `i` / `enter` install, `r` rescans. A read
 error is shown in the box; a pane too small for it falls back to a
 one-line notice. While the lookup runs the pane says so and offers nothing.
 
+## Ask the agent (#2845)
+
+`agent.ask` (`cmd+alt+shift+q`, `a` in the trace pane, Tools menu → *Ask the
+Agent…*, palette) asks the traced session *why* — about the selected node,
+or about the session as a whole when no row is selected. The answer comes
+from a **fork** of that session (`--resume <id> --fork-session`, see the
+fork notes above): the fork has the whole conversation as context, runs on
+a cheaper model without tools, and writes its answer into its own
+transcript. **The original session's JSONL is never written to** — the only
+process IKE starts is the fork, and `internal/app/agentask_test.go` asserts
+the transcript is byte-for-byte unchanged after an ask through a fake
+`claude`. The pure half is `internal/agentask`; the app half
+`internal/app/agentask.go`.
+
+### Prompt and context
+
+The command needs an open Agent Trace with a session (otherwise a notice
+says what to open). It opens a `ui.Field` prompt in the floating shell —
+the rename prompt's twin: typing edits, paste and `ctrl+u` work, `enter`
+asks, `esc` cancels — with a faint `about:` line naming the node. On enter
+the run goes off the Update loop: the transcript is parsed once more
+(`agenttrace.Parse`, independent of the pane's reader, which is never
+shared across goroutines) and `agentask.NodeContext` derives the node's
+context, which is prefixed to the question:
+
+| line | source |
+|---|---|
+| `turn: #3 (2026-09-30 14:03)` | the turn and its prompt line's timestamp |
+| `file: main.go:12 (edit)` | the node's `FileRef` — file rows and single-file tool rows |
+| `tool: Edit main.go` | the tool call's name and title |
+| `assistant said: …` | the decision's own text, or the assistant text that preceded the tool call in that turn (never a thinking block; capped at `MaxAssistant` = 2000 runes) |
+| `diff:` + a ```` ```diff ```` block | the linked change-feed entry's diff (#2838), unified through `agentask.UnifiedHunks`, capped at `MaxHunkLines` = 60 |
+
+The prompt is then `Context from the session trace …` + `Question: …`
+(`agentask.Prompt`); an empty context (a turn row, or no row) sends the bare
+question.
+
+### The command
+
+`agentask.Command` assembles
+
+```
+claude -p --resume <session-id> --fork-session --model <agent.ask.model> \
+  --tools "" --max-turns <agent.ask.max_turns> --output-format json \
+  --append-system-prompt "Explain only; do not modify files." "<prompt>"
+```
+
+and `agentask.Run` executes it **in the session's cwd** (a fork started
+elsewhere lands in another project directory and the resume is refused),
+capturing both streams, cancellable through a context. The JSON result
+(`type: result`, `result`, `session_id`, `subtype`, `is_error`,
+`duration_ms`, `num_turns`, `total_cost_usd`) is `agentask.ParseResult`;
+a stream of objects is tolerated by taking the `result` line. Failures are
+typed: `ErrNotInstalled` when `claude` is not on PATH, `*ResumeError`
+when stderr says the session is unknown (`No conversation found …`), a
+harness-reported error (`error_max_turns`, `is_error`) with the fork id
+kept.
+
+The fork's session id is remembered on the model (`askForks`) and passed
+to discovery as an exclusion (`locateAgentSession` → `DiscoverIn(…,
+exclude…)`), belt and braces over the fork grouping: right after an ask the
+fork is the newest file in the project directory, and the trace must keep
+following the original.
+
+### Overlay
+
+The same shell shows every phase (`askContent`, a `ui.Content` rendering at
+the shell's width budget):
+
+- **running** — the app-wide braille spinner (`askSpinMsg`, 200 ms,
+  generation-guarded), the model, the elapsed time and the question; `esc`
+  cancels the process.
+- **answered** — the question in bold, the injected context in faint text
+  (only while `agent.ask.show_context` is on; paths shortened through
+  `displayPath`), the answer as glamour-rendered markdown
+  (`agentask.RenderMarkdown`: the issues pane's theme-bound style, hanging
+  list indents, wrapped at the budget), and a footer with duration, cost
+  and the fork's short id. The render is cached per width. `esc` / `q`
+  close; other keys scroll the shell.
+- **failed** — the shell in the error accent titled *Ask failed*: the
+  message, plus what to do (install Claude Code / put `claude` on PATH; a
+  refused resume names the directory the fork ran in).
+
+A result that lands after `esc` (a cancelled run, or a superseded ask) is
+dropped by generation; a late spinner tick never reopens the shell.
+
+### Settings
+
+All three live on the **Agent Trace** page of the Settings UI (validated
+in the form, persisted at user scope, shown in the list):
+
+| Setting | Default | Values |
+|---|---|---|
+| `agent.ask.model` | `sonnet` | `sonnet`, `opus` or a full model id — one word (`config.AgentAskModelError`, shared by the config validator, which falls back to `sonnet`, and the form, which refuses) |
+| `agent.ask.max_turns` | `1` | 1–5 (`--max-turns`; the config validator falls back to 1, the form clamps) |
+| `agent.ask.show_context` | `true` | show the injected context in the answer overlay |
+
+Follow-up questions on the fork (resuming the *fork*, never the original)
+are #2844.
+
 ## Tests
 
 `internal/agenttrace/tree_test.go` builds the tree from `basic.jsonl` (the
@@ -428,6 +528,22 @@ projects root (session ids and cwd rewritten) to cover fork marking, the
 exclusion list, encoded-name collisions, trailing slashes and the symlinked
 cwd; `TestParseRealTranscript` parses a real file when `AGENTTRACE_SAMPLE`
 points at one.
+
+`internal/agentask/agentask_test.go` covers #2845's pure half: the node
+context of file, decision and turn rows (the preceding decision, never the
+thinking block; clipping), prompt composition, the exact argv, unified
+hunks with their cap, result parsing (single object, stream, harness
+errors, garbage), and `Run` through a fake `claude` script on PATH (argv
+and cwd recorded; missing binary → `ErrNotInstalled`; a refusal on stderr
+→ `*ResumeError`; cancellation). `internal/config/agent_ask_validate_test.go`
+and `internal/settings/agent_ask_test.go` the defaults, the validator
+fallbacks, `Flat`, and the form (refused multi-word model, clamped turns,
+the toggle, list rendering). `internal/app/agentask_test.go` the overlay
+lifecycle end to end against the same fake: prompt → run → answer with
+context and rendered markdown, the transcript byte-identical afterwards,
+the fork recorded, `show_context` off, the two error dialogs, `esc` while
+running with the late result ignored, the pane's `a`, the empty-question
+note, paste and `ctrl+u`, and the session-wide ask.
 
 ## Related
 

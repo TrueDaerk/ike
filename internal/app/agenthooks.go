@@ -204,11 +204,11 @@ func (m Model) agentSessionLocator(t *terminal.Model) func() (agentSession, erro
 }
 
 // locateAgentSession is agentSessionLocator's body with its inputs explicit.
-func locateAgentSession(bound agentSession, ok bool, projectsDir, cwd string) (agentSession, error) {
+func locateAgentSession(bound agentSession, ok bool, projectsDir, cwd string, exclude ...string) (agentSession, error) {
 	if ok && !bound.Ended {
 		return bound, nil
 	}
-	l, err := agenttrace.DiscoverIn(projectsDir, cwd)
+	l, err := agenttrace.DiscoverIn(projectsDir, cwd, exclude...)
 	if err != nil {
 		return agentSession{}, err
 	}

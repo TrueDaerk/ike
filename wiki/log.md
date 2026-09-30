@@ -1,5 +1,25 @@
 # Log
 
+## 2026-10-01 (agent trace: `agent.ask` on a fork with a cheaper model, #2845)
+
+- `agent.ask` (`cmd+alt+shift+q`, `a` in the trace pane, Tools menu) asks a
+  **fork** of the traced session about the selected node: `ui.Field` prompt,
+  node context prefixed (turn time, file:line, tool, preceding assistant
+  text, linked change-feed diff), `claude -p --resume <id> --fork-session
+  --model <agent.ask.model> --tools "" --max-turns <n> --output-format json
+  --append-system-prompt "Explain only; do not modify files."` run in the
+  session's cwd off the loop. The original transcript is never written to
+  (asserted with a fake `claude`); fork ids are excluded from discovery.
+- Answer overlay in the floating shell: spinner while running, glamour
+  markdown with the injected context (`agent.ask.show_context`), duration /
+  cost / fork id; missing `claude` and a refused resume are error dialogs.
+- Settings `agent.ask.model` (`sonnet` | `opus` | full id),
+  `agent.ask.max_turns` (1–5), `agent.ask.show_context` on the new **Agent
+  Trace** settings page (validated, persisted, listed).
+- New pure package `internal/agentask`.
+- Wiki: [Agent Trace](/architecture/agent-trace.md),
+  [Settings UI](/architecture/settings-ui.md).
+
 ## 2026-09-30 (agent trace: tool window on hiertree with click-to-code, #2840)
 
 - `agent.trace.toggle` (`cmd+alt+shift+a`, Tools menu) opens the singleton

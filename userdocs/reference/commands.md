@@ -28,6 +28,7 @@ bring their own.
 
 | Command | ID | Chord | In the editor | Available in |
 |---|---|---|---|---|
+| Agent Trace: Ask the Agent | `agent.ask` | `cmd+alt+shift+q` | — | everywhere |
 | Agent Trace: Install Claude Hooks | `agent.hooks.install` | — | — | everywhere |
 | Agent Trace: Uninstall Claude Hooks | `agent.hooks.uninstall` | — | — | everywhere |
 | Agent Trace | `agent.trace.toggle` | `cmd+alt+shift+a` | — | everywhere |

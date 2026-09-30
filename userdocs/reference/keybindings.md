@@ -32,6 +32,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Agent trace | `cmd+alt+shift+a` | `ctrl+alt+shift+a` | `agent.trace.toggle` |
 | Append result path (all items) | `ctrl+shift+.` | `ctrl+shift+.` | `json.jqAppendPathAny` |
 | Append result path to query | `ctrl+.` | `ctrl+.` | `json.jqAppendPath` |
+| Ask the agent about a trace node | `cmd+alt+shift+q` | `ctrl+alt+shift+q` | `agent.ask` |
 | Bind key for last palette command | `cmd+alt+k` | `ctrl+alt+k` | `palette.bindLastPick` |
 | Bookmarks | `cmd+f3` | `ctrl+f3` | `nav.bookmarks` |
 | Breakpoint properties | `cmd+alt+f8` | `ctrl+alt+f8` | `debug.breakpointProperties` |

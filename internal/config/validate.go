@@ -1028,6 +1028,20 @@ func validate(c *Config) []Diagnostic {
 		c.Project.History = c.Project.History[:n]
 	}
 
+	// agent.ask (#2845): the model is a free-form id ("sonnet", "opus" or a
+	// full model name) that must be a single non-empty word; the turn budget
+	// stays inside 1-5.
+	if msg := AgentAskModelError(c.Agent.Ask.Model); msg != "" {
+		diags = append(diags, Diagnostic{Field: "agent.ask.model", Message: fmt.Sprintf("model %q: %s, using \"sonnet\"", c.Agent.Ask.Model, msg)})
+		c.Agent.Ask.Model = "sonnet"
+	} else {
+		c.Agent.Ask.Model = strings.TrimSpace(c.Agent.Ask.Model)
+	}
+	if c.Agent.Ask.MaxTurns < 1 || c.Agent.Ask.MaxTurns > 5 {
+		diags = append(diags, Diagnostic{Field: "agent.ask.max_turns", Message: fmt.Sprintf("max_turns %d out of range (1\u20135), using 1", c.Agent.Ask.MaxTurns)})
+		c.Agent.Ask.MaxTurns = 1
+	}
+
 	diags = append(diags, validateProjectGroups(c)...)
 
 	for _, e := range registered() {
@@ -1128,6 +1142,20 @@ func validateProjectGroups(c *Config) []Diagnostic {
 	}
 	c.Project.Groups = kept
 	return diags
+}
+
+// AgentAskModelError is the agent.ask.model rule shared by validate and the
+// settings form (#2845): one non-empty word — "sonnet", "opus" or a full
+// model id such as claude-sonnet-5-5. "" accepts.
+func AgentAskModelError(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "the model must be sonnet, opus or a full model id"
+	}
+	if strings.ContainsAny(v, " \t\n\r") {
+		return "the model is one word: sonnet, opus or a full model id"
+	}
+	return ""
 }
 
 // expandRoot resolves a stored group root the way project.Validate does
