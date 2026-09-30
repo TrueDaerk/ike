@@ -66,6 +66,11 @@ func TestRunAgentHookDelivers(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
+	// A fork agent.ask spawned (#2844) is silent: its SessionEnd never
+	// arrives, the next real event does.
+	if err := runAgentHook(strings.NewReader(hookJSON), "SessionEnd", env(map[string]string{"IKE_AGENT_ASK": "1"}), dir); err != nil {
+		t.Fatal(err)
+	}
 	if err := runAgentHook(strings.NewReader(hookJSON), "SessionStart", env(nil), dir); err != nil {
 		t.Fatal(err)
 	}

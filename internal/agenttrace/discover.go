@@ -64,12 +64,28 @@ type Located struct {
 	// fork time before the copied history; the original opens at session
 	// start.
 	FirstAt time.Time
+	// Asked is set on a fork IKE's agent.ask created (#2844): its fork-time
+	// queue line carries AskMarker. Such a session is never the traced one.
+	Asked bool
 
 	rootUUID string
 }
 
+// AskMarker opens every prompt agent.ask hands to a fork (#2844). Claude
+// Code records a print-mode prompt in the fork's preamble queue line, ahead
+// of the copied history, so the tag sits in the header discovery reads —
+// and survives an IKE restart, unlike the in-memory list of fork ids. It is
+// an HTML comment so the model reads past it.
+const AskMarker = "<!-- ike:agent.ask -->"
+
+// IsAskPrompt reports whether a prompt text is one agent.ask sent.
+func IsAskPrompt(text string) bool {
+	return strings.HasPrefix(strings.TrimSpace(text), AskMarker)
+}
+
 // Discover returns the newest session whose transcript belongs to cwd,
-// skipping forks and the session ids in exclude. It reads ProjectsDir.
+// skipping forks, the forks agent.ask tagged and the session ids in exclude.
+// It reads ProjectsDir.
 func Discover(cwd string, exclude ...string) (Located, error) {
 	return DiscoverIn(ProjectsDir(), cwd, exclude...)
 }
@@ -85,7 +101,7 @@ func DiscoverIn(projectsDir, cwd string, exclude ...string) (Located, error) {
 		skip[id] = true
 	}
 	for _, l := range all {
-		if l.ParentID == "" && !skip[l.ID] {
+		if l.ParentID == "" && !l.Asked && !skip[l.ID] {
 			return l, nil
 		}
 	}
@@ -162,6 +178,15 @@ func locate(path string) (Located, bool) {
 		}
 		if at := parseTime(rec.Timestamp); !at.IsZero() && l.FirstAt.IsZero() {
 			l.FirstAt = at
+		}
+		if rec.Type == "queue-operation" && l.rootUUID == "" {
+			var q struct {
+				Content json.RawMessage `json:"content"`
+			}
+			var text string
+			if json.Unmarshal(sc.Bytes(), &q) == nil && json.Unmarshal(q.Content, &text) == nil && IsAskPrompt(text) {
+				l.Asked = true
+			}
 		}
 		if l.rootUUID == "" && (rec.Type == "user" || rec.Type == "assistant") {
 			l.rootUUID = rec.UUID

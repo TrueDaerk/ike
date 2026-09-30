@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/agentask"
+	"ike/internal/agenttrace"
 	"ike/internal/config"
 	"ike/internal/tracepanel"
 )
@@ -187,8 +188,9 @@ func TestAgentAskForksWithFakeClaudeAndNeverWritesTheOriginal(t *testing.T) {
 		t.Fatalf("forks = %v", m.askForks)
 	}
 
-	// The overlay: question, context, rendered markdown, run facts.
-	body := ansiSeq.ReplaceAllString(m.shell.Content().Render(120), "")
+	// The overlay: question, context, rendered markdown, run facts. Wide
+	// enough that the temp-dir path of the file line never wraps.
+	body := ansiSeq.ReplaceAllString(m.shell.Content().Render(400), "")
 	for _, s := range []string{"Q: why?", "context:", "main.go:3 (edit)", "Because", "c became d", "1.2s", "$0.0123", "fork fork"} {
 		if !strings.Contains(body, s) {
 			t.Errorf("answer lacks %q:\n%s", s, body)
@@ -358,4 +360,146 @@ func TestAgentAskPromptKeysAndPaneKey(t *testing.T) {
 	if !m.agentAskOpen() || m.agentAsk.node != nil || !strings.Contains(m.shell.Content().Render(80), "the whole session") {
 		t.Fatalf("session-wide ask:\n%s", m.shell.Content().Render(80))
 	}
+}
+
+// readArgv reads the argv the fake claude recorded.
+func readArgv(t *testing.T, argsFile string) []string {
+	t.Helper()
+	args, err := os.ReadFile(argsFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Split(strings.TrimSuffix(string(args), "\x00"), "\x00")
+}
+
+// typeQuestion types q into the open prompt and presses enter.
+func typeQuestion(t *testing.T, m Model, q string) (Model, tea.Cmd) {
+	t.Helper()
+	for _, r := range q {
+		out, _ := m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+		m = out.(Model)
+	}
+	out, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m = out.(Model)
+	if m.agentAsk == nil || m.agentAsk.phase != askRunning || cmd == nil {
+		t.Fatal("enter must start the run")
+	}
+	return m, cmd
+}
+
+// TestAgentAskFollowUpChainsOnTheFork (#2844): `f` on an answer asks again
+// on the fork — never the original — the chain shows in the overlay, the
+// fork is kept for the node, reopening the ask on that node continues it,
+// and ctrl+n starts a fresh fork.
+func TestAgentAskFollowUpChainsOnTheFork(t *testing.T) {
+	askSpinInterval = time.Millisecond
+	m, transcript, _ := askApp(t)
+	before, _ := os.ReadFile(transcript)
+	argsFile, _ := fakeClaude(t, `{"type":"result","subtype":"success","result":"First answer.","session_id":"fork-1"}`, 0)
+	m, cmd := typeAsk(t, m, "why?")
+	m = runAsk(t, m, cmd)
+	if m.agentAsk.phase != askAnswered {
+		t.Fatalf("phase = %v, err = %v", m.agentAsk.phase, m.agentAsk.err)
+	}
+	if body := ansiSeq.ReplaceAllString(m.shell.Content().Render(120), ""); !strings.Contains(body, "f follow up") {
+		t.Fatalf("answer lacks the follow-up key:\n%s", body)
+	}
+	if !agentaskTagged(readArgv(t, argsFile)) {
+		t.Fatal("the first ask's prompt must carry the marker")
+	}
+
+	// f: the prompt again, on the fork.
+	out, _ := m.Update(tea.KeyPressMsg{Code: 'f', Text: "f"})
+	m = out.(Model)
+	if !m.agentAskOpen() || m.agentAsk.phase != askPrompting || m.agentAsk.followUp != "fork-1" {
+		t.Fatalf("f = phase %v, followUp %q", m.agentAsk.phase, m.agentAsk.followUp)
+	}
+	body := ansiSeq.ReplaceAllString(m.shell.Content().Render(120), "")
+	for _, s := range []string{"Q: why?", "First answer.", "follow-up on fork fork", "ctrl+n new fork"} {
+		if !strings.Contains(body, s) {
+			t.Errorf("follow-up prompt lacks %q:\n%s", s, body)
+		}
+	}
+
+	argsFile, _ = fakeClaude(t, `{"type":"result","subtype":"success","result":"Second answer.","session_id":"fork-1"}`, 0)
+	m, cmd = typeQuestion(t, m, "and then?")
+	if body := m.shell.Content().Render(80); !strings.Contains(body, "asking fork fork") {
+		t.Fatalf("running view:\n%s", body)
+	}
+	m = runAsk(t, m, cmd)
+	if m.agentAsk.phase != askAnswered {
+		t.Fatalf("follow-up phase = %v, err = %v", m.agentAsk.phase, m.agentAsk.err)
+	}
+	argv := readArgv(t, argsFile)
+	want := agentask.FollowUp("fork-1", agentask.Defaults, "")
+	if strings.Join(argv[:len(argv)-1], "\x00") != strings.Join(want[1:len(want)-1], "\x00") {
+		t.Fatalf("follow-up argv = %q", argv)
+	}
+	for _, a := range argv {
+		if a == "sess-1" || a == "--fork-session" {
+			t.Fatalf("a follow-up must resume the fork only: %q", argv)
+		}
+	}
+	if p := argv[len(argv)-1]; !agentaskTagged(argv) || strings.Contains(p, "Context from") || !strings.HasSuffix(p, "and then?") {
+		t.Fatalf("follow-up prompt = %q", p)
+	}
+	body = ansiSeq.ReplaceAllString(m.shell.Content().Render(120), "")
+	for _, s := range []string{"Q: why?", "First answer.", "Q: and then?", "Second answer."} {
+		if !strings.Contains(body, s) {
+			t.Errorf("chain lacks %q:\n%s", s, body)
+		}
+	}
+	if after, _ := os.ReadFile(transcript); string(after) != string(before) {
+		t.Fatal("the original session's transcript was written to")
+	}
+
+	// Reopening the ask on the same node continues the kept fork.
+	out, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m = out.(Model)
+	out, _ = m.Update(AgentAskMsg{})
+	m = out.(Model)
+	if m.agentAsk == nil || m.agentAsk.followUp != "fork-1" {
+		t.Fatalf("reopened ask = %+v, want the kept fork", m.agentAsk)
+	}
+	// ctrl+n drops it: the next question forks the original afresh.
+	out, _ = m.Update(tea.KeyPressMsg{Code: 'n', Mod: tea.ModCtrl})
+	m = out.(Model)
+	if m.agentAsk.followUp != "" {
+		t.Fatal("ctrl+n must start a fresh fork")
+	}
+	argsFile, _ = fakeClaude(t, `{"type":"result","subtype":"success","result":"Fresh.","session_id":"fork-2"}`, 0)
+	m, cmd = typeQuestion(t, m, "again?")
+	m = runAsk(t, m, cmd)
+	if argv := readArgv(t, argsFile); argv[2] != "sess-1" || argv[3] != "--fork-session" {
+		t.Fatalf("fresh fork argv = %q", argv)
+	}
+	if got := m.askNodeForks[m.agentAsk.forkKey]; got != "fork-2" {
+		t.Fatalf("kept fork = %q, want fork-2", got)
+	}
+}
+
+// TestAgentAskFollowUpOnVanishedForkForgetsIt: a refused resume of a kept
+// fork fails the ask and forgets the fork, so the next ask forks afresh.
+func TestAgentAskFollowUpOnVanishedForkForgetsIt(t *testing.T) {
+	askSpinInterval = time.Millisecond
+	m, _, _ := askApp(t)
+	fakeClaude(t, `{"type":"result","subtype":"success","result":"ok","session_id":"fork-9"}`, 0)
+	m, cmd := typeAsk(t, m, "why?")
+	m = runAsk(t, m, cmd)
+	out, _ := m.Update(tea.KeyPressMsg{Code: 'f', Text: "f"})
+	m = out.(Model)
+	fakeClaude(t, "", 1)
+	m, cmd = typeQuestion(t, m, "more?")
+	m = runAsk(t, m, cmd)
+	if m.agentAsk.phase != askFailed {
+		t.Fatalf("phase = %v", m.agentAsk.phase)
+	}
+	if _, ok := m.askNodeForks[m.agentAsk.forkKey]; ok {
+		t.Fatal("a vanished fork must be forgotten")
+	}
+}
+
+// agentaskTagged reports whether the recorded prompt carries the ask marker.
+func agentaskTagged(argv []string) bool {
+	return len(argv) > 0 && agenttrace.IsAskPrompt(argv[len(argv)-1])
 }

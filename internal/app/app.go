@@ -719,10 +719,12 @@ type Model struct {
 	lspRename *lspRenameState
 	// agentAsk is the open agent.ask prompt / answer (#2845); askGen retires
 	// a superseded ask's messages; askForks are the fork session ids asks
-	// spawned, excluded from trace discovery.
-	agentAsk *agentAskState
-	askGen   int64
-	askForks []string
+	// spawned, excluded from trace discovery; askNodeForks keeps, per traced
+	// session and node (askForkKey), the fork a follow-up resumes (#2844).
+	agentAsk     *agentAskState
+	askGen       int64
+	askForks     []string
+	askNodeForks map[string]string
 	// lspRenamePreview is the multi-file rename confirmation (#2149); nil
 	// while no previewed rename waits for an answer.
 	lspRenamePreview *lspRenamePreviewState

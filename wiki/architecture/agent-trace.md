@@ -1,7 +1,7 @@
 ---
 type: architecture
 title: Agent Trace
-description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840), the links from writing file nodes to change-feed entries with diff/revert and the feed's jump back (#2838), and `agent.ask` — a question about a node answered by a fork of the same session on a cheaper model, with its node context, settings and answer overlay (internal/agentask, #2845).
+description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840), the links from writing file nodes to change-feed entries with diff/revert and the feed's jump back (#2838), and `agent.ask` — a question about a node answered by a fork of the same session on a cheaper model, with its node context, settings and answer overlay (internal/agentask, #2845), and follow-up questions on the same fork, fork tagging and the trimmed context (#2844).
 resource: internal/agenttrace
 tags: [architecture, agents, claude, transcript, trace, discovery, hooks, tool-window, hiertree, change-feed, ask, settings]
 timestamp: 2026-10-01T00:00:00Z
@@ -136,6 +136,14 @@ first with forks marked. Details that matter:
   listed.
 - **Exclusion list.** The caller can pass session ids to skip — the `agent.ask`
   command (#2845) knows the id of the fork it just spawned.
+- **Ask tag.** A transcript whose preamble `queue-operation` line carries
+  `agenttrace.AskMarker` (`<!-- ike:agent.ask -->`) at the start of its
+  `content` is a fork `agent.ask` created (#2844): `locate` sets
+  `Located.Asked` and `Discover` skips it. Claude Code records the print-mode
+  prompt in that line, ahead of the copied history, so the tag sits inside
+  the header scan and survives an IKE restart — unlike the in-memory
+  exclusion list — and it still holds when the fork cannot be grouped with
+  its original (original deleted).
 
 ### Fork detection
 
@@ -405,13 +413,16 @@ context, which is prefixed to the question:
 |---|---|
 | `turn: #3 (2026-09-30 14:03)` | the turn and its prompt line's timestamp |
 | `file: main.go:12 (edit)` | the node's `FileRef` — file rows and single-file tool rows |
-| `tool: Edit main.go` | the tool call's name and title |
+| `tool: Edit main.go` | the tool call's name and title, whitespace collapsed to one line, capped at `MaxTool` = 300 runes |
+| `tool output:` + a fenced block | the call's result text when it is textual and at most `MaxOutput` = 1500 runes; a binary (NUL or invalid UTF-8), harness-truncated or larger output becomes `tool output: omitted (binary)` / `omitted (N bytes, too large)` instead |
 | `assistant said: …` | the decision's own text, or the assistant text that preceded the tool call in that turn (never a thinking block; capped at `MaxAssistant` = 2000 runes) |
-| `diff:` + a ```` ```diff ```` block | the linked change-feed entry's diff (#2838), unified through `agentask.UnifiedHunks`, capped at `MaxHunkLines` = 60 |
+| `diff:` + a ```` ```diff ```` block | the linked change-feed entry's diff (#2838) through `agentask.Hunk`: unified by `UnifiedHunks`, capped at `MaxHunkLines` = 60 lines of at most `MaxHunkLine` = 200 runes and `MaxHunkBytes` = 4000 bytes in all (cut at a line with a trailing `…`); left out entirely when either side is binary or larger than `MaxDiffInput` = 256 KiB |
 
-The prompt is then `Context from the session trace …` + `Question: …`
-(`agentask.Prompt`); an empty context (a turn row, or no row) sends the bare
-question.
+The prompt is then `AskMarker` + `Context from the session trace …` +
+`Question: …` (`agentask.Prompt`); an empty context (a turn row, no row, or a
+follow-up) sends the marker and the bare question. The marker is an HTML
+comment the model reads past; it is what tags the fork (see *Ask tag*
+above and *Fork tagging* below).
 
 ### The command
 
@@ -473,8 +484,40 @@ in the form, persisted at user scope, shown in the list):
 | `agent.ask.max_turns` | `1` | 1–5 (`--max-turns`; the config validator falls back to 1, the form clamps) |
 | `agent.ask.show_context` | `true` | show the injected context in the answer overlay |
 
-Follow-up questions on the fork (resuming the *fork*, never the original)
-are #2844.
+### Follow-up questions
+
+`f` on an answer (the footer says `f follow up`) turns the overlay back
+into the prompt, the earlier exchange staying above it (question in bold,
+answer rendered; cached per width and length because the prompt re-renders
+on every key). The next question resumes **the fork**, never the original:
+`agentask.FollowUp` is `Command` on the fork id without `--fork-session`, so
+the fork's conversation continues and the original session id appears
+nowhere in the argv; the prompt carries no context (the fork has it). The
+running view says `asking fork <id>`.
+
+The fork id is kept per traced session and node for the IKE session
+(`askNodeForks`, keyed by `askForkKey` — session id plus node key, the
+session id alone for a session-wide ask). Asking about the same node again
+opens the prompt in follow-up mode (`follow-up on fork …`); `ctrl+n` there
+drops the fork and the history, so the next question forks the original
+afresh (and that fork becomes the node's). A follow-up refused with a
+`*ResumeError` (the fork file is gone) forgets the node's fork.
+
+### Fork tagging
+
+Every fork IKE creates is kept out of the trace three ways:
+
+- **Discovery** skips the fork ids of this IKE session (`askForks`) and —
+  from the transcript itself, across restarts — every transcript tagged with
+  `AskMarker` (`Located.Asked`).
+- **Hooks.** `agentask.Run` starts `claude` with `IKE_AGENT_ASK=1`
+  (`agentask.EnvAsk`); `ike agent-hook` exits silently when it is set, so the
+  fork's `SessionStart` / `UserPromptSubmit` / `SessionEnd` never reach IKE.
+  Without that, the fork's events (same cwd) would bind the fork to the
+  traced tool pane and the trace would switch to it.
+- **The tree.** `BuildTree` leaves out every turn whose prompt starts with
+  the marker (question and answer), should a tagged fork ever be traced: its
+  copied history shows, the asks do not.
 
 ## Tests
 
@@ -535,7 +578,15 @@ thinking block; clipping), prompt composition, the exact argv, unified
 hunks with their cap, result parsing (single object, stream, harness
 errors, garbage), and `Run` through a fake `claude` script on PATH (argv
 and cwd recorded; missing binary → `ErrNotInstalled`; a refusal on stderr
-→ `*ResumeError`; cancellation). `internal/config/agent_ask_validate_test.go`
+→ `*ResumeError`; cancellation; `IKE_AGENT_ASK` in the fork's
+environment), and #2844's context trimming — the one-line clipped tool
+title, tool output kept or replaced by its binary / too-large note, `Hunk`
+dropping binary and oversized sides and capping line width and bytes — plus
+the marker on every prompt and the `FollowUp` argv.
+`internal/agenttrace/discover_test.go` covers the ask tag (a tagged fork
+with no original to group with is skipped; untagged, it is discovered) and
+`tree_test.go` the dropped ask turns; `cmd/ike/agenthook_test.go` the
+silent hook under `IKE_AGENT_ASK`. `internal/config/agent_ask_validate_test.go`
 and `internal/settings/agent_ask_test.go` the defaults, the validator
 fallbacks, `Flat`, and the form (refused multi-word model, clamped turns,
 the toggle, list rendering). `internal/app/agentask_test.go` the overlay
@@ -543,7 +594,11 @@ lifecycle end to end against the same fake: prompt → run → answer with
 context and rendered markdown, the transcript byte-identical afterwards,
 the fork recorded, `show_context` off, the two error dialogs, `esc` while
 running with the late result ignored, the pane's `a`, the empty-question
-note, paste and `ctrl+u`, and the session-wide ask.
+note, paste and `ctrl+u`, and the session-wide ask; the follow-up chain
+(`f` → prompt on the fork with the history shown → argv resuming only the
+fork, tagged, context-free → both exchanges in the overlay → the original
+transcript untouched → reopening the node continues the kept fork →
+`ctrl+n` forks afresh) and a vanished fork being forgotten.
 
 ## Related
 

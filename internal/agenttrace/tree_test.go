@@ -93,6 +93,24 @@ func TestBuildTreeDetailsAndRefs(t *testing.T) {
 	}
 }
 
+// TestBuildTreeDropsAskTurns: the turns agent.ask put to a fork (#2844) —
+// question and answer — stay out of the tree; the copied history remains.
+func TestBuildTreeDropsAskTurns(t *testing.T) {
+	s := &Session{Events: []Event{
+		{Kind: KindUser, Turn: 1, Text: "go"},
+		{Kind: KindAssistant, Turn: 1, Text: "done"},
+		{Kind: KindUser, Turn: 2, Text: AskMarker + "\nContext …\n\nQuestion: why?"},
+		{Kind: KindAssistant, Turn: 2, Text: "because"},
+		{Kind: KindUser, Turn: 3, Text: AskMarker + "\nand then?"},
+		{Kind: KindTool, Turn: 3, Tool: &Tool{Name: "Read", Title: "x"}},
+	}}
+	got := outline(BuildTree(s))
+	want := []string{"turn:t1:#1 go", " decision:e1:done"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("tree =\n%s", strings.Join(got, "\n"))
+	}
+}
+
 func TestBuildTreeImplicitDecisionAndPending(t *testing.T) {
 	s := &Session{Events: []Event{
 		{Kind: KindUser, Turn: 1, Text: "go"},
