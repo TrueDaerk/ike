@@ -3,6 +3,7 @@ package agenttrace
 import (
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -72,6 +73,11 @@ type Node struct {
 	// result has not arrived.
 	Error   bool
 	Pending bool
+	// At and Until bound a tool call (and its file nodes) in time: when the
+	// call was issued and when its result arrived (zero while pending).
+	// Change-feed linking (link.go) matches external writes against them.
+	At    time.Time
+	Until time.Time
 
 	Children []Node
 }
@@ -146,7 +152,7 @@ func BuildTree(s *Session) []Node {
 // toolNode builds the row of one tool call with its files below.
 func toolNode(ev Event, i int) Node {
 	tool := ev.Tool
-	n := Node{Kind: NodeTool, Key: "e" + strconv.Itoa(i), Turn: ev.Turn, Event: i, Label: tool.Name, Error: tool.IsError, Pending: !tool.Done}
+	n := Node{Kind: NodeTool, Key: "e" + strconv.Itoa(i), Turn: ev.Turn, Event: i, Label: tool.Name, Error: tool.IsError, Pending: !tool.Done, At: ev.At, Until: tool.DoneAt}
 	switch {
 	case len(tool.Paths) == 1:
 		ref := tool.Paths[0]
@@ -167,7 +173,7 @@ func toolNode(ev Event, i int) Node {
 		ref := tool.Paths[j]
 		n.Children = append(n.Children, Node{
 			Kind: NodeFile, Key: n.Key + "/f" + strconv.Itoa(j), Turn: ev.Turn, Event: i,
-			Label: ref.Op.String(), Ref: &ref, Path: ref.Path,
+			Label: ref.Op.String(), Ref: &ref, Path: ref.Path, At: ev.At, Until: tool.DoneAt,
 		})
 	}
 	return n

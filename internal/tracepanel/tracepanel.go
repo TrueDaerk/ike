@@ -42,6 +42,17 @@ type RefreshMsg struct{}
 // dialog's action while no session is found ('i').
 type InstallHooksMsg struct{}
 
+// ChangeDiffMsg asks the root model to show the change-feed mini-diff of the
+// entry a linked node resolved to ('D', #2838).
+type ChangeDiffMsg struct{ Path string }
+
+// ChangeRevertMsg asks the root model to run the change feed's revert of the
+// entry a linked node resolved to ('V', #2838).
+type ChangeRevertMsg struct{ Path string }
+
+// linkMark suffixes the detail of a node linked to a change-feed entry.
+const linkMark = "Δ"
+
 // Info describes the session the tree was built from.
 type Info struct {
 	ID         string
@@ -63,6 +74,10 @@ type Model struct {
 	focused bool
 
 	tree hiertree.Tree[agenttrace.Node]
+	// nodes is the last tree Set handed in; links the change-feed entries
+	// its writing nodes resolved to (#2838).
+	nodes []agenttrace.Node
+	links agenttrace.Links
 	// seenTurns is how many turns the last Set showed; every newer one is
 	// expanded whole when it arrives.
 	seenTurns int
@@ -118,9 +133,10 @@ func (m *Model) Set(nodes []agenttrace.Node, info Info) {
 	m.err = ""
 	m.hasSession = true
 	m.info = info
+	m.nodes = nodes
 	m.ensureFetch()
 	first := !m.tree.HasNodes()
-	m.tree.Refresh(rows(nodes), nodeKey)
+	m.tree.Refresh(m.rows(nodes), nodeKey)
 	roots := m.tree.Roots()
 	from := m.seenTurns
 	if first && len(roots) > 0 {
@@ -143,6 +159,7 @@ func (m *Model) SetNoSession(cwd string, err error) {
 		m.err = err.Error()
 	}
 	m.tree.Clear()
+	m.nodes, m.links = nil, agenttrace.Links{}
 	m.seenTurns = 0
 }
 
@@ -151,6 +168,7 @@ func (m *Model) SetNoSession(cwd string, err error) {
 // The pane shows the locating notice until the next Set.
 func (m *Model) Reset() {
 	m.tree.Clear()
+	m.nodes, m.links = nil, agenttrace.Links{}
 	m.seenTurns = 0
 	m.hasSession = false
 	m.loading = true
@@ -175,24 +193,115 @@ func (m *Model) Rows() []string {
 	return out
 }
 
+// Nodes returns the tree the last Set handed in.
+func (m *Model) Nodes() []agenttrace.Node { return m.nodes }
+
+// Links returns the change-feed links the rows show.
+func (m *Model) Links() agenttrace.Links { return m.links }
+
+// SetLinks installs the change-feed links of the shown tree (#2838): linked
+// rows carry the Δ mark and answer D (mini-diff) and V (revert). The tree
+// is re-laid only when the links changed, keeping expansion and selection.
+func (m *Model) SetLinks(l agenttrace.Links) {
+	if sameLinks(m.links, l) {
+		return
+	}
+	m.links = l
+	if m.hasSession {
+		m.ensureFetch()
+		m.tree.Refresh(m.rows(m.nodes), nodeKey)
+	}
+}
+
+func sameLinks(a, b agenttrace.Links) bool {
+	if len(a.ByNode) != len(b.ByNode) || len(a.ByPath) != len(b.ByPath) {
+		return false
+	}
+	for k, v := range a.ByNode {
+		if b.ByNode[k] != v {
+			return false
+		}
+	}
+	for k, v := range a.ByPath {
+		if b.ByPath[k] != v {
+			return false
+		}
+	}
+	return true
+}
+
+// Select moves the cursor onto the node keyed key, unfolding its ancestors,
+// and reports whether the node exists — the change feed's jump to the trace
+// node behind a write (#2838).
+func (m *Model) Select(key string) bool {
+	chain := keyChain(m.nodes, key)
+	if chain == nil {
+		return false
+	}
+	m.ensureFetch()
+	level := m.tree.Roots()
+	var target *hiertree.Row[agenttrace.Node]
+	for i, k := range chain {
+		target = nil
+		for _, r := range level {
+			if r.Item.Key == k {
+				target = r
+				break
+			}
+		}
+		if target == nil {
+			return false
+		}
+		if i < len(chain)-1 {
+			m.tree.Expand(target)
+			level = target.Children()
+		}
+	}
+	for i, r := range m.tree.Visible() {
+		if r == target {
+			m.tree.SetCursor(i)
+			return true
+		}
+	}
+	return false
+}
+
+// keyChain returns the keys from a root down to the node keyed key, nil when
+// no node has it.
+func keyChain(nodes []agenttrace.Node, key string) []string {
+	for i := range nodes {
+		if nodes[i].Key == key {
+			return []string{key}
+		}
+		if rest := keyChain(nodes[i].Children, key); rest != nil {
+			return append([]string{nodes[i].Key}, rest...)
+		}
+	}
+	return nil
+}
+
 // nodeKey is the identity hiertree.Refresh carries state by.
 func nodeKey(n agenttrace.Node) string { return n.Key }
 
 // rows converts trace nodes to tree rows; the fetch below expands them from
 // the children they already carry.
-func rows(nodes []agenttrace.Node) []hiertree.Row[agenttrace.Node] {
+func (m *Model) rows(nodes []agenttrace.Node) []hiertree.Row[agenttrace.Node] {
 	out := make([]hiertree.Row[agenttrace.Node], len(nodes))
 	for i, n := range nodes {
-		out[i] = hiertree.Row[agenttrace.Node]{Entry: entry(n), Item: n}
+		out[i] = hiertree.Row[agenttrace.Node]{Entry: entry(n, m.links.Node(n.Key) != ""), Item: n}
 	}
 	return out
 }
 
 // entry is the hiertree presentation of a node: the label, the faint detail
-// and — for the rows that carry a file — the location, with the 1-based
-// FileRef line mapped onto hiertree's 0-based Line (-1 = unknown).
-func entry(n agenttrace.Node) hiertree.Entry {
+// (with the Δ mark when the node links to a change-feed entry) and — for the
+// rows that carry a file — the location, with the 1-based FileRef line
+// mapped onto hiertree's 0-based Line (-1 = unknown).
+func entry(n agenttrace.Node, linked bool) hiertree.Entry {
 	e := hiertree.Entry{Name: n.Label, Detail: n.Detail, Line: -1}
+	if linked {
+		e.Detail = strings.TrimSpace(e.Detail + " " + linkMark)
+	}
 	if n.Path != "" {
 		e.Path = n.Path
 		if n.Ref != nil && n.Ref.Line > 0 {
@@ -243,6 +352,19 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return func() tea.Msg { return RefreshMsg{} }
 	case "i":
 		return func() tea.Msg { return InstallHooksMsg{} }
+	case "D", "V":
+		cur := m.Current()
+		if cur == nil {
+			return nil
+		}
+		path := m.links.Node(cur.Key)
+		if path == "" {
+			return nil // unlinked rows stay plain
+		}
+		if key == "D" {
+			return func() tea.Msg { return ChangeDiffMsg{Path: path} }
+		}
+		return func() tea.Msg { return ChangeRevertMsg{Path: path} }
 	}
 	return nil
 }
@@ -252,7 +374,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 // the model has settled in the pane instance.
 func (m *Model) ensureFetch() {
 	m.tree.SetFetch(hiertree.Static(&m.tree, func(n agenttrace.Node) []hiertree.Row[agenttrace.Node] {
-		return rows(n.Children)
+		return m.rows(n.Children)
 	}))
 }
 
@@ -355,7 +477,7 @@ func (m *Model) View() string {
 	for len(lines) < headerRows+m.treeHeight() {
 		lines = append(lines, "")
 	}
-	hint := "enter/double-click opens · space expands · h/l fold · r rescan"
+	hint := "enter/double-click opens · space expands · h/l fold · r rescan · Δ: D diff · V revert"
 	lines = append(lines, clip.Render(lipgloss.NewStyle().Faint(true).Render(hint)))
 	return strings.Join(lines, "\n")
 }

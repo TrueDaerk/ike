@@ -287,7 +287,7 @@ func TestChangeFeedGroupsByProcess(t *testing.T) {
 // neither is an idle or dead one.
 func TestChangeFeedAttributionStaysSilentWithoutACandidate(t *testing.T) {
 	m := newSized()
-	if got := m.changeFeedSource(); got != "" {
+	if got, key := m.changeFeedSource(); got != "" || key != "" {
 		t.Fatalf("changeFeedSource = %q with nothing running, want no attribution", got)
 	}
 	if got := terminalSourceName(nil); got != "" {

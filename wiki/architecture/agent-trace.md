@@ -1,10 +1,10 @@
 ---
 type: architecture
 title: Agent Trace
-description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840); change-feed links and "ask" follow in their own sub-issues.
+description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840), and the links from writing file nodes to change-feed entries with diff/revert and the feed's jump back (#2838); "ask" follows in its own sub-issue.
 resource: internal/agenttrace
-tags: [architecture, agents, claude, transcript, trace, discovery, hooks, tool-window, hiertree]
-timestamp: 2026-09-30T22:00:00Z
+tags: [architecture, agents, claude, transcript, trace, discovery, hooks, tool-window, hiertree, change-feed]
+timestamp: 2026-09-30T23:00:00Z
 ---
 
 # Agent Trace
@@ -44,7 +44,8 @@ FileRef { Path, Line (1-based, 0 = unknown), Op (read|edit|write|create|delete) 
   compaction (`system/compact_boundary` or a user line flagged
   `isCompactSummary`) and the old-format `summary` line.
 - **Session.Files()** flattens every `FileRef` in timeline order — the input
-  the change-feed link (#2838) joins against.
+  the change-feed link (#2838) joins against. `Tool.DoneAt` records when the
+  result arrived; with the call's own time it bounds the link's window.
 
 ## Parser (`parse.go`)
 
@@ -295,7 +296,7 @@ pane.
 Keys: the tree's own (`j/k`, page keys, `space`/`l` expand, `h` fold or
 walk to the parent), `enter` opens the row's file — or folds/unfolds a row
 that has none — `r` looks the session up again, `i` installs the Claude
-hooks. Mouse: a click selects, a click on the marker cell folds, a second
+hooks, `D` / `V` show the mini-diff / revert of a linked row (below). Mouse: a click selects, a click on the marker cell folds, a second
 click within `ui.DoubleClickWindow` opens (the shared list-mouse gesture),
 the wheel scrolls through `Tree.Wheel`.
 
@@ -328,6 +329,42 @@ pane's `r`, when the pane is re-focused through its toggle, and after a
 hook install finished. Closing the pane ends the chain; a pane restored
 with the layout starts it from `Init`.
 
+### Change-feed links (#2838)
+
+A file node whose tool call wrote the file (every op but `read`) links to
+the [change-feed](./change-feed.md) entry the write produced.
+`agenttrace.Link` (`link.go`, pure) matches on all three of:
+
+- **path** — the node's file is the entry's (relative paths resolve against
+  the session cwd);
+- **time** — the entry's span (`First`…`Time`, the oldest and newest
+  coalesced event) overlaps the tool call's window: from the `tool_use`
+  line (`Node.At`) to the `tool_result` line (`Node.Until`, from
+  `Tool.DoneAt`), widened by `LinkSlack` (5 s) for the watcher's debounce
+  and the two clocks; a pending call stays open for `LinkPending` (10 min —
+  a permission prompt can hold the write back);
+- **source process** — the entry's `SourceKey` is the session key of the
+  terminal the trace follows. The feed sets the key only when exactly one
+  terminal was busy at the write, so an ambiguous moment (two processes, or
+  the same program in two panes) stays unattributed and never links, and a
+  trace that follows no terminal links nothing.
+
+Unmatched nodes stay plain. A tool row that touched a single file shares its
+file node's link. The back-link of an entry names the file node that best
+explains its newest write: the latest call issued by then, else the earliest
+one issued after it (it matched only inside the slack).
+
+The app relinks on every read (`syncTraceLinks`, once per poll tick) and
+keeps the last result on the model (`traceLinks`), so the feed can jump back
+even while the pane is closed. Linked rows carry a `Δ` in their detail and
+answer two keys that route into the feed's **own** handlers — no copies:
+`D` (`ChangeDiffMsg`) opens the feed panel on that entry, i.e. its
+mini-diff, and `V` (`ChangeRevertMsg`) raises the feed's revert
+confirmation. The feed's `t` jumps the other way (`jumpToTraceNode`): an
+open pane is focused and `Select` unfolds the node's ancestors and puts the
+cursor on it; a closed pane opens and the pending `traceJump` is selected
+by the first read.
+
 ### Empty state
 
 No transcript for the followed directory is actionable — start the agent
@@ -358,6 +395,15 @@ reading an appended turn without losing the selection (and dying when
 stale or after close), the empty state's actions, and the followed
 terminal (focused tool pane, last tool pane, hook binding, project root).
 
+`internal/agenttrace/link_test.go` covers change-feed matching (#2838):
+path, window edges and slack, reads never linking, unattributed and
+foreign-terminal changes staying plain, a relative pending write, and the
+back-link picking the newest cause. `tracepanel_test.go` checks the `Δ`
+mark, `D`/`V` on linked and unlinked rows and `Select` unfolding a folded
+turn; `agenttrace_panel_test.go` runs both directions end to end — `D`
+opening the feed on the entry with its mini-diff, `V` its revert prompt, the
+feed's `t` focusing the pane on the node, and the pending jump.
+
 `internal/agenttrace/hooks_test.go` round-trips install → install →
 uninstall against a settings file with foreign hooks and unrelated keys
 (document equal after the round trip, key order and file mode kept), a moved
@@ -386,7 +432,7 @@ points at one.
 ## Related
 
 - [External-Change Feed](/architecture/change-feed.md) — the diff/revert
-  side that file nodes will link to (#2838).
+  side writing file nodes link to, and the `t` back-link (#2838).
 - [Hierarchy Tree](/architecture/hiertree.md) — the tree the trace tool
   window is built on: `Static`, `Refresh`, `ExpandDeep` were added for it
   (#2840).

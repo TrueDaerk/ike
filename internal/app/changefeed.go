@@ -70,13 +70,16 @@ func feedKind(k watch.Kind) changefeed.Kind {
 // pane running `claude`, a Run task, a command in a terminal pane. Exactly one
 // of them busy at the moment of the write is a usable answer; two are not, so
 // an ambiguous moment stays unattributed rather than pinning an agent's write
-// on the formatter that happened to run beside it.
-func (m Model) changeFeedSource() string {
+// on the formatter that happened to run beside it. key is the session key of
+// that one terminal (#2838); two busy terminals running the same program share
+// the name but not the key, so key stays "" and an agent trace cannot claim
+// the write for its own pane.
+func (m Model) changeFeedSource() (name, key string) {
 	ws := m.activeWS()
 	if ws == nil || ws.Panes == nil {
-		return ""
+		return "", ""
 	}
-	found := ""
+	found, foundKey := "", ""
 	for _, key := range ws.Panes.Keys() {
 		inst := ws.Panes.Get(key)
 		if inst == nil {
@@ -95,16 +98,20 @@ func (m Model) changeFeedSource() string {
 		}
 		for _, t := range terms {
 			name := terminalSourceName(t)
-			if name == "" || name == found {
+			if name == "" {
+				continue
+			}
+			if name == found {
+				foundKey = "" // the same program in two terminals: which one is unknown
 				continue
 			}
 			if found != "" {
-				return "" // more than one candidate: no honest answer
+				return "", "" // more than one candidate: no honest answer
 			}
-			found = name
+			found, foundKey = name, t.SessionKey()
 		}
 	}
-	return found
+	return found, foundKey
 }
 
 // terminalSourceName names the process a busy session runs, "" when the
@@ -148,13 +155,15 @@ func (m *Model) recordChangeFeed(msg watch.EventMsg) {
 		return
 	}
 	before, origin := m.changeFeedBefore(msg.Path, msg.Kind)
+	source, sourceKey := m.changeFeedSource()
 	if !m.feed.Add(changefeed.Entry{
-		Path:   msg.Path,
-		Time:   m.clock(),
-		Kind:   feedKind(msg.Kind),
-		Before: before,
-		Origin: origin,
-		Source: m.changeFeedSource(),
+		Path:      msg.Path,
+		Time:      m.clock(),
+		Kind:      feedKind(msg.Kind),
+		Before:    before,
+		Origin:    origin,
+		Source:    source,
+		SourceKey: sourceKey,
 	}) {
 		return
 	}
@@ -210,12 +219,13 @@ func (m *Model) recordChangeFeedBatch(events []watch.EventMsg) (cmd tea.Cmd, vis
 		kind   changefeed.Kind
 		at     time.Time
 		source string
+		key    string
 	}
 	var deferred []deferredCapture
 	// The attribution is resolved once per flush, not once per file: a busy
 	// tool pane is a property of the moment, and re-asking it per event would
 	// only cost pane walks for the same answer.
-	source := m.changeFeedSource()
+	source, sourceKey := m.changeFeedSource()
 	added := false
 	for _, msg := range events {
 		switch msg.Kind {
@@ -235,19 +245,20 @@ func (m *Model) recordChangeFeedBatch(events []watch.EventMsg) (cmd tea.Cmd, vis
 				// fallback is the newest local-history snapshot, which reads
 				// from disk — deferred off-loop.
 				deferred = append(deferred, deferredCapture{
-					path: msg.Path, kind: feedKind(msg.Kind), at: m.clock(), source: source,
+					path: msg.Path, kind: feedKind(msg.Kind), at: m.clock(), source: source, key: sourceKey,
 				})
 				continue
 			}
 		}
 		before, origin := m.changeFeedBefore(msg.Path, msg.Kind)
 		if m.feed.Add(changefeed.Entry{
-			Path:   msg.Path,
-			Time:   m.clock(),
-			Kind:   feedKind(msg.Kind),
-			Before: before,
-			Origin: origin,
-			Source: source,
+			Path:      msg.Path,
+			Time:      m.clock(),
+			Kind:      feedKind(msg.Kind),
+			Before:    before,
+			Origin:    origin,
+			Source:    source,
+			SourceKey: sourceKey,
 		}) {
 			added = true
 		}
@@ -272,7 +283,7 @@ func (m *Model) recordChangeFeedBatch(events []watch.EventMsg) (cmd tea.Cmd, vis
 				}
 			}
 			entries = append(entries, changefeed.Entry{
-				Path: d.path, Time: d.at, Kind: d.kind, Before: before, Origin: origin, Source: d.source,
+				Path: d.path, Time: d.at, Kind: d.kind, Before: before, Origin: origin, Source: d.source, SourceKey: d.key,
 			})
 		}
 		return changeFeedCapturedMsg{entries: entries}
@@ -326,13 +337,24 @@ func (m Model) changeFeedBefore(path string, kind watch.Kind) (string, changefee
 }
 
 // openChangeFeed raises the feed panel over the recorded changes.
-func (m *Model) openChangeFeed() {
+func (m *Model) openChangeFeed() { m.openChangeFeedAt("") }
+
+// openChangeFeedAt raises the feed panel with path's entry selected — the
+// agent trace's mini-diff action (#2838); "" (or an unlisted path) selects
+// the newest entry.
+func (m *Model) openChangeFeedAt(path string) {
 	if m.feed == nil || m.feed.Len() == 0 {
 		m.host.Notify(host.Info, "no external file changes recorded this session")
 		return
 	}
 	m.cfEntries = m.changeFeedList()
 	m.cfSel = 0
+	for i, e := range m.cfEntries {
+		if path != "" && e.Path == path {
+			m.cfSel = i
+			break
+		}
+	}
 	m.cfMarks = nil // a fresh review starts with nothing selected for a batch
 	m.cfPicker = true
 	m.refreshChangeFeedDiff()
@@ -564,13 +586,16 @@ func (m Model) changeFeedBody(width int) string {
 		if e.Source != "" {
 			detail += " · by: " + e.Source
 		}
+		if m.traceLinks.Path(e.Path) != "" {
+			detail += " · t: agent trace"
+		}
 		b.WriteString("\n" + dim.Render(detail))
 	}
 	if n := m.changeFeedMarked(); n > 0 {
 		b.WriteString("\n" + dim.Render(fmt.Sprintf("%d file(s) marked — A / V act on the marks", n)))
 	}
 	b.WriteString("\nenter open · d diff pane · R reload buffer · r revert change · " +
-		"x dismiss · c clear feed · j/k move · esc close")
+		"x dismiss · c clear feed · t agent trace · j/k move · esc close")
 	b.WriteString("\nspace mark · m mark group · A reload marked/all · V revert marked/all")
 	return b.String()
 }
@@ -671,6 +696,16 @@ func (m Model) updateChangeFeed(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.toggleChangeFeedGroupMarks(e.Source)
 		m.setChangeFeedContent()
 		return m, nil
+	case "t":
+		// The back-link (#2838): the agent-trace node whose tool call made
+		// the entry's newest write.
+		key := m.traceLinks.Path(e.Path)
+		if key == "" {
+			m.host.Notify(host.Info, "no agent trace node linked to "+baseName(e.Path))
+			return m, nil
+		}
+		m.closeChangeFeed()
+		return m, m.jumpToTraceNode(key)
 	case "x":
 		m.feed.Remove(e.Path)
 		delete(m.cfMarks, e.Path)

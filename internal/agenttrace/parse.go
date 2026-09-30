@@ -181,7 +181,7 @@ func (p *Parser) user(l *line) bool {
 		b := &blocks[i]
 		switch b.Type {
 		case "tool_result":
-			if p.result(b, l.ToolUseResult) {
+			if p.result(b, l.ToolUseResult, at) {
 				changed = true
 			}
 		case "text":
@@ -273,7 +273,7 @@ func (p *Parser) system(l *line) bool {
 }
 
 // result attaches a tool_result block to its pending call.
-func (p *Parser) result(b *block, structured json.RawMessage) bool {
+func (p *Parser) result(b *block, structured json.RawMessage, at time.Time) bool {
 	idx, ok := p.pending[b.ToolUseID]
 	if !ok {
 		return false
@@ -281,6 +281,7 @@ func (p *Parser) result(b *block, structured json.RawMessage) bool {
 	delete(p.pending, b.ToolUseID)
 	tool := p.sess.Events[idx].Tool
 	tool.Done = true
+	tool.DoneAt = at
 	tool.IsError = b.IsError
 	tool.Output, tool.Truncated = capOutput(resultText(b.Content))
 	p.refine(tool, structured)

@@ -5,10 +5,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/agenttrace"
+	"ike/internal/changefeed"
 	"ike/internal/pane"
 	"ike/internal/tracepanel"
 )
@@ -260,5 +262,90 @@ func TestAgentTraceFollowsTheAgentToolPane(t *testing.T) {
 	m.recentToolTerm = ""
 	if got := m.traceTargetNow(); got.key != "" || got.cwd != projectRoot() {
 		t.Fatalf("no-terminal target = %+v", got)
+	}
+}
+
+// TestAgentTraceChangeFeedLinkBothWays covers #2838 end to end: a feed
+// entry written by the followed terminal inside the Edit call's window links
+// to its file node; D on the node opens the feed on that entry, V asks the
+// feed's revert, and t in the feed jumps back to the node — directly while
+// the pane shows the session, and through the pending jump a read applies.
+// An entry the feed could not attribute stays unlinked.
+func TestAgentTraceChangeFeedLinkBothWays(t *testing.T) {
+	m, dir := traceApp(t)
+	target := filepath.Join(t.TempDir(), "main.go")
+	if err := os.WriteFile(target, []byte("a\nb\nd\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	other := filepath.Join(filepath.Dir(target), "other.go")
+	if err := os.WriteFile(filepath.Join(dir, "sess-1.jsonl"), []byte(transcriptLines("sess-1", projectRoot(), target, 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m = openTrace(t, m)
+	p := m.agentTracePanel()
+	if !p.HasSession() {
+		t.Fatal("no session")
+	}
+	wrote := time.Date(2026, 9, 30, 14, 1, 2, 500_000_000, time.UTC)
+	m.feed.Add(changefeed.Entry{
+		Path: target, Time: wrote, Kind: changefeed.Changed,
+		Before: "a\nb\nc\n", Origin: changefeed.FromBuffer, Source: "claude", SourceKey: "term-1",
+	})
+	m.feed.Add(changefeed.Entry{ // unattributed: several processes were busy
+		Path: other, Time: wrote, Kind: changefeed.Changed,
+		Before: "x", Origin: changefeed.FromBuffer,
+	})
+	m.traceFollow = traceTarget{key: "term-1", cwd: projectRoot()}
+	m.syncTraceLinks()
+	if m.traceLinks.Path(target) != "e2/f0" || p.Links().Node("e2/f0") != target {
+		t.Fatalf("links = %+v", m.traceLinks)
+	}
+	if m.traceLinks.Path(other) != "" {
+		t.Fatal("an unattributed change was linked")
+	}
+
+	// Trace → feed: D opens the feed's mini-diff on the entry.
+	if !p.Select("e2/f0") {
+		t.Fatal("select failed")
+	}
+	msg, ok := p.Update(tea.KeyPressMsg{Code: 'D', Text: "D"})().(tracepanel.ChangeDiffMsg)
+	if !ok || msg.Path != target {
+		t.Fatalf("D = %#v", msg)
+	}
+	out, _ := m.Update(msg)
+	m = out.(Model)
+	if sel, _ := m.changeFeedSel(); !m.changeFeedOpen() || sel.Path != target || len(m.cfDiff.Hunks) == 0 {
+		t.Fatalf("feed open=%v on %q, hunks=%d", m.changeFeedOpen(), sel.Path, len(m.cfDiff.Hunks))
+	}
+	if !strings.Contains(m.changeFeedBody(160), "t: agent trace") {
+		t.Fatal("the feed detail does not offer the back-link")
+	}
+
+	// Feed → trace: t focuses the pane on the node.
+	p.Select("t1")
+	out, _ = m.updateChangeFeed(tea.KeyPressMsg{Code: 't', Text: "t"})
+	m = out.(Model)
+	p = m.agentTracePanel()
+	if m.changeFeedOpen() || m.activeWS().Panes.Focused() != pane.AgentTraceKey || p.Current().Key != "e2/f0" {
+		t.Fatalf("t: feed open=%v focus=%q node=%+v", m.changeFeedOpen(), m.activeWS().Panes.Focused(), p.Current())
+	}
+
+	// A jump that had to open the pane lands with the next read.
+	p.Select("t1")
+	m.traceJump = "e2/f0"
+	m.syncTraceLinks()
+	if m.traceJump != "" || p.Current().Key != "e2/f0" {
+		t.Fatalf("pending jump: %q, node %+v", m.traceJump, p.Current())
+	}
+
+	// V asks the feed's own revert confirmation.
+	rev, ok := p.Update(tea.KeyPressMsg{Code: 'V', Text: "V"})().(tracepanel.ChangeRevertMsg)
+	if !ok {
+		t.Fatalf("V = %#v", rev)
+	}
+	out, _ = m.Update(rev)
+	m = out.(Model)
+	if m.cfRevert != target || !m.changeFeedRevertOpen() {
+		t.Fatalf("revert prompt for %q", m.cfRevert)
 	}
 }

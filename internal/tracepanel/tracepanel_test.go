@@ -193,6 +193,72 @@ func TestLiveAppendKeepsSelectionAndExpansion(t *testing.T) {
 	}
 }
 
+// findNode returns the node keyed key.
+func findNode(nodes []agenttrace.Node, key string) *agenttrace.Node {
+	var out *agenttrace.Node
+	agenttrace.Walk(nodes, func(n *agenttrace.Node) {
+		if n.Key == key {
+			out = n
+		}
+	})
+	return out
+}
+
+// TestLinkedRowsMarkDiffRevertAndSelect covers the pane half of #2838: a
+// node linked to a change-feed entry shows the Δ mark and answers D / V,
+// an unlinked one stays plain, and Select unfolds its way to a node.
+func TestLinkedRowsMarkDiffRevertAndSelect(t *testing.T) {
+	m := panel(t)
+	s := fixture(t, false)
+	nodes := agenttrace.BuildTree(s)
+	m.Set(nodes, info(s))
+	edit := findNode(nodes, "e4/f0")
+	if edit == nil || edit.At.IsZero() || edit.Until.IsZero() || !edit.Until.After(edit.At) {
+		t.Fatalf("edit node window = %+v", edit)
+	}
+	const target = "/Users/dev/src/proj/main.go"
+	links := agenttrace.Link(nodes, []agenttrace.Change{{
+		Path: target, First: edit.Until, Last: edit.Until, SourceKey: "term-1",
+	}}, "term-1", s.CWD)
+	if links.Path(target) != "e4/f0" || links.Node("e4") != target {
+		t.Fatalf("links = %+v", links)
+	}
+	m.SetLinks(links)
+	if view := plain(m.View()); !strings.Contains(view, "Edit Δ") {
+		t.Fatalf("linked tool row has no mark:\n%s", view)
+	}
+	// The cursor starts on the turn row: unlinked, D and V do nothing.
+	if msg := send(m, "D"); msg != nil {
+		t.Fatalf("D on an unlinked row = %#v", msg)
+	}
+	// Fold the turn, then jump into it: Select unfolds the ancestors.
+	send(m, "left")
+	if len(m.Rows()) != 1 {
+		t.Fatalf("turn did not fold: %v", m.Rows())
+	}
+	if !m.Select("e4/f0") || m.Current().Key != "e4/f0" {
+		t.Fatalf("select landed on %+v", m.Current())
+	}
+	if m.Select("e999") {
+		t.Fatal("select of an unknown key succeeded")
+	}
+	if msg, ok := send(m, "D").(ChangeDiffMsg); !ok || msg.Path != target {
+		t.Fatalf("D = %#v", msg)
+	}
+	if msg, ok := send(m, "V").(ChangeRevertMsg); !ok || msg.Path != target {
+		t.Fatalf("V = %#v", msg)
+	}
+	// Selection and expansion survive a relink; Reset forgets the links.
+	m.SetLinks(agenttrace.Links{})
+	if m.Current().Key != "e4/f0" || send(m, "D") != nil {
+		t.Fatal("unlinking must keep the selection and silence D")
+	}
+	m.Reset()
+	if m.Links().Len() != 0 || m.Nodes() != nil {
+		t.Fatal("reset kept the links")
+	}
+}
+
 func TestClickSelectsDoubleClickOpens(t *testing.T) {
 	m := panel(t)
 	now := time.Unix(1000, 0)

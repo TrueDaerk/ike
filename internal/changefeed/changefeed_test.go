@@ -258,6 +258,30 @@ func TestNilFeedIsInert(t *testing.T) {
 	}
 }
 
+// TestCoalescingKeepsFirstTimeAndAdoptsSourceKey: an agent trace matches a
+// row against the whole span of its writes (#2838), so coalescing keeps the
+// oldest event's time; the source key travels with the adopted source.
+func TestCoalescingKeepsFirstTimeAndAdoptsSourceKey(t *testing.T) {
+	f := New()
+	f.Add(entry("a.go", 1, "x"))
+	later := entry("a.go", 9, "y")
+	later.Source, later.SourceKey = "claude", "term-1"
+	f.Add(later)
+	e, _ := f.Get("a.go")
+	if !e.First.Equal(at(1)) || !e.Time.Equal(at(9)) {
+		t.Fatalf("span = %v..%v, want %v..%v", e.First, e.Time, at(1), at(9))
+	}
+	if e.Source != "claude" || e.SourceKey != "term-1" {
+		t.Fatalf("source = %q/%q", e.Source, e.SourceKey)
+	}
+	other := entry("a.go", 10, "z")
+	other.Source, other.SourceKey = "gofmt", "term-2"
+	f.Add(other)
+	if e, _ = f.Get("a.go"); e.SourceKey != "term-1" {
+		t.Fatalf("an existing source key was overwritten: %q", e.SourceKey)
+	}
+}
+
 // TestKindAndOriginLabels: the panel renders these verbatim, so a renamed
 // constant must not silently produce a blank column.
 func TestKindAndOriginLabels(t *testing.T) {
