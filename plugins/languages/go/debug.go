@@ -13,6 +13,7 @@ import (
 
 	"ike/internal/lang"
 	"ike/internal/lsp/transport"
+	"ike/internal/safego"
 )
 
 // Debug-adapter contribution (#1914): Go debugs through delve's DAP server.
@@ -91,7 +92,7 @@ func (toolchain) DebugAdapterConnect(root, _ string) (io.ReadWriteCloser, error)
 		return nil, err
 	}
 	addrCh := make(chan string, 1)
-	go func() {
+	safego.Go("langgo.toolchain.DebugAdapterConnect", func() {
 		sc := bufio.NewScanner(stdout)
 		for sc.Scan() {
 			if addr, ok := strings.CutPrefix(sc.Text(), dlvBanner); ok {
@@ -102,7 +103,7 @@ func (toolchain) DebugAdapterConnect(root, _ string) (io.ReadWriteCloser, error)
 		// Keep draining so dlv never blocks on a full stdout pipe; EOF ends
 		// the goroutine with the process.
 		_, _ = io.Copy(io.Discard, stdout)
-	}()
+	})
 	fail := func(err error) (io.ReadWriteCloser, error) {
 		if cmd.Process != nil {
 			_ = cmd.Process.Kill()

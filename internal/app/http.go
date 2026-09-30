@@ -25,6 +25,7 @@ import (
 	"ike/internal/httppane"
 	"ike/internal/layout"
 	"ike/internal/pane"
+	"ike/internal/safego"
 	"ike/internal/telemetry"
 )
 
@@ -485,7 +486,7 @@ func (m *Model) dispatchHTTPLimit(source, key, label string, ws bool, limit time
 			Chunk: buf, events: events}
 	}}
 	dispatch := func() tea.Msg {
-		go func() {
+		safego.Go("app.Model.dispatchHTTPLimit", func() {
 			resp, err := send(ctx, source, key, httpclient.WSCallbacks{
 				StreamCallbacks: httpclient.StreamCallbacks{
 					OnHeaders: func(status string, _ int, proto string, headers http.Header) {
@@ -506,7 +507,7 @@ func (m *Model) dispatchHTTPLimit(source, key, label string, ws bool, limit time
 			coal.finish() // the buffered tail lands ahead of the final response
 			events <- HTTPResponseMsg{Source: source, Request: key, Resp: resp, Err: err}
 			close(events)
-		}()
+		})
 		return <-events
 	}
 	return tea.Batch(dispatch, tick)

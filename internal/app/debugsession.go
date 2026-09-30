@@ -23,6 +23,7 @@ import (
 	"ike/internal/pane"
 	"ike/internal/project"
 	"ike/internal/run"
+	"ike/internal/safego"
 	"ike/internal/settings"
 	"ike/internal/terminal"
 	"ike/internal/ui"
@@ -373,10 +374,10 @@ func (m *Model) launchOrInstall(root string, cfg run.Config, afterInstall bool) 
 	m.host.Notify(host.Info, "debug: "+reason+" — installing…")
 	send := m.host.Send
 	gen := m.dbgLaunchGen
-	go func() {
+	safego.Go("app.Model.launchOrInstall", func() {
 		err := runAdapterInstall(candidates)
 		send(debugInstallResultMsg{cfg: cfg, root: root, err: err, gen: gen})
-	}()
+	})
 }
 
 // adapterInstallTimeout bounds one install attempt.
@@ -502,7 +503,7 @@ func (m *Model) launchDebug(root string, cfg run.Config) {
 		send(debugRunInTerminalMsg{seq: seq, args: args, sess: sess})
 	})
 	m.host.Notify(host.Info, "debug: "+cfg.Name+" starting")
-	go func() {
+	safego.Go("app.Model.launchDebug", func() {
 		if err := sess.Initialize(); err != nil {
 			send(debugErrMsg{err: withAdapterStderr(err, sess)})
 			return
@@ -510,7 +511,7 @@ func (m *Model) launchDebug(root string, cfg run.Config) {
 		if err := <-sess.LaunchAsync(launchArgs); err != nil {
 			send(debugErrMsg{err: withAdapterStderr(err, sess)})
 		}
-	}()
+	})
 }
 
 // withAdapterStderr appends the adapter's captured stderr tail to a
@@ -577,7 +578,7 @@ func (m *Model) handleDebugEvent(evSess *dap.Session, ev dap.Event) {
 			m.host.Notify(host.Warn, notice)
 		}
 		root := dbg.root
-		go func() {
+		safego.Go("app.Model.handleDebugEvent", func() {
 			for file, bps := range files {
 				abs := file
 				if !filepath.IsAbs(abs) {
@@ -590,10 +591,10 @@ func (m *Model) handleDebugEvent(evSess *dap.Session, ev dap.Event) {
 			if err := sess.ConfigurationDone(); err != nil {
 				send(debugErrMsg{err: err})
 			}
-		}()
+		})
 	case "stopped":
 		st := ev.Stopped()
-		go func() {
+		safego.Go("app.Model.handleDebugEvent", func() {
 			threadID := st.ThreadID
 			if threadID == 0 {
 				if threads, err := sess.Threads(); err == nil && len(threads) > 0 {
@@ -606,7 +607,7 @@ func (m *Model) handleDebugEvent(evSess *dap.Session, ev dap.Event) {
 				return
 			}
 			send(debugStoppedMsg{sess: sess, threadID: threadID, frames: frames})
-		}()
+		})
 	case "continued":
 		// A spontaneous resume (another client, a conditional breakpoint the
 		// adapter continued past) blanks the panel like debugStep does, so no
@@ -647,9 +648,9 @@ func (m *Model) handleDebugEvent(evSess *dap.Session, ev dap.Event) {
 		}
 	case "exited":
 		x := ev.Exited()
-		go func() { send(debugEndedMsg{sess: sess, exitCode: x.ExitCode, hasCode: true}) }()
+		safego.Go("app.Model.handleDebugEvent", func() { send(debugEndedMsg{sess: sess, exitCode: x.ExitCode, hasCode: true}) })
 	case "terminated":
-		go func() { send(debugEndedMsg{sess: sess}) }()
+		safego.Go("app.Model.handleDebugEvent", func() { send(debugEndedMsg{sess: sess}) })
 	case "ike.filterDetach":
 		// The listener rejected a request on the hostname filter (#938):
 		// surface it — a filter false-negative must be distinguishable from
@@ -831,11 +832,11 @@ func (m *Model) debugStep(kind string) {
 	}
 	send := m.host.Send
 	threadID := dbg.threadID
-	go func() {
+	safego.Go("app.Model.debugStep", func() {
 		if err := do(threadID); err != nil {
 			send(debugErrMsg{err: err})
 		}
-	}()
+	})
 }
 
 // debugPanel returns the singleton panel model, nil while it is not open.
@@ -1034,7 +1035,7 @@ func (m *Model) finishParkedDebugSession(w *workspace.Workspace, root string, ex
 	extras.dbg = nil
 	extras.dbgLaunching = false
 	w.Aux = extras
-	go dbg.sess.Close()
+	safego.Go("app.Model.finishParkedDebugSession", func() { dbg.sess.Close() })
 	note := "debug: " + dbg.cfgName + " finished"
 	if hasCode {
 		note += " (exit code " + strconv.Itoa(exitCode) + ")"
@@ -1082,7 +1083,7 @@ func (m *Model) fetchScopes(frameID int, path string, line int) {
 	}
 	sess := dbg.sess
 	send := m.host.Send
-	go func() {
+	safego.Go("app.Model.fetchScopes", func() {
 		scopes, err := sess.Scopes(frameID)
 		if err != nil {
 			send(debugErrMsg{err: err})
@@ -1097,7 +1098,7 @@ func (m *Model) fetchScopes(frameID int, path string, line int) {
 				}
 			}
 		}
-	}()
+	})
 }
 
 // fetchVariables expands one variablesReference for the panel.
@@ -1108,14 +1109,14 @@ func (m *Model) fetchVariables(ref int) {
 	}
 	sess := dbg.sess
 	send := m.host.Send
-	go func() {
+	safego.Go("app.Model.fetchVariables", func() {
 		vars, err := sess.Variables(ref)
 		if err != nil {
 			send(debugErrMsg{err: err})
 			return
 		}
 		send(debugVarsMsg{ref: ref, vars: vars})
-	}()
+	})
 }
 
 // runDebuggeeInTerminal answers a runInTerminal reverse request (#625): it
@@ -1128,7 +1129,7 @@ func (m *Model) fetchVariables(ref int) {
 func (m *Model) runDebuggeeInTerminal(msg debugRunInTerminalMsg) {
 	refuse := func(reason string) {
 		sess := msg.sess
-		go func() { _ = sess.RefuseReverse(msg.seq, "runInTerminal", reason) }()
+		safego.Go("app.Model.runDebuggeeInTerminal", func() { _ = sess.RefuseReverse(msg.seq, "runInTerminal", reason) })
 	}
 	dbg := m.dbg
 	if dbg == nil || dbg.sess != msg.sess {
@@ -1176,7 +1177,7 @@ func (m *Model) runDebuggeeInTerminal(msg debugRunInTerminalMsg) {
 	p.AutoTab(debugpanel.TabConsole)
 	seq := msg.seq
 	sess := msg.sess
-	go func() { _ = sess.RespondRunInTerminal(seq, pid) }()
+	safego.Go("app.Model.runDebuggeeInTerminal", func() { _ = sess.RespondRunInTerminal(seq, pid) })
 }
 
 // envMapToSlice converts a runInTerminal env map into "K=V" entries. A nil
@@ -1215,7 +1216,7 @@ func (m *Model) setDebugVariable(ref int, name, value string) {
 	}
 	sess := dbg.sess
 	send := m.host.Send
-	go func() {
+	safego.Go("app.Model.setDebugVariable", func() {
 		if _, err := sess.SetVariable(ref, name, value); err != nil {
 			send(debugErrMsg{err: err})
 			return
@@ -1225,7 +1226,7 @@ func (m *Model) setDebugVariable(ref int, name, value string) {
 		} else {
 			send(debugVarsMsg{ref: ref, vars: vars})
 		}
-	}()
+	})
 }
 
 // stopDebugSession ends the live session; notify controls the toast (a
@@ -1262,10 +1263,10 @@ func (m *Model) stopDebugSession(notify bool) {
 	}
 	m.applyDebugSessionEnd()
 	sess := dbg.sess
-	go func() {
+	safego.Go("app.Model.stopDebugSession", func() {
 		_ = sess.Disconnect()
 		sess.Close()
-	}()
+	})
 	if notify {
 		m.host.Notify(host.Info, "debug: session stopped")
 	}
@@ -1340,7 +1341,7 @@ func (m *Model) finishDebugSession(msg debugEndedMsg) {
 		}
 	}
 	m.applyDebugSessionEnd()
-	go dbg.sess.Close()
+	safego.Go("app.Model.finishDebugSession", func() { dbg.sess.Close() })
 	note := "debug: " + dbg.cfgName + " finished"
 	if msg.hasCode {
 		note += " (exit code " + strconv.Itoa(msg.exitCode) + ")"

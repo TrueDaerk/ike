@@ -37,6 +37,7 @@ import (
 
 	"ike/internal/config"
 	"ike/internal/imgview"
+	"ike/internal/safego"
 )
 
 // diagramTimeout bounds one renderer invocation. A diagram that takes longer
@@ -312,7 +313,7 @@ func (m *Model) startDiagram(b *diagramBlock, st *diagramState, mode string, px 
 	send, key, hash := m.send, m.key, b.hash
 	lang, code, dark := b.lang, b.code, m.palette().Dark
 	image := mode == "image" && tool.Image != ""
-	go func() {
+	safego.Go("preview.Model.startDiagram", func() {
 		msg := DiagramMsg{Key: key, Hash: hash, Tool: bin, Lang: lang}
 		if image {
 			png, err := runDiagramImage(tool, code, px, dark)
@@ -322,7 +323,7 @@ func (m *Model) startDiagram(b *diagramBlock, st *diagramState, mode string, px 
 			msg.Lines, msg.Err = out, errText(err)
 		}
 		send(msg)
-	}()
+	})
 }
 
 // notifyMissing reports an uninstalled renderer once per pane; the root model
@@ -334,7 +335,7 @@ func (m *Model) notifyMissing(bin, lang string) {
 	m.hinted = true
 	send, key := m.send, m.key
 	msg := DiagramMsg{Key: key, Missing: true, Tool: bin, Lang: lang}
-	go send(msg)
+	safego.Go("preview.Model.notifyMissing", func() { send(msg) })
 }
 
 // applyDiagram stores a finished render and re-renders the document. An

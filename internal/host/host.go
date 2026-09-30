@@ -13,6 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/config"
+	"ike/internal/safego"
 )
 
 // Severity classifies a notification (Roadmap 0130). Info and Warn toasts
@@ -382,7 +383,7 @@ func (h *Host) Send(msg tea.Msg) {
 	}
 	h.pumping = true
 	h.sendMu.Unlock()
-	go h.pump()
+	safego.Go("host.Host.Send", func() { h.pump() })
 }
 
 // SetDiagLog wires a best-effort diagnostic logger (the app's debug.log) that

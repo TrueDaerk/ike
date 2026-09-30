@@ -14,6 +14,7 @@ import (
 	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
 	"ike/internal/lsp/transport"
+	"ike/internal/safego"
 )
 
 // install.go is the missing-server install helper (Roadmap 0180, #131).
@@ -94,7 +95,8 @@ func (b *bridge) installMissing(h host.API) tea.Cmd {
 			if _, err := transport.Resolve(l.Server.Command); err == nil {
 				continue
 			}
-			go func(id string) { _ = b.installLang(id)() }(l.ID)
+			id := l.ID
+			safego.Go("lsp.bridge.installMissing", func() { _ = b.installLang(id)() })
 			kicked++
 		}
 		if kicked == 0 {

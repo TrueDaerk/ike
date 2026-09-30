@@ -10,6 +10,7 @@ import (
 	ilsp "ike/internal/lsp"
 	"ike/internal/lsp/manager"
 	"ike/internal/lsp/protocol"
+	"ike/internal/safego"
 )
 
 // codeaction.go is the offer one code-action reply hands the app (#2252): the
@@ -66,7 +67,7 @@ func (s *actionSet) at(mgr *manager.Manager, i int) (protocol.CodeAction, bool) 
 // pure text the popup diffs. An action with no resolvable edit answers with a
 // Note instead, which is what the popup renders as "no preview".
 func (s *actionSet) previewCmd(h host.API, mgr *manager.Manager, i int) tea.Cmd {
-	go func() {
+	safego.Go("lsp.actionSet.previewCmd", func() {
 		msg := ilsp.ActionPreviewMsg{Path: s.path, Index: i}
 		act, ok := s.at(mgr, i)
 		if !ok {
@@ -84,7 +85,7 @@ func (s *actionSet) previewCmd(h host.API, mgr *manager.Manager, i int) tea.Cmd 
 			msg.Note = "no preview available"
 		}
 		h.Send(msg)
-	}()
+	})
 	return nil
 }
 
@@ -94,12 +95,12 @@ func (s *actionSet) previewCmd(h host.API, mgr *manager.Manager, i int) tea.Cmd 
 // resolve is a round trip, so it runs off the Update goroutine like the apply
 // it precedes.
 func (s *actionSet) applyCmd(h host.API, b *bridge, i int) tea.Cmd {
-	go func() {
+	safego.Go("lsp.actionSet.applyCmd", func() {
 		act, ok := s.at(b.manager(), i)
 		if !ok {
 			return
 		}
 		b.runAction(h, s.path, act)
-	}()
+	})
 	return nil
 }

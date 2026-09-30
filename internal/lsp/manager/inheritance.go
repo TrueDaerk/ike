@@ -10,6 +10,7 @@ import (
 	"ike/internal/lsp"
 	"ike/internal/lsp/client"
 	"ike/internal/lsp/protocol"
+	"ike/internal/safego"
 )
 
 // inheritance.go adds the implementation / type-hierarchy wrappers and the
@@ -147,19 +148,21 @@ func (m *Manager) InheritanceMarks(ctx context.Context, path string) ([]lsp.Inhe
 	for i, cand := range candidates {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(i int, cand inheritCandidate) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			locs, err := srv.cl.Implementation(bctx, protocol.ImplementationParams{
-				TextDocument: protocol.TextDocumentIdentifier{URI: uri},
-				Position:     cand.pos,
-			})
-			if err != nil || len(locs) == 0 {
-				return // an erroring probe only loses its own mark
-			}
-			line := protocol.FromLSPPosition(lines, cand.pos, enc).Line
-			marks[i] = lsp.InheritanceMark{Line: line, Kind: cand.kind}
-		}(i, cand)
+		safego.Go("manager.Manager.InheritanceMarks", func() {
+			func(i int, cand inheritCandidate) {
+				defer wg.Done()
+				defer func() { <-sem }()
+				locs, err := srv.cl.Implementation(bctx, protocol.ImplementationParams{
+					TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+					Position:     cand.pos,
+				})
+				if err != nil || len(locs) == 0 {
+					return // an erroring probe only loses its own mark
+				}
+				line := protocol.FromLSPPosition(lines, cand.pos, enc).Line
+				marks[i] = lsp.InheritanceMark{Line: line, Kind: cand.kind}
+			}(i, cand)
+		})
 	}
 	wg.Wait()
 

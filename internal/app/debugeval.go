@@ -10,6 +10,7 @@ import (
 	"ike/internal/editor"
 	"ike/internal/host"
 	"ike/internal/pane"
+	"ike/internal/safego"
 	"ike/internal/ui"
 )
 
@@ -118,10 +119,10 @@ func (m *Model) evaluateExpr(expr, context string) {
 	}
 	sess, frameID := dbg.sess, dbg.curFrameID
 	send := m.host.Send
-	go func() {
+	safego.Go("app.Model.evaluateExpr", func() {
 		res, err := sess.Evaluate(expr, frameID, context)
 		send(debugEvalMsg{sess: sess, expr: expr, res: res, err: err})
-	}()
+	})
 }
 
 // applyEvalResult opens (or refuses to open) the popup for a finished
@@ -165,13 +166,13 @@ func (m *Model) fetchEvalChildren(ref int) {
 	}
 	sess := dbg.sess
 	send := m.host.Send
-	go func() {
+	safego.Go("app.Model.fetchEvalChildren", func() {
 		vars, err := sess.Variables(ref)
 		if err != nil {
 			return // a failed expansion leaves the row collapsed, not broken
 		}
 		send(debugEvalVarsMsg{sess: sess, ref: ref, vars: vars})
-	}()
+	})
 }
 
 // applyEvalChildren pushes fetched children into the open popup.

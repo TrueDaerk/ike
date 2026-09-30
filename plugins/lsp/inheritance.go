@@ -11,6 +11,7 @@ import (
 	ilsp "ike/internal/lsp"
 	"ike/internal/lsp/manager"
 	"ike/internal/lsp/protocol"
+	"ike/internal/safego"
 )
 
 // inheritance.go carries the bridge cores of the inheritance navigation
@@ -29,7 +30,7 @@ func (b *bridge) goToSuper(h host.API) tea.Cmd {
 	if path == "" || mgr == nil {
 		return nil
 	}
-	go func() {
+	safego.Go("lsp.bridge.goToSuper", func() {
 		pos := buffer.Position{Line: line, Col: col}
 		if mgr.TypeHierarchySupported(path) {
 			items, err := mgr.PrepareTypeHierarchy(context.Background(), path, pos)
@@ -57,7 +58,7 @@ func (b *bridge) goToSuper(h host.API) tea.Cmd {
 			return
 		}
 		h.Send(ilsp.ImplementationsMsg{Refs: locationsToRefs(mgr, path, locs), Super: true})
-	}()
+	})
 	return nil
 }
 
@@ -71,7 +72,7 @@ func (b *bridge) implementations(h host.API) tea.Cmd {
 	if path == "" || mgr == nil {
 		return nil
 	}
-	go func() {
+	safego.Go("lsp.bridge.implementations", func() {
 		locs, err := mgr.Implementation(context.Background(), path, buffer.Position{Line: line, Col: col})
 		if requestFailed(h, "go to implementations", err) {
 			return
@@ -81,7 +82,7 @@ func (b *bridge) implementations(h host.API) tea.Cmd {
 			return
 		}
 		h.Send(ilsp.ImplementationsMsg{Refs: locationsToRefs(mgr, path, locs)})
-	}()
+	})
 	return nil
 }
 
@@ -105,7 +106,7 @@ func (b *bridge) typeHierarchy(h host.API) tea.Cmd {
 	if path == "" || mgr == nil {
 		return nil
 	}
-	go func() {
+	safego.Go("lsp.bridge.typeHierarchy", func() {
 		items, err := mgr.PrepareTypeHierarchy(context.Background(), path, buffer.Position{Line: line, Col: col})
 		if requestFailed(h, "type hierarchy", err) {
 			return
@@ -125,7 +126,7 @@ func (b *bridge) typeHierarchy(h host.API) tea.Cmd {
 				return b.fetchTypes(h, path, reqID, item, supertypes)
 			},
 		})
-	}()
+	})
 	return nil
 }
 
@@ -135,7 +136,7 @@ func (b *bridge) fetchTypes(h host.API, path string, reqID int, item protocol.Ty
 	if mgr == nil {
 		return nil
 	}
-	go func() {
+	safego.Go("lsp.bridge.fetchTypes", func() {
 		var items []protocol.TypeHierarchyItem
 		var err error
 		if supertypes {
@@ -151,7 +152,7 @@ func (b *bridge) fetchTypes(h host.API, path string, reqID int, item protocol.Ty
 			entries[i] = typeHierEntry(mgr, path, it)
 		}
 		h.Send(ilsp.TypeHierarchyItemsMsg{ReqID: reqID, Supertypes: supertypes, Items: entries})
-	}()
+	})
 	return nil
 }
 
@@ -228,7 +229,7 @@ func (b *bridge) requestInheritanceMarks(path string) {
 	b.inheritInFlight[path] = true
 	b.mu.Unlock()
 
-	go func() {
+	safego.Go("lsp.bridge.requestInheritanceMarks", func() {
 		for {
 			version, _ := mgr.DocVersion(path)
 			marks, err := mgr.InheritanceMarks(context.Background(), path)
@@ -245,7 +246,7 @@ func (b *bridge) requestInheritanceMarks(path string) {
 			b.mu.Unlock()
 			return
 		}
-	}()
+	})
 }
 
 // typeItemsToRefs converts hierarchy items to picker references — their

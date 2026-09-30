@@ -8,6 +8,7 @@ package mru
 
 import (
 	"encoding/json"
+	"ike/internal/safego"
 	"os"
 	"path/filepath"
 	"sync"
@@ -93,7 +94,7 @@ func (s *Store) Bump(scope, label string) {
 	if path == "" {
 		return
 	}
-	go save(path, snapshot)
+	safego.Go("mru.Store.Bump", func() { save(path, snapshot) })
 }
 
 // Rank returns label's recency rank in scope (0 = most recent) or -1 when

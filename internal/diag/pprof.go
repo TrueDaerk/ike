@@ -5,6 +5,7 @@ package diag
 
 import (
 	"fmt"
+	"ike/internal/safego"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -26,23 +27,23 @@ import (
 // Failures are reported through warn (stderr in main) and never abort startup.
 func Start(warn func(string)) {
 	if addr := os.Getenv("IKE_PPROF"); addr != "" {
-		go func() {
+		safego.Go("diag.Start", func() {
 			// DefaultServeMux carries the /debug/pprof handlers via the
 			// blank import above.
 			if err := http.ListenAndServe(addr, nil); err != nil {
 				warn("pprof listener: " + err.Error())
 			}
-		}()
+		})
 	}
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGUSR1)
-	go func() {
+	safego.Go("diag.Start", func() {
 		for range sig {
 			if _, err := Dump(); err != nil {
 				warn("pprof dump: " + err.Error())
 			}
 		}
-	}()
+	})
 }
 
 // Dump writes a goroutine dump plus a heap profile to IKE_PPROF_DIR (default:

@@ -12,6 +12,7 @@ import (
 	"ike/internal/host"
 	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
+	"ike/internal/safego"
 )
 
 // reformat.go answers the reformat commands (Roadmap 0470, #1401): the
@@ -100,7 +101,7 @@ func (m *Model) runReformat(prov format.Provider, req format.Request, run func(c
 	name := prov.DisplayName(req.Path)
 	h := m.host
 	return func() tea.Msg {
-		go func() {
+		safego.Go("app.Model.runReformat", func() {
 			ctx, cancel := context.WithTimeout(context.Background(), reformatTimeout)
 			res, err := run(ctx)
 			cancel()
@@ -123,7 +124,7 @@ func (m *Model) runReformat(prov format.Provider, req format.Request, run func(c
 			}
 			h.Send(ilsp.FormatEditsMsg{Path: req.Path, Edits: out})
 			h.Send(ilsp.ServerStatusMsg{Text: "reformat: " + name, Kind: ilsp.ServerEventInfo})
-		}()
+		})
 		return nil
 	}
 }

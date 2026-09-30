@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"ike/internal/deeplink"
+	"ike/internal/safego"
 )
 
 // server.go is the TCP endpoint: accept loop, per-connection request loop,
@@ -108,7 +109,7 @@ func Serve(opts Options) (*Server, error) {
 		conns:   map[net.Conn]struct{}{},
 		done:    make(chan struct{}),
 	}
-	go s.accept()
+	safego.Go("netlink.Serve", func() { s.accept() })
 	return s, nil
 }
 
@@ -155,7 +156,7 @@ func (s *Server) accept() {
 		}
 		s.conns[conn] = struct{}{}
 		s.mu.Unlock()
-		go s.handle(conn)
+		safego.Go("netlink.Server.accept", func() { s.handle(conn) })
 	}
 }
 

@@ -4,7 +4,7 @@ title: Project Search (Find in Path)
 description: Streaming project-wide search engine — rg --json backend with a pure-Go walker fallback, generation-based cancellation, bounded results — and the shared in-pane "/" search (ui.LineSearch) every viewer pane jumps through its matches with.
 resource: internal/search
 tags: [architecture, search, find-in-path, in-pane-search, ui]
-timestamp: 2026-09-29T12:00:00Z
+timestamp: 2026-09-30T18:00:00Z
 ---
 
 # Project Search (Find in Path)
@@ -232,7 +232,10 @@ the palette):
   visual mode), terminal panes plus terminal tabs and the debug console
   (`Instance.ActiveTerminal`), diff panes (side-column mouse selection and the
   editable right side's visual mode), merge panes, and the HTTP response
-  viewer. Rules: a selection **spanning more than one line prefills nothing**
+  viewer. An editor pane whose active tab is a **viewer content tab**
+  (image, data, hex, archive, notebook, HTTP response, #1778) has no editor
+  behind it and contributes nothing — dereferencing one there was the
+  find-in-path crash of #2836. Rules: a selection **spanning more than one line prefills nothing**
   — the query language has no line-spanning match to offer, the same rule the
   editor's `/` (#2063) and the HTTP viewer's search (#2122) follow — and so
   does a blank one; a single trailing newline (a linewise selection of one

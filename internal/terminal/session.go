@@ -25,6 +25,7 @@ import (
 	"github.com/creack/pty"
 	"golang.org/x/sys/unix"
 
+	"ike/internal/safego"
 	"ike/internal/theme"
 )
 
@@ -227,8 +228,8 @@ func NewPipeSession(key string, w, h int, send func(tea.Msg)) *Session {
 	s.out = newSpool()
 	s.ioWG.Add(1)
 	s.wlWG.Add(1)
-	go s.feedLoop()
-	go s.writeLoop()
+	safego.Go("terminal.NewPipeSession", func() { s.feedLoop() })
+	safego.Go("terminal.NewPipeSession", func() { s.writeLoop() })
 	return s
 }
 
@@ -272,7 +273,7 @@ func (s *Session) FinishPipe(exitCode int, hasCode bool) {
 		// Off this goroutine: FinishPipe runs on the Update loop
 		// (stopDebugSession), and Program.Send blocks until that very loop
 		// receives — a synchronous send here deadlocks the whole UI (#1375).
-		go s.send(OutputMsg{Key: s.key}) // repaint with the dead view
+		safego.Go("terminal.Session.FinishPipe", func() { s.send(OutputMsg{Key: s.key}) }) // repaint with the dead view
 	}
 }
 
@@ -387,10 +388,10 @@ func startSession(key string, argv []string, isCommand bool, dir string, w, h in
 	s.out = newSpool()
 	s.ioWG.Add(2)
 	s.wlWG.Add(1)
-	go s.readLoop()
-	go s.feedLoop()
-	go s.writeLoop()
-	go s.waitExit()
+	safego.Go("terminal.startSession", func() { s.readLoop() })
+	safego.Go("terminal.startSession", func() { s.feedLoop() })
+	safego.Go("terminal.startSession", func() { s.writeLoop() })
+	safego.Go("terminal.startSession", func() { s.waitExit() })
 	return s, nil
 }
 
@@ -878,7 +879,7 @@ func (s *Session) flushResize() {
 		// still owes a repaint at the settled size (#1951). Off this
 		// goroutine: send blocks until the update loop receives.
 		if s.send != nil {
-			go s.send(OutputMsg{Key: s.key})
+			safego.Go("terminal.Session.flushResize", func() { s.send(OutputMsg{Key: s.key}) })
 		}
 		return
 	}
@@ -1508,14 +1509,14 @@ func (s *Session) Close() {
 		// The child already exited on its own: the loops are collected, but
 		// the emulator stayed open so the exited pane could keep reflowing
 		// (#1951). Closing the pane retires it for good.
-		go s.closeEmulator()
+		safego.Go("terminal.Session.Close", func() { s.closeEmulator() })
 		return
 	}
 	s.release()
-	go func() {
+	safego.Go("terminal.Session.Close", func() {
 		s.join()
 		s.closeEmulator()
-	}()
+	})
 }
 
 // release is teardown's bounded half: it stops the resize timer, kills the
@@ -1553,7 +1554,8 @@ func (s *Session) join() {
 	s.wlStop.Store(true)
 	// The sentinel write blocks until the write loop reads it; a loop that
 	// already exited leaves it parked until closeEmulator errors the pipe.
-	go func() { _, _ = s.em.InputPipe().Write([]byte{0}) }()
+	pipe := s.em.InputPipe()
+	safego.Go("terminal.Session.join", func() { _, _ = pipe.Write([]byte{0}) })
 	s.wlWG.Wait()
 }
 

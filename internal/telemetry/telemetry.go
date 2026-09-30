@@ -21,6 +21,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"ike/internal/safego"
 	"os"
 	"path/filepath"
 	"sort"
@@ -305,6 +306,64 @@ type Recorder struct {
 	hbSnapshot func() map[string]string
 	hbQuit     chan struct{}
 	hbDone     chan struct{}
+
+	// ring holds the last recentEvents events as one-line summaries for the
+	// crash report (#2836) — in memory only, kept whether or not telemetry is
+	// enabled (nothing is written unless IKE crashes), content-free like the
+	// events themselves. ringMu is separate from mu: Recent runs inside a
+	// recover handler and must never wait on the writer path.
+	ringMu  sync.Mutex
+	ring    []string
+	ringPos int
+}
+
+// recentEvents is the size of the in-memory ring Recent reads (#2836).
+const recentEvents = 50
+
+// Recent returns the last events recorded in this process, oldest first, as
+// "<ts> <type> k=v ..." lines — the crash report's trailing context.
+func (r *Recorder) Recent() []string {
+	if r == nil {
+		return nil
+	}
+	r.ringMu.Lock()
+	defer r.ringMu.Unlock()
+	if len(r.ring) < recentEvents {
+		out := make([]string, len(r.ring))
+		copy(out, r.ring)
+		return out
+	}
+	out := make([]string, 0, recentEvents)
+	out = append(out, r.ring[r.ringPos:]...)
+	out = append(out, r.ring[:r.ringPos]...)
+	return out
+}
+
+// remember appends one event summary to the ring.
+func (r *Recorder) remember(typ string, data map[string]string) {
+	keys := make([]string, 0, len(data))
+	for k := range data {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var b strings.Builder
+	b.WriteString(r.now().UTC().Format("15:04:05.000"))
+	b.WriteString(" ")
+	b.WriteString(typ)
+	for _, k := range keys {
+		b.WriteString(" ")
+		b.WriteString(k)
+		b.WriteString("=")
+		b.WriteString(data[k])
+	}
+	r.ringMu.Lock()
+	if len(r.ring) < recentEvents {
+		r.ring = append(r.ring, b.String())
+	} else {
+		r.ring[r.ringPos] = b.String()
+		r.ringPos = (r.ringPos + 1) % recentEvents
+	}
+	r.ringMu.Unlock()
 }
 
 // envelope carries either an event or a flush request through the channel.
@@ -663,6 +722,7 @@ func (r *Recorder) record(typ string, data map[string]string) {
 	if r == nil {
 		return
 	}
+	r.remember(typ, data)
 	if r.enabled != nil && !r.enabled() {
 		return
 	}
@@ -708,13 +768,13 @@ func (r *Recorder) record(typ string, data map[string]string) {
 		}
 		r.ch = make(chan envelope, 256)
 		r.done = make(chan struct{})
-		go r.run(f)
+		safego.Go("telemetry.Recorder.record", func() { r.run(f) })
 		if r.hbSnapshot != nil {
 			// The liveness stamp starts with the session (#2348) — a recorder
 			// that never opens a file never ticks.
 			r.hbQuit = make(chan struct{})
 			r.hbDone = make(chan struct{})
-			go r.heartbeat()
+			safego.Go("telemetry.Recorder.record", func() { r.heartbeat() })
 		}
 		// The deferred low-signal events precede this one in time, so they
 		// go in first — the log keeps its chronological order.

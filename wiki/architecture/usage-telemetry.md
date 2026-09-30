@@ -4,7 +4,7 @@ title: Usage Telemetry
 description: Local-only usage recording — command (with outcome), keybinding, layout, session, heartbeat, freeze-with-goroutine-dump, operation-lifecycle, palette-pick, palette-dismissal and project-time events appended as per-session JSONL under ~/.ike/telemetry, asynchronous and content-free, switched by telemetry.enabled.
 resource: internal/telemetry/telemetry.go
 tags: [architecture, telemetry, usage, jsonl, privacy, diagnostics]
-timestamp: 2026-09-23T14:00:00Z
+timestamp: 2026-09-30T18:00:00Z
 ---
 
 # Usage Telemetry
@@ -398,6 +398,11 @@ history).
   loop never blocks and a usage log never disrupts the session. The recorder
   opens its file lazily on the first accepted event and is flushed/closed in
   the quit path.
+- **In-memory ring for crash reports (#2836)**: the recorder also keeps the
+  last 50 events as one-line summaries (`Recorder.Recent`), whether or not
+  telemetry is enabled. The ring is never written on its own; a crash log
+  ([crash reporting](/architecture/crash-reporting.md)) appends it as the
+  session's trailing context.
 - **No ghost sessions (#2318)**: a bare `layout`/`pane.focus` event does not
   open the file. The session restore moves focus from the explorer to the
   restored editor on every launch, so a start-and-quit would otherwise leave

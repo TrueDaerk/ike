@@ -100,6 +100,7 @@ import (
 	"ike/internal/regextest"
 	"ike/internal/registry"
 	"ike/internal/remote"
+	"ike/internal/safego"
 	"ike/internal/search"
 	"ike/internal/secret"
 	"ike/internal/settings"
@@ -1233,6 +1234,10 @@ type Model struct {
 	// IDE-level chords (in the focused pane's context) to registered command ids;
 	// unbound or inert chords fall through to the existing dispatch.
 	keys *keymap.Resolver
+
+	// viewPanic is the crash guard's test hook (#2836, crash.go): a non-empty
+	// value makes View panic with it, inside the guard.
+	viewPanic string
 }
 
 // escEscTimeout bounds the esc-esc palette toggle (#1750): the two presses
@@ -1669,6 +1674,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	// that records nothing meaningful still leaves no file; a project switch
 	// re-emits it on the carried recorder (switch.go).
 	recordTelemetrySession(m.usage)
+	installCrashHooks(m.usage, m.host) // crash reports name the session and reach the UI (#2836)
 	// Every non-empty trait-member answer is one op event (0520, #2668). The
 	// source calls this off the UI goroutine, which the recorder allows; the
 	// recorder is captured by itself, not through the model, so the closure
@@ -1993,7 +1999,7 @@ func (m Model) StartWatcher(root string) {
 	// live git state (mirroring the watcher-free-tests rule above). The
 	// invalidate goes through the debounce and runs even with files.watch
 	// disabled.
-	go m.host.Send(vcsInvalidateMsg{})
+	safego.Go("app.Model.StartWatcher", func() { m.host.Send(vcsInvalidateMsg{}) })
 	if v, ok := m.host.Config().Get("files.watch"); ok && v == "false" {
 		return
 	}
@@ -2013,7 +2019,7 @@ func (m Model) StartWatcher(root string) {
 // watcher is fully registered when the switch returns and tests never race a
 // background walk.
 func (m Model) StartWatcherAsync(root string) {
-	go m.StartWatcher(root)
+	safego.Go("app.Model.StartWatcherAsync", func() { m.StartWatcher(root) })
 }
 
 // editorEmitter adapts editor lifecycle events into host editor events, which the
@@ -2063,23 +2069,23 @@ func (e editorEmitter) Emit(ev editor.Event) {
 		// The TODO index rescans the saved file (#61). Same goroutine
 		// indirection as the SyncMsg below: Emit runs inside Update, so a
 		// direct send into the program's own loop would deadlock.
-		go e.host.Send(todoSavedMsg{path: ev.Path})
+		safego.Go("app.editorEmitter.Emit", func() { e.host.Send(todoSavedMsg{path: ev.Path}) })
 		// Local History (#1023): snapshot the just-written file. Every save
 		// flow (manual write, Save All, autosave) funnels through the editor
 		// save path, so this one hook captures them all.
-		go e.host.Send(localHistorySnapshotMsg{path: ev.Path})
+		safego.Go("app.editorEmitter.Emit", func() { e.host.Send(localHistorySnapshotMsg{path: ev.Path}) })
 		// The save also invalidates the git status snapshot (Roadmap 0320);
 		// IKE's own writes are watcher-suppressed (MarkSaved above), so this
 		// is the only refresh trigger for in-IDE saves.
-		go e.host.Send(vcsInvalidateMsg{})
+		safego.Go("app.editorEmitter.Emit", func() { e.host.Send(vcsInvalidateMsg{}) })
 		// A buffer bound to a forge text pushes on save (#2087). The emitter
 		// cannot know which paths are bound, so every save reports and the
 		// handler drops the ones that are not.
-		go e.host.Send(forgeEditSavedMsg{path: ev.Path})
+		safego.Go("app.editorEmitter.Emit", func() { e.host.Send(forgeEditSavedMsg{path: ev.Path}) })
 		// Test Results watch mode (#2172): an armed panel re-runs the saved
 		// file's affected tests. Every save reports; the handler is a cheap
 		// no-op while the mode is off or the panel closed.
-		go e.host.Send(testWatchSavedMsg{path: ev.Path})
+		safego.Go("app.editorEmitter.Emit", func() { e.host.Send(testWatchSavedMsg{path: ev.Path}) })
 	}
 	if ev.Kind == editor.EventCursorMove && ev.Path != "" && (e.previews == nil || e.previews.Load()) {
 		// Markdown previews follow the cursor (#62). Same goroutine indirection
@@ -2088,7 +2094,7 @@ func (e editorEmitter) Emit(ev editor.Event) {
 		// when no preview pane is bound to the path — and since #2540 the
 		// message is not even sent while no preview pane is open at all: a
 		// caret move must not cost an Update+View pass for nobody.
-		go e.host.Send(preview.CursorMsg{Path: ev.Path, Line: ev.Line})
+		safego.Go("app.editorEmitter.Emit", func() { e.host.Send(preview.CursorMsg{Path: ev.Path, Line: ev.Line}) })
 	}
 	if ev.Kind == editor.EventChange && ev.Path != "" && e.edits != nil {
 		// The edit-location ring (#2545): a buffer change leaves the caret
@@ -2110,7 +2116,7 @@ func (e editorEmitter) Emit(ev editor.Event) {
 		if e.syncs != nil {
 			e.syncs.push(msg)
 		} else {
-			go e.host.Send(msg)
+			safego.Go("app.editorEmitter.Emit", func() { e.host.Send(msg) })
 		}
 	}
 	e.host.EmitEditor(host.EditorEvent{
@@ -4352,7 +4358,7 @@ func (m Model) explorer() *explorer.Model {
 }
 
 // Init implements tea.Model.
-func (m Model) Init() tea.Cmd {
+func (m Model) initUnguarded() tea.Cmd {
 	cmds := []tea.Cmd{m.explorer().Init()}
 	// Query the terminal background (OSC 11, #1480) so [theme].auto can pick
 	// the light/dark pair; harmless where unsupported (no reply, no wait).
@@ -4417,7 +4423,7 @@ func (m Model) Init() tea.Cmd {
 // raised (command Runs and routed updates call host.Notify synchronously), so
 // a toast appears in the very frame its event produced. updateMsg holds the
 // actual dispatch switch.
-func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m Model) updateUnguarded(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// The performance HUD's message counter (#1999). Dispatch is the natural
 	// counting point — every wake of the program passes here exactly once —
 	// and with the HUD hidden the whole hook is one atomic load.
@@ -4757,6 +4763,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.finder.SetSize(m.width, m.height)
 		m.finder.OpenPrefilled(".", m.activeSelectionText())
 		return m, nil
+
+	case OpenCrashLogMsg:
+		// crash.openLastLog (#2836): the newest crash report, in a split like
+		// lsp.showLog opens a server log.
+		return m.openLastCrashLog()
 
 	case OpenReplaceInPathMsg:
 		// project.replaceInPath (cmd+shift+r / palette): find-in-path plus the
@@ -14001,7 +14012,7 @@ func (m *Model) copyTerminalSelection(term *terminal.Model) {
 // F9…, first param is the key number, not 1) as a *second* KeyPressEvent, so a
 // single F8 tap stepped the debugger twice (#622). Legacy `~` keys carry no
 // event type without the flag, so leaving it off is a clean fix.
-func (m Model) View() tea.View {
+func (m Model) viewUnguarded() tea.View {
 	// A no-op motion pass (#2626) hands the previous frame out again: the
 	// renderer diffs it against the screen and writes nothing. Counted as
 	// `view/reuse`, so `view/render` stays the count of composed frames.
@@ -14229,7 +14240,7 @@ func (m Model) render() string {
 	// after this point fills in asynchronously. The log write runs off the
 	// render path; ok is true exactly once per process.
 	if d, ok := perfhud.RecordFirstFrame(time.Now()); ok {
-		go logStartup(d)
+		safego.Go("app.Model.render", func() { logStartup(d) })
 	}
 	start := time.Now()
 	defer func() {

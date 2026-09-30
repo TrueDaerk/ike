@@ -14,6 +14,7 @@ import (
 	"ike/internal/lsp/jsonrpc"
 	"ike/internal/lsp/protocol"
 	"ike/internal/lsp/transport"
+	"ike/internal/safego"
 )
 
 // checks.go runs the per-server probe chain (#2164). Every external effect is
@@ -177,11 +178,11 @@ func spawnInit(srv Server) SpawnResult {
 // maps it to a diagnosis.
 type evidence struct {
 	srv            Server
-	path           string // resolved path ("" = nowhere)
-	onPath         bool   // resolved via PATH
-	fallbackDir    string // hit in an IKE-probed fallback dir (still works)
-	strandedDir    string // hit only in a well-known dir IKE does not probe
-	otherCopies    []string// further copies of the binary in probed dirs
+	path           string   // resolved path ("" = nowhere)
+	onPath         bool     // resolved via PATH
+	fallbackDir    string   // hit in an IKE-probed fallback dir (still works)
+	strandedDir    string   // hit only in a well-known dir IKE does not probe
+	otherCopies    []string // further copies of the binary in probed dirs
 	envPATH        string
 	notExecutable  bool
 	shebang        string // script interpreter line, "" for native binaries
@@ -201,10 +202,12 @@ func Run(servers []Server, p Probes) []Result {
 	var wg sync.WaitGroup
 	for i := range servers {
 		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			out[i] = runOne(servers[i], p)
-		}(i)
+		safego.Go("lspdoctor.Run", func() {
+			func(i int) {
+				defer wg.Done()
+				out[i] = runOne(servers[i], p)
+			}(i)
+		})
 	}
 	wg.Wait()
 	return out

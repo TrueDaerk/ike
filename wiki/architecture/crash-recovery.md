@@ -4,7 +4,7 @@ title: Crash Recovery
 description: Vim-swapfile-style crash recovery — debounced full-text snapshots of dirty buffers, written atomically to the project state dir, restored on next launch.
 resource: internal/backup
 tags: [architecture, backup, crash-recovery, persistence]
-timestamp: 2026-09-08T14:00:00Z
+timestamp: 2026-09-30T18:00:00Z
 ---
 
 # Crash Recovery
@@ -217,3 +217,12 @@ pruned. With no leftover snapshots there is nothing to prune and no prompt.
 state dir, outside the project tree). `enable = false` turns the subsystem
 fully off and purges everything on disk — at startup and immediately on a live
 config reload.
+
+## Related: crash reporting (#2836)
+
+This subsystem protects the *edits* when the process dies. The *process*
+itself is covered by [crash reporting](/architecture/crash-reporting.md): a
+panic in `Update`, `View`, a `Cmd` or an IKE-owned goroutine is recovered,
+written to `~/.ike/logs/crash-*.log` and announced, and the session keeps
+running — with this backup service still on the loop, so dirty buffers stay
+snapshotted through a recovered crash exactly as before it.

@@ -20,6 +20,7 @@ import (
 	"ike/internal/perfhud"
 	"ike/internal/project"
 	"ike/internal/registry"
+	"ike/internal/safego"
 	"ike/internal/version"
 	"ike/internal/wasm"
 	"ike/internal/wasm/abi"
@@ -143,6 +144,10 @@ func main() {
 	}
 	// Opt-in diagnostics (#1001): IKE_PPROF=<addr> serves net/http/pprof,
 	// SIGUSR1 dumps goroutines + heap to IKE_PPROF_DIR (default temp dir).
+	// Crash reporting (#2836): stderr is teed from here on, so a panic the
+	// program loop catches and prints into the alternate screen still lands
+	// in the crash report main writes when Run ends with it.
+	capture := captureStderr()
 	diag.Start(func(msg string) { fmt.Fprintln(os.Stderr, "ike:", msg) })
 	// Restore the last project (#1000): with project.restore_last enabled and
 	// no explicit open target (CLI paths or stdin count as explicit), the most
@@ -208,6 +213,8 @@ func main() {
 	if restoreNotice != "" {
 		m.Host().Notify(host.Info, restoreNotice)
 	}
+	// A crash log the previous run left behind is announced once (#2836).
+	m = m.NoticeLastCrash()
 	// Open the CLI targets after construction: session restore already ran, so
 	// the requested files win focus over the restored layout.
 	phase = time.Now()
@@ -243,7 +250,7 @@ func main() {
 	// A link given on this command line resolves once the program runs.
 	if inv.URL != "" {
 		url := inv.URL
-		go m.Host().Send(app.DeepLinkMsg{URL: url})
+		safego.Go("main.main", func() { m.Host().Send(app.DeepLinkMsg{URL: url}) })
 	}
 	// Watch the project root for external file changes (Roadmap 0140); events
 	// arrive through the host's Send as watch.EventMsg. Async (#2260): the
@@ -253,8 +260,11 @@ func main() {
 	// issues window keeps up with the forge without a manual refresh.
 	// forge.poll_interval_seconds = 0 opts out.
 	m.StartForgePoll()
-	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "ike: %v\n", err)
-		os.Exit(1)
+	_, runErr := p.Run()
+	// A panic the program loop caught ends here with ErrProgramPanic: the
+	// crash report gets the captured stderr (bubbletea's value and stack), and
+	// the restored terminal gets the one line that names the file (#2836).
+	if code := reportProgramEnd(runErr, capture, capture.origWriter()); code != 0 {
+		os.Exit(code)
 	}
 }

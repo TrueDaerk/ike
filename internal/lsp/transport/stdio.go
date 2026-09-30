@@ -6,6 +6,7 @@ package transport
 
 import (
 	"errors"
+	"ike/internal/safego"
 	"io"
 	"os"
 	"os/exec"
@@ -125,7 +126,7 @@ func Start(spec Spec) (*Process, error) {
 		log:    logFile,
 		exited: make(chan struct{}),
 	}
-	go p.watch()
+	safego.Go("transport.Start", func() { p.watch() })
 	return p, nil
 }
 

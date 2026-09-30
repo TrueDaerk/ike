@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"golang.org/x/net/dns/dnsmessage"
+	"ike/internal/safego"
 )
 
 // Service is one announced instance.
@@ -85,18 +86,18 @@ func Announce(svc Service) (*Responder, error) {
 		return nil, errors.New("mdns: cannot join the multicast group on any interface")
 	}
 	for _, c := range r.conns {
-		go r.serve(c)
+		safego.Go("mdns.Announce", func() { r.serve(c) })
 	}
 	// Two announcements a second apart (RFC 6762 §8.3): the first may be
 	// lost to a browser that was mid-refresh.
-	go func() {
+	safego.Go("mdns.Announce", func() {
 		r.multicast(Announcement(r.svc, r.addrs(), true))
 		select {
 		case <-time.After(time.Second):
 			r.multicast(Announcement(r.svc, r.addrs(), true))
 		case <-r.done:
 		}
-	}()
+	})
 	return r, nil
 }
 

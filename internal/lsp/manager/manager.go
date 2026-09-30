@@ -27,6 +27,7 @@ import (
 	"ike/internal/lsp/jsonrpc"
 	"ike/internal/lsp/protocol"
 	"ike/internal/lsp/transport"
+	"ike/internal/safego"
 )
 
 // requestTimeout bounds a single server request so a hung server cannot wedge a
@@ -1426,7 +1427,7 @@ func (m *Manager) ensureServer(lang, root string, spec lsp.ServerSpec) (*server,
 	// Ready is the moment a missing optional companion becomes relevant: the
 	// server works, but a delegated capability is silently off (#1067).
 	m.hintCompanions(lang, spec)
-	go m.watchExit(srv)
+	safego.Go("manager.Manager.ensureServer", func() { m.watchExit(srv) })
 	return srv, nil
 }
 
@@ -1451,7 +1452,7 @@ func (m *Manager) watchExit(srv *server) {
 	// the session — and restart below spawns a second one on top (#1537).
 	// stop is idempotent enough: Conn.Close on a dead conn is a no-op error
 	// and Process.Stop on an exited child just reaps it.
-	go srv.stop()
+	safego.Go("manager.Manager.watchExit", func() { srv.stop() })
 	// Name the concrete error when the stderr tail yields one (#990) — both
 	// in the toast and as a log marker, so neither reader has to fish the
 	// message out of a raw dump.
@@ -1466,7 +1467,7 @@ func (m *Manager) watchExit(srv *server) {
 	}
 	m.status(srv.lang, text, lsp.ServerEventWarn)
 	appendLog(srv.lang, marker)
-	go m.restart(srv, docs, tail)
+	safego.Go("manager.Manager.watchExit", func() { m.restart(srv, docs, tail) })
 }
 
 // onNotify routes a server notification. Only publishDiagnostics is consumed in
@@ -1558,14 +1559,14 @@ func (m *Manager) onRequest(srvKey string, id jsonrpc.ID, method string, params 
 		// deadlock against a server still flushing its own write.
 		var p protocol.ApplyWorkspaceEditParams
 		_ = json.Unmarshal(params, &p)
-		go func() {
+		safego.Go("manager.Manager.onRequest", func() {
 			applied := false
 			if m.cb.ApplyEdit != nil {
 				m.cb.ApplyEdit(m.convertWorkspaceEdit(p.Edit, srv.cl.Encoding()))
 				applied = true
 			}
 			_ = srv.cl.Respond(id, protocol.ApplyWorkspaceEditResult{Applied: applied}, nil)
-		}()
+		})
 	case "workspace/codeLens/refresh", "workspace/semanticTokens/refresh", "workspace/inlayHint/refresh":
 		// The server invalidated every previous result of one decoration
 		// (#1912): answer promptly, then ask the host to re-pull. For semantic
@@ -1582,7 +1583,7 @@ func (m *Manager) onRequest(srvKey string, id jsonrpc.ID, method string, params 
 		}
 		_ = srv.cl.Respond(id, nil, nil)
 		if m.cb.Refresh != nil {
-			go m.cb.Refresh(kind)
+			safego.Go("manager.Manager.onRequest", func() { m.cb.Refresh(kind) })
 		}
 	default:
 		_ = srv.cl.Respond(id, nil, nil)

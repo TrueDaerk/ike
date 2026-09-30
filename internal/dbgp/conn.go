@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"ike/internal/safego"
 	"io"
 	"strings"
 	"sync"
@@ -54,7 +55,7 @@ func NewConn(rwc io.ReadWriteCloser, onStream func(Stream)) *Conn {
 		initFail: make(chan error, 1),
 		onStream: onStream,
 	}
-	go c.readLoop()
+	safego.Go("dbgp.NewConn", func() { c.readLoop() })
 	return c
 }
 

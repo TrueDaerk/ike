@@ -9,6 +9,7 @@ import (
 	"ike/internal/highlight"
 	"ike/internal/lsp"
 	"ike/internal/lsp/protocol"
+	"ike/internal/safego"
 )
 
 // fragments.go implements virtual documents for embedded-language fragments
@@ -94,7 +95,7 @@ func (m *Manager) scheduleFragmentSync(hostPath string) {
 	}
 	m.fragBusy[hostPath] = true
 	m.mu.Unlock()
-	go func() {
+	safego.Go("manager.Manager.scheduleFragmentSync", func() {
 		for {
 			m.syncFragments(hostPath)
 			m.mu.Lock()
@@ -106,7 +107,7 @@ func (m *Manager) scheduleFragmentSync(hostPath string) {
 			delete(m.fragDirty, hostPath)
 			m.mu.Unlock()
 		}
-	}()
+	})
 }
 
 func (m *Manager) syncFragments(hostPath string) {

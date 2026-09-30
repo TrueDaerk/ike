@@ -26,6 +26,7 @@ import (
 
 	"ike/internal/highlight"
 	"ike/internal/lang"
+	"ike/internal/safego"
 )
 
 // skipDirs are directory names the walk never descends into.
@@ -123,7 +124,7 @@ func (x *Index[T]) Ensure(langs ...string) {
 			e.done = true
 			continue
 		}
-		go x.scan(id)
+		safego.Go("langindex.Ensure", func() { x.scan(id) })
 	}
 }
 
@@ -304,7 +305,7 @@ func (x *Index[T]) Invalidate(path string) {
 	}
 	if !x.invalBusy {
 		x.invalBusy = true
-		go x.drain()
+		safego.Go("langindex.Invalidate", func() { x.drain() })
 	}
 	x.invalMu.Unlock()
 }

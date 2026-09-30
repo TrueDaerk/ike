@@ -54,8 +54,14 @@ func instSelectionText(inst *pane.Instance) string {
 	}
 	switch inst.Kind() {
 	case pane.KindEditor:
-		if sel, ok := inst.Editor().SelectionText(); ok {
-			return sel
+		// The active tab may be a nested content tab with no selection of its
+		// own (an image, a data or hex viewer, an HTTP response tab, #1778) or
+		// the pane may hold no tab at all — then there is no editor here, and
+		// dereferencing one crashed find-in-path (#2836).
+		if ed := inst.Editor(); ed != nil {
+			if sel, ok := ed.SelectionText(); ok {
+				return sel
+			}
 		}
 	case pane.KindDiff:
 		if ed := inst.DiffEditor(); ed != nil {
