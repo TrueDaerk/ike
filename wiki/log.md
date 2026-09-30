@@ -1,5 +1,12 @@
 # Log
 
+## 2026-10-01 (agent trace: concept doc consolidation and cross-links, #2839)
+
+- [Agent Trace](/architecture/agent-trace.md) gains a **Keybinds** summary
+  and a **Limitations** section (Claude Code only; other harnesses need a
+  parser, discovery rule and optional hook push into the same model); the
+  architecture index entry now covers #2838 and #2844.
+
 ## 2026-10-01 (agent trace: follow-ups on the ask fork, fork tagging, trimmed context, #2844)
 
 - `f` on an `agent.ask` answer asks a follow-up on the **fork**

@@ -1,7 +1,7 @@
 ---
 type: architecture
 title: Agent Trace
-description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840), the links from writing file nodes to change-feed entries with diff/revert and the feed's jump back (#2838), and `agent.ask` — a question about a node answered by a fork of the same session on a cheaper model, with its node context, settings and answer overlay (internal/agentask, #2845), and follow-up questions on the same fork, fork tagging and the trimmed context (#2844).
+description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840), the links from writing file nodes to change-feed entries with diff/revert and the feed's jump back (#2838), and `agent.ask` — a question about a node answered by a fork of the same session on a cheaper model, with its node context, settings and answer overlay (internal/agentask, #2845), and follow-up questions on the same fork, fork tagging and the trimmed context (#2844), plus keybinds and limitations (other harnesses) (#2839).
 resource: internal/agenttrace
 tags: [architecture, agents, claude, transcript, trace, discovery, hooks, tool-window, hiertree, change-feed, ask, settings]
 timestamp: 2026-10-01T00:00:00Z
@@ -518,6 +518,33 @@ Every fork IKE creates is kept out of the trace three ways:
 - **The tree.** `BuildTree` leaves out every turn whose prompt starts with
   the marker (question and answer), should a tagged fork ever be traced: its
   copied history shows, the asks do not.
+
+## Keybinds
+
+| Chord | Command | Where |
+|---|---|---|
+| `cmd+alt+shift+a` | `agent.trace.toggle` | global; also in the Tools menu |
+| `cmd+alt+shift+q` | `agent.ask` | global; `a` inside the trace pane |
+
+In-pane keys (`enter`, `r`, `i`, `D`, `V`, `a`) are listed under
+[Pane](#pane); the answer overlay's `f` / `ctrl+n` under
+[Follow-up questions](#follow-up-questions); the feed's `t` under
+[Change-feed links](#change-feed-links-2838).
+
+## Limitations
+
+- **Claude Code only.** The model is harness-neutral (`Session.Harness`),
+  but the only parser, discovery rule, hook installer and ask runner are for
+  Claude Code (`HarnessClaude`). Other harnesses (Codex, Aider, Gemini CLI,
+  …) show the empty state; supporting one means a parser into the same
+  `Session`/`Event` model, a discovery rule for its transcript location and,
+  optionally, a hook push.
+- Without hooks a session is found by working directory only; two sessions
+  in one cwd bind to the newest — install the hooks for an exact binding.
+- `agent.ask` needs the `claude` CLI on `PATH` and spends tokens on the
+  chosen model; it explains only (`--tools ""`) and never edits files.
+- Change-feed links exist only for writes the feed saw during this ike
+  session.
 
 ## Tests
 
