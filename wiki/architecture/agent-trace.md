@@ -1,10 +1,10 @@
 ---
 type: architecture
 title: Agent Trace
-description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, and session discovery by working directory with fork exclusion (internal/agenttrace, #2842); the tool window, hooks, change-feed links and "ask" follow in their own sub-issues.
+description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), and the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843); the tool window, change-feed links and "ask" follow in their own sub-issues.
 resource: internal/agenttrace
-tags: [architecture, agents, claude, transcript, trace, discovery]
-timestamp: 2026-09-30T18:00:00Z
+tags: [architecture, agents, claude, transcript, trace, discovery, hooks]
+timestamp: 2026-09-30T20:00:00Z
 ---
 
 # Agent Trace
@@ -167,7 +167,98 @@ modification time. The upshot for the trace: right after an "ask" the fork is
 the newest file in the directory, and `Discover` still returns the pane's
 session.
 
+## Claude Code hooks (#2843)
+
+Discovery guesses; the hook push knows. Claude Code runs a command hook on
+`SessionStart`, `SessionEnd` and `UserPromptSubmit` with the hook input JSON
+(`session_id`, `transcript_path`, `cwd`, `hook_event_name`, …) on stdin.
+IKE's hooks run `ike agent-hook <event>`, which forwards the session to a
+running IKE, and IKE binds it to the terminal the agent runs in.
+
+### Installer (`hooks.go`)
+
+`agent.hooks.install` (palette, no default chord — a one-off setup step,
+recorded in the keybind audit ledger) writes one matcher group per event into
+Claude Code's user settings (`$CLAUDE_CONFIG_DIR/settings.json`, else
+`~/.claude/settings.json`; `agenttrace.SettingsPath`):
+
+```json
+"hooks": {
+  "SessionStart": [
+    { "matcher": "", "hooks": [
+      { "type": "command", "command": "/usr/local/bin/ike agent-hook SessionStart", "timeout": 5 } ] } ],
+  …
+}
+```
+
+The executable is the running binary (`os.Executable`, symlinks resolved),
+single-quoted when it is not shell-safe. As in Whiteboard's
+`agent-trace-hooks.ts`, **the command shape is the marker**: a hook is IKE's
+exactly when its command is `<exe> agent-hook <SessionStart|SessionEnd|UserPromptSubmit>`
+with an `exe` whose base name starts with `ike`, plain or quoted exactly as
+IKE quotes (`agenttrace.IsIKEHook`). A shell compound (`ike agent-hook X; rm …`)
+never matches, so uninstall can only remove what IKE wrote; install refuses a
+binary not named `ike*` because its entries could not be recognised again.
+
+- **Install** (`InstallHooks`) strips every IKE entry, then appends a fresh
+  group per event — idempotent, and a moved binary is picked up by running it
+  again. The result is compared to the file as JSON; an unchanged document is
+  not rewritten ("already up to date").
+- **Uninstall** (`agent.hooks.uninstall`, `UninstallHooks`) removes IKE
+  commands only: a group keeps its foreign hooks, a group or event list left
+  empty is dropped, and a `hooks` object left empty is removed. Install then
+  uninstall returns the original document.
+- The rest of the file survives: key order at every level (the settings
+  object is edited as an ordered list of raw members), unknown keys, foreign
+  hooks, strings unescaped. Output is two-space indented, Claude Code's own
+  format. The write is atomic (temp file + rename) and keeps the file's
+  mode (0600 for a new file). A file that is not a JSON object — or whose
+  `hooks` is not one — is refused and left untouched.
+
+### `ike agent-hook <event>` (`cmd/ike/agenthook.go`)
+
+The first-argument subcommand (`cli.Invocation.AgentHook`) reads at most
+1 MiB of hook JSON from stdin, keeps `session_id`, `cwd`, `transcript_path`,
+takes the event name from the command line, adds `$IKE_SESSION` /
+`$IKE_PID`, and sends a [deeplink `event` message](./deep-links.md#the-event-message-2843).
+It **always exits 0** — a non-zero exit (2 in particular) from a
+`UserPromptSubmit` hook would block the user's prompt — and prints a failure
+to stderr only; no running IKE is not a failure.
+
+### Binding in the app (`internal/app/agenthooks.go`)
+
+Every terminal IKE spawns carries `IKE_SESSION=<terminal session key>` and
+`IKE_PID=<IDE pid>` in its environment (`terminal.startSession`), so the hook
+knows which terminal it ran in. An `AgentEventMsg` binds the session to:
+
+1. the terminal whose session key is `ike_session`, when `ike_pid` is this
+   process — pane and tab terminals of the active and parked workspaces, and
+   parked global tools;
+2. else a terminal whose live cwd is the event's cwd (symlinks resolved),
+   preferring the one already bound to that session, then a tool pane, then
+   a plain terminal without a live binding;
+3. else nothing — the event is dropped.
+
+The binding (`Model.agentSessions`, keyed by terminal session key) holds the
+session id, transcript path, cwd and last event; `SessionEnd` keeps it but
+marks it ended, and the next `SessionStart` (e.g. after `/clear`) replaces
+it. `agentSessionLocator(t)` is what the trace window (#2840) calls off the
+Update loop: a live hook binding wins, otherwise `agenttrace.Discover` on the
+terminal's cwd.
+
 ## Tests
+
+`internal/agenttrace/hooks_test.go` round-trips install → install →
+uninstall against a settings file with foreign hooks and unrelated keys
+(document equal after the round trip, key order and file mode kept), a moved
+binary with a quoted path, file creation, a group shared with foreign hooks,
+malformed files left untouched, and the marker matcher's compound/quoting
+cases. `internal/deeplink/event_test.go` covers the wire form, every
+validation refusal, the length cap, an open-only endpoint refusing events and
+owner-first routing; `cmd/ike/agenthook_test.go` the stdin → event mapping;
+`internal/app/agenthooks_test.go` binding by pane key, by cwd, unmatched
+events, the discovery fallback and both commands against a temporary
+`CLAUDE_CONFIG_DIR`.
 
 `internal/agenttrace/testdata/basic.jsonl` is a current-format session with
 a typed prompt carrying a system reminder, thinking + text blocks, `Read`,
@@ -190,3 +281,5 @@ points at one.
   window is built on (#2840).
 - [Deep Links](/architecture/deep-links.md) — the socket the hook push
   extends with an `event` message (#2843).
+- [Tool Panes](/architecture/tool-panes.md) — the tool panes a hook binds a
+  session to.

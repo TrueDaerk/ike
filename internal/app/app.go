@@ -1004,6 +1004,9 @@ type Model struct {
 	dlPending    *deepLinkPending
 	dlChoose     *deepLinkChooser
 	dlAfterClone *deeplink.Link
+	// agentSessions binds a coding-agent session to the terminal it runs in,
+	// keyed by terminal session key; fed by `ike agent-hook` events (#2843).
+	agentSessions map[string]agentSession
 	// The project.open_link paste prompt (#2396): one URL line.
 	dlLinkOpen bool
 	dlLinkText ui.Field
@@ -7356,6 +7359,19 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case DeepLinkMsg:
 		// An ike:// link arrived — socket, CLI argument, or the paste prompt.
 		return m.handleDeepLink(msg.URL)
+
+	case AgentEventMsg:
+		// A Claude Code hook reported a session lifecycle event (#2843).
+		return m.handleAgentEvent(msg.Event)
+
+	case AgentHooksInstallMsg:
+		return m, agentHooksCmd(true)
+
+	case AgentHooksUninstallMsg:
+		return m, agentHooksCmd(false)
+
+	case agentHooksDoneMsg:
+		return m.handleAgentHooksDone(msg)
 
 	case deepLinkResolvedMsg:
 		return m.handleDeepLinkResolved(msg)

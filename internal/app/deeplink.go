@@ -74,8 +74,9 @@ func pendingFor(link deeplink.Link, root string) *deepLinkPending {
 // home) degrades silently — links then only work by starting `ike ike://…`.
 func (m Model) StartDeepLink() Model {
 	h := m.host
-	srv, err := deeplink.Serve(deeplink.DefaultDir(), func(url string) {
-		h.Send(DeepLinkMsg{URL: url})
+	srv, err := deeplink.ServeHandlers(deeplink.DefaultDir(), deeplink.Handlers{
+		Open:  func(url string) { h.Send(DeepLinkMsg{URL: url}) },
+		Event: func(ev deeplink.Event) { h.Send(AgentEventMsg{Event: ev}) },
 	})
 	if err != nil {
 		return m

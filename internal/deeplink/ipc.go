@@ -19,9 +19,10 @@ import (
 // focused instance's socket; no instance answering means "start one yourself".
 //
 // The socket is a trust boundary: created 0600 in a 0700 directory, it accepts
-// exactly one message form — "open ike://…" — with a hard length cap. Anything
-// else is answered with an error and the connection dropped. The URL is
-// re-parsed by the receiver before anything acts on it.
+// exactly two message forms — "open ike://…" and "event {json}" (#2843, see
+// event.go) — with a hard length cap. Anything else is answered with an error
+// and the connection dropped. The URL is re-parsed by the receiver before
+// anything acts on it.
 
 // maxLinkLen bounds an incoming message; a legitimate link is a few hundred
 // bytes, so anything larger is garbage or an attack.
@@ -52,10 +53,23 @@ type Server struct {
 	ln   net.Listener
 }
 
+// Handlers receives the validated messages of one endpoint. Open gets every
+// ike:// link, Event every agent lifecycle push; a nil handler refuses its
+// message form.
+type Handlers struct {
+	Open  func(url string)
+	Event func(Event)
+}
+
 // Serve opens this instance's socket under dir (created 0700) and delivers
 // every valid incoming link to deliver, each on its own goroutine. The socket
 // is named by pid so parallel instances never collide.
 func Serve(dir string, deliver func(url string)) (*Server, error) {
+	return ServeHandlers(dir, Handlers{Open: deliver})
+}
+
+// ServeHandlers is Serve with a handler per message form.
+func ServeHandlers(dir string, h Handlers) (*Server, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
@@ -70,25 +84,26 @@ func Serve(dir string, deliver func(url string)) (*Server, error) {
 	_ = os.Chmod(sock, 0o600)
 	s := &Server{dir: dir, sock: sock, ln: ln}
 	s.Touch()
-	safego.Go("deeplink.Serve", func() { s.accept(deliver) })
+	safego.Go("deeplink.Serve", func() { s.accept(h) })
 	return s, nil
 }
 
 // accept handles connections until the listener closes.
-func (s *Server) accept(deliver func(url string)) {
+func (s *Server) accept(h Handlers) {
 	for {
 		conn, err := s.ln.Accept()
 		if err != nil {
 			return
 		}
-		safego.Go("deeplink.Server.accept", func() { handleConn(conn, deliver) })
+		safego.Go("deeplink.Server.accept", func() { handleConn(conn, h) })
 	}
 }
 
-// handleConn reads and validates the single allowed message. The connection
-// answers "ok" only after the link parsed, so the client can fall back to
-// starting a fresh instance when it hit a wedged or foreign socket.
-func handleConn(conn net.Conn, deliver func(url string)) {
+// handleConn reads and validates the single message of a connection. The
+// connection answers "ok" only after the message parsed, so the client can
+// fall back to starting a fresh instance when it hit a wedged or foreign
+// socket.
+func handleConn(conn net.Conn, h Handlers) {
 	defer conn.Close()
 	_ = conn.SetDeadline(time.Now().Add(ipcTimeout))
 	r := bufio.NewReaderSize(limitConn(conn), maxLinkLen)
@@ -96,17 +111,27 @@ func handleConn(conn net.Conn, deliver func(url string)) {
 	if err != nil && line == "" {
 		return
 	}
-	raw, ok := strings.CutPrefix(strings.TrimSpace(line), "open ")
-	if !ok {
-		fmt.Fprintln(conn, "err unsupported message")
+	line = strings.TrimSpace(line)
+	if raw, ok := strings.CutPrefix(line, "open "); ok && h.Open != nil {
+		if _, err := Parse(raw); err != nil {
+			fmt.Fprintf(conn, "err %v\n", err)
+			return
+		}
+		fmt.Fprintln(conn, "ok")
+		h.Open(raw)
 		return
 	}
-	if _, err := Parse(raw); err != nil {
-		fmt.Fprintf(conn, "err %v\n", err)
+	if raw, ok := strings.CutPrefix(line, "event "); ok && h.Event != nil {
+		ev, err := ParseEvent(raw)
+		if err != nil {
+			fmt.Fprintf(conn, "err %v\n", err)
+			return
+		}
+		fmt.Fprintln(conn, "ok")
+		h.Event(ev)
 		return
 	}
-	fmt.Fprintln(conn, "ok")
-	deliver(raw)
+	fmt.Fprintln(conn, "err unsupported message")
 }
 
 // limitConn caps what a connection may send — ReadString would otherwise
@@ -162,19 +187,28 @@ func (s *Server) Close() {
 var ErrNoInstance = errors.New("no running ike instance")
 
 func Send(dir, url string) error {
+	return deliverLine(sockets(dir), "open "+url)
+}
+
+// sockets lists the instance sockets under dir, newest focus stamp first.
+func sockets(dir string) []string {
 	socks, err := filepath.Glob(filepath.Join(dir, "ike-*.sock"))
-	if err != nil || len(socks) == 0 {
-		return ErrNoInstance
+	if err != nil {
+		return nil
 	}
 	sort.Slice(socks, func(i, j int) bool { return focusTime(socks[i]).After(focusTime(socks[j])) })
+	return socks
+}
+
+// deliverLine tries socks in order until one acknowledges line. A socket
+// nobody answers belongs to a dead instance: its files are removed on the way
+// so the directory never accumulates corpses.
+func deliverLine(socks []string, line string) error {
 	for _, sock := range socks {
-		if trySend(sock, url) {
+		if sendLine(sock, line) {
 			return nil
 		}
-		// A socket nobody answers belongs to a dead instance: clean it up so
-		// the directory never accumulates corpses.
-		_ = os.Remove(sock)
-		_ = os.Remove(strings.TrimSuffix(sock, ".sock") + ".focus")
+		removeDead(sock)
 	}
 	return ErrNoInstance
 }
@@ -189,20 +223,4 @@ func focusTime(sock string) time.Time {
 		return fi.ModTime()
 	}
 	return time.Time{}
-}
-
-// trySend performs one delivery attempt and reports whether the instance
-// acknowledged it.
-func trySend(sock, url string) bool {
-	conn, err := net.DialTimeout("unix", sock, ipcTimeout)
-	if err != nil {
-		return false
-	}
-	defer conn.Close()
-	_ = conn.SetDeadline(time.Now().Add(ipcTimeout))
-	if _, err := fmt.Fprintf(conn, "open %s\n", url); err != nil {
-		return false
-	}
-	reply, err := bufio.NewReader(conn).ReadString('\n')
-	return err == nil && strings.TrimSpace(reply) == "ok"
 }

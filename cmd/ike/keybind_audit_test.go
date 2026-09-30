@@ -82,7 +82,9 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	// #2419's Dependencies window: refresh/audit are the pane's 'r' (and the
 	// palette); the update action is the manifest line's alt+enter offer.
 	{"deps.refresh", reasonPaneKey},
-	{"crash.openLastLog", reasonOccasional}, // the next-launch crash notice offers it as an action (#2836)
+	{"crash.openLastLog", reasonOccasional},     // the next-launch crash notice offers it as an action (#2836)
+	{"agent.hooks.install", reasonOccasional},   // one-off Claude Code setup (#2843)
+	{"agent.hooks.uninstall", reasonOccasional}, // one-off Claude Code setup (#2843)
 	{"deps.audit", reasonOccasional},
 	// time.toggle (#2426) has cmd+alt+0; the reload is the pane's own 'r'.
 	{"time.refresh", reasonPaneKey},

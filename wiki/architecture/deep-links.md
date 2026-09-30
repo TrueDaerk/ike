@@ -1,10 +1,10 @@
 ---
 type: architecture
 title: Deep Links (ike:// URL scheme)
-description: The ike:// URL scheme — parse/normalise/resolve in internal/deeplink, per-instance socket hand-off, history→projects-dir→clone resolution, file/tool payload after the switch, the group= form that opens a project group and lands on a member (#2576), OS registration per platform (#2396)
+description: The ike:// URL scheme — parse/normalise/resolve in internal/deeplink, per-instance socket hand-off, history→projects-dir→clone resolution, file/tool payload after the switch, the group= form that opens a project group and lands on a member (#2576), OS registration per platform (#2396), the socket's `event` message for agent hook pushes (#2843)
 resource: internal/deeplink
-tags: [deeplink, url-scheme, ipc, project-switching]
-timestamp: 2026-09-08T23:30:00Z
+tags: [deeplink, url-scheme, ipc, project-switching, agents]
+timestamp: 2026-09-30T20:00:00Z
 ---
 
 # Deep Links (ike:// URL scheme)
@@ -52,11 +52,36 @@ a pure leaf package (no bubbletea) with full unit tests.
 Every instance listens on a **unix domain socket** under the user state
 directory (`$IKE_CONFIG_DIR/deeplink` else `~/.ike/deeplink`, dir 0700,
 socket 0600, one per pid — `deeplink.Serve` in `internal/deeplink/ipc.go`).
-The socket accepts exactly one message form, `open ike://…\n` (8 KiB cap);
+The socket accepts exactly two message forms, one line each under a shared
+8 KiB cap: `open ike://…\n` and `event {json}\n` (the agent hook push, below);
 anything else is answered with an error and dropped, and the receiver
 re-parses the URL before acting. A sidecar `.focus` stamp file (touched on
 `tea.FocusMsg`) marks the most recently focused instance; `deeplink.Send`
 tries sockets newest-stamp-first and removes dead ones as it goes.
+`deeplink.ServeHandlers` takes one handler per form (`Handlers{Open, Event}`);
+a nil handler refuses its form, and `deeplink.Serve` is the open-only wrapper.
+
+### The `event` message (#2843)
+
+`ike agent-hook <event>` — the command IKE's Claude Code hooks run (see
+[Agent Trace](./agent-trace.md#claude-code-hooks-2843)) — reads the hook JSON
+on stdin and sends
+
+```
+event {"session_id":"…","cwd":"/abs","transcript_path":"/abs/….jsonl","event":"SessionStart","ike_session":"…","ike_pid":123}
+```
+
+`deeplink.ParseEvent` refuses unknown fields and trailing data and validates
+every field: `event` one of `SessionStart` / `SessionEnd` /
+`UserPromptSubmit` (`deeplink.AgentEvents`); `session_id` `[A-Za-z0-9_-]`,
+≤ 256 bytes; `cwd` absolute, `transcript_path` absolute and `.jsonl` (or
+absent), no control bytes in either; `ike_session` ≤ 256 bytes, no control
+bytes; `ike_pid` non-negative. `ike_session` / `ike_pid` come from
+`$IKE_SESSION` / `$IKE_PID`, which every IKE terminal spawn carries (the
+terminal's routing key and the IDE's pid). `deeplink.SendEvent` tries the
+socket of `ike_pid` first — the instance whose terminal the agent runs in —
+then the rest in focus order like `Send`. The receiver only records ids and
+paths; nothing in an event opens, reads or runs anything.
 
 `ike ike://…` on the command line (`internal/cli`) delivers to a running
 instance and exits, or starts the IDE and resolves the link after startup.
@@ -164,7 +189,8 @@ best-effort — the switch itself always happens.
 ## Security
 
 Links are untrusted input: the parser rejects file paths that escape the
-project root, the socket is user-only and single-message, incoming URLs are
+project root, the socket is user-only and single-message, `event` payloads
+are strictly validated and only ever recorded, incoming URLs are
 re-parsed before anything acts, cloning always goes through the confirmed
 dialog showing the URL verbatim, and `ike-gui` refuses quoting-hostile URL
 strings before they reach a shell.

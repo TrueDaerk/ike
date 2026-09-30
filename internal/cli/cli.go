@@ -36,7 +36,17 @@ type Invocation struct {
 	// and exit (success or failure), never start the IDE. The OS URL handler
 	// uses it to probe before spawning a terminal.
 	URLSendOnly bool
+	// AgentHook is the event name of `ike agent-hook <event>` (#2843): the
+	// Claude Code hook entry point. cmd/ike reads the hook JSON on stdin,
+	// forwards it to a running instance and exits; every other field is then
+	// meaningless.
+	AgentHook string
 }
+
+// agentHookCmd is the subcommand word; only recognised as the first
+// argument, so a file named "agent-hook" still opens as `./agent-hook` or
+// anywhere later on the line.
+const agentHookCmd = "agent-hook"
 
 // Parse parses the arguments after the program name. Supported forms:
 //
@@ -49,6 +59,8 @@ type Invocation struct {
 //	                   resolve after startup (at most once)
 //	--url-send-only    with an ike:// URL: only deliver it, never start
 //	--version, -v      print the version banner instead of starting
+//	agent-hook EVENT   (first argument only) Claude Code hook entry point:
+//	                   forward the hook JSON on stdin, never start (#2843)
 //
 // A suffix that is not a positive number stays part of the path ("weird:name"
 // is a plain path, as is a trailing colon), since file names may contain ":".
@@ -56,6 +68,12 @@ type Invocation struct {
 // errors. Zero args parse to a zero Invocation.
 func Parse(args []string) (Invocation, error) {
 	var inv Invocation
+	if len(args) > 0 && args[0] == agentHookCmd {
+		if len(args) != 2 || args[1] == "" {
+			return Invocation{}, fmt.Errorf("usage: ike %s <event>", agentHookCmd)
+		}
+		return Invocation{AgentHook: args[1]}, nil
+	}
 	pending := 0 // "+N" line waiting for its path; 0 = none
 	for _, a := range args {
 		switch {
