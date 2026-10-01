@@ -141,6 +141,15 @@ func (m *Model) openAgentAsk() tea.Cmd {
 	}
 	info := p.Info()
 	sess := m.traceSession
+	if p.Stored() {
+		// A stored session (#2860) forks by its id — while Claude still has
+		// the transcript.
+		var problem string
+		if sess, problem = m.traceAskStored(info); problem != "" {
+			m.host.Notify(host.Info, problem)
+			return nil
+		}
+	}
 	if sess.ID == "" {
 		sess.ID = info.ID
 	}

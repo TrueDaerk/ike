@@ -173,6 +173,8 @@ func stopNode(st *agenttrace.Stop) *agenttrace.Node {
 		n.Kind = agenttrace.NodeDecision
 	case agenttrace.StopSeparator:
 		n.Kind = agenttrace.NodeSeparator
+	case agenttrace.StopRewind:
+		n.Kind = agenttrace.NodeRewind
 	}
 	return n
 }
@@ -327,6 +329,10 @@ func (m *Model) graphKey(key string) (tea.Cmd, bool) {
 			return nil, true
 		}
 		st := &g.stops[cur]
+		if st.Kind == agenttrace.StopRewind {
+			m.toggleExpand(st.Key)
+			return nil, true
+		}
 		if st.Kind == agenttrace.StopChange && g.lastEnter == st.Key {
 			g.lastEnter = ""
 			m.toggleExpand(st.Key)
@@ -348,11 +354,12 @@ func (m *Model) graphKey(key string) (tea.Cmd, bool) {
 	return nil, false
 }
 
-// toggleExpand expands a change box in place (collapsing any other) or
+// toggleExpand expands a change box — or a rewind marker (#2860), whose
+// block lists the abandoned branch — in place (collapsing any other) or
 // collapses it; prompt and answer boxes have nothing to expand.
 func (m *Model) toggleExpand(key string) {
 	i := m.stopIndex(key)
-	if i < 0 || m.graph.stops[i].Kind != agenttrace.StopChange {
+	if i < 0 || (m.graph.stops[i].Kind != agenttrace.StopChange && m.graph.stops[i].Kind != agenttrace.StopRewind) {
 		return
 	}
 	if m.graph.expanded == key {
@@ -430,6 +437,9 @@ func (m *Model) graphClick(x, y int) tea.Cmd {
 // it, the assistant text that preceded it, the patch summary and the keys.
 func (m *Model) detailLines(st agenttrace.Stop, width int) []string {
 	var lines []string
+	if st.Kind == agenttrace.StopRewind {
+		return m.rewindLines(st, width)
+	}
 	for _, c := range st.Calls {
 		status := "ok"
 		switch {
@@ -637,6 +647,8 @@ func stopStyle(st agenttrace.Stop) (style int, glyph string) {
 			return stPending, "…"
 		}
 		return stAnswer, "✓"
+	case agenttrace.StopRewind:
+		return stFaint, "↶"
 	case agenttrace.StopChange:
 		if st.Error {
 			return stError, "✗"
@@ -722,7 +734,7 @@ func (m *Model) drawBox(c *canvas, st agenttrace.Stop, s Slot, i int) {
 	c.put(s.X+w-1, s.Y+1, "│", style, 0)
 	label := fitCells(st.Label, w-2)
 	labelSt := stPlain
-	if st.Pending && st.Kind == agenttrace.StopAnswer {
+	if (st.Pending && st.Kind == agenttrace.StopAnswer) || st.Kind == agenttrace.StopRewind {
 		labelSt = stFaint
 	}
 	c.put(s.X+1, s.Y+1, label, labelSt, w-2)
@@ -770,4 +782,4 @@ func (m *Model) drawConnector(c *canvas, prev, s Slot) {
 }
 
 // graphHint is the key line under the graph.
-const graphHint = "h/l along the path · j/k rows · enter open · space expand · t tree · D diff · a ask · r rescan · Δ: V revert"
+const graphHint = "h/l along the path · j/k rows · enter open · space expand · t tree · s sessions · D diff · a ask · r rescan · Δ: V revert"

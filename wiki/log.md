@@ -1,5 +1,30 @@
 # Log
 
+## 2026-10-01 (agent trace: session history, /clear and rewinds, import, picker, #2860)
+
+- [Agent Trace](/architecture/agent-trace.md): the trace keeps a compact
+  per-session **record** under `.ike/agent-trace/<session-id>.json` (`v: 1`,
+  the harness-neutral model — prompts, texts, tool calls with their files,
+  rewinds, reconstructed diffs as hunks; no tool inputs/outputs, texts
+  capped, 512 KiB per record, the oldest pruned past
+  `agent.trace.history_max_sessions`, default 50, Settings UI page Agent
+  Trace), written at every turn boundary, on a rewind and on SessionEnd; a
+  `/clear` (new SessionStart, or a new transcript appearing) closes the
+  record and starts the next.
+- Rewinds: the parser keeps `parentUuid` (`Event.ParentUUID`); a prompt
+  whose parent is an earlier line than the tail abandons the events after
+  it (`Session.Rewinds`, `Event.Abandoned`). `BuildTree` / `BuildPath`
+  follow the live branch and show the abandoned one behind a `↶ rewound`
+  marker (folded root in the tree, faint expandable box in the graph).
+- `agent.trace.import` (palette) stores every original transcript of the
+  project Claude Code still has (forks and ask-tagged forks skipped,
+  unreadable files reported, idempotent by size/mtime), progress in the
+  status bar.
+- `s` in the pane / `agent.trace.history` opens the session picker
+  (`ui.LineSearch` filter, shared list blocks); `enter` shows a stored
+  session read-only (`history · <date>` header), `esc`/`r` return to the
+  live one; `a` on a stored session forks it while its transcript exists.
+
 ## 2026-10-01 (agent trace: graph view, #2858)
 
 - [Agent Trace](/architecture/agent-trace.md): the pane opens in a

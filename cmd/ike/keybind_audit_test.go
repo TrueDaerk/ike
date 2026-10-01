@@ -93,6 +93,10 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	// agent.trace.toggle (#2840) has cmd+alt+shift+a; the graph ↔ tree switch
 	// is the pane's own 't' (#2858).
 	{"agent.trace.view", reasonPaneKey},
+	// The session picker (#2860) is the pane's own 's'; the import runs once
+	// per project (and again when Claude wrote new transcripts).
+	{"agent.trace.history", reasonPaneKey},
+	{"agent.trace.import", reasonOccasional},
 	{"deps.updateLatest", reasonIntention},
 	{"http.", reasonPaneKey}, // the response pane's single keys
 	// #2423's GraphQL schema commands carve themselves out of that family:

@@ -1048,6 +1048,23 @@ type Model struct {
 	// pick — a reopened pane comes back in the view it was closed in.
 	traceView    tracepanel.ViewMode
 	traceViewSet bool
+	// Session history (#2860): traceSaved is what the last record of the
+	// live session held, traceSaveErr the last reported write failure,
+	// traceLiveInfo the live session the last read described (the picker's
+	// live mark), traceHistoryID the stored session the pane shows ("" for
+	// the live one), traceHistoryGen retires a superseded listing or load,
+	// traceDirStamp the project directory's last seen modification time
+	// (a new transcript without hooks), and the traceImport* fields the
+	// running import's status.
+	traceSaved       traceSaveState
+	traceSaveErr     string
+	traceLiveInfo    tracepanel.Info
+	traceHistoryID   string
+	traceHistoryGen  int64
+	traceDirStamp    time.Time
+	traceImporting   bool
+	traceImportDone  int
+	traceImportTotal int
 	// traceDiff is the open per-change diff view of the trace (#2859);
 	// traceDiffGen retires a reconstruction that finished after another D.
 	traceDiff    *traceDiffState
@@ -6654,6 +6671,39 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tracepanel.InstallHooksMsg:
 		// The empty state's action: install the Claude hooks (#2843).
 		return m, agentHooksCmd(true)
+
+	case AgentTraceHistoryMsg, tracepanel.HistoryMsg:
+		// agent.trace.history (#2860), also 's' in the pane: the picker of
+		// stored sessions.
+		return m, m.openTraceHistory()
+
+	case traceHistoryListMsg:
+		return m.handleTraceHistoryList(msg)
+
+	case tracepanel.ShowHistoryMsg:
+		// Enter in the picker: the stored session, read-only.
+		return m, m.showTraceHistoryCmd(msg.ID)
+
+	case traceHistoryLoadedMsg:
+		return m.handleTraceHistoryLoaded(msg)
+
+	case tracepanel.LiveMsg:
+		// esc / r on a stored session: back to the live one.
+		return m, m.backToLiveTrace()
+
+	case AgentTraceImportMsg:
+		// agent.trace.import (#2860): the project's Claude transcripts into
+		// the history store.
+		return m, m.importTraceHistory()
+
+	case traceImportProgressMsg:
+		return m.handleTraceImportProgress(msg)
+
+	case traceImportDoneMsg:
+		return m.handleTraceImportDone(msg)
+
+	case traceSavedMsg:
+		return m.handleTraceSaved(msg)
 
 	case TestsToggleMsg:
 		// tests.toggle (#1911): same state machine for the Test Results pane.

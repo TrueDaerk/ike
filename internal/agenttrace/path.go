@@ -30,6 +30,9 @@ const (
 	StopAnswer
 	// StopSeparator is a compaction or summary boundary, drawn as a marker.
 	StopSeparator
+	// StopRewind marks where the transcript went back (#2860): a greyed box
+	// whose Branch is the abandoned path, shown when the box is expanded.
+	StopRewind
 )
 
 // String returns the lowercase name used in tests.
@@ -43,6 +46,8 @@ func (k StopKind) String() string {
 		return "answer"
 	case StopSeparator:
 		return "separator"
+	case StopRewind:
+		return "rewind"
 	}
 	return "unknown"
 }
@@ -98,6 +103,9 @@ type Stop struct {
 	// reconstructed diff's (#2859), whatever its source.
 	Added, Removed int
 	HasDiff        bool
+	// Branch is the abandoned path behind a rewind stop (#2860): the stops
+	// of the turns the rewind superseded, in order. nil for other kinds.
+	Branch []Stop
 }
 
 // Selectable reports whether the stop is a box the user can land on;
@@ -123,10 +131,39 @@ func BuildPath(s *Session) []Stop {
 	if s == nil {
 		return nil
 	}
+	return buildPath(s, diffCounts(s), branchOwners(s), -1, 0, len(s.Events), "", true)
+}
+
+// buildPath reduces the events in [from, to) of branch own (#2860), keyed
+// with prefix; a rewind inside the range becomes a StopRewind at its
+// rewinding event, carrying the abandoned branch's path. running marks the
+// live branch of an open session (an abandoned branch is never running).
+func buildPath(s *Session, counts map[string]ChangeDiff, owner []int, own, from, to int, prefix string, running bool) []Stop {
 	var out []Stop
-	b := pathBuilder{counts: diffCounts(s)}
+	b := pathBuilder{counts: counts, prefix: prefix}
+	rewinds := map[int]int{}
+	for k, rw := range s.Rewinds {
+		rewinds[rw.To] = k
+	}
+	ownerAt := func(i int) int {
+		if i < 0 || i >= len(owner) {
+			return -1
+		}
+		return owner[i]
+	}
 	asked := -1
-	for i := range s.Events {
+	for i := from; i < to && i <= len(s.Events); i++ {
+		if k, ok := rewinds[i]; ok && ownerAt(i) == own {
+			rw := s.Rewinds[k]
+			out = b.close(out, false)
+			b = pathBuilder{counts: counts, prefix: prefix}
+			st := Stop{Kind: StopRewind, Key: rewindKey(i), Turn: s.Events[rw.From].Turn, Label: "↶ rewound", Detail: rewindDetail(s, rw), At: rw.At}
+			st.Branch = buildPath(s, counts, owner, k, rw.From, rw.To, rewindKey(i)+"/", false)
+			out = append(out, st)
+		}
+		if i >= len(s.Events) || owner[i] != own {
+			continue
+		}
 		ev := s.Events[i]
 		if ev.Kind == KindUser && IsAskPrompt(ev.Text) {
 			asked = ev.Turn
@@ -136,8 +173,8 @@ func BuildPath(s *Session) []Stop {
 		}
 		if !b.open || b.turn != ev.Turn {
 			out = b.close(out, false)
-			b = pathBuilder{open: true, turn: ev.Turn, lastAt: ev.At, counts: b.counts}
-			p := Stop{Kind: StopPrompt, Key: "t" + strconv.Itoa(ev.Turn), Turn: ev.Turn, At: ev.At}
+			b = pathBuilder{open: true, turn: ev.Turn, lastAt: ev.At, counts: b.counts, prefix: prefix}
+			p := Stop{Kind: StopPrompt, Key: prefix + "t" + strconv.Itoa(ev.Turn), Turn: ev.Turn, At: ev.At}
 			if ev.Kind == KindUser {
 				p.Label = "#" + strconv.Itoa(ev.Turn) + " " + Collapse(ev.Text)
 				p.Text = ev.Text
@@ -171,13 +208,15 @@ func BuildPath(s *Session) []Stop {
 			out = b.changes(out, s.Events, i, "e"+strconv.Itoa(i), nil)
 		}
 	}
-	return b.close(out, true)
+	return b.close(out, running)
 }
 
 // pathBuilder is the state of the turn being reduced.
 type pathBuilder struct {
 	open bool
 	turn int
+	// prefix keys the turn's stops ("" on the live branch, #2860).
+	prefix string
 	// context collects the assistant labels since the last change.
 	context []string
 	// text is the turn's latest assistant text; textAfterTool whether it
@@ -199,7 +238,7 @@ func (b *pathBuilder) close(out []Stop, running bool) []Stop {
 	if !b.open {
 		return out
 	}
-	a := Stop{Kind: StopAnswer, Key: "t" + strconv.Itoa(b.turn) + "/end", Turn: b.turn, Text: b.text, At: b.lastAt}
+	a := Stop{Kind: StopAnswer, Key: b.prefix + "t" + strconv.Itoa(b.turn) + "/end", Turn: b.turn, Text: b.text, At: b.lastAt}
 	switch {
 	case b.text != "" && (b.textAfterTool || !b.sawTool):
 		a.Label = Collapse(b.text)

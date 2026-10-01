@@ -448,6 +448,10 @@ type Agent struct {
 // agent.trace.view switch for the running IKE session without touching it.
 type AgentTrace struct {
 	View string `toml:"view"`
+	// HistoryMaxSessions caps the per-project session history (#2860): how
+	// many stored sessions .ike/agent-trace keeps before the oldest are
+	// pruned (1-500).
+	HistoryMaxSessions int `toml:"history_max_sessions"`
 }
 
 // AgentAsk configures agent.ask (#2845): the question about a trace node

@@ -212,6 +212,7 @@ func (c *Config) Flat() map[string]string {
 	put("agent.ask.max_turns", c.Agent.Ask.MaxTurns)
 	put("agent.ask.show_context", c.Agent.Ask.ShowContext)
 	put("agent.trace.view", c.Agent.Trace.View)
+	put("agent.trace.history_max_sessions", c.Agent.Trace.HistoryMaxSessions)
 	put("lsp.code_lens", c.LSP.CodeLens)
 	put("lsp.folding", c.LSP.Folding)
 	put("lsp.semantic_tokens", c.LSP.SemanticTokens)

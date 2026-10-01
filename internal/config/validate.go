@@ -1048,6 +1048,11 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "agent.trace.view", Message: fmt.Sprintf("unknown view %q, using \"graph\"", c.Agent.Trace.View)})
 		c.Agent.Trace.View = "graph"
 	}
+	// agent.trace.history_max_sessions (#2860) bounds the stored sessions.
+	if c.Agent.Trace.HistoryMaxSessions < 1 || c.Agent.Trace.HistoryMaxSessions > 500 {
+		diags = append(diags, Diagnostic{Field: "agent.trace.history_max_sessions", Message: fmt.Sprintf("history_max_sessions %d out of range (1\u2013500), using 50", c.Agent.Trace.HistoryMaxSessions)})
+		c.Agent.Trace.HistoryMaxSessions = 50
+	}
 
 	diags = append(diags, validateProjectGroups(c)...)
 

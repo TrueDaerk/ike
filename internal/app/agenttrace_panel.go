@@ -84,6 +84,10 @@ type traceReadMsg struct {
 	rev   int
 	at    time.Time
 	err   error
+	// saved is the record the read wrote (#2860), nil when none was due;
+	// saveErr its write failure.
+	saved   *traceSaveState
+	saveErr error
 }
 
 // traceTickMsg drives the poll while the pane is open. gen retires the
@@ -281,19 +285,30 @@ func (m Model) handleTraceLocated(msg traceLocatedMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if msg.err != nil {
+		closed := m.traceCloseCmd(m.traceReader)
 		m.traceReader = nil
 		m.traceSession = agentSession{}
-		p.SetNoSession(msg.target.cwd, msg.err)
-		return m, nil
+		m.traceSaved = traceSaveState{}
+		if !m.traceShowingHistory() {
+			p.SetNoSession(msg.target.cwd, msg.err)
+		}
+		return m, closed
 	}
+	var closed tea.Cmd
 	if m.traceReader == nil || m.traceReader.Path() != msg.sess.Transcript {
+		// The session the trace leaves is filed as ended (#2860): a /clear
+		// started a new one, or a new transcript appeared.
+		closed = m.traceCloseCmd(m.traceReader)
 		m.traceReader = agenttrace.NewReader(msg.sess.Transcript)
 		m.traceBusy, m.tracePending = false, false
 		m.traceShownRev = -1
-		p.Reset()
+		m.traceSaved = traceSaveState{}
+		if !m.traceShowingHistory() {
+			p.Reset()
+		}
 	}
 	m.traceSession = msg.sess
-	return m, tea.Batch(m.traceReadCmd(), m.ensureTraceTick())
+	return m, tea.Batch(closed, m.traceReadCmd(), m.ensureTraceTick())
 }
 
 // traceReadCmd runs one incremental read and regroups the tree off the
@@ -312,10 +327,14 @@ func (m *Model) traceReadCmd() tea.Cmd {
 	}
 	m.traceBusy, m.traceBusyAt, m.tracePending = true, time.Now(), false
 	sess := m.traceSession
+	saved := m.traceSaved
+	store := traceStore()
 	return func() tea.Msg {
 		var nodes []agenttrace.Node
 		var stops []agenttrace.Stop
 		var info tracepanel.Info
+		var rec *agenttrace.Record
+		var state *traceSaveState
 		added, rev, err := r.Read(func(s *agenttrace.Session) {
 			info = tracepanel.Info{
 				ID: s.ID, Transcript: r.Path(), CWD: s.CWD,
@@ -323,6 +342,12 @@ func (m *Model) traceReadCmd() tea.Cmd {
 			}
 			nodes = agenttrace.BuildTree(s)
 			stops = agenttrace.BuildPath(s)
+			// The history record (#2860) is refreshed at every turn
+			// boundary, on a rewind and on the session's end.
+			if traceRecordDue(s, sess.Ended, saved) {
+				rec = agenttrace.NewRecord(s, r.Path(), sess.Ended)
+				state = &traceSaveState{id: s.ID, turns: s.Turns(), rewinds: len(s.Rewinds), ended: sess.Ended}
+			}
 		})
 		if info.ID == "" {
 			info.ID = sess.ID
@@ -330,7 +355,11 @@ func (m *Model) traceReadCmd() tea.Cmd {
 		if info.CWD == "" {
 			info.CWD = sess.CWD
 		}
-		return traceReadMsg{reader: r, nodes: nodes, stops: stops, info: info, added: added, rev: rev, at: time.Now(), err: err}
+		out := traceReadMsg{reader: r, nodes: nodes, stops: stops, info: info, added: added, rev: rev, at: time.Now(), err: err}
+		if rec != nil {
+			out.saved, out.saveErr = state, store.Save(rec)
+		}
+		return out
 	}
 }
 
@@ -353,6 +382,21 @@ func (m Model) handleTraceRead(msg traceReadMsg) (tea.Model, tea.Cmd) {
 		m.host.Notify(host.Error, "agent trace: "+msg.err.Error())
 		return m, nil
 	}
+	if msg.saved != nil {
+		m.traceSaved = *msg.saved
+		out, _ := m.handleTraceSaved(traceSavedMsg{err: msg.saveErr})
+		m = out.(Model)
+	}
+	m.traceLiveInfo = msg.info
+	var again tea.Cmd
+	if m.tracePending {
+		again = m.traceReadCmd()
+	}
+	if m.traceShowingHistory() {
+		// The pane shows a stored session (#2860): the live one was read
+		// and filed, but stays off screen until esc / r.
+		return m, tea.Batch(again, m.ensureTraceTick())
+	}
 	p.SetRead(msg.at, msg.added)
 	if msg.rev != m.traceShownRev || !p.HasSession() || msg.info != p.Info() {
 		p.Set(msg.nodes, msg.info)
@@ -360,10 +404,6 @@ func (m Model) handleTraceRead(msg traceReadMsg) (tea.Model, tea.Cmd) {
 		m.traceShownRev = msg.rev
 	}
 	m.syncTraceLinks()
-	var again tea.Cmd
-	if m.tracePending {
-		again = m.traceReadCmd()
-	}
 	return m, tea.Batch(again, m.ensureTraceTick())
 }
 
@@ -399,6 +439,11 @@ func (m Model) handleTraceTick(msg traceTickMsg) (tea.Model, tea.Cmd) {
 	m.noteTraceView()
 	target := m.traceTargetNow()
 	rescan := m.traceTicks%agentTraceRescanTicks == 0 && (m.traceReader == nil || m.traceSession.Ended)
+	if m.traceTicks%agentTraceRescanTicks == 0 && !rescan && !m.traceSession.FromHook && m.traceDirChanged(target.cwd) {
+		// A transcript appeared without a hook announcing it (#2860): a
+		// /clear started a new session in the followed terminal.
+		rescan = true
+	}
 	var work tea.Cmd
 	if !target.sameTerminal(m.traceFollow) || rescan {
 		m.traceGen++

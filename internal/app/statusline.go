@@ -61,6 +61,7 @@ var statusLeft = []statusSegment{
 	{id: "deps", render: func(m Model, _ *editor.Model) string { return m.depsSegment() }},
 	{id: "projecttime", render: func(m Model, _ *editor.Model) string { return m.projectTimeSegment() }},
 	{id: "allfind", render: func(m Model, _ *editor.Model) string { return m.allFindSegment() }},
+	{id: "agentimport", render: func(m Model, _ *editor.Model) string { return m.traceImportSegment() }},
 }
 
 // allFindSegment is the Find-in-All-Projects progress indicator (#2413):
@@ -870,6 +871,8 @@ var statusSegmentCommands = map[string]string{
 	"branchissue": "issues.openCurrentBranch",
 	// The all-projects scan progress (#2413) opens the results it counts.
 	"allfind": "project.findInAllProjectsResults",
+	// The agent-session import progress (#2860) opens the history it fills.
+	"agentimport": "agent.trace.history",
 	// The dependency scan indicator (#2419) opens the pane it fills.
 	"deps": "deps.toggle",
 	// The project-time segment (#2426) opens the report it summarises.

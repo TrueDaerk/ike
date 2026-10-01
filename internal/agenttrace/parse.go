@@ -24,6 +24,7 @@ type line struct {
 	Type             string          `json:"type"`
 	Subtype          string          `json:"subtype"`
 	UUID             string          `json:"uuid"`
+	ParentUUID       string          `json:"parentUuid"`
 	SessionID        string          `json:"sessionId"`
 	CWD              string          `json:"cwd"`
 	Timestamp        string          `json:"timestamp"`
@@ -70,6 +71,12 @@ type Parser struct {
 	turn      int
 	pending   map[string]int
 	cache     map[string][]byte
+	// uuids maps every line id seen to the event count after that line;
+	// tail is the id of the last line with one. A line whose parentUuid is
+	// a known id other than the tail rewound the transcript (#2860).
+	uuids  map[string]int
+	tail   string
+	parent string
 }
 
 // NewParser returns a Parser with an empty Session.
@@ -78,6 +85,7 @@ func NewParser() *Parser {
 		sess:    &Session{Harness: HarnessClaude},
 		pending: map[string]int{},
 		cache:   map[string][]byte{},
+		uuids:   map[string]int{},
 	}
 }
 
@@ -126,19 +134,77 @@ func (p *Parser) Line(raw []byte) bool {
 		return false
 	}
 	p.header(&l)
+	p.parent = l.ParentUUID
+	changed := p.rewind(&l)
 	switch l.Type {
 	case "user":
-		return p.user(&l)
+		changed = p.user(&l) || changed
 	case "assistant":
-		return p.assistant(&l)
+		changed = p.assistant(&l) || changed
 	case "system":
-		return p.system(&l)
+		changed = p.system(&l) || changed
 	case "summary":
-		if l.Summary == "" {
+		if l.Summary != "" {
+			p.add(Event{Kind: KindSeparator, Text: l.Summary, UUID: l.UUID})
+			changed = true
+		}
+	}
+	if l.UUID != "" {
+		p.uuids[l.UUID] = len(p.sess.Events)
+		p.tail = l.UUID
+	}
+	return changed
+}
+
+// rewind detects a line that continues an earlier point of the transcript
+// (#2860): its parentUuid is a line the parser saw, but not the tail. Claude
+// Code's esc esc writes the new prompt that way — the picked message and
+// everything after it are superseded. Only a prompt or an assistant line
+// counts: a tool_result's parent is its own tool_use, which is not the tail
+// when several calls ran in parallel. The events after the parent are
+// marked abandoned and the rewind recorded; it reports whether anything
+// changed.
+func (p *Parser) rewind(l *line) bool {
+	if l.ParentUUID == "" || p.tail == "" || l.ParentUUID == p.tail || p.skip(l) {
+		return false
+	}
+	switch l.Type {
+	case "assistant":
+	case "user":
+		if l.IsMeta || l.IsCompactSummary || isToolResult(l.Message.Content) {
 			return false
 		}
-		p.add(Event{Kind: KindSeparator, Text: l.Summary, UUID: l.UUID})
-		return true
+	default:
+		return false
+	}
+	pos, ok := p.uuids[l.ParentUUID]
+	if !ok || pos >= len(p.sess.Events) {
+		return false
+	}
+	changed := false
+	for i := pos; i < len(p.sess.Events); i++ {
+		if !p.sess.Events[i].Abandoned {
+			p.sess.Events[i].Abandoned = true
+			changed = true
+		}
+	}
+	if !changed {
+		return false
+	}
+	p.sess.Rewinds = append(p.sess.Rewinds, Rewind{From: pos, To: len(p.sess.Events), At: parseTime(l.Timestamp)})
+	return true
+}
+
+// isToolResult reports whether a user message's content is tool results.
+func isToolResult(raw json.RawMessage) bool {
+	var blocks []block
+	if json.Unmarshal(raw, &blocks) != nil {
+		return false
+	}
+	for i := range blocks {
+		if blocks[i].Type == "tool_result" {
+			return true
+		}
 	}
 	return false
 }
@@ -164,6 +230,7 @@ func (p *Parser) header(l *line) {
 
 func (p *Parser) add(ev Event) int {
 	ev.Turn = p.turn
+	ev.ParentUUID = p.parent
 	p.sess.Events = append(p.sess.Events, ev)
 	return len(p.sess.Events) - 1
 }
