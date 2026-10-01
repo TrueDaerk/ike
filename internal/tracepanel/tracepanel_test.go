@@ -74,6 +74,14 @@ func keyMsg(key string) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: rune(key[0]), Text: key}
 }
 
+// toTop moves the cursor onto the first row the way the user would, which
+// ends following the newest row (#2857).
+func toTop(m *Model) {
+	for m.tree.Cursor() > 0 {
+		send(m, "up")
+	}
+}
+
 func send(m *Model, key string) tea.Msg {
 	cmd := m.Update(keyMsg(key))
 	if cmd == nil {
@@ -104,6 +112,7 @@ func TestEnterOpensFileNodeAndTogglesOthers(t *testing.T) {
 	m := panel(t)
 	s := fixture(t, false)
 	m.Set(agenttrace.BuildTree(s), info(s))
+	toTop(m)
 	// One turn: expanded whole on the first Set.
 	rows := m.Rows()
 	if rows[0] != "t1" || rows[1] != " e1" || rows[2] != " e2" || rows[3] != "  e3" {
@@ -160,6 +169,7 @@ func TestLiveAppendKeepsSelectionAndExpansion(t *testing.T) {
 	m := panel(t)
 	s := fixture(t, false)
 	m.Set(agenttrace.BuildTree(s), info(s))
+	toTop(m)
 	// Fold the Read call's decision block partially: collapse e7 (MultiEdit)
 	// and select e6.
 	for _, k := range []string{"down", "down", "down", "down", "down", "down", "down", "down", "down", "down"} {
@@ -212,6 +222,7 @@ func TestLinkedRowsMarkDiffRevertAndSelect(t *testing.T) {
 	s := fixture(t, false)
 	nodes := agenttrace.BuildTree(s)
 	m.Set(nodes, info(s))
+	toTop(m)
 	edit := findNode(nodes, "e4/f0")
 	if edit == nil || edit.At.IsZero() || edit.Until.IsZero() || !edit.Until.After(edit.At) {
 		t.Fatalf("edit node window = %+v", edit)
@@ -361,5 +372,98 @@ func TestEmptyStateDialogAndActions(t *testing.T) {
 	m.SetSize(30, 4)
 	if view = plain(m.View()); strings.Contains(view, "╭") || !strings.Contains(view, "no agent session") {
 		t.Fatalf("small pane:\n%s", view)
+	}
+}
+
+// TestFollowKeepsNewestRowInView (#2857): the pane opens on the newest row
+// and, while the cursor stays on the last row, every Set moves it onto the
+// new last row — so a session growing past the pane's height stays visible
+// instead of growing below the fold. Moving off the last row stops it;
+// moving back resumes it.
+func TestFollowKeepsNewestRowInView(t *testing.T) {
+	m := panel(t)
+	m.SetSize(100, 5) // header + 3 tree rows + hint
+	part := fixture(t, false)
+	m.Set(agenttrace.BuildTree(part), info(part))
+	rows := m.Rows()
+	if cur := m.Current(); !m.Following() || cur == nil || cur.Key != strings.TrimSpace(rows[len(rows)-1]) {
+		t.Fatalf("the pane must open on the newest row, cursor on %+v", cur)
+	}
+	whole := fixture(t, true)
+	m.Set(agenttrace.BuildTree(whole), info(whole))
+	if cur := m.Current(); cur == nil || cur.Key != "e11" {
+		t.Fatalf("follow did not move onto the newest row: %+v", cur)
+	}
+	if view := plain(m.View()); !strings.Contains(view, "#2 /verify main.go") {
+		t.Fatalf("newest turn not on screen:\n%s", view)
+	}
+
+	send(m, "up")
+	if m.Following() {
+		t.Fatal("moving off the last row must stop following")
+	}
+	m.Set(agenttrace.BuildTree(whole), info(whole))
+	if cur := m.Current(); cur == nil || cur.Key != "e10" {
+		t.Fatalf("selection moved while not following: %+v", cur)
+	}
+	send(m, "down")
+	if !m.Following() {
+		t.Fatal("back on the last row must follow again")
+	}
+}
+
+// TestNewNodesInRunningTurnArriveExpanded (#2857): a decision, call and
+// file landing in a turn already on screen come up expanded, while a node
+// the user folded stays folded.
+func TestNewNodesInRunningTurnArriveExpanded(t *testing.T) {
+	file := func(key string) agenttrace.Node {
+		return agenttrace.Node{Kind: agenttrace.NodeFile, Key: key, Label: "edit", Path: "/p/" + key}
+	}
+	tool := func(key string) agenttrace.Node {
+		return agenttrace.Node{Kind: agenttrace.NodeTool, Key: key, Label: "Edit", Children: []agenttrace.Node{file(key + "/f0")}}
+	}
+	decision := func(key string, tools ...agenttrace.Node) agenttrace.Node {
+		return agenttrace.Node{Kind: agenttrace.NodeDecision, Key: key, Label: "decide " + key, Children: tools}
+	}
+	turn := func(ds ...agenttrace.Node) []agenttrace.Node {
+		return []agenttrace.Node{{Kind: agenttrace.NodeTurn, Key: "t1", Label: "#1", Children: ds}}
+	}
+	m := panel(t)
+	m.Set(turn(decision("e1", tool("e2"))), Info{ID: "s", Turns: 1})
+	if got := strings.Join(m.Rows(), ","); got != "t1, e1,  e2,   e2/f0" {
+		t.Fatalf("first set rows = %s", got)
+	}
+	// The user folds the first call.
+	for m.Current().Key != "e2" {
+		send(m, "up")
+	}
+	send(m, "left")
+	m.Set(turn(decision("e1", tool("e2"), tool("e3")), decision("e4", tool("e5"))), Info{ID: "s", Turns: 1})
+	want := "t1, e1,  e2,  e3,   e3/f0, e4,  e5,   e5/f0"
+	if got := strings.Join(m.Rows(), ","); got != want {
+		t.Fatalf("rows = %s, want %s", got, want)
+	}
+}
+
+// TestHeaderDiagnostics (#2857): the header tells "no new lines" from "not
+// reading" — the last read's time and count — and names the followed
+// terminal and why.
+func TestHeaderDiagnostics(t *testing.T) {
+	m := panel(t)
+	m.SetSize(160, 10)
+	s := fixture(t, false)
+	m.Set(agenttrace.BuildTree(s), info(s))
+	if view := plain(m.View()); !strings.Contains(view, "· not read yet") || strings.Contains(view, "⇢") {
+		t.Fatalf("header before any read:\n%s", view)
+	}
+	m.SetRead(time.Date(2026, 10, 1, 14, 5, 9, 0, time.Local), 3)
+	m.SetFollowing("claude (focused)")
+	header := strings.SplitN(plain(m.View()), "\n", 2)[0]
+	if !strings.Contains(header, "· read 14:05:09 +3") || !strings.Contains(header, "· ⇢ claude (focused)") {
+		t.Fatalf("header = %q", header)
+	}
+	m.SetRead(time.Date(2026, 10, 1, 14, 5, 10, 0, time.Local), 0)
+	if header = strings.SplitN(plain(m.View()), "\n", 2)[0]; !strings.Contains(header, "· read 14:05:10 +0") {
+		t.Fatalf("an empty read must still stamp the header: %q", header)
 	}
 }

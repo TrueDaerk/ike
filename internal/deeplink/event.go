@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -148,20 +149,36 @@ func SendEvent(dir string, e Event) error {
 	return deliverLine(socks, line)
 }
 
-// sendLine is one delivery attempt of a raw message line; true when the
-// instance acknowledged it.
-func sendLine(sock, line string) bool {
-	conn, err := net.DialTimeout("unix", sock, ipcTimeout)
+// sendResult is how one delivery attempt ended.
+type sendResult int
+
+const (
+	sendOK      sendResult = iota // acknowledged
+	sendDead                      // nobody listens: a dead instance's leftover
+	sendRefused                   // a live instance answered otherwise or too slowly
+)
+
+// sendLine is one delivery attempt of a raw message line, bounded by
+// timeout.
+func sendLine(sock, line string, timeout time.Duration) sendResult {
+	conn, err := net.DialTimeout("unix", sock, timeout)
 	if err != nil {
-		return false
+		var ne net.Error
+		if errors.As(err, &ne) && ne.Timeout() {
+			return sendRefused // a full backlog: alive, just busy
+		}
+		return sendDead
 	}
 	defer conn.Close()
-	_ = conn.SetDeadline(time.Now().Add(ipcTimeout))
+	_ = conn.SetDeadline(time.Now().Add(timeout))
 	if _, err := fmt.Fprintf(conn, "%s\n", line); err != nil {
-		return false
+		return sendRefused
 	}
 	reply, err := bufio.NewReader(conn).ReadString('\n')
-	return err == nil && strings.TrimSpace(reply) == "ok"
+	if err == nil && strings.TrimSpace(reply) == "ok" {
+		return sendOK
+	}
+	return sendRefused
 }
 
 // removeDead cleans up the files of an instance that did not answer.

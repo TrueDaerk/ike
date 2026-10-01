@@ -4,7 +4,7 @@ title: Agent Trace
 description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840), the links from writing file nodes to change-feed entries with diff/revert and the feed's jump back (#2838), and `agent.ask` — a question about a node answered by a fork of the same session on a cheaper model, with its node context, settings and answer overlay (internal/agentask, #2845), and follow-up questions on the same fork, fork tagging and the trimmed context (#2844), plus keybinds and limitations (other harnesses) (#2839).
 resource: internal/agenttrace
 tags: [architecture, agents, claude, transcript, trace, discovery, hooks, tool-window, hiertree, change-feed, ask, settings]
-timestamp: 2026-10-01T00:00:00Z
+timestamp: 2026-10-01T12:00:00Z
 ---
 
 # Agent Trace
@@ -102,12 +102,20 @@ the file after the earlier turns' changes. Tests inject `ReadFile`.
 `NewReader(path)` tails one transcript. `Update()` opens the file, seeks to
 the kept byte offset, and feeds every line that ends in `\n`; a trailing
 partial line — Claude Code is mid-write — is held back and re-read on the next
-call, so a half-written JSON object never counts as malformed. A file that
-shrank below the offset (rotated, truncated) restarts from byte 0 with a
-fresh `Session`. A missing file is not an error: the first line may not exist
+call, so a half-written JSON object never counts as malformed — however many
+`write(2)` calls the line takes. A file that was **replaced** restarts from
+byte 0 with a fresh `Session` (#2857): another file under the path
+(`os.SameFile` fails — renamed over, deleted and recreated), one that shrank
+below the offset (truncated), or one whose byte before the offset is no
+longer the `\n` the last read stopped behind (truncated and rewritten past
+the old size). A missing file is not an error: the first line may not exist
 yet when the pane opens. `Update` returns how many events were added or
-completed, which is what a tool window uses to decide whether to re-render;
-`Session()` is stable across calls and grows in place.
+completed; `Revision()` changes with every update that changed the session
+and every restart, which is what the tool window compares against the
+revision it shows. `Read(view)` is `Update` plus a callback on the session
+under the reader's own mutex — the host builds its tree there — so two
+reads never race even when the host gave up waiting for one. `Session()` is
+stable across calls and grows in place.
 
 ## Session discovery (`discover.go`)
 
@@ -295,11 +303,25 @@ The panel is a [hiertree](./hiertree.md) host over `agenttrace.Node` with
 the synchronous `hiertree.Static` fetch — the children are already in
 memory. Every `Set` goes through `Tree.Refresh`, which keeps expanded rows
 expanded and the cursor on the same key; the newest turn on the first
-`Set` and every turn that appears later are expanded whole (`ExpandDeep`),
-so the latest activity is visible without a keystroke. A header line names
-the session (`11111111 · hook · 3 turns · ~/.claude/projects/…`, `· ended`
-after SessionEnd; `scan` when discovery found it), a hint row closes the
-pane.
+`Set`, and every node that appears later — a new turn, but also a decision,
+call or file landing in the running turn — are expanded whole
+(`ExpandDeep`), while a row the user folded stays folded.
+
+**Following the tail (#2857).** The pane opens with the cursor on the
+newest row and keeps it there: while the cursor sits on the last row, every
+`Set` moves it onto the new last row, which scrolls the newest activity into
+view. Moving the cursor off the last row (keys, click, wheel, `Select`)
+stops following and the selection then stays put across updates; moving
+back onto the last row resumes it.
+
+A header line names the session and tells "no new lines" from "not
+reading": `11111111 · hook · 3 turns · read 14:05:09 +2 · ⇢ claude
+(focused)  ~/.claude/projects/…` — `scan` instead of `hook` when discovery
+found it, `· ended` after SessionEnd, the time of the last read with the
+number of events it added or completed (`+0` on an idle tick, `not read
+yet` before the first), and the followed terminal with why it was picked
+(`focused`, `last focused`, `hook-bound`, `tool pane`, `only terminal`, or
+`project root`). A hint row closes the pane.
 
 Keys: the tree's own (`j/k`, page keys, `space`/`l` expand, `h` fold or
 walk to the parent), `enter` opens the row's file — or folds/unfolds a row
@@ -327,15 +349,47 @@ binding when live, otherwise `agenttrace.Discover` on its cwd
 
 One `agenttrace.Reader` tails the located transcript. While the pane is open
 a one-second tick (`traceTickMsg`, generation-guarded like the other
-tickers) runs an incremental `Update()` and regroups the tree **off the
-loop** — at most one read in flight, and the on-loop side only ever sees the
-finished `[]Node`, so the reader's session is never shared. A read that
-added nothing leaves the pane untouched. The tick re-locates when the
-followed terminal changed, every fifth tick while nothing is found or the
-session has ended, and immediately on a hook push (`AgentEventMsg`), on the
-pane's `r`, when the pane is re-focused through its toggle, and after a
-hook install finished. Closing the pane ends the chain; a pane restored
-with the layout starts it from `Init`.
+tickers) runs an incremental read (`Reader.Read`) and regroups the tree
+**off the loop**; the on-loop side only ever sees the finished `[]Node`.
+The tick re-locates when the followed terminal (its key and cwd — never the
+reason, so focus moving from the agent pane to the editor costs nothing)
+changed, every fifth tick while nothing is found or the session has ended,
+and immediately on a hook push (`AgentEventMsg`), on the pane's `r`, when
+the pane is re-focused through its toggle, and after a hook install
+finished. Closing the pane ends the chain; a pane restored with the layout
+starts it from `Init`.
+
+The read side is built so that no lost message can freeze the pane (#2857):
+
+- **One read in flight**, and a read asked for meanwhile (a hook push or a
+  relocation landing mid-read) is remembered and runs the moment the
+  current one reports — a push's new lines never wait for the next tick.
+- **A read is applied by reader, not by generation.** A read of the current
+  `Reader` is shown even when a relocation started while it ran — its
+  events are consumed either way; only a read of a replaced reader is
+  dropped.
+- **The pane re-renders on revision, not on a count.** It rebuilds the tree
+  whenever the reader's `Revision()` differs from the one shown (or the
+  session facts changed), so a dropped result, or a completion that only
+  changed a row, still reaches the screen.
+- **Lost work is revived.** A read that never reported (its command
+  panicked; the crash guard swallows the message) stops blocking after
+  ten seconds — the reader serializes the two. A poll chain whose tick was
+  lost (the pane was in another workspace, a recovered panic) is restarted
+  by the next relocation, read or toggle once no tick was armed for three
+  intervals (`ensureTraceTick`).
+
+**Root cause of #2857** ("the pane does not update live"): the reading
+worked — the transcript was tailed every second — but the tree grew *below
+the fold*. The cursor stayed on the oldest turn, the view never scrolled,
+decisions arriving in the running turn came up collapsed, and during one
+long agent turn even the header's turn count stood still, so a growing
+session looked exactly like a frozen one. Following the tail, expanding new
+nodes and the header's read/`+N`/follow segments fix what the user sees;
+the chain defects above (dropped in-flight reads, the `added > 0` gate, a
+chain or busy flag that never recovered) were fixed with it. Hook delivery
+skips dead sockets without dialling (see
+[deep links](./deep-links.md#the-event-message-2843)).
 
 ### Change-feed links (#2838)
 
@@ -564,6 +618,17 @@ lookup → read → tree pipeline against a transcript under a temporary
 reading an appended turn without losing the selection (and dying when
 stale or after close), the empty state's actions, and the followed
 terminal (focused tool pane, last tool pane, hook binding, project root).
+`internal/app/agenttrace_live_test.go` (#2857) drives the real tick → read
+→ re-arm chain through a small goroutine runtime while a fake agent appends
+a turn every 100 ms: the tree grows within two ticks without a key press and
+follows the newest row with the editor focused, keeps a moved selection and
+a fold with the tool terminal focused, a `UserPromptSubmit` push with a
+stale `ike_pid` binds by cwd and reads before the next tick, an in-flight
+read survives a relocation, and a lost chain and a lost read recover.
+`reader_test.go` covers a transcript renamed over (same size) and rewritten
+in place, and a line arriving in many writes; `tracepanel_test.go` the
+tail-follow, new nodes in the running turn arriving expanded, and the
+header diagnostics.
 
 `internal/agenttrace/link_test.go` covers change-feed matching (#2838):
 path, window edges and slack, reads never linking, unattributed and
@@ -580,8 +645,10 @@ uninstall against a settings file with foreign hooks and unrelated keys
 binary with a quoted path, file creation, a group shared with foreign hooks,
 malformed files left untouched, and the marker matcher's compound/quoting
 cases. `internal/deeplink/event_test.go` covers the wire form, every
-validation refusal, the length cap, an open-only endpoint refusing events and
-owner-first routing; `cmd/ike/agenthook_test.go` the stdin → event mapping;
+validation refusal, the length cap, an open-only endpoint refusing events,
+owner-first routing, and delivery past six crashed instances' leftovers and
+a pid-alive-but-unbound socket (removed) and a refusing live instance (kept)
+in well under the hook timeout (#2857); `cmd/ike/agenthook_test.go` the stdin → event mapping;
 `internal/app/agenthooks_test.go` binding by pane key, by cwd, unmatched
 events, the discovery fallback and both commands against a temporary
 `CLAUDE_CONFIG_DIR`.

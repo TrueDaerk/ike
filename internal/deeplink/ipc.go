@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -31,6 +32,12 @@ const maxLinkLen = 8 * 1024
 // ipcTimeout bounds every client-side dial/write/read: the handler must never
 // hang on a dead instance's leftover socket.
 const ipcTimeout = 2 * time.Second
+
+// deliverBudget bounds one whole delivery across every candidate socket
+// (#2857): `ike agent-hook` runs under Claude Code's 5 s hook timeout, and a
+// directory of leftovers must not spend it before the live instance is
+// reached.
+const deliverBudget = 3 * time.Second
 
 // DefaultDir is the socket directory shared by every instance of this user:
 // $IKE_CONFIG_DIR/deeplink when the override is set (tests, portable setups —
@@ -200,17 +207,39 @@ func sockets(dir string) []string {
 	return socks
 }
 
-// deliverLine tries socks in order until one acknowledges line. A socket
-// nobody answers belongs to a dead instance: its files are removed on the way
-// so the directory never accumulates corpses.
+// deliverLine tries socks in order until one acknowledges line, within
+// deliverBudget. A socket whose process is gone, or that refuses the
+// connection, belongs to a dead instance: its files are removed on the way
+// so the directory never accumulates corpses — without a dial for the
+// first kind, which is what a crashed instance leaves (#2857). A live
+// instance that answered with an error or too slowly keeps its socket: it
+// is only skipped.
 func deliverLine(socks []string, line string) error {
+	deadline := time.Now().Add(deliverBudget)
 	for _, sock := range socks {
-		if sendLine(sock, line) {
-			return nil
+		if pid, ok := socketPID(sock); ok && !pidAlive(pid) {
+			removeDead(sock)
+			continue
 		}
-		removeDead(sock)
+		left := time.Until(deadline)
+		if left <= 0 {
+			break
+		}
+		switch sendLine(sock, line, min(ipcTimeout, left)) {
+		case sendOK:
+			return nil
+		case sendDead:
+			removeDead(sock)
+		}
 	}
 	return ErrNoInstance
+}
+
+// socketPID reads the pid out of an instance socket name (ike-<pid>.sock).
+func socketPID(sock string) (int, bool) {
+	name := strings.TrimSuffix(strings.TrimPrefix(filepath.Base(sock), "ike-"), ".sock")
+	pid, err := strconv.Atoi(name)
+	return pid, err == nil && pid > 0
 }
 
 // focusTime reads a socket's focus stamp, falling back to the socket's own

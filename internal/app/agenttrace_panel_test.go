@@ -66,7 +66,25 @@ func openTrace(t *testing.T, m Model) Model {
 			m = out.(Model)
 		}
 	}
+	traceToTop(m.agentTracePanel())
 	return m
+}
+
+// traceToTop walks the cursor up onto the first row, the way a user
+// browsing the history would — the pane opens on the newest row (#2857),
+// and the tests below navigate from the top.
+func traceToTop(p *tracepanel.Model) {
+	rows := p.Rows()
+	if len(rows) == 0 {
+		return
+	}
+	first := strings.TrimSpace(rows[0])
+	for range rows {
+		if cur := p.Current(); cur == nil || cur.Key == first {
+			return
+		}
+		p.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	}
 }
 
 func TestAgentTraceToggleLifecycle(t *testing.T) {

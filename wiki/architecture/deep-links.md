@@ -4,7 +4,7 @@ title: Deep Links (ike:// URL scheme)
 description: The ike:// URL scheme — parse/normalise/resolve in internal/deeplink, per-instance socket hand-off, history→projects-dir→clone resolution, file/tool payload after the switch, the group= form that opens a project group and lands on a member (#2576), OS registration per platform (#2396), the socket's `event` message for agent hook pushes (#2843)
 resource: internal/deeplink
 tags: [deeplink, url-scheme, ipc, project-switching, agents]
-timestamp: 2026-09-30T20:00:00Z
+timestamp: 2026-10-01T12:00:00Z
 ---
 
 # Deep Links (ike:// URL scheme)
@@ -57,7 +57,12 @@ The socket accepts exactly two message forms, one line each under a shared
 anything else is answered with an error and dropped, and the receiver
 re-parses the URL before acting. A sidecar `.focus` stamp file (touched on
 `tea.FocusMsg`) marks the most recently focused instance; `deeplink.Send`
-tries sockets newest-stamp-first and removes dead ones as it goes.
+tries sockets newest-stamp-first and removes dead ones as it goes (#2857): a
+socket whose pid (`ike-<pid>.sock`) no longer exists is unlinked without a
+dial, one that refuses the connection is unlinked after it, and a live
+instance that answers with an error or too slowly is skipped but keeps its
+socket. One delivery spends at most 3 s across all candidates, inside the
+5 s Claude Code allows the agent hook.
 `deeplink.ServeHandlers` takes one handler per form (`Handlers{Open, Event}`);
 a nil handler refuses its form, and `deeplink.Serve` is the open-only wrapper.
 
