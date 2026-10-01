@@ -89,15 +89,19 @@ func TestAgentTraceSubagentEditsLinkAndAsk(t *testing.T) {
 	if m.traceLinks.Path(target) != "e2/a2/f0" || p.Links().Node("e2/a2/f0") != target {
 		t.Fatalf("links = %+v", m.traceLinks)
 	}
-	diffMsg, ok := p.Update(tea.KeyPressMsg{Code: 'D', Text: "D"})().(tracepanel.ChangeDiffMsg)
-	if !ok || diffMsg.Path != target {
+	diffMsg, ok := p.Update(tea.KeyPressMsg{Code: 'D', Text: "D"})().(tracepanel.DiffMsg)
+	if !ok || diffMsg.Linked != target || diffMsg.Key != "e2/a2/f0" {
 		t.Fatalf("D = %#v", diffMsg)
 	}
 	revMsg, ok := p.Update(tea.KeyPressMsg{Code: 'V', Text: "V"})().(tracepanel.ChangeRevertMsg)
 	if !ok || revMsg.Path != target {
 		t.Fatalf("V = %#v", revMsg)
 	}
-	out, _ = m.Update(diffMsg)
+	m = runTraceDiff(t, m, diffMsg)
+	if !m.traceDiffOpen() {
+		t.Fatal("D must open the diff view")
+	}
+	out, _ = m.Update(tea.KeyPressMsg{Code: 'f', Text: "f"})
 	m = out.(Model)
 	if sel, _ := m.changeFeedSel(); !m.changeFeedOpen() || sel.Path != target {
 		t.Fatalf("feed open=%v on %q", m.changeFeedOpen(), sel.Path)

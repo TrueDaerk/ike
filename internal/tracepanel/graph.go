@@ -452,7 +452,7 @@ func (m *Model) detailLines(st agenttrace.Stop, width int) []string {
 		if st.Ref.Line > 0 {
 			where += ":" + itoa(st.Ref.Line)
 		}
-		diff := "no diff recorded"
+		diff := "line counts unknown"
 		if st.HasDiff {
 			diff = "+" + itoa(st.Added) + " −" + itoa(st.Removed)
 		}
@@ -770,4 +770,4 @@ func (m *Model) drawConnector(c *canvas, prev, s Slot) {
 }
 
 // graphHint is the key line under the graph.
-const graphHint = "h/l along the path · j/k rows · enter open · space expand · t tree · a ask · r rescan · Δ: D diff · V revert"
+const graphHint = "h/l along the path · j/k rows · enter open · space expand · t tree · D diff · a ask · r rescan · Δ: V revert"

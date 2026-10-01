@@ -339,9 +339,14 @@ func capOutput(s string) (string, bool) {
 // structuredResult is the part of Claude Code's toolUseResult the parser
 // uses to sharpen a FileRef after the fact.
 type structuredResult struct {
-	Type            string `json:"type"`
-	FilePath        string `json:"filePath"`
-	AgentID         string `json:"agentId"`
+	Type     string `json:"type"`
+	FilePath string `json:"filePath"`
+	AgentID  string `json:"agentId"`
+	File     *struct {
+		StartLine  int `json:"startLine"`
+		NumLines   int `json:"numLines"`
+		TotalLines int `json:"totalLines"`
+	} `json:"file"`
 	StructuredPatch []struct {
 		OldStart int `json:"oldStart"`
 		NewStart int `json:"newStart"`
@@ -353,8 +358,8 @@ type structuredResult struct {
 // alone). A Write is a create or — on an existing file, type "update" — an
 // edit of the whole file (#2861); an edit's line comes from the recorded
 // patch, which beats any search of the file; an Agent call learns the id of
-// the subagent it spawned. File-changing calls keep the object for the
-// diffs.
+// the subagent it spawned; a Read learns the window of the file it
+// returned. File-changing calls keep the object for the diffs (#2859).
 func (p *Parser) refine(tool *Tool, raw json.RawMessage) {
 	if len(raw) == 0 || raw[0] != '{' {
 		return
@@ -366,6 +371,11 @@ func (p *Parser) refine(tool *Tool, raw json.RawMessage) {
 	switch tool.Name {
 	case "Agent", "Task":
 		tool.AgentID = sr.AgentID
+		return
+	case "Read":
+		if f := sr.File; f != nil {
+			tool.Span = &ReadSpan{Start: f.StartLine, Lines: f.NumLines, Total: f.TotalLines}
+		}
 		return
 	}
 	if len(tool.Paths) == 0 {

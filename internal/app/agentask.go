@@ -218,6 +218,17 @@ func (m Model) traceAskHunk(node *agenttrace.Node) string {
 	return agentask.Hunk(e.Before, after)
 }
 
+// askSessionHunk is the hunk the ask context carries: the change feed's
+// (feed) when the node links to an entry, else the one reconstructed from
+// the transcript (#2859). Runs off the loop — the reconstruction may read
+// the file on disk.
+func askSessionHunk(s *agenttrace.Session, node *agenttrace.Node, feed string) string {
+	if feed != "" || s == nil || node == nil {
+		return feed
+	}
+	return agentask.SessionHunk(s, node.Key)
+}
+
 // closeAgentAsk dismisses the prompt or answer, cancelling a running fork.
 func (m *Model) closeAgentAsk() {
 	if s := m.agentAsk; s != nil && s.cancel != nil {
@@ -255,7 +266,7 @@ func (m *Model) startAgentAsk(question string) tea.Cmd {
 			// their calls (#2861).
 			parsed, _ := agenttrace.Load(transcript)
 			c = agentask.NodeContext(parsed, node)
-			c.Hunk = hunk
+			c.Hunk = askSessionHunk(parsed, node, hunk)
 		}
 		argv := agentask.Command(sess.ID, opts, agentask.Prompt(c, question))
 		res, err := agentask.Run(ctx, sess.CWD, argv)

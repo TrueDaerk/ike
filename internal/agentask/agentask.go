@@ -319,6 +319,25 @@ func Hunk(before, after string) string {
 	return capHunk(UnifiedHunks(diff.Compute(before, after), MaxHunkLines))
 }
 
+// SessionHunk is the context diff of the change keyed key, reconstructed
+// from the session (#2859) — the fallback for a node no change-feed entry
+// links to. Whole contents go through Hunk; recorded or placed hunks are
+// capped the same way. "" when the session has no diff for the key.
+func SessionHunk(s *agenttrace.Session, key string) string {
+	d, ok := agenttrace.DiffFor(agenttrace.Diffs(s), key)
+	switch {
+	case !ok:
+		return ""
+	case d.HasBefore && d.HasAfter:
+		return Hunk(d.Before, d.After)
+	}
+	lines := strings.Split(d.Unified(), "\n")
+	if len(lines) > MaxHunkLines {
+		lines = append(lines[:MaxHunkLines], "…")
+	}
+	return capHunk(strings.Join(lines, "\n"))
+}
+
 // capHunk clips each hunk line to MaxHunkLine runes and the whole to
 // MaxHunkBytes, cutting at a line boundary with a trailing "…" line.
 func capHunk(h string) string {

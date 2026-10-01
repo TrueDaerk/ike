@@ -154,10 +154,11 @@ func TestEnterOpensFileNodeAndTogglesOthers(t *testing.T) {
 	}
 	// The rendered row shows the path without a line.
 	view := plain(m.View())
-	if !strings.Contains(view, "create  /Users/dev/src/proj/hello.go\n") && !strings.Contains(view, "create  /Users/dev/src/proj/hello.go ") {
+	// A reconstructed diff (#2859) puts its line counts in the detail.
+	if !strings.Contains(view, "create +1 −0  /Users/dev/src/proj/hello.go") {
 		t.Fatalf("create row:\n%s", view)
 	}
-	if !strings.Contains(view, "edit  /Users/dev/src/proj/main.go:3") {
+	if !strings.Contains(view, "edit +1 −0  /Users/dev/src/proj/main.go:3") {
 		t.Fatalf("edit row:\n%s", view)
 	}
 	if !strings.Contains(view, "Bash Build and vet the module ✗ error") {
@@ -253,7 +254,7 @@ func TestLinkedRowsMarkDiffRevertAndSelect(t *testing.T) {
 	if m.Select("e999") {
 		t.Fatal("select of an unknown key succeeded")
 	}
-	if msg, ok := send(m, "D").(ChangeDiffMsg); !ok || msg.Path != target {
+	if msg, ok := send(m, "D").(DiffMsg); !ok || msg.Linked != target || msg.Path != target {
 		t.Fatalf("D = %#v", msg)
 	}
 	if msg, ok := send(m, "V").(ChangeRevertMsg); !ok || msg.Path != target {
@@ -261,8 +262,12 @@ func TestLinkedRowsMarkDiffRevertAndSelect(t *testing.T) {
 	}
 	// Selection and expansion survive a relink; Reset forgets the links.
 	m.SetLinks(agenttrace.Links{})
-	if m.Current().Key != "e4/f0" || send(m, "D") != nil {
-		t.Fatal("unlinking must keep the selection and silence D")
+	if m.Current().Key != "e4/f0" || send(m, "V") != nil {
+		t.Fatal("unlinking must keep the selection and silence V")
+	}
+	// D still answers (#2859): the diff is reconstructed from the transcript.
+	if msg, ok := send(m, "D").(DiffMsg); !ok || msg.Key != "e4/f0" || msg.Linked != "" {
+		t.Fatalf("unlinked D = %#v", msg)
 	}
 	m.Reset()
 	if m.Links().Len() != 0 || m.Nodes() != nil {
