@@ -97,8 +97,11 @@ func TestMiniDiffEmphasisOff(t *testing.T) {
 
 func TestMiniDiffEmphasisTruncatesBalanced(t *testing.T) {
 	pal := theme.DefaultPalette()
-	left := "start " + strings.Repeat("a", 40)
-	right := "start " + strings.Repeat("b", 40)
+	// The changed token stays under the whole-line fallback share (#2849)
+	// thanks to the long unchanged tail, so the pair carries spans.
+	tail := " and a long unchanged tail"
+	left := "start with " + strings.Repeat("a", 20) + tail
+	right := "start with " + strings.Repeat("b", 20) + tail
 	res := diff.Compute(left+"\n", right+"\n")
 	const width = 20
 	for _, l := range renderMiniDiff(pal, res, width, true) {

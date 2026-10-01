@@ -304,13 +304,13 @@ func TestHorizontalScrollUnified(t *testing.T) {
 }
 
 func TestSpansSurviveHorizontalOffset(t *testing.T) {
-	// A changed pair differing only in a late rune: the intra-line emphasis
-	// must land on that rune after the view scrolled right.
+	// A changed pair differing only in a late one-rune token: the intra-line
+	// emphasis must land on that rune after the view scrolled right.
 	pal := theme.DefaultPalette()
 	m := NewFiles("diff", "/tmp/left.txt", "/tmp/right.txt", pal)
 	m.SetSize(30, 10)
-	prefix := strings.Repeat("x", 40)
-	m.SetContents(prefix+"L"+prefix, prefix+"R"+prefix)
+	prefix := strings.Repeat("x", 39)
+	m.SetContents(prefix+" L "+prefix, prefix+" R "+prefix)
 	m.ScrollXBy(35)
 	want := lipgloss.NewStyle().Background(pal.DiffAddedEmph).Bold(true).Render("R")
 	if !strings.Contains(m.View(), want) {
