@@ -32,6 +32,7 @@ bring their own.
 | Agent Trace: Install Claude Hooks | `agent.hooks.install` | — | — | everywhere |
 | Agent Trace: Uninstall Claude Hooks | `agent.hooks.uninstall` | — | — | everywhere |
 | Agent Trace | `agent.trace.toggle` | `cmd+alt+shift+a` | — | everywhere |
+| Agent Trace: Graph / Tree View | `agent.trace.view` | — | — | everywhere |
 | Extract Whole Archive… | `archive.extractAll` | — | — | everywhere |
 | Extract Selected Archive Entry… | `archive.extractEntry` | — | — | everywhere |
 | Reload Archive Listing | `archive.reload` | `ctrl+r` | — | everywhere |

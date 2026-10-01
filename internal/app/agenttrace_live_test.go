@@ -101,6 +101,8 @@ func liveTrace(t *testing.T) (Model, *traceLoop, string) {
 
 	l := newTraceLoop()
 	m = l.send(m, AgentTraceToggleMsg{})
+	// The live tests read the tree; the pane opens in the graph (#2858).
+	m.agentTracePanel().SetViewMode(tracepanel.ViewTree)
 	m = l.pump(t, m, 5*time.Second, nil, func(m Model) bool { return m.agentTracePanel().Info().Turns == 1 })
 	return m, l, path
 }

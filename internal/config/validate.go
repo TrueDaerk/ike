@@ -140,6 +140,8 @@ var (
 	whitespaceModes = map[string]bool{"none": true, "trailing": true, "all": true}
 	// timelineSources are the history.timeline_source values (#1916).
 	timelineSources = map[string]bool{"both": true, "local": true, "git": true}
+	// agentTraceViews are the agent.trace.view values (#2858).
+	agentTraceViews = map[string]bool{"graph": true, "tree": true}
 	// forgeNotifyStyles are the forge.notify.* values (#2086).
 	forgeNotifyStyles = map[string]bool{"dialog": true, "badge": true, "toast": true, "off": true}
 	// popupCwds are the terminal.popup_cwd values (#2316).
@@ -1040,6 +1042,11 @@ func validate(c *Config) []Diagnostic {
 	if c.Agent.Ask.MaxTurns < 1 || c.Agent.Ask.MaxTurns > 5 {
 		diags = append(diags, Diagnostic{Field: "agent.ask.max_turns", Message: fmt.Sprintf("max_turns %d out of range (1\u20135), using 1", c.Agent.Ask.MaxTurns)})
 		c.Agent.Ask.MaxTurns = 1
+	}
+	// agent.trace.view (#2858) is the trace pane's opening view.
+	if !agentTraceViews[c.Agent.Trace.View] {
+		diags = append(diags, Diagnostic{Field: "agent.trace.view", Message: fmt.Sprintf("unknown view %q, using \"graph\"", c.Agent.Trace.View)})
+		c.Agent.Trace.View = "graph"
 	}
 
 	diags = append(diags, validateProjectGroups(c)...)

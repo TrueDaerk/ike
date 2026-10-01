@@ -438,7 +438,16 @@ type ESEndpoint struct {
 
 // Agent holds the coding-agent integration settings (epic 0540).
 type Agent struct {
-	Ask AgentAsk `toml:"ask"`
+	Ask   AgentAsk   `toml:"ask"`
+	Trace AgentTrace `toml:"trace"`
+}
+
+// AgentTrace configures the Agent Trace tool window (#2858). View is the
+// view the pane opens in: "graph" (the change path as a snake of boxes, the
+// default) or "tree" (turn → decision → tool → file); the pane's 't' and
+// agent.trace.view switch for the running IKE session without touching it.
+type AgentTrace struct {
+	View string `toml:"view"`
 }
 
 // AgentAsk configures agent.ask (#2845): the question about a trace node

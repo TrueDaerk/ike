@@ -1,10 +1,10 @@
 ---
 type: architecture
 title: Agent Trace
-description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, subagent transcripts joined under their Agent call and `Write` on an existing file as an edit (#2861), and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840), the links from writing file nodes to change-feed entries with diff/revert and the feed's jump back (#2838), and `agent.ask` — a question about a node answered by a fork of the same session on a cheaper model, with its node context, settings and answer overlay (internal/agentask, #2845), and follow-up questions on the same fork, fork tagging and the trimmed context (#2844), plus keybinds and limitations (other harnesses) (#2839).
+description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, subagent transcripts joined under their Agent call and `Write` on an existing file as an edit (#2861), and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840), its graph view — the session as a snake path of prompt, change and answer boxes with expand-in-place, the `agent.trace.view` setting and the tree toggle (#2858), the links from writing file nodes to change-feed entries with diff/revert and the feed's jump back (#2838), and `agent.ask` — a question about a node answered by a fork of the same session on a cheaper model, with its node context, settings and answer overlay (internal/agentask, #2845), and follow-up questions on the same fork, fork tagging and the trimmed context (#2844), plus keybinds and limitations (other harnesses) (#2839).
 resource: internal/agenttrace
 tags: [architecture, agents, claude, transcript, trace, discovery, hooks, tool-window, hiertree, change-feed, ask, settings]
-timestamp: 2026-10-01T15:00:00Z
+timestamp: 2026-10-01T18:00:00Z
 ---
 
 # Agent Trace
@@ -402,6 +402,98 @@ with the 0-based line (−1 when unknown), which the root model routes into
 `ike://open` deep link, so navigation history, the Source-view switch and
 the focused-pane rules all apply.
 
+### Graph view (#2858)
+
+The tree answers "what happened"; the **graph** answers "what changed",
+and it is the view the pane opens in (setting `agent.trace.view`, Settings
+UI page *Agent Trace*, `graph` by default; `tree` opens the tree). It draws
+the session as a path of boxes: for every turn the prompt, then one box
+per file a tool call created, wrote, edited or deleted, in order, then the
+agent's answer — and the next turn continues the path. Reasoning and the
+tool calls are secondary: they live *inside* a change box and show on
+expand.
+
+```
+┌?─────────────────────┐   ┌✎─────────────────────┐   ┌+─────────────────────┐
+│#1 Add a greeting to …│──▶│main.go               │──▶│hello.go              │
+└─ 14:00 ──────────────┘   └─ edit :3 +1 −0 ──────┘   └─ create ─────────────┘
+                                                                  ▼
+┌✓─────────────────────┐   ┌✕─────────────────────┐   ┌✎─────────────────────┐
+│I'll read main.go, th…│◀──│notes.ipynb           │◀──│main.go               │
+└─ ended on a tool ca…─┘   └─ delete ─────────────┘   └─ edit :2 ×2 ─────────┘
+            ▼
+┌?─────────────────────┐         ┌✓─────────────────────┐
+│#2 /verify main.go    │──▶─◇───▶│Done: main.go greets,…│
+└─ 14:01 ──────────────┘         └─ 14:02 ──────────────┘
+```
+
+**Path model.** `agenttrace.BuildPath(session) []Stop` is the pure
+reduction (`path.go`), rebuilt from the same `Session` on every read like
+the tree. A `Stop` is a prompt (`t<turn>`, `#<turn> <first line>`, the
+whole text in `Text`), a change (the file node's key `e<i>/f<n>` — a
+subagent's `e<i>/a<j>/f<n>` — so the change-feed links of #2838 apply
+unchanged; label the file name, detail `edit :12`, `create`, `delete`,
+`×2` for several edits of one file in one call, `+12 −3` when the result
+recorded a patch, `✗` on a failed call, `…` while pending; `Calls` and
+`Context` carry the call(s) and the assistant text/reasoning that preceded
+it in the turn), an answer (`t<turn>/end`, stable whether the turn's final
+text exists yet: `Implicit` when the turn ended on a tool call, `Pending`
+for the last turn until the next prompt lands or the host's `Settle`
+marks the session ended) or a separator (`e<i>`, a compaction, drawn as a
+`◇` marker on the path, not selectable). Consecutive calls to the same
+file are separate boxes; several edits inside one call stay one. Prompt
+and answer labels are the first non-empty line with whitespace collapsed
+(`Collapse`), system reminders already stripped by the parser.
+
+**Layout.** `tracepanel/snake.go` is pure over widths: `BoxWidth(paneW)`
+picks the box width — as many boxes per row as keep each at least 22
+cells, else at least 18, capped at 28; a pane narrower than two 18-cell
+boxes is a single column of full-width boxes — and `Snake(widths, paneW,
+expanded, detailH)` places the slots: left-to-right from the top-left, a
+turn down when the next box would not fit, then right-to-left, and so on
+(boustrophedon). The first box of a row sits directly under the last box
+of the row before (sharing the edge the path came from), so a turn is one
+`▼` in the row between; boxes on a row join with `──▶` / `◀──`. Boxes are
+three rows — top border with the kind glyph (`?` prompt, `✎` edit/write,
+`+` create, `✕` delete, `✓` answer, `✗` failed call, `…` pending; the `Δ`
+of a linked change sits before the right corner), the label, the detail
+set into the bottom border — so kinds read without colour; the border
+colour (accent, warning, success, error, info) adds the second cue. The
+expanded box's detail block is inserted beneath its row and pushes the
+rows below down. The renderer draws onto a cell canvas (`graph.go`) and
+the mouse hit test (`Layout.At`) reads the same slots.
+
+**Selection and keys.** One box is selected; `h`/`l` (`left`/`right`)
+walk the path, skipping separators, `j`/`k` (`down`/`up`) jump to the
+nearest box on the row below/above on screen (`Layout.Below`/`Above`),
+`g`/`G` the first/last box, page keys scroll. `enter` on a change box
+opens the file at the line (`OpenLocationMsg`, the click-to-code pipeline
+above); a second `enter` on the same box, or `space`, expands it in place
+into the detail block — the call(s) with name, title and status, the
+preceding assistant text (`›` lines), the location with the patch summary
+and the Δ mark, and the keys — `space` again collapses, and only one box
+is expanded at a time (`esc` collapses too). `enter` on a prompt or answer
+box shows the whole text markdown-rendered in the floating shell
+(`ShowTextMsg` → `openTraceText`, the ask overlay's renderer). `D` / `V` /
+`a` act on the box like on a tree row: the box's key is the file node's
+key, so a linked change box answers the feed's mini-diff and revert, and
+`Current()` presents the box as a node (a change as its file node) for
+`agent.ask` and the links. `t` toggles graph ↔ tree in either view
+(`agent.trace.view` from the palette does the same; it stays palette-only
+because `t` is the pane's own key, recorded in the keybind ledger); the
+pane remembers the pick for the running IKE session, so a reopened pane
+comes back in the view it was closed in, and the setting is the default
+for a fresh session. Mouse: a click selects, a second click within the
+double-click window opens, the wheel scrolls.
+
+**Live updates.** `SetPath` installs every read's path next to the tree:
+the selected and the expanded box survive by key; while *following* — the
+newest box selected and the window at the end — the selection moves onto
+the newest box and the newest turn scrolls into view; a wheel up, or
+moving the selection off the newest box, parks the window until the user
+returns to the end (`G`). The feed's back-link (`Select`) lands on the
+change box, also when it names the tool node's key.
+
 ### Following the agent pane and reading live
 
 The trace follows one terminal, picked on every lookup (`traceTargetNow`):
@@ -645,8 +737,11 @@ Every fork IKE creates is kept out of the trace three ways:
 | `cmd+alt+shift+a` | `agent.trace.toggle` | global; also in the Tools menu |
 | `cmd+alt+shift+q` | `agent.ask` | global; `a` inside the trace pane |
 
-In-pane keys (`enter`, `r`, `i`, `D`, `V`, `a`) are listed under
-[Pane](#pane); the answer overlay's `f` / `ctrl+n` under
+`agent.trace.view` (graph ↔ tree, #2858) is palette-only: the pane's own
+`t` is the binding, as the keybind ledger records.
+
+In-pane keys (`enter`, `r`, `i`, `D`, `V`, `a`, `t`) are listed under
+[Pane](#pane) and [Graph view](#graph-view-2858); the answer overlay's `f` / `ctrl+n` under
 [Follow-up questions](#follow-up-questions); the feed's `t` under
 [Change-feed links](#change-feed-links-2838).
 
@@ -694,6 +789,30 @@ read survives a relocation, and a lost chain and a lost read recover.
 in place, and a line arriving in many writes; `tracepanel_test.go` the
 tail-follow, new nodes in the running turn arriving expanded, and the
 header diagnostics.
+
+The graph view (#2858): `internal/agenttrace/path_test.go` reduces
+`basic.jsonl` to the expected stop sequence (prompt, changes in order with
+ops and patch counts, the implicit answer of a turn that ended on a tool
+call, the separator, the explicit answer), the stops' refs, calls and
+context, the pending answer of a running turn and key stability across
+an append, ask turns and read-only calls left out; `internal/tracepanel/graph_test.go`
+the snake at widths 40/80/120 (row 1 left→right, row 2 right→left, …,
+rows joined under the last box, no box cut at the border, `j`/`k`
+neighbours), the single column below two boxes and the expanded row
+pushing the rows below down, the rendered boxes, connectors and glyphs,
+the keys (`h/l/j/k/g/G`, `enter` open / second `enter` and `space`
+expand, `ShowTextMsg` on prompt and answer, separators skipped), linked
+boxes answering `D`/`V`/`a` and `Select` by file or tool key, selection and
+expansion surviving a live append with a pending answer settling, the
+newest-turn auto-scroll parked by a wheel up, click/double-click/wheel
+against the drawn geometry, and the kinds telling apart by glyph;
+`internal/app/agenttrace_graph_test.go` the pane opening in the configured
+view, `agent.trace.view` and `t` toggling with the pick remembered for a
+reopened pane, a live append in graph mode keeping the selected and
+expanded box, enter opening the editor at the hunk line and the prompt
+text in the shell; `internal/config/agent_trace_validate_test.go` and
+`internal/settings/agent_trace_test.go` the setting's validation, Settings
+UI entry and persistence.
 
 `internal/agenttrace/subagent_test.go` (#2861) parses `edits.jsonl` —
 `Edit` with a string (rejected) result in a line that also has a thinking

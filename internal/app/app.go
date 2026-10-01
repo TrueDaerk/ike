@@ -1043,6 +1043,11 @@ type Model struct {
 	// a node key the next read selects (a jump that had to open the pane).
 	traceLinks agenttrace.Links
 	traceJump  string
+	// traceView is the trace pane's view for this IKE session (#2858): the
+	// agent.trace.view setting until the user toggled, then the toggle's
+	// pick — a reopened pane comes back in the view it was closed in.
+	traceView    tracepanel.ViewMode
+	traceViewSet bool
 	// The project.open_link paste prompt (#2396): one URL line.
 	dlLinkOpen bool
 	dlLinkText ui.Field
@@ -6584,6 +6589,17 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// agent.trace.toggle (#2840): the tool-window state machine over the
 		// followed agent pane's transcript.
 		return m, m.toggleAgentTracePanel()
+
+	case AgentTraceViewMsg:
+		// agent.trace.view (#2858), also 't' in the pane: graph ↔ tree.
+		m.toggleTraceView()
+		return m, nil
+
+	case tracepanel.ShowTextMsg:
+		// Enter on a prompt or answer box of the graph (#2858): the whole
+		// text, markdown-rendered, in the floating shell.
+		m.openTraceText(msg)
+		return m, nil
 
 	case AgentAskMsg, tracepanel.AskMsg:
 		// agent.ask (#2845), also 'a' in the trace pane: ask a fork of the
