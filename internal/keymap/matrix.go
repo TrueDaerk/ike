@@ -316,6 +316,12 @@ var reachableAlternatives = map[string]string{
 	// #2628: the diff viewer's copy joins the same family — its pane-local
 	// "y" delivers on every terminal, next to the palette.
 	"diff.copy": "diff pane \"y\" / palette",
+	// Review changes (#2848): the whole-file steps are modified F-keys —
+	// delivered off macOS, fragile there — and the opener a cmd+alt+shift
+	// chord; the pane's "f" picker, the VCS panel's r / shift+enter and
+	// the palette reach both.
+	"diff.nextFile":      "diff pane \"f\" picker / palette",
+	"diff.reviewChanges": "VCS panel r / palette",
 }
 
 // StatusMatrix builds the ledger over the default table. commandExists

@@ -99,6 +99,20 @@ var jetbrainsRows = []row{
 	// n/N remain the vim-flavored equivalents inside the pane.
 	{"f7", "diff.nextChange", "Next change (diff)", Diff, "Diff (0340)"},
 	{"shift+f7", "diff.prevChange", "Previous change (diff)", Diff, "Diff (0340)"},
+	// Review changes (#2848): whole-file steps are the f7 pair with the
+	// platform modifier — cmd+f7 / cmd+shift+f7 on macOS (ctrl+f7 is a
+	// system shortcut there, like ctrl+f8 above), ctrl+f7 / ctrl+shift+f7
+	// everywhere (the Cmd→Ctrl fold lands on the same rows off macOS).
+	{"cmd+f7", "diff.nextFile", "Next file (diff review)", Diff, "Diff review (#2848)"},
+	{"ctrl+f7", "diff.nextFile", "Next file (diff review)", Diff, "Diff review (#2848)"},
+	{"cmd+shift+f7", "diff.prevFile", "Previous file (diff review)", Diff, "Diff review (#2848)"},
+	{"ctrl+shift+f7", "diff.prevFile", "Previous file (diff review)", Diff, "Diff review (#2848)"},
+	// Opening the review: "m" for modifications on the cmd+alt+shift layer
+	// the other VCS-wide entry points use, with the delivered ctrl
+	// secondary — both letters free of the fold on every platform and of
+	// option-combos on a German QWERTZ layout.
+	{"cmd+alt+shift+m", "diff.reviewChanges", "Review changes against HEAD", Global, "Diff review (#2848)"},
+	{"ctrl+alt+shift+m", "diff.reviewChanges", "Review changes against HEAD", Global, "Diff review (#2848)"},
 	// JetBrains' call-hierarchy chord (#173).
 	{"ctrl+alt+h", "lsp.callHierarchy", "Call hierarchy", Editor, "LSP (0100)"},
 	// Inheritance navigation (#1455), JetBrains-macOS chords verbatim: cmd+u

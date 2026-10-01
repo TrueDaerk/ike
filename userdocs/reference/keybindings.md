@@ -153,6 +153,8 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Return from peek | `ctrl+shift+b` | `ctrl+shift+b` | `project.peek.return` |
 | Reveal open file in explorer | `alt+f1` | `alt+f1` | `explorer.reveal` |
 | Revert file | `cmd+alt+z` | `ctrl+alt+z` | `vcs.revertFile` |
+| Review changes against HEAD | `cmd+alt+shift+m` | `ctrl+alt+shift+m` | `diff.reviewChanges` |
+| Review changes against HEAD | `ctrl+alt+shift+m` | `ctrl+alt+shift+m` | `diff.reviewChanges` |
 | Run file | `shift+f10` | `shift+f10` | `run.file` |
 | Run to cursor | `alt+f9` | `alt+f9` | `debug.runToCursor` |
 | Run/Debug configurations | `alt+shift+f10` | `alt+shift+f10` | `run.select` |
@@ -341,8 +343,12 @@ Active when a diff pane has focus.
 | Copy diff selection or hunk | `cmd+c` | `ctrl+c` | `diff.copy` |
 | New empty editor tab | `ctrl+t` | `ctrl+t` | `editor.tab.new` |
 | Next change (diff) | `f7` | `f7` | `diff.nextChange` |
+| Next file (diff review) | `cmd+f7` | `ctrl+f7` | `diff.nextFile` |
+| Next file (diff review) | `ctrl+f7` | `ctrl+f7` | `diff.nextFile` |
 | Pin/unpin tab | `alt+shift+p` | `alt+shift+p` | `editor.tab.togglePin` |
 | Previous change (diff) | `shift+f7` | `shift+f7` | `diff.prevChange` |
+| Previous file (diff review) | `cmd+shift+f7` | `ctrl+shift+f7` | `diff.prevFile` |
+| Previous file (diff review) | `ctrl+shift+f7` | `ctrl+shift+f7` | `diff.prevFile` |
 
 ## Palette
 

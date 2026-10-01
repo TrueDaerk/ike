@@ -1016,6 +1016,9 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("diff.nextChange", "Next Change (Diff)", DiffStepMsg{Delta: 1}),
 			appCommand("diff.prevChange", "Previous Change (Diff)", DiffStepMsg{Delta: -1}),
 			paneCommand("diff.copy", "Diff: Copy Selection or Hunk", "diff", DiffCopyMsg{}),
+			withAliases(appCommand("diff.reviewChanges", "Review Changes Against HEAD", ReviewChangesMsg{}), "review all", "working tree diff"),
+			paneCommand("diff.nextFile", "Next File (Diff Review)", "diff", DiffFileStepMsg{Delta: 1}),
+			paneCommand("diff.prevFile", "Previous File (Diff Review)", "diff", DiffFileStepMsg{Delta: -1}),
 		), append(append(append(append(scratchCommands(), toolCommands()...), memoryCommands()...), perfCommands()...), esCommands()...)...),
 	}
 }
