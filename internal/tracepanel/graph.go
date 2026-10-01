@@ -746,9 +746,11 @@ func (m *Model) graphRows(pal *theme.Palette) []string {
 	return rows
 }
 
-// drawBox draws one 3-row box: the top border carrying the kind glyph (and
-// the Δ mark of a linked change), the label, the detail set into the bottom
-// border.
+// drawBox draws one 4-row box (#2872): the top border carrying the kind
+// glyph (and the Δ mark of a linked change), the label, the detail (faint)
+// and a closed bottom border with no text in it — only the expanded box's
+// "┴" marks where its detail block attaches. The selection covers both
+// content rows.
 func (m *Model) drawBox(c *canvas, st agenttrace.Stop, s Slot, i int) {
 	style, glyph := stopStyle(st)
 	w := s.W
@@ -764,42 +766,33 @@ func (m *Model) drawBox(c *canvas, st agenttrace.Stop, s Slot, i int) {
 		c.put(s.X+w-2, s.Y, linkMark, style, 0)
 	}
 	c.put(s.X+w-1, s.Y, "┐", style, 0)
-	// Label row.
-	c.put(s.X, s.Y+1, "│", style, 0)
-	c.put(s.X+w-1, s.Y+1, "│", style, 0)
-	label := fitCells(st.Label, w-2)
+	// Label and detail rows.
+	for y := s.Y + 1; y <= s.Y+2; y++ {
+		c.put(s.X, y, "│", style, 0)
+		c.put(s.X+w-1, y, "│", style, 0)
+	}
 	labelSt := stPlain
 	if (st.Pending && st.Kind == agenttrace.StopAnswer) || st.Kind == agenttrace.StopRewind {
 		labelSt = stFaint
 	}
-	c.put(s.X+1, s.Y+1, label, labelSt, w-2)
+	c.put(s.X+1, s.Y+1, fitCells(st.Label, w-2), labelSt, w-2)
+	c.put(s.X+1, s.Y+2, fitCells(st.Detail, w-2), stFaint, w-2)
 	if st.Key == m.graph.sel {
 		sel := stSelected
 		if !m.focused {
 			sel = stSelectedMuted
 		}
 		c.restyle(s.X+1, s.Y+1, w-2, sel)
+		c.restyle(s.X+1, s.Y+2, w-2, sel)
 	}
-	// Bottom border with the detail: "└─ detail ─┘", the detail cut to
-	// leave a space and at least one "─" on either side, so the frame stays
-	// closed at every width (#2866).
-	c.put(s.X, s.Y+2, "└", style, 0)
-	c.fill(s.X+1, s.Y+2, w-2, "─", style)
+	// Bottom border.
+	c.put(s.X, s.Y+3, "└", style, 0)
+	c.fill(s.X+1, s.Y+3, w-2, "─", style)
 	if st.Key == m.graph.expanded {
-		c.put(s.X+1, s.Y+2, "┴", style, 0)
+		c.put(s.X+1, s.Y+3, "┴", style, 0)
 	}
-	if d := st.Detail; d != "" && w >= detailMinW {
-		c.put(s.X+2, s.Y+2, " "+fitCells(d, w-detailFrameW)+" ", stFaint, w-4)
-	}
-	c.put(s.X+w-1, s.Y+2, "┘", style, 0)
+	c.put(s.X+w-1, s.Y+3, "┘", style, 0)
 }
-
-// detailFrameW is the cells of a bottom border that are not detail text:
-// "└─ " and " ─┘"; detailMinW the narrowest box that still shows a detail.
-const (
-	detailFrameW = 6
-	detailMinW   = detailFrameW + 1
-)
 
 // drawTurnRule draws the faint "── #<turn> ──…" rule across the pane that
 // sets a new question apart from the turn before (#2866).

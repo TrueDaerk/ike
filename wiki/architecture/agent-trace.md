@@ -416,18 +416,21 @@ expand.
 ```
 ┌?─────────────────────┐   ┌✎─────────────────────┐   ┌+─────────────────────┐
 │#1 Add a greeting to …│──▶│main.go               │──▶│hello.go              │
-└─ 14:00 ──────────────┘   └─ edit :3 +1 −0 ──────┘   └─ create ─────────────┘
+│14:00                 │   │edit :3 +1 −0         │   │create                │
+└──────────────────────┘   └──────────────────────┘   └──────────────────────┘
                                                                   │
                                                                   ▼
 ┌✓─────────────────────┐   ┌✕─────────────────────┐   ┌✎─────────────────────┐
 │I'll read main.go, th…│◀──│notes.ipynb           │◀──│main.go               │
-└─ ended on a tool c… ─┘   └─ delete ─────────────┘   └─ edit :2 ×2 ─────────┘
+│ended on a tool call  │   │delete                │   │edit :2 ×2            │
+└──────────────────────┘   └──────────────────────┘   └──────────────────────┘
             │
 ── #2 ──────┼───────────────────────────────────────────────────────────────────
             ▼
 ┌?─────────────────────┐         ┌✓─────────────────────┐
 │#2 /verify main.go    │──▶─◇───▶│Done: main.go greets,…│
-└─ 14:01 ──────────────┘         └─ 14:02 ──────────────┘
+│14:01                 │         │14:02                 │
+└──────────────────────┘         └──────────────────────┘
 ```
 
 **Path model.** `agenttrace.BuildPath(session) []Stop` is the pure
@@ -465,12 +468,16 @@ row and continuing its boustrophedon direction; a faint full-width turn
 rule `── #<turn> ──…` sits between the rows (three gap rows: `│`, the rule
 crossed by `┼`, `▼`), so a session of many turns reads as separate
 questions. Compaction separators are unaffected. In a 12-row bottom pane
-two box rows plus their gap still fit. Boxes are
-three rows — top border with the kind glyph (`?` prompt, `✎` edit/write,
-`+` create, `✕` delete, `✓` answer, `✗` failed call, `…` pending; the `Δ`
-of a linked change sits before the right corner), the label, the detail
-set into the bottom border as `└─ detail ─┘`, cut so a space and at least
-one `─` stay on both sides and the frame stays closed at every box width;
+(ten body rows) two box rows plus their two-row gap still fit exactly
+(`boxH` 4, `turnH` 2, `breakH` 3). Boxes are four rows (#2872), all the
+same height whether or not a stop has a detail — top border with the kind
+glyph (`?` prompt, `✎` edit/write, `+` create, `✕` delete, `✓` answer, `✗`
+failed call, `…` pending; the `Δ` of a linked change sits before the right
+corner), the label, the detail (faint, left-aligned, cut to the inner width
+like the label) and a closed bottom border with no text in it, a solid run
+of `─` between the corners (the expanded box's `┴` excepted, where its
+detail block attaches). The selection highlights both content rows; the
+`──▶` / `◀──` connectors sit on the label row;
 the canvas gives every rune exactly the cells its width claims (a wide
 rune never straddles the edge or leaves half a glyph behind) — so kinds
 read without colour; the border

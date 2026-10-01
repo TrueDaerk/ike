@@ -433,8 +433,12 @@ func TestGraphClickSelectsDoubleClickOpensWheelScrolls(t *testing.T) {
 	if got := strings.TrimSpace(string(row[s.X+1 : s.X+s.W-1])); got != "main.go" {
 		t.Fatalf("label at the slot = %q", got)
 	}
+	// The connector points at the label row, not the detail row (#2872).
+	if row[s.X-1] != '▶' {
+		t.Fatalf("connector on the label row = %q", string(row))
+	}
 	// The wheel scrolls once the path is taller than the pane.
-	m.SetSize(40, 8)
+	m.SetSize(40, 9)
 	m.Wheel(1)
 	if m.GraphTop() != 1 {
 		t.Fatalf("wheel top = %d", m.GraphTop())
@@ -534,7 +538,7 @@ func TestGraphNewQuestionBreaksTheRow(t *testing.T) {
 		t.Fatalf("the answer must connect down across the rule at column %d:\n%s", x, strings.Join(rows[headerRows+s.Y-3:headerRows+s.Y], "\n"))
 	}
 	// Selecting the prompt keeps its rule on screen.
-	m.SetSize(200, 7)
+	m.SetSize(200, 8)
 	if !m.graphSelect("t2") || m.GraphTop() > s.Y-2 {
 		t.Fatalf("top %d hides the rule at %d", m.GraphTop(), s.Y-2)
 	}
@@ -582,7 +586,7 @@ func TestGraphBoxFrameClosedAtEveryWidth(t *testing.T) {
 	}
 	m := panel(t)
 	styles := m.graphStyles(m.theme())
-	corners := [boxH][2]string{{"┌", "┐"}, {"│", "│"}, {"└", "┘"}}
+	corners := [boxH][2]string{{"┌", "┐"}, {"│", "│"}, {"│", "│"}, {"└", "┘"}}
 	for _, w := range widths {
 		for _, d := range details {
 			for _, variant := range []string{"plain", "linked", "expanded", "selected"} {
@@ -611,22 +615,38 @@ func TestGraphBoxFrameClosedAtEveryWidth(t *testing.T) {
 						t.Fatalf("%s: row %d frame %q…%q", name, y, c.cells[y][x0].ch, c.cells[y][x0+w-1].ch)
 					}
 				}
-				// The horizontal run stays intact on both sides of the detail.
-				bottom := c.cells[2]
-				if l := bottom[x0+1].ch; l != "─" && l != "┴" {
-					t.Fatalf("%s: left run %q", name, l)
-				}
-				if r := bottom[x0+w-2].ch; r != "─" {
-					t.Fatalf("%s: right run %q", name, r)
-				}
-				if d != "" && w >= detailMinW {
-					j := x0 + w - 2
-					for bottom[j].ch == "─" {
-						j--
+				// The bottom border is a solid run (#2872): no text in it, only
+				// the expanded box's "┴" at the left.
+				bottom := c.cells[3]
+				for x := x0 + 1; x < x0+w-1; x++ {
+					want := "─"
+					if variant == "expanded" && x == x0+1 {
+						want = "┴"
 					}
-					if line := plain(rows[2]); bottom[x0+2].ch != " " || bottom[j].ch != " " {
-						t.Fatalf("%s: detail not set off by spaces: %q", name, line)
+					if bottom[x].ch != want {
+						t.Fatalf("%s: bottom border %q at %d, want %q", name, plain(rows[3]), x-x0, want)
 					}
+				}
+				// The detail sits on the third row, left-aligned and cut to
+				// the inner width like the label.
+				var inner strings.Builder
+				for x := x0 + 1; x < x0+w-1; x++ {
+					inner.WriteString(c.cells[2][x].ch)
+				}
+				want := fitCells(d, w-2)
+				want += strings.Repeat(" ", w-2-ansi.StringWidth(want))
+				if inner.String() != want {
+					t.Fatalf("%s: detail row %q, want %q", name, inner.String(), want)
+				}
+				// The selection covers both content rows.
+				if variant == "selected" {
+					for _, y := range []int{1, 2} {
+						if c.cells[y][x0+1].st != stSelectedMuted && c.cells[y][x0+1].st != stSelected {
+							t.Fatalf("%s: row %d not highlighted", name, y)
+						}
+					}
+				} else if d != "" && c.cells[2][x0+1].st != stFaint {
+					t.Fatalf("%s: detail not faint", name)
 				}
 			}
 		}
