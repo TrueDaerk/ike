@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Diff Viewer
-description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, an ignore-whitespace mode (w, persisted as diff.ignore_whitespace, #2170), side-by-side or unified rendering with per-side theme diff slots including bold/underlined intra-line emphasis and tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, scroll-aware hunk navigation with a current-hunk gutter marker, side-label headers and a hunk/progress footer (#2494), mouse text selection with y/ctrl+c/cmd+c copy (#2070) painted as a per-frame overlay so a drag stays cheap (#2495), a hard 2 MiB/side input budget with a bounded Myers core (#2505), live reload of file-vs-file diffs off the 0140 watcher with a removed-file footer notice (#2506), clickable collapsed-context separators, diff.files palette command, opens as a content tab of the focused editor pane (diff.placement, #2507), layout persistence, and a review-changes mode walking every changed file of the working tree against HEAD in one pane with F7 / shift+F7 crossing file boundaries, diff.nextFile / diff.prevFile and an in-pane file picker (#2848)."
+description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with token-level intra-line refinement (gap cleanup and whole-line fallback, #2849), an ignore-whitespace mode (w, persisted as diff.ignore_whitespace, #2170), side-by-side or unified rendering with per-side theme diff slots including bold intra-line emphasis and tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, scroll-aware hunk navigation with a current-hunk gutter marker, side-label headers and a hunk/progress footer (#2494), mouse text selection with y/ctrl+c/cmd+c copy (#2070) painted as a per-frame overlay so a drag stays cheap (#2495), a hard 2 MiB/side input budget with a bounded Myers core (#2505), live reload of file-vs-file diffs off the 0140 watcher with a removed-file footer notice (#2506), clickable collapsed-context separators, diff.files palette command, opens as a content tab of the focused editor pane (diff.placement, #2507), layout persistence, and a review-changes mode walking every changed file of the working tree against HEAD in one pane with F7 / shift+F7 crossing file boundaries, diff.nextFile / diff.prevFile and an in-pane file picker (#2848)."
 resource: internal/diff
 tags: [architecture, diff, pane, vcs]
 timestamp: 2026-10-01T00:00:00Z
@@ -23,20 +23,37 @@ texts into lines, runs Myers' greedy O(ND) diff (with common prefix/suffix
 trimming), and folds the edit script into aligned display `Row`s: unchanged
 lines, changed pairs (a delete run paired positionally with the following
 insert run), and one-sided adds/removes with a gap on the other side. Changed
-pairs are refined at rune level through the same Myers core into per-side
-`Span`s for intra-line emphasis; lines longer than 400 runes skip refinement
-(quadratic cost, unreadable emphasis). Contiguous runs of non-equal rows form
-the `Hunk` list used for navigation. `Lines(a, b)` exposes the raw line-level
-edit script for future consumers that need scripts rather than rows.
+pairs are refined at **token level** through the same Myers core into
+per-side `Span`s for intra-line emphasis (#2849), the way
+`git diff --word-diff` and diff-match-patch's semantic cleanup read a
+rewritten line: each side is tokenized into identifier runs (letters, digits,
+marks, underscore), whitespace runs and single symbol runes — after the
+common rune prefix/suffix is trimmed and snapped back to a token boundary,
+so a small edit in a long line only tokenizes and diffs its changed middle —
+the token edit script is mapped back to rune spans, and equal gaps shorter
+than three runes between two changes (a shared `.`, `, ` or a single letter)
+merge into the surrounding emphasis instead of breaking it into confetti. A
+pair whose emphasis would cover more than 60 % of *both* lines falls back to
+whole-line emphasis (no spans), the same look an unrefined line has — a fully
+rewritten line reads better without emphasis — while a short line growing a
+long insertion keeps its spans. Lines longer than 1000 runes skip refinement
+(the bounded Myers core is still quadratic on a divergent pair, and emphasis
+inside very long lines is unreadable). `Refine(left, right)` exports the
+refinement for the `.diff`/`.patch` language (#1630). Contiguous runs of
+non-equal rows form the `Hunk` list used for navigation. `Lines(a, b)`
+exposes the raw line-level edit script for future consumers that need
+scripts rather than rows.
 
 `ComputeWith(left, right, Options)` is the same computation under options;
 `Compute` is it with the zero value. `Options.IgnoreWhitespace` (#2170) drops
 whitespace from every comparison the way `git diff -w` does: lines compare by
 their whitespace-stripped key, so a re-indented or re-wrapped line pairs up as
 a `RowSame` row (each side keeping its own **raw** text — the option changes
-what is compared, never what is shown), and intra-line refinement trims each
-span to its non-whitespace core, dropping the ones left empty. A hunk whose
-lines only moved sideways therefore disappears from the hunk list entirely.
+what is compared, never what is shown), and intra-line refinement treats any
+two whitespace tokens as equal (so a re-indented line never trips the
+whole-line fallback) and then trims each span to its non-whitespace core,
+dropping the ones left empty. A hunk whose lines only moved sideways
+therefore disappears from the hunk list entirely.
 
 **Size budget** (#2505): the engine refuses oversized input instead of diffing
 it. A side over `MaxDiffBytes` (2 MiB, a constant — deliberately not a
@@ -53,7 +70,9 @@ delete-all/insert-all script over the trimmed middle, which `buildRows` still
 pairs positionally into changed rows. Intra-line refinement additionally skips
 line pairs over 4 KiB (`maxRefineBytes`) *before* the `[]rune` conversion, so
 a multi-megabyte single line (minified JSON) never allocates a rune per byte
-just to learn it is over the 400-rune cap anyway.
+just to learn it is over the 1000-rune cap anyway; below the cap a fully
+divergent pair is a quarter of the rune-level diff's cost (and a sixth of its
+allocation), because the token sequence is a fraction of the rune sequence.
 
 ## Pane model (`model.go`)
 
@@ -99,9 +118,11 @@ them gets them derived from its own diff backgrounds, pushed toward the side's
 semantic hue and then pulled back until the result stays inside that
 background's readability envelope (`emphHeadroom`, guarded by the theme
 contrast audit). Because that envelope keeps the background step deliberately
-small, the renderer carries the rest of the distinction as **bold +
-underline** on the emphasized runes — visible in every theme, in both layouts,
-and over the syntax foreground.
+small, the renderer carries the rest of the distinction as **bold** on the
+emphasized runes — visible in every theme, in both layouts, and over the
+syntax foreground. Underline is deliberately not used: lipgloss emits it per
+grapheme, one escape pair per rune, which bloats every changed line and
+breaks plain-text matching downstream.
 
 Syntax highlighting (#1699) rides on top: both sides parse independently with
 the language resolved from the compared file's path (the editor's

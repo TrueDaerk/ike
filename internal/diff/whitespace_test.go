@@ -74,13 +74,13 @@ func TestIgnoreWhitespaceSpansSkipIndentation(t *testing.T) {
 			t.Errorf("left span %v is whitespace-only", s)
 		}
 	}
-	// The rune diff keeps whatever the two identifiers share ("e"), so the
-	// spans cover the differing parts — never the indentation before them.
-	if got := spanText(row.Left, row.LeftSpans); got != "valu" {
-		t.Errorf("left spans cover %q, want %q", got, "valu")
+	// The token diff (#2849) marks the renamed identifiers whole — never the
+	// indentation before them.
+	if got := spanText(row.Left, row.LeftSpans); got != "value" {
+		t.Errorf("left spans cover %q, want %q", got, "value")
 	}
-	if got := spanText(row.Right, row.RightSpans); got != "rsult" {
-		t.Errorf("right spans cover %q, want %q", got, "rsult")
+	if got := spanText(row.Right, row.RightSpans); got != "result" {
+		t.Errorf("right spans cover %q, want %q", got, "result")
 	}
 	if row.LeftSpans[0].Start < 2 {
 		t.Errorf("left span starts at %d, inside the indentation", row.LeftSpans[0].Start)

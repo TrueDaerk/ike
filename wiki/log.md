@@ -1,5 +1,19 @@
 # Log
 
+## 2026-10-01 (diff: token-level intra-line refinement, #2849)
+
+- [Diff Viewer](/architecture/diff-viewer.md): intra-line refinement runs
+  Myers over **tokens** (identifier runs, whitespace runs, single symbols)
+  instead of runes, after a rune-level prefix/suffix trim snapped to token
+  boundaries; equal gaps under three runes between two changes merge into
+  the emphasis, a pair emphasized over 60 % on both sides falls back to
+  whole-line emphasis, ignore-whitespace compares whitespace tokens as
+  equal before the span trim, and the refinement cap rises from 400 to
+  1000 runes (a divergent 400-rune pair costs a quarter of before). The
+  emphasis wording is now bold only (the code never underlined). Same
+  engine behind the `.diff`/`.patch` emphasis
+  ([Editor](/architecture/editor.md)).
+
 ## 2026-10-01 (agent trace: session history, /clear and rewinds, import, picker, #2860)
 
 - [Agent Trace](/architecture/agent-trace.md): the trace keeps a compact

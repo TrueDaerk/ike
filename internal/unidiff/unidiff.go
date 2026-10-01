@@ -2,7 +2,7 @@
 // language: line classification (added/removed/context, @@ hunk headers, file
 // headers, git extension headers), fold ranges on hunk and file boundaries,
 // and word-level emphasis between paired removed/added lines using the same
-// rune-level Myers refinement the diff views use (internal/diff).
+// token-level Myers refinement the diff views use (internal/diff, #2849).
 //
 // The format has no Tree-sitter grammar here on purpose: unified diff is line
 // oriented and stateful (a line reading "--- x" is a removed line inside a
@@ -286,7 +286,7 @@ func Folds(lines []string) []lang.FoldRange {
 
 // wordSpans pairs each run of consecutive removed lines with the added run
 // that immediately follows it — the classic word-diff pairing — and refines
-// each i-th pair rune-level. Offsets shift by one column for the -/+ marker.
+// each i-th pair at token level. Offsets shift by one column for the -/+ marker.
 func wordSpans(lines []string, kinds []kind) []lang.Span {
 	var out []lang.Span
 	var minus, plus []int

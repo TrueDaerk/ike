@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-09-29T12:00:00Z
+timestamp: 2026-10-01T00:00:00Z
 ---
 
 # Editor
@@ -2734,8 +2734,8 @@ format is line oriented and stateful, so all structure is Go-computed in
   prose between file sections (a format-patch commit message) stays plain.
 - **Word-level emphasis**: each run of consecutive removed lines pairs with
   the added run that immediately follows; every i-th pair is refined
-  rune-level by the diff views' own Myers refinement (`diff.Refine`,
-  `maxRefineRunes` cap included). The changed ranges carry
+  at token level by the diff views' own Myers refinement (`diff.Refine`,
+  gap cleanup, whole-line fallback and `maxRefineRunes` cap included; #2849). The changed ranges carry
   `diff.plus.emph` / `diff.minus.emph` — the dotted-prefix fallback keeps
   the line's foreground and `styleAt` layers the palette's `DiffChanged`
   background underneath, so a `.diff` buffer reads like the diff panes.

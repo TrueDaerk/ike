@@ -146,18 +146,6 @@ func TestRefineSkipsOversizedLines(t *testing.T) {
 	}
 }
 
-func TestRefineMergesAdjacentSpans(t *testing.T) {
-	// "abcdef" -> "aXYdef": runes 1-2 replaced; the delete+insert runs touch,
-	// so each side carries one merged span.
-	ls, rs := refine("abcdef", "aXYdef")
-	if len(ls) != 1 || ls[0] != (Span{Start: 1, End: 3}) {
-		t.Fatalf("left spans: got %+v want [{1 3}]", ls)
-	}
-	if len(rs) != 1 || rs[0] != (Span{Start: 1, End: 3}) {
-		t.Fatalf("right spans: got %+v want [{1 3}]", rs)
-	}
-}
-
 func TestSplitLines(t *testing.T) {
 	if got := splitLines(""); got != nil {
 		t.Fatalf("empty text should split to nil, got %q", got)

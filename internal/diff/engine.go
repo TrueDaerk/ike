@@ -6,7 +6,7 @@
 //
 // engine.go is the pure computation half: no rendering, no bubbletea. Lines
 // computes the line-level edit script; Compute pairs delete/insert runs into
-// changed line pairs, refines them at rune level into per-side spans, and
+// changed line pairs, refines them at token level into per-side spans, and
 // groups the result into hunks for n/N navigation. ComputeWith runs the same
 // computation under Options — today: ignoring whitespace (#2170).
 package diff
@@ -84,9 +84,12 @@ type Result struct {
 	TooLarge bool
 }
 
-// maxRefineRunes bounds intra-line refinement: rune-level Myers is quadratic
-// in the worst case, and emphasis inside very long lines is unreadable anyway.
-const maxRefineRunes = 400
+// maxRefineRunes bounds intra-line refinement: the token-level Myers (#2849)
+// is still quadratic in the worst case (a fully divergent pair of long lines
+// runs the full bounded D loop), and emphasis inside very long lines is
+// unreadable anyway. Tokens are far fewer than runes, so the cap sits well
+// above the 400 runes the rune-level diff allowed.
+const maxRefineRunes = 1000
 
 // maxRefineBytes rejects a line pair before the []rune conversion (#2505): a
 // multi-megabyte single line (minified JSON, a spooled body) would allocate
@@ -291,18 +294,23 @@ func hunksOf(rows []Row) []Hunk {
 	return hunks
 }
 
-// Refine runs a rune-level diff over a changed line pair and returns the
+// Refine runs a token-level diff over a changed line pair and returns the
 // changed spans on each side — refine exported for consumers outside the
 // row model (#1630): the unified-diff language pairs adjacent -/+ lines and
 // emphasizes their changed ranges with the same algorithm the diff views use.
 func Refine(left, right string) (ls, rs []Span) { return refine(left, right) }
 
-// refineWith refines a changed pair under opts: ignoring whitespace, spans
-// that carry no non-whitespace change drop out and the remaining ones shrink
-// to their non-whitespace core, so a re-indented line whose *content* changed
-// emphasizes the content and not the leading run.
+// refine is refineTokens with whitespace significant.
+func refine(left, right string) (ls, rs []Span) { return refineTokens(left, right, false) }
+
+// refineWith refines a changed pair under opts: ignoring whitespace, the
+// token diff treats any two whitespace runs as equal — so a re-indented line
+// whose *content* changed emphasizes the content and not the leading run,
+// and the re-indentation never pushes the pair into the whole-line fallback
+// — and the spans still shrink to their non-whitespace core afterwards,
+// dropping the ones left empty (a whitespace run the other side lacks).
 func refineWith(left, right string, opts Options) (ls, rs []Span) {
-	ls, rs = refine(left, right)
+	ls, rs = refineTokens(left, right, opts.IgnoreWhitespace)
 	if !opts.IgnoreWhitespace {
 		return ls, rs
 	}
@@ -333,10 +341,17 @@ func trimSpaceSpans(line string, spans []Span) []Span {
 	return out
 }
 
-// refine runs a rune-level diff over a changed line pair and returns the
-// changed spans on each side. Oversized lines skip refinement (whole-line
-// emphasis reads better than quadratic work).
-func refine(left, right string) (ls, rs []Span) {
+// refineTokens runs a token-level diff over a changed line pair and returns
+// the changed spans on each side (#2849): the lines are tokenized into
+// identifier runs, whitespace runs and single symbols, the token edit script
+// is mapped back to rune spans, equal gaps shorter than minEqualGapRunes
+// between two changes are absorbed into the emphasis (a shared "." or ", "
+// between two renamed identifiers is not worth a break in the emphasis), and
+// a pair whose emphasis would cover more than refineFallbackPercent of both
+// lines falls back to whole-line emphasis (nil spans) — a rewritten line
+// reads better without confetti. Oversized lines skip refinement the same
+// way. With wsEqual, whitespace runs compare equal whatever they hold.
+func refineTokens(left, right string, wsEqual bool) (ls, rs []Span) {
 	if len(left) > maxRefineBytes || len(right) > maxRefineBytes {
 		// Over 4 KiB the line is over maxRefineRunes for sure (#2505) — skip
 		// before the []rune conversion would allocate a rune per byte of it.
@@ -347,22 +362,233 @@ func refine(left, right string) (ls, rs []Span) {
 	if len(lr) > maxRefineRunes || len(rr) > maxRefineRunes {
 		return nil, nil
 	}
-	edits := runeScript(lr, rr)
-	li, ri := 0, 0
-	for _, e := range edits {
-		switch e.op {
-		case OpEqual:
-			li += e.n
-			ri += e.n
-		case OpDelete:
-			ls = appendSpan(ls, li, li+e.n)
-			li += e.n
-		case OpInsert:
-			rs = appendSpan(rs, ri, ri+e.n)
-			ri += e.n
+	// Common prefix and suffix are trimmed at rune level first (the usual
+	// edit touches a few tokens of a long line) and snapped back to token
+	// boundaries, so only the changed middle is tokenized and diffed.
+	pre, suf := commonTokenEnds(lr, rr)
+	lt := tokenize(lr, pre, len(lr)-suf)
+	rt := tokenize(rr, pre, len(rr)-suf)
+	ops := myersTrace(tokenSeq{r: lr, t: lt, ws: wsEqual}, tokenSeq{r: rr, t: rt, ws: wsEqual})
+	blocks := mergeShortGaps(refineBlocks(ops, lt, rt, pre, len(lr), len(rr)))
+	for _, b := range blocks {
+		if !b.changed {
+			continue
+		}
+		if b.left.End > b.left.Start {
+			ls = appendSpan(ls, b.left.Start, b.left.End)
+		}
+		if b.right.End > b.right.Start {
+			rs = appendSpan(rs, b.right.Start, b.right.End)
 		}
 	}
+	if emphasisDominates(ls, len(lr)) && emphasisDominates(rs, len(rr)) {
+		return nil, nil
+	}
 	return ls, rs
+}
+
+// minEqualGapRunes is the shortest equal run between two changes that stays
+// unemphasized (#2849): a gap of fewer runes — a lone symbol, a ", ", a
+// single shared letter — merges into the surrounding emphasis.
+const minEqualGapRunes = 3
+
+// refineFallbackPercent is the share of a line's runes the token-level
+// emphasis may cover before the pair falls back to whole-line emphasis
+// (#2849); the fallback needs both sides over the limit, so a short line
+// growing a long insertion still shows where the insertion sits.
+const refineFallbackPercent = 60
+
+// token is one refinement unit of a line (#2849): an identifier run
+// (letters, digits, marks, underscore), a whitespace run, or a single
+// symbol rune, as the rune range [start, end) of the line.
+type token struct {
+	start, end int
+}
+
+// tokenize splits the rune range [from, to) of a line into refinement
+// tokens (positions stay absolute). Identifier and whitespace runs group;
+// every other rune (punctuation, operators, emoji) is a token of its own, so
+// "a.b" diffs as three tokens and a changed operator stays a one-rune edit.
+// The range must start and end on token boundaries (commonTokenEnds).
+func tokenize(r []rune, from, to int) []token {
+	toks := make([]token, 0, (to-from)/2+1)
+	for i := from; i < to; {
+		start := i
+		switch {
+		case isWordRune(r[i]):
+			for i < to && isWordRune(r[i]) {
+				i++
+			}
+		case unicode.IsSpace(r[i]):
+			for i < to && unicode.IsSpace(r[i]) {
+				i++
+			}
+		default:
+			i++
+		}
+		toks = append(toks, token{start: start, end: i})
+	}
+	return toks
+}
+
+func isWordRune(r rune) bool {
+	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.IsMark(r)
+}
+
+// joined reports whether runes i-1 and i of r belong to the same token —
+// both word runes or both whitespace — so position i is not a token
+// boundary.
+func joined(r []rune, i int) bool {
+	if i <= 0 || i >= len(r) {
+		return false
+	}
+	return (isWordRune(r[i-1]) && isWordRune(r[i])) ||
+		(unicode.IsSpace(r[i-1]) && unicode.IsSpace(r[i]))
+}
+
+// commonTokenEnds returns the lengths of the common rune prefix and suffix
+// of a and b, each shortened to the nearest token boundary of *both* lines,
+// so the middle [pre, len-suf) can be tokenized on its own without a token
+// straddling the cut ("oldName" vs "newName" share "Name" at rune level but
+// differ as one token).
+func commonTokenEnds(a, b []rune) (pre, suf int) {
+	n := min(len(a), len(b))
+	for pre < n && a[pre] == b[pre] {
+		pre++
+	}
+	for pre > 0 && (joined(a, pre) || joined(b, pre)) {
+		pre--
+	}
+	for suf < n-pre && a[len(a)-1-suf] == b[len(b)-1-suf] {
+		suf++
+	}
+	for suf > 0 && (joined(a, len(a)-suf) || joined(b, len(b)-suf)) {
+		suf--
+	}
+	return pre, suf
+}
+
+// tokenEq reports whether two tokens hold the same runes; with wsEqual two
+// whitespace runs match whatever they hold (ignore-whitespace mode).
+func tokenEq(lr []rune, a token, rr []rune, b token, wsEqual bool) bool {
+	if wsEqual && unicode.IsSpace(lr[a.start]) && unicode.IsSpace(rr[b.start]) {
+		return true
+	}
+	if a.end-a.start != b.end-b.start {
+		return false
+	}
+	for k := 0; k < a.end-a.start; k++ {
+		if lr[a.start+k] != rr[b.start+k] {
+			return false
+		}
+	}
+	return true
+}
+
+// refineBlock is one run of the token edit script folded to rune extents:
+// an equal run or a change run (adjacent deletes and inserts), with the
+// rune range it covers on each side — empty on a side the run does not
+// touch (a pure insertion has an empty left extent at the insertion point).
+type refineBlock struct {
+	changed     bool
+	left, right Span
+}
+
+// refineBlocks folds the per-token ops over the tokenized middle into
+// alternating equal/changed blocks with rune extents, walking a token cursor
+// per side; the untouched common prefix [0, pre) and the suffix up to
+// lend/rend become the outer equal blocks.
+func refineBlocks(ops []Op, lt, rt []token, pre, lend, rend int) []refineBlock {
+	blocks := make([]refineBlock, 0, 4)
+	if pre > 0 {
+		blocks = append(blocks, refineBlock{left: Span{0, pre}, right: Span{0, pre}})
+	}
+	li, ri := 0, 0
+	lpos := func() int {
+		if li < len(lt) {
+			return lt[li].start
+		}
+		if len(lt) > 0 {
+			return lt[len(lt)-1].end
+		}
+		return pre
+	}
+	rpos := func() int {
+		if ri < len(rt) {
+			return rt[ri].start
+		}
+		if len(rt) > 0 {
+			return rt[len(rt)-1].end
+		}
+		return pre
+	}
+	open := func(changed bool) *refineBlock {
+		if n := len(blocks); n > 0 && blocks[n-1].changed == changed {
+			return &blocks[n-1]
+		}
+		l, r := lpos(), rpos()
+		blocks = append(blocks, refineBlock{changed: changed, left: Span{l, l}, right: Span{r, r}})
+		return &blocks[len(blocks)-1]
+	}
+	for _, op := range ops {
+		switch op {
+		case OpEqual:
+			b := open(false)
+			b.left.End = lt[li].end
+			b.right.End = rt[ri].end
+			li++
+			ri++
+		case OpDelete:
+			b := open(true)
+			b.left.End = lt[li].end
+			li++
+		case OpInsert:
+			b := open(true)
+			b.right.End = rt[ri].end
+			ri++
+		}
+	}
+	if lpos() < lend || rpos() < rend {
+		b := open(false)
+		b.left.End = lend
+		b.right.End = rend
+	}
+	return blocks
+}
+
+// mergeShortGaps absorbs every equal block shorter than minEqualGapRunes
+// that sits between two changed blocks into one changed block spanning all
+// three, on both sides — the diff-match-patch style semantic cleanup that
+// keeps "foo.bar" → "baz.qux" one emphasized region instead of two.
+// Leading and trailing equal runs are never gaps.
+func mergeShortGaps(blocks []refineBlock) []refineBlock {
+	out := blocks[:0]
+	for _, b := range blocks {
+		n := len(out)
+		if b.changed && n >= 2 && !out[n-1].changed && out[n-2].changed &&
+			out[n-1].left.End-out[n-1].left.Start < minEqualGapRunes {
+			out[n-2].left.End = b.left.End
+			out[n-2].right.End = b.right.End
+			out = out[:n-1]
+			continue
+		}
+		out = append(out, b)
+	}
+	return out
+}
+
+// emphasisDominates reports whether spans cover more than
+// refineFallbackPercent of a line of n runes; an empty side counts as
+// fully covered (there is nothing left unchanged to anchor the emphasis).
+func emphasisDominates(spans []Span, n int) bool {
+	if n == 0 {
+		return true
+	}
+	covered := 0
+	for _, s := range spans {
+		covered += s.End - s.Start
+	}
+	return 100*covered > refineFallbackPercent*n
 }
 
 // appendSpan appends [start, end), merging into the previous span when they
@@ -375,12 +601,6 @@ func appendSpan(spans []Span, start, end int) []Span {
 		return spans
 	}
 	return append(spans, Span{Start: start, End: end})
-}
-
-// runEdit is a run-length edit for rune-level scripts.
-type runEdit struct {
-	op Op
-	n  int
 }
 
 // script computes the line-level edit script (whitespace significant), the
@@ -439,40 +659,7 @@ func pairScript(a, b []string, opts Options) []pairEdit {
 	return out
 }
 
-// runeScript computes a run-length rune-level edit script via the same Myers
-// core, for intra-line refinement.
-func runeScript(a, b []rune) []runEdit {
-	pre := 0
-	for pre < len(a) && pre < len(b) && a[pre] == b[pre] {
-		pre++
-	}
-	suf := 0
-	for suf < len(a)-pre && suf < len(b)-pre && a[len(a)-1-suf] == b[len(b)-1-suf] {
-		suf++
-	}
-	trace := myersTrace(runeSeq{a[pre : len(a)-suf]}, runeSeq{b[pre : len(b)-suf]})
-	var out []runEdit
-	if pre > 0 {
-		out = append(out, runEdit{op: OpEqual, n: pre})
-	}
-	for _, op := range trace {
-		if n := len(out); n > 0 && out[n-1].op == op {
-			out[n-1].n++
-			continue
-		}
-		out = append(out, runEdit{op: op, n: 1})
-	}
-	if suf > 0 {
-		if n := len(out); n > 0 && out[n-1].op == OpEqual {
-			out[n-1].n += suf
-		} else {
-			out = append(out, runEdit{op: OpEqual, n: suf})
-		}
-	}
-	return out
-}
-
-// seq abstracts the two element types (lines, runes) the Myers core walks.
+// seq abstracts the two element types (lines, tokens) the Myers core walks.
 type seq interface {
 	Len() int
 	Eq(other seq, i, j int) bool
@@ -485,11 +672,18 @@ func (q stringSeq) Eq(other seq, i, j int) bool {
 	return q.s[i] == other.(stringSeq).s[j]
 }
 
-type runeSeq struct{ r []rune }
+// tokenSeq walks the refinement tokens of one line (#2849); two tokens are
+// equal when they hold the same runes (or are both whitespace, with ws).
+type tokenSeq struct {
+	r  []rune
+	t  []token
+	ws bool
+}
 
-func (q runeSeq) Len() int { return len(q.r) }
-func (q runeSeq) Eq(other seq, i, j int) bool {
-	return q.r[i] == other.(runeSeq).r[j]
+func (q tokenSeq) Len() int { return len(q.t) }
+func (q tokenSeq) Eq(other seq, i, j int) bool {
+	o := other.(tokenSeq)
+	return tokenEq(q.r, q.t[i], o.r, o.t[j], q.ws)
 }
 
 // myersTrace is the greedy O(ND) Myers diff (An O(ND) Difference Algorithm,
