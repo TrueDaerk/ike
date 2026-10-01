@@ -85,6 +85,14 @@ type agentTerm struct {
 	cwd  string
 }
 
+// label names the terminal for the trace header: its tool, else "terminal".
+func (t agentTerm) label() string {
+	if t.tool != "" {
+		return t.tool
+	}
+	return "terminal"
+}
+
 // agentTerminals lists every live terminal of this instance: panes and
 // editor-tab terminals of the active and every parked workspace, plus the
 // parked global tools.

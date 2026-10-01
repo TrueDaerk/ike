@@ -31,10 +31,27 @@ import (
 type AgentTraceToggleMsg struct{}
 
 // traceTarget is the terminal the trace follows: its session key ("" when no
-// terminal qualifies) and the working directory the session is looked up by.
+// terminal qualifies) and the working directory the session is looked up by,
+// plus — for the pane header only (#2857) — its name and why it was picked.
 type traceTarget struct {
-	key string
-	cwd string
+	key  string
+	cwd  string
+	name string
+	why  string
+}
+
+// sameTerminal reports whether t follows the same terminal and directory as
+// o. The name and the reason never count: focus moving from the agent pane
+// to the editor turns "focused" into "last focused", and relocating on that
+// would restart a perfectly good read.
+func (t traceTarget) sameTerminal(o traceTarget) bool { return t.key == o.key && t.cwd == o.cwd }
+
+// label is the header's "follows" segment.
+func (t traceTarget) label() string {
+	if t.name == "" {
+		return t.why
+	}
+	return t.name + " (" + t.why + ")"
 }
 
 // traceLocatedMsg is the off-loop session lookup's verdict.
@@ -46,13 +63,18 @@ type traceLocatedMsg struct {
 }
 
 // traceReadMsg is one finished incremental read: the regrouped tree, the
-// session facts for the header and how many events the read added.
+// session facts for the header, how many events the read added and the
+// reader's revision after it. reader names the Reader that ran it — a read
+// of the current reader is applied even when a relocation happened in the
+// meantime, since its events are consumed either way (#2857).
 type traceReadMsg struct {
-	gen   int64
-	nodes []agenttrace.Node
-	info  tracepanel.Info
-	added int
-	err   error
+	reader *agenttrace.Reader
+	nodes  []agenttrace.Node
+	info   tracepanel.Info
+	added  int
+	rev    int
+	at     time.Time
+	err    error
 }
 
 // traceTickMsg drives the poll while the pane is open. gen retires the
@@ -68,14 +90,23 @@ const agentTraceInterval = time.Second
 // plus header reads, not something to do every second.
 const agentTraceRescanTicks = 5
 
+// agentTraceTickLost is how long without an armed tick counts as a dead
+// poll chain (#2857): a tick dropped while the pane was out of reach
+// (another workspace) or by a recovered panic ends the chain, and the next
+// relocation, read or toggle starts a fresh one.
+const agentTraceTickLost = 3 * agentTraceInterval
+
+// agentTraceReadLost is how long a read may stay in flight before the next
+// one stops waiting for it: a read whose command panicked never reports
+// back, and its busy flag would otherwise freeze the pane for good. The
+// Reader serializes the two, so giving up on it is safe.
+const agentTraceReadLost = 10 * time.Second
+
 // toggleAgentTracePanel is the agent.trace.toggle state machine: no pane →
 // open and locate; open but unfocused → focus it and re-locate (the agent
 // pane may have changed); focused → return focus.
 func (m *Model) toggleAgentTracePanel() tea.Cmd {
-	return m.togglePanelWith(pane.AgentTraceKey, m.openAgentTracePanel, func() tea.Cmd {
-		m.traceGen++
-		return m.traceLocateCmd()
-	})
+	return m.togglePanelWith(pane.AgentTraceKey, m.openAgentTracePanel, m.traceRelocateCmd)
 }
 
 // agentTracePanel returns the singleton panel model, or nil when closed.
@@ -119,33 +150,33 @@ func (m Model) traceInitCmd() tea.Cmd {
 func (m Model) traceTargetNow() traceTarget {
 	if inst := m.activeWS().Panes.FocusedInstance(); inst != nil {
 		if t := inst.ActiveTerminal(); t != nil && t.Tool() != "" && t.SessionKey() != "" {
-			return traceTarget{key: t.SessionKey(), cwd: t.Cwd()}
+			return traceTarget{key: t.SessionKey(), cwd: t.Cwd(), name: t.Tool(), why: "focused"}
 		}
 	}
 	terms := m.agentTerminals()
 	if m.recentToolTerm != "" {
 		for _, t := range terms {
 			if t.key == m.recentToolTerm {
-				return traceTarget{key: t.key, cwd: t.cwd}
+				return traceTarget{key: t.key, cwd: t.cwd, name: t.label(), why: "last focused"}
 			}
 		}
 	}
 	best, bestRank := traceTarget{}, 0
 	for _, t := range terms {
-		rank := 1
+		rank, why := 1, "only terminal"
 		if bound, ok := m.agentSessions[t.key]; ok && !bound.Ended {
-			rank = 3
+			rank, why = 3, "hook-bound"
 		} else if t.tool != "" {
-			rank = 2
+			rank, why = 2, "tool pane"
 		}
 		if rank > bestRank {
-			best, bestRank = traceTarget{key: t.key, cwd: t.cwd}, rank
+			best, bestRank = traceTarget{key: t.key, cwd: t.cwd, name: t.label(), why: why}, rank
 		}
 	}
 	if bestRank > 0 {
 		return best
 	}
-	return traceTarget{cwd: projectRoot()}
+	return traceTarget{cwd: projectRoot(), why: "project root"}
 }
 
 // traceLocateCmd looks the followed terminal's session up off the loop:
@@ -153,6 +184,9 @@ func (m Model) traceTargetNow() traceTarget {
 func (m *Model) traceLocateCmd() tea.Cmd {
 	target := m.traceTargetNow()
 	m.traceFollow = target
+	if p := m.agentTracePanel(); p != nil {
+		p.SetFollowing(target.label())
+	}
 	bound, ok := m.agentSessions[target.key]
 	projects := agenttrace.ProjectsDir()
 	gen := m.traceGen
@@ -179,58 +213,80 @@ func (m Model) handleTraceLocated(msg traceLocatedMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.traceReader == nil || m.traceReader.Path() != msg.sess.Transcript {
 		m.traceReader = agenttrace.NewReader(msg.sess.Transcript)
-		m.traceBusy = false
+		m.traceBusy, m.tracePending = false, false
+		m.traceShownRev = -1
 		p.Reset()
 	}
 	m.traceSession = msg.sess
-	return m, m.traceReadCmd()
+	return m, tea.Batch(m.traceReadCmd(), m.ensureTraceTick())
 }
 
 // traceReadCmd runs one incremental read and regroups the tree off the
-// loop. At most one read is in flight: the reader's session is touched by
-// nothing else while it runs.
+// loop. At most one read is in flight; a read asked for meanwhile (a hook
+// push, a relocation) is remembered and runs as soon as the current one
+// reports, so its lines are not left for the next tick. A read that never
+// reported (its command panicked) stops blocking after agentTraceReadLost.
 func (m *Model) traceReadCmd() tea.Cmd {
 	r := m.traceReader
-	if r == nil || m.traceBusy {
+	if r == nil {
 		return nil
 	}
-	m.traceBusy = true
-	gen := m.traceGen
+	if m.traceBusy && time.Since(m.traceBusyAt) < agentTraceReadLost {
+		m.tracePending = true
+		return nil
+	}
+	m.traceBusy, m.traceBusyAt, m.tracePending = true, time.Now(), false
 	sess := m.traceSession
 	return func() tea.Msg {
-		added, err := r.Update()
-		s := r.Session()
-		info := tracepanel.Info{
-			ID: s.ID, Transcript: r.Path(), CWD: s.CWD,
-			FromHook: sess.FromHook, Ended: sess.Ended, Turns: s.Turns(),
-		}
+		var nodes []agenttrace.Node
+		var info tracepanel.Info
+		added, rev, err := r.Read(func(s *agenttrace.Session) {
+			info = tracepanel.Info{
+				ID: s.ID, Transcript: r.Path(), CWD: s.CWD,
+				FromHook: sess.FromHook, Ended: sess.Ended, Turns: s.Turns(),
+			}
+			nodes = agenttrace.BuildTree(s)
+		})
 		if info.ID == "" {
 			info.ID = sess.ID
 		}
 		if info.CWD == "" {
 			info.CWD = sess.CWD
 		}
-		return traceReadMsg{gen: gen, nodes: agenttrace.BuildTree(s), info: info, added: added, err: err}
+		return traceReadMsg{reader: r, nodes: nodes, info: info, added: added, rev: rev, at: time.Now(), err: err}
 	}
 }
 
-// handleTraceRead feeds a finished read into the pane. Only a read that
-// added events (or the first one) rebuilds the tree.
+// handleTraceRead feeds a finished read into the pane. A read of a reader
+// that has since been replaced is dropped; any other is applied, and the
+// tree is rebuilt whenever the reader's revision differs from the one shown
+// — not only when this very read added events: a read whose result was
+// dropped, or a completion that changed a row in place, must still reach
+// the pane (#2857). Every read stamps the header's liveness segment.
 func (m Model) handleTraceRead(msg traceReadMsg) (tea.Model, tea.Cmd) {
+	if msg.reader != m.traceReader {
+		return m, nil
+	}
 	m.traceBusy = false
 	p := m.agentTracePanel()
-	if msg.gen != m.traceGen || p == nil {
+	if p == nil {
 		return m, nil
 	}
 	if msg.err != nil {
 		m.host.Notify(host.Error, "agent trace: "+msg.err.Error())
 		return m, nil
 	}
-	if msg.added > 0 || !p.HasSession() {
+	p.SetRead(msg.at, msg.added)
+	if msg.rev != m.traceShownRev || !p.HasSession() || msg.info != p.Info() {
 		p.Set(msg.nodes, msg.info)
+		m.traceShownRev = msg.rev
 	}
 	m.syncTraceLinks()
-	return m, nil
+	var again tea.Cmd
+	if m.tracePending {
+		again = m.traceReadCmd()
+	}
+	return m, tea.Batch(again, m.ensureTraceTick())
 }
 
 // armTraceTick schedules the next poll. bump starts a fresh chain (open),
@@ -239,8 +295,19 @@ func (m *Model) armTraceTick(bump bool) tea.Cmd {
 	if bump {
 		m.traceTickGen++
 	}
+	m.traceTickAt = time.Now()
 	gen := m.traceTickGen
 	return tea.Tick(agentTraceInterval, func(time.Time) tea.Msg { return traceTickMsg{gen: gen} })
+}
+
+// ensureTraceTick restarts the poll when its chain died (#2857): nil while
+// the pane is closed or a tick was armed recently, else a fresh chain that
+// retires whatever is left of the old one.
+func (m *Model) ensureTraceTick() tea.Cmd {
+	if m.agentTracePanel() == nil || time.Since(m.traceTickAt) < agentTraceTickLost {
+		return nil
+	}
+	return m.armTraceTick(true)
 }
 
 // handleTraceTick reads the transcript again, re-locates the session when
@@ -254,23 +321,26 @@ func (m Model) handleTraceTick(msg traceTickMsg) (tea.Model, tea.Cmd) {
 	target := m.traceTargetNow()
 	rescan := m.traceTicks%agentTraceRescanTicks == 0 && (m.traceReader == nil || m.traceSession.Ended)
 	var work tea.Cmd
-	if target != m.traceFollow || rescan {
+	if !target.sameTerminal(m.traceFollow) || rescan {
 		m.traceGen++
 		work = m.traceLocateCmd()
 	} else {
+		m.traceFollow = target
+		m.agentTracePanel().SetFollowing(target.label())
 		work = m.traceReadCmd()
 	}
 	return m, tea.Batch(work, m.armTraceTick(false))
 }
 
-// traceRelocateCmd is the "look again now" the hook push, the pane's 'r'
-// and a finished hook install share; nil while the pane is closed.
+// traceRelocateCmd is the "look again now" the hook push, the pane's 'r',
+// the toggle's re-focus and a finished hook install share; nil while the
+// pane is closed. It also revives a poll chain that died (#2857).
 func (m *Model) traceRelocateCmd() tea.Cmd {
 	if m.agentTracePanel() == nil {
 		return nil
 	}
 	m.traceGen++
-	return m.traceLocateCmd()
+	return tea.Batch(m.traceLocateCmd(), m.ensureTraceTick())
 }
 
 // noteToolFocus remembers the tool terminal the keyboard last sat in, so a

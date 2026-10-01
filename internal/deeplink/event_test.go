@@ -203,6 +203,99 @@ func TestSendEventPrefersOwner(t *testing.T) {
 	}
 }
 
+// TestSendEventSkipsDeadSockets (#2857): a directory of crashed instances'
+// leftovers — sockets of vanished pids, and one of a live pid nobody listens
+// on — all focused more recently than the live instance, plus a live
+// instance that refuses the message. The event still reaches the live one
+// well inside the hook's 5 s timeout, the leftovers are removed and the
+// refusing instance keeps its socket.
+func TestSendEventSkipsDeadSockets(t *testing.T) {
+	dir := sockDir(t)
+	got := make(chan Event, 1)
+	s, err := ServeHandlers(dir, Handlers{Event: func(e Event) { got <- e }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close()
+
+	stamp := func(sock string, at time.Time) {
+		focus := strings.TrimSuffix(sock, ".sock") + ".focus"
+		_ = os.WriteFile(focus, nil, 0o600)
+		_ = os.Chtimes(focus, at, at)
+	}
+	// leftover binds a real socket file and closes it without unlinking:
+	// what a killed instance leaves behind.
+	leftover := func(name string) string {
+		sock := filepath.Join(dir, name)
+		ln, err := net.Listen("unix", sock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ln.(*net.UnixListener).SetUnlinkOnClose(false)
+		ln.Close()
+		return sock
+	}
+	future := time.Now().Add(time.Hour)
+	var dead []string
+	for i, pid := range []int{99999991, 99999992, 99999993, 99999994, 99999995, 99999996} {
+		sock := leftover(fmt.Sprintf("ike-%d.sock", pid))
+		stamp(sock, future.Add(time.Duration(i)*time.Minute))
+		dead = append(dead, sock)
+	}
+	// pid 1 is always alive, but nothing listens on its leftover: the
+	// refused dial marks it dead.
+	refusedDial := leftover("ike-1.sock")
+	stamp(refusedDial, future)
+	dead = append(dead, refusedDial)
+
+	// A live instance that answers with an error (an older build without
+	// event support): skipped, never deleted.
+	refusing := filepath.Join(dir, fmt.Sprintf("ike-%d.sock", os.Getppid()))
+	ln, err := net.Listen("unix", refusing)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			bufio.NewReader(c).ReadString('\n')
+			fmt.Fprintln(c, "err unsupported message")
+			c.Close()
+		}
+	}()
+	stamp(refusing, future.Add(-time.Minute))
+
+	e := validEvent()
+	e.PID = 0 // no owner preference: every leftover is tried first
+	start := time.Now()
+	if err := SendEvent(dir, e); err != nil {
+		t.Fatalf("SendEvent: %v", err)
+	}
+	if took := time.Since(start); took > time.Second {
+		t.Errorf("delivery took %v", took)
+	}
+	select {
+	case <-got:
+	case <-time.After(2 * time.Second):
+		t.Fatal("event never delivered")
+	}
+	for _, sock := range dead {
+		if _, err := os.Stat(sock); !os.IsNotExist(err) {
+			t.Errorf("dead socket %s not removed: %v", filepath.Base(sock), err)
+		}
+		if _, err := os.Stat(strings.TrimSuffix(sock, ".sock") + ".focus"); !os.IsNotExist(err) {
+			t.Errorf("focus stamp of %s not removed", filepath.Base(sock))
+		}
+	}
+	if _, err := os.Stat(refusing); err != nil {
+		t.Errorf("the refusing live instance lost its socket: %v", err)
+	}
+}
+
 func rawSend(t *testing.T, sock, line string) string {
 	t.Helper()
 	conn, err := net.Dial("unix", sock)

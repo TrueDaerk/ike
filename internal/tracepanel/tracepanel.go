@@ -82,9 +82,22 @@ type Model struct {
 	// its writing nodes resolved to (#2838).
 	nodes []agenttrace.Node
 	links agenttrace.Links
-	// seenTurns is how many turns the last Set showed; every newer one is
-	// expanded whole when it arrives.
-	seenTurns int
+	// known holds the key of every node the last Set showed: a node that is
+	// not in it arrived since and is expanded whole (#2857), so a decision
+	// landing in the running turn shows its tool calls without a keystroke.
+	known map[string]bool
+	// follow keeps the cursor on the newest row while the agent works
+	// (#2857): on until the user moves the cursor off the last row, on
+	// again once it is back there.
+	follow bool
+
+	// Diagnostics for the header (#2857): when the host last read the
+	// transcript, how many events that read added and which terminal the
+	// trace follows and why — "no new lines" must look different from "not
+	// reading".
+	readAt    time.Time
+	readAdded int
+	following string
 
 	info       Info
 	hasSession bool
@@ -99,7 +112,7 @@ type Model struct {
 
 // New builds an empty panel: nothing located yet.
 func New(pal *theme.Palette) Model {
-	return Model{pal: pal, loading: true, now: time.Now}
+	return Model{pal: pal, loading: true, now: time.Now, follow: true}
 }
 
 // SetPalette follows a theme switch.
@@ -129,9 +142,12 @@ func (m *Model) Info() Info { return m.info }
 
 // Set replaces the tree with a fresh grouping of the session (#2840). Rows
 // the user expanded stay expanded and the selection stays on the same node
-// (by key); turns the panel has not shown before — the newest one on the
-// first Set, every new one afterwards — are expanded whole so the latest
-// activity is visible without a keystroke.
+// (by key); nodes the panel has not shown before — the newest turn on the
+// first Set, every new turn, decision, call and file afterwards — are
+// expanded whole so the latest activity is visible without a keystroke.
+// While following (#2857) the cursor moves onto the newest row, which
+// scrolls it into view: the tree grows below the fold otherwise, and a
+// growing session looked exactly like a frozen one.
 func (m *Model) Set(nodes []agenttrace.Node, info Info) {
 	m.loading = false
 	m.err = ""
@@ -142,14 +158,57 @@ func (m *Model) Set(nodes []agenttrace.Node, info Info) {
 	first := !m.tree.HasNodes()
 	m.tree.Refresh(m.rows(nodes), nodeKey)
 	roots := m.tree.Roots()
-	from := m.seenTurns
-	if first && len(roots) > 0 {
-		from = len(roots) - 1
+	if first {
+		if len(roots) > 0 {
+			m.tree.ExpandDeep(roots[len(roots)-1])
+		}
+	} else {
+		m.expandNew(roots)
 	}
-	for i := from; i < len(roots); i++ {
-		m.tree.ExpandDeep(roots[i])
+	m.known = map[string]bool{}
+	rememberKeys(m.known, nodes)
+	if m.follow {
+		m.tree.SetCursor(len(m.tree.Visible()) - 1)
 	}
-	m.seenTurns = len(roots)
+}
+
+// expandNew expands, whole, every row whose node the last Set did not show
+// and walks on below the expanded rows that it did.
+func (m *Model) expandNew(rows []*hiertree.Row[agenttrace.Node]) {
+	for _, r := range rows {
+		switch {
+		case !m.known[r.Item.Key]:
+			m.tree.ExpandDeep(r)
+		case r.Expanded():
+			m.expandNew(r.Children())
+		}
+	}
+}
+
+func rememberKeys(into map[string]bool, nodes []agenttrace.Node) {
+	for i := range nodes {
+		into[nodes[i].Key] = true
+		rememberKeys(into, nodes[i].Children)
+	}
+}
+
+// SetRead records one finished read of the transcript for the header: its
+// time and how many events it added or completed (#2857).
+func (m *Model) SetRead(at time.Time, added int) { m.readAt, m.readAdded = at, added }
+
+// SetFollowing names the terminal the trace follows and why ("agent ·
+// focused", "terminal · hook", "project root · scan"), shown in the header.
+func (m *Model) SetFollowing(s string) { m.following = s }
+
+// Following reports whether the cursor sticks to the newest row.
+func (m *Model) Following() bool { return m.follow }
+
+// noteCursor re-derives follow after the user moved: it holds while the
+// cursor is on the last row.
+func (m *Model) noteCursor() {
+	if n := len(m.tree.Visible()); n > 0 {
+		m.follow = m.tree.Cursor() == n-1
+	}
 }
 
 // SetNoSession switches to the empty state: no transcript for cwd. err is
@@ -164,7 +223,9 @@ func (m *Model) SetNoSession(cwd string, err error) {
 	}
 	m.tree.Clear()
 	m.nodes, m.links = nil, agenttrace.Links{}
-	m.seenTurns = 0
+	m.known = nil
+	m.follow = true
+	m.readAt, m.readAdded = time.Time{}, 0
 }
 
 // Reset forgets the shown session ahead of a switch to another transcript:
@@ -173,7 +234,9 @@ func (m *Model) SetNoSession(cwd string, err error) {
 func (m *Model) Reset() {
 	m.tree.Clear()
 	m.nodes, m.links = nil, agenttrace.Links{}
-	m.seenTurns = 0
+	m.known = nil
+	m.follow = true
+	m.readAt, m.readAdded = time.Time{}, 0
 	m.hasSession = false
 	m.loading = true
 	m.err = ""
@@ -264,6 +327,7 @@ func (m *Model) Select(key string) bool {
 	for i, r := range m.tree.Visible() {
 		if r == target {
 			m.tree.SetCursor(i)
+			m.noteCursor()
 			return true
 		}
 	}
@@ -321,7 +385,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	if !ok {
 		return nil
 	}
-	return m.handleKey(k)
+	cmd := m.handleKey(k)
+	if m.hasSession {
+		m.noteCursor()
+	}
+	return cmd
 }
 
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -403,6 +471,7 @@ func (m *Model) Wheel(delta int) {
 	}
 	m.ensureFetch()
 	m.tree.Wheel(delta, m.treeHeight())
+	m.noteCursor()
 }
 
 // Click handles a left click at pane-content-local (x, y): on the tree a
@@ -423,6 +492,7 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	row := visible[i]
 	double := m.clicks.Double(i, m.now())
 	m.tree.SetCursor(i)
+	m.noteCursor()
 	if x >= row.Depth()*2 && x < row.Depth()*2+2 && !double {
 		// The marker cell: unfold or fold like the tree's own arrow.
 		m.clicks.Reset()
@@ -507,7 +577,25 @@ func (m *Model) headerLine(pal *theme.Palette) string {
 		turns += "s"
 	}
 	title := lipgloss.NewStyle().Foreground(pal.Accent).Bold(m.focused).Render(" " + id)
-	return title + lipgloss.NewStyle().Faint(true).Render(" · "+source+turns+state+"  "+m.display(m.info.Transcript))
+	return title + lipgloss.NewStyle().Faint(true).Render(" · "+source+turns+state+m.readStatus()+m.followStatus()+"  "+m.display(m.info.Transcript))
+}
+
+// readStatus is the header's liveness segment (#2857): the time of the last
+// read and what it brought, "+0" included — a clock that keeps moving says
+// the pane reads and the agent wrote nothing new.
+func (m *Model) readStatus() string {
+	if m.readAt.IsZero() {
+		return " · not read yet"
+	}
+	return " · read " + m.readAt.Format("15:04:05") + " +" + itoa(m.readAdded)
+}
+
+// followStatus names the followed terminal and why.
+func (m *Model) followStatus() string {
+	if m.following == "" {
+		return ""
+	}
+	return " · ⇢ " + m.following
 }
 
 func itoa(n int) string {

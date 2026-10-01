@@ -1027,7 +1027,14 @@ type Model struct {
 	traceSession agentSession
 	traceFollow  traceTarget
 	traceBusy    bool
-	traceTicks   int
+	// traceBusyAt is when the in-flight read started, tracePending a read
+	// asked for while it ran, traceShownRev the reader revision the pane
+	// shows and traceTickAt when the poll was last armed (#2857).
+	traceBusyAt   time.Time
+	tracePending  bool
+	traceShownRev int
+	traceTickAt   time.Time
+	traceTicks    int
 	// recentToolTerm is the session key of the tool terminal the keyboard
 	// last sat in — what the trace follows when the focus is elsewhere.
 	recentToolTerm string

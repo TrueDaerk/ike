@@ -115,3 +115,80 @@ func TestReaderResolvesEditsAgainstCurrentFile(t *testing.T) {
 		t.Errorf("files = %+v", files)
 	}
 }
+
+// TestReaderPicksUpReplacedTranscript (#2857): a transcript renamed over
+// the tailed path — even one of the very same size — and one truncated and
+// rewritten past the old size are both parsed from the start again.
+func TestReaderPicksUpReplacedTranscript(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "s1.jsonl")
+	appendFile(t, path, promptLine)
+	r := NewReader(path)
+	if n, _ := r.Update(); n != 1 {
+		t.Fatalf("first read = %d", n)
+	}
+	rev := r.Revision()
+
+	// Same size, other content, renamed over the path.
+	other := `{"type":"user","uuid":"u9","sessionId":"s1","cwd":"/w","timestamp":"2026-09-30T14:00:01.000Z","message":{"role":"user","content":"other"}}` + "\n"
+	if len(other) != len(promptLine) {
+		t.Fatalf("fixture sizes differ: %d vs %d", len(other), len(promptLine))
+	}
+	tmp := filepath.Join(dir, "s1.jsonl.tmp")
+	appendFile(t, tmp, other)
+	if err := os.Rename(tmp, path); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := r.Update(); n != 1 || err != nil {
+		t.Fatalf("replaced read = %d, %v", n, err)
+	}
+	if s := r.Session(); len(s.Events) != 1 || s.Events[0].Text != "other" {
+		t.Fatalf("events after replace = %+v", s.Events)
+	}
+	if r.Revision() == rev {
+		t.Fatal("a replaced transcript must change the revision")
+	}
+
+	// Truncated in place and rewritten longer: the byte before the offset is
+	// no longer the line end the reader stopped behind.
+	long := `{"type":"user","uuid":"u7","sessionId":"s1","cwd":"/w","timestamp":"2026-09-30T14:00:01.000Z","message":{"role":"user","content":"rewritten prompt"}}` + "\n"
+	if err := os.WriteFile(path, []byte(long), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := r.Update(); n != 1 || err != nil {
+		t.Fatalf("rewritten read = %d, %v", n, err)
+	}
+	if s := r.Session(); len(s.Events) != 1 || s.Events[0].Text != "rewritten prompt" {
+		t.Fatalf("events after rewrite = %+v", s.Events)
+	}
+}
+
+// TestReaderCompletesLineWrittenInPieces (#2857): a large line arriving in
+// several writes is held back until its newline lands, then read whole; the
+// revision moves only with a read that changed the session.
+func TestReaderCompletesLineWrittenInPieces(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "s1.jsonl")
+	appendFile(t, path, promptLine)
+	r := NewReader(path)
+	if n, rev, err := r.Read(nil); n != 1 || err != nil || rev != r.Revision() {
+		t.Fatalf("first read = %d, %d, %v", n, rev, err)
+	}
+	rev := r.Revision()
+	const piece = 16
+	body := replyLine[:len(replyLine)-1] // everything but the newline
+	for i := 0; i < len(body); i += piece {
+		appendFile(t, path, body[i:min(i+piece, len(body))])
+		if n, _ := r.Update(); n != 0 {
+			t.Fatalf("partial line counted after %d bytes", i+piece)
+		}
+		if r.Revision() != rev {
+			t.Fatal("a read without changes moved the revision")
+		}
+	}
+	appendFile(t, path, "\n")
+	var events int
+	n, newRev, err := r.Read(func(s *Session) { events = len(s.Events) })
+	if n != 1 || err != nil || events != 2 || newRev == rev {
+		t.Fatalf("completed line: n=%d events=%d rev %d→%d err=%v", n, events, rev, newRev, err)
+	}
+}
