@@ -213,11 +213,20 @@ func (m *Model) graphLayout() Layout {
 	g := &m.graph
 	boxW, _ := BoxWidth(m.width)
 	widths := make([]int, len(g.stops))
+	var breaks []int
+	seenPrompt := false
 	for i := range g.stops {
 		if g.stops[i].Selectable() {
 			widths[i] = boxW
 		} else {
 			widths[i] = sepW
+		}
+		// Every question but the first starts a new row (#2866).
+		if g.stops[i].Kind == agenttrace.StopPrompt {
+			if seenPrompt {
+				breaks = append(breaks, i)
+			}
+			seenPrompt = true
 		}
 	}
 	exp := m.stopIndex(g.expanded)
@@ -225,7 +234,7 @@ func (m *Model) graphLayout() Layout {
 	if exp >= 0 {
 		detailH = len(m.detailLines(g.stops[exp], m.width))
 	}
-	return Snake(widths, m.width, exp, detailH)
+	return Snake(widths, breaks, m.width, exp, detailH)
 }
 
 // graphMaxTop is the top row that still fills the body.
@@ -241,8 +250,8 @@ func (m *Model) graphScrollToEnd() {
 	m.graph.top = m.graphMaxTop(m.graphLayout())
 }
 
-// graphEnsureVisible scrolls so the selected box (and its detail block, if
-// expanded) is on screen.
+// graphEnsureVisible scrolls so the selected box (with the turn rule above
+// a break, and its detail block, if expanded) is on screen.
 func (m *Model) graphEnsureVisible() {
 	if m.width <= 0 {
 		return
@@ -255,6 +264,9 @@ func (m *Model) graphEnsureVisible() {
 	}
 	s := l.Slots[i]
 	y0, y1 := s.Y, s.Y+s.H
+	if s.Break {
+		y0 = s.Y - 2
+	}
 	if l.DetailY == y1 {
 		y1 += l.DetailH
 	}
@@ -522,7 +534,10 @@ func newCanvas(w, h int) *canvas {
 }
 
 // put writes s at (x, y) in style st, clipped to the canvas and to maxW
-// cells (<= 0 for no limit).
+// cells (<= 0 for no limit). Every rune takes exactly the cells its width
+// claims, so a row always renders c.w cells wide: a wide rune that would
+// straddle the right edge is left out, and a write over half of a wide
+// rune blanks the other half (#2866).
 func (c *canvas) put(x, y int, s string, st, maxW int) {
 	if y < 0 || y >= c.h {
 		return
@@ -536,15 +551,32 @@ func (c *canvas) put(x, y int, s string, st, maxW int) {
 		if maxW > 0 && used+w > maxW {
 			return
 		}
-		if x >= 0 && x < c.w {
+		if x >= 0 && x+w <= c.w {
+			c.clear(x, y)
+			if w == 2 {
+				c.clear(x+1, y)
+			}
 			c.cells[y][x] = cell{ch: string(r), st: st}
-			if w == 2 && x+1 < c.w {
+			if w == 2 {
 				c.cells[y][x+1] = cell{ch: "", st: st}
 			}
 		}
 		x += w
 		used += w
 	}
+}
+
+// clear blanks cell (x, y) ahead of a write, and with it the other half of
+// the wide rune it belongs to.
+func (c *canvas) clear(x, y int) {
+	row := c.cells[y]
+	switch {
+	case row[x].ch == "" && x > 0:
+		row[x-1] = cell{ch: " ", st: row[x-1].st}
+	case x+1 < c.w && row[x+1].ch == "":
+		row[x+1] = cell{ch: " ", st: row[x+1].st}
+	}
+	row[x] = cell{ch: " ", st: row[x].st}
 }
 
 // fill writes n copies of glyph from (x, y).
@@ -686,6 +718,9 @@ func (m *Model) graphRows(pal *theme.Palette) []string {
 	c := newCanvas(m.width, l.Height)
 	for i, st := range g.stops {
 		s := l.Slots[i]
+		if s.Break {
+			drawTurnRule(c, s.Y-2, st.Turn)
+		}
 		if i > 0 {
 			m.drawConnector(c, l.Slots[i-1], s)
 		}
@@ -745,25 +780,48 @@ func (m *Model) drawBox(c *canvas, st agenttrace.Stop, s Slot, i int) {
 		}
 		c.restyle(s.X+1, s.Y+1, w-2, sel)
 	}
-	// Bottom border with the detail.
+	// Bottom border with the detail: "└─ detail ─┘", the detail cut to
+	// leave a space and at least one "─" on either side, so the frame stays
+	// closed at every width (#2866).
 	c.put(s.X, s.Y+2, "└", style, 0)
 	c.fill(s.X+1, s.Y+2, w-2, "─", style)
 	if st.Key == m.graph.expanded {
 		c.put(s.X+1, s.Y+2, "┴", style, 0)
 	}
-	if d := st.Detail; d != "" && w > 6 {
-		d = " " + fitCells(d, w-5) + " "
-		c.put(s.X+2, s.Y+2, d, stFaint, w-4)
+	if d := st.Detail; d != "" && w >= detailMinW {
+		c.put(s.X+2, s.Y+2, " "+fitCells(d, w-detailFrameW)+" ", stFaint, w-4)
 	}
 	c.put(s.X+w-1, s.Y+2, "┘", style, 0)
 }
 
+// detailFrameW is the cells of a bottom border that are not detail text:
+// "└─ " and " ─┘"; detailMinW the narrowest box that still shows a detail.
+const (
+	detailFrameW = 6
+	detailMinW   = detailFrameW + 1
+)
+
+// drawTurnRule draws the faint "── #<turn> ──…" rule across the pane that
+// sets a new question apart from the turn before (#2866).
+func drawTurnRule(c *canvas, y, turn int) {
+	c.fill(0, y, c.w, "─", stFaint)
+	c.put(2, y, " #"+itoa(turn)+" ", stFaint, 0)
+}
+
 // drawConnector joins two consecutive slots: an arrow along the row, or
-// the "▼" of a turn in the row between two path rows.
+// the "│ ▼" of a turn down the rows between two path rows ("│ ┼ ▼" across
+// a break's turn rule).
 func (m *Model) drawConnector(c *canvas, prev, s Slot) {
 	switch {
 	case prev.Row != s.Row:
-		c.put(s.CenterX(), s.Y-1, "▼", stConn, 0)
+		x := s.CenterX()
+		if s.Break {
+			c.put(x, s.Y-3, "│", stConn, 0)
+			c.put(x, s.Y-2, "┼", stConn, 0)
+		} else {
+			c.put(x, s.Y-2, "│", stConn, 0)
+		}
+		c.put(x, s.Y-1, "▼", stConn, 0)
 	case s.Dir > 0:
 		x0 := prev.X + prev.W
 		n := s.X - x0

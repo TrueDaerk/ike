@@ -417,10 +417,13 @@ expand.
 ┌?─────────────────────┐   ┌✎─────────────────────┐   ┌+─────────────────────┐
 │#1 Add a greeting to …│──▶│main.go               │──▶│hello.go              │
 └─ 14:00 ──────────────┘   └─ edit :3 +1 −0 ──────┘   └─ create ─────────────┘
+                                                                  │
                                                                   ▼
 ┌✓─────────────────────┐   ┌✕─────────────────────┐   ┌✎─────────────────────┐
 │I'll read main.go, th…│◀──│notes.ipynb           │◀──│main.go               │
-└─ ended on a tool ca…─┘   └─ delete ─────────────┘   └─ edit :2 ×2 ─────────┘
+└─ ended on a tool c… ─┘   └─ delete ─────────────┘   └─ edit :2 ×2 ─────────┘
+            │
+── #2 ──────┼───────────────────────────────────────────────────────────────────
             ▼
 ┌?─────────────────────┐         ┌✓─────────────────────┐
 │#2 /verify main.go    │──▶─◇───▶│Done: main.go greets,…│
@@ -452,12 +455,25 @@ boxes is a single column of full-width boxes — and `Snake(widths, paneW,
 expanded, detailH)` places the slots: left-to-right from the top-left, a
 turn down when the next box would not fit, then right-to-left, and so on
 (boustrophedon). The first box of a row sits directly under the last box
-of the row before (sharing the edge the path came from), so a turn is one
-`▼` in the row between; boxes on a row join with `──▶` / `◀──`. Boxes are
+of the row before (sharing the edge the path came from), so a turn is a
+`│` over a `▼` in the two rows between — the rows breathe instead of
+stacking — and boxes on a row join with `──▶` / `◀──`. **A new question
+breaks the row (#2866):** every prompt stop but the first starts a new row
+even when it would still fit (`Snake` takes the break indices; `graphLayout`
+passes every prompt after the first), the path turning down as at a full
+row and continuing its boustrophedon direction; a faint full-width turn
+rule `── #<turn> ──…` sits between the rows (three gap rows: `│`, the rule
+crossed by `┼`, `▼`), so a session of many turns reads as separate
+questions. Compaction separators are unaffected. In a 12-row bottom pane
+two box rows plus their gap still fit. Boxes are
 three rows — top border with the kind glyph (`?` prompt, `✎` edit/write,
 `+` create, `✕` delete, `✓` answer, `✗` failed call, `…` pending; the `Δ`
 of a linked change sits before the right corner), the label, the detail
-set into the bottom border — so kinds read without colour; the border
+set into the bottom border as `└─ detail ─┘`, cut so a space and at least
+one `─` stay on both sides and the frame stays closed at every box width;
+the canvas gives every rune exactly the cells its width claims (a wide
+rune never straddles the edge or leaves half a glyph behind) — so kinds
+read without colour; the border
 colour (accent, warning, success, error, info) adds the second cue. The
 expanded box's detail block is inserted beneath its row and pushes the
 rows below down. The renderer draws onto a cell canvas (`graph.go`) and
