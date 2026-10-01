@@ -1,5 +1,18 @@
 # Log
 
+## 2026-10-01 (agent trace: subagent edits and Write updates, #2861)
+
+- [Agent Trace](/architecture/agent-trace.md): the `Reader` tails the
+  session's `<session-id>/subagents/agent-*.jsonl` transcripts too and
+  attaches each subagent under its `Agent` call (meta `toolUseId`, else the
+  result's `agentId`), so edits a subagent made show in the tree,
+  `Session.Files()`, change-feed links and `agent.ask`'s context.
+- `Write` on an existing file (`toolUseResult.type` `update`) is an
+  **edit** row with the patch's line; the structured result of
+  file-changing calls stays reachable as `Tool.Result`. Main-transcript
+  `Edit`/`MultiEdit` (string results, `replace_all`) were verified to parse
+  and are pinned by the `edits.jsonl` fixture.
+
 ## 2026-10-01 (agent trace: concept doc consolidation and cross-links, #2839)
 
 - [Agent Trace](/architecture/agent-trace.md) gains a **Keybinds** summary

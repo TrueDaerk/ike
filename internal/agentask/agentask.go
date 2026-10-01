@@ -209,10 +209,13 @@ func NodeContext(s *agenttrace.Session, n *agenttrace.Node) Context {
 			break
 		}
 	}
-	if n.Event < 0 || n.Event >= len(s.Events) {
+	// A subagent's call (#2861) resolves into the subagent's timeline,
+	// where the decision it followed from is found as well.
+	evs, idx := s.Timeline(n)
+	if evs == nil {
 		return c
 	}
-	ev := &s.Events[n.Event]
+	ev := &evs[idx]
 	switch {
 	case ev.Kind == agenttrace.KindAssistant:
 		c.Assistant = clip(ev.Text, MaxAssistant)
@@ -221,8 +224,8 @@ func NodeContext(s *agenttrace.Session, n *agenttrace.Node) Context {
 		c.Output, c.OutputNote = toolOutput(ev.Tool)
 		// The assistant text that preceded the call in the same turn is the
 		// decision it followed from.
-		for i := n.Event - 1; i >= 0; i-- {
-			prev := &s.Events[i]
+		for i := idx - 1; i >= 0; i-- {
+			prev := &evs[i]
 			if prev.Turn != ev.Turn {
 				break
 			}

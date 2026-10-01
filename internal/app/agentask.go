@@ -3,7 +3,6 @@ package app
 import (
 	"context"
 	"errors"
-	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -252,11 +251,9 @@ func (m *Model) startAgentAsk(question string) tea.Cmd {
 		}
 		c := agentask.Context{}
 		if node != nil {
-			var parsed *agenttrace.Session
-			if f, err := os.Open(transcript); err == nil {
-				parsed, _ = agenttrace.Parse(f)
-				f.Close()
-			}
+			// The subagent transcripts come along: a node may be one of
+			// their calls (#2861).
+			parsed, _ := agenttrace.Load(transcript)
 			c = agentask.NodeContext(parsed, node)
 			c.Hunk = hunk
 		}

@@ -90,6 +90,33 @@ func TestNodeContextDecisionTurnAndNil(t *testing.T) {
 	}
 }
 
+// TestNodeContextSubagentNode: a subagent's file row (#2861) resolves to
+// the subagent's own call and the decision before it in its timeline — not
+// to the spawning Agent call.
+func TestNodeContextSubagentNode(t *testing.T) {
+	s := session()
+	t0 := s.Events[0].At
+	s.Events[3] = agenttrace.Event{Kind: agenttrace.KindTool, Turn: 1, At: t0.Add(3 * time.Second), Tool: &agenttrace.Tool{
+		Name: "Agent", Title: "Rename helpers", Done: true,
+		Subagent: &agenttrace.Subagent{ID: "a1", Type: "builder", Session: &agenttrace.Session{Events: []agenttrace.Event{
+			{Kind: agenttrace.KindUser, Turn: 1, At: t0.Add(4 * time.Second), Text: "Rename a1"},
+			{Kind: agenttrace.KindAssistant, Turn: 1, At: t0.Add(5 * time.Second), Text: "Renaming in util.go."},
+			{Kind: agenttrace.KindTool, Turn: 1, At: t0.Add(6 * time.Second), Tool: &agenttrace.Tool{
+				Name: "Edit", Title: "/proj/util.go", Done: true, Output: "updated",
+				Paths: []agenttrace.FileRef{{Path: "/proj/util.go", Line: 4, Op: agenttrace.OpEdit}},
+			}},
+		}}},
+	}}
+	tree := agenttrace.BuildTree(s)
+	c := NodeContext(s, find(tree, "e3/a2/f0"))
+	if c.Turn != 1 || c.Path != "/proj/util.go" || c.Line != 4 || c.Op != "edit" {
+		t.Fatalf("context = %+v", c)
+	}
+	if c.Tool != "Edit /proj/util.go" || c.Output != "updated" || c.Assistant != "Renaming in util.go." {
+		t.Fatalf("tool=%q output=%q assistant=%q", c.Tool, c.Output, c.Assistant)
+	}
+}
+
 func TestPromptAndCommand(t *testing.T) {
 	if got := Prompt(Context{}, "  why?  "); got != agenttrace.AskMarker+"\nwhy?" {
 		t.Fatalf("empty context prompt = %q", got)

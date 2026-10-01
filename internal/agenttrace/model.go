@@ -12,6 +12,7 @@ package agenttrace
 
 import (
 	"encoding/json"
+	"sort"
 	"time"
 )
 
@@ -108,6 +109,35 @@ type Tool struct {
 	DoneAt time.Time
 	// Paths are the files this call touched, in input order.
 	Paths []FileRef
+	// Result is the harness's structured result (Claude Code's toolUseResult
+	// object) of a file-changing call — Edit, MultiEdit, Write, NotebookEdit
+	// — kept for the diffs: it carries originalFile and structuredPatch.
+	// nil for the other tools and for a plain-text result.
+	Result json.RawMessage
+	// AgentID is the id of the subagent an Agent (Task) call spawned, as its
+	// result reports it; "" until the result arrived.
+	AgentID string
+	// Subagent is the sidechain session this Agent (Task) call spawned, once
+	// the Reader found its transcript (#2861); nil otherwise.
+	Subagent *Subagent
+}
+
+// Subagent is a sidechain session an Agent (Task) tool call spawned. Claude
+// Code writes it next to the main transcript as
+// <session-id>/subagents/agent-<id>.jsonl (every line isSidechain) with an
+// agent-<id>.meta.json naming the agent type, the description and the
+// tool_use id of the spawning call — the join key.
+type Subagent struct {
+	// ID is the agent id, the file name's agent-<id>.
+	ID string
+	// Type and Description come from the meta file; "" until it was read.
+	Type        string
+	Description string
+	// ToolUseID is the tool_use id of the spawning Agent call.
+	ToolUseID string
+	// Session is the subagent's own timeline. Its tool calls may spawn
+	// subagents in turn.
+	Session *Session
 }
 
 // Event is one entry of a Session's timeline.
@@ -154,13 +184,66 @@ func (s *Session) Turns() int {
 	return n
 }
 
-// Files returns every FileRef of every tool event, in timeline order.
+// Files returns every FileRef of every tool event, its subagents' included,
+// in timeline order: a subagent's refs interleave with the calls the session
+// made meanwhile by their timestamps (an event without one keeps the time of
+// the event before it in its own timeline).
 func (s *Session) Files() []FileRef {
-	var out []FileRef
-	for i := range s.Events {
-		if t := s.Events[i].Tool; t != nil {
-			out = append(out, t.Paths...)
+	type stamped struct {
+		at  time.Time
+		ref FileRef
+	}
+	var all []stamped
+	var walk func(evs []Event)
+	walk = func(evs []Event) {
+		var at time.Time
+		for i := range evs {
+			ev := &evs[i]
+			if !ev.At.IsZero() {
+				at = ev.At
+			}
+			t := ev.Tool
+			if t == nil {
+				continue
+			}
+			for _, ref := range t.Paths {
+				all = append(all, stamped{at, ref})
+			}
+			if t.Subagent != nil && t.Subagent.Session != nil {
+				walk(t.Subagent.Session.Events)
+			}
 		}
 	}
+	walk(s.Events)
+	sort.SliceStable(all, func(i, j int) bool { return all[i].at.Before(all[j].at) })
+	out := make([]FileRef, 0, len(all))
+	for _, st := range all {
+		out = append(out, st.ref)
+	}
+	if len(out) == 0 {
+		return nil
+	}
 	return out
+}
+
+// Timeline resolves a tree node to its event: Events[n.Event], then down
+// n.Agent through the subagent sessions. It returns the timeline holding the
+// event and the event's index in it; nil, -1 when the node has no event.
+func (s *Session) Timeline(n *Node) ([]Event, int) {
+	if s == nil || n == nil || n.Event < 0 || n.Event >= len(s.Events) {
+		return nil, -1
+	}
+	evs, idx := s.Events, n.Event
+	for _, j := range n.Agent {
+		t := evs[idx].Tool
+		if t == nil || t.Subagent == nil || t.Subagent.Session == nil {
+			return nil, -1
+		}
+		evs = t.Subagent.Session.Events
+		if j < 0 || j >= len(evs) {
+			return nil, -1
+		}
+		idx = j
+	}
+	return evs, idx
 }
