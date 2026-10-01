@@ -1,6 +1,7 @@
 package tracepanel
 
 import (
+	"image/color"
 	"strings"
 	"testing"
 	"time"
@@ -662,5 +663,75 @@ func TestCanvasWideRunes(t *testing.T) {
 	c.put(1, 0, "x", stPlain, 0)
 	if got := plain(c.lines(0, 1, make([]lipgloss.Style, stCount))[0]); got != " xab " {
 		t.Fatalf("row = %q", got)
+	}
+}
+
+// TestGraphKindColourOnGlyphAndLabel (#2874): each box kind paints its
+// top-border glyph, its border and its label row in the kind's own trace
+// colour, the style table maps those kinds to the dedicated palette roles,
+// and the selection still wins on the selected box's label row.
+func TestGraphKindColourOnGlyphAndLabel(t *testing.T) {
+	m := panel(t)
+	pal := m.theme()
+	styles := m.graphStyles(pal)
+	ref := func(op agenttrace.Op) *agenttrace.FileRef {
+		return &agenttrace.FileRef{Path: "/p/x.go", Op: op}
+	}
+	cases := []struct {
+		name  string
+		stop  agenttrace.Stop
+		style int
+		glyph string
+		want  color.Color
+	}{
+		{"prompt", agenttrace.Stop{Kind: agenttrace.StopPrompt, Key: "t1", Label: "#1 go"}, stPrompt, "?", pal.TracePrompt},
+		{"edit", agenttrace.Stop{Kind: agenttrace.StopChange, Key: "e1/f0", Label: "x.go", Ref: ref(agenttrace.OpEdit)}, stEdit, "✎", pal.TraceEdit},
+		{"create", agenttrace.Stop{Kind: agenttrace.StopChange, Key: "e2/f0", Label: "y.go", Ref: ref(agenttrace.OpCreate)}, stCreate, "+", pal.TraceCreate},
+		{"delete", agenttrace.Stop{Kind: agenttrace.StopChange, Key: "e3/f0", Label: "z.go", Ref: ref(agenttrace.OpDelete)}, stDelete, "✕", pal.TraceDelete},
+		{"answer", agenttrace.Stop{Kind: agenttrace.StopAnswer, Key: "t1/end", Label: "done"}, stAnswer, "✓", pal.TraceAnswer},
+	}
+	rgba := func(c color.Color) [4]uint32 {
+		r, g, b, a := c.RGBA()
+		return [4]uint32{r, g, b, a}
+	}
+	const x0, w = 1, 14
+	seen := map[[4]uint32]string{}
+	for _, tc := range cases {
+		if got := styles[tc.style].GetForeground(); rgba(got) != rgba(tc.want) {
+			t.Errorf("%s: style foreground %v, want trace role %v", tc.name, got, tc.want)
+		}
+		if tc.name != "delete" {
+			if prev, dup := seen[rgba(tc.want)]; dup {
+				t.Errorf("%s and %s share colour %v", prev, tc.name, tc.want)
+			}
+			seen[rgba(tc.want)] = tc.name
+		}
+		for _, selected := range []bool{false, true} {
+			m.graph.sel = ""
+			if selected {
+				m.graph.sel = tc.stop.Key
+			}
+			c := newCanvas(w+2*x0, boxH)
+			m.drawBox(c, tc.stop, Slot{X: x0, W: w, H: boxH}, 0)
+			if g := c.cells[0][x0+1]; g.ch != tc.glyph || g.st != tc.style {
+				t.Errorf("%s: glyph cell %q style %d, want %q style %d", tc.name, g.ch, g.st, tc.glyph, tc.style)
+			}
+			if b := c.cells[3][x0]; b.st != tc.style {
+				t.Errorf("%s: border style %d, want %d", tc.name, b.st, tc.style)
+			}
+			want := tc.style
+			if selected {
+				want = stSelectedMuted
+				if m.focused {
+					want = stSelected
+				}
+			}
+			for x := x0 + 1; x < x0+1+ansi.StringWidth(tc.stop.Label); x++ {
+				if got := c.cells[1][x].st; got != want {
+					t.Errorf("%s selected=%v: label cell %d style %d, want %d", tc.name, selected, x, got, want)
+					break
+				}
+			}
+		}
 	}
 }
