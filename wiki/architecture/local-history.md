@@ -68,7 +68,11 @@ name, the absolute save time, and the humanized age ("5m ago"); the **right
 pane** shows an inline (unified) diff of the *selected* snapshot against the
 current buffer, styled like a git diff — `@@` hunk headers with three context
 lines, a `+`/`-` marker per line, added lines green, removed lines red,
-context plain. Moving the selection recomputes the diff immediately, so
+context plain. The changed ranges inside a `-`/`+` pair are emphasized like
+the diff pane's (`DiffRemovedEmph` / `DiffAddedEmph` background + bold,
+#2847) while `editor.diff_word_highlight` is on; the span rendering truncates
+on plain text and styles each run separately, so a clipped line never leaves
+an escape open. Moving the selection recomputes the diff immediately, so
 browsing snapshots *is* previewing them; an identical snapshot renders a
 "no changes" notice, an unreadable one an error line, in place of the diff.
 The buffer text is captured at open time (the panel is modal, so it cannot
@@ -80,7 +84,7 @@ selection move.
 - `enter` opens the reusable diff pane (#60) with the snapshot on the left
   ("name @ 5m ago") and the live buffer on the right, following the
   vcs.diff single-slot reuse behavior — the full pane remains the place for
-  intra-line emphasis, hunk navigation and editing the right side.
+  side-by-side review, hunk navigation and editing the right side.
 - `r` restores the snapshot into the buffer **through the normal edit path**
   (`ApplyTextEdits`, one history change): the buffer marks dirty, a single
   undo reverts the restore, and the file on disk is untouched until the next

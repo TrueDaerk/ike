@@ -1061,7 +1061,9 @@ type Editor struct {
 	// zero-width sequences by spec.
 	Hyperlinks bool `toml:"hyperlinks"`
 	// DiffWordHighlight emphasizes the word-level changed range inside
-	// paired removed/added lines of .diff/.patch buffers (#1630) with the
+	// paired removed/added lines of .diff/.patch buffers (#1630) and of the
+	// shared mini-diffs (change feed, local history, recovery, previews;
+	// #2847) with the
 	// diff viewer's changed-range background; off keeps whole-line coloring
 	// only.
 	DiffWordHighlight bool `toml:"diff_word_highlight"`

@@ -2740,7 +2740,9 @@ format is line oriented and stateful, so all structure is Go-computed in
   the line's foreground and `styleAt` layers the palette's `DiffChanged`
   background underneath, so a `.diff` buffer reads like the diff panes.
   Toggled by `editor.diff_word_highlight` (default on); a config flip
-  re-parses open editors like the rainbow-brackets toggle does.
+  re-parses open editors like the rainbow-brackets toggle does. The same
+  switch gates the intra-line emphasis of the shared mini-diffs (change
+  feed, local history, crash recovery, action/rename previews; #2847).
 - **Folding**: every hunk folds behind its `@@` header and every file
   section behind its `diff` header via the Go fold seam
   (`lang.Language.Folds`, see

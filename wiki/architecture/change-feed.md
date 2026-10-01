@@ -120,7 +120,11 @@ shell hosting a width-aware `ui.Content`, the Local History layout of #1969):
   against what the file holds *now* (the live buffer where one is open, the
   file on disk otherwise; a removed file's right side is empty). Rendered git
   style: `@@` hunk headers with three context lines, `+`/`-` markers, added
-  green, removed red. An entry with no pre-change content renders the reason
+  green, removed red; inside a changed `-`/`+` pair the engine's intra-line
+  spans carry the diff pane's emphasis (`DiffRemovedEmph` / `DiffAddedEmph`
+  background + bold, #2847), toggled by `editor.diff_word_highlight`. The
+  renderer (`miniDiffLines`) is shared with local history, crash recovery and
+  the action / rename previews. An entry with no pre-change content renders the reason
   in place of the diff instead of notifying, so the selection can sweep across
   it without side effects.
 - **Groups.** As soon as anything in the feed carries a source, the list

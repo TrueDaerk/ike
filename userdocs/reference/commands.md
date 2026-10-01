@@ -31,6 +31,8 @@ bring their own.
 | Agent Trace: Ask the Agent | `agent.ask` | `cmd+alt+shift+q` | — | everywhere |
 | Agent Trace: Install Claude Hooks | `agent.hooks.install` | — | — | everywhere |
 | Agent Trace: Uninstall Claude Hooks | `agent.hooks.uninstall` | — | — | everywhere |
+| Agent Trace: Session History | `agent.trace.history` | — | — | everywhere |
+| Agent Trace: Import Claude Sessions | `agent.trace.import` | — | — | everywhere |
 | Agent Trace | `agent.trace.toggle` | `cmd+alt+shift+a` | — | everywhere |
 | Agent Trace: Graph / Tree View | `agent.trace.view` | — | — | everywhere |
 | Extract Whole Archive… | `archive.extractAll` | — | — | everywhere |
