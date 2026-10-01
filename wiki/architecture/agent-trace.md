@@ -1,10 +1,10 @@
 ---
 type: architecture
 title: Agent Trace
-description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, subagent transcripts joined under their Agent call and `Write` on an existing file as an edit (#2861), and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840), its graph view — the session as a snake path of prompt, change and answer boxes with expand-in-place, the `agent.trace.view` setting and the tree toggle (#2858), the links from writing file nodes to change-feed entries with diff/revert and the feed's jump back (#2838), per-change diffs reconstructed from the transcript with their provenance and a session-before / git HEAD / working-file base switch (#2859), and `agent.ask` — a question about a node answered by a fork of the same session on a cheaper model, with its node context, settings and answer overlay (internal/agentask, #2845), and follow-up questions on the same fork, fork tagging and the trimmed context (#2844), plus keybinds and limitations (other harnesses) (#2839).
+description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, subagent transcripts joined under their Agent call and `Write` on an existing file as an edit (#2861), and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840), its graph view — the session as a snake path of prompt, change and answer boxes with expand-in-place, the `agent.trace.view` setting and the tree toggle (#2858), the links from writing file nodes to change-feed entries with diff/revert and the feed's jump back (#2838), per-change diffs reconstructed from the transcript with their provenance and a session-before / git HEAD / working-file base switch (#2859), and `agent.ask` — a question about a node answered by a fork of the same session on a cheaper model, with its node context, settings and answer overlay (internal/agentask, #2845), and follow-up questions on the same fork, fork tagging and the trimmed context (#2844), the per-project session history — records written at turn boundaries, /clear boundaries, rewinds as abandoned branches behind a marker, the one-time import of Claude transcripts and the session picker with a read-only stored view (#2860) — plus keybinds and limitations (other harnesses) (#2839).
 resource: internal/agenttrace
-tags: [architecture, agents, claude, transcript, trace, discovery, hooks, tool-window, hiertree, change-feed, diff, ask, settings]
-timestamp: 2026-10-01T20:00:00Z
+tags: [architecture, agents, claude, transcript, trace, discovery, hooks, tool-window, hiertree, change-feed, diff, ask, settings, history, rewind]
+timestamp: 2026-10-01T22:00:00Z
 ---
 
 # Agent Trace
@@ -786,6 +786,139 @@ Every fork IKE creates is kept out of the trace three ways:
   the marker (question and answer), should a tagged fork ever be traced: its
   copied history shows, the asks do not.
 
+## History (#2860)
+
+The trace follows the live session; the **history** keeps the sessions it
+followed, the states a session went through when the user reset or rewound
+it, and — once imported — the sessions that ran before IKE watched them.
+Everything lives in `internal/agenttrace/history.go` (the record and the
+store), `internal/tracepanel/history.go` (the picker and the stored view) and
+`internal/app/agenttrace_history.go` (when records are written, the import,
+the commands).
+
+### Record format
+
+A session is stored as `.ike/agent-trace/<session-id>.json` under the
+project's state directory (`$IKE_CONFIG_DIR/agent-trace` when the variable
+is set, like the local history). The record is the harness-neutral model,
+versioned (`"v": 1`; a newer version is refused with `ErrRecordVersion`, an
+older one read with zero defaults) and independent of Claude's transcript
+schema — never a copy of the transcript:
+
+- header: `id`, `harness`, `cwd`, `transcript` (the file it was read from,
+  kept for `agent.ask`), `started_at` / `ended_at`, `ended`, `source`
+  (`live` or `import`), the transcript's `transcript_size` /
+  `transcript_mod` at write time (import idempotence), and the picker's
+  columns `turns`, `files_changed`, `first_prompt`;
+- `events`: every `Event` as kind, turn, time, text, `thinking`,
+  `abandoned` and — for a tool call — name, title, error/done and the
+  `FileRef`s (`path`, `line`, `op`); a subagent's events nest under its
+  call (`agent`). Tool inputs and outputs are dropped; a prompt or answer
+  keeps 4 KiB, an intermediate text or thinking block 512 bytes;
+- `rewinds`: the `Rewind` list (`from`, `to`, `at`);
+- `diffs`: the reconstructed changes (#2859) as `RecordDiff` — key(s),
+  path, op, tool, turn, provenance, hunks and line counts, never the whole
+  before/after contents.
+
+`agenttrace.NewRecord(session, transcript, ended)` builds it;
+`Record.Session()` rebuilds a `Session` whose `KnownDiffs` are the stored
+diffs, so `BuildTree`, `BuildPath` and `Diffs` work on a stored session
+like on a live one (the counts on the boxes and `D` included).
+
+**Caps.** One record is at most `MaxRecordBytes` (512 KiB): `Encode` drops
+the hunks of the largest diffs first (their counts stay), then halves the
+text caps, and marks the record `truncated`. The `Store` keeps at most
+`agent.trace.history_max_sessions` records (Settings UI page *Agent Trace*,
+1–500, default 50): every `Save` prunes the oldest by session end (then
+start), so the directory is bounded at cap × 512 KiB. Writes are atomic
+(temp file, rename).
+
+### When records are written
+
+The live read (`traceReadCmd`) builds the record under the reader's lock
+and writes it whenever the session's turn count, rewind count or ended
+state moved since the last write (`traceRecordDue`) — i.e. at every turn
+boundary, on a rewind and on `SessionEnd` — so a crash loses at most the
+running turn. A write failure is reported once per distinct error.
+
+**Session boundaries.** A `/clear` starts a new Claude session: with hooks
+the new `SessionStart` rebinds the terminal and the trace relocates; without
+them the project directory's modification time is polled every few ticks
+(`agenttrace.DirStamp`) and a new transcript triggers a relocation. Either
+way the session the trace leaves is filed as ended (`traceCloseCmd`) and the
+new one gets its own record; both are listed in the picker.
+
+### Rewinds
+
+Claude Code's `esc esc` rewinds to an earlier message: the next prompt is
+written with a `parentUuid` naming the line *before* the picked message
+instead of the tail. The parser keeps every line's `parentUuid`
+(`Event.ParentUUID`) and the event count after every line id; a prompt or
+assistant line whose parent is a known id other than the tail is a rewind
+(`Session.Rewinds`): the events after the parent are marked `Abandoned` in
+place and the line reports a change, so the tailing host re-reads. A
+`tool_result` whose parent is its own `tool_use` is *not* a rewind — that is
+how parallel tool calls chain (the real transcripts in `~/.claude/projects`
+show exactly this shape, and nothing else, as a parent-chain break).
+
+`BuildTree` and `BuildPath` follow the live branch. Where the transcript
+went back they insert a marker: a `NodeRewind` root (`↶ rewound`, detail
+`N turns abandoned`, key `rw<index of the rewinding event>`) whose children
+are the abandoned events grouped into turns of their own (turn keys
+prefixed `rw<i>/`, event keys unchanged), kept folded until expanded; and a
+`StopRewind` box (faint, glyph `↶`) whose `Branch` is the abandoned path —
+`space` or `enter` expands it into a block listing the branch's prompt,
+changes and answer. Nested rewinds (going back past an earlier rewind)
+nest their markers: every event belongs to the innermost rewind that
+abandoned it (`branchOwners`). An abandoned turn's answer is never
+"working …".
+
+The rule was verified against a real `esc esc` → *Restore conversation*
+rewind on Claude Code 2.1.285: the rewind stays in the same transcript
+file (no new session id), the restored prompt text comes back into the
+input, and the next prompt line carries the `parentUuid` of the line before
+the picked message — parsed into one rewind with the picked turn abandoned.
+The `rewind.jsonl` fixture holds the same shape (plus a parallel tool pair
+as the negative case).
+
+### Import (`agent.trace.import`)
+
+`agenttrace.Import(store, projectsDir, cwd, progress)` scans the project's
+transcript directories (as given and symlink-resolved) and writes a record
+for every original session not yet stored — or stored from an older file
+(size or mtime differ). Forks and ask-tagged forks are skipped
+(`ImportResult.Forks`), a file without a session header or without events
+(a malformed transcript) is reported in `Failed`, never fatal. The app runs
+it off the loop; progress goes through the host's coalescing outbox into
+the status bar segment `⇣ agent sessions 3/12` (`agentimport`, a click
+opens the picker), and the result is one notice: `N imported, M unchanged,
+K forks skipped · unreadable: …`. Re-running is idempotent. The command
+is palette-only (ledger: occasional).
+
+### Picker and stored view
+
+`s` in the pane (any state, the empty one included) or
+`agent.trace.history` lists the store (`HistoryMsg` → the app's `List` →
+`OpenPicker`): newest first, one row per session — `●` for the live one,
+the start date, the duration (`1h05m`, `live`), turns, files changed and
+the first prompt. The list is built from the shared blocks: `ui.LineSearch`
+(`/` filters by date, prompt and id with smartcase; `enter` keeps the
+filter, `esc` drops it, a second `esc` closes), `ui.ListNav` with
+`ui.ClampWindow`, `ui.RenderWindow` / `ui.ListPaneView`, and the list-mouse
+`ClickTracker.ClickRow` / `WheelWindow`. `enter` (or a double click) on a
+stored session asks for it (`ShowHistoryMsg`); the app loads the record
+off the loop and hands its tree and path to `SetStored`.
+
+A stored session is shown read-only: the header reads `history ·
+<date> · <id> · N turns · esc live`, the tree opens on the first turn and
+the graph on the first box (history is read from the start), no read or
+follow status is shown and the change-feed links are empty. The ticks keep
+reading and filing the *live* session meanwhile — they just leave the pane
+alone (`traceShowingHistory`) — and `esc` or `r` (`LiveMsg`) return to it,
+located and read afresh. `agent.ask` on a stored session forks its id
+when the transcript still exists; otherwise `a` explains that Claude Code
+pruned it and only the record remains.
+
 ## Keybinds
 
 | Chord | Command | Where |
@@ -793,14 +926,19 @@ Every fork IKE creates is kept out of the trace three ways:
 | `cmd+alt+shift+a` | `agent.trace.toggle` | global; also in the Tools menu |
 | `cmd+alt+shift+q` | `agent.ask` | global; `a` inside the trace pane |
 
-`agent.trace.view` (graph ↔ tree, #2858) is palette-only: the pane's own
-`t` is the binding, as the keybind ledger records.
+`agent.trace.view` (graph ↔ tree, #2858) and `agent.trace.history` (the
+session picker, #2860) are palette-only: the pane's own `t` and `s` are the
+bindings, as the keybind ledger records; `agent.trace.import` (#2860) is an
+occasional one-off, palette-only too.
 
-In-pane keys (`enter`, `r`, `i`, `D`, `V`, `a`, `t`) are listed under
+In-pane keys (`enter`, `r`, `i`, `D`, `V`, `a`, `t`, `s`, `esc` on a stored
+session) are listed under
 [Pane](#pane) and [Graph view](#graph-view-2858); the diff view's `1` / `2`
 / `3` / `f` under [Diffs](#diffs-2859); the answer overlay's `f` / `ctrl+n` under
 [Follow-up questions](#follow-up-questions); the feed's `t` under
 [Change-feed links](#change-feed-links-2838).
+The history picker's keys (`/`, `enter`, `esc`, `q`) are under
+[History](#history-2860).
 
 ## Limitations
 
@@ -970,6 +1108,29 @@ note, paste and `ctrl+u`, and the session-wide ask; the follow-up chain
 fork, tagged, context-free → both exchanges in the overlay → the original
 transcript untouched → reopening the node continues the kept fork →
 `ctrl+n` forks afresh) and a vanished fork being forgotten.
+
+`internal/agenttrace/rewind_test.go` (#2860) parses `rewind.jsonl`: the one
+rewind with its abandoned range, `ParentUUID` on every event, the parallel
+tool pair that is no rewind, the tree and path markers with the abandoned
+branch behind them (keys, detail, no pending answer) and a rewind arriving
+incrementally; `history_test.go` round-trips `basic.jsonl` and
+`rewind.jsonl` through the store (tree, path, rewinds and diffs identical),
+the summary columns and the dropped inputs/outputs, the size cap trimming
+hunks, pruning oldest first and the version refusal, the import over a
+projects root (two originals stored, a plain and an ask-tagged fork
+skipped, a malformed file reported, idempotent, a grown transcript
+re-imported) and `DirStamp`. `internal/tracepanel/history_test.go` covers
+`s` in both states, the picker (rows, live mark, `/` filter, miss, enter,
+esc, mouse), the stored header with `esc`/`r`, and the rewind marker folded
+in the tree and expandable in the graph. `internal/app/agenttrace_history_test.go`
+covers the record written on the first read, not on an idle one, on a new
+turn and on the end; a hook `/clear` closing the first record and starting
+the second, the picker switching to the stored session while live reads
+keep filing, `esc` back; `agent.ask` on a stored session with and without
+its transcript; and `agent.trace.import` with its status segment and
+notice. `internal/config/agent_trace_validate_test.go` and
+`internal/settings/agent_trace_history_test.go` cover
+`agent.trace.history_max_sessions`.
 
 ## Related
 

@@ -75,6 +75,9 @@ type Info struct {
 	// Ended is set once the harness reported SessionEnd.
 	Ended bool
 	Turns int
+	// History is the date label of a stored session shown read-only (#2860),
+	// "" for the live one.
+	History string
 }
 
 // Model is the tool window.
@@ -120,6 +123,8 @@ type Model struct {
 	// zero value is the tree; the host applies the agent.trace.view setting.
 	view  ViewMode
 	graph graphState
+	// picker is the stored-session picker (#2860, history.go).
+	picker pickerState
 }
 
 // New builds an empty panel: nothing located yet.
@@ -189,6 +194,8 @@ func (m *Model) Set(nodes []agenttrace.Node, info Info) {
 func (m *Model) expandNew(rows []*hiertree.Row[agenttrace.Node]) {
 	for _, r := range rows {
 		switch {
+		case r.Item.Kind == agenttrace.NodeRewind:
+			// An abandoned branch (#2860) stays folded behind its marker.
 		case !m.known[r.Item.Key]:
 			m.tree.ExpandDeep(r)
 		case r.Expanded():
@@ -411,6 +418,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	if !ok {
 		return nil
 	}
+	if m.picker.open {
+		return m.pickerKey(k)
+	}
 	cmd := m.handleKey(k)
 	if m.hasSession && m.view == ViewTree {
 		m.noteCursor()
@@ -432,6 +442,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	key := msg.String()
 	if !m.hasSession {
 		switch key {
+		case "s":
+			return func() tea.Msg { return HistoryMsg{} }
 		case "i", "enter":
 			if m.loading {
 				return nil
@@ -466,7 +478,16 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 	switch key {
+	case "s":
+		return func() tea.Msg { return HistoryMsg{} }
+	case "esc":
+		if m.Stored() {
+			return func() tea.Msg { return LiveMsg{} }
+		}
 	case "r":
+		if m.Stored() {
+			return func() tea.Msg { return LiveMsg{} }
+		}
 		return func() tea.Msg { return RefreshMsg{} }
 	case "i":
 		return func() tea.Msg { return InstallHooksMsg{} }
@@ -517,6 +538,10 @@ func (m *Model) open(n agenttrace.Node) tea.Cmd {
 
 // Wheel scrolls the tree by delta rows.
 func (m *Model) Wheel(delta int) {
+	if m.picker.open {
+		m.pickerWheel(delta)
+		return
+	}
 	if !m.hasSession {
 		return
 	}
@@ -534,6 +559,9 @@ func (m *Model) Wheel(delta int) {
 // click on the same row within ui.DoubleClickWindow opens its file (or
 // toggles a row without one). In the empty state the dialog's buttons act.
 func (m *Model) Click(x, y int) tea.Cmd {
+	if m.picker.open {
+		return m.pickerClick(x, y)
+	}
 	if !m.hasSession {
 		return m.dialogClick(x, y)
 	}
@@ -600,12 +628,15 @@ func (m *Model) View() string {
 		return ""
 	}
 	pal := m.theme()
+	if m.picker.open {
+		return m.pickerView(pal)
+	}
 	if !m.hasSession {
 		return m.emptyView(pal)
 	}
 	clip := lipgloss.NewStyle().MaxWidth(m.width)
 	lines := []string{clip.Render(m.headerLine(pal))}
-	hint := "enter/double-click opens · space expands · h/l fold · t graph · D diff · a ask · r rescan · Δ: V revert"
+	hint := "enter/double-click opens · space expands · h/l fold · t graph · s sessions · D diff · a ask · r rescan · Δ: V revert"
 	if m.view == ViewGraph {
 		lines = append(lines, m.graphRows(pal)...)
 		hint = graphHint
@@ -613,6 +644,9 @@ func (m *Model) View() string {
 		m.ensureFetch()
 		rows := m.tree.RenderRows(m.width, m.treeHeight(), pal, m.display, "(no events yet)")
 		lines = append(lines, rows...)
+	}
+	if m.Stored() {
+		hint = "esc/r back to live · " + hint
 	}
 	for len(lines) < headerRows+m.treeHeight() {
 		lines = append(lines, "")
@@ -638,6 +672,12 @@ func (m *Model) headerLine(pal *theme.Palette) string {
 	turns := " · " + itoa(m.info.Turns) + " turn"
 	if m.info.Turns != 1 {
 		turns += "s"
+	}
+	if m.info.History != "" {
+		// A stored session (#2860): the date is the headline, nothing is
+		// read or followed.
+		title := lipgloss.NewStyle().Foreground(pal.Accent).Bold(m.focused).Render(" history · " + m.info.History)
+		return title + lipgloss.NewStyle().Faint(true).Render(" · "+id+turns+" · esc live  "+m.display(m.info.Transcript))
 	}
 	title := lipgloss.NewStyle().Foreground(pal.Accent).Bold(m.focused).Render(" " + id)
 	return title + lipgloss.NewStyle().Faint(true).Render(" · "+source+turns+state+m.readStatus()+m.followStatus()+"  "+m.display(m.info.Transcript))

@@ -144,6 +144,10 @@ func DiffsWith(s *Session, readFile func(string) ([]byte, error)) []ChangeDiff {
 	if s == nil {
 		return nil
 	}
+	if s.KnownDiffs != nil {
+		// A session restored from a history record (#2860) carries its diffs.
+		return s.KnownDiffs
+	}
 	d := differ{cwd: s.CWD, read: readFile, full: true, known: map[string]func() (snapshot, bool){}}
 	d.walk(s.Events, "e", -1)
 	return d.out
@@ -165,6 +169,15 @@ func DiffFor(diffs []ChangeDiff, key string) (ChangeDiff, bool) {
 // the counts by node key, without the disk and without assembling whole
 // contents no count needs.
 func diffCounts(s *Session) map[string]ChangeDiff {
+	if s.KnownDiffs != nil {
+		out := make(map[string]ChangeDiff, len(s.KnownDiffs))
+		for _, cd := range s.KnownDiffs {
+			if cd.Counted {
+				out[cd.Key] = cd
+			}
+		}
+		return out
+	}
 	d := differ{cwd: s.CWD, known: map[string]func() (snapshot, bool){}}
 	d.walk(s.Events, "e", -1)
 	out := make(map[string]ChangeDiff, len(d.out))

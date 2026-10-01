@@ -30,6 +30,9 @@ const (
 	NodeFile
 	// NodeSeparator is a compaction or summary boundary inside a turn.
 	NodeSeparator
+	// NodeRewind marks where the transcript went back (#2860); the turns a
+	// rewind abandoned nest below it.
+	NodeRewind
 )
 
 // String returns the lowercase name used in tests.
@@ -45,6 +48,8 @@ func (k NodeKind) String() string {
 		return "file"
 	case NodeSeparator:
 		return "separator"
+	case NodeRewind:
+		return "rewind"
 	}
 	return "unknown"
 }
@@ -95,10 +100,74 @@ const MaxLabel = 80
 // BuildTree groups the session's events into turns. Events before the first
 // prompt (a resumed session's compaction, for instance) form a leading
 // "session start" turn. Turns agent.ask prompted (IsAskPrompt) are left out.
+// The tree follows the live branch (#2860): the events a rewind abandoned
+// sit under a NodeRewind marker ("↶ rewound") placed where the transcript
+// went back, grouped into turns of their own.
 func BuildTree(s *Session) []Node {
 	if s == nil {
 		return nil
 	}
+	b := treeBuilder{s: s, counts: diffCounts(s), owner: branchOwners(s)}
+	return b.build(-1, 0, len(s.Events), "")
+}
+
+// branchOwners assigns every event to the rewind that abandoned it: -1 for
+// the live branch, else the index into Session.Rewinds of the innermost
+// rewind whose range holds the event. Rewinds come in transcript order, so
+// an earlier (inner) one claims its events before a later one that went
+// back past it.
+func branchOwners(s *Session) []int {
+	owner := make([]int, len(s.Events))
+	for i := range owner {
+		owner[i] = -1
+	}
+	for k, rw := range s.Rewinds {
+		for i := rw.From; i < rw.To && i < len(owner); i++ {
+			if i >= 0 && owner[i] == -1 {
+				owner[i] = k
+			}
+		}
+	}
+	return owner
+}
+
+// rewindKey is the node (and stop) key of the rewind whose rewinding event
+// is at index to.
+func rewindKey(to int) string { return "rw" + strconv.Itoa(to) }
+
+// rewindDetail summarises an abandoned branch: its turns, else its events.
+func rewindDetail(s *Session, rw Rewind) string {
+	turns, events := 0, 0
+	for i := rw.From; i < rw.To && i < len(s.Events); i++ {
+		events++
+		if s.Events[i].Kind == KindUser {
+			turns++
+		}
+	}
+	switch {
+	case turns == 1:
+		return "1 turn abandoned"
+	case turns > 1:
+		return strconv.Itoa(turns) + " turns abandoned"
+	case events == 1:
+		return "1 event abandoned"
+	}
+	return strconv.Itoa(events) + " events abandoned"
+}
+
+// treeBuilder groups one branch of the session.
+type treeBuilder struct {
+	s      *Session
+	counts map[string]ChangeDiff
+	owner  []int
+}
+
+// build groups the events in [from, to) that belong to branch own into
+// turns, keyed with prefix (the live branch's is ""), and places the marker
+// of every rewind that happened inside the range where its rewinding event
+// is — with the abandoned branch grouped beneath it.
+func (b *treeBuilder) build(own, from, to int, prefix string) []Node {
+	s := b.s
 	// Turns are built behind pointers: the decision a tool call nests under
 	// must stay valid while the turn's children grow.
 	var turns []*Node
@@ -108,7 +177,7 @@ func BuildTree(s *Session) []Node {
 		if cur != nil && cur.Turn == ev.Turn {
 			return cur
 		}
-		cur = &Node{Kind: NodeTurn, Key: "t" + strconv.Itoa(ev.Turn), Turn: ev.Turn, Event: -1}
+		cur = &Node{Kind: NodeTurn, Key: prefix + "t" + strconv.Itoa(ev.Turn), Turn: ev.Turn, Event: -1}
 		turns = append(turns, cur)
 		decision = nil
 		if ev.Kind == KindUser {
@@ -122,12 +191,25 @@ func BuildTree(s *Session) []Node {
 		}
 		return cur
 	}
+	rewinds := map[int]int{} // rewinding event index → rewind
+	for k, rw := range s.Rewinds {
+		rewinds[rw.To] = k
+	}
 	// asked is the turn of a question agent.ask put to this session (#2844)
 	// — only ever present in a fork IKE created; its turns stay out of the
 	// tree.
 	asked := -1
-	counts := diffCounts(s)
-	for i := range s.Events {
+	for i := from; i < to && i <= len(s.Events); i++ {
+		if k, ok := rewinds[i]; ok && b.ownerAt(i) == own {
+			rw := s.Rewinds[k]
+			n := &Node{Kind: NodeRewind, Key: rewindKey(i), Turn: s.Events[rw.From].Turn, Event: -1, Label: "↶ rewound", Detail: rewindDetail(s, rw), At: rw.At}
+			n.Children = b.build(k, rw.From, rw.To, rewindKey(i)+"/")
+			turns = append(turns, n)
+			cur, decision = nil, nil
+		}
+		if i >= len(s.Events) || b.owner[i] != own {
+			continue
+		}
 		ev := s.Events[i]
 		if ev.Kind == KindUser && IsAskPrompt(ev.Text) {
 			asked = ev.Turn
@@ -157,7 +239,7 @@ func BuildTree(s *Session) []Node {
 				t.Children = append(t.Children, Node{Kind: NodeDecision, Key: "e" + strconv.Itoa(i) + "/x", Turn: ev.Turn, Event: i, Label: "tool calls"})
 				decision = &t.Children[len(t.Children)-1]
 			}
-			decision.Children = append(decision.Children, toolNode(ev, "e"+strconv.Itoa(i), ev.Turn, i, nil, counts))
+			decision.Children = append(decision.Children, toolNode(ev, "e"+strconv.Itoa(i), ev.Turn, i, nil, b.counts))
 		}
 	}
 	out := make([]Node, len(turns))
@@ -165,6 +247,15 @@ func BuildTree(s *Session) []Node {
 		out[i] = *t
 	}
 	return out
+}
+
+// ownerAt is the branch the event at i belongs to; a rewind whose
+// rewinding line produced no event (i == len(Events)) is the live branch's.
+func (b *treeBuilder) ownerAt(i int) int {
+	if i < 0 || i >= len(b.owner) {
+		return -1
+	}
+	return b.owner[i]
 }
 
 // toolNode builds the row of one tool call with its files below and, for an

@@ -715,6 +715,12 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			// Ask a fork of the traced session about the selected node (#2845).
 			withAliases(appCommand("agent.ask", "Agent Trace: Ask the Agent", AgentAskMsg{}),
 				"claude", "why", "question", "fork"),
+			// The session history (#2860): the picker of stored sessions (also
+			// the pane's 's') and the one-time import of Claude's transcripts.
+			withAliases(appCommand("agent.trace.history", "Agent Trace: Session History", AgentTraceHistoryMsg{}),
+				"claude", "trace", "sessions", "past", "picker"),
+			withAliases(appCommand("agent.trace.import", "Agent Trace: Import Claude Sessions", AgentTraceImportMsg{}),
+				"claude", "trace", "history", "transcripts"),
 			// The PHP declaration index's operations surface (0520, #2673).
 			// Global rather than PHP-scoped: the reason to rebuild — a branch
 			// switch, a generator run — is felt with the explorer or a terminal

@@ -161,10 +161,28 @@ type Event struct {
 	Text string
 	// Reasoning marks an assistant thinking block.
 	Reasoning bool
-	// UUID is the harness's line id; parent links are not modelled.
-	UUID string
+	// UUID is the harness's line id; ParentUUID the id of the line it
+	// continues (#2860): the previous line normally, an earlier one after a
+	// rewind.
+	UUID       string
+	ParentUUID string
+	// Abandoned marks an event a rewind superseded (#2860): the user went
+	// back to an earlier message and the transcript continued from there.
+	// BuildTree and BuildPath follow the live branch and show the abandoned
+	// events behind a rewind marker.
+	Abandoned bool
 	// Tool is set for KindTool events.
 	Tool *Tool
+}
+
+// Rewind is one point where the transcript went back (#2860): Claude Code's
+// esc esc picks an earlier message and the next line's parentUuid names the
+// line before it instead of the tail. Events [From, To) are the abandoned
+// branch; Events[To] is the line that rewound.
+type Rewind struct {
+	From int       `json:"from"`
+	To   int       `json:"to"`
+	At   time.Time `json:"at,omitempty"`
 }
 
 // Session is one transcript.
@@ -179,9 +197,29 @@ type Session struct {
 	StartedAt time.Time
 	EndedAt   time.Time
 	Events    []Event
+	// Rewinds are the points where the transcript went back (#2860), in
+	// order; the abandoned events carry Abandoned.
+	Rewinds []Rewind
 	// Malformed counts lines that were not valid JSON objects and were
 	// skipped.
 	Malformed int
+	// KnownDiffs are the change diffs of a session restored from a history
+	// record (#2860), whose tool inputs and results are not kept: Diffs and
+	// the tree's and path's counts take them instead of reconstructing. nil
+	// for a parsed transcript.
+	KnownDiffs []ChangeDiff
+}
+
+// Live returns the indices of the events on the live branch: every event a
+// rewind did not abandon.
+func (s *Session) Live() []int {
+	out := make([]int, 0, len(s.Events))
+	for i := range s.Events {
+		if !s.Events[i].Abandoned {
+			out = append(out, i)
+		}
+	}
+	return out
 }
 
 // Turns returns the number of user prompts seen so far.
