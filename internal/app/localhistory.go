@@ -18,6 +18,7 @@ import (
 	"ike/internal/project"
 	"ike/internal/textenc"
 	"ike/internal/theme"
+	"ike/internal/unidiff"
 )
 
 // localhistory.go wires Local History (#35, MVP #1023) into the app: every
@@ -242,15 +243,32 @@ func (m Model) renderLocalHistoryDiff(width int) []string {
 // miniDiffLines renders res as git-style unified lines clipped to width: an
 // "@@" header per widened hunk, then one row per line with a +/- gutter
 // marker — added green, removed red, context plain. It is the shared inline
-// diff renderer behind the local-history panel, the change feed (#1969) and
-// the crash-recovery dialog (#2160).
+// diff renderer behind the local-history panel, the change feed (#1969), the
+// crash-recovery dialog (#2160), the intention action preview and the LSP
+// rename preview. The changed ranges of a "- "/"+ " pair carry the diff
+// pane's intra-line emphasis (#2847) while editor.diff_word_highlight is on.
 func miniDiffLines(pal *theme.Palette, res diff.Result, width int) []string {
+	return renderMiniDiff(pal, res, width, unidiff.WordHighlightEnabled())
+}
+
+// renderMiniDiff is miniDiffLines with the word-emphasis toggle explicit.
+func renderMiniDiff(pal *theme.Palette, res diff.Result, width int, words bool) []string {
 	dim := lipgloss.NewStyle().Foreground(pal.Hint)
 	added := lipgloss.NewStyle().Foreground(pal.VCSAdded)
 	removed := lipgloss.NewStyle().Foreground(pal.VCSDeleted)
+	// Same emphasis as the diff pane (#2170): the emph background slot plus
+	// bold, layered over the line's own foreground.
+	addedEmph := added.Background(pal.DiffAddedEmph).Bold(true)
+	removedEmph := removed.Background(pal.DiffRemovedEmph).Bold(true)
 	clip := func(marker, text string) string {
 		text = strings.ReplaceAll(text, "\t", "    ")
 		return ansi.Truncate(marker+text, width, "…")
+	}
+	side := func(base, emph lipgloss.Style, marker, text string, spans []diff.Span) string {
+		if !words || len(spans) == 0 {
+			return base.Render(clip(marker, text))
+		}
+		return miniDiffEmphLine(base, emph, marker, text, spans, width)
 	}
 	var out []string
 	for _, h := range mergedLocalHistoryHunks(res) {
@@ -260,7 +278,9 @@ func miniDiffLines(pal *theme.Palette, res diff.Result, width int) []string {
 			case diff.RowSame:
 				out = append(out, clip("  ", row.Left))
 			case diff.RowChanged:
-				out = append(out, removed.Render(clip("- ", row.Left)), added.Render(clip("+ ", row.Right)))
+				out = append(out,
+					side(removed, removedEmph, "- ", row.Left, row.LeftSpans),
+					side(added, addedEmph, "+ ", row.Right, row.RightSpans))
 			case diff.RowRemoved:
 				out = append(out, removed.Render(clip("- ", row.Left)))
 			case diff.RowAdded:
@@ -269,6 +289,62 @@ func miniDiffLines(pal *theme.Palette, res diff.Result, width int) []string {
 		}
 	}
 	return out
+}
+
+// miniDiffEmphLine renders one side of a changed pair with its changed rune
+// spans in emph and the rest in base, clipped to width like the plain rows.
+// Spans index the raw line's runes; tabs expand to four columns here, so the
+// spans widen with them. Truncation runs on the plain text first and every
+// run renders as its own styled segment, so each escape opened inside the
+// visible width is closed again — nothing leaks past the line end.
+func miniDiffEmphLine(base, emph lipgloss.Style, marker, text string, spans []diff.Span, width int) string {
+	vis := []rune(marker)
+	hot := make([]bool, len(vis))
+	for i, r := range []rune(text) {
+		in := false
+		for _, s := range spans {
+			if i >= s.Start && i < s.End {
+				in = true
+				break
+			}
+		}
+		if r == '\t' {
+			vis = append(vis, ' ', ' ', ' ', ' ')
+			hot = append(hot, in, in, in, in)
+			continue
+		}
+		vis = append(vis, r)
+		hot = append(hot, in)
+	}
+	full := string(vis)
+	ellipsis := ""
+	if clipped := ansi.Truncate(full, width, "…"); clipped != full {
+		// Keep the rune prefix the plain truncation kept; the ellipsis
+		// renders in the base style after it.
+		kept := strings.TrimSuffix(clipped, "…")
+		if kept != clipped {
+			ellipsis = "…"
+		}
+		n := len([]rune(kept))
+		vis, hot = vis[:n], hot[:n]
+	}
+	var b strings.Builder
+	for i := 0; i < len(vis); {
+		j := i
+		for j < len(vis) && hot[j] == hot[i] {
+			j++
+		}
+		st := base
+		if hot[i] {
+			st = emph
+		}
+		b.WriteString(st.Render(string(vis[i:j])))
+		i = j
+	}
+	if ellipsis != "" {
+		b.WriteString(base.Render(ellipsis))
+	}
+	return b.String()
 }
 
 // mergedLocalHistoryHunks widens each computed hunk by lhContext unchanged
