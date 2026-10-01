@@ -128,6 +128,8 @@ func (m *Model) routeWatchEvent(msg watch.EventMsg) tea.Cmd {
 	// the removal handling below, which may close an editor pane and return
 	// early; the diff is a viewer of its own and never rides on one.
 	m.reloadDiffsForPath(msg.Path)
+	// A review pane's working-tree side follows the file too (#2848).
+	m.reloadReviewForPath(msg.Path)
 	// Announce the file event to hook subscribers (#1144): the LSP bridge
 	// forwards it to the servers as workspace/didChangeWatchedFiles, so
 	// Intelephense re-indexes externally created/changed/deleted files.

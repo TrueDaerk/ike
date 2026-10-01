@@ -19,7 +19,16 @@ import (
 // delegated to custom tool panes (#741, lazygit as the shipped example).
 
 // OpenDiffMsg asks the root model to open the file's diff against HEAD.
-type OpenDiffMsg struct{ Path string } // repo-relative
+// Review (shift+enter, #2848) asks for the review-changes mode positioned at
+// the file instead of a single-file diff.
+type OpenDiffMsg struct {
+	Path   string // repo-relative
+	Review bool
+}
+
+// ReviewChangesMsg asks the root model to review every changed file against
+// HEAD in one diff pane (#2848), starting at Path ("" = the first file).
+type ReviewChangesMsg struct{ Path string }
 
 // Row is one changed file in the list. Code is the porcelain badge from the
 // entry ("A", "M", "AM"…, #1868); it tells a fully staged file from one that
@@ -64,6 +73,17 @@ func (m *Model) updateChanges(msg tea.KeyPressMsg) tea.Cmd {
 		if m.chCursor < len(m.chRows) {
 			path := m.chRows[m.chCursor].Path
 			return func() tea.Msg { return OpenDiffMsg{Path: path} }
+		}
+	case "shift+enter":
+		// Review mode from this row (#2848).
+		if m.chCursor < len(m.chRows) {
+			path := m.chRows[m.chCursor].Path
+			return func() tea.Msg { return OpenDiffMsg{Path: path, Review: true} }
+		}
+	case "r":
+		// Review all changes from the first file (#2848).
+		if len(m.chRows) > 0 {
+			return func() tea.Msg { return ReviewChangesMsg{} }
 		}
 	}
 	return nil
@@ -121,5 +141,5 @@ func (m *Model) renderChangeRows(pal *theme.Palette, height int) string {
 
 // changesFooter shows the key hints.
 func (m *Model) changesFooter(pal *theme.Palette) string {
-	return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter diff · j/k move"))
+	return lipgloss.NewStyle().Faint(true).Render(m.clip(" enter diff · r review all · shift+enter review from here · j/k move"))
 }

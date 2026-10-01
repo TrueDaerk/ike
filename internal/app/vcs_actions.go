@@ -171,6 +171,9 @@ func (m *Model) openDiffHeadPane(path, head string) {
 		if ed := m.editorForPath(path); ed != nil {
 			right = ed.Text()
 		}
+		// A review pane on this very file (#2848) becomes the plain
+		// single-file diff that was asked for.
+		inst.Diff().EndReview()
 		inst.Diff().SetContents(head, right)
 		m.focusContentAt(hostKey, tabIdx)
 		return

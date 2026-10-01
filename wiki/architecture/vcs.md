@@ -113,6 +113,7 @@ since the leader layer retired (#711):
 | `vcs.undoRevert` | palette | Palette picker over the focused file's revert-history snapshots (newest first, timestamp + changed-line count); selecting one re-applies it to the buffer as a single undo-tree change — dirty, undoable, saved only explicitly. |
 | `vcs.revertHunk` | palette | JetBrains "Rollback Lines": restore the contiguous change under the caret (the gutter-marked region, deletion anchors included) to its HEAD content. Applied as one buffer edit through the undo tree — plain undo brings the hunk back; works against unsaved edits too (`internal/editor/vcs_revert.go`). |
 | `vcs.diff` | palette | Diff pane: live buffer vs HEAD blob (reuses the [Diff Viewer](/architecture/diff-viewer.md)). |
+| `diff.reviewChanges` | `cmd+alt+shift+m` / `ctrl+alt+shift+m`, VCS panel `r` | Review every changed file against HEAD in one diff pane (#2848): the panel's rows in order, untracked last, each working tree vs HEAD; `F7`/`shift+F7` cross file boundaries, `diff.nextFile`/`diff.prevFile` (`cmd+f7`/`cmd+shift+f7`) jump files, `f` picks one — see [Diff Viewer § Review changes](/architecture/diff-viewer.md). |
 | `vcs.blameLine` | palette | Toggle the inline blame annotation. |
 | `vcs.historyForSelection` | palette / editor context menu | JetBrains "Show History for Selection" (#1430): `git log -L` over the visual selection's lines (caret line fallback) — modal picker of the commits that touched exactly that range (`internal/vcs/rangelog.go`, capped at 200 commits); enter expands one commit to the patch git computed for the tracked range. Git follows the range across edits and renames itself. |
 | `vcs.mergeFile` | palette | Three-way merge view for the focused conflicted file (#1478): fetches the `:1`/`:2`/`:3` index stages (`internal/vcs/merge.go`) and opens the merge pane (see [Diff Viewer](/architecture/diff-viewer.md)). `enter` on a conflicted VCS-panel row opens it too, and opening a conflicted file in the editor offers it (#2258). |
@@ -148,8 +149,12 @@ explorer shows, in a two-cell column so `AM` rows stay aligned (#1868) —
 VCS-colored via the shared
 status recipe (#1052), `j`/`k`/wheel/click navigation with the muted
 unfocused cursor (#1034), and `enter`/double-click opens the file's
-diff-vs-HEAD — or, on a conflicted row, the three-way merge view (#1478). No staging checkboxes, no commit message, no Log tab — that
-workflow lives in the lazygit tool pane.
+diff-vs-HEAD — or, on a conflicted row, the three-way merge view (#1478).
+`r` opens the review of all changes and `shift+enter` the review positioned
+at the row (`OpenDiffMsg{Review: true}`, #2848 — see
+[Diff Viewer § Review changes](/architecture/diff-viewer.md)). No staging
+checkboxes, no commit message, no Log tab — that workflow lives in the
+lazygit tool pane.
 
 The panel never runs git itself — it emits request messages the root model
 answers with `internal/vcs` commands. The layout slot persists (kind

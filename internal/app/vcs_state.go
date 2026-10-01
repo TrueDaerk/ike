@@ -65,6 +65,7 @@ func (m Model) startVCSRefresh() tea.Cmd {
 // follow-up run, if triggers arrived while git was running.
 func (m Model) applyVCSSnapshot(msg vcs.SnapshotMsg) tea.Cmd {
 	m.vcs.refreshing = false
+	var reviewCmds []tea.Cmd
 	if m.vcs.snap.Equal(msg.Snap) {
 		// The refresh found the working tree as the frame already shows it
 		// (#2693): the watcher fires for every write in the project, most of
@@ -84,6 +85,9 @@ func (m Model) applyVCSSnapshot(msg vcs.SnapshotMsg) tea.Cmd {
 		if inst := m.toolWindow(pane.KindVCS); inst != nil { // pane or hosted tab (#2736)
 			inst.VCS().SetVCS(msg.Snap)
 		}
+		// Review panes re-list the changed files (#2848): clean files drop
+		// out, the file on screen re-diffs against the possibly moved HEAD.
+		reviewCmds = m.refreshReviewPanes(msg.Snap)
 	}
 	if m.vcs.dirty {
 		m.vcs.dirty = false
@@ -92,7 +96,7 @@ func (m Model) applyVCSSnapshot(msg vcs.SnapshotMsg) tea.Cmd {
 	}
 	// Recompute the gutter diff markers of every open buffer against the new
 	// snapshot (#464); clean/untracked buffers get their markers cleared.
-	return tea.Batch(m.vcsMarksCmds()...)
+	return tea.Batch(append(m.vcsMarksCmds(), reviewCmds...)...)
 }
 
 // ToggleBlameMsg runs vcs.blameLine (#468) on the focused document.

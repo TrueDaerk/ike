@@ -1575,7 +1575,10 @@ JetBrains is:
 | `deps.toggle` | `cmd+0` | fragile | `palette` | live via palette |
 | `diff.copy` | `cmd+c` | fragile | `diff pane "y" / palette` | live via diff pane "y" / palette |
 | `diff.nextChange` | `f7` | delivered | `—` | live |
+| `diff.nextFile` | `cmd+f7` | fragile | `diff pane "f" picker / palette` | live via diff pane "f" picker / palette |
 | `diff.prevChange` | `shift+f7` | delivered | `—` | live |
+| `diff.prevFile` | `cmd+shift+f7` | fragile | `ctrl+shift+f7` | live via ctrl+shift+f7 |
+| `diff.reviewChanges` | `cmd+alt+shift+m` | fragile | `VCS panel r / palette` | live via VCS panel r / palette |
 | `editor.caret.addAbove` | `alt+shift+up` | fragile | `palette` | live via palette |
 | `editor.caret.addAll` | `ctrl+shift+g` | fragile | `palette` | live via palette |
 | `editor.caret.addBelow` | `alt+shift+down` | fragile | `palette` | live via palette |

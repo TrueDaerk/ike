@@ -7038,9 +7038,37 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// (#1778); a non-diff focus is a quiet no-op (the bindings are
 		// diff-scoped, so this is belt and braces).
 		if inst := m.focusedContent(); inst != nil && inst.Kind() == pane.KindDiff {
-			inst.Diff().StepHunk(msg.Delta)
+			// In review mode (#2848) the step past a file end returns
+			// the next file's load request.
+			return m, inst.Diff().StepHunk(msg.Delta)
 		}
 		return m, nil
+
+	case DiffFileStepMsg:
+		// diff.nextFile / diff.prevFile (#2848): whole-file steps of the
+		// focused review pane; a single-file diff has no list to step.
+		inst := m.focusedContent()
+		if inst == nil || inst.Kind() != pane.KindDiff || !inst.Diff().Reviewing() {
+			m.host.Notify(host.Info, "diff: not reviewing changes — diff.reviewChanges opens the review")
+			return m, nil
+		}
+		return m, inst.Diff().StepReviewFile(msg.Delta)
+
+	case ReviewChangesMsg:
+		// diff.reviewChanges (#2848): every changed file against HEAD in
+		// one pane.
+		return m, m.openReviewPane(msg.Path)
+
+	case vcspanel.ReviewChangesMsg:
+		// The VCS panel's review action (#2848): r reviews from the first
+		// file, shift+enter from the row under the cursor.
+		return m, m.openReviewPane(msg.Path)
+
+	case diff.ReviewLoadMsg:
+		return m, m.serveReviewLoad(msg)
+
+	case reviewHeadMsg:
+		return m, m.applyReviewHead(msg)
 
 	case DiffCopyMsg:
 		// diff.copy (cmd+c, #2628): the focused diff pane's copy key as a
@@ -8884,6 +8912,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		abs := filepath.Join(snap.Root, filepath.FromSlash(msg.Path))
+		if msg.Review {
+			// Opened with a modifier (#2848): review mode, positioned at
+			// the row — untracked rows included, their HEAD side is empty.
+			return m, m.openReviewPane(msg.Path)
+		}
 		if snap.Status(abs) == vcs.StatusUntracked {
 			m.host.Notify(host.Info, "untracked file — there is no HEAD version to diff against")
 			return m, nil

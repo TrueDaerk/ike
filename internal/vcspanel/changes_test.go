@@ -79,3 +79,36 @@ func TestChangesNavigationAndDiff(t *testing.T) {
 		t.Fatalf("enter = %#v", cmd())
 	}
 }
+
+// TestReviewActions (#2848): shift+enter asks for review mode positioned at
+// the row, r for the review from the first file; the footer names both.
+func TestReviewActions(t *testing.T) {
+	m := changesPanel()
+	m.Update(key("j"))
+	cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModShift})
+	if cmd == nil {
+		t.Fatal("shift+enter emitted nothing")
+	}
+	if msg, ok := cmd().(OpenDiffMsg); !ok || msg.Path != "b.go" || !msg.Review {
+		t.Fatalf("shift+enter = %+v, want OpenDiffMsg{b.go, Review}", cmd())
+	}
+	cmd = m.Update(key("r"))
+	if cmd == nil {
+		t.Fatal("r emitted nothing")
+	}
+	if msg, ok := cmd().(ReviewChangesMsg); !ok || msg.Path != "" {
+		t.Fatalf("r = %+v, want ReviewChangesMsg{}", cmd())
+	}
+	// Plain enter keeps the single-file diff.
+	if msg, ok := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})().(OpenDiffMsg); !ok || msg.Review {
+		t.Fatalf("enter = %+v, want a plain OpenDiffMsg", msg)
+	}
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "r review all") {
+		t.Fatalf("footer lacks the review hint:\n%s", v)
+	}
+	// A clean tree has nothing to review.
+	m.SetVCS(snapWith())
+	if cmd := m.Update(key("r")); cmd != nil {
+		t.Fatal("r on a clean tree must be inert")
+	}
+}

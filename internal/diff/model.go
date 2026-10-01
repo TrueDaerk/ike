@@ -148,6 +148,10 @@ type Model struct {
 	// pointer so the value-receiver View copies share it, like the explorer's
 	// speed search; nil means no search is open and n/N step hunks.
 	search *ui.LineSearch
+
+	// rv is the review-changes state (#2848, review.go): the ordered file
+	// list hunk stepping continues through; nil for a single-file diff.
+	rv *review
 }
 
 // IgnoreWhitespaceMsg reports that the diff pane Key flipped its
@@ -424,6 +428,9 @@ func (m *Model) Retarget(leftTitle, rightTitle, leftPath, rightPath, leftRev, ri
 	m.leftRev, m.rightRev = leftRev, rightRev
 	m.editable = editable
 	m.editModeOn = false
+	// A retarget is a different comparison: the review list (#2848) does
+	// not describe it (review mode re-installs its own state around this).
+	m.EndReview()
 	// The path (and thus the language) may change; the following SetContents
 	// re-parses both sides against the new one.
 	m.leftIx, m.rightIx = highlight.Index{}, highlight.Index{}
@@ -499,6 +506,11 @@ func (m *Model) rediff() {
 		m.recomputeMatches()
 	}
 }
+
+// ReloadRight replaces the right side only — the working tree of a review
+// file that changed on disk (#2848) — re-diffing in place against the
+// retained left text the way ReloadContents does.
+func (m *Model) ReloadRight(right string) { m.ReloadContents(m.leftText, right) }
 
 // recompute re-diffs under changed options (#2170) and re-renders, keeping the
 // view on the hunk it was on — clamped to the new hunk list, since ignoring
@@ -608,6 +620,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if m.search != nil && m.search.Open {
 		return m.searchKey(msg)
 	}
+	// So does the open review file picker (#2848).
+	if m.PickingFile() {
+		return m.pickerKey(msg)
+	}
 	switch msg.String() {
 	case "/", "ctrl+f", "cmd+f", "super+f":
 		// The shared search key and the find chord open the same prompt.
@@ -646,13 +662,16 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.stepMatch(1)
 			break
 		}
-		m.stepHunk(1)
+		return m.stepHunk(1)
 	case "N":
 		if m.search != nil {
 			m.stepMatch(-1)
 			break
 		}
-		m.stepHunk(-1)
+		return m.stepHunk(-1)
+	case "f":
+		// Review mode's file picker (#2848); a single-file diff has no list.
+		m.openPicker()
 	case "u":
 		m.SetUnified(!m.unified)
 	case "w":
@@ -756,8 +775,9 @@ func (m *Model) expandGap(gi int) {
 
 // StepHunk moves the current hunk by delta — the diff.nextChange /
 // diff.prevChange commands (F7 / shift+F7, 0340 #495) drive it from outside
-// the key handler.
-func (m *Model) StepHunk(delta int) { m.stepHunk(delta) }
+// the key handler. In review mode (#2848) a step past the file's last (or
+// first) hunk returns the load request for the next (previous) file.
+func (m *Model) StepHunk(delta int) tea.Cmd { return m.stepHunk(delta) }
 
 // stepHunk steps to the next/previous change relative to what is on screen
 // (#2494): forward to the first hunk starting below the viewport anchor,
@@ -766,9 +786,15 @@ func (m *Model) StepHunk(delta int) { m.stepHunk(delta) }
 // itself placed by a step (no scroll in between), the step is a plain
 // cur±1 walk, which keeps repeated F7 progressing even when the viewport is
 // clamped at the document end and hunks pile up below the anchor.
-func (m *Model) stepHunk(delta int) {
+//
+// In review mode (#2848) a step with no hunk left in its direction — past
+// the last hunk forward, past the first backward, or on a file without
+// hunks — continues into the neighbouring file instead of clamping; the
+// returned command is that file's load request. A single-file diff clamps.
+func (m *Model) stepHunk(delta int) tea.Cmd {
 	if len(m.res.Hunks) == 0 {
-		return
+		cmd, _ := m.crossReviewBoundary(delta)
+		return cmd
 	}
 	target := m.cur + delta
 	if !m.curStepped && len(m.rowStarts) > 0 {
@@ -792,12 +818,18 @@ func (m *Model) stepHunk(delta int) {
 			}
 		}
 	}
+	if target < 0 || target >= len(m.res.Hunks) {
+		if cmd, ok := m.crossReviewBoundary(delta); ok {
+			return cmd
+		}
+	}
 	target = clamp(target, 0, len(m.res.Hunks)-1)
 	m.scrollToHunk(target)
 	// scrollToHunk's scroll re-synced cur against the anchor; the explicit
 	// step outranks that (the two only differ when the scroll clamped).
 	m.cur = target
 	m.curStepped = true
+	return nil
 }
 
 // anchorLine is the visual row one third down the viewport — where the hunk
@@ -1017,8 +1049,12 @@ func (m Model) View() string {
 		b.WriteByte('\n')
 		foot := ""
 		switch {
+		case m.PickingFile():
+			// The file picker (#2848) and the search prompt hold the
+			// keyboard, so they outrank everything.
+			ensure()
+			foot = m.pickerLine(st)
 		case m.search != nil:
-			// The prompt holds the keyboard, so it outranks everything.
 			foot = m.searchLine()
 		case m.notice != "":
 			// The live-reload notice (#2506), dimmed like the separators.
@@ -1064,6 +1100,10 @@ func (m Model) footerLine(st styles) string {
 			cur = fmt.Sprintf("%d", m.cur+1)
 		}
 		part = fmt.Sprintf("hunk %s/%d", cur, n)
+	}
+	if rf := m.reviewFooter(); rf != "" {
+		// Review mode (#2848): the file position ahead of the hunk one.
+		part = rf + " · " + part
 	}
 	part = fmt.Sprintf(" %s · %d%%", part, m.Progress())
 	if m.Collapsed() && len(m.sepLines) > 0 {

@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Diff Viewer
-description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, an ignore-whitespace mode (w, persisted as diff.ignore_whitespace, #2170), side-by-side or unified rendering with per-side theme diff slots including bold/underlined intra-line emphasis and tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, scroll-aware hunk navigation with a current-hunk gutter marker, side-label headers and a hunk/progress footer (#2494), mouse text selection with y/ctrl+c/cmd+c copy (#2070) painted as a per-frame overlay so a drag stays cheap (#2495), a hard 2 MiB/side input budget with a bounded Myers core (#2505), live reload of file-vs-file diffs off the 0140 watcher with a removed-file footer notice (#2506), clickable collapsed-context separators, diff.files palette command, opens as a content tab of the focused editor pane (diff.placement, #2507), layout persistence."
+description: "#60/0340 — reusable read-only diff pane: line-level Myers engine with intra-line refinement, an ignore-whitespace mode (w, persisted as diff.ignore_whitespace, #2170), side-by-side or unified rendering with per-side theme diff slots including bold/underlined intra-line emphasis and tree-sitter syntax highlighting, no soft-wrap with a horizontal offset shared by both sides, scroll-aware hunk navigation with a current-hunk gutter marker, side-label headers and a hunk/progress footer (#2494), mouse text selection with y/ctrl+c/cmd+c copy (#2070) painted as a per-frame overlay so a drag stays cheap (#2495), a hard 2 MiB/side input budget with a bounded Myers core (#2505), live reload of file-vs-file diffs off the 0140 watcher with a removed-file footer notice (#2506), clickable collapsed-context separators, diff.files palette command, opens as a content tab of the focused editor pane (diff.placement, #2507), layout persistence, and a review-changes mode walking every changed file of the working tree against HEAD in one pane with F7 / shift+F7 crossing file boundaries, diff.nextFile / diff.prevFile and an in-pane file picker (#2848)."
 resource: internal/diff
 tags: [architecture, diff, pane, vcs]
-timestamp: 2026-09-04T00:00:00Z
+timestamp: 2026-10-01T00:00:00Z
 ---
 
 # Diff Viewer (#60)
@@ -385,6 +385,74 @@ missing clipboard utility) shows a notification instead of an empty diff. The
 pane routes through the single diff slot / `placeDiffLeaf` like every other
 diff-open (`internal/app/diff_clipboard.go`).
 
+## Review changes against HEAD (#2848)
+
+`diff.reviewChanges` (`cmd+alt+shift+m` / `ctrl+alt+shift+m`, the palette,
+the VCS panel's `r`, or `shift+enter` on a panel row) opens the diff viewer
+in **review mode**: one pane holding the ordered list of changed files —
+the rows the [VCS panel](/architecture/vcs.md) shows, sorted by path,
+untracked files last — and walking them in order, each compared **working
+tree vs HEAD**. A file that is staged *and* modified again is one diff
+against HEAD, never index-vs-HEAD plus worktree-vs-index; a deleted file
+shows its HEAD blob against an empty right side, an untracked or added file
+an empty HEAD side.
+
+The split of responsibilities is the pane's usual one. The model
+(`internal/diff/review.go`) owns the list (`ReviewFile`: repo-relative
+path, absolute working-tree path, porcelain badge, skip reason) and the
+position; it never reads a file or runs git. Every step across a file
+boundary is a **request**: the model returns a `ReviewLoadMsg{Key, Index}`
+command, the root model (`internal/app/diffreview.go`) serves it — the
+working-tree side from the open buffer (unsaved edits included, like
+`vcs.diff`) or disk, the HEAD blob via `vcs.HeadContent` asynchronously —
+and lands it with `ShowReviewFile(idx, left, right)`, or reports it
+unreadable with `ReviewSkip(idx, reason)`. Landing retargets the pane to
+the file (enter jumps into it, `e` edits it, the layout persists it as a
+plain HEAD diff of that file), labels the sides with **path + revision**
+(`internal/foo.go @ HEAD` / `internal/foo.go (working tree)`), and puts
+the view on the file's **first hunk** after a forward step and its **last**
+after a backward one (`landOnHunk`, which also marks the hunk as stepped-to
+so the next F7 walks on). The footer reads `file 3/12 · hunk 2/5 · p%`.
+
+- **Stepping across files** — `stepHunk` asks `crossReviewBoundary` whenever
+  a step has no hunk left in its direction: past the last hunk forward,
+  past the first backward, or on a file without hunks. `F7` / `shift+F7`
+  (`diff.nextChange` / `diff.prevChange`) and `n` / `N` therefore continue
+  into the next / previous file; the list ends stop. A **single-file diff
+  has no list** and keeps clamping at its ends — `StepHunk` returns a nil
+  command there.
+- **Whole-file steps** — `diff.nextFile` / `diff.prevFile` (`cmd+f7` /
+  `cmd+shift+f7`, `ctrl+f7` / `ctrl+shift+f7`; the diff-scoped rows)
+  call `StepReviewFile(±1)`; off a review pane they toast.
+- **File picker** — `f` opens a `ui.LineSearch` over the paths on the
+  footer row (`file: query  3/12  M internal/foo.go`): typing filters
+  (smartcase substring), `ctrl+n` / `ctrl+p` and the arrows move between
+  matches (every file matches while the query is empty, cursor on the
+  current one), enter jumps, esc closes. A jump lands on the first hunk.
+- **Placeholders** — files the engine cannot diff keep their row so the
+  position counter stays honest, but are **skipped by stepping**: the list
+  builder marks working-tree files that are binary (a NUL in the leading
+  8 KiB) or over `MaxDiffBytes` (a stat); a HEAD side found binary or
+  oversized while loading is reported through `ReviewSkip`, which continues
+  the step past it. A direct jump (the start file, the picker) to a
+  placeholder shows it empty with the reason in the footer.
+- **Live refresh** — every changed status snapshot re-lists the review
+  panes (`refreshReviewPanes` → `UpdateReviewFiles`): files that became
+  clean drop out, the file on screen stays current by path (re-requested
+  in place, since HEAD may have moved — `ShowReviewFile` on the same file
+  is a `ReloadContents`, keeping scroll and hunk), a current file that went
+  clean is replaced by its successor, an emptied list keeps the diff with a
+  `no changes left to review` notice. A watcher event for the current
+  file's path re-reads the working-tree side at once (`ReloadRight`), since
+  the status refresh behind it may find the snapshot unchanged (the file
+  was already `M`).
+- **One review pane** — re-running the command refocuses and re-lists the
+  existing review pane, keeping the place; otherwise the single diff slot
+  (#513) is retargeted or a viewer placed (#2507) like a HEAD diff. Opening
+  any other comparison into the pane (`Retarget`, or enter on a panel row
+  for the file on screen) **ends review mode** (`EndReview`): the pane is
+  the single-file diff that was asked for.
+
 ## Three-way merge view (#1478)
 
 For git-conflicted files the engine grows a three-way half
@@ -499,7 +567,9 @@ and the diff landed away from the eye.
 
 Layout persistence saves `{kind: "diff", path, path2}`; restore rebuilds the
 pane and re-reads both files from disk (a vanished side restores empty rather
-than breaking the layout).
+than breaking the layout). A review pane (#2848) persists as the plain HEAD
+diff of the file it showed — the file list is session state, re-derived by
+`diff.reviewChanges`.
 
 ## Diff viewer v2 (Epic 0340)
 
@@ -518,7 +588,9 @@ than breaking the layout).
   and jumps work over collapsed maps.
 - **F7 / shift+F7** — next/previous change via the diff-scoped default
   bindings (`diff.nextChange`/`diff.prevChange`); `n`/`N` stay. Both are
-  scroll-aware (#2494, see § Scroll-aware hunk stepping above).
+  scroll-aware (#2494, see § Scroll-aware hunk stepping above) and, in
+  review mode, continue into the neighbouring file (#2848, see § Review
+  changes against HEAD).
 - **Editable current side** — `e` on a worktree-backed diff (diff.files,
   vcs.diff, the changes view) mounts a live editor as the right column: full
   vim editing, `:w` saves, shared document with open tabs, the left column
