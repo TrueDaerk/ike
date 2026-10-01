@@ -14,8 +14,9 @@ package tracepanel
 // drawn.
 
 const (
-	// boxH is the rows of a box: border with the kind glyph, label, detail.
-	boxH = 3
+	// boxH is the rows of a box: border with the kind glyph, label, detail,
+	// closed bottom border (#2872).
+	boxH = 4
 	// gapW is the cells between two boxes on a row: the "──▶" connector.
 	gapW = 3
 	// turnH is the rows between two path rows: the "│" and "▼" of a turn,
