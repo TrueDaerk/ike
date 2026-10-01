@@ -1,10 +1,10 @@
 ---
 type: architecture
 title: Agent Trace
-description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, subagent transcripts joined under their Agent call and `Write` on an existing file as an edit (#2861), and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840), its graph view — the session as a snake path of prompt, change and answer boxes with expand-in-place, the `agent.trace.view` setting and the tree toggle (#2858), the links from writing file nodes to change-feed entries with diff/revert and the feed's jump back (#2838), and `agent.ask` — a question about a node answered by a fork of the same session on a cheaper model, with its node context, settings and answer overlay (internal/agentask, #2845), and follow-up questions on the same fork, fork tagging and the trimmed context (#2844), plus keybinds and limitations (other harnesses) (#2839).
+description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, subagent transcripts joined under their Agent call and `Write` on an existing file as an edit (#2861), and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840), its graph view — the session as a snake path of prompt, change and answer boxes with expand-in-place, the `agent.trace.view` setting and the tree toggle (#2858), the links from writing file nodes to change-feed entries with diff/revert and the feed's jump back (#2838), per-change diffs reconstructed from the transcript with their provenance and a session-before / git HEAD / working-file base switch (#2859), and `agent.ask` — a question about a node answered by a fork of the same session on a cheaper model, with its node context, settings and answer overlay (internal/agentask, #2845), and follow-up questions on the same fork, fork tagging and the trimmed context (#2844), plus keybinds and limitations (other harnesses) (#2839).
 resource: internal/agenttrace
-tags: [architecture, agents, claude, transcript, trace, discovery, hooks, tool-window, hiertree, change-feed, ask, settings]
-timestamp: 2026-10-01T18:00:00Z
+tags: [architecture, agents, claude, transcript, trace, discovery, hooks, tool-window, hiertree, change-feed, diff, ask, settings]
+timestamp: 2026-10-01T20:00:00Z
 ---
 
 # Agent Trace
@@ -391,7 +391,7 @@ yet` before the first), and the followed terminal with why it was picked
 Keys: the tree's own (`j/k`, page keys, `space`/`l` expand, `h` fold or
 walk to the parent), `enter` opens the row's file — or folds/unfolds a row
 that has none — `r` looks the session up again, `i` installs the Claude
-hooks, `D` / `V` show the mini-diff / revert of a linked row (below), `a` asks the agent about the row (#2845, below). Mouse: a click selects, a click on the marker cell folds, a second
+hooks, `D` shows what a change row did ([Diffs](#diffs-2859)), `V` the revert of a linked row (below), `a` asks the agent about the row (#2845, below). Mouse: a click selects, a click on the marker cell folds, a second
 click within `ui.DoubleClickWindow` opens (the shared list-mouse gesture),
 the wheel scrolls through `Tree.Wheel`.
 
@@ -476,7 +476,8 @@ is expanded at a time (`esc` collapses too). `enter` on a prompt or answer
 box shows the whole text markdown-rendered in the floating shell
 (`ShowTextMsg` → `openTraceText`, the ask overlay's renderer). `D` / `V` /
 `a` act on the box like on a tree row: the box's key is the file node's
-key, so a linked change box answers the feed's mini-diff and revert, and
+key, so a change box opens its diff, a linked one answers the feed's
+revert, and
 `Current()` presents the box as a node (a change as its file node) for
 `agent.ask` and the links. `t` toggles graph ↔ tree in either view
 (`agent.trace.view` from the palette does the same; it stays palette-only
@@ -576,13 +577,68 @@ one issued after it (it matched only inside the slack).
 The app relinks on every read (`syncTraceLinks`, once per poll tick) and
 keeps the last result on the model (`traceLinks`), so the feed can jump back
 even while the pane is closed. Linked rows carry a `Δ` in their detail and
-answer two keys that route into the feed's **own** handlers — no copies:
-`D` (`ChangeDiffMsg`) opens the feed panel on that entry, i.e. its
-mini-diff, and `V` (`ChangeRevertMsg`) raises the feed's revert
-confirmation. The feed's `t` jumps the other way (`jumpToTraceNode`): an
+route into the feed's **own** handlers — no copies: `D` shows the feed's
+exact diff of the entry in the [diff view](#diffs-2859) (whose `f` opens the
+feed panel on the entry, i.e. its mini-diff), and `V` (`ChangeRevertMsg`)
+raises the feed's revert confirmation. The feed's `t` jumps the other way (`jumpToTraceNode`): an
 open pane is focused and `Select` unfolds the node's ancestors and puts the
 cursor on it; a closed pane opens and the pending `traceJump` is selected
 by the first read.
+
+### Diffs (#2859)
+
+Every change box and writing file node shows what the agent changed, also
+for writes the feed never saw (a session opened later, an ambiguous write).
+`agenttrace.Diffs(session)` (`diffs.go`, pure) reconstructs one
+`ChangeDiff` per writing call and file — `Key` the file node / change stop
+key, `Keys` every node showing it (all file nodes of the path in the call,
+the tool node when the call touched one file) — with `Before` / `After`
+(whole contents, when known), unified `Hunks`, `+N −M` counts and its
+**provenance** (`DiffSource`), in order of preference:
+
+| Source | Label | When |
+|---|---|---|
+| `DiffFeed` | exact (change feed) | the node links to a feed entry with its pre-change content (set by the app; the feed's before against the file now) |
+| `DiffPatch` | from structuredPatch | the result recorded hunks; `originalFile` / `originalFileContents` is the whole before, the patch applied to it the after |
+| `DiffStrings` | from old/new string | `Edit` / `MultiEdit` without a patch: the replacements placed in the content the session last saw — a `Read`'s output (whole when the result's `file` span says so, else the window with its line numbers) or an earlier change's after — else in the file on disk when it still holds every new text (`Note` says so), else a bare hunk at an unknown position |
+| `DiffSession` | from earlier session content | a `Write` without a result, against the content the session saw before |
+| `DiffCreate` | new file | a `Write` whose result says `create` |
+| `DiffAfterOnly` | after only | a `Write` whose previous content is unknown — no counts |
+
+The parser keeps a `Read`'s span (`Tool.Span`, from `toolUseResult.file`)
+for this. Rejected and failed calls have no diff and leave the session's
+view of the file alone; `NotebookEdit` has none. The few line diffs the
+reconstruction needs (placed strings, a `Write` against earlier content) run
+through a small bounded Myers in `linediff.go` — `internal/diff` carries a
+UI half the pure package does not import. `BuildTree` and `BuildPath` take
+the counts on every read through a cheap pass (no disk, whole contents
+assembled only where a later count needs them): the file row's detail and
+the change box's second line show `+N −M`.
+
+**The view.** `D` on a change box or writing file node (`DiffMsg`, reads
+and other rows stay silent) parses the transcript again off the loop
+(`traceDiffCmd`; subagent calls included), picks the node's diff with
+`agenttrace.DiffFor` and reads both comparison bases: the working file and
+its git HEAD blob (`vcs.DetectRoot` + `vcs.HeadContent`). A linked node
+takes the feed's exact diff instead. The floating shell shows the file, the
+op and tool, the turn, `+N −M` and the provenance (plus its note), a
+`ui.Segmented` strip of the bases and the diff: whole contents through the
+engine and the change feed's renderer (`miniDiffLines`), hunks only
+through the ask overlay's markdown renderer in a `diff` fence, an after-only
+write as all-added. `1` / `2` / `3` switch the left side between *session
+before* (default), *git HEAD* and *working file*; the right side stays the
+change's after, so HEAD and the working file answer "what of this change is
+still there" ("no differences — … holds exactly this change's result").
+A base that cannot be used is marked `✗` with its reason under the strip
+and refuses the key with a notice: HEAD outside a repository ("not a git
+repository") or for a file HEAD does not track, the working file once it
+is gone, and both while only hunks of the change are known. `f` opens the
+feed panel on a linked entry, `esc` closes, the rest scrolls.
+
+**Ask context.** `agent.ask` (#2845) still prefers the linked feed entry's
+hunk; without one the fork's context carries the reconstructed one
+(`agentask.SessionHunk`, computed off the loop with the node context, under
+the same `MaxHunkLines` / `MaxHunkLine` / `MaxHunkBytes` caps).
 
 ### Empty state
 
@@ -741,7 +797,8 @@ Every fork IKE creates is kept out of the trace three ways:
 `t` is the binding, as the keybind ledger records.
 
 In-pane keys (`enter`, `r`, `i`, `D`, `V`, `a`, `t`) are listed under
-[Pane](#pane) and [Graph view](#graph-view-2858); the answer overlay's `f` / `ctrl+n` under
+[Pane](#pane) and [Graph view](#graph-view-2858); the diff view's `1` / `2`
+/ `3` / `f` under [Diffs](#diffs-2859); the answer overlay's `f` / `ctrl+n` under
 [Follow-up questions](#follow-up-questions); the feed's `t` under
 [Change-feed links](#change-feed-links-2838).
 
@@ -758,7 +815,10 @@ In-pane keys (`enter`, `r`, `i`, `D`, `V`, `a`, `t`) are listed under
 - `agent.ask` needs the `claude` CLI on `PATH` and spends tokens on the
   chosen model; it explains only (`--tools ""`) and never edits files.
 - Change-feed links exist only for writes the feed saw during this ike
-  session.
+  session. Diffs without one are reconstructed from the transcript and are
+  only as exact as their provenance says: a string placed in the file on
+  disk or a bare hunk may sit at the wrong spot, a `Write` of a file the
+  session never saw has no before.
 
 ## Tests
 
@@ -792,7 +852,7 @@ header diagnostics.
 
 The graph view (#2858): `internal/agenttrace/path_test.go` reduces
 `basic.jsonl` to the expected stop sequence (prompt, changes in order with
-ops and patch counts, the implicit answer of a turn that ended on a tool
+ops and reconstructed counts, the implicit answer of a turn that ended on a tool
 call, the separator, the explicit answer), the stops' refs, calls and
 context, the pending answer of a running turn and key stability across
 an append, ask turns and read-only calls left out; `internal/tracepanel/graph_test.go`
@@ -837,6 +897,24 @@ mark, `D`/`V` on linked and unlinked rows and `Select` unfolding a folded
 turn; `agenttrace_panel_test.go` runs both directions end to end — `D`
 opening the feed on the entry with its mini-diff, `V` its revert prompt, the
 feed's `t` focusing the pane on the node, and the pending jump.
+
+`internal/agenttrace/diffs_test.go` (#2859) reconstructs `basic.jsonl`
+(`Edit` from its patch with whole before/after, `Write` create, the
+patch-less `MultiEdit` placed in the content the `Edit` left), `edits.jsonl`
+(the rejected edit without a diff, `replace_all`, `MultiEdit` and `Write`
+update from their patches) and `readedit.jsonl` — a whole `Read` → patch-less
+`Edit` (context and whole contents from the read), a partial `Read` → `Edit`
+at the read's line numbers, a `Write` against the edited content, an
+after-only `Write`, an `Edit` placed on disk, a bare one, a rejected one —
+plus the cheap counting pass skipping the disk, the labels, hunk merging
+and patch application; `linediff_test.go` the line script and subagent
+keys. `internal/tracepanel/diffdetail_test.go` checks `+N −M` in the tree
+row and the change box and `D` on change and read rows;
+`internal/agentask/sessionhunk_test.go` the ask fallback hunk and its cap;
+`internal/app/agenttrace_diff_test.go` the view end to end in a temporary
+git repository — provenance header, `esc`, the HEAD and working-file bases,
+HEAD disabled for an untracked file and outside a repository, the
+working file refused while only hunks are known — and the ask fallback.
 
 `internal/agenttrace/hooks_test.go` round-trips install → install →
 uninstall against a settings file with foreign hooks and unrelated keys

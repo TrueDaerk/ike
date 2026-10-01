@@ -42,9 +42,16 @@ type RefreshMsg struct{}
 // dialog's action while no session is found ('i').
 type InstallHooksMsg struct{}
 
-// ChangeDiffMsg asks the root model to show the change-feed mini-diff of the
-// entry a linked node resolved to ('D', #2838).
-type ChangeDiffMsg struct{ Path string }
+// DiffMsg asks the root model to show what a change did ('D', #2859): the
+// diff of the change box or file node keyed Key, reconstructed from the
+// transcript — or the change feed's exact one when the node links to an
+// entry (Linked, #2838).
+type DiffMsg struct {
+	Key  string
+	Path string
+	// Linked is the change-feed path the node links to; "" for none.
+	Linked string
+}
 
 // AskMsg is 'a' in the pane (#2845): ask a fork of the traced session about
 // the selected node — the root model runs agent.ask.
@@ -465,7 +472,15 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return func() tea.Msg { return InstallHooksMsg{} }
 	case "a":
 		return func() tea.Msg { return AskMsg{} }
-	case "D", "V":
+	case "D":
+		// Every change has a diff (#2859); reads and the other rows have none.
+		cur := m.Current()
+		if cur == nil || cur.Ref == nil || cur.Ref.Op == agenttrace.OpRead {
+			return nil
+		}
+		msg := DiffMsg{Key: cur.Key, Path: cur.Ref.Path, Linked: m.links.Node(cur.Key)}
+		return func() tea.Msg { return msg }
+	case "V":
 		cur := m.Current()
 		if cur == nil {
 			return nil
@@ -473,9 +488,6 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		path := m.links.Node(cur.Key)
 		if path == "" {
 			return nil // unlinked rows stay plain
-		}
-		if key == "D" {
-			return func() tea.Msg { return ChangeDiffMsg{Path: path} }
 		}
 		return func() tea.Msg { return ChangeRevertMsg{Path: path} }
 	}
@@ -593,7 +605,7 @@ func (m *Model) View() string {
 	}
 	clip := lipgloss.NewStyle().MaxWidth(m.width)
 	lines := []string{clip.Render(m.headerLine(pal))}
-	hint := "enter/double-click opens · space expands · h/l fold · t graph · a ask · r rescan · Δ: D diff · V revert"
+	hint := "enter/double-click opens · space expands · h/l fold · t graph · D diff · a ask · r rescan · Δ: V revert"
 	if m.view == ViewGraph {
 		lines = append(lines, m.graphRows(pal)...)
 		hint = graphHint

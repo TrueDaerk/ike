@@ -114,12 +114,23 @@ type Tool struct {
 	// — kept for the diffs: it carries originalFile and structuredPatch.
 	// nil for the other tools and for a plain-text result.
 	Result json.RawMessage
+	// Span is the window of the file a Read returned, as its structured
+	// result reports it; nil for the other tools and a plain-text result.
+	// The diffs (#2859) take a Read's output as the file's content only
+	// when the span says it is the whole file.
+	Span *ReadSpan
 	// AgentID is the id of the subagent an Agent (Task) call spawned, as its
 	// result reports it; "" until the result arrived.
 	AgentID string
 	// Subagent is the sidechain session this Agent (Task) call spawned, once
 	// the Reader found its transcript (#2861); nil otherwise.
 	Subagent *Subagent
+}
+
+// ReadSpan is the window of a file a Read returned: the 1-based first
+// line, the lines returned and the file's total.
+type ReadSpan struct {
+	Start, Lines, Total int
 }
 
 // Subagent is a sidechain session an Agent (Task) tool call spawned. Claude

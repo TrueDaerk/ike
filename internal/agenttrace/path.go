@@ -1,7 +1,6 @@
 package agenttrace
 
 import (
-	"encoding/json"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -95,7 +94,8 @@ type Stop struct {
 	Context []string
 	// Count is how many edits of the file the call made (MultiEdit).
 	Count int
-	// Added and Removed count the recorded patch's lines when HasDiff.
+	// Added and Removed count the changed lines when HasDiff: the
+	// reconstructed diff's (#2859), whatever its source.
 	Added, Removed int
 	HasDiff        bool
 }
@@ -124,7 +124,7 @@ func BuildPath(s *Session) []Stop {
 		return nil
 	}
 	var out []Stop
-	b := pathBuilder{}
+	b := pathBuilder{counts: diffCounts(s)}
 	asked := -1
 	for i := range s.Events {
 		ev := s.Events[i]
@@ -136,7 +136,7 @@ func BuildPath(s *Session) []Stop {
 		}
 		if !b.open || b.turn != ev.Turn {
 			out = b.close(out, false)
-			b = pathBuilder{open: true, turn: ev.Turn, lastAt: ev.At}
+			b = pathBuilder{open: true, turn: ev.Turn, lastAt: ev.At, counts: b.counts}
 			p := Stop{Kind: StopPrompt, Key: "t" + strconv.Itoa(ev.Turn), Turn: ev.Turn, At: ev.At}
 			if ev.Kind == KindUser {
 				p.Label = "#" + strconv.Itoa(ev.Turn) + " " + Collapse(ev.Text)
@@ -188,6 +188,9 @@ type pathBuilder struct {
 	textAfterTool bool
 	sawTool       bool
 	lastAt        time.Time
+	// counts are the reconstructed diffs' line counts by change key
+	// (#2859).
+	counts map[string]ChangeDiff
 }
 
 // close appends the turn's answer stop. running marks the session as still
@@ -253,7 +256,9 @@ func (b *pathBuilder) changes(out []Stop, evs []Event, i int, key string, agent 
 			Error: tool.IsError, Pending: !tool.Done, Calls: []StopCall{call},
 			Context: append([]string(nil), b.context...), Count: 1,
 		}
-		st.Added, st.Removed, st.HasDiff = patchCounts(tool.Result)
+		if cd, ok := b.counts[st.Key]; ok {
+			st.Added, st.Removed, st.HasDiff = cd.Added, cd.Removed, true
+		}
 		first[ref.Path] = len(out)
 		out = append(out, st)
 	}
@@ -301,33 +306,6 @@ func changeDetail(st Stop) string {
 		d += " …"
 	}
 	return d
-}
-
-// patchCounts sums the added and removed lines of a structured result's
-// patch; ok is false when the result records no patch.
-func patchCounts(raw json.RawMessage) (added, removed int, ok bool) {
-	if len(raw) == 0 || raw[0] != '{' {
-		return 0, 0, false
-	}
-	var r struct {
-		StructuredPatch []struct {
-			Lines []string `json:"lines"`
-		} `json:"structuredPatch"`
-	}
-	if json.Unmarshal(raw, &r) != nil || len(r.StructuredPatch) == 0 {
-		return 0, 0, false
-	}
-	for _, h := range r.StructuredPatch {
-		for _, l := range h.Lines {
-			switch {
-			case strings.HasPrefix(l, "+"):
-				added++
-			case strings.HasPrefix(l, "-"):
-				removed++
-			}
-		}
-	}
-	return added, removed, true
 }
 
 // Settle marks the session as ended: a pending answer — the last turn ended

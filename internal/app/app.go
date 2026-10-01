@@ -1048,6 +1048,10 @@ type Model struct {
 	// pick — a reopened pane comes back in the view it was closed in.
 	traceView    tracepanel.ViewMode
 	traceViewSet bool
+	// traceDiff is the open per-change diff view of the trace (#2859);
+	// traceDiffGen retires a reconstruction that finished after another D.
+	traceDiff    *traceDiffState
+	traceDiffGen int64
 	// The project.open_link paste prompt (#2396): one URL line.
 	dlLinkOpen bool
 	dlLinkText ui.Field
@@ -6630,12 +6634,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// 'r' in the trace pane, or its dialog's Rescan: look again now.
 		return m, m.traceRelocateCmd()
 
-	case tracepanel.ChangeDiffMsg:
-		// D on a trace row linked to a change-feed entry (#2838): the feed
-		// panel opens on that entry, showing its mini-diff.
-		if _, ok := m.traceChangeEntry(msg.Path); ok {
-			m.openChangeFeedAt(msg.Path)
-		}
+	case tracepanel.DiffMsg:
+		// D on a change box / file node (#2859): what the change did, in the
+		// floating shell — the feed's exact diff when the node is linked
+		// (#2838), else reconstructed from the transcript.
+		return m, m.traceDiffCmd(msg)
+
+	case traceDiffReadyMsg:
+		m.openTraceDiff(msg)
 		return m, nil
 
 	case tracepanel.ChangeRevertMsg:
@@ -9298,6 +9304,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The external-change feed (#2000) owns the keyboard the same way.
 		if m.changeFeedOpen() {
 			return m.updateChangeFeed(msg)
+		}
+		// The trace's per-change diff (#2859): 1/2/3 switch the base.
+		if m.traceDiffOpen() {
+			return m.updateTraceDiff(msg)
 		}
 		// Its revert confirmation (#2000): enter / esc answer it.
 		if m.changeFeedRevertOpen() {

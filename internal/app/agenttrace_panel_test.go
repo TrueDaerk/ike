@@ -308,6 +308,9 @@ func TestAgentTraceFollowsTheAgentToolPane(t *testing.T) {
 // An entry the feed could not attribute stays unlinked.
 func TestAgentTraceChangeFeedLinkBothWays(t *testing.T) {
 	m, dir := traceApp(t)
+	if m.onboardingOpen() {
+		m = m.closeOnboarding().(Model)
+	}
 	target := filepath.Join(t.TempDir(), "main.go")
 	if err := os.WriteFile(target, []byte("a\nb\nd\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -339,15 +342,20 @@ func TestAgentTraceChangeFeedLinkBothWays(t *testing.T) {
 		t.Fatal("an unattributed change was linked")
 	}
 
-	// Trace → feed: D opens the feed's mini-diff on the entry.
+	// Trace → feed: D shows the feed's exact diff (#2859), f opens the
+	// feed's mini-diff on the entry.
 	if !p.Select("e2/f0") {
 		t.Fatal("select failed")
 	}
-	msg, ok := p.Update(tea.KeyPressMsg{Code: 'D', Text: "D"})().(tracepanel.ChangeDiffMsg)
-	if !ok || msg.Path != target {
+	msg, ok := p.Update(tea.KeyPressMsg{Code: 'D', Text: "D"})().(tracepanel.DiffMsg)
+	if !ok || msg.Linked != target {
 		t.Fatalf("D = %#v", msg)
 	}
-	out, _ := m.Update(msg)
+	m = runTraceDiff(t, m, msg)
+	if !m.traceDiffOpen() || m.traceDiff.diff.Source != agenttrace.DiffFeed {
+		t.Fatalf("diff view open=%v", m.traceDiffOpen())
+	}
+	out, _ := m.Update(tea.KeyPressMsg{Code: 'f', Text: "f"})
 	m = out.(Model)
 	if sel, _ := m.changeFeedSel(); !m.changeFeedOpen() || sel.Path != target || len(m.cfDiff.Hunks) == 0 {
 		t.Fatalf("feed open=%v on %q, hunks=%d", m.changeFeedOpen(), sel.Path, len(m.cfDiff.Hunks))

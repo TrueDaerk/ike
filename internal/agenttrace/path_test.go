@@ -53,8 +53,8 @@ func TestBuildPathBasicFixture(t *testing.T) {
 	want := []string{
 		"prompt:t1:#1 Add a greeting to main.go:" + local(14, 0),
 		"change:e4/f0:main.go:edit :3 +1 −0",
-		"change:e5/f0:hello.go:create",
-		"change:e7/f0:main.go:edit :2 ×2",
+		"change:e5/f0:hello.go:create +1 −0",
+		"change:e7/f0:main.go:edit :2 ×2 +3 −1",
 		"change:e8/f0:notes.ipynb:delete",
 		"answer:t1/end:I'll read main.go, then add the greeting.:ended on a tool call",
 		"prompt:t2:#2 /verify main.go:" + local(14, 1),
@@ -88,10 +88,12 @@ func TestBuildPathStopDetails(t *testing.T) {
 	if len(edit.Context) != 2 || !strings.HasPrefix(edit.Context[0], "The user wants a greeting") || !strings.HasPrefix(edit.Context[1], "I'll read main.go") {
 		t.Errorf("edit context = %q", edit.Context)
 	}
-	if create := byKey["e5/f0"]; len(create.Context) != 0 || create.HasDiff || create.Ref.Op != OpCreate {
+	if create := byKey["e5/f0"]; len(create.Context) != 0 || !create.HasDiff || create.Added != 1 || create.Ref.Op != OpCreate {
 		t.Errorf("create stop = %+v", create)
 	}
-	if multi := byKey["e7/f0"]; multi.Count != 2 || multi.HasDiff {
+	if multi := byKey["e7/f0"]; multi.Count != 2 || !multi.HasDiff || multi.Added != 3 || multi.Removed != 1 {
+		// Reconstructed from old/new strings against the content the
+		// earlier Edit left (#2859): two import lines, one changed line.
 		t.Errorf("multi-edit stop = %+v", multi)
 	}
 	if del := byKey["e8/f0"]; del.Ref.Op != OpDelete || !del.Selectable() {

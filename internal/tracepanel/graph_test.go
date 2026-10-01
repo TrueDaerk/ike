@@ -223,7 +223,7 @@ func TestGraphKeysMoveOpenAndExpand(t *testing.T) {
 		t.Fatalf("second enter must expand, expanded = %q", m.Expanded())
 	}
 	view := plain(m.View())
-	for _, want := range []string{"Write · /Users/dev/src/proj/hello.go · ok", "no diff recorded", "space collapse", "┴"} {
+	for _, want := range []string{"Write · /Users/dev/src/proj/hello.go · ok", "hello.go · +1 −0", "space collapse", "┴"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("detail block lacks %q:\n%s", want, view)
 		}
@@ -283,7 +283,7 @@ func TestGraphLinkedBoxesDiffRevertAndSelect(t *testing.T) {
 	if m.Select("e999") || m.Select("e10") {
 		t.Fatal("unknown or separator keys must not select")
 	}
-	if msg, ok := send(m, "D").(ChangeDiffMsg); !ok || msg.Path != target {
+	if msg, ok := send(m, "D").(DiffMsg); !ok || msg.Linked != target || msg.Path != target {
 		t.Fatalf("D = %#v", msg)
 	}
 	if msg, ok := send(m, "V").(ChangeRevertMsg); !ok || msg.Path != target {

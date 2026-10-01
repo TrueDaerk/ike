@@ -126,6 +126,7 @@ func BuildTree(s *Session) []Node {
 	// — only ever present in a fork IKE created; its turns stay out of the
 	// tree.
 	asked := -1
+	counts := diffCounts(s)
 	for i := range s.Events {
 		ev := s.Events[i]
 		if ev.Kind == KindUser && IsAskPrompt(ev.Text) {
@@ -156,7 +157,7 @@ func BuildTree(s *Session) []Node {
 				t.Children = append(t.Children, Node{Kind: NodeDecision, Key: "e" + strconv.Itoa(i) + "/x", Turn: ev.Turn, Event: i, Label: "tool calls"})
 				decision = &t.Children[len(t.Children)-1]
 			}
-			decision.Children = append(decision.Children, toolNode(ev, "e"+strconv.Itoa(i), ev.Turn, i, nil))
+			decision.Children = append(decision.Children, toolNode(ev, "e"+strconv.Itoa(i), ev.Turn, i, nil, counts))
 		}
 	}
 	out := make([]Node, len(turns))
@@ -169,8 +170,9 @@ func BuildTree(s *Session) []Node {
 // toolNode builds the row of one tool call with its files below and, for an
 // Agent call, its subagent's tool calls after them. key, turn, i and agent
 // place the row: a subagent's calls carry the spawning call's turn and
-// event, and their path into the subagent sessions.
-func toolNode(ev Event, key string, turn, i int, agent []int) Node {
+// event, and their path into the subagent sessions. A file node whose
+// change was reconstructed (#2859) shows its "+N −M" from counts.
+func toolNode(ev Event, key string, turn, i int, agent []int, counts map[string]ChangeDiff) Node {
 	tool := ev.Tool
 	n := Node{Kind: NodeTool, Key: key, Turn: turn, Event: i, Agent: agent, Label: tool.Name, Error: tool.IsError, Pending: !tool.Done, At: ev.At, Until: tool.DoneAt}
 	switch {
@@ -194,10 +196,14 @@ func toolNode(ev Event, key string, turn, i int, agent []int) Node {
 	}
 	for j := range tool.Paths {
 		ref := tool.Paths[j]
-		n.Children = append(n.Children, Node{
+		f := Node{
 			Kind: NodeFile, Key: n.Key + "/f" + strconv.Itoa(j), Turn: turn, Event: i, Agent: agent,
 			Label: ref.Op.String(), Ref: &ref, Path: ref.Path, At: ev.At, Until: tool.DoneAt,
-		})
+		}
+		if cd, ok := counts[f.Key]; ok {
+			f.Detail = "+" + strconv.Itoa(cd.Added) + " −" + strconv.Itoa(cd.Removed)
+		}
+		n.Children = append(n.Children, f)
 	}
 	if sub := tool.Subagent; sub != nil && sub.Session != nil {
 		for j := range sub.Session.Events {
@@ -206,7 +212,7 @@ func toolNode(ev Event, key string, turn, i int, agent []int) Node {
 				continue
 			}
 			path := append(append(make([]int, 0, len(agent)+1), agent...), j)
-			n.Children = append(n.Children, toolNode(sev, key+"/a"+strconv.Itoa(j), turn, i, path))
+			n.Children = append(n.Children, toolNode(sev, key+"/a"+strconv.Itoa(j), turn, i, path, counts))
 		}
 	}
 	return n
