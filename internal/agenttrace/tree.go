@@ -23,7 +23,8 @@ const (
 	// NodeDecision is one assistant text or thinking block; the tool calls
 	// that followed it nest below.
 	NodeDecision
-	// NodeTool is one tool call.
+	// NodeTool is one tool call; an Agent call's subagent (#2861) nests its
+	// own tool calls below it.
 	NodeTool
 	// NodeFile is one file a tool call touched.
 	NodeFile
@@ -54,7 +55,9 @@ type Node struct {
 	// Key identifies the node across rebuilds: "t<turn>" for a turn,
 	// "e<index>" for the event behind a decision or tool call, "e<index>/f<n>"
 	// for a file, "e<index>/x" for the implicit decision that groups tool
-	// calls issued before any assistant text of the turn.
+	// calls issued before any assistant text of the turn. A subagent's call
+	// extends its spawning call's key by "/a<index>" (the index into the
+	// subagent's events), its files by "/f<n>" again.
 	Key string
 	// Label is the row text; Detail the faint suffix (time, status, op).
 	Label  string
@@ -63,6 +66,10 @@ type Node struct {
 	// (-1 for a turn).
 	Turn  int
 	Event int
+	// Agent leads from Session.Events[Event] down to a subagent's event:
+	// one index into Tool.Subagent.Session.Events per nesting level; nil for
+	// the session's own events. Session.Timeline resolves it.
+	Agent []int
 	// Ref is set when the node opens a file: every file node, and a tool
 	// node whose call touched exactly one file.
 	Ref *FileRef
@@ -149,7 +156,7 @@ func BuildTree(s *Session) []Node {
 				t.Children = append(t.Children, Node{Kind: NodeDecision, Key: "e" + strconv.Itoa(i) + "/x", Turn: ev.Turn, Event: i, Label: "tool calls"})
 				decision = &t.Children[len(t.Children)-1]
 			}
-			decision.Children = append(decision.Children, toolNode(ev, i))
+			decision.Children = append(decision.Children, toolNode(ev, "e"+strconv.Itoa(i), ev.Turn, i, nil))
 		}
 	}
 	out := make([]Node, len(turns))
@@ -159,10 +166,13 @@ func BuildTree(s *Session) []Node {
 	return out
 }
 
-// toolNode builds the row of one tool call with its files below.
-func toolNode(ev Event, i int) Node {
+// toolNode builds the row of one tool call with its files below and, for an
+// Agent call, its subagent's tool calls after them. key, turn, i and agent
+// place the row: a subagent's calls carry the spawning call's turn and
+// event, and their path into the subagent sessions.
+func toolNode(ev Event, key string, turn, i int, agent []int) Node {
 	tool := ev.Tool
-	n := Node{Kind: NodeTool, Key: "e" + strconv.Itoa(i), Turn: ev.Turn, Event: i, Label: tool.Name, Error: tool.IsError, Pending: !tool.Done, At: ev.At, Until: tool.DoneAt}
+	n := Node{Kind: NodeTool, Key: key, Turn: turn, Event: i, Agent: agent, Label: tool.Name, Error: tool.IsError, Pending: !tool.Done, At: ev.At, Until: tool.DoneAt}
 	switch {
 	case len(tool.Paths) == 1:
 		ref := tool.Paths[0]
@@ -172,6 +182,9 @@ func toolNode(ev Event, i int) Node {
 		n.Detail = strconv.Itoa(len(tool.Paths)) + " files"
 	default:
 		n.Detail = Label(tool.Title)
+		if sub := tool.Subagent; sub != nil && sub.Type != "" {
+			n.Detail = strings.TrimSpace(sub.Type + " · " + n.Detail)
+		}
 	}
 	switch {
 	case tool.IsError:
@@ -182,9 +195,19 @@ func toolNode(ev Event, i int) Node {
 	for j := range tool.Paths {
 		ref := tool.Paths[j]
 		n.Children = append(n.Children, Node{
-			Kind: NodeFile, Key: n.Key + "/f" + strconv.Itoa(j), Turn: ev.Turn, Event: i,
+			Kind: NodeFile, Key: n.Key + "/f" + strconv.Itoa(j), Turn: turn, Event: i, Agent: agent,
 			Label: ref.Op.String(), Ref: &ref, Path: ref.Path, At: ev.At, Until: tool.DoneAt,
 		})
+	}
+	if sub := tool.Subagent; sub != nil && sub.Session != nil {
+		for j := range sub.Session.Events {
+			sev := sub.Session.Events[j]
+			if sev.Kind != KindTool || sev.Tool == nil {
+				continue
+			}
+			path := append(append(make([]int, 0, len(agent)+1), agent...), j)
+			n.Children = append(n.Children, toolNode(sev, key+"/a"+strconv.Itoa(j), turn, i, path))
+		}
 	}
 	return n
 }

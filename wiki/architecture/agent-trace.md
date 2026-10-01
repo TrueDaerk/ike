@@ -1,10 +1,10 @@
 ---
 type: architecture
 title: Agent Trace
-description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840), the links from writing file nodes to change-feed entries with diff/revert and the feed's jump back (#2838), and `agent.ask` — a question about a node answered by a fork of the same session on a cheaper model, with its node context, settings and answer overlay (internal/agentask, #2845), and follow-up questions on the same fork, fork tagging and the trimmed context (#2844), plus keybinds and limitations (other harnesses) (#2839).
+description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, subagent transcripts joined under their Agent call and `Write` on an existing file as an edit (#2861), and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840), the links from writing file nodes to change-feed entries with diff/revert and the feed's jump back (#2838), and `agent.ask` — a question about a node answered by a fork of the same session on a cheaper model, with its node context, settings and answer overlay (internal/agentask, #2845), and follow-up questions on the same fork, fork tagging and the trimmed context (#2844), plus keybinds and limitations (other harnesses) (#2839).
 resource: internal/agenttrace
 tags: [architecture, agents, claude, transcript, trace, discovery, hooks, tool-window, hiertree, change-feed, ask, settings]
-timestamp: 2026-10-01T12:00:00Z
+timestamp: 2026-10-01T15:00:00Z
 ---
 
 # Agent Trace
@@ -24,7 +24,9 @@ config or knows about the app; later sub-issues (hook push #2843, tool window
 ```
 Session { ID, ParentID, Harness, CWD, StartedAt, EndedAt, Events []Event, Malformed }
 Event   { Kind (user|assistant|tool|separator), Turn, At, Text, Reasoning, UUID, Tool *Tool }
-Tool    { ID, Name, Title, Input (raw JSON), Output, IsError, Truncated, Done, Paths []FileRef }
+Tool    { ID, Name, Title, Input (raw JSON), Output, IsError, Truncated, Done, DoneAt, Paths []FileRef,
+          Result (raw toolUseResult of a file-changing call), AgentID, Subagent *Subagent }
+Subagent { ID, Type, Description, ToolUseID, Session *Session }
 FileRef { Path, Line (1-based, 0 = unknown), Op (read|edit|write|create|delete) }
 ```
 
@@ -43,9 +45,18 @@ FileRef { Path, Line (1-based, 0 = unknown), Op (read|edit|write|create|delete) 
 - **Separator** events mark boundaries that are not prompts: a context
   compaction (`system/compact_boundary` or a user line flagged
   `isCompactSummary`) and the old-format `summary` line.
-- **Session.Files()** flattens every `FileRef` in timeline order — the input
-  the change-feed link (#2838) joins against. `Tool.DoneAt` records when the
-  result arrived; with the call's own time it bounds the link's window.
+- **Session.Files()** flattens every `FileRef` in timeline order — the
+  subagents' refs included, interleaved with the session's own calls by
+  timestamp (#2861) — the input the change-feed link (#2838) joins against.
+  `Tool.DoneAt` records when the result arrived; with the call's own time it
+  bounds the link's window.
+- **Tool.Result** keeps the structured result object (`toolUseResult`) of
+  `Edit`, `MultiEdit`, `Write` and `NotebookEdit` — `originalFile`,
+  `structuredPatch` — for the per-change diffs (#2859); `nil` for a
+  plain-string result (a rejected or failed call).
+- **Session.Timeline(node)** resolves a tree node to its event — following
+  `Node.Agent` into subagent sessions — and returns the timeline holding it,
+  which `agent.ask` reads its context from.
 
 ## Parser (`parse.go`)
 
@@ -61,8 +72,10 @@ most the session id, cwd and the started/ended timestamps.
 
 What is dropped on purpose:
 
-- `isSidechain` lines (subagent traffic in older transcripts) and `isMeta`
-  user lines (harness caveats, memory injections).
+- `isSidechain` lines inside the main transcript (subagent traffic in older
+  transcripts) and `isMeta` user lines (harness caveats, memory injections).
+  Current subagent transcripts live in their own files and are read by a
+  sidechain parser (see [Subagent transcripts](#subagent-transcripts-2861)).
 - `<system-reminder>…</system-reminder>` blocks inside a prompt; the prompt
   is what the user typed.
 - A user line that is only `<local-command-stdout>` (the echo of a local
@@ -79,19 +92,31 @@ What is dropped on purpose:
 | `Read` | `file_path` | read | `offset` when given |
 | `Edit` | `file_path` | edit | see below |
 | `MultiEdit` | `file_path`, one ref per `edits[]` entry | edit | see below |
-| `Write` | `file_path` | write, upgraded to **create** when the result's `toolUseResult.type` is `create` | — |
+| `Write` | `file_path` | write; **create** when the result's `toolUseResult.type` is `create`, **edit** when it is `update` (an existing file overwritten, #2861) | `structuredPatch[0].newStart` for `update` |
 | `NotebookEdit` | `notebook_path` | edit, or **delete** for `edit_mode: delete` | — |
 
 An edit's line is resolved best effort, in this order:
 
 1. `toolUseResult.structuredPatch[0].newStart` once the result has arrived —
-   the harness recorded exactly where the hunk landed.
+   the harness recorded exactly where the hunk landed. A `MultiEdit`'s hunks
+   come in file order, its edits in input order, so only an edit the search
+   below could not place takes the hunk of its index.
 2. Until then, `new_string` searched in the file *as it is now*
    (`Parser.ReadFile`, default `os.ReadFile`): after the edit the file
    contains the new text.
 3. `old_string` as the fallback for an edit that was reverted or never
    applied.
 4. `0` when the file cannot be read or neither string is in it.
+
+`toolUseResult` is an object for a successful call and a plain **string**
+for a rejected or failed one (`"Error: The user doesn't want to proceed…"`);
+the string is ignored — the row stays, with its searched line and `✗ error`.
+`replace_all` edits need no special case: the first hunk is the line.
+
+`Write` on an existing file is shown as **edit**, not as a separate
+`overwrite` op (#2861): for the trace an overwrite is a change to a file
+that existed, which is what `edit` says; the extent is the diff's business
+(#2859), and `create` stays reserved for a file the call brought into being.
 
 The file cache lives per batch: `Parse` reads each file once, the `Reader`
 clears it on every `Update`, so an edit from a later turn is resolved against
@@ -115,7 +140,36 @@ and every restart, which is what the tool window compares against the
 revision it shows. `Read(view)` is `Update` plus a callback on the session
 under the reader's own mutex — the host builds its tree there — so two
 reads never race even when the host gave up waiting for one. `Session()` is
-stable across calls and grows in place.
+stable across calls and grows in place. `Load(path)` is one `Update` of a
+fresh reader — the whole session, subagents included — for a one-off parse
+(`agent.ask`'s context).
+
+### Subagent transcripts (#2861)
+
+Claude Code writes what a subagent (an `Agent`/`Task` call — builders,
+explorers, general-purpose agents, where many edits happen) does to its own
+file next to the main transcript:
+
+```
+<projects>/<encoded-cwd>/<session-id>.jsonl
+<projects>/<encoded-cwd>/<session-id>/subagents/agent-<id>.jsonl      every line isSidechain
+<projects>/<encoded-cwd>/<session-id>/subagents/agent-<id>.meta.json  {agentType, description, toolUseId, spawnDepth}
+```
+
+The main transcript carries only the `Agent` call and its summary result
+(`toolUseResult.agentId`), so before #2861 every file a subagent touched was
+invisible. The `Reader` is directory-aware: every `Update` reads the main
+file, then lists `<session-id>/subagents/` (a subagent starts mid-turn) and
+tails each `agent-*.jsonl` with its own offset, replacement check and
+sidechain `Parser`. The meta file is read until it exists; its `toolUseId`
+is the join key to the spawning call, the agent id the call's result
+reports is the fallback when there is no meta file. The call is looked up in
+the main timeline and in the other subagents' (a nested spawn), and the
+subagent is attached as `Tool.Subagent` once found — re-attached after a
+restart of the main file. A subagent read, reset or attachment counts as a
+change, so `Revision()` moves and the tree is rebuilt within one tick.
+Discovery and the hook binding are unaffected: the session id is the main
+file's name, and the subagent directory is never listed as a session.
 
 ## Session discovery (`discover.go`)
 
@@ -291,11 +345,22 @@ runs after every read:
   not arrived;
 - a **file** row per `FileRef` below the call (`edit  main.go:3`, `create
   hello.go`); a line the parser could not resolve shows the path alone;
+- below an **Agent** row whose subagent was found (#2861), the subagent's
+  tool calls with their file rows, nested the same way (a subagent's own
+  `Agent` calls included); the row's detail is `<agent type> ·
+  <description>`. The subagent's prompt and texts are not shown — the
+  `Agent` row is the decision;
 - a **separator** row for a compaction (`— context compacted —`).
 
 Node keys come from event indices (`t3`, `e17`, `e17/f0`, `e17/x`), which the
 append-only `Events` slice keeps stable, so the tree host can carry state
-across rebuilds by key.
+across rebuilds by key. A subagent's call extends the spawning call's key by
+its index in the subagent's events (`e17/a4`, its files `e17/a4/f0`); the
+node keeps the spawning call's `Turn` and `Event` and records the path into
+the subagent sessions in `Node.Agent`. Change-feed links, `D`/`V` and `a`
+work on these rows like on any other: links walk the whole tree, and
+`agent.ask` resolves the node with `Session.Timeline`, so the context is the
+subagent's call and the decision before it in the subagent's timeline.
 
 ### Pane
 
@@ -629,6 +694,21 @@ read survives a relocation, and a lost chain and a lost read recover.
 in place, and a line arriving in many writes; `tracepanel_test.go` the
 tail-follow, new nodes in the running turn arriving expanded, and the
 header diagnostics.
+
+`internal/agenttrace/subagent_test.go` (#2861) parses `edits.jsonl` —
+`Edit` with a string (rejected) result in a line that also has a thinking
+block, `Edit` with `replace_all`, `MultiEdit` with one edit placed by the
+search and one by its hunk, `Write` `update` and `create` — into `edit` file
+rows with lines (and the kept structured results), and reads the
+`subagent/` session directory: the subagent's calls below the `Agent` row,
+`Session.Files()` in timeline order, `Timeline` on a subagent node, the
+main file's own sidechain line still dropped, `Load`; a subagent file
+appearing while the reader tails (attached once its meta file names the
+call), a join by agent id without a meta file plus a nested spawn, and
+re-attachment after the main file was replaced.
+`internal/agentask/agentask_test.go` checks a subagent node's context;
+`internal/app/agenttrace_subagent_test.go` the app end to end — the row
+appearing on the next read, the feed link, `D`, `V` and `a`.
 
 `internal/agenttrace/link_test.go` covers change-feed matching (#2838):
 path, window edges and slack, reads never linking, unattributed and

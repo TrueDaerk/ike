@@ -62,10 +62,14 @@ type Parser struct {
 	// or to disable resolution (return an error).
 	ReadFile func(path string) ([]byte, error)
 
-	sess    *Session
-	turn    int
-	pending map[string]int
-	cache   map[string][]byte
+	sess *Session
+	// sidechain makes the parser keep isSidechain lines: a subagent's
+	// transcript consists of nothing else. The main transcript's sidechain
+	// lines (the old in-file subagent format) stay dropped.
+	sidechain bool
+	turn      int
+	pending   map[string]int
+	cache     map[string][]byte
 }
 
 // NewParser returns a Parser with an empty Session.
@@ -75,6 +79,13 @@ func NewParser() *Parser {
 		pending: map[string]int{},
 		cache:   map[string][]byte{},
 	}
+}
+
+// newSidechainParser returns a Parser for a subagent transcript.
+func newSidechainParser() *Parser {
+	p := NewParser()
+	p.sidechain = true
+	return p
 }
 
 // Session returns the transcript parsed so far.
@@ -157,8 +168,14 @@ func (p *Parser) add(ev Event) int {
 	return len(p.sess.Events) - 1
 }
 
+// skip reports a line the parser does not show: no message, or a sidechain
+// line of the main transcript.
+func (p *Parser) skip(l *line) bool {
+	return l.Message == nil || (l.IsSidechain && !p.sidechain)
+}
+
 func (p *Parser) user(l *line) bool {
-	if l.Message == nil || l.IsSidechain {
+	if p.skip(l) {
 		return false
 	}
 	at := parseTime(l.Timestamp)
@@ -228,7 +245,7 @@ func (p *Parser) prompt(l *line, at time.Time, text string) bool {
 }
 
 func (p *Parser) assistant(l *line) bool {
-	if l.Message == nil || l.IsSidechain {
+	if p.skip(l) {
 		return false
 	}
 	var blocks []block
@@ -324,16 +341,22 @@ func capOutput(s string) (string, bool) {
 type structuredResult struct {
 	Type            string `json:"type"`
 	FilePath        string `json:"filePath"`
+	AgentID         string `json:"agentId"`
 	StructuredPatch []struct {
 		OldStart int `json:"oldStart"`
 		NewStart int `json:"newStart"`
 	} `json:"structuredPatch"`
 }
 
-// refine upgrades a Write to a create when the harness says so and takes the
-// edit's line from the recorded patch, which beats any search of the file.
+// refine sharpens a call from its structured result, which is an object for
+// a successful call and a plain string for a rejected or failed one (left
+// alone). A Write is a create or — on an existing file, type "update" — an
+// edit of the whole file (#2861); an edit's line comes from the recorded
+// patch, which beats any search of the file; an Agent call learns the id of
+// the subagent it spawned. File-changing calls keep the object for the
+// diffs.
 func (p *Parser) refine(tool *Tool, raw json.RawMessage) {
-	if len(raw) == 0 || raw[0] != '{' || len(tool.Paths) == 0 {
+	if len(raw) == 0 || raw[0] != '{' {
 		return
 	}
 	var sr structuredResult
@@ -341,13 +364,41 @@ func (p *Parser) refine(tool *Tool, raw json.RawMessage) {
 		return
 	}
 	switch tool.Name {
+	case "Agent", "Task":
+		tool.AgentID = sr.AgentID
+		return
+	}
+	if len(tool.Paths) == 0 {
+		return
+	}
+	switch tool.Name {
+	case "Edit", "MultiEdit", "Write", "NotebookEdit":
+		tool.Result = append(json.RawMessage(nil), raw...)
+	}
+	patchLine := 0
+	if len(sr.StructuredPatch) > 0 && sr.StructuredPatch[0].NewStart > 0 {
+		patchLine = sr.StructuredPatch[0].NewStart
+	}
+	switch tool.Name {
 	case "Write":
-		if sr.Type == "create" {
+		switch sr.Type {
+		case "create":
 			tool.Paths[0].Op = OpCreate
+		case "update":
+			tool.Paths[0].Op = OpEdit
+			tool.Paths[0].Line = patchLine
 		}
 	case "Edit":
-		if len(sr.StructuredPatch) > 0 && sr.StructuredPatch[0].NewStart > 0 {
-			tool.Paths[0].Line = sr.StructuredPatch[0].NewStart
+		if patchLine > 0 {
+			tool.Paths[0].Line = patchLine
+		}
+	case "MultiEdit":
+		// The hunks are in file order, the edits in input order; only an
+		// edit the file search could not place takes a hunk's line.
+		for i := range tool.Paths {
+			if tool.Paths[i].Line == 0 && i < len(sr.StructuredPatch) {
+				tool.Paths[i].Line = sr.StructuredPatch[i].NewStart
+			}
 		}
 	}
 }
