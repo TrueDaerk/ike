@@ -62,6 +62,11 @@ type UI struct {
 	VCSUntracked       string // vcs status foreground: untracked files
 	VCSDeleted         string // vcs status foreground: deleted files
 	VCSConflicted      string // vcs status foreground: merge-conflicted files
+	TracePrompt        string // agent-trace box kind: question (#2874)
+	TraceEdit          string // agent-trace box kind: edited file
+	TraceCreate        string // agent-trace box kind: created file
+	TraceDelete        string // agent-trace box kind: deleted file
+	TraceAnswer        string // agent-trace box kind: answer
 }
 
 // Theme is one named color scheme: ui chrome slots plus the default sources
@@ -132,6 +137,11 @@ type Palette struct {
 	VCSUntracked       color.Color
 	VCSDeleted         color.Color
 	VCSConflicted      color.Color
+	TracePrompt        color.Color
+	TraceEdit          color.Color
+	TraceCreate        color.Color
+	TraceDelete        color.Color
+	TraceAnswer        color.Color
 
 	// ANSI is the resolved 16-color terminal palette; TerminalFg/TerminalBg
 	// are the terminal's default foreground/background (#1363). Indexed
@@ -263,6 +273,16 @@ func NewPalette(t Theme) *Palette {
 	p.VCSUntracked = slotOrMix(t.UI.VCSUntracked, p.VCSConflicted, p.VCSModified, 0.5)
 	p.VCSDeleted = slotOrMix(t.UI.VCSDeleted,
 		p.VCSConflicted, Resolve(firstNonEmpty(t.UI.Border, def.UI.Border)), 0.5)
+	// The agent-trace box kinds (#2874) get dedicated roles because the
+	// generic ones they used to borrow (Accent vs Info, Warning vs Accent)
+	// share a hue in several palettes. A theme without them falls back to
+	// its own generic role first — the pre-#2874 look — so a sparse
+	// third-party theme keeps working in its own colours.
+	p.TracePrompt = slot(t.UI.TracePrompt, firstNonEmpty(t.UI.Accent, def.UI.Accent))
+	p.TraceEdit = slot(t.UI.TraceEdit, firstNonEmpty(t.UI.Warning, def.UI.Warning))
+	p.TraceCreate = slot(t.UI.TraceCreate, firstNonEmpty(t.UI.Success, def.UI.Success))
+	p.TraceDelete = slot(t.UI.TraceDelete, firstNonEmpty(t.UI.Error, def.UI.Error))
+	p.TraceAnswer = slot(t.UI.TraceAnswer, firstNonEmpty(t.UI.Info, def.UI.Info))
 	// The terminal palette resolves last: entries the theme omits derive from
 	// the semantic slots filled in above (#1363).
 	p.resolveTerminal(t.Terminal)

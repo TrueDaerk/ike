@@ -107,6 +107,11 @@ func defaultTheme() Theme {
 			VCSUntracked:    "#c880d5",
 			VCSDeleted:      "#a0807c",
 			VCSConflicted:   "#ff6464",
+			TracePrompt:     "#d787ff", // agent-trace box kinds (#2874)
+			TraceEdit:       "#d7af5f",
+			TraceCreate:     "#5fd75f",
+			TraceDelete:     "#ff6464",
+			TraceAnswer:     "#5fafff",
 		},
 		Captures: map[string]string{
 			"keyword":          "magenta",
@@ -197,6 +202,11 @@ func tokyoNight() Theme {
 			VCSUntracked:    "#c476d2",
 			VCSDeleted:      "#a77772",
 			VCSConflicted:   "#f7768e",
+			TracePrompt:     "#c476d2", // agent-trace box kinds (#2874)
+			TraceEdit:       "#faba4a",
+			TraceCreate:     "#72c67e",
+			TraceDelete:     "#f7768e",
+			TraceAnswer:     "#7dcfff",
 		},
 		Captures: map[string]string{
 			"keyword":          "#bb9af7",
@@ -287,6 +297,11 @@ func nord() Theme {
 			VCSUntracked:    "#d59edf",
 			VCSDeleted:      "#b29692",
 			VCSConflicted:   "#d9a1a6",
+			TracePrompt:     "#d59edf", // agent-trace box kinds (#2874)
+			TraceEdit:       "#ebcb8b",
+			TraceCreate:     "#a3be8c",
+			TraceDelete:     "#d9a1a6",
+			TraceAnswer:     "#88c0d0",
 		},
 		Captures: map[string]string{
 			"keyword":          "#81a1c1",
@@ -377,6 +392,11 @@ func gruvbox() Theme {
 			VCSUntracked:    "#ce8dd9",
 			VCSDeleted:      "#a88a87",
 			VCSConflicted:   "#fc7d6e",
+			TracePrompt:     "#ce8dd9", // agent-trace box kinds (#2874)
+			TraceEdit:       "#d79921",
+			TraceCreate:     "#8ec07c",
+			TraceDelete:     "#fc7d6e",
+			TraceAnswer:     "#8ea7c5",
 		},
 		Captures: gruvboxCaptures(false),
 		Files: filesTable(fileColors{
@@ -447,6 +467,11 @@ func gruvboxLight() Theme {
 			VCSUntracked:    "#61246b",
 			VCSDeleted:      "#7f4a44",
 			VCSConflicted:   "#ba211a",
+			TracePrompt:     "#61246b", // agent-trace box kinds (#2874)
+			TraceEdit:       "#7c5813",
+			TraceCreate:     "#225328",
+			TraceDelete:     "#ba211a",
+			TraceAnswer:     "#076678",
 		},
 		Captures: gruvboxCaptures(true),
 		Files: filesTable(fileColors{
@@ -568,6 +593,11 @@ func rosePine() Theme {
 			VCSUntracked:    "#d092db",
 			VCSDeleted:      "#9b7874",
 			VCSConflicted:   "#eb6f92",
+			TracePrompt:     "#d092db", // agent-trace box kinds (#2874)
+			TraceEdit:       "#f6c177",
+			TraceCreate:     "#9dd7a5",
+			TraceDelete:     "#eb6f92",
+			TraceAnswer:     "#4097bb",
 		},
 		Captures: map[string]string{
 			"keyword":          "#3a8aaa",
@@ -658,6 +688,11 @@ func rosePineDawn() Theme {
 			VCSUntracked:    "#6e297a",
 			VCSDeleted:      "#926d69",
 			VCSConflicted:   "#a34e66",
+			TracePrompt:     "#6e297a", // agent-trace box kinds (#2874)
+			TraceEdit:       "#945c0f",
+			TraceCreate:     "#3f7346",
+			TraceDelete:     "#a34e66",
+			TraceAnswer:     "#286983",
 		},
 		Captures: map[string]string{
 			"keyword":          "#286983",
@@ -748,6 +783,11 @@ func catppuccinMocha() Theme {
 			VCSUntracked:    "#e3beea",
 			VCSDeleted:      "#a38380",
 			VCSConflicted:   "#f38ba8",
+			TracePrompt:     "#e3beea", // agent-trace box kinds (#2874)
+			TraceEdit:       "#f9e2af",
+			TraceCreate:     "#b6e8b1",
+			TraceDelete:     "#f38ba8",
+			TraceAnswer:     "#89dceb",
 		},
 		Captures: map[string]string{
 			"keyword":          "#cba6f7",
@@ -842,6 +882,11 @@ func kanagawa() Theme {
 			VCSUntracked:    "#c477d2",
 			VCSDeleted:      "#9e7d7a",
 			VCSConflicted:   "#ff5d62",
+			TracePrompt:     "#c477d2", // agent-trace box kinds (#2874)
+			TraceEdit:       "#c0a36e",
+			TraceCreate:     "#6cbb77",
+			TraceDelete:     "#ff5d62",
+			TraceAnswer:     "#7fb4ca",
 		},
 		Captures: map[string]string{
 			"keyword":          "#957fb8", // oniViolet
@@ -935,6 +980,11 @@ func oneDark() Theme {
 			VCSUntracked:    "#cc89d8",
 			VCSDeleted:      "#9d7b77",
 			VCSConflicted:   "#e88388",
+			TracePrompt:     "#c678dd", // agent-trace box kinds (#2874)
+			TraceEdit:       "#e5c07b",
+			TraceCreate:     "#98c379",
+			TraceDelete:     "#e88388",
+			TraceAnswer:     "#85c3f3",
 		},
 		Captures: map[string]string{
 			"keyword":          "#c678dd", // purple
@@ -1030,6 +1080,11 @@ func solarizedDark() Theme {
 			VCSUntracked:    "#c881d5",
 			VCSDeleted:      "#a1817d",
 			VCSConflicted:   "#e87674",
+			TracePrompt:     "#c881d5", // agent-trace box kinds (#2874)
+			TraceEdit:       "#bb9316",
+			TraceCreate:     "#48af55",
+			TraceDelete:     "#e87674",
+			TraceAnswer:     "#4b9fda",
 		},
 		Captures: solarizedCaptures(false),
 		Files: filesTable(fileColors{
@@ -1103,6 +1158,11 @@ func solarizedLight() Theme {
 			VCSUntracked:    "#592163",
 			VCSDeleted:      "#876561",
 			VCSConflicted:   "#c52d2a",
+			TracePrompt:     "#592163", // agent-trace box kinds (#2874)
+			TraceEdit:       "#7f6000",
+			TraceCreate:     "#204e26",
+			TraceDelete:     "#c52d2a",
+			TraceAnswer:     "#1c6699",
 		},
 		Captures: solarizedCaptures(true),
 		Files: filesTable(fileColors{
@@ -1233,6 +1293,11 @@ func dracula() Theme {
 			VCSUntracked:    "#d8a5e1",
 			VCSDeleted:      "#9c7a77",
 			VCSConflicted:   "#ff5555",
+			TracePrompt:     "#d8a5e1", // agent-trace box kinds (#2874)
+			TraceEdit:       "#ffb86c",
+			TraceCreate:     "#7fcb89",
+			TraceDelete:     "#ff5555",
+			TraceAnswer:     "#8be9fd",
 		},
 		Captures: map[string]string{
 			"keyword":          "#ff79c6", // pink
@@ -1323,6 +1388,11 @@ func catppuccinLatte() Theme {
 			VCSUntracked:    "#5e2369",
 			VCSDeleted:      "#7e5f5c",
 			VCSConflicted:   "#b10d30",
+			TracePrompt:     "#5e2369", // agent-trace box kinds (#2874)
+			TraceEdit:       "#7c4f10",
+			TraceCreate:     "#28641b",
+			TraceDelete:     "#b10d30",
+			TraceAnswer:     "#025f83",
 		},
 		Captures: map[string]string{
 			"keyword":          "#8839ef",
@@ -1417,6 +1487,11 @@ func darcula() Theme {
 			VCSUntracked:    "#d298dd",
 			VCSDeleted:      "#ae928f", // comment gray #808080 lightened for 3.5:1 over overlays
 			VCSConflicted:   "#dd9795", // error red #bc3f3c lightened for AA on Panel
+			TracePrompt:     "#d298dd", // agent-trace box kinds (#2874)
+			TraceEdit:       "#e8bf6a",
+			TraceCreate:     "#86b57b",
+			TraceDelete:     "#dd9795",
+			TraceAnswer:     "#8aaeca",
 		},
 		Captures: map[string]string{
 			"keyword":          "#cf7e3b", // #cc7832 lightened for AA on Surface
@@ -1511,6 +1586,11 @@ func intellijLight() Theme {
 			VCSUntracked:    "#5e2368", // metadata gold darkened for AA on Panel
 			VCSDeleted:      "#715551",
 			VCSConflicted:   "#a90f21",
+			TracePrompt:     "#5e2368", // agent-trace box kinds (#2874)
+			TraceEdit:       "#806e0b",
+			TraceCreate:     "#265d2d",
+			TraceDelete:     "#df0000",
+			TraceAnswer:     "#00627a",
 		},
 		Captures: map[string]string{
 			"keyword":          "#0033b3",
@@ -1605,6 +1685,11 @@ func everforestDark() Theme {
 			VCSUntracked:    "#d195dc",
 			VCSDeleted:      "#ac908d", // grey1, lightened for contrast from #859289
 			VCSConflicted:   "#e98f91", // lightened for contrast from #e67e80
+			TracePrompt:     "#d195dc", // agent-trace box kinds (#2874)
+			TraceEdit:       "#dbbc7f",
+			TraceCreate:     "#80c089",
+			TraceDelete:     "#e98f91",
+			TraceAnswer:     "#95adc8",
 		},
 		Captures: map[string]string{
 			"keyword":          "#e67e80", // red
@@ -1699,6 +1784,11 @@ func everforestLight() Theme {
 			VCSUntracked:    "#5c2267", // darkened for contrast from #dfa000
 			VCSDeleted:      "#8a6864", // grey1, darkened for contrast from #939f91
 			VCSConflicted:   "#d50c09", // darkened for contrast from #f85552
+			TracePrompt:     "#5c2267", // agent-trace box kinds (#2874)
+			TraceEdit:       "#896300",
+			TraceCreate:     "#215027",
+			TraceDelete:     "#d50c09",
+			TraceAnswer:     "#4b6c7e",
 		},
 		Captures: map[string]string{
 			"keyword":          "#e10d09", // red, darkened for contrast from #f85552
@@ -1793,6 +1883,11 @@ func ayuDark() Theme {
 			VCSUntracked:    "#be69cd",
 			VCSDeleted:      "#886763", // lightened for contrast from #636b76
 			VCSConflicted:   "#f26d78",
+			TracePrompt:     "#be69cd", // agent-trace box kinds (#2874)
+			TraceEdit:       "#e6b450",
+			TraceCreate:     "#7fd962",
+			TraceDelete:     "#d95757",
+			TraceAnswer:     "#59c2ff",
 		},
 		Captures: map[string]string{
 			"keyword":          "#ff8f40",
@@ -1887,6 +1982,11 @@ func ayuMirage() Theme {
 			VCSUntracked:    "#cd8cd9",
 			VCSDeleted:      "#97736f",
 			VCSConflicted:   "#f27983",
+			TracePrompt:     "#cd8cd9", // agent-trace box kinds (#2874)
+			TraceEdit:       "#ffcc66",
+			TraceCreate:     "#87d96c",
+			TraceDelete:     "#ff6666",
+			TraceAnswer:     "#73d0ff",
 		},
 		Captures: map[string]string{
 			"keyword":          "#ffad66",
@@ -1981,6 +2081,11 @@ func ayuLight() Theme {
 			VCSUntracked:    "#6d297a", // darkened for contrast from #f2ae49
 			VCSDeleted:      "#926e6a", // darkened for contrast from #8a9199
 			VCSConflicted:   "#d90019", // darkened for contrast from #ff7383
+			TracePrompt:     "#6d297a", // agent-trace box kinds (#2874)
+			TraceEdit:       "#8a5a00",
+			TraceCreate:     "#437729",
+			TraceDelete:     "#d41e1e",
+			TraceAnswer:     "#306fae",
 		},
 		Captures: map[string]string{
 			"keyword":          "#c15405", // darkened for contrast from #fa8d3e
@@ -2075,6 +2180,11 @@ func githubDark() Theme {
 			VCSUntracked:    "#ba61ca",
 			VCSDeleted:      "#a68783",
 			VCSConflicted:   "#f85149",
+			TracePrompt:     "#ba61ca", // agent-trace box kinds (#2874)
+			TraceEdit:       "#d29922",
+			TraceCreate:     "#7ee787",
+			TraceDelete:     "#f85149",
+			TraceAnswer:     "#a5d6ff",
 		},
 		Captures: map[string]string{
 			"keyword":          "#ff7b72",
@@ -2169,6 +2279,11 @@ func githubLight() Theme {
 			VCSUntracked:    "#682773",
 			VCSDeleted:      "#8b6864",
 			VCSConflicted:   "#cf222e",
+			TracePrompt:     "#682773", // agent-trace box kinds (#2874)
+			TraceEdit:       "#9a6700",
+			TraceCreate:     "#2c6d35",
+			TraceDelete:     "#cf222e",
+			TraceAnswer:     "#396eaa",
 		},
 		Captures: map[string]string{
 			"keyword":          "#cf222e",
@@ -2265,6 +2380,11 @@ func oxocarbon() Theme {
 			VCSUntracked:    "#d59edf", // no yellow in the palette
 			VCSDeleted:      "#9f7e7b",
 			VCSConflicted:   "#ee5396",
+			TracePrompt:     "#be95ff", // agent-trace box kinds (#2874)
+			TraceEdit:       "#f1c21b",
+			TraceCreate:     "#42be65",
+			TraceDelete:     "#ee5396",
+			TraceAnswer:     "#33b1ff",
 		},
 		Captures: map[string]string{
 			"keyword":          "#be95ff", // base0E
@@ -2359,6 +2479,11 @@ func monokaiPro() Theme {
 			VCSUntracked:    "#cd8cd9",
 			VCSDeleted:      "#a48581",
 			VCSConflicted:   "#ff6188",
+			TracePrompt:     "#cd8cd9", // agent-trace box kinds (#2874)
+			TraceEdit:       "#ffd866",
+			TraceCreate:     "#85cd8f",
+			TraceDelete:     "#ff6188",
+			TraceAnswer:     "#89add8",
 		},
 		Captures: map[string]string{
 			"keyword":          "#ff6188",
@@ -2454,6 +2579,11 @@ func zenburn() Theme {
 			VCSUntracked:    "#e0b8e7",
 			VCSDeleted:      "#bfa9a7", // lightened for contrast from #989888
 			VCSConflicted:   "#deb8b8", // lightened for contrast from #cc9393
+			TracePrompt:     "#e0b8e7", // agent-trace box kinds (#2874)
+			TraceEdit:       "#f0dfaf",
+			TraceCreate:     "#a9ccad",
+			TraceDelete:     "#deb8b8",
+			TraceAnswer:     "#adc7e4",
 		},
 		Captures: map[string]string{
 			"keyword":          "#f0dfaf",
@@ -2557,6 +2687,11 @@ func highContrastDark() Theme {
 			VCSUntracked:    "#ca84d6",
 			VCSDeleted:      "#cab8b6", // no dim class
 			VCSConflicted:   "#ff8a80",
+			TracePrompt:     "#ca84d6", // agent-trace box kinds (#2874)
+			TraceEdit:       "#fff0c1",
+			TraceCreate:     "#8acf93",
+			TraceDelete:     "#ff8a80",
+			TraceAnswer:     "#a7c3e2",
 		},
 		Captures: map[string]string{
 			"keyword":          "#ff79c6",
@@ -2651,6 +2786,11 @@ func highContrastLight() Theme {
 			VCSUntracked:    "#481b50",
 			VCSDeleted:      "#594341", // no dim class
 			VCSConflicted:   "#96000e",
+			TracePrompt:     "#481b50", // agent-trace box kinds (#2874)
+			TraceEdit:       "#7a3600",
+			TraceCreate:     "#1a3f1f",
+			TraceDelete:     "#96000e",
+			TraceAnswer:     "#274b75",
 		},
 		Captures: map[string]string{
 			"keyword":          "#8b1a6b",

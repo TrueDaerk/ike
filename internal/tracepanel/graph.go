@@ -654,11 +654,11 @@ func (m *Model) graphStyles(pal *theme.Palette) []lipgloss.Style {
 	st := make([]lipgloss.Style, stCount)
 	st[stPlain] = lipgloss.NewStyle()
 	st[stFaint] = lipgloss.NewStyle().Faint(true)
-	st[stPrompt] = lipgloss.NewStyle().Foreground(pal.Accent)
-	st[stEdit] = lipgloss.NewStyle().Foreground(pal.Warning)
-	st[stCreate] = lipgloss.NewStyle().Foreground(pal.Success)
-	st[stDelete] = lipgloss.NewStyle().Foreground(pal.Error)
-	st[stAnswer] = lipgloss.NewStyle().Foreground(pal.Info)
+	st[stPrompt] = lipgloss.NewStyle().Foreground(pal.TracePrompt)
+	st[stEdit] = lipgloss.NewStyle().Foreground(pal.TraceEdit)
+	st[stCreate] = lipgloss.NewStyle().Foreground(pal.TraceCreate)
+	st[stDelete] = lipgloss.NewStyle().Foreground(pal.TraceDelete)
+	st[stAnswer] = lipgloss.NewStyle().Foreground(pal.TraceAnswer)
 	st[stError] = lipgloss.NewStyle().Foreground(pal.Error).Bold(true)
 	st[stPending] = lipgloss.NewStyle().Faint(true)
 	st[stSelected] = lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
@@ -771,7 +771,9 @@ func (m *Model) drawBox(c *canvas, st agenttrace.Stop, s Slot, i int) {
 		c.put(s.X, y, "│", style, 0)
 		c.put(s.X+w-1, y, "│", style, 0)
 	}
-	labelSt := stPlain
+	// The label carries the kind colour too (#2874), so the kind reads from
+	// more than one thin border line; the selection below still wins.
+	labelSt := style
 	if (st.Pending && st.Kind == agenttrace.StopAnswer) || st.Kind == agenttrace.StopRewind {
 		labelSt = stFaint
 	}

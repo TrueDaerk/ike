@@ -235,6 +235,9 @@ func TestBuiltinThemeFullContrast(t *testing.T) {
 				{"VCSModified", p.VCSModified}, {"VCSAdded", p.VCSAdded},
 				{"VCSUntracked", p.VCSUntracked}, {"VCSDeleted", p.VCSDeleted},
 				{"VCSConflicted", p.VCSConflicted},
+				{"TracePrompt", p.TracePrompt}, {"TraceEdit", p.TraceEdit},
+				{"TraceCreate", p.TraceCreate}, {"TraceDelete", p.TraceDelete},
+				{"TraceAnswer", p.TraceAnswer},
 			} {
 				audit(f, chromeBases)
 			}

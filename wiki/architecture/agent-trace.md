@@ -4,7 +4,7 @@ title: Agent Trace
 description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, subagent transcripts joined under their Agent call and `Write` on an existing file as an edit (#2861), and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840), its graph view — the session as a snake path of prompt, change and answer boxes with expand-in-place, the `agent.trace.view` setting and the tree toggle (#2858), the links from writing file nodes to change-feed entries with diff/revert and the feed's jump back (#2838), per-change diffs reconstructed from the transcript with their provenance and a session-before / git HEAD / working-file base switch (#2859), and `agent.ask` — a question about a node answered by a fork of the same session on a cheaper model, with its node context, settings and answer overlay (internal/agentask, #2845), and follow-up questions on the same fork, fork tagging and the trimmed context (#2844), the per-project session history — records written at turn boundaries, /clear boundaries, rewinds as abandoned branches behind a marker, the one-time import of Claude transcripts and the session picker with a read-only stored view (#2860) — plus keybinds and limitations (other harnesses) (#2839).
 resource: internal/agenttrace
 tags: [architecture, agents, claude, transcript, trace, discovery, hooks, tool-window, hiertree, change-feed, diff, ask, settings, history, rewind]
-timestamp: 2026-10-01T22:00:00Z
+timestamp: 2026-10-01T23:00:00Z
 ---
 
 # Agent Trace
@@ -480,8 +480,15 @@ detail block attaches). The selection highlights both content rows; the
 `──▶` / `◀──` connectors sit on the label row;
 the canvas gives every rune exactly the cells its width claims (a wide
 rune never straddles the edge or leaves half a glyph behind) — so kinds
-read without colour; the border
-colour (accent, warning, success, error, info) adds the second cue. The
+read without colour; the kind colour adds the second cue on the
+border, the top-border glyph and the label row (#2874; the selection
+still wins on the selected box's content rows). The colours are the
+dedicated theme roles `TracePrompt`, `TraceEdit`, `TraceCreate`,
+`TraceDelete` and `TraceAnswer` (see [Themes](./themes.md)), set in every
+built-in so question, edit, create and answer are different hues — the
+generic `Accent`/`Info` they used to borrow share a hue in several themes.
+Failed calls (bold `Error`) and pending stops (faint) keep their look. The
+tree view does not colour by kind. The
 expanded box's detail block is inserted beneath its row and pushes the
 rows below down. The renderer draws onto a cell canvas (`graph.go`) and
 the mouse hit test (`Layout.At`) reads the same slots.

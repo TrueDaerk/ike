@@ -4,7 +4,7 @@ title: Themes / Color Schemes
 description: Named-palette system — one [theme].name recolors syntax, explorer, chrome and the integrated terminal ANSI palette together; one shared color resolver; plugin-extensible built-ins.
 resource: internal/theme
 tags: [architecture, themes, color, lipgloss]
-timestamp: 2026-08-28T20:00:00Z
+timestamp: 2026-10-01T23:00:00Z
 ---
 
 # Themes / Color Schemes
@@ -31,7 +31,8 @@ set of **semantic color slots**, not a per-widget sheet. The IKE slot set
 `Success`, `Warning`, `Error`, `Info`, `Hint`, `MoveSource`, `DropTarget`,
 `Ghost`, `ScrollbarTrack`, `ScrollbarThumb`, `PaneBadge`, `PaneBadgeText`,
 `PaneBadgeMuted`, `PaneBadgeMutedText`, `DiffAdded`, `DiffRemoved`,
-`DiffChanged`, `DiffAddedEmph`, `DiffRemovedEmph`, `DiffMarker`. The occurrence slots back the LSP
+`DiffChanged`, `DiffAddedEmph`, `DiffRemovedEmph`, `DiffMarker`, the `VCS*` and
+`Trace*` slots. The occurrence slots back the LSP
 document-highlight marks (#172); left empty they fall back to the theme's own
 `SelectionMuted` before the default theme's, so occurrences stay in-palette
 for sparse themes. `InlayHint` colours the inline LSP inlay-hint text (#171);
@@ -62,7 +63,15 @@ of the line background's own drift from `Surface` — the readability envelope
 the contrast audit holds every overlay to. `DiffMarker` (#2494) is the diff
 viewer's current-hunk gutter marker and the highlight of the collapsed-gap
 separator the `o` key targets — a foreground mark; left empty it falls back
-to the theme's own `Accent`.
+to the theme's own `Accent`. `VCSModified`, `VCSAdded`, `VCSUntracked`,
+`VCSDeleted` and `VCSConflicted` colour VCS file status. `TracePrompt`,
+`TraceEdit`, `TraceCreate`, `TraceDelete` and `TraceAnswer` (#2874) colour
+the Agent Trace graph view's box kinds (border, glyph and label — see
+[Agent Trace](./agent-trace.md)). Every built-in sets them so question,
+edit, create and answer sit at least `minTraceHueGap` (30°) apart on the
+colour wheel (`trace_test`), and the contrast audit holds them to text
+contrast; left empty they fall back to the theme's own `Accent`/`Warning`/
+`Success`/`Error`/`Info` — the pre-#2874 look — then the default's.
 
 ## Model
 
