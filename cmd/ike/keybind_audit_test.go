@@ -90,6 +90,9 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	{"time.refresh", reasonPaneKey},
 	// usage.toggle (#2552) has cmd+alt+u; the reload is the pane's own 'r'.
 	{"usage.refresh", reasonPaneKey},
+	// agent.trace.toggle (#2840) has cmd+alt+shift+a; the graph ↔ tree switch
+	// is the pane's own 't' (#2858).
+	{"agent.trace.view", reasonPaneKey},
 	{"deps.updateLatest", reasonIntention},
 	{"http.", reasonPaneKey}, // the response pane's single keys
 	// #2423's GraphQL schema commands carve themselves out of that family:

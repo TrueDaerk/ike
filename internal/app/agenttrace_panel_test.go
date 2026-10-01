@@ -49,14 +49,31 @@ func transcriptLines(id, cwd, target string, turn int) string {
 
 // openTrace toggles the pane open and runs the lookup and the first read
 // synchronously, returning the model with the tree filled (or the empty
-// state shown).
+// state shown). The pane opens in the graph view by default (#2858); the
+// tree tests here pin the tree view, the graph tests open through
+// openTraceGraph.
 func openTrace(t *testing.T, m Model) Model {
+	t.Helper()
+	return openTraceView(t, m, tracepanel.ViewTree)
+}
+
+// openTraceGraph is openTrace in the default graph view.
+func openTraceGraph(t *testing.T, m Model) Model {
+	t.Helper()
+	return openTraceView(t, m, tracepanel.ViewGraph)
+}
+
+func openTraceView(t *testing.T, m Model, view tracepanel.ViewMode) Model {
 	t.Helper()
 	out, _ := m.Update(AgentTraceToggleMsg{})
 	m = out.(Model)
 	if m.agentTracePanel() == nil || m.activeWS().Panes.Focused() != pane.AgentTraceKey {
 		t.Fatalf("toggle must open + focus the pane (focus=%q)", m.activeWS().Panes.Focused())
 	}
+	if m.agentTracePanel().ViewMode() != tracepanel.ViewGraph {
+		t.Fatal("the pane must open in the graph view by default (agent.trace.view)")
+	}
+	m.agentTracePanel().SetViewMode(view)
 	located := m.traceLocateCmd()()
 	out, cmd := m.Update(located)
 	m = out.(Model)

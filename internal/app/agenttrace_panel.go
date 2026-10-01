@@ -4,9 +4,12 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
+	"ike/internal/agentask"
 	"ike/internal/agenttrace"
 	"ike/internal/changefeed"
+	"ike/internal/config"
 	"ike/internal/host"
 	"ike/internal/pane"
 	"ike/internal/tracepanel"
@@ -29,6 +32,9 @@ import (
 
 // AgentTraceToggleMsg runs agent.trace.toggle.
 type AgentTraceToggleMsg struct{}
+
+// AgentTraceViewMsg runs agent.trace.view (#2858): graph ↔ tree.
+type AgentTraceViewMsg struct{}
 
 // traceTarget is the terminal the trace follows: its session key ("" when no
 // terminal qualifies) and the working directory the session is looked up by,
@@ -70,11 +76,14 @@ type traceLocatedMsg struct {
 type traceReadMsg struct {
 	reader *agenttrace.Reader
 	nodes  []agenttrace.Node
-	info   tracepanel.Info
-	added  int
-	rev    int
-	at     time.Time
-	err    error
+	// stops is the change path the graph view draws (#2858), built from
+	// the same session as the tree.
+	stops []agenttrace.Stop
+	info  tracepanel.Info
+	added int
+	rev   int
+	at    time.Time
+	err   error
 }
 
 // traceTickMsg drives the poll while the pane is open. gen retires the
@@ -124,11 +133,77 @@ func (m *Model) openAgentTracePanel() tea.Cmd {
 		p := m.activeWS().Panes.Get(key).AgentTrace()
 		p.SetDisplayPath(displayPath)
 		p.SetLoading(true)
+		p.SetViewMode(m.traceViewMode())
 	}) {
 		return nil
 	}
 	m.traceGen++
 	return tea.Batch(m.traceLocateCmd(), m.armTraceTick(true))
+}
+
+// traceViewMode is the view a trace pane opens in (#2858): the toggle's
+// last pick this IKE session, else the agent.trace.view setting.
+func (m Model) traceViewMode() tracepanel.ViewMode {
+	if m.traceViewSet {
+		return m.traceView
+	}
+	return tracepanel.ParseViewMode(config.Get().Agent.Trace.View)
+}
+
+// toggleTraceView is agent.trace.view: the open pane switches between the
+// graph and the tree, and the pick is remembered for a reopened pane. With
+// the pane closed the next open uses the other view.
+func (m *Model) toggleTraceView() {
+	cur := m.traceViewMode()
+	next := tracepanel.ViewGraph
+	if cur == tracepanel.ViewGraph {
+		next = tracepanel.ViewTree
+	}
+	m.traceView, m.traceViewSet = next, true
+	if p := m.agentTracePanel(); p != nil {
+		p.SetViewMode(next)
+	}
+}
+
+// noteTraceView records a view the pane's own 't' switched to, so a
+// reopened pane keeps it.
+func (m *Model) noteTraceView() {
+	if p := m.agentTracePanel(); p != nil {
+		m.traceView, m.traceViewSet = p.ViewMode(), true
+	}
+}
+
+// openTraceText shows a prompt or answer of the graph in full (#2858):
+// markdown-rendered like the ask overlay, esc to dismiss.
+func (m *Model) openTraceText(msg tracepanel.ShowTextMsg) {
+	m.shell.SetAccent(nil)
+	m.shell.SetContent(&traceTextContent{m: m, title: msg.Title, text: msg.Text})
+	m.shell.SetSize(m.width, m.height)
+	m.shell.Open()
+}
+
+// traceTextContent renders a prompt or answer at the shell's width budget.
+type traceTextContent struct {
+	m     *Model
+	title string
+	text  string
+	// cache holds the last rendering by width — glamour is not free.
+	cacheW int
+	cache  string
+}
+
+// Title implements ui.Content.
+func (c *traceTextContent) Title() string { return c.title }
+
+// Render implements ui.Content.
+func (c *traceTextContent) Render(width int) string {
+	width = max(20, width)
+	if c.cacheW != width || c.cache == "" {
+		c.cache = agentask.RenderMarkdown(c.text, width, c.m.pal()) + "\n\n" +
+			lipgloss.NewStyle().Faint(true).Render("esc close")
+		c.cacheW = width
+	}
+	return c.cache
 }
 
 // traceInitCmd starts the lookup and the poll for a pane restored with the
@@ -239,6 +314,7 @@ func (m *Model) traceReadCmd() tea.Cmd {
 	sess := m.traceSession
 	return func() tea.Msg {
 		var nodes []agenttrace.Node
+		var stops []agenttrace.Stop
 		var info tracepanel.Info
 		added, rev, err := r.Read(func(s *agenttrace.Session) {
 			info = tracepanel.Info{
@@ -246,6 +322,7 @@ func (m *Model) traceReadCmd() tea.Cmd {
 				FromHook: sess.FromHook, Ended: sess.Ended, Turns: s.Turns(),
 			}
 			nodes = agenttrace.BuildTree(s)
+			stops = agenttrace.BuildPath(s)
 		})
 		if info.ID == "" {
 			info.ID = sess.ID
@@ -253,7 +330,7 @@ func (m *Model) traceReadCmd() tea.Cmd {
 		if info.CWD == "" {
 			info.CWD = sess.CWD
 		}
-		return traceReadMsg{reader: r, nodes: nodes, info: info, added: added, rev: rev, at: time.Now(), err: err}
+		return traceReadMsg{reader: r, nodes: nodes, stops: stops, info: info, added: added, rev: rev, at: time.Now(), err: err}
 	}
 }
 
@@ -279,6 +356,7 @@ func (m Model) handleTraceRead(msg traceReadMsg) (tea.Model, tea.Cmd) {
 	p.SetRead(msg.at, msg.added)
 	if msg.rev != m.traceShownRev || !p.HasSession() || msg.info != p.Info() {
 		p.Set(msg.nodes, msg.info)
+		p.SetPath(msg.stops)
 		m.traceShownRev = msg.rev
 	}
 	m.syncTraceLinks()
@@ -318,6 +396,7 @@ func (m Model) handleTraceTick(msg traceTickMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.traceTicks++
+	m.noteTraceView()
 	target := m.traceTargetNow()
 	rescan := m.traceTicks%agentTraceRescanTicks == 0 && (m.traceReader == nil || m.traceSession.Ended)
 	var work tea.Cmd

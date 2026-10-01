@@ -408,7 +408,7 @@ func defaults() *Config {
 		Completion: Completion{CaseSensitivity: "first_letter"}, // IntelliJ's rule (#2650)
 		// agent.ask (#2845) answers on the cheaper model in one turn and shows
 		// the node context it injected.
-		Agent: Agent{Ask: AgentAsk{Model: "sonnet", MaxTurns: 1, ShowContext: true}},
+		Agent: Agent{Ask: AgentAsk{Model: "sonnet", MaxTurns: 1, ShowContext: true}, Trace: AgentTrace{View: "graph"}}, // graph view by default (#2858)
 		// The PHP declaration index (0520, #2667) is on: three parent
 		// levels cover the usual model → base model → framework chain,
 		// vendor/ stays with the language server, and 20000 files bound a

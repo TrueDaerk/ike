@@ -708,6 +708,10 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			// session as a turn → decision → tool call → file tree.
 			withAliases(appCommand("agent.trace.toggle", "Agent Trace", AgentTraceToggleMsg{}),
 				"claude", "trace", "session"),
+			// Graph ↔ tree view of the trace (#2858); the pane's own 't' is
+			// the short way from inside it.
+			withAliases(appCommand("agent.trace.view", "Agent Trace: Graph / Tree View", AgentTraceViewMsg{}),
+				"claude", "trace", "graph", "tree", "path"),
 			// Ask a fork of the traced session about the selected node (#2845).
 			withAliases(appCommand("agent.ask", "Agent Trace: Ask the Agent", AgentAskMsg{}),
 				"claude", "why", "question", "fork"),

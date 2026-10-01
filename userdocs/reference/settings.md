@@ -443,6 +443,7 @@ advertises formatting.
 
 | Setting | Key | Type | Default | Scope | Description |
 |---|---|---|---|---|---|
+| Trace view | `agent.trace.view` | enum: `graph`, `tree` | `graph` | user | View the Agent Trace window opens in: "graph" draws the session as a path of boxes — the prompt, one box per file change, the answer, snaking across the pane — "tree" lists turn → decision → tool call → file. The pane's t key (and agent.trace.view) switches the open window without changing this default |
 | Ask model | `agent.ask.model` | string | `sonnet` | user | Model the forked session answers Ask the Agent (agent.ask) on: "sonnet" (the default, the cheaper choice), "opus" or a full model id such as claude-sonnet-5-5. The fork inherits the whole session context either way; the original session's history is never touched |
 | Ask max turns | `agent.ask.max_turns` | integer (1–5) | `1` | user | Agentic turns the forked session may take to answer (claude --max-turns); 1 is a single reply, up to 5 lets it reason in several steps at more cost |
 | Ask shows context | `agent.ask.show_context` | boolean | `true` | user | Show the node context the question was prefixed with (file, line, diff hunk, turn time, assistant text) above the answer in the Ask overlay |

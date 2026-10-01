@@ -559,7 +559,9 @@ reports back so a coding agent's session binds to the pane it runs in
 The **Agent Trace** tool window (`agent.trace.toggle`, `cmd+alt+shift+a`,
 Tools menu; [Agent Trace](./agent-trace.md#trace-tool-window-2840), #2840)
 follows the focused — else the most recently focused — tool pane and shows
-that pane's agent session as a turn → decision → tool call → file tree, with
+that pane's agent session as a change path — prompt, one box per file
+change, answer — snaking across the pane (the default, #2858) or as a turn
+→ decision → tool call → file tree (`t` toggles), with change boxes and
 file rows opening in the editor. It is a singleton tool window like the
 others on this page (toggle semantics, layout persistence, slot numbering,
 tab hosting), under key `agenttrace`.

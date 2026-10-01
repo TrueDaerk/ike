@@ -164,6 +164,7 @@ func (m *Model) wireToolWindow(inst *pane.Instance) {
 		p := inst.AgentTrace()
 		p.SetDisplayPath(displayPath)
 		p.SetLoading(true)
+		p.SetViewMode(m.traceViewMode())
 	case pane.KindDeps:
 		// The panel re-seeds from the last snapshot; the auto-scan (or 'r')
 		// refreshes it (#2419).

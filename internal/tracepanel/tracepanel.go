@@ -108,11 +108,16 @@ type Model struct {
 	displayPath func(string) string
 	now         func() time.Time
 	clicks      ui.ClickTracker
+
+	// view is the shown view (#2858); graph the graph view's state. The
+	// zero value is the tree; the host applies the agent.trace.view setting.
+	view  ViewMode
+	graph graphState
 }
 
 // New builds an empty panel: nothing located yet.
 func New(pal *theme.Palette) Model {
-	return Model{pal: pal, loading: true, now: time.Now, follow: true}
+	return Model{pal: pal, loading: true, now: time.Now, follow: true, graph: graphState{follow: true}}
 }
 
 // SetPalette follows a theme switch.
@@ -225,6 +230,7 @@ func (m *Model) SetNoSession(cwd string, err error) {
 	m.nodes, m.links = nil, agenttrace.Links{}
 	m.known = nil
 	m.follow = true
+	m.graph = graphState{follow: true}
 	m.readAt, m.readAdded = time.Time{}, 0
 }
 
@@ -236,14 +242,24 @@ func (m *Model) Reset() {
 	m.nodes, m.links = nil, agenttrace.Links{}
 	m.known = nil
 	m.follow = true
+	m.graph = graphState{follow: true}
 	m.readAt, m.readAdded = time.Time{}, 0
 	m.hasSession = false
 	m.loading = true
 	m.err = ""
 }
 
-// Current returns the selected node, nil on an empty tree.
+// Current returns the selected node, nil on an empty tree. In the graph
+// view it is the selected box seen as a node: a change box as its file
+// node (same key, so the change-feed links and the ask context apply), a
+// prompt as its turn, an answer as a decision.
 func (m *Model) Current() *agenttrace.Node {
+	if m.view == ViewGraph {
+		if st := m.CurrentStop(); st != nil {
+			return stopNode(st)
+		}
+		return nil
+	}
 	r := m.tree.Current()
 	if r == nil {
 		return nil
@@ -301,6 +317,9 @@ func sameLinks(a, b agenttrace.Links) bool {
 // and reports whether the node exists — the change feed's jump to the trace
 // node behind a write (#2838).
 func (m *Model) Select(key string) bool {
+	if m.view == ViewGraph {
+		return m.graphSelect(key)
+	}
 	chain := keyChain(m.nodes, key)
 	if chain == nil {
 		return false
@@ -386,10 +405,20 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return nil
 	}
 	cmd := m.handleKey(k)
-	if m.hasSession {
+	if m.hasSession && m.view == ViewTree {
 		m.noteCursor()
 	}
 	return cmd
+}
+
+// toggleView switches between the graph and the tree ('t', or the
+// agent.trace.view command).
+func (m *Model) toggleView() {
+	if m.view == ViewGraph {
+		m.SetViewMode(ViewTree)
+	} else {
+		m.SetViewMode(ViewGraph)
+	}
 }
 
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -406,18 +435,28 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	}
-	m.ensureFetch()
-	onEnter := func(r hiertree.Row[agenttrace.Node]) tea.Cmd {
-		if cmd := m.open(r.Item); cmd != nil {
-			return cmd
-		}
-		if cur := m.tree.Current(); cur != nil {
-			return m.tree.Toggle(cur)
-		}
+	if key == "t" {
+		m.toggleView()
 		return nil
 	}
-	if cmd, ok := m.tree.Key(key, m.treeHeight(), onEnter, func() tea.Cmd { return nil }); ok {
-		return cmd
+	if m.view == ViewGraph {
+		if cmd, ok := m.graphKey(key); ok {
+			return cmd
+		}
+	} else {
+		m.ensureFetch()
+		onEnter := func(r hiertree.Row[agenttrace.Node]) tea.Cmd {
+			if cmd := m.open(r.Item); cmd != nil {
+				return cmd
+			}
+			if cur := m.tree.Current(); cur != nil {
+				return m.tree.Toggle(cur)
+			}
+			return nil
+		}
+		if cmd, ok := m.tree.Key(key, m.treeHeight(), onEnter, func() tea.Cmd { return nil }); ok {
+			return cmd
+		}
 	}
 	switch key {
 	case "r":
@@ -469,6 +508,10 @@ func (m *Model) Wheel(delta int) {
 	if !m.hasSession {
 		return
 	}
+	if m.view == ViewGraph {
+		m.graphScroll(delta)
+		return
+	}
 	m.ensureFetch()
 	m.tree.Wheel(delta, m.treeHeight())
 	m.noteCursor()
@@ -481,6 +524,9 @@ func (m *Model) Wheel(delta int) {
 func (m *Model) Click(x, y int) tea.Cmd {
 	if !m.hasSession {
 		return m.dialogClick(x, y)
+	}
+	if m.view == ViewGraph {
+		return m.graphClick(x, y)
 	}
 	m.ensureFetch()
 	visible := m.tree.Visible()
@@ -545,15 +591,20 @@ func (m *Model) View() string {
 	if !m.hasSession {
 		return m.emptyView(pal)
 	}
-	m.ensureFetch()
 	clip := lipgloss.NewStyle().MaxWidth(m.width)
 	lines := []string{clip.Render(m.headerLine(pal))}
-	rows := m.tree.RenderRows(m.width, m.treeHeight(), pal, m.display, "(no events yet)")
-	lines = append(lines, rows...)
+	hint := "enter/double-click opens · space expands · h/l fold · t graph · a ask · r rescan · Δ: D diff · V revert"
+	if m.view == ViewGraph {
+		lines = append(lines, m.graphRows(pal)...)
+		hint = graphHint
+	} else {
+		m.ensureFetch()
+		rows := m.tree.RenderRows(m.width, m.treeHeight(), pal, m.display, "(no events yet)")
+		lines = append(lines, rows...)
+	}
 	for len(lines) < headerRows+m.treeHeight() {
 		lines = append(lines, "")
 	}
-	hint := "enter/double-click opens · space expands · h/l fold · a ask · r rescan · Δ: D diff · V revert"
 	lines = append(lines, clip.Render(lipgloss.NewStyle().Faint(true).Render(hint)))
 	return strings.Join(lines, "\n")
 }

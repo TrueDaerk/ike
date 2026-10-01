@@ -1,5 +1,25 @@
 # Log
 
+## 2026-10-01 (agent trace: graph view, #2858)
+
+- [Agent Trace](/architecture/agent-trace.md): the pane opens in a
+  **graph** view — the session as a snake path of boxes, per turn the
+  prompt, one box per file change (create/write/edit/delete; several edits
+  of one file in one call stay one box) and the answer, a compaction as a
+  `◇` marker — laid out left→right, then right→left, … (`snake.go`, pure
+  over widths; a pane narrower than two boxes is a single column). `h/l`
+  walk the path, `j/k` the rows, `enter` opens the file / shows a prompt or
+  answer in the shell, `space` (or a second `enter`) expands a change box
+  into its calls, preceding reasoning and patch summary, `D`/`a`/`V` act as
+  on tree rows (same keys as the file nodes, so change-feed links apply),
+  `t` toggles the tree; selection and expansion survive live appends, the
+  newest turn auto-scrolls unless the user scrolled up.
+- `agenttrace.BuildPath(session) []Stop` is the pure path model; `Settle`
+  marks a pending answer of an ended session.
+- New setting `agent.trace.view` (`graph` / `tree`, Settings UI page Agent
+  Trace) is the opening view; `agent.trace.view` (palette) toggles the open
+  pane and the pick is remembered for the IKE session.
+
 ## 2026-10-01 (agent trace: subagent edits and Write updates, #2861)
 
 - [Agent Trace](/architecture/agent-trace.md): the `Reader` tails the
