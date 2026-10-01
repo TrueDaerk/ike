@@ -5,6 +5,9 @@ import (
 	"testing"
 	"time"
 
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+
 	"ike/internal/agenttrace"
 )
 
@@ -42,7 +45,7 @@ func widthsFor(n, sep, w int) []int {
 func TestSnakeLayoutBoustrophedon(t *testing.T) {
 	for _, w := range []int{40, 80, 120} {
 		widths := widthsFor(12, 5, w)
-		l := Snake(widths, w, -1, 0)
+		l := Snake(widths, nil, w, -1, 0)
 		if l.Single {
 			t.Fatalf("width %d must not be a single column", w)
 		}
@@ -119,7 +122,7 @@ func TestSnakeLayoutBoustrophedon(t *testing.T) {
 
 func TestSnakeSingleColumnAndExpanded(t *testing.T) {
 	// Narrower than two boxes: one column, full width, stacked.
-	l := Snake(widthsFor(4, -1, 30), 30, -1, 0)
+	l := Snake(widthsFor(4, -1, 30), nil, 30, -1, 0)
 	if !l.Single || l.BoxW != 30 {
 		t.Fatalf("single column = %+v", l)
 	}
@@ -129,7 +132,7 @@ func TestSnakeSingleColumnAndExpanded(t *testing.T) {
 		}
 	}
 	// An expanded box pushes the rows below it down by its detail height.
-	l = Snake(widthsFor(6, -1, 40), 40, 1, 3)
+	l = Snake(widthsFor(6, -1, 40), nil, 40, 1, 3)
 	if l.DetailY != boxH || l.DetailH != 3 {
 		t.Fatalf("detail at %d/%d", l.DetailY, l.DetailH)
 	}
@@ -139,7 +142,7 @@ func TestSnakeSingleColumnAndExpanded(t *testing.T) {
 	if l.At(l.Slots[2].X+1, l.Slots[2].Y+1) != 2 || l.At(0, boxH+1) != -1 {
 		t.Fatal("hit test disagrees with the slots")
 	}
-	if BoxWidth(0); Snake(nil, 40, -1, 0).Height != 0 {
+	if BoxWidth(0); Snake(nil, nil, 40, -1, 0).Height != 0 {
 		t.Fatal("empty path has no height")
 	}
 }
@@ -462,5 +465,182 @@ func TestGraphThemesTellKindsApartByGlyph(t *testing.T) {
 	m.SetPath(path)
 	if view = plain(m.View()); !strings.Contains(view, "┌✗") {
 		t.Fatalf("failed call glyph missing:\n%s", view)
+	}
+}
+
+func TestSnakeBreaksStartNewRowWithRule(t *testing.T) {
+	// Six boxes fit one row at 160 cells; a break at 3 forces a turn.
+	const w = 160
+	l := Snake(widthsFor(6, -1, w), []int{0, 3}, w, -1, 0)
+	if l.Slots[2].Row != 0 || l.Slots[3].Row != 1 || l.Slots[4].Row != 1 {
+		t.Fatalf("rows = %+v", l.Slots)
+	}
+	if l.Slots[0].Break || !l.Slots[3].Break || l.Slots[4].Break {
+		t.Fatal("only the forced turn is a break; a break at 0 is ignored")
+	}
+	// The break leaves room for the "│", the rule and the "▼", and the
+	// snake turns as before: right-to-left, under the last box.
+	prev, s := l.Slots[2], l.Slots[3]
+	if s.Y != boxH+breakH || s.Dir != -1 || s.X+s.W != prev.X+prev.W {
+		t.Fatalf("break slot = %+v after %+v", s, prev)
+	}
+	if n := l.Slots[4]; n.X+n.W+gapW != s.X {
+		t.Fatalf("the row after a break continues leftwards: %+v", n)
+	}
+	// Nothing on the gap rows is clickable; j/k cross the break.
+	for y := boxH; y < s.Y; y++ {
+		if l.At(s.X+1, y) != -1 {
+			t.Fatalf("gap row %d hits a box", y)
+		}
+	}
+	if l.Below(2, nil) != 3 || l.Above(3, nil) != 2 {
+		t.Fatalf("below(2)=%d above(3)=%d", l.Below(2, nil), l.Above(3, nil))
+	}
+	if l.Height != 2*boxH+breakH {
+		t.Fatalf("height = %d", l.Height)
+	}
+	// A single column takes the break's extra row too.
+	l = Snake(widthsFor(3, -1, 30), []int{2}, 30, -1, 0)
+	if l.Slots[1].Y != boxH+turnH || l.Slots[2].Y != 2*boxH+turnH+breakH || !l.Slots[2].Break {
+		t.Fatalf("single column with a break = %+v", l.Slots)
+	}
+}
+
+func TestGraphNewQuestionBreaksTheRow(t *testing.T) {
+	// 200 cells hold seven boxes: turn 2's prompt would fit on the first
+	// row, but a new question starts a new one under a "── #2 ──" rule.
+	m, _ := graphPanel(t, true, 200, 30)
+	l := m.graphLayout()
+	p2 := m.stopIndex("t2")
+	if p2 < 1 {
+		t.Fatal("no prompt for turn 2")
+	}
+	s, prev := l.Slots[p2], l.Slots[p2-1]
+	if !s.Break || s.Row != prev.Row+1 {
+		t.Fatalf("prompt #2 = %+v after %+v", s, prev)
+	}
+	for i := 0; i < p2; i++ {
+		if l.Slots[i].Row != 0 || l.Slots[i].Break {
+			t.Fatalf("turn 1 slot %d = %+v", i, l.Slots[i])
+		}
+	}
+	rows := strings.Split(plain(m.View()), "\n")
+	rule := []rune(rows[headerRows+s.Y-2])
+	if !strings.HasPrefix(string(rule), "── #2 ──") || len(rule) != 200 {
+		t.Fatalf("turn rule = %q", string(rule))
+	}
+	x := s.CenterX()
+	if rule[x] != '┼' || []rune(rows[headerRows+s.Y-3])[x] != '│' || []rune(rows[headerRows+s.Y-1])[x] != '▼' {
+		t.Fatalf("the answer must connect down across the rule at column %d:\n%s", x, strings.Join(rows[headerRows+s.Y-3:headerRows+s.Y], "\n"))
+	}
+	// Selecting the prompt keeps its rule on screen.
+	m.SetSize(200, 7)
+	if !m.graphSelect("t2") || m.GraphTop() > s.Y-2 {
+		t.Fatalf("top %d hides the rule at %d", m.GraphTop(), s.Y-2)
+	}
+}
+
+func TestGraphTwoRowsFitATwelveRowPane(t *testing.T) {
+	for _, w := range []int{40, 80, 120} {
+		m, _ := graphPanel(t, true, w, 12)
+		send(m, "g")
+		l := m.graphLayout()
+		var second *Slot
+		for i := range l.Slots {
+			if l.Slots[i].Row == 1 {
+				second = &l.Slots[i]
+				break
+			}
+		}
+		if second == nil {
+			t.Fatalf("width %d: one row only", w)
+		}
+		if gap := second.Y - boxH; gap <= 1 {
+			t.Fatalf("width %d: rows %d apart, want more breathing room", w, gap)
+		}
+		if m.GraphTop() != 0 || second.Y+boxH > m.treeHeight() {
+			t.Fatalf("width %d: second row ends at %d, body is %d", w, second.Y+boxH, m.treeHeight())
+		}
+		// A click on the second row's box lands on it.
+		m.Click(second.X+1, headerRows+second.Y+1)
+		if cur := m.CurrentStop(); cur == nil || m.stopIndex(cur.Key) != l.At(second.X+1, second.Y+1) {
+			t.Fatalf("width %d: click selected %+v", w, cur)
+		}
+	}
+}
+
+func TestGraphBoxFrameClosedAtEveryWidth(t *testing.T) {
+	widths := []int{4, 6, 7, 8, 12}
+	for w := minBoxW; w <= maxBoxW; w++ {
+		widths = append(widths, w)
+	}
+	widths = append(widths, 30, 37, 60) // single-column full width
+	details := []string{
+		"", "16:00", "+12 −3", "✗ error", "…", "create +1 −0",
+		"edit :123 ×2 +12 −3 ✗ error", "working …", "ended on a tool call",
+		"編集した変更の詳細", "x編集した変更の詳細",
+	}
+	m := panel(t)
+	styles := m.graphStyles(m.theme())
+	corners := [boxH][2]string{{"┌", "┐"}, {"│", "│"}, {"└", "┘"}}
+	for _, w := range widths {
+		for _, d := range details {
+			for _, variant := range []string{"plain", "linked", "expanded", "selected"} {
+				st := agenttrace.Stop{Kind: agenttrace.StopChange, Key: "e1/f0", Label: "a very long file name.go", Detail: d,
+					Ref: &agenttrace.FileRef{Path: "main.go", Op: agenttrace.OpEdit}}
+				m.links = agenttrace.Links{}
+				m.graph.expanded, m.graph.sel = "", ""
+				switch variant {
+				case "linked":
+					m.links = agenttrace.Links{ByNode: map[string]string{st.Key: "/p/main.go"}}
+				case "expanded":
+					m.graph.expanded = st.Key
+				case "selected":
+					m.graph.sel = st.Key
+				}
+				const x0 = 2
+				c := newCanvas(w+2*x0, boxH)
+				m.drawBox(c, st, Slot{X: x0, W: w, H: boxH}, 0)
+				name := variant + "/" + d + "/w" + itoa(w)
+				rows := c.lines(0, boxH, styles)
+				for y, row := range rows {
+					if got := ansi.StringWidth(row); got != c.w {
+						t.Fatalf("%s: row %d is %d cells, want %d", name, y, got, c.w)
+					}
+					if c.cells[y][x0].ch != corners[y][0] || c.cells[y][x0+w-1].ch != corners[y][1] {
+						t.Fatalf("%s: row %d frame %q…%q", name, y, c.cells[y][x0].ch, c.cells[y][x0+w-1].ch)
+					}
+				}
+				// The horizontal run stays intact on both sides of the detail.
+				bottom := c.cells[2]
+				if l := bottom[x0+1].ch; l != "─" && l != "┴" {
+					t.Fatalf("%s: left run %q", name, l)
+				}
+				if r := bottom[x0+w-2].ch; r != "─" {
+					t.Fatalf("%s: right run %q", name, r)
+				}
+				if d != "" && w >= detailMinW {
+					j := x0 + w - 2
+					for bottom[j].ch == "─" {
+						j--
+					}
+					if line := plain(rows[2]); bottom[x0+2].ch != " " || bottom[j].ch != " " {
+						t.Fatalf("%s: detail not set off by spaces: %q", name, line)
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestCanvasWideRunes(t *testing.T) {
+	c := newCanvas(5, 1)
+	// A wide rune that would straddle the right edge is left out.
+	c.put(2, 0, "ab編", stPlain, 0)
+	c.put(0, 0, "編", stPlain, 0)
+	// Overwriting either half of a wide rune blanks the other half.
+	c.put(1, 0, "x", stPlain, 0)
+	if got := plain(c.lines(0, 1, make([]lipgloss.Style, stCount))[0]); got != " xab " {
+		t.Fatalf("row = %q", got)
 	}
 }
