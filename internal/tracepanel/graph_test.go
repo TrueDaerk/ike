@@ -321,9 +321,13 @@ func TestGraphLinkedBoxesDiffRevertAndSelect(t *testing.T) {
 	if view := plain(m.View()); !strings.Contains(view, "Δ┐") {
 		t.Fatalf("linked box has no mark:\n%s", view)
 	}
-	// Unlinked box: D and V stay silent.
+	// A box that is no change: D stays silent; V asks, and the root model
+	// answers with a notice (#2877).
 	if msg := send(m, "D"); msg != nil {
 		t.Fatalf("D on an unlinked box = %#v", msg)
+	}
+	if msg, ok := send(m, "V").(ChangeRevertMsg); !ok || msg.Linked != "" {
+		t.Fatalf("V on an unlinked box = %#v", msg)
 	}
 	// The feed's back-link selects by file node key — or by the tool key.
 	if !m.Select("e4") || m.CurrentStop().Key != "e4/f0" {
@@ -335,7 +339,7 @@ func TestGraphLinkedBoxesDiffRevertAndSelect(t *testing.T) {
 	if msg, ok := send(m, "D").(DiffMsg); !ok || msg.Linked != target || msg.Path != target {
 		t.Fatalf("D = %#v", msg)
 	}
-	if msg, ok := send(m, "V").(ChangeRevertMsg); !ok || msg.Path != target {
+	if msg, ok := send(m, "V").(ChangeRevertMsg); !ok || msg.Linked != target || msg.Path != target || msg.Read {
 		t.Fatalf("V = %#v", msg)
 	}
 	if _, ok := send(m, "a").(AskMsg); !ok {

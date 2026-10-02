@@ -57,9 +57,19 @@ type DiffMsg struct {
 // the selected node — the root model runs agent.ask.
 type AskMsg struct{}
 
-// ChangeRevertMsg asks the root model to run the change feed's revert of the
-// entry a linked node resolved to ('V', #2838).
-type ChangeRevertMsg struct{ Path string }
+// ChangeRevertMsg asks the root model to revert the selected row's change
+// ('V'): the change feed's revert when the node links to an entry (Linked,
+// #2838), else the inverse of the transcript's diff (#2877). It is sent for
+// every row — the root model says why when there is nothing to revert, so
+// the key is never silent. Path is the row's file, "" for a row without one;
+// Read marks a read.
+type ChangeRevertMsg struct {
+	Key  string
+	Path string
+	Read bool
+	// Linked is the change-feed path the node links to; "" for none.
+	Linked string
+}
 
 // linkMark suffixes the detail of a node linked to a change-feed entry.
 const linkMark = "Δ"
@@ -506,11 +516,11 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		if cur == nil {
 			return nil
 		}
-		path := m.links.Node(cur.Key)
-		if path == "" {
-			return nil // unlinked rows stay plain
+		msg := ChangeRevertMsg{Key: cur.Key, Linked: m.links.Node(cur.Key)}
+		if cur.Ref != nil {
+			msg.Path, msg.Read = cur.Ref.Path, cur.Ref.Op == agenttrace.OpRead
 		}
-		return func() tea.Msg { return ChangeRevertMsg{Path: path} }
+		return func() tea.Msg { return msg }
 	}
 	return nil
 }
@@ -636,7 +646,7 @@ func (m *Model) View() string {
 	}
 	clip := lipgloss.NewStyle().MaxWidth(m.width)
 	lines := []string{clip.Render(m.headerLine(pal))}
-	hint := "enter/double-click opens · space expands · h/l fold · t graph · s sessions · D diff · a ask · r rescan · Δ: V revert"
+	hint := "enter/double-click opens · space expands · h/l fold · t graph · s sessions · D diff · a ask · r rescan · V revert"
 	if m.view == ViewGraph {
 		lines = append(lines, m.graphRows(pal)...)
 		hint = graphHint

@@ -1106,16 +1106,19 @@ func (m *Model) openChangeFeedRevertPrompt(e changefeed.Entry) {
 // changeFeedRevertOpen reports whether the shell shows a revert confirmation —
 // the single-file one or the batch's.
 func (m Model) changeFeedRevertOpen() bool {
-	return (m.cfRevert != "" || len(m.cfRevertBatch) > 0) && m.shell.IsOpen()
+	return (m.cfRevert != "" || len(m.cfRevertBatch) > 0 || m.cfRevertTrace != nil) && m.shell.IsOpen()
 }
 
 // updateChangeFeedRevert consumes every key while the confirmation is open.
 func (m Model) updateChangeFeedRevert(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter", "y":
-		path, batch, skipped := m.cfRevert, m.cfRevertBatch, m.cfRevertSkip
+		path, batch, skipped, trace := m.cfRevert, m.cfRevertBatch, m.cfRevertSkip, m.cfRevertTrace
 		m.clearChangeFeedRevert()
 		m.shell.Close()
+		if trace != nil {
+			return m.applyTraceRevert(*trace)
+		}
 		if len(batch) > 0 {
 			return m.applyChangeFeedRevertBatch(batch, skipped)
 		}
@@ -1130,7 +1133,7 @@ func (m Model) updateChangeFeedRevert(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 
 // clearChangeFeedRevert drops the pending confirmation's state.
 func (m *Model) clearChangeFeedRevert() {
-	m.cfRevert, m.cfRevertBatch, m.cfRevertSkip = "", nil, nil
+	m.cfRevert, m.cfRevertBatch, m.cfRevertSkip, m.cfRevertTrace = "", nil, nil, nil
 }
 
 // applyChangeFeedRevert restores the entry's pre-change content. An open (or
@@ -1171,21 +1174,27 @@ func (m Model) revertChangeFeedPath(path string, quiet bool) (Model, tea.Cmd, bo
 		tm, cmd := m.openPathInEditor(path)
 		return tm.(Model), cmd, true
 	}
-	var openCmd tea.Cmd
-	if m.editorForPath(path) == nil {
-		// Not open: the restore path edits a buffer, so open one first. The
-		// open is synchronous enough for the edit below — its command only
-		// carries the parse/LSP follow-up.
-		tm, cmd := m.openPathInEditor(path)
-		m, openCmd = tm.(Model), cmd
-		if m.editorForPath(path) == nil {
-			notify(host.Warn, "could not open "+baseName(path)+" to revert it")
-			return m, openCmd, false
-		}
+	m, openCmd, ok := m.openForRevert(path)
+	if !ok {
+		notify(host.Warn, "could not open "+baseName(path)+" to revert it")
+		return m, openCmd, false
 	}
 	cmd := m.restoreChangeFeedBuffer(path, e, quiet)
 	m.feed.Remove(path)
 	return m, tea.Batch(openCmd, cmd), true
+}
+
+// openForRevert makes sure path has a buffer to restore into: the restore
+// path edits a buffer, so a file that is not open is opened first. The open
+// is synchronous enough for the edit that follows — its command only carries
+// the parse/LSP follow-up. false when no buffer could be opened.
+func (m Model) openForRevert(path string) (Model, tea.Cmd, bool) {
+	if m.editorForPath(path) != nil {
+		return m, nil, true
+	}
+	tm, cmd := m.openPathInEditor(path)
+	m = tm.(Model)
+	return m, cmd, m.editorForPath(path) != nil
 }
 
 // restoreChangeFeedBuffer puts the pre-change content back into the buffer,

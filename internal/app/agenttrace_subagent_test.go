@@ -94,7 +94,7 @@ func TestAgentTraceSubagentEditsLinkAndAsk(t *testing.T) {
 		t.Fatalf("D = %#v", diffMsg)
 	}
 	revMsg, ok := p.Update(tea.KeyPressMsg{Code: 'V', Text: "V"})().(tracepanel.ChangeRevertMsg)
-	if !ok || revMsg.Path != target {
+	if !ok || revMsg.Linked != target || revMsg.Key != "e2/a2/f0" {
 		t.Fatalf("V = %#v", revMsg)
 	}
 	m = runTraceDiff(t, m, diffMsg)

@@ -67,40 +67,65 @@ type traceDiffReadyMsg struct {
 // parsed again (subagents included — the node may be one of their calls),
 // and both comparison bases are read.
 func (m *Model) traceDiffCmd(req tracepanel.DiffMsg) tea.Cmd {
-	p := m.agentTracePanel()
-	if p == nil {
+	transcript, cwd, ok := m.traceDiffSource()
+	if !ok {
 		return nil
-	}
-	transcript := p.Info().Transcript
-	if m.traceReader != nil {
-		transcript = m.traceReader.Path()
-	}
-	cwd := p.Info().CWD
-	if cwd == "" {
-		cwd = projectRoot()
 	}
 	m.traceDiffGen++
 	gen := m.traceDiffGen
 	return func() tea.Msg {
 		out := traceDiffReadyMsg{gen: gen, req: req}
-		if transcript != "" {
-			sess, err := agenttrace.Load(transcript)
-			out.err = err
-			if sess != nil {
-				out.diff, out.found = agenttrace.DiffFor(agenttrace.Diffs(sess), req.Key)
-			}
-		}
+		out.diff, out.found, out.err = loadTraceDiff(transcript, req.Key)
 		path := req.Path
 		if out.found {
 			path = out.diff.Path
 		}
-		if !filepath.IsAbs(path) {
-			path = filepath.Join(cwd, path)
-		}
+		path = traceAbs(path, cwd)
 		out.work, out.workOK = traceWorkingFile(path)
 		out.head, out.headOK = traceHeadFile(path)
 		return out
 	}
+}
+
+// traceDiffSource is the shown session's transcript and working directory
+// (the project root when it has none); false while the pane is not there.
+func (m Model) traceDiffSource() (transcript, cwd string, ok bool) {
+	p := m.agentTracePanel()
+	if p == nil {
+		return "", "", false
+	}
+	transcript = p.Info().Transcript
+	if m.traceReader != nil {
+		transcript = m.traceReader.Path()
+	}
+	cwd = p.Info().CWD
+	if cwd == "" {
+		cwd = projectRoot()
+	}
+	return transcript, cwd, true
+}
+
+// loadTraceDiff parses the transcript again (subagents included — the node
+// may be one of their calls) and reconstructs the diff the node key shows.
+// Off the loop only: it reads the transcript and the files.
+func loadTraceDiff(transcript, key string) (agenttrace.ChangeDiff, bool, error) {
+	if transcript == "" {
+		return agenttrace.ChangeDiff{}, false, nil
+	}
+	sess, err := agenttrace.Load(transcript)
+	if sess == nil {
+		return agenttrace.ChangeDiff{}, false, err
+	}
+	d, found := agenttrace.DiffFor(agenttrace.Diffs(sess), key)
+	return d, found, err
+}
+
+// traceAbs resolves a transcript path against the session's directory.
+func traceAbs(path, cwd string) string {
+	if path != "" && !filepath.IsAbs(path) {
+		path = filepath.Join(cwd, path)
+	}
+	return path
 }
 
 // traceWorkingFile is the file on disk now, in the buffer's native form.

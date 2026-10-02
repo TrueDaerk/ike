@@ -1,10 +1,10 @@
 ---
 type: architecture
 title: Agent Trace
-description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, subagent transcripts joined under their Agent call and `Write` on an existing file as an edit (#2861), and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840), its graph view — the session as a snake path of prompt, change and answer boxes with expand-in-place, the `agent.trace.view` setting and the tree toggle (#2858), the links from writing file nodes to change-feed entries with diff/revert and the feed's jump back (#2838), per-change diffs reconstructed from the transcript with their provenance and a session-before / git HEAD / working-file base switch (#2859), and `agent.ask` — a question about a node answered by a fork of the same session on a cheaper model, with its node context, settings and answer overlay (internal/agentask, #2845), and follow-up questions on the same fork, fork tagging and the trimmed context (#2844), the per-project session history — records written at turn boundaries, /clear boundaries, rewinds as abandoned branches behind a marker, the one-time import of Claude transcripts and the session picker with a read-only stored view (#2860) — plus keybinds and limitations (other harnesses) (#2839).
+description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, subagent transcripts joined under their Agent call and `Write` on an existing file as an edit (#2861), and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840), its graph view — the session as a snake path of prompt, change and answer boxes with expand-in-place, the `agent.trace.view` setting and the tree toggle (#2858), the links from writing file nodes to change-feed entries with diff/revert and the feed's jump back (#2838), per-change diffs reconstructed from the transcript with their provenance and a session-before / git HEAD / working-file base switch (#2859), `V` reverting any change from the feed or the transcript diff with a notice when nothing can be reverted (#2877), and `agent.ask` — a question about a node answered by a fork of the same session on a cheaper model, with its node context, settings and answer overlay (internal/agentask, #2845), and follow-up questions on the same fork, fork tagging and the trimmed context (#2844), the per-project session history — records written at turn boundaries, /clear boundaries, rewinds as abandoned branches behind a marker, the one-time import of Claude transcripts and the session picker with a read-only stored view (#2860) — plus keybinds and limitations (other harnesses) (#2839).
 resource: internal/agenttrace
 tags: [architecture, agents, claude, transcript, trace, discovery, hooks, tool-window, hiertree, change-feed, diff, ask, settings, history, rewind]
-timestamp: 2026-10-01T23:00:00Z
+timestamp: 2026-10-02T12:00:00Z
 ---
 
 # Agent Trace
@@ -391,7 +391,7 @@ yet` before the first), and the followed terminal with why it was picked
 Keys: the tree's own (`j/k`, page keys, `space`/`l` expand, `h` fold or
 walk to the parent), `enter` opens the row's file — or folds/unfolds a row
 that has none — `r` looks the session up again, `i` installs the Claude
-hooks, `D` shows what a change row did ([Diffs](#diffs-2859)), `V` the revert of a linked row (below), `a` asks the agent about the row (#2845, below). Mouse: a click selects, a click on the marker cell folds, a second
+hooks, `D` shows what a change row did ([Diffs](#diffs-2859)), `V` reverts a change row (the feed's revert when linked, else the transcript's diff — [Diffs](#diffs-2859)), `a` asks the agent about the row (#2845, below). Mouse: a click selects, a click on the marker cell folds, a second
 click within `ui.DoubleClickWindow` opens (the shared list-mouse gesture),
 the wheel scrolls through `Tree.Wheel`.
 
@@ -613,7 +613,18 @@ even while the pane is closed. Linked rows carry a `Δ` in their detail and
 route into the feed's **own** handlers — no copies: `D` shows the feed's
 exact diff of the entry in the [diff view](#diffs-2859) (whose `f` opens the
 feed panel on the entry, i.e. its mini-diff), and `V` (`ChangeRevertMsg`)
-raises the feed's revert confirmation. The feed's `t` jumps the other way (`jumpToTraceNode`): an
+raises the feed's revert confirmation when the entry still holds its
+pre-change content (`HasBefore`). Every other row — unlinked, or linked to
+an entry without a snapshot — reverts from the transcript instead (see
+[Diffs](#diffs-2859)); `V` is sent for every row and never silent.
+
+Why a written change is often **unlinked** (#2877): a link needs the trace
+to follow an IKE terminal (`traceFollow.key`), so an agent running in an
+outside terminal — or a trace found by working directory only — links
+nothing; the feed must attribute the write to exactly that terminal; and
+the entry keeps a `Before` only for a file that was open or saved in the
+session. These are deliberate (the feed refuses to guess a culprit), so the
+transcript revert is the fallback rather than looser matching. The feed's `t` jumps the other way (`jumpToTraceNode`): an
 open pane is focused and `Select` unfolds the node's ancestors and puts the
 cursor on it; a closed pane opens and the pending `traceJump` is selected
 by the first read.
@@ -667,6 +678,31 @@ and refuses the key with a notice: HEAD outside a repository ("not a git
 repository") or for a file HEAD does not track, the working file once it
 is gone, and both while only hunks of the change are known. `f` opens the
 feed panel on a linked entry, `esc` closes, the rest scrolls.
+
+**Revert (#2877).** `V` on a change box or file node
+(`ChangeRevertMsg{Key, Path, Read, Linked}`, `agenttrace_revert.go`) takes,
+in order:
+
+1. the change feed's revert prompt, when the node links to an entry with
+   its pre-change content;
+2. the transcript's diff, reconstructed off the loop like `D`'s
+   (`traceRevertCmd` → `loadTraceDiff`). `agenttrace.Revert` turns every
+   hunk around against the file now — the open buffer, else the disk: the
+   hunk's after lines (context and added) must occur exactly once and are
+   replaced by its before lines, last hunk first, so later unrelated edits
+   survive; a diff with whole contents but no hunks needs the file to be
+   exactly its after. A clean check raises the feed's confirmation shell
+   ("Revert agent change", `cfRevertTrace`); `enter` checks again, opens
+   the file when needed (`openForRevert`, shared with the feed revert) and
+   lands the result through `applyBufferRestore` — one undoable edit, a
+   dirty buffer, the disk untouched until the save;
+3. a notice saying why, never a silent return: a row that is no change, a
+   read, a create (`ErrCreated` — no earlier version), a write whose before
+   is unknown or a change the transcript has no diff for (`ErrNoSnapshot`,
+   "no snapshot to revert to"), a file that no longer exists, and — after
+   the check — a conflict (`ErrConflict`, the after lines are gone; the
+   file is left untouched), an ambiguous match (`ErrAmbiguous`) or a change
+   already undone (`ErrReverted`).
 
 **Ask context.** `agent.ask` (#2845) still prefers the linked feed entry's
 hunk; without one the fork's context carries the reconstructed one
@@ -1068,6 +1104,13 @@ mark, `D`/`V` on linked and unlinked rows and `Select` unfolding a folded
 turn; `agenttrace_panel_test.go` runs both directions end to end — `D`
 opening the feed on the entry with its mini-diff, `V` its revert prompt, the
 feed's `t` focusing the pane on the node, and the pending jump.
+`internal/agenttrace/revert_test.go` (#2877) turns hunks around (later
+edits surviving, two hunks, whole contents) and refuses conflicts,
+ambiguous and already-reverted content, creates and after-only writes;
+`internal/app/agenttrace_revert_test.go` runs `V` without a feed link —
+the prompt, the reverted dirty buffer with the disk untouched, a conflict
+leaving the file alone, and the notices for a create, a read, a non-change
+row and a deleted file.
 
 `internal/agenttrace/diffs_test.go` (#2859) reconstructs `basic.jsonl`
 (`Edit` from its patch with whole before/after, `Write` create, the

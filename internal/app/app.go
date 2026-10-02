@@ -1069,6 +1069,8 @@ type Model struct {
 	// traceDiffGen retires a reconstruction that finished after another D.
 	traceDiff    *traceDiffState
 	traceDiffGen int64
+	// traceRevertGen does the same for V's reconstruction (#2877).
+	traceRevertGen int64
 	// The project.open_link paste prompt (#2396): one URL line.
 	dlLinkOpen bool
 	dlLinkText ui.Field
@@ -1162,6 +1164,9 @@ type Model struct {
 	cfDiff    diff.Result        // selected entry's before vs now, for the mini-diff
 	cfErr     string             // why the selection has no diff, shown in its place
 	cfRevert  string             // file awaiting the revert confirmation
+	// cfRevertTrace is the agent-trace change awaiting the same confirmation
+	// when the feed cannot revert it (#2877): the transcript diff's inverse.
+	cfRevertTrace *traceRevert
 	// Batch state (#2183): the marked rows a batch action is scoped to, and
 	// the files a revert-all confirmation is holding — spelled out in the
 	// prompt, because reverting a whole agent run at once is the destructive
@@ -6662,10 +6667,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tracepanel.ChangeRevertMsg:
-		// V on a linked trace row: the feed's own revert confirmation.
-		if e, ok := m.traceChangeEntry(msg.Path); ok {
-			m.openChangeFeedRevertPrompt(e)
-		}
+		// V on a trace row: the feed's own revert confirmation when the row
+		// links to an entry that can be reverted, else the transcript diff's
+		// inverse (#2877) — or a notice saying why there is nothing to revert.
+		return m, m.traceRevertCmd(msg)
+
+	case traceRevertReadyMsg:
+		m.openTraceRevert(msg)
 		return m, nil
 
 	case tracepanel.InstallHooksMsg:
