@@ -175,6 +175,35 @@ func (l Layout) Below(i int, ok func(int) bool) int { return l.neighbour(i, 1, o
 // Above is Below's counterpart for the row before.
 func (l Layout) Above(i int, ok func(int) bool) int { return l.neighbour(i, -1, ok) }
 
+// Right returns the index of the nearest slot to the right of slot i on the
+// same screen row, whatever the path direction; -1 at the row end. ok
+// filters the candidates.
+func (l Layout) Right(i int, ok func(int) bool) int { return l.beside(i, 1, ok) }
+
+// Left is Right's counterpart towards the left edge.
+func (l Layout) Left(i int, ok func(int) bool) int { return l.beside(i, -1, ok) }
+
+func (l Layout) beside(i, dx int, ok func(int) bool) int {
+	if i < 0 || i >= len(l.Slots) {
+		return -1
+	}
+	cur := l.Slots[i]
+	best, bestD := -1, 0
+	for j, s := range l.Slots {
+		if j == i || s.Row != cur.Row || (ok != nil && !ok(j)) {
+			continue
+		}
+		d := (s.CenterX() - cur.CenterX()) * dx
+		if d <= 0 {
+			continue
+		}
+		if best < 0 || d < bestD {
+			best, bestD = j, d
+		}
+	}
+	return best
+}
+
 func (l Layout) neighbour(i, step int, ok func(int) bool) int {
 	if i < 0 || i >= len(l.Slots) {
 		return -1

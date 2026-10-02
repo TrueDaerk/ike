@@ -118,6 +118,18 @@ func TestSnakeLayoutBoustrophedon(t *testing.T) {
 		if l.Above(0, nil) != -1 {
 			t.Fatalf("width %d: nothing is above the first row", w)
 		}
+		// h/l neighbours stay on the screen row, whatever the path direction.
+		for i, s := range l.Slots {
+			if r := l.Right(i, nil); r >= 0 && (l.Slots[r].Row != s.Row || l.Slots[r].X <= s.X) {
+				t.Fatalf("width %d: right(%d) = %d", w, i, r)
+			}
+			if lf := l.Left(i, nil); lf >= 0 && (l.Slots[lf].Row != s.Row || l.Slots[lf].X >= s.X) {
+				t.Fatalf("width %d: left(%d) = %d", w, i, lf)
+			}
+		}
+		if l.Left(0, nil) != -1 {
+			t.Fatalf("width %d: the first box is the row's left end", w)
+		}
 	}
 }
 
@@ -189,15 +201,15 @@ func TestGraphKeysMoveOpenAndExpand(t *testing.T) {
 	if m.CurrentStop().Key != "t1" {
 		t.Fatalf("g → %s", m.CurrentStop().Key)
 	}
-	send(m, "l")
-	send(m, "l")
-	send(m, "l")
+	send(m, "n")
+	send(m, "n")
+	send(m, "n")
 	if m.CurrentStop().Key != "e7/f0" {
-		t.Fatalf("l l l → %s", m.CurrentStop().Key)
+		t.Fatalf("n n n → %s", m.CurrentStop().Key)
 	}
-	send(m, "h")
+	send(m, "p")
 	if m.CurrentStop().Key != "e5/f0" {
-		t.Fatalf("h → %s", m.CurrentStop().Key)
+		t.Fatalf("p → %s", m.CurrentStop().Key)
 	}
 	// j goes to the box directly below (e7/f0 sits under e5/f0), k back up.
 	send(m, "j")
@@ -215,7 +227,7 @@ func TestGraphKeysMoveOpenAndExpand(t *testing.T) {
 	if m.CurrentStop().Key != "e4/f0" {
 		t.Fatalf("k k → %s", m.CurrentStop().Key)
 	}
-	send(m, "l")
+	send(m, "n")
 	// Enter on a change box opens the file at the line (create: no line).
 	msg, ok := send(m, "enter").(OpenLocationMsg)
 	if !ok || msg.Path != "/Users/dev/src/proj/hello.go" || msg.Line != -1 {
@@ -232,7 +244,7 @@ func TestGraphKeysMoveOpenAndExpand(t *testing.T) {
 			t.Errorf("detail block lacks %q:\n%s", want, view)
 		}
 	}
-	send(m, "h")
+	send(m, "p")
 	send(m, "space")
 	if m.Expanded() != "e4/f0" {
 		t.Fatalf("space must move the expansion, expanded = %q", m.Expanded())
@@ -245,7 +257,7 @@ func TestGraphKeysMoveOpenAndExpand(t *testing.T) {
 		t.Fatal("space again must collapse")
 	}
 	// Space on a prompt does nothing; enter shows its text.
-	send(m, "h")
+	send(m, "p")
 	send(m, "space")
 	if m.Expanded() != "" {
 		t.Fatal("a prompt box has nothing to expand")
@@ -260,9 +272,42 @@ func TestGraphKeysMoveOpenAndExpand(t *testing.T) {
 		t.Fatalf("enter on the answer = %#v", text)
 	}
 	// Separators are skipped along the path.
-	send(m, "h")
+	send(m, "p")
 	if m.CurrentStop().Key != "t2" {
-		t.Fatalf("h over the separator → %s", m.CurrentStop().Key)
+		t.Fatalf("p over the separator → %s", m.CurrentStop().Key)
+	}
+}
+
+func TestGraphArrowKeysMoveSpatially(t *testing.T) {
+	m, _ := graphPanel(t, true, 80, 30)
+	// Row 1 runs right-to-left: on screen t1/end, e8/f0, e7/f0.
+	send(m, "g")
+	for range 3 {
+		send(m, "n")
+	}
+	if m.CurrentStop().Key != "e7/f0" {
+		t.Fatalf("n n n → %s", m.CurrentStop().Key)
+	}
+	send(m, "right")
+	if m.CurrentStop().Key != "e7/f0" {
+		t.Fatalf("right at the row end must be a no-op, got %s", m.CurrentStop().Key)
+	}
+	send(m, "left")
+	if m.CurrentStop().Key != "e8/f0" {
+		t.Fatalf("left → %s", m.CurrentStop().Key)
+	}
+	send(m, "h")
+	if m.CurrentStop().Key != "t1/end" {
+		t.Fatalf("h → %s", m.CurrentStop().Key)
+	}
+	send(m, "left")
+	if m.CurrentStop().Key != "t1/end" {
+		t.Fatalf("left at the row end must be a no-op, got %s", m.CurrentStop().Key)
+	}
+	send(m, "right")
+	send(m, "l")
+	if m.CurrentStop().Key != "e7/f0" {
+		t.Fatalf("right l → %s", m.CurrentStop().Key)
 	}
 }
 

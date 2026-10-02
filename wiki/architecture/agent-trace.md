@@ -494,7 +494,10 @@ rows below down. The renderer draws onto a cell canvas (`graph.go`) and
 the mouse hit test (`Layout.At`) reads the same slots.
 
 **Selection and keys.** One box is selected; `h`/`l` (`left`/`right`)
-walk the path, skipping separators, `j`/`k` (`down`/`up`) jump to the
+move to the nearest box to the left/right on the same screen row
+(`Layout.Left`/`Right`, whatever the path direction; a no-op at the row
+end), `n`/`p` walk the path to the next/previous stop, skipping
+separators and changing rows, `j`/`k` (`down`/`up`) jump to the
 nearest box on the row below/above on screen (`Layout.Below`/`Above`),
 `g`/`G` the first/last box, page keys scroll. `enter` on a change box
 opens the file at the line (`OpenLocationMsg`, the click-to-code pipeline
@@ -1028,7 +1031,7 @@ the snake at widths 40/80/120 (row 1 left→right, row 2 right→left, …,
 rows joined under the last box, no box cut at the border, `j`/`k`
 neighbours), the single column below two boxes and the expanded row
 pushing the rows below down, the rendered boxes, connectors and glyphs,
-the keys (`h/l/j/k/g/G`, `enter` open / second `enter` and `space`
+the keys (`h/l` spatial on a right-to-left row, `n/p/j/k/g/G`, `enter` open / second `enter` and `space`
 expand, `ShowTextMsg` on prompt and answer, separators skipped), linked
 boxes answering `D`/`V`/`a` and `Select` by file or tool key, selection and
 expansion surviving a live append with a pending answer settling, the
