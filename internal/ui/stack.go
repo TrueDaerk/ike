@@ -2,6 +2,7 @@ package ui
 
 import (
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"ike/internal/overlay"
 	"ike/internal/theme"
@@ -159,13 +160,25 @@ func (s *Stack) Update(msg tea.Msg) bool {
 	return consumed
 }
 
-// Composite draws every open layer bottom-to-top centered over base, a canvas
-// w columns by h rows, so the topmost layer is drawn last and fully readable.
+// Composite draws every open layer bottom-to-top over base, a canvas w
+// columns by h rows, so the topmost layer is drawn last and fully readable.
+// Each layer sits at its Origin: centered plus its stored position offset
+// (#2896).
 func (s *Stack) Composite(base string, w, h int) string {
 	for _, l := range s.layers {
-		if l.f.IsOpen() {
-			base = overlay.Center(base, l.f.View(), w, h)
+		if !l.f.IsOpen() {
+			continue
 		}
+		v := l.f.View()
+		if v == "" {
+			continue
+		}
+		vw, vh := lipgloss.Width(v), lipgloss.Height(v)
+		if vw > w || vh > h {
+			continue // does not fit the canvas: overlay.Center's rule
+		}
+		x, y := l.f.Origin(w, h, vw, vh)
+		base = overlay.Place(base, v, x, y, w, h)
 	}
 	return base
 }

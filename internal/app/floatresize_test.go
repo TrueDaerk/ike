@@ -32,19 +32,19 @@ func TestSettingsMouseResizeRightEdge(t *testing.T) {
 	if m.floatDrag == nil || m.floatDrag.kind != "settings" || m.floatDrag.sx != 1 || m.floatDrag.sy != 0 {
 		t.Fatalf("right-edge press must start a horizontal drag, got %+v", m.floatDrag)
 	}
-	// The box is centered, so the pointer delta is doubled (#1243): the
-	// grabbed edge tracks the pointer, the opposite edge mirrors outward.
+	// The grabbed edge tracks the pointer 1:1 and the left edge stays put
+	// (#2896) — before it the centered box grew both sides.
 	m = step(m, motion(bx+w-1+4, by+h/2))
 	w1, h1 := m.settingsSize()
-	if w1 != w0+8 || h1 != h0 {
-		t.Fatalf("drag +4 cols: size = (%d,%d), want (%d,%d)", w1, h1, w0+8, h0)
+	if w1 != w0+4 || h1 != h0 {
+		t.Fatalf("drag +4 cols: size = (%d,%d), want (%d,%d)", w1, h1, w0+4, h0)
 	}
 	m = step(m, release(bx+w-1+4, by+h/2))
 	if m.floatDrag != nil {
 		t.Fatal("release must end the drag")
 	}
-	if dw, dh := m.winSizes.Get("settings"); dw != 8 || dh != 0 {
-		t.Fatalf("persisted delta = (%d,%d), want (8,0)", dw, dh)
+	if dw, dh := m.winSizes.Get("settings"); dw != 4 || dh != 0 {
+		t.Fatalf("persisted delta = (%d,%d), want (4,0)", dw, dh)
 	}
 }
 
@@ -60,8 +60,8 @@ func TestSettingsMouseResizeCorner(t *testing.T) {
 	}
 	m = step(m, motion(bx+w-1-3, by+h-1+2))
 	w1, h1 := m.settingsSize()
-	if w1 != w0-6 || h1 != h0+4 {
-		t.Fatalf("corner drag: size = (%d,%d), want (%d,%d)", w1, h1, w0-6, h0+4)
+	if w1 != w0-3 || h1 != h0+2 {
+		t.Fatalf("corner drag: size = (%d,%d), want (%d,%d)", w1, h1, w0-3, h0+2)
 	}
 	m = step(m, release(bx+w-1-3, by+h-1+2))
 	if m.floatDrag != nil {
@@ -108,8 +108,8 @@ func TestPaletteMouseResizeWidth(t *testing.T) {
 		t.Fatalf("palette right-edge press must start a drag, got %+v", m.floatDrag)
 	}
 	m = step(m, motion(bx+w-1+6, by+h/2))
-	if dw, _ := m.winSizes.Get("palette"); dw != 12 {
-		t.Fatalf("palette width delta = %d, want 12", dw)
+	if dw, _ := m.winSizes.Get("palette"); dw != 6 {
+		t.Fatalf("palette width delta = %d, want 6", dw)
 	}
 	m = step(m, release(bx+w-1+6, by+h/2))
 	if m.floatDrag != nil {

@@ -1,5 +1,19 @@
 # Log
 
+## 2026-10-02 (edge-anchored mouse resize for every centered popup, #2896)
+
+- [Floating Shell](/architecture/floating-shell.md): new § Edge-anchored
+  mouse resize & the offset store — a border drag on a shell layer, Settings,
+  a centered palette mode or the popup terminal box moves only the grabbed
+  edge(s) 1:1 (the doubled #1243 delta is gone); a position offset from the
+  centered origin (`<kind>:pos` in `ui.WinSizes`) keeps the opposite edge put,
+  persists with the size and is clamped on every resolve (`ui.FloatOrigin`).
+  The stack composites each layer at its `Origin`. New overlay audit table;
+  the list overlays are tracked in #2897.
+- [Settings UI](/architecture/settings-ui.md),
+  [Integrated Terminal](/architecture/terminal.md): the drag rewrites
+  `settings:pos` / `popupterm:pos`.
+
 ## 2026-10-02 (PHP declaration index persists across sessions, #2885)
 
 - [PHP Trait Index](/architecture/php-trait-index.md): new § Persistence

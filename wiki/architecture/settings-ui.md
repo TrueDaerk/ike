@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-09-26T00:30:00Z
+timestamp: 2026-10-02T12:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -184,7 +184,11 @@ per-project `winsize.json`) and re-derives `settingsSize()`, which clamps
 base+delta into the live terminal bounds. **Mouse resize** (#933): pressing
 the panel's border ring starts a drag — edges resize one axis, corners both —
 applied through the same store (un-persisted per motion step, flushed on
-release), so key and mouse resizes share one remembered size. The panel's
+release), so key and mouse resizes share one remembered size. The drag is
+edge-anchored (#2896): the grabbed edge follows the pointer 1:1 and the
+opposite edge stays put through a `settings:pos` offset from center, stored
+and flushed with the size (see
+[Floating Shell](/architecture/floating-shell.md)). The panel's
 default width honours `ui.popup_max_width` (#932, default 110) instead of a
 hardcoded cap; the Appearance page exposes the setting and edits apply live.
 

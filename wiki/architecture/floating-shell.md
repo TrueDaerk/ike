@@ -4,7 +4,7 @@ title: Floating Shell
 description: Reusable centered overlay component — a content-sized box composited on the active layout that hosts any tea.Model-shaped content, owning chrome, sizing, scroll, and dismissal.
 resource: internal/ui/floating.go
 tags: [architecture, overlay, modal, floating, reusable, bubbletea]
-timestamp: 2026-08-28T18:00:00Z
+timestamp: 2026-10-02T12:00:00Z
 ---
 
 # Floating Shell
@@ -111,11 +111,69 @@ Keys are checked in this order — filter → dismiss → key handler → scroll
   **mouse resize** (#933): pressing the shell's border ring — the outermost
   cell; edges resize one axis, corners both — starts a drag handled by the
   root model (`floatResizeDrag`), which nudges the store un-persisted per
-  motion step and flushes it on release. Floats are centered, so one pointer
-  cell maps to **two** size cells (#1243): the grabbed edge tracks the
-  pointer exactly, the opposite edge mirrors outward. `ui.popup_max_width` (#932, default
+  motion step and flushes it on release. The drag is **edge-anchored**
+  (#2896, see below): only the grabbed edge(s) follow the pointer, the
+  opposite edge stays put. `ui.popup_max_width` (#932, default
   110, 0 disables) additionally caps the shell's outer width on large
   terminals; the resize delta applies on top of the capped base.
+
+## Edge-anchored mouse resize & the offset store (#2896)
+
+Every centered float — the shell layers (dialogs and prompts included),
+Settings, the centered palette modes and the popup terminal box — resizes by
+mouse with the **grabbed edge anchored**: dragging the bottom edge N rows down
+grows the box by N and leaves the top edge on its row; a left/top edge grows
+the box toward the pointer while the right/bottom edge stays; a corner moves
+its two edges and the opposite corner stays. (Before #2896 the centered box
+grew symmetrically and the pointer delta was doubled, #1243, so the far edge
+moved too.)
+
+- **Position offset.** A centered box gets its anchoring from a **position
+  offset relative to the centered origin**, stored in the same `ui.WinSizes`
+  store as the size delta under the kind's key plus `:pos`
+  (`ui.OffsetKey`: `settings:pos`, `palette:pos`, `<content title>:pos` for
+  the shell layers, `popupterm:pos` — the key the popup box already used for
+  its titlebar move, #1793). The release flushes size and offset together, so
+  a popup reopens where and as large as the user left it.
+- **Placement.** `ui.FloatOrigin(tw, th, w, h, ox, oy)` resolves the box's
+  top-left: centered, shifted by the offset, **clamped fully on screen**.
+  `Floating.Origin`, `palette.Palette.Origin` (an anchored palette keeps its
+  anchor), the root's `settingsRect` and `popupTermRect` all go through it,
+  and the frame composites (`overlay.Place`, `Stack.Composite`) and every
+  hit-test (outside-click, border ring, content clicks) resolve the same rect.
+  The clamp runs on every resolve, so a `tea.WindowSizeMsg` re-clamps a stored
+  offset on the next frame — a box can never sit partially off-screen. (A
+  box larger than the terminal — content that ignores its width budget —
+  has no room to move: it stays centered, exactly as before.)
+- **Drag step.** `applyFloatResize` (root model) reads the box's current rect,
+  bounds the pointer delta so the grabbed edge stays on screen
+  (`ui.AnchoredStep`), applies it **1:1** as a size delta (`Nudge` /
+  `AdjustSize` / `popupTermResize`, which clamp as before), re-measures the
+  box and rewrites the offset with `ui.AnchorOffset` so the opposite edge
+  keeps its cell. Re-measuring keeps the anchor exact when a clamp or
+  content-sizing swallowed part of the delta. The torn-out floating terminal
+  panels (#1793) are corner-anchored already and keep their own 1:1 step
+  (`applyFloatTermResize`).
+- **Keyboard resize is unchanged.** The resize chords (#774) name no edge, so
+  they stay symmetric around the box's (offset) center and leave the offset
+  alone.
+
+### Overlay audit
+
+Every overlay the root composites, and whether it is drag-resizable:
+
+| Overlay | Drag resize | Reason when fixed |
+|---|---|---|
+| Shell layers (help, dialogs, prompts, pickers, plugin modals) | yes, edge-anchored | — |
+| Settings | yes, edge-anchored | — |
+| Palette, centered modes | yes, edge-anchored | — |
+| Palette, anchored modes (alt+enter intentions, quick-fix and `@` popups at the cursor) | no | geometry derives from its anchor cell; a transient cursor menu, not a window |
+| Popup terminal box | yes, edge-anchored | — |
+| Floating terminal panels | yes, corner-anchored (#1793) | — |
+| Finder, all-projects search form and results, TODO index, undo tree, call/type hierarchy | not yet | each package sizes its box from fixed terminal fractions with no size-delta/offset seam; tracked in #2897 |
+| Key doctor | no | fills the whole terminal by design (`width−4 × height−2`) |
+| Large-file detail popup | no | read-only, content-sized, closes on any press |
+| Context menu, menu dropdown, which-key hint, toasts, LSP/editor popups, perf HUD | no | content-sized and anchored to a cell, edge or cursor by design |
 - **The body re-renders on every `View()`** (#409), preserving the scroll
   offset. Content that mutates its state in place after opening — a modal
   moving its cursor or dropping list items — shows the change on the very next
@@ -137,8 +195,9 @@ shell itself stays single-level and layering-unaware:
   (key-swallow as before); a dismiss key closes just that layer — one layer
   per keypress. `tea.WindowSizeMsg` resizes every layer.
 - **Compositing.** `Composite(base, w, h)` draws every open layer
-  bottom-to-top via `overlay.Center`, so the topmost is drawn last and fully
-  readable over the lower ones.
+  bottom-to-top via `overlay.Place` at the layer's `Origin` (centered plus its
+  stored offset, #2896), so the topmost is drawn last and fully readable over
+  the lower ones.
 - **Mouse.** The root routes mouse to `Top()`: a press outside the topmost
   layer `Pop`s only that layer (outside-click, #116); a border press starts
   the resize drag (#933) on the topmost layer.
@@ -182,9 +241,10 @@ host per shell.
 
 ## Boundaries
 
-- Animations and drag/move of the pane are out of scope (windowing belongs to
-  the broader pane manager). Stacked modals are in scope since #1237 via
-  `ui.Stack`.
+- Animations and a free titlebar move of the shell are out of scope
+  (windowing belongs to the broader pane manager); the edge-anchored resize
+  (#2896) only shifts the box as far as anchoring the opposite edge needs.
+  Stacked modals are in scope since #1237 via `ui.Stack`.
 - Specific modal content (confirm dialogs, pickers) are separate features that
   *consume* this shell.
 - The **popup terminal** (#1398) deliberately does *not* use this shell: the

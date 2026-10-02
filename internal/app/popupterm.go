@@ -544,6 +544,18 @@ func (m *Model) popupTermMoveBy(ddx, ddy int, persist bool) {
 	}
 }
 
+// popupTermSetPos replaces the popup box's position offset in the project
+// store un-persisted — the edge-anchored resize drag (#2896) rewrites it so
+// the edge opposite the grabbed one stays put; the release persists it with
+// popupTermPersistPos. The pinned strip (#2406) ignores the offset, so a drag
+// there leaves the floating box's stored position alone.
+func (m *Model) popupTermSetPos(dx, dy int) {
+	if m.popup.pinned {
+		return
+	}
+	m.winSizes.Put(popupTermPosKey, dx, dy)
+}
+
 // popupTermPersistPos writes the popup position offset to the project store
 // and mirrors it into the user-scoped store, like popupTermPersist does for
 // the size delta (#1714).
@@ -595,8 +607,7 @@ func (m Model) popupTermRect() (x, y, w, h int) {
 		return 0, max(m.height-h, 0), w, h
 	}
 	dx, dy := m.popupTermPos()
-	x = ui.ClampDelta((m.width-w)/2, dx, 0, max(m.width-w, 0))
-	y = ui.ClampDelta((m.height-h)/2, dy, 0, max(m.height-h, 0))
+	x, y = ui.FloatOrigin(m.width, m.height, w, h, dx, dy)
 	return x, y, w, h
 }
 

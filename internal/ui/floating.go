@@ -129,6 +129,22 @@ func (f *Floating) AdjustSize(ddw, ddh int) {
 	f.layout(true)
 }
 
+// Origin returns the top-left screen cell of a w×h box this shell rendered
+// in a tw×th terminal (#2896): centered, shifted by the content's stored
+// position offset, clamped fully on screen. Compositing and every hit-test
+// resolve the box through it, so they never disagree.
+func (f *Floating) Origin(tw, th, w, h int) (x, y int) {
+	ox, oy := f.sizes.Offset(f.sizeKind())
+	return FloatOrigin(tw, th, w, h, ox, oy)
+}
+
+// SetOffset replaces the content's position offset from center without
+// persisting — the edge-anchored mouse resize (#2896) moves the box so the
+// edge opposite the grabbed one stays put; the host flushes on release.
+func (f *Floating) SetOffset(ox, oy int) {
+	f.sizes.SetOffset(f.sizeKind(), ox, oy)
+}
+
 // sizeKind is the persistence key for the current content: its title, so
 // each hosted window (help, settings dialogs, …) remembers its own size.
 func (f *Floating) sizeKind() string {
@@ -323,7 +339,8 @@ func (f *Floating) layout(preserveScroll bool) {
 }
 
 // View renders the floating box, sized to its content, or empty when closed or
-// before a size is known. The caller composites it centered via overlay.Center.
+// before a size is known. The caller composites it at Origin (centered plus
+// the stored position offset, #2896).
 // The body is re-rendered on every call (#409): content that mutates its state
 // in place after opening — a modal moving its cursor, dropping list items —
 // shows the change on the very next frame without the host having to force a

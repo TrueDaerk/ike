@@ -318,6 +318,23 @@ func (p *Palette) AdjustSize(ddw, ddh int) {
 	p.scrollSideToSelected()
 }
 
+// Origin returns the top-left screen cell of a w×h palette box in a tw×th
+// terminal: an anchored box sits at its anchor, a centered one at the center
+// shifted by the stored position offset, clamped fully on screen (#2896).
+// Compositing and every hit-test resolve the box through it.
+func (p *Palette) Origin(tw, th, w, h int) (x, y int) {
+	if p.anchored {
+		return p.anchorX, p.anchorY
+	}
+	ox, oy := p.sizes.Offset(winKind)
+	return ui.FloatOrigin(tw, th, w, h, ox, oy)
+}
+
+// SetOffset replaces the centered box's position offset without persisting —
+// the edge-anchored mouse resize (#2896) moves the box so the edge opposite
+// the grabbed one stays put; the host flushes the store on release.
+func (p *Palette) SetOffset(ox, oy int) { p.sizes.SetOffset(winKind, ox, oy) }
+
 // visibleRows is the effective result-window height: the configured
 // maxResults plus the user's stored resize delta, floored at 3 (#774). A
 // preview open (#2047) re-bounds it to [ui.MinResultRows, ui.MaxResultRows] —
