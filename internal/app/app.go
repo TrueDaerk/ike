@@ -3270,13 +3270,15 @@ func (m *Model) resolveKeymap(k keymap.Key) (tea.Cmd, bool) {
 		// expected-but-missing keybinds. Only command-modified chords and
 		// function keys are recordable — plain typed characters never are.
 		if recordableUnbound(k) && !m.terminalOwnsUnbound() {
-			// With an editor focused the verdict waits for the pane (#2303):
+			// With a pane focused the verdict waits for it (#2303, #2889):
 			// the editor owns editing chords the keymap table never lists
-			// (alt+delete, alt+backspace, ctrl+u, …), and reporting those as
-			// unbound buried the genuinely missing keybinds in noise.
-			// routeKey logs the event only if the editor ignored the key too.
+			// (alt+delete, alt+backspace, ctrl+u, …), and so does every tool
+			// pane's search prompt, filter row and type-ahead — reporting
+			// those as unbound buried the genuinely missing keybinds in
+			// noise. routeKey logs the event only if the pane ignored the
+			// key too (pane.Instance.HandledLastKey).
 			ev := unboundKey{chord: k.String(), context: string(m.keyContext()), command: m.droppedDefault(k)}
-			if m.focusedEditor() != nil {
+			if m.activeWS().Panes.FocusedInstance() != nil {
 				m.pendUnbound = &ev
 				break
 			}
@@ -4786,6 +4788,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if cmd, handled := m.resolveKeymap(k); handled {
 				return m, cmd
 			}
+			// No pane is offered the button, so a held-back verdict has
+			// nothing to wait for.
+			m.recordUnbound()
 			return m, nil
 		}
 		return m.handleMouse(mouseEvent{Mouse: msg.Mouse(), action: mousePress})
@@ -11039,20 +11044,29 @@ func (m Model) droppedDefault(k keymap.Key) string {
 }
 
 // flushUnbound records the held-back unbound chord once the pane has seen the
-// key — unless the editor acted on it, in which case the chord is bound after
-// all, just inside the editor rather than in the keymap table. A chord that
-// never reaches a pane (an app-level handler consumed it) is dropped here by
-// the caller clearing the slot on the next key press.
+// key — unless the pane acted on it (#2303, #2889), in which case the chord is
+// bound after all, just inside the editor or the tool pane rather than in the
+// keymap table. A pane kind that cannot report keeps the chord recorded. A
+// chord that never reaches a pane (an app-level handler consumed it) is
+// dropped by the caller clearing the slot on the next key press.
 func (m *Model) flushUnbound(inst *pane.Instance) {
 	ev := m.pendUnbound
 	m.pendUnbound = nil
-	if ev == nil {
-		return
-	}
-	if ed := inst.Editor(); ed != nil && ed.HandledLastKey() {
+	if ev == nil || inst.HandledLastKey() {
 		return
 	}
 	m.usage.Key(ev.chord, ev.context, ev.command, "unbound")
+}
+
+// recordUnbound logs the held-back unbound chord unconditionally — for a
+// chord no pane is ever offered (a mouse navigation button, #816), so there
+// is no pane verdict to wait for.
+func (m *Model) recordUnbound() {
+	ev := m.pendUnbound
+	m.pendUnbound = nil
+	if ev != nil {
+		m.usage.Key(ev.chord, ev.context, ev.command, "unbound")
+	}
 }
 
 // activeEditorKey returns the editor that should receive a Replace open or an

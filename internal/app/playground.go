@@ -176,6 +176,11 @@ var playSpinFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "
 // of the two playgrounds this is (#2039) — the one field the rendering, the
 // scratch extension, the fold scan and the filter library all read.
 type playState struct {
+	// KeyVerdict is the mode's answer to the deferred unbound verdict
+	// (#2889): the mode owns the keyboard, so a key counts as taken unless a
+	// route marks it missed (playMissKey).
+	ui.KeyVerdict
+
 	dialect  jqplay.Dialect
 	paneKey  string
 	resultEd *editor.Model
@@ -1552,8 +1557,11 @@ func (s *playState) playFoldSummary(header, end, budget int) string {
 // changed the program, and with the expanded query view up (#2032) the header
 // then holds a different number of rows than the buffer was sized under.
 func (m Model) updatePlayground(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	s := m.play // the verdict is this mode's, even if the key closed it
+	m.pendPlayUnbound(msg)
 	out, cmd := m.updatePlaygroundKey(msg)
 	if mm, ok := out.(Model); ok {
+		mm.flushPlayUnbound(s)
 		mm.sizePlayResult()
 		// A motion may have brought the reader near the end of a paged result
 		// (#2796): the next page is pulled before the edge is reached.
@@ -1756,7 +1764,7 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if ok, cmd := m.playGlobalChord(msg); ok {
 			return m, cmd
 		}
-		m.recordPlayUnbound(msg)
+		m.playMissKey()
 		return m, nil
 	}
 	if !changed {
@@ -1863,24 +1871,46 @@ func (m Model) updatePlayBufferKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	*s.resultEd, cmd = s.resultEd.Update(msg)
 	if !s.resultEd.HandledLastKey() {
-		m.recordPlayUnbound(msg)
+		m.playMissKey()
 	}
 	return m, cmd
 }
 
-// recordPlayUnbound writes the usage log's unbound-chord event for a
-// recordable chord the playground swallowed (#2539): neither the mode's own
-// keys, the Global scope nor (in the result buffer) the editor took it. The
-// mode owns the keyboard ahead of resolveKeymap, so without this its misses
-// left no trace at all — and the context is the playground's own, not the
-// hosting editor's editor[json], so the signal names the pane that actually
-// dropped the key (the cheatsheet already reports under the same id).
-func (m Model) recordPlayUnbound(msg tea.KeyPressMsg) {
-	k, ok := keymap.FromKeyMsg(msg)
-	if !ok || !recordableUnbound(k) {
+// pendPlayUnbound holds a recordable chord back for the playground's verdict
+// (#2539, #2889) — the same pend-then-flush rule the main dispatch applies to
+// every focused pane (resolveKeymap / flushUnbound). The mode owns the
+// keyboard ahead of resolveKeymap, so without it its misses left no trace at
+// all; the context is the playground's own, not the hosting editor's
+// editor[json], so the signal names the pane that actually dropped the key
+// (the cheatsheet already reports under the same id).
+func (m *Model) pendPlayUnbound(msg tea.KeyPressMsg) {
+	if m.play == nil {
 		return
 	}
-	m.usage.Key(k.String(), ctxPlayground, "", "unbound")
+	m.play.HitKey() // the mode owns the keyboard: taken unless a route misses
+	if k, ok := keymap.FromKeyMsg(msg); ok && recordableUnbound(k) {
+		m.pendUnbound = &unboundKey{chord: k.String(), context: ctxPlayground}
+	}
+}
+
+// playMissKey marks the current key as one the playground had no use for:
+// neither the mode's own keys, the Global scope nor (in the result buffer)
+// the editor took it.
+func (m Model) playMissKey() {
+	if m.play != nil {
+		m.play.MissKey()
+	}
+}
+
+// flushPlayUnbound records the held-back chord when the playground s missed
+// it. s is the mode the key was routed to, read even when the key closed it.
+func (m *Model) flushPlayUnbound(s *playState) {
+	ev := m.pendUnbound
+	m.pendUnbound = nil
+	if ev == nil || s == nil || s.HandledLastKey() {
+		return
+	}
+	m.usage.Key(ev.chord, ev.context, ev.command, "unbound")
 }
 
 // playCopyChord reports whether msg is the app keymap's editor.copy binding in

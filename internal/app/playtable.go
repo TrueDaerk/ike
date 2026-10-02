@@ -489,7 +489,7 @@ func (m Model) updatePlayTableKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	if handled, cmd := m.playGlobalChord(msg); handled {
 		return m, cmd
 	}
-	m.recordPlayUnbound(msg)
+	m.playMissKey()
 	return m, nil
 }
 

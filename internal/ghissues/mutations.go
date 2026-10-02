@@ -288,7 +288,7 @@ func (m *Model) editorKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	// Backspace deletes the last query rune while a type-ahead runs and only
 	// falls through to "clear the selection" once the query is empty.
-	if handled, changed := m.ovSearch.Key(msg); handled {
+	if handled, changed := m.ovSearch.Key(msg); m.KeyAnswered(handled) {
 		if changed {
 			m.ovCursor, m.ovTop = 0, 0
 			m.clampOverlay()
@@ -451,7 +451,8 @@ func (m *Model) commentPromptKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		return m.stateMutation(body)
 	default:
-		m.cmInput.Key(msg)
+		handled, _ := m.cmInput.Key(msg)
+		m.KeyAnswered(handled)
 	}
 	return nil
 }

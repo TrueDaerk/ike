@@ -98,6 +98,7 @@ func (m *Model) SetPRDetailResult(msg forge.PRDetailMsg) {
 // with a PR on screen.
 func (m *Model) prDetailKey(msg tea.KeyPressMsg) tea.Cmd {
 	page := m.bodyHeight()
+	m.HitKey() // every case below acts; the default branch may take it back
 	switch msg.String() {
 	case "esc", "q", "backspace":
 		m.prDetail = false
@@ -135,7 +136,11 @@ func (m *Model) prDetailKey(msg tea.KeyPressMsg) tea.Cmd {
 		if ui.CopyChord(msg.String()) {
 			return m.copySelection()
 		}
-		return m.prActionKey(msg.String())
+		cmd := m.prActionKey(msg.String())
+		if cmd == nil {
+			m.MissKey()
+		}
+		return cmd
 	}
 	m.clampPRDetail()
 	return nil
@@ -280,7 +285,8 @@ func (m *Model) prActionDialogKey(msg tea.KeyPressMsg) tea.Cmd {
 			m.prActStage = 1
 			return nil
 		}
-		m.cmInput.Key(msg)
+		handled, _ := m.cmInput.Key(msg)
+		m.KeyAnswered(handled)
 		return nil
 	}
 	switch key {

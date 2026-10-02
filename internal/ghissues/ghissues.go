@@ -207,6 +207,11 @@ type listRow struct {
 // Model is the tool window state. Value type with pointer-receiver mutators,
 // embedded in a pane.Instance like the Usages panel (#1155).
 type Model struct {
+	// KeyVerdict answers the host's deferred unbound verdict (#2889): a
+	// chord the filter input, a type-ahead or a view key took is no
+	// missing keybind.
+	ui.KeyVerdict
+
 	width   int
 	height  int
 	focused bool
@@ -760,6 +765,7 @@ func hasLabel(is *forge.Issue, name string) bool {
 // it, focus-filtered by the pane layer.
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	if k, ok := msg.(tea.KeyPressMsg); ok {
+		m.BeginKey()
 		return m.handleKey(k)
 	}
 	return nil
@@ -783,6 +789,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 // listKey handles the active list view.
 func (m *Model) listKey(msg tea.KeyPressMsg) tea.Cmd {
 	key := msg.String()
+	m.HitKey() // every branch below acts; the unmatched tail takes it back
 	switch key {
 	case "tab", "ctrl+pgdown":
 		m.switchTab(1)
@@ -825,11 +832,16 @@ func (m *Model) listKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.startWork()
 	case "o":
 		return m.openInBrowser()
+	default:
+		if cmd := m.mutationKey(key); cmd != nil {
+			return cmd
+		}
+		if cmd := m.prActionKey(key); cmd != nil {
+			return cmd
+		}
+		m.MissKey()
 	}
-	if cmd := m.mutationKey(key); cmd != nil {
-		return cmd
-	}
-	return m.prActionKey(key)
+	return nil
 }
 
 // mutationKey routes the state-write keys (#2088), which the list and the
@@ -957,6 +969,7 @@ func (m *Model) detailKey(msg tea.KeyPressMsg) tea.Cmd {
 	// A scroll that lands on the end of the loaded detail pulls the next
 	// timeline page on its own (#2113).
 	scrolled := false
+	m.HitKey() // every case below acts; the default branch may take it back
 	switch msg.String() {
 	case "esc", "q", "backspace":
 		m.detail = false
@@ -1008,6 +1021,7 @@ func (m *Model) detailKey(msg tea.KeyPressMsg) tea.Cmd {
 		if cmd := m.mutationKey(msg.String()); cmd != nil {
 			return cmd
 		}
+		m.MissKey()
 	}
 	m.clampDetail()
 	if scrolled {

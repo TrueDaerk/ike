@@ -4,7 +4,7 @@ title: Usage Telemetry
 description: Local-only usage recording — command (with outcome), keybinding, layout, session, heartbeat, freeze-with-goroutine-dump, operation-lifecycle, palette-pick, palette-dismissal and project-time events appended as per-session JSONL under ~/.ike/telemetry, asynchronous and content-free, switched by telemetry.enabled.
 resource: internal/telemetry/telemetry.go
 tags: [architecture, telemetry, usage, jsonl, privacy, diagnostics]
-timestamp: 2026-10-02T12:00:00Z
+timestamp: 2026-10-02T14:00:00Z
 ---
 
 # Usage Telemetry
@@ -96,9 +96,12 @@ counts by the version's interval before comparing sessions.
     expected-but-missing-keybind signal, modifier/function keys only). An
     `unbound` event carries `command` only when a user unbind override removed
     a default for the chord in that context (#2539): it names the default,
-    so a report can tell "never bound" from "removed by config". The jq/yq
-    playground records the chords it swallows under its own `playground`
-    context rather than the hosting editor's.
+    so a report can tell "never bound" from "removed by config". The verdict
+    is deferred until the focused pane has seen the key — an editor (#2303)
+    or a tool pane (#2889) — so a chord the pane answers itself (a search
+    prompt's `alt+backspace`, a filter row's word jump) is not logged as
+    unbound. The jq/yq playground records the chords it swallows under its
+    own `playground` context rather than the hosting editor's.
   - `layout` — a structural operation. `op` is one of `split`, `pane.move`,
     `pane.focus`, `resize`, `tab.switch`, `tab.move`, `project.switch`;
     `zone`/`direction` name an edge (`left`/`right`/`top`/`bottom`/`center`)
@@ -365,11 +368,30 @@ All hooks sit at the existing funnels, so coverage is by construction:
   `internal` event type, not `command` (`Recorder.Command` in
   `internal/telemetry/telemetry.go` picks the type from the source).
 - **Keys**: `resolveKeymap` (and the chord-timeout branch) in
-  `internal/app/app.go` — resolved, blocked and unbound outcomes. With an
-  editor focused the `unbound` verdict is deferred until the pane has seen the
-  key (#2303): the editor owns editing chords the keymap table never lists
-  (`alt+delete`, `alt+backspace`, `ctrl+u`, …), and `routeKey` records the
-  event only when `editor.HandledLastKey()` says the editor ignored it too.
+  `internal/app/app.go` — resolved, blocked and unbound outcomes. With any
+  pane focused the `unbound` verdict is deferred until the pane has seen the
+  key (#2303 for editors, #2889 for tool panes): the editor owns editing
+  chords the keymap table never lists (`alt+delete`, `alt+backspace`,
+  `ctrl+u`, …), and so does every tool pane's search prompt, filter row and
+  type-ahead. `resolveKeymap` holds the event in `pendUnbound`; `routeKey`'s
+  `flushUnbound` records it only when `pane.Instance.HandledLastKey()` says
+  the pane ignored the key too. The instance asks the component the key
+  reached through the `pane.KeyReporter` capability
+  (`internal/pane/keyreporter.go`): the editor's own `HandledLastKey`, or a
+  tool pane's embedded `ui.KeyVerdict` (`internal/ui/keyverdict.go`) — the
+  pane calls `BeginKey` per press and claims the key on every branch that
+  acts (`HitKey`, or `KeyAnswered` with the handled result of `ui.Field` /
+  `ui.LineSearch` / `ui.SpeedSearch` / `hiertree`). Wired today: the
+  explorer, HTTP, issues, notebook and agent-trace panes; a pane kind that
+  cannot report answers false, so its chords keep being logged as before. A
+  chord an app-level handler consumes before any pane sees it is dropped
+  (the slot clears on the next key); a mouse navigation button, which no pane
+  is offered, is recorded at once. A focused terminal owns its unbound chords
+  outright (#2701, `terminalOwnsUnbound`). The playground, which owns the
+  keyboard ahead of `resolveKeymap`, applies the same rule itself:
+  `updatePlayground` pends the chord (`pendPlayUnbound`), every route that has
+  no use for the key marks the mode's `ui.KeyVerdict` missed (`playMissKey`),
+  and `flushPlayUnbound` records it under the `playground` context.
   Otherwise those keys drown the real missing-keybind signal.
 - **Layout**: `SplitFocused`, `setFocus` (real focus transitions only),
   `commitMove`, divider drags and resize mode, `switchTab`/`moveTab`, and the

@@ -83,10 +83,8 @@ func (m *Model) wsInputKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	}
-	if handled, changed := m.wsText.Key(msg); handled {
-		if changed {
-			m.wsSentIdx = -1 // an edit leaves the history walk
-		}
+	if handled, changed := m.wsText.Key(msg); m.KeyAnswered(handled) && changed {
+		m.wsSentIdx = -1 // an edit leaves the history walk
 	}
 	return nil
 }

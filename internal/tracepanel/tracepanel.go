@@ -92,6 +92,11 @@ type Info struct {
 
 // Model is the tool window.
 type Model struct {
+	// KeyVerdict answers the host's deferred unbound verdict (#2889): a
+	// chord the tree, the graph or the history picker took is no missing
+	// keybind.
+	ui.KeyVerdict
+
 	pal     *theme.Palette
 	width   int
 	height  int
@@ -441,6 +446,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	if !ok {
 		return nil
 	}
+	m.BeginKey()
 	if m.picker.open {
 		return m.pickerKey(k)
 	}
@@ -482,7 +488,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	if m.view == ViewGraph {
-		if cmd, ok := m.graphKey(key); ok {
+		if cmd, ok := m.graphKey(key); m.KeyAnswered(ok) {
 			return cmd
 		}
 	} else {
@@ -496,7 +502,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			}
 			return nil
 		}
-		if cmd, ok := m.tree.Key(key, m.treeHeight(), onEnter, func() tea.Cmd { return nil }); ok {
+		if cmd, ok := m.tree.Key(key, m.treeHeight(), onEnter, func() tea.Cmd { return nil }); m.KeyAnswered(ok) {
 			return cmd
 		}
 	}

@@ -277,6 +277,7 @@ func (m *Model) overlayKey(msg tea.KeyPressMsg) tea.Cmd {
 		nav = ui.NavDefault
 	}
 	if ui.ListNav(key, &m.ovCursor, m.overlayItems(), m.overlayHeight(), nav) {
+		m.HitKey()
 		m.clampOverlay()
 		return nil
 	}
@@ -317,7 +318,7 @@ func (m *Model) actionMenuKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.closeOverlay()
 		return nil
 	}
-	if handled, changed := m.ovSearch.Key(msg); handled && changed {
+	if handled, changed := m.ovSearch.Key(msg); m.KeyAnswered(handled) && changed {
 		m.ovCursor, m.ovTop = 0, 0
 		m.clampOverlay()
 	}
