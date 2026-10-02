@@ -105,11 +105,13 @@ func TestPlanMacOSFixture(t *testing.T) {
 		t.Fatalf("Name = %q", res.Name)
 	}
 	want := map[string]string{
-		"cmd+s":       "editor.write",
-		"cmd+b":       "lsp.definition",
-		"cmd+shift+f": "project.findInPath",
-		"cmd+alt+l":   "lsp.format",
-		"cmd+k cmd+s": "editor.saveAll", // second-keystroke chord
+		// The hex viewer saves on cmd+s too (#2876): the import scopes
+		// editor.write to the editor (#2820).
+		"editor.cmd+s": "editor.write",
+		"cmd+b":        "lsp.definition",
+		"cmd+shift+f":  "project.findInPath",
+		"cmd+alt+l":    "lsp.format",
+		"cmd+k cmd+s":  "editor.saveAll", // second-keystroke chord
 	}
 	for chord, cmd := range want {
 		if got := res.Bind[chord]; got != cmd {
@@ -125,17 +127,18 @@ func TestPlanMacOSFixture(t *testing.T) {
 		t.Fatalf("Skipped = %v", res.Skipped)
 	}
 	// Unbind lists the replaced defaults: editor.write keeps cmd+s (imported)
-	// but loses ctrl+s; lsp.definition keeps cmd+b but loses f4.
+	// but loses ctrl+s — in the editor only, the hex viewer's ctrl+s (#2876)
+	// stays; lsp.definition keeps cmd+b but loses f4.
 	unbound := map[string]bool{}
 	for _, c := range res.Unbind {
 		unbound[c] = true
 	}
-	for _, wantGone := range []string{"ctrl+s", "f4", "cmd+shift+s"} {
+	for _, wantGone := range []string{"editor.ctrl+s", "f4", "cmd+shift+s"} {
 		if !unbound[wantGone] {
 			t.Fatalf("Unbind missing %q: %v", wantGone, res.Unbind)
 		}
 	}
-	for _, kept := range []string{"cmd+s", "cmd+b", "cmd+shift+f"} {
+	for _, kept := range []string{"cmd+s", "ctrl+s", "editor.cmd+s", "cmd+b", "cmd+shift+f"} {
 		if unbound[kept] {
 			t.Fatalf("Unbind must not contain imported chord %q: %v", kept, res.Unbind)
 		}
@@ -148,7 +151,8 @@ func TestPlanWindowsFixture(t *testing.T) {
 		t.Fatalf("Plan: %v", err)
 	}
 	want := map[string]string{
-		"ctrl+s": "editor.write",
+		// hex.save shares ctrl+s from the hex context (#2876).
+		"editor.ctrl+s": "editor.write",
 		// The playground's table view (#2794) holds ctrl+alt+l in the Global
 		// context, so the import scopes Reformat Code to the editor (#2820).
 		"editor.ctrl+alt+l": "lsp.format",
@@ -172,8 +176,8 @@ func TestPlanWindowsFixture(t *testing.T) {
 	for _, c := range res.Unbind {
 		unbound[c] = true
 	}
-	if !unbound["cmd+s"] || unbound["ctrl+s"] {
-		t.Fatalf("Unbind = %v, want cmd+s unbound and ctrl+s kept", res.Unbind)
+	if !unbound["editor.cmd+s"] || unbound["editor.ctrl+s"] || unbound["cmd+s"] {
+		t.Fatalf("Unbind = %v, want editor.cmd+s unbound, ctrl+s kept and the hex cmd+s untouched", res.Unbind)
 	}
 }
 
@@ -204,9 +208,19 @@ func TestApplyEndToEnd(t *testing.T) {
 		t.Fatalf("Load diagnostic: %+v", d)
 	}
 	table := keymap.BuildTable(defaults, c.Keymap.Bindings, "darwin")
+	// The hex viewer holds the save chords in its own context (hex.save,
+	// #2876); the import scopes editor.write to the editor and leaves them.
 	byChord := map[string]string{}
+	hexChords := map[string]string{}
 	for _, b := range table.Bindings() {
+		if b.Context == keymap.Hex {
+			hexChords[b.Chord.String()] = b.Command
+			continue
+		}
 		byChord[b.Chord.String()] = b.Command
+	}
+	if hexChords["cmd+s"] != "hex.save" || hexChords["ctrl+s"] != "hex.save" {
+		t.Fatalf("the import must keep the hex viewer's save chords, got %v", hexChords)
 	}
 	if byChord["cmd+b"] != "lsp.definition" {
 		t.Fatalf("cmd+b = %q, want lsp.definition", byChord["cmd+b"])

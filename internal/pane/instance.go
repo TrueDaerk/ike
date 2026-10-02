@@ -139,7 +139,7 @@ const (
 	// bottom-split panel listing the project's declared dependencies per
 	// manifest with latest versions and vulnerabilities, under key "deps".
 	KindDeps
-	// KindHex is a read-only hex viewer pane (#2420); any number may exist,
+	// KindHex is a hex viewer pane (#2420, overwrite edits #2876); any number may exist,
 	// each bound to one file, rendered offset|hex|ASCII over windowed reads.
 	KindHex
 	// KindNotebook is a read-only Jupyter notebook viewer pane (#2425); any

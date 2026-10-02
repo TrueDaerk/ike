@@ -1,5 +1,17 @@
 # Log
 
+## 2026-10-02 (hex viewer: overwrite edit mode, #2876)
+
+- [Hex Viewer](/architecture/hex-viewer.md): new *Editing* section — the
+  viewer edits in overwrite mode over an overlay of edited bytes; `tab`
+  switches the hex / text column, hex digits type nibbles in the hex column,
+  `i` … `esc` types characters in the text column, `u` / `ctrl+r`
+  undo/redo, `hex.save` (`cmd+s` / `ctrl+s`, hex context) writes the
+  changed bytes in place with the watcher stamped. Dirty viewers show `●`
+  and join the close, quit and workspace guards and Save All.
+- [Keybindings](/architecture/keybindings.md): `hex.save` in the
+  reachability matrix.
+
 ## 2026-10-01 (diff: token-level intra-line refinement, #2849)
 
 - [Diff Viewer](/architecture/diff-viewer.md): intra-line refinement runs

@@ -1,21 +1,22 @@
 ---
 type: concept
 title: Hex Viewer
-description: "#2420 — binary files open read-only as offset|hex|ASCII over windowed reads: byte cursor with inspector row, range selection with hex/raw copy, string and byte-sequence search, the files.binary_open routing setting and the Open File As… chooser."
+description: "#2420 — binary files open as offset|hex|ASCII over windowed reads: byte cursor with inspector row, range selection with hex/raw copy, string and byte-sequence search, overwrite editing in the hex and text columns with in-place save (#2876), the files.binary_open routing setting and the Open File As… chooser."
 resource: internal/hexview
-tags: [architecture, hex, binary, pane, viewer, openas]
-timestamp: 2026-09-03T00:00:00Z
+tags: [architecture, hex, binary, pane, viewer, openas, editing]
+timestamp: 2026-10-02T00:00:00Z
 ---
 
 # Hex Viewer (#2420)
 
-`internal/hexview` renders any file read-only in the classic hex layout —
-offset column, hex bytes, ASCII column — in a pane of kind `KindHex`. The
-model never holds the file: it keeps a `(path, size, 256 KiB read window)`
-triple and serves every render and inspection through `ReadAt` on that
-window, so a multi-gigabyte file opens as fast as a small one. The buffer is
-deliberately window-shaped rather than a byte slice so a later write mode can
-grow an overlay of edited ranges without touching the read path.
+`internal/hexview` renders any file in the classic hex layout — offset
+column, hex bytes, ASCII column — in a pane of kind `KindHex`. The model
+never holds the file: it keeps a `(path, size, 256 KiB read window)` triple
+and serves every render and inspection through `ReadAt` on that window, so a
+multi-gigabyte file opens as fast as a small one. The buffer is deliberately
+window-shaped rather than a byte slice: the overwrite edit mode (#2876, see
+[Editing](#editing)) is an overlay of edited bytes on top of it, and the
+read path only gained one patch step.
 
 ## Routing
 
@@ -83,6 +84,71 @@ never the open. `enter` lands on the first match at or after the cursor; a
 query that does not parse shows its complaint in the line and keeps it open.
 `esc` while the line is open drops the search; at rest it drops the applied
 set (after a selection, which `esc` clears first).
+
+## Editing
+
+Overwrite only (#2876): editing replaces bytes in place and never inserts or
+deletes, so the file size never changes.
+
+**Two columns, one active.** The cursor lives in the hex or the text column
+(`column`: `colHex`, `colText`); `tab` switches, and the footer leads with
+`HEX`, `TEXT` or `TEXT INSERT`. The one rule for which keys type: the hex
+column types hex digits directly — no `0-9a-fA-F` key is a viewer key, so
+no toggle is needed and every other key (`h/j/k/l`, `g/G`, `v`, `y`, `/`,
+`n/N`, `u`) keeps its meaning while non-hex printable keys are ignored — and
+the text column, where every letter is also a navigation key, types only
+between `i` and `esc` (`i` from the hex column switches to text insertion
+too). While inserting, printable keys write and only `esc`, arrows, page
+keys and `tab` (which also ends the insertion) act otherwise; the app
+counts the state as text-capturing (`Model.Capturing`, read by
+`editorCapturing`), so plain keys bypass the keymap layer, `?` help, the
+esc-esc palette and `q`, exactly as for an editor in insert mode. A paste in
+text insertion overwrites like typing.
+
+- **Hex column:** the first nibble replaces the cursor byte's high nibble
+  at once (the half-edit shows: `12` → `a2`) and the cursor stays; the
+  second completes the byte and advances. Moving away — any non-digit key,
+  the wheel, a search step — commits the half-edit as is.
+- **Text column:** a key writes its UTF-8 bytes consecutively and advances
+  past them. A character that would run past the end of the file is refused
+  with a footer notice.
+
+**Overlay.** `overlay map[int64]byte` holds every edited byte that differs
+from the disk; `setByte` drops an entry written back to its on-disk value,
+so the overlay — and `Dirty()` — only ever holds real differences.
+`readAt` returns the raw window slice when the overlay is empty and a
+patched copy otherwise (`readRaw` is the disk view); `findAll` patches each
+streamed chunk. Rendering, the inspector row, copy and search therefore all
+see the edits.
+
+**Undo.** `u` undoes the last write — one completed (or committed half)
+hex byte, one text keystroke — and `ctrl+r` redoes; a plain stack of
+`byteEdit{off, old, new}` runs, a new write clearing the redo stack.
+
+**Highlighting.** `classify(off, col)` ranks the cursor first: the active
+column's cursor (`classCursor`) wears the editor caret's mode colours —
+`Accent` while navigating, `Success` (insert green) while typing text —
+and the mirror byte in the other column (`classMirror`) the `Selection` /
+`SelectionText` pair; then selection, search match, and an unsaved edit
+(`classModified`, `Warning` foreground, also over a selection or match
+background).
+
+**Saving.** `hex.save` — `cmd+s` / `ctrl+s` in the hex context, the
+editor's save chords; `editor.write` targets a buffer the pane lacks — runs
+`Model.Save`: the file's size is re-checked (a file resized on disk is
+refused, its offsets no longer mean the same), each contiguous overlay run is
+written with `WriteAt` on the path opened `O_WRONLY`, then the overlay
+clears and the window re-reads. The undo stack survives: an undo after a
+save dirties the pane against the new disk state. The app stamps
+`watcher.MarkSaved` before the write (no reload, no external-change
+warning) and refreshes the VCS status.
+
+**Dirty state in the app.** A dirty viewer shows `●` in its pane title
+(`HEX blob.bin ●`) or tab label, like a dirty editor tab. Every guard that
+protects unsaved buffers covers it: the close guard (`dirtyOnClose`, for a
+hex pane and a hex content tab — `s` saves via `saveHex`, `d` discards), the
+quit / workspace / project-close guards (`collectActivity` lists it,
+`saveWorkspaceDirty` writes it) and Save All (`writeDirtyTabs`).
 
 ## Open File As… chooser
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -42,8 +43,8 @@ func key(m *Model, keys ...string) {
 }
 
 func keyMsg(k string) tea.KeyPressMsg {
-	if len(k) == 1 {
-		r := rune(k[0])
+	if utf8.RuneCountInString(k) == 1 {
+		r, _ := utf8.DecodeRuneInString(k)
 		km := tea.Key{Code: r, Text: k}
 		if r >= 'A' && r <= 'Z' {
 			km.Mod = tea.ModShift
@@ -61,6 +62,14 @@ func keyMsg(k string) tea.KeyPressMsg {
 		return tea.KeyPressMsg(tea.Key{Code: 'd', Mod: tea.ModCtrl})
 	case "ctrl+u":
 		return tea.KeyPressMsg(tea.Key{Code: 'u', Mod: tea.ModCtrl})
+	case "ctrl+r":
+		return tea.KeyPressMsg(tea.Key{Code: 'r', Mod: tea.ModCtrl})
+	case "tab":
+		return tea.KeyPressMsg(tea.Key{Code: tea.KeyTab})
+	case "left":
+		return tea.KeyPressMsg(tea.Key{Code: tea.KeyLeft})
+	case "right":
+		return tea.KeyPressMsg(tea.Key{Code: tea.KeyRight})
 	}
 	panic("unknown key " + k)
 }

@@ -210,7 +210,7 @@ func (m Model) updateGroupClosePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) 
 			if w := m.activeWS(); w != nil && w.Root == b.root {
 				cmds = append(cmds, m.saveAllDirty()...)
 			} else {
-				cmds = append(cmds, saveWorkspaceDirty(m.ws.Peek(b.root))...)
+				cmds = append(cmds, m.saveWorkspaceDirty(m.ws.Peek(b.root))...)
 			}
 		}
 		if failed := m.groupSaveFailed(pending.busy); failed != "" {

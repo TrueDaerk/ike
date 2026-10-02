@@ -401,6 +401,8 @@ Active when a hex viewer pane has focus.
 | New empty editor tab | `ctrl+t` | `ctrl+t` | `editor.tab.new` |
 | Pin/unpin tab | `alt+shift+p` | `alt+shift+p` | `editor.tab.togglePin` |
 | Recent files | `ctrl+e` | `ctrl+e` | `palette.recentFiles` |
+| Save hex edits | `cmd+s` | `ctrl+s` | `hex.save` |
+| Save hex edits | `ctrl+s` | `ctrl+s` | `hex.save` |
 
 ## Notebook viewer
 

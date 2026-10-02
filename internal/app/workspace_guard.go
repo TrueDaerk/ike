@@ -188,6 +188,12 @@ func collectActivity(w *workspace.Workspace) wsActivity {
 		if inst == nil {
 			continue
 		}
+		// Unsaved hex edits (#2876) are dirty documents like a buffer's.
+		for _, hv := range hexViews(inst) {
+			if hv.Dirty() {
+				a.dirty = append(a.dirty, filepath.Base(hv.Path()))
+			}
+		}
 		switch inst.Kind() {
 		case pane.KindTerminal:
 			a.addTermModel(inst.Terminal())
@@ -299,7 +305,7 @@ func (m Model) updateWsClosePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.wsClosePending = nil
 		m.shell.Close()
 		w := m.ws.Peek(pending.root)
-		cmds := saveWorkspaceDirty(w)
+		cmds := m.saveWorkspaceDirty(w)
 		if len(collectActivity(w).dirty) > 0 {
 			m.host.Notify(host.Error, "not closed: save failed")
 			return m, tea.Batch(cmds...)
@@ -319,14 +325,18 @@ func (m Model) updateWsClosePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 }
 
 // saveWorkspaceDirty writes every dirty buffer of w (background workspaces
-// included — the editor write path does not depend on focus or rendering).
-func saveWorkspaceDirty(w *workspace.Workspace) []tea.Cmd {
+// included — the editor write path does not depend on focus or rendering),
+// and every hex viewer's unsaved edits (#2876).
+func (m *Model) saveWorkspaceDirty(w *workspace.Workspace) []tea.Cmd {
 	if w == nil {
 		return nil
 	}
 	var cmds []tea.Cmd
 	for _, key := range w.Panes.Keys() {
 		inst := w.Panes.Get(key)
+		for _, hv := range hexViews(inst) {
+			m.saveHex(hv)
+		}
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}

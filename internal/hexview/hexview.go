@@ -1,4 +1,4 @@
-// Package hexview is the read-only hex viewer pane (#2420): the classic
+// Package hexview is the hex viewer pane (#2420): the classic
 // offset | hex | ASCII layout over windowed reads, so a multi-gigabyte file
 // opens as fast as a small one — only the visible bytes are ever read. It
 // carries a byte cursor with an inspector row (integer/float/rune decodings
@@ -6,8 +6,10 @@
 // copy-as-raw, and a search for ASCII/UTF-8 strings or hex byte sequences.
 //
 // The buffer is deliberately a (path, size, window) triple rather than a byte
-// slice: a later write mode can grow an overlay of edited ranges on top
-// without touching the read path.
+// slice. The overwrite edit mode (#2876) sits on top of it as an overlay of
+// edited bytes (offset → byte): every read goes through readAt, which patches
+// the overlay over the raw window, and Save writes only the overlay back in
+// place. Editing never inserts or deletes, so the file size never changes.
 package hexview
 
 import (
@@ -16,11 +18,13 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/theme"
 	"ike/internal/ui"
@@ -84,6 +88,39 @@ type Model struct {
 	// cached read window.
 	win    []byte
 	winOff int64
+
+	// Overwrite edit mode (#2876). col is the column owning the cursor;
+	// inserting is the text column's typing toggle (i … esc), without which
+	// printable keys stay navigation there. overlay holds every edited byte
+	// that differs from the file on disk — reads patch it over the window,
+	// Save writes it back. A first hex nibble lands in the overlay at once
+	// (nibble set, nibOff/nibOld remembering the byte's value before it);
+	// the undo entry is pushed when the byte completes or the cursor leaves.
+	col       column
+	inserting bool
+	overlay   map[int64]byte
+	nibble    bool
+	nibOff    int64
+	nibOld    byte
+	undo      []byteEdit
+	redo      []byteEdit
+	notice    string // one-shot footer notice, cleared by the next key
+}
+
+// column is the byte column that owns the cursor (#2876): typing edits the
+// cursor byte as hex digits in one, as characters in the other.
+type column int
+
+const (
+	colHex column = iota
+	colText
+)
+
+// byteEdit is one undoable write: the run of bytes at off before and after
+// it — one byte per completed hex byte, a character's bytes per text key.
+type byteEdit struct {
+	off      int64
+	old, new []byte
 }
 
 // New opens the file at path for windowed reading. Open/stat errors are kept
@@ -243,10 +280,46 @@ func (m *Model) clampScroll() {
 	m.top = topRow * per
 }
 
-// readAt returns up to n bytes at off through the cached window, reading a
-// fresh window from the file when off falls outside the cached one. Reads
-// never touch more than windowSize bytes, whatever the file size.
+// readAt returns up to n bytes at off as the user sees them: the file's bytes
+// with the edit overlay patched over them (#2876). Without edits it is the
+// raw window slice; with edits it is a patched copy, so the window itself
+// keeps mirroring the disk.
 func (m *Model) readAt(off int64, n int) []byte {
+	raw := m.readRaw(off, n)
+	if len(m.overlay) == 0 || len(raw) == 0 {
+		return raw
+	}
+	out := append([]byte(nil), raw...)
+	m.patch(out, off)
+	return out
+}
+
+// patch overwrites data, the bytes starting at off, with the overlay's edits
+// in that range — walking whichever of the two is smaller.
+func (m *Model) patch(data []byte, off int64) {
+	if len(m.overlay) == 0 {
+		return
+	}
+	if len(data) <= len(m.overlay) {
+		for i := range data {
+			if b, ok := m.overlay[off+int64(i)]; ok {
+				data[i] = b
+			}
+		}
+		return
+	}
+	for at, b := range m.overlay {
+		if at >= off && at < off+int64(len(data)) {
+			data[at-off] = b
+		}
+	}
+}
+
+// readRaw returns up to n bytes at off through the cached window, reading a
+// fresh window from the file when off falls outside the cached one. Reads
+// never touch more than windowSize bytes, whatever the file size. These are
+// the bytes on disk; readAt is the overlay-aware view.
+func (m *Model) readRaw(off int64, n int) []byte {
 	if m.f == nil || off < 0 || off >= m.size || n <= 0 {
 		return nil
 	}
@@ -276,8 +349,9 @@ func (m *Model) readAt(off int64, n int) []byte {
 	return m.win[lo:hi]
 }
 
-// Update handles one message; the pane is read-only, so every key is
-// navigation, selection, search or the copy menu.
+// Update handles one message: an edit key (#2876) — tab, a hex digit in the
+// hex column, a character while inserting in the text column, i, u, ctrl+r —
+// or else navigation, selection, search or the copy menu.
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	key, ok := msg.(tea.KeyPressMsg)
 	if !ok {
@@ -291,6 +365,11 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	}
 	if m.search.Open {
 		return m.searchKey(key)
+	}
+	m.notice = ""
+	if m.editKey(key) {
+		m.clampScroll()
+		return nil
 	}
 	per := int64(m.perRow)
 	page := int64(m.bodyRows()) * per
@@ -345,18 +424,274 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
+// editKey handles the overwrite edit mode's keys (#2876) and reports whether
+// it consumed key. The rule: the hex column types hex digits directly — no
+// digit 0-9a-f is a hex viewer key — while the text column, where every
+// letter is also a navigation key, types only between i and esc. tab
+// switches the column (leaving text insertion); u undoes, ctrl+r redoes.
+func (m *Model) editKey(key tea.KeyPressMsg) bool {
+	if key.String() == "tab" {
+		m.commitNibble()
+		m.inserting = false
+		if m.col == colHex {
+			m.col = colText
+		} else {
+			m.col = colHex
+		}
+		return true
+	}
+	if m.col == colText && m.inserting {
+		if key.String() == "esc" {
+			m.inserting = false
+			return true
+		}
+		if text := printable(key); text != "" {
+			m.writeText(text)
+			return true
+		}
+		return false // arrows, page keys: navigation while inserting
+	}
+	if m.col == colHex {
+		if text := printable(key); len(text) == 1 {
+			if v, ok := hexVal(text[0]); ok {
+				m.typeNibble(v)
+				return true
+			}
+		}
+	}
+	m.commitNibble()
+	switch key.String() {
+	case "i":
+		// i always lands in text insertion, from either column: one key
+		// to start typing characters.
+		m.col, m.inserting = colText, true
+		return true
+	case "u":
+		m.undoEdit()
+		return true
+	case "ctrl+r":
+		m.redoEdit()
+		return true
+	}
+	return false
+}
+
+// printable returns the text a key types, "" for a chord or a named key.
+func printable(key tea.KeyPressMsg) string {
+	if key.Text == "" || key.Mod&(tea.ModCtrl|tea.ModAlt|tea.ModMeta|tea.ModSuper|tea.ModHyper) != 0 {
+		return ""
+	}
+	return key.Text
+}
+
+// typeNibble feeds one hex digit to the cursor byte: the first replaces the
+// high nibble and keeps the cursor there, the second the low nibble — the
+// byte is complete, becomes one undo step, and the cursor advances.
+func (m *Model) typeNibble(v byte) {
+	if m.size == 0 {
+		return
+	}
+	if m.nibble && m.nibOff != m.cur {
+		m.commitNibble()
+	}
+	cur := m.byteAt(m.cur)
+	if !m.nibble {
+		m.nibble, m.nibOff, m.nibOld = true, m.cur, cur
+		m.setByte(m.cur, v<<4|cur&0x0f)
+		return
+	}
+	m.setByte(m.cur, cur&0xf0|v)
+	m.commitNibble()
+	if m.cur < m.size-1 {
+		m.cur++
+	}
+}
+
+// commitNibble closes a pending hex byte edit — completed, or half-typed and
+// left as is — into one undo step.
+func (m *Model) commitNibble() {
+	if !m.nibble {
+		return
+	}
+	m.nibble = false
+	m.pushEdit(byteEdit{off: m.nibOff, old: []byte{m.nibOld}, new: []byte{m.byteAt(m.nibOff)}})
+}
+
+// writeText overwrites the bytes at the cursor with text's UTF-8 bytes and
+// advances past them, as one undo step. A text that would run past the end
+// of the file is refused: editing never changes the file size.
+func (m *Model) writeText(text string) {
+	data := []byte(text)
+	if m.size == 0 || len(data) == 0 {
+		return
+	}
+	if m.cur+int64(len(data)) > m.size {
+		m.notice = fmt.Sprintf("%q needs %d bytes, only %d left — overwrite never grows the file", text, len(data), m.size-m.cur)
+		return
+	}
+	old := make([]byte, len(data))
+	for i, b := range data {
+		old[i] = m.byteAt(m.cur + int64(i))
+		m.setByte(m.cur+int64(i), b)
+	}
+	m.pushEdit(byteEdit{off: m.cur, old: old, new: data})
+	m.cur += int64(len(data))
+	if m.cur > m.size-1 {
+		m.cur = m.size - 1
+	}
+}
+
+// byteAt is the byte at off as the user sees it (overlay over disk).
+func (m *Model) byteAt(off int64) byte {
+	if b, ok := m.overlay[off]; ok {
+		return b
+	}
+	if d := m.readRaw(off, 1); len(d) == 1 {
+		return d[0]
+	}
+	return 0
+}
+
+// setByte writes v at off into the overlay. A byte set back to its value on
+// disk leaves the overlay, so the overlay — and the dirty state — only ever
+// holds real differences, however the edits and undos interleave.
+func (m *Model) setByte(off int64, v byte) {
+	if d := m.readRaw(off, 1); len(d) == 1 && d[0] == v {
+		delete(m.overlay, off)
+		return
+	}
+	if m.overlay == nil {
+		m.overlay = map[int64]byte{}
+	}
+	m.overlay[off] = v
+}
+
+// pushEdit records a write on the undo stack and drops the redo stack; a
+// write that changed nothing is not recorded.
+func (m *Model) pushEdit(e byteEdit) {
+	if bytesEqual(e.old, e.new) {
+		return
+	}
+	m.undo = append(m.undo, e)
+	m.redo = nil
+}
+
+// undoEdit reverts the last write and puts the cursor on it.
+func (m *Model) undoEdit() {
+	if len(m.undo) == 0 {
+		m.notice = "nothing to undo"
+		return
+	}
+	e := m.undo[len(m.undo)-1]
+	m.undo = m.undo[:len(m.undo)-1]
+	for i, b := range e.old {
+		m.setByte(e.off+int64(i), b)
+	}
+	m.redo = append(m.redo, e)
+	m.cur = e.off
+}
+
+// redoEdit re-applies the last undone write and puts the cursor after it.
+func (m *Model) redoEdit() {
+	if len(m.redo) == 0 {
+		m.notice = "nothing to redo"
+		return
+	}
+	e := m.redo[len(m.redo)-1]
+	m.redo = m.redo[:len(m.redo)-1]
+	for i, b := range e.new {
+		m.setByte(e.off+int64(i), b)
+	}
+	m.undo = append(m.undo, e)
+	m.cur = e.off + int64(len(e.new))
+	if m.cur > m.size-1 {
+		m.cur = m.size - 1
+	}
+}
+
+// Capturing reports whether printable keys type text (#2876): the text
+// column between i and esc. The app then keeps plain keys away from the
+// keymap layer and its global single-key meanings, as for an editor in
+// insert mode.
+func (m *Model) Capturing() bool { return m.col == colText && m.inserting }
+
+// Dirty reports whether the pane holds edits not yet written to disk.
+func (m *Model) Dirty() bool { return len(m.overlay) > 0 }
+
+// Modified returns how many bytes differ from the file on disk.
+func (m *Model) Modified() int { return len(m.overlay) }
+
+// Save writes the edited bytes back to the file in place (#2876): one WriteAt
+// per contiguous run of the overlay, nothing else touched, the size unchanged.
+// It reports how many bytes it wrote. A file whose size changed on disk since
+// the pane opened is refused — the offsets no longer mean what they meant.
+// On success the overlay is empty and the read window re-reads the disk; the
+// undo stack survives, an undo then dirtying the pane again against the new
+// disk state.
+func (m *Model) Save() (int, error) {
+	m.commitNibble()
+	if len(m.overlay) == 0 {
+		return 0, nil
+	}
+	st, err := os.Stat(m.path)
+	if err != nil {
+		return 0, err
+	}
+	if st.Size() != m.size {
+		return 0, fmt.Errorf("file size changed on disk (%d → %d bytes)", m.size, st.Size())
+	}
+	f, err := os.OpenFile(m.path, os.O_WRONLY, 0)
+	if err != nil {
+		return 0, err
+	}
+	offs := make([]int64, 0, len(m.overlay))
+	for off := range m.overlay {
+		offs = append(offs, off)
+	}
+	slices.Sort(offs)
+	for i := 0; i < len(offs); {
+		run := []byte{m.overlay[offs[i]]}
+		j := i
+		for j+1 < len(offs) && offs[j+1] == offs[j]+1 {
+			j++
+			run = append(run, m.overlay[offs[j]])
+		}
+		if _, err := f.WriteAt(run, offs[i]); err != nil {
+			f.Close()
+			return 0, err
+		}
+		i = j + 1
+	}
+	if err := f.Close(); err != nil {
+		return 0, err
+	}
+	m.overlay = nil
+	m.win, m.winOff = nil, 0
+	return len(offs), nil
+}
+
 // PasteText inserts a paste into the open search line (#2002), re-matching
-// like a typed edit; with the line closed the text is dropped rather than
+// like a typed edit. In text insertion (#2876) the paste overwrites the bytes
+// at the cursor as one undo step; otherwise the text is dropped rather than
 // leaking into navigation keys.
 func (m *Model) PasteText(text string) {
-	if m.search.Open && m.search.Paste(text) {
-		m.recomputeMatches(false)
+	if m.search.Open {
+		if m.search.Paste(text) {
+			m.recomputeMatches(false)
+		}
+		return
+	}
+	if m.err == nil && m.col == colText && m.inserting {
+		m.notice = ""
+		m.writeText(text)
+		m.clampScroll()
 	}
 }
 
 // Wheel scrolls the viewport by delta rows, moving the cursor along so it
 // stays visible.
 func (m *Model) Wheel(delta int) {
+	m.commitNibble()
 	m.cur += int64(delta) * int64(m.perRow)
 	m.clampScroll()
 }
@@ -372,6 +707,7 @@ func (m *Model) startSearch() {
 	if m.err != nil || m.size == 0 {
 		return
 	}
+	m.commitNibble()
 	m.search.Start()
 }
 
@@ -398,6 +734,7 @@ func (m *Model) searchStep(delta int) ui.MatchStep {
 	if !m.search.Active() {
 		return ui.NoStep
 	}
+	m.commitNibble() // the step moves the cursor off a half-typed byte
 	if m.stale {
 		m.recomputeMatches(true) // a step is an explicit search: pay the scan
 	}
@@ -511,6 +848,7 @@ func (m *Model) findAll(needle []byte) (offs []int64, capped bool) {
 			break
 		}
 		data := buf[:read]
+		m.patch(data, off) // search what the user sees, edits included (#2876)
 		for i := 0; ; {
 			j := indexBytes(data[i:], needle)
 			if j < 0 {
@@ -656,16 +994,23 @@ type byteClass int
 
 const (
 	classPlain byteClass = iota
+	classModified
 	classMatch
 	classSelected
+	classMirror
 	classCursor
 )
 
-// classify ranks the highlights of the byte at off: the cursor wins over the
-// selection, which wins over a search match.
-func (m *Model) classify(off int64) byteClass {
+// classify ranks the highlights of the byte at off as drawn in column col:
+// the cursor wins — the strong cursor in the active column, its mirror in
+// the other (#2876) — over the selection, which wins over a search match,
+// which wins over an unsaved edit.
+func (m *Model) classify(off int64, col column) byteClass {
 	if off == m.cur {
-		return classCursor
+		if col == m.col {
+			return classCursor
+		}
+		return classMirror
 	}
 	if from, to, ok := m.Selection(); ok && off >= from && off <= to {
 		return classSelected
@@ -673,7 +1018,31 @@ func (m *Model) classify(off int64) byteClass {
 	if m.inMatch(off) {
 		return classMatch
 	}
+	if _, ok := m.overlay[off]; ok {
+		return classModified
+	}
 	return classPlain
+}
+
+// styles maps each byte class to its look. The active cursor wears the
+// editor caret's mode colours (#2876, editor.ModeColor): the accent while
+// navigating, the insert green while typing characters; the mirror cursor in
+// the other column takes the selection colours; an unsaved edit is drawn in
+// the warning colour, also over a selection or match background.
+func (m *Model) styles() map[byteClass]lipgloss.Style {
+	caret := m.pal.Accent
+	if m.col == colText && m.inserting {
+		caret = m.pal.Success
+	}
+	return map[byteClass]lipgloss.Style{
+		classPlain:    lipgloss.NewStyle().Foreground(m.pal.Foreground),
+		classModified: lipgloss.NewStyle().Foreground(m.pal.Warning).Bold(true),
+		classMatch:    lipgloss.NewStyle().Background(m.pal.OccurrenceRead).Foreground(m.pal.Foreground),
+		classSelected: lipgloss.NewStyle().Background(m.pal.SelectionMuted).Foreground(m.pal.Foreground),
+		classMirror:   lipgloss.NewStyle().Background(m.pal.Selection).Foreground(m.pal.SelectionText),
+		classCursor: lipgloss.NewStyle().Background(caret).
+			Foreground(theme.Readable(caret, m.pal.Background, m.pal.Foreground)).Bold(true),
+	}
 }
 
 // inMatch reports whether off lies inside any enumerated match. Matches are
@@ -703,11 +1072,16 @@ func (m *Model) inMatch(off int64) bool {
 func (m *Model) renderRow(off int64) string {
 	offW := m.offsetWidth()
 	data := m.readAt(off, m.perRow)
-	styles := map[byteClass]lipgloss.Style{
-		classPlain:    lipgloss.NewStyle().Foreground(m.pal.Foreground),
-		classMatch:    lipgloss.NewStyle().Background(m.pal.OccurrenceRead).Foreground(m.pal.Foreground),
-		classSelected: lipgloss.NewStyle().Background(m.pal.SelectionMuted).Foreground(m.pal.Foreground),
-		classCursor:   lipgloss.NewStyle().Background(m.pal.Primary).Foreground(m.pal.SelectionText).Bold(true),
+	styles := m.styles()
+	style := func(at int64, col column) lipgloss.Style {
+		c := m.classify(at, col)
+		st := styles[c]
+		if c == classSelected || c == classMatch {
+			if _, ok := m.overlay[at]; ok {
+				st = st.Foreground(m.pal.Warning).Bold(true)
+			}
+		}
+		return st
 	}
 	dim := lipgloss.NewStyle().Foreground(m.pal.Ghost)
 	var hex, asc strings.Builder
@@ -723,13 +1097,13 @@ func (m *Model) renderRow(off int64) string {
 			continue
 		}
 		b := data[i]
-		st := styles[m.classify(off+int64(i))]
-		hex.WriteString(st.Render(fmt.Sprintf("%02x", b)))
+		at := off + int64(i)
+		hex.WriteString(style(at, colHex).Render(fmt.Sprintf("%02x", b)))
 		ch := "."
 		if b >= 0x20 && b < 0x7f {
 			ch = string(rune(b))
 		}
-		asc.WriteString(st.Render(ch))
+		asc.WriteString(style(at, colText).Render(ch))
 	}
 	return dim.Render(fmt.Sprintf("%0*x", offW, off)) + "  " + hex.String() + "  " + asc.String()
 }
@@ -782,7 +1156,16 @@ func (m *Model) footer() string {
 		}
 		return clipTo(line, m.w)
 	}
-	status := fmt.Sprintf(" offset %d (0x%x) of %d", m.cur, m.cur, m.size)
+	// The active column (#2876) leads the line, with the dirty marker the
+	// editor tabs use, so neither is clipped off a narrow pane.
+	mode := lipgloss.NewStyle().Foreground(m.pal.Accent).Bold(true).Render(" " + m.ColumnLabel())
+	if m.Dirty() {
+		mode += lipgloss.NewStyle().Foreground(m.pal.Warning).Render(fmt.Sprintf(" ● %d B modified", len(m.overlay)))
+	}
+	if m.notice != "" {
+		return ansi.Truncate(mode+lipgloss.NewStyle().Foreground(m.pal.Warning).Render(" · "+m.notice), m.w, "")
+	}
+	status := fmt.Sprintf(" · offset %d (0x%x) of %d", m.cur, m.cur, m.size)
 	if n := len(m.search.Matches); n > 0 {
 		total := fmt.Sprintf("%d", n)
 		if m.capped {
@@ -790,8 +1173,26 @@ func (m *Model) footer() string {
 		}
 		status += fmt.Sprintf(" · match %d/%s", m.search.Cur+1, total)
 	}
-	hints := "j/k/h/l move · g/G ends · ctrl+d/u half page · v select · y copy · / search · n/N match"
-	return lipgloss.NewStyle().Faint(true).Render(clipTo(status+" · "+hints, m.w))
+	hints := "tab column · 0-9a-f type · i insert text · u/ctrl+r undo/redo · ctrl+s save · j/k/h/l move · g/G ends · ctrl+d/u half page · v select · y copy · / search · n/N match"
+	switch {
+	case m.col == colText && m.inserting:
+		hints = "type to overwrite · esc stop · arrows move · tab column · ctrl+s save"
+	case m.col == colText:
+		hints = "tab column · i insert text · u/ctrl+r undo/redo · ctrl+s save · j/k/h/l move · g/G ends · v select · y copy · / search"
+	}
+	return ansi.Truncate(mode+lipgloss.NewStyle().Faint(true).Render(status+" · "+hints), m.w, "")
+}
+
+// ColumnLabel names the active column (#2876): HEX, TEXT, or TEXT INSERT
+// while characters type.
+func (m *Model) ColumnLabel() string {
+	switch {
+	case m.col == colText && m.inserting:
+		return "TEXT INSERT"
+	case m.col == colText:
+		return "TEXT"
+	}
+	return "HEX"
 }
 
 // clipTo cuts s to width cells; the footer and inspector never wrap.
