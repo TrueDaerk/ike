@@ -161,14 +161,15 @@ func defaults() *Config {
 			// 15 s is far past every warm-up on record (p90 ≈ 2.6 s) and
 			// still short enough that the notice arrives while the switch is
 			// what the user is thinking about (#2629).
-			WarmupNoticeMs: 15000,
-			CodeLens:       true,
-			Folding:        true,
-			SemanticTokens: true,
-			SelectionRange: true,
-			WillRename:     true,
-			LogLevel:       "warn",
-			Servers:        map[string]map[string]any{},
+			WarmupNoticeMs:         15000,
+			WarmupNoticeMutedRoots: []string{},
+			CodeLens:               true,
+			Folding:                true,
+			SemanticTokens:         true,
+			SelectionRange:         true,
+			WillRename:             true,
+			LogLevel:               "warn",
+			Servers:                map[string]map[string]any{},
 			// Default ignore rules (#1260): intelephense's P1006 TypeError
 			// cannot infer types written through by-reference parameters
 			// (&$param) and floods by-ref-heavy PHP with bogus

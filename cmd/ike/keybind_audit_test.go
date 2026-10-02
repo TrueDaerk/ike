@@ -216,6 +216,7 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	{"lsp.quickFixProblem", reasonIntention},      //
 	{"lsp.codeLens", reasonIntention},             //
 	{"lsp.doctor", reasonOccasional},              //
+	{"lsp.muteWarmupNotice", reasonOccasional},    // #2886: the silent-server notice's follow-up
 	{"lsp.installMissing", reasonOccasional},      //
 	{"lsp.restart", reasonOccasional},             //
 	{"lsp.showLog", reasonOccasional},             //

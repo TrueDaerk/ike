@@ -393,6 +393,10 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	// history view can label foreign ones), as does the unseen counter.
 	fresh.history = m.history
 	fresh.notifUnseen = m.notifUnseen
+	// The silent-server notice warns once per project per session (#2886):
+	// the set of roots it already fired for is session state like the
+	// history it was recorded in.
+	fresh.lspNoticed = m.lspNoticed
 	// The playground's program history and per-file recall are session state
 	// too (#1977, #1982, #2535): one list for the whole run, and the very
 	// object a parked playground's state points at — carrying it is what
@@ -597,7 +601,7 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	// reports skipped=no_server_docs on the spot, an armed wait that never
 	// sees a publish is closed by the quiet fallback timer.
 	serverLang, hasServerDocs := sized.switchServerDocLang()
-	sized.switchLSPWait = &switchLSPWait{start: switchStart, lang: serverLang}
+	sized.switchLSPWait = &switchLSPWait{start: switchStart, lang: serverLang, root: sized.projectRootTag()}
 	endOp("ok", map[string]string{
 		"parked": strconv.FormatBool(parked),
 		"panes":  strconv.Itoa(len(sized.activeWS().Panes.Keys())),

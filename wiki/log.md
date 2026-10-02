@@ -1,5 +1,19 @@
 # Log
 
+## 2026-10-02 (silent server notice: once per project per session, per-project mute, #2886)
+
+- [Project Switching](/architecture/project-switching.md): the post-switch
+  silent-server notice fires at most once per project root per session
+  (`Model.lspNoticed`, carried across switches); a third action *Don't warn
+  for this project* (`lsp.muteWarmupNotice`) appends the root to the new
+  `lsp.warmup_notice_muted_roots` setting (Settings UI: Language Support →
+  *Silent server notice: muted projects*), which mutes it across sessions.
+- [Usage Telemetry](/architecture/usage-telemetry.md): a `quiet` `lsp`
+  phase whose notice was held back carries `notified: "false"` plus
+  `suppressed: "session"` / `"muted"`.
+- [Notifications](/architecture/notifications.md) and
+  [LSP](/architecture/lsp.md) name the new action and setting.
+
 ## 2026-10-02 (agent trace: idle poll reuses the frame, #2884)
 
 - [Agent Trace](/architecture/agent-trace.md): the header's liveness

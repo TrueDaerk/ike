@@ -1121,6 +1121,7 @@ type Model struct {
 	usage         *telemetry.Recorder  // local-only usage telemetry (#2235); session state, rides across project switches
 	projClock     *projectClock        // foreground time in the current project, for project.leave (#2408); per-project, not carried across a switch
 	switchLSPWait *switchLSPWait       // LSP warm-up timer of the project just switched into (#2403); nil once reported
+	lspNoticed    map[string]bool      // project roots the silent-server notice already fired for this session (#2886); session state, rides across project switches
 	pendUnbound   *unboundKey          // unbound chord awaiting the focused editor's verdict (#2303)
 	fileFrec      *frecency.Store      // file-open frecency ranking in the "@" finder (#2155)
 	projFrec      *frecency.Store      // project-switch frecency, user-scoped: the Recent Projects column (#2399)
@@ -6938,6 +6939,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// 'r' in the LSP Doctor pane (#2164): re-run the checks; Finish
 		// verifies fixes against the previous run's failure classes.
 		return m, m.runLSPDoctor()
+
+	case LSPMuteWarmupNoticeMsg:
+		// The silent-server notice's opt-out (#2886): persist the active
+		// root into lsp.warmup_notice_muted_roots.
+		return m, m.muteWarmupNotice()
 
 	case LSPDoctorCopyMsg:
 		// lsp.doctor.copy (cmd+c in the LSP Doctor, #2487): the whole

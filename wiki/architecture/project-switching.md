@@ -565,10 +565,25 @@ second timer speaks up first:
   first server-backed document the switch opened — and is recorded in the
   notification history like any other.
 - It carries **follow-up actions** (`host.NotifyAction`, #2629): *Restart
-  Language Servers* (`lsp.restart`) and *Open LSP Doctor* (`lsp.doctor`). The
+  Language Servers* (`lsp.restart`), *Open LSP Doctor* (`lsp.doctor`) and
+  *Don't warn for this project* (`lsp.muteWarmupNotice`, #2886). The
   notification center numbers the actions of the ring and runs one on its
   digit (`1`–`9`), closing the center. Details:
   [notifications](notifications.md).
+- It fires **at most once per project root per session** (#2886): the roots
+  already warned about live in `Model.lspNoticed`, session state carried
+  across every switch like the notification history, so A→B→A→B with B's
+  server silent warns once, not on every return. The key is the active
+  workspace root (`projectRootTag`, the root `telemetry.ProjectToken`
+  hashes), stamped on the wait when `performSwitch` arms it. A restart of
+  ike starts with an empty set and warns once again.
+- **`lsp.warmup_notice_muted_roots`** (Settings UI: "Language Support" →
+  *Silent server notice: muted projects*, user scope, list of absolute
+  paths) mutes the notice for a root across sessions — projects that will
+  never have a server. `lsp.muteWarmupNotice` appends the active root (a
+  root already listed only says so); the form rejects blank, relative or
+  comma-carrying entries, the loader drops non-absolute ones with a
+  diagnostic, and roots compare cleaned.
 - It fires **at most once per wait** and does **not** disarm it: a late publish
   is still a real measurement. The pointer-identity guard the quiet fallback
   uses holds here too, so a switch superseded before its threshold drops its
@@ -576,7 +591,10 @@ second timer speaks up first:
   `no_server_docs` case arms nothing and therefore never notifies.
 - The `lsp` phase keeps its semantics; a `quiet` end whose user was warned
   additionally carries `notified: "true"`, so the export can separate a
-  silence nobody noticed from one that was reported.
+  silence nobody noticed from one that was reported. One whose notice was
+  held back by the once-per-session rule or the mute (#2886) carries
+  `notified: "false"` and `suppressed: "session"` / `"muted"`; the field
+  stays absent when the threshold never passed.
 
 **Settings scope (0380, #795).** The config reload inside `performSwitch`
 runs after the chdir, so the incoming project's `.ike/settings.toml` layer
