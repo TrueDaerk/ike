@@ -297,7 +297,7 @@ func (m *Model) graphKey(key string) (tea.Cmd, bool) {
 		}
 	}
 	switch key {
-	case "l", "right":
+	case "n":
 		for j := cur + 1; j < len(g.stops); j++ {
 			if selectable(j) {
 				move(j)
@@ -305,13 +305,19 @@ func (m *Model) graphKey(key string) (tea.Cmd, bool) {
 			}
 		}
 		return nil, true
-	case "h", "left":
+	case "p":
 		for j := cur - 1; j >= 0; j-- {
 			if selectable(j) {
 				move(j)
 				break
 			}
 		}
+		return nil, true
+	case "l", "right":
+		move(l.Right(cur, selectable))
+		return nil, true
+	case "h", "left":
+		move(l.Left(cur, selectable))
 		return nil, true
 	case "j", "down":
 		move(l.Below(cur, selectable))
@@ -835,4 +841,4 @@ func (m *Model) drawConnector(c *canvas, prev, s Slot) {
 }
 
 // graphHint is the key line under the graph.
-const graphHint = "h/l along the path · j/k rows · enter open · space expand · t tree · s sessions · D diff · a ask · r rescan · Δ: V revert"
+const graphHint = "←/→ ↑/↓ move · n/p along the path · enter open · space expand · t tree · s sessions · D diff · a ask · r rescan · Δ: V revert"
