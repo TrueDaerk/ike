@@ -73,6 +73,11 @@ type popupTerm struct {
 	// the layer again. The flag rides in wsExtras with the rest of the popup
 	// state, so a project resumed after a switch comes back exactly as left.
 	pinned bool
+	// maximized zooms the box over the whole body rect (#2899, pane.maximize
+	// with the box focused), pinned or not. Runtime-only: the stored size and
+	// position deltas stay untouched, so restoring is just clearing the flag,
+	// and hiding the layer drops it.
+	maximized bool
 	// boxZ is the box's slot in the layer's z-order (#1806): the number of
 	// floating panels (#1793) drawn below it. 0 leaves the box at the bottom,
 	// len(floatTerms) puts it on top — where focusing it moves it, so the box
@@ -163,6 +168,7 @@ func (m *Model) showPopupLayer() {
 // running shells are retained: hiding is a rendering and key-routing act.
 func (m *Model) hidePopupLayer() {
 	m.popup.open = false
+	m.restorePopupMaximize()
 	for _, inst := range m.popupLayerInstances() {
 		inst.SetFocused(false)
 	}
@@ -175,6 +181,7 @@ func (m *Model) hidePopupLayer() {
 // restores the centered-overlay geometry and hides the layer, the state the
 // toggle chord takes it out of again.
 func (m *Model) togglePopupPin() {
+	m.popup.maximized = false
 	if m.popup.pinned {
 		m.popup.pinned = false
 		m.hidePopupLayer()
@@ -458,6 +465,10 @@ func (m Model) popupTermDelta() (dw, dh int) {
 // ui.popup_max_width, adjusted by the resolved resize delta, floored so the
 // box never degenerates.
 func (m Model) popupSize() (w, h int) {
+	if m.popup.maximized {
+		r := m.bodyRect()
+		return r.W, r.H
+	}
 	w = int(float64(m.width) * popupTermWFrac)
 	h = int(float64(m.height) * popupTermHFrac)
 	if cap := popupMaxWidth(); cap > 0 && w > cap {
@@ -496,6 +507,9 @@ func (m *Model) popupTermSeed() {
 // step, where writing the stores per motion event would be waste — the drag's
 // release calls popupTermPersist instead.
 func (m *Model) popupTermResize(ddw, ddh int, persist bool) {
+	if m.popup.maximized {
+		return // the zoomed box has no size of its own (#2899)
+	}
 	m.popupTermSeed()
 	m.winSizes.Nudge(popupTermSizeKey, ddw, ddh)
 	if persist {
@@ -528,6 +542,9 @@ func (m Model) popupTermPos() (dx, dy int) {
 // continue-from-what-you-see rule). persist=false is the mid-drag step; the
 // drag's release calls popupTermPersistPos.
 func (m *Model) popupTermMoveBy(ddx, ddy int, persist bool) {
+	if m.popup.maximized {
+		return // the zoomed box has no position of its own (#2899)
+	}
 	if m.popup.pinned {
 		// The pinned strip is anchored to the bottom edge (#2406): there is
 		// no free position to drag it to, and the stored offset belongs to
@@ -550,7 +567,7 @@ func (m *Model) popupTermMoveBy(ddx, ddy int, persist bool) {
 // popupTermPersistPos. The pinned strip (#2406) ignores the offset, so a drag
 // there leaves the floating box's stored position alone.
 func (m *Model) popupTermSetPos(dx, dy int) {
-	if m.popup.pinned {
+	if m.popup.pinned || m.popup.maximized {
 		return
 	}
 	m.winSizes.Put(popupTermPosKey, dx, dy)
@@ -599,6 +616,10 @@ func (m *Model) applyPopupSize() {
 // the persisted move offset (#1793), clamped so the box always stays fully on
 // screen.
 func (m Model) popupTermRect() (x, y, w, h int) {
+	if m.popup.maximized {
+		r := m.bodyRect()
+		return r.X, r.Y, r.W, r.H
+	}
 	w, h = m.popupSize()
 	if m.popup.pinned {
 		// Pinned (#2406): anchored to the bottom edge, ignoring the move
@@ -744,8 +765,9 @@ func (m Model) popupTermMouse(msg mouseEvent) (tea.Model, tea.Cmd, bool) {
 		}
 		return m, nil, true
 	case msg.action == mousePress && msg.Button == tea.MouseLeft:
-		// The border ring starts a mouse resize (#933), centered geometry.
-		if zx, zy, ok := ui.ResizeZone(msg.X-px, msg.Y-py, pw, ph); ok {
+		// The border ring starts a mouse resize (#933), centered geometry —
+		// not on a maximized box (#2899), which has no size of its own.
+		if zx, zy, ok := ui.ResizeZone(msg.X-px, msg.Y-py, pw, ph); ok && !m.popup.maximized {
 			m.floatDrag = &floatResizeDrag{kind: "popupterm", sx: zx, sy: zy, lastX: msg.X, lastY: msg.Y}
 			return m, nil, true
 		}
@@ -775,7 +797,9 @@ func (m Model) popupTermMouse(msg mouseEvent) (tea.Model, tea.Cmd, bool) {
 				}
 				return m, nil, true
 			}
-			m.floatMove = &floatMoveDrag{lastX: msg.X, lastY: msg.Y}
+			if !m.popup.maximized {
+				m.floatMove = &floatMoveDrag{lastX: msg.X, lastY: msg.Y}
+			}
 			return m, nil, true
 		}
 		if term == nil {
@@ -1028,6 +1052,7 @@ func (m *Model) closePopupTab(inst *pane.Instance, idx int) {
 		m.applyPopupSize()
 	default:
 		m.popup.inst = nil
+		m.popup.maximized = false
 		if len(m.floatTerms) > 0 {
 			// Floating panels remain (#1793): the layer stays open and the
 			// topmost panel takes the keyboard.

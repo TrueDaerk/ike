@@ -263,5 +263,9 @@ host per shell.
   a delta of their own (#1714, see the terminal doc). `WinSizes.Has`/`Set`
   exist for that cascade: `Has` separates "never resized here" from a stored
   zero delta, `Set` mirrors a delta instead of accumulating it.
+  `pane.maximize` with the layer focused (#2899) zooms the popup box or the
+  focused floating panel over the body rect; the zoom is runtime state that
+  never writes these stores (resize/move steps are inert while zoomed), so
+  restoring — or hiding the layer — brings back the stored geometry as is.
 - The plugin "open as modal" contract beyond the minimal additive
   `OpenModalRequest` seam is owned by the plugin roadmaps.

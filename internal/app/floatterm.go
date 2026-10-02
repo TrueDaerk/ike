@@ -41,6 +41,9 @@ type floatTerm struct {
 	x, y   int            // outer top-left screen cell
 	w, h   int            // outer box size
 	global bool           // app-owned: survives project switches (#1793)
+	// restore holds the geometry a maximized panel (#2899) returns to; nil
+	// while the panel is not maximized. Runtime-only like the rest.
+	restore *floatRect
 }
 
 // floatMoveDrag tracks a live titlebar move drag (#1793): the popup box
@@ -248,6 +251,11 @@ func (m *Model) clampFloatTerms() {
 		return
 	}
 	for _, f := range m.floatTerms {
+		if f.restore != nil {
+			// A maximized panel (#2899) tracks the body rect.
+			f.x, f.y, f.w, f.h = m.maximizedFloatRect()
+			continue
+		}
 		f.w = min(f.w, m.width)
 		f.h = min(f.h, m.height)
 		f.x = ui.ClampDelta(f.x, 0, 0, m.width-f.w)
@@ -266,6 +274,9 @@ func (m *Model) applyFloatTermSizes() {
 // resizeFloatTerm applies one resize step (chord #774 or border drag #933) to
 // a panel, floored like the popup box and clamped to the terminal.
 func (m *Model) resizeFloatTerm(f *floatTerm, ddw, ddh int) {
+	if f.restore != nil {
+		return // the zoomed panel has no size of its own (#2899)
+	}
 	f.w = ui.ClampDelta(f.w, ddw, popupTermMinW, max(m.width-f.x, popupTermMinW))
 	f.h = ui.ClampDelta(f.h, ddh, popupTermMinH, max(m.height-f.y, popupTermMinH))
 	m.applyPopupSize()
@@ -383,6 +394,7 @@ func (m *Model) collapsePopupSlot(src *pane.Instance) {
 		m.popup.focusRight = false
 	case src == m.popup.inst:
 		m.popup.inst = nil
+		m.popup.maximized = false
 	default:
 		if f := m.floatTermFor(src); f != nil {
 			m.removeFloatTermEntry(f)
@@ -559,7 +571,7 @@ func (m Model) floatTermMouse(f *floatTerm, msg mouseEvent) (tea.Model, tea.Cmd,
 		return m, nil, true
 	case msg.action == mousePress && msg.Button == tea.MouseLeft:
 		m.setFloatFocus(f)
-		if zx, zy, ok := ui.ResizeZone(msg.X-f.x, msg.Y-f.y, f.w, f.h); ok {
+		if zx, zy, ok := ui.ResizeZone(msg.X-f.x, msg.Y-f.y, f.w, f.h); ok && f.restore == nil {
 			m.floatDrag = &floatResizeDrag{kind: "floatterm", target: f, sx: zx, sy: zy, lastX: msg.X, lastY: msg.Y}
 			return m, nil, true
 		}
@@ -585,7 +597,9 @@ func (m Model) floatTermMouse(f *floatTerm, msg mouseEvent) (tea.Model, tea.Cmd,
 				return m, nil, true
 			}
 			// The title row outside any tab segment starts the move drag.
-			m.floatMove = &floatMoveDrag{target: f, lastX: msg.X, lastY: msg.Y}
+			if f.restore == nil {
+				m.floatMove = &floatMoveDrag{target: f, lastX: msg.X, lastY: msg.Y}
+			}
 			return m, nil, true
 		}
 		if term == nil {
