@@ -1656,6 +1656,7 @@ JetBrains is:
 | `file.openInBrowser` | `alt+f2` | fragile | `palette / context menu` | live via palette / context menu |
 | `file.rename` | `shift+f6` | delivered | `—` | live |
 | `find.openInPanel` | `cmd+enter` | fragile | `ctrl+enter` | live via ctrl+enter |
+| `hex.save` | `cmd+s` | fragile | `ctrl+s` | live via ctrl+s |
 | `html.preview` | `cmd+alt+h` | fragile | `palette / tab context menu` | live via palette / tab context menu |
 | `html.view.toggle` | `cmd+alt+shift+v` | fragile | `the tab's [Source] [Preview] buttons / palette / tab context menu` | live via the tab's [Source] [Preview] buttons / palette / tab context menu |
 | `http.cancel` | `cmd+.` | fragile | `ctrl+.` | live via ctrl+. |

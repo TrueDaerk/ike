@@ -765,6 +765,11 @@ var jetbrainsRows = []row{
 	// The same muscle memory in the archive viewer (#2314): "rerun" reads as
 	// "read the archive again" there, which is the listing reload.
 	{"ctrl+r", "archive.reload", "Reload archive listing", Archive, "Archive viewer (#1762)"},
+	// The hex viewer's overwrite edits (#2876) save on the editor's own save
+	// chords, scoped to the hex context — editor.write targets a buffer the
+	// hex pane does not have.
+	{"cmd+s", "hex.save", "Save hex edits", Hex, "Hex viewer (#2876)"},
+	{"ctrl+s", "hex.save", "Save hex edits", Hex, "Hex viewer (#2876)"},
 	// The notebook viewer's run key (#2682): r executes the whole notebook in
 	// place through nbconvert, next to the pane's other single-letter actions
 	// (e scratch, y copy, o save image); run.file's shift+f10 does the same.

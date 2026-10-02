@@ -146,16 +146,16 @@ func TestCaptureConflictNeedsConfirmation(t *testing.T) {
 
 func TestUnbindAndResetRoundTrip(t *testing.T) {
 	k, _ := keymapPage(t)
-	selectChord(t, k, "ctrl+s")
+	selectChord(t, k, "ctrl+shift+u")
 	apply(t, unbind(t, k))
-	if _, ok := k.table().Lookup(keymap.MustParseChord("ctrl+s"), keymap.Global); ok {
+	if _, ok := k.table().Lookup(keymap.MustParseChord("ctrl+shift+u"), keymap.Editor); ok {
 		t.Fatal("unbind must drop the chord")
 	}
 	// Reset removes the override; the preset default falls back through the
 	// layers (the same RemoveAndReload the page's 'r' key issues).
-	apply(t, config.RemoveAndReload(k.opts, config.UserScope, "keymap.bindings.ctrl+s"))
-	nb, ok := k.table().Lookup(keymap.MustParseChord("ctrl+s"), keymap.Editor)
-	if !ok || nb.Command != "editor.write" {
+	apply(t, config.RemoveAndReload(k.opts, config.UserScope, "keymap.bindings.ctrl+shift+u"))
+	nb, ok := k.table().Lookup(keymap.MustParseChord("ctrl+shift+u"), keymap.Editor)
+	if !ok || nb.Command != "editor.case.toggle" {
 		t.Fatal("reset must restore the preset default")
 	}
 }
@@ -520,7 +520,7 @@ func TestNeverBoundCommandCapturesFirstChord(t *testing.T) {
 // provenance, and reports the conflict state.
 func TestKeymapDetailColumnExplainsTheCommand(t *testing.T) {
 	k, _ := keymapPage(t)
-	b := selectChord(t, k, "ctrl+s")
+	b := selectChord(t, k, "ctrl+shift+u")
 	v := k.View(130, 40)
 	for _, want := range []string{b.Command, "bindings ·", "@default", "no conflicts"} {
 		if !strings.Contains(v, want) {

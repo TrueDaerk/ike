@@ -129,6 +129,9 @@ func tabLabels(inst *pane.Instance) []string {
 			// the content's short title, so a preview tab of README.md is
 			// told apart from an editor tab of the same file.
 			name = contentTabGlyph(t.Content().Kind()) + t.Title()
+			if _, dirty := dirtyHexName(t.Content()); dirty {
+				name += " ●" // unsaved hex edits (#2876), like a dirty buffer
+			}
 		} else if p := inst.TabPath(i); p != "" {
 			// TabPath, not the editor's path: labelling a restored tab must
 			// not read its file (#2177) — the strip renders every tab, which

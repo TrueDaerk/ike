@@ -217,7 +217,7 @@ opens the raw document.
 ## Binary files: the hex viewer
 
 A file with a NUL byte in its first 8 KiB and no dedicated viewer (image,
-archive, database, gzip) opens read-only in a **hex viewer** instead of a text
+archive, database, gzip) opens in a **hex viewer** instead of a text
 buffer: offset, hex bytes and ASCII side by side, 8/16/32 bytes per row
 depending on the pane width. Move with `j/k/h/l`, `g`/`G` and `ctrl+d`/`ctrl+u`;
 the footer shows the cursor's offset in decimal and hex, and the inspector row
@@ -225,6 +225,17 @@ above it decodes the bytes under the cursor (u8/i8, u16/u32/u64 little- and
 big-endian, f32/f64, the UTF-8 rune). `v` selects a range and `y` copies it —
 as a hex string or as raw bytes. `/` (or cmd+f) searches for text, a `0x…` hex
 sequence or `\xNN` escapes; `n`/`N` and cmd+g/cmd+shift+g step the matches.
+
+The hex viewer also **edits in overwrite mode** — bytes are replaced, never
+inserted or deleted, so the file size stays the same. `tab` switches between
+the hex and the text column (the footer says which is active). In the hex
+column just type hex digits: `6bd4` writes `0x6b` and `0xd4` and moves on, a
+single digit replaces the high nibble. In the text column press `i` to start
+typing characters (`esc` stops); a multi-byte character writes all of its
+bytes. Edited bytes show in the warning colour, the tab gets a `●`, `u` /
+`ctrl+r` undo and redo, and `ctrl+s` (cmd+s) writes the changed bytes back
+into the file. Closing a viewer with unsaved edits asks first, like an
+editor tab.
 
 `files.binary_open` (Settings → Files & Session) switches the default back to
 the text editor, which then opens the binary with code insight off. And **Open

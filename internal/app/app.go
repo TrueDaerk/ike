@@ -8050,6 +8050,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.openHexPane(msg.Path)
 		return m, nil
 
+	case HexSaveMsg:
+		// hex.save (cmd+s / ctrl+s in the hex viewer, #2876): write the
+		// edited bytes back in place.
+		return m, m.saveFocusedHex()
+
 	case hexview.CopyMsg:
 		// y / enter in the hex viewer's copy menu (#2420).
 		m.copyToClipboard(msg.Text)
@@ -9935,8 +9940,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// A focused data viewer owns tab (#1788): it toggles the pane's
 			// own sidebar/grid regions, the way an editor keeps its plain
 			// keys. Pane focus still cycles with ctrl+tab (the pane switcher)
-			// and the focus keys.
-			if m.dataPaneFocused() || m.previewLinkPaneFocused() {
+			// and the focus keys. The hex viewer owns it too (#2876): tab
+			// switches its active column between hex and text.
+			if m.dataPaneFocused() || m.previewLinkPaneFocused() || m.hexPaneFocused() {
 				return m.routeKey(msg)
 			}
 			m.cycleFocus()
@@ -10779,6 +10785,10 @@ func (m Model) editorCapturing() bool {
 		ed := inst.DiffEditor()
 		return ed != nil && ed.Capturing()
 	}
+	if inst.Kind() == pane.KindHex {
+		// The hex viewer's text insertion (#2876) types characters.
+		return inst.Hex().Capturing()
+	}
 	if inst.Kind() != pane.KindEditor {
 		return false
 	}
@@ -10909,6 +10919,13 @@ func (m Model) explorerCapturing() bool {
 func (m Model) dataPaneFocused() bool {
 	inst := m.focusedContent()
 	return inst != nil && (inst.Kind() == pane.KindData || inst.Kind() == pane.KindES)
+}
+
+// hexPaneFocused reports whether the focused content is a hex viewer, whose
+// tab switches the active byte column (#2876).
+func (m Model) hexPaneFocused() bool {
+	inst := m.focusedContent()
+	return inst != nil && inst.Kind() == pane.KindHex
 }
 
 // previewLinkPaneFocused reports whether tab belongs to a focused markdown
@@ -11348,7 +11365,7 @@ func (m *Model) guardedClosePane() {
 	if m.guardMergeClose(inst) {
 		return
 	}
-	if inst.Kind() == pane.KindEditor {
+	if inst.Kind() == pane.KindEditor || inst.Kind() == pane.KindHex {
 		if dirty := m.dirtyOnClose(inst, -1); len(dirty) > 0 {
 			m.openClosePrompt(inst.Key(), -1, dirty)
 			return
@@ -15378,6 +15395,9 @@ func contentPaneTitle(inst *pane.Instance) string {
 	case pane.KindData:
 		return "DATA " + baseName(inst.Data().Path())
 	case pane.KindHex:
+		if inst.Hex().Dirty() {
+			return "HEX " + baseName(inst.Hex().Path()) + " ●" // unsaved edits (#2876)
+		}
 		return "HEX " + baseName(inst.Hex().Path())
 	case pane.KindNotebook:
 		return "NOTEBOOK " + baseName(inst.Notebook().Path())

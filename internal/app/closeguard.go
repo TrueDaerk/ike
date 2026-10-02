@@ -50,7 +50,7 @@ func (m *Model) guardedCloseFocused() {
 	if m.guardMergeClose(inst) {
 		return
 	}
-	if inst != nil && inst.Kind() == pane.KindEditor {
+	if inst != nil && (inst.Kind() == pane.KindEditor || inst.Kind() == pane.KindHex) {
 		idx := -1
 		if inst.TabCount() > 1 {
 			idx = inst.ActiveTab()
@@ -138,8 +138,15 @@ func (m *Model) openQuitPrompt(dirty, running []string) {
 }
 
 // dirtyOnClose lists the documents that closing tab idx (or the whole pane,
-// idx -1) of inst would lose: dirty buffers not shown by any other pane.
+// idx -1) of inst would lose: dirty buffers not shown by any other pane, and
+// hex viewers with unsaved edits (#2876) — a pane of their own or a tab.
 func (m *Model) dirtyOnClose(inst *pane.Instance, idx int) []string {
+	if inst.Kind() == pane.KindHex {
+		if name, ok := dirtyHexName(inst); ok {
+			return []string{name}
+		}
+		return nil
+	}
 	tabs := []int{idx}
 	if idx < 0 {
 		tabs = tabs[:0]
@@ -149,6 +156,10 @@ func (m *Model) dirtyOnClose(inst *pane.Instance, idx int) []string {
 	}
 	var dirty []string
 	for _, i := range tabs {
+		if name, ok := dirtyHexName(inst.TabContent(i)); ok {
+			dirty = append(dirty, name)
+			continue
+		}
 		ed := inst.TabEditor(i)
 		if ed == nil || !ed.Dirty() {
 			continue
@@ -240,7 +251,14 @@ func (m Model) updateClosePrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		var cmds []tea.Cmd
+		if inst.Kind() == pane.KindHex {
+			m.saveHex(inst.Hex())
+		}
 		for _, i := range pendingTabs(inst, pending) {
+			if c := inst.TabContent(i); c != nil && c.Kind() == pane.KindHex {
+				m.saveHex(c.Hex()) // a hex tab's edits (#2876)
+				continue
+			}
 			if ed := inst.TabEditor(i); ed != nil && ed.Dirty() {
 				cmds = append(cmds, inst.UpdateTab(i, editor.ActionMsg{Action: "write"}))
 			}
@@ -311,7 +329,7 @@ func (m Model) updateQuitPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// Background workspaces save too (#821): the write path does not
 		// depend on focus or rendering.
 		for _, root := range m.ws.Background() {
-			cmds = append(cmds, saveWorkspaceDirty(m.ws.Peek(root))...)
+			cmds = append(cmds, m.saveWorkspaceDirty(m.ws.Peek(root))...)
 		}
 		if dirty, _ := m.quitActivity(); len(dirty) > 0 {
 			// A write failed (read-only file, full disk): stay running; the

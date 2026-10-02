@@ -145,6 +145,17 @@ func (m *Model) writeDirtyTabs(action string) []tea.Cmd {
 	var cmds []tea.Cmd
 	for _, key := range m.activeWS().Panes.Keys() {
 		inst := m.activeWS().Panes.Get(key)
+		// Hex viewers' edits (#2876) write synchronously either way; each
+		// save contributes its VCS refresh, so the caller's per-cmd file
+		// count includes it.
+		for _, hv := range hexViews(inst) {
+			if !hv.Dirty() {
+				continue
+			}
+			if _, ok := m.saveHex(hv); ok {
+				cmds = append(cmds, func() tea.Msg { return vcsInvalidateMsg{} })
+			}
+		}
 		if inst == nil || inst.Kind() != pane.KindEditor {
 			continue
 		}
