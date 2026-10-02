@@ -259,6 +259,11 @@ func (f *FileMode) Results(query string, cx Context) []Item {
 		if a.usage != b.usage {
 			return a.usage > b.usage
 		}
+		// Equal on every signal (#2887): the shorter path first, then
+		// alphabetical — a deterministic order one can read, never the walk's.
+		if len(a.path) != len(b.path) {
+			return len(a.path) < len(b.path)
+		}
 		return a.path < b.path
 	})
 	// The empty listing is the frecency order, capped: the whole tree is not
@@ -312,7 +317,8 @@ const (
 	tierFileExact    fileTier = iota // basename, or the basename without its extension, equals the query
 	tierFilePrefix                   // basename starts with the query
 	tierFileBase                     // hump match inside the basename alone
-	tierFilePath                     // hump match that needs directory segments
+	tierFileSegment                  // hump match inside one directory segment (#2887)
+	tierFilePath                     // hump match that spans directory segments
 	tierFileFallback                 // permissive subsequence match: nothing hump-matched at all
 )
 
@@ -323,19 +329,44 @@ const (
 //
 // The basename is tried first: a match that lies entirely inside the file's
 // own name is what one means by typing a name, so it ranks above one that
-// needs a directory segment — while matching the whole path second keeps
-// "@app/app" finding internal/app/app.go, the path separator counting as a
-// word boundary like any other separator (fuzzy.isBoundary).
+// needs a directory segment. Next each directory segment on its own, deepest
+// first (#2887): a query that is a directory name — "ghissues" for every file
+// under internal/ghissues/ — is scored on that segment alone, so the score
+// carries no lead penalty for depth and no boundary borrowed from a
+// neighbouring segment. Scored over the whole path, "ghissues" preferred
+// aligning its last letter with the start of savedfilter.go (a boundary bonus
+// beats a consecutive one) and listed those files above view.go, with the
+// rest in alphabetical order — the picked file sat at rank 34 of 36.
+// Matching the whole path last keeps "@app/app" finding internal/app/app.go,
+// the path separator counting as a word boundary like any other separator
+// (fuzzy.isBoundary).
 func matchFile(query, p string, mode fuzzy.Case) (fileTier, fuzzy.Result, bool) {
-	base, off := p, 0
-	if i := strings.LastIndex(p, "/"); i >= 0 {
-		base, off = p[i+1:], len([]rune(p[:i+1]))
+	segs := strings.Split(p, "/")
+	// Rune offset of every segment in p, so a match scored on a segment alone
+	// still highlights the right cells of the path the row is titled with.
+	offs := make([]int, len(segs))
+	for i := 1; i < len(segs); i++ {
+		offs[i] = offs[i-1] + len([]rune(segs[i-1])) + 1
 	}
-	if r, ok := fuzzy.MatchHumpsCase(query, base, mode); ok {
+	shift := func(r fuzzy.Result, off int) fuzzy.Result {
 		for i := range r.Positions {
 			r.Positions[i] += off
 		}
-		return basenameTier(query, base, r), r, true
+		return r
+	}
+	base := segs[len(segs)-1]
+	if r, ok := fuzzy.MatchHumpsCase(query, base, mode); ok {
+		return basenameTier(query, base, r), shift(r, offs[len(segs)-1]), true
+	}
+	best, bestOff, found := fuzzy.Result{}, 0, false
+	for i := len(segs) - 2; i >= 0; i-- {
+		r, ok := fuzzy.MatchHumpsCase(query, segs[i], mode)
+		if ok && (!found || r.Score > best.Score) {
+			best, bestOff, found = r, offs[i], true
+		}
+	}
+	if found {
+		return tierFileSegment, shift(best, bestOff), true
 	}
 	if r, ok := fuzzy.MatchHumpsCase(query, p, mode); ok {
 		return tierFilePath, r, true

@@ -306,7 +306,9 @@ segment:
    (case-insensitively)
 2. the basename **starts with** the query (`Result.Prefix`, under the case rule)
 3. a hump match **inside the basename**
-4. a hump match over the **whole relative path** (what makes `@app/app` work)
+4. a hump match **inside one directory segment** (#2887), scored on that
+   segment alone — the deepest segment that matches, the best score among them
+5. a hump match over the **whole relative path** (what makes `@app/app` work)
 
 Within one tier the blend of three signals — fuzzy score, **frecency** (#2155)
 and the **most-used** counter (#1419) — applies unchanged, and the blend order
@@ -314,13 +316,27 @@ depends on how much the user has typed:
 
 | Query length | Order |
 | --- | --- |
-| 0–2 characters (`shortQueryLen`) | frecency, then tier, then fuzzy score, then usage, then path — capped at `maxEmptyRows` (50) when nothing is typed |
-| 3+ characters | tier, then fuzzy score **plus a frecency boost**, then frecency, then usage, then path |
+| 0–2 characters (`shortQueryLen`) | frecency, then tier, then fuzzy score, then usage, then path length, then path — capped at `maxEmptyRows` (50) when nothing is typed |
+| 3+ characters | tier, then fuzzy score **plus a frecency boost**, then frecency, then usage, then path length, then path |
 
 The rationale is that one or two characters barely discriminate — the score
 differences are noise — so the files one is actually working on belong on top
 (the hump filter only decides *which* files survive there); from the third
 character the typed text is a real signal and match quality leads again.
+
+**The directory-segment tier and the tie-break (#2887).** A query that is a
+directory name — `ghissues` for the 34 files under `internal/ghissues/` — used
+to be scored over the whole path, and the scorer, which rewards a word
+boundary more than a consecutive rune, preferred to split the query: `ghissue`
+in the directory plus `s` at the start of `savedfilter.go`. Those files led,
+the rest followed in alphabetical order, and the telemetry showed 8–9 character
+queries with the picked file at rank 31–34 of 36. Now each directory segment is
+tried on its own before the whole path, so every file under the directory
+scores the segment alike (no depth penalty, no borrowed boundary) and ranks
+above a hit stitched together across segments. What is left to order equal
+rows is the **tie-break**: after frecency and usage, the **shorter path
+first, then alphabetical** — a deterministic order one can read (`view.go`
+before `qualifier_conformance_test.go`), never the walk order.
 
 **Fallback (#2686).** When *nothing* hump-matches — a typo, or a query whose
 letters merely occur somewhere — the whole list falls back to the permissive

@@ -1,5 +1,14 @@
 # Log
 
+## 2026-10-02 (file finder: directory-segment tier and path-length tie-break, #2887)
+
+- [Command Palette](/architecture/command-palette.md): the `@` finder gains a
+  tier between the basename and whole-path hump matches — a match confined to
+  one directory segment, scored on that segment alone — so a query that is a
+  directory name no longer lists the files whose name let the scorer borrow a
+  boundary first and the rest alphabetically. Rows equal on every signal now
+  order by path length, then alphabetically.
+
 ## 2026-10-02 (silent server notice: once per project per session, per-project mute, #2886)
 
 - [Project Switching](/architecture/project-switching.md): the post-switch
