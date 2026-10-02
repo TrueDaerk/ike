@@ -490,7 +490,7 @@ func recordableUnbound(k keymap.Key) bool { return k.NonTyping() }
 // keybinds in noise, exactly as the editor's own editing chords did (#2303).
 // The exited read-only view (#1951) counts too: its keys are late shell input,
 // not a keymap gap. The playground records under its own context for the same
-// reason (recordPlayUnbound).
+// reason (pendPlayUnbound).
 func (m Model) terminalOwnsUnbound() bool {
 	return m.terminalFocused() || m.focusedDeadTerminal() != nil
 }

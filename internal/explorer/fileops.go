@@ -160,6 +160,9 @@ func (m *Model) Paste(text string) (handled bool) {
 // by accepting it. It clears the prompt on accept or cancel.
 func (m *Model) handlePromptKey(msg tea.KeyPressMsg) tea.Cmd {
 	p := m.prompt
+	if p.kind != promptInput {
+		m.HitKey() // a notice or a y/n confirmation takes every key
+	}
 	if p.kind == promptNotice {
 		// Any key dismisses the error dialog (#1030) and clears the error.
 		m.prompt = nil
@@ -216,7 +219,8 @@ func (m *Model) handlePromptKey(msg tea.KeyPressMsg) tea.Cmd {
 		// Everything else is shared line editing (#2002): cursor and word
 		// motions, word/line kills and the macOS opt/cmd chords, plus
 		// printable insertion at the cursor (a bare space included).
-		p.input.Key(msg)
+		handled, _ := p.input.Key(msg)
+		m.KeyAnswered(handled)
 	}
 	return nil
 }

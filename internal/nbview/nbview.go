@@ -93,6 +93,10 @@ type row struct {
 
 // Model is one notebook viewer pane bound to a file path.
 type Model struct {
+	// KeyVerdict answers the host's deferred unbound verdict (#2889): a
+	// chord the search line or a viewer key took is no missing keybind.
+	ui.KeyVerdict
+
 	key  string
 	path string
 	pal  *theme.Palette
@@ -286,6 +290,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	if !ok {
 		return nil
 	}
+	m.BeginKey()
 	if m.err != nil {
 		return nil
 	}
@@ -293,6 +298,7 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return m.searchKey(key)
 	}
 	page := m.bodyRows()
+	m.HitKey() // every case below acts; the default branch takes it back
 	switch key.String() {
 	case "j":
 		m.moveCell(1)
@@ -332,6 +338,8 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 		return m.saveImageCmd()
 	case "r":
 		return m.runCmd()
+	default:
+		m.MissKey()
 	}
 	return nil
 }
@@ -529,7 +537,8 @@ func (m *Model) searchStep(delta int) ui.MatchStep {
 // the query and jumps to the first match at or after the cursor cell, esc
 // drops the search.
 func (m *Model) searchKey(key tea.KeyPressMsg) tea.Cmd {
-	_, changed, action := m.search.Key(key)
+	handled, changed, action := m.search.Key(key)
+	m.KeyAnswered(handled)
 	switch action {
 	case ui.SearchCancel:
 		m.hits = nil

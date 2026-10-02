@@ -4,7 +4,7 @@ title: Shared Building Blocks
 description: The catalog of reusable pieces every new pane, prompt, list, search line or tool window MUST be built from — one table per family with the helper, when it is mandatory, the guard test that enforces it, and the concept doc that explains it (0500 consolidation sweep, Epic #2458).
 resource: internal/ui
 tags: [architecture, ui, conventions, reuse, guard-tests]
-timestamp: 2026-09-26T00:30:00Z
+timestamp: 2026-10-02T14:00:00Z
 ---
 
 # Shared Building Blocks
@@ -42,6 +42,7 @@ apply to every family:
 | `EditKey`, `PasteText`, `CursorView`, `Typing` | `internal/ui/textinput.go` | the primitives behind `Field`; call directly only when the text lives in a struct you cannot change | same |
 | `SpeedSearch` | `internal/ui/speedsearch.go` | type-ahead narrowing inside a modal picker | — |
 | `filterbar.Model` | `internal/filterbar` | the permanent filter row of a list pane with a `filterexpr` schema | — |
+| `KeyVerdict` (`BeginKey`, `HitKey`, `MissKey`, `KeyAnswered`, `HandledLastKey`) | `internal/ui/keyverdict.go` | embedded in a tool pane so the host's deferred unbound verdict knows which chords the pane (and its input) answered — see [Usage Telemetry](usage-telemetry.md) (#2889) | — |
 
 The keys a field answers, wherever it is hosted — reuse the block and a filter
 row in a tool pane edits exactly like the palette's query line:

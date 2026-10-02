@@ -83,6 +83,7 @@ func (m *Model) OpenSearch() bool {
 // consumed while the field is open; only enter/esc close it.
 func (m *Model) handleSearchKey(msg tea.KeyPressMsg) {
 	s := m.search
+	m.HitKey() // the stepping chords below act; the prompt answers the rest
 	switch {
 	case msg.String() == "ctrl+n" || msg.Code == tea.KeyDown:
 		m.searchStep(1)
@@ -105,7 +106,10 @@ func (m *Model) handleSearchKey(msg tea.KeyPressMsg) {
 	// line editing (#2002) — a movable cursor with word motions, word/line
 	// kills and the macOS opt/cmd chords. ctrl+n / ctrl+p above keep priority
 	// over anything the field binds.
-	_, changed, action := s.Key(msg)
+	handled, changed, action := s.Key(msg)
+	if !handled {
+		m.MissKey()
+	}
 	switch action {
 	case ui.SearchCancel:
 		// Cancel: the cursor returns to where the search started (clamped —

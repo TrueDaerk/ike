@@ -131,7 +131,7 @@ func (m Model) updatePlayVarsKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if ok, cmd := m.playGlobalChord(msg); ok {
 			return m, cmd
 		}
-		m.recordPlayUnbound(msg)
+		m.playMissKey()
 		return m, nil
 	}
 	if !changed {

@@ -69,6 +69,10 @@ type row struct {
 // Model is the response viewer state. Value type with pointer-receiver
 // mutators, embedded in a pane.Instance like the Usages panel (#1155).
 type Model struct {
+	// KeyVerdict answers the host's deferred unbound verdict (#2889): a
+	// chord the search prompt or a pane key took is no missing keybind.
+	ui.KeyVerdict
+
 	width   int
 	height  int
 	focused bool
@@ -769,6 +773,7 @@ func roundDuration(d time.Duration) time.Duration {
 // it, focus-filtered by the pane layer.
 func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	if k, ok := msg.(tea.KeyPressMsg); ok {
+		m.BeginKey()
 		return m.handleKey(k)
 	}
 	return nil
@@ -791,6 +796,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.wsInputKey(msg)
 	}
 	if m.pendingZ {
+		// Whatever follows "z" ends the fold sequence: the key is taken.
+		m.HitKey()
 		m.pendingZ = false
 		// The copy chord outranks a half-typed fold sequence (#2062): "z"
 		// followed by cmd+c is no fold command, so swallowing it would drop
@@ -802,6 +809,7 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		return m.foldKey(msg.String())
 	}
+	m.HitKey() // every case below acts; the default branch takes it back
 	switch msg.String() {
 	case "/", "ctrl+f", "cmd+f", "super+f":
 		// Open the in-pane search prompt (#1265), editor conventions. ctrl+f /
@@ -968,6 +976,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.left = 0
 	case "$":
 		m.left = m.maxLeft()
+	default:
+		m.MissKey()
 	}
 	return nil
 }
@@ -1031,6 +1041,7 @@ func (m *Model) searchCopyKey(msg tea.KeyPressMsg) tea.Cmd {
 	if !copyChord(msg) || !m.sel.on {
 		return nil
 	}
+	m.HitKey()
 	return m.copyKeyCmd()
 }
 
@@ -1093,7 +1104,8 @@ func (m *Model) BeginSearch() {
 // pattern, and every edit — cursor motion, word ops, deletion, insertion —
 // re-runs the search and rescrolls to the current match.
 func (m *Model) searchKey(msg tea.KeyPressMsg) {
-	_, changed, action := m.search.Key(msg)
+	handled, changed, action := m.search.Key(msg)
+	m.KeyAnswered(handled)
 	switch action {
 	case ui.SearchCancel:
 		m.clearSearch()

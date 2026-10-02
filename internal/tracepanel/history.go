@@ -149,6 +149,7 @@ func (m *Model) pickerKey(msg tea.KeyPressMsg) tea.Cmd {
 	key := msg.String()
 	if p.search.Open {
 		handled, changed, action := p.search.Key(msg)
+		m.KeyAnswered(handled)
 		switch action {
 		case ui.SearchCancel:
 			m.recomputePicker()
@@ -182,6 +183,7 @@ func (m *Model) pickerKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.pickerActivate(p.cursor)
 	}
 	if ui.ListNav(key, &p.cursor, len(p.rows), m.pickerHeight(), ui.NavFull) {
+		m.HitKey()
 		ui.ClampWindow(&p.cursor, &p.top, len(p.rows), m.pickerHeight())
 	}
 	return nil

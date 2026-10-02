@@ -90,7 +90,14 @@ func telemetryModel(t *testing.T, cfg host.MapConfig) Model {
 	}}}})
 	m := NewWith(reg, cfg)
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
-	return tm.(Model)
+	m = tm.(Model)
+	// The first-start LSP dialog (#301) owns the keyboard ahead of the keymap
+	// layer whenever the loaded config enables LSP; a scripted chord would
+	// never reach the resolver or a pane behind it.
+	if m.onboardingOpen() {
+		m = m.closeOnboarding().(Model)
+	}
+	return m
 }
 
 // TestTelemetryKeybindRecordsCommandAndKey drives a bound chord and expects

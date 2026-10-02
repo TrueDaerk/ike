@@ -222,6 +222,7 @@ func (m *Model) filterOvKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 	n := m.fovFixedRows() + m.fovLabelRows()
+	m.HitKey() // every case below acts and returns
 	switch msg.String() {
 	case "enter":
 		var cmd tea.Cmd
@@ -242,6 +243,7 @@ func (m *Model) filterOvKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.clampOverlay()
 		return nil
 	}
+	m.MissKey()
 	if m.ovCursor == fovMatch {
 		return m.matchRowKey(msg)
 	}
@@ -270,6 +272,7 @@ func (m *Model) searchingFilterKey(msg tea.KeyPressMsg) tea.Cmd {
 	if m.ovCursor < first {
 		m.ovCursor = first
 	}
+	m.HitKey() // every case below acts and returns
 	switch msg.String() {
 	case "enter":
 		m.closeOverlay()
@@ -288,6 +291,7 @@ func (m *Model) searchingFilterKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.clampOverlay()
 		return nil
 	}
+	m.MissKey()
 	return m.labelRowKey(msg)
 }
 
@@ -296,7 +300,7 @@ func (m *Model) searchingFilterKey(msg tea.KeyPressMsg) tea.Cmd {
 // Each edit also extracts any qualifier the keystroke just terminated (#2110):
 // "is:closed " becomes the state gate, not fuzzy text.
 func (m *Model) matchRowKey(msg tea.KeyPressMsg) tea.Cmd {
-	if handled, changed := m.fInput.Key(msg); handled {
+	if handled, changed := m.fInput.Key(msg); m.KeyAnswered(handled) {
 		if changed {
 			m.filterTouched = true
 			m.matchStatus = "" // an edited pattern starts a fresh walk (#2410)
@@ -406,7 +410,7 @@ func (m *Model) labelRowKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		return nil
 	}
-	if handled, changed := m.ovSearch.Key(msg); handled {
+	if handled, changed := m.ovSearch.Key(msg); m.KeyAnswered(handled) {
 		if changed {
 			// The query moved the section under the cursor: land on its first
 			// visible label so the best match reads first.

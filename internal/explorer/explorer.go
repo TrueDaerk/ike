@@ -57,6 +57,11 @@ type node struct {
 
 // Model is the file-explorer pane: an expandable tree rooted at a fixed base.
 type Model struct {
+	// KeyVerdict answers the host's deferred unbound verdict (#2889): a
+	// chord the tree, the speed search or a prompt took is no missing
+	// keybind.
+	ui.KeyVerdict
+
 	root    *node   // project base; never replaced, never escaped
 	rows    []*node // flattened visible nodes, rebuilt on every expand/collapse
 	cursor  int     // index into rows
@@ -889,6 +894,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case RedoMsg:
 		return m, m.redo()
 	case tea.KeyPressMsg:
+		m.BeginKey()
 		// A modal prompt captures every key (filename entry, y/n, esc) until it
 		// is accepted or cancelled, ahead of any navigation binding.
 		if m.prompt != nil {
@@ -932,6 +938,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		}
 		m.clearSel()
+		m.HitKey() // every case below acts; the default branch takes it back
 		switch key {
 		case "down", "j":
 			m.stepCursor(1)
@@ -964,13 +971,16 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			// Speed search (#1087): "/" is the dedicated activation key — the
 			// tree's single-letter file-op keys rule out bare typing.
 			m.OpenSearch()
-		}
-		if ui.FindChord(key) {
-			// ctrl+f is deliberately unbound in the keymap table (#2409) so
-			// vim's page-forward survives in the editor; the panes that have a
-			// search answer the chord themselves. cmd+f arrives here too when
-			// the Global search.open binding was overridden.
-			m.OpenSearch()
+		default:
+			if ui.FindChord(key) {
+				// ctrl+f is deliberately unbound in the keymap table (#2409) so
+				// vim's page-forward survives in the editor; the panes that have a
+				// search answer the chord themselves. cmd+f arrives here too when
+				// the Global search.open binding was overridden.
+				m.OpenSearch()
+			} else {
+				m.MissKey()
+			}
 		}
 	}
 	return m, nil
