@@ -236,6 +236,7 @@ each of them:
 | `watch.EventBatchMsg` | decided *before* routing: directory, `.git` and config events only launch commands; a file event is quiet when no surface shows the path (`watchPathViewed` mirrors every consumer of `routeWatchEvent` — editor tabs, file diffs, notebooks, gz previews, merged-log followers, the playground source); plus the change-feed capture landed nothing in an open picker | `watchEventQuiet` |
 | `changeFeedCapturedMsg` | the feed shows nowhere but its picker: reusable unless the picker is open and an entry was added | `applyChangeFeedCaptured` |
 | `explorer.ScanDoneMsg` | `sameEntries`: the listing names exactly the children the node holds (name, kind, entry mtime), no error came or went, and no deliberate cursor snap, reveal, restore or expand-all was pending — a stability snap (`externalRefresh`) over identical rows is fine | `explorer.LastScanNoop` |
+| `traceTickMsg` / `traceReadMsg` (agent trace poll, #2884) | the tick only launches the read/locate and re-arms; the read brought the revision already shown, the same session info, the same change-feed links, no jump and no save; and for both, the header's liveness and follow segments would draw what the last frame drew (`tracepanel.StatusChanged` — the segment shows the last read *with events*, so an idle `+0` read leaves it unchanged; the live → stale flip still renders). A read while a stored session is shown is reusable unless it filed a save | `handleTraceTick`, `handleTraceRead` |
 
 Two guards keep a wrong proof from showing a stale frame: the verdict is
 withdrawn on the settled pass when a notification was drained
@@ -247,7 +248,8 @@ open buffer, a rescan that found a new entry, a poll result with a listing
 (`forge.IssuesMsg`), and every key, click and wheel notch. Tests:
 `renderreuse_idle_test.go` (one per wake, each with its rendering
 counterpart, plus the motion rule driven through the real coalescer),
-`explorer/scannoop_test.go`, `vcs/snapshot_equal_test.go`.
+`explorer/scannoop_test.go`, `vcs/snapshot_equal_test.go`,
+`agenttrace_reuse_test.go` (the trace poll).
 
 ## Render hot path (#608)
 

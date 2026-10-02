@@ -458,25 +458,54 @@ func TestNewNodesInRunningTurnArriveExpanded(t *testing.T) {
 	}
 }
 
-// TestHeaderDiagnostics (#2857): the header tells "no new lines" from "not
-// reading" — the last read's time and count — and names the followed
-// terminal and why.
+// TestHeaderDiagnostics (#2857, #2884): the header tells "no new lines"
+// from "not reading" — live/stale, the last read that brought events and
+// its count — and names the followed terminal and why. An idle read leaves
+// the text alone, so StatusChanged stays false and the host reuses the
+// frame.
 func TestHeaderDiagnostics(t *testing.T) {
 	m := panel(t)
 	m.SetSize(160, 10)
+	now := time.Date(2026, 10, 1, 14, 5, 9, 0, time.Local)
+	m.SetNow(func() time.Time { return now })
 	s := fixture(t, false)
 	m.Set(agenttrace.BuildTree(s), info(s))
 	if view := plain(m.View()); !strings.Contains(view, "· not read yet") || strings.Contains(view, "⇢") {
 		t.Fatalf("header before any read:\n%s", view)
 	}
-	m.SetRead(time.Date(2026, 10, 1, 14, 5, 9, 0, time.Local), 3)
+	m.SetRead(now, 3)
 	m.SetFollowing("claude (focused)")
+	if !m.StatusChanged() {
+		t.Fatal("a first read must change the status")
+	}
 	header := strings.SplitN(plain(m.View()), "\n", 2)[0]
-	if !strings.Contains(header, "· read 14:05:09 +3") || !strings.Contains(header, "· ⇢ claude (focused)") {
+	if !strings.Contains(header, "· live · +3 at 14:05:09") || !strings.Contains(header, "· ⇢ claude (focused)") {
 		t.Fatalf("header = %q", header)
 	}
-	m.SetRead(time.Date(2026, 10, 1, 14, 5, 10, 0, time.Local), 0)
-	if header = strings.SplitN(plain(m.View()), "\n", 2)[0]; !strings.Contains(header, "· read 14:05:10 +0") {
-		t.Fatalf("an empty read must still stamp the header: %q", header)
+	// An idle read a second later: same text, no change to draw.
+	now = now.Add(time.Second)
+	m.SetRead(now, 0)
+	if m.StatusChanged() {
+		t.Fatal("an idle read must not change the status")
+	}
+	if header = strings.SplitN(plain(m.View()), "\n", 2)[0]; !strings.Contains(header, "· live · +3 at 14:05:09") {
+		t.Fatalf("an idle read must leave the header alone: %q", header)
+	}
+	// No read for a while: stale.
+	now = now.Add(10 * time.Second)
+	if !m.StatusChanged() {
+		t.Fatal("the live → stale flip must change the status")
+	}
+	if header = strings.SplitN(plain(m.View()), "\n", 2)[0]; !strings.Contains(header, "· stale · +3 at 14:05:09") {
+		t.Fatalf("header without reads = %q", header)
+	}
+	// A read with events moves the stamp.
+	m.SetRead(now, 2)
+	if header = strings.SplitN(plain(m.View()), "\n", 2)[0]; !strings.Contains(header, "· live · +2 at 14:05:20") {
+		t.Fatalf("header after a change = %q", header)
+	}
+	m.SetFollowing("claude (last focused)")
+	if !m.StatusChanged() {
+		t.Fatal("a new follow label must change the status")
 	}
 }

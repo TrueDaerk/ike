@@ -380,11 +380,12 @@ stops following and the selection then stays put across updates; moving
 back onto the last row resumes it.
 
 A header line names the session and tells "no new lines" from "not
-reading": `11111111 · hook · 3 turns · read 14:05:09 +2 · ⇢ claude
+reading": `11111111 · hook · 3 turns · live · +2 at 14:05:09 · ⇢ claude
 (focused)  ~/.claude/projects/…` — `scan` instead of `hook` when discovery
-found it, `· ended` after SessionEnd, the time of the last read with the
-number of events it added or completed (`+0` on an idle tick, `not read
-yet` before the first), and the followed terminal with why it was picked
+found it, `· ended` after SessionEnd, `live` while reads keep landing and
+`stale` once none did for 5 s, then the last read that added or completed
+events with their number (`+0` only for a first read that found nothing,
+`not read yet` before the first), and the followed terminal with why it was picked
 (`focused`, `last focused`, `hook-bound`, `tool pane`, `only terminal`, or
 `project root`). A hint row closes the pane.
 
@@ -569,6 +570,13 @@ The read side is built so that no lost message can freeze the pane (#2857):
   lost (the pane was in another workspace, a recovered panic) is restarted
   by the next relocation, read or toggle once no tick was armed for three
   intervals (`ensureTraceTick`).
+- **An idle poll composes no frame (#2884).** A tick, and a read that
+  brought the revision already shown, the same session info and the same
+  links, hand bubbletea the previous frame (`markFrameReusable`, counted
+  as `view/reuse`) unless the header's liveness or follow segment would
+  now read differently (`tracepanel.StatusChanged`). Before, the open
+  pane composed two frames a second on an unchanged transcript; see the
+  reuse table in [foundation](foundation.md#render-only-on-a-change-the-background-wakes-2693).
 
 **Root cause of #2857** ("the pane does not update live"): the reading
 worked — the transcript was tailed every second — but the tree grew *below

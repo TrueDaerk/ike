@@ -204,6 +204,16 @@ issue asked for. What still composes a frame in an idle session: a status
 snapshot that differs, a rescan that found a new entry, a poll result
 carrying a listing, and any notification.
 
+The open agent trace pane was the next such wake (#2884, telemetry
+0.6.120–0.6.134): its one-second poll showed up in idle minutes'
+`renders` as ~60 `app.traceTickMsg` + ~60 `app.traceReadMsg` — two
+composed frames a second on an unchanged transcript, because the header
+stamped every read's time. The header now shows the last read that
+*brought* events plus a live/stale flag, and both poll handlers mark the
+frame reusable when nothing they touch would draw differently, so an idle
+pane counts `view/reuse` for its poll and renders only on new events, a
+follow change or the stale flip.
+
 ## The render budget & the idle pass count (#2402)
 
 The unit the idle rules are enforced in is the **pass**: one

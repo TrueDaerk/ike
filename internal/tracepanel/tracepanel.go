@@ -114,10 +114,16 @@ type Model struct {
 	// Diagnostics for the header (#2857): when the host last read the
 	// transcript, how many events that read added and which terminal the
 	// trace follows and why — "no new lines" must look different from "not
-	// reading".
-	readAt    time.Time
-	readAdded int
-	following string
+	// reading". changeAt / changeAdded are the last read that brought events
+	// (or the first read): the header shows those, so an idle "+0" read
+	// leaves the text — and the composed frame — as it was (#2884); readAt
+	// only decides live vs stale. shownStatus is the status text the last
+	// View drew, which StatusChanged compares against.
+	readAt      time.Time
+	changeAt    time.Time
+	changeAdded int
+	following   string
+	shownStatus string
 
 	info       Info
 	hasSession bool
@@ -223,7 +229,12 @@ func rememberKeys(into map[string]bool, nodes []agenttrace.Node) {
 
 // SetRead records one finished read of the transcript for the header: its
 // time and how many events it added or completed (#2857).
-func (m *Model) SetRead(at time.Time, added int) { m.readAt, m.readAdded = at, added }
+func (m *Model) SetRead(at time.Time, added int) {
+	m.readAt = at
+	if added > 0 || m.changeAt.IsZero() {
+		m.changeAt, m.changeAdded = at, added
+	}
+}
 
 // SetFollowing names the terminal the trace follows and why ("agent ·
 // focused", "terminal · hook", "project root · scan"), shown in the header.
@@ -255,7 +266,7 @@ func (m *Model) SetNoSession(cwd string, err error) {
 	m.known = nil
 	m.follow = true
 	m.graph = graphState{follow: true}
-	m.readAt, m.readAdded = time.Time{}, 0
+	m.readAt, m.changeAt, m.changeAdded = time.Time{}, time.Time{}, 0
 }
 
 // Reset forgets the shown session ahead of a switch to another transcript:
@@ -267,7 +278,7 @@ func (m *Model) Reset() {
 	m.known = nil
 	m.follow = true
 	m.graph = graphState{follow: true}
-	m.readAt, m.readAdded = time.Time{}, 0
+	m.readAt, m.changeAt, m.changeAdded = time.Time{}, time.Time{}, 0
 	m.hasSession = false
 	m.loading = true
 	m.err = ""
@@ -308,16 +319,18 @@ func (m *Model) Links() agenttrace.Links { return m.links }
 
 // SetLinks installs the change-feed links of the shown tree (#2838): linked
 // rows carry the Δ mark and answer D (mini-diff) and V (revert). The tree
-// is re-laid only when the links changed, keeping expansion and selection.
-func (m *Model) SetLinks(l agenttrace.Links) {
+// is re-laid only when the links changed, keeping expansion and selection;
+// the result reports whether they did.
+func (m *Model) SetLinks(l agenttrace.Links) bool {
 	if sameLinks(m.links, l) {
-		return
+		return false
 	}
 	m.links = l
 	if m.hasSession {
 		m.ensureFetch()
 		m.tree.Refresh(m.rows(m.nodes), nodeKey)
 	}
+	return true
 }
 
 func sameLinks(a, b agenttrace.Links) bool {
@@ -638,6 +651,7 @@ func (m *Model) View() string {
 		return ""
 	}
 	pal := m.theme()
+	m.shownStatus = m.liveStatus()
 	if m.picker.open {
 		return m.pickerView(pal)
 	}
@@ -690,18 +704,43 @@ func (m *Model) headerLine(pal *theme.Palette) string {
 		return title + lipgloss.NewStyle().Faint(true).Render(" · "+id+turns+" · esc live  "+m.display(m.info.Transcript))
 	}
 	title := lipgloss.NewStyle().Foreground(pal.Accent).Bold(m.focused).Render(" " + id)
-	return title + lipgloss.NewStyle().Faint(true).Render(" · "+source+turns+state+m.readStatus()+m.followStatus()+"  "+m.display(m.info.Transcript))
+	return title + lipgloss.NewStyle().Faint(true).Render(" · "+source+turns+state+m.shownStatus+"  "+m.display(m.info.Transcript))
 }
 
-// readStatus is the header's liveness segment (#2857): the time of the last
-// read and what it brought, "+0" included — a clock that keeps moving says
-// the pane reads and the agent wrote nothing new.
+// readStatus is the header's liveness segment (#2857, #2884): "live" while
+// reads keep landing, "stale" once none did for readStale, then the last
+// read that brought events and how many ("+0" for a first read that found
+// none). An idle read changes none of it, so the poll's frame can be reused;
+// the live → stale flip is what tells "not reading" from "no new lines".
 func (m *Model) readStatus() string {
 	if m.readAt.IsZero() {
 		return " · not read yet"
 	}
-	return " · read " + m.readAt.Format("15:04:05") + " +" + itoa(m.readAdded)
+	state := " · live"
+	if m.now().Sub(m.readAt) > readStale {
+		state = " · stale"
+	}
+	return state + " · +" + itoa(m.changeAdded) + " at " + m.changeAt.Format("15:04:05")
 }
+
+// readStale is how long after the last read the header calls the pane
+// stale: several missed one-second polls.
+const readStale = 5 * time.Second
+
+// liveStatus is the header's time- and follow-dependent text as View would
+// draw it now; "" while the header does not show it (no session, a stored
+// session, the picker over the pane, no size).
+func (m *Model) liveStatus() string {
+	if m.width <= 0 || m.height <= 0 || m.picker.open || !m.hasSession || m.info.History != "" {
+		return ""
+	}
+	return m.readStatus() + m.followStatus()
+}
+
+// StatusChanged reports whether the header's liveness and follow segments
+// would draw differently from the last View (#2884): the host's poll reuses
+// the previous frame when they would not and nothing else changed.
+func (m *Model) StatusChanged() bool { return m.liveStatus() != m.shownStatus }
 
 // followStatus names the followed terminal and why.
 func (m *Model) followStatus() string {
