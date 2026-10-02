@@ -4,7 +4,7 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); pinned mode docking the popup to the bottom edge with the toggle chord as a focus switch, plus a project/global popup scope that carries one shell across projects (#2406); popup focus loss blurs instead of hiding, with a statusbar activity indicator for the hidden layer (#2309), and the wheel outside the layer's boxes scrolls the pane below while the layer keeps focus (#2343); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); sending the editor's selection (else the caret's line) to a shell as a bracketed paste, optionally submitted (#2542); re-running the last shell command from anywhere, prompt-gated and without moving the keyboard (#2543); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192); unbound control chords forward to the pty instead of being recorded as missing keybinds, and a plain shell tab closes when its shell ends by EOF (#2701).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-09-23T12:00:00Z
+timestamp: 2026-10-02T12:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -286,7 +286,11 @@ toggled by `terminal.popup` (default `cmd+alt+t`; `terminal.new` moved to
   screen instead of jumping back to the default), applies the step, and on
   persist mirrors the project delta into the global store. `WinSizes.Has`
   drives the cascade, so a delta resized back to zero still counts as the
-  project's own choice.
+  project's own choice. The mouse drag is edge-anchored (#2896): it also
+  rewrites the `popupterm:pos` offset (`popupTermSetPos`) so the edge
+  opposite the grabbed one stays put, and its release persists and mirrors
+  the offset with the size (the pinned strip, #2406, keeps the floating
+  box's offset untouched).
 - **Per-project** (#1407): the popup belongs to its project like pane
   terminals do (#777). A seamless switch parks it with the workspace
   (`wsExtras` in `Workspace.Aux`) — tabs, scrollback, running processes and

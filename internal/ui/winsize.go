@@ -90,6 +90,14 @@ func (s *WinSizes) Has(kind string) bool {
 // mirror a store's delta into another one (the global popup-terminal fallback,
 // #1714), where accumulating would drift the two apart.
 func (s *WinSizes) Set(kind string, dw, dh int) {
+	s.Put(kind, dw, dh)
+	s.Flush()
+}
+
+// Put replaces a window kind's delta outright without persisting — the
+// mid-drag step that rewrites a position offset (#2896); the drag's release
+// calls Flush.
+func (s *WinSizes) Put(kind string, dw, dh int) {
 	if s == nil || kind == "" {
 		return
 	}
@@ -97,7 +105,70 @@ func (s *WinSizes) Set(kind string, dw, dh int) {
 		s.deltas = map[string]winDelta{}
 	}
 	s.deltas[kind] = winDelta{W: dw, H: dh}
-	s.Flush()
+}
+
+// OffsetKey is the store key holding a window kind's position offset from its
+// centered origin (#1793, #2896): the offset rides in the same store as the
+// size delta, under the kind's name plus ":pos".
+func OffsetKey(kind string) string { return kind + ":pos" }
+
+// Offset returns a window kind's stored position offset from center.
+func (s *WinSizes) Offset(kind string) (dx, dy int) { return s.Get(OffsetKey(kind)) }
+
+// SetOffset replaces a window kind's position offset without persisting (the
+// mid-drag step, #2896); the drag's release calls Flush.
+func (s *WinSizes) SetOffset(kind string, dx, dy int) {
+	if kind == "" {
+		return
+	}
+	s.Put(OffsetKey(kind), dx, dy)
+}
+
+// FloatOrigin places a w×h box in a tw×th terminal: centered, shifted by the
+// position offset (ox, oy), clamped so the box always sits fully on screen
+// (#2896). The clamp runs on every resolve, so a terminal resize re-clamps a
+// stored offset on the very next frame and hit-test. A box larger than the
+// terminal along an axis (content that ignores its width budget) has no room
+// to move there: it stays centered, overhanging both sides evenly, exactly
+// where the centered placement always put it.
+func FloatOrigin(tw, th, w, h, ox, oy int) (x, y int) {
+	return floatAxis(tw, w, ox), floatAxis(th, h, oy)
+}
+
+// floatAxis is FloatOrigin along one axis.
+func floatAxis(t, w, o int) int {
+	if w > t {
+		return (t - w) / 2
+	}
+	return ClampDelta((t-w)/2, o, 0, t-w)
+}
+
+// AnchorOffset returns the position offset (along one axis, terminal extent t)
+// that keeps a resized box's opposite edge in place (#2896): the box sat at x
+// with extent w and now measures w2; s is the grabbed edge's grow direction —
+// +1 (right/bottom) keeps the near edge x, −1 (left/top) keeps the far edge
+// x+w, 0 (axis not grabbed) keeps x as well.
+func AnchorOffset(t, x, w, w2, s int) int {
+	nx := x
+	if s < 0 {
+		nx = x + w - w2
+	}
+	return nx - (t-w2)/2
+}
+
+// AnchoredStep bounds one edge-drag pointer delta d (along one axis, terminal
+// extent t) so the grabbed edge never leaves the screen (#2896): a left/top
+// edge grows at most to cell 0, a right/bottom edge at most to the last cell.
+// The box sits at x with extent w; s is the grabbed edge's grow direction, and
+// an axis not grabbed (s == 0) takes no step.
+func AnchoredStep(t, x, w, s, d int) int {
+	switch {
+	case s < 0:
+		return max(d, min(-x, 0))
+	case s > 0:
+		return min(d, max(t-(x+w), 0))
+	}
+	return 0
 }
 
 // Adjust adds a delta for a window kind and persists the store. Errors are

@@ -12045,7 +12045,8 @@ func (m *Model) auxZone(target string) layout.Zone {
 // (0036); a drag to the source pane's own edge spawns a fresh split there (0037).
 // floatResizeDrag tracks a live mouse resize of a floating window (#933):
 // press on the window's border ring grabs an edge (sx or sy set) or corner
-// (both), motion applies pointer deltas as size deltas, release persists.
+// (both), motion moves the grabbed edge(s) with the pointer while the
+// opposite edge stays put (#2896), release persists.
 type floatResizeDrag struct {
 	kind         string     // which float: "settings", "palette", "shell", "popupterm", "floatterm"
 	target       *floatTerm // kind "floatterm" (#1793): the panel being resized
@@ -12053,11 +12054,48 @@ type floatResizeDrag struct {
 	lastX, lastY int        // last applied pointer cell
 }
 
-// applyFloatResize applies one resize step to the dragged float. Deltas go
-// through the shared size store un-persisted (Nudge); each float re-clamps
-// live against the terminal bounds exactly as it does for the key resize
-// (#774), so a drag can never push a window off-screen.
-func (m *Model) applyFloatResize(kind string, ddw, ddh int) {
+// settingsRect is the settings panel's screen rectangle: centered geometry
+// plus the stored position offset (#2896), clamped fully on screen.
+func (m Model) settingsRect() (x, y, w, h int) {
+	w, h = m.settings.Size()
+	ox, oy := m.winSizes.Offset("settings")
+	x, y = ui.FloatOrigin(m.width, m.height, w, h, ox, oy)
+	return x, y, w, h
+}
+
+// floatRect resolves the on-screen rectangle of a centered float kind — the
+// same geometry the frame composites it at (#2896). ok is false when the
+// kind has nothing open.
+func (m Model) floatRect(kind string) (x, y, w, h int, ok bool) {
+	switch kind {
+	case "settings":
+		x, y, w, h = m.settingsRect()
+		return x, y, w, h, w > 0
+	case "palette":
+		v := m.palette.View()
+		w, h = lipgloss.Width(v), lipgloss.Height(v)
+		x, y = m.palette.Origin(m.width, m.height, w, h)
+		return x, y, w, h, v != ""
+	case "shell":
+		if top := m.floats.Top(); top != nil {
+			v := top.View()
+			w, h = lipgloss.Width(v), lipgloss.Height(v)
+			x, y = top.Origin(m.width, m.height, w, h)
+			return x, y, w, h, v != ""
+		}
+	case "popupterm":
+		if m.popup.inst != nil {
+			x, y, w, h = m.popupTermRect()
+			return x, y, w, h, true
+		}
+	}
+	return 0, 0, 0, 0, false
+}
+
+// resizeFloat applies a size delta to a centered float kind un-persisted —
+// the mid-drag step; each float re-clamps live against the terminal bounds
+// exactly as it does for the key resize (#774).
+func (m *Model) resizeFloat(kind string, ddw, ddh int) {
 	switch kind {
 	case "settings":
 		m.winSizes.Nudge("settings", ddw, ddh)
@@ -12077,6 +12115,50 @@ func (m *Model) applyFloatResize(kind string, ddw, ddh int) {
 	}
 }
 
+// setFloatOffset replaces a centered float kind's position offset from
+// center un-persisted (#2896) — the release flushes it with the size.
+func (m *Model) setFloatOffset(kind string, ox, oy int) {
+	switch kind {
+	case "settings":
+		m.winSizes.SetOffset("settings", ox, oy)
+	case "palette":
+		m.palette.SetOffset(ox, oy)
+	case "shell":
+		if top := m.floats.Top(); top != nil {
+			top.SetOffset(ox, oy)
+		}
+	case "popupterm":
+		m.popupTermSetPos(ox, oy)
+	}
+}
+
+// applyFloatResize applies one border-drag motion step to a centered float
+// with the grabbed edge anchored (#2896): the pointer delta along each
+// grabbed axis becomes a 1:1 size delta, then the position offset is
+// rewritten so the opposite edge stays on the same screen cell — the box is
+// centered, so a bare size delta would grow both sides. The step is bounded
+// so the grabbed edge never leaves the screen, and the size re-clamps as
+// usual; measuring the box again afterwards keeps the anchor exact even when
+// a clamp or content-sizing swallowed part of the delta.
+func (m *Model) applyFloatResize(d *floatResizeDrag, px, py int) {
+	x, y, w, h, ok := m.floatRect(d.kind)
+	if !ok {
+		return
+	}
+	dx := ui.AnchoredStep(m.width, x, w, d.sx, px-d.lastX)
+	dy := ui.AnchoredStep(m.height, y, h, d.sy, py-d.lastY)
+	d.lastX, d.lastY = px, py
+	if dx == 0 && dy == 0 {
+		return
+	}
+	m.resizeFloat(d.kind, dx*d.sx, dy*d.sy)
+	_, _, w2, h2, ok := m.floatRect(d.kind)
+	if !ok {
+		return
+	}
+	m.setFloatOffset(d.kind, ui.AnchorOffset(m.width, x, w, w2, d.sx), ui.AnchorOffset(m.height, y, h, h2, d.sy))
+}
+
 func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 	// Any press, release, or wheel cancels a pending or open mouse-idle hover
 	// (#1129); motion is handled cell-wise by trackMouseHover below.
@@ -12084,12 +12166,10 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		m.cancelMouseHover()
 	}
 	// An active float resize drag (#933) owns the mouse until release: each
-	// motion step applies the pointer delta along the grabbed edge/corner as a
-	// size delta (motion events are already folded by the input coalescer, so
-	// this runs at most once per rendered frame), release persists the store.
-	// Floats are centered, so a size delta grows both sides — one pointer cell
-	// maps to two size cells so the grabbed edge tracks the pointer exactly
-	// (#1243).
+	// motion step moves the grabbed edge/corner with the pointer while the
+	// opposite edge stays put (#2896; motion events are already folded by the
+	// input coalescer, so this runs at most once per rendered frame), release
+	// persists the size delta and the position offset together.
 	if m.floatDrag != nil {
 		switch msg.action {
 		case mouseMotion:
@@ -12100,19 +12180,17 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 				m.applyFloatTermResize(d, msg.X, msg.Y)
 				return m, nil
 			}
-			ddw, ddh := (msg.X-d.lastX)*d.sx*2, (msg.Y-d.lastY)*d.sy*2
-			if ddw != 0 || ddh != 0 {
-				d.lastX, d.lastY = msg.X, msg.Y
-				m.applyFloatResize(d.kind, ddw, ddh)
-			}
+			m.applyFloatResize(d, msg.X, msg.Y)
 			return m, nil
 		case mouseRelease:
 			kind := m.floatDrag.kind
 			m.floatDrag = nil
 			switch kind {
 			case "popupterm":
-				// The popup delta also becomes the user-scoped fallback (#1714).
+				// The popup delta and offset also become the user-scoped
+				// fallback (#1714).
 				m.popupTermPersist()
+				m.popupTermPersistPos()
 			case "floatterm":
 				// Panel geometry is runtime state (#1793): nothing persists.
 			default:
@@ -12215,8 +12293,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		// The panel's geometry comes from Size(), never from measuring View()
 		// (#1396): mouse motion arrives at very high frequency, and a full
 		// panel render per event saturated the Update loop.
-		w, h := m.settings.Size()
-		bx, by := (m.width-w)/2, (m.height-h)/2
+		bx, by, w, h := m.settingsRect()
 		if msg.action == mousePress && w > 0 && !inRect(msg.X, msg.Y, bx, by, w, h) {
 			cmd := m.settings.CancelPreview()
 			m.settings.Close()
@@ -12244,8 +12321,12 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 	}
 	if top := m.floats.Top(); top != nil {
 		// Mouse routes to the topmost open layer (#1237): a press outside it
-		// pops only that layer, a border press resizes it.
-		if clickOutside(msg, top.View(), m.width, m.height) {
+		// pops only that layer, a border press resizes it. The layer sits at
+		// its Origin — centered plus its stored offset (#2896).
+		tv := top.View()
+		tw, th := lipgloss.Width(tv), lipgloss.Height(tv)
+		bx, by := top.Origin(m.width, m.height, tw, th)
+		if msg.action == mousePress && tv != "" && !inRect(msg.X, msg.Y, bx, by, tw, th) {
 			m.floats.Pop()
 			return m, nil
 		}
@@ -12268,10 +12349,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if msg.action == mousePress && msg.Button == tea.MouseLeft {
-			v := top.View()
-			w, h := lipgloss.Width(v), lipgloss.Height(v)
-			bx, by := (m.width-w)/2, (m.height-h)/2
-			if sx, sy, ok := ui.ResizeZone(msg.X-bx, msg.Y-by, w, h); ok {
+			if sx, sy, ok := ui.ResizeZone(msg.X-bx, msg.Y-by, tw, th); ok {
 				m.floatDrag = &floatResizeDrag{kind: "shell", sx: sx, sy: sy, lastX: msg.X, lastY: msg.Y}
 				return m, nil
 			}
@@ -12295,10 +12373,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 	}
 	if m.palette.IsOpen() {
 		v := m.palette.View()
-		bx, by := (m.width-lipgloss.Width(v))/2, (m.height-lipgloss.Height(v))/2
-		if m.palette.Anchored() {
-			bx, by = m.palette.AnchorPos()
-		}
+		bx, by := m.palette.Origin(m.width, m.height, lipgloss.Width(v), lipgloss.Height(v))
 		if msg.action == mousePress {
 			if !inRect(msg.X, msg.Y, bx, by, lipgloss.Width(v), lipgloss.Height(v)) {
 				m.palette.Close()
@@ -14565,8 +14640,10 @@ func (m Model) render() string {
 		base = overlay.Place(base, m.menu.Dropdown(), m.menu.DropdownX(), 1, m.width, m.height)
 	}
 	if m.settings.IsOpen() {
-		// The settings panel floats centered above the workspace (#115).
-		base = overlay.Center(base, m.settings.View(), m.width, m.height)
+		// The settings panel floats centered above the workspace (#115),
+		// shifted by its stored position offset (#2896).
+		x, y, _, _ := m.settingsRect()
+		base = overlay.Place(base, m.settings.View(), x, y, m.width, m.height)
 	}
 	if box, x, y, ok := m.moveGhost(); ok {
 		base = overlay.Place(base, box, x, y, m.width, m.height)
@@ -14630,13 +14707,11 @@ func (m Model) render() string {
 	case m.typehier.IsOpen():
 		result = overlay.Center(base, m.typehier.View(), m.width, m.height)
 	case m.palette.IsOpen():
+		// Anchored at its anchor, otherwise centered plus the stored
+		// position offset (#2896).
 		v := m.palette.View()
-		if m.palette.Anchored() {
-			x, y := m.palette.AnchorPos()
-			result = overlay.Place(base, v, x, y, m.width, m.height)
-		} else {
-			result = overlay.Center(base, v, m.width, m.height)
-		}
+		x, y := m.palette.Origin(m.width, m.height, lipgloss.Width(v), lipgloss.Height(v))
+		result = overlay.Place(base, v, x, y, m.width, m.height)
 	case m.floats.IsOpen():
 		// The floating stack composites bottom-to-top (#1237): the topmost
 		// layer is drawn last and fully readable over the lower ones.
