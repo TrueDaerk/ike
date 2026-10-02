@@ -50,12 +50,18 @@ type traceDiffState struct {
 	linked string
 }
 
+// traceDroppedNotice explains a stored change whose hunks the record cap
+// dropped (#2882); its counts stay in the view's header.
+const traceDroppedNotice = "hunks of this change were dropped when the session was stored"
+
 // traceDiffReadyMsg is the off-loop reconstruction's result.
 type traceDiffReadyMsg struct {
 	gen    int64
 	req    tracepanel.DiffMsg
 	diff   agenttrace.ChangeDiff
 	found  bool
+	// record reports a diff from a stored session's record (#2882).
+	record bool
 	err    error
 	head   string
 	headOK string // "" when head is valid, else why not
@@ -67,7 +73,7 @@ type traceDiffReadyMsg struct {
 // parsed again (subagents included — the node may be one of their calls),
 // and both comparison bases are read.
 func (m *Model) traceDiffCmd(req tracepanel.DiffMsg) tea.Cmd {
-	transcript, cwd, ok := m.traceDiffSource()
+	src, ok := m.traceDiffSource()
 	if !ok {
 		return nil
 	}
@@ -75,34 +81,69 @@ func (m *Model) traceDiffCmd(req tracepanel.DiffMsg) tea.Cmd {
 	gen := m.traceDiffGen
 	return func() tea.Msg {
 		out := traceDiffReadyMsg{gen: gen, req: req}
-		out.diff, out.found, out.err = loadTraceDiff(transcript, req.Key)
+		out.diff, out.found, out.record, out.err = src.load(req.Key)
 		path := req.Path
 		if out.found {
 			path = out.diff.Path
 		}
-		path = traceAbs(path, cwd)
+		path = traceAbs(path, src.cwd)
 		out.work, out.workOK = traceWorkingFile(path)
 		out.head, out.headOK = traceHeadFile(path)
 		return out
 	}
 }
 
-// traceDiffSource is the shown session's transcript and working directory
+// traceDiffSrc is where D and V find a node's diff: the live session's
+// transcript, or — while the pane shows a stored session (#2882) — the
+// record's diffs, with the record's transcript as a second source while
+// Claude Code still keeps it.
+type traceDiffSrc struct {
+	transcript, cwd string
+	stored          bool
+	diffs           []agenttrace.ChangeDiff
+}
+
+// traceDiffSource is the shown session's diff source and working directory
 // (the project root when it has none); false while the pane is not there.
-func (m Model) traceDiffSource() (transcript, cwd string, ok bool) {
+// A stored session never consults the live reader: its keys are not the
+// live transcript's.
+func (m Model) traceDiffSource() (traceDiffSrc, bool) {
 	p := m.agentTracePanel()
 	if p == nil {
-		return "", "", false
+		return traceDiffSrc{}, false
 	}
-	transcript = p.Info().Transcript
-	if m.traceReader != nil {
-		transcript = m.traceReader.Path()
+	src := traceDiffSrc{transcript: p.Info().Transcript, cwd: p.Info().CWD}
+	switch {
+	case m.traceShowingHistory():
+		src.stored, src.diffs = true, m.traceHistoryDiffs
+	case m.traceReader != nil:
+		src.transcript = m.traceReader.Path()
 	}
-	cwd = p.Info().CWD
-	if cwd == "" {
-		cwd = projectRoot()
+	if src.cwd == "" {
+		src.cwd = projectRoot()
 	}
-	return transcript, cwd, true
+	return src, true
+}
+
+// load finds the node key's diff; record reports that it is the stored
+// record's (hunks and counts only). Off the loop only: it may parse the
+// transcript and read files.
+func (s traceDiffSrc) load(key string) (d agenttrace.ChangeDiff, found, record bool, err error) {
+	if !s.stored {
+		d, found, err = loadTraceDiff(s.transcript, key)
+		return d, found, false, err
+	}
+	d, found = agenttrace.DiffFor(s.diffs, key)
+	// The transcript, when it is still there, recovers the whole contents
+	// the record never keeps; a parse failure just leaves the record's.
+	if s.transcript != "" {
+		if _, statErr := os.Stat(s.transcript); statErr == nil {
+			if td, ok, _ := loadTraceDiff(s.transcript, key); ok && (td.HasAfter || len(td.Hunks) > 0) {
+				return td, true, false, nil
+			}
+		}
+	}
+	return d, found, found, nil
 }
 
 // loadTraceDiff parses the transcript again (subagents included — the node
@@ -192,9 +233,15 @@ func (m *Model) openTraceDiff(msg traceDiffReadyMsg) {
 		m.host.Notify(host.Info, why)
 		return
 	}
+	if d.Dropped && len(d.Hunks) == 0 && !d.HasAfter {
+		m.host.Notify(host.Info, traceDroppedNotice)
+	}
 	st := &traceDiffState{diff: d, head: msg.head, headWhy: msg.headOK, work: msg.work, workWhy: msg.workOK, linked: msg.req.Linked}
 	if !d.HasAfter {
 		why := "the transcript holds only the changed hunks — the whole after content is unknown"
+		if msg.record {
+			why = "stored session — the record kept only the changed hunks, the whole after content is unknown"
+		}
 		if st.headWhy == "" {
 			st.headWhy = why
 		}
@@ -395,6 +442,8 @@ func (c *traceDiffContent) body(width int) string {
 		return strings.TrimRight(agentask.RenderMarkdown("```diff\n"+d.Unified()+"\n```", width, pal), "\n")
 	case d.HasAfter:
 		return dim.Render("before unknown — the whole after content:") + "\n" + c.whole("", d.After, width, "(empty file)")
+	case d.Dropped:
+		return dim.Render(ansi.Truncate(traceDroppedNotice, width, "…"))
 	}
 	return dim.Render("nothing known about this change")
 }

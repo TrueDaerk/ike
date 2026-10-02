@@ -61,6 +61,7 @@ type traceHistoryLoadedMsg struct {
 	id    string
 	nodes []agenttrace.Node
 	stops []agenttrace.Stop
+	diffs []agenttrace.ChangeDiff
 	info  tracepanel.Info
 	err   error
 }
@@ -206,7 +207,7 @@ func (m *Model) showTraceHistoryCmd(id string) tea.Cmd {
 			ID: rec.ID, Transcript: rec.Transcript, CWD: rec.CWD, Ended: true, Turns: rec.Turns,
 			History: tracepanel.HistoryLabel(rec.StartedAt),
 		}
-		return traceHistoryLoadedMsg{gen: gen, id: id, nodes: agenttrace.BuildTree(s), stops: agenttrace.BuildPath(s), info: info}
+		return traceHistoryLoadedMsg{gen: gen, id: id, nodes: agenttrace.BuildTree(s), stops: agenttrace.BuildPath(s), diffs: s.KnownDiffs, info: info}
 	}
 }
 
@@ -221,6 +222,7 @@ func (m Model) handleTraceHistoryLoaded(msg traceHistoryLoadedMsg) (tea.Model, t
 		return m, nil
 	}
 	m.traceHistoryID = msg.id
+	m.traceHistoryDiffs = msg.diffs
 	p.SetStored(msg.nodes, msg.stops, msg.info)
 	// The change-feed links are the live session's; a stored one has none.
 	p.SetLinks(agenttrace.Links{})
@@ -231,6 +233,7 @@ func (m Model) handleTraceHistoryLoaded(msg traceHistoryLoadedMsg) (tea.Model, t
 // live session is located and read again.
 func (m *Model) backToLiveTrace() tea.Cmd {
 	m.traceHistoryID = ""
+	m.traceHistoryDiffs = nil
 	if p := m.agentTracePanel(); p != nil {
 		p.ClosePicker()
 		p.Reset()

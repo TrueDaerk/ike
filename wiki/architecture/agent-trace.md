@@ -679,6 +679,20 @@ repository") or for a file HEAD does not track, the working file once it
 is gone, and both while only hunks of the change are known. `f` opens the
 feed panel on a linked entry, `esc` closes, the rest scrolls.
 
+**On a stored session (#2882).** While the pane shows a session from the
+history, `D` never consults the live reader — its keys are not the stored
+session's. The source (`traceDiffSource` → `traceDiffSrc.load`) is the
+stored session's own transcript while Claude Code still keeps it (it
+recovers the whole contents a record drops), else the record's diffs
+(`agenttrace.DiffFor` over the `KnownDiffs` the app keeps from the load,
+`traceHistoryDiffs`). A record diff has hunks and counts only, so the HEAD
+and working-file bases are marked `✗` with "stored session — the record
+kept only the changed hunks". A change whose hunks the record cap dropped
+(`RecordDiff.dropped`) opens with its counts in the header and the notice
+"hunks of this change were dropped when the session was stored" instead of
+the generic "no diff for this change". Feed links are empty there by
+design; `V` reads the same source.
+
 **Revert (#2877).** `V` on a change box or file node
 (`ChangeRevertMsg{Key, Path, Read, Linked}`, `agenttrace_revert.go`) takes,
 in order:
@@ -895,8 +909,9 @@ diffs, so `BuildTree`, `BuildPath` and `Diffs` work on a stored session
 like on a live one (the counts on the boxes and `D` included).
 
 **Caps.** One record is at most `MaxRecordBytes` (512 KiB): `Encode` drops
-the hunks of the largest diffs first (their counts stay), then halves the
-text caps, and marks the record `truncated`. The `Store` keeps at most
+the hunks of the largest diffs first (their counts stay, the diff is marked
+`dropped`; an older truncated record's counted diff without hunks reads as
+dropped too), then halves the text caps, and marks the record `truncated`. The `Store` keeps at most
 `agent.trace.history_max_sessions` records (Settings UI page *Agent Trace*,
 1–500, default 50): every `Save` prunes the oldest by session end (then
 start), so the directory is bounded at cap × 512 KiB. Writes are atomic
@@ -986,7 +1001,9 @@ reading and filing the *live* session meanwhile — they just leave the pane
 alone (`traceShowingHistory`) — and `esc` or `r` (`LiveMsg`) return to it,
 located and read afresh. `agent.ask` on a stored session forks its id
 when the transcript still exists; otherwise `a` explains that Claude Code
-pruned it and only the record remains.
+pruned it and only the record remains. `D` (and `V`) work on a stored
+session too — also after a restart with no live session — sourced from its
+transcript while it exists, else from the record's hunks (see *Diffs*).
 
 ## Keybinds
 
@@ -1129,6 +1146,11 @@ row and the change box and `D` on change and read rows;
 git repository — provenance header, `esc`, the HEAD and working-file bases,
 HEAD disabled for an untracked file and outside a repository, the
 working file refused while only hunks are known — and the ask fallback.
+`internal/app/agenttrace_stored_diff_test.go` covers `D` on a stored
+session (#2882): with a different live session read meanwhile, from the
+stored transcript, from the record alone once it is deleted (the stored
+reason under the strip), with no live reader, and the dropped-hunks notice;
+plus `Encode`'s `dropped` mark and its fallback for older records.
 
 `internal/agenttrace/hooks_test.go` round-trips install → install →
 uninstall against a settings file with foreign hooks and unrelated keys

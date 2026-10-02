@@ -120,6 +120,9 @@ type ChangeDiff struct {
 	// Added and Removed count the changed lines when Counted.
 	Added, Removed int
 	Counted        bool
+	// Dropped reports a stored change whose hunks the record cap
+	// (MaxRecordBytes) dropped: only the counts remain.
+	Dropped bool
 }
 
 // Unified renders the hunks as unified diff text: each hunk's header, then

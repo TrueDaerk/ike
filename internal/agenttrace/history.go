@@ -127,6 +127,8 @@ type RecordDiff struct {
 	Added   int        `json:"added"`
 	Removed int        `json:"removed"`
 	Counted bool       `json:"counted"`
+	// Dropped reports that Encode dropped the hunks to fit the cap.
+	Dropped bool `json:"dropped,omitempty"`
 }
 
 // ParseOp is the inverse of Op.String; unknown names read as OpRead.
@@ -247,6 +249,9 @@ func (r *Record) Session() *Session {
 		s.KnownDiffs = append(s.KnownDiffs, ChangeDiff{
 			Key: d.Key, Keys: d.Keys, Path: d.Path, Op: ParseOp(d.Op), Tool: d.Tool, Turn: d.Turn, At: d.At,
 			Source: DiffSource(d.Source), Note: d.Note, Hunks: d.Hunks, Added: d.Added, Removed: d.Removed, Counted: d.Counted,
+			// Records written before the per-diff mark: a truncated record's
+			// counted diff without hunks lost them to the cap.
+			Dropped: d.Dropped || r.Truncated && d.Counted && len(d.Hunks) == 0,
 		})
 	}
 	return s
@@ -315,6 +320,7 @@ func (r *Record) Encode() ([]byte, error) {
 			continue
 		}
 		r.Diffs[big].Hunks = nil
+		r.Diffs[big].Dropped = true
 		r.Truncated = true
 	}
 }

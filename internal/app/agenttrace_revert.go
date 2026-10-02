@@ -57,15 +57,15 @@ func (m *Model) traceRevertCmd(req tracepanel.ChangeRevertMsg) tea.Cmd {
 		m.host.Notify(host.Info, traceRevertNothing+"a read does not change the file")
 		return nil
 	}
-	transcript, cwd, ok := m.traceDiffSource()
+	src, ok := m.traceDiffSource()
 	if !ok {
 		return nil
 	}
 	m.traceRevertGen++
 	gen := m.traceRevertGen
 	return func() tea.Msg {
-		d, found, err := loadTraceDiff(transcript, req.Key)
-		return traceRevertReadyMsg{gen: gen, cwd: cwd, diff: d, found: found, err: err}
+		d, found, _, err := src.load(req.Key)
+		return traceRevertReadyMsg{gen: gen, cwd: src.cwd, diff: d, found: found, err: err}
 	}
 }
 
