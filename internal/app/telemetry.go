@@ -186,6 +186,7 @@ func traitIndexScanRecorder(r *telemetry.Recorder) func(phpindex.Stats) {
 			"ms":        strconv.FormatInt(s.LastScan.Milliseconds(), 10),
 			"files":     strconv.Itoa(s.Files),
 			"truncated": strconv.FormatBool(s.Truncated),
+			"cached":    strconv.Itoa(s.Cached),
 		})
 	}
 }

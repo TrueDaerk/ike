@@ -490,11 +490,14 @@ type PHP struct {
 // PHPIndex bounds the PHP declaration index (#2667). ParentDepth is how many
 // parent classes of a trait's consumers contribute members to the trait's
 // consumer scope (0–10). IncludeVendor lets the walk read vendor/, which the
-// language server already covers. MaxFiles caps the walk (min 100).
+// language server already covers. MaxFiles caps the walk (min 100). Cache
+// persists the per-file extractions under the project's .ike directory so the
+// next session re-reads only changed files (#2885).
 type PHPIndex struct {
 	ParentDepth   int  `toml:"parent_depth"`
 	IncludeVendor bool `toml:"include_vendor"`
 	MaxFiles      int  `toml:"max_files"`
+	Cache         bool `toml:"cache"`
 }
 
 // Debug holds debugger behaviour (0360). PHP carries the web/request listen

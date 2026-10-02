@@ -131,11 +131,12 @@ func TestPHPOptionsFromHostConfig(t *testing.T) {
 		"php.index.parent_depth":   "5",
 		"php.index.include_vendor": "true",
 		"php.index.max_files":      "banana",
+		"php.index.cache":          "false",
 	})
-	if opts.Enabled || opts.ParentDepth != 5 || !opts.IncludeVendor || opts.MaxFiles != 20000 {
+	if opts.Enabled || opts.ParentDepth != 5 || !opts.IncludeVendor || opts.MaxFiles != 20000 || opts.Cache {
 		t.Fatalf("options = %+v", opts)
 	}
-	if opts := phpOptionsFrom(nil); !opts.Enabled {
+	if opts := phpOptionsFrom(nil); !opts.Enabled || !opts.Cache {
 		t.Fatalf("nil host config must fall back to the defaults: %+v", opts)
 	}
 }

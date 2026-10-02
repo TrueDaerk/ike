@@ -51,14 +51,50 @@ type Limits struct {
 	KeepDirs    []string
 }
 
+// Stamp identifies one version of a file on disk (#2885): its size and
+// modification time. A scan seeded with a previous session's extraction
+// takes a file whose stamp still matches from the seed without reading it.
+type Stamp struct {
+	Size    int64
+	ModTime int64 // UnixNano
+}
+
+// stampOf is info's stamp.
+func stampOf(info os.FileInfo) Stamp {
+	return Stamp{Size: info.Size(), ModTime: info.ModTime().UnixNano()}
+}
+
+// Seeded is one file's extraction from a previous session (#2885) and the
+// stamp of the file it was extracted from.
+type Seeded[T any] struct {
+	Stamp Stamp
+	Value T
+}
+
+// Persist is the scan cache seam (#2885). Load runs on the scan goroutine
+// before the walk and returns the previous session's extractions of id keyed
+// by path (nil for none); the walk still decides which files exist, so a
+// seeded file that disappeared, or one the walk skips, never comes back.
+// Saved runs on the scan goroutine after the walk installed its result and
+// before the scan reads as Done, off every lock; the persister reads the
+// result back through EachStamped.
+type Persist[T any] struct {
+	Load  func(id string) map[string]Seeded[T]
+	Saved func(id string)
+}
+
 // entry is one language's share of the index. dur and truncated describe
 // the scan (#2667, Stats): how long the walk took and whether it stopped at
-// MaxFiles before the tree was exhausted.
+// MaxFiles before the tree was exhausted; cached counts the files a seeded
+// scan took from the seed instead of reading them (#2885). stamps holds the
+// on-disk stamp every file in files was extracted from.
 type entry[T any] struct {
 	files     map[string]T
+	stamps    map[string]Stamp
 	done      bool
 	dur       time.Duration
 	truncated bool
+	cached    int
 }
 
 // Index is the per-language project index. Zero value is not usable; use New.
@@ -78,6 +114,9 @@ type Index[T any] struct {
 	// re-extraction bump it, so a reader caching a derived view (the PHP
 	// index's edge tables) knows when to rebuild without diffing files.
 	gen uint64
+	// persist is the scan cache seam (#2885); zero means every scan reads
+	// every file.
+	persist Persist[T]
 
 	// Invalidation queue (#2176): watcher events re-extract through one
 	// worker goroutine instead of one goroutine per event.
@@ -100,6 +139,14 @@ func New[T any](root string, limits Limits, langOf func(string) string, ext Extr
 	}
 }
 
+// SetPersist installs the scan cache seam (#2885). Call it before Ensure:
+// a scan already running does not see it.
+func (x *Index[T]) SetPersist(p Persist[T]) {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	x.persist = p
+}
+
 // LangOf is the default path classifier: the registered language's id, or
 // "" when no language claims the path.
 func LangOf(path string) string {
@@ -118,7 +165,7 @@ func (x *Index[T]) Ensure(langs ...string) {
 		if id == "" || x.langs[id] != nil {
 			continue
 		}
-		e := &entry[T]{files: map[string]T{}}
+		e := &entry[T]{files: map[string]T{}, stamps: map[string]Stamp{}}
 		x.langs[id] = e
 		if x.root == "" {
 			e.done = true
@@ -158,6 +205,18 @@ func (x *Index[T]) ScanInfo(id string) (dur time.Duration, truncated bool) {
 	return e.dur, e.truncated
 }
 
+// Cached reports how many files id's finished scan took from the persisted
+// seed instead of reading them (#2885); 0 while the scan runs.
+func (x *Index[T]) Cached(id string) int {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	e := x.langs[id]
+	if e == nil || !e.done {
+		return 0
+	}
+	return e.cached
+}
+
 // Scanned lists the languages a scan was started for, sorted.
 func (x *Index[T]) Scanned() []string {
 	x.mu.Lock()
@@ -187,15 +246,38 @@ func (x *Index[T]) Each(langs []string, fn func(path string, v T)) {
 	}
 }
 
+// EachStamped is Each for one language with the stamp of the on-disk file
+// each value was extracted from (#2885), under the index lock — fn must only
+// read.
+func (x *Index[T]) EachStamped(id string, fn func(path string, st Stamp, v T)) {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	e := x.langs[id]
+	if e == nil {
+		return
+	}
+	for p, v := range e.files {
+		fn(p, e.stamps[p], v)
+	}
+}
+
 // scan walks root for language id: files of the language itself, plus the
 // files that embed fragments of it. Every file read records its embedded
 // languages, so later scans consult the cache instead of the grammar.
 func (x *Index[T]) scan(id string) {
 	only := func(l string) bool { return l == id }
 	files := map[string]T{}
-	read := 0
+	stamps := map[string]Stamp{}
+	read, cached := 0, 0
 	truncated := false
 	started := time.Now()
+	x.mu.Lock()
+	persist := x.persist
+	x.mu.Unlock()
+	var seed map[string]Seeded[T]
+	if persist.Load != nil {
+		seed = persist.Load(id)
+	}
 	_ = filepath.WalkDir(x.root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -223,7 +305,18 @@ func (x *Index[T]) scan(id string) {
 				return nil
 			}
 		}
-		text, ok := x.readFile(path)
+		if s, ok := seed[path]; ok {
+			// A seeded file whose stamp still matches is taken as it is:
+			// its extraction is a function of its content alone.
+			if info, err := os.Stat(path); err == nil && !info.IsDir() && info.Size() <= x.limits.MaxFileSize && stampOf(info) == s.Stamp {
+				read++
+				cached++
+				files[path] = s.Value
+				stamps[path] = s.Stamp
+				return nil
+			}
+		}
+		text, st, ok := x.readFile(path)
 		if !ok {
 			return nil
 		}
@@ -237,6 +330,7 @@ func (x *Index[T]) scan(id string) {
 		}
 		if v, ok := x.ext(path, host, text, only)[id]; ok {
 			files[path] = v
+			stamps[path] = st
 		}
 		return nil
 	})
@@ -244,11 +338,20 @@ func (x *Index[T]) scan(id string) {
 	e := x.langs[id]
 	for p, v := range files {
 		e.files[p] = v
+		e.stamps[p] = stamps[p]
 	}
-	e.done = true
 	e.dur = time.Since(started)
 	e.truncated = truncated
+	e.cached = cached
 	x.gen++
+	x.mu.Unlock()
+	// The content is visible from here on; the scan only reads as done once
+	// the persister is through, so nothing waiting on Done races its write.
+	if persist.Saved != nil {
+		persist.Saved(id)
+	}
+	x.mu.Lock()
+	e.done = true
 	x.mu.Unlock()
 }
 
@@ -262,24 +365,26 @@ func mayEmbed(host string) bool {
 }
 
 // readFile reads path within the size cap, skipping directories and
-// binaries (NUL in the head).
-func (x *Index[T]) readFile(path string) (string, bool) {
+// binaries (NUL in the head), and returns the stamp it read it at — taken
+// before the read, so a write racing the read leaves a stamp that no longer
+// matches and the next seeded scan reads the file again.
+func (x *Index[T]) readFile(path string) (string, Stamp, bool) {
 	info, err := os.Stat(path)
 	if err != nil || info.IsDir() || info.Size() > x.limits.MaxFileSize {
-		return "", false
+		return "", Stamp{}, false
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", false
+		return "", Stamp{}, false
 	}
 	head := data
 	if len(head) > 1024 {
 		head = head[:1024]
 	}
 	if bytes.IndexByte(head, 0) >= 0 {
-		return "", false
+		return "", Stamp{}, false
 	}
-	return string(data), true
+	return string(data), stampOf(info), true
 }
 
 func contains(xs []string, s string) bool {
@@ -338,7 +443,9 @@ func (x *Index[T]) reextract(path string) {
 	host := x.langOf(path)
 	var res map[string]T
 	var embeds []string
-	if text, ok := x.readFile(path); ok {
+	var st Stamp
+	if text, stamp, ok := x.readFile(path); ok {
+		st = stamp
 		lines := strings.Split(text, "\n")
 		embeds = highlight.EmbeddedLangs(host, lines)
 		res = x.ext(path, host, text, only)
@@ -353,8 +460,10 @@ func (x *Index[T]) reextract(path string) {
 	for id, e := range x.langs {
 		if v, ok := res[id]; ok {
 			e.files[path] = v
+			e.stamps[path] = st
 		} else {
 			delete(e.files, path)
+			delete(e.stamps, path)
 		}
 	}
 	x.gen++

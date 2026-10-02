@@ -197,6 +197,7 @@ bring their own.
 | Import JetBrains Keymap XML… | `keymap.importJetBrains` | — | — | everywhere |
 | Open Rotated Log Set (Merged Timeline) | `log.openRotatedSet` | — | — | everywhere |
 | LSP Doctor: Copy Report | `lsp.doctor.copy` | `cmd+c` | — | `lspdoctor` pane |
+| Don't Warn About a Silent Language Server for This Project | `lsp.muteWarmupNotice` | — | — | everywhere |
 | Markdown Preview | `markdown.preview` | `cmd+alt+m` | — | everywhere |
 | Open Menu Bar | `menu.open` | `f10` | — | everywhere |
 | Navigate Back | `nav.back` | `mouse-back` | — | everywhere |

@@ -1,10 +1,12 @@
 package settings
 
 // php_page_test.go covers the Settings-UI half of the PHP declaration
-// index (#2667): the "PHP" page carries the four [php] keys, the bounded
-// ones validate with a message, every edit persists and shows in the list.
+// index (#2667): the "PHP" page carries the [php] keys (the cache switch since
+// #2885), the bounded ones validate with a message, every edit persists and
+// shows in the list.
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -38,7 +40,7 @@ func TestPHPPageEntries(t *testing.T) {
 	if p.Description == "" {
 		t.Fatal("the PHP page needs a description")
 	}
-	want := []string{"php.trait_index", "php.index.parent_depth", "php.index.include_vendor", "php.index.max_files"}
+	want := []string{"php.trait_index", "php.index.parent_depth", "php.index.include_vendor", "php.index.max_files", "php.index.cache"}
 	if len(p.Entries) != len(want) {
 		t.Fatalf("PHP page has %d entries, want %d: %+v", len(p.Entries), len(want), p.Entries)
 	}
@@ -53,6 +55,9 @@ func TestPHPPageEntries(t *testing.T) {
 	}
 	if e := phpEntry(t, "php.index.include_vendor"); e.Type != Bool {
 		t.Errorf("include_vendor type = %v, want Bool", e.Type)
+	}
+	if e := phpEntry(t, "php.index.cache"); e.Type != Bool {
+		t.Errorf("cache type = %v, want Bool", e.Type)
 	}
 	if e := phpEntry(t, "php.index.parent_depth"); e.Type != Int || e.Min != 0 || e.Max != 10 {
 		t.Errorf("parent_depth = %+v, want Int 0–10", e)
@@ -136,5 +141,40 @@ func TestPHPMaxFilesFloorAndSwitches(t *testing.T) {
 	}
 	if view := m.View(); !strings.Contains(view, "Trait consumer index") || !strings.Contains(view, "Index vendor/") {
 		t.Fatalf("the PHP page must list its switches:\n%s", view)
+	}
+}
+
+// TestPHPIndexCacheTogglesAndPersists (#2885): the cache switch defaults to
+// on, toggles on enter, lands in the user settings file and shows in the
+// list. A boolean takes no free-form input, so the toggle is its validation.
+func TestPHPIndexCacheTogglesAndPersists(t *testing.T) {
+	restoreConfig(t)
+	if !config.Get().PHP.Index.Cache {
+		t.Fatal("php.index.cache should default to on")
+	}
+	opts := testOpts(t)
+	m := New([]Page{{Title: "PHP", Entries: []Entry{phpEntry(t, "php.index.cache")}}}, opts)
+	m.SetSize(100, 20)
+	m.Open()
+	if view := m.View(); !strings.Contains(view, "Persist index") {
+		t.Fatalf("the entry list must show the cache switch:\n%s", view)
+	}
+	m.Update(key("tab"))
+	m.Update(key("enter"))
+	commit(t, m)
+	if config.Get().PHP.Index.Cache {
+		t.Fatal("enter should switch the cache off")
+	}
+	data, err := os.ReadFile(opts.UserPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), "cache = false") {
+		t.Fatalf("the switch must persist to the user settings:\n%s", data)
+	}
+	m.Update(key("enter"))
+	commit(t, m)
+	if !config.Get().PHP.Index.Cache {
+		t.Fatal("enter should switch the cache back on")
 	}
 }

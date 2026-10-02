@@ -360,6 +360,17 @@ language through the index's **single worker** with per-path dedup (#2176)
 — the word index now refreshes on-disk edits too. Until a language's scan
 finishes, its buffer tiers answer alone.
 
+**Scan cache seam (#2885).** Every indexed value carries the **stamp** (size +
+mtime) of the file it was extracted from, and an owner may install
+`Persist{Load, Saved}` before `Ensure`: `Load` seeds the scan with a previous
+session's values, and a file whose current stamp matches is taken from the
+seed without a read; `Saved` runs after the result is installed and before
+the scan reads as `Done`, reading it back through `EachStamped`. `Cached(id)`
+counts the seeded files. The walk still decides which files exist, so a seeded
+file that vanished or is skipped never returns. Only the
+[PHP trait index](php-trait-index.md#persistence-across-sessions-2885) uses
+it today; the word and symbol indexes scan cold.
+
 ## Symbol index (#853)
 
 `internal/complete/symbols` (name `symbols`, priority `lsp.PrioritySymbols`)

@@ -416,7 +416,7 @@ func defaults() *Config {
 		// large legacy tree.
 		PHP: PHP{
 			TraitIndex: true,
-			Index:      PHPIndex{ParentDepth: 3, IncludeVendor: false, MaxFiles: 20000},
+			Index:      PHPIndex{ParentDepth: 3, IncludeVendor: false, MaxFiles: 20000, Cache: true},
 		},
 		Debug: Debug{
 			InlineValues: true,   // paused locals annotate their lines (#1914)

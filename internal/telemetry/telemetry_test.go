@@ -811,16 +811,16 @@ func TestPalettePickClampsNegatives(t *testing.T) {
 	}
 }
 
-// The version analysis scripts branch on (#2716).
-func TestSchemaVersionIsFifteen(t *testing.T) {
-	if SchemaVersion != 15 {
-		t.Fatalf("SchemaVersion = %d, want 15", SchemaVersion)
+// The version analysis scripts branch on (#2885).
+func TestSchemaVersionIsSixteen(t *testing.T) {
+	if SchemaVersion != 16 {
+		t.Fatalf("SchemaVersion = %d, want 16", SchemaVersion)
 	}
 	dir := t.TempDir()
 	r := New(dir, nil)
 	r.Command("editor.save", SourceKeybind)
 	r.Close()
-	if evs := readSession(t, dir); len(evs) != 1 || evs[0].V != 15 {
-		t.Fatalf("events must be stamped v15, got %v", evs)
+	if evs := readSession(t, dir); len(evs) != 1 || evs[0].V != 16 {
+		t.Fatalf("events must be stamped v16, got %v", evs)
 	}
 }
