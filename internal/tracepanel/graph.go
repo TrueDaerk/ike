@@ -841,4 +841,4 @@ func (m *Model) drawConnector(c *canvas, prev, s Slot) {
 }
 
 // graphHint is the key line under the graph.
-const graphHint = "←/→ ↑/↓ move · n/p along the path · enter open · space expand · t tree · s sessions · D diff · a ask · r rescan · Δ: V revert"
+const graphHint = "←/→ ↑/↓ move · n/p along the path · enter open · space expand · t tree · s sessions · D diff · a ask · r rescan · V revert"

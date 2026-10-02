@@ -239,9 +239,13 @@ func TestLinkedRowsMarkDiffRevertAndSelect(t *testing.T) {
 	if view := plain(m.View()); !strings.Contains(view, "Edit Δ") {
 		t.Fatalf("linked tool row has no mark:\n%s", view)
 	}
-	// The cursor starts on the turn row: unlinked, D and V do nothing.
+	// The cursor starts on the turn row: D does nothing, V still asks — the
+	// root model says there is nothing to revert (#2877).
 	if msg := send(m, "D"); msg != nil {
 		t.Fatalf("D on an unlinked row = %#v", msg)
+	}
+	if msg, ok := send(m, "V").(ChangeRevertMsg); !ok || msg.Path != "" || msg.Linked != "" {
+		t.Fatalf("V on the turn row = %#v", msg)
 	}
 	// Fold the turn, then jump into it: Select unfolds the ancestors.
 	send(m, "left")
@@ -257,13 +261,17 @@ func TestLinkedRowsMarkDiffRevertAndSelect(t *testing.T) {
 	if msg, ok := send(m, "D").(DiffMsg); !ok || msg.Linked != target || msg.Path != target {
 		t.Fatalf("D = %#v", msg)
 	}
-	if msg, ok := send(m, "V").(ChangeRevertMsg); !ok || msg.Path != target {
+	if msg, ok := send(m, "V").(ChangeRevertMsg); !ok || msg.Linked != target || msg.Path != target || msg.Read {
 		t.Fatalf("V = %#v", msg)
 	}
 	// Selection and expansion survive a relink; Reset forgets the links.
 	m.SetLinks(agenttrace.Links{})
-	if m.Current().Key != "e4/f0" || send(m, "V") != nil {
-		t.Fatal("unlinking must keep the selection and silence V")
+	if m.Current().Key != "e4/f0" {
+		t.Fatal("unlinking must keep the selection")
+	}
+	// V still answers (#2877): the root model reverts from the transcript.
+	if msg, ok := send(m, "V").(ChangeRevertMsg); !ok || msg.Key != "e4/f0" || msg.Linked != "" || msg.Path != target {
+		t.Fatalf("unlinked V = %#v", msg)
 	}
 	// D still answers (#2859): the diff is reconstructed from the transcript.
 	if msg, ok := send(m, "D").(DiffMsg); !ok || msg.Key != "e4/f0" || msg.Linked != "" {
