@@ -576,6 +576,19 @@ func (m *Model) pushEdit(e byteEdit) {
 	m.redo = nil
 }
 
+// Undo reverts the last write — hex.undo (cmd+z / ctrl+z, #2888).
+func (m *Model) Undo() {
+	m.commitNibble()
+	m.undoEdit()
+}
+
+// Redo re-applies the last undone write — hex.redo (cmd+shift+z /
+// ctrl+shift+z, #2888).
+func (m *Model) Redo() {
+	m.commitNibble()
+	m.redoEdit()
+}
+
 // undoEdit reverts the last write and puts the cursor on it.
 func (m *Model) undoEdit() {
 	if len(m.undo) == 0 {

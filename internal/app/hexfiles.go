@@ -65,6 +65,29 @@ func (m *Model) openHexPane(path string) {
 // focused hex pane writes its edited bytes back to the file in place.
 type HexSaveMsg struct{}
 
+// HexUndoMsg / HexRedoMsg run hex.undo / hex.redo (cmd+z / ctrl+z and
+// cmd+shift+z / ctrl+shift+z in the hex viewer, #2888) — the editor's
+// chords for the pane's u / ctrl+r.
+type (
+	HexUndoMsg struct{}
+	HexRedoMsg struct{}
+)
+
+// undoFocusedHex runs hex.undo (redo=false) or hex.redo against the focused
+// hex viewer.
+func (m *Model) undoFocusedHex(redo bool) {
+	c := m.focusedContent()
+	if c == nil || c.Kind() != pane.KindHex {
+		m.host.Notify(host.Info, "hex: focus a hex viewer first")
+		return
+	}
+	if redo {
+		c.Hex().Redo()
+	} else {
+		c.Hex().Undo()
+	}
+}
+
 // saveFocusedHex runs hex.save against the focused hex viewer — a pane of
 // its own or a content tab. The returned cmd refreshes the VCS status, the
 // one follow-up an in-IDE write owes besides the watcher stamp.
