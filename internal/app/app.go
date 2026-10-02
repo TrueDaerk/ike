@@ -1055,16 +1055,18 @@ type Model struct {
 	// the live one), traceHistoryGen retires a superseded listing or load,
 	// traceDirStamp the project directory's last seen modification time
 	// (a new transcript without hooks), and the traceImport* fields the
-	// running import's status.
-	traceSaved       traceSaveState
-	traceSaveErr     string
-	traceLiveInfo    tracepanel.Info
-	traceHistoryID   string
-	traceHistoryGen  int64
-	traceDirStamp    time.Time
-	traceImporting   bool
-	traceImportDone  int
-	traceImportTotal int
+	// running import's status. traceHistoryDiffs are the stored session's
+	// recorded diffs (#2882), D's and V's source while it is shown.
+	traceHistoryDiffs []agenttrace.ChangeDiff
+	traceSaved        traceSaveState
+	traceSaveErr      string
+	traceLiveInfo     tracepanel.Info
+	traceHistoryID    string
+	traceHistoryGen   int64
+	traceDirStamp     time.Time
+	traceImporting    bool
+	traceImportDone   int
+	traceImportTotal  int
 	// traceDiff is the open per-change diff view of the trace (#2859);
 	// traceDiffGen retires a reconstruction that finished after another D.
 	traceDiff    *traceDiffState
