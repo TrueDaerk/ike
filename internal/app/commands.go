@@ -309,6 +309,12 @@ type IssuesCopyMsg struct{}
 // diagnosis and fix — goes to the clipboard as plain text.
 type LSPDoctorCopyMsg struct{}
 
+// LSPMuteWarmupNoticeMsg runs lsp.muteWarmupNotice (#2886), the silent-server
+// notice's "Don't warn for this project" follow-up: the active project's root
+// joins lsp.warmup_notice_muted_roots, so the notice stays quiet for it across
+// sessions.
+type LSPMuteWarmupNoticeMsg struct{}
+
 // IssuesStepMsg runs issues.selectPrev / issues.selectNext (ctrl+up /
 // ctrl+down, #2400): walk the issues window's selection.
 type IssuesStepMsg struct{ Delta int }
@@ -949,6 +955,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			paneCommand("issues.nextTab", "Issues: Next Tab", "issues", IssuesTabMsg{Delta: 1}),
 			paneCommand("issues.prevTab", "Issues: Previous Tab", "issues", IssuesTabMsg{Delta: -1}),
 			paneCommand("lsp.doctor.copy", "LSP Doctor: Copy Report", "lspdoctor", LSPDoctorCopyMsg{}),
+			appCommand("lsp.muteWarmupNotice", "Don't Warn About a Silent Language Server for This Project", LSPMuteWarmupNoticeMsg{}),
 			paneCommand("http.search", "Search in HTTP Response", "http", HTTPSearchMsg{}),
 			appCommand("terminal.toggle", "Toggle Terminal", TerminalToggleMsg{}),
 			withAliases(appCommand("terminal.popup", "Popup Terminal", TerminalPopupMsg{}), "terminal", "shell"),

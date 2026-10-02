@@ -1217,8 +1217,11 @@ identifier-rune wait, #2541), `completion_auto` (as-you-type
 completion popup on identifier characters, default `true`, #527; server
 trigger characters and `ctrl+space` work regardless), the #1912 per-feature
 toggles `code_lens`, `folding`, `semantic_tokens`, `selection_range` and
-`will_rename` (all default `true`, all on Settings → Language Support), and a
-per-language `servers` table.
+`will_rename` (all default `true`, all on Settings → Language Support),
+`warmup_notice_ms` and `warmup_notice_muted_roots` (the post-switch
+silent-server notice and the project roots it is muted for, #2629/#2886 — see
+[project-switching](./project-switching.md)), and a per-language `servers`
+table.
 Defaults ship for `go`, `php`, `python`; a user overrides any field in their
 `settings.toml`. `[lsp.servers.<id>] enabled = false` switches one language's
 server off while the subsystem stays on (#130; honored by `resolveSpec`). The

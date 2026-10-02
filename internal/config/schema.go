@@ -1222,6 +1222,12 @@ type LSP struct {
 	// at a few hundred milliseconds to ~2.6 s (p90), so the default leaves
 	// plenty of room for a cold index. 0 turns the notice off.
 	WarmupNoticeMs int `toml:"warmup_notice_ms"`
+	// WarmupNoticeMutedRoots lists project roots (absolute paths) the
+	// silent-server notice never fires for (#2886): projects that will never
+	// have a working server, muted from the notice's own "Don't warn for this
+	// project" action. Without an entry the notice still shows at most once
+	// per project per session.
+	WarmupNoticeMutedRoots []string `toml:"warmup_notice_muted_roots"`
 	// CodeLens toggles server code lenses ("run test", reference counts)
 	// rendered as virtual annotations on the anchored line and executable via
 	// the lsp.codeLens command (#1912).

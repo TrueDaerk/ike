@@ -791,6 +791,7 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "lsp.warmup_notice_ms", Message: fmt.Sprintf("threshold %d out of range (0\u2013600000 ms, 0 = off), using 15000", c.LSP.WarmupNoticeMs)})
 		c.LSP.WarmupNoticeMs = 15000
 	}
+	diags = append(diags, validateWarmupNoticeMutedRoots(c)...)
 	// HTML preview render budget (#2745): below the floor a page shows next
 	// to nothing, above the ceiling the budget stops bounding anything.
 	if c.Preview.HTMLRenderBudgetKB < HTMLRenderBudgetKBMin || c.Preview.HTMLRenderBudgetKB > HTMLRenderBudgetKBMax {

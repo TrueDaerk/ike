@@ -208,6 +208,7 @@ func (c *Config) Flat() map[string]string {
 	put("lsp.completion_auto", c.LSP.CompletionAuto)
 	put("lsp.completion_delay_ms", c.LSP.CompletionDelayMs)
 	put("lsp.warmup_notice_ms", c.LSP.WarmupNoticeMs)
+	put("lsp.warmup_notice_muted_roots", strings.Join(c.LSP.WarmupNoticeMutedRoots, ","))
 	put("agent.ask.model", c.Agent.Ask.Model)
 	put("agent.ask.max_turns", c.Agent.Ask.MaxTurns)
 	put("agent.ask.show_context", c.Agent.Ask.ShowContext)

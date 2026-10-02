@@ -267,9 +267,17 @@ type switchLSPWait struct {
 	// and "gopls said nothing" is a far more actionable sentence than "a
 	// server said nothing".
 	lang string
+	// root is the project root switched into (#2886): the key the
+	// silent-server notice is deduplicated and muted by.
+	root string
 	// notified records that the silent-server notice already went out, so the
 	// quiet fallback can say whether the user was told (#2629).
 	notified bool
+	// suppressed names why the notice threshold passed without a notice
+	// (#2886): "session" (already shown for this root in this session) or
+	// "muted" (the root is in lsp.warmup_notice_muted_roots). Empty while the
+	// threshold has not passed or the notice went out.
+	suppressed string
 }
 
 // noteSwitchLSPReady records the first LSP publish after a project switch as
@@ -307,6 +315,7 @@ func (m *Model) noteSwitchLSPSkipped(reason string) {
 	}
 	ms := time.Since(m.switchLSPWait.start)
 	notified := m.switchLSPWait.notified
+	suppressed := m.switchLSPWait.suppressed
 	m.switchLSPWait = nil
 	if ms < 0 {
 		ms = 0
@@ -316,9 +325,16 @@ func (m *Model) noteSwitchLSPSkipped(reason string) {
 		"skipped": reason,
 	}
 	// A quiet end the user was warned about reads differently from one they
-	// never noticed (#2629), so the phase says which it was.
-	if notified {
+	// never noticed (#2629), so the phase says which it was. A notice the
+	// once-per-session rule or the user's mute held back (#2886) reads
+	// notified=false plus the reason; the field stays absent when the notice
+	// threshold never passed (or the notice is switched off).
+	switch {
+	case notified:
 		fields["notified"] = "true"
+	case suppressed != "":
+		fields["notified"] = "false"
+		fields["suppressed"] = suppressed
 	}
 	m.usage.Op(telemetry.OpProjectSwitch, "lsp", fields)
 }
@@ -379,12 +395,35 @@ func armSwitchLSPNotice(wait *switchLSPWait) tea.Cmd {
 // the two follow-ups that actually help — restart the servers, or open the
 // doctor that explains why none is running. It fires at most once per wait;
 // the wait itself stays armed, so a late publish is still measured.
+//
+// It also fires at most once per project root per session (#2886): a project
+// whose server is simply not configured would otherwise warn on every switch
+// back to it. A root in lsp.warmup_notice_muted_roots — the notice's own
+// "Don't warn for this project" action — never warns at all. A held-back
+// notice is remembered on the wait, so the quiet phase still tells it apart.
 func (m *Model) noteSwitchLSPSilent() {
-	if m.switchLSPWait == nil || m.switchLSPWait.notified {
+	w := m.switchLSPWait
+	if w == nil || w.notified || w.suppressed != "" {
 		return
 	}
-	m.switchLSPWait.notified = true
-	name := m.switchLSPWait.lang
+	root := w.root
+	if root == "" {
+		root = m.projectRootTag()
+	}
+	switch {
+	case config.Get().LSP.WarmupNoticeMuted(root):
+		w.suppressed = "muted"
+		return
+	case m.lspNoticed[root]:
+		w.suppressed = "session"
+		return
+	}
+	if m.lspNoticed == nil {
+		m.lspNoticed = map[string]bool{}
+	}
+	m.lspNoticed[root] = true
+	w.notified = true
+	name := w.lang
 	if name == "" {
 		name = "this project"
 	}
@@ -392,7 +431,31 @@ func (m *Model) noteSwitchLSPSilent() {
 		fmt.Sprintf("Language server for %s has not responded since the switch", name),
 		host.NotifyAction{Command: "lsp.restart", Label: "Restart Language Servers"},
 		host.NotifyAction{Command: "lsp.doctor", Label: "Open LSP Doctor"},
+		host.NotifyAction{Command: "lsp.muteWarmupNotice", Label: "Don't warn for this project"},
 	)
+}
+
+// muteWarmupNotice runs lsp.muteWarmupNotice (#2886): the active project's
+// root joins lsp.warmup_notice_muted_roots at user scope — the list spans
+// projects — so the silent-server notice stays quiet for it from now on,
+// this session and every later one. A root already listed only says so.
+func (m Model) muteWarmupNotice() tea.Cmd {
+	root := m.projectRootTag()
+	if root == "" {
+		m.host.Notify(host.Warn, "no project to mute the silent language server notice for")
+		return nil
+	}
+	cfg := config.Get().LSP
+	base := filepath.Base(root)
+	if cfg.WarmupNoticeMuted(root) {
+		m.host.Notify(host.Info, "silent language server notice is already muted for "+base)
+		return nil
+	}
+	roots := append(append([]string{}, cfg.WarmupNoticeMutedRoots...), filepath.Clean(root))
+	m.host.Notify(host.Info, "silent language server notice muted for "+base+" (Settings › Language Support)")
+	return config.ApplyAndReload(m.cfgOpts, []config.Mutation{
+		{Scope: config.UserScope, Key: "lsp.warmup_notice_muted_roots", Value: roots},
+	})
 }
 
 // telemetryProjectToken names the current project structurally: a short hash

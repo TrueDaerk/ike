@@ -69,7 +69,8 @@ Its own keys, footered in the view as
   ordinary dispatch funnel and closes the center, so the command's own surface
   is what the user looks at next. The silent-language-server notice
   ([project-switching](/architecture/project-switching.md)) is the first user:
-  *Restart Language Servers* and *Open LSP Doctor*.
+  *Restart Language Servers*, *Open LSP Doctor* and, since #2886, *Don't warn
+  for this project* (`lsp.muteWarmupNotice`).
 
 Only those keys are consumed (`updateNotifCenter` reports it as handled) — a
 digit past the last action is not one of them; everything else falls through
