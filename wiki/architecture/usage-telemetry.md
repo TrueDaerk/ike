@@ -121,7 +121,8 @@ counts by the version's interval before comparing sessions.
     process ended. Since #2402 it also carries `top`: the interval's three
     loudest pass sources as `type:count` pairs
     (`app.termCheckMsg:5,view/render:5`; `view/reuse` counts the frames a no-op
-    motion pass handed out again, #2626), diffed from the always-on
+    pass handed out again — motion #2626, background wakes #2693, the agent
+    trace poll #2884), diffed from the always-on
     per-message-type counter (`diag.MessageCounts`) — the field that names
     an idle-wake culprit in an export without a local repro. Since #2693 a
     second field, `renders`, attributes the interval's composed frames to

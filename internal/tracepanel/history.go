@@ -322,7 +322,7 @@ func (m *Model) SetStored(nodes []agenttrace.Node, stops []agenttrace.Stop, info
 		}
 	}
 	m.graph.top = 0
-	m.readAt = time.Time{}
+	m.readAt, m.changeAt, m.changeAdded = time.Time{}, time.Time{}, 0
 }
 
 // Stored reports whether a history record is shown instead of the live

@@ -168,7 +168,7 @@ func TestAgentTraceFollowsGrowingTranscriptWithEditorFocused(t *testing.T) {
 	// test layout's pane clips it).
 	p.SetSize(200, 20)
 	view := p.View()
-	if !strings.Contains(view, "· read ") || !strings.Contains(view, "⇢ watcher (last focused)") {
+	if !strings.Contains(view, "· live · +") || !strings.Contains(view, "⇢ watcher (last focused)") {
 		t.Fatalf("header diagnostics missing:\n%s", view)
 	}
 }

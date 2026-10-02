@@ -1,5 +1,15 @@
 # Log
 
+## 2026-10-02 (agent trace: idle poll reuses the frame, #2884)
+
+- [Agent Trace](/architecture/agent-trace.md): the header's liveness
+  segment reads `live · +N at HH:MM:SS` (the last read that brought
+  events) and flips to `stale` after 5 s without a read; an idle poll tick
+  or read composes no frame.
+- [Foundation](/architecture/foundation.md): the trace poll joins the
+  background-wake reuse table; [Performance](/architecture/performance.md)
+  and [Usage Telemetry](/architecture/usage-telemetry.md) note it.
+
 ## 2026-10-02 (hex viewer: overwrite edit mode, #2876)
 
 - [Hex Viewer](/architecture/hex-viewer.md): new *Editing* section — the

@@ -394,16 +394,29 @@ func (m Model) handleTraceRead(msg traceReadMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.traceShowingHistory() {
 		// The pane shows a stored session (#2860): the live one was read
-		// and filed, but stays off screen until esc / r.
+		// and filed, but stays off screen until esc / r — nothing on screen
+		// moved unless a save landed (#2884).
+		if msg.saved == nil {
+			m.markFrameReusable()
+		}
 		return m, tea.Batch(again, m.ensureTraceTick())
 	}
 	p.SetRead(msg.at, msg.added)
+	changed := msg.saved != nil
 	if msg.rev != m.traceShownRev || !p.HasSession() || msg.info != p.Info() {
 		p.Set(msg.nodes, msg.info)
 		p.SetPath(msg.stops)
 		m.traceShownRev = msg.rev
+		changed = true
 	}
-	m.syncTraceLinks()
+	if m.syncTraceLinks() {
+		changed = true
+	}
+	// An idle poll (#2884): same revision, same info, same links and a
+	// header that would read the same — the previous frame is exact.
+	if !changed && !p.StatusChanged() {
+		m.markFrameReusable()
+	}
 	return m, tea.Batch(again, m.ensureTraceTick())
 }
 
@@ -453,6 +466,12 @@ func (m Model) handleTraceTick(msg traceTickMsg) (tea.Model, tea.Cmd) {
 		m.agentTracePanel().SetFollowing(target.label())
 		work = m.traceReadCmd()
 	}
+	// The tick only launches work and re-arms (#2884): unless the follow
+	// label or the liveness segment now reads differently, the previous
+	// frame is exact.
+	if !m.agentTracePanel().StatusChanged() {
+		m.markFrameReusable()
+	}
 	return m, tea.Batch(work, m.armTraceTick(false))
 }
 
@@ -498,21 +517,24 @@ func (m Model) traceChanges() []agenttrace.Change {
 }
 
 // syncTraceLinks relinks the shown tree against the feed and applies a
-// pending jump from the feed once the tree is there.
-func (m *Model) syncTraceLinks() {
+// pending jump from the feed once the tree is there. It reports whether the
+// pane changed (new links or a jump).
+func (m *Model) syncTraceLinks() bool {
 	p := m.agentTracePanel()
 	if p == nil || !p.HasSession() {
-		return
+		return false
 	}
 	links := agenttrace.Link(p.Nodes(), m.traceChanges(), m.traceFollow.key, p.Info().CWD)
-	p.SetLinks(links)
+	changed := p.SetLinks(links)
 	m.traceLinks = links
 	if key := m.traceJump; key != "" {
 		m.traceJump = ""
+		changed = true
 		if !p.Select(key) {
 			m.host.Notify(host.Info, traceNodeGone)
 		}
 	}
+	return changed
 }
 
 // traceNodeGone is the notice for a back-link whose node the pane does not
