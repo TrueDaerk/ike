@@ -234,3 +234,26 @@ func TestHexEditKeysReachPane(t *testing.T) {
 	}
 	_ = m
 }
+
+// TestHexEditUndoRedoChords: the editor's undo / redo chords (#2888) reach
+// the hex viewer — ctrl+z and cmd+z undo, ctrl+shift+z and cmd+shift+z redo.
+func TestHexEditUndoRedoChords(t *testing.T) {
+	for _, mod := range []tea.KeyMod{tea.ModCtrl, tea.ModSuper} {
+		m, _ := hexEditOpen(t, false)
+		m = hexEditType(m, "6b")
+		hv := m.focusedContent().Hex()
+		if hv.Modified() != 1 {
+			t.Fatalf("typing 6b must edit one byte, modified %d", hv.Modified())
+		}
+		out, cmd := m.Update(tea.KeyPressMsg{Code: 'z', Mod: mod})
+		m = drainCmd(out.(Model), cmd)
+		if hv.Modified() != 0 {
+			t.Fatalf("mod %v+z must undo the edit, modified %d", mod, hv.Modified())
+		}
+		out, cmd = m.Update(tea.KeyPressMsg{Code: 'z', Mod: mod | tea.ModShift})
+		m = drainCmd(out.(Model), cmd)
+		if hv.Modified() != 1 {
+			t.Fatalf("mod %v+shift+z must redo the edit, modified %d", mod, hv.Modified())
+		}
+	}
+}

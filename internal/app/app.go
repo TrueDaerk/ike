@@ -8057,6 +8057,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// edited bytes back in place.
 		return m, m.saveFocusedHex()
 
+	case HexUndoMsg:
+		m.undoFocusedHex(false)
+		return m, nil
+
+	case HexRedoMsg:
+		m.undoFocusedHex(true)
+		return m, nil
+
 	case hexview.CopyMsg:
 		// y / enter in the hex viewer's copy menu (#2420).
 		m.copyToClipboard(msg.Text)

@@ -136,7 +136,9 @@ bring their own.
 | Show Timeline | `file.timeline` | — | — | everywhere |
 | Open Results in Find Window | `find.openInPanel` | `cmd+enter` | — | everywhere |
 | Welcome Tour | `help.welcomeTour` | — | — | everywhere |
+| Redo Hex Edit | `hex.redo` | `cmd+shift+z` | — | everywhere |
 | Save Hex Edits | `hex.save` | `cmd+s` | — | everywhere |
+| Undo Hex Edit | `hex.undo` | `cmd+z` | — | everywhere |
 | Show Project History Timeline | `history.projectTimeline` | — | — | everywhere |
 | HTML Preview | `html.preview` | `cmd+alt+h` | — | everywhere |
 | HTML preview: render in browser | `html.preview.browser` | — | — | everywhere |

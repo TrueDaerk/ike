@@ -770,6 +770,10 @@ var jetbrainsRows = []row{
 	// hex pane does not have.
 	{"cmd+s", "hex.save", "Save hex edits", Hex, "Hex viewer (#2876)"},
 	{"ctrl+s", "hex.save", "Save hex edits", Hex, "Hex viewer (#2876)"},
+	{"cmd+z", "hex.undo", "Undo hex edit", Hex, "Hex viewer (#2888)"},
+	{"ctrl+z", "hex.undo", "Undo hex edit", Hex, "Hex viewer (#2888)"},
+	{"cmd+shift+z", "hex.redo", "Redo hex edit", Hex, "Hex viewer (#2888)"},
+	{"ctrl+shift+z", "hex.redo", "Redo hex edit", Hex, "Hex viewer (#2888)"},
 	// The notebook viewer's run key (#2682): r executes the whole notebook in
 	// place through nbconvert, next to the pane's other single-letter actions
 	// (e scratch, y copy, o save image); run.file's shift+f10 does the same.

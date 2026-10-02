@@ -906,6 +906,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("archive.extractAll", "Extract Whole Archive…", ArchiveExtractAllMsg{}),
 			appCommand("archive.reload", "Reload Archive Listing", ArchiveReloadMsg{}),
 			appCommand("hex.save", "Save Hex Edits", HexSaveMsg{}),
+			appCommand("hex.undo", "Undo Hex Edit", HexUndoMsg{}),
+			appCommand("hex.redo", "Redo Hex Edit", HexRedoMsg{}),
 			// The explorer's keyboard context menu and archive actions
 			// (#2805): tree-scoped, like the explorer's own commands.
 			paneCommand("explorer.contextMenu", "Explorer: Show Context Menu", "explorer", ExplorerContextMenuMsg{}),

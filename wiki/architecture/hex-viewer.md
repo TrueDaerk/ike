@@ -123,7 +123,9 @@ see the edits.
 
 **Undo.** `u` undoes the last write — one completed (or committed half)
 hex byte, one text keystroke — and `ctrl+r` redoes; a plain stack of
-`byteEdit{off, old, new}` runs, a new write clearing the redo stack.
+`byteEdit{off, old, new}` runs, a new write clearing the redo stack. The editor's chords work too: `hex.undo`
+(`cmd+z` / `ctrl+z`) and `hex.redo` (`cmd+shift+z` / `ctrl+shift+z`) in the hex
+context (#2888).
 
 **Highlighting.** `classify(off, col)` ranks the cursor first: the active
 column's cursor (`classCursor`) wears the editor caret's mode colours —

@@ -35,6 +35,8 @@ var noCounterpart = map[string]string{
 	"http.resend":                      "IKE-only concept (#1832): repeating a captured request verbatim has no JetBrains keymap action",
 	"archive.reload":                   "IKE-only concept (#1762): JetBrains re-reads an archive on focus, no keymap action",
 	"hex.save":                         "IKE-only concept (#2876): JetBrains' hex editor plugin saves through the ordinary Save All action, already mapped to editor.write",
+	"hex.undo":                         "IKE-only concept (#2888): JetBrains has no hex editor; its $Undo is already mapped to editor.undo",
+	"hex.redo":                         "IKE-only concept (#2888): JetBrains has no hex editor; its $Redo is already mapped to editor.redo",
 	"http.showResponse":                "IKE-only concept (stored response without dispatch), no JetBrains equivalent",
 	"http.diffPreviousRun":             "IKE-only concept (response history diff, #2060), no JetBrains equivalent",
 	"http.copyResponse":                "IKE-only concept (#2315): JetBrains' $Copy is the editor copy, already mapped to editor.copy",
