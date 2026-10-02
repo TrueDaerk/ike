@@ -5512,6 +5512,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case MaximizePaneMsg:
 		// pane.maximize (cmd+k z / View menu, #358): tmux-style zoom toggle.
+		// With the popup layer focused it zooms the layer's keyboard owner —
+		// the popup box or a floating panel (#2899) — not the pane below.
+		if m.popupLayerFocused() {
+			m.togglePopupMaximize()
+			return m, nil
+		}
 		m.toggleMaximize()
 		return m, nil
 
