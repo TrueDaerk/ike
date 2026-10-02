@@ -124,6 +124,9 @@ func phpIndexStatusBody(x *phpindex.Index) string {
 		"  declarations   " + strconv.Itoa(s.Declarations) + "\n" +
 		"  edges          " + strconv.Itoa(s.Edges) + "\n" +
 		"  last scan      " + phpScanDuration(s.LastScan) + "\n"
+	if s.Cached > 0 {
+		body += "  from cache     " + strconv.Itoa(s.Cached) + " files unchanged since the last session\n"
+	}
 	if s.Truncated {
 		body += "  truncated      yes — the walk stopped at php.index.max_files\n"
 	}

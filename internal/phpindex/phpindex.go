@@ -17,6 +17,8 @@
 // through the walk's single worker, and open buffers overriding their on-disk
 // file from the editor's change events (debounced off the Update goroutine).
 // Queries (query.go) run on a snapshot derived once per content generation.
+// A finished walk persists its extractions (cache.go, #2885) so the next
+// session re-parses only the files that changed.
 //
 // Without cgo the highlight layer has no syntax tree: the index stays empty
 // and Stats reports it unavailable; nothing panics.
@@ -33,6 +35,7 @@ import (
 	"ike/internal/highlight"
 	"ike/internal/host"
 	"ike/internal/lang"
+	"ike/internal/safego"
 )
 
 // Scan limits: PHP legacy classes run long, so the per-file cap sits above
@@ -60,6 +63,8 @@ type Options struct {
 	ParentDepth   int
 	IncludeVendor bool
 	MaxFiles      int
+	// Cache persists the walk across sessions (php.index.cache, #2885).
+	Cache bool
 }
 
 // FromConfig maps the typed [php] section to Options.
@@ -69,6 +74,7 @@ func FromConfig(c config.PHP) Options {
 		ParentDepth:   c.Index.ParentDepth,
 		IncludeVendor: c.Index.IncludeVendor,
 		MaxFiles:      c.Index.MaxFiles,
+		Cache:         c.Index.Cache,
 	}
 }
 
@@ -91,6 +97,9 @@ type Stats struct {
 	// php.index.max_files before the tree was exhausted.
 	LastScan  time.Duration
 	Truncated bool
+	// Cached counts the files the last walk took from the persisted cache
+	// instead of parsing them (#2885); 0 for a cold walk.
+	Cached int
 }
 
 // bufDoc is one observed open buffer; its extraction overrides the on-disk
@@ -113,9 +122,11 @@ type Index struct {
 	root    string
 	opts    Options
 	project *langindex.Index[fileDecls] // nil while disabled
-	buffers map[string]*bufDoc
-	bufGen  uint64
-	timer   *time.Timer
+	// cacheFile is where the walk persists (CacheFile(root), #2885).
+	cacheFile string
+	buffers   map[string]*bufDoc
+	bufGen    uint64
+	timer     *time.Timer
 	// snap is the query snapshot derived for snapKey; a changed key
 	// rebuilds it lazily on the next query.
 	snap    *snapshot
@@ -150,7 +161,7 @@ type snapKey struct {
 // New returns the index over the project at root ("" indexes nothing) and,
 // when opts.Enabled, starts the scan in the background.
 func New(root string, opts Options) *Index {
-	x := &Index{root: root, buffers: map[string]*bufDoc{}}
+	x := &Index{root: root, cacheFile: CacheFile(root), buffers: map[string]*bufDoc{}}
 	x.Reconfigure(opts)
 	return x
 }
@@ -168,12 +179,21 @@ func (x *Index) Options() Options {
 // Reconfigure applies changed [php] settings live: turning the master
 // switch off drops the index (buffers included), turning it on builds and
 // scans it, a changed vendor/file cap rescans, and a changed parent depth
-// only refreshes the derived snapshot.
+// only refreshes the derived snapshot. Turning the cache off deletes it;
+// turning it on persists the finished walk at once.
 func (x *Index) Reconfigure(opts Options) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
 	prev := x.opts
 	x.opts = opts
+	if prev.Cache && !opts.Cache {
+		file := x.cacheFile
+		safego.Go("phpindex.removeCache", func() { removeCache(file) })
+	}
+	if !prev.Cache && opts.Cache && opts.Enabled && x.project != nil && x.project.Done("php") {
+		p := x.project
+		safego.Go("phpindex.saveCache", func() { x.persist(p) })
+	}
 	switch {
 	case !opts.Enabled:
 		x.project = nil
@@ -187,7 +207,7 @@ func (x *Index) Reconfigure(opts Options) {
 			x.chTimer.Stop()
 		}
 	case x.project == nil || prev.IncludeVendor != opts.IncludeVendor || prev.MaxFiles != opts.MaxFiles:
-		x.project = x.newProject(opts)
+		x.project = x.newProject(opts, true)
 		x.project.Ensure("php")
 		x.snap = nil
 		x.armWatchLocked()
@@ -202,6 +222,8 @@ func (x *Index) Reconfigure(opts Options) {
 // thousands of files, a generator run — where no watcher event ever arrived.
 // Observed open buffers survive it; they are the editor's live truth, not
 // the walk's, and re-reading them would only lose the unsaved overrides.
+// The rebuild ignores the persisted cache (#2885) — it is the escape hatch
+// for a cache gone wrong too — and replaces it once the walk finishes.
 //
 // It reports false when there is nothing to rebuild — php.trait_index is off,
 // or the build cannot parse PHP at all — so the command can say so instead of
@@ -215,7 +237,7 @@ func (x *Index) Rebuild() bool {
 	if !x.opts.Enabled {
 		return false
 	}
-	x.project = x.newProject(x.opts)
+	x.project = x.newProject(x.opts, false)
 	x.project.Ensure("php")
 	x.snap = nil
 	x.armWatchLocked()
@@ -224,8 +246,10 @@ func (x *Index) Rebuild() bool {
 
 // newProject builds the walk for opts: PHP files only (a custom classifier
 // keeps the walk from reading other languages' files for embedded PHP),
-// vendor/ kept when asked.
-func (x *Index) newProject(opts Options) *langindex.Index[fileDecls] {
+// vendor/ kept when asked. The walk persists through the cache (#2885) while
+// php.index.cache is on — read live, so a toggle mid-scan is honoured — and
+// seeds itself from it unless seeded is false (a rebuild).
+func (x *Index) newProject(opts Options, seeded bool) *langindex.Index[fileDecls] {
 	limits := langindex.Limits{MaxFileSize: maxFileSize, MaxFiles: opts.MaxFiles}
 	if limits.MaxFiles <= 0 {
 		limits.MaxFiles = 20000
@@ -233,7 +257,36 @@ func (x *Index) newProject(opts Options) *langindex.Index[fileDecls] {
 	if opts.IncludeVendor {
 		limits.KeepDirs = []string{"vendor"}
 	}
-	return langindex.New(x.root, limits, phpOnly, extractFile)
+	p := langindex.New(x.root, limits, phpOnly, extractFile)
+	persist := langindex.Persist[fileDecls]{
+		Saved: func(string) { x.persist(p) },
+	}
+	if seeded {
+		persist.Load = func(string) map[string]langindex.Seeded[fileDecls] {
+			x.mu.Lock()
+			on := x.opts.Cache
+			x.mu.Unlock()
+			if !on {
+				return nil
+			}
+			return loadCache(x.cacheFile, x.root)
+		}
+	}
+	p.SetPersist(persist)
+	return p
+}
+
+// persist writes walk p to the cache when the cache is on and p is still the
+// index's walk — a walk a rebuild or a setting already replaced is stale. It
+// runs on a scan (or helper) goroutine; a failed write only costs the next
+// session its warm start.
+func (x *Index) persist(p *langindex.Index[fileDecls]) {
+	x.mu.Lock()
+	ok := x.opts.Cache && x.opts.Enabled && x.project == p
+	x.mu.Unlock()
+	if ok {
+		_ = saveCache(x.cacheFile, x.root, p)
+	}
 }
 
 // phpOnly classifies a path for the walk: "php" for a PHP file, "" for
@@ -359,6 +412,7 @@ func (x *Index) Stats() Stats {
 	}
 	s.Scanning = !p.Done("php")
 	s.LastScan, s.Truncated = p.ScanInfo("php")
+	s.Cached = p.Cached("php")
 	snap := x.snapshot()
 	if snap != nil {
 		s.Files = len(snap.files)

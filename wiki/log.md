@@ -1,5 +1,22 @@
 # Log
 
+## 2026-10-02 (PHP declaration index persists across sessions, #2885)
+
+- [PHP Trait Index](/architecture/php-trait-index.md): new § Persistence
+  across sessions — a finished walk writes its per-file extractions with
+  size+mtime stamps to `.ike/php-index.gob` (`IKE_CONFIG_DIR` seam), the next
+  walk takes unchanged files from it and parses only changed or new ones;
+  removed or excluded files are never visited, so never resurrected. A
+  version stamp (`cacheVersion`) or root mismatch ignores the cache; a
+  rebuild runs cold. New setting `php.index.cache` (Settings → PHP →
+  *Persist index*, default on; off deletes the cache). The status popup gains
+  a `from cache` row.
+- [Completion](/architecture/completion.md)'s shared walk
+  (`internal/complete/langindex`) gains the `Persist{Load, Saved}` seam, file
+  stamps and `Cached(id)`; a seeded scan reads as done only after `Saved`.
+- [Usage Telemetry](/architecture/usage-telemetry.md): schema v16 — the
+  `php.trait.index_scan` op gains `cached`.
+
 ## 2026-10-02 (file finder: directory-segment tier and path-length tie-break, #2887)
 
 - [Command Palette](/architecture/command-palette.md): the `@` finder gains a

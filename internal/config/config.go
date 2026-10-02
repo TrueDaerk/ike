@@ -362,6 +362,7 @@ func (c *Config) Flat() map[string]string {
 	put("php.index.parent_depth", c.PHP.Index.ParentDepth)
 	put("php.index.include_vendor", c.PHP.Index.IncludeVendor)
 	put("php.index.max_files", c.PHP.Index.MaxFiles)
+	put("php.index.cache", c.PHP.Index.Cache)
 
 	put("debug.inline_values", c.Debug.InlineValues)
 	put("debug.session_end", c.Debug.SessionEnd)

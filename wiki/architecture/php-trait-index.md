@@ -1,10 +1,10 @@
 ---
 type: concept
 title: PHP Trait Index
-description: The workspace-wide PHP declaration index (Epic 0520, #2667) — every class-like declaration with its members, the trait-use / extends / implements edges between them, and the consumer scope a `$this` inside a trait body resolves against where Intelephense is blind. Built on the shared per-language project walk, kept fresh from buffer edits and watcher events, configured by the [php] section (Settings → PHP), with a status popup, a rebuild command and a per-scan telemetry op as its operations surface.
+description: The workspace-wide PHP declaration index (Epic 0520, #2667) — every class-like declaration with its members, the trait-use / extends / implements edges between them, and the consumer scope a `$this` inside a trait body resolves against where Intelephense is blind. Built on the shared per-language project walk, kept fresh from buffer edits and watcher events, persisted across sessions in .ike/php-index.gob so a warm start re-parses only changed files, configured by the [php] section (Settings → PHP), with a status popup, a rebuild command and a per-scan telemetry op as its operations surface.
 resource: internal/phpindex
-tags: [architecture, php, traits, index, completion, navigation, hover, references, rename, lsp, telemetry, status-line]
-timestamp: 2026-09-21T21:00:00Z
+tags: [architecture, php, traits, index, completion, navigation, hover, references, rename, lsp, telemetry, status-line, cache]
+timestamp: 2026-10-02T12:00:00Z
 ---
 
 # PHP Trait Index
@@ -96,6 +96,45 @@ or the parent depth changed: declarations by FQN, by short name and by
 file, the reverse trait-use edges (`users`: trait → the declarations using
 it directly) and the files referring to each declaration.
 
+## Persistence across sessions (#2885)
+
+A cold walk parses every PHP file — 55 s for 6.8k files in the wild — and
+until it finishes the trait features have nothing to answer with. With
+`php.index.cache` on (the default) the walk therefore persists
+(`internal/phpindex/cache.go`):
+
+- **Where.** `<root>/.ike/php-index.gob` beside the other per-project state
+  files, or `$IKE_CONFIG_DIR/php-index.gob` when that redirection seam is set
+  (`phpindex.CacheFile`). A gob stream: a header (`cacheVersion`, the project
+  root, the record count) and one record per file — path, **stamp** (size +
+  mtime in ns) and the file's extraction. `Decl.Path` / `Member.Path` are
+  stored once per record and restored on load.
+- **When.** At the end of every walk, on the scan goroutine, through the
+  langindex seam `Persist{Load, Saved}`: the result is installed (queries see
+  it) first, the cache written, and only then does the scan read as done — so
+  anything waiting on `ScanDone` never races the write. The file is written
+  to a temporary sibling and renamed into place. A walk without a single PHP
+  file writes nothing and removes a leftover cache, so a non-PHP project
+  never grows the file.
+- **Load.** The next walk seeds itself from the cache: a file whose current
+  stamp equals the cached one is taken as it is, without a read or a parse; a
+  changed or new file is parsed; a cached file the walk no longer reaches —
+  deleted, under an excluded directory, beyond the file cap — is simply never
+  visited, so the cache cannot resurrect it. Watcher re-extractions during a
+  session keep the stamps current.
+- **Invalidation.** A cache with another `cacheVersion`, another root
+  (`IKE_CONFIG_DIR` shared between projects) or a decode error is ignored and
+  the walk runs cold. Bump `cacheVersion` whenever `fileDecls` changes shape
+  or the extractor answers differently for the same input;
+  `TestCacheVersionTracksFormat` fails on a shape change without a bump.
+- **Escape hatches.** `php.traitIndex.rebuild` ignores the cache (it rescans
+  cold and replaces the file afterwards); turning `php.index.cache` off
+  deletes the file and the next walk neither reads nor writes one; turning it
+  on persists the finished walk at once.
+
+`Stats().Cached` (and the scan op's `cached` field) counts the files the last
+walk took from the cache.
+
 ## Scope rules
 
 For a trait `T` the **consumer scope** is the union, in precedence order,
@@ -133,9 +172,10 @@ unavailable.
 | `php.index.parent_depth` | `3` (0–10) | parent levels of the consumers that contribute to the scope; applies without a rescan |
 | `php.index.include_vendor` | `false` | read `vendor/` too (the server already covers it); rescans |
 | `php.index.max_files` | `20000` (min 100) | walk cap; rescans, and a truncated scan is flagged in `Stats()` |
+| `php.index.cache` | `true` | persist the walk across sessions (see above); off deletes the cache, on writes it at once |
 
 The loader clamps the ranges with a diagnostic; the form rejects a
-non-number and clamps out-of-range input with a notice. Reloads reach the
+non-number and clamps out-of-range input with a notice; the switches toggle. Reloads reach the
 index through `reloadConfig` → `Reconfigure`.
 
 ## Completion (#2668)
@@ -462,12 +502,15 @@ floating-shell modal — esc dismisses it — over `Index.Stats()`:
   declarations   2977
   edges          4102
   last scan      612ms
+  from cache     1838 files unchanged since the last session
   truncated      yes — the walk stopped at php.index.max_files
 
   …/projects/legacy-shop
 ```
 
-`truncated` appears only when the walk hit `php.index.max_files`, and the
+`from cache` appears only when the walk was seeded from the
+[persisted cache](#persistence-across-sessions-2885);
+`truncated` only when the walk hit `php.index.max_files`, and the
 root is elided from the left so a deeply nested project cannot widen the box
 past the terminal. The two states in which the index can never answer replace
 the numbers with the reason: `disabled — php.trait_index is off` and
@@ -483,7 +526,8 @@ wakes the Update loop through the content-change callback, so the slot clears
 on its own without a timer.
 
 **Telemetry.** One `php.trait.index_scan` op per completed walk — the initial
-scan and every rebuild — with `ms`, `files` and `truncated`. The index fires
+scan and every rebuild — with `ms`, `files`, `truncated` and (schema v16,
+#2885) `cached`, the files taken from the persisted cache. The index fires
 it through `SetOnScan`, which shares the settle poll with the content-change
 callback, so completion is noticed without a second timer. The op is on the
 short list that never opens a session file (`startsSession`,

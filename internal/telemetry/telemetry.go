@@ -163,7 +163,13 @@ import (
 // omitted when no redirect was followed, so its absence reads as zero on v15
 // and as "not recorded" below it. Structural only — the count, never a URL,
 // host or Location.
-const SchemaVersion = 15
+//
+// v16 (#2885): the "php.trait.index_scan" op gains "cached" — how many of the
+// walk's "files" were taken from the persisted index cache instead of being
+// parsed. A warm start reads cached == files and a small "ms"; a cold walk
+// cached 0. Structural only — a count. Absence below v16 means every file was
+// parsed: there was no cache.
+const SchemaVersion = 16
 
 // defaultFlushInterval is how often the writer goroutine flushes the
 // bufio.Writer on its own, independent of buffer fill or explicit Flush
@@ -233,8 +239,10 @@ const (
 	// One completed project walk of the PHP declaration index (0520, #2673):
 	// the initial scan and every php.traitIndex.rebuild. "ms" is the walk's
 	// duration, "files" how many files it left indexed and "truncated" whether
-	// it stopped at php.index.max_files. A single ok phase per scan, so the
-	// volume is the number of scans and the durations price the warm-up.
+	// it stopped at php.index.max_files; "cached" (v16, #2885) how many of those
+	// files came from the persisted cache instead of being parsed. A single
+	// ok phase per scan, so the volume is the number of scans and the
+	// durations price the warm-up.
 	OpPHPTraitIndexScan = "php.trait.index_scan"
 )
 

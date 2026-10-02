@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -118,6 +119,29 @@ func TestPHPIndexStatusBodyStates(t *testing.T) {
 	} else if !strings.Contains(got, "unavailable") {
 		// A build without the PHP grammar reports the harder state first.
 		t.Errorf("a grammar-less build should read unavailable: %q", got)
+	}
+}
+
+// TestPHPIndexStatusBodyShowsWarmStart (#2885): the second session over the
+// fixture takes its files from the persisted cache, and the popup says how
+// many; the cold first session prints no such line.
+func TestPHPIndexStatusBodyShowsWarmStart(t *testing.T) {
+	m := phpOpsModel(t)
+	if got := phpIndexStatusBody(m.PHPIndex()); strings.Contains(got, "from cache") {
+		t.Fatalf("a cold first session has nothing from the cache:\n%s", got)
+	}
+	opts := m.PHPIndex().Options()
+	if !opts.Cache {
+		t.Fatal("php.index.cache should default to on")
+	}
+	warm := phpindex.New(m.PHPIndex().Root(), opts)
+	waitPHPScan(t, warm)
+	s := warm.Stats()
+	if s.Cached == 0 || s.Cached != s.Files {
+		t.Fatalf("the second session should be warm: %+v", s)
+	}
+	if got := phpIndexStatusBody(warm); !strings.Contains(got, "from cache     "+strconv.Itoa(s.Cached)+" files") {
+		t.Fatalf("the popup should report the warm start:\n%s", got)
 	}
 }
 
@@ -238,7 +262,7 @@ func TestPHPIndexRebuildInertWhenDisabled(t *testing.T) {
 }
 
 // TestPHPIndexScanRecordsTelemetryOp: one php.trait.index_scan op per scan —
-// the initial walk plus the rebuild's — carrying ms, files and truncated.
+// the initial walk plus the rebuild's — carrying ms, files, truncated and cached (#2885).
 func TestPHPIndexScanRecordsTelemetryOp(t *testing.T) {
 	m := phpOpsModel(t)
 	// The scan op alone never opens a session file (#2318's ghost rule, see
@@ -265,6 +289,9 @@ func TestPHPIndexScanRecordsTelemetryOp(t *testing.T) {
 	if d["truncated"] != "false" {
 		t.Errorf("truncated = %q, want false for a two-file fixture", d["truncated"])
 	}
+	if d["cached"] != "0" {
+		t.Errorf("cached = %q, want 0 for a first session without a cache", d["cached"])
+	}
 
 	tm, _ := m.Update(PHPIndexRebuildMsg{})
 	m = tm.(Model)
@@ -272,6 +299,10 @@ func TestPHPIndexScanRecordsTelemetryOp(t *testing.T) {
 	waitPHPOps(t, "the rebuild scan op", func() bool { return len(phpScanOps(t, m)) >= 2 })
 	if n := len(phpScanOps(t, m)); n != 2 {
 		t.Fatalf("after one rebuild %d scan ops were recorded, want 2", n)
+	}
+	// The rebuild runs cold even though the first walk persisted (#2885).
+	if got := phpScanOps(t, m)[1].Data["cached"]; got != "0" {
+		t.Errorf("rebuild cached = %q, want 0", got)
 	}
 }
 

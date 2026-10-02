@@ -4,7 +4,7 @@ title: Usage Telemetry
 description: Local-only usage recording — command (with outcome), keybinding, layout, session, heartbeat, freeze-with-goroutine-dump, operation-lifecycle, palette-pick, palette-dismissal and project-time events appended as per-session JSONL under ~/.ike/telemetry, asynchronous and content-free, switched by telemetry.enabled.
 resource: internal/telemetry/telemetry.go
 tags: [architecture, telemetry, usage, jsonl, privacy, diagnostics]
-timestamp: 2026-09-30T18:00:00Z
+timestamp: 2026-10-02T12:00:00Z
 ---
 
 # Usage Telemetry
@@ -33,7 +33,7 @@ paths.** Two guards enforce it:
 ## Event schema (the analysis interface)
 
 One JSON object per line. `v` is the schema version (`telemetry.SchemaVersion`,
-currently 15); readers must tolerate unknown fields and filter on `v`.
+currently 16); readers must tolerate unknown fields and filter on `v`.
 
 ```json
 {"v":13,"ts":"2026-08-27T10:15:30.123Z","sid":"a1b2c3d4e5f6","type":"command","data":{"id":"editor.save","source":"keybind"}}
@@ -59,6 +59,7 @@ currently 15); readers must tolerate unknown fields and filter on `v`.
 | 13 | #2692 | The `freeze` event narrows its meaning to **"the loop went quiet while work was pending"**: a beat below the pass threshold only counts as frozen when a pass was in flight at the beat, or input (a key, a mouse event) reached the program during the interval without a pass completing. An idle-quiet interval emits no event and writes no dump. The fields are unchanged (`passes`, `since_ms`, `dumped`), so a v13 event parses like a v10..v12 one — but v10..v12 `freeze` events include false positives: since the idle-churn work (#2540, #2626) an idle loop looks exactly like a frozen one from the pass counter's side, and the three dumps in the wild all showed the loop parked in its own select. Freeze *rates* are therefore not comparable across the boundary; from v13 every `freeze` has a stuck loop behind it. |
 | 14 | #2693 | The `heartbeat` event gains `renders` — the interval's three loudest **render triggers** as `type:count` pairs, where the type is the message whose Update pass the composed frame followed (`watch.EventBatchMsg:43,tea.KeyPressMsg:12,vcs.SnapshotMsg:2`). `top` says the loop composed N frames; `renders` says what for — the field that separates a wake worth drawing from render churn without a local repro. Summed over an interval it equals the interval's `view/render` count; a `view/reuse` pass is not a render and is never attributed. Omitted when the interval composed nothing. Structure only, never content. Absence below v14 means "not recorded". |
 | 15 | #2716 | The `http.flight` end phases gain `redirects` — how many redirects the exchange followed before it landed on the response the pane shows (a 301 → 302 → 200 is `2`). Go fires the DNS, connect and TLS hooks once per hop and the v8 breakdown *accumulates* them, so without the count a three-hop chain is indistinguishable from one slow host with a 3× handshake. The field is **omitted when no redirect was followed**, so on v15 absence reads as zero, below v15 as "not recorded". Structural only: the count, never a URL, host or `Location`. |
+| 16 | #2885 | The `php.trait.index_scan` op gains `cached` — how many of the walk's `files` were taken from the persisted [PHP index cache](php-trait-index.md#persistence-across-sessions-2885) instead of being parsed. A warm start reads `cached` equal to `files` with a small `ms`; a cold walk, a `php.traitIndex.rebuild` and a session with `php.index.cache` off read `0`. Structural only — a count, never a path. Absence below v16 means "no cache existed": every file was parsed. |
 
 An export spanning versions therefore needs three guards: filter v1 `command`
 events on `data.source != "internal"`, treat a missing `ok`/`ms` on v4 as
@@ -291,10 +292,11 @@ counts by the version's interval before comparing sessions.
     - `php.trait.index_scan` (#2673) — one completed project walk of the
       [PHP trait index](php-trait-index.md#operations-2673): the initial scan
       and every `php.traitIndex.rebuild`. `ms` is the walk's duration, `files`
-      how many files it left indexed and `truncated` (`true`/`false`) whether
-      it stopped at `php.index.max_files` — the three numbers the status popup
-      shows, so a review can say what the warm-up costs and whether the file
-      cap is biting. Like its neighbours a single `ok` phase, one per scan; a
+      how many files it left indexed, `truncated` (`true`/`false`) whether
+      it stopped at `php.index.max_files` and (v16, #2885) `cached` how many of
+      the `files` came from the persisted cache instead of being parsed — the
+      numbers the status popup shows, so a review can say what the warm-up
+      costs, whether the cache made it warm and whether the file cap is biting. Like its neighbours a single `ok` phase, one per scan; a
       disabled index and a build without the PHP grammar never scan and
       therefore record nothing. Like `session.restore` it **never opens a
       session file on its own** (#2318): the walk finishes a few seconds after
@@ -305,7 +307,8 @@ counts by the version's interval before comparing sessions.
     Those seven `php.trait.*` ids are epic 0520's complete op vocabulary —
     the ids the epic's review recipe greps for. All of them are additive — no
     existing field changes meaning, so no schema bump; absence in an older
-    export means the build predates them.
+    export means the build predates them. (The `cached` field the scan op
+    gained later did bump it, to v16 — see the version history.)
   - `palette.pick` (#2551) — a palette row was activated, the counterpart of
     `palette.dismiss`. `mode` is the mode's prefix rune, `query_len` the number
     of runes typed — **never the query itself** — `rank` the **0-based index**

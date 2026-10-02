@@ -56,6 +56,11 @@ func phpOptionsFrom(cfg host.Config) phpindex.Options {
 			def.MaxFiles = n
 		}
 	}
+	if v, ok := cfg.Get("php.index.cache"); ok {
+		if b, err := strconv.ParseBool(v); err == nil {
+			def.Cache = b
+		}
+	}
 	return def
 }
 
