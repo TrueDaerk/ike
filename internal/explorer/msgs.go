@@ -22,6 +22,11 @@ type RefreshMsg struct{}
 // gesture.
 type ResyncMsg struct{}
 
+// ExtractToMsg is explorer.extractTo (#2903): the tree's e key. The archive
+// actions live in the app (the archive viewer's extraction pipeline), so this
+// is deliberately not an explorer Msg — the root model handles it itself.
+type ExtractToMsg struct{}
+
 // RevealMsg moves the cursor to the currently open file (explorer.reveal).
 type RevealMsg struct{}
 

@@ -535,7 +535,7 @@ these are defaults.
 | `explorer.redo` | `Ctrl+Shift+Z` / `Cmd+Shift+Z` | re-apply the last undone file operation (`RedoMsg`) |
 | `explorer.contextMenu` | `alt+enter` | open the node context menu at the cursor row (#2805) |
 | `explorer.extractHere` | — (context menu) | unpack the selected archive / `.gz` beside it (#2805) |
-| `explorer.extractTo` | — (context menu) | unpack it into a directory picked in the extraction prompt (#2805) |
+| `explorer.extractTo` | `e` | unpack it into a directory picked in the extraction prompt (#2805; `e` since #2903) |
 | `explorer.compressGzip` | — (context menu) | gzip the selected file into `<name>.gz` (#2805) |
 | `explorer.compressZip` | — (context menu) | zip the selected directory or multi-selection (#2805) |
 
@@ -597,7 +597,12 @@ multi-select (marks or a shift range, `Model.OpTargetPaths`) → *Compress
   refused or failed run leaves nothing behind.
 - **Extract To…** opens the same target-directory prompt the viewer's `E`
   does, prefilled with that proposal (the `.gz`'s own directory for a plain
-  gzip, whose file then lands in the chosen directory).
+  gzip, whose file then lands in the chosen directory). The tree's **`e`**
+  key (#2903, an explorer-plugin keymap next to the other single-letter keys,
+  dispatching `explorer.ExtractToMsg`, which the app handles) runs the same
+  command without the menu, and the menu entry shows it as its shortcut; on
+  any other row it raises the "select an archive or a .gz file" notice, and
+  an open prompt or speed search still takes `e` as a typed character.
 - **Compress (gzip)** writes `<file>.gz` beside the file (`archive.WriteGzip`,
   `compress/gzip` default level, original kept, header carries name and
   mtime). **Compress (zip)** writes `<dir>.zip` beside a directory, or
