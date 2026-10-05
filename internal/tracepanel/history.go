@@ -358,9 +358,8 @@ func (m *Model) rewindLines(st agenttrace.Stop, width int) []string {
 		}
 		lines = append(lines, line)
 	}
-	lines = append(lines, "space collapse · the live path continues to the right")
 	for i, l := range lines {
-		lines[i] = fitCells(l, max(1, width-2))
+		lines[i] = fitCells(l, max(1, width-2*drawerPad))
 	}
 	return lines
 }

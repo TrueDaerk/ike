@@ -707,10 +707,18 @@ func (m *Model) headerLine(pal *theme.Palette) string {
 		// A stored session (#2860): the date is the headline, nothing is
 		// read or followed.
 		title := lipgloss.NewStyle().Foreground(pal.Accent).Bold(m.focused).Render(" history · " + m.info.History)
-		return title + lipgloss.NewStyle().Faint(true).Render(" · "+id+turns+" · esc live  "+m.display(m.info.Transcript))
+		return title + lipgloss.NewStyle().Foreground(pal.Secondary).Render(" · "+id+turns+" · esc live  "+m.display(m.info.Transcript))
 	}
+	// The meta segment is secondary text; the follow indicator ("⇢ agent ·
+	// …") stands out in the Info role so a followed terminal reads at a
+	// glance (#2901).
 	title := lipgloss.NewStyle().Foreground(pal.Accent).Bold(m.focused).Render(" " + id)
-	return title + lipgloss.NewStyle().Faint(true).Render(" · "+source+turns+state+m.shownStatus+"  "+m.display(m.info.Transcript))
+	meta := lipgloss.NewStyle().Foreground(pal.Secondary)
+	follow := ""
+	if m.following != "" {
+		follow = lipgloss.NewStyle().Foreground(pal.Info).Render(m.followStatus())
+	}
+	return title + meta.Render(" · "+source+turns+state+m.readStatus()) + follow + meta.Render("  "+m.display(m.info.Transcript))
 }
 
 // readStatus is the header's liveness segment (#2857, #2884): "live" while

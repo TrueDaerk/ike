@@ -4,7 +4,7 @@ title: Agent Trace
 description: Epic 0540 — the coding-agent session as a trace graph. This page covers the harness-neutral transcript model, the Claude Code JSONL parser with incremental tailing and edit-to-line resolution, subagent transcripts joined under their Agent call and `Write` on an existing file as an edit (#2861), and session discovery by working directory with fork exclusion (internal/agenttrace, #2842), the Claude Code hook push — settings.json installer, `ike agent-hook` CLI, binding a session to its terminal (#2843) — and the Agent Trace tool window on hiertree with click-to-code, live updates and the install-hooks dialog (internal/tracepanel, #2840), its graph view — the session as a snake path of prompt, change and answer boxes with expand-in-place, the `agent.trace.view` setting and the tree toggle (#2858), the links from writing file nodes to change-feed entries with diff/revert and the feed's jump back (#2838), per-change diffs reconstructed from the transcript with their provenance and a session-before / git HEAD / working-file base switch (#2859), `V` reverting any change from the feed or the transcript diff with a notice when nothing can be reverted (#2877), and `agent.ask` — a question about a node answered by a fork of the same session on a cheaper model, with its node context, settings and answer overlay (internal/agentask, #2845), and follow-up questions on the same fork, fork tagging and the trimmed context (#2844), the per-project session history — records written at turn boundaries, /clear boundaries, rewinds as abandoned branches behind a marker, the one-time import of Claude transcripts and the session picker with a read-only stored view (#2860) — plus keybinds and limitations (other harnesses) (#2839).
 resource: internal/agenttrace
 tags: [architecture, agents, claude, transcript, trace, discovery, hooks, tool-window, hiertree, change-feed, diff, ask, settings, history, rewind]
-timestamp: 2026-10-02T12:00:00Z
+timestamp: 2026-10-05T12:00:00Z
 ---
 
 # Agent Trace
@@ -415,23 +415,37 @@ tool calls are secondary: they live *inside* a change box and show on
 expand.
 
 ```
-┌?─────────────────────┐   ┌✎─────────────────────┐   ┌+─────────────────────┐
-│#1 Add a greeting to …│──▶│main.go               │──▶│hello.go              │
-│14:00                 │   │edit :3 +1 −0         │   │create                │
-└──────────────────────┘   └──────────────────────┘   └──────────────────────┘
+╔?═════════════════════╗   ┌✎─────────────────────┐   ┌+─────────────────────┐
+║#1 Add a greeting to …║──▶│main.go               │──▶│hello.go              │
+║14:00                 ║   │edit :3 +1 −0         │   │create                │
+╚══════════════════════╝   └──────────────────────┘   └──────────────────────┘
                                                                   │
                                                                   ▼
-┌✓─────────────────────┐   ┌✕─────────────────────┐   ┌✎─────────────────────┐
+╭◌─────────────────────╮   ┌✕─────────────────────┐   ┌✎─────────────────────┐
 │I'll read main.go, th…│◀──│notes.ipynb           │◀──│main.go               │
 │ended on a tool call  │   │delete                │   │edit :2 ×2            │
-└──────────────────────┘   └──────────────────────┘   └──────────────────────┘
+╰──────────────────────╯   └──────────────────────┘   └──────────────────────┘
             │
-── #2 ──────┼───────────────────────────────────────────────────────────────────
+┄┄ #2 ┄┄┄┄┄┄┼┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄
             ▼
-┌?─────────────────────┐         ┌✓─────────────────────┐
-│#2 /verify main.go    │──▶─◇───▶│Done: main.go greets,…│
-│14:01                 │         │14:02                 │
-└──────────────────────┘         └──────────────────────┘
+╔?═════════════════════╗         ╭✓─────────────────────╮
+║#2 /verify main.go    ║──▶─◇───▶│Done: main.go greets,…│
+║14:01                 ║         │14:02                 │
+╚══════════════════════╝         ╰──────────────────────╯
+```
+
+An expanded change box opens its drawer beneath the row:
+
+```
+┌✎─────────────────────┐
+│main.go               │
+│edit :3 +1 −0         │
+└───────────┬──────────┘
+╭───────────┴──────────────────────────────────────────────────────────────╮
+│ Edit · main.go · ok                                                      │
+│ › I'll read main.go, then add the greeting                               │
+│ main.go:3 · +1 −0 · Δ change feed                                        │
+╰─ space collapse · enter open · D diff · a ask · V revert ────────────────╯
 ```
 
 **Path model.** `agenttrace.BuildPath(session) []Stop` is the pure
@@ -455,44 +469,81 @@ and answer labels are the first non-empty line with whitespace collapsed
 **Layout.** `tracepanel/snake.go` is pure over widths: `BoxWidth(paneW)`
 picks the box width — as many boxes per row as keep each at least 22
 cells, else at least 18, capped at 28; a pane narrower than two 18-cell
-boxes is a single column of full-width boxes — and `Snake(widths, paneW,
-expanded, detailH)` places the slots: left-to-right from the top-left, a
-turn down when the next box would not fit, then right-to-left, and so on
-(boustrophedon). The first box of a row sits directly under the last box
-of the row before (sharing the edge the path came from), so a turn is a
-`│` over a `▼` in the two rows between — the rows breathe instead of
-stacking — and boxes on a row join with `──▶` / `◀──`. **A new question
-breaks the row (#2866):** every prompt stop but the first starts a new row
-even when it would still fit (`Snake` takes the break indices; `graphLayout`
+boxes is a single column of full-width boxes — and `Snake(widths, breaks,
+paneW, expanded, detailH)` places the slots: left-to-right from the
+top-left, a turn down when the next box would not fit, then right-to-left,
+and so on (boustrophedon). The first box of a row sits directly under the
+last box of the row before (sharing the edge the path came from), so a
+turn is a `│` over a `▼` in the two rows between — the rows breathe
+instead of stacking — and boxes on a row join with `──▶` / `◀──`. **A row
+runs towards the room (#2901):** a turn normally reverses the direction,
+but when the box the new row starts with does not sit at the edge the
+path came from — the row before held a single box, the path came off a
+narrow compaction marker, or a break follows a turn — the reversed
+direction may have no room for a box beside it while the other has; the
+row then keeps the direction (`fitsBeside`), so the next box sits beside
+the first instead of dropping another row. That was the edge-wrap step: a
+turn ending alone on a row at the left edge, followed by a prompt-and-
+answer turn, stacked the answer under the prompt. **A new question breaks
+the row (#2866):** every prompt stop but the first starts a new row even
+when it would still fit (`Snake` takes the break indices; `graphLayout`
 passes every prompt after the first), the path turning down as at a full
-row and continuing its boustrophedon direction; a faint full-width turn
-rule `── #<turn> ──…` sits between the rows (three gap rows: `│`, the rule
-crossed by `┼`, `▼`), so a session of many turns reads as separate
-questions. Compaction separators are unaffected. In a 12-row bottom pane
-(ten body rows) two box rows plus their two-row gap still fit exactly
-(`boxH` 4, `turnH` 2, `breakH` 3). Boxes are four rows (#2872), all the
-same height whether or not a stop has a detail — top border with the kind
-glyph (`?` prompt, `✎` edit/write, `+` create, `✕` delete, `✓` answer, `✗`
-failed call, `…` pending; the `Δ` of a linked change sits before the right
-corner), the label, the detail (faint, left-aligned, cut to the inner width
-like the label) and a closed bottom border with no text in it, a solid run
-of `─` between the corners (the expanded box's `┴` excepted, where its
-detail block attaches). The selection highlights both content rows; the
-`──▶` / `◀──` connectors sit on the label row;
-the canvas gives every rune exactly the cells its width claims (a wide
-rune never straddles the edge or leaves half a glyph behind) — so kinds
-read without colour; the kind colour adds the second cue on the
-border, the top-border glyph and the label row (#2874; the selection
-still wins on the selected box's content rows). The colours are the
-dedicated theme roles `TracePrompt`, `TraceEdit`, `TraceCreate`,
-`TraceDelete` and `TraceAnswer` (see [Themes](./themes.md)), set in every
-built-in so question, edit, create and answer are different hues — the
-generic `Accent`/`Info` they used to borrow share a hue in several themes.
-Failed calls (bold `Error`) and pending stops (faint) keep their look. The
-tree view does not colour by kind. The
-expanded box's detail block is inserted beneath its row and pushes the
-rows below down. The renderer draws onto a cell canvas (`graph.go`) and
-the mouse hit test (`Layout.At`) reads the same slots.
+row; a dotted full-width turn rule `┄┄ #<turn> ┄┄…` sits between the rows
+(three gap rows: the turn, the rule crossed by `┼`, `▼`), the turn number
+in the question colour, so a session of many turns reads as separate
+questions without the rule dominating. A compaction marker right before a
+question starts the question's row with it (`graphLayout` moves the break
+onto the marker; the rule is still labelled with the question's turn)
+rather than taking a row of its own, and the path runs straight into the
+marker (`│` over `◇`). When the centres of a turn's two slots differ (a
+box under a marker) the turn is a rounded elbow (`╰──╮` / `╭──╯`) on the
+top gap row instead of a dangling `│`. In a 12-row bottom pane (ten body
+rows) two box rows plus their two-row gap still fit exactly (`boxH` 4,
+`gapW` 3, `turnH` 2, `breakH` 3 — reviewed for #2901 and kept: at 80
+cells three 24-cell boxes fill the row, at 120 four 27-cell ones, at 160
+six 24-cell ones, at 200 eight 22-cell ones). The expanded box's drawer is
+inserted beneath its row and pushes the rows below down by its full
+height. The renderer draws onto a cell canvas (`graph.go`) and the mouse
+hit test (`Layout.At`) reads the same slots.
+
+**Look (#2901).** Boxes are four rows (#2872), all the same height whether
+or not a stop has a detail: the top border carrying the kind glyph right
+after the corner (the `Δ` of a linked change sits before the right corner,
+in the `Accent` colour), the label, the detail and a closed bottom border
+with no text in it, a solid run between the corners (the expanded box's
+`┬` at its centre excepted, where its drawer attaches). Kinds tell apart
+by **frame, glyph and colour**, so a monochrome terminal still reads the
+path: a question is a double frame (`╔?═╗`), a change a single frame with
+`✎` edit/write, `+` create, `✕` delete or `✗` failed call (bold `Error`),
+an answer a rounded frame (`╭✓─╮`) — `◌` and dimmed when the turn ended on
+a tool call (implicit) — and a pending change or answer a dashed frame
+(`┌…┄┐` / `╭…┄╮`) in faint text until it settles; a rewind marker (#2860)
+is a faint single frame with `↶`; a compaction separator is a `◇` on the
+path, not a box. The colours are the dedicated theme roles `TracePrompt`,
+`TraceEdit`, `TraceCreate`, `TraceDelete` and `TraceAnswer` (see
+[Themes](./themes.md)), set in every built-in so question, edit, create
+and answer are different hues, on the frame, the glyph and the label row
+(#2874); the detail row is secondary text (`Secondary`) with a change's
+markers in their own colours — `+N` in the create hue, `−M` in the delete
+hue, `×2` in the edit hue, `✗` bold error, `…` faint; the path (arrows,
+turns, elbows, the rule and the `◇`'s dashes) takes the `Border` role. No
+colour is hard-coded, so the light and dark palettes both read. The
+**selected box is lifted off the pane**: all four rows, frame included,
+take the `Selection` background (`SelectionMuted` while the pane is
+unfocused) and the focused pane's content rows the `SelectionText` colour,
+bold; the frame keeps its kind colour. The **drawer** of the expanded box
+is a full-width rounded block beneath its row whose top border joins the
+box's `┬` with a `┴`; inside are the detail lines (the call(s) with name,
+title and status, the preceding assistant text as secondary `›` lines, the
+location with the patch summary and the Δ mark — `detailLines`; a rewind
+marker's abandoned branch, `rewindLines`), and its bottom border carries
+the key hint (`drawerHint`). The canvas gives every rune exactly the cells
+its width claims (a wide rune never straddles the edge or leaves half a
+glyph behind), each cell carrying a foreground style and a selection
+background independently. The pane header's meta segment is secondary
+text with the follow indicator (`⇢ …`) in the `Info` role; the graph's
+empty state is `(no events yet)` with a one-line explanation. The tree
+view does not colour by kind.
 
 **Selection and keys.** One box is selected; `h`/`l` (`left`/`right`)
 move to the nearest box to the left/right on the same screen row

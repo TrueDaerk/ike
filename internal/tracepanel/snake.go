@@ -143,6 +143,16 @@ func Snake(widths []int, breaks []int, paneW, expanded, detailH int) Layout {
 					x = last.X
 				}
 				x = max(0, min(x, paneW-w))
+				// The row runs towards the room (#2901): when the last box
+				// of the row before did not sit at the edge the turn comes
+				// from — a row of one box, a narrow separator, a break
+				// right after a turn — the reversed direction may have no
+				// room for a box beside this one while the other has; the
+				// row then keeps the direction, and the next box sits
+				// beside this one instead of under it.
+				if !fitsBeside(x, w, dir, boxW, paneW) && fitsBeside(x, w, -dir, boxW, paneW) {
+					dir = -dir
+				}
 			}
 			l.Slots[i] = Slot{X: x, Y: y, W: w, H: boxH, Row: row, Dir: dir, Break: brk[i]}
 		}
@@ -155,6 +165,29 @@ func Snake(widths []int, breaks []int, paneW, expanded, detailH int) Layout {
 		l.Height = y + boxH + rowDetail
 	}
 	return l
+}
+
+// fitsBeside reports whether a box boxW wide fits gapW beside the slot at
+// (x, w) in direction dir inside paneW.
+func fitsBeside(x, w, dir, boxW, paneW int) bool {
+	if dir > 0 {
+		return x+w+gapW+boxW <= paneW
+	}
+	return x-gapW-boxW >= 0
+}
+
+// RowBreak reports whether the row of slot i was started by a break, so a
+// turn rule sits two rows above it.
+func (l Layout) RowBreak(i int) bool {
+	if i < 0 || i >= len(l.Slots) {
+		return false
+	}
+	for j := i; j >= 0 && l.Slots[j].Row == l.Slots[i].Row; j-- {
+		if l.Slots[j].Break {
+			return true
+		}
+	}
+	return false
 }
 
 // At returns the index of the slot containing content cell (x, y), -1 when

@@ -1,5 +1,16 @@
 # Log
 
+## 2026-10-05 (agent trace graph: reworked look, edge-wrap fix, #2901)
+
+- [Agent Trace](/architecture/agent-trace.md): § Graph view — new ASCII
+  example and *Look* paragraph: frames per kind (double question, single
+  change, rounded answer, dashed pending, `◌` implicit), coloured detail
+  markers, the selected box lifted on the selection background, the expanded
+  box's framed drawer joined by `┬`/`┴`, rounded elbows on misaligned turns,
+  the dotted `┄┄ #<turn> ┄┄` rule. Layout: a turned row runs towards the room
+  (`fitsBeside`) — the edge-wrap step after a single-box row is gone — and a
+  compaction marker right before a question shares the question's row.
+
 ## 2026-10-02 (edge-anchored mouse resize for every centered popup, #2896)
 
 - [Floating Shell](/architecture/floating-shell.md): new § Edge-anchored

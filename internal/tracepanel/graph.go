@@ -1,6 +1,7 @@
 package tracepanel
 
 import (
+	"image/color"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -221,10 +222,16 @@ func (m *Model) graphLayout() Layout {
 		} else {
 			widths[i] = sepW
 		}
-		// Every question but the first starts a new row (#2866).
+		// Every question but the first starts a new row (#2866); a
+		// compaction marker right before the question starts the row
+		// with it instead of taking a row of its own (#2901).
 		if g.stops[i].Kind == agenttrace.StopPrompt {
 			if seenPrompt {
-				breaks = append(breaks, i)
+				b := i
+				if i > 0 && !g.stops[i-1].Selectable() {
+					b = i - 1
+				}
+				breaks = append(breaks, b)
 			}
 			seenPrompt = true
 		}
@@ -232,7 +239,7 @@ func (m *Model) graphLayout() Layout {
 	exp := m.stopIndex(g.expanded)
 	detailH := 0
 	if exp >= 0 {
-		detailH = len(m.detailLines(g.stops[exp], m.width))
+		detailH = len(m.detailLines(g.stops[exp], m.width)) + detailFrameH
 	}
 	return Snake(widths, breaks, m.width, exp, detailH)
 }
@@ -264,7 +271,7 @@ func (m *Model) graphEnsureVisible() {
 	}
 	s := l.Slots[i]
 	y0, y1 := s.Y, s.Y+s.H
-	if s.Break {
+	if l.RowBreak(i) {
 		y0 = s.Y - 2
 	}
 	if l.DetailY == y1 {
@@ -451,8 +458,9 @@ func (m *Model) graphClick(x, y int) tea.Cmd {
 	return m.openStop(&m.graph.stops[i])
 }
 
-// detailLines is the expanded block of a change box: the call(s) behind
-// it, the assistant text that preceded it, the patch summary and the keys.
+// detailLines is the expanded drawer's content for a change box: the call(s)
+// behind it, the assistant text that preceded it and the patch summary; the
+// key hint sits in the drawer's frame (drawerHint).
 func (m *Model) detailLines(st agenttrace.Stop, width int) []string {
 	var lines []string
 	if st.Kind == agenttrace.StopRewind {
@@ -489,36 +497,69 @@ func (m *Model) detailLines(st agenttrace.Stop, width int) []string {
 		}
 		lines = append(lines, where+" · "+diff)
 	}
-	lines = append(lines, "space collapse · enter open · D diff · a ask · V revert")
 	for i, l := range lines {
-		lines[i] = fitCells(l, max(1, width-2))
+		lines[i] = fitCells(l, max(1, width-2*drawerPad))
 	}
 	return lines
 }
 
-// Canvas cell styles.
+// drawerPad is the cells the drawer's frame and padding take on each side
+// of a detail line.
+const drawerPad = 2
+
+// Canvas cell styles (#2901): a cell carries one foreground style and,
+// independently, one selection background, so the selected box keeps its
+// kind colour on the frame while the whole box is lifted off the pane.
 const (
 	stPlain = iota
-	stFaint
+	// stSecondary is the secondary text: detail rows, the separator marker,
+	// the drawer's key hint, a drawer's context lines.
+	stSecondary
 	stPrompt
 	stEdit
 	stCreate
 	stDelete
 	stAnswer
+	// stImplicit is an answer the turn never spoke (it ended on a tool
+	// call): the answer hue, dimmed.
+	stImplicit
 	stError
 	stPending
-	stSelected
-	stSelectedMuted
+	stRewind
+	// stSelText is the text of the focused selected box.
+	stSelText
+	// stConn is the path: arrows, turns, elbows, the rule crossing.
 	stConn
+	// stRule is the turn rule between two questions; stRuleLabel its
+	// "#<turn>".
+	stRule
+	stRuleLabel
+	// stDetail and stFrame are the expanded drawer's text and frame.
 	stDetail
+	stFrame
+	// stAdded, stRemoved and stTimes are a change detail's "+N", "−M" and
+	// "×2" markers; stLink the Δ of a linked change.
+	stAdded
+	stRemoved
+	stTimes
+	stLink
 	stCount
 )
 
+// Canvas cell backgrounds.
+const (
+	bgNone = iota
+	bgSelected
+	bgSelectedMuted
+	bgCount
+)
+
 // cell is one canvas position: its glyph ("" for the second half of a wide
-// rune) and style.
+// rune), style and selection background.
 type cell struct {
 	ch string
 	st int
+	bg int
 }
 
 // canvas is the graph's drawing surface.
@@ -543,7 +584,8 @@ func newCanvas(w, h int) *canvas {
 // cells (<= 0 for no limit). Every rune takes exactly the cells its width
 // claims, so a row always renders c.w cells wide: a wide rune that would
 // straddle the right edge is left out, and a write over half of a wide
-// rune blanks the other half (#2866).
+// rune blanks the other half (#2866). The background of the cells written
+// is kept.
 func (c *canvas) put(x, y int, s string, st, maxW int) {
 	if y < 0 || y >= c.h {
 		return
@@ -562,9 +604,9 @@ func (c *canvas) put(x, y int, s string, st, maxW int) {
 			if w == 2 {
 				c.clear(x+1, y)
 			}
-			c.cells[y][x] = cell{ch: string(r), st: st}
+			c.cells[y][x] = cell{ch: string(r), st: st, bg: c.cells[y][x].bg}
 			if w == 2 {
-				c.cells[y][x+1] = cell{ch: "", st: st}
+				c.cells[y][x+1] = cell{ch: "", st: st, bg: c.cells[y][x+1].bg}
 			}
 		}
 		x += w
@@ -578,11 +620,11 @@ func (c *canvas) clear(x, y int) {
 	row := c.cells[y]
 	switch {
 	case row[x].ch == "" && x > 0:
-		row[x-1] = cell{ch: " ", st: row[x-1].st}
+		row[x-1] = cell{ch: " ", st: row[x-1].st, bg: row[x-1].bg}
 	case x+1 < c.w && row[x+1].ch == "":
-		row[x+1] = cell{ch: " ", st: row[x+1].st}
+		row[x+1] = cell{ch: " ", st: row[x+1].st, bg: row[x+1].bg}
 	}
-	row[x] = cell{ch: " ", st: row[x].st}
+	row[x] = cell{ch: " ", st: row[x].st, bg: row[x].bg}
 }
 
 // fill writes n copies of glyph from (x, y).
@@ -604,8 +646,20 @@ func (c *canvas) restyle(x, y, n, st int) {
 	}
 }
 
-// lines renders rows [from, to) with the given styles.
-func (c *canvas) lines(from, to int, styles []lipgloss.Style) []string {
+// highlight sets the background of a run of cells.
+func (c *canvas) highlight(x, y, n, bg int) {
+	if y < 0 || y >= c.h {
+		return
+	}
+	for i := x; i < x+n && i < c.w; i++ {
+		if i >= 0 {
+			c.cells[y][i].bg = bg
+		}
+	}
+}
+
+// lines renders rows [from, to) with the given styles and backgrounds.
+func (c *canvas) lines(from, to int, styles []lipgloss.Style, bgs []color.Color) []string {
 	var out []string
 	for y := from; y < to && y < c.h; y++ {
 		if y < 0 {
@@ -613,15 +667,18 @@ func (c *canvas) lines(from, to int, styles []lipgloss.Style) []string {
 		}
 		var sb strings.Builder
 		var run strings.Builder
-		cur := -1
+		cur, curBg := -1, -1
 		flush := func() {
 			if run.Len() == 0 {
 				return
 			}
-			if cur == stPlain {
+			switch {
+			case cur == stPlain && curBg == bgNone:
 				sb.WriteString(run.String())
-			} else {
+			case curBg == bgNone:
 				sb.WriteString(styles[cur].Render(run.String()))
+			default:
+				sb.WriteString(styles[cur].Background(bgs[curBg]).Render(run.String()))
 			}
 			run.Reset()
 		}
@@ -629,9 +686,9 @@ func (c *canvas) lines(from, to int, styles []lipgloss.Style) []string {
 			if cl.ch == "" {
 				continue
 			}
-			if cl.st != cur {
+			if cl.st != cur || cl.bg != curBg {
 				flush()
-				cur = cl.st
+				cur, curBg = cl.st, cl.bg
 			}
 			run.WriteString(cl.ch)
 		}
@@ -655,38 +712,75 @@ func fitCells(s string, w int) string {
 	return ansi.Truncate(s, w-1, "") + "…"
 }
 
-// graphStyles builds the canvas styles off the palette.
+// graphStyles builds the canvas styles off the palette: the kinds take the
+// dedicated trace roles (#2874), the path and the rule the border colour,
+// secondary text the Secondary role — no hard-coded colours, so both
+// palettes read.
 func (m *Model) graphStyles(pal *theme.Palette) []lipgloss.Style {
 	st := make([]lipgloss.Style, stCount)
 	st[stPlain] = lipgloss.NewStyle()
-	st[stFaint] = lipgloss.NewStyle().Faint(true)
+	st[stSecondary] = lipgloss.NewStyle().Foreground(pal.Secondary)
 	st[stPrompt] = lipgloss.NewStyle().Foreground(pal.TracePrompt)
 	st[stEdit] = lipgloss.NewStyle().Foreground(pal.TraceEdit)
 	st[stCreate] = lipgloss.NewStyle().Foreground(pal.TraceCreate)
 	st[stDelete] = lipgloss.NewStyle().Foreground(pal.TraceDelete)
 	st[stAnswer] = lipgloss.NewStyle().Foreground(pal.TraceAnswer)
+	st[stImplicit] = lipgloss.NewStyle().Foreground(pal.TraceAnswer).Faint(true)
 	st[stError] = lipgloss.NewStyle().Foreground(pal.Error).Bold(true)
 	st[stPending] = lipgloss.NewStyle().Faint(true)
-	st[stSelected] = lipgloss.NewStyle().Background(pal.Selection).Foreground(pal.SelectionText).Bold(true)
-	st[stSelectedMuted] = lipgloss.NewStyle().Background(pal.SelectionMuted).Bold(true)
+	st[stRewind] = lipgloss.NewStyle().Faint(true)
+	st[stSelText] = lipgloss.NewStyle().Foreground(pal.SelectionText).Bold(true)
 	st[stConn] = lipgloss.NewStyle().Foreground(pal.Border)
+	st[stRule] = lipgloss.NewStyle().Foreground(pal.Border)
+	st[stRuleLabel] = lipgloss.NewStyle().Foreground(pal.TracePrompt).Bold(true)
 	st[stDetail] = lipgloss.NewStyle().Foreground(pal.Foreground)
+	st[stFrame] = lipgloss.NewStyle().Foreground(pal.Border)
+	st[stAdded] = lipgloss.NewStyle().Foreground(pal.TraceCreate)
+	st[stRemoved] = lipgloss.NewStyle().Foreground(pal.TraceDelete)
+	st[stTimes] = lipgloss.NewStyle().Foreground(pal.TraceEdit)
+	st[stLink] = lipgloss.NewStyle().Foreground(pal.Accent)
 	return st
 }
 
-// stopStyle is the border style and glyph of a stop: kinds tell apart by
-// glyph as well as colour, so a monochrome terminal still reads the path.
+// graphBackgrounds builds the selection backgrounds off the palette,
+// indexed by the bg* constants (bgNone unused).
+func graphBackgrounds(pal *theme.Palette) []color.Color {
+	return []color.Color{bgNone: nil, bgSelected: pal.Selection, bgSelectedMuted: pal.SelectionMuted}
+}
+
+// frame is a box's border glyph set: kinds tell apart by frame as well as
+// by glyph and colour, so a monochrome terminal still reads the path.
+type frame struct{ tl, tr, bl, br, h, v string }
+
+var (
+	// frameSingle is a change (and a rewind marker).
+	frameSingle = frame{"┌", "┐", "└", "┘", "─", "│"}
+	// frameDouble is a question: the milestone of a turn.
+	frameDouble = frame{"╔", "╗", "╚", "╝", "═", "║"}
+	// frameRound is an answer.
+	frameRound = frame{"╭", "╮", "╰", "╯", "─", "│"}
+	// frameDashed and frameRoundDashed are a pending change / answer: the
+	// box is not settled yet.
+	frameDashed      = frame{"┌", "┐", "└", "┘", "┄", "┆"}
+	frameRoundDashed = frame{"╭", "╮", "╰", "╯", "┄", "┆"}
+)
+
+// stopStyle is the style and glyph of a stop: kinds tell apart by glyph
+// as well as colour, so a monochrome terminal still reads the path.
 func stopStyle(st agenttrace.Stop) (style int, glyph string) {
 	switch st.Kind {
 	case agenttrace.StopPrompt:
 		return stPrompt, "?"
 	case agenttrace.StopAnswer:
-		if st.Pending {
+		switch {
+		case st.Pending:
 			return stPending, "…"
+		case st.Implicit:
+			return stImplicit, "◌"
 		}
 		return stAnswer, "✓"
 	case agenttrace.StopRewind:
-		return stFaint, "↶"
+		return stRewind, "↶"
 	case agenttrace.StopChange:
 		if st.Error {
 			return stError, "✗"
@@ -704,7 +798,26 @@ func stopStyle(st agenttrace.Stop) (style int, glyph string) {
 		}
 		return stEdit, "✎"
 	}
-	return stFaint, "◇"
+	return stSecondary, "◇"
+}
+
+// stopFrame is the border glyph set of a stop: double for a question,
+// rounded for an answer, single for a change, dashed while pending.
+func stopFrame(st agenttrace.Stop) frame {
+	switch st.Kind {
+	case agenttrace.StopPrompt:
+		return frameDouble
+	case agenttrace.StopAnswer:
+		if st.Pending {
+			return frameRoundDashed
+		}
+		return frameRound
+	case agenttrace.StopChange:
+		if st.Pending && !st.Error {
+			return frameDashed
+		}
+	}
+	return frameSingle
 }
 
 // graphRows draws the path onto a canvas and returns the body's visible
@@ -713,11 +826,14 @@ func (m *Model) graphRows(pal *theme.Palette) []string {
 	g := &m.graph
 	h := m.treeHeight()
 	if len(g.stops) == 0 {
-		rows := []string{lipgloss.NewStyle().Faint(true).Render("(no events yet)")}
+		rows := []string{
+			lipgloss.NewStyle().Foreground(pal.Secondary).Render(" (no events yet)"),
+			lipgloss.NewStyle().Faint(true).Render(" the path fills as the agent asks, changes files and answers"),
+		}
 		for len(rows) < h {
 			rows = append(rows, "")
 		}
-		return rows
+		return rows[:h]
 	}
 	l := m.graphLayout()
 	g.top = max(0, min(g.top, m.graphMaxTop(l)))
@@ -725,27 +841,27 @@ func (m *Model) graphRows(pal *theme.Palette) []string {
 	for i, st := range g.stops {
 		s := l.Slots[i]
 		if s.Break {
-			drawTurnRule(c, s.Y-2, st.Turn)
+			turn := st.Turn
+			if !st.Selectable() && i+1 < len(g.stops) {
+				// A compaction marker starting the row with its question
+				// labels the rule with that question's turn.
+				turn = g.stops[i+1].Turn
+			}
+			drawTurnRule(c, s.Y-2, turn)
 		}
 		if i > 0 {
-			m.drawConnector(c, l.Slots[i-1], s)
+			drawConnector(c, l.Slots[i-1], s)
 		}
 		if !st.Selectable() {
-			c.put(s.X, s.Y+1, "─◇─", stFaint, s.W)
+			drawSeparator(c, s)
 			continue
 		}
 		m.drawBox(c, st, s, i)
 	}
 	if exp := m.stopIndex(g.expanded); exp >= 0 && l.DetailH > 0 {
-		for j, line := range m.detailLines(g.stops[exp], m.width) {
-			st := stDetail
-			if j == 0 || j == l.DetailH-1 {
-				st = stFaint
-			}
-			c.put(1, l.DetailY+j, " "+line, st, m.width-1)
-		}
+		m.drawDrawer(c, l, g.stops[exp], l.Slots[exp])
 	}
-	rows := c.lines(g.top, g.top+h, m.graphStyles(pal))
+	rows := c.lines(g.top, g.top+h, m.graphStyles(pal), graphBackgrounds(pal))
 	for len(rows) < h {
 		rows = append(rows, "")
 	}
@@ -753,76 +869,177 @@ func (m *Model) graphRows(pal *theme.Palette) []string {
 }
 
 // drawBox draws one 4-row box (#2872): the top border carrying the kind
-// glyph (and the Δ mark of a linked change), the label, the detail (faint)
-// and a closed bottom border with no text in it — only the expanded box's
-// "┴" marks where its detail block attaches. The selection covers both
-// content rows.
+// glyph (and the Δ mark of a linked change), the label in the kind colour,
+// the detail in secondary text with a change's markers coloured, and a
+// closed bottom border with no text in it — only the expanded box's "┬"
+// marks where its drawer attaches. The selected box is lifted off the
+// pane: all four rows take the selection background, the focused pane's
+// content rows the selection text colour (#2901).
 func (m *Model) drawBox(c *canvas, st agenttrace.Stop, s Slot, i int) {
 	style, glyph := stopStyle(st)
+	f := stopFrame(st)
 	w := s.W
 	if w < 4 {
 		return
 	}
 	linked := m.links.Node(st.Key) != ""
 	// Top border.
-	c.put(s.X, s.Y, "┌", style, 0)
+	c.put(s.X, s.Y, f.tl, style, 0)
 	c.put(s.X+1, s.Y, glyph, style, 0)
-	c.fill(s.X+2, s.Y, w-3, "─", style)
+	c.fill(s.X+2, s.Y, w-3, f.h, style)
 	if linked && w > 5 {
-		c.put(s.X+w-2, s.Y, linkMark, style, 0)
+		c.put(s.X+w-2, s.Y, linkMark, stLink, 0)
 	}
-	c.put(s.X+w-1, s.Y, "┐", style, 0)
+	c.put(s.X+w-1, s.Y, f.tr, style, 0)
 	// Label and detail rows.
 	for y := s.Y + 1; y <= s.Y+2; y++ {
-		c.put(s.X, y, "│", style, 0)
-		c.put(s.X+w-1, y, "│", style, 0)
+		c.put(s.X, y, f.v, style, 0)
+		c.put(s.X+w-1, y, f.v, style, 0)
 	}
 	// The label carries the kind colour too (#2874), so the kind reads from
 	// more than one thin border line; the selection below still wins.
 	labelSt := style
 	if (st.Pending && st.Kind == agenttrace.StopAnswer) || st.Kind == agenttrace.StopRewind {
-		labelSt = stFaint
+		labelSt = stSecondary
 	}
 	c.put(s.X+1, s.Y+1, fitCells(st.Label, w-2), labelSt, w-2)
-	c.put(s.X+1, s.Y+2, fitCells(st.Detail, w-2), stFaint, w-2)
-	if st.Key == m.graph.sel {
-		sel := stSelected
-		if !m.focused {
-			sel = stSelectedMuted
-		}
-		c.restyle(s.X+1, s.Y+1, w-2, sel)
-		c.restyle(s.X+1, s.Y+2, w-2, sel)
-	}
+	drawDetail(c, st, s.X+1, s.Y+2, w-2)
 	// Bottom border.
-	c.put(s.X, s.Y+3, "└", style, 0)
-	c.fill(s.X+1, s.Y+3, w-2, "─", style)
-	if st.Key == m.graph.expanded {
-		c.put(s.X+1, s.Y+3, "┴", style, 0)
+	c.put(s.X, s.Y+3, f.bl, style, 0)
+	c.fill(s.X+1, s.Y+3, w-2, f.h, style)
+	if st.Key != "" && st.Key == m.graph.expanded {
+		c.put(s.CenterX(), s.Y+3, "┬", style, 0)
 	}
-	c.put(s.X+w-1, s.Y+3, "┘", style, 0)
+	c.put(s.X+w-1, s.Y+3, f.br, style, 0)
+	if st.Key != "" && st.Key == m.graph.sel {
+		bg := bgSelectedMuted
+		if m.focused {
+			bg = bgSelected
+		}
+		for y := s.Y; y < s.Y+boxH; y++ {
+			c.highlight(s.X, y, w, bg)
+		}
+		if m.focused {
+			c.restyle(s.X+1, s.Y+1, w-2, stSelText)
+			c.restyle(s.X+1, s.Y+2, w-2, stSelText)
+		}
+	}
 }
 
-// drawTurnRule draws the faint "── #<turn> ──…" rule across the pane that
-// sets a new question apart from the turn before (#2866).
+// drawDetail writes a box's detail row in secondary text; a change's
+// markers stand out in their own colours — "+N" added, "−M" removed, "×2"
+// edits of one file, "✗" failed, "…" pending.
+func drawDetail(c *canvas, st agenttrace.Stop, x, y, w int) {
+	d := fitCells(st.Detail, w)
+	if st.Kind != agenttrace.StopChange {
+		c.put(x, y, d, stSecondary, w)
+		return
+	}
+	pos := 0
+	for _, tok := range strings.SplitAfter(d, " ") {
+		c.put(x+pos, y, tok, detailTokenStyle(strings.TrimSpace(tok)), 0)
+		pos += ansi.StringWidth(tok)
+	}
+}
+
+// detailTokenStyle is the style of one word of a change detail.
+func detailTokenStyle(tok string) int {
+	switch {
+	case tok == "":
+		return stSecondary
+	case strings.HasPrefix(tok, "+"):
+		return stAdded
+	case strings.HasPrefix(tok, "−"):
+		return stRemoved
+	case strings.HasPrefix(tok, "×"):
+		return stTimes
+	case tok == "✗":
+		return stError
+	case tok == "…":
+		return stPending
+	}
+	return stSecondary
+}
+
+// drawSeparator draws a compaction marker: a "◇" on the path.
+func drawSeparator(c *canvas, s Slot) {
+	c.put(s.X, s.Y+1, "─", stConn, 0)
+	c.put(s.X+1, s.Y+1, "◇", stSecondary, 0)
+	c.put(s.X+2, s.Y+1, "─", stConn, 0)
+}
+
+// detailFrameH is the rows the drawer's frame adds around the detail
+// lines: its top border (attached to the box) and its bottom border
+// (carrying the key hint).
+const detailFrameH = 2
+
+// drawDrawer draws the expanded box's detail block (#2901): a full-width
+// rounded drawer beneath the box's row whose top border joins the box's
+// "┬" with a "┴", the detail lines inside, the key hint in the bottom
+// border.
+func (m *Model) drawDrawer(c *canvas, l Layout, st agenttrace.Stop, s Slot) {
+	lines := m.detailLines(st, m.width)
+	w, y := c.w, l.DetailY
+	if w < 6 {
+		return
+	}
+	c.put(0, y, "╭", stFrame, 0)
+	c.fill(1, y, w-2, "─", stFrame)
+	c.put(w-1, y, "╮", stFrame, 0)
+	c.put(s.CenterX(), y, "┴", stFrame, 0)
+	for j, line := range lines {
+		st := stDetail
+		if strings.HasPrefix(line, "› ") {
+			st = stSecondary
+		}
+		c.put(0, y+1+j, "│", stFrame, 0)
+		c.put(2, y+1+j, line, st, w-4)
+		c.put(w-1, y+1+j, "│", stFrame, 0)
+	}
+	yb := y + 1 + len(lines)
+	c.put(0, yb, "╰", stFrame, 0)
+	c.fill(1, yb, w-2, "─", stFrame)
+	c.put(w-1, yb, "╯", stFrame, 0)
+	c.put(2, yb, " "+fitCells(drawerHint(st), w-6)+" ", stSecondary, w-4)
+}
+
+// drawerHint is the key line in the drawer's bottom border.
+func drawerHint(st agenttrace.Stop) string {
+	if st.Kind == agenttrace.StopRewind {
+		return "space collapse · the live path continues to the right"
+	}
+	return "space collapse · enter open · D diff · a ask · V revert"
+}
+
+// drawTurnRule draws the dotted "┄┄ #<turn> ┄┄…" rule across the pane
+// that sets a new question apart from the turn before (#2866): a boundary
+// that reads without dominating the view.
 func drawTurnRule(c *canvas, y, turn int) {
-	c.fill(0, y, c.w, "─", stFaint)
-	c.put(2, y, " #"+itoa(turn)+" ", stFaint, 0)
+	c.fill(0, y, c.w, "┄", stRule)
+	c.put(2, y, " #"+itoa(turn)+" ", stRuleLabel, 0)
 }
 
-// drawConnector joins two consecutive slots: an arrow along the row, or
-// the "│ ▼" of a turn down the rows between two path rows ("│ ┼ ▼" across
-// a break's turn rule).
-func (m *Model) drawConnector(c *canvas, prev, s Slot) {
+// drawConnector joins two consecutive slots as one path: an arrow along
+// the row, or the turn down the rows between two path rows — a "│" over a
+// "▼" when the slots' centres align, else an elbow ("╰──╮" / "╭──╯") on
+// the top gap row — crossing a break's turn rule with "┼".
+func drawConnector(c *canvas, prev, s Slot) {
 	switch {
 	case prev.Row != s.Row:
-		x := s.CenterX()
+		px, x := prev.CenterX(), s.CenterX()
+		top := s.Y - 2
 		if s.Break {
-			c.put(x, s.Y-3, "│", stConn, 0)
+			top = s.Y - 3
 			c.put(x, s.Y-2, "┼", stConn, 0)
-		} else {
-			c.put(x, s.Y-2, "│", stConn, 0)
 		}
-		c.put(x, s.Y-1, "▼", stConn, 0)
+		drawElbow(c, top, px, x)
+		if s.W == sepW {
+			// The path runs straight into the marker.
+			c.put(x, s.Y-1, "│", stConn, 0)
+			c.put(x, s.Y, "│", stConn, 0)
+		} else {
+			c.put(x, s.Y-1, "▼", stConn, 0)
+		}
 	case s.Dir > 0:
 		x0 := prev.X + prev.W
 		n := s.X - x0
@@ -837,6 +1054,23 @@ func (m *Model) drawConnector(c *canvas, prev, s Slot) {
 			c.put(x0, s.Y+1, "◀", stConn, 0)
 			c.fill(x0+1, s.Y+1, n-1, "─", stConn)
 		}
+	}
+}
+
+// drawElbow draws the row of a turn that leaves column px and arrives at
+// column x: a "│" when they agree, else a rounded elbow between them.
+func drawElbow(c *canvas, y, px, x int) {
+	switch {
+	case px == x:
+		c.put(x, y, "│", stConn, 0)
+	case x > px:
+		c.put(px, y, "╰", stConn, 0)
+		c.fill(px+1, y, x-px-1, "─", stConn)
+		c.put(x, y, "╮", stConn, 0)
+	default:
+		c.put(x, y, "╭", stConn, 0)
+		c.fill(x+1, y, px-x-1, "─", stConn)
+		c.put(px, y, "╯", stConn, 0)
 	}
 }
 
