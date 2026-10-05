@@ -163,7 +163,7 @@ func TestSnakeSingleColumnAndExpanded(t *testing.T) {
 func TestGraphViewRendersBoxesAndConnectors(t *testing.T) {
 	m, _ := graphPanel(t, true, 80, 30)
 	view := plain(m.View())
-	for _, want := range []string{"┌?", "│#1 Add a greeting to …│", "✎", "┌+", "hello.go", "✕", "notes.ipynb", "┌✓", "Done: main.go greets,", "──▶", "◀──", "▼", "◇", "edit :3 +1 −0", "create", "t tree"} {
+	for _, want := range []string{"╔?", "║#1 Add a greeting to …║", "✎", "┌+", "hello.go", "✕", "notes.ipynb", "╭✓", "Done: main.go greets,", "──▶", "◀──", "▼", "◇", "edit :3 +1 −0", "create", "t tree"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("graph lacks %q:\n%s", want, view)
 		}
@@ -356,7 +356,7 @@ func TestGraphLiveAppendKeepsSelectionAndExpansion(t *testing.T) {
 	if cur := m.CurrentStop(); cur.Key != "t1/end" || !cur.Pending {
 		t.Fatalf("newest box = %+v", cur)
 	}
-	if view := plain(m.View()); !strings.Contains(view, "┌…") || !strings.Contains(view, "working …") {
+	if view := plain(m.View()); !strings.Contains(view, "╭…") || !strings.Contains(view, "working …") {
 		t.Fatalf("pending answer:\n%s", view)
 	}
 	// The user selects and expands the first edit.
@@ -505,7 +505,7 @@ func TestGraphClickSelectsDoubleClickOpensWheelScrolls(t *testing.T) {
 func TestGraphThemesTellKindsApartByGlyph(t *testing.T) {
 	m, _ := graphPanel(t, true, 120, 30)
 	view := plain(m.View())
-	for _, glyph := range []string{"┌?", "┌✎", "┌+", "┌✕", "┌✓"} {
+	for _, glyph := range []string{"╔?", "┌✎", "┌+", "┌✕", "╭✓"} {
 		if !strings.Contains(view, glyph) {
 			t.Errorf("glyph %q missing without colour:\n%s", glyph, view)
 		}
@@ -580,7 +580,7 @@ func TestGraphNewQuestionBreaksTheRow(t *testing.T) {
 	}
 	rows := strings.Split(plain(m.View()), "\n")
 	rule := []rune(rows[headerRows+s.Y-2])
-	if !strings.HasPrefix(string(rule), "── #2 ──") || len(rule) != 200 {
+	if !strings.HasPrefix(string(rule), "┄┄ #2 ┄┄") || len(rule) != 200 {
 		t.Fatalf("turn rule = %q", string(rule))
 	}
 	x := s.CenterX()
@@ -656,7 +656,7 @@ func TestGraphBoxFrameClosedAtEveryWidth(t *testing.T) {
 				c := newCanvas(w+2*x0, boxH)
 				m.drawBox(c, st, Slot{X: x0, W: w, H: boxH}, 0)
 				name := variant + "/" + d + "/w" + itoa(w)
-				rows := c.lines(0, boxH, styles)
+				rows := c.lines(0, boxH, styles, graphBackgrounds(m.theme()))
 				for y, row := range rows {
 					if got := ansi.StringWidth(row); got != c.w {
 						t.Fatalf("%s: row %d is %d cells, want %d", name, y, got, c.w)
@@ -666,12 +666,13 @@ func TestGraphBoxFrameClosedAtEveryWidth(t *testing.T) {
 					}
 				}
 				// The bottom border is a solid run (#2872): no text in it, only
-				// the expanded box's "┴" at the left.
+				// the expanded box's "┬" at its centre, where the drawer attaches
+				// (#2901).
 				bottom := c.cells[3]
 				for x := x0 + 1; x < x0+w-1; x++ {
 					want := "─"
-					if variant == "expanded" && x == x0+1 {
-						want = "┴"
+					if variant == "expanded" && x == x0+w/2 {
+						want = "┬"
 					}
 					if bottom[x].ch != want {
 						t.Fatalf("%s: bottom border %q at %d, want %q", name, plain(rows[3]), x-x0, want)
@@ -688,15 +689,29 @@ func TestGraphBoxFrameClosedAtEveryWidth(t *testing.T) {
 				if inner.String() != want {
 					t.Fatalf("%s: detail row %q, want %q", name, inner.String(), want)
 				}
-				// The selection covers both content rows.
+				// The selection lifts the whole box: every row, frame included,
+				// takes the selection background; the focused pane's content
+				// rows the selection text (#2901).
 				if variant == "selected" {
-					for _, y := range []int{1, 2} {
-						if c.cells[y][x0+1].st != stSelectedMuted && c.cells[y][x0+1].st != stSelected {
-							t.Fatalf("%s: row %d not highlighted", name, y)
+					for y := 0; y < boxH; y++ {
+						for x := x0; x < x0+w; x++ {
+							if c.cells[y][x].bg != bgSelected {
+								t.Fatalf("%s: cell %d/%d not highlighted", name, x-x0, y)
+							}
 						}
 					}
-				} else if d != "" && c.cells[2][x0+1].st != stFaint {
-					t.Fatalf("%s: detail not faint", name)
+					if c.cells[1][x0+1].st != stSelText || c.cells[2][x0+1].st != stSelText || c.cells[0][x0].st != stEdit {
+						t.Fatalf("%s: selected styles label %d detail %d frame %d", name, c.cells[1][x0+1].st, c.cells[2][x0+1].st, c.cells[0][x0].st)
+					}
+				} else {
+					for y := 0; y < boxH; y++ {
+						if c.cells[y][x0].bg != bgNone {
+							t.Fatalf("%s: row %d highlighted", name, y)
+						}
+					}
+					if d != "" && !detailStyles[c.cells[2][x0+1].st] {
+						t.Fatalf("%s: detail style %d is not a detail style", name, c.cells[2][x0+1].st)
+					}
 				}
 			}
 		}
@@ -710,7 +725,7 @@ func TestCanvasWideRunes(t *testing.T) {
 	c.put(0, 0, "編", stPlain, 0)
 	// Overwriting either half of a wide rune blanks the other half.
 	c.put(1, 0, "x", stPlain, 0)
-	if got := plain(c.lines(0, 1, make([]lipgloss.Style, stCount))[0]); got != " xab " {
+	if got := plain(c.lines(0, 1, make([]lipgloss.Style, stCount), make([]color.Color, bgCount))[0]); got != " xab " {
 		t.Fatalf("row = %q", got)
 	}
 }
@@ -768,16 +783,13 @@ func TestGraphKindColourOnGlyphAndLabel(t *testing.T) {
 			if b := c.cells[3][x0]; b.st != tc.style {
 				t.Errorf("%s: border style %d, want %d", tc.name, b.st, tc.style)
 			}
-			want := tc.style
+			want, wantBg := tc.style, bgNone
 			if selected {
-				want = stSelectedMuted
-				if m.focused {
-					want = stSelected
-				}
+				want, wantBg = stSelText, bgSelected
 			}
 			for x := x0 + 1; x < x0+1+ansi.StringWidth(tc.stop.Label); x++ {
-				if got := c.cells[1][x].st; got != want {
-					t.Errorf("%s selected=%v: label cell %d style %d, want %d", tc.name, selected, x, got, want)
+				if got := c.cells[1][x]; got.st != want || got.bg != wantBg {
+					t.Errorf("%s selected=%v: label cell %d style %d/%d, want %d/%d", tc.name, selected, x, got.st, got.bg, want, wantBg)
 					break
 				}
 			}

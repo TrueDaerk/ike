@@ -29,7 +29,7 @@ func TestAgentTraceViewToggleAndRemember(t *testing.T) {
 	if p.ViewMode() != tracepanel.ViewGraph || len(p.Path()) != 3 {
 		t.Fatalf("view=%v path=%d", p.ViewMode(), len(p.Path()))
 	}
-	if view := ansiSeq.ReplaceAllString(p.View(), ""); !strings.Contains(view, "┌?") || !strings.Contains(view, "x.go") || !strings.Contains(view, "┌✎") {
+	if view := ansiSeq.ReplaceAllString(p.View(), ""); !strings.Contains(view, "╔?") || !strings.Contains(view, "x.go") || !strings.Contains(view, "┌✎") {
 		t.Fatalf("graph not drawn:\n%s", view)
 	}
 	// The command toggles the open pane.
