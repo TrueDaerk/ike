@@ -450,3 +450,58 @@ func TestExplorerArchiveActionsRefuseWrongKind(t *testing.T) {
 		t.Error("zip must not run on a single file")
 	}
 }
+
+// TestExplorerEKeyExtractTo: e on the tree runs explorer.extractTo (#2903) —
+// the target-directory prompt on an archive, the "select an archive" notice
+// on a plain file — while an open speed search still takes it as a typed
+// character, and the node menu's Extract To… shows the key.
+func TestExplorerEKeyExtractTo(t *testing.T) {
+	root := t.TempDir()
+	p := copyInto(t, writeTestArchive(t, "x.zip", map[string]string{"a.txt": "a"}), root)
+	src := filepath.Join(root, "notes.txt")
+	writeFile(t, src, "hi")
+	m := packTestModel(t, root)
+	eKey := tea.KeyPressMsg{Code: 'e', Text: "e"}
+
+	if got := m.commandInfo(m.reg)("explorer.extractTo").Shortcut; got != "e" {
+		t.Errorf("Extract To… shortcut hint = %q, want e", got)
+	}
+
+	m = selectEntry(t, m, p)
+	m = runMsg(m, eKey)
+	if !m.archiveExtractPromptOpen() {
+		t.Fatal("e on an archive must open the target-directory prompt")
+	}
+	if base := filepath.Base(m.archExtractDir.Input.Text); base != "x" {
+		t.Errorf("prefill = %q, want the ./x proposal", m.archExtractDir.Input.Text)
+	}
+	if !m.archExtractReveal {
+		t.Error("the key path must reveal the target in the tree like the menu entry")
+	}
+	m = runMsg(m, tea.KeyPressMsg{Code: tea.KeyEscape})
+	if m.archiveExtractPromptOpen() {
+		t.Fatal("esc must close the prompt")
+	}
+
+	m.focusExplorer()
+	m = selectEntry(t, m, src)
+	m = runMsg(m, eKey)
+	if m.archiveExtractPromptOpen() {
+		t.Fatal("e on a plain file must not open the prompt")
+	}
+	if n := extractNotice(m); !strings.Contains(n, "select an archive") {
+		t.Errorf("notice = %q, want the select-an-archive notice", n)
+	}
+
+	m = runMsg(m, explorer.SearchMsg{})
+	if !m.explorer().Searching() {
+		t.Fatal("speed search did not open")
+	}
+	m = runMsg(m, eKey)
+	if m.archiveExtractPromptOpen() {
+		t.Fatal("e typed into the speed search must not extract")
+	}
+	if !m.explorer().Searching() {
+		t.Fatal("e must stay a typed character in the speed search")
+	}
+}

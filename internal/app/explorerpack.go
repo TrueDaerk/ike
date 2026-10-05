@@ -23,8 +23,8 @@ import (
 //
 //   - explorer.contextMenu (alt+enter) opens the right-click menu at the
 //     cursor row, the selection kept as it is;
-//   - explorer.extractHere / explorer.extractTo unpack an archive (through the
-//     archive viewer's own pipeline — plan, cap, traversal and link checks,
+//   - explorer.extractHere / explorer.extractTo (the tree's e, #2903) unpack
+//     an archive (through the archive viewer's own pipeline — plan, cap, traversal and link checks,
 //     overwrite guard) or a plain .gz (gzfile.Extract, the same cap);
 //   - explorer.compressGzip / explorer.compressZip pack a file into
 //     <name>.gz, or a directory or multi-selection into <name>.zip.
@@ -38,8 +38,9 @@ type ExplorerContextMenuMsg struct{}
 // ExplorerExtractHereMsg runs explorer.extractHere.
 type ExplorerExtractHereMsg struct{}
 
-// ExplorerExtractToMsg runs explorer.extractTo.
-type ExplorerExtractToMsg struct{}
+// ExplorerExtractToMsg runs explorer.extractTo. It is the explorer's own
+// message so the tree's e keymap (#2903) can dispatch it.
+type ExplorerExtractToMsg = explorer.ExtractToMsg
 
 // ExplorerCompressGzipMsg runs explorer.compressGzip.
 type ExplorerCompressGzipMsg struct{}

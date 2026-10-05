@@ -80,6 +80,9 @@ func (corePlugin) Capabilities() plugin.Capabilities {
 			keymap("y", "explorer.copy", CopySelectionMsg{}),
 			keymap("space", "explorer.toggleMark", ToggleMarkMsg{}),
 			keymap("/", "explorer.search", SearchMsg{}),
+			// The archive viewer's E on the tree (#2903): the command itself
+			// is registered by the app, which owns the extraction prompt.
+			keymap("e", "explorer.extractTo", ExtractToMsg{}),
 		},
 	}
 }

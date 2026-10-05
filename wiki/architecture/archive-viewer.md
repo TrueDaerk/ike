@@ -199,8 +199,8 @@ only emit `archview.ExtractMsg`, naming the archive and the members. Everything
 else is the root model's, in three steps:
 
 **Entry points.** The viewer (`e`/`E` and the two palette commands) and, since
-#2805, the explorer: *Extract To…* on an archive row opens step 1 exactly as
-`E` does, and *Extract Here* skips the prompt and plans straight into the
+#2805, the explorer: *Extract To…* (or the tree's `e` key, #2903) on an
+archive row opens step 1 exactly as `E` does, and *Extract Here* skips the prompt and plans straight into the
 proposed directory. Both explorer entries end with the tree rescanned and the
 target directory selected; everything below — plan, guard, cap, refusals — is
 shared. A plain `.gz` (not an archive) extracts through `gzfile.Extract`
