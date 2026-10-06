@@ -175,3 +175,35 @@ func TestPHPAttributes(t *testing.T) {
 		}
 	}
 }
+
+// TestPHPThisBuiltin guards #2907: `$this` is variable.builtin (whole token,
+// `$` included) while ordinary variables and the property keep their captures.
+func TestPHPThisBuiltin(t *testing.T) {
+	lines := []string{
+		`<?php`,
+		`class A { function f($foo) { $this->bar = $foo; self::x(); } }`,
+	}
+	highlight.SetRainbow(false)
+	defer highlight.SetRainbow(true)
+	ix := highlight.NewIndex(highlight.Highlight("main.php", lines))
+	l := lines[1]
+	this := strings.Index(l, "$this")
+	cases := []struct {
+		name string
+		col  int
+		want string
+	}{
+		{"dollar", this, "variable.builtin"},
+		{"name", this + 2, "variable.builtin"},
+		{"foo", strings.Index(l, "$foo;"), "variable"},
+		{"self", strings.Index(l, "self"), "variable.builtin"},
+	}
+	for _, c := range cases {
+		if got := ix.CaptureAt(1, c.col); got != c.want {
+			t.Errorf("%s: CaptureAt(1,%d) = %q, want %q", c.name, c.col, got, c.want)
+		}
+	}
+	if got := ix.CaptureAt(1, strings.Index(l, "bar")); got == "variable.builtin" {
+		t.Errorf("property painted as builtin")
+	}
+}
