@@ -600,6 +600,7 @@ func (m Model) popupSplitWidths() (wl, wr int) {
 // side gets its half's interior; the floating panels (#1793) re-clamp and
 // re-size in the same pass.
 func (m *Model) applyPopupSize() {
+	m.syncPopupZen()
 	if m.popup.inst != nil {
 		_, h := m.popupSize()
 		wl, wr := m.popupSplitWidths()
@@ -1057,8 +1058,10 @@ func (m *Model) closePopupTab(inst *pane.Instance, idx int) {
 			// Floating panels remain (#1793): the layer stays open and the
 			// topmost panel takes the keyboard.
 			m.setFloatFocus(m.floatTerms[len(m.floatTerms)-1])
+			m.syncPopupZen()
 			return
 		}
 		m.popup.open = false
+		m.syncPopupZen()
 	}
 }

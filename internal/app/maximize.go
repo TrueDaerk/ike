@@ -58,7 +58,9 @@ func (m *Model) zoomActive() bool {
 // bar and status line hidden — pure text, JetBrains distraction-free. Any
 // pane kind qualifies (#934): editor, terminal, or tool pane. Leaving zen
 // restores the chrome; the zoom stays only when that same pane was already
-// manually zoomed before zen (else the full layout returns).
+// manually zoomed before zen (else the full layout returns). With the popup
+// layer focused, zen targets the popup box or floating panel instead (#2905,
+// togglePopupZen) — see the ZenModeMsg dispatch.
 func (m *Model) toggleZen() {
 	if m.zen {
 		m.zen = false

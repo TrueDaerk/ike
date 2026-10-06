@@ -1300,6 +1300,12 @@ type Model struct {
 	// so leaving zen restores that state instead of the full layout.
 	zen         bool
 	zenKeepZoom bool
+	// popupZen is view.zenMode on the popup layer (#2905): popupZenFloat is
+	// the zoomed floating panel (nil = the popup box), popupZenKeep whether
+	// that surface was already maximized (#2899) before zen. Runtime-only.
+	popupZen      bool
+	popupZenFloat *floatTerm
+	popupZenKeep  bool
 	// resizeMode is the sticky keyboard pane-resize mode (#2150): while it is
 	// armed the mode owns every key press (see resizemode.go). Not persisted.
 	resizeMode bool
@@ -5559,6 +5565,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ZenModeMsg:
 		// view.zenMode (ctrl+alt+f / View menu, #359): maximize + no chrome.
+		// With the popup layer focused the layer's keyboard owner goes zen
+		// instead of the pane below (#2905).
+		if m.popupLayerFocused() {
+			m.togglePopupZen()
+			return m, nil
+		}
 		m.toggleZen()
 		return m, nil
 
@@ -11792,8 +11804,9 @@ func abs(v int) int {
 func (m *Model) bodyRect() layout.Rect {
 	top := m.menuHeight()
 	h := m.height - statusHeight - top
-	if m.zen {
-		// Zen (#359): the status line is hidden, its row joins the body.
+	if m.chromeHidden() {
+		// Zen (#359, popup zen #2905): the status line is hidden, its row
+		// joins the body.
 		h = m.height - top
 	}
 	return layout.Rect{X: 0, Y: top, W: m.width, H: h}
@@ -11969,6 +11982,9 @@ func (m *Model) layout() {
 	}
 	if m.activeWS().Tree == nil {
 		m.activeWS().Tree = layout.Default(m.width, explorerWidth)
+	}
+	if m.popupZen && !m.popupZenActive() {
+		m.clearPopupZen() // the popup zen target went away (#2905)
 	}
 	if m.zoomActive() {
 		// Zoomed (#358): the one pane owns the whole body; no dividers.
@@ -12936,7 +12952,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		// one of its clickable segments — TODO count, notifications counter,
 		// LSP state — dispatches that segment's command, any other press on
 		// the row is swallowed.
-		if !m.zen && msg.Y == m.height-1 {
+		if !m.chromeHidden() && msg.Y == m.height-1 {
 			if msg.Button == tea.MouseLeft {
 				if id, ok := statusSegmentCommands[m.statusSegmentAt(msg.X)]; ok {
 					if c, found := m.reg.Command(id); found {
@@ -14632,7 +14648,7 @@ func (m Model) render() string {
 		body = m.renderNode(m.activeWS().Tree, m.bodyRect())
 	}
 	rows := []string{body}
-	if !m.zen {
+	if !m.chromeHidden() {
 		rows = append(rows, m.statusLine())
 	}
 	if m.menuEnabled() {

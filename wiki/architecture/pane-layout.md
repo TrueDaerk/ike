@@ -577,7 +577,9 @@ the zoom (one flag cleared in the same `layout()` check); zen is not
 persisted either. The chord sits on the terminal global-command allowlist
 (`terminalGlobalCommands`, #934), so it toggles zen from a focused terminal
 or tool TUI pane instead of reaching the shell — and the same chord leaves
-zen again while that pane keeps focus.
+zen again while that pane keeps focus. With the popup terminal layer
+focused, zen targets the popup box or floating panel instead of the pane
+underneath (#2905, see [Integrated Terminal](/architecture/terminal.md)).
 
 ## Persistence
 
