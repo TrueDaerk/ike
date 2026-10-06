@@ -204,6 +204,7 @@ func (m *Model) removeFloatTerm(f *floatTerm) {
 	case wasFocused:
 		m.setFloatFocus(nil)
 	}
+	m.syncPopupZen()
 }
 
 // globalFloatTerms filters the app-owned panels (#1793) — the ones a project

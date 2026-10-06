@@ -1,5 +1,15 @@
 # Log
 
+## 2026-10-06 (view.zenMode on the popup terminal layer, #2905)
+
+- [Integrated Terminal](/architecture/terminal.md): new *Zen* bullet in the
+  popup section — with the layer focused `view.zenMode` zooms the box or the
+  focused floating panel with the status line hidden (`togglePopupZen`,
+  `chromeHidden`), never the pane underneath; a second invocation, hiding the
+  layer or closing the target restores geometry and chrome.
+- [Floating Shell](/architecture/floating-shell.md),
+  [Pane Layout](/architecture/pane-layout.md): pointers to popup zen.
+
 ## 2026-10-05 (agent trace graph: reworked look, edge-wrap fix, #2901)
 
 - [Agent Trace](/architecture/agent-trace.md): § Graph view — new ASCII

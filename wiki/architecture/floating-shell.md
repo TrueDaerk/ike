@@ -267,5 +267,9 @@ host per shell.
   focused floating panel over the body rect; the zoom is runtime state that
   never writes these stores (resize/move steps are inert while zoomed), so
   restoring — or hiding the layer — brings back the stored geometry as is.
+  `view.zenMode` with the layer focused (#2905) is the same zoom plus the
+  hidden status line (the body rect gains its row); it leaves the layout pane
+  underneath alone, and a second invocation, hiding the layer or closing the
+  zoomed box/panel restores geometry and chrome without touching the stores.
 - The plugin "open as modal" contract beyond the minimal additive
   `OpenModalRequest` seam is owned by the plugin roadmaps.

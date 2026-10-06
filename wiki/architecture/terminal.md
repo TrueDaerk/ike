@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Integrated Terminal
-description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); pinned mode docking the popup to the bottom edge with the toggle chord as a focus switch, plus a project/global popup scope that carries one shell across projects (#2406); popup focus loss blurs instead of hiding, with a statusbar activity indicator for the hidden layer (#2309), and the wheel outside the layer's boxes scrolls the pane below while the layer keeps focus (#2343); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); sending the editor's selection (else the caret's line) to a shell as a bracketed paste, optionally submitted (#2542); re-running the last shell command from anywhere, prompt-gated and without moving the keyboard (#2543); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192); unbound control chords forward to the pty instead of being recorded as missing keybinds, and a plain shell tab closes when its shell ends by EOF (#2701); pane.maximize zooms the focused popup box or floating panel over the body and restores it (#2899).
+description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); pinned mode docking the popup to the bottom edge with the toggle chord as a focus switch, plus a project/global popup scope that carries one shell across projects (#2406); popup focus loss blurs instead of hiding, with a statusbar activity indicator for the hidden layer (#2309), and the wheel outside the layer's boxes scrolls the pane below while the layer keeps focus (#2343); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); sending the editor's selection (else the caret's line) to a shell as a bracketed paste, optionally submitted (#2542); re-running the last shell command from anywhere, prompt-gated and without moving the keyboard (#2543); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192); unbound control chords forward to the pty instead of being recorded as missing keybinds, and a plain shell tab closes when its shell ends by EOF (#2701); pane.maximize zooms the focused popup box or floating panel over the body and restores it (#2899), and view.zenMode does the same with the chrome hidden (#2905).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
 timestamp: 2026-10-02T12:00:00Z
@@ -333,6 +333,20 @@ toggled by `terminal.popup` (default `cmd+alt+t`; `terminal.new` moved to
   (`hidePopupLayer` → `restorePopupMaximize`), pin toggles and closing the
   box drop it. The `cmd+k z` chord itself stays with the shell like every
   multi-step chord (`terminalGlobalChord`).
+- **Zen** (`view.zenMode`, #2905): with the layer focused the `ZenModeMsg`
+  dispatch calls `togglePopupZen` instead of `toggleZen`, so the layer's
+  keyboard owner — the box or the focused floating panel — is zoomed (the
+  same `popup.maximized` / `floatTerm.restore` plumbing as Maximize) and the
+  status line is hidden; the pane focused before the popup opened is never
+  zoomed and the layout-zen bookkeeping (`zen`, `zoomed`, `zenKeepZoom`) is
+  untouched. `popupZen`/`popupZenFloat` record the target; `chromeHidden()`
+  (`zen` or an active popup zen) is what `bodyRect`, the status line render
+  and its mouse row key off, so the zoomed surface grows into the freed row.
+  A second invocation restores the previous geometry (a maximize that
+  predates zen stays, `popupZenKeep`), `pane.maximize` leaves zen first, and
+  hiding the layer or closing/collapsing the target drops zen and re-lays out
+  (`restorePopupMaximize`, `syncPopupZen`). Stored deltas and the pinned dock
+  are never written.
 - **Scope** (`terminal.popup_scope`, #2406): `project` (the default) is the
   per-project popup above; `global` makes it app state, like a global floating
   panel (#1793). `performSwitchOpts` decides from the *incoming* config (the
