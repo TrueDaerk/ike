@@ -120,6 +120,10 @@
 
 (relative_scope) @variable.builtin
 
+; $this (#2907): the whole variable_name, before the catch-all (first span wins).
+((variable_name (name) @_n) @variable.builtin
+ (#eq? @_n "this"))
+
 (variable_name) @variable
 
 (method_declaration name: (name) @constructor
@@ -229,8 +233,5 @@
 (integer) @number
 (float) @number
 (comment) @comment
-
-((name) @variable.builtin
- (#eq? @variable.builtin "this"))
 
 "$" @operator
