@@ -305,20 +305,10 @@ func (m *Model) graphKey(key string) (tea.Cmd, bool) {
 	}
 	switch key {
 	case "n":
-		for j := cur + 1; j < len(g.stops); j++ {
-			if selectable(j) {
-				move(j)
-				break
-			}
-		}
+		move(m.stepStop(cur, 1, selectable))
 		return nil, true
 	case "p":
-		for j := cur - 1; j >= 0; j-- {
-			if selectable(j) {
-				move(j)
-				break
-			}
-		}
+		move(m.stepStop(cur, -1, selectable))
 		return nil, true
 	case "l", "right":
 		move(l.Right(cur, selectable))
@@ -377,6 +367,18 @@ func (m *Model) graphKey(key string) (tea.Cmd, bool) {
 		}
 	}
 	return nil, false
+}
+
+// stepStop walks the path from index from in direction dir (+1 / -1) to
+// the first stop ok accepts, -1 at the end — n / p (#2878) and the diff
+// view's change stepping (#2910).
+func (m *Model) stepStop(from, dir int, ok func(int) bool) int {
+	for j := from + dir; j >= 0 && j < len(m.graph.stops); j += dir {
+		if ok(j) {
+			return j
+		}
+	}
+	return -1
 }
 
 // toggleExpand expands a change box — or a rewind marker (#2860), whose

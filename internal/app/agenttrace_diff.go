@@ -48,6 +48,9 @@ type traceDiffState struct {
 	work, workWhy string
 	// linked is the change-feed path the node links to, for f.
 	linked string
+	// key is the node the view was opened or stepped to — where ← / → and
+	// n / p step from (#2910).
+	key string
 }
 
 // traceDroppedNotice explains a stored change whose hunks the record cap
@@ -56,10 +59,10 @@ const traceDroppedNotice = "hunks of this change were dropped when the session w
 
 // traceDiffReadyMsg is the off-loop reconstruction's result.
 type traceDiffReadyMsg struct {
-	gen    int64
-	req    tracepanel.DiffMsg
-	diff   agenttrace.ChangeDiff
-	found  bool
+	gen   int64
+	req   tracepanel.DiffMsg
+	diff  agenttrace.ChangeDiff
+	found bool
 	// record reports a diff from a stored session's record (#2882).
 	record bool
 	err    error
@@ -67,6 +70,10 @@ type traceDiffReadyMsg struct {
 	headOK string // "" when head is valid, else why not
 	work   string
 	workOK string
+	// step marks a reconstruction ← / → / n / p started (#2910): it moves
+	// the pane's selection onto the node and keeps base when it applies.
+	step bool
+	base traceDiffBase
 }
 
 // traceDiffCmd reconstructs the node's diff off the loop: the transcript is
@@ -236,7 +243,7 @@ func (m *Model) openTraceDiff(msg traceDiffReadyMsg) {
 	if d.Dropped && len(d.Hunks) == 0 && !d.HasAfter {
 		m.host.Notify(host.Info, traceDroppedNotice)
 	}
-	st := &traceDiffState{diff: d, head: msg.head, headWhy: msg.headOK, work: msg.work, workWhy: msg.workOK, linked: msg.req.Linked}
+	st := &traceDiffState{diff: d, head: msg.head, headWhy: msg.headOK, work: msg.work, workWhy: msg.workOK, linked: msg.req.Linked, key: msg.req.Key}
 	if !d.HasAfter {
 		why := "the transcript holds only the changed hunks — the whole after content is unknown"
 		if msg.record {
@@ -247,6 +254,16 @@ func (m *Model) openTraceDiff(msg traceDiffReadyMsg) {
 		}
 		if st.workWhy == "" {
 			st.workWhy = why
+		}
+	}
+	if msg.step {
+		if p := m.agentTracePanel(); p != nil {
+			p.Select(msg.req.Key)
+		}
+		if why := st.disabled(msg.base); why != "" {
+			m.host.Notify(host.Info, traceBaseLabel(msg.base)+": "+why)
+		} else {
+			st.base = msg.base
 		}
 	}
 	m.traceDiff = st
@@ -272,7 +289,8 @@ func (m *Model) closeTraceDiff() {
 }
 
 // updateTraceDiff handles a key while the view is open: the base switch,
-// f for the linked feed entry, esc; the rest scrolls.
+// f for the linked feed entry, ← / → and n / p to step through the
+// changes, esc; the rest scrolls.
 func (m Model) updateTraceDiff(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	st := m.traceDiff
 	switch key := msg.String(); key {
@@ -294,10 +312,45 @@ func (m Model) updateTraceDiff(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		if _, ok := m.traceChangeEntry(st.linked); ok {
 			m.openChangeFeedAt(st.linked)
 		}
+	case "right", "n", "left", "p":
+		return m, m.stepTraceDiff(key == "right" || key == "n")
 	default:
 		m.shell.Update(msg)
 	}
 	return m, nil
+}
+
+// stepTraceDiff loads the diff of the change after (or before) the shown
+// one along the trace (#2910), keeping the picked base; the view stays
+// open on the current diff until the new one is ready, and at an end of
+// the trace says so.
+func (m *Model) stepTraceDiff(next bool) tea.Cmd {
+	st := m.traceDiff
+	p := m.agentTracePanel()
+	if p == nil {
+		return nil
+	}
+	dir, end := 1, "no next change"
+	if !next {
+		dir, end = -1, "no previous change"
+	}
+	req, ok := p.NextChange(st.key, dir)
+	if !ok {
+		m.host.Notify(host.Info, end)
+		return nil
+	}
+	cmd := m.traceDiffCmd(req)
+	if cmd == nil {
+		return nil
+	}
+	base := st.base
+	return func() tea.Msg {
+		out, ok := cmd().(traceDiffReadyMsg)
+		if ok {
+			out.step, out.base = true, base
+		}
+		return out
+	}
 }
 
 // disabled is why a base cannot be picked, "" when it can.
@@ -385,7 +438,7 @@ func (c *traceDiffContent) render(width int) string {
 	if c.st.linked != "" {
 		hint += " · f change feed"
 	}
-	hint += " · esc close"
+	hint += " · ←/→ n/p prev/next change · esc close"
 	return strings.Join(lines, "\n") + "\n" + body + "\n\n" + dim.Render(ansi.Truncate(hint, width, "…"))
 }
 

@@ -745,6 +745,26 @@ repository") or for a file HEAD does not track, the working file once it
 is gone, and both while only hunks of the change are known. `f` opens the
 feed panel on a linked entry, `esc` closes, the rest scrolls.
 
+**Stepping (#2910).** `→` / `n` show the next change's diff, `←` / `p` the
+previous one, without closing the view. The pane owns the order:
+`tracepanel.NextChange(key, dir)` walks from the shown node (the view
+keeps its key) to the neighbouring node `D` works on — in the graph view
+the next change stop of the path (the same `stepStop` walk as `n` / `p`,
+#2878; prompts, answers, separators and rewinds skipped), in the tree view
+the next writing file row in tree order (a MultiEdit's rows each count; a
+tool row steps past its own file row) — and returns the `DiffMsg` `D` would
+send. The app runs it through `traceDiffCmd` (async, `traceDiffGen`-guarded,
+the same `traceDiffSource`, so stored sessions step too); once the diff is
+ready, `openTraceDiff` replaces the view's content (scroll back at the top),
+moves the pane's selection onto the node with `Select` — closing leaves the
+user on the diff they last saw — and keeps the picked base when the new
+change has it, else falls back to *session before* with the base's
+"label: reason" notice. At either end the current diff stays and the view
+notifies "no next change" / "no previous change". A step whose diff cannot
+be found keeps the current diff with the usual notice. The keys are the
+overlay's own (handled in `updateTraceDiff`, like `f` and `1`–`3`) and are
+listed in its footer.
+
 **On a stored session (#2882).** While the pane shows a session from the
 history, `D` never consults the live reader — its keys are not the stored
 session's. The source (`traceDiffSource` → `traceDiffSrc.load`) is the
