@@ -1,5 +1,12 @@
 # Log
 
+## 2026-10-07 (agent trace graph: turn runs towards more room, #2909)
+
+- [Agent Trace](/architecture/agent-trace.md): § Graph view — the "runs
+  towards the room" rule now keeps the reversed direction only when the rest
+  of the turn fits that way, else takes the direction that fits the whole
+  turn (`fitsRun`), else the one with more room (`room`), reversing on a tie.
+
 ## 2026-10-06 (view.zenMode on the popup terminal layer, #2905)
 
 - [Integrated Terminal](/architecture/terminal.md): new *Zen* bullet in the

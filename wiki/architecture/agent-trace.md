@@ -476,15 +476,22 @@ and so on (boustrophedon). The first box of a row sits directly under the
 last box of the row before (sharing the edge the path came from), so a
 turn is a `│` over a `▼` in the two rows between — the rows breathe
 instead of stacking — and boxes on a row join with `──▶` / `◀──`. **A row
-runs towards the room (#2901):** a turn normally reverses the direction,
-but when the box the new row starts with does not sit at the edge the
-path came from — the row before held a single box, the path came off a
-narrow compaction marker, or a break follows a turn — the reversed
-direction may have no room for a box beside it while the other has; the
-row then keeps the direction (`fitsBeside`), so the next box sits beside
-the first instead of dropping another row. That was the edge-wrap step: a
-turn ending alone on a row at the left edge, followed by a prompt-and-
-answer turn, stacked the answer under the prompt. **A new question breaks
+runs towards the room (#2901, #2909):** a turn normally reverses the
+direction, but when the box the new row starts with does not sit at the
+edge the path came from — a short turn ended mid-row, the row before held
+a single box, the path came off a narrow compaction marker — the reversed
+direction may hold fewer boxes than the other. The row keeps the reversed
+direction when the rest of the turn (the stops up to the next break,
+separators included) fits that way; else it takes the other direction
+when the whole turn fits there (`fitsRun`); else, when neither fits, the
+direction with more room for boxes beside the first (`room`), the
+reversed one on a tie, so the plain snake stays a snake. A prompt +
+change + answer turn after a row ending at column 3 of 4 going left thus
+runs left on one row instead of putting one box beside the prompt and
+dropping the answer to a row of its own; the edge-wrap step (#2901) — a
+turn ending alone at the left edge, followed by a prompt-and-answer turn
+stacking the answer under the prompt — is the case with no room at all
+in the reversed direction. **A new question breaks
 the row (#2866):** every prompt stop but the first starts a new row even
 when it would still fit (`Snake` takes the break indices; `graphLayout`
 passes every prompt after the first), the path turning down as at a full
