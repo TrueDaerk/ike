@@ -143,14 +143,18 @@ func Snake(widths []int, breaks []int, paneW, expanded, detailH int) Layout {
 					x = last.X
 				}
 				x = max(0, min(x, paneW-w))
-				// The row runs towards the room (#2901): when the last box
-				// of the row before did not sit at the edge the turn comes
-				// from — a row of one box, a narrow separator, a break
-				// right after a turn — the reversed direction may have no
-				// room for a box beside this one while the other has; the
-				// row then keeps the direction, and the next box sits
-				// beside this one instead of under it.
-				if !fitsBeside(x, w, dir, boxW, paneW) && fitsBeside(x, w, -dir, boxW, paneW) {
+				// The row runs towards the room (#2901, #2909): the last box
+				// of the row before need not sit at the edge the turn comes
+				// from — a short turn, a narrow separator, a break right
+				// after a turn — so the reversed direction may hold fewer
+				// boxes than the other. The row keeps the reversed direction
+				// when the rest of the turn (the stops up to the next break)
+				// fits that way; else it takes the other direction when the
+				// whole turn fits there, else the direction with more room
+				// for boxes beside this one, the reversed one on a tie.
+				rest := widths[i+1 : turnEnd(i, len(widths), brk)]
+				if !fitsRun(x, w, dir, rest, paneW) && (fitsRun(x, w, -dir, rest, paneW) ||
+					room(x, w, -dir, boxW, paneW) > room(x, w, dir, boxW, paneW)) {
 					dir = -dir
 				}
 			}
@@ -167,13 +171,38 @@ func Snake(widths []int, breaks []int, paneW, expanded, detailH int) Layout {
 	return l
 }
 
-// fitsBeside reports whether a box boxW wide fits gapW beside the slot at
-// (x, w) in direction dir inside paneW.
-func fitsBeside(x, w, dir, boxW, paneW int) bool {
-	if dir > 0 {
-		return x+w+gapW+boxW <= paneW
+// turnEnd returns the index of the first stop after i that starts a new
+// row by a break (n when none does).
+func turnEnd(i, n int, brk map[int]bool) int {
+	for j := i + 1; j < n; j++ {
+		if brk[j] {
+			return j
+		}
 	}
-	return x-gapW-boxW >= 0
+	return n
+}
+
+// fitsRun reports whether the stops of the given widths all fit, gapW
+// apart, beside the slot at (x, w) in direction dir inside paneW.
+func fitsRun(x, w, dir int, widths []int, paneW int) bool {
+	need := 0
+	for _, sw := range widths {
+		need += gapW + sw
+	}
+	if dir > 0 {
+		return x+w+need <= paneW
+	}
+	return x-need >= 0
+}
+
+// room returns how many boxes boxW wide fit, gapW apart, beside the slot at
+// (x, w) in direction dir inside paneW.
+func room(x, w, dir, boxW, paneW int) int {
+	free := x
+	if dir > 0 {
+		free = paneW - x - w
+	}
+	return max(free, 0) / (gapW + boxW)
 }
 
 // RowBreak reports whether the row of slot i was started by a break, so a
