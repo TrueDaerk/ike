@@ -213,3 +213,117 @@ func TestTraceAskFallsBackToReconstructedHunk(t *testing.T) {
 		t.Fatalf("the feed's hunk must win, got %q", h)
 	}
 }
+
+// TestTraceDiffStepsThroughChanges: ← / → and n / p in the diff view step
+// to the neighbouring change (#2910) — the read and the prompt skipped —
+// moving the pane's selection along, keeping the picked base while the new
+// change has it and falling back with a notice otherwise; at the ends the
+// view keeps its diff and says so. Both pane views.
+func TestTraceDiffStepsThroughChanges(t *testing.T) {
+	for _, view := range []tracepanel.ViewMode{tracepanel.ViewTree, tracepanel.ViewGraph} {
+		t.Run(view.String(), func(t *testing.T) {
+			m, dir := traceApp(t)
+			if m.onboardingOpen() {
+				m = m.closeOnboarding().(Model)
+			}
+			files := t.TempDir()
+			main := filepath.Join(files, "main.go")
+			created := filepath.Join(files, "new.go")
+			other := filepath.Join(files, "other.go")
+			for path, text := range map[string]string{main: "a\nb\nd\n", created: "x\n", other: "2\n"} {
+				if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.WriteFile(filepath.Join(dir, "sess-1.jsonl"), []byte(diffTranscript(t, "sess-1", projectRoot(), main, created, other)), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			m = openTraceView(t, m, view)
+			p := m.agentTracePanel()
+			if !p.Select("e2/f0") {
+				t.Fatalf("no edit node:\n%s", p.View())
+			}
+			m = runTraceDiff(t, m, p.Update(tea.KeyPressMsg{Code: 'D', Text: "D"})().(tracepanel.DiffMsg))
+			if !m.traceDiffOpen() {
+				t.Fatal("D must open the diff view")
+			}
+			press := func(k tea.KeyPressMsg) {
+				t.Helper()
+				out, cmd := m.Update(k)
+				m = out.(Model)
+				if cmd != nil {
+					out, _ = m.Update(cmd())
+					m = out.(Model)
+				}
+			}
+			// noticed reports a notice starting with prefix (the history is
+			// newest-first, the undrained queue oldest-first).
+			noticed := func(prefix string) bool {
+				for _, n := range notices(m) {
+					if strings.HasPrefix(n, prefix) {
+						return true
+					}
+				}
+				return false
+			}
+			at := func(key string) {
+				t.Helper()
+				if !m.traceDiffOpen() || m.traceDiff.key != key {
+					t.Fatalf("diff view open=%v on %q, want %q (notices %q)", m.traceDiffOpen(), m.traceDiff.key, key, notices(m))
+				}
+				if cur := m.agentTracePanel().Current(); cur == nil || cur.Key != key {
+					t.Fatalf("selection = %+v, want %q", cur, key)
+				}
+				if s := m.shell.ScrollOffset(); s != 0 {
+					t.Fatalf("a step must scroll to the top, offset %d", s)
+				}
+			}
+			right := tea.KeyPressMsg{Code: tea.KeyRight}
+			left := tea.KeyPressMsg{Code: tea.KeyLeft}
+			n := tea.KeyPressMsg{Code: 'n', Text: "n"}
+			pk := tea.KeyPressMsg{Code: 'p', Text: "p"}
+
+			// The working-file base, then on to the created file: kept.
+			press(tea.KeyPressMsg{Code: '3', Text: "3"})
+			if m.traceDiff.base != baseWork {
+				t.Fatalf("3 must pick the working file: %q", notices(m))
+			}
+			press(right)
+			at("e3/f0")
+			if m.traceDiff.base != baseWork {
+				t.Fatal("the picked base must survive a step when the change has it")
+			}
+			if view := ansi.Strip(m.shell.Content().Render(100)); !strings.Contains(view, "new file") || !strings.Contains(view, "n/p prev/next change") {
+				t.Errorf("stepped view:\n%s", view)
+			}
+			// The patch-only change has no working-file base: back to the
+			// session's before, with the notice.
+			press(n)
+			at("e4/f0")
+			if m.traceDiff.base != baseSession || !noticed("working file: ") {
+				t.Fatalf("base %d, notices %q", m.traceDiff.base, notices(m))
+			}
+			// The last change: the view stays and says so.
+			press(n)
+			at("e4/f0")
+			if !noticed("no next change") {
+				t.Fatalf("notices %q", notices(m))
+			}
+			press(left)
+			at("e3/f0")
+			press(pk)
+			at("e2/f0")
+			// Before the first change come only the read and the prompt.
+			press(pk)
+			at("e2/f0")
+			if !noticed("no previous change") {
+				t.Fatalf("notices %q", notices(m))
+			}
+			// esc still closes, leaving the selection on the last diff.
+			press(tea.KeyPressMsg{Code: tea.KeyEscape})
+			if m.traceDiffOpen() || m.agentTracePanel().Current().Key != "e2/f0" {
+				t.Fatal("esc must close the view and keep the selection")
+			}
+		})
+	}
+}

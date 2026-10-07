@@ -525,10 +525,10 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "D":
 		// Every change has a diff (#2859); reads and the other rows have none.
 		cur := m.Current()
-		if cur == nil || cur.Ref == nil || cur.Ref.Op == agenttrace.OpRead {
+		if !diffable(cur) {
 			return nil
 		}
-		msg := DiffMsg{Key: cur.Key, Path: cur.Ref.Path, Linked: m.links.Node(cur.Key)}
+		msg := m.diffMsg(cur)
 		return func() tea.Msg { return msg }
 	case "V":
 		cur := m.Current()
@@ -542,6 +542,72 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return func() tea.Msg { return msg }
 	}
 	return nil
+}
+
+// diffable reports whether D shows a diff for the node: a file reference
+// that is not a read.
+func diffable(n *agenttrace.Node) bool {
+	return n != nil && n.Ref != nil && n.Ref.Op != agenttrace.OpRead
+}
+
+// diffMsg is the DiffMsg D sends for a diffable node.
+func (m *Model) diffMsg(n *agenttrace.Node) DiffMsg {
+	return DiffMsg{Key: n.Key, Path: n.Ref.Path, Linked: m.links.Node(n.Key)}
+}
+
+// NextChange is the change after (dir > 0) or before (dir < 0) the one
+// keyed key along the trace — the next change stop of the path in the
+// graph view (prompts, answers and separators skipped), the next writing
+// file row in tree order otherwise — as the DiffMsg D would send for it;
+// false at the end of the trace. The diff view steps with it (#2910) and
+// moves the selection there with Select once the diff is shown.
+func (m *Model) NextChange(key string, dir int) (DiffMsg, bool) {
+	if dir > 0 {
+		dir = 1
+	} else {
+		dir = -1
+	}
+	if m.view == ViewGraph {
+		stops := m.graph.stops
+		from := m.stopIndex(key)
+		if from < 0 {
+			return DiffMsg{}, false
+		}
+		j := m.stepStop(from, dir, func(j int) bool {
+			return stops[j].Kind == agenttrace.StopChange && diffable(stopNode(&stops[j]))
+		})
+		if j < 0 {
+			return DiffMsg{}, false
+		}
+		return m.diffMsg(stopNode(&stops[j])), true
+	}
+	var order []*agenttrace.Node
+	var walk func(nodes []agenttrace.Node)
+	walk = func(nodes []agenttrace.Node) {
+		for i := range nodes {
+			order = append(order, &nodes[i])
+			walk(nodes[i].Children)
+		}
+	}
+	walk(m.nodes)
+	from := -1
+	for i, n := range order {
+		if n.Key == key {
+			from = i
+			break
+		}
+	}
+	if from < 0 {
+		return DiffMsg{}, false
+	}
+	for j := from + dir; j >= 0 && j < len(order); j += dir {
+		// A tool row showing its only file is the same change as that
+		// file's row below it: step over the rows under the start.
+		if n := order[j]; n.Kind == agenttrace.NodeFile && diffable(n) && !strings.HasPrefix(n.Key, key+"/") {
+			return m.diffMsg(n), true
+		}
+	}
+	return DiffMsg{}, false
 }
 
 // ensureFetch wires the tree's synchronous expansion; the Tree is a value
