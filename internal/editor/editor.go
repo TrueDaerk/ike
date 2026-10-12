@@ -702,6 +702,10 @@ type Model struct {
 	covMarks      map[int]lang.CoverKind
 	covStale      bool
 	covDocVersion int
+	// cxHints are the inline complexity hints (0550, #2919), keyed by the
+	// 0-based header line; pushed by the app stamped with the document
+	// version they were measured at. See complexityhints.go.
+	cxHints map[int]ComplexityHint
 	// Vim marks (#1151): marks are this view's local marks (m{a-z}),
 	// per-session like the caret set; markLines is the last observed line
 	// count for the edit-shift delta (the bpLines pattern). gm holds the
@@ -1816,6 +1820,13 @@ func (m Model) updateMsg(msg tea.Msg) (Model, tea.Cmd) {
 		// toggle hiding them).
 		if msg.Path == m.path {
 			m.setCoverageMarks(msg.Marks, msg.Stale)
+		}
+		return m, nil
+	case ComplexityHintsMsg:
+		// Inline complexity hints (0550, #2919); a push measured at another
+		// document version is dropped, nil clears.
+		if msg.Path == m.path {
+			m.SetComplexityHints(msg.Hints, msg.Version)
 		}
 		return m, nil
 	case vcs.MarksMsg:

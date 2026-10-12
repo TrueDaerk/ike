@@ -1211,6 +1211,15 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 				disp = emitHint(&b, disp, hints[hi])
 				hi++
 			}
+			// The complexity hint (0550, #2919) comes last, after any code
+			// lens, and only whole: it never truncates and never counts
+			// toward the right-edge mark — a header with no room shows none.
+			if hi >= len(hints) {
+				if cx, w := m.complexityHintTrailer(line, width-disp); w > 0 {
+					b.WriteString(cx)
+					disp += w
+				}
+			}
 			break
 		}
 

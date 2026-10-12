@@ -206,7 +206,9 @@ any entry whose key the typed schema does not expose (no dead keys).
 - **Conceal & Hints** (#2133) — every conceal family, the glob rules gating
   them, the field→unit mapping and the secret key patterns; see below.
 - **Diagnostics** (#1259) — the per-source, per-severity decoration toggles
-  (`editor.marks.lsp_*`, `editor.marks.git_*`; user scope) and the
+  (`editor.marks.lsp_*`, `editor.marks.git_*`, `editor.marks.inheritance`,
+  `editor.marks.coverage`, `editor.marks.complexity` for the inline
+  complexity hints, #2919; user scope) and the
   project-scoped `lsp.diagnostics_ignore` rule list the editor's
   "Ignore Diagnostic Under Caret" command appends to.
 - **Explorer** — hidden files, git-status colours, file-type icons, autoscroll

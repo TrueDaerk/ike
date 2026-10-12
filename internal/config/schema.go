@@ -1162,6 +1162,10 @@ type Marks struct {
 	// the gutter (#2081); the coverage.toggle command hides them per session
 	// on top of this.
 	Coverage bool `toml:"coverage"`
+	// Complexity gates the inline complexity hints on function headers
+	// (0550, #2919): `CCN 12 · cog 8` as trailing virtual text, fed from the
+	// complexity index and re-measured after edits.
+	Complexity bool `toml:"complexity"`
 }
 
 // Tabs holds editor-tab behaviour (Roadmap 0190). AlwaysShow renders the
