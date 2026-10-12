@@ -1,5 +1,17 @@
 # Log
 
+## 2026-10-13 (Inline complexity hints on function headers, #2919)
+
+- [Code Complexity](/architecture/complexity.md): new section "Editor
+  surface" — the settled-pass sync keyed on `cxHintKey`, index-served clean
+  buffers vs the 250 ms debounced off-loop `Measure` of dirty ones, the
+  version-stamped push and the `editor.marks.complexity` toggle.
+- [Editor](/architecture/editor.md): the mark catalogue gains the inline
+  complexity hint (trailing virtual text after any code lens, whole or not
+  at all); the decoration-toggle list names the non-diagnostic classes.
+- [Settings UI](/architecture/settings-ui.md): the Diagnostics page carries
+  `editor.marks.complexity`.
+
 ## 2026-10-13 (Complexity Problems feed for over-threshold functions, #2920)
 
 - [Code Complexity](/architecture/complexity.md): new section "Problems

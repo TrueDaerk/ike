@@ -332,6 +332,10 @@ type Model struct {
 	// the generations the diff keys on and the last result, shared by
 	// pointer like vcs.
 	cxDiff *complexityDiffState
+	// cxHints is the inline complexity hint feed's bookkeeping (0550,
+	// #2919): the state key delivered or armed per open document, shared by
+	// pointer like cxDiff.
+	cxHints *complexityHintState
 	// forgePoll is the background forge poll service (#2085): one poller per
 	// workspace root, shared by pointer across value-model copies like vcs.
 	// Nil in bare test models — every accessor is nil-safe.
@@ -1700,6 +1704,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		phpIndex:        phpIdx,
 		complexityIndex: cxIdx,
 		cxDiff:          &complexityDiffState{},
+		cxHints:         &complexityHintState{sent: map[string]cxHintKey{}, pending: map[string]cxHintKey{}},
 		ws:              wsMgr,
 		recentEditor:    edKey,
 		recent:          recent,
@@ -4596,6 +4601,12 @@ func (m Model) updateUnguarded(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Its Changes tab pulls the diff against the base revision here too
 	// (#2918): a moved snapshot / index generation arms the debounce tick.
 	if sync := mm.complexityDiffSyncCmd(); sync != nil {
+		cmd = tea.Batch(cmd, sync)
+	}
+	// Inline complexity hints follow every open document here (#2919): a
+	// clean, indexed buffer is served from the snapshot, a dirty one arms
+	// the debounced off-loop measurement.
+	if sync := mm.complexityHintsSyncCmd(); sync != nil {
 		cmd = tea.Batch(cmd, sync)
 	}
 	// The DOM inspector rides the same settled pass (#1929): cursor follow is
@@ -8516,6 +8527,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The comparison landed (#2918).
 		m.applyComplexityDiff(msg)
 		return m, nil
+
+	case complexityHintTickMsg:
+		// An inline hint debounce expired (#2919): measure the buffer
+		// off-loop if it still wants that state.
+		return m, m.complexityHintTick(msg)
+
+	case complexityHintMeasuredMsg:
+		// The measurement landed (#2919): to every view of the path.
+		return m, m.applyComplexityHints(msg)
 
 	case complexitypanel.SetBaseMsg:
 		// 'R' + enter in the Changes tab (#2918): compare against another

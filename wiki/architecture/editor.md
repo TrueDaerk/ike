@@ -64,7 +64,21 @@ run-with-coverage; stale data — the buffer changed since the run, detected by
 document version or the app's store flag — draws faint in the info tone;
 gated by `editor.marks.coverage` and cleared/re-pushed by the
 `coverage.toggle` command) >
-diagnostic/git colouring. A single-cell sign column means a line that is both
+diagnostic/git colouring. One mark class lives outside the gutter: the
+**inline complexity hint** (0550, #2919, `complexityhints.go`) — `CCN 12 ·
+cog 8` as trailing virtual text at the end of every function header, after
+any code lens, dimmed-italic like a lens and in the warning tone when a
+metric reaches `complexity.ccn_warn` / `complexity.cognitive_warn`. The app
+pushes `ComplexityHintsMsg{Path, Hints, Version}` per document (from the
+project index for a clean buffer, from a debounced off-loop `Measure` of the
+dirty text otherwise, see [complexity](./complexity.md#editor-surface-2919));
+`SetComplexityHints` drops a push whose `Version` is not the current
+`DocVersion`, so a hint never lands on a moved line. The hint is emitted by
+the end-of-line flush after the inlay hints and lenses and, unlike those,
+only whole: no room (a header at full width, the caret cell on the last
+column, a line wider than the pane) means no hint, never a truncated one
+over buffer text. Gated by `editor.marks.complexity`; cached hints survive a
+toggle round-trip. A single-cell sign column means a line that is both
 a test and an overriding method shows only the test marker. A plain gutter
 click still toggles the breakpoint on every line; ctrl/cmd+click on a marker
 line runs that test (see /architecture/run-configurations.md).
@@ -1077,8 +1091,9 @@ the left mark only. `ui.h_scroll_marks = false` turns the marks off everywhere.
 **Decoration toggles (#1259, `editor/marktoggles.go`).** The `editor.marks.*`
 config switches gate which mark classes decorate the buffer, per source and
 severity: `lsp_errors`/`lsp_warnings`/`lsp_info`/`lsp_hints` for LSP
-diagnostics and `git_added`/`git_changed`/`git_deleted` for the VCS line
-marks. A disabled class disappears consistently from the scrollbar stripe
+diagnostics, `git_added`/`git_changed`/`git_deleted` for the VCS line
+marks, `inheritance`, `coverage` and `complexity` (#2919) for the
+non-diagnostic classes. A disabled class disappears consistently from the scrollbar stripe
 (including click-to-jump targets), the gutter colouring and the inline
 underlines — `sevVisible`/`gitVisible` are consulted at all render seams, and
 a toggle flip bumps the diags/marks epochs so the memoized stripe rebuilds.

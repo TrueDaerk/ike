@@ -404,6 +404,49 @@ editor paints no gutter mark or underline for them.
 |---|---|---|
 | `complexity.problems` | `true` | Publish over-threshold functions into Problems (Settings > Complexity). |
 
+## Editor surface (#2919)
+
+`internal/app/complexity_hints.go` feeds the editor's inline complexity
+hints — `CCN 12 · cog 8` as trailing virtual text on every function header
+(editor side: `internal/editor/complexityhints.go`, see
+[editor](./editor.md)). It is a third per-line annotation store beside code
+lenses and inline debugger values, fed per open document and routed like
+`vcs.MarksMsg` through `routeToEditor` to every view of the path.
+
+**Sync.** `complexityHintsSyncCmd` runs on the settled pass of every
+`Update`, the Structure pane's pattern (#1025): every open document of a
+language with a complexity spec (not excluded, not a degraded large file)
+wants hints for one state key `cxHintKey{version, gen, ccn, cog, enabled}`
+— the buffer's `DocVersion`, the index generation the hints came from, the
+two warning thresholds and the master switch. The key last delivered (or
+launched) per path is remembered in `sent`, the key a debounce is armed for
+in `pending`; a document whose wanted key matches either costs nothing. A
+**clean buffer the index holds** is served on the spot from the snapshot —
+no parse, so opening a file, a finished walk or a `ComplexityChangedMsg`
+shows hints in the same pass. A **dirty buffer** (or one the walk has not
+reached) arms the 250 ms `cxHintDebounce` tick; a typing burst re-arms with
+a newer key and every older tick is dropped at fire time
+(`complexityHintTick`). The surviving tick takes the buffer text and runs
+`complexity.Measure` off-loop (`cxMeasureText`, shared with the Changes
+tab); the result returns as `complexityHintMeasuredMsg`, stamped with the
+version it was taken at, and is routed only while it is still the sent key.
+The editor drops a push whose version moved meanwhile; the next settled pass
+re-arms. Closed documents are forgotten so a reopen starts fresh.
+
+**Hints.** `complexityHintsFor(fns, ccnWarn, cogWarn)` emits one
+`editor.ComplexityHint{Line, Text, Warn}` per function at its header line
+(the first unit on a line wins, so a lambda beside its header does not
+replace it); `Warn` when CCN or cognitive reaches its threshold, which paints
+the hint in the warning tone. A threshold change on reload changes the key,
+so every open buffer repaints. `complexity.enabled = false` sends one
+clearing push per buffer that holds hints; `editor.marks.complexity = false`
+hides them in the editor without a push (Settings > Editor > Diagnostics,
+next to the other mark toggles).
+
+| Key | Default | Meaning |
+|---|---|---|
+| `editor.marks.complexity` | `true` | Render the inline complexity hints on function headers. |
+
 ## Extending
 
 A new language declares its `lang.ComplexitySpec` (see
