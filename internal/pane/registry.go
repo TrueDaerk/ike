@@ -9,6 +9,7 @@ import (
 
 	"ike/internal/archview"
 	"ike/internal/breakpanel"
+	"ike/internal/complexitypanel"
 	"ike/internal/dataview"
 	"ike/internal/debugdoctor"
 	"ike/internal/debugpanel"
@@ -145,6 +146,10 @@ const UsageKey = "usage"
 // AgentTraceKey is the stable key of the singleton Agent Trace tool window
 // (#2840).
 const AgentTraceKey = "agenttrace"
+
+// ComplexityKey is the stable key of the singleton Complexity tool window
+// (#2917).
+const ComplexityKey = "complexity"
 
 // Registry maps stable instance keys to live pane components and tracks which
 // key currently holds focus. The explorer is a singleton under ExplorerKey;
@@ -830,6 +835,8 @@ func (r *Registry) newToolWindow(kind Kind) *Instance {
 		inst.usg = usagepanel.New(r.pal)
 	case KindAgentTrace:
 		inst.at = tracepanel.New(r.pal)
+	case KindComplexity:
+		inst.cx = complexitypanel.New(r.pal)
 	case KindBreakpoints:
 		inst.bp = breakpanel.New(r.pal)
 	case KindHTTP:
@@ -909,6 +916,10 @@ func (r *Registry) AddUsage() string { return r.AddToolWindow(KindUsage) }
 // AddAgentTrace creates the singleton Agent Trace tool window under
 // AgentTraceKey (#2840), returning the existing key when it is already open.
 func (r *Registry) AddAgentTrace() string { return r.AddToolWindow(KindAgentTrace) }
+
+// AddComplexity creates the singleton Complexity tool window under
+// ComplexityKey (#2917), returning the existing key when it is already open.
+func (r *Registry) AddComplexity() string { return r.AddToolWindow(KindComplexity) }
 
 // AddBreakpoints creates the singleton Breakpoints tool window under
 // BreakpointsKey (#1377) and returns its key; a second call returns the

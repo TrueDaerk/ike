@@ -11,6 +11,7 @@ import (
 	"ike/internal/archview"
 	"ike/internal/breakpanel"
 	"ike/internal/clipboard"
+	"ike/internal/complexitypanel"
 	"ike/internal/config"
 	"ike/internal/dataview"
 	"ike/internal/debugdoctor"
@@ -158,6 +159,11 @@ const (
 	// singleton panel showing the coding-agent session of a tool pane as a
 	// turn → decision → tool call → file tree, under key "agenttrace".
 	KindAgentTrace
+	// KindComplexity is the Complexity tool window (#2917, epic 0550): a
+	// singleton bottom-split panel listing the project's functions with
+	// their cyclomatic / cognitive complexity from the complexity index,
+	// under key "complexity".
+	KindComplexity
 	// KindHTMLPreview is a rendered HTML preview pane (Epic 0530, #2740); any
 	// number may exist, each bound to one .html/.htm/.xhtml (or .html.gz)
 	// source buffer path, the markdown preview's sibling.
@@ -201,6 +207,7 @@ const (
 	ctxTime     = "time"
 	ctxUsage    = "usage"
 	ctxTrace    = "agenttrace"
+	ctxCx       = "complexity"
 	ctxHex      = "hex"
 	ctxNotebook = "notebook"
 )
@@ -243,6 +250,7 @@ type Instance struct {
 	tp   timepanel.Model
 	usg  usagepanel.Model
 	at   tracepanel.Model
+	cx   complexitypanel.Model
 	rm   remote.Model
 	// dfEdit is the diff pane's edit-mode editor (0340, #496): non-nil while
 	// the right column is a live editor of the underlying file.
@@ -393,6 +401,8 @@ func (i *Instance) ContextID() string {
 		return ctxUsage
 	case KindAgentTrace:
 		return ctxTrace
+	case KindComplexity:
+		return ctxCx
 	case KindRemote:
 		return ctxRemote
 	case KindHex:
@@ -495,6 +505,10 @@ func (i *Instance) Usage() *usagepanel.Model { return &i.usg }
 // AgentTrace returns the Agent Trace tool window model (#2840). It is only
 // meaningful for KindAgentTrace instances.
 func (i *Instance) AgentTrace() *tracepanel.Model { return &i.at }
+
+// Complexity returns the Complexity tool window model (#2917). It is only
+// meaningful for KindComplexity instances.
+func (i *Instance) Complexity() *complexitypanel.Model { return &i.cx }
 
 // Remote returns the underlying SFTP remote browser model (#1997). It is
 // only valid for a remote instance; callers gate on Kind first.
@@ -894,6 +908,8 @@ func SingletonKey(k Kind) string {
 		return UsageKey
 	case KindAgentTrace:
 		return AgentTraceKey
+	case KindComplexity:
+		return ComplexityKey
 	}
 	return ""
 }
@@ -913,7 +929,7 @@ func SingletonKind(key string) (Kind, bool) {
 var toolWindowKinds = []Kind{
 	KindVCS, KindDebug, KindProblems, KindStructure, KindUsages, KindHTTP, KindBreakpoints,
 	KindTests, KindIssues, KindDOM, KindDoctor, KindLSPDoctor, KindDeps, KindTime, KindUsage,
-	KindAgentTrace,
+	KindAgentTrace, KindComplexity,
 }
 
 // ToolWindowKinds returns every singleton tool window kind (#2736), for the
@@ -1021,6 +1037,8 @@ func (i *Instance) DetachContent() (*Instance, bool) {
 		nested.usg, i.usg = i.usg, usagepanel.Model{}
 	case KindAgentTrace:
 		nested.at, i.at = i.at, tracepanel.Model{}
+	case KindComplexity:
+		nested.cx, i.cx = i.cx, complexitypanel.Model{}
 	default:
 		return nil, false
 	}
@@ -1192,6 +1210,8 @@ func ToolWindowName(k Kind) string {
 		return "usage"
 	case KindAgentTrace:
 		return "agenttrace"
+	case KindComplexity:
+		return "complexity"
 	}
 	return ""
 }
@@ -1646,6 +1666,8 @@ func (i *Instance) SetSize(w, h int) {
 		i.usg.SetSize(w, h)
 	case KindAgentTrace:
 		i.at.SetSize(w, h)
+	case KindComplexity:
+		i.cx.SetSize(w, h)
 	case KindRemote:
 		i.rm.SetSize(w, h)
 	}
@@ -1720,6 +1742,8 @@ func (i *Instance) SetFocused(f bool) {
 		i.usg.SetFocused(f)
 	case KindAgentTrace:
 		i.at.SetFocused(f)
+	case KindComplexity:
+		i.cx.SetFocused(f)
 	case KindRemote:
 		i.rm.SetFocused(f)
 	}
@@ -1804,6 +1828,8 @@ func (i *Instance) View() string {
 		return i.usg.View()
 	case KindAgentTrace:
 		return i.at.View()
+	case KindComplexity:
+		return i.cx.View()
 	case KindRemote:
 		return i.rm.View()
 	}
@@ -1909,6 +1935,8 @@ func (i *Instance) Update(msg tea.Msg) tea.Cmd {
 		cmd = i.usg.Update(msg)
 	case KindAgentTrace:
 		cmd = i.at.Update(msg)
+	case KindComplexity:
+		cmd = i.cx.Update(msg)
 	case KindRemote:
 		cmd = i.rm.Update(msg)
 	}
@@ -2110,6 +2138,8 @@ func (i *Instance) setPalette(p *theme.Palette) {
 		i.usg.SetPalette(p)
 	case KindAgentTrace:
 		i.at.SetPalette(p)
+	case KindComplexity:
+		i.cx.SetPalette(p)
 	case KindRemote:
 		i.rm.SetPalette(p)
 	}

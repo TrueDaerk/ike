@@ -70,6 +70,10 @@ func (m *Model) reconfigureComplexityIndex(cfg *config.Config) {
 		return
 	}
 	m.complexityIndex.Reconfigure(complexityOptions(cfg.Complexity))
+	// The tool window's warning thresholds follow the same reload (#2917).
+	if p := m.complexityPanel(); p != nil {
+		p.SetWarn(cfg.Complexity.CCNWarn, cfg.Complexity.CognitiveWarn)
+	}
 }
 
 // complexityScanRecorder is the callback the complexity index reports a

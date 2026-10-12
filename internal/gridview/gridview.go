@@ -34,6 +34,9 @@ type Cell struct {
 	Null   bool
 	Cursor bool
 	Match  bool
+	// Warn paints the cell's text in the warning colour: a metric at or
+	// above its threshold (the Complexity window, #2917).
+	Warn bool
 }
 
 // NullCell is the glyph a Null cell draws as — visibly distinct from the
@@ -70,7 +73,7 @@ func DataRow(pal *theme.Palette, cells []Cell, widths []int, colOff, w int, sele
 			text, style = NullCell, nullStyle
 		}
 		chunk := PadTo(text, widths[c])
-		if cell.Cursor || cell.Match {
+		if cell.Cursor || cell.Match || cell.Warn {
 			chunk = ClipTo(chunk, budget)
 			b.WriteString(markStyle(pal, style, cell, focused).Render(chunk))
 			budget -= lipgloss.Width(chunk)
@@ -96,6 +99,9 @@ func DataRow(pal *theme.Palette, cells []Cell, widths []int, colOff, w int, sele
 
 // markStyle is the style of a Cursor or Match cell on top of the row's.
 func markStyle(pal *theme.Palette, style lipgloss.Style, cell Cell, focused bool) lipgloss.Style {
+	if cell.Warn {
+		style = style.Foreground(pal.Warning)
+	}
 	if cell.Match {
 		style = style.Background(pal.OccurrenceRead)
 	}

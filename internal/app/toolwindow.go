@@ -165,6 +165,10 @@ func (m *Model) wireToolWindow(inst *pane.Instance) {
 		p.SetDisplayPath(displayPath)
 		p.SetLoading(true)
 		p.SetViewMode(m.traceViewMode())
+	case pane.KindComplexity:
+		// The Complexity panel (#2917) re-seeds from the live index; the
+		// next generation change refreshes it.
+		m.seedComplexityPanel(inst.Complexity())
 	case pane.KindDeps:
 		// The panel re-seeds from the last snapshot; the auto-scan (or 'r')
 		// refreshes it (#2419).

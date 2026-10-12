@@ -508,10 +508,15 @@ type PHPIndex struct {
 // never measures, matched against the project-relative slash path
 // (`vendor/**`, `**/*_test.go`) and, for a pattern without a slash, against
 // the base name too; the walk's own skip rules (hidden and build
-// directories, the size cap) apply on top.
+// directories, the size cap) apply on top. CCNWarn and CognitiveWarn
+// (#2917) are the thresholds a function counts as complex at: the tool
+// window paints a metric at or above its threshold in the warning colour
+// and the summary counts it as over threshold.
 type Complexity struct {
-	Enabled bool     `toml:"enabled"`
-	Exclude []string `toml:"exclude"`
+	Enabled       bool     `toml:"enabled"`
+	Exclude       []string `toml:"exclude"`
+	CCNWarn       int      `toml:"ccn_warn"`
+	CognitiveWarn int      `toml:"cognitive_warn"`
 }
 
 // Debug holds debugger behaviour (0360). PHP carries the web/request listen

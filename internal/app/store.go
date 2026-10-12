@@ -500,6 +500,10 @@ func encodeLayoutState(root layout.Node, reg *pane.Registry) ([]byte, bool) {
 			// The panel restores empty (#2840): the session is looked up
 			// again and the transcript re-read.
 			ids[key] = paneIdentity{Kind: "agenttrace"}
+		case pane.KindComplexity:
+			// The panel restores from the live index (#2917): the snapshot
+			// is re-read on wire-up and on every generation change.
+			ids[key] = paneIdentity{Kind: "complexity"}
 		case pane.KindTests:
 			// The panel restores empty (#1911): test results are session state.
 			ids[key] = paneIdentity{Kind: "tests"}

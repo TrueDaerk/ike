@@ -1008,6 +1008,12 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("time.refresh", "Project Time: Reload Usage Log", TimeRefreshMsg{}),
 			appCommand("usage.toggle", "Usage Report", UsageToggleMsg{}),
 			appCommand("usage.refresh", "Usage Report: Reload Usage Log", UsageRefreshMsg{}),
+			// The Complexity tool window (#2917): the project's functions with
+			// their cyclomatic / cognitive complexity; the rescan and the CSV
+			// export are the pane's own 'r' and 'e'.
+			withAliases(appCommand("complexity.toggle", "Complexity", ComplexityToggleMsg{}), "cyclomatic", "cognitive", "ccn"),
+			appCommand("complexity.refresh", "Complexity: Rescan Project", ComplexityRefreshMsg{}),
+			appCommand("complexity.export", "Complexity: Export Current Tab as CSV", ComplexityExportMsg{}),
 			appCommand("deps.refresh", "Dependencies: Refresh Scan", DepsRefreshMsg{}),
 			appCommand("deps.audit", "Dependencies: Audit Vulnerabilities", DepsAuditMsg{}),
 			appCommand("deps.updateLatest", "Update Dependency to Latest", DepsUpdateLatestMsg{}),

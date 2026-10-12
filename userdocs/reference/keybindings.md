@@ -48,6 +48,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Close project | `ctrl+shift+w` | `ctrl+shift+w` | `project.close` |
 | Close project group | `cmd+alt+shift+w` | `ctrl+alt+shift+w` | `project.group.close` |
 | Close project group | `ctrl+alt+shift+w` | `ctrl+alt+shift+w` | `project.group.close` |
+| Complexity tool window | `cmd+alt+shift+x` | `ctrl+alt+shift+x` | `complexity.toggle` |
 | Continue (debug) | `f9` | `f9` | `debug.continue` |
 | Copy file | `f5` | `f5` | `file.copy` |
 | Copy path | `cmd+shift+c` | `ctrl+shift+c` | `file.copyPath` |

@@ -249,6 +249,8 @@ func (st *snapState) leafIdentity(key string) (string, paneIdentity, bool) {
 		return singleton(pane.UsageKey, "usage")
 	case pane.KindAgentTrace:
 		return singleton(pane.AgentTraceKey, "agenttrace")
+	case pane.KindComplexity:
+		return singleton(pane.ComplexityKey, "complexity")
 	case pane.KindTests:
 		return singleton(pane.TestsKey, "tests")
 	case pane.KindIssues:
