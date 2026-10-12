@@ -40,6 +40,7 @@ segments.
 | `toolchain` | effective interpreter, see below | not resolvable |
 | `notifications` | `● N` unseen notification count, see below | count is 0 |
 | `forge` | `● 2 new issues` unread forge events (#2086), see [Notifications](/architecture/notifications.md) | nothing unread |
+| `complexity` | `Δcx +4` — ΣCCN delta of the working tree vs the Changes tab's base, sign always shown; warning colour when positive, success when negative, muted at `±0` (#2921, see [Code Complexity](/architecture/complexity.md)) | `complexity.status_segment` off (default), `complexity.enabled` off, outside git, or the diff is empty |
 
 While the keyboard pane-resize mode is armed (#2150) the bar drops the slots
 entirely for a mode banner — `RESIZE <pane>  hjkl / arrows move the edge · esc
@@ -65,7 +66,7 @@ bar onto a second row and corrupt the layout. Overflow shrinks
 priority-aware (#471, `composeStatus`): first the file segment shortens by
 exactly the overflow with a JetBrains-style middle ellipsis (floor 16
 cells), then low-priority segments drop in a defined order (hint, group, eol,
-encoding, indent, svcolumn, docpath, toolchain, todo, host, notifications, macro,
+encoding, indent, svcolumn, docpath, toolchain, todo, complexity, host, notifications, macro,
 branchissue, branch, buflang, forge, diagnostics, lsp, search — mode, file and the cursor never drop), and only as a
 last resort the bar hard-clips on the right.
 
@@ -178,6 +179,7 @@ router dispatches a left press through `statusSegmentCommands`:
 | `forge` (unread forge events) | `issues.toggle` |
 | `branchissue` (the current branch's issue, #2544) | `issues.openCurrentBranch` |
 | `lsp` (server state) | `lsp.doctor` (#2164) |
+| `complexity` (`Δcx`, #2921) | `complexity.toggle`, then the Changes tab (special-cased in the router, not a map entry) |
 | `group` (project-group marker, #2571) | `project.group.next` (#2572) — the next member in list order, with wrap |
 
 Only segments with one clear, obvious target are wired; every other press on

@@ -365,7 +365,8 @@ any entry whose key the typed schema does not expose (no dead keys).
   (Int, 1-200, default 15) the Complexity tool window paints cells against.
   All apply live: off drops the index, on rewalks, a changed list rebuilds,
   a changed threshold repaints the open window. `complexity.problems` (Bool, default on, #2920) feeds over-threshold
-  functions into the Problems window; off clears those rows. Listed in the Languages
+  functions into the Problems window; off clears those rows. `complexity.status_segment` (Bool, default off,
+  #2921) shows the `Δcx` status segment live. Listed in the Languages
   group after PHP (see [complexity](./complexity.md#project-index-2916) and
   [the tool window](./complexity.md#tool-window-2917)).
 - **Dependencies** (#2419) — `deps.auto_scan`, the background dependency

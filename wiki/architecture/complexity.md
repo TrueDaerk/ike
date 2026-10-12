@@ -2,7 +2,7 @@
 type: concept
 title: Code Complexity
 description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters and nesting depth per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary, the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
-resource: internal/complexity, internal/complexitypanel, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_problems.go
+resource: internal/complexity, internal/complexitypanel, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_problems.go, internal/app/complexity_segment.go
 tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive, index, settings, telemetry, vcs, diff, problems]
 timestamp: 2026-10-13T12:00:00Z
 ---
@@ -403,6 +403,23 @@ editor paints no gutter mark or underline for them.
 | Key | Default | Meaning |
 |---|---|---|
 | `complexity.problems` | `true` | Publish over-threshold functions into Problems (Settings > Complexity). |
+
+## Status segment (#2921)
+
+`internal/app/complexity_segment.go` renders the opt-in `complexity`
+status slot: `Δcx +4` / `Δcx -2` / `Δcx ±0`, the `DeltaCCN()` of the diff
+the Changes tab stores, tinted after layout (foreground only) in the
+warning, success or muted (inlay-hint) colour. It is hidden while the
+setting or `complexity.enabled` is off, outside git and while the diff has
+no changed files. The segment is a pure consumer; `complexityDiffWanted`
+— the Changes tab on screen **or** the segment on — is the seam that keeps
+the debounced diff armed on VCS refreshes and re-measures with the window
+closed, so a save shows up within one refresh. A click toggles the
+Complexity window and selects its Changes tab.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `complexity.status_segment` | `false` | Show the `Δcx` status segment (Settings > Complexity). |
 
 ## Editor surface (#2919)
 
