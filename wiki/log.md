@@ -1,5 +1,20 @@
 # Log
 
+## 2026-10-12 (language complexity spec + audit ledger, #2914)
+
+- [Language Registry](/architecture/languages.md): new § Complexity spec —
+  `lang.Language.Complexity *lang.ComplexitySpec` (FunctionNodes, ParamsField,
+  Branch, Else, Nesting, BoolOps, Jumps) with the field table, the five declared
+  specs (go, python, php, typescript, shell) and the audit ledger
+  `cmd/ike/complexity_audit_test.go` (`reasonNoFunctions` / `reasonNoGrammar` /
+  `reasonSpecGap`); `highlight.SyntaxNode.Operator` keeps the operator token
+  (`operator` field, else the infix of a field-less list) so boolean operators
+  are visible in the snapshot.
+- [Change Workflow](/process/change-workflow.md): new § "Languages declare their
+  complexity spec or a reason".
+- [PHP Trait Index](/architecture/php-trait-index.md): the snapshot now carries
+  `Operator`.
+
 ## 2026-10-07 (agent trace graph: turn runs towards more room, #2909)
 
 - [Agent Trace](/architecture/agent-trace.md): § Graph view — the "runs

@@ -38,12 +38,17 @@ func SyntaxTree(langID string, lines []string) *SyntaxNode {
 	}
 	defer tree.Close()
 	conv := newColMapper(lines)
-	return snapshotTree(tree.RootNode(), "", conv)
+	return snapshotTree(tree.RootNode(), "", src, conv)
 }
 
 // snapshotTree copies n and its named descendants. The walk uses a cursor
 // per level (Child(i) is O(1) on the C side; the cursor keeps field names).
-func snapshotTree(n *ts.Node, field string, conv colMapper) *SyntaxNode {
+// The operator token (#2914) is the one anonymous child kept: the text of
+// the grammar's `operator` field, else the first anonymous token sitting
+// between two named children (the infix of a field-less list such as
+// shell's `a && b`); leading and trailing tokens (keywords, brackets) are
+// never taken.
+func snapshotTree(n *ts.Node, field string, src []byte, conv colMapper) *SyntaxNode {
 	start, end := n.StartPosition(), n.EndPosition()
 	out := &SyntaxNode{
 		Kind:      n.Kind(),
@@ -55,13 +60,31 @@ func snapshotTree(n *ts.Node, field string, conv colMapper) *SyntaxNode {
 		EndLine:   int(end.Row),
 		EndCol:    conv.runeCol(int(end.Row), int(end.Column)),
 	}
+	if op := n.ChildByFieldName("operator"); op != nil {
+		out.Operator = string(src[op.StartByte():op.EndByte()])
+	}
 	count := n.ChildCount()
+	lastNamed := -1
+	if out.Operator == "" {
+		for i := int(count) - 1; i >= 0; i-- {
+			if c := n.Child(uint(i)); c != nil && c.IsNamed() {
+				lastNamed = i
+				break
+			}
+		}
+	}
 	for i := uint(0); i < count; i++ {
 		c := n.Child(i)
-		if c == nil || !c.IsNamed() {
+		if c == nil {
 			continue
 		}
-		out.Children = append(out.Children, snapshotTree(c, n.FieldNameForChild(uint32(i)), conv))
+		if !c.IsNamed() {
+			if out.Operator == "" && len(out.Children) > 0 && int(i) < lastNamed {
+				out.Operator = string(src[c.StartByte():c.EndByte()])
+			}
+			continue
+		}
+		out.Children = append(out.Children, snapshotTree(c, n.FieldNameForChild(uint32(i)), src, conv))
 	}
 	return out
 }
