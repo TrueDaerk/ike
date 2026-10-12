@@ -330,6 +330,7 @@ list of keys.
 | Cyclomatic warning threshold | `complexity.ccn_warn` | integer (1–200) | `15` | user | Cyclomatic complexity (CCN) a function counts as complex at: the Complexity tool window paints the cell in the warning colour and the summary counts it as over threshold. 1–200, default 15 |
 | Cognitive warning threshold | `complexity.cognitive_warn` | integer (1–200) | `15` | user | Cognitive complexity a function counts as complex at: the Complexity tool window paints the cell in the warning colour and the summary counts it as over threshold. 1–200, default 15 |
 | Problems feed | `complexity.problems` | boolean | `true` | user | List every function at or above a warning threshold in the Problems tool window as a warning under the source "complexity" (filter with source:complexity); enter jumps to the function. Off clears the rows and leaves LSP, lint and task findings untouched |
+| Status segment | `complexity.status_segment` | boolean | `false` | user | Show the summed cyclomatic complexity delta of the working tree against the base revision in the status line ("Δcx +4"): warning colour when it rose, success when it fell. Hidden outside git repositories and while the diff is empty; a click opens the Complexity window on its Changes tab. Off by default |
 
 ### Formatters
 

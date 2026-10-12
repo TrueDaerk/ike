@@ -1,5 +1,14 @@
 # Log
 
+## 2026-10-13 (Complexity docs consolidation, #2923)
+
+- [Code Complexity](/architecture/complexity.md): consolidated into the one
+  concept doc for Roadmap 0550 — new sections "Language spec and audit
+  ledger", "Settings" (all six keys) and "Limitations"; cross-links and
+  timestamps refreshed in languages, problems, vcs, status-line, editor,
+  shared-building-blocks and settings-ui; the user guide gained "Reading
+  the numbers" and "The Changes tab".
+
 ## 2026-10-13 (Headless `ike complexity` CLI, #2922)
 
 - [Code Complexity](/architecture/complexity.md): new section "Headless

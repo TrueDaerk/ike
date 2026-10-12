@@ -4,7 +4,7 @@ title: Problems Tool Window
 description: Singleton bottom-split pane aggregating LSP diagnostics project-wide — grouped by file, errors first, enter/double-click jumps to the location, 'a' applies a code action without leaving the pane, '/' filters with the shared list-filter syntax and 'f' is its current-file sugar; consumes the publishDiagnostics flow plus the Go-computed lint notes and per-run task-matcher findings, the deps and complexity (#2920) task sources (#1024, part of #33; notes #1654; tasks #1915; quick fixes #2175; shared filter #2156).
 resource: internal/problems/problems.go
 tags: [architecture, lsp, diagnostics, tool-window, pane, tasks, code-actions, filter]
-timestamp: 2026-10-13T12:00:00Z
+timestamp: 2026-10-13T18:00:00Z
 ---
 
 # Problems Tool Window (#1024)
