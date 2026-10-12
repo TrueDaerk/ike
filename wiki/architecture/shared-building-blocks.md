@@ -4,7 +4,7 @@ title: Shared Building Blocks
 description: The catalog of reusable pieces every new pane, prompt, list, search line or tool window MUST be built from — one table per family with the helper, when it is mandatory, the guard test that enforces it, and the concept doc that explains it (0500 consolidation sweep, Epic #2458).
 resource: internal/ui
 tags: [architecture, ui, conventions, reuse, guard-tests]
-timestamp: 2026-10-02T14:00:00Z
+timestamp: 2026-10-13T18:00:00Z
 ---
 
 # Shared Building Blocks
@@ -106,7 +106,9 @@ Doc: [Selection-List Navigation](/architecture/list-navigation.md),
 | `writeDirtyTabs(action)` | `internal/app/switch.go` | the save-all sweep (`write` vs `write_raw`) |
 
 Doc: [Pane Registry](/architecture/pane-registry.md),
-[Pane Layout](/architecture/pane-layout.md).
+[Pane Layout](/architecture/pane-layout.md); a worked example built only from
+these blocks is the [Complexity](/architecture/complexity.md) tool window
+(`togglePanel`, `gridview`, the shared `filterbar`, `ui.Field` for the base-revision prompt).
 
 ## Structured views
 

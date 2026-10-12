@@ -4,7 +4,7 @@ title: Code Complexity
 description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters and nesting depth per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary, the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source, and the headless `ike complexity` CLI (#2922) printing the project table or the diff against a revision as text or JSON for CI and agents; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
 resource: internal/complexity, internal/complexitypanel, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_problems.go, internal/app/complexity_segment.go, internal/complexitycli
 tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive, index, settings, telemetry, vcs, diff, problems, cli]
-timestamp: 2026-10-13T12:00:00Z
+timestamp: 2026-10-13T18:00:00Z
 ---
 
 # Code Complexity
@@ -15,12 +15,30 @@ window, and answers *"did this change make the project more or less
 complex?"* by comparing the working tree against `HEAD`. Everything runs on
 the Tree-sitter parse IKE already has — no lizard, gocyclo or gocognit on the
 machine — so it works for every language with a grammar, in mixed projects,
-out of the box. This page documents the **engine** (`internal/complexity`,
-#2915) and the **project index** on top of it (#2916, below); the language
-seam it reads is [languages](./languages.md#complexity-spec-2914); the tool
-window (#2917), the diff against a base revision (#2918), the Problems
-feed, the status segment, the editor hints and the headless CLI (#2922)
-follow below.
+out of the box. This page is the single concept doc for the whole stream: the language
+spec and its audit ledger (#2914), the **engine** (`internal/complexity`,
+#2915), the **project index** (#2916), the tool window (#2917), the diff
+against a base revision (#2918), the editor hints (#2919), the Problems
+feed (#2920), the status segment (#2921), the headless CLI (#2922), the
+settings and the limitations. The user-facing guide is
+`userdocs/guides/complexity.md`.
+
+## Language spec and audit ledger (#2914)
+
+Each language plugin declares `lang.Language.Complexity *lang.ComplexitySpec`
+next to `ScopeNodes` / `FoldNodes`; `lang` stays a leaf package, so the spec
+holds node-kind names and operator tokens only: `FunctionNodes` (kind → name
+field, `""` = anonymous), `ParamsField`, `Branch`, `Else`, `Nesting`,
+`BoolOps`, `Jumps`, plus the naming helpers `Selector`, `Arms`, `Calls` and
+`MethodSep`. Details and the per-language specs:
+[languages](./languages.md#complexity-spec-2914).
+
+The audit ledger `cmd/ike/complexity_audit_test.go` makes every registered
+language either declare a spec, verified against a probe parse, or carry a
+row with a reason from a closed set — `reasonNoFunctions` (data formats:
+JSON, YAML, TOML, CSV, INI, dotenv, Markdown, SQL, …), `reasonNoGrammar`
+(no Tree-sitter grammar) or `reasonGap` with a tracking issue. A new
+language fails the build until its row is filled in.
 
 ## Model
 
@@ -515,6 +533,36 @@ changed, added, removed, verdict, skipped}` with `verdict` one of
 **No cgo.** Without cgo there are no grammars; `complexity.Available()`
 (shared with the index's `Unavailable` stat) is false and the command
 prints a clear error and exits 2.
+
+## Settings
+
+All keys live in the `[complexity]` section (Settings > Complexity, user
+scope), validated in the form and by `config.Validate`:
+
+| Key | Default | Meaning |
+|---|---|---|
+| `complexity.enabled` | `true` | Master switch for the index and every surface reading it. |
+| `complexity.exclude` | `[]` | `internal/pathglob` patterns of files never measured. |
+| `complexity.ccn_warn` | `15` | Cyclomatic warning threshold (1-200): tool-window colour, hints, Problems, over-threshold count. |
+| `complexity.cognitive_warn` | `15` | The same for cognitive complexity. |
+| `complexity.problems` | `true` | Publish over-threshold functions into Problems. |
+| `complexity.status_segment` | `false` | Show the `Δcx` status segment. |
+
+## Limitations
+
+- **No grammar, no metrics.** Only languages with a Tree-sitter grammar and a
+  `ComplexitySpec` are measured; the others are rows in the audit ledger and
+  are absent from every surface. A build without cgo measures nothing (the
+  CLI exits 2, the index reports `Unavailable`).
+- **Renames are removed + added.** Units pair by name and ordinal; there is
+  no body hash, so a renamed function shows as one removal and one addition
+  in the Changes tab and `--diff`.
+- **Anonymous naming is positional.** Closures and lambdas are
+  `(anonymous)#n` numbered per file in source order, so inserting one above
+  shifts the numbers of those below and the diff pairs them by position.
+- **NLOC includes nested units** (lizard subtracts them), and the
+  cross-check deviations per language are recorded in `golden_test.go`.
+- No trend history, no enforcement: IKE reports, policy belongs to CI.
 
 ## Extending
 

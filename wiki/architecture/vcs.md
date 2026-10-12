@@ -4,7 +4,7 @@ title: VCS / Git Integration
 description: "Epics 0320/0330, slimmed by #750 — git status snapshot behind explorer coloring, branch status-line segment, gutter diff markers, file-vs-HEAD diff, hunk/file revert, inline blame, and a read-only changes tool window; git *workflow* (staging, commits, branches, log) is delegated to custom tool panes, with lazygit preconfigured; all git calls async via tea.Cmd."
 resource: internal/vcs
 tags: [architecture, vcs, git]
-timestamp: 2026-10-13T12:00:00Z
+timestamp: 2026-10-13T18:00:00Z
 ---
 
 # VCS / Git Integration (Epics 0320/0330, slimmed by #750)

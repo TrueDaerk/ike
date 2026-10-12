@@ -11,6 +11,37 @@ CI pipelines and coding agents: `ike complexity`.
 Settings live under `[complexity]` (Settings ▸ Complexity): `exclude` globs,
 and the warning thresholds `ccn_warn` / `cognitive_warn` (15 by default).
 
+## Reading the numbers
+
+| Column | Meaning |
+|---|---|
+| **CCN** | Cyclomatic complexity (McCabe): 1 + one per branch (`if`, loop, `case` arm, `catch`, ternary) + one per `&&` / `\|\|`. Roughly the number of test cases needed to cover every path. |
+| **cog** | Cognitive complexity (Sonar): how hard the function is to *read*. Each branch costs 1 plus its nesting depth, `else` costs 1, a run of like boolean operators costs 1, as do jumps (`goto`, labelled `break`) and direct recursion. Deep nesting is what drives it up. |
+| **nloc** | Lines that are neither blank nor comment-only. |
+| **params** | Parameter count. |
+| **depth** | Deepest nesting level inside the function. |
+
+Values at or above `ccn_warn` / `cognitive_warn` show in the warning colour,
+as a hint after the function header (`CCN 12 · cog 8`) and, unless
+`complexity.problems` is off, as warnings in the Problems window. The
+optional `Δcx` status segment (`complexity.status_segment`) shows how the
+working tree compares with `HEAD`.
+
+Closures and lambdas are named `(anonymous)#n`, numbered per file. Languages
+without a syntax grammar (and data formats like JSON or YAML) are not
+measured.
+
+## The Changes tab
+
+The third tab of the Complexity window compares every function in the files
+that differ from a base revision (`HEAD` by default; press `R` to pick any
+branch, tag or sha). The header sums it up:
+`base HEAD → working tree · functions 120→123 · ΣCCN 410→416 (+6) · … · more complex`.
+Rows are grouped as **changed** (before → after with Δ, largest change
+first), **added** and **removed**. Unsaved editor buffers count with their
+current text. A renamed function appears as one removed and one added row.
+`enter` jumps to the function, `e` exports CSV, `y` copies the row.
+
 ## Command line
 
 ```

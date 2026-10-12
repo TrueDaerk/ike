@@ -4,7 +4,7 @@ title: Status Line Segments
 description: Extensible left/right slot model behind the bottom status bar — mode, file, buffer language, diagnostics, host/LSP status, toolchain interpreter, csv column, json/yaml path, search match counter, notification counter, forge unread badge, branch issue.
 resource: internal/app/statusline.go
 tags: [architecture, ui, status-line, toolchain, notifications]
-timestamp: 2026-09-08T12:00:00Z
+timestamp: 2026-10-13T18:00:00Z
 ---
 
 # Status Line Segments
