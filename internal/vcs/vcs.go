@@ -150,6 +150,9 @@ type FileEntry struct {
 	Path   string
 	Status FileStatus
 	X, Y   byte // porcelain v2 staged/worktree letters; '?' for untracked
+	// From is the original path of a renamed (or copied) entry, "" otherwise
+	// (#2918): the Changes tab measures the base side under it.
+	From string
 }
 
 // Staged reports whether the entry has index (staged) changes.
