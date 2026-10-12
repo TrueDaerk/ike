@@ -1,9 +1,9 @@
 ---
 type: concept
 title: Code Complexity
-description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters and nesting depth per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary, the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
-resource: internal/complexity, internal/complexitypanel, internal/app/complexityindex.go, internal/app/complexity_diff.go
-tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive, index, settings, telemetry, vcs, diff]
+description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters and nesting depth per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary, the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
+resource: internal/complexity, internal/complexitypanel, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_problems.go
+tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive, index, settings, telemetry, vcs, diff, problems]
 timestamp: 2026-10-13T12:00:00Z
 ---
 
@@ -379,6 +379,30 @@ revision in the filter row's place (`ui.Field`, seeded with the current
 base, `enter` applies, `esc` cancels); an invalid ref keeps the previous
 base and shows git's message in the header. The base revision is session
 state, not a setting.
+
+## Problems feed (#2920)
+
+`internal/app/complexity_problems.go` publishes every over-threshold
+function into the [Problems tool window](./problems.md) through the store's
+task-source channel (`Store.SetTaskSource("complexity", byPath)`), the same
+seam the dependency scanner uses. On every `ComplexityChangedMsg` and every
+config reload `feedComplexityProblems` reads the index snapshot and the
+pure builder `complexityDiagnostics(view, ccnWarn, cogWarn)` emits one
+warning per function at or above a threshold, anchored at its header line:
+`function <name>: CCN 40 ≥ 15`, `function <name>: cognitive 25 ≥ 15`, or
+both joined by a comma when both are over; `Source` is `complexity`,
+`Code` the first exceeded metric (`ccn` before `cognitive`). Each publish
+replaces the source wholesale, so a raised threshold or a simplified
+function drops its row and a lowered threshold adds rows without a restart.
+`complexity.problems = false` or `complexity.enabled = false` calls
+`ClearTaskSource("complexity")`, leaving LSP, lint and other task findings
+untouched. Rows navigate like any diagnostic and filter with
+`source:complexity`; the task channel is read only by the pane, so the
+editor paints no gutter mark or underline for them.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `complexity.problems` | `true` | Publish over-threshold functions into Problems (Settings > Complexity). |
 
 ## Extending
 

@@ -39,7 +39,7 @@ func TestComplexityPageEntries(t *testing.T) {
 	if p.Description == "" {
 		t.Fatal("the Complexity page needs a description")
 	}
-	want := []string{"complexity.enabled", "complexity.exclude", "complexity.ccn_warn", "complexity.cognitive_warn"}
+	want := []string{"complexity.enabled", "complexity.exclude", "complexity.ccn_warn", "complexity.cognitive_warn", "complexity.problems"}
 	if len(p.Entries) != len(want) {
 		t.Fatalf("Complexity page has %d entries, want %d: %+v", len(p.Entries), len(want), p.Entries)
 	}
@@ -49,8 +49,10 @@ func TestComplexityPageEntries(t *testing.T) {
 			t.Errorf("entry %d = %+v, want user-scoped %s with title and description", i, e, key)
 		}
 	}
-	if e := complexityEntry(t, "complexity.enabled"); e.Type != Bool {
-		t.Errorf("enabled type = %v, want Bool", e.Type)
+	for _, key := range []string{"complexity.enabled", "complexity.problems"} {
+		if e := complexityEntry(t, key); e.Type != Bool {
+			t.Errorf("%s type = %v, want Bool", key, e.Type)
+		}
 	}
 	if e := complexityEntry(t, "complexity.exclude"); e.Type != List || e.ValidateEntry == nil {
 		t.Errorf("exclude = %+v, want a validated List", e)
@@ -127,5 +129,31 @@ func TestComplexityEnabledToggles(t *testing.T) {
 	commit(t, m)
 	if got := config.Get().Complexity.Enabled; got != before {
 		t.Fatalf("enabled did not toggle back to %v", before)
+	}
+}
+
+// TestComplexityProblemsToggles: the Problems feed switch (#2920) defaults
+// on, shows in the list, flips on enter and persists.
+func TestComplexityProblemsToggles(t *testing.T) {
+	restoreConfig(t)
+	m := New([]Page{{Title: "Complexity", Entries: []Entry{complexityEntry(t, "complexity.problems")}}}, testOpts(t))
+	m.SetSize(100, 24)
+	m.Open()
+	m.Update(key("tab"))
+	if !config.Get().Complexity.Problems {
+		t.Fatal("complexity.problems must default to on")
+	}
+	if view := m.View(); !strings.Contains(view, "Problems feed") {
+		t.Fatalf("the entry list must show the setting:\n%s", view)
+	}
+	m.Update(key("enter"))
+	commit(t, m)
+	if config.Get().Complexity.Problems {
+		t.Fatal("problems did not toggle off")
+	}
+	m.Update(key("enter"))
+	commit(t, m)
+	if !config.Get().Complexity.Problems {
+		t.Fatal("problems did not toggle back on")
 	}
 }

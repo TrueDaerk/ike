@@ -1,5 +1,16 @@
 # Log
 
+## 2026-10-13 (Complexity Problems feed for over-threshold functions, #2920)
+
+- [Code Complexity](/architecture/complexity.md): new section "Problems
+  feed" — the pure builder `complexityDiagnostics`, the message / code
+  shape, the per-generation and per-reload wholesale replace, and the
+  `complexity.problems` setting.
+- [Problems Tool Window](/architecture/problems.md): the task-source seam
+  gains its complexity producer (`source:complexity`), pane-only.
+- [Settings UI](/architecture/settings-ui.md): the Complexity page carries
+  `complexity.problems`.
+
 ## 2026-10-13 (Changes vs HEAD: diff engine, Changes tab, verdict, base revision, #2918)
 
 - [Code Complexity](/architecture/complexity.md): new section "Changes vs

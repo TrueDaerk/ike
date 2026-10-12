@@ -74,6 +74,9 @@ func (m *Model) reconfigureComplexityIndex(cfg *config.Config) {
 	if p := m.complexityPanel(); p != nil {
 		p.SetWarn(cfg.Complexity.CCNWarn, cfg.Complexity.CognitiveWarn)
 	}
+	// So do the Problems feed's rows (#2920): a moved threshold adds or
+	// drops rows, a switched-off feed or index clears them.
+	m.feedComplexityProblems(cfg.Complexity)
 }
 
 // complexityScanRecorder is the callback the complexity index reports a

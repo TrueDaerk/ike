@@ -328,6 +328,7 @@ list of keys.
 | Excluded files | `complexity.exclude` | list | *(empty)* | user | Comma-separated glob patterns of files the index never measures, matched against the project-relative path ("vendor/**", "**/*_test.go", "src/gen/**"); a pattern without a slash also matches the file name anywhere ("*_test.go"). Hidden and build directories and files above the size cap are skipped either way |
 | Cyclomatic warning threshold | `complexity.ccn_warn` | integer (1–200) | `15` | user | Cyclomatic complexity (CCN) a function counts as complex at: the Complexity tool window paints the cell in the warning colour and the summary counts it as over threshold. 1–200, default 15 |
 | Cognitive warning threshold | `complexity.cognitive_warn` | integer (1–200) | `15` | user | Cognitive complexity a function counts as complex at: the Complexity tool window paints the cell in the warning colour and the summary counts it as over threshold. 1–200, default 15 |
+| Problems feed | `complexity.problems` | boolean | `true` | user | List every function at or above a warning threshold in the Problems tool window as a warning under the source "complexity" (filter with source:complexity); enter jumps to the function. Off clears the rows and leaves LSP, lint and task findings untouched |
 
 ### Formatters
 

@@ -355,14 +355,15 @@ any entry whose key the typed schema does not expose (no dead keys).
 - **Notifications** — toast timeout, severity floor.
 - **TODO Index** (#1663) — `todo.patterns`, the tag words the project scan
   matches (see [TODO index](./todo-index.md)).
-- **Complexity** (0550, #2916, #2917) - `complexity.enabled`, the master
+- **Complexity** (0550, #2916, #2917, #2920) - `complexity.enabled`, the master
   switch of the project complexity index, `complexity.exclude`, the glob
   list of files it never measures (`vendor/**`, `**/*_test.go`; the shared
   `globValidate` refuses a malformed pattern in the form), and the two
   warning thresholds `complexity.ccn_warn` / `complexity.cognitive_warn`
   (Int, 1-200, default 15) the Complexity tool window paints cells against.
   All apply live: off drops the index, on rewalks, a changed list rebuilds,
-  a changed threshold repaints the open window. Listed in the Languages
+  a changed threshold repaints the open window. `complexity.problems` (Bool, default on, #2920) feeds over-threshold
+  functions into the Problems window; off clears those rows. Listed in the Languages
   group after PHP (see [complexity](./complexity.md#project-index-2916) and
   [the tool window](./complexity.md#tool-window-2917)).
 - **Dependencies** (#2419) — `deps.auto_scan`, the background dependency

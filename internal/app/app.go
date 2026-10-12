@@ -8499,11 +8499,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ComplexityChangedMsg:
 		// The complexity index reached a new generation (0550, #2916): the
-		// tool window re-reads the snapshot (#2917); the Problems feed and
-		// the status segment of the later steps will too. The Changes tab
-		// keys on the generation (#2918).
+		// tool window re-reads the snapshot (#2917), the Problems feed
+		// republishes its rows (#2920); the status segment of a later step
+		// will too. The Changes tab keys on the generation (#2918).
 		m.noteComplexityGen(msg.Gen)
 		m.refreshComplexityPanel()
+		m.feedComplexityProblems(config.Get().Complexity)
 		return m, nil
 
 	case complexityDiffTickMsg:
