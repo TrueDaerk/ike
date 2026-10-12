@@ -1,0 +1,104 @@
+{
+  "lang": "shell",
+  "functions": [
+    {
+      "name": "else_if_chain",
+      "kind": "function",
+      "line": 8,
+      "endLine": 21,
+      "nloc": 13,
+      "params": 0,
+      "ccn": 5,
+      "cognitive": 6,
+      "depth": 2
+    },
+    {
+      "name": "case_arms",
+      "kind": "function",
+      "line": 23,
+      "endLine": 39,
+      "nloc": 17,
+      "params": 0,
+      "ccn": 6,
+      "cognitive": 5,
+      "depth": 2
+    },
+    {
+      "name": "nested_loops",
+      "kind": "function",
+      "line": 41,
+      "endLine": 57,
+      "nloc": 17,
+      "params": 0,
+      "ccn": 6,
+      "cognitive": 11,
+      "depth": 4
+    },
+    {
+      "name": "boolean_sequences",
+      "kind": "function",
+      "line": 59,
+      "endLine": 68,
+      "nloc": 10,
+      "params": 0,
+      "ccn": 9,
+      "cognitive": 6,
+      "depth": 1
+    },
+    {
+      "name": "nested_functions",
+      "kind": "function",
+      "line": 70,
+      "endLine": 77,
+      "nloc": 8,
+      "params": 0,
+      "ccn": 1,
+      "cognitive": 2,
+      "depth": 2
+    },
+    {
+      "name": "helper",
+      "kind": "function",
+      "line": 71,
+      "endLine": 75,
+      "nloc": 5,
+      "params": 0,
+      "ccn": 2,
+      "cognitive": 1,
+      "depth": 1
+    },
+    {
+      "name": "countdown",
+      "kind": "function",
+      "line": 79,
+      "endLine": 85,
+      "nloc": 7,
+      "params": 0,
+      "ccn": 2,
+      "cognitive": 2,
+      "depth": 1
+    },
+    {
+      "name": "select_loop",
+      "kind": "function",
+      "line": 87,
+      "endLine": 94,
+      "nloc": 8,
+      "params": 0,
+      "ccn": 4,
+      "cognitive": 3,
+      "depth": 2
+    },
+    {
+      "name": "plain",
+      "kind": "function",
+      "line": 96,
+      "endLine": 98,
+      "nloc": 3,
+      "params": 0,
+      "ccn": 1,
+      "cognitive": 0,
+      "depth": 0
+    }
+  ]
+}

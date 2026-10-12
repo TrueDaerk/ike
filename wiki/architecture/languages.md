@@ -312,11 +312,11 @@ outcome**, because a wrong one retypes the buffer under the user's cursor:
 The editor is the only caller; the trigger and its gates are described in
 [Editor](/architecture/editor.md#language-detection-on-paste-2037).
 
-## Complexity spec (#2914)
+## Complexity spec (#2914, #2915)
 
 Roadmap 0550 measures cyclomatic and cognitive complexity per function on the
-Tree-sitter parse. The engine (`internal/complexity`, the epic's next step)
-holds both algorithms once; a language only declares **which of its nodes
+Tree-sitter parse. The engine ([complexity](./complexity.md),
+`internal/complexity`) holds both algorithms once; a language only declares **which of its nodes
 count** through `Language.Complexity *lang.ComplexitySpec`, declared next to
 `ScopeNodes`/`FoldNodes` in `plugins/languages/<lang>/complexity.go`. The spec
 names grammar kinds and operator tokens only, so `lang` stays a leaf package.
@@ -325,11 +325,15 @@ names grammar kinds and operator tokens only, so `lang` stays a leaf package.
 |---|---|---|
 | `FunctionNodes map[kind]field` | kinds that start a measured unit → the field holding its name; `""` = anonymous (`"(anonymous)"` + ordinal) | Go `function_declaration: "name"`, `func_literal: ""` |
 | `ParamsField` | field holding the parameter list; the engine counts its named children, a child with several `name` fields (Go `a, b int`) once per name | `"parameters"`; shell: `""` |
-| `Branch` | kinds counting +1 CCN and +1 cognitive plus nesting: if / elif / else-if, loops, case / match arms, catch / except, the ternary. A default arm is never listed | Python `if_statement`, `elif_clause`, `except_clause`, `case_clause` |
-| `Else` | kinds counting +1 cognitive only (no CCN, no nesting penalty); empty where the else is a bare block in the parent's `alternative` field (Go) and the engine reads the field | `else_clause` |
-| `Nesting` | kinds that only raise the nesting level: lambdas / nested functions (also units), class bodies | PHP `anonymous_function`, `class_declaration` |
+| `MethodSep` | joins the class / receiver qualifier to a method name in the engine's `Function.Name`; `""` = `.` | PHP `"::"` (`Class::method`) |
+| `Branch` | kinds counting +1 CCN and +1 cognitive plus nesting: if / elif / else-if, loops, catch / except, the ternary. Arms and selectors are listed separately | Python `if_statement`, `elif_clause`, `except_clause`, `conditional_expression` |
+| `Selector` | switch-like statements: +1 cognitive plus nesting once, every arm (the default included) nests; no CCN | Go `expression_switch_statement`, `type_switch_statement`, `select_statement`; Python `match_statement` |
+| `Arms` | case / match arms: +1 CCN each, nothing else. A default arm is never listed | Go `expression_case`, TS `switch_case`, shell `case_item` |
+| `Else` | kinds counting +1 cognitive only (no CCN, no nesting penalty) when they are a Branch's alternative; empty where the else is a bare block in the parent's `alternative` field (Go) and the engine reads the field | `else_clause` |
+| `Nesting` | kinds that only raise the nesting level: lambdas / nested functions (also units), class-like bodies — a named one qualifies the methods inside it | PHP `anonymous_function`, `class_declaration`, `trait_declaration` |
 | `BoolOps` | boolean operator **tokens**, as `highlight.SyntaxNode.Operator` carries them; `?.` is never one | `&&`, `\|\|`, `and`, `or`, `??` |
 | `Jumps` | kinds counting +1 cognitive: goto, and break / continue when they carry a label or level | Go `goto_statement`, `break_statement` |
+| `Calls` | call kinds → the field holding the callee, for the engine's direct-recursion check | Go `call_expression: "function"`, PHP `member_call_expression: "name"` |
 
 An else-if form is a Branch kind sitting in the else position (the `alternative`
 field, or inside an Else kind); the engine counts it without the nesting
@@ -343,16 +347,17 @@ The kinds are the grammars' **real** node kinds, verified by a parse rather than
 guessed: each spec'd plugin carries a `complexity_test.go` whose probe buffer
 must parse to every kind and operator the spec names, and whose functions must
 come out with the expected names, kinds, parameter counts and reference CCN
-(`internal/highlight/treetest`, the test-side reader — 1 + branches + boolean
-operators per unit, nested units excluded; not the engine). Declared today:
+(`internal/highlight/treetest`, the test-side reader — 1 + branches + arms +
+boolean operators per unit, nested units excluded; not the engine). Declared
+today:
 
-| Language | Units | Branches | Boolean ops |
-|---|---|---|---|
-| go | `function_declaration`, `method_declaration`, `func_literal` | `if_statement`, `for_statement` (all three loop shapes), `expression_case`, `type_case`, `communication_case` | `&&` `\|\|` |
-| python | `function_definition`, `lambda` | `if_statement`, `elif_clause`, `for_statement`, `while_statement`, `except_clause`, `conditional_expression`, `case_clause` | `and` `or` |
-| php | `function_definition`, `method_declaration`, `anonymous_function`, `arrow_function` | `if_statement`, `else_if_clause`, `for_statement`, `foreach_statement`, `while_statement`, `do_statement`, `case_statement`, `catch_clause`, `conditional_expression`, `match_conditional_expression` | `&&` `\|\|` `and` `or` `??` |
-| typescript (TSX grammar: JS/TS/JSX) | `function_declaration`, `generator_function_declaration`, `method_definition`, `function_expression`, `generator_function`, `arrow_function` | `if_statement`, `for_statement`, `for_in_statement` (for-in and for-of), `while_statement`, `do_statement`, `switch_case`, `catch_clause`, `ternary_expression` | `&&` `\|\|` `??` |
-| shell | `function_definition` (no parameters) | `if_statement`, `elif_clause`, `for_statement` (for and select), `c_style_for_statement`, `while_statement` (while and until), `case_item` | `&&` `\|\|` |
+| Language | Units | Branches | Selectors / arms | Boolean ops |
+|---|---|---|---|---|
+| go | `function_declaration`, `method_declaration`, `func_literal` | `if_statement`, `for_statement` (all three loop shapes) | `expression_switch_statement`, `type_switch_statement`, `select_statement` / `expression_case`, `type_case`, `communication_case` | `&&` `\|\|` |
+| python | `function_definition`, `lambda` | `if_statement`, `elif_clause`, `for_statement`, `while_statement`, `except_clause`, `conditional_expression` | `match_statement` / `case_clause` | `and` `or` |
+| php | `function_definition`, `method_declaration`, `anonymous_function`, `arrow_function` | `if_statement`, `else_if_clause`, `for_statement`, `foreach_statement`, `while_statement`, `do_statement`, `catch_clause`, `conditional_expression` | `switch_statement`, `match_expression` / `case_statement`, `match_conditional_expression` | `&&` `\|\|` `and` `or` `??` |
+| typescript (TSX grammar: JS/TS/JSX) | `function_declaration`, `generator_function_declaration`, `method_definition`, `function_expression`, `generator_function`, `arrow_function` | `if_statement`, `for_statement`, `for_in_statement` (for-in and for-of), `while_statement`, `do_statement`, `catch_clause`, `ternary_expression` | `switch_statement` / `switch_case` | `&&` `\|\|` `??` |
+| shell | `function_definition` (no parameters) | `if_statement`, `elif_clause`, `for_statement` (for and select), `c_style_for_statement`, `while_statement` (while and until) | `case_statement` / `case_item` | `&&` `\|\|` |
 
 **Audit ledger.** `cmd/ike/complexity_audit_test.go`, the sibling of the
 span-family ledger: every registered language either declares a spec — then the

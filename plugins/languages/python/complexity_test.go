@@ -12,7 +12,8 @@ import (
 
 // pythonComplexityProbe exercises every kind and operator the spec names: a
 // method with if / elif / else, for, while, try / except, a conditional
-// expression, a match statement and a lambda, plus a plain async function.
+// expression, a match statement, a call and a lambda, plus a plain async
+// function.
 var pythonComplexityProbe = []string{
 	"class C:",
 	"    def m(self, a, b=1, *args, **kw):", // 1
@@ -38,10 +39,11 @@ var pythonComplexityProbe = []string{
 	"                pass",
 	"            case _:",
 	"                pass",
-	"        f = lambda x: x > 1 or x < 0", // 24
+	"        print(a)",
+	"        f = lambda x: x > 1 or x < 0", // 25
 	"        return f",
 	"",
-	"async def plain(x): pass", // 27
+	"async def plain(x): pass", // 28
 }
 
 func TestPythonComplexitySpecKindsExist(t *testing.T) {
@@ -73,8 +75,8 @@ func TestPythonComplexityProbeFunctions(t *testing.T) {
 		// 1 + if, elif, for, while, 2 except, conditional, 2 case arms
 		// + and, or; the lambda's `or` is its own.
 		{Name: "m", Kind: "function_definition", Line: 1, Params: 5, CCN: 12},
-		{Name: "", Kind: "lambda", Line: 24, Params: 1, CCN: 2},
-		{Name: "plain", Kind: "function_definition", Line: 27, Params: 1, CCN: 1},
+		{Name: "", Kind: "lambda", Line: 25, Params: 1, CCN: 2},
+		{Name: "plain", Kind: "function_definition", Line: 28, Params: 1, CCN: 1},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("Functions = %+v, want %+v", got, want)

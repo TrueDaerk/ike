@@ -13,7 +13,8 @@ import (
 // phpComplexityProbe exercises every kind and operator the spec names: a
 // method with if / elseif / else, the four loops, switch, try / catch, the
 // ternary, null coalescing, match, a closure, an arrow function, a levelled
-// break and a goto, plus a plain function.
+// break, a goto and the four call shapes, plus a plain function and the
+// class-like declarations.
 var phpComplexityProbe = []string{
 	"<?php",
 	"class C {",
@@ -34,13 +35,17 @@ var phpComplexityProbe = []string{
 	"        $f = function ($x) use ($a) { return $x > 1 || $x < 0; };", // 16
 	"        $g = fn($x) => $x and $y;",                                 // 17
 	"        $h = ($a or $b);",
+	"        foo($a); $this->m($a); $a?->m($a); self::m($a);",
 	"        while ($a) { continue 2; }",
 	"        goto end;",
 	"        end:",
 	"        return 1;",
 	"    }",
 	"}",
-	"function plain($a) { return 1; }", // 25
+	"function plain($a) { return 1; }", // 26
+	"trait T {}",
+	"interface I {}",
+	"enum E {}",
 }
 
 func TestPHPComplexitySpecKindsExist(t *testing.T) {
@@ -75,7 +80,7 @@ func TestPHPComplexityProbeFunctions(t *testing.T) {
 		{Name: "m", Kind: "method_declaration", Line: 2, Params: 3, CCN: 17},
 		{Name: "", Kind: "anonymous_function", Line: 16, Params: 1, CCN: 2},
 		{Name: "", Kind: "arrow_function", Line: 17, Params: 1, CCN: 2},
-		{Name: "plain", Kind: "function_definition", Line: 25, Params: 1, CCN: 1},
+		{Name: "plain", Kind: "function_definition", Line: 26, Params: 1, CCN: 1},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("Functions = %+v, want %+v", got, want)

@@ -118,6 +118,9 @@ Tree-sitter grammar, `reasonSpecGap(issue)` for a real gap linked to its trackin
 Concretely: a **new language** fails the build until its row is filled in; **declaring a
 spec** means adding a `complexityProbes` entry and a `complexity_test.go` in the plugin whose
 probe parses to every kind and operator the spec names (the kinds are verified by a parse,
-never guessed); a reason row for a language that has since gained a spec, or whose
+never guessed), plus a golden fixture under `internal/complexity/testdata/<lang>/` whose
+`fixture.golden.json` was reviewed against the language's reference tool (#2915, see
+[complexity](/architecture/complexity.md) § Fixtures); a reason row for a language that has since gained a spec, or whose
 `reasonNoGrammar` claim no longer holds, is **stale and fails**. See
-[languages](/architecture/languages.md) § Complexity spec.
+[languages](/architecture/languages.md) § Complexity spec and
+[complexity](/architecture/complexity.md).
