@@ -1,5 +1,14 @@
 # Log
 
+## 2026-10-13 (Status-line Δcx segment, #2921)
+
+- [Code Complexity](/architecture/complexity.md): new section "Status
+  segment" — `Δcx ±N`, verdict colours, `complexityDiffWanted` arming seam,
+  `complexity.status_segment`.
+- [Status Line](/architecture/status-line.md): `complexity` slot, drop
+  order and click target.
+- [Settings UI](/architecture/settings-ui.md): the new Complexity bool.
+
 ## 2026-10-13 (Inline complexity hints on function headers, #2919)
 
 - [Code Complexity](/architecture/complexity.md): new section "Editor

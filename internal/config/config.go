@@ -371,6 +371,7 @@ func (c *Config) Flat() map[string]string {
 	put("complexity.ccn_warn", c.Complexity.CCNWarn)
 	put("complexity.cognitive_warn", c.Complexity.CognitiveWarn)
 	put("complexity.problems", c.Complexity.Problems)
+	put("complexity.status_segment", c.Complexity.StatusSegment)
 
 	put("debug.inline_values", c.Debug.InlineValues)
 	put("debug.session_end", c.Debug.SessionEnd)

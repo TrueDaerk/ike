@@ -13085,7 +13085,13 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		// the row is swallowed.
 		if !m.chromeHidden() && msg.Y == m.height-1 {
 			if msg.Button == tea.MouseLeft {
-				if id, ok := statusSegmentCommands[m.statusSegmentAt(msg.X)]; ok {
+				seg := m.statusSegmentAt(msg.X)
+				if seg == "complexity" {
+					// The Δcx segment (#2921) opens the window on the tab
+					// whose summary it is.
+					return m, m.openComplexityChanges()
+				}
+				if id, ok := statusSegmentCommands[seg]; ok {
 					if c, found := m.reg.Command(id); found {
 						return m, m.dispatchCommandFrom(id, c, telemetry.SourceMouse)
 					}

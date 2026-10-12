@@ -57,6 +57,7 @@ var statusLeft = []statusSegment{
 	{id: "popupterm", render: func(m Model, _ *editor.Model) string { return m.popupTermSegment() }},
 	{id: "forge", render: func(m Model, _ *editor.Model) string { return m.forgeBadgeSegment() }},
 	{id: "todo", render: func(m Model, _ *editor.Model) string { return m.todoSegment() }},
+	{id: "complexity", render: func(m Model, _ *editor.Model) string { return m.complexitySegment() }},
 	{id: "http", render: func(m Model, _ *editor.Model) string { return m.httpFlightSegment() }},
 	{id: "deps", render: func(m Model, _ *editor.Model) string { return m.depsSegment() }},
 	{id: "projecttime", render: func(m Model, _ *editor.Model) string { return m.projectTimeSegment() }},
@@ -652,9 +653,9 @@ func (m Model) statusLine() string {
 	ed := m.activeEditor()
 	line, spans := composeStatusSpans(renderParts(m, ed, statusLeft), renderParts(m, ed, statusRight), m.width)
 	if badged, ok := m.badgeMode(line, spans, ed); ok {
-		return badged
+		return m.tintComplexitySegment(badged)
 	}
-	return style.Render(line)
+	return m.tintComplexitySegment(style.Render(line))
 }
 
 // badgeMode re-renders the mode segment of an already-styled status line as a
@@ -724,7 +725,7 @@ func renderParts(m Model, ed *editor.Model, segs []statusSegment) []renderedSeg 
 var statusDropOrder = []string{
 	// The project-group slot (#2571) is orientation, not state one acts on
 	// this second — it goes with the hint.
-	"hint", "group", "eol", "encoding", "indent", "svcolumn", "docpath", "logspan", "toolchain", "todo",
+	"hint", "group", "eol", "encoding", "indent", "svcolumn", "docpath", "logspan", "toolchain", "todo", "complexity",
 	"host", "notifications", "popupterm", "macro", "branchissue", "branch", "buflang", "forge", "diagnostics", "lsp",
 	// The search counter (#2145) shows only during an active search and is
 	// what the user is watching then, so it drops last of all.

@@ -520,6 +520,8 @@ type Complexity struct {
 	CCNWarn       int      `toml:"ccn_warn"`
 	CognitiveWarn int      `toml:"cognitive_warn"`
 	Problems      bool     `toml:"problems"`
+	// StatusSegment shows the "Δcx" status segment (#2921).
+	StatusSegment bool `toml:"status_segment"`
 }
 
 // Debug holds debugger behaviour (0360). PHP carries the web/request listen

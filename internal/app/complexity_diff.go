@@ -27,7 +27,7 @@ import (
 // complexitypanel.Changes to the pane.
 //
 // The diff is pulled, not pushed: once per settled Update pass, while the
-// Changes tab is on screen, the model compares the key of the diff the pane
+// Changes tab is on screen (or the status segment is on, #2921), the model compares the key of the diff the pane
 // shows — (VCS snapshot generation, complexity index generation, base
 // revision) — with the current one and, when they differ, arms a debounce
 // tick that launches the computation. A snapshot refresh, a re-measured
@@ -103,21 +103,37 @@ func (m Model) noteComplexityGen(gen int) {
 	}
 }
 
+// complexityDiffWanted reports whether anything consumes the diff: the
+// Changes tab on screen, or the status segment (#2921) — the segment is what
+// keeps the computation armed on VCS refreshes while the tab is closed.
+func (m Model) complexityDiffWanted() bool {
+	if m.cxDiff == nil {
+		return false
+	}
+	if p := m.complexityPanel(); p != nil && p.Tab() == complexitypanel.TabChanges {
+		return true
+	}
+	c := config.Get()
+	return c != nil && c.Complexity.Enabled && c.Complexity.StatusSegment
+}
+
 // complexityDiffSyncCmd runs once per settled Update pass: while the
 // Changes tab is on screen and the pane's diff is behind the current inputs,
 // it arms the debounce tick (once). Outside a repository the tab is told so
 // and nothing runs.
 func (m *Model) complexityDiffSyncCmd() tea.Cmd {
-	p := m.complexityPanel()
-	if p == nil || p.Tab() != complexitypanel.TabChanges || m.cxDiff == nil {
+	if !m.complexityDiffWanted() {
 		return nil
 	}
+	p := m.complexityPanel()
 	st := m.cxDiff
 	if m.vcs.snap == nil {
 		if !st.result.NotGit {
 			st.result = complexitypanel.Changes{NotGit: true, Rev: st.rev}
 			st.key = cxDiffKey{}
-			p.SetChanges(st.result)
+			if p != nil {
+				p.SetChanges(st.result)
+			}
 		}
 		return nil
 	}
@@ -125,7 +141,9 @@ func (m *Model) complexityDiffSyncCmd() tea.Cmd {
 		// Back inside a repository (a project switch, git init): forget the
 		// marker so the next run shows a diff.
 		st.result = complexitypanel.Changes{Rev: st.rev}
-		p.SetChanges(st.result)
+		if p != nil {
+			p.SetChanges(st.result)
+		}
 	}
 	if st.computing || st.tickArmed || m.currentCxDiffKey() == st.key {
 		return nil
@@ -140,8 +158,7 @@ func (m *Model) complexityDiffSyncCmd() tea.Cmd {
 func (m *Model) startComplexityDiff() tea.Cmd {
 	st := m.cxDiff
 	st.tickArmed = false
-	p := m.complexityPanel()
-	if p == nil || p.Tab() != complexitypanel.TabChanges || m.vcs.snap == nil || st.computing {
+	if !m.complexityDiffWanted() || m.vcs.snap == nil || st.computing {
 		return nil
 	}
 	key := m.currentCxDiffKey()
@@ -151,7 +168,9 @@ func (m *Model) startComplexityDiff() tea.Cmd {
 	st.computing = true
 	st.result.Computing = true
 	st.result.Err = ""
-	p.SetChanges(st.result)
+	if p := m.complexityPanel(); p != nil {
+		p.SetChanges(st.result)
+	}
 	job := m.complexityDiffJob(key)
 	return func() tea.Msg { return runComplexityDiff(job) }
 }
