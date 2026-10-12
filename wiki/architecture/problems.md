@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Problems Tool Window
-description: Singleton bottom-split pane aggregating LSP diagnostics project-wide — grouped by file, errors first, enter/double-click jumps to the location, 'a' applies a code action without leaving the pane, '/' filters with the shared list-filter syntax and 'f' is its current-file sugar; consumes the publishDiagnostics flow plus the Go-computed lint notes and per-run task-matcher findings (#1024, part of #33; notes #1654; tasks #1915; quick fixes #2175; shared filter #2156).
+description: Singleton bottom-split pane aggregating LSP diagnostics project-wide — grouped by file, errors first, enter/double-click jumps to the location, 'a' applies a code action without leaving the pane, '/' filters with the shared list-filter syntax and 'f' is its current-file sugar; consumes the publishDiagnostics flow plus the Go-computed lint notes and per-run task-matcher findings, the deps and complexity (#2920) task sources (#1024, part of #33; notes #1654; tasks #1915; quick fixes #2175; shared filter #2156).
 resource: internal/problems/problems.go
 tags: [architecture, lsp, diagnostics, tool-window, pane, tasks, code-actions, filter]
-timestamp: 2026-09-03T00:00:00Z
+timestamp: 2026-10-13T12:00:00Z
 ---
 
 # Problems Tool Window (#1024)
@@ -46,6 +46,16 @@ publish and cleared at every launch (`ClearTaskSource`), so a re-run
 replaces its previous problems instead of duplicating them and never touches
 another run's or the LSP's findings. `Get` appends task findings after the
 server and lint sets; rows navigate like any diagnostic.
+
+A fourth producer rides the same task-source seam: the complexity index's
+Problems feed (#2920, see [Code Complexity](/architecture/complexity.md#problems-feed-2920))
+publishes one warning per over-threshold function under the source
+`complexity` (`source:complexity` filters them), replaced wholesale on every
+index generation and config reload and cleared by `complexity.problems =
+false` or `complexity.enabled = false`. The dependency scanner's `deps`
+source (#2419) uses the seam the same way. The task-source channel is
+pane-only — editors take their decorations from the LSP and lint flows — so
+these rows never paint a gutter mark or underline.
 
 Both LSP consumers sit behind the app's diagnostic ignore filter (#1259,
 `internal/app/diag_ignore.go`): a diagnostic matching an

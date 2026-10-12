@@ -511,12 +511,15 @@ type PHPIndex struct {
 // directories, the size cap) apply on top. CCNWarn and CognitiveWarn
 // (#2917) are the thresholds a function counts as complex at: the tool
 // window paints a metric at or above its threshold in the warning colour
-// and the summary counts it as over threshold.
+// and the summary counts it as over threshold. Problems
+// (#2920) publishes every function at or above a threshold into the Problems
+// tool window as a warning under the "complexity" source.
 type Complexity struct {
 	Enabled       bool     `toml:"enabled"`
 	Exclude       []string `toml:"exclude"`
 	CCNWarn       int      `toml:"ccn_warn"`
 	CognitiveWarn int      `toml:"cognitive_warn"`
+	Problems      bool     `toml:"problems"`
 }
 
 // Debug holds debugger behaviour (0360). PHP carries the web/request listen
