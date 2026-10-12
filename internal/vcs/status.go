@@ -63,10 +63,16 @@ func parseStatus(out []byte) *Snapshot {
 			}
 		case strings.HasPrefix(line, "2 "):
 			xy, p, ok := renameEntry(line)
-			if ok {
-				snap.addEntry(p, statusFromXY(xy), xy)
+			// The -z record carries the original path as one extra
+			// NUL-terminated field (#2918: the Changes tab needs it).
+			from := ""
+			if i+1 < len(tokens) {
+				from = string(tokens[i+1])
 			}
-			i++ // skip the trailing "original path" field of the -z record
+			i++
+			if ok {
+				snap.addRenamed(p, from, statusFromXY(xy), xy)
+			}
 		case strings.HasPrefix(line, "u "):
 			if xy, p, ok := unmergedEntry(line); ok {
 				snap.addEntry(p, StatusConflicted, xy)
@@ -93,10 +99,16 @@ func parseStatus(out []byte) *Snapshot {
 // addEntry records one parsed status record: the coloring map plus the
 // commit-UI entry carrying the staged/worktree letters.
 func (s *Snapshot) addEntry(p string, st FileStatus, xy string) {
+	s.addRenamed(p, "", st, xy)
+}
+
+// addRenamed is addEntry for a record that names the path it came from
+// (#2918); from is "" for an ordinary entry.
+func (s *Snapshot) addRenamed(p, from string, st FileStatus, xy string) {
 	if p == "" || st == StatusNone {
 		return
 	}
-	e := FileEntry{Path: p, Status: st}
+	e := FileEntry{Path: p, Status: st, From: from}
 	if len(xy) == 2 {
 		e.X, e.Y = xy[0], xy[1]
 	}

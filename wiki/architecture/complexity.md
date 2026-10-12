@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Code Complexity
-description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters and nesting depth per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary, and the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
-resource: internal/complexity, internal/app/complexityindex.go
-tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive, index, settings, telemetry]
-timestamp: 2026-10-13T00:30:00Z
+description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters and nesting depth per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary, the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
+resource: internal/complexity, internal/complexitypanel, internal/app/complexityindex.go, internal/app/complexity_diff.go
+tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive, index, settings, telemetry, vcs, diff]
+timestamp: 2026-10-13T12:00:00Z
 ---
 
 # Code Complexity
@@ -17,9 +17,10 @@ the Tree-sitter parse IKE already has — no lizard, gocyclo or gocognit on the
 machine — so it works for every language with a grammar, in mixed projects,
 out of the box. This page documents the **engine** (`internal/complexity`,
 #2915) and the **project index** on top of it (#2916, below); the language
-seam it reads is [languages](./languages.md#complexity-spec-2914), and the
-diff against HEAD, the tool window, the editor hints, the Problems feed, the
-status segment and the CLI are the epic's later steps.
+seam it reads is [languages](./languages.md#complexity-spec-2914); the tool
+window (#2917) and the diff against a base revision (#2918) follow below,
+and the editor hints, the Problems feed, the status segment and the CLI are
+the epic's later steps.
 
 ## Model
 
@@ -243,10 +244,9 @@ layer because `cmd+alt+x` folds onto `ctrl+alt+x`, the xmq playground, off
 macOS.
 
 **Tabs.** `Project` lists every function of the index snapshot, `File` the
-focused editor's file; `tab` / `shift+tab` and a click on the header's tab
-bar switch. A third slot, `Changes`, is reserved for the diff view of a
-later issue and refuses selection until it lands, so the tab order never
-shifts. The pane is a pure consumer: the app seeds it with
+focused editor's file, `Changes` the diff against a base revision (#2918,
+[below](#changes-vs-head-2918)); `tab` / `shift+tab` and a click on the
+header's tab bar switch. The pane is a pure consumer: the app seeds it with
 `Index.Snapshot()` and `Index.Stats()` when it opens or is restored from a
 layout (`wireToolWindow`), re-reads the snapshot on every
 `ComplexityChangedMsg`, and on every settled Update pass tells it the
@@ -298,6 +298,87 @@ single keys are the pane's own (keybind audit ledger, `reasonPaneKey`).
 **Settings** (`complexity.ccn_warn`, `complexity.cognitive_warn`, Settings >
 Complexity, Int 1-200, default 15) apply live through the same config
 reload that reconfigures the index.
+
+## Changes vs HEAD (#2918)
+
+The third tab, **Changes**, answers the epic's question: it measures the
+**base revision** of every file that differs from it and diffs that against
+the working tree. The pure half is `internal/complexity/diff.go`, the git
+and app half `internal/app/complexity_diff.go`, the rendering
+`internal/complexitypanel/changes.go`.
+
+**Diff engine (pure).** `DiffFunctions(base, head)` pairs the units of one
+file by `(Name, ordinal among same-named units)` — the k-th `handle` of the
+base meets the k-th `handle` of the head, so overloads, nested closures
+(`(anonymous)#2`) and repeated local helpers line up in source order — and
+classifies every pair whose five metrics (CCN, cognitive, NLOC, params,
+depth) differ as `Changed` (before / after / Δ), an unpaired head unit as
+`Added`, an unpaired base unit as `Removed`. A unit that only moved is
+unchanged; a renamed function is removed + added (the engine has no body
+hash to tell a rename from a rewrite). `Changed` is sorted by |ΔCCN|
+descending. `DiffProject(base, head, ccnWarn, cogWarn)` runs it per path
+over two `map[path][]Function`, keeps the files with a non-empty
+classification, summarises both sides (`Summarize`) and renders the
+**verdict**: `more complex` when ΣCCN rose, `less complex` when it fell,
+Σcognitive breaking the tie, `unchanged` otherwise.
+
+**Base revision and file list.** `vcs.ResolveRev(root, rev)` turns the
+typed base — `HEAD` by default; any `git rev-parse`-able ref: a branch, a
+tag, a sha, `HEAD~3` — into its commit sha (git's own message for a ref
+that does not exist); `vcs.ChangedFiles(root, sha)` lists the tracked files
+whose working tree differs from it (`git diff --name-status -M`, staged and
+unstaged edits alike, renames with their old path), and the status
+snapshot's untracked entries join as all-added files. Comparing against
+`main` therefore includes the branch's commits, not only the uncommitted
+edits. The status snapshot's rename records keep their origin
+(`FileEntry.From`) for the same reason. Both helpers run inside a
+`tea.Cmd`; see [VCS](./vcs.md).
+
+**App wiring** (`complexity_diff.go`). The diff is **pulled**, not pushed:
+once per settled Update pass, while the Changes tab is on screen, the model
+compares the key of the diff the pane shows — `(VCS snapshot generation,
+complexity index generation, base revision)` — with the current one and,
+when they differ, arms a 300 ms debounce tick (once). The snapshot
+generation moves in `applyVCSSnapshot` for every snapshot that differs from
+the last (an `Equal` refresh moves nothing), the index generation with every
+`ComplexityChangedMsg` (a saved file re-measured), the base with `R`. A
+hidden tab costs nothing; one computation runs at a time; a result whose
+inputs moved meanwhile is followed by a fresh run. The tick gathers the
+inputs in `Update` — the snapshot, the index `View`, the text of every dirty
+buffer, `complexity.exclude`, the warning thresholds — and launches one
+`tea.Cmd` that resolves the base, lists the files, and measures both sides
+of each with four workers: the base side by `git show <sha>:<path>` +
+`Measure` (every git call under the package's 5 s timeout; a blob the base
+lacks measures as nothing), the head side from the **dirty buffer** when the
+file is open and unsaved (its rows carry the editor tabs' `*`), else from
+the index snapshot, else from disk. Measured base blobs are cached per
+`(sha, path)` for the session, so the next run against the same base skips
+their git calls; unchanged files are never measured — only the files git
+lists are. Files outside the project root (the project may be a
+subdirectory of the repository), of a language without a spec, or matched
+by `complexity.exclude` are skipped. A deleted file is all removed, an added
+or untracked one all added, a renamed one removed under its old path and
+added under the new one with a one-line note in the header. Outside a
+repository the tab says `not a git repository` and nothing runs. Nothing in
+`Update` runs git or parses.
+
+**Changes tab.** The header reads `base <rev> → working tree · functions
+n→m · ΣCCN a→b (Δ) · Σcog c→d (Δ) · <verdict>` plus the rename note
+(`computing…` while a run is in flight). The grid keeps its sections —
+changed (|ΔCCN| descending), added, removed — with the section named on its
+first row, and the columns change, function, file, line, `ccn
+before→after (Δ)`, `cog before→after (Δ)`, `nloc before→after` (the missing
+side of an added / removed unit is `-`). The same filter row applies —
+`file:`, `fn:`, `lang:`, `metric:`, and `min:` on |Δ| of the sort column —
+and `s` / `S` / the header click sort inside the sections. `enter` opens the
+function (a removed one opens its file at the first line), `e` exports the
+tab as CSV (`change,file,function,kind,line,ccn_before,ccn_after,ccn_delta,
+cog_before,cog_after,cog_delta,nloc_before,nloc_after`), `y` copies
+`path:line: name changed ccn=a→b (Δ) cog=c→d (Δ)`. **`R`** prompts the base
+revision in the filter row's place (`ui.Field`, seeded with the current
+base, `enter` applies, `esc` cancels); an invalid ref keeps the previous
+base and shows git's message in the header. The base revision is session
+state, not a setting.
 
 ## Extending
 

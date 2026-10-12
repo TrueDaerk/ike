@@ -45,8 +45,8 @@ const (
 	TabProject Tab = iota
 	// TabFile lists the focused editor's file.
 	TabFile
-	// TabChanges is the reserved slot for the diff view (a later issue);
-	// it is disabled until that lands, so the tab order does not shift.
+	// TabChanges lists the functions whose metrics differ between a base
+	// revision and the working tree (#2918, changes.go).
 	TabChanges
 )
 
@@ -54,7 +54,7 @@ const (
 var tabNames = []string{"Project", "File", "Changes"}
 
 // enabledTabs are the tabs the keyboard and the mouse can reach.
-var enabledTabs = []Tab{TabProject, TabFile}
+var enabledTabs = []Tab{TabProject, TabFile, TabChanges}
 
 // Column is one grid column; the order is the display order.
 type Column int
@@ -68,14 +68,26 @@ const (
 	ColNLOC
 	ColParams
 	ColDepth
+	// ColChange is the Changes tab's section column: changed / added /
+	// removed (#2918).
+	ColChange
 )
 
 // columnLabels are the column headers in Column order.
-var columnLabels = []string{"file", "function", "line", "ccn", "cog", "nloc", "params", "depth"}
+var columnLabels = []string{"file", "function", "line", "ccn", "cog", "nloc", "params", "depth", "change"}
 
 // numeric reports whether a column sorts as a number (descending by
 // default) rather than as text.
-func (c Column) numeric() bool { return c >= ColLine }
+func (c Column) numeric() bool { return c >= ColLine && c != ColChange }
+
+// The per-tab column layouts, in display order: the File tab hides the
+// file column, the Changes tab leads with the section and drops params /
+// depth for the before→after metrics.
+var (
+	projectLayout = []Column{ColFile, ColFunc, ColLine, ColCCN, ColCog, ColNLOC, ColParams, ColDepth}
+	fileLayout    = projectLayout[1:]
+	changesLayout = []Column{ColChange, ColFunc, ColFile, ColLine, ColCCN, ColCog, ColNLOC}
+)
 
 // DefaultWarn is the warning threshold both metrics fall back to
 // (complexity.ccn_warn / complexity.cognitive_warn).
@@ -126,10 +138,18 @@ type Row struct {
 	Fn complexity.Function
 	// Caret marks the File tab's row whose range contains the caret.
 	Caret bool
+	// Change classifies a Changes-tab row (#2918); 0 on the other tabs.
+	// Fn is the head side (the base side for a removed unit), Before the
+	// base side of a changed or removed unit.
+	Change complexity.ChangeKind
+	Before complexity.Function
+	// Dirty marks a Changes row whose head side is an unsaved buffer.
+	Dirty bool
 }
 
 // value is the row's sort key on column c: a number for the metric
-// columns, the text for file / function.
+// columns, the text for file / function. On the Changes tab the metric
+// columns sort by the absolute delta, so min: reads |Δ| there.
 func (r Row) value(c Column) (int, string) {
 	switch c {
 	case ColFile:
@@ -138,6 +158,20 @@ func (r Row) value(c Column) (int, string) {
 		return 0, r.Fn.Name
 	case ColLine:
 		return r.Fn.Line, ""
+	case ColChange:
+		return r.sectionRank(), ""
+	}
+	if r.Change != 0 {
+		switch c {
+		case ColCCN:
+			return abs(r.DeltaCCN()), ""
+		case ColCog:
+			return abs(r.DeltaCognitive()), ""
+		case ColNLOC:
+			return abs(r.DeltaNLOC()), ""
+		}
+	}
+	switch c {
 	case ColCCN:
 		return r.Fn.CCN, ""
 	case ColCog:
@@ -150,10 +184,62 @@ func (r Row) value(c Column) (int, string) {
 	return r.Fn.Depth, ""
 }
 
-// cells renders the row's grid cells in Column order.
-func (r Row) cells() []string {
-	return []string{r.Rel, r.Fn.Name, strconv.Itoa(r.Fn.Line + 1), strconv.Itoa(r.Fn.CCN),
-		strconv.Itoa(r.Fn.Cognitive), strconv.Itoa(r.Fn.NLOC), strconv.Itoa(r.Fn.Params), strconv.Itoa(r.Fn.Depth)}
+func abs(n int) int {
+	if n < 0 {
+		return -n
+	}
+	return n
+}
+
+// cell renders the row's text for column c: the plain metric on the
+// Project / File tabs, "before→after (Δ)" on the Changes tab.
+func (r Row) cell(c Column) string {
+	switch c {
+	case ColFile:
+		return r.Rel
+	case ColFunc:
+		if r.Dirty {
+			return r.Fn.Name + dirtyMark
+		}
+		return r.Fn.Name
+	case ColLine:
+		return strconv.Itoa(r.Fn.Line + 1)
+	case ColParams:
+		return strconv.Itoa(r.Fn.Params)
+	case ColDepth:
+		return strconv.Itoa(r.Fn.Depth)
+	case ColChange:
+		return r.Change.String()
+	}
+	if r.Change != 0 {
+		switch c {
+		case ColCCN:
+			return r.metricCell(ccnOf, true)
+		case ColCog:
+			return r.metricCell(cogOf, true)
+		}
+		return r.metricCell(nlocOf, false)
+	}
+	switch c {
+	case ColCCN:
+		return strconv.Itoa(r.Fn.CCN)
+	case ColCog:
+		return strconv.Itoa(r.Fn.Cognitive)
+	}
+	return strconv.Itoa(r.Fn.NLOC)
+}
+
+// dirtyMark suffixes the function of a row measured from an unsaved
+// buffer, as the editor tabs mark a dirty file.
+const dirtyMark = "*"
+
+// cells renders the row's grid cells for the given layout.
+func (r Row) cells(layout []Column) []string {
+	out := make([]string, len(layout))
+	for i, c := range layout {
+		out[i] = r.cell(c)
+	}
+	return out
 }
 
 // Model is the tool window state. Value type with pointer-receiver mutators,
@@ -185,6 +271,12 @@ type Model struct {
 	clicks   ui.ClickTracker
 	now      func() time.Time
 	pathLang func(string) string
+
+	// The Changes tab (#2918): its data, and the base-revision prompt 'R'
+	// opens in the filter row's place.
+	changes   Changes
+	revField  ui.Field
+	prompting bool
 }
 
 // New returns an empty panel on the Project tab sorted by CCN descending;
@@ -256,8 +348,7 @@ func (m *Model) SetPalette(p *theme.Palette) { m.pal = p }
 // Tab reports the selected population.
 func (m *Model) Tab() Tab { return m.tab }
 
-// SetTab selects a population and rebuilds the rows; the reserved Changes
-// tab is refused until it is implemented.
+// SetTab selects a population and rebuilds the rows.
 func (m *Model) SetTab(t Tab) {
 	if !tabEnabled(t) || t == m.tab {
 		return
@@ -265,6 +356,28 @@ func (m *Model) SetTab(t Tab) {
 	m.tab = t
 	m.cursor, m.top = 0, 0
 	m.Refresh()
+}
+
+// layout is the selected tab's column order.
+func (m *Model) layout() []Column {
+	switch m.tab {
+	case TabFile:
+		return fileLayout
+	case TabChanges:
+		return changesLayout
+	}
+	return projectLayout
+}
+
+// layoutIndex is the display position of column c on the selected tab, -1
+// when the tab does not show it.
+func (m *Model) layoutIndex(c Column) int {
+	for i, l := range m.layout() {
+		if l == c {
+			return i
+		}
+	}
+	return -1
 }
 
 // tabEnabled reports whether t can be selected.
@@ -295,24 +408,19 @@ func (m *Model) SortColumn() (Column, bool) { return m.sortCol, m.desc }
 // SetSort selects the sort column (a numeric column descending, a text one
 // ascending) and rebuilds the rows.
 func (m *Model) SetSort(c Column) {
-	if c < ColFile || c > ColDepth {
+	if c < ColFile || c > ColChange {
 		return
 	}
 	m.sortCol, m.desc = c, c.numeric()
 	m.Refresh()
 }
 
-// cycleSort moves the sort column to the next one ('s'); the File tab has
-// no file column to sort by.
+// cycleSort moves the sort column to the next one the tab shows ('s'),
+// wrapping; a sort column the tab hides restarts at its first column.
 func (m *Model) cycleSort() {
-	next := m.sortCol + 1
-	if next > ColDepth {
-		next = ColFile
-	}
-	if m.tab == TabFile && next == ColFile {
-		next = ColFunc
-	}
-	m.SetSort(next)
+	layout := m.layout()
+	i := m.layoutIndex(m.sortCol)
+	m.SetSort(layout[(i+1)%len(layout)])
 }
 
 // Follow tells the File tab which file the focused editor shows and where
@@ -361,14 +469,17 @@ func (m *Model) Selected() (Row, bool) {
 // filter and the sort, keeping the cursor on the same function where
 // possible.
 func (m *Model) Refresh() {
-	keepPath, keepLine, keepName := "", -1, ""
+	keepPath, keepLine, keepName, keepChange := "", -1, "", 0
 	if r, ok := m.Selected(); ok {
-		keepPath, keepLine, keepName = r.Path, r.Fn.Line, r.Fn.Name
+		keepPath, keepLine, keepName, keepChange = r.Path, r.Fn.Line, r.Fn.Name, int(r.Change)
 	}
 	all := m.population()
 	m.total = len(all)
 	fns := make([]complexity.Function, 0, len(all))
 	for _, r := range all {
+		if r.Change == complexity.Removed {
+			continue // the Changes summary is the head side's
+		}
 		fns = append(fns, r.Fn)
 	}
 	m.summary = complexity.Summarize(fns, m.ccnWarn, m.cogWarn)
@@ -390,7 +501,7 @@ func (m *Model) Refresh() {
 	m.widths = m.columnWidths()
 	m.cursor = 0
 	for i, r := range m.rows {
-		if r.Path == keepPath && r.Fn.Line == keepLine && r.Fn.Name == keepName {
+		if r.Path == keepPath && r.Fn.Line == keepLine && r.Fn.Name == keepName && int(r.Change) == keepChange {
 			m.cursor = i
 			break
 		}
@@ -420,6 +531,8 @@ func (m *Model) population() []Row {
 				add(abs, m.view.Files[abs])
 			}
 		}
+	case TabChanges:
+		out = m.changesRows()
 	}
 	return out
 }
@@ -473,11 +586,15 @@ func (m *Model) matches(q filterexpr.Query, r Row) bool {
 }
 
 // sortRows orders the visible rows by the sort column, ties by path and
-// line so the order is stable across refreshes.
+// line so the order is stable across refreshes. The Changes tab keeps its
+// sections (changed, added, removed) and sorts inside each.
 func (m *Model) sortRows() {
 	col, desc := m.sortCol, m.desc
 	sort.SliceStable(m.rows, func(i, j int) bool {
 		a, b := m.rows[i], m.rows[j]
+		if a.Change != b.Change {
+			return a.sectionRank() < b.sectionRank()
+		}
 		ai, as := a.value(col)
 		bi, bs := b.value(col)
 		if col.numeric() {
@@ -533,17 +650,19 @@ func (m *Model) CaretRow() int {
 	return -1
 }
 
-// columnWidths sizes every column to its longest visible value or label,
-// the sort marker included.
+// columnWidths sizes every column of the tab's layout to its longest
+// visible value or label, the sort marker included.
 func (m *Model) columnWidths() []int {
+	layout := m.layout()
 	labels := m.headerLabels()
 	ws := make([]int, len(labels))
 	for i, l := range labels {
 		ws[i] = lipgloss.Width(l)
 	}
+	fnCol := m.layoutIndex(ColFunc)
 	for _, r := range m.rows {
-		for i, c := range r.cells() {
-			if i == int(ColFunc) && r.Caret {
+		for i, c := range r.cells(layout) {
+			if i == fnCol && r.Caret {
 				c = caretMark + c
 			}
 			if w := lipgloss.Width(c); w > ws[i] {
@@ -553,8 +672,10 @@ func (m *Model) columnWidths() []int {
 	}
 	// The file column is capped so a deep path never pushes the metrics off
 	// the pane; the rest are short by nature.
-	if max := m.width / 2; max > 12 && ws[ColFile] > max {
-		ws[ColFile] = max
+	if fi := m.layoutIndex(ColFile); fi >= 0 {
+		if max := m.width / 2; max > 12 && ws[fi] > max {
+			ws[fi] = max
+		}
 	}
 	return ws
 }
@@ -562,24 +683,22 @@ func (m *Model) columnWidths() []int {
 // caretMark prefixes the function under the caret on the File tab.
 const caretMark = "▸ "
 
-// headerLabels are the column labels with the sort marker on the sort
-// column.
+// headerLabels are the tab's column labels with the sort marker on the
+// sort column.
 func (m *Model) headerLabels() []string {
-	out := append([]string(nil), columnLabels...)
+	layout := m.layout()
+	out := make([]string, len(layout))
+	for i, c := range layout {
+		out[i] = columnLabels[c]
+	}
 	mark := " ▲"
 	if m.desc {
 		mark = " ▼"
 	}
-	out[m.sortCol] += mark
-	return out
-}
-
-// colOff is the first drawn column: the File tab hides the file column.
-func (m *Model) colOff() int {
-	if m.tab == TabFile {
-		return 1
+	if i := m.layoutIndex(m.sortCol); i >= 0 {
+		out[i] += mark
 	}
-	return 0
+	return out
 }
 
 // Update handles one message while the panel exists; only key presses reach
@@ -608,8 +727,8 @@ func (m *Model) NextMatch() ui.MatchStep { return m.stepFiltered(1) }
 func (m *Model) PrevMatch() ui.MatchStep { return m.stepFiltered(-1) }
 
 // LineInputOpen implements the pane's Searchable capability (#2634): the
-// focused filter row owns the caret chords.
-func (m *Model) LineInputOpen() bool { return m.filter.Active() }
+// focused filter row — or the base-revision prompt — owns the caret chords.
+func (m *Model) LineInputOpen() bool { return m.filter.Active() || m.prompting }
 
 func (m *Model) stepFiltered(delta int) ui.MatchStep {
 	if !m.filter.Active() {
@@ -622,6 +741,9 @@ func (m *Model) stepFiltered(delta int) ui.MatchStep {
 }
 
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+	if m.prompting {
+		return m.promptKey(msg)
+	}
 	if m.filter.Active() {
 		handled, changed := m.filter.Key(msg)
 		if changed {
@@ -662,18 +784,26 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.copyRow()
 	case "r":
 		return func() tea.Msg { return RefreshMsg{} }
+	case "R":
+		if m.tab == TabChanges && !m.changes.NotGit {
+			m.promptBase()
+		}
 	}
 	m.clampScroll()
 	return nil
 }
 
-// open asks the root model to open the selected function's file.
+// open asks the root model to open the selected function's file; a removed
+// function has no line in the working tree, so its file opens at the top.
 func (m *Model) open() tea.Cmd {
 	r, ok := m.Selected()
 	if !ok {
 		return nil
 	}
 	msg := OpenLocationMsg{Path: r.Path, Line: r.Fn.Line}
+	if r.Change == complexity.Removed {
+		msg.Line = 0
+	}
 	return func() tea.Msg { return msg }
 }
 
@@ -687,10 +817,14 @@ func (m *Model) copyRow() tea.Cmd {
 	return func() tea.Msg { return CopyMsg{Text: text} }
 }
 
-// CopyText renders a row as "path:line: name ccn=.. cog=..".
+// CopyText renders a row as "path:line: name ccn=.. cog=.."; a Changes
+// row carries both sides: "changed ccn=3→5 (+2) cog=1→1 (0)".
 func CopyText(r Row) string {
-	return r.Rel + ":" + strconv.Itoa(r.Fn.Line+1) + ": " + r.Fn.Name +
-		" ccn=" + strconv.Itoa(r.Fn.CCN) + " cog=" + strconv.Itoa(r.Fn.Cognitive)
+	head := r.Rel + ":" + strconv.Itoa(r.Fn.Line+1) + ": " + r.Fn.Name
+	if r.Change != 0 {
+		return head + " " + r.Change.String() + " ccn=" + r.metricCell(ccnOf, true) + " cog=" + r.metricCell(cogOf, true)
+	}
+	return head + " ccn=" + strconv.Itoa(r.Fn.CCN) + " cog=" + strconv.Itoa(r.Fn.Cognitive)
 }
 
 // export builds the current tab's CSV and hands it to the root model.
@@ -707,11 +841,14 @@ var csvHeader = []string{"file", "function", "kind", "line", "ccn", "cognitive",
 // one row per visible function, the file column included on every tab so
 // an export stays self-describing.
 func (m *Model) CSV() string {
+	if m.tab == TabChanges {
+		return m.changesCSV()
+	}
 	var b strings.Builder
 	writeCSVRow(&b, csvHeader)
 	for _, r := range m.rows {
-		c := r.cells()
-		writeCSVRow(&b, []string{c[0], c[1], r.Fn.Kind, c[2], c[3], c[4], c[5], c[6], c[7]})
+		c := r.cells(projectLayout)
+		writeCSVRow(&b, []string{c[0], r.Fn.Name, r.Fn.Kind, c[2], c[3], c[4], c[5], c[6], c[7]})
 	}
 	return b.String()
 }
@@ -742,9 +879,13 @@ func (m *Model) View() string {
 	var b strings.Builder
 	b.WriteString(m.headerLine(pal))
 	b.WriteString("\n")
-	b.WriteString(m.filter.View(m.width, pal))
+	if m.prompting {
+		b.WriteString(m.promptView())
+	} else {
+		b.WriteString(m.filter.View(m.width, pal))
+	}
 	b.WriteString("\n")
-	b.WriteString(gridview.HeaderRow(pal, m.headerLabels(), m.widths, m.colOff(), m.width))
+	b.WriteString(gridview.HeaderRow(pal, m.headerLabels(), m.widths, 0, m.width))
 	b.WriteString("\n")
 	b.WriteString(m.renderRows(pal, m.bodyHeight()))
 	b.WriteString(m.footer())
@@ -762,8 +903,6 @@ func (m *Model) headerLine(pal *theme.Palette) string {
 		// Reverse video, not an underline: lipgloss renders an underlined
 		// run one escape sequence per cell, which would break every "does
 		// the header say File" assertion for no visual gain.
-		// The reserved Changes tab stays faint like an unselected one; a
-		// strikethrough would render one escape per cell.
 		st := lipgloss.NewStyle().Faint(true)
 		if Tab(i) == m.tab {
 			st = lipgloss.NewStyle().Foreground(pal.Background).Background(pal.Accent).Bold(true)
@@ -784,8 +923,12 @@ func (m *Model) headerLine(pal *theme.Palette) string {
 	return lead + lipgloss.NewStyle().Faint(true).Render(totals)
 }
 
-// totalsText renders the tab's Summary and the index state.
+// totalsText renders the tab's Summary and the index state; the Changes
+// tab renders its base → working tree line instead.
 func (m *Model) totalsText() string {
+	if m.tab == TabChanges {
+		return m.changesTotals()
+	}
 	s := m.summary
 	// The index state leads, so a narrow pane still shows it.
 	var parts []string
@@ -814,6 +957,9 @@ func (m *Model) renderRows(pal *theme.Palette, height int) string {
 
 // emptyText explains an empty list per index state, tab and filter.
 func (m *Model) emptyText() string {
+	if m.tab == TabChanges {
+		return m.changesEmpty()
+	}
 	switch {
 	case m.hasView && m.stats.Unavailable:
 		return "(no syntax tree in this build — the index cannot measure)"
@@ -837,25 +983,38 @@ func (m *Model) emptyText() string {
 // on the function cell.
 func (m *Model) renderRow(pal *theme.Palette, i int) string {
 	r := m.rows[i]
-	texts := r.cells()
+	layout := m.layout()
+	texts := r.cells(layout)
 	cells := make([]gridview.Cell, len(texts))
 	for c, t := range texts {
 		cells[c] = gridview.Cell{Text: t}
 	}
-	if r.Caret {
-		cells[ColFunc].Text = caretMark + cells[ColFunc].Text
-		cells[ColFunc].Match = true
+	if fi := m.layoutIndex(ColFunc); fi >= 0 && r.Caret {
+		cells[fi].Text = caretMark + cells[fi].Text
+		cells[fi].Match = true
 	}
-	cells[ColCCN].Warn = r.Fn.CCN >= m.ccnWarn
-	cells[ColCog].Warn = r.Fn.Cognitive >= m.cogWarn
-	return gridview.DataRow(pal, cells, m.widths, m.colOff(), m.width, i == m.cursor, m.focused)
+	if ci := m.layoutIndex(ColCCN); ci >= 0 {
+		cells[ci].Warn = r.Fn.CCN >= m.ccnWarn
+	}
+	if ci := m.layoutIndex(ColCog); ci >= 0 {
+		cells[ci].Warn = r.Fn.Cognitive >= m.cogWarn
+	}
+	// The section column reads like a heading: named on the first row of
+	// each section, blank below it.
+	if si := m.layoutIndex(ColChange); si >= 0 && i > 0 && m.rows[i-1].Change == r.Change {
+		cells[si].Text = ""
+	}
+	return gridview.DataRow(pal, cells, m.widths, 0, m.width, i == m.cursor, m.focused)
 }
 
 // footer shows the filtered / total counts and the key hints.
 func (m *Model) footer() string {
 	count := itoa(len(m.rows)) + "/" + itoa(m.total) + " rows"
-	return lipgloss.NewStyle().Faint(true).Render(
-		m.clip(" " + count + " · tab view · s sort · S reverse · enter open · e export · y copy · r rescan · / filter"))
+	hints := " · tab view · s sort · S reverse · enter open · e export · y copy · r rescan · / filter"
+	if m.tab == TabChanges {
+		hints += " · R base"
+	}
+	return lipgloss.NewStyle().Faint(true).Render(m.clip(" " + count + hints))
 }
 
 // chromeRows counts the header, filter, column-header and footer lines.
@@ -938,10 +1097,11 @@ func (m *Model) clickHeader(x int) {
 // each column padded to its width and two spaces apart (gridview.HeaderRow).
 func (m *Model) clickColumn(x int) {
 	start := 1
-	for c := m.colOff(); c < len(m.widths); c++ {
+	layout := m.layout()
+	for c := 0; c < len(m.widths) && c < len(layout); c++ {
 		end := start + m.widths[c]
 		if x >= start && x < end {
-			col := Column(c)
+			col := layout[c]
 			if col == m.sortCol {
 				m.desc = !m.desc
 				m.Refresh()
@@ -958,6 +1118,9 @@ func (m *Model) clickColumn(x int) {
 // (#2460), re-deriving the rows exactly like typing there does. A closed
 // filter row lets the paste fall through.
 func (m *Model) PasteText(text string) bool {
+	if m.prompting {
+		return m.revField.Paste(text)
+	}
 	if !m.filter.Active() {
 		return false
 	}

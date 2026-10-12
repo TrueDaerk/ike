@@ -4,7 +4,7 @@ title: VCS / Git Integration
 description: "Epics 0320/0330, slimmed by #750 — git status snapshot behind explorer coloring, branch status-line segment, gutter diff markers, file-vs-HEAD diff, hunk/file revert, inline blame, and a read-only changes tool window; git *workflow* (staging, commits, branches, log) is delegated to custom tool panes, with lazygit preconfigured; all git calls async via tea.Cmd."
 resource: internal/vcs
 tags: [architecture, vcs, git]
-timestamp: 2026-09-08T14:00:00Z
+timestamp: 2026-10-13T12:00:00Z
 ---
 
 # VCS / Git Integration (Epics 0320/0330, slimmed by #750)
@@ -88,6 +88,15 @@ only a snapshot refresh (save, watcher, VCS command) triggers them.
   the line below (EOF removals fold onto the last line). Diagnostics win the
   cell. Recomputed per snapshot and on open; only modified/conflicted/renamed
   files spawn a git subprocess.
+- **Complexity vs a base revision** (`internal/vcs/changes.go`, #2918) —
+  the Complexity window's Changes tab resolves the typed base with
+  `ResolveRev` (`git rev-parse --verify`), lists the files whose working
+  tree differs from it with `ChangedFiles` (`git diff --name-status -M`,
+  renames with their old path; the snapshot's untracked entries join as
+  additions) and reads each base blob with `RevContent`, all inside one
+  `tea.Cmd` with bounded concurrency; status rename records keep their
+  origin in `FileEntry.From`. See
+  [Code Complexity § Changes vs HEAD](/architecture/complexity.md#changes-vs-head-2918).
 - **Inline blame** (`internal/vcs/blame.go`, `vcs.blameLine`, palette) —
   toggleable dimmed EOL annotation on the cursor line ("author, when ·
   summary", "not committed yet"); whole-file porcelain blame cached per

@@ -71,6 +71,7 @@ func (m *Model) seedComplexityPanel(p *complexitypanel.Model) {
 	c := config.Get().Complexity
 	p.SetWarn(c.CCNWarn, c.CognitiveWarn)
 	p.Set(m.complexityIndex.Snapshot(), m.complexityIndex.Stats())
+	m.seedComplexityChanges(p)
 }
 
 // refreshComplexityPanel re-reads the snapshot into an open panel: the

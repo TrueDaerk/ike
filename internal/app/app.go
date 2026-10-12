@@ -328,6 +328,10 @@ type Model struct {
 	// refresh scheduling, shared by pointer across value-model copies. A nil
 	// snapshot means "not a git repository".
 	vcs *vcsState
+	// cxDiff is the Changes tab's state (0550, #2918): the base revision,
+	// the generations the diff keys on and the last result, shared by
+	// pointer like vcs.
+	cxDiff *complexityDiffState
 	// forgePoll is the background forge poll service (#2085): one poller per
 	// workspace root, shared by pointer across value-model copies like vcs.
 	// Nil in bare test models — every accessor is nil-safe.
@@ -1695,6 +1699,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		completeEngine:  engine,
 		phpIndex:        phpIdx,
 		complexityIndex: cxIdx,
+		cxDiff:          &complexityDiffState{},
 		ws:              wsMgr,
 		recentEditor:    edKey,
 		recent:          recent,
@@ -4588,6 +4593,11 @@ func (m Model) updateUnguarded(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// The Complexity window's File tab follows the focused buffer and its
 	// caret the same way (#2917): an in-place re-mark, no parse.
 	mm.syncComplexityPanel()
+	// Its Changes tab pulls the diff against the base revision here too
+	// (#2918): a moved snapshot / index generation arms the debounce tick.
+	if sync := mm.complexityDiffSyncCmd(); sync != nil {
+		cmd = tea.Batch(cmd, sync)
+	}
 	// The DOM inspector rides the same settled pass (#1929): cursor follow is
 	// a cheap in-place highlight, a buffer switch or edit spawns the async
 	// reparse, and moved selector matches re-route to the editors.
@@ -8490,8 +8500,26 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case ComplexityChangedMsg:
 		// The complexity index reached a new generation (0550, #2916): the
 		// tool window re-reads the snapshot (#2917); the Problems feed and
-		// the status segment of the later steps will too.
+		// the status segment of the later steps will too. The Changes tab
+		// keys on the generation (#2918).
+		m.noteComplexityGen(msg.Gen)
 		m.refreshComplexityPanel()
+		return m, nil
+
+	case complexityDiffTickMsg:
+		// The Changes tab's debounce expired (#2918): launch the off-loop
+		// comparison against the base revision.
+		return m, m.startComplexityDiff()
+
+	case complexityDiffMsg:
+		// The comparison landed (#2918).
+		m.applyComplexityDiff(msg)
+		return m, nil
+
+	case complexitypanel.SetBaseMsg:
+		// 'R' + enter in the Changes tab (#2918): compare against another
+		// revision; the settled pass launches it.
+		m.setComplexityBase(msg.Rev)
 		return m, nil
 
 	case ComplexityToggleMsg:

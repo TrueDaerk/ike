@@ -206,18 +206,18 @@ func TestFileTabFollowsCaret(t *testing.T) {
 	if got := names(m.Rows()); strings.Join(got, ",") != "Page::show" || m.CaretRow() != 0 {
 		t.Fatalf("switched rows = %v caret=%d", got, m.CaretRow())
 	}
-	// shift+tab goes back to Project; the Changes slot is skipped.
+	// tab moves on to Changes (#2918), then wraps to Project.
+	m.Update(key("tab"))
+	if m.Tab() != TabChanges {
+		t.Fatalf("tab after File = %v, want Changes", m.Tab())
+	}
 	m.Update(key("tab"))
 	if m.Tab() != TabProject {
-		t.Fatalf("tab after wrap = %v, want Project (Changes disabled)", m.Tab())
+		t.Fatalf("tab after wrap = %v, want Project", m.Tab())
 	}
 	m.Update(key("shift+tab"))
-	if m.Tab() != TabFile {
-		t.Fatalf("shift+tab = %v, want File", m.Tab())
-	}
-	m.SetTab(TabChanges)
-	if m.Tab() != TabFile {
-		t.Fatal("the reserved Changes tab must refuse selection")
+	if m.Tab() != TabChanges {
+		t.Fatalf("shift+tab = %v, want Changes", m.Tab())
 	}
 }
 
@@ -296,8 +296,8 @@ func TestMouseSelectsOpensAndSwitches(t *testing.T) {
 		t.Fatalf("header click tab = %v, want File", m.Tab())
 	}
 	m.Click(len(" Complexity")+3+len("Project")+1+len("File")+1, 0)
-	if m.Tab() != TabFile {
-		t.Fatal("a click on the disabled Changes tab must not switch")
+	if m.Tab() != TabChanges {
+		t.Fatalf("header click tab = %v, want Changes", m.Tab())
 	}
 	m.SetTab(TabProject)
 	// A click on a column header sorts by it; a second one reverses.

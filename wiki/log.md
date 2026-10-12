@@ -1,5 +1,19 @@
 # Log
 
+## 2026-10-13 (Changes vs HEAD: diff engine, Changes tab, verdict, base revision, #2918)
+
+- [Code Complexity](/architecture/complexity.md): new section "Changes vs
+  HEAD" — the pure diff (`DiffFunctions` matching by name + ordinal,
+  `DiffProject` with both summaries and the ΣCCN / Σcognitive verdict), the
+  git plumbing (`vcs.ResolveRev`, `vcs.ChangedFiles`, rename origins), the
+  pulled, generation-keyed computation in `internal/app/complexity_diff.go`
+  (debounce, bounded workers, dirty buffers first, base-blob cache, project
+  subdirectory and exclude rules), and the Changes tab's header, sections,
+  before→after columns, filter, export, copy and the `R` base prompt. The
+  Tool window section no longer calls the Changes slot reserved.
+- [VCS](/architecture/vcs.md): Surfaces gains the complexity-vs-base entry
+  with the cross-link.
+
 ## 2026-10-13 (Complexity tool window: Project + File tabs, filter, sort, export, keybind, #2917)
 
 - [Code Complexity](/architecture/complexity.md): new section "Tool

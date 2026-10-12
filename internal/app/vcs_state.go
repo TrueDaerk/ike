@@ -76,6 +76,9 @@ func (m Model) applyVCSSnapshot(msg vcs.SnapshotMsg) tea.Cmd {
 		m.markFrameReusable()
 	} else {
 		m.vcs.snap = msg.Snap
+		// The Complexity window's Changes tab keys its diff on the snapshot
+		// generation (#2918).
+		m.noteVCSSnapshotForComplexity()
 		// Consumers read the snapshot per frame; the explorer holds its own
 		// reference (#463).
 		if m.activeWS().Panes.Has(pane.ExplorerKey) {
