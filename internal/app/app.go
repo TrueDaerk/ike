@@ -41,6 +41,7 @@ import (
 	"ike/internal/complete/symbols"
 	"ike/internal/complete/words"
 	"ike/internal/complexity"
+	"ike/internal/complexitypanel"
 	"ike/internal/config"
 	"ike/internal/coverage"
 	"ike/internal/dataview"
@@ -4584,6 +4585,9 @@ func (m Model) updateUnguarded(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if sync := mm.structureSyncCmd(); sync != nil {
 		cmd = tea.Batch(cmd, sync)
 	}
+	// The Complexity window's File tab follows the focused buffer and its
+	// caret the same way (#2917): an in-place re-mark, no parse.
+	mm.syncComplexityPanel()
 	// The DOM inspector rides the same settled pass (#1929): cursor follow is
 	// a cheap in-place highlight, a buffer switch or edit spawns the async
 	// reparse, and moved selector matches re-route to the editors.
@@ -8484,9 +8488,38 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.refilterDiagnostics()...)
 
 	case ComplexityChangedMsg:
-		// The complexity index reached a new generation (0550, #2916). The
-		// surfaces of the epic's later steps re-read Snapshot here; the
-		// message itself is the loop wake that lets them.
+		// The complexity index reached a new generation (0550, #2916): the
+		// tool window re-reads the snapshot (#2917); the Problems feed and
+		// the status segment of the later steps will too.
+		m.refreshComplexityPanel()
+		return m, nil
+
+	case ComplexityToggleMsg:
+		// complexity.toggle (#2917): the tool-window state machine over the
+		// project complexity index.
+		return m, m.toggleComplexityPanel()
+
+	case ComplexityRefreshMsg, complexitypanel.RefreshMsg:
+		// complexity.refresh (#2917), also 'r' in the pane: rebuild the index.
+		return m, m.rebuildComplexityIndex()
+
+	case ComplexityExportMsg:
+		// complexity.export (#2917): the pane's 'e' from the palette.
+		return m, m.exportComplexityPanel()
+
+	case complexitypanel.ExportMsg:
+		// 'e' in the Complexity pane (#2917): the current tab as a CSV scratch.
+		return m.handleComplexityExport(msg)
+
+	case complexitypanel.OpenLocationMsg:
+		// Enter / double click on a function row (#2917): the same path:line
+		// pipeline every jump surface uses, so nav.back returns.
+		return m.openPathAt(msg.Path, msg.Line, 0)
+
+	case complexitypanel.CopyMsg:
+		// 'y' / the copy chord in the Complexity pane (#2917).
+		m.copyToClipboard(msg.Text)
+		m.host.Notify(host.Info, "complexity: copied "+msg.Text)
 		return m, nil
 
 	case ilsp.IgnoreDiagnosticMsg:
@@ -10012,7 +10045,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// keys. Pane focus still cycles with ctrl+tab (the pane switcher)
 			// and the focus keys. The hex viewer owns it too (#2876): tab
 			// switches its active column between hex and text.
-			if m.dataPaneFocused() || m.previewLinkPaneFocused() || m.hexPaneFocused() {
+			// The Complexity window owns it as well (#2917): tab /
+			// shift+tab switch its Project / File tabs.
+			if m.dataPaneFocused() || m.previewLinkPaneFocused() || m.hexPaneFocused() || m.complexityPaneFocused() {
 				return m.routeKey(msg)
 			}
 			m.cycleFocus()
@@ -10998,6 +11033,14 @@ func (m Model) hexPaneFocused() bool {
 	return inst != nil && inst.Kind() == pane.KindHex
 }
 
+// complexityPaneFocused reports whether the focused content is the
+// Complexity window, whose tab / shift+tab switch its Project / File tabs
+// (#2917).
+func (m Model) complexityPaneFocused() bool {
+	inst := m.focusedContent()
+	return inst != nil && inst.Kind() == pane.KindComplexity
+}
+
 // previewLinkPaneFocused reports whether tab belongs to a focused markdown
 // (#2180) or HTML (#2741) preview, where it walks the document's links. Only
 // a preview that actually has links claims the key — a link-free document
@@ -11166,7 +11209,7 @@ func (m Model) viewerSplitTarget() string {
 		case pane.KindExplorer, pane.KindVCS, pane.KindDebug, pane.KindProblems,
 			pane.KindStructure, pane.KindUsages, pane.KindHTTP, pane.KindBreakpoints,
 			pane.KindTests, pane.KindIssues, pane.KindDOM, pane.KindDoctor, pane.KindDeps,
-			pane.KindTime, pane.KindUsage, pane.KindAgentTrace:
+			pane.KindTime, pane.KindUsage, pane.KindAgentTrace, pane.KindComplexity:
 			return false
 		}
 		return true
@@ -12739,6 +12782,14 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case tea.MouseWheelDown:
 				inst.AgentTrace().Wheel(lines)
 			}
+		case pane.KindComplexity:
+			// The wheel scrolls the Complexity list (#2917).
+			switch msg.Button {
+			case tea.MouseWheelUp:
+				inst.Complexity().Wheel(-lines)
+			case tea.MouseWheelDown:
+				inst.Complexity().Wheel(lines)
+			}
 		case pane.KindTests:
 			// The wheel scrolls the Test Results tree or detail (#1911).
 			switch msg.Button {
@@ -13995,6 +14046,13 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		// header's tab bar or period selector switches the view.
 		if msg.Button == tea.MouseLeft {
 			return m, inst.Usage().Click(localX, localY)
+		}
+	case pane.KindComplexity:
+		// Complexity-window clicks (#2917): a click selects a row, a double
+		// click opens the function, the header's tab bar switches the tab and
+		// a column header sorts by it.
+		if msg.Button == tea.MouseLeft {
+			return m, inst.Complexity().Click(localX, localY)
 		}
 	case pane.KindAgentTrace:
 		// Trace-tree clicks (#2840): a click selects, the marker cell folds,
@@ -15593,6 +15651,8 @@ func contentPaneTitle(inst *pane.Instance) string {
 		return "USAGE"
 	case pane.KindAgentTrace:
 		return "AGENT TRACE"
+	case pane.KindComplexity:
+		return "COMPLEXITY"
 	case pane.KindTests:
 		return "TESTS"
 	case pane.KindIssues:

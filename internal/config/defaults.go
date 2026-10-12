@@ -420,7 +420,9 @@ func defaults() *Config {
 		},
 		// The complexity index (0550, #2916) is on and measures every
 		// supported file the walk's own skip rules keep; nothing excluded.
-		Complexity: Complexity{Enabled: true, Exclude: []string{}},
+		// The warning thresholds (#2917) follow the common lizard / SonarQube
+		// defaults of 15 for both metrics.
+		Complexity: Complexity{Enabled: true, Exclude: []string{}, CCNWarn: 15, CognitiveWarn: 15},
 		Debug: Debug{
 			InlineValues: true,   // paused locals annotate their lines (#1914)
 			SessionEnd:   "keep", // the finished area stays reviewable (#689, #2190)

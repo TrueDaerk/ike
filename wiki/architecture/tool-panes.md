@@ -566,6 +566,15 @@ file rows opening in the editor. It is a singleton tool window like the
 others on this page (toggle semantics, layout persistence, slot numbering,
 tab hosting), under key `agenttrace`.
 
+The **Complexity** tool window (`complexity.toggle`, `cmd+alt+shift+x`,
+Tools menu; [Code Complexity](./complexity.md#tool-window-2917), #2917)
+lists the project's functions from the complexity index with their
+cyclomatic and cognitive complexity on a Project tab and a File tab that
+follows the focused editor's caret, with sort, filter, CSV export and
+enter-to-open. It is a singleton tool window like the others on this page
+(toggle semantics, layout persistence, slot numbering, tab hosting), under
+key `complexity`.
+
 IKE never rewrites a tool's own config files; the setup surfaces (#751–#753,
 #759) write only `[[tools.custom]]` entries and install binaries — wiring the
 variables into e.g. a lazygit theme config stays the user's choice.

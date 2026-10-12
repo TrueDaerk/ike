@@ -367,6 +367,8 @@ func (c *Config) Flat() map[string]string {
 	// The project complexity index (0550, #2916).
 	put("complexity.enabled", c.Complexity.Enabled)
 	put("complexity.exclude", strings.Join(c.Complexity.Exclude, ","))
+	put("complexity.ccn_warn", c.Complexity.CCNWarn)
+	put("complexity.cognitive_warn", c.Complexity.CognitiveWarn)
 
 	put("debug.inline_values", c.Debug.InlineValues)
 	put("debug.session_end", c.Debug.SessionEnd)

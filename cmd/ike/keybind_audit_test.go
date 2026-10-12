@@ -97,6 +97,11 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	// per project (and again when Claude wrote new transcripts).
 	{"agent.trace.history", reasonPaneKey},
 	{"agent.trace.import", reasonOccasional},
+	// complexity.toggle (#2917) has cmd+alt+shift+x; the rescan and the CSV
+	// export are the pane's own 'r' and 'e' (its other single keys -- s / S
+	// sort, y copy, tab / shift+tab view -- have no command at all).
+	{"complexity.refresh", reasonPaneKey},
+	{"complexity.export", reasonPaneKey},
 	{"deps.updateLatest", reasonIntention},
 	{"http.", reasonPaneKey}, // the response pane's single keys
 	// #2423's GraphQL schema commands carve themselves out of that family:

@@ -706,6 +706,16 @@ func validate(c *Config) []Diagnostic {
 		}
 		c.HTTP.DiffIgnoreHeaders = kept
 	}
+	// The complexity warning thresholds (#2917): 0 would flag every
+	// function, past 200 nothing real; both fall back to the default.
+	if w := c.Complexity.CCNWarn; w < 1 || w > 200 {
+		diags = append(diags, Diagnostic{Field: "complexity.ccn_warn", Message: fmt.Sprintf("threshold %d out of range (1\xe2\x80\x93200), using 15", w)})
+		c.Complexity.CCNWarn = 15
+	}
+	if w := c.Complexity.CognitiveWarn; w < 1 || w > 200 {
+		diags = append(diags, Diagnostic{Field: "complexity.cognitive_warn", Message: fmt.Sprintf("threshold %d out of range (1\xe2\x80\x93200), using 15", w)})
+		c.Complexity.CognitiveWarn = 15
+	}
 	// The response viewer's highlight cap (#2353): a limit below 1 KiB would
 	// silently turn highlighting off, one past 64 MiB defeats the cap's
 	// purpose — both fall back to the default rather than either extreme.

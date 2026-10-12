@@ -1,5 +1,21 @@
 # Log
 
+## 2026-10-13 (Complexity tool window: Project + File tabs, filter, sort, export, keybind, #2917)
+
+- [Code Complexity](/architecture/complexity.md): new section "Tool
+  window", `internal/complexitypanel` on the Usage-window template: the
+  Project / File tabs (Changes slot reserved), the seed / refresh / caret
+  follow wiring, the header totals, the grid columns with the sort cycle and
+  the warning colour, the filter language, enter-to-open, rescan, CSV export
+  and copy; the settings table gains `complexity.ccn_warn` and
+  `complexity.cognitive_warn`.
+- [Settings UI](/architecture/settings-ui.md): the Complexity page carries
+  the two threshold entries.
+- [Tool Panes](/architecture/tool-panes.md): the Complexity window joins the
+  singleton list; [Shared Building Blocks](/architecture/shared-building-blocks.md):
+  `gridview.Cell.Warn`; [Keybindings](/architecture/keybindings.md) matrix:
+  `complexity.toggle` on `cmd+alt+shift+x`.
+
 ## 2026-10-13 (project complexity index on langindex, incremental, settings + telemetry, #2916)
 
 - [Code Complexity](/architecture/complexity.md): new section "Project

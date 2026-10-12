@@ -809,6 +809,11 @@ var jetbrainsRows = []row{
 	// check), so the trace takes the shift layer; cmd+alt+shift+a is free
 	// on both platforms (ctrl+alt+shift+a off macOS).
 	{"cmd+alt+shift+a", "agent.trace.toggle", "Agent trace", Global, "Agent trace (#2840)"},
+	// Complexity tool window (#2917): the alt layer next to the time and
+	// usage reports; cmd+alt+x is free on macOS and its ctrl fold off macOS
+	// is the xmq playground's ctrl+alt+x, so the window takes the shift
+	// layer there (cmd+alt+shift+x, free on both platforms).
+	{"cmd+alt+shift+x", "complexity.toggle", "Complexity tool window", Global, "Complexity (#2917)"},
 	// Ask the agent about the selected trace node (#2845): the trace's
 	// neighbour in the same shift layer; cmd+alt+shift+q is free on both
 	// platforms (ctrl+alt+shift+q off macOS). The pane's own 'a' is the

@@ -595,6 +595,8 @@ func (m Model) statusLine() string {
 			left += "USAGE"
 		case inst.Kind() == pane.KindAgentTrace:
 			left += "AGENT TRACE"
+		case inst.Kind() == pane.KindComplexity:
+			left += "COMPLEXITY"
 		case inst.Kind() == pane.KindTests:
 			left += "TESTS"
 		case inst.Kind() == pane.KindIssues:

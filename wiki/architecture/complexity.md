@@ -219,6 +219,8 @@ inside one settle window collapses into one notification.
 |---|---|---|
 | `complexity.enabled` | `true` | The master switch: off stops the walk at once and drops the snapshot every complexity surface reads; on restarts the walk without a restart. |
 | `complexity.exclude` | `[]` | Glob patterns of files the index never measures, matched against the project-relative slash path (`vendor/**`, `**/*_test.go`, `src/gen/**`) and, for a pattern without a slash, against the base name at any depth (`*_test.go`). The shared `internal/pathglob` vocabulary (`**`, `*`, `?`, `{a,b}`, `[...]`). A malformed pattern is refused in the Settings form and dropped with a diagnostic by `config.Validate`. |
+| `complexity.ccn_warn` | `15` | The cyclomatic threshold (#2917): the tool window paints a CCN cell at or above it in the warning colour and `Summary.OverThreshold` counts the function. 1-200; out of range falls back to the default with a diagnostic. |
+| `complexity.cognitive_warn` | `15` | The same for cognitive complexity. |
 
 **Telemetry.** One `complexity.scan` op per completed walk (the initial one
 and every rebuild), phase `ok` with `ms`, `files`, `functions` and
@@ -227,6 +229,75 @@ and every rebuild), phase `ok` with `ms`, `files`, `functions` and
 finishes after every launch); it is held and written once a real usage
 event starts the session. No path travels. See
 [usage telemetry](./usage-telemetry.md).
+
+## Tool window (#2917)
+
+The **Complexity** tool window (`complexity.toggle`, `cmd+alt+shift+x`,
+Tools menu, `internal/complexitypanel`) is the index's first surface: a
+singleton bottom-split pane built like the [Usage report](./usage-report.md)
+(`pane.KindComplexity`, key `complexity`, context id `complexity`, the usual
+`togglePanel` state machine - open at the bottom, focus, return focus - and
+every tool-window wiring site: layout persistence, slot numbering, tab
+hosting, status line, paste routing, mouse). The chord sits on the shift
+layer because `cmd+alt+x` folds onto `ctrl+alt+x`, the xmq playground, off
+macOS.
+
+**Tabs.** `Project` lists every function of the index snapshot, `File` the
+focused editor's file; `tab` / `shift+tab` and a click on the header's tab
+bar switch. A third slot, `Changes`, is reserved for the diff view of a
+later issue and refuses selection until it lands, so the tab order never
+shifts. The pane is a pure consumer: the app seeds it with
+`Index.Snapshot()` and `Index.Stats()` when it opens or is restored from a
+layout (`wireToolWindow`), re-reads the snapshot on every
+`ComplexityChangedMsg`, and on every settled Update pass tells it the
+active editor's file and caret line (`syncComplexityPanel`, beside the
+Structure pane's follow). On the File tab the innermost function whose
+range contains the caret is marked (`▸` prefix and the occurrence
+highlight on its name cell); a moved caret is an in-place re-mark, a buffer
+switch rebuilds the tab from the snapshot already held. Nothing is parsed
+in `Update`.
+
+**Header and columns.** The header line names the pane, draws the tab bar
+and the tab's `Summary` over its whole population: the index generation (or
+`scanning…` while the walk runs), functions, NLOC, sum / average / max CCN
+and cognitive complexity, and the count over threshold. The grid
+(`gridview.HeaderRow` / `DataRow`, widths from the longest visible value,
+the file column capped at half the pane) has the columns file
+(project-relative; hidden on the File tab), function, line (1-based), ccn,
+cog, nloc, params, depth. `s` cycles the sort column (default CCN
+descending; a numeric column starts descending, a text column ascending),
+`S` reverses, a click on a column header sorts by it (again: reverses). A
+CCN or cognitive cell at or above `complexity.ccn_warn` /
+`complexity.cognitive_warn` renders in the palette's warning colour
+(`gridview.Cell.Warn`). The status row shows `filtered/total rows` and the
+key hints.
+
+**Filter.** The filter row is the shared `filterbar` over a `filterexpr`
+schema (`/`, the find chord `cmd+f` / `ctrl+f`; `cmd+g` / `cmd+shift+g`
+step the cursor through the filtered rows like the TODO index): `file:`
+(substring or glob over the project-relative path), `lang:` (language id),
+`fn:` (function name substring), `min:` (keeps rows at or above n on the
+sort column, CCN when the sort column is text), `metric:ccn|cog` (sets the
+sort column, and with it the column `min:` reads); bare words fuzzy-match
+the function names. `file:internal/app min:20` is "functions with CCN >= 20
+under internal/app"; adding `metric:cog` switches both to cognitive
+complexity.
+
+**Actions.** `enter` / a double click sends `OpenLocationMsg{Path, Line}`
+and the app opens the file through `openPathAt`, so the caret lands on the
+function header and `nav.back` returns. `r` (and the palette's
+`complexity.refresh`) rebuilds the index (`Index.Rebuild`; a disabled index
+or a build without a syntax tree is reported instead). `e` (and
+`complexity.export`) writes the current tab as a CSV scratch
+(`ExportMsg{Label, CSV}`: header `file,function,kind,line,ccn,cognitive,nloc,params,depth`,
+one row per visible function, the file column on every tab) and opens it.
+`y` / the copy chord puts `path:line: name ccn=.. cog=..` on the clipboard
+(and the clipboard history). The wheel scrolls, a click selects. The
+single keys are the pane's own (keybind audit ledger, `reasonPaneKey`).
+
+**Settings** (`complexity.ccn_warn`, `complexity.cognitive_warn`, Settings >
+Complexity, Int 1-200, default 15) apply live through the same config
+reload that reconfigures the index.
 
 ## Extending
 
