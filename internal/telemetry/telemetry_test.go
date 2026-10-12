@@ -824,3 +824,31 @@ func TestSchemaVersionIsSixteen(t *testing.T) {
 		t.Fatalf("events must be stamped v16, got %v", evs)
 	}
 }
+
+// The complexity index's project walk (0550, #2916) is background work of
+// the same kind as the PHP walk: it finishes on its own after every launch,
+// so it must not open a session file either — but it lands in every file a
+// real session writes.
+func TestComplexityScanNeverOpensASession(t *testing.T) {
+	dir := t.TempDir()
+	r := New(dir, nil)
+	r.Op(OpComplexityScan, OpPhaseOK, map[string]string{"ms": "840", "files": "412", "functions": "3310", "truncated": "false"})
+	r.Close()
+	if files := sessionFiles(t, dir); len(files) != 0 {
+		t.Fatalf("a lone complexity scan opened a session file: %v", files)
+	}
+
+	dir = t.TempDir()
+	r = New(dir, nil)
+	r.Op(OpComplexityScan, OpPhaseOK, map[string]string{"ms": "840", "files": "412", "functions": "3310", "truncated": "false"})
+	r.Command("editor.save", SourceKeybind)
+	r.Close()
+
+	evs := readSession(t, dir)
+	if len(evs) != 2 || evs[0].Type != TypeOp || evs[0].Data["id"] != OpComplexityScan {
+		t.Fatalf("the held scan op must precede the command that opened the file, got %v", evs)
+	}
+	if d := evs[0].Data; d["ms"] != "840" || d["files"] != "412" || d["functions"] != "3310" || d["truncated"] != "false" {
+		t.Fatalf("payload = %v, want ms, files, functions and truncated", d)
+	}
+}

@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Code Complexity
-description: The code-complexity engine (Roadmap 0550, #2913) — cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters and nesting depth per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, and the summary the later project index, diff and tool window build on.
-resource: internal/complexity
-tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive]
-timestamp: 2026-10-12T23:30:00Z
+description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters and nesting depth per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary, and the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
+resource: internal/complexity, internal/app/complexityindex.go
+tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive, index, settings, telemetry]
+timestamp: 2026-10-13T00:30:00Z
 ---
 
 # Code Complexity
@@ -16,8 +16,8 @@ complex?"* by comparing the working tree against `HEAD`. Everything runs on
 the Tree-sitter parse IKE already has — no lizard, gocyclo or gocognit on the
 machine — so it works for every language with a grammar, in mixed projects,
 out of the box. This page documents the **engine** (`internal/complexity`,
-#2915); the language seam it reads is
-[languages](./languages.md#complexity-spec-2914), and the project index, the
+#2915) and the **project index** on top of it (#2916, below); the language
+seam it reads is [languages](./languages.md#complexity-spec-2914), and the
 diff against HEAD, the tool window, the editor hints, the Problems feed, the
 status segment and the CLI are the epic's later steps.
 
@@ -155,6 +155,78 @@ into functions, NLOC, Σ / avg / max CCN, Σ / avg / max cognitive and the
 number of functions **at or above** either warning threshold (a non-positive
 threshold disables that check). The thresholds come from the `[complexity]`
 settings of the later steps; the engine takes them as plain integers.
+
+## Project index (#2916)
+
+The engine measures one buffer; the tool window, the Problems feed and the
+status segment need the whole project, measured once and kept current. That
+is `complexity.Index` (`index.go`), one per project root, built in
+`buildModel` beside the PHP declaration index and wired by
+`internal/app/complexityindex.go`.
+
+**Storage** is the shared per-language project walk
+(`internal/complete/langindex`, the [PHP trait index](./php-trait-index.md)'s
+template): the lazy walk with its built-in skips (`.git`, hidden directories,
+`node_modules`, `vendor`, `dist`, `build`, `target`, virtualenvs), a 512 KiB
+per-file cap and a 50 000-file cap, one re-extraction worker for watcher
+events, and binaries skipped by a NUL in the head. The walk is keyed by
+language, but the index wants one pass over every file of every language
+with a spec, so it registers a single pseudo language: the classifier claims
+a path when `lang.ByPath` names a language with a `ComplexitySpec` and no
+`complexity.exclude` glob matches; the extractor re-derives the language
+from the path and runs `Measure`. Nothing else is read, and a file the
+engine cannot measure (no tree) is not indexed. A 50k-line project walks in
+a few seconds; nothing is persisted across sessions yet (the walk's
+`Persist` seam is there when it is worth it).
+
+**Lifecycle.** `NewIndex(root, opts)` builds the walk but does not start it;
+`Start` (called from the app's `Init`, after the program's sender is wired,
+like the TODO index) kicks it off in the background. `Reconfigure(opts)`
+applies a reloaded `[complexity]` section live: the master switch off drops
+the walk and the snapshot, on rebuilds it, a changed exclude list rewalks,
+unchanged options are a no-op. `Rebuild` is the escape hatch for a tree that
+changed without watcher events. A project switch builds a new model and
+therefore a new index.
+
+**Freshness.** `InvalidateFile(path)` re-measures one file through the
+walk's worker, off the Update goroutine: the app calls it from the buffer
+save path (`todoSavedMsg`, so every save flow reaches it; IKE's own writes
+are watcher-suppressed) and from `routeWatchEvent` for every file event that
+is not repository metadata, a settings file or a directory. A path no spec
+language claims, or an excluded one, is dropped without queueing; a removed
+file drops out of the snapshot. Nothing in `Update` parses.
+
+**Snapshot.** `Snapshot()` returns an immutable `View{Gen, Files}`: the
+measured functions per absolute path, derived from the walk once per content
+generation and reused until it moves; a consumer keeps a View as long as it
+likes and never holds the walk's internals. `View.Summary(ccnWarn, cogWarn)`
+is `Summarize` over every function, `Paths` the sorted file list. `Stats`
+reports enabled / unavailable (no syntax tree in the build) / scanning, the
+file and function counts, the walk's duration and whether it hit the cap.
+
+**Change notification.** `SetOnChange(fn)` runs off the UI goroutine on a
+settle timer (250 ms, re-armed while a walk or a queued re-extraction is
+still landing): when the walk's content moved since the last notification,
+or the index was dropped or rebuilt, the generation `Gen` moves **once** and
+the callback fires with it. The app sends `ComplexityChangedMsg{Gen}` to the
+root model, so a save storm or a branch switch arrives as one wake; the
+surfaces of the later steps re-read `Snapshot` on it. An enable + disable
+inside one settle window collapses into one notification.
+
+**Settings** (`[complexity]`, Settings > Languages > Complexity, user scope):
+
+| Key | Default | Meaning |
+|---|---|---|
+| `complexity.enabled` | `true` | The master switch: off stops the walk at once and drops the snapshot every complexity surface reads; on restarts the walk without a restart. |
+| `complexity.exclude` | `[]` | Glob patterns of files the index never measures, matched against the project-relative slash path (`vendor/**`, `**/*_test.go`, `src/gen/**`) and, for a pattern without a slash, against the base name at any depth (`*_test.go`). The shared `internal/pathglob` vocabulary (`**`, `*`, `?`, `{a,b}`, `[...]`). A malformed pattern is refused in the Settings form and dropped with a diagnostic by `config.Validate`. |
+
+**Telemetry.** One `complexity.scan` op per completed walk (the initial one
+and every rebuild), phase `ok` with `ms`, `files`, `functions` and
+`truncated`, or phase `error` when the build has no syntax tree at all. Like
+`php.trait.index_scan` it never opens a session file on its own (the walk
+finishes after every launch); it is held and written once a real usage
+event starts the session. No path travels. See
+[usage telemetry](./usage-telemetry.md).
 
 ## Extending
 

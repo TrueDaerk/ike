@@ -1,5 +1,19 @@
 # Log
 
+## 2026-10-13 (project complexity index on langindex, incremental, settings + telemetry, #2916)
+
+- [Code Complexity](/architecture/complexity.md): new section "Project
+  index", `complexity.Index` on the shared `langindex` walk: one pseudo
+  language over every file with a spec, the exclude globs, the lifecycle
+  (Start from Init, Reconfigure, Rebuild), freshness from saves and watcher
+  events, the immutable `View` snapshot, the settle-timed `Gen` notification
+  (`ComplexityChangedMsg`), the `[complexity]` settings and the
+  `complexity.scan` op.
+- [Settings UI](/architecture/settings-ui.md): page catalog gains
+  **Complexity** (`complexity.enabled`, `complexity.exclude`).
+- [Usage Telemetry](/architecture/usage-telemetry.md): op vocabulary gains
+  `complexity.scan`, held like `php.trait.index_scan`.
+
 ## 2026-10-12 (complexity engine: CCN + cognitive per function, golden fixtures, #2915)
 
 - [Code Complexity](/architecture/complexity.md): new concept doc for

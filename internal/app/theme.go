@@ -218,6 +218,9 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	// [php] edits apply live too (#2667): the trait-index master switch
 	// drops or rebuilds the PHP declaration index, the walk bounds rescan.
 	m.reconfigurePHPIndex(cfg)
+	// [complexity] edits too (0550, #2916): the master switch drops or
+	// rebuilds the complexity index, a changed exclude list rewalks.
+	m.reconfigureComplexityIndex(cfg)
 	// [backup] edits apply live too: interval changes re-arm, disabling purges
 	// existing snapshots (Roadmap 0210, #167).
 	m.reconfigureBackup(hcfg)

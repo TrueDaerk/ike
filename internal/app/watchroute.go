@@ -104,6 +104,11 @@ func (m *Model) routeWatchEvent(msg watch.EventMsg) tea.Cmd {
 	if m.completeEngine != nil && msg.Kind != watch.GitChanged && msg.Kind != watch.ConfigChanged {
 		m.completeEngine.NotifyFileChanged(msg.Path)
 	}
+	// The complexity index re-measures the changed file the same way (0550,
+	// #2916); a path no measured language claims is dropped without queueing.
+	if m.complexityIndex != nil && msg.Kind != watch.GitChanged && msg.Kind != watch.ConfigChanged && msg.Kind != watch.DirChanged {
+		m.complexityIndex.InvalidateFile(msg.Path)
+	}
 	if msg.Kind == watch.ConfigChanged {
 		// The project settings file changed externally (0380, #795):
 		// re-run the reload pipeline — theme, keymap, editor behavior

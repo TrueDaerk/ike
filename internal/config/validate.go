@@ -405,6 +405,8 @@ func validate(c *Config) []Diagnostic {
 	}{
 		{"project.find_all.include", &c.Project.FindAll.Include},
 		{"project.find_all.exclude", &c.Project.FindAll.Exclude},
+		// The complexity index's exclude globs (0550, #2916) too.
+		{"complexity.exclude", &c.Complexity.Exclude},
 	} {
 		if *l.list == nil {
 			continue

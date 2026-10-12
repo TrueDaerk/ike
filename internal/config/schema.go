@@ -64,6 +64,8 @@ type Config struct {
 	Agent Agent `toml:"agent"`
 	// PHP holds the PHP trait-consumer intelligence settings (0520, #2667).
 	PHP PHP `toml:"php"`
+	// Complexity holds the code-complexity index settings (0550, #2916).
+	Complexity Complexity `toml:"complexity"`
 	// Tools holds user-defined TUI tool panes (#741).
 	Tools Tools `toml:"tools"`
 	// Elasticsearch holds the ES console's cluster endpoints (#1927).
@@ -498,6 +500,18 @@ type PHPIndex struct {
 	IncludeVendor bool `toml:"include_vendor"`
 	MaxFiles      int  `toml:"max_files"`
 	Cache         bool `toml:"cache"`
+}
+
+// Complexity configures the project complexity index (0550, #2916). Enabled
+// is the master switch: off stops the walk and drops the snapshot every
+// complexity surface reads. Exclude lists glob patterns of files the index
+// never measures, matched against the project-relative slash path
+// (`vendor/**`, `**/*_test.go`) and, for a pattern without a slash, against
+// the base name too; the walk's own skip rules (hidden and build
+// directories, the size cap) apply on top.
+type Complexity struct {
+	Enabled bool     `toml:"enabled"`
+	Exclude []string `toml:"exclude"`
 }
 
 // Debug holds debugger behaviour (0360). PHP carries the web/request listen

@@ -320,6 +320,13 @@ list of keys.
 | Maximum files | `php.index.max_files` | integer (100–500000) | `20000` | user | How many PHP files the project walk reads before it stops; the status report flags a truncated scan. At least 100 |
 | Persist index | `php.index.cache` | boolean | `true` | user | Keep the index's per-file results in the project's .ike directory, so the next start re-reads only the PHP files that changed instead of scanning the whole project. Off neither reads nor writes the cache and deletes it |
 
+### Complexity
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Complexity index | `complexity.enabled` | boolean | `true` | user | Measure the project's functions in the background. Off stops the walk at once and drops the snapshot every complexity surface reads; on restarts the walk without a restart |
+| Excluded files | `complexity.exclude` | list | *(empty)* | user | Comma-separated glob patterns of files the index never measures, matched against the project-relative path ("vendor/**", "**/*_test.go", "src/gen/**"); a pattern without a slash also matches the file name anywhere ("*_test.go"). Hidden and build directories and files above the size cap are skipped either way |
+
 ### Formatters
 
 The **Formatters** page lists each language's reformat command, the config

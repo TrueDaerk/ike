@@ -244,6 +244,13 @@ const (
 	// ok phase per scan, so the volume is the number of scans and the
 	// durations price the warm-up.
 	OpPHPTraitIndexScan = "php.trait.index_scan"
+	// One completed project walk of the complexity index (0550, #2916): the
+	// initial scan and every rebuild. "ms" is the walk's duration, "files"
+	// how many files it measured, "functions" how many units they hold and
+	// "truncated" whether it stopped at the file cap. The phase is "error"
+	// when the build has no syntax tree at all (the index can never fill),
+	// "ok" otherwise. No path travels.
+	OpComplexityScan = "complexity.scan"
 )
 
 // CommandSlowThreshold is the dispatch duration from which a command event
@@ -713,6 +720,11 @@ func startsSession(typ string, data map[string]string) bool {
 		// a PHP project, so letting it open the file would resurrect the ghost
 		// the deferred pane.focus and session rules avoid. Held like them, it
 		// still lands in every file a real session writes.
+		return false
+	}
+	if typ == TypeOp && data["id"] == OpComplexityScan {
+		// The complexity index's walk (0550, #2916) is background work of
+		// the same kind: it finishes on its own after every launch.
 		return false
 	}
 	if typ == TypeOp && data["id"] == OpSessionRestore {
