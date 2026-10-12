@@ -364,6 +364,10 @@ func (c *Config) Flat() map[string]string {
 	put("php.index.max_files", c.PHP.Index.MaxFiles)
 	put("php.index.cache", c.PHP.Index.Cache)
 
+	// The project complexity index (0550, #2916).
+	put("complexity.enabled", c.Complexity.Enabled)
+	put("complexity.exclude", strings.Join(c.Complexity.Exclude, ","))
+
 	put("debug.inline_values", c.Debug.InlineValues)
 	put("debug.session_end", c.Debug.SessionEnd)
 	put("debug.php.port", c.Debug.PHP.Port)

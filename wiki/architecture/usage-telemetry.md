@@ -4,7 +4,7 @@ title: Usage Telemetry
 description: Local-only usage recording — command (with outcome), keybinding, layout, session, heartbeat, freeze-with-goroutine-dump, operation-lifecycle, palette-pick, palette-dismissal and project-time events appended as per-session JSONL under ~/.ike/telemetry, asynchronous and content-free, switched by telemetry.enabled.
 resource: internal/telemetry/telemetry.go
 tags: [architecture, telemetry, usage, jsonl, privacy, diagnostics]
-timestamp: 2026-10-02T14:00:00Z
+timestamp: 2026-10-13T00:30:00Z
 ---
 
 # Usage Telemetry
@@ -312,6 +312,16 @@ counts by the version's interval before comparing sessions.
     existing field changes meaning, so no schema bump; absence in an older
     export means the build predates them. (The `cached` field the scan op
     gained later did bump it, to v16 — see the version history.)
+  - `complexity.scan` (0550, #2916) - one completed project walk of the
+    [complexity index](complexity.md#project-index-2916): the initial scan
+    and every rebuild. `ms` is the walk's duration, `files` how many files it
+    measured, `functions` how many units they hold and `truncated`
+    (`true`/`false`) whether it stopped at the 50 000-file cap. The phase is
+    `ok`, or `error` when the build has no syntax tree at all (the index can
+    never fill). Like `php.trait.index_scan` it **never opens a session file
+    on its own**: the walk finishes after every launch, so it is held and
+    written once a real usage event starts the session. Additive, no schema
+    bump; no path travels.
   - `palette.pick` (#2551) — a palette row was activated, the counterpart of
     `palette.dismiss`. `mode` is the mode's prefix rune, `query_len` the number
     of runes typed — **never the query itself** — `rank` the **0-based index**

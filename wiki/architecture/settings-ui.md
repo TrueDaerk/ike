@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-10-02T12:00:00Z
+timestamp: 2026-10-13T00:30:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -355,6 +355,12 @@ any entry whose key the typed schema does not expose (no dead keys).
 - **Notifications** — toast timeout, severity floor.
 - **TODO Index** (#1663) — `todo.patterns`, the tag words the project scan
   matches (see [TODO index](./todo-index.md)).
+- **Complexity** (0550, #2916) - `complexity.enabled`, the master switch of
+  the project complexity index, and `complexity.exclude`, the glob list of
+  files it never measures (`vendor/**`, `**/*_test.go`; the shared
+  `globValidate` refuses a malformed pattern in the form). Both apply live:
+  off drops the index, on rewalks, a changed list rebuilds. Listed in the
+  Languages group after PHP (see [complexity](./complexity.md#project-index-2916)).
 - **Dependencies** (#2419) — `deps.auto_scan`, the background dependency
   scan on project open (see [dependencies](./dependencies.md)).
 - **Network Links** (#2519) — `network.enabled`, `network.port` (1..65535)

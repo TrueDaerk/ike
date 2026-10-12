@@ -418,6 +418,9 @@ func defaults() *Config {
 			TraitIndex: true,
 			Index:      PHPIndex{ParentDepth: 3, IncludeVendor: false, MaxFiles: 20000, Cache: true},
 		},
+		// The complexity index (0550, #2916) is on and measures every
+		// supported file the walk's own skip rules keep; nothing excluded.
+		Complexity: Complexity{Enabled: true, Exclude: []string{}},
 		Debug: Debug{
 			InlineValues: true,   // paused locals annotate their lines (#1914)
 			SessionEnd:   "keep", // the finished area stays reviewable (#689, #2190)

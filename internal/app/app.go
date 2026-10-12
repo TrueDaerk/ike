@@ -40,6 +40,7 @@ import (
 	"ike/internal/complete/postfix"
 	"ike/internal/complete/symbols"
 	"ike/internal/complete/words"
+	"ike/internal/complexity"
 	"ike/internal/config"
 	"ike/internal/coverage"
 	"ike/internal/dataview"
@@ -184,6 +185,10 @@ type Model struct {
 	// project root beside the completion sources and registered on the
 	// engine as an observer; [php] settings reconfigure it live.
 	phpIndex *phpindex.Index
+	// complexityIndex is the project complexity index (0550, #2916): every
+	// supported file measured in the background, re-measured from saves and
+	// watcher events; [complexity] settings reconfigure it live.
+	complexityIndex *complexity.Index
 	// cfgDiagSeen dedupes config-diagnostic notifications (#793): each
 	// distinct message toasts once per session, so a settings write that
 	// reloads an unchanged-but-warned config does not re-toast. Lazily
@@ -1557,6 +1562,11 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	// telemetry callback is installed below, once the model's recorder exists.
 	phpTraits := phptraits.New(phpIdx)
 	engine.Register(phpTraits)
+	// The project complexity index (0550, #2916) walks every file of every
+	// language with a spec; the walk starts from Init, once the program's
+	// sender is wired, and a settled change lands as one message.
+	cxIdx := complexity.NewIndex(root, complexityOptionsFrom(cfg))
+	cxIdx.SetOnChange(func(gen int) { h.Send(ComplexityChangedMsg{Gen: gen}) })
 	engine.Register(emmet.New())
 	// Live templates (#1152): user [[snippets]] + built-ins as popup items,
 	// language-scoped per buffer. Reads config.Get() live, so reloads apply.
@@ -1683,6 +1693,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		feed:            changefeed.New(),                    // external-change feed (#2000)
 		completeEngine:  engine,
 		phpIndex:        phpIdx,
+		complexityIndex: cxIdx,
 		ws:              wsMgr,
 		recentEditor:    edKey,
 		recent:          recent,
@@ -1769,6 +1780,9 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	// costs and whether it hit the file cap. Called off the UI goroutine, on
 	// the recorder alone, like the trait-completion callback above.
 	phpIdx.SetOnScan(traitIndexScanRecorder(m.usage))
+	// The complexity walk reports the same way (0550, #2916): one
+	// complexity.scan op per finished walk, counts and duration only.
+	cxIdx.SetOnScan(complexityScanRecorder(m.usage))
 	m.floats = ui.NewStack(m.shell)                 // z-ordered floating stack (#1237)
 	m.floats.SetSizeStore(winSizes)                 // resizable modal shell (#774)
 	m.palette.SetSizeStore(winSizes)                // resizable palette box (#774)
@@ -4448,6 +4462,11 @@ func (m Model) initUnguarded() tea.Cmd {
 	// the sender (and again after a project switch), so the streamed results
 	// land and the status-line count is live without opening the overlay.
 	m.todo.Rescan()
+	// The complexity index's project walk (0550, #2916) starts here for the
+	// same reason; its settled changes arrive as ComplexityChangedMsg.
+	if m.complexityIndex != nil {
+		m.complexityIndex.Start()
+	}
 	// Every restored data viewer opens its database in the background (#1795),
 	// so a workspace holding a huge database still comes up instantly.
 	cmds = append(cmds, m.initDataPanes()...)
@@ -4893,6 +4912,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		_, crumbs := m.docSymbols[msg.path]
 		if sp := m.structPanel(); (sp != nil && sp.Path() == msg.path) || crumbs {
 			m.structForce = true
+		}
+		// The complexity index re-measures the saved file off-loop (0550,
+		// #2916); IKE's own writes are watcher-suppressed, so this is the
+		// only trigger for in-IDE saves.
+		if m.complexityIndex != nil {
+			m.complexityIndex.InvalidateFile(msg.path)
 		}
 		return m, m.todo.RescanFile(msg.path)
 
@@ -8457,6 +8482,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The PHP declaration index reached a new content generation (#2669):
 		// re-run the trait suppression pass over every cached raw set.
 		return m, tea.Batch(m.refilterDiagnostics()...)
+
+	case ComplexityChangedMsg:
+		// The complexity index reached a new generation (0550, #2916). The
+		// surfaces of the epic's later steps re-read Snapshot here; the
+		// message itself is the loop wake that lets them.
+		return m, nil
 
 	case ilsp.IgnoreDiagnosticMsg:
 		// The editor's "ignore diagnostic under caret" action (#1259).
