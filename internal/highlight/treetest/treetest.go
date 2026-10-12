@@ -4,7 +4,7 @@
 // that a spec names the grammar's real node kinds and finds the probe's
 // functions. It is deliberately not the complexity engine
 // (internal/complexity, #2913): the CCN it reports is the audit's reference
-// count — 1 + Branch nodes + boolean operators per unit, nested units
+// count — 1 + Branch nodes + Arms + boolean operators per unit, nested units
 // excluded — with none of the cognitive rules, naming or nesting logic the
 // engine owns.
 package treetest
@@ -20,7 +20,7 @@ type Function struct {
 	Kind   string // the node kind that started the unit
 	Line   int    // 0-based line of the unit's first token
 	Params int    // named children of the ParamsField node, one per `name` field where a child declares several
-	CCN    int    // 1 + Branch nodes + BoolOps operators inside the unit, nested units excluded
+	CCN    int    // 1 + Branch nodes + Arms + BoolOps operators inside the unit, nested units excluded
 }
 
 // Functions walks root with spec and returns every unit in pre-order.
@@ -50,7 +50,7 @@ func Functions(root *highlight.SyntaxNode, src string, spec *lang.ComplexitySpec
 	return out
 }
 
-// branches counts the Branch nodes and boolean operators below n, stopping
+// branches counts the Branch nodes, Arms and boolean operators below n, stopping
 // at a nested unit (which is measured on its own). top marks n itself as the
 // unit's root, which is never a nested unit.
 func branches(n *highlight.SyntaxNode, spec *lang.ComplexitySpec, top bool) int {
@@ -60,7 +60,7 @@ func branches(n *highlight.SyntaxNode, spec *lang.ComplexitySpec, top bool) int 
 		}
 	}
 	count := 0
-	if !top && contains(spec.Branch, n.Kind) {
+	if !top && (contains(spec.Branch, n.Kind) || contains(spec.Arms, n.Kind)) {
 		count++
 	}
 	if n.Operator != "" && contains(spec.BoolOps, n.Operator) {
@@ -133,14 +133,19 @@ func Operators(root *highlight.SyntaxNode) map[string]bool {
 }
 
 // SpecKinds returns every node kind a spec names, in declaration order:
-// FunctionNodes (sorted by the caller if order matters), Branch, Else,
-// Nesting, Jumps.
+// FunctionNodes and Calls (map order; sorted by the caller if order matters),
+// Branch, Selector, Arms, Else, Nesting, Jumps.
 func SpecKinds(spec *lang.ComplexitySpec) []string {
 	var out []string
 	for k := range spec.FunctionNodes {
 		out = append(out, k)
 	}
+	for k := range spec.Calls {
+		out = append(out, k)
+	}
 	out = append(out, spec.Branch...)
+	out = append(out, spec.Selector...)
+	out = append(out, spec.Arms...)
 	out = append(out, spec.Else...)
 	out = append(out, spec.Nesting...)
 	out = append(out, spec.Jumps...)

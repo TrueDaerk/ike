@@ -1,0 +1,137 @@
+{
+  "lang": "typescript",
+  "functions": [
+    {
+      "name": "elseIfChain",
+      "kind": "function",
+      "line": 9,
+      "endLine": 21,
+      "nloc": 12,
+      "params": 1,
+      "ccn": 4,
+      "cognitive": 5,
+      "depth": 2
+    },
+    {
+      "name": "switchArms",
+      "kind": "function",
+      "line": 23,
+      "endLine": 35,
+      "nloc": 13,
+      "params": 1,
+      "ccn": 4,
+      "cognitive": 3,
+      "depth": 2
+    },
+    {
+      "name": "nestedLoops",
+      "kind": "function",
+      "line": 37,
+      "endLine": 48,
+      "nloc": 12,
+      "params": 1,
+      "ccn": 4,
+      "cognitive": 7,
+      "depth": 3
+    },
+    {
+      "name": "tryCatch",
+      "kind": "function",
+      "line": 50,
+      "endLine": 56,
+      "nloc": 7,
+      "params": 1,
+      "ccn": 3,
+      "cognitive": 3,
+      "depth": 2
+    },
+    {
+      "name": "booleanSequences",
+      "kind": "function",
+      "line": 58,
+      "endLine": 66,
+      "nloc": 9,
+      "params": 3,
+      "ccn": 9,
+      "cognitive": 6,
+      "depth": 1
+    },
+    {
+      "name": "(anonymous)#1",
+      "kind": "lambda",
+      "line": 68,
+      "endLine": 73,
+      "nloc": 6,
+      "params": 1,
+      "ccn": 1,
+      "cognitive": 2,
+      "depth": 2
+    },
+    {
+      "name": "(anonymous)#2",
+      "kind": "lambda",
+      "line": 69,
+      "endLine": 69,
+      "nloc": 1,
+      "params": 1,
+      "ccn": 2,
+      "cognitive": 1,
+      "depth": 1
+    },
+    {
+      "name": "(anonymous)#3",
+      "kind": "lambda",
+      "line": 70,
+      "endLine": 70,
+      "nloc": 1,
+      "params": 1,
+      "ccn": 1,
+      "cognitive": 0,
+      "depth": 0
+    },
+    {
+      "name": "keep",
+      "kind": "function",
+      "line": 70,
+      "endLine": 72,
+      "nloc": 3,
+      "params": 1,
+      "ccn": 1,
+      "cognitive": 0,
+      "depth": 0
+    },
+    {
+      "name": "factorial",
+      "kind": "function",
+      "line": 75,
+      "endLine": 80,
+      "nloc": 6,
+      "params": 1,
+      "ccn": 2,
+      "cognitive": 2,
+      "depth": 1
+    },
+    {
+      "name": "Server.handle",
+      "kind": "method",
+      "line": 83,
+      "endLine": 93,
+      "nloc": 11,
+      "params": 2,
+      "ccn": 4,
+      "cognitive": 4,
+      "depth": 2
+    },
+    {
+      "name": "Server.send",
+      "kind": "method",
+      "line": 95,
+      "endLine": 97,
+      "nloc": 3,
+      "params": 1,
+      "ccn": 1,
+      "cognitive": 0,
+      "depth": 0
+    }
+  ]
+}

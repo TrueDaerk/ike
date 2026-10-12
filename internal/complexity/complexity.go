@@ -1,0 +1,124 @@
+// Package complexity is the code-complexity engine (Roadmap 0550, #2913,
+// #2915): it measures every function of a buffer — cyclomatic complexity
+// (McCabe's CCN, the numbers lizard and gocyclo print), cognitive complexity
+// (Sonar's definition, as gocognit and complexipy implement it), non-comment
+// lines, parameter count and nesting depth — on the Tree-sitter parse IKE
+// already has, read through the language's lang.ComplexitySpec.
+//
+// The package is pure: no UI, no git, no settings. Both algorithms live here
+// once; a language plugin only declares which of its node kinds are
+// functions, branches, selectors and arms, else arms, nesting scopes, boolean
+// operators, jumps and calls (see internal/lang/complexity.go). The project
+// index, the diff against HEAD and the tool window are the epic's later steps
+// and build on Measure and Summarize.
+//
+// Rules (see wiki/architecture/complexity.md for the worked examples):
+//
+//   - CCN = 1 + Branch nodes + Arms + boolean operators inside the unit. A
+//     nested function unit (closure, lambda, inner def) is measured on its
+//     own and excluded from the enclosing unit's CCN.
+//   - Cognitive: +1 and the current nesting level for each Branch and each
+//     Selector; +1 flat for an else and for an else-if (a Branch in the else
+//     position); +1 per sequence of like boolean operators, parentheses
+//     flattened (`a && b && c` = 1, `a && b || c` = 2); +1 per Jump with a
+//     target; +1 per direct recursive call. Branch bodies, Selector arms, else
+//     bodies, Nesting kinds and nested units raise the nesting level. A nested
+//     unit's structures count toward every enclosing unit at the enclosing
+//     unit's nesting (Sonar: lambdas are part of the method they sit in) and
+//     toward the nested unit itself from level zero.
+//   - Depth is the deepest nesting level a unit's walk reaches, closures
+//     included; NLOC the lines of the unit's range that are neither blank nor
+//     comment-only, by the language's comment markers.
+package complexity
+
+import (
+	"errors"
+
+	"ike/internal/highlight"
+	"ike/internal/lang"
+)
+
+// ErrUnsupported is returned by Measure for a language that is not
+// registered, declares no lang.ComplexitySpec, or yields no syntax tree (a
+// build without cgo). Nothing panics; the caller reads it as "not measured".
+var ErrUnsupported = errors.New("complexity: language not measured")
+
+// The Kind values of a Function.
+const (
+	KindFunction = "function" // a free function
+	KindMethod   = "method"   // a method: Go receiver, class body, PHP trait, …
+	KindLambda   = "lambda"   // an anonymous unit: closure, lambda, arrow function
+)
+
+// Function is one measured unit of a buffer.
+type Function struct {
+	Name      string `json:"name"`      // "renderWeek", "Server.handle", "Class::method", "(anonymous)#3"
+	Kind      string `json:"kind"`      // KindFunction | KindMethod | KindLambda
+	Line      int    `json:"line"`      // 0-based line of the unit's first token
+	EndLine   int    `json:"endLine"`   // 0-based last line of the unit
+	NLOC      int    `json:"nloc"`      // non-blank, non-comment lines in [Line, EndLine]
+	Params    int    `json:"params"`    // declared parameters
+	CCN       int    `json:"ccn"`       // cyclomatic complexity
+	Cognitive int    `json:"cognitive"` // cognitive complexity
+	Depth     int    `json:"depth"`     // deepest nesting level reached inside the unit
+}
+
+// syntaxTree is the parse seam — a variable so a test can hand Measure a nil
+// tree (the !cgo shape) in a cgo build.
+var syntaxTree = highlight.SyntaxTree
+
+// Measure parses lines as language langID and returns every function unit in
+// source order. It is a full parse of the text, so callers run it off the
+// Update goroutine. ErrUnsupported when the language has no spec or no tree.
+func Measure(langID string, lines []string) ([]Function, error) {
+	l, ok := lang.ByID(langID)
+	if !ok || l.Complexity == nil {
+		return nil, ErrUnsupported
+	}
+	root := syntaxTree(langID, lines)
+	if root == nil {
+		return nil, ErrUnsupported
+	}
+	return measure(root, lines, l.Complexity, comments{line: l.LineComment, block: l.BlockComment}), nil
+}
+
+// Summary is the aggregate of a list of functions — a file, or a project.
+type Summary struct {
+	Functions     int     `json:"functions"`
+	NLOC          int     `json:"nloc"`
+	CCNSum        int     `json:"ccnSum"`
+	CCNAvg        float64 `json:"ccnAvg"`
+	CCNMax        int     `json:"ccnMax"`
+	CogSum        int     `json:"cogSum"`
+	CogAvg        float64 `json:"cogAvg"`
+	CogMax        int     `json:"cogMax"`
+	OverThreshold int     `json:"overThreshold"` // functions at or above either warning threshold
+}
+
+// Summarize aggregates fns. A function is over threshold when its CCN is at
+// or above ccnWarn or its cognitive complexity at or above cogWarn; a
+// non-positive threshold disables that metric's check. Averages are 0 for an
+// empty list.
+func Summarize(fns []Function, ccnWarn, cogWarn int) Summary {
+	var s Summary
+	for _, f := range fns {
+		s.Functions++
+		s.NLOC += f.NLOC
+		s.CCNSum += f.CCN
+		s.CogSum += f.Cognitive
+		if f.CCN > s.CCNMax {
+			s.CCNMax = f.CCN
+		}
+		if f.Cognitive > s.CogMax {
+			s.CogMax = f.Cognitive
+		}
+		if (ccnWarn > 0 && f.CCN >= ccnWarn) || (cogWarn > 0 && f.Cognitive >= cogWarn) {
+			s.OverThreshold++
+		}
+	}
+	if s.Functions > 0 {
+		s.CCNAvg = float64(s.CCNSum) / float64(s.Functions)
+		s.CogAvg = float64(s.CogSum) / float64(s.Functions)
+	}
+	return s
+}

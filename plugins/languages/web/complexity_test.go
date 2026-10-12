@@ -15,7 +15,7 @@ import (
 // method with if / else if / else, the loops, switch, try / catch, the
 // ternary, null coalescing, optional chaining (not a branch), an arrow
 // function, a named and an unnamed function expression, generators and a
-// labelled break, plus a plain function.
+// labelled break, plus a plain function, a call and a class expression.
 var tsComplexityProbe = []string{
 	"class C {",
 	"  m(a: number, b = 1, ...rest: string[]): number {", // 1
@@ -43,6 +43,8 @@ var tsComplexityProbe = []string{
 	"}",
 	"function plain(a, b) { return 1; }", // 24
 	"function* gen() { yield 1; }",       // 25
+	"plain(1, 2);",
+	"const D = class {};",
 }
 
 func TestTSComplexitySpecKindsExist(t *testing.T) {

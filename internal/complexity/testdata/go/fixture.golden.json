@@ -1,0 +1,148 @@
+{
+  "lang": "go",
+  "functions": [
+    {
+      "name": "elseIfChain",
+      "kind": "function",
+      "line": 16,
+      "endLine": 31,
+      "nloc": 14,
+      "params": 1,
+      "ccn": 5,
+      "cognitive": 6,
+      "depth": 2
+    },
+    {
+      "name": "switchArms",
+      "kind": "function",
+      "line": 35,
+      "endLine": 49,
+      "nloc": 15,
+      "params": 1,
+      "ccn": 5,
+      "cognitive": 5,
+      "depth": 2
+    },
+    {
+      "name": "typeSwitchAndSelect",
+      "kind": "function",
+      "line": 52,
+      "endLine": 65,
+      "nloc": 14,
+      "params": 2,
+      "ccn": 4,
+      "cognitive": 2,
+      "depth": 1
+    },
+    {
+      "name": "nestedLoops",
+      "kind": "function",
+      "line": 69,
+      "endLine": 86,
+      "nloc": 18,
+      "params": 1,
+      "ccn": 6,
+      "cognitive": 15,
+      "depth": 4
+    },
+    {
+      "name": "Server.Handle",
+      "kind": "method",
+      "line": 90,
+      "endLine": 100,
+      "nloc": 11,
+      "params": 2,
+      "ccn": 2,
+      "cognitive": 3,
+      "depth": 2
+    },
+    {
+      "name": "(anonymous)#1",
+      "kind": "lambda",
+      "line": 91,
+      "endLine": 95,
+      "nloc": 5,
+      "params": 0,
+      "ccn": 2,
+      "cognitive": 1,
+      "depth": 1
+    },
+    {
+      "name": "booleanSequences",
+      "kind": "function",
+      "line": 105,
+      "endLine": 119,
+      "nloc": 15,
+      "params": 4,
+      "ccn": 14,
+      "cognitive": 12,
+      "depth": 1
+    },
+    {
+      "name": "nestedClosures",
+      "kind": "function",
+      "line": 123,
+      "endLine": 136,
+      "nloc": 14,
+      "params": 1,
+      "ccn": 1,
+      "cognitive": 5,
+      "depth": 3
+    },
+    {
+      "name": "(anonymous)#2",
+      "kind": "lambda",
+      "line": 124,
+      "endLine": 135,
+      "nloc": 12,
+      "params": 0,
+      "ccn": 2,
+      "cognitive": 3,
+      "depth": 2
+    },
+    {
+      "name": "(anonymous)#3",
+      "kind": "lambda",
+      "line": 126,
+      "endLine": 130,
+      "nloc": 5,
+      "params": 1,
+      "ccn": 2,
+      "cognitive": 1,
+      "depth": 1
+    },
+    {
+      "name": "factorial",
+      "kind": "function",
+      "line": 139,
+      "endLine": 144,
+      "nloc": 6,
+      "params": 1,
+      "ccn": 2,
+      "cognitive": 2,
+      "depth": 1
+    },
+    {
+      "name": "labelledJumps",
+      "kind": "function",
+      "line": 147,
+      "endLine": 164,
+      "nloc": 18,
+      "params": 1,
+      "ccn": 5,
+      "cognitive": 7,
+      "depth": 2
+    },
+    {
+      "name": "plain",
+      "kind": "function",
+      "line": 167,
+      "endLine": 167,
+      "nloc": 1,
+      "params": 0,
+      "ccn": 1,
+      "cognitive": 0,
+      "depth": 0
+    }
+  ]
+}

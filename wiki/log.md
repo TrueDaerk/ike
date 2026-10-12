@@ -1,5 +1,22 @@
 # Log
 
+## 2026-10-12 (complexity engine: CCN + cognitive per function, golden fixtures, #2915)
+
+- [Code Complexity](/architecture/complexity.md): new concept doc for
+  `internal/complexity` — the Function model and naming (`Receiver.Name`,
+  `Class::method`, `(anonymous)#n`), the rule table (Branch / Selector / Arms
+  / Else / Nesting / BoolOps / Jumps / Calls), the else-if, header, switch,
+  boolean-run, recursion and loop-else details, the iterative walker, the six
+  golden fixtures cross-checked against gocyclo, lizard, gocognit and
+  complexipy with every documented difference, `Summarize` and the benchmark.
+- [Language Registry](/architecture/languages.md): § Complexity spec gains
+  `Selector`, `Arms`, `Calls` and `MethodSep` (arms moved out of `Branch` so
+  a switch counts once for cognitive); the per-language table lists selectors
+  and arms; PHP nests trait / interface / enum bodies, TS the `class`
+  expression.
+- [Change Workflow](/process/change-workflow.md): declaring a spec now also
+  means a golden fixture under `internal/complexity/testdata/<lang>/`.
+
 ## 2026-10-12 (language complexity spec + audit ledger, #2914)
 
 - [Language Registry](/architecture/languages.md): new § Complexity spec —

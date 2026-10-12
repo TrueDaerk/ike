@@ -1,0 +1,170 @@
+{
+  "lang": "typescript",
+  "functions": [
+    {
+      "name": "elseIfChain",
+      "kind": "function",
+      "line": 10,
+      "endLine": 24,
+      "nloc": 14,
+      "params": 1,
+      "ccn": 5,
+      "cognitive": 6,
+      "depth": 2
+    },
+    {
+      "name": "switchArms",
+      "kind": "function",
+      "line": 26,
+      "endLine": 42,
+      "nloc": 17,
+      "params": 1,
+      "ccn": 6,
+      "cognitive": 5,
+      "depth": 2
+    },
+    {
+      "name": "nestedLoops",
+      "kind": "function",
+      "line": 44,
+      "endLine": 66,
+      "nloc": 23,
+      "params": 1,
+      "ccn": 8,
+      "cognitive": 17,
+      "depth": 4
+    },
+    {
+      "name": "tryCatch",
+      "kind": "function",
+      "line": 68,
+      "endLine": 79,
+      "nloc": 12,
+      "params": 1,
+      "ccn": 3,
+      "cognitive": 3,
+      "depth": 2
+    },
+    {
+      "name": "ternaries",
+      "kind": "function",
+      "line": 81,
+      "endLine": 87,
+      "nloc": 7,
+      "params": 5,
+      "ccn": 7,
+      "cognitive": 6,
+      "depth": 2
+    },
+    {
+      "name": "booleanSequences",
+      "kind": "function",
+      "line": 89,
+      "endLine": 103,
+      "nloc": 15,
+      "params": 4,
+      "ccn": 14,
+      "cognitive": 12,
+      "depth": 1
+    },
+    {
+      "name": "nestedClosures",
+      "kind": "function",
+      "line": 105,
+      "endLine": 116,
+      "nloc": 12,
+      "params": 1,
+      "ccn": 1,
+      "cognitive": 3,
+      "depth": 3
+    },
+    {
+      "name": "(anonymous)#1",
+      "kind": "lambda",
+      "line": 106,
+      "endLine": 115,
+      "nloc": 10,
+      "params": 0,
+      "ccn": 1,
+      "cognitive": 2,
+      "depth": 2
+    },
+    {
+      "name": "(anonymous)#2",
+      "kind": "lambda",
+      "line": 108,
+      "endLine": 112,
+      "nloc": 5,
+      "params": 1,
+      "ccn": 2,
+      "cognitive": 1,
+      "depth": 1
+    },
+    {
+      "name": "(anonymous)#3",
+      "kind": "lambda",
+      "line": 113,
+      "endLine": 113,
+      "nloc": 1,
+      "params": 1,
+      "ccn": 1,
+      "cognitive": 0,
+      "depth": 0
+    },
+    {
+      "name": "factorial",
+      "kind": "function",
+      "line": 118,
+      "endLine": 123,
+      "nloc": 6,
+      "params": 1,
+      "ccn": 2,
+      "cognitive": 2,
+      "depth": 1
+    },
+    {
+      "name": "Server.handle",
+      "kind": "method",
+      "line": 126,
+      "endLine": 136,
+      "nloc": 11,
+      "params": 2,
+      "ccn": 4,
+      "cognitive": 5,
+      "depth": 2
+    },
+    {
+      "name": "Server.send",
+      "kind": "method",
+      "line": 138,
+      "endLine": 140,
+      "nloc": 3,
+      "params": 1,
+      "ccn": 1,
+      "cognitive": 0,
+      "depth": 0
+    },
+    {
+      "name": "generator",
+      "kind": "function",
+      "line": 143,
+      "endLine": 147,
+      "nloc": 5,
+      "params": 1,
+      "ccn": 2,
+      "cognitive": 1,
+      "depth": 1
+    },
+    {
+      "name": "plain",
+      "kind": "function",
+      "line": 149,
+      "endLine": 149,
+      "nloc": 1,
+      "params": 0,
+      "ccn": 1,
+      "cognitive": 0,
+      "depth": 0
+    }
+  ]
+}

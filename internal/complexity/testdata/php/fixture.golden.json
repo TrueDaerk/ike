@@ -1,0 +1,170 @@
+{
+  "lang": "php",
+  "functions": [
+    {
+      "name": "elseIfChain",
+      "kind": "function",
+      "line": 11,
+      "endLine": 26,
+      "nloc": 15,
+      "params": 1,
+      "ccn": 5,
+      "cognitive": 6,
+      "depth": 2
+    },
+    {
+      "name": "switchAndMatch",
+      "kind": "function",
+      "line": 28,
+      "endLine": 49,
+      "nloc": 22,
+      "params": 1,
+      "ccn": 8,
+      "cognitive": 6,
+      "depth": 2
+    },
+    {
+      "name": "nestedLoops",
+      "kind": "function",
+      "line": 51,
+      "endLine": 71,
+      "nloc": 21,
+      "params": 1,
+      "ccn": 7,
+      "cognitive": 16,
+      "depth": 4
+    },
+    {
+      "name": "tryCatch",
+      "kind": "function",
+      "line": 73,
+      "endLine": 87,
+      "nloc": 15,
+      "params": 1,
+      "ccn": 4,
+      "cognitive": 4,
+      "depth": 2
+    },
+    {
+      "name": "ternaries",
+      "kind": "function",
+      "line": 89,
+      "endLine": 96,
+      "nloc": 8,
+      "params": 5,
+      "ccn": 7,
+      "cognitive": 6,
+      "depth": 2
+    },
+    {
+      "name": "booleanSequences",
+      "kind": "function",
+      "line": 98,
+      "endLine": 113,
+      "nloc": 16,
+      "params": 4,
+      "ccn": 14,
+      "cognitive": 11,
+      "depth": 1
+    },
+    {
+      "name": "nestedClosures",
+      "kind": "function",
+      "line": 115,
+      "endLine": 125,
+      "nloc": 11,
+      "params": 1,
+      "ccn": 1,
+      "cognitive": 5,
+      "depth": 3
+    },
+    {
+      "name": "(anonymous)#1",
+      "kind": "lambda",
+      "line": 117,
+      "endLine": 124,
+      "nloc": 8,
+      "params": 0,
+      "ccn": 2,
+      "cognitive": 3,
+      "depth": 2
+    },
+    {
+      "name": "(anonymous)#2",
+      "kind": "lambda",
+      "line": 119,
+      "endLine": 119,
+      "nloc": 1,
+      "params": 1,
+      "ccn": 2,
+      "cognitive": 1,
+      "depth": 1
+    },
+    {
+      "name": "factorial",
+      "kind": "function",
+      "line": 127,
+      "endLine": 133,
+      "nloc": 7,
+      "params": 1,
+      "ccn": 2,
+      "cognitive": 2,
+      "depth": 1
+    },
+    {
+      "name": "labelledJumps",
+      "kind": "function",
+      "line": 135,
+      "endLine": 149,
+      "nloc": 15,
+      "params": 1,
+      "ccn": 4,
+      "cognitive": 5,
+      "depth": 2
+    },
+    {
+      "name": "Server::handle",
+      "kind": "method",
+      "line": 153,
+      "endLine": 164,
+      "nloc": 12,
+      "params": 2,
+      "ccn": 4,
+      "cognitive": 5,
+      "depth": 2
+    },
+    {
+      "name": "Server::send",
+      "kind": "method",
+      "line": 166,
+      "endLine": 169,
+      "nloc": 4,
+      "params": 1,
+      "ccn": 1,
+      "cognitive": 0,
+      "depth": 0
+    },
+    {
+      "name": "Loggable::log",
+      "kind": "method",
+      "line": 174,
+      "endLine": 177,
+      "nloc": 4,
+      "params": 1,
+      "ccn": 1,
+      "cognitive": 0,
+      "depth": 0
+    },
+    {
+      "name": "plain",
+      "kind": "function",
+      "line": 180,
+      "endLine": 182,
+      "nloc": 3,
+      "params": 0,
+      "ccn": 1,
+      "cognitive": 0,
+      "depth": 0
+    }
+  ]
+}
