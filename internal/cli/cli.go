@@ -41,12 +41,43 @@ type Invocation struct {
 	// forwards it to a running instance and exits; every other field is then
 	// meaningless.
 	AgentHook string
+	// Complexity is `ike complexity …` (#2922): the headless complexity
+	// report. cmd/ike runs it and exits; every other field is then
+	// meaningless.
+	Complexity *ComplexityArgs
+}
+
+// ComplexityArgs is the parsed `ike complexity [--diff[=REV]] [--json]
+// [--min N] [--ccn N] [--cog N] [DIR]`. A zero threshold means "not given":
+// the report falls back to the configured warning thresholds.
+type ComplexityArgs struct {
+	// Diff selects the diff report against Rev ("" = HEAD).
+	Diff bool
+	Rev  string
+	// JSON selects the machine-readable rendering.
+	JSON bool
+	// Min keeps only the rows whose CCN or cognitive complexity is at least
+	// Min; CCN and Cog are the warning thresholds (and, given explicitly,
+	// the row filter: CCN ≥ CCN or cognitive ≥ Cog).
+	Min, CCN, Cog int
+	// Dir is the project directory to report on ("" = the working
+	// directory).
+	Dir string
+	// Help asks for the usage text.
+	Help bool
 }
 
 // agentHookCmd is the subcommand word; only recognised as the first
 // argument, so a file named "agent-hook" still opens as `./agent-hook` or
 // anywhere later on the line.
 const agentHookCmd = "agent-hook"
+
+// complexityCmd is the headless report's subcommand word (#2922), first
+// argument only like agentHookCmd.
+const complexityCmd = "complexity"
+
+// ComplexityUsage is the one-line grammar of `ike complexity`.
+const ComplexityUsage = "usage: ike complexity [--diff[=REV]] [--json] [--min N] [--ccn N] [--cog N] [DIR]"
 
 // Parse parses the arguments after the program name. Supported forms:
 //
@@ -61,6 +92,8 @@ const agentHookCmd = "agent-hook"
 //	--version, -v      print the version banner instead of starting
 //	agent-hook EVENT   (first argument only) Claude Code hook entry point:
 //	                   forward the hook JSON on stdin, never start (#2843)
+//	complexity …       (first argument only) headless complexity report,
+//	                   never start (#2922; see parseComplexity)
 //
 // A suffix that is not a positive number stays part of the path ("weird:name"
 // is a plain path, as is a trailing colon), since file names may contain ":".
@@ -73,6 +106,13 @@ func Parse(args []string) (Invocation, error) {
 			return Invocation{}, fmt.Errorf("usage: ike %s <event>", agentHookCmd)
 		}
 		return Invocation{AgentHook: args[1]}, nil
+	}
+	if len(args) > 0 && args[0] == complexityCmd {
+		ca, err := parseComplexity(args[1:])
+		if err != nil {
+			return Invocation{}, err
+		}
+		return Invocation{Complexity: &ca}, nil
 	}
 	pending := 0 // "+N" line waiting for its path; 0 = none
 	for _, a := range args {
@@ -122,6 +162,60 @@ func Parse(args []string) (Invocation, error) {
 		return Invocation{}, fmt.Errorf("--url-send-only needs an ike:// URL")
 	}
 	return inv, nil
+}
+
+// parseComplexity parses the arguments after `ike complexity`. Numeric
+// flags take their value as `--min N` or `--min=N`; `--diff` takes its
+// revision only in the `--diff=REV` form, so `--diff DIR` keeps DIR as the
+// directory. At most one directory; an unknown flag is an error.
+func parseComplexity(args []string) (ComplexityArgs, error) {
+	var ca ComplexityArgs
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		name, val, hasVal := strings.Cut(a, "=")
+		switch {
+		case a == "-h" || a == "--help":
+			ca.Help = true
+		case a == "--json":
+			ca.JSON = true
+		case name == "--diff":
+			ca.Diff = true
+			if hasVal {
+				if strings.TrimSpace(val) == "" {
+					return ComplexityArgs{}, fmt.Errorf("--diff= needs a revision")
+				}
+				ca.Rev = val
+			}
+		case name == "--min" || name == "--ccn" || name == "--cog":
+			if !hasVal {
+				if i+1 >= len(args) {
+					return ComplexityArgs{}, fmt.Errorf("%s needs a number", name)
+				}
+				i++
+				val = args[i]
+			}
+			n, ok := parseNum(val)
+			if !ok {
+				return ComplexityArgs{}, fmt.Errorf("%s: %q is not a positive number", name, val)
+			}
+			switch name {
+			case "--min":
+				ca.Min = n
+			case "--ccn":
+				ca.CCN = n
+			default:
+				ca.Cog = n
+			}
+		case strings.HasPrefix(a, "-") && a != "-":
+			return ComplexityArgs{}, fmt.Errorf("unknown flag %q", a)
+		default:
+			if ca.Dir != "" {
+				return ComplexityArgs{}, fmt.Errorf("more than one directory (%q, %q)", ca.Dir, a)
+			}
+			ca.Dir = a
+		}
+	}
+	return ca, nil
 }
 
 // parseNum parses a strictly positive decimal of plain digits — no sign, no

@@ -12,6 +12,7 @@ import (
 
 	"ike/internal/app"
 	"ike/internal/cli"
+	"ike/internal/complexitycli"
 	"ike/internal/config"
 	"ike/internal/deeplink"
 	"ike/internal/diag"
@@ -109,11 +110,17 @@ func main() {
 	// line. Parse argv up front so a malformed invocation fails before any UI.
 	inv, err := cli.Parse(os.Args[1:])
 	if err != nil {
+		if len(os.Args) > 1 && os.Args[1] == "complexity" {
+			fmt.Fprintln(os.Stderr, "ike complexity:", err)
+			fmt.Fprintln(os.Stderr, cli.ComplexityUsage)
+			os.Exit(complexitycli.ExitError)
+		}
 		fmt.Fprintln(os.Stderr, "ike:", err)
 		fmt.Fprintln(os.Stderr, "usage: ike [+N] [path[:line[:col]]]... [-]")
 		fmt.Fprintln(os.Stderr, "       ike [--url-send-only] ike://open?...")
 		fmt.Fprintln(os.Stderr, "       ike --version")
 		fmt.Fprintln(os.Stderr, "       ike agent-hook <event>   (Claude Code hook; JSON on stdin)")
+		fmt.Fprintln(os.Stderr, "       ike complexity [--diff[=REV]] [--json] [--min N] [DIR]")
 		if len(os.Args) > 1 && os.Args[1] == "agent-hook" {
 			// Exit 2 from a UserPromptSubmit hook blocks the prompt (#2843).
 			os.Exit(1)
@@ -126,6 +133,11 @@ func main() {
 	if inv.Version {
 		fmt.Println(version.Full())
 		return
+	}
+	// `ike complexity …` (#2922): the headless complexity report for CI and
+	// agents — no terminal, exit 0 on a report, 2 on a usage or git error.
+	if inv.Complexity != nil {
+		os.Exit(complexitycli.Run(*inv.Complexity, os.Stdout, os.Stderr))
 	}
 	// `ike agent-hook <event>` (#2843): a Claude Code hook forwarding the
 	// session lifecycle to a running instance. Always exits 0 — a failing
