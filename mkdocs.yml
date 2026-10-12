@@ -95,6 +95,7 @@ nav:
       - Git: guides/git.md
       - Dependencies: guides/dependencies.md
       - Project time: guides/project-time.md
+      - Code complexity: guides/complexity.md
       - Running and debugging: guides/run-and-debug.md
       - The HTTP client: guides/http-client.md
       - Scratch files and snippets: guides/scratch-and-snippets.md

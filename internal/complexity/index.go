@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"ike/internal/complete/langindex"
-	"ike/internal/highlight"
 	"ike/internal/lang"
 	"ike/internal/pathglob"
 )
@@ -155,9 +154,6 @@ type Index struct {
 
 	onScan  func(Stats)
 	scanned *langindex.Index[[]Function]
-
-	availOnce sync.Once
-	avail     bool
 }
 
 // viewKey identifies the content a snapshot was built from.
@@ -326,17 +322,7 @@ func extractFile(path, _ string, text string, only func(string) bool) map[string
 
 // Available reports whether the build can parse at least one language with a
 // spec (cgo + grammar); without it the index can never fill.
-func (x *Index) Available() bool {
-	x.availOnce.Do(func() {
-		for _, l := range lang.All() {
-			if l.Complexity != nil && highlight.SyntaxTree(l.ID, []string{""}) != nil {
-				x.avail = true
-				return
-			}
-		}
-	})
-	return x.avail
-}
+func (x *Index) Available() bool { return Available() }
 
 // InvalidateFile re-measures path through the walk's worker — a buffer
 // save, or an on-disk change the watcher reported; a removed file drops out.

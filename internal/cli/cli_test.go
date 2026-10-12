@@ -146,3 +146,46 @@ func TestParseAgentHook(t *testing.T) {
 		t.Errorf("agent-hook after a path must stay a path: %+v, %v", inv, err)
 	}
 }
+
+// TestParseComplexity covers `ike complexity …` (#2922): flags in both the
+// `--flag N` and `--flag=N` forms, --diff's optional `=REV`, one directory,
+// and the usage errors cmd/ike turns into exit 2.
+func TestParseComplexity(t *testing.T) {
+	cases := []struct {
+		args []string
+		want ComplexityArgs
+	}{
+		{nil, ComplexityArgs{}},
+		{[]string{"."}, ComplexityArgs{Dir: "."}},
+		{[]string{"--json", "src"}, ComplexityArgs{JSON: true, Dir: "src"}},
+		{[]string{"--diff"}, ComplexityArgs{Diff: true}},
+		{[]string{"--diff=origin/main", "--json"}, ComplexityArgs{Diff: true, Rev: "origin/main", JSON: true}},
+		{[]string{"--diff", "src"}, ComplexityArgs{Diff: true, Dir: "src"}},
+		{[]string{"--min", "20"}, ComplexityArgs{Min: 20}},
+		{[]string{"--min=20", "--ccn", "10", "--cog=12"}, ComplexityArgs{Min: 20, CCN: 10, Cog: 12}},
+		{[]string{"--help"}, ComplexityArgs{Help: true}},
+		{[]string{"-h"}, ComplexityArgs{Help: true}},
+	}
+	for _, c := range cases {
+		inv, err := Parse(append([]string{"complexity"}, c.args...))
+		if err != nil {
+			t.Errorf("Parse(complexity %q) error: %v", c.args, err)
+			continue
+		}
+		if inv.Complexity == nil || *inv.Complexity != c.want || len(inv.Targets) != 0 {
+			t.Errorf("Parse(complexity %q) = %+v, want %+v", c.args, inv.Complexity, c.want)
+		}
+	}
+	for _, args := range [][]string{
+		{"--min"}, {"--min", "x"}, {"--min=0"}, {"--ccn=-1"}, {"--cog", ""},
+		{"--diff="}, {"--bogus"}, {"a", "b"},
+	} {
+		if _, err := Parse(append([]string{"complexity"}, args...)); err == nil {
+			t.Errorf("Parse(complexity %q) accepted", args)
+		}
+	}
+	inv, err := Parse([]string{"main.go", "complexity"})
+	if err != nil || inv.Complexity != nil || len(inv.Targets) != 2 {
+		t.Errorf("complexity after a path must stay a path: %+v, %v", inv, err)
+	}
+}

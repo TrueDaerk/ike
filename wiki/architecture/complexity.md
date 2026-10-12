@@ -1,9 +1,9 @@
 ---
 type: concept
 title: Code Complexity
-description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters and nesting depth per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary, the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
-resource: internal/complexity, internal/complexitypanel, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_problems.go, internal/app/complexity_segment.go
-tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive, index, settings, telemetry, vcs, diff, problems]
+description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters and nesting depth per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary, the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source, and the headless `ike complexity` CLI (#2922) printing the project table or the diff against a revision as text or JSON for CI and agents; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
+resource: internal/complexity, internal/complexitypanel, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_problems.go, internal/app/complexity_segment.go, internal/complexitycli
+tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive, index, settings, telemetry, vcs, diff, problems, cli]
 timestamp: 2026-10-13T12:00:00Z
 ---
 
@@ -18,9 +18,9 @@ machine — so it works for every language with a grammar, in mixed projects,
 out of the box. This page documents the **engine** (`internal/complexity`,
 #2915) and the **project index** on top of it (#2916, below); the language
 seam it reads is [languages](./languages.md#complexity-spec-2914); the tool
-window (#2917) and the diff against a base revision (#2918) follow below,
-and the editor hints, the Problems feed, the status segment and the CLI are
-the epic's later steps.
+window (#2917), the diff against a base revision (#2918), the Problems
+feed, the status segment, the editor hints and the headless CLI (#2922)
+follow below.
 
 ## Model
 
@@ -463,6 +463,58 @@ next to the other mark toggles).
 | Key | Default | Meaning |
 |---|---|---|
 | `editor.marks.complexity` | `true` | Render the inline complexity hints on function headers. |
+
+## Headless CLI (#2922)
+
+`ike complexity [--diff[=REV]] [--json] [--min N] [--ccn N] [--cog N] [DIR]`
+is the terminal-free report for CI pipelines and coding agents. The grammar
+lives in `internal/cli` (`ComplexityArgs`, first argument only like
+`agent-hook`, so a file named `complexity` still opens as `./complexity`);
+`cmd/ike` dispatches before any terminal setup to
+`internal/complexitycli.Run`, which returns the exit code: **0** for a
+report, **2** for a usage error, a directory that does not exist, a git
+error (an unknown `--diff` ref prints git's message on stderr) or a build
+without syntax trees. The report never fails on thresholds — gating is the
+caller's policy over the JSON.
+
+**One walk.** The project report walks `DIR` with
+`complexity.WalkProject`, which runs on `langindex.WalkFiles` — the same
+directory skip rules the index's `langindex` scan uses — and classifies
+every file with the index's own `classify` (language with a spec, no
+`complexity.exclude` glob), so the CLI and the tool window can never
+disagree about which files count. `complexity.ReadSource` applies the
+index's 512 KiB cap. Files a language claims but no spec measures are
+counted per language in a final `skipped:` line (and the JSON `skipped`
+object) rather than dropped silently; excluded files and files no language
+claims are not counted.
+
+**Settings.** `config.Load(config.Discover(DIR))` reads the user layer and
+`DIR/.ike/settings.toml`: `complexity.exclude` and the warning thresholds
+(15 without config). `--ccn` / `--cog` override the thresholds. The row
+filter: `--min N` keeps rows with CCN or cognitive ≥ N; an explicit `--ccn`
+/ `--cog` alone keeps rows at or above either threshold; no filter flag
+keeps every row. The summary always covers every function.
+`complexity.enabled` is ignored — running the command is the request.
+
+**Diff.** `--diff[=REV]` (default `HEAD`) runs synchronously the same git
+plumbing as the Changes tab — `vcs.ResolveRev`, `vcs.ChangedFiles`, the
+status snapshot's untracked files (a collapsed untracked directory is walked)
+and `vcs.RevContent` per base blob — restricted to files under `DIR` the
+index would measure, then `complexity.DiffProject`. The head side is read
+uncapped like the tab's, so a file over the walk's cap does not read as
+all-removed. The text report prints `changed` (before→after with Δ per
+metric), `added` and `removed` sections, the totals and
+`verdict: MORE COMPLEX (ΣCCN +4, Σcog +2)`.
+
+**JSON.** Field names are snake_case and stable (documented in
+`userdocs/guides/complexity.md`; add, never rename): the project report is
+`{summary, functions, skipped}`, the diff `{rev, sha, base, head, delta,
+changed, added, removed, verdict, skipped}` with `verdict` one of
+`more_complex`, `less_complex`, `unchanged`. Line numbers are 1-based.
+
+**No cgo.** Without cgo there are no grammars; `complexity.Available()`
+(shared with the index's `Unavailable` stat) is false and the command
+prints a clear error and exits 2.
 
 ## Extending
 

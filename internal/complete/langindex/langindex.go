@@ -278,17 +278,7 @@ func (x *Index[T]) scan(id string) {
 	if persist.Load != nil {
 		seed = persist.Load(id)
 	}
-	_ = filepath.WalkDir(x.root, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		name := d.Name()
-		if d.IsDir() {
-			if path != x.root && (skipDirs[name] || strings.HasPrefix(name, ".")) && !contains(x.limits.KeepDirs, name) {
-				return filepath.SkipDir
-			}
-			return nil
-		}
+	_ = WalkFiles(x.root, x.limits.KeepDirs, func(path string) error {
 		if read >= x.limits.MaxFiles {
 			truncated = true
 			return filepath.SkipAll
@@ -385,6 +375,28 @@ func (x *Index[T]) readFile(path string) (string, Stamp, bool) {
 		return "", Stamp{}, false
 	}
 	return string(data), stampOf(info), true
+}
+
+// WalkFiles walks root and calls fn for every regular file outside the
+// skipped directories: hidden ones and the built-in skip list (node_modules,
+// vendor, build output, virtualenvs), except the names in keepDirs. It is
+// the one walk every project index and the headless `ike complexity` report
+// (#2922) share, so their skip rules never diverge. fn may return
+// filepath.SkipAll to stop; unreadable entries are skipped silently.
+func WalkFiles(root string, keepDirs []string, fn func(path string) error) error {
+	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		if d.IsDir() {
+			name := d.Name()
+			if path != root && (skipDirs[name] || strings.HasPrefix(name, ".")) && !contains(keepDirs, name) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		return fn(path)
+	})
 }
 
 func contains(xs []string, s string) bool {

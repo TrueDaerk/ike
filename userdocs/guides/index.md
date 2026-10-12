@@ -26,6 +26,9 @@ Task-oriented pages, one per feature area.
 - **[Project time](project-time.md)** — how long you worked on which project
   today, this week or this month, from the local usage log: the Time window,
   CSV export, and the optional status-line clock.
+- **[Code complexity](complexity.md)** — cyclomatic and cognitive complexity
+  per function, the Complexity window, and the headless `ike complexity`
+  report (text or JSON, `--diff` against a revision) for CI and agents.
 - **[Running and debugging](run-and-debug.md)** — run configurations, tests,
   where output goes, breakpoints, stepping, and PHP/Xdebug.
 - **[The HTTP client](http-client.md)** — `.http` files in the repository,

@@ -1,5 +1,13 @@
 # Log
 
+## 2026-10-13 (Headless `ike complexity` CLI, #2922)
+
+- [Code Complexity](/architecture/complexity.md): new section "Headless
+  CLI" — `ike complexity` grammar and exit codes, the walk shared with the
+  index (`complexity.WalkProject` on `langindex.WalkFiles`), the skipped
+  line, the synchronous `--diff`, the stable snake_case JSON and the `!cgo`
+  refusal.
+
 ## 2026-10-13 (Status-line Δcx segment, #2921)
 
 - [Code Complexity](/architecture/complexity.md): new section "Status
