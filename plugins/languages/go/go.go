@@ -80,6 +80,8 @@ func init() {
 		// Sticky-scroll scopes (#168): declarations whose header line stays
 		// pinned while scrolling through the body.
 		ScopeNodes: []string{"function_declaration", "method_declaration", "func_literal", "type_declaration"},
+		// Complexity measurement (Roadmap 0550, #2914): see complexity.go.
+		Complexity: goComplexity,
 		// Completion context (#2654): keywords that introduce a new name, and
 		// the import line only gopls has an answer for.
 		DeclKeywords: []string{"func", "type", "var", "const", "package"},

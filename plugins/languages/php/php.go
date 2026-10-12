@@ -74,6 +74,8 @@ func init() {
 			"class_declaration", "interface_declaration", "trait_declaration",
 			"enum_declaration", "namespace_definition",
 		},
+		// Complexity measurement (Roadmap 0550, #2914): see complexity.go.
+		Complexity: phpComplexity,
 		// Foldable regions (#144): declarations, statement blocks, array
 		// literals and multi-line /* */ comments.
 		FoldNodes: []string{

@@ -82,6 +82,8 @@ func init() {
 		PostfixExprNodes: postfixExprNodes,
 		// Sticky-scroll scopes (#168).
 		ScopeNodes: []string{"function_definition", "class_definition"},
+		// Complexity measurement (Roadmap 0550, #2914): see complexity.go.
+		Complexity: pythonComplexity,
 		// Completion context (#2654).
 		DeclKeywords: []string{"def", "class"},
 		ImportLine:   regexp.MustCompile(`^\s*(import|from)\b`),

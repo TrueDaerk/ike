@@ -13,7 +13,8 @@ package highlight
 // coordinates; StartByte/EndByte index the joined source
 // (strings.Join(lines, "\n")) for Text. Children holds the named children
 // in source order; anonymous tokens (keywords, punctuation) are not kept —
-// a caller that needs them reads the parent's Text.
+// a caller that needs them reads the parent's Text — except the operator
+// token, which Operator carries (#2914).
 type SyntaxNode struct {
 	Kind      string
 	Field     string // field name under the parent, "" when the grammar gives none
@@ -23,7 +24,16 @@ type SyntaxNode struct {
 	StartCol  int
 	EndLine   int
 	EndCol    int
-	Children  []*SyntaxNode
+	// Operator is the node's operator token (#2914): the text of the
+	// grammar's `operator` field when the node has one (`&&` on a Go
+	// binary_expression, `and` on a Python boolean_operator), else the first
+	// anonymous token sitting between two named children — the infix of a
+	// field-less list such as shell's `a && b` — and "" for a node with
+	// neither (a leading keyword or a closing bracket never counts). It is
+	// the one anonymous token the snapshot keeps, so a consumer can tell
+	// `a && b` from `a + b` without re-reading the source.
+	Operator string
+	Children []*SyntaxNode
 }
 
 // Text returns the node's source slice out of src, the joined lines the

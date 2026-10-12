@@ -97,6 +97,15 @@ type Language struct {
 	// means the language has no code folding.
 	FoldNodes []string
 
+	// Complexity declares the node kinds and operator tokens the complexity
+	// engine measures this language by (Roadmap 0550, #2914): function
+	// units, branches, else arms, nesting scopes, boolean operators, jumps.
+	// Nil means the language is not measured — a data format with no
+	// functions, or a language without a grammar; every such language
+	// carries a justified row in cmd/ike/complexity_audit_test.go. See
+	// complexity.go.
+	Complexity *ComplexitySpec
+
 	// Postfix lists the postfix-completion templates of this language (#1913):
 	// `expr.if`, `err.nil`, `expr.for` and friends, which rewrite the
 	// expression before the dot instead of inserting at the cursor. Empty —

@@ -64,6 +64,8 @@ func init() {
 		DeclKeywords: []string{"function", "local"},
 		// Sticky scopes + folding (#168, #144).
 		ScopeNodes: []string{"function_definition", "if_statement", "for_statement", "while_statement", "case_statement"},
+		// Complexity measurement (Roadmap 0550, #2914): see complexity.go.
+		Complexity: shellComplexity,
 		FoldNodes: []string{
 			"function_definition", "if_statement", "for_statement",
 			"while_statement", "case_statement", "compound_statement",

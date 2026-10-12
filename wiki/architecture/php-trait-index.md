@@ -60,7 +60,8 @@ names, exact on member names.
 The extractor reads the **syntax tree**, not the highlight captures:
 `highlight.SyntaxTree` (new with #2667) parses once through the PHP grammar
 and hands back a pure-Go snapshot of the named nodes with kinds, field
-names and rune-column ranges, closed before returning and safe to keep.
+names and rune-column ranges — plus, since #2914, each node's operator token
+in `Operator` — closed before returning and safe to keep.
 Without cgo the snapshot is nil: the index stays empty, `Stats()` reports
 `Unavailable`, and nothing panics.
 

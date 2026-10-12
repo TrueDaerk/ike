@@ -107,6 +107,8 @@ func init() {
 		ImportLine:   regexp.MustCompile(`^\s*import\b`),
 		// Sticky scopes + folding (#168, #144).
 		ScopeNodes: []string{"function_declaration", "method_definition", "class_declaration", "arrow_function", "function_expression"},
+		// Complexity measurement (Roadmap 0550, #2914): see complexity.go.
+		Complexity: tsComplexity,
 		FoldNodes: []string{
 			"function_declaration", "method_definition", "class_declaration",
 			"arrow_function", "function_expression", "statement_block",

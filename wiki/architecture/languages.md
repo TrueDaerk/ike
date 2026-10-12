@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-08-30T12:00:00Z
+timestamp: 2026-10-12T12:00:00Z
 ---
 
 # Language Registry
@@ -37,6 +37,8 @@ type Language struct {
     IndentAfter  []string   // block-opening line suffixes (0260): ":" / "{" …
     SpaceAfter   []rune     // punctuation typed with a following space (#1326): ':' in JSON
     ScopeNodes   []string   // sticky-scroll scope node kinds (#168); empty = inert
+    FoldNodes    []string   // foldable region node kinds (#144); empty = ScopeNodes
+    Complexity   *ComplexitySpec // complexity node kinds + boolean operators (#2914); nil = not measured
     Postfix          []PostfixTemplate // postfix-completion templates (#1913); empty = inert
     PostfixExprNodes []string          // Tree-sitter kinds that count as the expression before the dot
     Template     string     // initial content for new files (#170); "" = start empty
@@ -309,6 +311,63 @@ outcome**, because a wrong one retypes the buffer under the user's cursor:
 
 The editor is the only caller; the trigger and its gates are described in
 [Editor](/architecture/editor.md#language-detection-on-paste-2037).
+
+## Complexity spec (#2914)
+
+Roadmap 0550 measures cyclomatic and cognitive complexity per function on the
+Tree-sitter parse. The engine (`internal/complexity`, the epic's next step)
+holds both algorithms once; a language only declares **which of its nodes
+count** through `Language.Complexity *lang.ComplexitySpec`, declared next to
+`ScopeNodes`/`FoldNodes` in `plugins/languages/<lang>/complexity.go`. The spec
+names grammar kinds and operator tokens only, so `lang` stays a leaf package.
+
+| Field | Holds | Example |
+|---|---|---|
+| `FunctionNodes map[kind]field` | kinds that start a measured unit → the field holding its name; `""` = anonymous (`"(anonymous)"` + ordinal) | Go `function_declaration: "name"`, `func_literal: ""` |
+| `ParamsField` | field holding the parameter list; the engine counts its named children, a child with several `name` fields (Go `a, b int`) once per name | `"parameters"`; shell: `""` |
+| `Branch` | kinds counting +1 CCN and +1 cognitive plus nesting: if / elif / else-if, loops, case / match arms, catch / except, the ternary. A default arm is never listed | Python `if_statement`, `elif_clause`, `except_clause`, `case_clause` |
+| `Else` | kinds counting +1 cognitive only (no CCN, no nesting penalty); empty where the else is a bare block in the parent's `alternative` field (Go) and the engine reads the field | `else_clause` |
+| `Nesting` | kinds that only raise the nesting level: lambdas / nested functions (also units), class bodies | PHP `anonymous_function`, `class_declaration` |
+| `BoolOps` | boolean operator **tokens**, as `highlight.SyntaxNode.Operator` carries them; `?.` is never one | `&&`, `\|\|`, `and`, `or`, `??` |
+| `Jumps` | kinds counting +1 cognitive: goto, and break / continue when they carry a label or level | Go `goto_statement`, `break_statement` |
+
+An else-if form is a Branch kind sitting in the else position (the `alternative`
+field, or inside an Else kind); the engine counts it without the nesting
+penalty, as Sonar does. The snapshot the engine walks is `highlight.SyntaxTree`,
+which since #2914 keeps **one anonymous token per node** in `Operator`: the
+grammar's `operator` field where there is one (Go/PHP/TS `binary_expression`,
+Python `boolean_operator`), else the first anonymous token between two named
+children (shell's field-less `list`, `a && b`).
+
+The kinds are the grammars' **real** node kinds, verified by a parse rather than
+guessed: each spec'd plugin carries a `complexity_test.go` whose probe buffer
+must parse to every kind and operator the spec names, and whose functions must
+come out with the expected names, kinds, parameter counts and reference CCN
+(`internal/highlight/treetest`, the test-side reader — 1 + branches + boolean
+operators per unit, nested units excluded; not the engine). Declared today:
+
+| Language | Units | Branches | Boolean ops |
+|---|---|---|---|
+| go | `function_declaration`, `method_declaration`, `func_literal` | `if_statement`, `for_statement` (all three loop shapes), `expression_case`, `type_case`, `communication_case` | `&&` `\|\|` |
+| python | `function_definition`, `lambda` | `if_statement`, `elif_clause`, `for_statement`, `while_statement`, `except_clause`, `conditional_expression`, `case_clause` | `and` `or` |
+| php | `function_definition`, `method_declaration`, `anonymous_function`, `arrow_function` | `if_statement`, `else_if_clause`, `for_statement`, `foreach_statement`, `while_statement`, `do_statement`, `case_statement`, `catch_clause`, `conditional_expression`, `match_conditional_expression` | `&&` `\|\|` `and` `or` `??` |
+| typescript (TSX grammar: JS/TS/JSX) | `function_declaration`, `generator_function_declaration`, `method_definition`, `function_expression`, `generator_function`, `arrow_function` | `if_statement`, `for_statement`, `for_in_statement` (for-in and for-of), `while_statement`, `do_statement`, `switch_case`, `catch_clause`, `ternary_expression` | `&&` `\|\|` `??` |
+| shell | `function_definition` (no parameters) | `if_statement`, `elif_clause`, `for_statement` (for and select), `c_style_for_statement`, `while_statement` (while and until), `case_item` | `&&` `\|\|` |
+
+**Audit ledger.** `cmd/ike/complexity_audit_test.go`, the sibling of the
+span-family ledger: every registered language either declares a spec — then the
+audit parses a per-language probe with the registered grammar and requires the
+named function at the expected CCN — or carries a row in `unmeasuredLanguages`
+with a reason from the named set: `reasonNoFunctions` (data, markup,
+configuration, logs, patches, manifests: json, ndjson, yaml, toml, xml,
+markdown, markdown_inline, dockerfile, make, http, ini, dotenv, crontab, diff,
+log, ansible, csv/tsv/psv, sql, html, css, go.mod/go.work/go.sum),
+`reasonNoGrammar` (a language with functions but no Tree-sitter grammar — none
+today; a row with it fails once a grammar is registered) or `reasonSpecGap(issue)`
+(a real gap linked to its tracking issue). A new language fails the build until
+its row is filled in; a row for a language that has since gained a spec, or
+that no longer exists, is stale and fails. See
+[change workflow](/process/change-workflow.md).
 
 ## A language plugin
 

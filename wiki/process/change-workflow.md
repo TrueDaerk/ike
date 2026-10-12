@@ -101,3 +101,23 @@ the new producer needs a shape the probe lacks); a reason entry for a family the
 has since started offering is **stale and fails**. Real gaps are never recorded as a bare
 reason — they are closed or linked as a follow-up issue (`reasonGap`; the initial set the
 audit surfaced was closed wholesale in #2345, so the ledger currently carries none).
+
+## Languages declare their complexity spec or a reason
+
+The complexity engine (Roadmap 0550) measures a language only through its
+`lang.Language.Complexity` spec — the node kinds that start a function, branch, nest and the
+boolean operator tokens — so a language added without one would silently read as "no
+functions" in every metric. The audit ledger in `cmd/ike/complexity_audit_test.go` (#2914)
+closes that hole the same way the span-family ledger does: every registered language either
+**declares a spec** (verified behaviourally — the test parses a per-language probe with the
+registered grammar and requires the named function at the expected cyclomatic count) or
+carries a row in `unmeasuredLanguages` with a reason from the named set (`reasonNoFunctions`
+for data and markup formats, `reasonNoGrammar` for a language with functions but no
+Tree-sitter grammar, `reasonSpecGap(issue)` for a real gap linked to its tracking issue).
+
+Concretely: a **new language** fails the build until its row is filled in; **declaring a
+spec** means adding a `complexityProbes` entry and a `complexity_test.go` in the plugin whose
+probe parses to every kind and operator the spec names (the kinds are verified by a parse,
+never guessed); a reason row for a language that has since gained a spec, or whose
+`reasonNoGrammar` claim no longer holds, is **stale and fails**. See
+[languages](/architecture/languages.md) § Complexity spec.

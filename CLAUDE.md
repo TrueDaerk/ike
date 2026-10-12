@@ -34,6 +34,10 @@ It supports windowing, tabs, panes and resizing / moving any pane to another loc
   audited stand-in/hint family, either offer it or carry a justified entry in the audit
   ledger `cmd/ike/spanfamily_audit_test.go`, whose test fails otherwise
   (see [wiki/process/change-workflow.md](wiki/process/change-workflow.md)).
+- **Languages declare a complexity spec or a reason:** every registered language either
+  declares `lang.Language.Complexity` (verified against a probe parse) or carries a justified
+  row in the audit ledger `cmd/ike/complexity_audit_test.go`, whose test fails otherwise
+  (see [wiki/process/change-workflow.md](wiki/process/change-workflow.md)).
 - **Reuse the shared building blocks:** a new pane, prompt, list, search line or tool window is
   built from the catalog in
   [wiki/architecture/shared-building-blocks.md](wiki/architecture/shared-building-blocks.md)
