@@ -53,44 +53,32 @@ func sevName(sev int) string {
 
 // matches gates one diagnostic through the filter. Terms of different fields
 // are AND'd, repeats of one field OR'd, and the free text is the same fuzzy
-// gate the Issues pane uses, run over the message and code.
+// gate the Issues pane uses, run over the message and code. A negated term
+// or word (-source:complexity, -unused) drops what it matches (#2951).
 func (m *Model) matches(path string, d ilsp.Diagnostic) bool {
 	q := m.filter.Query()
 	if q.Empty() {
 		return true
 	}
-	if q.Value("scope") == "file" && (m.activePath == "" || path != m.activePath) {
+	inScope := func(v string) bool {
+		return v != "file" || (m.activePath != "" && path == m.activePath)
+	}
+	if !q.Keeps("scope", inScope) ||
+		!q.Keeps("severity", func(v string) bool { return v == sevName(d.Severity) }) ||
+		!q.Keeps("file", func(v string) bool { return m.pathMatches(v, path) }) ||
+		!q.Keeps("code", func(v string) bool { return hasSubstring(d.Code, v) }) ||
+		!q.Keeps("source", func(v string) bool { return hasSubstring(d.Source, v) }) {
 		return false
 	}
-	if sevs := q.Values("severity"); len(sevs) > 0 && !hasString(sevs, sevName(d.Severity)) {
-		return false
-	}
-	if files := q.Values("file"); len(files) > 0 && !m.pathMatches(files, path) {
-		return false
-	}
-	if codes := q.Values("code"); len(codes) > 0 && !anySubstring(codes, d.Code) {
-		return false
-	}
-	if srcs := q.Values("source"); len(srcs) > 0 && !anySubstring(srcs, d.Source) {
-		return false
-	}
-	if _, ok := filterexpr.MatchText(q.Match, matchHay(d)); !ok {
-		return false
-	}
-	return true
+	_, ok := q.MatchFree(matchHay(d))
+	return ok
 }
 
-// pathMatches applies the file: values to a path, OR'd, against both the
-// path as rendered (project-relative) and the raw one — a filter typed off
-// the screen has to hit what the screen shows.
-func (m *Model) pathMatches(pats []string, path string) bool {
-	shown := m.shorten(path)
-	for _, p := range pats {
-		if filterexpr.MatchPath(p, shown) || filterexpr.MatchPath(p, path) {
-			return true
-		}
-	}
-	return false
+// pathMatches applies one file: value to a path, against both the path as
+// rendered (project-relative) and the raw one — a filter typed off the
+// screen has to hit what the screen shows.
+func (m *Model) pathMatches(pat, path string) bool {
+	return filterexpr.MatchPath(pat, m.shorten(path)) || filterexpr.MatchPath(pat, path)
 }
 
 // matchHay is what the free match text is run against: the diagnostic's
@@ -102,29 +90,10 @@ func matchHay(d ilsp.Diagnostic) string {
 	return d.Message + " " + d.Code
 }
 
-// anySubstring reports whether any needle is a case-insensitive substring of
-// hay; an empty hay matches nothing, so code:x hides diagnostics with no code.
-func anySubstring(needles []string, hay string) bool {
-	if hay == "" {
-		return false
-	}
-	low := strings.ToLower(hay)
-	for _, n := range needles {
-		if strings.Contains(low, strings.ToLower(n)) {
-			return true
-		}
-	}
-	return false
-}
-
-// hasString reports whether v is in list.
-func hasString(list []string, v string) bool {
-	for _, s := range list {
-		if s == v {
-			return true
-		}
-	}
-	return false
+// hasSubstring reports whether needle is a case-insensitive substring of hay;
+// an empty hay matches nothing, so code:x hides diagnostics with no code.
+func hasSubstring(hay, needle string) bool {
+	return hay != "" && strings.Contains(strings.ToLower(hay), strings.ToLower(needle))
 }
 
 // FileOnly reports whether the filter scopes the list to the active editor's

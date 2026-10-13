@@ -37,51 +37,34 @@ func schemaFor(patterns []string) filterexpr.Schema {
 
 // matches gates one entry through the filter. Terms of different fields are
 // AND'd, repeats of one field OR'd, and the free text is the same fuzzy gate
-// the Issues pane uses, run over the tag's source line.
+// the Issues pane uses, run over the tag's source line. A negated term or
+// word (-tag:NOTE, -file:vendor, -wip) drops what it matches (#2951).
 func (m *Model) matches(e Entry) bool {
 	q := m.filter.Query()
 	if q.Empty() {
 		return true
 	}
-	if q.Value("scope") == "file" && (m.curPath == "" || e.Item.Path != m.curPath) {
+	inScope := func(v string) bool {
+		return v != "file" || (m.curPath != "" && e.Item.Path == m.curPath)
+	}
+	if !q.Keeps("scope", inScope) ||
+		!q.Keeps("tag", func(v string) bool { return v == e.Tag }) ||
+		!q.Keeps("file", func(v string) bool { return m.pathMatches(v, e.Item.Path) }) {
 		return false
 	}
-	if tags := q.Values("tag"); len(tags) > 0 && !hasString(tags, e.Tag) {
-		return false
-	}
-	if files := q.Values("file"); len(files) > 0 && !m.pathMatches(files, e.Item.Path) {
-		return false
-	}
-	if _, ok := filterexpr.MatchText(q.Match, e.Item.Text); !ok {
-		return false
-	}
-	return true
+	_, ok := q.MatchFree(e.Item.Text)
+	return ok
 }
 
-// pathMatches applies the file: values to a path, OR'd, against both the path
-// as rendered (project-relative) and the raw one — a filter typed off the
+// pathMatches applies one file: value to a path, against both the path as
+// rendered (project-relative) and the raw one — a filter typed off the
 // screen has to hit what the screen shows.
-func (m *Model) pathMatches(pats []string, path string) bool {
+func (m *Model) pathMatches(pat, path string) bool {
 	shown := path
 	if m.displayPath != nil {
 		shown = m.displayPath(path)
 	}
-	for _, p := range pats {
-		if filterexpr.MatchPath(p, shown) || filterexpr.MatchPath(p, path) {
-			return true
-		}
-	}
-	return false
-}
-
-// hasString reports whether v is in list.
-func hasString(list []string, v string) bool {
-	for _, s := range list {
-		if s == v {
-			return true
-		}
-	}
-	return false
+	return filterexpr.MatchPath(pat, shown) || filterexpr.MatchPath(pat, path)
 }
 
 // FileOnly reports whether the filter scopes the list to the current file —

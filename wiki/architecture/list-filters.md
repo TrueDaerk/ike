@@ -4,7 +4,7 @@ title: List Filter Syntax
 description: One filter expression language shared by every list pane — fielded terms plus free match text, parsed by internal/filterexpr against a per-pane schema and typed into the internal/filterbar row that Problems, Usages and the TODO index all wear; the Issues pane's saved filters are the same syntax, and each pane's single-key filters are sugar that writes into it (#2156).
 resource: internal/filterexpr/filterexpr.go
 tags: [architecture, filter, tool-window, pane, search, issues, problems, usages, todo]
-timestamp: 2026-09-03T00:00:00Z
+timestamp: 2026-10-13T00:00:00Z
 ---
 
 # List Filter Syntax (#2156)
@@ -38,6 +38,14 @@ severity:error file:internal/**/*.go missing return
 - Terms of **different** fields are AND'd; **repeats of one field** are OR'd
   (`file:*.ts file:*.md` widens, `severity:error file:*.go` narrows). For the
   single-valued gates (`is:`, `scope:`) the last one written wins.
+- A leading `-` **negates** a token (#2951). `-file:vendor` drops the rows
+  `file:vendor` would keep; `-helper` drops the rows the word fuzzy-matches.
+  A negated term is validated exactly like its positive spelling (the value
+  without the dash), and negated terms AND with everything else:
+  `file:internal/app -file:*_test.go` is "under internal/app, not a test".
+  The dash is only an operator unquoted and in front of something: a lone
+  `-` and a quoted `"-x"` are literal match text, and `--x` is the literal
+  word `-x` (so `--` is a literal `-`).
 
 ## The core — `internal/filterexpr`
 
@@ -55,7 +63,19 @@ match helpers. It knows nothing about any pane.
   else is match text`, `unterminated quote`. The same message reaches a
   settings form, a config diagnostic and a pane's filter row.
 - `Query.Value(field)` / `Values(field)` / `Has(field)` are how a pane reads
-  a parse back; `Format(query)` writes one back out and round-trips.
+  a parse back — positive terms only; `Format(query)` writes one back out and
+  round-trips, negated terms and words included.
+- A `Term` carries `Negated`; negated free words go to `Query.Excludes`
+  rather than `Match`, so `Match` stays the positive text and a relevance
+  score computed from it is unchanged (#2951).
+- `Query.Keeps(field, match)` is how every pane gates a row by one field:
+  `match` reads one value against the row, and the helper applies all of
+  the field's terms — one positive term must match (repeats OR), no negated
+  one may, a field the query never names keeps the row. `KeepsAll` is the
+  variant whose positive repeats AND (the Complexity panel's reading).
+  `Query.MatchFree(text)` is the free-text gate with the excludes applied:
+  `MatchText` over `Match`, and a row any `Excludes` word fuzzy-matches is
+  dropped. No pane loops over `Terms` by hand, so negation is uniform.
 - `MatchText(pattern, text)` is the free-text gate (fuzzy, scored).
   `MatchPath(pattern, path)` is what every `file:` field uses: a pattern with
   glob meta characters matches through `internal/pathglob` against the whole
@@ -79,7 +99,7 @@ supplies the schema and nothing else about the widget differs between panes.
 
 - The row is **permanent** (the rule #2104 set for the Issues filter row): a
   filter appearing must not shift the list by a line. Idle it renders the
-  expression, or a hint naming the pane's fields; focused it renders the
+  expression, or a hint naming the pane's fields (and that `-` negates); focused it renders the
   cursor, the inline completion ghost and any parse error.
 - `/` focuses it — in every pane. `enter` applies and leaves the input, `esc`
   clears the filter and leaves it, `tab` accepts the ghost. Editing keys come
@@ -115,7 +135,13 @@ supplies the schema and nothing else about the widget differs between panes.
 The Issues dialect lives in `internal/issuefilter` — the schema plus the
 `Spec` shape the config validator and the settings form read; it is what
 `issues.default_filter` and `issues.saved_filters` are written in (see
-[Config](./config.md)).
+[Config](./config.md)). It is the one dialect that rejects negation, with an
+error naming the `--` escape: the Issues pane narrows by a label selection and
+a state gate, not by a per-row gate a negated term could subtract from.
+
+The Complexity, Dependencies, Time and Usage panels wear the same row; every
+pane's gate goes through `Keeps` / `MatchFree`, so `-field:value` and `-word`
+work in each of them.
 
 ## Single-key filters are sugar
 

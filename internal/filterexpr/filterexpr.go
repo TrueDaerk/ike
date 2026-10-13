@@ -17,6 +17,11 @@
 // (label:"good first issue") and are the only escape there is — the same rule
 // the Issues pane's live match input applies.
 //
+// A leading "-" negates a token (#2951): -file:vendor keeps the rows file:
+// would drop, -helper drops the rows the word fuzzy-matches. The dash is only
+// an operator unquoted and in front of something — a lone "-" and a quoted
+// "-x" are literal, and "--x" is the literal word "-x".
+//
 // Parsing is strict: an unknown field, a value outside a closed vocabulary
 // and an unterminated quote are errors naming what is valid, because the
 // readers of a whole expression (a config value, a settings form, a pane's
@@ -35,56 +40,112 @@ import (
 )
 
 // Term is one fielded term: the field's canonical name (never an alias) and
-// its value, unquoted.
+// its value, unquoted. Negated marks a term written with a leading "-": the
+// rows it matches are dropped instead of kept.
 type Term struct {
-	Field string
-	Value string
+	Field   string
+	Value   string
+	Negated bool
 }
 
 // Query is one parsed expression: the fielded terms in written order plus the
 // free match text. Every part is optional — an empty Query narrows nothing.
+// Excludes are the negated free words (-helper); Match stays the positive text
+// alone, so a relevance score computed from it is unchanged by them.
 type Query struct {
-	Terms []Term
-	Match string
+	Terms    []Term
+	Match    string
+	Excludes []string
 }
 
 // Empty reports whether the query narrows nothing.
-func (q Query) Empty() bool { return len(q.Terms) == 0 && q.Match == "" }
+func (q Query) Empty() bool { return len(q.Terms) == 0 && q.Match == "" && len(q.Excludes) == 0 }
 
-// Has reports whether the query named field at least once.
+// Has reports whether the query named field at least once in a positive term.
 func (q Query) Has(field string) bool {
 	for _, t := range q.Terms {
-		if t.Field == field {
+		if t.Field == field && !t.Negated {
 			return true
 		}
 	}
 	return false
 }
 
-// Value returns the field's last value, "" when the query did not name it.
-// The last one wins for the single-valued fields (a second is:open after an
-// is:closed reads as a correction).
+// Value returns the field's last positive value, "" when the query did not
+// name it. The last one wins for the single-valued fields (a second is:open
+// after an is:closed reads as a correction).
 func (q Query) Value(field string) string {
 	out := ""
 	for _, t := range q.Terms {
-		if t.Field == field {
+		if t.Field == field && !t.Negated {
 			out = t.Value
 		}
 	}
 	return out
 }
 
-// Values returns every value written for field, in order and deduplicated —
-// the repeatable fields (label:, tag:) OR their values together.
+// Values returns every positive value written for field, in order and
+// deduplicated — the repeatable fields (label:, tag:) OR their values
+// together.
 func (q Query) Values(field string) []string {
 	var out []string
 	for _, t := range q.Terms {
-		if t.Field != field || contains(out, t.Value) {
+		if t.Field != field || t.Negated || contains(out, t.Value) {
 			continue
 		}
 		out = append(out, t.Value)
 	}
 	return out
+}
+
+// Keeps applies every term of field to a row: when the field has positive
+// terms one of them must match (repeats OR, the repeatable-field rule), and no
+// negated term may match. A query that never names the field keeps the row.
+// match is the pane's reading of one value against the row — the same
+// function serves both polarities, so a pane cannot get negation wrong.
+func (q Query) Keeps(field string, match func(value string) bool) bool {
+	return q.keeps(field, match, false)
+}
+
+// KeepsAll is Keeps for a field whose positive repeats AND rather than OR
+// (the Complexity panel's file:a file:b narrows to both): every positive term
+// must match, no negated one may.
+func (q Query) KeepsAll(field string, match func(value string) bool) bool {
+	return q.keeps(field, match, true)
+}
+
+func (q Query) keeps(field string, match func(string) bool, all bool) bool {
+	positive, hit := false, false
+	for _, t := range q.Terms {
+		if t.Field != field {
+			continue
+		}
+		m := match(t.Value)
+		switch {
+		case t.Negated:
+			if m {
+				return false
+			}
+		case all && !m:
+			return false
+		default:
+			positive = true
+			hit = hit || m
+		}
+	}
+	return !positive || hit
+}
+
+// MatchFree gates a haystack by the free text: Match must fuzzy-match it
+// (MatchText) and no Excludes word may. The score is Match's, so negated
+// words never move a relevance order.
+func (q Query) MatchFree(text string) (score int, ok bool) {
+	for _, w := range q.Excludes {
+		if _, hit := fuzzy.Match(w, text); hit {
+			return 0, false
+		}
+	}
+	return MatchText(q.Match, text)
 }
 
 // Field describes one qualifier a pane accepts.
@@ -192,7 +253,11 @@ func (s Schema) Parse(expr string) (Query, error) {
 	for _, t := range toks {
 		name, val, ok := t.Qualifier()
 		if !ok {
-			match = append(match, t.Text)
+			if t.Negated {
+				q.Excludes = append(q.Excludes, t.Text)
+			} else {
+				match = append(match, t.Text)
+			}
 			continue
 		}
 		f, known := s.Lookup(name)
@@ -202,21 +267,40 @@ func (s Schema) Parse(expr string) (Query, error) {
 		if err := f.check(name, val); err != nil {
 			return Query{}, err
 		}
-		q.Terms = append(q.Terms, Term{Field: f.Name, Value: val})
+		q.Terms = append(q.Terms, Term{Field: f.Name, Value: val, Negated: t.Negated})
 	}
 	q.Match = strings.Join(match, " ")
 	return q, nil
 }
 
 // Format writes a query back as an expression: the terms in order, then the
-// match text. It is the inverse of Parse up to term order and quoting.
+// match text, then the negated words. It is the inverse of Parse up to term
+// order and quoting: a match word that starts with "-" is written "--word"
+// and an excluded one that does is quoted, so neither changes polarity.
 func Format(q Query) string {
-	parts := make([]string, 0, len(q.Terms)+1)
+	parts := make([]string, 0, len(q.Terms)+len(q.Excludes)+1)
 	for _, t := range q.Terms {
-		parts = append(parts, t.Field+":"+Quote(t.Value))
+		neg := ""
+		if t.Negated {
+			neg = "-"
+		}
+		parts = append(parts, neg+t.Field+":"+Quote(t.Value))
 	}
 	if q.Match != "" {
-		parts = append(parts, q.Match)
+		words := strings.Split(q.Match, " ")
+		for i, w := range words {
+			if len(w) > 1 && w[0] == '-' {
+				words[i] = "-" + w
+			}
+		}
+		parts = append(parts, strings.Join(words, " "))
+	}
+	for _, w := range q.Excludes {
+		if strings.HasPrefix(w, "-") || strings.ContainsAny(w, " \t") {
+			parts = append(parts, "-\""+strings.ReplaceAll(w, "\"", "")+"\"")
+			continue
+		}
+		parts = append(parts, "-"+w)
 	}
 	return strings.Join(parts, " ")
 }
@@ -235,29 +319,49 @@ func Quote(v string) string {
 // Token is one tokenized word plus the byte offset of the first colon written
 // outside quotes (-1 when there is none). Quoting decides what is a field:
 // label:"good first issue" splits at its unquoted colon, while a fully quoted
-// "fix:tests" is plain match text.
+// "fix:tests" is plain match text. Negated reports a leading unquoted "-",
+// already stripped from Text (and Colon shifted to match).
 type Token struct {
-	Text  string
-	Colon int
+	Text    string
+	Colon   int
+	Negated bool
 }
 
 // Tokenize splits an expression on whitespace, keeping double-quoted runs
 // together. A quote may open mid-word (label:"good first issue"), which is
 // how a field carries a value with spaces; the quotes themselves are dropped
-// from the token.
+// from the token. A leading unquoted "-" negates the token unless it is the
+// whole token; a leading unquoted "--" escapes to a literal "-".
 func Tokenize(expr string) ([]Token, error) {
 	var out []Token
 	var cur strings.Builder
 	inWord, inQuote := false, false
 	colon := -1
+	// dashes counts the unquoted "-" runes opening the word, up to two;
+	// leading is false once anything else (a quote included) was seen.
+	dashes, leading := 0, true
 	flush := func() {
 		if inWord {
-			out = append(out, Token{Text: cur.String(), Colon: colon})
+			tok := Token{Text: cur.String(), Colon: colon}
+			if dashes > 0 && tok.Text != "-" {
+				tok.Negated = dashes == 1
+				tok.Text = tok.Text[1:]
+				if tok.Colon >= 0 {
+					tok.Colon--
+				}
+			}
+			out = append(out, tok)
 			cur.Reset()
 			inWord, colon = false, -1
 		}
+		dashes, leading = 0, true
 	}
 	for _, r := range expr {
+		if r == '-' && !inQuote && leading && dashes < 2 {
+			dashes++
+		} else if r != ' ' && r != '\t' && r != '\n' && r != '\r' || inQuote {
+			leading = false
+		}
 		switch {
 		case r == '"':
 			inWord, inQuote = true, !inQuote

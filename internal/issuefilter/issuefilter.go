@@ -78,6 +78,17 @@ func Parse(expr string) (Spec, error) {
 	if err != nil {
 		return Spec{}, err
 	}
+	// The Issues pane narrows by selected labels and a state gate, not by a
+	// row gate, so it has nothing a negated term could exclude — say so
+	// rather than silently dropping it (#2951). "--x" still writes "-x".
+	for _, t := range q.Terms {
+		if t.Negated {
+			return Spec{}, fmt.Errorf("-%s: issue filters cannot negate a qualifier — write --%s:%s to match it literally", t.Field, t.Field, t.Value)
+		}
+	}
+	if len(q.Excludes) > 0 {
+		return Spec{}, fmt.Errorf("-%s: issue filters cannot exclude words — write --%s to match it literally", q.Excludes[0], q.Excludes[0])
+	}
 	return Spec{
 		State:  q.Value("is"),
 		Labels: q.Values("label"),

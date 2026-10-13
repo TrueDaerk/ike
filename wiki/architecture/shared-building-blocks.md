@@ -41,7 +41,7 @@ apply to every family:
 | `Field{Text, Cur}` with `Key`, `Paste`, `View`, `ViewSel`, `Set`, `Clear` | `internal/ui/field.go` | every one-line input: prompts, rename fields, filters, form fields | `internal/ui/inputsweep_test.go` |
 | `EditKey`, `PasteText`, `CursorView`, `Typing` | `internal/ui/textinput.go` | the primitives behind `Field`; call directly only when the text lives in a struct you cannot change | same |
 | `SpeedSearch` | `internal/ui/speedsearch.go` | type-ahead narrowing inside a modal picker | — |
-| `filterbar.Model` | `internal/filterbar` | the permanent filter row of a list pane with a `filterexpr` schema | — |
+| `filterbar.Model` | `internal/filterbar` | the permanent filter row of a list pane with a `filterexpr` schema; gate rows with `Query.Keeps(field, match)` per field and `Query.MatchFree(text)` for the free text, never a hand loop over `Terms`, so `-field:value` / `-word` negation (#2951) works — see [List Filter Syntax](list-filters.md) | — |
 | `KeyVerdict` (`BeginKey`, `HitKey`, `MissKey`, `KeyAnswered`, `HandledLastKey`) | `internal/ui/keyverdict.go` | embedded in a tool pane so the host's deferred unbound verdict knows which chords the pane (and its input) answered — see [Usage Telemetry](usage-telemetry.md) (#2889) | — |
 
 The keys a field answers, wherever it is hosted — reuse the block and a filter

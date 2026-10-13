@@ -151,7 +151,7 @@ func (m *Model) SetTerm(field, value string) bool {
 // HasTerm reports whether the current filter carries field:value.
 func (m *Model) HasTerm(field, value string) bool {
 	for _, t := range m.query.Terms {
-		if t.Field == field && t.Value == value {
+		if t.Field == field && t.Value == value && !t.Negated {
 			return true
 		}
 	}
@@ -231,6 +231,8 @@ func (m *Model) Completion() string {
 	if !ok {
 		return ""
 	}
+	// A negated token (-file:…) completes like its positive spelling.
+	tok = strings.TrimPrefix(tok, "-")
 	if i := strings.IndexByte(tok, ':'); i > 0 {
 		return m.completeValue(strings.ToLower(tok[:i]), tok[i+1:])
 	}
@@ -312,7 +314,7 @@ func (m *Model) Hint() string {
 	if len(names) == 0 {
 		return "/ filter"
 	}
-	return "/ filter — " + strings.Join(names, " ") + " or plain text"
+	return "/ filter — " + strings.Join(names, " ") + " or plain text, - negates"
 }
 
 // View renders the row, clipped to width. The focused row shows the cursor,

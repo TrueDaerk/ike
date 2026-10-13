@@ -159,16 +159,14 @@ func (m *Model) matches(md deps.ManifestDeps, d deps.Dep) bool {
 	if q.Empty() {
 		return true
 	}
-	if manifests := q.Values("manifest"); len(manifests) > 0 && !m.pathMatches(manifests, md.Path) {
+	// A negated term or word (-state:fresh, -lodash) drops what it
+	// matches (#2951).
+	if !q.Keeps("manifest", func(v string) bool { return m.pathMatches(v, md.Path) }) ||
+		!q.Keeps("state", func(v string) bool { return v == depState(d) }) {
 		return false
 	}
-	if states := q.Values("state"); len(states) > 0 && !hasString(states, depState(d)) {
-		return false
-	}
-	if _, ok := filterexpr.MatchText(q.Match, d.Name); !ok {
-		return false
-	}
-	return true
+	_, ok := q.MatchFree(d.Name)
+	return ok
 }
 
 // depState classifies a dependency for the state: gate; vulnerable wins
@@ -183,25 +181,10 @@ func depState(d deps.Dep) string {
 	return "fresh"
 }
 
-// pathMatches applies the manifest: values, OR'd, against the rendered
-// and the raw path.
-func (m *Model) pathMatches(pats []string, path string) bool {
-	shown := m.shorten(path)
-	for _, p := range pats {
-		if filterexpr.MatchPath(p, shown) || filterexpr.MatchPath(p, path) {
-			return true
-		}
-	}
-	return false
-}
-
-func hasString(list []string, v string) bool {
-	for _, s := range list {
-		if s == v {
-			return true
-		}
-	}
-	return false
+// pathMatches applies one manifest: value against the rendered and the raw
+// path.
+func (m *Model) pathMatches(pat, path string) bool {
+	return filterexpr.MatchPath(pat, m.shorten(path)) || filterexpr.MatchPath(pat, path)
 }
 
 // Update handles one message while the panel exists; only key presses

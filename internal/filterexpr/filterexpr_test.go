@@ -134,6 +134,10 @@ func TestFormatRoundTrips(t *testing.T) {
 		`file:"src dir/*.go"`,
 		"file:a file:b crash here",
 		"scope:file plain text",
+		"-file:vendor",
+		`-file:"src dir" a -b c`,
+		`"-literal" -- - -"-x"`,
+		"file:a -file:b -sev:warning",
 	} {
 		q, err := demo.Parse(expr)
 		if err != nil {
@@ -206,5 +210,102 @@ func TestTokenizeKeepsQuotedRunsTogether(t *testing.T) {
 	name, val, ok := toks[2].Qualifier()
 	if !ok || name != "d" || val != "e f" {
 		t.Fatalf("qualifier = %q/%q/%v", name, val, ok)
+	}
+}
+
+// A leading "-" negates (#2951): a fielded term becomes a Negated term, a
+// bare word goes to Excludes, and the literal escapes stay match text.
+func TestParseNegation(t *testing.T) {
+	for _, tc := range []struct {
+		expr     string
+		terms    []Term
+		match    string
+		excludes []string
+	}{
+		{expr: "-file:vendor", terms: []Term{{Field: "file", Value: "vendor", Negated: true}}},
+		{expr: "-word", excludes: []string{"word"}},
+		{expr: `"-literal"`, match: "-literal"},
+		{expr: "--", match: "-"},
+		{expr: "-", match: "-"},
+		{expr: "--x", match: "-x"},
+		{expr: "a -b c", match: "a c", excludes: []string{"b"}},
+		{expr: `-"two words"`, excludes: []string{"two words"}},
+		{expr: "file:a -file:b", terms: []Term{{Field: "file", Value: "a"}, {Field: "file", Value: "b", Negated: true}}},
+		{expr: "-SEV:error", terms: []Term{{Field: "severity", Value: "error", Negated: true}}},
+	} {
+		q, err := demo.Parse(tc.expr)
+		if err != nil {
+			t.Fatalf("parse %q: %v", tc.expr, err)
+		}
+		if !reflect.DeepEqual(q.Terms, tc.terms) || q.Match != tc.match || !reflect.DeepEqual(q.Excludes, tc.excludes) {
+			t.Fatalf("%q = %+v, want terms %+v match %q excludes %v", tc.expr, q, tc.terms, tc.match, tc.excludes)
+		}
+		if q.Empty() {
+			t.Fatalf("%q must not report Empty", tc.expr)
+		}
+	}
+}
+
+// Negated terms are validated like positive ones, on the value without the
+// dash, and never read as positive by Has / Value / Values.
+func TestNegatedTermsValidateAndStayOutOfValues(t *testing.T) {
+	if _, err := demo.Parse("-sev:fatal"); err == nil || !strings.Contains(err.Error(), "wants error, warning") {
+		t.Fatalf("-sev:fatal err = %v, want the vocabulary error", err)
+	}
+	if _, err := demo.Parse("-bogus:x"); err == nil || !strings.Contains(err.Error(), `unknown qualifier "bogus:"`) {
+		t.Fatalf("-bogus:x err = %v", err)
+	}
+	q, err := demo.Parse("-scope:file -file:a")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if q.Has("scope") || q.Value("scope") != "" || q.Values("file") != nil {
+		t.Fatalf("negated terms leaked into Has/Value/Values: %+v", q)
+	}
+}
+
+func TestKeeps(t *testing.T) {
+	eq := func(row string) func(string) bool { return func(v string) bool { return v == row } }
+	for _, tc := range []struct {
+		expr      string
+		row       string
+		keep, all bool
+	}{
+		{expr: "", row: "a", keep: true, all: true},               // field absent
+		{expr: "scope:file", row: "a", keep: true, all: true},     // other field only
+		{expr: "file:a", row: "a", keep: true, all: true},         // positive hit
+		{expr: "file:a", row: "b", keep: false, all: false},       // positive miss
+		{expr: "file:a file:b", row: "b", keep: true, all: false}, // OR vs AND
+		{expr: "-file:a", row: "a", keep: false, all: false},      // negated hit
+		{expr: "-file:a", row: "b", keep: true, all: true},        // negated miss
+		{expr: "file:b -file:a", row: "b", keep: true, all: true}, // mixed
+		{expr: "file:b -file:b", row: "b", keep: false, all: false},
+		{expr: "file:c -file:a", row: "b", keep: false, all: false},
+	} {
+		q, err := demo.Parse(tc.expr)
+		if err != nil {
+			t.Fatalf("parse %q: %v", tc.expr, err)
+		}
+		if got := q.Keeps("file", eq(tc.row)); got != tc.keep {
+			t.Errorf("%q Keeps(%q) = %v, want %v", tc.expr, tc.row, got, tc.keep)
+		}
+		if got := q.KeepsAll("file", eq(tc.row)); got != tc.all {
+			t.Errorf("%q KeepsAll(%q) = %v, want %v", tc.expr, tc.row, got, tc.all)
+		}
+	}
+}
+
+func TestMatchFreeHonoursExcludes(t *testing.T) {
+	q, err := demo.Parse("ren -helper")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if _, ok := q.MatchFree("renderHelper"); ok {
+		t.Fatal("an excluded word that fuzzy-matches must drop the row")
+	}
+	score, ok := q.MatchFree("render")
+	want, _ := MatchText("ren", "render")
+	if !ok || score != want {
+		t.Fatalf("MatchFree(render) = %d, %v; want Match's score %d", score, ok, want)
 	}
 }

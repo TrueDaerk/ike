@@ -752,27 +752,27 @@ func (m *Model) relPath(path string) string {
 	return filepath.ToSlash(path)
 }
 
-// matches gates one row through the filter.
+// matches gates one row through the filter. Each field's terms go through
+// filterexpr's KeepsAll — repeats AND, a negated term (-file:_test) drops
+// what it matches — and the free text through MatchFree, so a negated word
+// drops the rows it fuzzy-matches (#2951).
 func (m *Model) matches(q filterexpr.Query, r Row) bool {
 	if q.Empty() {
 		return true
 	}
-	for _, t := range q.Terms {
-		switch t.Field {
-		case "file":
-			if !filterexpr.MatchPath(t.Value, r.Rel) {
-				return false
-			}
-		case "lang":
-			if !strings.EqualFold(t.Value, r.Lang) {
-				return false
-			}
-		case "fn":
-			if !strings.Contains(strings.ToLower(r.label()), strings.ToLower(t.Value)) {
-				return false
-			}
-		case "min", "max":
-			n, err := strconv.Atoi(t.Value)
+	class := r.Fn.Class
+	if r.Group != nil {
+		class = r.Group.Class
+	}
+	atLeast := func(field string) func(string) bool {
+		return func(v string) bool {
+			n, err := strconv.Atoi(v)
+			return err == nil && r.attr(field) >= n
+		}
+	}
+	bound := func(min bool) func(string) bool {
+		return func(v string) bool {
+			n, err := strconv.Atoi(v)
 			if err != nil {
 				return false
 			}
@@ -780,38 +780,36 @@ func (m *Model) matches(q filterexpr.Query, r Row) bool {
 			if !col.numeric() {
 				col = ColCCN
 			}
-			v, _ := r.value(col)
-			if (t.Field == "min" && v < float64(n)) || (t.Field == "max" && v > float64(n)) {
-				return false
+			x, _ := r.value(col)
+			if min {
+				return x >= float64(n)
 			}
-		case "kind":
-			if r.Group != nil || !strings.EqualFold(t.Value, r.Fn.Kind) {
-				return false
-			}
-		case "class":
-			class := r.Fn.Class
-			if r.Group != nil {
-				class = r.Group.Class
-			}
-			if !strings.Contains(strings.ToLower(class), strings.ToLower(t.Value)) {
-				return false
-			}
-		case "depth", "params", "nloc":
-			n, err := strconv.Atoi(t.Value)
-			if err != nil || r.attr(t.Field) < n {
-				return false
-			}
-		case "test":
-			if want, ok := testValue(t.Value); !ok || r.Test != want {
-				return false
-			}
-		case "baseline":
-			if !baselineMatches(t.Value, r) {
-				return false
-			}
+			return x <= float64(n)
 		}
 	}
-	_, ok := filterexpr.MatchText(q.Match, r.label())
+	gates := []struct {
+		field string
+		match func(string) bool
+	}{
+		{"file", func(v string) bool { return filterexpr.MatchPath(v, r.Rel) }},
+		{"lang", func(v string) bool { return strings.EqualFold(v, r.Lang) }},
+		{"fn", func(v string) bool { return strings.Contains(strings.ToLower(r.label()), strings.ToLower(v)) }},
+		{"min", bound(true)},
+		{"max", bound(false)},
+		{"kind", func(v string) bool { return r.Group == nil && strings.EqualFold(v, r.Fn.Kind) }},
+		{"class", func(v string) bool { return strings.Contains(strings.ToLower(class), strings.ToLower(v)) }},
+		{"depth", atLeast("depth")},
+		{"params", atLeast("params")},
+		{"nloc", atLeast("nloc")},
+		{"test", func(v string) bool { want, ok := testValue(v); return ok && r.Test == want }},
+		{"baseline", func(v string) bool { return baselineMatches(v, r) }},
+	}
+	for _, g := range gates {
+		if !q.KeepsAll(g.field, g.match) {
+			return false
+		}
+	}
+	_, ok := q.MatchFree(r.label())
 	return ok
 }
 

@@ -263,13 +263,14 @@ func percent(r float64) string {
 	return strconv.Itoa(int(r*100+0.5)) + "%"
 }
 
-// matches gates one row through the filter's free text.
+// matches gates one row through the filter's free text; a negated word drops
+// the rows it fuzzy-matches (#2951).
 func (m *Model) matches(r Row) bool {
 	q := m.filter.Query()
 	if q.Empty() {
 		return true
 	}
-	_, ok := filterexpr.MatchText(q.Match, r.Name)
+	_, ok := q.MatchFree(r.Name)
 	return ok
 }
 
