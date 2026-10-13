@@ -148,19 +148,23 @@ func TestParseAgentHook(t *testing.T) {
 }
 
 // TestParseComplexity covers `ike complexity …` (#2922): flags in both the
-// `--flag N` and `--flag=N` forms, --diff's optional `=REV`, one directory,
-// and the usage errors cmd/ike turns into exit 2.
+// `--flag N` and `--flag=N` forms, --diff's optional `=REV`, any number of
+// paths (#2936), and the usage errors cmd/ike turns into exit 2.
 func TestParseComplexity(t *testing.T) {
 	cases := []struct {
 		args []string
 		want ComplexityArgs
 	}{
 		{nil, ComplexityArgs{}},
-		{[]string{"."}, ComplexityArgs{Dir: "."}},
-		{[]string{"--json", "src"}, ComplexityArgs{JSON: true, Dir: "src"}},
+		{[]string{"."}, ComplexityArgs{Paths: []string{"."}}},
+		{[]string{"--json", "src"}, ComplexityArgs{JSON: true, Paths: []string{"src"}}},
 		{[]string{"--diff"}, ComplexityArgs{Diff: true}},
 		{[]string{"--diff=origin/main", "--json"}, ComplexityArgs{Diff: true, Rev: "origin/main", JSON: true}},
-		{[]string{"--diff", "src"}, ComplexityArgs{Diff: true, Dir: "src"}},
+		{[]string{"--diff", "src"}, ComplexityArgs{Diff: true, Paths: []string{"src"}}},
+		// Several paths, files and directories mixed, in order (#2936).
+		{[]string{"a.go", "b.go"}, ComplexityArgs{Paths: []string{"a.go", "b.go"}}},
+		{[]string{"--json", "pkg/", "--min", "3", "main.go", "-"}, ComplexityArgs{JSON: true, Min: 3, Paths: []string{"pkg/", "main.go", "-"}}},
+		{[]string{"--diff=main", "x.go", "x.go"}, ComplexityArgs{Diff: true, Rev: "main", Paths: []string{"x.go", "x.go"}}},
 		{[]string{"--min", "20"}, ComplexityArgs{Min: 20}},
 		{[]string{"--min=20", "--ccn", "10", "--cog=12"}, ComplexityArgs{Min: 20, CCN: 10, Cog: 12}},
 		{[]string{"--cmt", "40", "--json"}, ComplexityArgs{Cmt: 40, JSON: true}},
@@ -174,13 +178,13 @@ func TestParseComplexity(t *testing.T) {
 			t.Errorf("Parse(complexity %q) error: %v", c.args, err)
 			continue
 		}
-		if inv.Complexity == nil || *inv.Complexity != c.want || len(inv.Targets) != 0 {
+		if inv.Complexity == nil || !reflect.DeepEqual(*inv.Complexity, c.want) || len(inv.Targets) != 0 {
 			t.Errorf("Parse(complexity %q) = %+v, want %+v", c.args, inv.Complexity, c.want)
 		}
 	}
 	for _, args := range [][]string{
 		{"--min"}, {"--min", "x"}, {"--min=0"}, {"--ccn=-1"}, {"--cog", ""}, {"--cmt=0"}, {"--cmt", "101"}, {"--cmt"},
-		{"--diff="}, {"--bogus"}, {"a", "b"},
+		{"--diff="}, {"--bogus"}, {"a", "--bogus"},
 	} {
 		if _, err := Parse(append([]string{"complexity"}, args...)); err == nil {
 			t.Errorf("Parse(complexity %q) accepted", args)

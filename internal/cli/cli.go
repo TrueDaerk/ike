@@ -48,7 +48,7 @@ type Invocation struct {
 }
 
 // ComplexityArgs is the parsed `ike complexity [--diff[=REV]] [--json]
-// [--min N] [--ccn N] [--cog N] [--cmt N] [DIR]`. A zero threshold means "not given":
+// [--min N] [--ccn N] [--cog N] [--cmt N] [PATH...]`. A zero threshold means "not given":
 // the report falls back to the configured warning thresholds.
 type ComplexityArgs struct {
 	// Diff selects the diff report against Rev ("" = HEAD).
@@ -62,9 +62,14 @@ type ComplexityArgs struct {
 	// comment-density threshold in percent (#2934, 1–100), a row filter
 	// like CCN and Cog.
 	Min, CCN, Cog, Cmt int
-	// Dir is the project directory to report on ("" = the working
-	// directory).
-	Dir string
+	// Paths are the files and directories to report on, as typed (#2936;
+	// none = the working directory). A directory is walked with the
+	// index's skip rules and the complexity.exclude globs; a file is
+	// measured directly, even inside a hidden or excluded directory. The
+	// project root (config, relative output paths) is the git root of the
+	// first path, else that path when it is a directory, else the working
+	// directory.
+	Paths []string
 	// Help asks for the usage text.
 	Help bool
 }
@@ -79,7 +84,7 @@ const agentHookCmd = "agent-hook"
 const complexityCmd = "complexity"
 
 // ComplexityUsage is the one-line grammar of `ike complexity`.
-const ComplexityUsage = "usage: ike complexity [--diff[=REV]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [DIR]"
+const ComplexityUsage = "usage: ike complexity [--diff[=REV]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [PATH...]"
 
 // Parse parses the arguments after the program name. Supported forms:
 //
@@ -168,8 +173,9 @@ func Parse(args []string) (Invocation, error) {
 
 // parseComplexity parses the arguments after `ike complexity`. Numeric
 // flags take their value as `--min N` or `--min=N`; `--diff` takes its
-// revision only in the `--diff=REV` form, so `--diff DIR` keeps DIR as the
-// directory. At most one directory; an unknown flag is an error.
+// revision only in the `--diff=REV` form, so `--diff PATH` keeps PATH as a
+// path. Every other argument is a path, in order (#2936); an unknown flag
+// is an error.
 func parseComplexity(args []string) (ComplexityArgs, error) {
 	var ca ComplexityArgs
 	for i := 0; i < len(args); i++ {
@@ -216,10 +222,7 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 		case strings.HasPrefix(a, "-") && a != "-":
 			return ComplexityArgs{}, fmt.Errorf("unknown flag %q", a)
 		default:
-			if ca.Dir != "" {
-				return ComplexityArgs{}, fmt.Errorf("more than one directory (%q, %q)", ca.Dir, a)
-			}
-			ca.Dir = a
+			ca.Paths = append(ca.Paths, a)
 		}
 	}
 	return ca, nil

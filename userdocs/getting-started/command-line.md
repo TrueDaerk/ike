@@ -64,9 +64,10 @@ explicit file means you meant this directory, not your most recent one.
 
 ## Headless reports
 
-`ike complexity [--diff[=REV]] [--json] [--min N] [DIR]` prints the
-project's function complexity (or its change against a git revision) and
-exits without starting the IDE — for CI and scripts. See
+`ike complexity [--diff[=REV]] [--json] [--min N] [PATH...]` prints the
+function complexity of the project, or of just the files and directories
+you name (or its change against a git revision), and exits without
+starting the IDE — for CI, pre-commit hooks and scripts. See
 [Code complexity](../guides/complexity.md#command-line).
 
 ## Environment variables

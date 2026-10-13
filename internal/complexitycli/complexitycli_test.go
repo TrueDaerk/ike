@@ -84,7 +84,7 @@ func run(t *testing.T, a cli.ComplexityArgs) (string, string, int) {
 func TestProjectText(t *testing.T) {
 	requireTrees(t)
 	dir := fixture(t)
-	out, stderr, code := run(t, cli.ComplexityArgs{Dir: dir})
+	out, stderr, code := run(t, cli.ComplexityArgs{Paths: []string{dir}})
 	if code != ExitOK {
 		t.Fatalf("exit %d, stderr %q", code, stderr)
 	}
@@ -119,7 +119,7 @@ func TestProjectText(t *testing.T) {
 func TestProjectMinFilter(t *testing.T) {
 	requireTrees(t)
 	dir := fixture(t)
-	out, _, code := run(t, cli.ComplexityArgs{Dir: dir, Min: 3})
+	out, _, code := run(t, cli.ComplexityArgs{Paths: []string{dir}, Min: 3})
 	if code != ExitOK {
 		t.Fatalf("exit %d", code)
 	}
@@ -130,7 +130,7 @@ func TestProjectMinFilter(t *testing.T) {
 		t.Errorf("shown line missing:\n%s", out)
 	}
 	// An explicit --ccn filters at that threshold too.
-	out, _, _ = run(t, cli.ComplexityArgs{Dir: dir, CCN: 2})
+	out, _, _ = run(t, cli.ComplexityArgs{Paths: []string{dir}, CCN: 2})
 	if strings.Contains(out, "simple") {
 		t.Errorf("--ccn 2 should drop simple:\n%s", out)
 	}
@@ -139,7 +139,7 @@ func TestProjectMinFilter(t *testing.T) {
 func TestProjectJSON(t *testing.T) {
 	requireTrees(t)
 	dir := fixture(t)
-	out, _, code := run(t, cli.ComplexityArgs{Dir: dir, JSON: true})
+	out, _, code := run(t, cli.ComplexityArgs{Paths: []string{dir}, JSON: true})
 	if code != ExitOK {
 		t.Fatalf("exit %d", code)
 	}
@@ -193,7 +193,7 @@ func TestProjectCmtFilter(t *testing.T) {
 	requireTrees(t)
 	dir := fixture(t)
 	write(t, dir, "chatty.go", chattyGo)
-	out, _, code := run(t, cli.ComplexityArgs{Dir: dir, Cmt: 40, JSON: true})
+	out, _, code := run(t, cli.ComplexityArgs{Paths: []string{dir}, Cmt: 40, JSON: true})
 	if code != ExitOK {
 		t.Fatalf("exit %d", code)
 	}
@@ -229,11 +229,11 @@ func TestProjectCmtFilter(t *testing.T) {
 		t.Errorf("summary = %v", got.Summary)
 	}
 	// A threshold the function stays under drops it; the table shows CMT%.
-	out, _, _ = run(t, cli.ComplexityArgs{Dir: dir, Cmt: 61})
+	out, _, _ = run(t, cli.ComplexityArgs{Paths: []string{dir}, Cmt: 61})
 	if strings.Contains(out, "chatty") || !strings.Contains(out, "CMT%") {
 		t.Errorf("--cmt 61 should drop chatty:\n%s", out)
 	}
-	out, _, _ = run(t, cli.ComplexityArgs{Dir: dir})
+	out, _, _ = run(t, cli.ComplexityArgs{Paths: []string{dir}})
 	if !strings.Contains(out, "60\n") {
 		t.Errorf("the table must show chatty's 60:\n%s", out)
 	}
@@ -245,7 +245,7 @@ func TestNoCgoBuild(t *testing.T) {
 	orig := available
 	available = func() bool { return false }
 	defer func() { available = orig }()
-	out, stderr, code := run(t, cli.ComplexityArgs{Dir: t.TempDir()})
+	out, stderr, code := run(t, cli.ComplexityArgs{Paths: []string{t.TempDir()}})
 	if code != ExitError || out != "" || !strings.Contains(stderr, "cgo") {
 		t.Errorf("exit %d, stdout %q, stderr %q", code, out, stderr)
 	}
@@ -257,7 +257,7 @@ func TestUsageAndDirErrors(t *testing.T) {
 		t.Errorf("help: exit %d, %q", code, out)
 	}
 	requireTrees(t)
-	_, stderr, code := run(t, cli.ComplexityArgs{Dir: filepath.Join(t.TempDir(), "missing")})
+	_, stderr, code := run(t, cli.ComplexityArgs{Paths: []string{filepath.Join(t.TempDir(), "missing")}})
 	if code != ExitError || stderr == "" {
 		t.Errorf("missing dir: exit %d, stderr %q", code, stderr)
 	}
@@ -296,7 +296,7 @@ func gitFixture(t *testing.T) string {
 func TestDiffText(t *testing.T) {
 	requireTrees(t)
 	dir := gitFixture(t)
-	out, stderr, code := run(t, cli.ComplexityArgs{Dir: dir, Diff: true})
+	out, stderr, code := run(t, cli.ComplexityArgs{Paths: []string{dir}, Diff: true})
 	if code != ExitOK {
 		t.Fatalf("exit %d, stderr %q", code, stderr)
 	}
@@ -320,7 +320,7 @@ func TestDiffText(t *testing.T) {
 func TestDiffJSON(t *testing.T) {
 	requireTrees(t)
 	dir := gitFixture(t)
-	out, _, code := run(t, cli.ComplexityArgs{Dir: dir, Diff: true, Rev: "main", JSON: true})
+	out, _, code := run(t, cli.ComplexityArgs{Paths: []string{dir}, Diff: true, Rev: "main", JSON: true})
 	if code != ExitOK {
 		t.Fatalf("exit %d", code)
 	}
@@ -367,15 +367,171 @@ func TestDiffJSON(t *testing.T) {
 func TestDiffErrors(t *testing.T) {
 	requireTrees(t)
 	dir := gitFixture(t)
-	_, stderr, code := run(t, cli.ComplexityArgs{Dir: dir, Diff: true, Rev: "no-such-ref"})
+	_, stderr, code := run(t, cli.ComplexityArgs{Paths: []string{dir}, Diff: true, Rev: "no-such-ref"})
 	if code != ExitError || !strings.Contains(stderr, "no-such-ref") {
 		t.Errorf("bad ref: exit %d, stderr %q", code, stderr)
 	}
 	t.Setenv("GIT_CEILING_DIRECTORIES", os.TempDir())
 	plain := t.TempDir()
 	write(t, plain, "a.go", simpleGo)
-	_, stderr, code = run(t, cli.ComplexityArgs{Dir: plain, Diff: true})
+	_, stderr, code = run(t, cli.ComplexityArgs{Paths: []string{plain}, Diff: true})
 	if code != ExitError || stderr == "" {
 		t.Errorf("not a repository: exit %d, stderr %q", code, stderr)
+	}
+}
+
+// projectJSON runs the JSON report and returns summary.files, the file of
+// every function row and the skipped languages.
+func projectJSON(t *testing.T, a cli.ComplexityArgs) (files int, rows, skippedLangs []string) {
+	t.Helper()
+	a.JSON = true
+	out, stderr, code := run(t, a)
+	if code != ExitOK {
+		t.Fatalf("exit %d, stderr %q", code, stderr)
+	}
+	var got struct {
+		Summary struct {
+			Files int `json:"files"`
+		} `json:"summary"`
+		Functions []struct {
+			File string `json:"file"`
+		} `json:"functions"`
+		Skipped struct {
+			Languages []string `json:"languages"`
+		} `json:"skipped"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	for _, f := range got.Functions {
+		rows = append(rows, f.File)
+	}
+	return got.Summary.Files, rows, got.Skipped.Languages
+}
+
+// TestSelectSingleFile: one named file reports only its functions (#2936);
+// outside a git repository the paths render relative to the working
+// directory.
+func TestSelectSingleFile(t *testing.T) {
+	requireTrees(t)
+	dir := fixture(t)
+	t.Chdir(dir)
+	files, rows, _ := projectJSON(t, cli.ComplexityArgs{Paths: []string{"pkg/b.go"}})
+	if files != 1 || len(rows) != 1 || rows[0] != "pkg/b.go" {
+		t.Errorf("files %d, rows %v", files, rows)
+	}
+	out, _, _ := run(t, cli.ComplexityArgs{Paths: []string{"pkg/b.go"}})
+	if !strings.Contains(out, "summary: 1 functions in 1 files") || strings.Contains(out, "a.go") {
+		t.Errorf("text report:\n%s", out)
+	}
+}
+
+// TestSelectFilesAndDirs: several files plus a directory are the union,
+// each file measured once even when named twice or inside the directory.
+func TestSelectFilesAndDirs(t *testing.T) {
+	requireTrees(t)
+	dir := fixture(t)
+	write(t, dir, "pkg/c.go", simpleGo)
+	t.Chdir(dir)
+	files, rows, _ := projectJSON(t, cli.ComplexityArgs{Paths: []string{"a.go", "a.go", "pkg", "pkg/b.go"}})
+	if files != 3 || len(rows) != 3 {
+		t.Fatalf("files %d, rows %v", files, rows)
+	}
+	want := map[string]bool{"a.go": true, "pkg/b.go": true, "pkg/c.go": true}
+	for _, r := range rows {
+		if !want[r] {
+			t.Errorf("unexpected or repeated row file %q", r)
+		}
+		delete(want, r)
+	}
+	if len(want) != 0 {
+		t.Errorf("missing rows %v", want)
+	}
+	files, _, _ = projectJSON(t, cli.ComplexityArgs{Paths: []string{"a.go", "pkg/c.go"}})
+	if files != 2 {
+		t.Errorf("two files: summary.files = %d", files)
+	}
+}
+
+// TestSelectExcludedButNamed: a named file below an excluded or hidden
+// directory is measured; the walk of its parent still skips the others.
+func TestSelectExcludedButNamed(t *testing.T) {
+	requireTrees(t)
+	dir := fixture(t)
+	files, rows, _ := projectJSON(t, cli.ComplexityArgs{Paths: []string{dir, filepath.Join(dir, "gen/skip_me.go"), filepath.Join(dir, ".hidden/h.go")}})
+	got := strings.Join(rows, " ")
+	if files != 4 || !strings.Contains(got, "gen/skip_me.go") || !strings.Contains(got, ".hidden/h.go") || strings.Contains(got, "vendor/") {
+		t.Errorf("summary.files = %d (want 4), rows %v", files, rows)
+	}
+}
+
+// TestSelectUnmeasurableFile: a named file without a spec, or that no
+// language claims, lands on the skipped line instead of aborting.
+func TestSelectUnmeasurableFile(t *testing.T) {
+	requireTrees(t)
+	dir := fixture(t)
+	write(t, dir, "notes.zzz", "hello")
+	t.Chdir(dir)
+	files, rows, langs := projectJSON(t, cli.ComplexityArgs{Paths: []string{"a.go", "data.json", "notes.zzz"}})
+	if files != 1 || len(rows) != 1 {
+		t.Errorf("files %d rows %v", files, rows)
+	}
+	joined := strings.Join(langs, ",")
+	if !strings.Contains(joined, ".zzz") {
+		t.Errorf("skipped languages %v lack .zzz", langs)
+	}
+	if _, ok := lang.ByPath("data.json"); ok && !strings.Contains(joined, "json") {
+		t.Errorf("skipped languages %v lack json", langs)
+	}
+	out, _, code := run(t, cli.ComplexityArgs{Paths: []string{"notes.zzz"}})
+	if code != ExitOK || !strings.Contains(out, "skipped: 1 file (no complexity spec: .zzz)") {
+		t.Errorf("exit %d:\n%s", code, out)
+	}
+}
+
+// TestSelectUnknownPath: a missing path is a usage error naming it.
+func TestSelectUnknownPath(t *testing.T) {
+	requireTrees(t)
+	dir := fixture(t)
+	t.Chdir(dir)
+	out, stderr, code := run(t, cli.ComplexityArgs{Paths: []string{"a.go", "nope/missing.go"}})
+	if code != ExitError || out != "" || !strings.Contains(stderr, "nope/missing.go") {
+		t.Errorf("exit %d, stdout %q, stderr %q", code, out, stderr)
+	}
+}
+
+// TestDiffSelectFile: --diff with a named file reports only that file's
+// changes and an unchanged named file an empty "unchanged" diff. The root
+// is the git root, so paths stay root-relative from a subdirectory.
+func TestDiffSelectFile(t *testing.T) {
+	requireTrees(t)
+	dir := gitFixture(t)
+	t.Chdir(filepath.Join(dir, "pkg"))
+	out, stderr, code := run(t, cli.ComplexityArgs{Paths: []string{"b.go"}, Diff: true})
+	if code != ExitOK {
+		t.Fatalf("exit %d, stderr %q", code, stderr)
+	}
+	if !strings.Contains(out, "changed (1):") || !strings.Contains(out, "pkg/b.go") ||
+		strings.Contains(out, "added (") || strings.Contains(out, "removed (") {
+		t.Errorf("diff restricted to pkg/b.go:\n%s", out)
+	}
+	// vendor/v.go is committed and untouched.
+	out, _, code = run(t, cli.ComplexityArgs{Paths: []string{filepath.Join(dir, "vendor/v.go")}, Diff: true, JSON: true})
+	var got struct {
+		Changed []any  `json:"changed"`
+		Added   []any  `json:"added"`
+		Removed []any  `json:"removed"`
+		Verdict string `json:"verdict"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil || code != ExitOK {
+		t.Fatalf("exit %d, %v\n%s", code, err, out)
+	}
+	if len(got.Changed)+len(got.Added)+len(got.Removed) != 0 || got.Verdict != "unchanged" {
+		t.Errorf("unchanged file: %+v", got)
+	}
+	// A named untracked file below the directory git collapses still counts.
+	out, _, _ = run(t, cli.ComplexityArgs{Paths: []string{filepath.Join(dir, "fresh/c.go")}, Diff: true})
+	if !strings.Contains(out, "added (1):") || !strings.Contains(out, "fresh/c.go") || strings.Contains(out, "changed (") {
+		t.Errorf("untracked named file:\n%s", out)
 	}
 }

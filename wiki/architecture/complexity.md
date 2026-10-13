@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Code Complexity
-description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters, nesting depth and comment density (#2934) per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary, the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source, and the headless `ike complexity` CLI (#2922) printing the project table or the diff against a revision as text or JSON for CI and agents; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
+description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters, nesting depth and comment density (#2934) per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary, the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source, and the headless `ike complexity` CLI (#2922) printing the table of the project or of named files and directories (#2936) or the diff against a revision as text or JSON for CI and agents; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
 resource: internal/complexity, internal/complexitypanel, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_problems.go, internal/app/complexity_segment.go, internal/complexitycli
 tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive, index, settings, telemetry, vcs, diff, problems, cli]
-timestamp: 2026-10-13T20:00:00Z
+timestamp: 2026-10-13T22:00:00Z
 ---
 
 # Code Complexity
@@ -521,19 +521,36 @@ next to the other mark toggles).
 
 ## Headless CLI (#2922)
 
-`ike complexity [--diff[=REV]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [DIR]`
+`ike complexity [--diff[=REV]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [PATH...]`
 is the terminal-free report for CI pipelines and coding agents. The grammar
 lives in `internal/cli` (`ComplexityArgs`, first argument only like
 `agent-hook`, so a file named `complexity` still opens as `./complexity`);
 `cmd/ike` dispatches before any terminal setup to
 `internal/complexitycli.Run`, which returns the exit code: **0** for a
-report, **2** for a usage error, a directory that does not exist, a git
+report, **2** for a usage error, a path that does not exist (the message
+names it), a git
 error (an unknown `--diff` ref prints git's message on stderr) or a build
 without syntax trees. The report never fails on thresholds — gating is the
 caller's policy over the JSON.
 
-**One walk.** The project report walks `DIR` with
-`complexity.WalkProject`, which runs on `langindex.WalkFiles` — the same
+**Selection (#2936).** `ComplexityArgs.Paths` holds any number of files and
+directories, mixed; none means the working directory. Each path is made
+absolute with symlinks resolved (macOS `/var` → `/private/var`, so paths
+compare with what git reports). The **project root** — config discovery,
+threshold defaults, root-relative slash paths in the output, the base of
+the exclude globs — is the working directory without paths, otherwise the
+git root of the first path (`vcs.DetectRoot`), else the first path when it
+is a directory, else the working directory. A directory is walked with
+`complexity.WalkUnder(root, dir, …)` (the walk below, globs still relative
+to the root); a named file is measured directly — no skip rule and no
+`complexity.exclude` glob applies, since the user asked for it — and, when
+no spec measures it, lands on the `skipped:` line under its language id or,
+claimed by none, its extension. Every file is measured once (a file named
+twice or also below a named directory); `summary.files` counts the measured
+files of the selection.
+
+**One walk.** The project report walks each named directory with
+`complexity.WalkUnder` (`WalkProject` for the root), which runs on `langindex.WalkFiles` — the same
 directory skip rules the index's `langindex` scan uses — and classifies
 every file with the index's own `classify` (language with a spec, no
 `complexity.exclude` glob), so the CLI and the tool window can never
@@ -543,8 +560,8 @@ counted per language in a final `skipped:` line (and the JSON `skipped`
 object) rather than dropped silently; excluded files and files no language
 claims are not counted.
 
-**Settings.** `config.Load(config.Discover(DIR))` reads the user layer and
-`DIR/.ike/settings.toml`: `complexity.exclude` and the warning thresholds
+**Settings.** `config.Load(config.Discover(root))` reads the user layer and
+`<root>/.ike/settings.toml`: `complexity.exclude` and the warning thresholds
 (15 without config) and `complexity.comment_density_warn` (40 without
 config, `0` = off). `--ccn` / `--cog` / `--cmt` (percent, 1-100) override
 the thresholds. The row filter: `--min N` keeps rows with CCN or cognitive ≥
@@ -556,8 +573,11 @@ column, the summary line the aggregate density and the thresholds. The summary a
 **Diff.** `--diff[=REV]` (default `HEAD`) runs synchronously the same git
 plumbing as the Changes tab — `vcs.ResolveRev`, `vcs.ChangedFiles`, the
 status snapshot's untracked files (a collapsed untracked directory is walked)
-and `vcs.RevContent` per base blob — restricted to files under `DIR` the
-index would measure, then `complexity.DiffProject`. The head side is read
+and `vcs.RevContent` per base blob — restricted to the selection (below a
+named directory and measurable by the index's rules, or a named file with a
+spec; a named file inside a collapsed untracked directory is added even
+when the walk would skip it), then `complexity.DiffProject`; a named file
+without changes yields an empty diff and the `unchanged` verdict. The head side is read
 uncapped like the tab's, so a file over the walk's cap does not read as
 all-removed. The text report prints `changed` (before→after with Δ per
 metric), `added` and `removed` sections, the totals and

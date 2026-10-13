@@ -41,10 +41,19 @@ const defaultWarn = 15
 // build, where no language has a syntax tree.
 var available = complexity.Available
 
-// settings is the resolved run: directory, exclusions and thresholds.
+// target is one selected path (#2936): a directory to walk or a file named
+// explicitly.
+type target struct {
+	abs   string // absolute, symlinks resolved
+	isDir bool
+}
+
+// settings is the resolved run: project root, selection, exclusions and
+// thresholds.
 type settings struct {
 	args    cli.ComplexityArgs
-	dir     string // absolute project directory
+	dir     string // absolute project root, symlinks resolved
+	targets []target
 	exclude []string
 	ccnWarn int
 	cogWarn int
@@ -98,27 +107,28 @@ func Run(a cli.ComplexityArgs, stdout, stderr io.Writer) int {
 	return ExitOK
 }
 
-// resolve validates the directory and reads the [complexity] settings of
-// the user and project config layers (defaults when there are none); the
-// flags override the thresholds.
+// resolve validates the paths, picks the project root and reads the
+// [complexity] settings of the user and project config layers (defaults
+// when there are none); the flags override the thresholds.
 func resolve(a cli.ComplexityArgs) (settings, error) {
-	dir := a.Dir
-	if dir == "" {
-		dir = "."
+	paths := a.Paths
+	if len(paths) == 0 {
+		paths = []string{"."}
 	}
-	abs, err := filepath.Abs(dir)
+	targets := make([]target, 0, len(paths))
+	for _, p := range paths {
+		t, err := resolveTarget(p)
+		if err != nil {
+			return settings{}, err
+		}
+		targets = append(targets, t)
+	}
+	root, err := projectRoot(a, targets[0])
 	if err != nil {
 		return settings{}, err
 	}
-	info, err := os.Stat(abs)
-	if err != nil {
-		return settings{}, err
-	}
-	if !info.IsDir() {
-		return settings{}, fmt.Errorf("%s is not a directory", dir)
-	}
-	c, _ := config.Load(config.Discover(abs))
-	s := settings{args: a, dir: abs, exclude: c.Complexity.Exclude,
+	c, _ := config.Load(config.Discover(root))
+	s := settings{args: a, dir: root, targets: targets, exclude: c.Complexity.Exclude,
 		ccnWarn: c.Complexity.CCNWarn, cogWarn: c.Complexity.CognitiveWarn, cmtWarn: c.Complexity.CommentDensityWarn}
 	if a.CCN > 0 {
 		s.ccnWarn = a.CCN
@@ -136,6 +146,81 @@ func resolve(a cli.ComplexityArgs) (settings, error) {
 		s.cogWarn = defaultWarn
 	}
 	return s, nil
+}
+
+// resolveTarget makes p absolute (symlinks resolved, so paths compare with
+// what git reports — macOS /var → /private) and classifies it; a missing
+// path is an error naming it.
+func resolveTarget(p string) (target, error) {
+	abs, err := filepath.Abs(p)
+	if err != nil {
+		return target{}, err
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return target{}, fmt.Errorf("%s: no such file or directory", p)
+	}
+	if ev, err := filepath.EvalSymlinks(abs); err == nil {
+		abs = ev
+	}
+	return target{abs: abs, isDir: info.IsDir()}, nil
+}
+
+// projectRoot is the root for config discovery and relative output paths:
+// the working directory without positional paths (as before #2936);
+// otherwise the git root of the first path, else that path when it is a
+// directory, else the working directory.
+func projectRoot(a cli.ComplexityArgs, first target) (string, error) {
+	if len(a.Paths) == 0 {
+		return first.abs, nil
+	}
+	dir := first.abs
+	if !first.isDir {
+		dir = filepath.Dir(dir)
+	}
+	if repo, err := vcs.DetectRoot(dir); err == nil && repo != "" {
+		if ev, err := filepath.EvalSymlinks(repo); err == nil {
+			repo = ev
+		}
+		return repo, nil
+	}
+	if first.isDir {
+		return first.abs, nil
+	}
+	return resolveCwd()
+}
+
+// resolveCwd is the working directory, symlinks resolved.
+func resolveCwd() (string, error) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	if ev, err := filepath.EvalSymlinks(wd); err == nil {
+		wd = ev
+	}
+	return wd, nil
+}
+
+// named reports whether path is a file the user named explicitly.
+func (s settings) named(path string) bool {
+	for _, t := range s.targets {
+		if !t.isDir && t.abs == path {
+			return true
+		}
+	}
+	return false
+}
+
+// selected reports whether path lies in the selection: a named file, or
+// below a named directory.
+func (s settings) selected(path string) bool {
+	for _, t := range s.targets {
+		if t.isDir && inside(t.abs, path) || !t.isDir && t.abs == path {
+			return true
+		}
+	}
+	return false
 }
 
 // keep reports whether a function passes the row filter: --min N keeps
@@ -265,17 +350,34 @@ type projectReport struct {
 	skipped skipped
 }
 
-// runProject walks the directory and measures every file.
+// runProject walks the named directories, adds the named files and
+// measures every file once.
 func runProject(s settings) projectReport {
 	r := projectReport{s: s}
 	var paths []string
-	_ = complexity.WalkProject(s.dir, s.exclude, func(path string, l lang.Language, measurable bool) {
+	seen := map[string]bool{}
+	collect := func(path, langID string, measurable bool) {
+		if seen[path] {
+			return
+		}
+		seen[path] = true
 		if measurable {
 			paths = append(paths, path)
 			return
 		}
-		r.skipped.add(l.ID)
-	})
+		r.skipped.add(langID)
+	}
+	for _, t := range s.targets {
+		if !t.isDir {
+			// Named explicitly: no skip rule or exclude glob applies.
+			l, ok := lang.ByPath(t.abs)
+			collect(t.abs, langOf(t.abs), ok && l.Complexity != nil)
+			continue
+		}
+		_ = complexity.WalkUnder(s.dir, t.abs, s.exclude, func(path string, l lang.Language, measurable bool) {
+			collect(path, l.ID, measurable)
+		})
+	}
 	var mu sync.Mutex
 	parallel(paths, func(path string) {
 		text, ok := complexity.ReadSource(path)
@@ -357,11 +459,10 @@ func runDiff(s settings) (diffReport, error) {
 	if err != nil {
 		return r, err
 	}
-	// The project directory may sit under a symlink (macOS /var → /private):
-	// compare paths against the resolved form git reports.
-	if ev, err := filepath.EvalSymlinks(s.dir); err == nil {
-		s.dir = ev
-		r.s = s
+	// The project root may sit under a symlink (macOS /var → /private):
+	// compare paths against the resolved form, as resolve did for s.dir.
+	if ev, err := filepath.EvalSymlinks(repo); err == nil {
+		repo = ev
 	}
 	sha, err := vcs.ResolveRev(repo, rev)
 	if err != nil {
@@ -375,10 +476,18 @@ func runDiff(s settings) (diffReport, error) {
 	abs := func(rel string) string { return filepath.Join(repo, filepath.FromSlash(rel)) }
 	var files []diffFile
 	seen := map[string]bool{}
-	// gate reports whether a file takes part, counting a claimed but
-	// unmeasurable one as skipped.
+	// gate reports whether a file takes part — inside the selection, and
+	// measurable — counting a claimed but unmeasurable one as skipped. A
+	// file named explicitly ignores the exclude globs (#2936).
 	gate := func(path string) bool {
-		if !inside(s.dir, path) {
+		if !s.selected(path) {
+			return false
+		}
+		if s.named(path) {
+			if l, ok := lang.ByPath(path); ok && l.Complexity != nil {
+				return true
+			}
+			r.skipped.add(langOf(path))
 			return false
 		}
 		if complexity.Measurable(s.dir, s.exclude, path) {
@@ -431,6 +540,13 @@ func runDiff(s settings) (diffReport, error) {
 			continue
 		}
 		_ = complexity.WalkProject(p, nil, func(path string, _ lang.Language, _ bool) { addUntracked(path) })
+		// The walk skips hidden directories; a named file below one is
+		// still untracked.
+		for _, t := range s.targets {
+			if !t.isDir && inside(p, t.abs) {
+				addUntracked(t.abs)
+			}
+		}
 	}
 
 	base := map[string][]complexity.Function{}

@@ -1,5 +1,16 @@
 # Log
 
+## 2026-10-13 (`ike complexity` takes files and directories, #2936)
+
+- [Code Complexity](/architecture/complexity.md): new "Selection"
+  paragraph in "Headless CLI" — `ComplexityArgs.Paths` (any number of
+  files and directories, mixed, deduplicated), the project root (git root
+  of the first path, else that directory, else the working directory),
+  `complexity.WalkUnder` for named directories, named files measured past
+  the skip rules and exclude globs, unmeasurable named files on the
+  `skipped:` line, missing paths as exit 2, and `--diff` restricted to the
+  selection. The user guide and command-line page show the new grammar.
+
 ## 2026-10-13 (Comment density per function, #2934)
 
 - [Code Complexity](/architecture/complexity.md): `Function.CommentLines` /

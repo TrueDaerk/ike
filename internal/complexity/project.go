@@ -26,13 +26,23 @@ const MaxFileSize = indexMaxFileSize
 // has a complexity spec). Files no language claims and excluded files are
 // not reported. The walk stops at the index's file cap of measurable files.
 func WalkProject(root string, exclude []string, fn func(path string, l lang.Language, measurable bool)) error {
+	return WalkUnder(root, root, exclude, fn)
+}
+
+// WalkUnder is WalkProject over the directory dir inside the project root
+// (#2936): dir is walked with the index's skip rules (dir itself is never
+// skipped, even when hidden) while the exclude globs stay relative to root.
+func WalkUnder(root, dir string, exclude []string, fn func(path string, l lang.Language, measurable bool)) error {
 	if root != "" {
 		if abs, err := filepath.Abs(root); err == nil {
 			root = abs
 		}
 	}
+	if abs, err := filepath.Abs(dir); err == nil {
+		dir = abs
+	}
 	n := 0
-	return langindex.WalkFiles(root, nil, func(path string) error {
+	return langindex.WalkFiles(dir, nil, func(path string) error {
 		l, ok := lang.ByPath(path)
 		if !ok || Excluded(root, exclude, path) {
 			return nil

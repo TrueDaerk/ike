@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -120,7 +121,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "       ike [--url-send-only] ike://open?...")
 		fmt.Fprintln(os.Stderr, "       ike --version")
 		fmt.Fprintln(os.Stderr, "       ike agent-hook <event>   (Claude Code hook; JSON on stdin)")
-		fmt.Fprintln(os.Stderr, "       ike complexity [--diff[=REV]] [--json] [--min N] [DIR]")
+		fmt.Fprintln(os.Stderr, "       "+strings.TrimPrefix(cli.ComplexityUsage, "usage: "))
 		if len(os.Args) > 1 && os.Args[1] == "agent-hook" {
 			// Exit 2 from a UserPromptSubmit hook blocks the prompt (#2843).
 			os.Exit(1)

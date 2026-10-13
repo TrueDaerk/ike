@@ -63,13 +63,14 @@ current text. A renamed function appears as one removed and one added row.
 ## Command line
 
 ```
-ike complexity [--diff[=REV]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [DIR]
+ike complexity [--diff[=REV]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [PATH...]
 ```
 
 | Flag | Effect |
 |---|---|
-| *(none)* | Measure every supported file under `DIR` (default: the current directory) and print a table sorted by CCN, then a summary line. |
-| `--diff[=REV]` | Compare the working tree (including uncommitted and untracked files) against `REV` (default `HEAD`; any branch, tag or sha) and print the changed, added and removed functions, the totals and a verdict. |
+| *(none)* | Measure every supported file under the named paths (default: the current directory) and print a table sorted by CCN, then a summary line. |
+| `PATH...` | One or more files or directories, mixed freely (`ike complexity pkg/ main.go`). A directory is walked; a file is measured as is. A file named twice, or also inside a named directory, counts once. A path that does not exist is an error (exit 2). |
+| `--diff[=REV]` | Compare the working tree (including uncommitted and untracked files) against `REV` (default `HEAD`; any branch, tag or sha) and print the changed, added and removed functions, the totals and a verdict. With paths, only changes in those files and directories count. |
 | `--json` | Print JSON instead of text (fields below). |
 | `--min N` | Only list functions whose CCN **or** cognitive complexity is at least `N`. |
 | `--ccn N`, `--cog N` | Override the warning thresholds; given explicitly they also filter the rows to functions at or above either one. |
@@ -77,10 +78,20 @@ ike complexity [--diff[=REV]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [
 
 The walk skips the same files as the Complexity window: hidden directories,
 `node_modules`, `vendor`, `dist`, `build`, `target`, virtualenvs, files over
-512 KiB, and everything matching `complexity.exclude`. The command reads
-your user settings and `DIR/.ike/settings.toml` when they exist, defaults
-otherwise. Files of a language IKE cannot measure (JSON, YAML, Markdown, …)
-are counted in a final `skipped:` line.
+512 KiB, and everything matching `complexity.exclude`. A file you name
+explicitly is always measured, even inside a hidden or excluded directory.
+The command reads your user settings and the project's `.ike/settings.toml`
+when they exist, defaults otherwise; the project is the git repository of
+the first path (else that path when it is a directory, else the current
+directory), and file names print relative to it. Files of a language IKE
+cannot measure (JSON, YAML, Markdown, …) are counted in a final `skipped:`
+line.
+
+```
+$ ike complexity --json internal/cli/cli.go | jq '.summary.files'
+1
+$ ike complexity --diff internal/cli/cli.go internal/complexitycli/
+```
 
 ```
 $ ike complexity --min 40 .
