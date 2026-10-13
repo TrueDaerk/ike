@@ -2,12 +2,12 @@
 // to the git CLI — never from Update: every call runs inside a tea.Cmd with a
 // timeout. The package produces immutable Snapshots of the repository state
 // (branch, ahead/behind, per-file status) that consumers (explorer coloring,
-// status line, commit UI) read; consumers never run git themselves.
+// status line, commit UI) read; consumers never run git themselves. The
+// bubbletea-free core (snapshot, git runner, revision reads) lives in
+// internal/vcs/vcscore and is re-exported by core.go (#2939).
 package vcs
 
-import (
-	tea "charm.land/bubbletea/v2"
-)
+import tea "charm.land/bubbletea/v2"
 
 // SnapshotMsg carries a refreshed snapshot back into Update. A nil Snap means
 // the workspace is not a git repository (or git is unavailable).
