@@ -60,6 +60,7 @@ type complexityDiffState struct {
 	snapGen   int
 	indexGen  int
 	key       cxDiffKey // the inputs of the result the pane shows
+	gen       int       // bumped per stored result; the hint key joins it (#2949)
 	computing bool
 	tickArmed bool
 	result    complexitypanel.Changes
@@ -104,8 +105,10 @@ func (m Model) noteComplexityGen(gen int) {
 }
 
 // complexityDiffWanted reports whether anything consumes the diff: the
-// Changes tab on screen, or the status segment (#2921) — the segment is what
-// keeps the computation armed on VCS refreshes while the tab is closed.
+// Changes tab on screen, the status segment (#2921) — the segment is what
+// keeps the computation armed on VCS refreshes while the tab is closed — or
+// the header hints' Δ (#2949): an open editor of a measurable language
+// whose file the VCS snapshot lists as changed.
 func (m Model) complexityDiffWanted() bool {
 	if m.cxDiff == nil {
 		return false
@@ -114,7 +117,33 @@ func (m Model) complexityDiffWanted() bool {
 		return true
 	}
 	c := config.Get()
-	return c != nil && c.Complexity.Enabled && c.Complexity.StatusSegment
+	if c == nil || !c.Complexity.Enabled {
+		return false
+	}
+	if c.Complexity.StatusSegment {
+		return true
+	}
+	return c.Editor.Marks.Complexity != config.HintOff && m.cxHintsWantDiff()
+}
+
+// cxHintsWantDiff reports an open editor whose header hints would carry a
+// Δ (#2949): a measurable file the VCS snapshot lists as changed.
+func (m Model) cxHintsWantDiff() bool {
+	if m.vcs.snap == nil {
+		return false
+	}
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		for _, ed := range inst.Editors() {
+			if m.cxHintMeasurable(ed) && m.vcs.snap.Status(ed.Path()) != vcs.StatusNone {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // complexityDiffSyncCmd runs once per settled Update pass: while the
@@ -433,6 +462,7 @@ func (m *Model) applyComplexityDiff(msg complexityDiffMsg) {
 	} else {
 		st.result = msg.changes
 		st.key = msg.key
+		st.gen++
 		if len(msg.base) > 0 {
 			if st.baseCache == nil || len(st.baseCache) > cxDiffCacheMax {
 				st.baseCache = map[string][]complexity.Function{}

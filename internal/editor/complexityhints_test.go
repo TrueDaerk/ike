@@ -106,6 +106,33 @@ func TestComplexityHintsWarnColour(t *testing.T) {
 	}
 }
 
+// TestComplexityHintsDeltaTone: a Δ (#2949) splices in after its metric,
+// a fall in the success tone and a rise in the warning tone, the metrics
+// keep the hint's own tone.
+func TestComplexityHintsDeltaTone(t *testing.T) {
+	m, path := loaded(t, "func A() {\n}\n")
+	h := ComplexityHint{Line: 0, Text: "CCN 14 · cog 24", Deltas: [2]ComplexityDelta{
+		{At: len("CCN 14"), Delta: "(−6)"},
+		{At: len("CCN 14 · cog 24"), Delta: "(+7)", DeltaWarn: true},
+	}}
+	if got, want := h.Plain(), "CCN 14 (−6) · cog 24 (+7)"; got != want {
+		t.Fatalf("Plain = %q, want %q", got, want)
+	}
+	m, _ = m.Update(cxHintsMsg(path, m.DocVersion(), h))
+	if got, want := firstLine(m), "func A() {  CCN 14 (−6) · cog 24 (+7)"; got != want {
+		t.Errorf("line = %q, want %q", got, want)
+	}
+	view := m.View()
+	ok := lipgloss.NewStyle().Italic(true).Foreground(m.theme().Success).Render(" (−6)")
+	bad := lipgloss.NewStyle().Italic(true).Foreground(m.theme().Warning).Render(" (+7)")
+	dim := lipgloss.NewStyle().Italic(true).Foreground(m.theme().InlayHint).Faint(true).Render(" · cog 24")
+	for name, s := range map[string]string{"fall": ok, "rise": bad, "metric": dim} {
+		if !strings.Contains(view, s) {
+			t.Errorf("%s tone missing; view:\n%s", name, view)
+		}
+	}
+}
+
 // TestComplexityHintsConfigToggle hides the hints while
 // editor.marks.complexity is off and resumes from the cached set when it
 // comes back — rendering-only, like the code-lens toggle.

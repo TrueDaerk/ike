@@ -95,23 +95,14 @@ func metricsEqual(a, b Function) bool {
 // modified.
 func DiffFunctions(base, head []Function) FileDiff {
 	var d FileDiff
-	// Ordinal cursors per name into the base: the next unmatched base unit of
-	// that name, in source order.
-	byName := map[string][]int{}
-	for i, f := range base {
-		byName[f.Name] = append(byName[f.Name], i)
-	}
+	pairs := PairUnits(base, head)
 	matched := make([]bool, len(base))
-	next := map[string]int{}
-	for _, h := range head {
-		idxs := byName[h.Name]
-		k := next[h.Name]
-		if k >= len(idxs) {
+	for i, h := range head {
+		bi := pairs[i]
+		if bi < 0 {
 			d.Added = append(d.Added, h)
 			continue
 		}
-		next[h.Name] = k + 1
-		bi := idxs[k]
 		matched[bi] = true
 		if !metricsEqual(base[bi], h) {
 			d.Changed = append(d.Changed, Change{Before: base[bi], After: h})
@@ -124,6 +115,32 @@ func DiffFunctions(base, head []Function) FileDiff {
 	}
 	sortChanges(d.Changed)
 	return d
+}
+
+// PairUnits pairs head units with base units the way DiffFunctions does
+// (#2949): by (Name, ordinal among same-named units in source order). It
+// returns, per head unit, the index of its base partner or -1 for a unit
+// the base does not have.
+func PairUnits(base, head []Function) []int {
+	// Ordinal cursors per name into the base: the next unmatched base unit of
+	// that name, in source order.
+	byName := map[string][]int{}
+	for i, f := range base {
+		byName[f.Name] = append(byName[f.Name], i)
+	}
+	next := map[string]int{}
+	out := make([]int, len(head))
+	for i, h := range head {
+		idxs := byName[h.Name]
+		k := next[h.Name]
+		if k >= len(idxs) {
+			out[i] = -1
+			continue
+		}
+		next[h.Name] = k + 1
+		out[i] = idxs[k]
+	}
+	return out
 }
 
 // sortChanges orders by |ΔCCN| descending, then |Δcognitive| descending,
@@ -216,6 +233,16 @@ func (d Diff) Without(drop func(path string) bool) Diff {
 		return out
 	}
 	return DiffProject(keep(d.base), keep(d.head), d.warn[0], d.warn[1], d.warn[2])
+}
+
+// BaseOf returns the base measurement DiffProject compared for path and
+// whether the diff covered path at all (#2949): a file only the head has is
+// covered with a nil base, a file outside the diff — unchanged against the
+// base — is not. A diff not built by DiffProject covers nothing.
+func (d Diff) BaseOf(path string) (base []Function, covered bool) {
+	base, inBase := d.base[path]
+	_, inHead := d.head[path]
+	return base, inBase || inHead
 }
 
 // Paths lists the files with a non-empty classification, sorted.

@@ -23,6 +23,11 @@ package app
 // (editor.marks.complexity_sites) is part of the key and independent of the
 // hint mode; a panel `m` (complexitypanel.ShowSitesMsg) pins one function's
 // marks into the key until the buffer's version moves.
+//
+// While the Changes diff covers a file (#2949) its hints carry the live Δ
+// against the base — `CCN 14 (−6) · cog 24 (−7)`, `(new)` — and the key
+// carries the diff's key and result generation, so a landed run repaints
+// its files from the snapshot or the measurement kept in `measured`.
 
 import (
 	"sort"
@@ -56,6 +61,18 @@ type cxHintKey struct {
 	mode    config.HintMode // editor.marks.complexity (#2966)
 	sites   config.HintMode // editor.marks.complexity_sites (#2947)
 	show    int             // a panel `m` function's header line + 1; 0 none (#2947)
+	// diff / diffGen are the Changes diff the Δ comes from (#2949): the
+	// key and result generation of the run that covers the file, zero when
+	// none does or the hints are off — a landed run repaints its files.
+	diff    cxDiffKey
+	diffGen int
+}
+
+// measureKey is the key with the diff fields cleared: two keys equal here
+// want the same measurement and differ at most in the Δ joined onto it.
+func (k cxHintKey) measureKey() cxHintKey {
+	k.diff, k.diffGen = cxDiffKey{}, 0
+	return k
 }
 
 // complexityHintState is the sync's bookkeeping, shared by pointer across
@@ -66,6 +83,9 @@ type complexityHintState struct {
 	sent    map[string]cxHintKey
 	pending map[string]cxHintKey
 	show    map[string]cxShowSites
+	// measured keeps the last off-loop measurement per path, so a landed
+	// diff run repaints a dirty buffer's Δ without measuring again (#2949).
+	measured map[string]complexityHintMeasuredMsg
 }
 
 // cxShowSites is a panel `m` (#2947): paint the sites of the function whose
@@ -101,29 +121,64 @@ type complexityHintMeasuredMsg struct {
 // Several functions on one line (lambdas beside their enclosing header)
 // keep the first — the header's. warnOnly (editor.marks.complexity = warn,
 // #2966) keeps only the Warn hints.
-func complexityHintsFor(fns []complexity.Function, ccnWarn, cogWarn, cmtWarn int, warnOnly bool) []editor.ComplexityHint {
+//
+// diffed says the Changes diff covers the file (#2949), base being its
+// measurement at the base revision: each function pairs with a base unit
+// by (Name, ordinal among same-named units) like complexity.DiffFunctions,
+// and the CCN / cognitive that moved carry their Δ — `CCN 14 (−6) · cog
+// 24 (−7)`; an unpaired function reads `(new)`. The Δ is taken against the
+// live measurement fns, so it follows typing without a new diff run.
+func complexityHintsFor(fns []complexity.Function, ccnWarn, cogWarn, cmtWarn int, warnOnly bool, base []complexity.Function, diffed bool) []editor.ComplexityHint {
 	if len(fns) == 0 {
 		return nil
 	}
+	var pairs []int
+	if diffed {
+		pairs = complexity.PairUnits(base, fns)
+	}
 	seen := make(map[int]bool, len(fns))
 	out := make([]editor.ComplexityHint, 0, len(fns))
-	for _, fn := range fns {
+	for i, fn := range fns {
 		if seen[fn.Line] {
 			continue
 		}
 		seen[fn.Line] = true
-		text := "CCN " + strconv.Itoa(fn.CCN) + " · cog " + strconv.Itoa(fn.Cognitive)
+		var h editor.ComplexityHint
+		text := "CCN " + strconv.Itoa(fn.CCN)
+		if pairs != nil && pairs[i] >= 0 {
+			h.Deltas[0] = cxHintDelta(len(text), fn.CCN-base[pairs[i]].CCN)
+		}
+		text += " · cog " + strconv.Itoa(fn.Cognitive)
+		if pairs != nil && pairs[i] >= 0 {
+			h.Deltas[1] = cxHintDelta(len(text), fn.Cognitive-base[pairs[i]].Cognitive)
+		}
 		overCmt := fn.CommentsOver(cmtWarn)
 		if overCmt {
 			text += " · cmt " + strconv.Itoa(complexity.DensityPercent(fn.CommentDensity)) + "%"
+		}
+		if pairs != nil && pairs[i] < 0 {
+			text += " (new)"
 		}
 		warn := fn.CCN >= ccnWarn || fn.Cognitive >= cogWarn || overCmt
 		if warnOnly && !warn {
 			continue
 		}
-		out = append(out, editor.ComplexityHint{Line: fn.Line, Text: text, Warn: warn})
+		h.Line, h.Text, h.Warn = fn.Line, text, warn
+		out = append(out, h)
 	}
 	return out
+}
+
+// cxHintDelta is one metric's Δ against the base, after the first at bytes
+// of the hint text: `(−6)` / `(+3)`, none for 0; a rise warns.
+func cxHintDelta(at, d int) editor.ComplexityDelta {
+	switch {
+	case d < 0:
+		return editor.ComplexityDelta{At: at, Delta: "(−" + strconv.Itoa(-d) + ")"}
+	case d > 0:
+		return editor.ComplexityDelta{At: at, Delta: "(+" + strconv.Itoa(d) + ")", DeltaWarn: true}
+	}
+	return editor.ComplexityDelta{}
 }
 
 // cxSiteWarn is the cognitive increment from which a site mark takes the
@@ -199,13 +254,24 @@ func cxSiteText(s complexity.Site) string {
 func (m *Model) cxMarkPushes(path string, version int, fns []complexity.Function, key cxHintKey) tea.Cmd {
 	var hints []editor.ComplexityHint
 	if key.mode != config.HintOff {
-		hints = complexityHintsFor(fns, key.ccn, key.cog, key.cmt, key.mode == config.HintWarn)
+		base, diffed := m.cxHintBase(path)
+		hints = complexityHintsFor(fns, key.ccn, key.cog, key.cmt, key.mode == config.HintWarn, base, diffed)
 	}
 	marks := complexitySiteMarksFor(fns, key.ccn, key.cog, key.sites, key.show-1)
 	return tea.Batch(
 		m.routeToEditor(path, editor.ComplexityHintsMsg{Path: path, Hints: hints, Version: version}),
 		m.routeToEditor(path, editor.ComplexitySiteMarksMsg{Path: path, Marks: marks, Version: version}),
 	)
+}
+
+// cxHintBase is the Changes diff's base measurement of path (#2949) and
+// whether the last finished run covered the file at all.
+func (m Model) cxHintBase(path string) ([]complexity.Function, bool) {
+	st := m.cxDiff
+	if st == nil || !st.result.Ready || st.result.NotGit {
+		return nil, false
+	}
+	return st.result.Diff.BaseOf(canonicalPath(path))
 }
 
 // cxHintMeasurable gates a buffer into the hint feed: a file of a language
@@ -242,6 +308,11 @@ func (m Model) cxHintKeyFor(ed *editor.Model, view complexity.View, c config.Com
 	key.enabled = cxHintsOn(c, marks) || c.Enabled && key.show > 0
 	if !key.enabled {
 		return key, false
+	}
+	if key.mode != config.HintOff {
+		if _, covered := m.cxHintBase(ed.Path()); covered {
+			key.diff, key.diffGen = m.cxDiff.key, m.cxDiff.gen
+		}
 	}
 	if !ed.Dirty() {
 		if _, ok := view.Files[canonicalPath(ed.Path())]; ok {
@@ -305,6 +376,15 @@ func (m *Model) complexityHintsSyncCmd() tea.Cmd {
 				st.sent[path] = key
 				delete(st.pending, path)
 				cmds = append(cmds, m.cxMarkPushes(path, key.version, view.Files[canonicalPath(path)], key))
+			case st.sent[path].measureKey() == key.measureKey():
+				// Only the diff moved (#2949): re-join the Δ onto the
+				// measurement held for this version; one still in flight
+				// joins the current diff when it lands.
+				if got, ok := st.measured[path]; ok && got.key.measureKey() == key.measureKey() {
+					st.sent[path] = key
+					delete(st.pending, path)
+					cmds = append(cmds, m.cxMarkPushes(path, key.version, got.fns, key))
+				}
 			default:
 				st.pending[path] = key
 				cmds = append(cmds, tea.Tick(cxHintDebounce, func(time.Time) tea.Msg {
@@ -319,6 +399,11 @@ func (m *Model) complexityHintsSyncCmd() tea.Cmd {
 		if !seen[path] {
 			delete(st.sent, path)
 			delete(st.pending, path)
+		}
+	}
+	for path := range st.measured {
+		if !seen[path] {
+			delete(st.measured, path)
 		}
 	}
 	for path := range st.show {
@@ -359,13 +444,22 @@ func (m *Model) complexityHintTick(msg complexityHintTickMsg) tea.Cmd {
 
 // applyComplexityHints routes a landed measurement to every view of the
 // path; the editor drops it when its version moved. A measurement that is
-// no longer the sent key (a newer launch overtook it) is dropped here.
+// no longer the sent key (a newer launch overtook it) is dropped here; one
+// whose key differs only in the diff (#2949) joins the diff current now.
+// The kept measurement lets a later diff run repaint without measuring.
 func (m *Model) applyComplexityHints(msg complexityHintMeasuredMsg) tea.Cmd {
 	st := m.cxHints
-	if st == nil || st.sent[msg.path] != msg.key {
+	if st == nil {
 		return nil
 	}
-	return m.cxMarkPushes(msg.path, msg.version, msg.fns, msg.key)
+	sent, ok := st.sent[msg.path]
+	if !ok || sent.measureKey() != msg.key.measureKey() {
+		return nil
+	}
+	if st.measured != nil {
+		st.measured[msg.path] = msg
+	}
+	return m.cxMarkPushes(msg.path, msg.version, msg.fns, sent)
 }
 
 // showComplexitySites handles a panel `m` (#2947): pin the function's site

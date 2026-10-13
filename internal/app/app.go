@@ -1706,7 +1706,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		phpIndex:        phpIdx,
 		complexityIndex: cxIdx,
 		cxDiff:          &complexityDiffState{},
-		cxHints:         &complexityHintState{sent: map[string]cxHintKey{}, pending: map[string]cxHintKey{}, show: map[string]cxShowSites{}},
+		cxHints:         &complexityHintState{sent: map[string]cxHintKey{}, pending: map[string]cxHintKey{}, show: map[string]cxShowSites{}, measured: map[string]complexityHintMeasuredMsg{}},
 		ws:              wsMgr,
 		recentEditor:    edKey,
 		recent:          recent,

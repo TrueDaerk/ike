@@ -70,7 +70,7 @@ func (m Model) ComplexitySiteMarkAt(line int) (ComplexitySiteMark, bool) {
 // site mark, under the same whole-or-nothing fit rule.
 func (m Model) complexityTrailer(line, room int) (string, int) {
 	if h, ok := m.ComplexityHintAt(line); ok {
-		return m.complexityTrailerText(h.Text, h.Warn, room)
+		return m.complexityHintText(h, room)
 	}
 	s, ok := m.cxSites[line]
 	if !ok {

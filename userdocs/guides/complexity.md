@@ -33,7 +33,12 @@ short) and adds its own Problems warning
 (`function foo: comment density 55% ≥ 40%`). Which headers carry a hint is
 `editor.marks.complexity` (Settings > Editor > Diagnostics): `all` (every
 function), `warn` (only functions at or above a threshold) or `off`; an
-older settings file with `true` / `false` keeps working as `all` / `off`. The
+older settings file with `true` / `false` keeps working as `all` / `off`.
+In a file that differs from the Changes tab's base (`HEAD` by default) the
+hint also shows how each function moved, live while you type:
+`CCN 14 (−6) · cog 24 (−7)` — a drop in green, a rise in the warning
+colour — or `(new)` for a function the base does not have; a function
+whose numbers held shows no Δ. The window does not need to be open. The
 optional `Δcx` status segment (`complexity.status_segment`) shows how the
 working tree compares with `HEAD`.
 

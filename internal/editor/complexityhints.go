@@ -15,16 +15,63 @@ package editor
 // survive a toggle round-trip.
 
 import (
+	"strings"
+
 	"charm.land/lipgloss/v2"
 )
 
 // ComplexityHint is one function header's annotation: Line is the 0-based
 // buffer line, Text the rendered metrics, Warn whether a metric is at or
-// above its warning threshold.
+// above its warning threshold. Deltas (#2949) are the live change against
+// the Changes tab's base revision, each rendered right after its metric in
+// its own tone; a hint without them has zero values.
 type ComplexityHint struct {
-	Line int
-	Text string
-	Warn bool
+	Line   int
+	Text   string
+	Warn   bool
+	Deltas [2]ComplexityDelta
+}
+
+// ComplexityDelta is one metric's change against the base (#2949), `(−6)`:
+// it renders after the first At bytes of the hint's Text, in the success
+// tone when the metric fell and the warning tone (DeltaWarn) when it rose.
+// An empty Delta is none.
+type ComplexityDelta struct {
+	At        int
+	Delta     string
+	DeltaWarn bool
+}
+
+// Plain is the hint as it reads: Text with every delta spliced in after its
+// metric — `CCN 14 (−6) · cog 24 (−7)`.
+func (h ComplexityHint) Plain() string {
+	var b strings.Builder
+	for _, p := range h.pieces() {
+		b.WriteString(p.text)
+	}
+	return b.String()
+}
+
+// cxHintPiece is a run of a hint's rendering: metric text (delta false) or
+// one delta with its tone.
+type cxHintPiece struct {
+	text  string
+	delta bool
+	warn  bool
+}
+
+// pieces splits the hint into its rendering runs, deltas in At order.
+func (h ComplexityHint) pieces() []cxHintPiece {
+	var out []cxHintPiece
+	at := 0
+	for _, d := range h.Deltas {
+		if d.Delta == "" || d.At < at || d.At > len(h.Text) {
+			continue
+		}
+		out = append(out, cxHintPiece{text: h.Text[at:d.At]}, cxHintPiece{text: " " + d.Delta, delta: true, warn: d.DeltaWarn})
+		at = d.At
+	}
+	return append(out, cxHintPiece{text: h.Text[at:]})
 }
 
 // ComplexityHintsMsg replaces a document's complexity hints. Version is the
@@ -101,7 +148,37 @@ func (m Model) complexityHintTrailer(line, room int) (string, int) {
 	if !ok {
 		return "", 0
 	}
-	return m.complexityTrailerText(h.Text, h.Warn, room)
+	return m.complexityHintText(h, room)
+}
+
+// complexityHintText styles a header hint (#2949): the metrics in the
+// hint's tone like complexityTrailerText, each delta in its own — success
+// for a fall, warning for a rise — or "" when it would not fit whole.
+func (m Model) complexityHintText(h ComplexityHint, room int) (string, int) {
+	pieces := h.pieces()
+	if len(pieces) == 1 {
+		return m.complexityTrailerText(h.Text, h.Warn, room)
+	}
+	w := lipgloss.Width(complexityHintGap + h.Plain())
+	if w > room {
+		return "", 0
+	}
+	base := m.complexityTrailerStyle(h.Warn)
+	var b strings.Builder
+	b.WriteString(base.Render(complexityHintGap))
+	for _, p := range pieces {
+		st := base
+		if p.delta {
+			st = lipgloss.NewStyle().Italic(true).Foreground(m.theme().Success)
+			if p.warn {
+				st = st.Foreground(m.theme().Warning)
+			}
+		}
+		if p.text != "" {
+			b.WriteString(st.Render(p.text))
+		}
+	}
+	return b.String(), w
 }
 
 // complexityTrailerText styles one trailer — a header hint or a site mark
@@ -113,11 +190,15 @@ func (m Model) complexityTrailerText(body string, warn bool, room int) (string, 
 	if w > room {
 		return "", 0
 	}
+	return m.complexityTrailerStyle(warn).Render(text), w
+}
+
+// complexityTrailerStyle is a trailer's tone: the warning colour, or dimmed
+// like an inlay hint.
+func (m Model) complexityTrailerStyle(warn bool) lipgloss.Style {
 	st := lipgloss.NewStyle().Italic(true)
 	if warn {
-		st = st.Foreground(m.theme().Warning)
-	} else {
-		st = st.Foreground(m.theme().InlayHint).Faint(true)
+		return st.Foreground(m.theme().Warning)
 	}
-	return st.Render(text), w
+	return st.Foreground(m.theme().InlayHint).Faint(true)
 }

@@ -69,7 +69,10 @@ diagnostic/git colouring. One mark class lives outside the gutter: the
 cog 8` as trailing virtual text at the end of every function header, after
 any code lens, dimmed-italic like a lens and in the warning tone when a
 metric reaches `complexity.ccn_warn` / `complexity.cognitive_warn`; a body
-at or above `complexity.comment_density_warn` appends ` · cmt 55%` (#2934). The app
+at or above `complexity.comment_density_warn` appends ` · cmt 55%` (#2934); a function the Changes diff covers carries
+its live Δ against the base after each moved metric, `CCN 14 (−6) · cog 24
+(−7)`, a fall in the success colour and a rise in the warning colour
+(`ComplexityHint.Deltas`, #2949). The app
 pushes `ComplexityHintsMsg{Path, Hints, Version}` per document (from the
 project index for a clean buffer, from a debounced off-loop `Measure` of the
 dirty text otherwise, see [complexity](./complexity.md#editor-surface-2919));

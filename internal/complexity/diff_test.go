@@ -47,6 +47,29 @@ func TestDiffFunctionsMatchesByNameAndOrdinal(t *testing.T) {
 	}
 }
 
+// TestPairUnitsAndBaseOf: PairUnits is DiffFunctions' (name, ordinal)
+// pairing, and BaseOf reports the base side of a covered file (#2949).
+func TestPairUnitsAndBaseOf(t *testing.T) {
+	base := []Function{unit("a", 0, 3, 2), unit("dup", 10, 1, 0), unit("dup", 20, 4, 3)}
+	head := []Function{unit("dup", 0, 1, 0), unit("a", 10, 5, 2), unit("dup", 20, 4, 6), unit("dup", 30, 2, 2)}
+	if got := PairUnits(base, head); !reflect.DeepEqual(got, []int{1, 0, 2, -1}) {
+		t.Fatalf("pairs = %v", got)
+	}
+	d := DiffProject(map[string][]Function{"m.go": base}, map[string][]Function{"m.go": head, "n.go": head}, 15, 15, 40)
+	if b, ok := d.BaseOf("m.go"); !ok || len(b) != 3 {
+		t.Errorf("BaseOf(m.go) = %v, %v", b, ok)
+	}
+	if b, ok := d.BaseOf("n.go"); !ok || b != nil {
+		t.Errorf("an added file is covered with a nil base: %v, %v", b, ok)
+	}
+	if _, ok := d.BaseOf("x.go"); ok {
+		t.Error("a file outside the diff is not covered")
+	}
+	if _, ok := (Diff{}).BaseOf("m.go"); ok {
+		t.Error("a diff not built by DiffProject covers nothing")
+	}
+}
+
 func TestDiffFunctionsMovedOnlyIsEmpty(t *testing.T) {
 	base := []Function{unit("a", 0, 3, 2), unit("b", 10, 1, 1)}
 	head := []Function{unit("b", 0, 1, 1), unit("a", 50, 3, 2)}
