@@ -340,7 +340,9 @@ func TestSummarize(t *testing.T) {
 		{NLOC: 5, CCN: 1, Cognitive: 16},
 	}
 	s := Summarize(fns, 15, 15, 0)
-	want := Summary{Functions: 3, NLOC: 35, CCNSum: 19, CCNAvg: 19.0 / 3, CCNMax: 15, CogSum: 22, CogAvg: 22.0 / 3, CogMax: 16, OverThreshold: 2, Excess: 1}
+	want := Summary{Functions: 3, NLOC: 35, CCNSum: 19, CCNAvg: 19.0 / 3, CCNMax: 15, CogSum: 22, CogAvg: 22.0 / 3, CogMax: 16, OverThreshold: 2, Excess: 1,
+		CCNP50: 3, CCNP90: 15, CCNP99: 15, CogP50: 4, CogP90: 16, CogP99: 16,
+		CCNHist: [5]int{2, 0, 1, 0, 0}, CogHist: [5]int{2, 0, 0, 1, 0}}
 	if s != want {
 		t.Errorf("Summarize = %+v, want %+v", s, want)
 	}
@@ -362,6 +364,59 @@ func TestSummarize(t *testing.T) {
 	}
 	if s := Summarize(cm, 0, 0, 0); s.OverThreshold != 0 {
 		t.Errorf("cmtWarn 0 must disable the check, got %d over", s.OverThreshold)
+	}
+}
+
+func TestPercentiles(t *testing.T) {
+	var fns []Function
+	for i := 1; i <= 100; i++ {
+		fns = append(fns, Function{CCN: 101 - i, Cognitive: i})
+	}
+	s := Summarize(fns, 0, 0, 0)
+	if s.CCNP50 != 50 || s.CCNP90 != 90 || s.CCNP99 != 99 {
+		t.Errorf("CCN p50/p90/p99 over 1…100 = %d/%d/%d, want 50/90/99", s.CCNP50, s.CCNP90, s.CCNP99)
+	}
+	if s.CogP50 != 50 || s.CogP90 != 90 || s.CogP99 != 99 {
+		t.Errorf("cog p50/p90/p99 over 1…100 = %d/%d/%d, want 50/90/99", s.CogP50, s.CogP90, s.CogP99)
+	}
+	s = Summarize([]Function{{CCN: 7, Cognitive: 12}}, 0, 0, 0)
+	if s.CCNP50 != 7 || s.CCNP90 != 7 || s.CCNP99 != 7 || s.CogP50 != 12 || s.CogP99 != 12 {
+		t.Errorf("single function percentiles = %+v, want its own values", s)
+	}
+	s = Summarize(nil, 0, 0, 0)
+	if s.CCNP50 != 0 || s.CCNP90 != 0 || s.CCNP99 != 0 || s.CogP99 != 0 {
+		t.Errorf("empty percentiles = %+v, want 0", s)
+	}
+}
+
+func TestHistogram(t *testing.T) {
+	edges := map[int]int{0: 0, 1: 0, 5: 0, 6: 1, 10: 1, 11: 2, 15: 2, 16: 3, 25: 3, 26: 4, 170: 4}
+	var fns []Function
+	for v, want := range edges {
+		if got := HistBucketOf(v); got != want {
+			t.Errorf("HistBucketOf(%d) = %d, want %d", v, got, want)
+		}
+		fns = append(fns, Function{CCN: v, Cognitive: v})
+	}
+	h := Histogram(fns, MetricCCN)
+	if h != [5]int{3, 2, 2, 2, 2} {
+		t.Errorf("Histogram = %v, want [3 2 2 2 2]", h)
+	}
+	if Histogram(fns, MetricCognitive) != h {
+		t.Error("cognitive histogram must use the same edges")
+	}
+	sum := 0
+	for _, n := range h {
+		sum += n
+	}
+	if sum != len(fns) {
+		t.Errorf("buckets sum to %d, want %d", sum, len(fns))
+	}
+	labels := []string{"1–5", "6–10", "11–15", "16–25", "26+"}
+	for i, b := range HistBuckets {
+		if b.Label() != labels[i] {
+			t.Errorf("bucket %d label = %q, want %q", i, b.Label(), labels[i])
+		}
 	}
 }
 

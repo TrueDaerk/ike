@@ -784,6 +784,9 @@ var jetbrainsRows = []row{
 	{"b", "complexity.group", "Cycle complexity grouping (none/class/file)", Complexity, "Complexity grouping (#2937)"},
 	// …and t hides / shows the test files on every tab (#2950).
 	{"t", "complexity.toggleTests", "Toggle complexity test files", Complexity, "Complexity test files (#2950)"},
+	// …and D ("distribution") shows / hides the histogram row under the
+	// filter row (#2953); a bucket click narrows the list to it.
+	{"D", "complexity.histogram", "Toggle complexity distribution row", Complexity, "Complexity distribution (#2953)"},
 	// …and space expands the selected function into its complexity sites
 	// (#2946): the breakdown of where every CCN / cognitive point comes from.
 	{"space", "complexity.sites", "Expand / collapse complexity sites", Complexity, "Complexity sites (#2946)"},

@@ -120,26 +120,33 @@ func (m *Model) ToggleTests() {
 const testsHidden = "tests:hidden"
 
 // Mode renders the pane's persisted display state for the layout store:
-// GroupMode, then "tests:hidden" while the test files are hidden (#2950) —
-// "project:file,file:class,tests:hidden".
+// GroupMode, then "tests:hidden" while the test files are hidden (#2950)
+// and "hist:on" while the distribution row shows (#2953) —
+// "project:file,file:class,tests:hidden,hist:on".
 func (m *Model) Mode() string {
-	mode := m.GroupMode()
-	if !m.hideTests {
-		return mode
+	var parts []string
+	if g := m.GroupMode(); g != "" {
+		parts = append(parts, g)
 	}
-	if mode == "" {
-		return testsHidden
+	if m.hideTests {
+		parts = append(parts, testsHidden)
 	}
-	return mode + "," + testsHidden
+	if m.hist {
+		parts = append(parts, histOn)
+	}
+	return strings.Join(parts, ",")
 }
 
 // SetMode restores Mode's form; unknown tokens (a newer build's) are
 // ignored.
 func (m *Model) SetMode(mode string) {
-	m.hideTests = false
+	m.hideTests, m.hist = false, false
 	for _, part := range strings.Split(mode, ",") {
-		if part == testsHidden {
+		switch part {
+		case testsHidden:
 			m.hideTests = true
+		case histOn:
+			m.hist = true
 		}
 	}
 	m.SetGroupMode(mode)

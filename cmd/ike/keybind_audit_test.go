@@ -101,7 +101,9 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	{"agent.trace.import", reasonOccasional},
 	// complexity.toggle (#2917) has cmd+alt+shift+x; the rescan and the CSV
 	// export are the pane's own 'r' and 'e' (its other single keys -- s / S
-	// sort, y copy, tab / shift+tab view -- have no command at all).
+	// sort, y copy, tab / shift+tab view -- have no command at all; the
+	// toggles with a command -- b group, t tests, D distribution (#2953) --
+	// are bound in the Complexity context and need no entry here).
 	{"complexity.refresh", reasonPaneKey},
 	{"complexity.export", reasonPaneKey},
 	// Seeding the accepted-debt baseline (#2958) happens once per project

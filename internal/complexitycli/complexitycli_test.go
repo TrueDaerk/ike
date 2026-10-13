@@ -3,6 +3,7 @@ package complexitycli
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -107,6 +108,9 @@ func TestProjectText(t *testing.T) {
 	if !strings.Contains(out, "summary: 2 functions in 2 files") {
 		t.Errorf("summary missing:\n%s", out)
 	}
+	if !strings.Contains(out, "p50 1, p90 5, p99 5, max 5)") {
+		t.Errorf("summary lacks the CCN percentiles:\n%s", out)
+	}
 	// ccn_warn = 4 from the project config: branchy is over threshold.
 	if !strings.Contains(out, "1 over threshold (CCN ≥ 4 or cog ≥ 15 or cmt ≥ 40%) · excess 1") || !strings.Contains(lines[0], "CMT%") {
 		t.Errorf("thresholds not read from the project config:\n%s", out)
@@ -158,6 +162,22 @@ func TestProjectJSON(t *testing.T) {
 	}
 	if got.Summary["ccn_max"] != float64(5) || got.Summary["files"] != float64(2) {
 		t.Errorf("summary = %v", got.Summary)
+	}
+	// The distribution (#2953): nearest-rank percentiles over {1, 5} and
+	// both CCNs in the 1–5 bucket.
+	for k, v := range map[string]float64{"ccn_p50": 1, "ccn_p90": 5, "ccn_p99": 5, "cog_p50": 0} {
+		if got.Summary[k] != v {
+			t.Errorf("summary.%s = %v, want %v", k, got.Summary[k], v)
+		}
+	}
+	for _, k := range []string{"cog_p90", "cog_p99"} {
+		if _, ok := got.Summary[k]; !ok {
+			t.Errorf("summary lacks %q", k)
+		}
+	}
+	hist, _ := got.Summary["histogram"].(map[string]any)
+	if fmt.Sprint(hist["ccn"]) != "[2 0 0 0 0]" || fmt.Sprint(hist["cognitive"]) != "[1 1 0 0 0]" {
+		t.Errorf("summary.histogram = %v, want ccn [2 0 0 0 0], cognitive [1 1 0 0 0]", got.Summary["histogram"])
 	}
 	if len(got.Functions) != 2 {
 		t.Fatalf("functions = %v", got.Functions)

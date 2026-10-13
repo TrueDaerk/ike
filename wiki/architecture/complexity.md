@@ -307,6 +307,18 @@ first. The thresholds stay parameters so a per-file threshold can feed
 them. The thresholds come from the `[complexity]`
 settings of the later steps; the engine takes them as plain integers.
 
+**Distribution (#2953).** An average of 4 next to a maximum of 170 says
+nothing about the shape, so `Summarize` also takes the **nearest-rank**
+percentiles of both metrics — `CCNP50/P90/P99`, `CogP50/P90/P99`: the value
+at rank `⌈p/100 · n⌉` of the ascending order (over `1…100` that is 50 / 90 /
+99; one function gives its own value for all three; an empty list 0). It
+sorts a copy per metric — fine at 34 k functions, the call runs per refresh,
+not per key. `Histogram(fns, metric)` (`MetricCCN` / `MetricCognitive`)
+counts the population per `HistBuckets` bucket — `1–5`, `6–10`, `11–15`,
+`16–25`, `26+`, the same edges for both metrics, a cognitive `0` in the
+first (`HistBucketOf`) — so the buckets sum to the population;
+`Summary.CCNHist` / `CogHist` hold both.
+
 **Groups (#2937).** `GroupFunctions(files, by, ccnWarn, cogWarn, cmtWarn)`
 (`group.go`) folds functions keyed by file into one `Group{File, Class,
 Line, Summary}` per class (`ByClass`: the units with a non-empty
@@ -424,7 +436,10 @@ in `Update`.
 **Header and columns.** The header line names the pane, draws the tab bar
 and the tab's `Summary` over its whole population: the index generation (or
 `scanning…` while the walk runs), functions, NLOC, sum / average / max CCN
-and cognitive complexity, the aggregate comment density (`cmt 12%`), the
+and cognitive complexity — the sort metric's (cognitive while sorting by
+it, CCN otherwise) with its percentiles between average and max, `CCN
+Σ137301 avg 4.0 p50 2 p90 9 p99 28 max 170` (#2953), the other in the
+short form so the line stays within reason — the aggregate comment density (`cmt 12%`), the
 count over threshold, `excess N` (#2945) and, with a baseline in effect,
 `N accepted` (#2958, [below](#baseline-2958)). The grid
 (`gridview.HeaderRow` / `DataRow`, widths from the longest visible value,
@@ -484,6 +499,28 @@ visible population; `test:` and the toggle combine (both narrow). The state
 persists in the layout `Mode` beside the grouping
 (`project:file,file:class,tests:hidden`; `Mode` / `SetMode`, unknown tokens
 ignored) and the command saves the layout at once.
+
+**Distribution row (#2953).** `D` — the `complexity.histogram` command,
+bound to `shift+d` in the `complexity` keymap context and in the palette
+as "Complexity: Toggle Distribution (Histogram)" — shows one line under
+the filter row (`histogram.go`) on the Project and File tabs: the tab's
+`Summary.CCNHist` (or `CogHist` while sorting by cognitive) as `1–5
+████████ 29310 · 6–10 ███ 3102 · 11–15 █ 812 · 16–25 ▌ 540 · 26+ ▏ 185`.
+The bars are runs of `█` scaled so the widest bucket fills eight cells, in
+eighths (`▏`…`▉`; a non-empty bucket shows at least `▏`), no new building
+block; a bucket that reaches the metric's warning threshold renders in the
+warning colour. The row counts the tab's population before the filter,
+like the header, so narrowing to one bucket keeps the others readable.
+While it shows, the chrome is five lines (`chromeRows()` /
+`headerRows()`): the column header moves to y 3, the list to y 4. A click
+on a bucket (`Click(x, 2)` → `clickHistogram`, the x ranges from
+`histSegments`) writes `min:` / `max:` through `filterbar.SetTerm`, keeping
+the other typed terms — `min:16 max:25`, `min:0 max:5` for the first bucket
+(a cognitive 0 counts there), `min:26` for the last; a sort column other
+than the counted metric moves to it so the keys read the bucket's metric.
+The bucket the filter names renders bold, and a second click on it clears
+both keys. The state persists as `hist:on` in the layout `Mode`
+(`project:file,tests:hidden,hist:on`); the Changes tab has no row.
 
 **Grouping (#2937).** `b` — the `complexity.group` command, bound to `b`
 in the `complexity` keymap context and in the palette as "Complexity: Cycle
@@ -1062,7 +1099,9 @@ config, `0` = off). `--ccn` / `--cog` / `--cmt` (percent, 1-100) override
 the thresholds. The row filter: `--min N` keeps rows with CCN or cognitive ≥
 N; an explicit `--ccn` / `--cog` / `--cmt` keeps rows at or above any
 threshold; no filter flag keeps every row. The table carries a `CMT%`
-column, the summary line the aggregate density and the thresholds. The summary always covers every function.
+column, the summary line the aggregate density, the thresholds and both
+metrics' percentiles (`ΣCCN 136390 (avg 4.0, p50 2, p90 9, p99 28, max
+168)`, #2953). The summary always covers every function.
 `complexity.enabled` is ignored — running the command is the request.
 
 **Groups (#2937).** `--by class` / `--by file` (or `--by=…`) switches the
@@ -1164,7 +1203,10 @@ every summary (`summary`, `base`, `head`), the top-level `delta`, the
 delta of every changed function and every group. Line numbers are 1-based.
 `comment_lines` and `comment_density` (a ratio, four decimals) sit on every
 function, both sides and the delta of a changed function, the summaries and
-the top-level delta; the summaries also carry `cmt_warn` (#2934). The CLI
+the top-level delta; the summaries also carry `cmt_warn` (#2934). Every
+summary carries `ccn_p50` / `ccn_p90` / `ccn_p99` / `cog_p50` / `cog_p90` /
+`cog_p99` and `histogram: {"ccn": [5 ints], "cognitive": [5 ints]}` over
+the `1–5` … `26+` buckets (#2953); the group rows do not. The CLI
 keeps its snake_case spelling for them — the engine's own `Function` JSON
 uses `commentLines` / `commentDensity`.
 

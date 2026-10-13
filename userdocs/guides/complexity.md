@@ -57,6 +57,19 @@ and a trailing comment counts as code. In the Complexity window,
 `metric:cmt min:40` in the filter lists exactly the functions at or above
 40 %.
 
+**How bad is it overall?** An average says little next to a maximum, so
+the window header adds the percentiles of the sort metric:
+`CCN Σ137301 avg 4.0 p50 2 p90 9 p99 28 max 170` reads "half the functions
+are at 2 or below, nine in ten at 9 or below, one in a hundred above 28".
+Press `D` for the distribution row under the filter:
+`1–5 ████████ 29310 · 6–10 ███ 3102 · 11–15 █ 812 · 16–25 ▌ 540 · 26+ ▏ 185`
+— how many functions fall in each bucket of the sort metric (cognitive
+while you sort by it, CCN otherwise), the buckets at or above the warning
+threshold in the warning colour. Click a bucket to list just those
+functions (it sets `min:16 max:25` in the filter and keeps what else you
+typed); click it again to drop the range. `D` again hides the row; the
+window remembers it across restarts.
+
 The filter row knows more keys: `max:` bounds the sort column from above
 (`min:15 max:30` lists functions with CCN 15 to 30; `metric:cog min:10
 max:20` does the same on cognitive complexity), `kind:method` (or
@@ -300,7 +313,7 @@ FILE                         FUNCTION                  LINE  CCN  COG  NLOC  PAR
 internal/config/validate.go  validate                  262   168  220  622   1       14
 internal/editor/view.go      Model.renderSpanUncached  949   139  237  368   6       21
 
-summary: 33769 functions in 3161 files · ΣCCN 136390 (avg 4.0, max 168) · Σcog 122149 (avg 3.6, max 237) · NLOC 466863 · cmt 12% · 1223 over threshold (CCN ≥ 15 or cog ≥ 15 or cmt ≥ 40%) · excess 41870
+summary: 33769 functions in 3161 files · ΣCCN 136390 (avg 4.0, p50 2, p90 9, p99 28, max 168) · Σcog 122149 (avg 3.6, p50 1, p90 9, p99 37, max 237) · NLOC 466863 · cmt 12% · 1223 over threshold (CCN ≥ 15 or cog ≥ 15 or cmt ≥ 40%) · excess 41870
 shown: 2 of 33769 functions (CCN or cog ≥ 40)
 skipped: 192 files (no complexity spec: json, markdown, yaml)
 
@@ -368,7 +381,10 @@ Project report:
     "cog_sum": 122149, "cog_avg": 3.62, "cog_max": 237,
     "over_threshold": 1223, "excess": 41870, "ccn_warn": 15, "cog_warn": 15,
     "comment_lines": 63650, "comment_density": 0.12, "cmt_warn": 40,
-    "accepted": 0
+    "accepted": 0,
+    "ccn_p50": 2, "ccn_p90": 9, "ccn_p99": 28,
+    "cog_p50": 1, "cog_p90": 9, "cog_p99": 37,
+    "histogram": { "ccn": [29130, 3102, 812, 540, 185], "cognitive": [29954, 2010, 776, 590, 439] }
   },
   "functions": [
     { "file": "internal/config/validate.go", "name": "validate", "kind": "function",
@@ -416,6 +432,11 @@ against the [baseline](#accepted-debt-the-baseline) in effect and absent
 without one; `summary.accepted` counts the over-threshold functions the
 baseline accepts (always present, `0` without a baseline), while
 `over_threshold` and `excess` count only the new and worsened ones.
+`ccn_p50` … `cog_p99` are nearest-rank percentiles over the summarized
+functions (0 when there are none), and `histogram` counts them per bucket
+— `1–5`, `6–10`, `11–15`, `16–25`, `26+` in that order, a cognitive 0 in
+the first — so each array sums to `functions`. Every summary carries them
+(`summary`, and `base` / `head` under `--diff`); group rows do not.
 
 Grouped report (`--by class --json`): `functions` gives way to `groups`,
 one object per row the filter keeps, with the summary's field names; `class`

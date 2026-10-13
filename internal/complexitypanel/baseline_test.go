@@ -54,6 +54,7 @@ func TestBaselineClassifiesRowsAndTotals(t *testing.T) {
 	if s.OverThreshold != 1 || s.Accepted != 2 || s.Worsened != 1 || s.Excess != 3 {
 		t.Fatalf("summary over=%d accepted=%d worsened=%d excess=%d", s.OverThreshold, s.Accepted, s.Worsened, s.Excess)
 	}
+	m.SetSize(240, 12) // room for the sort metric's percentiles (#2953)
 	v := m.View()
 	for _, want := range []string{"render ✓", "Page::show ✓", "1 over", "excess 3", "2 accepted", "i accept"} {
 		if !strings.Contains(v, want) {

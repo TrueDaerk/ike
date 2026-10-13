@@ -42,6 +42,8 @@ package complexity
 
 import (
 	"errors"
+	"fmt"
+	"sort"
 
 	"ike/internal/highlight"
 	"ike/internal/lang"
@@ -192,6 +194,88 @@ type Summary struct {
 	// CommentLines / (NLOC + CommentLines) over the aggregate (#2934).
 	CommentLines   int     `json:"commentLines"`
 	CommentDensity float64 `json:"commentDensity"`
+	// The nearest-rank percentiles of CCN and cognitive complexity over the
+	// population (#2953); 0 for an empty list.
+	CCNP50 int `json:"ccnP50"`
+	CCNP90 int `json:"ccnP90"`
+	CCNP99 int `json:"ccnP99"`
+	CogP50 int `json:"cogP50"`
+	CogP90 int `json:"cogP90"`
+	CogP99 int `json:"cogP99"`
+	// CCNHist and CogHist count the population per HistBuckets bucket
+	// (see Histogram).
+	CCNHist [HistBucketCount]int `json:"ccnHist"`
+	CogHist [HistBucketCount]int `json:"cogHist"`
+}
+
+// The metric names Histogram takes.
+const (
+	MetricCCN       = "ccn"
+	MetricCognitive = "cognitive"
+)
+
+// HistBucketCount is the number of histogram buckets.
+const HistBucketCount = 5
+
+// HistBucket is one histogram bucket: the values Lo..Hi inclusive, Hi 0
+// for the open last bucket. The first bucket also takes 0.
+type HistBucket struct{ Lo, Hi int }
+
+// HistBuckets are the histogram buckets of both metrics (#2953):
+// 1–5, 6–10, 11–15, 16–25, 26+.
+var HistBuckets = [HistBucketCount]HistBucket{{1, 5}, {6, 10}, {11, 15}, {16, 25}, {26, 0}}
+
+// Label is the bucket as the histogram row prints it: "6–10", "26+".
+func (b HistBucket) Label() string {
+	if b.Hi == 0 {
+		return fmt.Sprintf("%d+", b.Lo)
+	}
+	return fmt.Sprintf("%d–%d", b.Lo, b.Hi)
+}
+
+// metricOf is f's value on metric (MetricCCN or MetricCognitive).
+func metricOf(f Function, metric string) int {
+	if metric == MetricCognitive {
+		return f.Cognitive
+	}
+	return f.CCN
+}
+
+// HistBucketOf is the index of the bucket v falls into.
+func HistBucketOf(v int) int {
+	for i, b := range HistBuckets[:HistBucketCount-1] {
+		if v <= b.Hi {
+			return i
+		}
+	}
+	return HistBucketCount - 1
+}
+
+// Histogram counts fns per HistBuckets bucket on metric (MetricCCN or
+// MetricCognitive); the buckets sum to len(fns).
+func Histogram(fns []Function, metric string) [HistBucketCount]int {
+	var h [HistBucketCount]int
+	for _, f := range fns {
+		h[HistBucketOf(metricOf(f, metric))]++
+	}
+	return h
+}
+
+// percentiles are the nearest-rank p50, p90 and p99 of fns on metric:
+// the value at rank ceil(p/100·n) of the ascending order; 0 for an empty
+// list.
+func percentiles(fns []Function, metric string) (p50, p90, p99 int) {
+	n := len(fns)
+	if n == 0 {
+		return 0, 0, 0
+	}
+	vals := make([]int, n)
+	for i, f := range fns {
+		vals[i] = metricOf(f, metric)
+	}
+	sort.Ints(vals)
+	rank := func(p int) int { return vals[(p*n+99)/100-1] }
+	return rank(50), rank(90), rank(99)
 }
 
 // Summarize aggregates fns. A function is over threshold when its CCN is at
@@ -236,5 +320,9 @@ func Summarize(fns []Function, ccnWarn, cogWarn, cmtWarn int) Summary {
 		s.CogAvg = float64(s.CogSum) / float64(s.Functions)
 	}
 	s.CommentDensity = density(s.NLOC, s.CommentLines)
+	s.CCNP50, s.CCNP90, s.CCNP99 = percentiles(fns, MetricCCN)
+	s.CogP50, s.CogP90, s.CogP99 = percentiles(fns, MetricCognitive)
+	s.CCNHist = Histogram(fns, MetricCCN)
+	s.CogHist = Histogram(fns, MetricCognitive)
 	return s
 }

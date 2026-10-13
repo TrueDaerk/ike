@@ -451,6 +451,7 @@ Active when the Complexity tool window has focus.
 | Cycle complexity grouping (none/class/file) | `b` | `b` | `complexity.group` |
 | Expand / collapse complexity sites | `space` | `space` | `complexity.sites` |
 | Mark complexity sites in the editor | `m` | `m` | `complexity.showSites` |
+| Toggle complexity distribution row | `shift+d` | `shift+d` | `complexity.histogram` |
 | Toggle complexity test files | `t` | `t` | `complexity.toggleTests` |
 
 ## Rebinding
