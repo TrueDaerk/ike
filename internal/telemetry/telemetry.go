@@ -169,7 +169,13 @@ import (
 // parsed. A warm start reads cached == files and a small "ms"; a cold walk
 // cached 0. Structural only — a count. Absence below v16 means every file was
 // parsed: there was no cache.
-const SchemaVersion = 16
+//
+// v17 (#2967): the "complexity.scan" op gains "cached" — how many of the
+// walk's "files" were taken from the persisted complexity index cache instead
+// of being measured — and "cache":"corrupt" when the cache it tried to seed
+// from was damaged (ignored and rewritten). Structural only — a count and a
+// marker. Absence below v17 means every file was measured.
+const SchemaVersion = 17
 
 // defaultFlushInterval is how often the writer goroutine flushes the
 // bufio.Writer on its own, independent of buffer fill or explicit Flush
@@ -247,7 +253,9 @@ const (
 	// One completed project walk of the complexity index (0550, #2916): the
 	// initial scan and every rebuild. "ms" is the walk's duration, "files"
 	// how many files it measured, "functions" how many units they hold and
-	// "truncated" whether it stopped at the file cap. The phase is "error"
+	// "truncated" whether it stopped at the file cap; "cached" (v17, #2967)
+	// how many of the files came from the persisted cache, and "cache" is
+	// "corrupt" when that cache was damaged. The phase is "error"
 	// when the build has no syntax tree at all (the index can never fill),
 	// "ok" otherwise. No path travels.
 	OpComplexityScan = "complexity.scan"

@@ -60,6 +60,7 @@ currently 16); readers must tolerate unknown fields and filter on `v`.
 | 14 | #2693 | The `heartbeat` event gains `renders` — the interval's three loudest **render triggers** as `type:count` pairs, where the type is the message whose Update pass the composed frame followed (`watch.EventBatchMsg:43,tea.KeyPressMsg:12,vcs.SnapshotMsg:2`). `top` says the loop composed N frames; `renders` says what for — the field that separates a wake worth drawing from render churn without a local repro. Summed over an interval it equals the interval's `view/render` count; a `view/reuse` pass is not a render and is never attributed. Omitted when the interval composed nothing. Structure only, never content. Absence below v14 means "not recorded". |
 | 15 | #2716 | The `http.flight` end phases gain `redirects` — how many redirects the exchange followed before it landed on the response the pane shows (a 301 → 302 → 200 is `2`). Go fires the DNS, connect and TLS hooks once per hop and the v8 breakdown *accumulates* them, so without the count a three-hop chain is indistinguishable from one slow host with a 3× handshake. The field is **omitted when no redirect was followed**, so on v15 absence reads as zero, below v15 as "not recorded". Structural only: the count, never a URL, host or `Location`. |
 | 16 | #2885 | The `php.trait.index_scan` op gains `cached` — how many of the walk's `files` were taken from the persisted [PHP index cache](php-trait-index.md#persistence-across-sessions-2885) instead of being parsed. A warm start reads `cached` equal to `files` with a small `ms`; a cold walk, a `php.traitIndex.rebuild` and a session with `php.index.cache` off read `0`. Structural only — a count, never a path. Absence below v16 means "no cache existed": every file was parsed. |
+| 17 | #2967 | The `complexity.scan` op gains `cached` — how many of the walk's `files` were taken from the persisted [complexity index cache](complexity.md#project-index-2916) instead of being measured — and `cache` = `corrupt` when the cache the walk tried to seed from was damaged (it is ignored and rewritten; the field is omitted otherwise). A warm start reads `cached` equal to `files`; a cold walk, a rebuild and a changed `complexity.exclude` read `0`. Structural only — a count and a marker, never a path. Absence below v17 means every file was measured. |
 
 An export spanning versions therefore needs three guards: filter v1 `command`
 events on `data.source != "internal"`, treat a missing `ok`/`ms` on v4 as
@@ -316,12 +317,13 @@ counts by the version's interval before comparing sessions.
     [complexity index](complexity.md#project-index-2916): the initial scan
     and every rebuild. `ms` is the walk's duration, `files` how many files it
     measured, `functions` how many units they hold and `truncated`
-    (`true`/`false`) whether it stopped at the 50 000-file cap. The phase is
+    (`true`/`false`) whether it stopped at the 50 000-file cap; (v17, #2967)
+    `cached` how many of the files came from the persisted cache, and
+    `cache` = `corrupt` when that cache was damaged. The phase is
     `ok`, or `error` when the build has no syntax tree at all (the index can
     never fill). Like `php.trait.index_scan` it **never opens a session file
     on its own**: the walk finishes after every launch, so it is held and
-    written once a real usage event starts the session. Additive, no schema
-    bump; no path travels.
+    written once a real usage event starts the session. No path travels.
   - `palette.pick` (#2551) — a palette row was activated, the counterpart of
     `palette.dismiss`. `mode` is the mode's prefix rune, `query_len` the number
     of runes typed — **never the query itself** — `rank` the **0-based index**

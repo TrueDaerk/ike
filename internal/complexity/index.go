@@ -124,6 +124,11 @@ type Stats struct {
 	// cap before the tree was exhausted.
 	LastScan  time.Duration
 	Truncated bool
+	// Cached counts the files the finished walk took from the persisted
+	// cache instead of measuring them (#2967); CacheCorrupt says the cache
+	// it tried to seed from was damaged (ignored, and rewritten by the walk).
+	Cached       int
+	CacheCorrupt bool
 }
 
 // Index is the project complexity index. Zero value is not usable; use
@@ -154,6 +159,11 @@ type Index struct {
 
 	onScan  func(Stats)
 	scanned *langindex.Index[[]Function]
+
+	// cacheFile is where the walk persists (CacheFile(root), #2967);
+	// corrupt names the walk whose seed load found it damaged.
+	cacheFile string
+	corrupt   *langindex.Index[[]Function]
 }
 
 // viewKey identifies the content a snapshot was built from.
@@ -171,9 +181,9 @@ func NewIndex(root string, opts Options) *Index {
 			root = abs
 		}
 	}
-	x := &Index{root: root, opts: opts}
+	x := &Index{root: root, opts: opts, cacheFile: CacheFile(root)}
 	if opts.Enabled {
-		x.project = x.newProject(opts)
+		x.project = x.newProject(opts, true)
 	}
 	return x
 }
@@ -209,7 +219,8 @@ func (x *Index) ensureLocked() {
 // Reconfigure applies changed [complexity] settings live: turning the
 // master switch off drops the index and bumps the generation (consumers see
 // an empty snapshot), turning it on builds and walks it, a changed exclude
-// list rebuilds. Unchanged options are a no-op.
+// list rebuilds. Unchanged options are a no-op. Turning the index on seeds
+// the walk from the persisted cache; a changed exclude list walks cold.
 func (x *Index) Reconfigure(opts Options) {
 	x.mu.Lock()
 	defer x.mu.Unlock()
@@ -224,12 +235,14 @@ func (x *Index) Reconfigure(opts Options) {
 		x.armChangeLocked()
 		return
 	}
-	x.project = x.newProject(opts)
+	x.project = x.newProject(opts, x.project == nil)
 	x.ensureLocked()
 }
 
 // Rebuild drops the walk and starts a fresh one: the escape hatch for a
-// tree that changed underneath ike without watcher events. It reports false
+// tree that changed underneath ike without watcher events. The rebuild
+// ignores the persisted cache (#2967) — it is the escape hatch for a cache
+// gone wrong too — and replaces it once the walk finishes. It reports false
 // when there is nothing to rebuild (disabled, or no syntax tree at all).
 func (x *Index) Rebuild() bool {
 	if !x.Available() {
@@ -240,20 +253,52 @@ func (x *Index) Rebuild() bool {
 	if !x.opts.Enabled {
 		return false
 	}
-	x.project = x.newProject(x.opts)
+	x.project = x.newProject(x.opts, false)
 	x.view = nil
 	x.pending = true
 	x.ensureLocked()
 	return true
 }
 
-// newProject builds the walk for opts.
-func (x *Index) newProject(opts Options) *langindex.Index[[]Function] {
+// newProject builds the walk for opts. The walk persists through the cache
+// (#2967) once it finishes and seeds itself from it unless seeded is false
+// (a rebuild, a changed exclude list). The caller holds x.mu.
+func (x *Index) newProject(opts Options, seeded bool) *langindex.Index[[]Function] {
 	limits := langindex.Limits{MaxFileSize: indexMaxFileSize, MaxFiles: indexMaxFiles}
 	root := x.root
 	exclude := append([]string(nil), opts.Exclude...)
 	langOf := func(path string) string { return classify(root, exclude, path) }
-	return langindex.New(root, limits, langOf, extractFile)
+	p := langindex.New(root, limits, langOf, extractFile)
+	persist := langindex.Persist[[]Function]{
+		Saved: func(string) { x.persist(p) },
+	}
+	if seeded {
+		persist.Load = func(string) map[string]langindex.Seeded[[]Function] {
+			seed, corrupt := loadCache(x.cacheFile, root)
+			if corrupt {
+				x.mu.Lock()
+				if x.project == p {
+					x.corrupt = p
+				}
+				x.mu.Unlock()
+			}
+			return seed
+		}
+	}
+	p.SetPersist(persist)
+	return p
+}
+
+// persist writes walk p to the cache when p is still the index's walk — a
+// walk a rebuild or a setting already replaced is stale. It runs on the scan
+// goroutine; a failed write only costs the next session its warm start.
+func (x *Index) persist(p *langindex.Index[[]Function]) {
+	x.mu.Lock()
+	ok := x.opts.Enabled && x.project == p
+	x.mu.Unlock()
+	if ok {
+		_ = saveCache(x.cacheFile, x.root, p)
+	}
 }
 
 // classify is the walk's classifier: indexLang for a file of a language with
@@ -399,6 +444,7 @@ func (x *Index) Stats() Stats {
 	p := x.project
 	enabled := x.opts.Enabled
 	started := x.started
+	corrupt := p != nil && x.corrupt == p
 	x.mu.Unlock()
 	s := Stats{Enabled: enabled, Unavailable: !x.Available()}
 	if p == nil {
@@ -406,6 +452,8 @@ func (x *Index) Stats() Stats {
 	}
 	s.Scanning = started && !p.Done(indexLang)
 	s.LastScan, s.Truncated = p.ScanInfo(indexLang)
+	s.Cached = p.Cached(indexLang)
+	s.CacheCorrupt = corrupt
 	v := x.Snapshot()
 	s.Files = len(v.Files)
 	s.Functions = v.Functions()

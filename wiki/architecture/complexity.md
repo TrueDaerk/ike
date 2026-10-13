@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Code Complexity
-description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters, nesting depth and comment density (#2934) per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary with its per-class and per-file groups (#2937), the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source, the hotspot columns (#2957) multiplying complexity by the commits per file from one git log, the accepted-debt baseline (#2958, a committed .ike/complexity-baseline.json that turns every surface into a ratchet flagging only new and worsened functions), the optimisation-session pins (#2959, functions pinned with their metrics in the state store's complexity-pins.json, a Pinned section with a since-pin delta and a session Δexcess in the header), and the headless `ike complexity` CLI (#2922) printing the table of the project or of named files and directories (#2936), per function or summed per class or file (#2937), or the diff against a revision as text or JSON for CI and agents, also as a complexity-only build of the ike binary (#2939, build tag ike_complexity_only, make install-complexity) that links no IDE; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
+description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters, nesting depth and comment density (#2934) per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary with its per-class and per-file groups (#2937), the project index (#2916) that measures every supported file in the background, persists it across sessions (#2967, a stamped complexity-index.gob in the state store), keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source, the hotspot columns (#2957) multiplying complexity by the commits per file from one git log, the accepted-debt baseline (#2958, a committed .ike/complexity-baseline.json that turns every surface into a ratchet flagging only new and worsened functions), the optimisation-session pins (#2959, functions pinned with their metrics in the state store's complexity-pins.json, a Pinned section with a since-pin delta and a session Δexcess in the header), and the headless `ike complexity` CLI (#2922) printing the table of the project or of named files and directories (#2936), per function or summed per class or file (#2937), or the diff against a revision as text or JSON for CI and agents, also as a complexity-only build of the ike binary (#2939, build tag ike_complexity_only, make install-complexity) that links no IDE; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
 resource: internal/complexity, internal/complexitypanel, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_churn.go, internal/app/complexity_baseline.go, internal/app/complexity_pins.go, internal/vcs/vcscore/churn.go, internal/app/complexity_problems.go, internal/app/complexity_segment.go, internal/complexitycli, cmd/ike/complexityonly.go
 tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive, index, settings, telemetry, vcs, diff, problems, cli, baseline, pins]
 timestamp: 2026-10-14T00:30:00Z
@@ -351,18 +351,40 @@ with a spec, so it registers a single pseudo language: the classifier claims
 a path when `lang.ByPath` names a language with a `ComplexitySpec` and no
 `complexity.exclude` glob matches; the extractor re-derives the language
 from the path and runs `Measure`. Nothing else is read, and a file the
-engine cannot measure (no tree) is not indexed. A 50k-line project walks in
-a few seconds; nothing is persisted across sessions yet (the walk's
-`Persist` seam is there when it is worth it).
+engine cannot measure (no tree) is not indexed. A cold walk of IKE itself
+(3 187 files, 33 949 functions) takes a few seconds.
+
+**Persistence (#2967).** The finished walk is written to
+`complexity-index.gob` in the state store (`IKE_CONFIG_DIR`, else the
+project's `.ike/`, which the repository ignores; `complexity.CacheFile`) by
+`persist.go`, which mirrors the PHP index's cache end to end: a gob stream
+of a header (`SpecVersion`, the project root, the record count) and one
+record per file — absolute path, the `langindex.Stamp` (size, mtime) of the
+file it was measured from, and its `[]Function` (`Baseline` cleared: a
+classification, not a measurement). The write is atomic (a temporary
+sibling renamed into place) and runs on the scan goroutine through the
+walk's `Persist.Saved`, only while the walk is still the index's; a walk
+with no measured file removes the file instead. The next session's walk
+seeds itself through `Persist.Load`: a file whose stamp still matches is
+taken without being read or measured, a changed or new one is measured, and
+a file the walk no longer reaches (deleted, excluded) is never visited, so
+the cache cannot resurrect it. A cache for another root (the shared
+`IKE_CONFIG_DIR` case) or another `SpecVersion` is ignored quietly — bump
+`SpecVersion` whenever a rule, a language spec or `Function` changes
+(`TestCacheVersionTracksFormat` pins the shape; a rule change has none, so
+that bump is by hand). A damaged cache is ignored too, reported once
+(`Stats.CacheCorrupt`, the scan op's `cache=corrupt`) and overwritten by the
+walk it failed to seed.
 
 **Lifecycle.** `NewIndex(root, opts)` builds the walk but does not start it;
 `Start` (called from the app's `Init`, after the program's sender is wired,
 like the TODO index) kicks it off in the background. `Reconfigure(opts)`
 applies a reloaded `[complexity]` section live: the master switch off drops
-the walk and the snapshot, on rebuilds it, a changed exclude list rewalks,
-unchanged options are a no-op. `Rebuild` is the escape hatch for a tree that
-changed without watcher events. A project switch builds a new model and
-therefore a new index.
+the walk and the snapshot, on rebuilds it (seeded from the cache), a changed
+exclude list rewalks cold, unchanged options are a no-op. `Rebuild` is the
+escape hatch for a tree that changed without watcher events — or a cache
+gone wrong: it ignores the seed and replaces the cache once it finishes. A
+project switch builds a new model and therefore a new index.
 
 **Freshness.** `InvalidateFile(path)` re-measures one file through the
 walk's worker, off the Update goroutine: the app calls it from the buffer
@@ -378,7 +400,10 @@ generation and reused until it moves; a consumer keeps a View as long as it
 likes and never holds the walk's internals. `View.Summary(ccnWarn, cogWarn)`
 is `Summarize` over every function, `Paths` the sorted file list. `Stats`
 reports enabled / unavailable (no syntax tree in the build) / scanning, the
-file and function counts, the walk's duration and whether it hit the cap.
+file and function counts, the walk's duration, whether it hit the cap,
+`Cached` — how many files the finished walk took from the persisted cache
+(the tool window's header reads `gen 1 (2981 cached)`) — and
+`CacheCorrupt`.
 
 **Change notification.** `SetOnChange(fn)` runs off the UI goroutine on a
 settle timer (250 ms, re-armed while a walk or a queued re-extraction is
@@ -400,8 +425,9 @@ inside one settle window collapses into one notification.
 | `complexity.comment_density_warn` | `40` | The comment-density threshold in percent (#2934): 0-100, `0` turns the check off; out of range falls back to 40 with a diagnostic. |
 
 **Telemetry.** One `complexity.scan` op per completed walk (the initial one
-and every rebuild), phase `ok` with `ms`, `files`, `functions` and
-`truncated`, or phase `error` when the build has no syntax tree at all. Like
+and every rebuild), phase `ok` with `ms`, `files`, `functions`, `cached`
+(v17, #2967), `truncated` and — for a damaged cache only — `cache=corrupt`,
+or phase `error` when the build has no syntax tree at all. Like
 `php.trait.index_scan` it never opens a session file on its own (the walk
 finishes after every launch); it is held and written once a real usage
 event starts the session. No path travels. See

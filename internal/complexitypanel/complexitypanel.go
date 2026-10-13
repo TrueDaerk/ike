@@ -1345,6 +1345,10 @@ func (m *Model) totalsText() string {
 	switch {
 	case m.stats.Scanning:
 		parts = append(parts, "scanning…")
+	case m.hasView && m.stats.Cached > 0:
+		// A walk seeded from the persisted cache (#2967) says how much of
+		// it was not measured this session.
+		parts = append(parts, "gen "+itoa(m.view.Gen)+" ("+itoa(m.stats.Cached)+" cached)")
 	case m.hasView:
 		parts = append(parts, "gen "+itoa(m.view.Gen))
 	}
