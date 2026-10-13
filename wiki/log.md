@@ -1,5 +1,21 @@
 # Log
 
+## 2026-10-14 (diff between two revisions, #2961)
+
+- [Code Complexity](/architecture/complexity.md): the new "Two revisions"
+  paragraph under Changes vs HEAD — `R` takes `A..B`
+  (`vcscore.ParseRevRange`, a malformed range keeps the previous base),
+  `ChangedFilesBetween`, the head side from the head commit's blob cached per
+  `(sha, path)`, the `base <A> → <B>` header, the range generation in
+  `cxDiffKey` (only `R`, a config reload and `r` re-run it), the function
+  diff's head blob; the CLI's `--diff=A..B` and the JSON `head_rev` /
+  `head_sha`.
+- [VCS](/architecture/vcs.md): `ParseRevRange` / `ChangedFilesBetween` in
+  the core list and the complexity bullet.
+- The complexity user guide: comparing two revisions in the Changes tab and
+  on the command line, the JSON fields, and a CI merge gate on
+  `origin/main..HEAD`.
+
 ## 2026-10-14 (persisted complexity index, #2967)
 
 - [Code Complexity](/architecture/complexity.md): the new "Persistence"

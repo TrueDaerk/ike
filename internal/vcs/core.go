@@ -59,6 +59,16 @@ func ChangedFiles(root, rev string) ([]CommitFile, error) {
 	return vcscore.ChangedFiles(root, rev)
 }
 
+// ParseRevRange splits "A..B" from a single revision (#2961).
+func ParseRevRange(spec string) (base, head string, ranged bool, err error) {
+	return vcscore.ParseRevRange(spec)
+}
+
+// ChangedFilesBetween lists every file that differs between two commits.
+func ChangedFilesBetween(root, baseSha, headSha string) ([]CommitFile, error) {
+	return vcscore.ChangedFilesBetween(root, baseSha, headSha)
+}
+
 // HeadContent returns the HEAD blob of the file at path.
 func HeadContent(root, path string) (string, error) { return vcscore.HeadContent(root, path) }
 

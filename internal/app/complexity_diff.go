@@ -46,19 +46,25 @@ const cxDiffWorkers = 4
 // cxDiffCacheMax bounds the base-side cache before it is dropped whole.
 const cxDiffCacheMax = 4096
 
-// cxDiffKey identifies the inputs a diff was computed from.
+// cxDiffKey identifies the inputs a diff was computed from. A ranged
+// spec ("A..B", #2961) compares two commits the working tree cannot move:
+// its key leaves the snapshot and index generations at zero and carries
+// the range generation instead, which only a new 'R', a config reload or
+// 'r' bumps — the resolved head sha rides the result (Changes.HeadSha).
 type cxDiffKey struct {
 	snapGen  int    // bumped per distinct VCS snapshot
 	indexGen int    // the last ComplexityChangedMsg generation
-	rev      string // the base revision as typed ("" = HEAD)
+	rev      string // the revision spec as typed ("" = HEAD)
+	rangeGen int    // ranged only: bumped per explicit re-run
 }
 
 // complexityDiffState is the session state behind the Changes tab, shared
 // by pointer across value-model copies like vcsState.
 type complexityDiffState struct {
-	rev       string // the base revision the user wants; "" = HEAD
+	rev       string // the revision spec the user wants; "" = HEAD
 	snapGen   int
 	indexGen  int
+	rangeGen  int       // bumped by 'R', a config reload and 'r' (#2961)
 	key       cxDiffKey // the inputs of the result the pane shows
 	gen       int       // bumped per stored result; the hint key joins it (#2949)
 	computing bool
@@ -89,7 +95,20 @@ type complexityDiffMsg struct {
 
 // currentCxDiffKey is the key a diff computed now would carry.
 func (m Model) currentCxDiffKey() cxDiffKey {
+	if _, _, ranged, _ := vcs.ParseRevRange(m.cxDiff.rev); ranged {
+		return cxDiffKey{rev: m.cxDiff.rev, rangeGen: m.cxDiff.rangeGen}
+	}
 	return cxDiffKey{snapGen: m.cxDiff.snapGen, indexGen: m.cxDiff.indexGen, rev: m.cxDiff.rev}
+}
+
+// rearmComplexityRange re-runs a ranged diff (#2961) on the next settled
+// pass: a config reload or 'r' asks for fresh numbers even though neither
+// commit moved (a ref like "main" may have, too). A working-tree diff keys
+// on the generations and ignores the bump.
+func (m Model) rearmComplexityRange() {
+	if m.cxDiff != nil {
+		m.cxDiff.rangeGen++
+	}
 }
 
 // noteVCSSnapshotForComplexity bumps the snapshot generation the Changes
@@ -210,6 +229,7 @@ func (m *Model) startComplexityDiff() tea.Cmd {
 // cxDiffJob is everything the off-loop computation reads.
 type cxDiffJob struct {
 	key      cxDiffKey
+	headSha  string // ranged mode (#2961): the head commit, set once resolved
 	repoRoot string
 	projRoot string // "" = whole repository
 	exclude  []string
@@ -232,6 +252,12 @@ func (m Model) complexityDiffJob(key cxDiffKey) cxDiffJob {
 	}
 	c := config.Get().Complexity
 	job.ccnWarn, job.cogWarn, job.cmtWarn = c.CCNWarn, c.CognitiveWarn, c.CommentDensityWarn
+	if _, _, ranged, _ := vcs.ParseRevRange(key.rev); ranged {
+		// Two commits (#2961): the working tree — snapshot, buffers, disk —
+		// plays no part.
+		job.snap = nil
+		return job
+	}
 	for _, key := range m.activeWS().Panes.Keys() {
 		inst := m.activeWS().Panes.Get(key)
 		if inst == nil || inst.Kind() != pane.KindEditor {
@@ -248,11 +274,12 @@ func (m Model) complexityDiffJob(key cxDiffKey) cxDiffJob {
 
 // cxFileJob is one file of the computation: where its base blob lives
 // (baseRel "" for a file the base does not have) and where its head side is
-// (headAbs "" for a deleted file); baseAbs keys the removed side of a
-// rename under the old path.
+// (headAbs "" for a deleted file; headRel its blob path in ranged mode);
+// baseAbs keys the removed side of a rename under the old path.
 type cxFileJob struct {
 	baseRel string
 	baseAbs string
+	headRel string
 	headAbs string
 }
 
@@ -260,7 +287,10 @@ type cxFileJob struct {
 // files that differ from it, measure both sides of each with bounded
 // concurrency, and diff. Every git call carries the package timeout.
 func runComplexityDiff(job cxDiffJob) tea.Msg {
-	rev := job.key.rev
+	rev, headRev, ranged, err := vcs.ParseRevRange(job.key.rev)
+	if err != nil {
+		return complexityDiffMsg{key: job.key, err: err.Error()}
+	}
 	if rev == "" {
 		rev = "HEAD"
 	}
@@ -268,7 +298,17 @@ func runComplexityDiff(job cxDiffJob) tea.Msg {
 	if err != nil {
 		return complexityDiffMsg{key: job.key, err: err.Error()}
 	}
-	changed, err := vcs.ChangedFiles(job.repoRoot, sha)
+	var changed []vcs.CommitFile
+	if ranged {
+		// Two revisions (#2961): both ends resolve, the file list is the
+		// commits' diff and the head side is read from the head commit.
+		if job.headSha, err = vcs.ResolveRev(job.repoRoot, headRev); err != nil {
+			return complexityDiffMsg{key: job.key, err: err.Error()}
+		}
+		changed, err = vcs.ChangedFilesBetween(job.repoRoot, sha, job.headSha)
+	} else {
+		changed, err = vcs.ChangedFiles(job.repoRoot, sha)
+	}
 	if err != nil {
 		return complexityDiffMsg{key: job.key, err: err.Error()}
 	}
@@ -281,12 +321,12 @@ func runComplexityDiff(job cxDiffJob) tea.Msg {
 			continue
 		}
 		seen[f.Path] = true
-		fj := cxFileJob{baseRel: f.Path, baseAbs: abs, headAbs: abs}
+		fj := cxFileJob{baseRel: f.Path, baseAbs: abs, headRel: f.Path, headAbs: abs}
 		switch f.Status {
 		case vcs.StatusAdded:
 			fj.baseRel, fj.baseAbs = "", ""
 		case vcs.StatusDeleted:
-			fj.headAbs = ""
+			fj.headRel, fj.headAbs = "", ""
 		case vcs.StatusRenamed:
 			if f.OldPath != "" {
 				fj.baseRel, fj.baseAbs = f.OldPath, cxAbs(job.repoRoot, f.OldPath)
@@ -296,8 +336,12 @@ func runComplexityDiff(job cxDiffJob) tea.Msg {
 		files = append(files, fj)
 	}
 	// Untracked files are not in `git diff`: every function they hold is
-	// added.
-	for _, e := range job.snap.Entries {
+	// added. A ranged diff has no snapshot — the working tree plays no part.
+	var entries []vcs.FileEntry
+	if job.snap != nil {
+		entries = job.snap.Entries
+	}
+	for _, e := range entries {
 		if e.Status != vcs.StatusUntracked || seen[e.Path] {
 			continue
 		}
@@ -321,13 +365,13 @@ func runComplexityDiff(job cxDiffJob) tea.Msg {
 			defer wg.Done()
 			for fj := range queue {
 				var bfns, hfns []complexity.Function
-				var fresh bool
+				var fresh, headFresh bool
 				if fj.baseRel != "" {
-					bfns, fresh = cxMeasureBase(job, sha, fj.baseRel)
+					bfns, fresh = cxMeasureRev(job, sha, fj.baseRel)
 				}
 				var isDirty bool
 				if fj.headAbs != "" {
-					hfns, isDirty = cxMeasureHead(job, fj.headAbs)
+					hfns, isDirty, headFresh = cxMeasureHead(job, fj)
 				}
 				mu.Lock()
 				if fj.baseAbs != "" {
@@ -340,6 +384,9 @@ func runComplexityDiff(job cxDiffJob) tea.Msg {
 					head[fj.headAbs] = hfns
 					if isDirty {
 						dirty[fj.headAbs] = true
+					}
+					if headFresh {
+						newBase[job.headSha+"\x00"+fj.headRel] = hfns
 					}
 				}
 				mu.Unlock()
@@ -357,6 +404,8 @@ func runComplexityDiff(job cxDiffJob) tea.Msg {
 		changes: complexitypanel.Changes{
 			Rev:     job.key.rev,
 			Sha:     sha,
+			HeadRev: headRev,
+			HeadSha: job.headSha,
 			Diff:    complexity.DiffProject(base, head, job.ccnWarn, job.cogWarn, job.cmtWarn),
 			Dirty:   dirty,
 			Renames: renames,
@@ -399,10 +448,11 @@ func cxMeasurable(job cxDiffJob, abs string) bool {
 	return !complexity.Excluded(job.projRoot, job.exclude, abs)
 }
 
-// cxMeasureBase measures the base blob of rel at sha: from the cache when
-// a previous run saw it (fresh=false), else by `git show` + Measure. A blob
-// git cannot show (the base has no such file) measures as nothing.
-func cxMeasureBase(job cxDiffJob, sha, rel string) ([]complexity.Function, bool) {
+// cxMeasureRev measures the blob of rel at sha: from the cache when a
+// previous run saw it (fresh=false), else by `git show` + Measure. A blob
+// git cannot show (the commit has no such file) measures as nothing. The
+// base side and a ranged diff's head side (#2961) both read through it.
+func cxMeasureRev(job cxDiffJob, sha, rel string) ([]complexity.Function, bool) {
 	if fns, ok := job.cache[sha+"\x00"+rel]; ok {
 		return fns, false
 	}
@@ -413,21 +463,28 @@ func cxMeasureBase(job cxDiffJob, sha, rel string) ([]complexity.Function, bool)
 	return cxMeasureText(rel, content), true
 }
 
-// cxMeasureHead measures the working-tree side of abs: the open buffer when
-// it is dirty (dirty=true), else the index's functions, else the file on
-// disk.
-func cxMeasureHead(job cxDiffJob, abs string) ([]complexity.Function, bool) {
+// cxMeasureHead measures the head side of a file. In ranged mode (#2961)
+// that is the head commit's blob, cached per (sha, path) like the base
+// (fresh=true when it was read now); otherwise the working tree: the open
+// buffer when it is dirty (dirty=true), else the index's functions, else
+// the file on disk.
+func cxMeasureHead(job cxDiffJob, fj cxFileJob) (fns []complexity.Function, dirty, fresh bool) {
+	if job.headSha != "" {
+		fns, fresh = cxMeasureRev(job, job.headSha, fj.headRel)
+		return fns, false, fresh
+	}
+	abs := fj.headAbs
 	if text, ok := job.dirty[abs]; ok {
-		return cxMeasureText(abs, text), true
+		return cxMeasureText(abs, text), true, false
 	}
 	if fns, ok := job.index.Files[abs]; ok {
-		return fns, false
+		return fns, false, false
 	}
 	data, err := os.ReadFile(abs)
 	if err != nil {
-		return nil, false
+		return nil, false, false
 	}
-	return cxMeasureText(abs, string(data)), false
+	return cxMeasureText(abs, string(data)), false, false
 }
 
 // cxMeasureText measures text as the language path names; an unmeasurable
@@ -491,8 +548,15 @@ func (m *Model) setComplexityBase(rev string) {
 	if rev == "HEAD" {
 		rev = ""
 	}
-	m.cxDiff.rev = rev
-	m.cxDiff.result.Err = ""
+	if _, _, _, err := vcs.ParseRevRange(rev); err != nil {
+		// A malformed range ("a..", "a...b"): the previous base stays and
+		// the message shows inline, no git call needed.
+		m.cxDiff.result.Err = err.Error()
+	} else {
+		m.cxDiff.rev = rev
+		m.cxDiff.rangeGen++ // a new 'R' re-runs even the same range
+		m.cxDiff.result.Err = ""
+	}
 	if p := m.complexityPanel(); p != nil {
 		p.SetChanges(m.cxDiff.result)
 	}

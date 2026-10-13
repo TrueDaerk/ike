@@ -297,6 +297,17 @@ first; `cmt%` in percentage points), **added** and **removed**. Unsaved editor b
 current text. A renamed function appears as one removed and one added row.
 `enter` jumps to the function, `e` exports CSV, `y` copies the row.
 
+**Comparing two revisions.** `R` also takes a range `A..B` — review a pull
+request branch without checking it out (`main..feature`), or ask whether
+`main` got more complex this week (`main@{1.week.ago}..main`). The header
+then reads `base main → feature · …`, both sides come from the commits, and
+your working tree — unsaved buffers, uncommitted and untracked files — plays
+no part, so editing does not re-run the comparison; `R`, `r` or a settings
+change does. A range with a missing end (`main..`) or three dots
+(`main...feature`) is rejected with a message and the previous base stays.
+The `Δcx` status segment and the inline hint Δ follow whichever comparison
+the tab shows.
+
 **Which edit cost the points?** Press `d` on a function row to open a diff
 of just that function: its version at the base revision on the left, the
 working tree (unsaved edits included) on the right, each with three lines of
@@ -320,7 +331,7 @@ again for the function rows; the choice is kept with the layout.
 ## Command line
 
 ```
-ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [PATH...]
+ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [PATH...]
 ```
 
 | Flag | Effect |
@@ -328,6 +339,7 @@ ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--mi
 | *(none)* | Measure every supported file under the named paths (default: the current directory) and print a table sorted by CCN, then a summary line. |
 | `PATH...` | One or more files or directories, mixed freely (`ike complexity pkg/ main.go`). A directory is walked; a file is measured as is. A file named twice, or also inside a named directory, counts once. A path that does not exist is an error (exit 2). |
 | `--diff[=REV]` | Compare the working tree (including uncommitted and untracked files) against `REV` (default `HEAD`; any branch, tag or sha) and print the changed, added and removed functions, the totals and a verdict. With paths, only changes in those files and directories count. |
+| `--diff=A..B` | Compare two revisions instead: the files that differ between commits `A` and `B`, both sides read from git; the working tree and untracked files are ignored. `--diff=origin/main..HEAD` gates a merge commit in CI. A malformed range (`A..`, `A...B`) or an unknown ref exits 2 with the message. |
 | `--by class`, `--by file` | Print one row per class or per file instead of per function: `FILE`, `CLASS` (class level only), `FUNCS`, `NLOC`, `CCN` (sum), `CCN_AVG`, `CCN_MAX`, `COG` (sum), `COG_AVG`, `COG_MAX`, `CMT%`, `OVER`, sorted by the CCN sum. With it, `--min N` keeps groups whose CCN or cognitive **sum** is at least `N`, and `--ccn` / `--cog` / `--cmt` keep groups whose **maximum** (or aggregate density) reaches the threshold. With `--diff`, `--by file` prints the change per file instead of per function (`FILE`, `CHANGED`, `ADDED`, `REMOVED`, then `CCN`, `COG`, `NLOC`, `EXCESS` as before→after (Δ), the biggest CCN increase first) and the JSON gains a `files` array; `--by class` is not combinable with `--diff`. |
 | `--brief`, `--brief=class` | Print one compact line per file (or per class), no header and no summary: `<path>  [<Class>]  funcs=12  nloc=340  ccn=48  cog=61  max=14/19  cmt=8%` — `ccn` / `cog` are sums, `max` is the largest CCN / cognitive complexity. At the class level a file's free functions and lambdas get one extra `(free)` line. Filters like `--by`; with `--json` the output is that of `--by file` / `--by class`. Not combinable with `--by` or `--diff`. |
 | `--json` | Print JSON instead of text (fields below). |
@@ -516,7 +528,7 @@ Diff report (`--diff --json`):
 
 ```json
 {
-  "rev": "main", "sha": "658ccf37…",
+  "rev": "main", "sha": "658ccf37…", "head_rev": "working tree", "head_sha": "",
   "base": { "files": 12, "functions": 12, "ccn_sum": 40, "cog_sum": 38, "…": "…" },
   "head": { "files": 13, "functions": 13, "ccn_sum": 57, "cog_sum": 59, "…": "…" },
   "delta": { "ccn": 17, "cognitive": 21, "excess": 9, "comment_lines": 2, "comment_density": -0.004 },
@@ -533,6 +545,8 @@ Diff report (`--diff --json`):
 }
 ```
 
+`rev` / `sha` name the base, `head_rev` / `head_sha` the head: `B` and its
+commit with `--diff=A..B`, `"working tree"` and `""` otherwise.
 `base` and `head` have the same fields as the project `summary`, over the
 files that differ from `REV`; both, the top-level `delta`, every changed
 function's `delta` and every group carry `excess`. `verdict` is
@@ -587,6 +601,23 @@ jobs:
 Swap the last line for whatever policy you want — for example
 `jq -e '.verdict != "more_complex"' cx.json` to refuse any net increase.
 `jq -e` exits non-zero when the expression is `false`, which fails the step.
+
+**Gating the merge commit.** On a `push` to a branch, or for the merge
+commit GitHub builds for a pull request, compare two commits instead of the
+working tree — nothing the job writes into the checkout can leak into the
+numbers:
+
+```yaml
+      - name: Complexity of the merge
+        run: |
+          ike complexity --diff=origin/main..HEAD --json > cx.json
+          jq -r '"\(.rev)..\(.head_rev) (\(.sha[:8])..\(.head_sha[:8])): \(.verdict)"' cx.json
+          jq -e '.verdict != "more_complex"' cx.json
+```
+
+The same works locally without a checkout: `ike complexity
+--diff=main..feature` reviews a branch, `ike complexity
+--diff=main@{1.week.ago}..main` the last week of `main`.
 
 **The ratchet.** With a committed [baseline](#accepted-debt-the-baseline)
 the policy no longer needs a diff: every function that is not accepted is

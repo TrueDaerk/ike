@@ -17,7 +17,8 @@ everywhere.
 
 **Core split (#2939).** The bubbletea-free half — the `git` runner with its
 timeout, `FileStatus`, the `Snapshot` model and its porcelain parser,
-`Load` / `DetectRoot`, `ResolveRev` / `ChangedFiles`, `RevContent` and `Churn` —
+`Load` / `DetectRoot`, `ResolveRev` / `ChangedFiles` / `ParseRevRange` /
+`ChangedFilesBetween`, `RevContent` and `Churn` —
 lives in `internal/vcs/vcscore`. `internal/vcs` re-exports it through type
 aliases and thin wrappers (`vcs.Snapshot`, `vcs.Load`, … keep their
 spelling) and adds the `tea.Cmd` / message layer. Headless callers import
@@ -104,7 +105,10 @@ only a snapshot refresh (save, watcher, VCS command) triggers them.
   renames with their old path; the snapshot's untracked entries join as
   additions) and reads each base blob with `RevContent`, all inside one
   `tea.Cmd` with bounded concurrency; status rename records keep their
-  origin in `FileEntry.From`. See
+  origin in `FileEntry.From`. A range `A..B` (#2961) is split by
+  `ParseRevRange`, and `ChangedFilesBetween(root, base, head)` (`git diff
+  --name-status -M <base> <head>`) lists the files between two commits —
+  no untracked entries. See
   [Code Complexity § Changes vs HEAD](/architecture/complexity.md#changes-vs-head-2918).
 - **Churn per file** (`internal/vcs/vcscore/churn.go`, `internal/vcs/churn.go`,
   #2957) — `Churn(root, since)` counts the commits per root-relative path in

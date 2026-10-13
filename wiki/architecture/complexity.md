@@ -965,6 +965,30 @@ base, `enter` applies, `esc` cancels); an invalid ref keeps the previous
 base and shows git's message in the header. The base revision is session
 state, not a setting.
 
+**Two revisions (#2961).** `R` also takes a range `A..B`
+(`main..feature`, `v1..v2`, `main@{1.week.ago}..main`):
+`vcscore.ParseRevRange(spec)` splits it — a single ref is the working-tree
+mode, `A..B` the ranged one, a missing end (`a..`, `..b`) or git's
+symmetric difference (`a...b`) an error that keeps the previous base and
+shows the message in the header without a git call. Both ends resolve
+through `ResolveRev`; `vcscore.ChangedFilesBetween(root, base, head)`
+(`git diff --name-status -M <base> <head>`, the `CommitFile` records of
+`ChangedFiles`) lists the files, and no untracked file joins. The head side
+is the head commit's blob (`RevContent`), measured through the same
+`cxMeasureRev` as the base and cached per `(sha, path)` beside it; the dirty
+buffers, the index snapshot and the disk play no part, while
+`complexity.exclude`, the project root and the language rules gate both
+sides as before. The header reads `base <A> → <B> · …`
+(`Changes.HeadRev` / `HeadSha` carry the head end). A ranged diff ignores
+the working tree's movement: its `cxDiffKey` zeroes the snapshot and index
+generations and carries a range generation that only a new `R`, a config
+reload or `r` (`rearmComplexityRange`) bumps — editing or saving a file
+never re-runs it, while `R` with the same range re-resolves the refs. The
+`Δcx` segment and the header hints' Δ (#2949) read the stored diff
+whatever its mode, so they show the range's numbers while one is active.
+The function diff (`d`) reads its right side from the head commit too
+(cached like the base text), titled `<name> @ <A> → <B>`, bound to no file.
+
 **Function diff (#2956).** `d` on a Changes function row (a site or
 candidate row stands for its parent; file rows, the Project and File tabs do
 nothing and their footers do not list it) sends
@@ -1168,7 +1192,7 @@ the request, so with both modes `off` the edit clears the marks at once.
 
 ## Headless CLI (#2922)
 
-`ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [PATH...]`
+`ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [PATH...]`
 is the terminal-free report for CI pipelines and coding agents. The grammar
 lives in `internal/cli` (`ComplexityArgs`, first argument only like
 `agent-hook`, so a file named `complexity` still opens as `./complexity`);
@@ -1301,7 +1325,7 @@ never carry it. Without the flag the JSON is byte-identical to before
 (`omitempty`), and the text table, the groups and the brief lines ignore the
 flag altogether.
 
-**Diff.** `--diff[=REV]` (default `HEAD`) runs synchronously the same git
+**Diff.** `--diff[=REV|A..B]` (default `HEAD`) runs synchronously the same git
 plumbing as the Changes tab — `vcscore.ResolveRev`, `vcscore.ChangedFiles`
 (the bubbletea-free core `vcs` re-exports, #2939), the status snapshot's
 untracked files (a collapsed untracked directory is walked) and
@@ -1311,7 +1335,14 @@ spec; a named file inside a collapsed untracked directory is added even
 when the walk would skip it), then `complexity.DiffProject`; a named file
 without changes yields an empty diff and the `unchanged` verdict. The head side is read
 uncapped like the tab's, so a file over the walk's cap does not read as
-all-removed. The text report prints `changed` (before→after with Δ per
+all-removed. `--diff=A..B` (#2961) compares two commits instead —
+`ParseRevRange`, both ends through `ResolveRev`,
+`vcscore.ChangedFilesBetween`, the head side from `RevContent` at B — and
+reads neither the working tree nor the untracked files; a malformed range
+or an unknown ref exits 2 with the message. The text header reads
+`complexity A (sha) → B (sha)`, and the JSON carries `head_rev` /
+`head_sha` beside the base's `rev` / `sha` (`"working tree"` and `""` in
+the working-tree mode). The text report prints `changed` (before→after with Δ per
 metric), `added` and `removed` sections, the totals and
 `verdict: LESS COMPLEX (excess -12, Σcog -7, ΣCCN +1)`; the totals line
 and the project summary line carry `excess` too, the group table an
@@ -1330,7 +1361,7 @@ the JSON has no `files` key.
 `{summary, functions, skipped}` — with `--by`, `{summary, groups, skipped}`,
 each group `{file, class (class level only), functions, nloc, ccn_sum,
 ccn_avg, ccn_max, cog_sum, cog_avg, cog_max, over_threshold, excess,
-comment_lines, comment_density}` under the summary's field names — the diff `{rev, sha, base, head, delta,
+comment_lines, comment_density}` under the summary's field names — the diff `{rev, sha, head_rev, head_sha, base, head, delta,
 changed, added, removed, verdict, skipped}` with `verdict` one of
 `more_complex`, `less_complex`, `unchanged` (read by the #2945 rule above;
 `delta.ccn` keeps the old ΣCCN policy available). `excess` (#2945) sits on

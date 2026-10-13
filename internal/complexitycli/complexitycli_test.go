@@ -386,6 +386,83 @@ func TestDiffJSON(t *testing.T) {
 	}
 }
 
+func TestDiffRangeBetweenCommits(t *testing.T) {
+	requireTrees(t)
+	dir := gitFixture(t)
+	g := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com",
+			"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com",
+			"GIT_CONFIG_GLOBAL=/dev/null",
+		)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	// Commit the fixture's edits on a branch, then dirty the working tree
+	// and add an untracked file: the range must see neither.
+	g("checkout", "-qb", "feature")
+	g("add", "-A")
+	g("commit", "-qm", "work")
+	featureSha := g("rev-parse", "HEAD")
+	write(t, dir, "pkg/b.go", branchyGo)
+	write(t, dir, "untracked.go", "package p\n\nfunc stray(x int) int {\n\tif x > 0 {\n\t\treturn 1\n\t}\n\treturn 0\n}\n")
+
+	out, stderr, code := run(t, cli.ComplexityArgs{Paths: []string{dir}, Diff: true, Rev: "main..feature", JSON: true})
+	if code != ExitOK {
+		t.Fatalf("exit %d, stderr %q", code, stderr)
+	}
+	var got struct {
+		Rev     string           `json:"rev"`
+		Sha     string           `json:"sha"`
+		HeadRev string           `json:"head_rev"`
+		HeadSha string           `json:"head_sha"`
+		Changed []map[string]any `json:"changed"`
+		Added   []map[string]any `json:"added"`
+		Removed []map[string]any `json:"removed"`
+		Verdict string           `json:"verdict"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	if got.Rev != "main" || got.Sha == "" || got.HeadRev != "feature" || got.HeadSha != featureSha {
+		t.Errorf("ends: rev %q sha %q head_rev %q head_sha %q (want %s)", got.Rev, got.Sha, got.HeadRev, got.HeadSha, featureSha)
+	}
+	// The committed edits — branchy grew, simple went, added() is new —
+	// and nothing of the working tree (branchy reverted on disk, stray).
+	if len(got.Changed) != 1 || got.Changed[0]["name"] != "branchy" || len(got.Added) != 1 || got.Added[0]["name"] != "added" || len(got.Removed) != 1 {
+		t.Fatalf("changed/added/removed = %v / %v / %v", got.Changed, got.Added, got.Removed)
+	}
+	if got.Verdict != "more_complex" {
+		t.Errorf("verdict %q", got.Verdict)
+	}
+
+	text, _, code := run(t, cli.ComplexityArgs{Paths: []string{dir}, Diff: true, Rev: "main..feature"})
+	if code != ExitOK || !strings.Contains(text, "complexity main (") || !strings.Contains(text, ") → feature ("+featureSha[:7]) {
+		t.Errorf("text header (exit %d):\n%s", code, text)
+	}
+
+	// The working-tree mode names its head in the JSON too.
+	out, _, _ = run(t, cli.ComplexityArgs{Paths: []string{dir}, Diff: true, JSON: true})
+	got.HeadRev, got.HeadSha = "", "x"
+	if err := json.Unmarshal([]byte(out), &got); err != nil || got.HeadRev != "working tree" || got.HeadSha != "" {
+		t.Errorf("working tree: head_rev %q head_sha %q (%v)", got.HeadRev, got.HeadSha, err)
+	}
+
+	// An unknown ref exits 2 with git's message; a malformed range too.
+	for spec, want := range map[string]string{"main..no-such-ref": "no-such-ref", "main..": "two refs", "main...feature": "symmetric"} {
+		_, stderr, code := run(t, cli.ComplexityArgs{Paths: []string{dir}, Diff: true, Rev: spec})
+		if code != ExitError || !strings.Contains(stderr, want) {
+			t.Errorf("%s: exit %d, stderr %q", spec, code, stderr)
+		}
+	}
+}
+
 func TestDiffErrors(t *testing.T) {
 	requireTrees(t)
 	dir := gitFixture(t)

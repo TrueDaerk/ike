@@ -63,6 +63,9 @@ type cxFuncDiffJob struct {
 	base     string // the cached base text, when cached
 	cached   bool
 	head     string // the working-tree text ("" when the unit is removed)
+	// headRev / headSha / headRel name the head blob of a ranged diff
+	// (#2961), read off-loop in place of the working tree; "" otherwise.
+	headRev, headSha, headRel string
 }
 
 // cxFuncDiffMsg carries the cut texts back to Update.
@@ -73,6 +76,9 @@ type cxFuncDiffMsg struct {
 	// base is the fetched base text for the cache ("" when it was cached
 	// or not needed); err a git failure reading it.
 	base string
+	// head is the fetched head blob of a ranged diff (#2961) for the same
+	// cache, "" when it was cached or the head is the working tree.
+	head string
 	err  string
 }
 
@@ -99,23 +105,27 @@ func (m *Model) openComplexityFunctionDiff(req complexitypanel.FunctionDiffMsg) 
 	job := cxFuncDiffJob{
 		req:      req,
 		key:      cxFuncDiffKey(req.Path, req.Name, req.Ordinal),
-		rev:      st.result.Rev,
+		rev:      st.result.BaseRev(),
 		repoRoot: m.vcs.snap.Root,
 		sha:      st.result.Sha,
+		headRev:  st.result.HeadRev,
+		headSha:  st.result.HeadSha,
 	}
-	if job.rev == "" {
-		job.rev = "HEAD"
+	rel, err := filepath.Rel(job.repoRoot, req.Path)
+	inRepo := err == nil && !strings.HasPrefix(rel, "..")
+	if !inRepo && (req.Change.Before.Name != "" || job.headSha != "") {
+		m.host.Notify(host.Info, "complexity: "+displayPath(req.Path)+" is outside the repository")
+		return nil
 	}
 	if req.Change.Before.Name != "" {
-		rel, err := filepath.Rel(job.repoRoot, req.Path)
-		if err != nil || strings.HasPrefix(rel, "..") {
-			m.host.Notify(host.Info, "complexity: "+displayPath(req.Path)+" is outside the repository")
-			return nil
-		}
 		job.rel = filepath.ToSlash(rel)
 		job.base, job.cached = st.funcText[job.sha+"\x00"+job.rel]
 	}
-	if req.Change.After.Name != "" {
+	if req.Change.After.Name != "" && job.headSha != "" {
+		// A ranged diff (#2961): the head side is the head commit's blob.
+		job.headRel = filepath.ToSlash(rel)
+		job.head = st.funcText[job.headSha+"\x00"+job.headRel]
+	} else if req.Change.After.Name != "" {
 		if ed := m.editorForPath(canonicalPath(req.Path)); ed != nil {
 			job.head = ed.Text()
 		} else if data, err := os.ReadFile(req.Path); err == nil {
@@ -142,6 +152,15 @@ func runCxFuncDiff(job cxFuncDiffJob) tea.Msg {
 			out.base = base
 		}
 		out.left, out.offL = cxExcerpt(base, req.Change.Before)
+	}
+	if req.Change.After.Name != "" && job.headSha != "" && job.head == "" {
+		content, err := vcs.RevContent(job.repoRoot, job.headSha, job.headRel)
+		if err != nil {
+			out.err = err.Error()
+			return out
+		}
+		job.head, _ = normalizeBufferText([]byte(content))
+		out.head = job.head
 	}
 	if req.Change.After.Name != "" {
 		after := req.Change.After
@@ -190,19 +209,30 @@ func (m *Model) showComplexityFunctionDiff(msg cxFuncDiffMsg) {
 		}
 		m.cxDiff.funcText[job.sha+"\x00"+job.rel] = msg.base
 	}
+	if msg.head != "" && m.cxDiff != nil {
+		if m.cxDiff.funcText == nil || len(m.cxDiff.funcText) >= cxFuncDiffTextMax {
+			m.cxDiff.funcText = map[string]string{}
+		}
+		m.cxDiff.funcText[job.headSha+"\x00"+job.headRel] = msg.head
+	}
 	if msg.err != "" {
 		m.host.Notify(host.Warn, "complexity: "+msg.err)
 		return
 	}
 	leftLabel := job.req.Name + " @ " + job.rev
-	title := leftLabel + " → working tree"
+	rightLabel := "working tree"
 	rightPath := ""
-	if job.req.Change.After.Name != "" {
+	if job.headRev != "" {
+		// A ranged diff (#2961): the right side is a blob too, bound to no
+		// file — the working tree may hold another version.
+		rightLabel = job.headRev
+	} else if job.req.Change.After.Name != "" {
 		rightPath = job.req.Path
 	}
+	title := leftLabel + " → " + rightLabel
 	fill := func(inst *pane.Instance) {
 		d := inst.Diff()
-		d.SetSideLabels(leftLabel, "working tree")
+		d.SetSideLabels(leftLabel, rightLabel)
 		d.SetEditable(false) // the left side is a blob
 		d.SetLineOffsets(msg.offL, msg.offR)
 		d.SetContents(msg.left, msg.right)

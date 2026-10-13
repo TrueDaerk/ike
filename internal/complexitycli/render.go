@@ -302,8 +302,12 @@ type jsonGroups struct {
 }
 
 type jsonDiff struct {
-	Rev     string         `json:"rev"`
-	Sha     string         `json:"sha"`
+	Rev string `json:"rev"`
+	Sha string `json:"sha"`
+	// HeadRev / HeadSha name the head end (#2961): B of --diff=A..B, or
+	// "working tree" with an empty sha.
+	HeadRev string         `json:"head_rev"`
+	HeadSha string         `json:"head_sha"`
 	Base    jsonSummary    `json:"base"`
 	Head    jsonSummary    `json:"head"`
 	Delta   jsonDelta      `json:"delta"`
@@ -396,7 +400,7 @@ func writeGroupsJSON(w io.Writer, r groupReport) error {
 func writeDiffJSON(w io.Writer, r diffReport) error {
 	changed, added, removed := r.sections()
 	out := jsonDiff{
-		Rev: r.rev, Sha: r.sha,
+		Rev: r.rev, Sha: r.sha, HeadRev: r.headRev, HeadSha: r.headSha,
 		Base: toJSONSummary(r.diff.Base, r.baseFiles, r.s),
 		Head: toJSONSummary(r.diff.Head, r.headFiles, r.s),
 		Delta: jsonDelta{CCN: r.diff.DeltaCCN(), Cognitive: r.diff.DeltaCognitive(), Excess: r.diff.DeltaExcess(),
@@ -642,7 +646,11 @@ func (s settings) thresholdText() string {
 // writeDiffText prints the changed / added / removed sections — the
 // per-file table under --by file (#2955) — the totals and the verdict line.
 func writeDiffText(w io.Writer, r diffReport) {
-	fmt.Fprintf(w, "complexity vs %s (%s)\n", r.rev, shortSha(r.sha))
+	if r.headSha != "" {
+		fmt.Fprintf(w, "complexity %s (%s) → %s (%s)\n", r.rev, shortSha(r.sha), r.headRev, shortSha(r.headSha))
+	} else {
+		fmt.Fprintf(w, "complexity vs %s (%s)\n", r.rev, shortSha(r.sha))
+	}
 	changed, added, removed := r.sections()
 	if len(changed)+len(added)+len(removed) == 0 {
 		fmt.Fprintln(w, "\nno function changed its complexity")
