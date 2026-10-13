@@ -100,11 +100,17 @@ const (
 	// excess. They show only inside a git repository.
 	ColCommits
 	ColHot
+	// ColChangedN, ColAddedN and ColRemovedN are a Changes file row's
+	// classification counts (#2955, changesgroup.go).
+	ColChangedN
+	ColAddedN
+	ColRemovedN
 )
 
 // columnLabels are the column headers in Column order.
 var columnLabels = []string{"file", "function", "line", "ccn", "cog", "nloc", "params", "depth", "change", "cmt%",
-	"class", "funcs", "ccn avg", "ccn max", "cog avg", "cog max", "over", "excess", "commits", "hot"}
+	"class", "funcs", "ccn avg", "ccn max", "cog avg", "cog max", "over", "excess", "commits", "hot",
+	"changed", "added", "removed"}
 
 // numeric reports whether a column sorts as a number (descending by
 // default) rather than as text.
@@ -117,7 +123,7 @@ func (c Column) numeric() bool {
 }
 
 // lastColumn is the highest Column value.
-const lastColumn = ColHot
+const lastColumn = ColRemovedN
 
 // The per-tab column layouts, in display order: the File tab hides the
 // file column, the Changes tab leads with the section and drops params /
@@ -205,6 +211,9 @@ type Row struct {
 	// Group is set on a group row (#2937): the class or file aggregate the
 	// row stands for. Fn is then zero; Path / Rel / Lang name the file.
 	Group *complexity.Group
+	// FileChange is set on a Changes file row (#2955, changesgroup.go):
+	// the file's diff folded; Members are its unit rows.
+	FileChange *complexity.FileChange
 	// Site is set on a site row (#2946, sites.go): one increment of the
 	// expanded function, whose row sits at index Parent in the rows; Fn,
 	// Path, Rel, Lang and Change are the parent's.
@@ -236,6 +245,9 @@ func (r Row) child() bool { return r.Site != nil || r.Cand != nil }
 func (r Row) value(c Column) (float64, string) {
 	if r.Group != nil {
 		return r.groupValue(c)
+	}
+	if r.FileChange != nil {
+		return r.fileChangeValue(c)
 	}
 	if r.Cand != nil {
 		if c == ColLine {
@@ -312,6 +324,9 @@ func abs(n int) int {
 func (r Row) cell(c Column) string {
 	if r.Group != nil {
 		return r.groupCell(c)
+	}
+	if r.FileChange != nil {
+		return r.fileChangeCell(c)
 	}
 	if r.Cand != nil {
 		return r.candCell(c)
@@ -419,6 +434,8 @@ type Model struct {
 	// The grouping level of the Project and File tabs (#2937, group.go).
 	projectGroup complexity.Level
 	fileGroup    complexity.Level
+	// changesGroup is the Changes tab's level: none or file (#2955).
+	changesGroup complexity.Level
 
 	// hideTests drops the test files from every tab ('t', #2950).
 	hideTests bool
@@ -657,7 +674,11 @@ func (m *Model) Refresh() {
 	}
 	// The totals stay the whole tab's; a grouped tab then lists groups.
 	m.summary = complexity.Summarize(fns, m.ccnWarn, m.cogWarn, m.cmtWarn)
-	if m.Grouping() != complexity.ByNone {
+	switch {
+	case m.Grouping() == complexity.ByNone:
+	case m.tab == TabChanges:
+		all = m.changesFileRows(all)
+	default:
 		all = m.groupRows(all)
 	}
 	m.total = len(all)
@@ -799,7 +820,7 @@ func (m *Model) matches(q filterexpr.Query, r Row) bool {
 		{"fn", func(v string) bool { return strings.Contains(strings.ToLower(r.label()), strings.ToLower(v)) }},
 		{"min", bound(true)},
 		{"max", bound(false)},
-		{"kind", func(v string) bool { return r.Group == nil && strings.EqualFold(v, r.Fn.Kind) }},
+		{"kind", func(v string) bool { return !r.aggregate() && strings.EqualFold(v, r.Fn.Kind) }},
 		{"class", func(v string) bool { return strings.Contains(strings.ToLower(class), strings.ToLower(v)) }},
 		{"depth", atLeast("depth")},
 		{"params", atLeast("params")},
@@ -828,6 +849,12 @@ func (r Row) attr(field string) int {
 			return g.ParamsMax
 		}
 		return g.NLOC
+	}
+	if fc := r.FileChange; fc != nil {
+		if field == "nloc" {
+			return fc.After.NLOC
+		}
+		return 0
 	}
 	switch field {
 	case "depth":
@@ -1093,6 +1120,8 @@ func (m *Model) open() tea.Cmd {
 	switch {
 	case r.Group != nil:
 		msg.Line = r.Group.Line // the group's earliest unit
+	case r.FileChange != nil:
+		msg.Line = r.fileChangeLine()
 	case r.Change == complexity.Removed:
 		msg.Line = 0
 	}
@@ -1115,6 +1144,9 @@ func (m *Model) copyRow() tea.Cmd {
 func CopyText(r Row) string {
 	if r.Group != nil {
 		return groupCopyText(r)
+	}
+	if r.FileChange != nil {
+		return fileChangeCopyText(r)
 	}
 	if r.Cand != nil {
 		return candCopyText(r)
@@ -1144,6 +1176,9 @@ var csvHeader = []string{"file", "function", "kind", "line", "ccn", "cognitive",
 // an export stays self-describing.
 func (m *Model) CSV() string {
 	if m.tab == TabChanges {
+		if m.Grouping() == complexity.ByFile {
+			return m.changesFileCSV()
+		}
 		return m.changesCSV()
 	}
 	if m.Grouping() != complexity.ByNone {
@@ -1333,6 +1368,13 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 		}
 		return gridview.DataRow(pal, cells, m.widths, 0, m.width, i == m.cursor, m.focused)
 	}
+	if fc := r.FileChange; fc != nil {
+		// A file that got heavier takes the warning colour.
+		for c, col := range layout {
+			cells[c].Warn = fileChangeDelta(fc, col) > 0
+		}
+		return gridview.DataRow(pal, cells, m.widths, 0, m.width, i == m.cursor, m.focused)
+	}
 	if r.child() {
 		return gridview.DataRow(pal, cells, m.widths, 0, m.width, i == m.cursor, m.focused)
 	}
@@ -1367,8 +1409,10 @@ func (m *Model) footer() string {
 	count := itoa(len(m.rows)) + "/" + itoa(m.total) + " rows"
 	hints := " · tab view · s sort · S reverse · enter open · e export · y copy · r rescan · / filter"
 	switch {
+	case m.tab == TabChanges && m.Grouping() == complexity.ByNone:
+		hints += " · R base · b group · space sites · m marks"
 	case m.tab == TabChanges:
-		hints += " · R base · space sites · m marks"
+		hints += " · R base · b group: file"
 	case m.Grouping() == complexity.ByNone:
 		hints += " · b group · space sites · m marks · i accept"
 	default:

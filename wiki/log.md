@@ -1,5 +1,18 @@
 # Log
 
+## 2026-10-14 (Changes tab per file, #2955)
+
+- [Code Complexity](/architecture/complexity.md): the diff paragraph
+  gains `Diff.ByFile()` / `FileChange` (counts and both sides' `Summary`
+  per file, ΔCCN descending); the grouping paragraph lets the Changes tab
+  cycle none → file and persist `changes:file`; the new "Changes per file"
+  paragraph covers its columns, |Δ| sort and `min:` / `max:`, the warning
+  on a positive Δ, `enter` / `y` / `e`; the CLI accepts `--diff --by file`
+  (text `files (n):` table, JSON `files`), `--by class` with `--diff` stays
+  a usage error.
+- The complexity user guide: "Per file" under the Changes tab, the `--by`
+  flag row and the `files` JSON example.
+
 ## 2026-10-13 (Complexity distribution, #2953)
 
 - [Code Complexity](/architecture/complexity.md): the Summary section

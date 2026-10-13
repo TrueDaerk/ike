@@ -165,6 +165,7 @@ func TestParseComplexity(t *testing.T) {
 		{[]string{"a.go", "b.go"}, ComplexityArgs{Paths: []string{"a.go", "b.go"}}},
 		{[]string{"--json", "pkg/", "--min", "3", "main.go", "-"}, ComplexityArgs{JSON: true, Min: 3, Paths: []string{"pkg/", "main.go", "-"}}},
 		{[]string{"--diff=main", "x.go", "x.go"}, ComplexityArgs{Diff: true, Rev: "main", Paths: []string{"x.go", "x.go"}}},
+		{[]string{"--diff=main", "--by", "file"}, ComplexityArgs{Diff: true, Rev: "main", By: "file"}},
 		{[]string{"--min", "20"}, ComplexityArgs{Min: 20}},
 		{[]string{"--min=20", "--ccn", "10", "--cog=12"}, ComplexityArgs{Min: 20, CCN: 10, Cog: 12}},
 		{[]string{"--cmt", "40", "--json"}, ComplexityArgs{Cmt: 40, JSON: true}},
@@ -205,7 +206,7 @@ func TestParseComplexity(t *testing.T) {
 	for _, args := range [][]string{
 		{"--min"}, {"--min", "x"}, {"--min=0"}, {"--ccn=-1"}, {"--cog", ""}, {"--cmt=0"}, {"--cmt", "101"}, {"--cmt"},
 		{"--diff="}, {"--bogus"}, {"a", "--bogus"},
-		{"--by"}, {"--by", "method"}, {"--by="}, {"--by=class", "--diff"}, {"--diff=main", "--by", "file"},
+		{"--by"}, {"--by", "method"}, {"--by="}, {"--by=class", "--diff"}, {"--diff=main", "--by", "class"},
 		{"--brief=method"}, {"--brief="},
 		{"--churn=0"}, {"--churn="}, {"--churn=x"}, {"--churn=3651"},
 		{"--baseline="}, {"--baseline=  "},

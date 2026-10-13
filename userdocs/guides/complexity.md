@@ -267,6 +267,16 @@ first; `cmt%` in percentage points), **added** and **removed**. Unsaved editor b
 current text. A renamed function appears as one removed and one added row.
 `enter` jumps to the function, `e` exports CSV, `y` copies the row.
 
+**Per file.** Press `b` to see the change per file instead: one row per
+file with how many functions changed, were added and were removed, and the
+file's CCN, cognitive, NLOC and excess sums before → after with the
+change — `internal/app/app.go  3  1  0  40→52 (+12)  31→44 (+13) …`. A
+file that got heavier shows its numbers in the warning colour. Sorting and
+`min:` / `max:` read the size of the change; `enter` opens the file at its
+first changed function, `y` copies `path: changed 3 added 1 removed 0 ccn
+40→52 (+12) cog 31→44 (+13)`, `e` exports one CSV row per file. Press `b`
+again for the function rows; the choice is kept with the layout.
+
 ## Command line
 
 ```
@@ -278,7 +288,7 @@ ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--mi
 | *(none)* | Measure every supported file under the named paths (default: the current directory) and print a table sorted by CCN, then a summary line. |
 | `PATH...` | One or more files or directories, mixed freely (`ike complexity pkg/ main.go`). A directory is walked; a file is measured as is. A file named twice, or also inside a named directory, counts once. A path that does not exist is an error (exit 2). |
 | `--diff[=REV]` | Compare the working tree (including uncommitted and untracked files) against `REV` (default `HEAD`; any branch, tag or sha) and print the changed, added and removed functions, the totals and a verdict. With paths, only changes in those files and directories count. |
-| `--by class`, `--by file` | Print one row per class or per file instead of per function: `FILE`, `CLASS` (class level only), `FUNCS`, `NLOC`, `CCN` (sum), `CCN_AVG`, `CCN_MAX`, `COG` (sum), `COG_AVG`, `COG_MAX`, `CMT%`, `OVER`, sorted by the CCN sum. With it, `--min N` keeps groups whose CCN or cognitive **sum** is at least `N`, and `--ccn` / `--cog` / `--cmt` keep groups whose **maximum** (or aggregate density) reaches the threshold. Not combinable with `--diff`. |
+| `--by class`, `--by file` | Print one row per class or per file instead of per function: `FILE`, `CLASS` (class level only), `FUNCS`, `NLOC`, `CCN` (sum), `CCN_AVG`, `CCN_MAX`, `COG` (sum), `COG_AVG`, `COG_MAX`, `CMT%`, `OVER`, sorted by the CCN sum. With it, `--min N` keeps groups whose CCN or cognitive **sum** is at least `N`, and `--ccn` / `--cog` / `--cmt` keep groups whose **maximum** (or aggregate density) reaches the threshold. With `--diff`, `--by file` prints the change per file instead of per function (`FILE`, `CHANGED`, `ADDED`, `REMOVED`, then `CCN`, `COG`, `NLOC`, `EXCESS` as before→after (Δ), the biggest CCN increase first) and the JSON gains a `files` array; `--by class` is not combinable with `--diff`. |
 | `--brief`, `--brief=class` | Print one compact line per file (or per class), no header and no summary: `<path>  [<Class>]  funcs=12  nloc=340  ccn=48  cog=61  max=14/19  cmt=8%` — `ccn` / `cog` are sums, `max` is the largest CCN / cognitive complexity. At the class level a file's free functions and lambdas get one extra `(free)` line. Filters like `--by`; with `--json` the output is that of `--by file` / `--by class`. Not combinable with `--by` or `--diff`. |
 | `--json` | Print JSON instead of text (fields below). |
 | `--min N` | Only list functions whose CCN **or** cognitive complexity is at least `N`. |
@@ -486,6 +496,19 @@ function's `delta` and every group carry `excess`. `verdict` is
 `more_complex`, `less_complex` or `unchanged`, decided by the excess first
 (the rule changed — see [The Changes tab](#the-changes-tab)). A policy that
 wants the old ΣCCN reading keeps it with `jq -e '.delta.ccn <= 0' cx.json`.
+
+With `--diff --by file --json` the report also carries `files`, one entry
+per file, the biggest CCN increase first:
+
+```json
+"files": [
+  { "file": "cmd/ike/main.go", "changed": 1, "added": 1, "removed": 0,
+    "ccn_before": 22, "ccn_after": 39, "ccn_delta": 17,
+    "cog_before": 29, "cog_after": 50, "cog_delta": 21,
+    "nloc_before": 103, "nloc_after": 140,
+    "excess_before": 21, "excess_after": 30, "excess_delta": 9 }
+]
+```
 
 ### Gating a pull request in GitHub Actions
 

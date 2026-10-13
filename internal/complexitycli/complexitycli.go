@@ -138,7 +138,7 @@ func Run(a cli.ComplexityArgs, stdout, stderr io.Writer) int {
 	case brief != complexity.ByNone && a.Diff:
 		fmt.Fprintln(stderr, "ike complexity:", cli.ErrBriefWithDiff)
 		return ExitError
-	case by != complexity.ByNone && a.Diff:
+	case by == complexity.ByClass && a.Diff:
 		fmt.Fprintln(stderr, "ike complexity:", cli.ErrByWithDiff)
 		return ExitError
 	case a.Churn && a.Diff:
@@ -175,6 +175,7 @@ func Run(a cli.ComplexityArgs, stdout, stderr io.Writer) int {
 	}
 	if a.Diff {
 		r, err := runDiff(s)
+		r.by = by
 		if err != nil {
 			fmt.Fprintln(stderr, "ike complexity:", err)
 			return ExitError
@@ -692,10 +693,12 @@ func (s settings) keepGroup(g complexity.Group) bool {
 
 // diffReport is the measured comparison against a revision.
 type diffReport struct {
-	s       settings
-	rev     string // as typed; "HEAD" by default
-	sha     string
-	diff    complexity.Diff
+	s    settings
+	rev  string // as typed; "HEAD" by default
+	sha  string
+	diff complexity.Diff
+	// by is the --by level: ByFile prints the per-file table (#2955).
+	by      complexity.Level
 	skipped skipped
 	// baseFiles / headFiles count the measured files on each side.
 	baseFiles, headFiles int
@@ -881,6 +884,33 @@ func (r diffReport) sections() (changed []changeRow, added, removed []row) {
 		}
 	}
 	return changed, added, removed
+}
+
+// fileChange is one file of the --by file diff (#2955), its path made
+// project-relative.
+type fileChange struct {
+	file string
+	complexity.FileChange
+}
+
+// files folds the diff per file (complexity.Diff.ByFile, ΔCCN descending),
+// keeping the files with at least one unit the row filter keeps.
+func (r diffReport) files() []fileChange {
+	changed, added, removed := r.sections()
+	kept := map[string]bool{}
+	for _, c := range changed {
+		kept[c.file] = true
+	}
+	for _, rw := range append(added, removed...) {
+		kept[rw.file] = true
+	}
+	var out []fileChange
+	for _, fc := range r.diff.ByFile() {
+		if rel := r.s.rel(fc.File); kept[rel] {
+			out = append(out, fileChange{file: rel, FileChange: fc})
+		}
+	}
+	return out
 }
 
 // verdictID is the JSON spelling of a verdict.

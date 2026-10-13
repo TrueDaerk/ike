@@ -50,11 +50,14 @@ func TestComplexityGroupCommandAndKey(t *testing.T) {
 	if g := m.complexityPanel().Grouping(); g != complexity.ByFile {
 		t.Fatalf("b in the filter row changed the grouping to %v", g)
 	}
-	// The Changes tab does not group; the command says so.
+	// The Changes tab groups per file (#2955).
 	m.complexityPanel().SetTab(complexitypanel.TabChanges)
 	out, _ = m.Update(ComplexityGroupMsg{})
 	m = out.(Model)
-	if !hasToast(m, "does not group") {
+	if g := m.complexityPanel().Grouping(); g != complexity.ByFile {
+		t.Fatalf("Changes tab: grouping = %v, want file", g)
+	}
+	if hasToast(m, "does not group") {
 		t.Fatalf("toasts = %v", toastTexts(m))
 	}
 }

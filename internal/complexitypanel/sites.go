@@ -40,7 +40,7 @@ func (m *Model) ToggleSites() bool {
 		m.Refresh()
 		return true
 	}
-	if r.Group != nil || r.Change == complexity.Removed {
+	if r.aggregate() || r.Change == complexity.Removed {
 		return false
 	}
 	key := r.expandKey()
@@ -176,7 +176,7 @@ type ShowSitesMsg struct {
 // of a site row. A group row or a removed function has none.
 func (m *Model) ShowSites() (ShowSitesMsg, bool) {
 	r, ok := m.Selected()
-	if !ok || r.Group != nil || r.Change == complexity.Removed || r.Path == "" {
+	if !ok || r.aggregate() || r.Change == complexity.Removed || r.Path == "" {
 		return ShowSitesMsg{}, false
 	}
 	return ShowSitesMsg{Path: r.Path, Line: r.Fn.Line}, true

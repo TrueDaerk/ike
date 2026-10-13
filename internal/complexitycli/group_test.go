@@ -194,7 +194,7 @@ func TestGroupUsageErrors(t *testing.T) {
 		t.Errorf("--by method: exit %d, stderr %q", code, stderr)
 	}
 	_, stderr, code = run(t, cli.ComplexityArgs{By: "class", Diff: true, Paths: []string{dir}})
-	if code != ExitError || !strings.Contains(stderr, "--by is not supported with --diff") {
+	if code != ExitError || !strings.Contains(stderr, "--by class is not supported with --diff") {
 		t.Errorf("--by with --diff: exit %d, stderr %q", code, stderr)
 	}
 }

@@ -525,7 +525,7 @@ both keys. The state persists as `hist:on` in the layout `Mode`
 **Grouping (#2937).** `b` — the `complexity.group` command, bound to `b`
 in the `complexity` keymap context and in the palette as "Complexity: Cycle
 Grouping" — cycles the Project tab none → class → file and the File tab
-none → class (the Changes tab does not group; the command says so). A
+none → class, and the Changes tab none → file (#2955, below). A
 grouped tab replaces the function rows with one row per
 `complexity.GroupFunctions` group: columns file (Project only), class (class
 level only), funcs, nloc, `Σccn`, ccn avg, ccn max, `Σcog`, cog avg, cog max,
@@ -541,7 +541,7 @@ a non-zero over or excess count take the warning colour. `enter` opens the group
 earliest unit, `y` copies `path: Class funcs=2 ccn=9 (max 8) cog=12 (max
 12)`, `e` exports `file,class,functions,nloc,ccn_sum,ccn_avg,ccn_max,cog_sum,cog_avg,cog_max,comment_lines,cmt_pct,over_threshold,excess`.
 Each tab keeps its own level. The levels persist in the layout as the
-pane identity's `Mode` (`project:file,file:class`; `GroupMode` /
+pane identity's `Mode` (`project:file,file:class,changes:file`; `GroupMode` /
 `SetGroupMode`, an unknown spelling ignored) — session layout, named
 layouts and hosted tabs alike — and the command saves the layout at once.
 A letter typed into the open filter row stays text: the app routes a
@@ -828,6 +828,14 @@ helper read *more complex* although nothing crossed a threshold. Reading the
 decision points rather than raw ΣCCN keeps that base 1 out of the last
 tiebreak, so the helper reads `unchanged`. `Diff.DeltaExcess()` is
 `Head.Excess − Base.Excess`; `DeltaCCN()` is unchanged.
+`Diff.ByFile()` (#2955) folds the diff per file: one `FileChange` per
+file with a non-empty classification — `File`, the `Changed` / `Added` /
+`Removed` counts and `Before` / `After`, the `Summary` of every unit
+`DiffProject` measured for the file on that side (a removed unit counts on
+the base side only, an added one on the head side only; a diff not built by
+`DiffProject` sums the classified units alone) — sorted by ΔCCN
+descending, then file; `DeltaCCN` / `DeltaCognitive` / `DeltaNLOC` /
+`DeltaExcess` read after − before.
 
 **Base revision and file list.** `vcs.ResolveRev(root, rev)` turns the
 typed base — `HEAD` by default; any `git rev-parse`-able ref: a branch, a
@@ -889,6 +897,20 @@ revision in the filter row's place (`ui.Field`, seeded with the current
 base, `enter` applies, `esc` cancels); an invalid ref keeps the previous
 base and shows git's message in the header. The base revision is session
 state, not a setting.
+
+**Changes per file (#2955).** `b` on the Changes tab cycles none → file
+(`changesgroup.go`): one row per `Diff.ByFile()` entry of the visible
+units, columns file, changed, added, removed, `Σccn before→after (Δ)`,
+`Σcog before→after (Δ)`, `nloc before→after` and `excess
+before→after (Δ)`; the section column disappears. The metric columns sort
+by |Δ| and `min:` / `max:` read |Δ| of the sort column; `file:`, `fn:`
+(the path), `lang:`, `test:` and the negated keys apply. A positive Δ
+takes the warning colour. `enter` opens the file at its first changed or
+added function (the top when it only lost functions), `y` copies `path:
+changed 3 added 1 removed 0 ccn 40→52 (+12) cog 31→44 (+13)`, `e` exports
+`file,changed,added,removed,ccn_before,ccn_after,ccn_delta,cog_before,
+cog_after,cog_delta,nloc_before,nloc_after`; `space` / `m` have nothing to
+expand. The level persists as `changes:file` in the layout `Mode`.
 
 ## Problems feed (#2920)
 
@@ -1113,8 +1135,9 @@ summary line is unchanged. The group filter: `--min N` keeps a CCN or
 cognitive **sum** ≥ N; an explicit `--ccn` / `--cog` / `--cmt` keeps groups
 whose **max** CCN, max cognitive or aggregate density is at or above its
 threshold; the `shown:` line reads `shown: 1 of 2 classes (ΣCCN or Σcog ≥ 5)`.
-An unknown level, or `--by` with `--diff`, is a usage error (exit 2,
-`--by is not supported with --diff`). Without `--by` the output is
+An unknown level, or `--by class` with `--diff`, is a usage error (exit 2,
+`--by class is not supported with --diff`); `--by file` with `--diff` is the
+per-file diff (#2955, under **Diff**). Without `--by` the output is
 unchanged byte for byte. The flag is CLI-only (no setting, no command).
 
 **Churn (#2957).** `--churn[=DAYS]` (`ComplexityArgs.Churn` / `ChurnDays`;
@@ -1188,7 +1211,15 @@ all-removed. The text report prints `changed` (before→after with Δ per
 metric), `added` and `removed` sections, the totals and
 `verdict: LESS COMPLEX (excess -12, Σcog -7, ΣCCN +1)`; the totals line
 and the project summary line carry `excess` too, the group table an
-`EXCESS` column.
+`EXCESS` column. With `--by file` (#2955) the sections give way to a
+`files (n):` table of `Diff.ByFile()` — `FILE`, `CHANGED`, `ADDED`,
+`REMOVED`, `CCN`, `COG`, `NLOC`, `EXCESS` as before→after (Δ), ΔCCN
+descending, a file kept when the row filter keeps one of its units — and
+the JSON adds `files` (`file, changed, added, removed, ccn_before,
+ccn_after, ccn_delta, cog_before, cog_after, cog_delta, nloc_before,
+nloc_after, excess_before, excess_after, excess_delta`) beside the
+unchanged `changed` / `added` / `removed` / `verdict`; without the flag
+the JSON has no `files` key.
 
 **JSON.** Field names are snake_case and stable (documented in
 `userdocs/guides/complexity.md`; add, never rename): the project report is

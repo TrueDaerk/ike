@@ -13,7 +13,8 @@ import (
 // row per class or file carrying the aggregate (complexity.GroupFunctions).
 // The header totals stay the whole tab's; sort, filter, open, copy and the
 // CSV export work on the group rows. Each tab keeps its own level, and
-// GroupMode / SetGroupMode carry both through a layout save.
+// GroupMode / SetGroupMode carry them through a layout save. The Changes
+// tab groups per file (#2955, changesgroup.go).
 
 // The group layouts, in display order: the File tab drops the file column.
 var (
@@ -25,20 +26,21 @@ var (
 	groupCycleFileTab    = []complexity.Level{complexity.ByNone, complexity.ByClass}
 )
 
-// Grouping reports the selected tab's grouping level; the Changes tab never
-// groups.
+// Grouping reports the selected tab's grouping level.
 func (m *Model) Grouping() complexity.Level {
 	switch m.tab {
 	case TabProject:
 		return m.projectGroup
 	case TabFile:
 		return m.fileGroup
+	case TabChanges:
+		return m.changesGroup
 	}
 	return complexity.ByNone
 }
 
 // CycleGroup moves the selected tab to its next grouping level and reports
-// whether the tab groups at all (false on the Changes tab).
+// whether the tab groups at all.
 func (m *Model) CycleGroup() bool {
 	var cycle []complexity.Level
 	var cur *complexity.Level
@@ -47,6 +49,8 @@ func (m *Model) CycleGroup() bool {
 		cycle, cur = groupCycleProjectTab, &m.projectGroup
 	case TabFile:
 		cycle, cur = groupCycleFileTab, &m.fileGroup
+	case TabChanges:
+		cycle, cur = groupCycleChanges, &m.changesGroup
 	default:
 		return false
 	}
@@ -72,8 +76,9 @@ func (m *Model) fitSort() {
 	}
 }
 
-// GroupMode renders both tabs' levels for the layout store: "project:class,
-// file:class", the tabs left at none omitted, "" when neither groups.
+// GroupMode renders the tabs' levels for the layout store: "project:class,
+// file:class,changes:file", the tabs left at none omitted, "" when none
+// groups.
 func (m *Model) GroupMode() string {
 	var parts []string
 	if m.projectGroup != complexity.ByNone {
@@ -82,13 +87,17 @@ func (m *Model) GroupMode() string {
 	if m.fileGroup != complexity.ByNone {
 		parts = append(parts, "file:"+m.fileGroup.String())
 	}
+	if m.changesGroup != complexity.ByNone {
+		parts = append(parts, "changes:"+m.changesGroup.String())
+	}
 	return strings.Join(parts, ",")
 }
 
 // SetGroupMode restores GroupMode's form; an unknown tab or level (a newer
-// build's) is ignored, and the File tab never takes the file level.
+// build's) is ignored, the File tab never takes the file level and the
+// Changes tab takes only it.
 func (m *Model) SetGroupMode(mode string) {
-	m.projectGroup, m.fileGroup = complexity.ByNone, complexity.ByNone
+	m.projectGroup, m.fileGroup, m.changesGroup = complexity.ByNone, complexity.ByNone, complexity.ByNone
 	for _, part := range strings.Split(mode, ",") {
 		tab, val, _ := strings.Cut(part, ":")
 		l, ok := complexity.ParseLevel(val)
@@ -100,6 +109,8 @@ func (m *Model) SetGroupMode(mode string) {
 			m.projectGroup = l
 		case tab == "file" && l != complexity.ByFile:
 			m.fileGroup = l
+		case tab == "changes" && l == complexity.ByFile:
+			m.changesGroup = l
 		}
 	}
 	m.fitSort()
@@ -155,6 +166,9 @@ func (m *Model) SetMode(mode string) {
 // groupLayout is the selected tab's group layout, nil when it does not
 // group.
 func (m *Model) groupLayout() []Column {
+	if m.tab == TabChanges && m.Grouping() == complexity.ByFile {
+		return changesFileLayout
+	}
 	switch m.Grouping() {
 	case complexity.ByClass:
 		if m.tab == TabFile {
@@ -203,10 +217,16 @@ func members(fnRows []Row, g *complexity.Group) []Row {
 	return out
 }
 
+// aggregate reports a group row or a Changes file row: a row standing for
+// several functions, with no unit of its own.
+func (r Row) aggregate() bool { return r.Group != nil || r.FileChange != nil }
+
 // label is what fn: and the bare-word match read: the function name, a
-// class group's class, a file group's path.
+// class group's class, a file group's or a Changes file row's path.
 func (r Row) label() string {
 	switch {
+	case r.FileChange != nil:
+		return r.Rel
 	case r.Group == nil:
 		return r.Fn.Name
 	case r.Group.Class != "":
@@ -222,6 +242,9 @@ func (r Row) key() string {
 	}
 	if r.Site != nil {
 		return r.siteKey()
+	}
+	if r.FileChange != nil {
+		return "c\x00" + r.Path
 	}
 	if r.Group != nil {
 		return "g\x00" + r.Path + "\x00" + r.Group.Class
