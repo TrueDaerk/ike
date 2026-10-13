@@ -1,5 +1,24 @@
 # Log
 
+## 2026-10-13 (Complexity baseline: accepted debt and ratchet mode, #2958)
+
+- [Code Complexity](/architecture/complexity.md): new "Baseline" section —
+  the committed `.ike/complexity-baseline.json` (`complexity.Baseline`:
+  entries keyed by file, function and ordinal, sorted `Save`, strict
+  `LoadBaseline`), the one `Classify` rule (accepted / worsened / new),
+  `Function.Baseline` + `Stamp` read by `Summarize` (`Accepted`, `Worsened`,
+  accepted units out of `OverThreshold` and `Excess`), the app state
+  reloaded on `watch.BaselineChanged`, the panel's muted `✓` rows, `N
+  accepted`, `baseline:` filter and `i` toggle (`BaselineToggleMsg`), the
+  `complexity.baselineAll` confirmation dialog, the CLI's
+  `--baseline[=PATH]` / `--no-baseline` / `--write-baseline` with the JSON
+  `baseline` and `summary.accepted` fields; the Problems feed, the tool
+  window, the CLI, the settings table and the limitations updated.
+- [Settings UI](/architecture/settings-ui.md) lists `complexity.baseline`.
+- The complexity user guide: an "Accepted debt: the baseline" section, the
+  CLI flags, the JSON fields and a CI ratchet example; the settings,
+  commands and keybindings references regenerated.
+
 ## 2026-10-13 (Hotspots: churn × complexity per file, #2957)
 
 - [Code Complexity](/architecture/complexity.md): new "Hotspots" section —

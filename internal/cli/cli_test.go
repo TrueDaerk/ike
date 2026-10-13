@@ -182,6 +182,13 @@ func TestParseComplexity(t *testing.T) {
 		{[]string{"--churn"}, ComplexityArgs{Churn: true}},
 		{[]string{"--churn=30", "--by", "file"}, ComplexityArgs{Churn: true, ChurnDays: 30, By: "file"}},
 		{[]string{"--churn", "30"}, ComplexityArgs{Churn: true, Paths: []string{"30"}}},
+		// --baseline[=PATH] / --no-baseline / --write-baseline (#2958): the
+		// path only after "=".
+		{[]string{"--baseline"}, ComplexityArgs{Baseline: true}},
+		{[]string{"--baseline=debt.json", "--json"}, ComplexityArgs{Baseline: true, BaselinePath: "debt.json", JSON: true}},
+		{[]string{"--baseline", "debt.json"}, ComplexityArgs{Baseline: true, Paths: []string{"debt.json"}}},
+		{[]string{"--no-baseline", "--by", "file"}, ComplexityArgs{NoBaseline: true, By: "file"}},
+		{[]string{"--write-baseline", "--baseline=debt.json"}, ComplexityArgs{WriteBaseline: true, Baseline: true, BaselinePath: "debt.json"}},
 		{[]string{"--help"}, ComplexityArgs{Help: true}},
 		{[]string{"-h"}, ComplexityArgs{Help: true}},
 	}
@@ -201,6 +208,7 @@ func TestParseComplexity(t *testing.T) {
 		{"--by"}, {"--by", "method"}, {"--by="}, {"--by=class", "--diff"}, {"--diff=main", "--by", "file"},
 		{"--brief=method"}, {"--brief="},
 		{"--churn=0"}, {"--churn="}, {"--churn=x"}, {"--churn=3651"},
+		{"--baseline="}, {"--baseline=  "},
 	} {
 		if _, err := Parse(append([]string{"complexity"}, args...)); err == nil {
 			t.Errorf("Parse(complexity %q) accepted", args)
@@ -216,6 +224,11 @@ func TestParseComplexity(t *testing.T) {
 		{[]string{"--diff=main", "--brief=class"}, ErrBriefWithDiff},
 		{[]string{"--churn", "--diff"}, ErrChurnWithDiff},
 		{[]string{"--diff=main", "--churn=30"}, ErrChurnWithDiff},
+		{[]string{"--baseline", "--no-baseline"}, ErrBaselineWithNoBaseline},
+		{[]string{"--no-baseline", "--baseline=x.json"}, ErrBaselineWithNoBaseline},
+		{[]string{"--write-baseline", "--diff"}, ErrWriteBaselineWithDiff},
+		{[]string{"--diff=main", "--write-baseline"}, ErrWriteBaselineWithDiff},
+		{[]string{"--write-baseline", "--no-baseline"}, ErrWriteBaselineWithNoBaseline},
 	} {
 		if _, err := Parse(append([]string{"complexity"}, c.args...)); err != c.want {
 			t.Errorf("Parse(complexity %q) error %v, want %v", c.args, err, c.want)

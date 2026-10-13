@@ -66,6 +66,12 @@ type settings struct {
 	// path in it, nil without --churn.
 	churnDays int
 	churn     map[string]int
+	// baseline is the accepted-debt baseline in effect (#2958), nil
+	// without one (no file, --no-baseline); baselinePath is the file it
+	// came from or --write-baseline writes — the project file unless
+	// --baseline=PATH named another.
+	baseline     *complexity.Baseline
+	baselinePath string
 }
 
 // defaultChurnDays is the --churn window when neither the flag nor the
@@ -138,6 +144,15 @@ func Run(a cli.ComplexityArgs, stdout, stderr io.Writer) int {
 	case a.Churn && a.Diff:
 		fmt.Fprintln(stderr, "ike complexity:", cli.ErrChurnWithDiff)
 		return ExitError
+	case a.Baseline && a.NoBaseline:
+		fmt.Fprintln(stderr, "ike complexity:", cli.ErrBaselineWithNoBaseline)
+		return ExitError
+	case a.WriteBaseline && a.Diff:
+		fmt.Fprintln(stderr, "ike complexity:", cli.ErrWriteBaselineWithDiff)
+		return ExitError
+	case a.WriteBaseline && a.NoBaseline:
+		fmt.Fprintln(stderr, "ike complexity:", cli.ErrWriteBaselineWithNoBaseline)
+		return ExitError
 	}
 	if brief != complexity.ByNone {
 		// --brief folds like --by: the JSON stays the full group report.
@@ -176,6 +191,16 @@ func Run(a cli.ComplexityArgs, stdout, stderr io.Writer) int {
 		return ExitOK
 	}
 	r := runProject(s)
+	if a.WriteBaseline {
+		n, err := writeBaseline(r)
+		if err != nil {
+			fmt.Fprintln(stderr, "ike complexity:", err)
+			return ExitError
+		}
+		fmt.Fprintf(stdout, "baseline: %d %s over threshold (CCN ≥ %d or cog ≥ %d) written to %s\n", n, plural(n, "function", "functions"),
+			s.ccnWarn, s.cogWarn, s.rel(s.baselinePath))
+		return ExitOK
+	}
 	if by != complexity.ByNone {
 		switch {
 		case a.JSON:
@@ -246,7 +271,65 @@ func resolve(a cli.ComplexityArgs) (settings, error) {
 	if s.churnDays <= 0 {
 		s.churnDays = defaultChurnDays
 	}
+	if err := s.loadBaseline(); err != nil {
+		return settings{}, err
+	}
 	return s, nil
+}
+
+// loadBaseline resolves the baseline file (#2958): --baseline=PATH as
+// typed (relative to the working directory), else the project's
+// .ike/complexity-baseline.json. The project file is read when it exists;
+// a file asked for by flag must exist unless --write-baseline is about to
+// create it; a malformed file is an error either way; --no-baseline reads
+// nothing.
+func (s *settings) loadBaseline() error {
+	a := s.args
+	path := complexity.BaselinePath(s.dir)
+	if a.BaselinePath != "" {
+		p, err := filepath.Abs(a.BaselinePath)
+		if err != nil {
+			return err
+		}
+		// Symlinks resolved like s.dir (macOS /var → /private/var), so the
+		// path prints relative to the project when it lies inside.
+		if ev, err := filepath.EvalSymlinks(p); err == nil {
+			p = ev
+		} else if ev, err := filepath.EvalSymlinks(filepath.Dir(p)); err == nil {
+			p = filepath.Join(ev, filepath.Base(p))
+		}
+		path = p
+	}
+	s.baselinePath = path
+	if a.NoBaseline {
+		return nil
+	}
+	b, err := complexity.LoadBaseline(path)
+	if err != nil {
+		return err
+	}
+	if b == nil && a.Baseline && !a.WriteBaseline {
+		return fmt.Errorf("--baseline: no baseline file at %s (seed one with --write-baseline)", s.rel(path))
+	}
+	s.baseline = b
+	return nil
+}
+
+// writeBaseline writes every over-threshold function of the report into
+// the baseline file, replacing it (#2958): the CI / agent way to seed the
+// accepted debt. Returns the entry count.
+func writeBaseline(r projectReport) (int, error) {
+	s := r.s
+	b := complexity.NewBaseline(s.ccnWarn, s.cogWarn)
+	for _, rw := range r.all {
+		if rw.fn.Over(s.ccnWarn, s.cogWarn) {
+			b.Accept(rw.file, rw.fn, rw.ordinal)
+		}
+	}
+	if err := b.Save(s.baselinePath); err != nil {
+		return 0, err
+	}
+	return b.Len(), nil
 }
 
 // resolveTarget makes p absolute (symlinks resolved, so paths compare with
@@ -445,6 +528,9 @@ func parallel[T any](items []T, fn func(T)) {
 type row struct {
 	file string // project-relative slash path
 	fn   complexity.Function
+	// ordinal is the unit's index among its file's same-named units in
+	// source order — the baseline's key (#2958).
+	ordinal int
 }
 
 // projectReport is the measured project.
@@ -506,8 +592,10 @@ func runProject(s settings) projectReport {
 		}
 		r.files++
 		rel := s.rel(path)
-		for _, f := range fns {
-			r.all = append(r.all, row{file: rel, fn: f})
+		// Stamped before the CCN sort: the baseline keys on source order.
+		s.baseline.Stamp(rel, fns)
+		for i, ord := range complexity.Ordinals(fns) {
+			r.all = append(r.all, row{file: rel, fn: fns[i], ordinal: ord})
 		}
 	})
 	sortRows(r.all)

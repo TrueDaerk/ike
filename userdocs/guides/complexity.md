@@ -10,8 +10,10 @@ CI pipelines and coding agents: `ike complexity`.
 
 Settings live under `[complexity]` (Settings ▸ Complexity): `exclude` globs,
 the warning thresholds `ccn_warn` / `cognitive_warn` (15 by default) and
-`comment_density_warn` (40 % by default, `0` turns it off), and the
-hotspot window `churn_days` (90 by default).
+`comment_density_warn` (40 % by default, `0` turns it off), the
+hotspot window `churn_days` (90 by default) and the `baseline` switch
+(on by default) that applies the project's accepted-debt file (see
+[Accepted debt: the baseline](#accepted-debt-the-baseline)).
 
 ## Reading the numbers
 
@@ -135,6 +137,61 @@ git repository the columns are hidden. The counts come from one `git log`
 per refresh of the git status. A renamed file is not followed: its commits
 before the rename count under the old name.
 
+## Accepted debt: the baseline
+
+A project that adopts complexity checks late has hundreds of functions over
+the thresholds, and none of them is going to be rewritten this week. Without
+a record of what is *accepted*, the Problems window lists all of them, the
+`over` count never changes, and a CI check cannot tell old debt from a new
+offender. The **baseline** fixes that the way linters do (`golangci-lint
+--new-from-rev`, Sonar's "new code"): record what exists, flag only what is
+new or got worse.
+
+The baseline is the file `.ike/complexity-baseline.json`, meant to be
+committed:
+
+```json
+{"version": 1, "ccn_warn": 15, "cognitive_warn": 15, "accepted": [
+  {"file": "internal/config/validate.go", "function": "validate", "ordinal": 0, "ccn": 170, "cognitive": 222}
+]}
+```
+
+One entry per accepted function — the project-relative path, the name, the
+ordinal among same-named functions of that file (0 for the first `init`,
+1 for the second) and the metrics it was accepted at; the thresholds are
+noted for the reader. A function is
+
+- **accepted** when its entry matches and neither CCN nor cognitive
+  complexity is above the recorded value — it no longer counts as over
+  threshold anywhere: not in the Problems window, not in the `over` count
+  or `excess` of the window header and the group rows, not in the CLI
+  summary. The window still shows it, with a `✓` after the name and its
+  over-threshold cells muted instead of coloured;
+- **worsened** when its entry matches but a metric grew — listed again,
+  the Problems row ends in `(worse than the baseline)`;
+- **new** otherwise: no entry, a renamed function, or an inserted
+  same-named function that shifted the ordinals.
+
+The comment-density check is not part of the baseline.
+
+**Seeding it.** In the Complexity window, `i` accepts the selected function
+into the file (or drops it again when it is already accepted — a worsened
+function re-accepted records its new metrics); on a class or file row `i`
+accepts every over-threshold function of that group, or drops them all when
+they are all accepted already. `Complexity: Accept All Over Threshold` in the
+command palette writes every function currently over the thresholds in one
+go, after a confirmation; it replaces the file. The same file comes out of
+`ike complexity --write-baseline` (below), which is how a CI job or a coding
+agent seeds it. Commit the file: IKE re-reads it whenever it changes on disk,
+so a `git checkout` of another branch applies that branch's baseline at
+once. The filter key `baseline:new`, `baseline:accepted` and
+`baseline:worsened` narrows the window to one status (on group rows: groups
+with such a member).
+
+**Switching it off.** `complexity.baseline = false` (Settings ▸ Complexity
+▸ Accepted-debt baseline) ignores the file everywhere without deleting it.
+A malformed file is reported once and ignored.
+
 ## Hiding test files
 
 Test functions are rarely what you want to simplify, yet a table-driven
@@ -175,7 +232,7 @@ current text. A renamed function appears as one removed and one added row.
 ## Command line
 
 ```
-ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [PATH...]
+ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [PATH...]
 ```
 
 | Flag | Effect |
@@ -192,6 +249,8 @@ ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--mi
 | `--no-tests` | Leave test files out (the same rule as `t` in the Complexity window, see [Hiding test files](#hiding-test-files)): the table, the groups, `--brief`, the summary and `--diff` ignore them; a line `tests hidden: N files` follows the summary and the JSON `summary` carries `"tests_hidden": true`. A test file you name explicitly is still measured. |
 | `--sites` | With `--json`: add `sites` to every function (and to the `after` side of every changed function under `--diff`), the per-site breakdown of [Why is this function complex?](#why-is-this-function-complex). The text table does not change; without the flag the JSON is exactly what it was. |
 | `--churn[=DAYS]` | Add the hotspot numbers (see [Hotspots](#hotspots-complexity--change-frequency)) from the commits of the last `DAYS` days (default: `complexity.churn_days`, 90): a `COMMITS` column in the function table, `COMMITS` and `HOT` in the `--by` tables, `commits=N  hot=N` on `--brief` lines, and in the JSON `commits` per function and group, `hot` per group and `summary.churn_days`. `ike complexity --churn=30 --by file` ranks the files to simplify first. Needs a git repository (exit 2 otherwise); not combinable with `--diff`. Without the flag the output is unchanged. |
+| `--baseline[=PATH]`, `--no-baseline` | Apply the [baseline](#accepted-debt-the-baseline). The project's `.ike/complexity-baseline.json` applies **by default** when it exists; a bare `--baseline` insists on it (exit 2 when it is missing), `--baseline=PATH` reads another file (relative to the current directory), `--no-baseline` reads none. With a baseline the text table marks accepted rows `name ✓`, a line `baseline: N accepted, N worsened (<file>)` follows the summary, the summary's over-threshold count and `excess` leave accepted functions out, and the JSON gains `baseline` per function and group and `accepted` in the summary. A malformed file is exit 2. `--diff` ignores the baseline (it compares revisions, not debt). |
+| `--write-baseline` | Write every function at or above the CCN or cognitive threshold — of the named paths, `--no-tests` respected, the row filters not — into the baseline file (the project file, or `--baseline=PATH`), replacing it, and print `baseline: N functions over threshold (CCN ≥ 15 or cog ≥ 15) written to .ike/complexity-baseline.json` instead of the report. The same file `Complexity: Accept All Over Threshold` writes in the IDE. Not combinable with `--diff` or `--no-baseline`. |
 
 The walk skips the same files as the Complexity window: hidden directories,
 `node_modules`, `vendor`, `dist`, `build`, `target`, virtualenvs, files over
@@ -283,13 +342,15 @@ Project report:
     "ccn_sum": 136390, "ccn_avg": 4.04, "ccn_max": 168,
     "cog_sum": 122149, "cog_avg": 3.62, "cog_max": 237,
     "over_threshold": 1223, "excess": 41870, "ccn_warn": 15, "cog_warn": 15,
-    "comment_lines": 63650, "comment_density": 0.12, "cmt_warn": 40
+    "comment_lines": 63650, "comment_density": 0.12, "cmt_warn": 40,
+    "accepted": 0
   },
   "functions": [
     { "file": "internal/config/validate.go", "name": "validate", "kind": "function",
       "line": 262, "end_line": 1047, "ccn": 168, "cognitive": 220,
       "nloc": 622, "params": 1, "depth": 5,
       "comment_lines": 101, "comment_density": 0.1397,
+      "baseline": "accepted",
       "sites": [
         { "line": 264, "col": 1, "end_line": 270, "kind": "if", "ccn": 1, "cognitive": 1, "nesting": 0, "level": 0 },
         { "line": 264, "col": 6, "end_line": 264, "kind": "&&", "ccn": 2, "cognitive": 1, "nesting": 0, "level": 0 },
@@ -314,12 +375,19 @@ function's CCN or cognitive complexity — `line` / `end_line` 1-based,
 operator, `recursion`), `ccn` and `cognitive` the increments, `nesting`
 the part of `cognitive` that is the nesting penalty, `level` the nesting
 level. With `--diff --sites` every `changed` entry's `after` and every
-`added` entry carry it too.
+`added` entry carry it too. `baseline` is `accepted`, `worsened` or `new`
+against the [baseline](#accepted-debt-the-baseline) in effect and absent
+without one; `summary.accepted` counts the over-threshold functions the
+baseline accepts (always present, `0` without a baseline), while
+`over_threshold` and `excess` count only the new and worsened ones.
 
 Grouped report (`--by class --json`): `functions` gives way to `groups`,
 one object per row the filter keeps, with the summary's field names; `class`
 is present at the class level only. With `--churn`, every group gains `commits` and
-`hot`, every function `commits`, and the summary `churn_days`.
+`hot`, every function `commits`, and the summary `churn_days`. With a
+baseline every group with an over-threshold or accepted function gains
+`baseline`: `worsened` when any of its functions worsened, `accepted` when
+every over-threshold function is accepted, `new` when one is not.
 
 ```json
 {
@@ -397,8 +465,34 @@ Swap the last line for whatever policy you want — for example
 `jq -e '.verdict != "more_complex"' cx.json` to refuse any net increase.
 `jq -e` exits non-zero when the expression is `false`, which fails the step.
 
+**The ratchet.** With a committed [baseline](#accepted-debt-the-baseline)
+the policy no longer needs a diff: every function that is not accepted is
+either new debt or old debt that got worse, and the build fails on exactly
+those — the accepted set can only shrink.
+
+```yaml
+      - name: Seed the baseline once (then commit .ike/complexity-baseline.json)
+        if: ${{ false }}   # run by hand the first time, or when the thresholds change
+        run: ike complexity --write-baseline
+      - name: Complexity ratchet
+        run: |
+          ike complexity --json > cx.json
+          jq -r '"\(.summary.over_threshold) over threshold, \(.summary.accepted) accepted"' cx.json
+          jq -e '[.functions[] | select(.baseline != "accepted")] | length == 0' cx.json
+```
+
+The last line fails the step when any function is `new` or `worsened`; to
+allow new functions under a higher bar, select on `.baseline == "worsened"
+or (.baseline == "new" and .ccn >= 20)` instead. The job runs on the
+checkout's own baseline, so a pull request that accepts more debt shows
+that as a diff of the JSON file for review.
+
 ### For coding agents
 
 An agent can ask "did I make this more complex?" with
 `ike complexity --diff --json` (against `HEAD`, so it sees its own
 uncommitted edits) and read `verdict`, `delta` and the `changed` entries.
+With a baseline, `ike complexity --json | jq '[.functions[] | select(.baseline
+!= "accepted")]'` lists exactly the functions it has to simplify before the
+ratchet passes, and `ike complexity --write-baseline` is how it records the
+debt a maintainer asked it to accept.

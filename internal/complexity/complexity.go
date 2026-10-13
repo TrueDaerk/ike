@@ -83,6 +83,11 @@ type Function struct {
 	// cognitive total includes them at its nesting (Sonar), records them
 	// too, CCN-less.
 	Sites []Site `json:"sites,omitempty"`
+	// Baseline is the unit's status against the accepted-debt baseline
+	// (#2958, baseline.go), left by Baseline.Stamp: new until a baseline
+	// classifies it. Not a measurement, so never serialised here — the
+	// CLI spells it out as its own field.
+	Baseline Status `json:"-"`
 }
 
 // Site is one increment of a unit's CCN or cognitive complexity (#2946):
@@ -171,6 +176,12 @@ type Summary struct {
 	// above the CCN and cognitive thresholds, the primary optimisation
 	// signal and what the diff verdict reads first.
 	Excess int `json:"excess"`
+	// Accepted counts the units over a CCN or cognitive threshold that the
+	// baseline accepts (#2958): they are left out of OverThreshold and
+	// Excess. Worsened counts the recorded units that grew past their
+	// recorded metrics; they are in OverThreshold.
+	Accepted int `json:"accepted"`
+	Worsened int `json:"worsened"`
 	// CommentLines sums the functions' comment-only lines; CommentDensity is
 	// CommentLines / (NLOC + CommentLines) over the aggregate (#2934).
 	CommentLines   int     `json:"commentLines"`
@@ -180,8 +191,11 @@ type Summary struct {
 // Summarize aggregates fns. A function is over threshold when its CCN is at
 // or above ccnWarn, its cognitive complexity at or above cogWarn or its
 // comment density at or above cmtWarn percent; a non-positive threshold
-// disables that metric's check. Excess sums Function.Excess with the CCN and
-// cognitive thresholds. Averages are 0 for an empty list.
+// disables that metric's check. A unit the baseline accepts
+// (Function.Baseline, #2958) is neither over threshold on CCN / cognitive
+// nor counted in Excess — it is counted in Accepted instead; the comment
+// density check is not part of the baseline. Excess sums Function.Excess
+// with the CCN and cognitive thresholds. Averages are 0 for an empty list.
 func Summarize(fns []Function, ccnWarn, cogWarn, cmtWarn int) Summary {
 	var s Summary
 	for _, f := range fns {
@@ -190,14 +204,24 @@ func Summarize(fns []Function, ccnWarn, cogWarn, cmtWarn int) Summary {
 		s.CCNSum += f.CCN
 		s.CogSum += f.Cognitive
 		s.CommentLines += f.CommentLines
-		s.Excess += f.Excess(ccnWarn, cogWarn)
+		accepted := f.Baseline == BaselineAccepted
+		if !accepted {
+			s.Excess += f.Excess(ccnWarn, cogWarn)
+		}
 		if f.CCN > s.CCNMax {
 			s.CCNMax = f.CCN
 		}
 		if f.Cognitive > s.CogMax {
 			s.CogMax = f.Cognitive
 		}
-		if (ccnWarn > 0 && f.CCN >= ccnWarn) || (cogWarn > 0 && f.Cognitive >= cogWarn) || f.CommentsOver(cmtWarn) {
+		over := f.Over(ccnWarn, cogWarn)
+		switch {
+		case over && accepted:
+			s.Accepted++
+		case over && f.Baseline == BaselineWorsened:
+			s.Worsened++
+		}
+		if over && !accepted || f.CommentsOver(cmtWarn) {
 			s.OverThreshold++
 		}
 	}

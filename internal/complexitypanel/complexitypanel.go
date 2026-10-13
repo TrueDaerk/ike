@@ -12,7 +12,10 @@
 // params:, nloc:, metric: and test:, and bare words fuzzy
 // over the function names; 't' hides the test files on every tab (#2950);
 // 'space' expands a function into its complexity sites (#2946, sites.go);
-// 'm' paints them in the editor once (#2947).
+// 'm' paints them in the editor once (#2947); 'i' accepts the selected
+// function (or a group's over-threshold functions) into the accepted-debt
+// baseline, or drops it again (#2958, baseline.go), and `baseline:`
+// filters by that status.
 //
 // The pane is a pure consumer: the root model hands it the index's immutable
 // View via Set on open and on every generation change, and tells it where
@@ -171,6 +174,7 @@ var Schema = filterexpr.Schema{Fields: []filterexpr.Field{
 	{Name: "nloc", ValueDoc: "a number", Doc: "nloc: keeps rows with at least n code lines (groups: the sum)"},
 	{Name: "metric", Values: []string{"ccn", "cog", "cmt", "hot", "commits"}, Doc: "metric: sorts by cyclomatic or cognitive complexity, comment density (cmt%), hotspot score (hot) or commits in the churn window"},
 	{Name: "test", Values: []string{"yes", "no"}, Doc: "test: no hides test files, test: yes keeps only them"},
+	{Name: "baseline", Values: []string{"new", "accepted", "worsened"}, Doc: "baseline: keeps functions the accepted-debt baseline classifies as new, accepted or worsened (groups: with such a member)"},
 }}
 
 // Row is one function of the current tab, kept alongside the cells so the
@@ -206,6 +210,12 @@ type Row struct {
 	// its hotspot score (#2957, churn.go); both 0 outside git.
 	Commits int
 	Hot     int
+	// Ordinal is the function's index among its file's same-named units
+	// in source order — the baseline's key (#2958, baseline.go).
+	Ordinal int
+	// Members are a group row's function rows (#2958), so 'i' can accept
+	// every over-threshold member.
+	Members []Row
 }
 
 // value is the row's sort key on column c: a number for the metric
@@ -292,10 +302,14 @@ func (r Row) cell(c Column) string {
 	case ColFile:
 		return r.Rel
 	case ColFunc:
-		if r.Dirty {
-			return r.Fn.Name + dirtyMark
+		name := r.Fn.Name
+		if r.Fn.Baseline == complexity.BaselineAccepted {
+			name += acceptedMark
 		}
-		return r.Fn.Name
+		if r.Dirty {
+			return name + dirtyMark
+		}
+		return name
 	case ColLine:
 		return strconv.Itoa(r.Fn.Line + 1)
 	case ColParams:
@@ -398,6 +412,10 @@ type Model struct {
 	churn     map[string]int
 	churnDays int
 	hotWarn   int
+
+	// baseline is the accepted-debt baseline in effect (#2958,
+	// baseline.go), nil without one.
+	baseline *complexity.Baseline
 }
 
 // New returns an empty panel on the Project tab sorted by CCN descending;
@@ -658,8 +676,9 @@ func (m *Model) population() []Row {
 	var out []Row
 	add := func(path string, fns []complexity.Function) {
 		rel, id := m.relPath(path), m.pathLang(path)
-		for _, fn := range fns {
-			out = append(out, Row{Path: path, Rel: rel, Lang: id, Fn: fn, Commits: m.churn[rel], Hot: m.fnHot(m.churn[rel], fn)})
+		fns, ords := m.classify(rel, fns)
+		for i, fn := range fns {
+			out = append(out, Row{Path: path, Rel: rel, Lang: id, Fn: fn, Commits: m.churn[rel], Hot: m.fnHot(m.churn[rel], fn), Ordinal: ords[i]})
 		}
 	}
 	switch m.tab {
@@ -763,6 +782,10 @@ func (m *Model) matches(q filterexpr.Query, r Row) bool {
 			}
 		case "test":
 			if want, ok := testValue(t.Value); !ok || r.Test != want {
+				return false
+			}
+		case "baseline":
+			if !baselineMatches(t.Value, r) {
 				return false
 			}
 		}
@@ -1010,6 +1033,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.ToggleSites()
 	case "m":
 		return m.showSites()
+	case "i":
+		return m.toggleBaseline()
 	case "enter":
 		return m.open()
 	case "e":
@@ -1208,6 +1233,9 @@ func (m *Model) totalsText() string {
 		itoa(s.OverThreshold)+" over",
 		"excess "+itoa(s.Excess),
 	)
+	if t := m.baselineTotals(); t != "" {
+		parts = append(parts, t)
+	}
 	return strings.Join(parts, " · ")
 }
 
@@ -1267,11 +1295,16 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 		cells[fi].Text = caretMark + cells[fi].Text
 		cells[fi].Match = true
 	}
+	// An accepted function (#2958) keeps its over-threshold cells, muted
+	// instead of in the warning colour.
+	accepted := r.Fn.Baseline == complexity.BaselineAccepted
 	if ci := m.layoutIndex(ColCCN); ci >= 0 {
-		cells[ci].Warn = r.Fn.CCN >= m.ccnWarn
+		cells[ci].Warn = r.Fn.CCN >= m.ccnWarn && !accepted
+		cells[ci].Muted = r.Fn.CCN >= m.ccnWarn && accepted
 	}
 	if ci := m.layoutIndex(ColCog); ci >= 0 {
-		cells[ci].Warn = r.Fn.Cognitive >= m.cogWarn
+		cells[ci].Warn = r.Fn.Cognitive >= m.cogWarn && !accepted
+		cells[ci].Muted = r.Fn.Cognitive >= m.cogWarn && accepted
 	}
 	if ci := m.layoutIndex(ColCmt); ci >= 0 {
 		cells[ci].Warn = r.Fn.CommentsOver(m.cmtWarn)
@@ -1292,9 +1325,9 @@ func (m *Model) footer() string {
 	case m.tab == TabChanges:
 		hints += " · R base · space sites · m marks"
 	case m.Grouping() == complexity.ByNone:
-		hints += " · b group · space sites · m marks"
+		hints += " · b group · space sites · m marks · i accept"
 	default:
-		hints += " · b group: " + m.Grouping().String()
+		hints += " · b group: " + m.Grouping().String() + " · i accept"
 	}
 	if m.hideTests {
 		hints += " · t tests: hidden"

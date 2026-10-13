@@ -104,6 +104,10 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	// sort, y copy, tab / shift+tab view -- have no command at all).
 	{"complexity.refresh", reasonPaneKey},
 	{"complexity.export", reasonPaneKey},
+	// Seeding the accepted-debt baseline (#2958) happens once per project
+	// (and after a threshold change); it rewrites a committed file behind
+	// a confirmation, so the palette is the right doorway.
+	{"complexity.baselineAll", reasonOccasional},
 	{"deps.updateLatest", reasonIntention},
 	{"http.", reasonPaneKey}, // the response pane's single keys
 	// #2423's GraphQL schema commands carve themselves out of that family:

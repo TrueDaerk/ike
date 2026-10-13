@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-10-13T23:59:30Z
+timestamp: 2026-10-14T00:30:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -371,7 +371,10 @@ any entry whose key the typed schema does not expose (no dead keys).
   functions into the Problems window; off clears those rows. `complexity.status_segment` (Bool, default off,
   #2921) shows the `Δcx` status segment live. `complexity.churn_days` (Int,
   1-3650, default 90, #2957) is the hotspot window of the `commits` / `hot`
-  columns; a change re-fetches the churn live. Listed in the Languages
+  columns; a change re-fetches the churn live. `complexity.baseline` (Bool,
+  default on, #2958) applies the project's `.ike/complexity-baseline.json`
+  — accepted functions leave the over counts, Problems and the warning
+  colour; off ignores the file everywhere, on re-applies it live. Listed in the Languages
   group after PHP (see [complexity](./complexity.md#project-index-2916) and
   [the tool window](./complexity.md#tool-window-2917)).
 - **Dependencies** (#2419) — `deps.auto_scan`, the background dependency

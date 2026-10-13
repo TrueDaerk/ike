@@ -30,7 +30,7 @@ func TestComplexityDiagnosticsBuilder(t *testing.T) {
 		},
 		"/p/b.go": {{Name: "fine", Line: 1, CCN: 14, Cognitive: 14}},
 	}}
-	got := complexityDiagnostics(v, 15, 15, 0)
+	got := complexityDiagnostics(v, 15, 15, 0, nil, "")
 	if _, ok := got["/p/b.go"]; ok || len(got) != 1 {
 		t.Fatalf("only a.go may hold findings: %v", got)
 	}
@@ -55,7 +55,7 @@ func TestComplexityDiagnosticsBuilder(t *testing.T) {
 		}
 	}
 	// A threshold is inclusive per metric: at 41 / 26 nothing is over.
-	if got := complexityDiagnostics(v, 41, 26, 0); len(got) != 0 {
+	if got := complexityDiagnostics(v, 41, 26, 0, nil, ""); len(got) != 0 {
 		t.Fatalf("raised thresholds still flag %v", got)
 	}
 }
@@ -71,7 +71,7 @@ func TestComplexityDiagnosticsCommentDensity(t *testing.T) {
 			{Name: "both", Line: 20, CCN: 30, NLOC: 6, CommentLines: 4, CommentDensity: 0.4},
 		},
 	}}
-	ds := complexityDiagnostics(v, 15, 15, 40)["/p/a.go"]
+	ds := complexityDiagnostics(v, 15, 15, 40, nil, "")["/p/a.go"]
 	want := []struct {
 		line      int
 		msg, code string
@@ -88,7 +88,7 @@ func TestComplexityDiagnosticsCommentDensity(t *testing.T) {
 			t.Errorf("diag %d = %+v, want line %d %q code %q", i, d, w.line, w.msg, w.code)
 		}
 	}
-	for _, d := range complexityDiagnostics(v, 15, 15, 0)["/p/a.go"] {
+	for _, d := range complexityDiagnostics(v, 15, 15, 0, nil, "")["/p/a.go"] {
 		if d.Code == "comments" {
 			t.Errorf("threshold 0 must disable the density row: %+v", d)
 		}
@@ -220,7 +220,7 @@ func TestComplexityProblemsSourceFilter(t *testing.T) {
 	s.Set("/p/a.go", []ilsp.Diagnostic{{Severity: 1, Message: "undefined: y", Source: "gopls"}})
 	s.SetTaskSource("complexity", complexityDiagnostics(complexity.View{Files: map[string][]complexity.Function{
 		"/p/a.go": {{Name: "A", Line: 4, CCN: 20}},
-	}}, 15, 15, 40))
+	}}, 15, 15, 40, nil, ""))
 	p := problems.New(nil)
 	p.SetSize(120, 12)
 	p.SetStore(s)

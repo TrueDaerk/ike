@@ -490,6 +490,45 @@ func TestConfigFileEvents(t *testing.T) {
 	}
 }
 
+// TestBaselineFileEvents (#2958): a write to, and a removal of,
+// <root>/.ike/complexity-baseline.json surfaces as BaselineChanged; other
+// JSON under .ike stays silent.
+func TestBaselineFileEvents(t *testing.T) {
+	dir := t.TempDir()
+	ike := filepath.Join(dir, ".ike")
+	if err := os.Mkdir(ike, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s, c := service()
+	if err := s.Start(dir); err != nil {
+		t.Fatal(err)
+	}
+	defer s.Stop()
+
+	if err := os.WriteFile(filepath.Join(ike, "session.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	if n := c.count(); n != 0 {
+		t.Fatalf("session.json churn must stay silent, got %d events", n)
+	}
+	baseline := filepath.Join(ike, "complexity-baseline.json")
+	if err := os.WriteFile(baseline, []byte(`{"version":1,"accepted":[]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := c.wait(t, 1)
+	if got[0].Kind != BaselineChanged || got[0].Path != baseline {
+		t.Fatalf("baseline write must surface as BaselineChanged, got %+v", got)
+	}
+	if err := os.Remove(baseline); err != nil {
+		t.Fatal(err)
+	}
+	got = c.wait(t, 2)
+	if last := got[len(got)-1]; last.Kind != BaselineChanged || last.Path != baseline {
+		t.Fatalf("baseline removal must surface as BaselineChanged, got %+v", got)
+	}
+}
+
 // TestConfigDirCreatedLate (#795): a project without .ike gains one (the
 // first project-scope write); the new directory is watched so the settings
 // file's first edit is seen.

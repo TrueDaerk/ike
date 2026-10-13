@@ -1018,6 +1018,10 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			withAliases(appCommand("complexity.toggleTests", "Complexity: Toggle Test Files", ComplexityToggleTestsMsg{}), "hide tests", "show tests"),
 			withAliases(appCommand("complexity.sites", "Complexity: Expand / Collapse Sites", ComplexitySitesMsg{}), "breakdown", "why complex", "per site"),
 			withAliases(appCommand("complexity.showSites", "Complexity: Mark Sites in Editor", ComplexityShowSitesMsg{}), "sonar", "site marks", "show increments"),
+			// The accepted-debt baseline (#2958): i in the pane toggles one
+			// function or group, the bulk accept asks first.
+			withAliases(appCommand("complexity.baseline", "Complexity: Accept / Drop Selected in Baseline", ComplexityBaselineMsg{}), "accept debt", "ignore complexity", "baseline"),
+			withAliases(appCommand("complexity.baselineAll", "Complexity: Accept All Over Threshold", ComplexityBaselineAllMsg{}), "seed baseline", "accept all debt", "ratchet"),
 			appCommand("deps.refresh", "Dependencies: Refresh Scan", DepsRefreshMsg{}),
 			appCommand("deps.audit", "Dependencies: Audit Vulnerabilities", DepsAuditMsg{}),
 			appCommand("deps.updateLatest", "Update Dependency to Latest", DepsUpdateLatestMsg{}),

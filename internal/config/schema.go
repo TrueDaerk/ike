@@ -533,6 +533,11 @@ type Complexity struct {
 	// ChurnDays (#2957) is the hotspot window in days: the Complexity window
 	// counts each file's commits since that many days ago (1–3650).
 	ChurnDays int `toml:"churn_days"`
+	// Baseline (#2958) applies the project's accepted-debt file,
+	// .ike/complexity-baseline.json: an accepted function is not over
+	// threshold in the Problems feed, the tool window's totals and group
+	// rows or the CLI summary. Off ignores the file everywhere.
+	Baseline bool `toml:"baseline"`
 }
 
 // Debug holds debugger behaviour (0360). PHP carries the web/request listen

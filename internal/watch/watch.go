@@ -42,6 +42,11 @@ const (
 	// (<root>/.ike/settings.toml, 0380 #795); the root model re-runs the
 	// config reload pipeline from it. Path carries the settings file.
 	ConfigChanged
+	// BaselineChanged is an external edit — or a removal — of the
+	// project's complexity baseline (<root>/.ike/complexity-baseline.json,
+	// #2958): a `git checkout`, a hand edit; the root model re-applies the
+	// file from it. Path carries the baseline file.
+	BaselineChanged
 )
 
 // EventMsg is one debounced, coalesced filesystem event. The root model routes
@@ -399,9 +404,16 @@ func (s *Service) ingest(ev fsnotify.Event) {
 	if s.inConfigDir(path) {
 		// Only the settings file matters under .ike (0380, #795): the layout,
 		// session and usage stores churn on IKE's own writes and stay silent.
-		if filepath.Base(path) == fileNameSettings &&
-			(ev.Has(fsnotify.Write) || ev.Has(fsnotify.Create) || ev.Has(fsnotify.Remove) || ev.Has(fsnotify.Rename)) {
+		if !(ev.Has(fsnotify.Write) || ev.Has(fsnotify.Create) || ev.Has(fsnotify.Remove) || ev.Has(fsnotify.Rename)) {
+			return
+		}
+		switch filepath.Base(path) {
+		case fileNameSettings:
 			s.note(path, ConfigChanged)
+		case fileNameBaseline:
+			// …and the complexity baseline (#2958), the one other file
+			// under .ike that is project data rather than a state store.
+			s.note(path, BaselineChanged)
 		}
 		return
 	}
@@ -496,6 +508,10 @@ func (s *Service) ingestGit(ev fsnotify.Event, path, gitDir string) {
 // fileNameSettings is the settings file name inside <root>/.ike (mirrors
 // internal/config; kept literal so watch stays dependency-free).
 const fileNameSettings = "settings.toml"
+
+// fileNameBaseline is the complexity baseline's name inside <root>/.ike
+// (mirrors complexity.BaselineFileName, #2958).
+const fileNameBaseline = "complexity-baseline.json"
 
 // Root returns the directory the watcher last started on, empty while it has
 // never run. Consumers filtering watcher-derived lists pass it to Ignored.

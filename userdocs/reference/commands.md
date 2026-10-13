@@ -46,6 +46,8 @@ bring their own.
 | Toggle Bookmark | `bookmark.toggle` | `f11` | — | everywhere |
 | Toggle Bookmark with Mnemonic | `bookmark.toggleMnemonic` | `alt+f3` | — | everywhere |
 | Basic Completion | `completion.trigger` | `ctrl+space` | — | `editor` pane |
+| Complexity: Accept / Drop Selected in Baseline | `complexity.baseline` | `i` | — | everywhere |
+| Complexity: Accept All Over Threshold | `complexity.baselineAll` | — | — | everywhere |
 | Complexity: Export Current Tab as CSV | `complexity.export` | — | — | everywhere |
 | Complexity: Cycle Grouping (None / Class / File) | `complexity.group` | `b` | — | everywhere |
 | Complexity: Rescan Project | `complexity.refresh` | — | — | everywhere |

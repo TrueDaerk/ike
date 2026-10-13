@@ -42,6 +42,9 @@ type jsonSummary struct {
 	TestsHidden bool `json:"tests_hidden,omitempty"`
 	// ChurnDays is the --churn window in days (#2957), absent without it.
 	ChurnDays int `json:"churn_days,omitempty"`
+	// Accepted counts the over-threshold functions the baseline accepts
+	// (#2958); OverThreshold counts only the new and worsened ones.
+	Accepted int `json:"accepted"`
 }
 
 func toJSONSummary(s complexity.Summary, files int, st settings) jsonSummary {
@@ -53,6 +56,7 @@ func toJSONSummary(s complexity.Summary, files int, st settings) jsonSummary {
 		CommentLines: s.CommentLines, CommentDensity: ratio(s.CommentDensity), CmtWarn: st.cmtWarn,
 		TestsHidden: st.args.NoTests,
 		ChurnDays:   st.churnShown(),
+		Accepted:    s.Accepted,
 	}
 }
 
@@ -83,6 +87,9 @@ type jsonFunction struct {
 	// Commits is the file's commit count in the --churn window (#2957),
 	// absent without the flag.
 	Commits *int `json:"commits,omitempty"`
+	// Baseline is "accepted", "worsened" or "new" against the baseline in
+	// effect (#2958), absent without one.
+	Baseline string `json:"baseline,omitempty"`
 }
 
 // jsonSite is one complexity.Site; line numbers are 1-based, the column
@@ -198,6 +205,12 @@ type jsonGroup struct {
 	// --churn hotspot numbers (#2957), absent without the flag.
 	Commits *int `json:"commits,omitempty"`
 	Hot     *int `json:"hot,omitempty"`
+	// Baseline is the group's status against the baseline in effect
+	// (#2958, complexity.Summary.BaselineStatus): "worsened" when any
+	// function worsened, "accepted" when every over-threshold function is
+	// accepted, "new" when one is not; absent without a baseline and on a
+	// group with nothing over threshold.
+	Baseline string `json:"baseline,omitempty"`
 }
 
 func toJSONGroup(g complexity.Group) jsonGroup {
@@ -243,6 +256,9 @@ func writeProjectJSON(w io.Writer, r projectReport) error {
 	}
 	for _, rw := range r.rows {
 		jf := toJSONFunction(rw.file, rw.fn, r.s.args.Sites)
+		if r.s.baseline != nil {
+			jf.Baseline = rw.fn.Baseline.String()
+		}
 		if r.s.churn != nil {
 			n := r.s.churn[rw.file]
 			jf.Commits = &n
@@ -260,6 +276,11 @@ func writeGroupsJSON(w io.Writer, r groupReport) error {
 	}
 	for _, g := range r.groups {
 		jg := toJSONGroup(g)
+		if r.s.baseline != nil {
+			if st, ok := g.BaselineStatus(); ok {
+				jg.Baseline = st.String()
+			}
+		}
 		if r.s.churn != nil {
 			commits, hot := r.s.hot(g)
 			jg.Commits, jg.Hot = &commits, &hot
@@ -311,7 +332,11 @@ func writeProjectText(w io.Writer, r projectReport) {
 	fmt.Fprintln(tw, "FILE\tFUNCTION\tLINE\tCCN\tCOG\tNLOC\tPARAMS\tCMT%"+r.s.churnHeader("\tCOMMITS"))
 	for _, rw := range r.rows {
 		f := rw.fn
-		fmt.Fprintf(tw, "%s\t%s\t%d\t%d\t%d\t%d\t%d\t%d", rw.file, f.Name, f.Line+1, f.CCN, f.Cognitive, f.NLOC, f.Params,
+		name := f.Name
+		if f.Baseline == complexity.BaselineAccepted {
+			name += acceptedMark
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%d\t%d\t%d\t%d\t%d\t%d", rw.file, name, f.Line+1, f.CCN, f.Cognitive, f.NLOC, f.Params,
 			complexity.DensityPercent(f.CommentDensity))
 		if r.s.churn != nil {
 			fmt.Fprintf(tw, "\t%d", r.s.churn[rw.file])
@@ -328,6 +353,10 @@ func writeProjectText(w io.Writer, r projectReport) {
 	}
 }
 
+// acceptedMark follows the name of a function the baseline accepts (#2958)
+// in the text table, as the tool window marks it.
+const acceptedMark = " ✓"
+
 // writeSummaryLine prints the blank line and the whole-project summary
 // both project tables end with.
 func (r projectReport) writeSummaryLine(w io.Writer) {
@@ -340,6 +369,9 @@ func (r projectReport) writeSummaryLine(w io.Writer) {
 	}
 	if r.s.churn != nil {
 		fmt.Fprintf(w, "churn: commits in the last %d %s (git log, renames not followed)\n", r.s.churnDays, plural(r.s.churnDays, "day", "days"))
+	}
+	if r.s.baseline != nil {
+		fmt.Fprintf(w, "baseline: %d accepted, %d worsened (%s)\n", s.Accepted, s.Worsened, r.s.rel(r.s.baselinePath))
 	}
 }
 

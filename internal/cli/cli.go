@@ -86,6 +86,16 @@ type ComplexityArgs struct {
 	// combinable with Diff.
 	Churn     bool
 	ChurnDays int
+	// Baseline / NoBaseline / WriteBaseline are the accepted-debt flags
+	// (#2958): BaselinePath is the file `--baseline=PATH` named ("" with
+	// a bare `--baseline`, which asks for the project file and is the
+	// default when it exists); NoBaseline ignores the file; WriteBaseline
+	// writes every over-threshold function of the report into it instead
+	// of printing the report. Not combinable with Diff.
+	Baseline      bool
+	BaselinePath  string
+	NoBaseline    bool
+	WriteBaseline bool
 	// Paths are the files and directories to report on, as typed (#2936;
 	// none = the working directory). A directory is walked with the
 	// index's skip rules and the complexity.exclude globs; a file is
@@ -125,8 +135,20 @@ var ErrChurnWithDiff = errors.New("--churn is not supported with --diff")
 // ChurnDaysMax bounds `--churn=DAYS` like complexity.churn_days.
 const ChurnDaysMax = 3650
 
+// ErrBaselineWithNoBaseline rejects `--baseline` together with
+// `--no-baseline` (#2958).
+var ErrBaselineWithNoBaseline = errors.New("--baseline and --no-baseline exclude each other")
+
+// ErrWriteBaselineWithDiff rejects `--write-baseline` together with
+// `--diff` (#2958): the baseline records the working tree, not a diff.
+var ErrWriteBaselineWithDiff = errors.New("--write-baseline is not supported with --diff")
+
+// ErrWriteBaselineWithNoBaseline rejects `--write-baseline` together with
+// `--no-baseline` (#2958).
+var ErrWriteBaselineWithNoBaseline = errors.New("--write-baseline and --no-baseline exclude each other")
+
 // ComplexityUsage is the one-line grammar of `ike complexity`.
-const ComplexityUsage = "usage: ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [PATH...]"
+const ComplexityUsage = "usage: ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [PATH...]"
 
 // Parse parses the arguments after the program name. Supported forms:
 //
@@ -220,7 +242,9 @@ func Parse(args []string) (Invocation, error) {
 // together with `--diff`. `--brief` takes its level only as `--brief=class`
 // (#2938), so `--brief PATH` keeps PATH as a path; it excludes `--by` and
 // `--diff`. `--churn` takes its window only as `--churn=DAYS` (#2957) and
-// excludes `--diff`. Every other argument is a path, in order (#2936);
+// excludes `--diff`. `--baseline` takes its file only as `--baseline=PATH`
+// (#2958) and excludes `--no-baseline`; `--write-baseline` excludes
+// `--diff` and `--no-baseline`. Every other argument is a path, in order (#2936);
 // an unknown flag is an error.
 func parseComplexity(args []string) (ComplexityArgs, error) {
 	var ca ComplexityArgs
@@ -236,6 +260,18 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 			ca.NoTests = true
 		case a == "--sites":
 			ca.Sites = true
+		case a == "--no-baseline":
+			ca.NoBaseline = true
+		case a == "--write-baseline":
+			ca.WriteBaseline = true
+		case name == "--baseline":
+			ca.Baseline = true
+			if hasVal {
+				if strings.TrimSpace(val) == "" {
+					return ComplexityArgs{}, fmt.Errorf("--baseline= needs a path")
+				}
+				ca.BaselinePath = val
+			}
 		case name == "--churn":
 			ca.Churn = true
 			if hasVal {
@@ -315,6 +351,14 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 	}
 	if ca.Churn && ca.Diff {
 		return ComplexityArgs{}, ErrChurnWithDiff
+	}
+	switch {
+	case ca.Baseline && ca.NoBaseline:
+		return ComplexityArgs{}, ErrBaselineWithNoBaseline
+	case ca.WriteBaseline && ca.Diff:
+		return ComplexityArgs{}, ErrWriteBaselineWithDiff
+	case ca.WriteBaseline && ca.NoBaseline:
+		return ComplexityArgs{}, ErrWriteBaselineWithNoBaseline
 	}
 	return ca, nil
 }
