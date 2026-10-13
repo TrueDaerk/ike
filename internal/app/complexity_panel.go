@@ -158,6 +158,7 @@ func (m *Model) seedComplexityPanel(p *complexitypanel.Model) {
 	p.SetRoot(m.complexityIndex.Root())
 	c := config.Get().Complexity
 	p.SetWarn(c.CCNWarn, c.CognitiveWarn, c.CommentDensityWarn)
+	p.SetBaseline(m.complexityBaseline()) // #2958
 	p.Set(m.complexityIndex.Snapshot(), m.complexityIndex.Stats())
 	m.seedComplexityChanges(p)
 	m.seedComplexityChurn(p)

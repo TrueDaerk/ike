@@ -337,6 +337,11 @@ type Model struct {
 	// cxChurn is the hotspot columns' cached churn map (0551, #2957),
 	// shared by pointer like cxDiff.
 	cxChurn *complexityChurnState
+	// cxBase is the accepted-debt baseline (0551, #2958), shared by
+	// pointer like cxDiff; cxBaseDialog marks the "accept all"
+	// confirmation dialog open in the shell.
+	cxBase       *complexityBaselineState
+	cxBaseDialog bool
 	// cxHints is the inline complexity hint feed's bookkeeping (0550,
 	// #2919): the state key delivered or armed per open document, shared by
 	// pointer like cxDiff.
@@ -1710,6 +1715,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		complexityIndex: cxIdx,
 		cxDiff:          &complexityDiffState{},
 		cxChurn:         &complexityChurnState{},
+		cxBase:          newComplexityBaselineState(root),
 		cxHints:         &complexityHintState{sent: map[string]cxHintKey{}, pending: map[string]cxHintKey{}, show: map[string]cxShowSites{}, measured: map[string]complexityHintMeasuredMsg{}},
 		ws:              wsMgr,
 		recentEditor:    edKey,
@@ -8535,6 +8541,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// will too. The Changes tab keys on the generation (#2918).
 		m.noteComplexityGen(msg.Gen)
 		m.refreshComplexityPanel()
+		m.reportComplexityBaseline() // a malformed baseline, once (#2958)
 		m.feedComplexityProblems(config.Get().Complexity)
 		return m, nil
 
@@ -8595,6 +8602,22 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// complexity.sites (#2946), space in the pane: expand / collapse the
 		// selected function into its complexity sites.
 		m.toggleComplexitySites()
+		return m, nil
+
+	case ComplexityBaselineMsg:
+		// complexity.baseline (#2958), i in the pane: accept the selected
+		// function or group into the baseline, or drop it again.
+		return m, m.toggleComplexityBaselineRow()
+
+	case ComplexityBaselineAllMsg:
+		// complexity.baselineAll (#2958): every over-threshold function,
+		// behind a confirmation dialog.
+		m.openComplexityBaselineDialog()
+		return m, nil
+
+	case complexitypanel.BaselineToggleMsg:
+		// The pane's 'i' (#2958): record or drop the items, save the file.
+		m.handleComplexityBaselineToggle(msg)
 		return m, nil
 
 	case ComplexityShowSitesMsg:
@@ -9532,6 +9555,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// enter opens the issue, d/esc dismisses, a dismisses all.
 		if m.forgeDialogOpen() {
 			return m.updateForgeDialog(msg)
+		}
+		// The complexity baseline's "accept all" confirmation (#2958) owns
+		// the keyboard the same way: enter/y accepts, esc/n cancels.
+		if m.complexityBaselineDialogOpen() {
+			return m.updateComplexityBaselineDialog(msg)
 		}
 		// The forge edit dialogs (#2087) — failed push, stale base — own the
 		// keyboard the same way: r retries, o overwrites, l loads, esc keeps

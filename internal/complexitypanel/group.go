@@ -174,11 +174,23 @@ func (m *Model) groupRows(fnRows []Row) []Row {
 	for i := range groups {
 		g := &groups[i]
 		src := meta[g.File]
-		out[i] = Row{Path: g.File, Rel: src.Rel, Lang: src.Lang, Test: src.Test, Group: g}
+		out[i] = Row{Path: g.File, Rel: src.Rel, Lang: src.Lang, Test: src.Test, Group: g, Members: members(fnRows, g)}
 		if g.Class == "" {
 			// A file group carries its file's hotspot numbers (#2957).
 			out[i].Commits = m.churn[src.Rel]
 			out[i].Hot = complexity.Hot(out[i].Commits, g.Summary)
+		}
+	}
+	return out
+}
+
+// members lists the function rows a group aggregates (#2958): the file's
+// units, narrowed to the class on a class group.
+func members(fnRows []Row, g *complexity.Group) []Row {
+	var out []Row
+	for _, r := range fnRows {
+		if r.Path == g.File && (g.Class == "" || r.Fn.Class == g.Class) {
+			out = append(out, r)
 		}
 	}
 	return out

@@ -75,8 +75,10 @@ func (m *Model) reconfigureComplexityIndex(cfg *config.Config) {
 		p.SetWarn(cfg.Complexity.CCNWarn, cfg.Complexity.CognitiveWarn, cfg.Complexity.CommentDensityWarn)
 	}
 	// So do the Problems feed's rows (#2920): a moved threshold adds or
-	// drops rows, a switched-off feed or index clears them.
-	m.feedComplexityProblems(cfg.Complexity)
+	// drops rows, a switched-off feed or index clears them — and the
+	// baseline in effect (#2958): complexity.baseline off hands every
+	// surface nil, on hands them the loaded file again.
+	m.applyComplexityBaseline()
 }
 
 // complexityScanRecorder is the callback the complexity index reports a

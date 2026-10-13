@@ -101,12 +101,12 @@ func (m *Model) routeWatchEvent(msg watch.EventMsg) tea.Cmd {
 	vcsCmd := m.scheduleVCSRefresh()
 	// On-disk changes refresh the symbol completion index (#853); repo
 	// metadata and settings files are not index material.
-	if m.completeEngine != nil && msg.Kind != watch.GitChanged && msg.Kind != watch.ConfigChanged {
+	if m.completeEngine != nil && msg.Kind != watch.GitChanged && msg.Kind != watch.ConfigChanged && msg.Kind != watch.BaselineChanged {
 		m.completeEngine.NotifyFileChanged(msg.Path)
 	}
 	// The complexity index re-measures the changed file the same way (0550,
 	// #2916); a path no measured language claims is dropped without queueing.
-	if m.complexityIndex != nil && msg.Kind != watch.GitChanged && msg.Kind != watch.ConfigChanged && msg.Kind != watch.DirChanged {
+	if m.complexityIndex != nil && msg.Kind != watch.GitChanged && msg.Kind != watch.ConfigChanged && msg.Kind != watch.DirChanged && msg.Kind != watch.BaselineChanged {
 		m.complexityIndex.InvalidateFile(msg.Path)
 	}
 	if msg.Kind == watch.ConfigChanged {
@@ -115,6 +115,13 @@ func (m *Model) routeWatchEvent(msg watch.EventMsg) tea.Cmd {
 		// re-apply live, diagnostics toast via the normal path. No VCS
 		// refresh: .ike is not part of the working tree view.
 		return configcmd.Reload(m.cfgOpts)
+	}
+	if msg.Kind == watch.BaselineChanged {
+		// The complexity baseline changed on disk (#2958): a checkout, a
+		// hand edit, IKE's own save — re-read and re-apply it. Like the
+		// settings file, no VCS refresh.
+		m.reloadComplexityBaseline()
+		return nil
 	}
 	if msg.Kind == watch.GitChanged {
 		// Repository metadata changed under .git (#738): an external commit,

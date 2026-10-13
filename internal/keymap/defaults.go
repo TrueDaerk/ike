@@ -790,6 +790,10 @@ var jetbrainsRows = []row{
 	// …and m ("marks") paints the selected function's sites in the editor
 	// once, whatever editor.marks.complexity_sites says (#2947).
 	{"m", "complexity.showSites", "Mark complexity sites in the editor", Complexity, "Complexity site marks (#2947)"},
+	// …and i ("ignore", as a linter's baseline does) accepts the selected
+	// function or group into the accepted-debt baseline, or drops it
+	// (#2958); the bulk accept is palette-only.
+	{"i", "complexity.baseline", "Accept / drop in the complexity baseline", Complexity, "Complexity baseline (#2958)"},
 	// Rerun and Stop (#1048, #1374): JetBrains' macOS Rerun (cmd+r) is taken by
 	// editor.replace, so rerun keeps the Windows-scheme F5 position with a cmd
 	// primary on darwin; stop's cmd+f2 is the macOS keymap verbatim. The ctrl

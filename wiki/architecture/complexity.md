@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Code Complexity
-description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters, nesting depth and comment density (#2934) per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary with its per-class and per-file groups (#2937), the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source, the hotspot columns (#2957) multiplying complexity by the commits per file from one git log, and the headless `ike complexity` CLI (#2922) printing the table of the project or of named files and directories (#2936), per function or summed per class or file (#2937), or the diff against a revision as text or JSON for CI and agents, also as a complexity-only build of the ike binary (#2939, build tag ike_complexity_only, make install-complexity) that links no IDE; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
-resource: internal/complexity, internal/complexitypanel, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_churn.go, internal/vcs/vcscore/churn.go, internal/app/complexity_problems.go, internal/app/complexity_segment.go, internal/complexitycli, cmd/ike/complexityonly.go
-tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive, index, settings, telemetry, vcs, diff, problems, cli]
-timestamp: 2026-10-13T23:59:30Z
+description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters, nesting depth and comment density (#2934) per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary with its per-class and per-file groups (#2937), the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source, the hotspot columns (#2957) multiplying complexity by the commits per file from one git log, the accepted-debt baseline (#2958, a committed .ike/complexity-baseline.json that turns every surface into a ratchet flagging only new and worsened functions), and the headless `ike complexity` CLI (#2922) printing the table of the project or of named files and directories (#2936), per function or summed per class or file (#2937), or the diff against a revision as text or JSON for CI and agents, also as a complexity-only build of the ike binary (#2939, build tag ike_complexity_only, make install-complexity) that links no IDE; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
+resource: internal/complexity, internal/complexitypanel, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_churn.go, internal/app/complexity_baseline.go, internal/vcs/vcscore/churn.go, internal/app/complexity_problems.go, internal/app/complexity_segment.go, internal/complexitycli, cmd/ike/complexityonly.go
+tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive, index, settings, telemetry, vcs, diff, problems, cli, baseline]
+timestamp: 2026-10-14T00:30:00Z
 ---
 
 # Code Complexity
@@ -371,7 +371,8 @@ in `Update`.
 and the tab's `Summary` over its whole population: the index generation (or
 `scanning…` while the walk runs), functions, NLOC, sum / average / max CCN
 and cognitive complexity, the aggregate comment density (`cmt 12%`), the
-count over threshold and `excess N` (#2945). The grid
+count over threshold, `excess N` (#2945) and, with a baseline in effect,
+`N accepted` (#2958, [below](#baseline-2958)). The grid
 (`gridview.HeaderRow` / `DataRow`, widths from the longest visible value,
 the file column capped at half the pane) has the columns file
 (project-relative; hidden on the File tab), function, line (1-based), ccn,
@@ -382,8 +383,9 @@ descending; a numeric column starts descending, a text column ascending),
 CCN, cognitive or `cmt%` cell at or above `complexity.ccn_warn` /
 `complexity.cognitive_warn` / `complexity.comment_density_warn` (unless 0)
 renders in the palette's warning colour
-(`gridview.Cell.Warn`). The status row shows `filtered/total rows` and the
-key hints.
+(`gridview.Cell.Warn`); on a function the baseline accepts the same cells
+render muted instead (`gridview.Cell.Muted`) and the name carries ` ✓`.
+The status row shows `filtered/total rows` and the key hints.
 
 **Filter.** The filter row is the shared `filterbar` over a `filterexpr`
 schema (`/`, the find chord `cmd+f` / `ctrl+f`; `cmd+g` / `cmd+shift+g`
@@ -402,6 +404,9 @@ same column (`min:15 max:30` is the closed range); `kind:function|method|lambda`
 matches `Function.Kind` exactly (case-insensitive; an unknown kind matches
 nothing), `class:` is a substring of `Function.Class`, and `depth:`,
 `params:`, `nloc:` keep rows at or above n on that attribute (#2952).
+`baseline:new|accepted|worsened` (#2958) keeps functions of that status
+against the accepted-debt baseline — on a group row, groups with such a
+member (`Summary.Accepted` / `Worsened` / the remaining over count).
 
 **Hide tests (#2950).** `t` — the `complexity.toggleTests` command, bound to
 `t` in the `complexity` keymap context and in the palette as "Complexity:
@@ -546,6 +551,135 @@ the same two columns land on directory and file nodes once it exists.
 **Setting.** `complexity.churn_days` (Settings > Complexity, Int 1-3650,
 default 90) is the window; a change applies live through the key.
 
+## Baseline (#2958)
+
+IKE has over a thousand functions above the thresholds. Without a record
+of what is *accepted*, the Problems feed lists all of them, the panel's
+`over` count and warning colour never change, and a CI policy over
+`ike complexity --json` cannot tell old debt from a new offender. Linters
+solve this with a baseline (`golangci-lint --new-from-rev`, Sonar's "new
+code" focus): record what exists, flag only what is new or got worse. The
+baseline turns every surface into a **ratchet**.
+
+**Format.** `.ike/complexity-baseline.json`, project data beside
+`.ike/settings.toml` and meant to be committed (not the state store —
+`bookmarks.File()` is the other pattern), written and read by
+`complexity.Baseline` (`internal/complexity/baseline.go`, pure: `Load`,
+`Save`, no root, no setting):
+
+```json
+{"version": 1, "ccn_warn": 15, "cognitive_warn": 15, "accepted": [
+  {"file": "internal/config/validate.go", "function": "validate", "ordinal": 0, "ccn": 170, "cognitive": 222}
+]}
+```
+
+One `Entry` per accepted function: the project-relative slash path, the
+`Function.Name`, the **ordinal** among the file's same-named units in
+source order (`complexity.Ordinals` — the pairing rule of `PairUnits` /
+`DiffFunctions`, so a function that moves inside its file keeps its entry
+and an overload or `(anonymous)#n` lines up by position) and the metrics at
+acceptance. `Save` sorts by file, function, ordinal and indents, so the
+committed diff is stable; `LoadBaseline` returns `(nil, nil)` for a missing
+file and an error naming the file for bad JSON, an unknown `version` or an
+entry without a file / function / non-negative ordinal. The thresholds in
+the file are informational (the ones the entries were accepted under),
+never applied. A lookup index (`map[EntryKey]int`) is built on first use
+and dropped by every mutation.
+
+**Semantics.** `Classify(file, fn, ordinal)` is the one rule every
+surface shares: **accepted** when an entry matches `(file, function,
+ordinal)` and neither CCN nor cognitive exceeds the recorded value,
+**worsened** when an entry matches and a metric grew, **new** otherwise
+(no entry, wrong ordinal, renamed); a nil baseline classifies everything
+new, so a surface with the baseline off runs the same code. `Stamp(file,
+fns)` writes the status into `Function.Baseline` (`json:"-"` — a
+classification, not a measurement), and `Summarize` reads it: an accepted
+unit over a CCN / cognitive threshold is not in `OverThreshold` and adds
+nothing to `Excess`; it is counted in `Summary.Accepted` instead, a
+worsened one in `Summary.Worsened` and in `OverThreshold`. The comment
+density check is not part of the baseline. `Summary.BaselineStatus` folds
+a population (a group row, a JSON group): worsened if any unit worsened,
+new if any over-threshold unit is not accepted, accepted if every one is,
+nothing when nothing is over or accepted. `Function.Over(ccn, cog)` is
+the shared "at or above a threshold" test.
+
+**App.** `internal/app/complexity_baseline.go` holds
+`complexityBaselineState` (shared by pointer like `cxDiff`): the file is
+read once in `buildModel` and again on every `watch.BaselineChanged`
+(`routeWatchEvent` → `reloadComplexityBaseline`) — the watcher classifies
+`<root>/.ike/complexity-baseline.json` like `settings.toml`, so a `git
+checkout`, a hand edit, a removal and IKE's own save all re-apply (a
+re-read of the same content is harmless). `complexityBaseline()` is the
+one gate: nil while `complexity.baseline` is off or the file is missing or
+malformed. `applyComplexityBaseline` hands it to an open panel
+(`SetBaseline`) and republishes the Problems feed; it runs on load, on
+every file change, after a toggle and from `reconfigureComplexityIndex`
+when the setting flips. A malformed file is reported **once**
+(`reportComplexityBaseline`, from the next `ComplexityChangedMsg` or
+apply, since `buildModel` cannot toast) and ignored; a later valid load
+resets the flag.
+
+**Panel** (`internal/complexitypanel/baseline.go`). `population` classifies
+each file's units (`classify`: the rows copy every `Function`, so the
+snapshot's slices stay untouched) and records `Row.Ordinal`; a group row
+keeps its `Members` (the function rows it aggregates). The header gains
+`N accepted`, the footer hint `i accept`. `i` (`complexity.baseline`, bound
+in the `complexity` context; "Complexity: Accept / Drop Selected in
+Baseline" in the palette) is `ToggleBaseline`: a function row (or a site
+row, standing for its function) yields `BaselineToggleMsg{Items, Remove}`
+— an accepted function is dropped, a new or worsened one recorded at its
+current metrics (a worsened function re-accepted records the new ones); a
+group row records every over-threshold member not yet accepted or, when
+all of them already are, drops them all. The Changes tab, a function under
+the thresholds and a group without an over-threshold member yield nothing
+(the app says so). The app's `handleComplexityBaselineToggle` mutates the
+state's baseline (created from the current thresholds when there is none),
+saves the file (`saveComplexityBaseline`: a failed write keeps the
+in-memory change and reports the error) and re-applies.
+
+**Accept all.** `complexity.baselineAll` ("Complexity: Accept All Over
+Threshold", keybind-less — `reasonOccasional` in the ledger) counts the
+snapshot's over-threshold functions (`overThresholdFunctions`, keyed the
+baseline's way) and raises a centered confirmation dialog in the floating
+shell, like the forge event dialog (the "prominent actions" convention):
+`enter` / `y` writes a **fresh** baseline of exactly those functions — the
+file `ike complexity --write-baseline` produces — `esc` / `n` cancels.
+With the setting off, another dialog open or nothing over threshold it
+notifies instead.
+
+**CLI.** `--baseline[=PATH]` reads a file (the project file is the default
+when it exists, so a bare report already applies it; a bare `--baseline`
+asks for the project file and fails when it is missing; `--baseline=PATH`
+names another, relative to the working directory), `--no-baseline` reads
+none, `--write-baseline` writes every over-threshold function of the
+report (paths and `--no-tests` respected, row filters not) into the file
+and prints `baseline: N functions over threshold (CCN ≥ 15 or cog ≥ 15)
+written to .ike/complexity-baseline.json` instead of the report. A
+malformed file is exit 2; `--baseline` with `--no-baseline`,
+`--write-baseline` with `--diff` or `--no-baseline` are usage errors. With
+a baseline in effect the units are stamped before the CCN sort (the
+baseline keys on source order), the text table marks accepted rows
+`name ✓`, the summary line is followed by `baseline: N accepted, N
+worsened (<file>)`, and the JSON gains `baseline: "accepted" | "worsened"
+| "new"` on every function, the folded status on every group (absent on a
+group with nothing over threshold) and `accepted` on the summary
+(`over_threshold` counts only new + worsened). `--diff` is unaffected: it
+compares revisions, not debt.
+
+**Setting.** `complexity.baseline` (Settings > Complexity, Bool, default
+`true`): off hands every surface nil, on re-applies the loaded file —
+live, through `reconfigureComplexityIndex`.
+
+**Tests.** `complexity/baseline_test.go` (round trip and order, malformed
+files, the classification table, `Ordinals` / `Stamp` / `Summarize`),
+`complexitypanel/baseline_test.go` (statuses, muted ✓ rendering, totals and
+group rows, the filter key, `i` on function / site / group rows),
+`complexitycli/baseline_test.go` (`--write-baseline`, the default file,
+the flags, JSON and text, the malformed file), `app/complexity_baseline_test.go`
+(Problems and panel, the setting, the watcher route, a malformed file
+reported once, `i`, the dialog), `watch/watch_test.go`
+(`TestBaselineFileEvents`).
+
 ## Changes vs HEAD (#2918)
 
 The third tab, **Changes**, answers the epic's question: it measures the
@@ -642,11 +776,15 @@ state, not a setting.
 ## Problems feed (#2920)
 
 `internal/app/complexity_problems.go` publishes every over-threshold
-function into the [Problems tool window](./problems.md) through the store's
+function — every *new or worsened* one once a baseline is in effect
+(#2958, [below](#baseline-2958): the builder takes the
+`complexity.Baseline` and the index root, classifies each file's units by
+`Classify` and skips the accepted ones; a worsened row ends in
+`(worse than the baseline)`) — into the [Problems tool window](./problems.md) through the store's
 task-source channel (`Store.SetTaskSource("complexity", byPath)`), the same
 seam the dependency scanner uses. On every `ComplexityChangedMsg` and every
 config reload `feedComplexityProblems` reads the index snapshot and the
-pure builder `complexityDiagnostics(view, ccnWarn, cogWarn, cmtWarn)` emits one
+pure builder `complexityDiagnostics(view, ccnWarn, cogWarn, cmtWarn, baseline, root)` emits one
 warning per function at or above a threshold, anchored at its header line:
 `function <name>: CCN 40 ≥ 15`, `function <name>: cognitive 25 ≥ 15`, or
 both joined by a comma when both are over; `Source` is `complexity`,
@@ -798,7 +936,7 @@ the request, so with both modes `off` the edit clears the marks at once.
 
 ## Headless CLI (#2922)
 
-`ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [PATH...]`
+`ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [PATH...]`
 is the terminal-free report for CI pipelines and coding agents. The grammar
 lives in `internal/cli` (`ComplexityArgs`, first argument only like
 `agent-hook`, so a file named `complexity` still opens as `./complexity`);
@@ -872,6 +1010,12 @@ group and `summary.churn_days`. Outside a repository it exits 2 with
 `--churn needs a git repository: <root> is not inside one`; with `--diff` it
 is a usage error (`--churn is not supported with --diff`). Without the flag
 the output is unchanged byte for byte.
+
+**Baseline (#2958).** `--baseline[=PATH]` / `--no-baseline` /
+`--write-baseline` (`ComplexityArgs.Baseline`, `BaselinePath`,
+`NoBaseline`, `WriteBaseline`; the path only after `=`) apply or seed the
+accepted-debt file — see [Baseline](#baseline-2958) for the flags, the
+`✓` rows, the `baseline:` line and the JSON fields.
 
 **Brief (#2938).** `--brief` (one line per file) and `--brief=class` (one
 line per class) are a second text renderer over the same groups
@@ -1013,6 +1157,7 @@ scope), validated in the form and by `config.Validate`:
 | `complexity.problems` | `true` | Publish over-threshold functions into Problems. |
 | `complexity.status_segment` | `false` | Show the `Δcx` status segment. |
 | `complexity.churn_days` | `90` | Hotspot window in days (1-3650): the commits the `commits` / `hot` columns count; `--churn`'s default. |
+| `complexity.baseline` | `true` | Apply `.ike/complexity-baseline.json` (#2958): accepted functions leave the over counts, Problems and the warning colour; off ignores the file everywhere. |
 
 ## Limitations
 
@@ -1034,7 +1179,12 @@ scope), validated in the form and by `config.Validate`:
   `//` or `#` reads as a comment line.
 - **NLOC includes nested units** (lizard subtracts them), and the
   cross-check deviations per language are recorded in `golden_test.go`.
-- No trend history, no enforcement: IKE reports, policy belongs to CI.
+- **The baseline keys on name and ordinal.** A renamed function, or a
+  same-named unit inserted above an accepted one, reads as new (and the
+  one below it as a different ordinal) until re-accepted — the same
+  positional rule as the diff.
+- No trend history, no enforcement: IKE reports, policy belongs to CI (the
+  baseline is the ratchet CI reads, not an enforcement of its own).
 
 ## Extending
 

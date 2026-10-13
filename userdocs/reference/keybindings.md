@@ -447,6 +447,7 @@ Active when the Complexity tool window has focus.
 
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|
+| Accept / drop in the complexity baseline | `i` | `i` | `complexity.baseline` |
 | Cycle complexity grouping (none/class/file) | `b` | `b` | `complexity.group` |
 | Expand / collapse complexity sites | `space` | `space` | `complexity.sites` |
 | Mark complexity sites in the editor | `m` | `m` | `complexity.showSites` |
