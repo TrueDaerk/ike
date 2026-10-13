@@ -34,6 +34,10 @@
 //     counts: a doc comment above the header (Go doc comment, PHPDoc, JSDoc)
 //     lies outside the range, and a Python docstring is a string statement,
 //     not a comment, so neither raises the density.
+//   - Sites (#2946) record every increment above with its position, kind,
+//     CCN, cognitive cost, nesting penalty and level, so a unit's totals
+//     are the sum of its sites and the tool window can say which `if`,
+//     `switch` or `&&` chain costs what.
 package complexity
 
 import (
@@ -72,6 +76,38 @@ type Function struct {
 	// (0.55), 0 when the unit has neither.
 	CommentLines   int     `json:"commentLines"`
 	CommentDensity float64 `json:"commentDensity"`
+	// Sites are the unit's increments in source order (#2946): one per
+	// branch, selector, arm, else, boolean run, jump and recursive call, so
+	// 1 + Σ Sites.CCN == CCN and Σ Sites.Cognitive == Cognitive. A nested
+	// unit's own structures are its own sites; the enclosing unit, whose
+	// cognitive total includes them at its nesting (Sonar), records them
+	// too, CCN-less.
+	Sites []Site `json:"sites,omitempty"`
+}
+
+// Site is one increment of a unit's CCN or cognitive complexity (#2946):
+// where it sits, what it is and what it costs.
+type Site struct {
+	// Line / Col are the 0-based position of the node's first token (a
+	// boolean run: its first operator); EndLine the node's last line.
+	Line    int `json:"line"`
+	Col     int `json:"col"`
+	EndLine int `json:"endLine"`
+	// Kind is the node kind as the language spells it — "if", "else if",
+	// "elif", "else", "for", "switch", "case", "catch", "goto", "?:" for a
+	// conditional expression — a boolean run's operator ("&&", "and") or
+	// "recursion".
+	Kind string `json:"kind"`
+	// CCN is the cyclomatic increment: 1 for a branch or an arm, the
+	// operator count of a boolean run, 0 otherwise (and always 0 in the
+	// enclosing unit's copy of a nested unit's site).
+	CCN int `json:"ccn"`
+	// Cognitive is the whole cognitive increment; Nesting the part of it
+	// that is the nesting penalty (0 for a flat increment); Level the
+	// nesting level the site sits at.
+	Cognitive int `json:"cognitive"`
+	Nesting   int `json:"nesting"`
+	Level     int `json:"level"`
 }
 
 // DensityPercent is d rounded to a whole percent — the unit the UI, the CLI

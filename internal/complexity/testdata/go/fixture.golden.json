@@ -13,7 +13,59 @@
       "cognitive": 6,
       "depth": 2,
       "commentLines": 2,
-      "commentDensity": 0.125
+      "commentDensity": 0.125,
+      "sites": [
+        {
+          "line": 17,
+          "col": 1,
+          "endLine": 29,
+          "kind": "if",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 19,
+          "col": 8,
+          "endLine": 29,
+          "kind": "else if",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 21,
+          "col": 8,
+          "endLine": 29,
+          "kind": "else if",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 23,
+          "col": 8,
+          "endLine": 29,
+          "kind": "else",
+          "ccn": 0,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 26,
+          "col": 2,
+          "endLine": 28,
+          "kind": "if",
+          "ccn": 1,
+          "cognitive": 2,
+          "nesting": 1,
+          "level": 1
+        }
+      ]
     },
     {
       "name": "switchArms",
@@ -27,7 +79,59 @@
       "cognitive": 5,
       "depth": 2,
       "commentLines": 0,
-      "commentDensity": 0
+      "commentDensity": 0,
+      "sites": [
+        {
+          "line": 36,
+          "col": 1,
+          "endLine": 47,
+          "kind": "switch",
+          "ccn": 0,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 37,
+          "col": 1,
+          "endLine": 41,
+          "kind": "case",
+          "ccn": 1,
+          "cognitive": 0,
+          "nesting": 0,
+          "level": 1
+        },
+        {
+          "line": 38,
+          "col": 2,
+          "endLine": 40,
+          "kind": "if",
+          "ccn": 1,
+          "cognitive": 2,
+          "nesting": 1,
+          "level": 1
+        },
+        {
+          "line": 41,
+          "col": 1,
+          "endLine": 43,
+          "kind": "case",
+          "ccn": 1,
+          "cognitive": 0,
+          "nesting": 0,
+          "level": 1
+        },
+        {
+          "line": 44,
+          "col": 2,
+          "endLine": 46,
+          "kind": "if",
+          "ccn": 1,
+          "cognitive": 2,
+          "nesting": 1,
+          "level": 1
+        }
+      ]
     },
     {
       "name": "typeSwitchAndSelect",
@@ -41,7 +145,59 @@
       "cognitive": 2,
       "depth": 1,
       "commentLines": 0,
-      "commentDensity": 0
+      "commentDensity": 0,
+      "sites": [
+        {
+          "line": 53,
+          "col": 1,
+          "endLine": 58,
+          "kind": "switch",
+          "ccn": 0,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 54,
+          "col": 1,
+          "endLine": 56,
+          "kind": "case",
+          "ccn": 1,
+          "cognitive": 0,
+          "nesting": 0,
+          "level": 1
+        },
+        {
+          "line": 56,
+          "col": 1,
+          "endLine": 58,
+          "kind": "case",
+          "ccn": 1,
+          "cognitive": 0,
+          "nesting": 0,
+          "level": 1
+        },
+        {
+          "line": 59,
+          "col": 1,
+          "endLine": 64,
+          "kind": "select",
+          "ccn": 0,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 60,
+          "col": 1,
+          "endLine": 62,
+          "kind": "case",
+          "ccn": 1,
+          "cognitive": 0,
+          "nesting": 0,
+          "level": 1
+        }
+      ]
     },
     {
       "name": "nestedLoops",
@@ -55,7 +211,69 @@
       "cognitive": 15,
       "depth": 4,
       "commentLines": 0,
-      "commentDensity": 0
+      "commentDensity": 0,
+      "sites": [
+        {
+          "line": 72,
+          "col": 1,
+          "endLine": 84,
+          "kind": "for",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 73,
+          "col": 2,
+          "endLine": 83,
+          "kind": "for",
+          "ccn": 1,
+          "cognitive": 2,
+          "nesting": 1,
+          "level": 1
+        },
+        {
+          "line": 74,
+          "col": 3,
+          "endLine": 82,
+          "kind": "for",
+          "ccn": 1,
+          "cognitive": 3,
+          "nesting": 2,
+          "level": 2
+        },
+        {
+          "line": 75,
+          "col": 4,
+          "endLine": 77,
+          "kind": "if",
+          "ccn": 1,
+          "cognitive": 4,
+          "nesting": 3,
+          "level": 3
+        },
+        {
+          "line": 76,
+          "col": 5,
+          "endLine": 76,
+          "kind": "continue",
+          "ccn": 0,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 4
+        },
+        {
+          "line": 78,
+          "col": 4,
+          "endLine": 80,
+          "kind": "if",
+          "ccn": 1,
+          "cognitive": 4,
+          "nesting": 3,
+          "level": 3
+        }
+      ]
     },
     {
       "name": "Server.Handle",
@@ -69,7 +287,29 @@
       "cognitive": 3,
       "depth": 2,
       "commentLines": 0,
-      "commentDensity": 0
+      "commentDensity": 0,
+      "sites": [
+        {
+          "line": 92,
+          "col": 2,
+          "endLine": 94,
+          "kind": "if",
+          "ccn": 0,
+          "cognitive": 2,
+          "nesting": 1,
+          "level": 1
+        },
+        {
+          "line": 96,
+          "col": 1,
+          "endLine": 98,
+          "kind": "if",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        }
+      ]
     },
     {
       "name": "(anonymous)#1",
@@ -83,7 +323,19 @@
       "cognitive": 1,
       "depth": 1,
       "commentLines": 0,
-      "commentDensity": 0
+      "commentDensity": 0,
+      "sites": [
+        {
+          "line": 92,
+          "col": 2,
+          "endLine": 94,
+          "kind": "if",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        }
+      ]
     },
     {
       "name": "booleanSequences",
@@ -97,7 +349,129 @@
       "cognitive": 12,
       "depth": 1,
       "commentLines": 0,
-      "commentDensity": 0
+      "commentDensity": 0,
+      "sites": [
+        {
+          "line": 106,
+          "col": 1,
+          "endLine": 108,
+          "kind": "if",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 106,
+          "col": 6,
+          "endLine": 106,
+          "kind": "\u0026\u0026",
+          "ccn": 2,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 109,
+          "col": 1,
+          "endLine": 111,
+          "kind": "if",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 109,
+          "col": 6,
+          "endLine": 109,
+          "kind": "\u0026\u0026",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 109,
+          "col": 11,
+          "endLine": 109,
+          "kind": "||",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 112,
+          "col": 1,
+          "endLine": 114,
+          "kind": "if",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 112,
+          "col": 6,
+          "endLine": 112,
+          "kind": "\u0026\u0026",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 112,
+          "col": 12,
+          "endLine": 112,
+          "kind": "||",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 112,
+          "col": 18,
+          "endLine": 112,
+          "kind": "\u0026\u0026",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 115,
+          "col": 1,
+          "endLine": 117,
+          "kind": "if",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 115,
+          "col": 6,
+          "endLine": 115,
+          "kind": "||",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 115,
+          "col": 11,
+          "endLine": 115,
+          "kind": "\u0026\u0026",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        }
+      ]
     },
     {
       "name": "nestedClosures",
@@ -111,7 +485,29 @@
       "cognitive": 5,
       "depth": 3,
       "commentLines": 0,
-      "commentDensity": 0
+      "commentDensity": 0,
+      "sites": [
+        {
+          "line": 127,
+          "col": 3,
+          "endLine": 129,
+          "kind": "if",
+          "ccn": 0,
+          "cognitive": 3,
+          "nesting": 2,
+          "level": 2
+        },
+        {
+          "line": 131,
+          "col": 2,
+          "endLine": 133,
+          "kind": "for",
+          "ccn": 0,
+          "cognitive": 2,
+          "nesting": 1,
+          "level": 1
+        }
+      ]
     },
     {
       "name": "(anonymous)#2",
@@ -125,7 +521,29 @@
       "cognitive": 3,
       "depth": 2,
       "commentLines": 0,
-      "commentDensity": 0
+      "commentDensity": 0,
+      "sites": [
+        {
+          "line": 127,
+          "col": 3,
+          "endLine": 129,
+          "kind": "if",
+          "ccn": 0,
+          "cognitive": 2,
+          "nesting": 1,
+          "level": 1
+        },
+        {
+          "line": 131,
+          "col": 2,
+          "endLine": 133,
+          "kind": "for",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        }
+      ]
     },
     {
       "name": "(anonymous)#3",
@@ -139,7 +557,19 @@
       "cognitive": 1,
       "depth": 1,
       "commentLines": 0,
-      "commentDensity": 0
+      "commentDensity": 0,
+      "sites": [
+        {
+          "line": 127,
+          "col": 3,
+          "endLine": 129,
+          "kind": "if",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        }
+      ]
     },
     {
       "name": "factorial",
@@ -153,7 +583,29 @@
       "cognitive": 2,
       "depth": 1,
       "commentLines": 0,
-      "commentDensity": 0
+      "commentDensity": 0,
+      "sites": [
+        {
+          "line": 140,
+          "col": 1,
+          "endLine": 142,
+          "kind": "if",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 143,
+          "col": 12,
+          "endLine": 143,
+          "kind": "recursion",
+          "ccn": 0,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        }
+      ]
     },
     {
       "name": "labelledJumps",
@@ -167,7 +619,69 @@
       "cognitive": 7,
       "depth": 2,
       "commentLines": 0,
-      "commentDensity": 0
+      "commentDensity": 0,
+      "sites": [
+        {
+          "line": 150,
+          "col": 1,
+          "endLine": 155,
+          "kind": "for",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 151,
+          "col": 2,
+          "endLine": 153,
+          "kind": "if",
+          "ccn": 1,
+          "cognitive": 2,
+          "nesting": 1,
+          "level": 1
+        },
+        {
+          "line": 152,
+          "col": 3,
+          "endLine": 152,
+          "kind": "break",
+          "ccn": 0,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 2
+        },
+        {
+          "line": 156,
+          "col": 1,
+          "endLine": 158,
+          "kind": "if",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        },
+        {
+          "line": 157,
+          "col": 2,
+          "endLine": 157,
+          "kind": "goto",
+          "ccn": 0,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 1
+        },
+        {
+          "line": 159,
+          "col": 1,
+          "endLine": 161,
+          "kind": "for",
+          "ccn": 1,
+          "cognitive": 1,
+          "nesting": 0,
+          "level": 0
+        }
+      ]
     },
     {
       "name": "plain",

@@ -9,7 +9,8 @@
 // grouped with 'b' (#2937, group.go), one aggregate row per class or file;
 // 's' cycles the sort column, 'S' reverses it, the filter row (internal/filterbar over internal/filterexpr)
 // narrows by file:, lang:, fn:, min:, metric: and test:, and bare words fuzzy
-// over the function names; 't' hides the test files on every tab (#2950).
+// over the function names; 't' hides the test files on every tab (#2950);
+// 'space' expands a function into its complexity sites (#2946, sites.go).
 //
 // The pane is a pure consumer: the root model hands it the index's immutable
 // View via Set on open and on every generation change, and tells it where
@@ -183,6 +184,11 @@ type Row struct {
 	// Group is set on a group row (#2937): the class or file aggregate the
 	// row stands for. Fn is then zero; Path / Rel / Lang name the file.
 	Group *complexity.Group
+	// Site is set on a site row (#2946, sites.go): one increment of the
+	// expanded function, whose row sits at index Parent in the rows; Fn,
+	// Path, Rel, Lang and Change are the parent's.
+	Site   *complexity.Site
+	Parent int
 }
 
 // value is the row's sort key on column c: a number for the metric
@@ -191,6 +197,17 @@ type Row struct {
 func (r Row) value(c Column) (float64, string) {
 	if r.Group != nil {
 		return r.groupValue(c)
+	}
+	if r.Site != nil {
+		switch c {
+		case ColLine:
+			return float64(r.Site.Line), ""
+		case ColCCN:
+			return float64(r.Site.CCN), ""
+		case ColCog:
+			return float64(r.Site.Cognitive), ""
+		}
+		return 0, r.siteCell(c)
 	}
 	n, s := r.intValue(c)
 	return float64(n), s
@@ -246,6 +263,9 @@ func abs(n int) int {
 func (r Row) cell(c Column) string {
 	if r.Group != nil {
 		return r.groupCell(c)
+	}
+	if r.Site != nil {
+		return r.siteCell(c)
 	}
 	switch c {
 	case ColFile:
@@ -342,6 +362,10 @@ type Model struct {
 
 	// hideTests drops the test files from every tab ('t', #2950).
 	hideTests bool
+
+	// expanded is the expandKey of the function row whose sites are shown
+	// ('space', #2946, sites.go); "" when none is.
+	expanded string
 }
 
 // New returns an empty panel on the Project tab sorted by CCN descending;
@@ -579,6 +603,7 @@ func (m *Model) Refresh() {
 		}
 	}
 	m.sortRows()
+	m.spliceSites()
 	m.markCaret()
 	m.widths = m.columnWidths()
 	m.cursor = 0
@@ -743,7 +768,7 @@ func (m *Model) markCaret() {
 	best := -1
 	for i := range m.rows {
 		m.rows[i].Caret = false
-		if m.tab != TabFile || m.rows[i].Group != nil {
+		if m.tab != TabFile || m.rows[i].Group != nil || m.rows[i].Site != nil {
 			continue
 		}
 		fn := m.rows[i].Fn
@@ -904,6 +929,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.CycleGroup()
 	case "t":
 		m.ToggleTests()
+	case "space":
+		m.ToggleSites()
 	case "enter":
 		return m.open()
 	case "e":
@@ -927,6 +954,9 @@ func (m *Model) open() tea.Cmd {
 	r, ok := m.Selected()
 	if !ok {
 		return nil
+	}
+	if r.Site != nil {
+		return m.openSite(r)
 	}
 	msg := OpenLocationMsg{Path: r.Path, Line: r.Fn.Line}
 	switch {
@@ -954,6 +984,9 @@ func (m *Model) copyRow() tea.Cmd {
 func CopyText(r Row) string {
 	if r.Group != nil {
 		return groupCopyText(r)
+	}
+	if r.Site != nil {
+		return siteCopyText(r)
 	}
 	head := r.Rel + ":" + strconv.Itoa(r.Fn.Line+1) + ": " + r.Fn.Name
 	if r.Change != 0 {
@@ -985,6 +1018,9 @@ func (m *Model) CSV() string {
 	var b strings.Builder
 	writeCSVRow(&b, csvHeader)
 	for _, r := range m.rows {
+		if r.Site != nil {
+			continue
+		}
 		c := r.cells(projectLayout)
 		writeCSVRow(&b, []string{c[0], r.Fn.Name, r.Fn.Kind, c[2], c[3], c[4], c[5], c[6], c[7], strconv.Itoa(r.Fn.CommentLines), c[8]})
 	}
@@ -1137,6 +1173,9 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 		}
 		return gridview.DataRow(pal, cells, m.widths, 0, m.width, i == m.cursor, m.focused)
 	}
+	if r.Site != nil {
+		return gridview.DataRow(pal, cells, m.widths, 0, m.width, i == m.cursor, m.focused)
+	}
 	if fi := m.layoutIndex(ColFunc); fi >= 0 && r.Caret {
 		cells[fi].Text = caretMark + cells[fi].Text
 		cells[fi].Match = true
@@ -1164,9 +1203,9 @@ func (m *Model) footer() string {
 	hints := " · tab view · s sort · S reverse · enter open · e export · y copy · r rescan · / filter"
 	switch {
 	case m.tab == TabChanges:
-		hints += " · R base"
+		hints += " · R base · space sites"
 	case m.Grouping() == complexity.ByNone:
-		hints += " · b group"
+		hints += " · b group · space sites"
 	default:
 		hints += " · b group: " + m.Grouping().String()
 	}

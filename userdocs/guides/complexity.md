@@ -50,6 +50,28 @@ Closures and lambdas are named `(anonymous)#n`, numbered per file. Languages
 without a syntax grammar (and data formats like JSON or YAML) are not
 measured.
 
+## Why is this function complex?
+
+A row says `renderSpanUncached ccn 139 cog 237` — but which `if`, which
+`switch`, which `&&` chain costs what, and how much of it is the nesting
+penalty? Select the function and press `space`: the row expands into one
+indented line per *site*, every place the numbers came from, most expensive
+first — `if +3 (nesting 2)` is an `if` two levels deep (1 for the `if`, 2
+for the nesting), `else if +1` is flat, `&& +1` a run of boolean operators
+(its `ccn` cell counts the operators), `switch +1` the statement with a
+`case` line per arm (CCN only), `recursion +1` a call of the function by
+itself. The `ccn` and `cog` cells of the site lines add up to the
+function's (plus the 1 every function starts with). `enter` on a site line
+jumps to it, `y` copies `path:line: if +3 (nesting 2)`, `space` again (on
+the function or on any of its sites) folds it back. One function is open
+at a time, and it stays open while the index re-measures the file. The
+nesting penalty is the lever: the sites with the largest `(nesting n)` are
+the blocks whose extraction into a helper saves the most. A closure's own
+`if`s are listed under the closure; the enclosing function lists them too,
+at its own depth, because Sonar counts a lambda's structure as part of the
+method it sits in. On the command line, `ike complexity --sites --json`
+prints the same breakdown.
+
 ## Per class and per file
 
 Press `b` in the Complexity window (or run *Complexity: Cycle Grouping*) to
@@ -105,7 +127,7 @@ current text. A renamed function appears as one removed and one added row.
 ## Command line
 
 ```
-ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [PATH...]
+ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [PATH...]
 ```
 
 | Flag | Effect |
@@ -120,6 +142,7 @@ ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--mi
 | `--ccn N`, `--cog N` | Override the warning thresholds; given explicitly they also filter the rows to functions at or above either one. |
 | `--cmt N` | Override the comment-density threshold (percent, 1-100); like `--ccn` / `--cog` it also filters the rows to functions at or above any threshold. |
 | `--no-tests` | Leave test files out (the same rule as `t` in the Complexity window, see [Hiding test files](#hiding-test-files)): the table, the groups, `--brief`, the summary and `--diff` ignore them; a line `tests hidden: N files` follows the summary and the JSON `summary` carries `"tests_hidden": true`. A test file you name explicitly is still measured. |
+| `--sites` | With `--json`: add `sites` to every function (and to the `after` side of every changed function under `--diff`), the per-site breakdown of [Why is this function complex?](#why-is-this-function-complex). The text table does not change; without the flag the JSON is exactly what it was. |
 
 The walk skips the same files as the Complexity window: hidden directories,
 `node_modules`, `vendor`, `dist`, `build`, `target`, virtualenvs, files over
@@ -217,7 +240,12 @@ Project report:
     { "file": "internal/config/validate.go", "name": "validate", "kind": "function",
       "line": 262, "end_line": 1047, "ccn": 168, "cognitive": 220,
       "nloc": 622, "params": 1, "depth": 5,
-      "comment_lines": 101, "comment_density": 0.1397 }
+      "comment_lines": 101, "comment_density": 0.1397,
+      "sites": [
+        { "line": 264, "col": 1, "end_line": 270, "kind": "if", "ccn": 1, "cognitive": 1, "nesting": 0, "level": 0 },
+        { "line": 264, "col": 6, "end_line": 264, "kind": "&&", "ccn": 2, "cognitive": 1, "nesting": 0, "level": 0 },
+        { "line": 266, "col": 2, "end_line": 268, "kind": "switch", "ccn": 0, "cognitive": 2, "nesting": 1, "level": 1 }
+      ] }
   ],
   "skipped": { "files": 192, "languages": ["json", "markdown", "yaml"] }
 }
@@ -230,6 +258,14 @@ body's comment-only lines; `cmt_warn` is the threshold in percent (`0` =
 off). `excess` is the summed mass above the CCN and cognitive thresholds
 (see [Reading the numbers](#reading-the-numbers)). With `--no-tests` every
 summary gains `"tests_hidden": true`; without it the field is absent.
+`sites` appears with `--sites` only: one entry per increment of the
+function's CCN or cognitive complexity — `line` / `end_line` 1-based,
+`col` 0-based, `kind` the construct as the language spells it (`if`,
+`else if`, `elif`, `for`, `switch`, `case`, `catch`, `?:`, a boolean
+operator, `recursion`), `ccn` and `cognitive` the increments, `nesting`
+the part of `cognitive` that is the nesting penalty, `level` the nesting
+level. With `--diff --sites` every `changed` entry's `after` and every
+`added` entry carry it too.
 
 Grouped report (`--by class --json`): `functions` gives way to `groups`,
 one object per row the filter keeps, with the summary's field names; `class`

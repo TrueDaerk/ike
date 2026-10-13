@@ -75,12 +75,40 @@ type jsonFunction struct {
 	// and their share as a ratio (0.55).
 	CommentLines   int     `json:"comment_lines"`
 	CommentDensity float64 `json:"comment_density"`
+	// Sites is the per-site breakdown (#2946), present under --sites only.
+	Sites []jsonSite `json:"sites,omitempty"`
 }
 
-func toJSONFunction(file string, f complexity.Function) jsonFunction {
+// jsonSite is one complexity.Site; line numbers are 1-based, the column
+// 0-based bytes like the engine's.
+type jsonSite struct {
+	Line      int    `json:"line"`
+	Col       int    `json:"col"`
+	EndLine   int    `json:"end_line"`
+	Kind      string `json:"kind"`
+	CCN       int    `json:"ccn"`
+	Cognitive int    `json:"cognitive"`
+	Nesting   int    `json:"nesting"`
+	Level     int    `json:"level"`
+}
+
+// toJSONSites converts f's sites when wanted; nil (omitted) otherwise.
+func toJSONSites(f complexity.Function, wanted bool) []jsonSite {
+	if !wanted || len(f.Sites) == 0 {
+		return nil
+	}
+	out := make([]jsonSite, len(f.Sites))
+	for i, s := range f.Sites {
+		out[i] = jsonSite{Line: s.Line + 1, Col: s.Col, EndLine: s.EndLine + 1, Kind: s.Kind,
+			CCN: s.CCN, Cognitive: s.Cognitive, Nesting: s.Nesting, Level: s.Level}
+	}
+	return out
+}
+
+func toJSONFunction(file string, f complexity.Function, sites bool) jsonFunction {
 	return jsonFunction{File: file, Name: f.Name, Kind: f.Kind, Line: f.Line + 1, EndLine: f.EndLine + 1,
 		CCN: f.CCN, Cognitive: f.Cognitive, NLOC: f.NLOC, Params: f.Params, Depth: f.Depth,
-		CommentLines: f.CommentLines, CommentDensity: ratio(f.CommentDensity)}
+		CommentLines: f.CommentLines, CommentDensity: ratio(f.CommentDensity), Sites: toJSONSites(f, sites)}
 }
 
 // jsonMetrics is one side of a changed function.
@@ -93,11 +121,13 @@ type jsonMetrics struct {
 	// The comment density (#2934), as on jsonFunction.
 	CommentLines   int     `json:"comment_lines"`
 	CommentDensity float64 `json:"comment_density"`
+	// Sites is the after side's breakdown (#2946), under --sites only.
+	Sites []jsonSite `json:"sites,omitempty"`
 }
 
-func toJSONMetrics(f complexity.Function) jsonMetrics {
+func toJSONMetrics(f complexity.Function, sites bool) jsonMetrics {
 	return jsonMetrics{CCN: f.CCN, Cognitive: f.Cognitive, NLOC: f.NLOC, Params: f.Params, Depth: f.Depth,
-		CommentLines: f.CommentLines, CommentDensity: ratio(f.CommentDensity)}
+		CommentLines: f.CommentLines, CommentDensity: ratio(f.CommentDensity), Sites: toJSONSites(f, sites)}
 }
 
 // jsonDelta is after − before.
@@ -202,7 +232,7 @@ func writeProjectJSON(w io.Writer, r projectReport) error {
 		Skipped:   toJSONSkipped(r.skipped),
 	}
 	for _, rw := range r.rows {
-		out.Functions = append(out.Functions, toJSONFunction(rw.file, rw.fn))
+		out.Functions = append(out.Functions, toJSONFunction(rw.file, rw.fn, r.s.args.Sites))
 	}
 	return writeJSON(w, out)
 }
@@ -237,17 +267,17 @@ func writeDiffJSON(w io.Writer, r diffReport) error {
 	for _, c := range changed {
 		out.Changed = append(out.Changed, jsonChange{
 			File: c.file, Name: c.ch.After.Name, Kind: c.ch.After.Kind, Line: c.ch.After.Line + 1,
-			Before: toJSONMetrics(c.ch.Before), After: toJSONMetrics(c.ch.After),
+			Before: toJSONMetrics(c.ch.Before, false), After: toJSONMetrics(c.ch.After, r.s.args.Sites),
 			Delta: jsonDelta{CCN: c.ch.DeltaCCN(), Cognitive: c.ch.DeltaCognitive(), NLOC: c.ch.DeltaNLOC(),
 				Excess:       c.ch.After.Excess(r.s.ccnWarn, r.s.cogWarn) - c.ch.Before.Excess(r.s.ccnWarn, r.s.cogWarn),
 				CommentLines: c.ch.DeltaCommentLines(), CommentDensity: ratio(c.ch.DeltaCommentDensity())},
 		})
 	}
 	for _, rw := range added {
-		out.Added = append(out.Added, toJSONFunction(rw.file, rw.fn))
+		out.Added = append(out.Added, toJSONFunction(rw.file, rw.fn, r.s.args.Sites))
 	}
 	for _, rw := range removed {
-		out.Removed = append(out.Removed, toJSONFunction(rw.file, rw.fn))
+		out.Removed = append(out.Removed, toJSONFunction(rw.file, rw.fn, false))
 	}
 	return writeJSON(w, out)
 }

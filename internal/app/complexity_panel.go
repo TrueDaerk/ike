@@ -95,6 +95,27 @@ func (m *Model) toggleComplexityTests() {
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
+// ComplexitySitesMsg runs complexity.sites (#2946): expand the selected
+// function row of the Complexity window into its complexity sites, or
+// collapse it.
+type ComplexitySitesMsg struct{}
+
+// toggleComplexitySites is the complexity.sites handler: it needs an open
+// panel with a function row selected; a selection with nothing to expand
+// (a group row, a removed function, a function without sites) says so.
+func (m *Model) toggleComplexitySites() {
+	p := m.complexityPanel()
+	if p == nil {
+		m.openComplexityPanel()
+		if p = m.complexityPanel(); p == nil {
+			return
+		}
+	}
+	if !p.ToggleSites() {
+		m.host.Notify(host.Info, "complexity: the selected row has no sites to expand")
+	}
+}
+
 // toggleComplexityPanel is the complexity.toggle state machine, mirroring
 // toggleUsagePanel: no panel → open at the bottom; unfocused → focus it;
 // focused → return focus to the remembered pane.

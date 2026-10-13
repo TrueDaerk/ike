@@ -8577,6 +8577,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toggleComplexityTests()
 		return m, nil
 
+	case ComplexitySitesMsg:
+		// complexity.sites (#2946), space in the pane: expand / collapse the
+		// selected function into its complexity sites.
+		m.toggleComplexitySites()
+		return m, nil
+
 	case complexitypanel.ExportMsg:
 		// 'e' in the Complexity pane (#2917): the current tab as a CSV scratch.
 		return m.handleComplexityExport(msg)

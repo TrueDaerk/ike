@@ -1,5 +1,19 @@
 # Log
 
+## 2026-10-13 (Per-site complexity breakdown, #2946)
+
+- [Code Complexity](/architecture/complexity.md): "Model" gains
+  `Function.Sites` and the `Site` record (position, kind as the language
+  spells it, CCN, cognitive increment, nesting penalty, level; the sum
+  invariant and the nested-unit rule); every rule under "Rules" names the
+  site it records; "Tool window" gains "Breakdown" — `space` /
+  `complexity.sites` expanding a function row into its sites, the splice
+  after sort and filter, the expansion remembered across snapshots, `enter`
+  / `y` on a site row; "Headless CLI" gains "Sites" — `--sites` adding
+  `sites` to the JSON functions and the diff's `after` side.
+- The complexity user guide: new "Why is this function complex?" section,
+  the `--sites` flag row and the `sites` JSON field.
+
 ## 2026-10-13 (Hide test files, #2950)
 
 - [Code Complexity](/architecture/complexity.md): "Tool window" gains the
