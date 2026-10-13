@@ -1,5 +1,16 @@
 # Log
 
+## 2026-10-13 (Live Δ against the base in the header hint, #2949)
+
+- [Code Complexity](/architecture/complexity.md): "Editor surface" gains
+  "Δ against the base" — `complexityHintsFor` joins the Changes diff's base
+  (`Diff.BaseOf`, `complexity.PairUnits`) into `CCN 14 (−6) · cog 24 (−7)` /
+  `(new)`, `ComplexityHint.Deltas` with success / warning tone, the key's
+  `diff` / `diffGen` and the kept measurement that repaints without a second
+  `Measure`; "Changes vs HEAD" and "Status segment" name the third
+  `complexityDiffWanted` condition (an open modified measurable file).
+- The complexity user guide: a paragraph on the hint's Δ.
+
 ## 2026-10-13 (Inline per-site complexity marks, #2947)
 
 - [Code Complexity](/architecture/complexity.md): "Editor surface" gains

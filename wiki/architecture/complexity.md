@@ -538,7 +538,8 @@ edits. The status snapshot's rename records keep their origin
 `tea.Cmd`; see [VCS](./vcs.md).
 
 **App wiring** (`complexity_diff.go`). The diff is **pulled**, not pushed:
-once per settled Update pass, while the Changes tab is on screen, the model
+once per settled Update pass, while the Changes tab is on screen (or
+another consumer wants it, see `complexityDiffWanted` below), the model
 compares the key of the diff the pane shows — `(VCS snapshot generation,
 complexity index generation, base revision)` — with the current one and,
 when they differ, arms a 300 ms debounce tick (once). The snapshot
@@ -620,7 +621,9 @@ diff the Changes tab stores (#2945; until then `DeltaCCN()`), tinted after layou
 warning, success or muted (inlay-hint) colour. It is hidden while the
 setting or `complexity.enabled` is off, outside git and while the diff has
 no changed files. The segment is a pure consumer; `complexityDiffWanted`
-— the Changes tab on screen **or** the segment on — is the seam that keeps
+— the Changes tab on screen, the segment on, **or** (#2949) an open
+editor of a measurable language whose file the VCS snapshot lists as
+changed while the header hints are not `off` — is the seam that keeps
 the debounced diff armed on VCS refreshes and re-measures with the window
 closed, so a save shows up within one refresh. A click toggles the
 Complexity window and selects its Changes tab.
@@ -641,10 +644,11 @@ lenses and inline debugger values, fed per open document and routed like
 **Sync.** `complexityHintsSyncCmd` runs on the settled pass of every
 `Update`, the Structure pane's pattern (#1025): every open document of a
 language with a complexity spec (not excluded, not a degraded large file)
-wants hints for one state key `cxHintKey{version, gen, ccn, cog, cmt, enabled, mode, sites, show}`
+wants hints for one state key `cxHintKey{version, gen, ccn, cog, cmt, enabled, mode, sites, show, diff, diffGen}`
 — the buffer's `DocVersion`, the index generation the hints came from, the
 three warning thresholds, the master switch, the hint and site-mark modes
-and a pending one-shot site request (below). The key last delivered (or
+and a pending one-shot site request (below), and the Changes diff the Δ
+comes from (#2949, below). The key last delivered (or
 launched) per path is remembered in `sent`, the key a debounce is armed for
 in `pending`; a document whose wanted key matches either costs nothing. A
 **clean buffer the index holds** is served on the spot from the snapshot —
@@ -660,7 +664,7 @@ The editor drops a push whose version moved meanwhile; the next settled pass
 re-arms. Closed documents are forgotten so a reopen starts fresh.
 
 **Hints.** `complexityHintsFor(fns, ccnWarn, cogWarn, cmtWarn)` emits one
-`editor.ComplexityHint{Line, Text, Warn}` per function at its header line
+`editor.ComplexityHint{Line, Text, Warn, Deltas}` per function at its header line
 (the first unit on a line wins, so a lambda beside its header does not
 replace it); `Warn` when CCN, cognitive or the comment density reaches its
 threshold, which paints the hint in the warning tone. The density joins the
@@ -679,6 +683,32 @@ TOML decode); an unknown mode falls back to `all` with one. The per-site
 marks' mode (#2947) is a separate setting: the function hint mode decides
 which headers carry `CCN n · cog m`, the site mode which branch sites are
 marked, and neither filters the other.
+
+**Δ against the base (#2949).** While the Changes diff covers a file
+(`Diff.BaseOf(path)`: the base measurement `DiffProject` compared, or nil
+for a file only the head has), `cxMarkPushes` hands that base to
+`complexityHintsFor(…, base, diffed)`. Every function pairs with a base unit
+by `complexity.PairUnits` — `DiffFunctions`' `(Name, ordinal among
+same-named units)` rule, not line numbers, which shift while typing — and
+the CCN and cognitive that moved carry their Δ: `CCN 14 (−6) · cog 24
+(−7)`, `CCN 14 · cog 24 (−7)` when only cognitive moved; an unpaired
+function reads `CCN 9 · cog 11 (new)`; a function whose metrics held, or a
+file outside the diff, shows nothing extra. The Δ is taken against the
+**live** measurement (the dirty buffer's own, the index's for a clean one),
+so it follows typing between diff runs. `editor.ComplexityHint` carries
+`Deltas [2]ComplexityDelta{At, Delta, DeltaWarn}`: each Δ renders after the
+first `At` bytes of `Text` (`Plain()` is the hint as it reads), in the
+success colour for a fall and the warning colour (`DeltaWarn`) for a rise,
+the metrics keeping the hint's own tone. The key's `diff` / `diffGen` are
+the stored result's `cxDiffKey` and a generation `applyComplexityDiff` bumps
+per result, set only for a covered file with the hints not `off`, so a
+landed run repaints exactly its files. No extra `Measure`: an indexed
+buffer is re-served from the snapshot, a dirty one from the last landed
+measurement kept in `measured` (a key that differs from the sent one only
+in `measureKey()` re-joins it; one still in flight joins the diff current
+when it lands). The diff itself is armed for the Δ by the third
+`complexityDiffWanted` condition (see Status segment) within the existing
+300 ms debounce and single in-flight job.
 
 **Site marks (#2947).** The same measurement also feeds a second editor
 store, the Sonar-style per-site marks (`editor.ComplexitySiteMark{Line,
