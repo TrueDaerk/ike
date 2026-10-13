@@ -3,6 +3,7 @@
   "functions": [
     {
       "name": "elseIfChain",
+      "class": "",
       "kind": "function",
       "line": 10,
       "endLine": 24,
@@ -16,6 +17,7 @@
     },
     {
       "name": "switchArms",
+      "class": "",
       "kind": "function",
       "line": 26,
       "endLine": 42,
@@ -29,6 +31,7 @@
     },
     {
       "name": "nestedLoops",
+      "class": "",
       "kind": "function",
       "line": 44,
       "endLine": 66,
@@ -42,6 +45,7 @@
     },
     {
       "name": "tryCatch",
+      "class": "",
       "kind": "function",
       "line": 68,
       "endLine": 79,
@@ -55,6 +59,7 @@
     },
     {
       "name": "ternaries",
+      "class": "",
       "kind": "function",
       "line": 81,
       "endLine": 87,
@@ -68,6 +73,7 @@
     },
     {
       "name": "booleanSequences",
+      "class": "",
       "kind": "function",
       "line": 89,
       "endLine": 103,
@@ -81,6 +87,7 @@
     },
     {
       "name": "nestedClosures",
+      "class": "",
       "kind": "function",
       "line": 105,
       "endLine": 116,
@@ -94,6 +101,7 @@
     },
     {
       "name": "(anonymous)#1",
+      "class": "",
       "kind": "lambda",
       "line": 106,
       "endLine": 115,
@@ -107,6 +115,7 @@
     },
     {
       "name": "(anonymous)#2",
+      "class": "",
       "kind": "lambda",
       "line": 108,
       "endLine": 112,
@@ -120,6 +129,7 @@
     },
     {
       "name": "(anonymous)#3",
+      "class": "",
       "kind": "lambda",
       "line": 113,
       "endLine": 113,
@@ -133,6 +143,7 @@
     },
     {
       "name": "factorial",
+      "class": "",
       "kind": "function",
       "line": 118,
       "endLine": 123,
@@ -146,6 +157,7 @@
     },
     {
       "name": "Server.handle",
+      "class": "Server",
       "kind": "method",
       "line": 126,
       "endLine": 136,
@@ -159,6 +171,7 @@
     },
     {
       "name": "Server.send",
+      "class": "Server",
       "kind": "method",
       "line": 138,
       "endLine": 140,
@@ -172,6 +185,7 @@
     },
     {
       "name": "generator",
+      "class": "",
       "kind": "function",
       "line": 143,
       "endLine": 147,
@@ -185,6 +199,7 @@
     },
     {
       "name": "plain",
+      "class": "",
       "kind": "function",
       "line": 149,
       "endLine": 149,
@@ -198,6 +213,7 @@
     },
     {
       "name": "documented",
+      "class": "",
       "kind": "function",
       "line": 155,
       "endLine": 157,
@@ -211,6 +227,7 @@
     },
     {
       "name": "commentHeavy",
+      "class": "",
       "kind": "function",
       "line": 159,
       "endLine": 167,

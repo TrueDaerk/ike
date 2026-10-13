@@ -58,6 +58,7 @@ const (
 // Function is one measured unit of a buffer.
 type Function struct {
 	Name      string `json:"name"`      // "renderWeek", "Server.handle", "Class::method", "(anonymous)#3"
+	Class     string `json:"class"`     // the qualifier of a method (#2937): "Server"; "" for a free function, a lambda, a nested def
 	Kind      string `json:"kind"`      // KindFunction | KindMethod | KindLambda
 	Line      int    `json:"line"`      // 0-based line of the unit's first token
 	EndLine   int    `json:"endLine"`   // 0-based last line of the unit

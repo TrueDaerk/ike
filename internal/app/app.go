@@ -17,6 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -2371,6 +2372,12 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			continue // restored below as the empty singleton viewer (#1250)
 		} else if ids[key].Kind == "breakpoints" {
 			continue // restored below seeded from the persisted store (#1377)
+		} else if _, ok := pane.ToolWindowKind(ids[key].Kind); ok {
+			// Every other singleton tool window — deps, time, usage, the
+			// agent trace, complexity — restores in the one tool-window
+			// branch below (#2736); without this the whole layout fell
+			// back to the default whenever one was open (#2937).
+			continue
 		} else if !isEditorKey(key) && !isTerminalKey(key) && !isContentHostKey(key) {
 			// A terminal- or viewer-shaped key may carry an editor identity:
 			// a converted tab host (#836, #1778) restores as an editor pane
@@ -2508,7 +2515,9 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 			if prunedTerm[key] {
 				continue
 			}
-			m.wireToolWindow(panes.Get(panes.AddToolWindow(kind)))
+			inst := panes.Get(panes.AddToolWindow(kind))
+			m.wireToolWindow(inst)
+			restoreToolWindowMode(inst, ids[key].Mode)
 			continue
 		}
 		if id := ids[key]; id.Kind == "diff" {
@@ -2724,6 +2733,7 @@ func (m *Model) restoreFromLayout(tree layout.Node, ids map[string]paneIdentity,
 				continue
 			}
 			m.wireToolWindow(nested) // the hooks a dedicated restore gives a tool window (#2736)
+			restoreToolWindowMode(nested, ct.Mode)
 			switch kind {
 			case pane.KindMarkdown:
 				if data, err := os.ReadFile(ct.Path); err == nil {
@@ -8556,6 +8566,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// complexity.export (#2917): the pane's 'e' from the palette.
 		return m, m.exportComplexityPanel()
 
+	case ComplexityGroupMsg:
+		// complexity.group (#2937), b in the pane: cycle the tab's grouping.
+		m.cycleComplexityGroup()
+		return m, nil
+
 	case complexitypanel.ExportMsg:
 		// 'e' in the Complexity pane (#2917): the current tab as a CSV scratch.
 		return m.handleComplexityExport(msg)
@@ -10010,6 +10025,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// pattern applied to the panes: the editor answers for its own line
 		// inputs, pane.Instance for the tool panes' (pane.Searchable).
 		if ui.IsNavKey(msg) && m.lineInputFocused() {
+			return m.routeKey(msg)
+		}
+		// A printable key typed into such an input is text (#2937): a
+		// pane-scoped single-letter binding — the Complexity window's b —
+		// must not take the letter from the pane's filter row.
+		if k, ok := keymap.FromKeyMsg(msg); ok && utf8.RuneCountInString(k.Base) == 1 && !k.NonTyping() && !m.keys.Pending() && m.lineInputFocused() {
 			return m.routeKey(msg)
 		}
 		// Keybinding layer (Roadmap 0080): resolve IDE-level chords to registered

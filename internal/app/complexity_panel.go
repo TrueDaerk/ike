@@ -33,6 +33,48 @@ type ComplexityRefreshMsg struct{}
 // palette.
 type ComplexityExportMsg struct{}
 
+// ComplexityGroupMsg runs complexity.group (#2937): cycle the current
+// tab's grouping — none → class → file on Project, none → class on File.
+type ComplexityGroupMsg struct{}
+
+// toolWindowMode is the persisted display mode of a tool window
+// (paneIdentity.Mode): the Complexity window's grouping levels (#2937),
+// "" for every other kind and for an ungrouped window.
+func toolWindowMode(inst *pane.Instance) string {
+	if inst != nil && inst.Kind() == pane.KindComplexity {
+		return inst.Complexity().GroupMode()
+	}
+	return ""
+}
+
+// restoreToolWindowMode puts a saved toolWindowMode back on a restored
+// tool window.
+func restoreToolWindowMode(inst *pane.Instance, mode string) {
+	if inst != nil && inst.Kind() == pane.KindComplexity && mode != "" {
+		inst.Complexity().SetGroupMode(mode)
+	}
+}
+
+// cycleComplexityGroup is the complexity.group handler: an unopened panel
+// is opened first, then the selected tab cycles its grouping; the Changes
+// tab does not group and says so.
+func (m *Model) cycleComplexityGroup() {
+	p := m.complexityPanel()
+	if p == nil {
+		m.openComplexityPanel()
+		if p = m.complexityPanel(); p == nil {
+			return
+		}
+	}
+	if !p.CycleGroup() {
+		m.host.Notify(host.Info, "complexity: the Changes tab does not group")
+		return
+	}
+	// The grouping is layout state: persist it now, so it survives
+	// without a clean quit.
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+}
+
 // toggleComplexityPanel is the complexity.toggle state machine, mirroring
 // toggleUsagePanel: no panel → open at the bottom; unfocused → focus it;
 // focused → return focus to the remembered pane.

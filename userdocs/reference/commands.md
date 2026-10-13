@@ -47,6 +47,7 @@ bring their own.
 | Toggle Bookmark with Mnemonic | `bookmark.toggleMnemonic` | `alt+f3` | — | everywhere |
 | Basic Completion | `completion.trigger` | `ctrl+space` | — | `editor` pane |
 | Complexity: Export Current Tab as CSV | `complexity.export` | — | — | everywhere |
+| Complexity: Cycle Grouping (None / Class / File) | `complexity.group` | `b` | — | everywhere |
 | Complexity: Rescan Project | `complexity.refresh` | — | — | everywhere |
 | Complexity | `complexity.toggle` | `cmd+alt+shift+x` | — | everywhere |
 | Toggle Coverage Marks | `coverage.toggle` | — | — | everywhere |

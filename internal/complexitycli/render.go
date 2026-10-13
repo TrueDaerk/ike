@@ -133,6 +133,40 @@ type jsonProject struct {
 	Skipped   jsonSkipped    `json:"skipped"`
 }
 
+// jsonGroup is one class or file group (#2937): its key and the aggregate
+// under the field names jsonSummary uses.
+type jsonGroup struct {
+	File           string  `json:"file"`
+	Class          string  `json:"class,omitempty"`
+	Functions      int     `json:"functions"`
+	NLOC           int     `json:"nloc"`
+	CCNSum         int     `json:"ccn_sum"`
+	CCNAvg         float64 `json:"ccn_avg"`
+	CCNMax         int     `json:"ccn_max"`
+	CogSum         int     `json:"cog_sum"`
+	CogAvg         float64 `json:"cog_avg"`
+	CogMax         int     `json:"cog_max"`
+	OverThreshold  int     `json:"over_threshold"`
+	CommentLines   int     `json:"comment_lines"`
+	CommentDensity float64 `json:"comment_density"`
+}
+
+func toJSONGroup(g complexity.Group) jsonGroup {
+	s := g.Summary
+	return jsonGroup{File: g.File, Class: g.Class, Functions: s.Functions, NLOC: s.NLOC,
+		CCNSum: s.CCNSum, CCNAvg: round2(s.CCNAvg), CCNMax: s.CCNMax,
+		CogSum: s.CogSum, CogAvg: round2(s.CogAvg), CogMax: s.CogMax,
+		OverThreshold: s.OverThreshold, CommentLines: s.CommentLines, CommentDensity: ratio(s.CommentDensity)}
+}
+
+// jsonGroups is the grouped project report: the functions array gives way
+// to the groups.
+type jsonGroups struct {
+	Summary jsonSummary `json:"summary"`
+	Groups  []jsonGroup `json:"groups"`
+	Skipped jsonSkipped `json:"skipped"`
+}
+
 type jsonDiff struct {
 	Rev     string         `json:"rev"`
 	Sha     string         `json:"sha"`
@@ -160,6 +194,18 @@ func writeProjectJSON(w io.Writer, r projectReport) error {
 	}
 	for _, rw := range r.rows {
 		out.Functions = append(out.Functions, toJSONFunction(rw.file, rw.fn))
+	}
+	return writeJSON(w, out)
+}
+
+func writeGroupsJSON(w io.Writer, r groupReport) error {
+	out := jsonGroups{
+		Summary: toJSONSummary(r.summary, r.files, r.s),
+		Groups:  make([]jsonGroup, 0, len(r.groups)),
+		Skipped: toJSONSkipped(r.skipped),
+	}
+	for _, g := range r.groups {
+		out.Groups = append(out.Groups, toJSONGroup(g))
 	}
 	return writeJSON(w, out)
 }
@@ -209,16 +255,70 @@ func writeProjectText(w io.Writer, r projectReport) {
 			complexity.DensityPercent(f.CommentDensity))
 	}
 	_ = tw.Flush()
-	s := r.summary
-	fmt.Fprintf(w, "\nsummary: %d functions in %d files · ΣCCN %d (avg %.1f, max %d) · Σcog %d (avg %.1f, max %d) · NLOC %d · cmt %d%% · %d over threshold (%s)\n",
-		s.Functions, r.files, s.CCNSum, s.CCNAvg, s.CCNMax, s.CogSum, s.CogAvg, s.CogMax, s.NLOC,
-		complexity.DensityPercent(s.CommentDensity), s.OverThreshold, r.s.thresholdText())
+	r.writeSummaryLine(w)
 	if r.s.filtered() {
-		fmt.Fprintf(w, "shown: %d of %d functions (%s)\n", len(r.rows), s.Functions, r.s.filterText())
+		fmt.Fprintf(w, "shown: %d of %d functions (%s)\n", len(r.rows), r.summary.Functions, r.s.filterText())
 	}
 	if l := r.skipped.line(); l != "" {
 		fmt.Fprintln(w, l)
 	}
+}
+
+// writeSummaryLine prints the blank line and the whole-project summary
+// both project tables end with.
+func (r projectReport) writeSummaryLine(w io.Writer) {
+	s := r.summary
+	fmt.Fprintf(w, "\nsummary: %d functions in %d files · ΣCCN %d (avg %.1f, max %d) · Σcog %d (avg %.1f, max %d) · NLOC %d · cmt %d%% · %d over threshold (%s)\n",
+		s.Functions, r.files, s.CCNSum, s.CCNAvg, s.CCNMax, s.CogSum, s.CogAvg, s.CogMax, s.NLOC,
+		complexity.DensityPercent(s.CommentDensity), s.OverThreshold, r.s.thresholdText())
+}
+
+// writeGroupsText prints the group table (#2937, CCN sum descending), the
+// summary line and the skipped line; the CLASS column only per class.
+func writeGroupsText(w io.Writer, r groupReport) {
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	byClass := r.by == complexity.ByClass
+	if byClass {
+		fmt.Fprint(tw, "FILE\tCLASS\t")
+	} else {
+		fmt.Fprint(tw, "FILE\t")
+	}
+	fmt.Fprintln(tw, "FUNCS\tNLOC\tCCN\tCCN_AVG\tCCN_MAX\tCOG\tCOG_AVG\tCOG_MAX\tCMT%\tOVER")
+	for _, g := range r.groups {
+		if byClass {
+			fmt.Fprintf(tw, "%s\t%s\t", g.File, g.Class)
+		} else {
+			fmt.Fprintf(tw, "%s\t", g.File)
+		}
+		fmt.Fprintf(tw, "%d\t%d\t%d\t%.1f\t%d\t%d\t%.1f\t%d\t%d\t%d\n", g.Functions, g.NLOC,
+			g.CCNSum, g.CCNAvg, g.CCNMax, g.CogSum, g.CogAvg, g.CogMax,
+			complexity.DensityPercent(g.CommentDensity), g.OverThreshold)
+	}
+	_ = tw.Flush()
+	r.writeSummaryLine(w)
+	if r.s.filtered() {
+		noun := "files"
+		if byClass {
+			noun = "classes"
+		}
+		fmt.Fprintf(w, "shown: %d of %d %s (%s)\n", len(r.groups), r.total, noun, r.s.groupFilterText())
+	}
+	if l := r.skipped.line(); l != "" {
+		fmt.Fprintln(w, l)
+	}
+}
+
+// groupFilterText describes the active group filter: the sums for --min,
+// the maxima and the aggregate density for the thresholds.
+func (s settings) groupFilterText() string {
+	if s.args.Min > 0 {
+		return fmt.Sprintf("ΣCCN or Σcog ≥ %d", s.args.Min)
+	}
+	t := fmt.Sprintf("max CCN ≥ %d or max cog ≥ %d", s.ccnWarn, s.cogWarn)
+	if s.cmtWarn > 0 {
+		t += fmt.Sprintf(" or cmt ≥ %d%%", s.cmtWarn)
+	}
+	return t
 }
 
 // filterText describes the active row filter.

@@ -5,6 +5,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -62,6 +63,9 @@ type ComplexityArgs struct {
 	// comment-density threshold in percent (#2934, 1–100), a row filter
 	// like CCN and Cog.
 	Min, CCN, Cog, Cmt int
+	// By switches the project report to group rows (#2937): "class" or
+	// "file"; "" is the function table. Not combinable with Diff.
+	By string
 	// Paths are the files and directories to report on, as typed (#2936;
 	// none = the working directory). A directory is walked with the
 	// index's skip rules and the complexity.exclude globs; a file is
@@ -83,8 +87,12 @@ const agentHookCmd = "agent-hook"
 // argument only like agentHookCmd.
 const complexityCmd = "complexity"
 
+// ErrByWithDiff rejects `--by` together with `--diff` (#2937): the diff
+// report has no group rows yet.
+var ErrByWithDiff = errors.New("--by is not supported with --diff")
+
 // ComplexityUsage is the one-line grammar of `ike complexity`.
-const ComplexityUsage = "usage: ike complexity [--diff[=REV]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [PATH...]"
+const ComplexityUsage = "usage: ike complexity [--diff[=REV]] [--by class|file] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [PATH...]"
 
 // Parse parses the arguments after the program name. Supported forms:
 //
@@ -174,8 +182,9 @@ func Parse(args []string) (Invocation, error) {
 // parseComplexity parses the arguments after `ike complexity`. Numeric
 // flags take their value as `--min N` or `--min=N`; `--diff` takes its
 // revision only in the `--diff=REV` form, so `--diff PATH` keeps PATH as a
-// path. Every other argument is a path, in order (#2936); an unknown flag
-// is an error.
+// path. `--by` takes class or file in either form (#2937) and is an error
+// together with `--diff`. Every other argument is a path, in order (#2936);
+// an unknown flag is an error.
 func parseComplexity(args []string) (ComplexityArgs, error) {
 	var ca ComplexityArgs
 	for i := 0; i < len(args); i++ {
@@ -194,6 +203,18 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 				}
 				ca.Rev = val
 			}
+		case name == "--by":
+			if !hasVal {
+				if i+1 >= len(args) {
+					return ComplexityArgs{}, fmt.Errorf("--by needs class or file")
+				}
+				i++
+				val = args[i]
+			}
+			if val != "class" && val != "file" {
+				return ComplexityArgs{}, fmt.Errorf("--by: %q is not class or file", val)
+			}
+			ca.By = val
 		case name == "--min" || name == "--ccn" || name == "--cog" || name == "--cmt":
 			if !hasVal {
 				if i+1 >= len(args) {
@@ -224,6 +245,9 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 		default:
 			ca.Paths = append(ca.Paths, a)
 		}
+	}
+	if ca.By != "" && ca.Diff {
+		return ComplexityArgs{}, ErrByWithDiff
 	}
 	return ca, nil
 }

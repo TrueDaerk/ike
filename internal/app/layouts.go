@@ -250,7 +250,10 @@ func (st *snapState) leafIdentity(key string) (string, paneIdentity, bool) {
 	case pane.KindAgentTrace:
 		return singleton(pane.AgentTraceKey, "agenttrace")
 	case pane.KindComplexity:
-		return singleton(pane.ComplexityKey, "complexity")
+		// The grouping is display state the layout keeps (#2937).
+		k, id, ok := singleton(pane.ComplexityKey, "complexity")
+		id.Mode = toolWindowMode(inst)
+		return k, id, ok
 	case pane.KindTests:
 		return singleton(pane.TestsKey, "tests")
 	case pane.KindIssues:
@@ -804,6 +807,7 @@ func (m *Model) resolveLeaf(id paneIdentity, st *applyState) (string, bool) {
 		key, ok := singleton(func() string { return m.dedicatedToolWindow(st, kind) })
 		if ok {
 			m.wireToolWindow(reg.Get(key))
+			restoreToolWindowMode(reg.Get(key), id.Mode)
 		}
 		return key, ok
 	}

@@ -69,6 +69,15 @@ func Run(a cli.ComplexityArgs, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stdout, cli.ComplexityUsage)
 		return ExitOK
 	}
+	by, ok := complexity.ParseLevel(a.By)
+	switch {
+	case !ok:
+		fmt.Fprintf(stderr, "ike complexity: --by: %q is not class or file\n", a.By)
+		return ExitError
+	case by != complexity.ByNone && a.Diff:
+		fmt.Fprintln(stderr, "ike complexity:", cli.ErrByWithDiff)
+		return ExitError
+	}
 	if !available() {
 		fmt.Fprintln(stderr, "ike complexity: this build has no syntax trees (built without cgo); use a cgo build of ike")
 		return ExitError
@@ -96,6 +105,18 @@ func Run(a cli.ComplexityArgs, stdout, stderr io.Writer) int {
 		return ExitOK
 	}
 	r := runProject(s)
+	if by != complexity.ByNone {
+		g := groupProject(r, by)
+		if a.JSON {
+			if err := writeGroupsJSON(stdout, g); err != nil {
+				fmt.Fprintln(stderr, "ike complexity:", err)
+				return ExitError
+			}
+		} else {
+			writeGroupsText(stdout, g)
+		}
+		return ExitOK
+	}
 	if a.JSON {
 		if err := writeProjectJSON(stdout, r); err != nil {
 			fmt.Fprintln(stderr, "ike complexity:", err)
@@ -425,6 +446,48 @@ func sortRows(rows []row) {
 		}
 		return a.fn.Line < b.fn.Line
 	})
+}
+
+// --- grouped project report ---
+
+// groupReport is the measured project folded per class or per file (#2937).
+type groupReport struct {
+	projectReport
+	by     complexity.Level
+	total  int                // every group, before the filter
+	groups []complexity.Group // the groups the filter keeps, CCN sum descending
+}
+
+// groupProject folds the project report's functions into the groups of by,
+// keyed by the project-relative path, and applies the group filter.
+func groupProject(r projectReport, by complexity.Level) groupReport {
+	files := map[string][]complexity.Function{}
+	for _, rw := range r.all {
+		files[rw.file] = append(files[rw.file], rw.fn)
+	}
+	s := r.s
+	all := complexity.GroupFunctions(files, by, s.ccnWarn, s.cogWarn, s.cmtWarn)
+	g := groupReport{projectReport: r, by: by, total: len(all)}
+	for _, gr := range all {
+		if s.keepGroup(gr) {
+			g.groups = append(g.groups, gr)
+		}
+	}
+	return g
+}
+
+// keepGroup is keep for a group row: --min N keeps a CCN or cognitive sum
+// ≥ N; an explicit --ccn / --cog / --cmt keeps groups whose max CCN, max
+// cognitive or aggregate comment density is at or above its threshold.
+func (s settings) keepGroup(g complexity.Group) bool {
+	switch {
+	case s.args.Min > 0:
+		return g.CCNSum >= s.args.Min || g.CogSum >= s.args.Min
+	case s.args.CCN > 0 || s.args.Cog > 0 || s.args.Cmt > 0:
+		return g.CCNMax >= s.ccnWarn || g.CogMax >= s.cogWarn ||
+			s.cmtWarn > 0 && complexity.DensityPercent(g.CommentDensity) >= s.cmtWarn
+	}
+	return true
 }
 
 // --- diff report ---

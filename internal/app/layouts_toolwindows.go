@@ -21,7 +21,7 @@ func hostedWindowTabs(inst *pane.Instance) []contentTabIdentity {
 			continue
 		}
 		if name := pane.ToolWindowName(c.Kind()); name != "" {
-			out = append(out, contentTabIdentity{Kind: name, Index: i, Pinned: inst.TabPinned(i)})
+			out = append(out, contentTabIdentity{Kind: name, Mode: toolWindowMode(c), Index: i, Pinned: inst.TabPinned(i)})
 		}
 	}
 	return out
@@ -141,6 +141,7 @@ func (m *Model) restoreWindowTabs(reg *pane.Registry, st *applyState, key string
 		default:
 			nested = reg.NewContentPane(kind, "", "", "", "")
 			m.wireToolWindow(nested)
+			restoreToolWindowMode(nested, ct.Mode)
 		}
 		if nested == nil || !host.AddContentTab(nested) {
 			continue

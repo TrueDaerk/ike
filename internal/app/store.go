@@ -185,8 +185,9 @@ func contentIdentity(inst *pane.Instance) (paneIdentity, bool) {
 	if name := pane.ToolWindowName(inst.Kind()); name != "" {
 		// A tool window persists as its kind alone (#2736), exactly like its
 		// dedicated pane: what it showed is session state, its place in the
-		// tab strip is layout.
-		return paneIdentity{Kind: name}, true
+		// tab strip is layout. Mode is the window's display mode, the
+		// Complexity window's grouping (#2937).
+		return paneIdentity{Kind: name, Mode: toolWindowMode(inst)}, true
 	}
 	return paneIdentity{}, false
 }
@@ -502,8 +503,9 @@ func encodeLayoutState(root layout.Node, reg *pane.Registry) ([]byte, bool) {
 			ids[key] = paneIdentity{Kind: "agenttrace"}
 		case pane.KindComplexity:
 			// The panel restores from the live index (#2917): the snapshot
-			// is re-read on wire-up and on every generation change.
-			ids[key] = paneIdentity{Kind: "complexity"}
+			// is re-read on wire-up and on every generation change. Mode
+			// keeps the tabs' grouping (#2937).
+			ids[key] = paneIdentity{Kind: "complexity", Mode: toolWindowMode(inst)}
 		case pane.KindTests:
 			// The panel restores empty (#1911): test results are session state.
 			ids[key] = paneIdentity{Kind: "tests"}

@@ -1,5 +1,23 @@
 # Log
 
+## 2026-10-13 (Complexity per class and per file, #2937)
+
+- [Code Complexity](/architecture/complexity.md): `Function.Class` (the
+  method qualifier, `""` for free functions and lambdas) in the model and
+  naming; new "Groups" paragraph in "Summary" — `GroupFunctions` /
+  `Group` / `Level`, one Summarize per class (keyed by file and class) or
+  per file, no double counting, CCN sum order; new "Grouping" paragraph in
+  "Tool window" — `b` / `complexity.group` in the new `complexity` keymap
+  context, none → class → file (File tab none → class), the group columns,
+  sort / filter / open / copy / CSV on group rows, the levels persisted as
+  the pane identity's `Mode`, a typed letter staying in the filter row; new
+  "Groups" paragraph in "Headless CLI" — `--by class|file`, the group table,
+  the sum / max filters, `groups` in the JSON, exit 2 with `--diff`. The
+  session restore no longer falls back to the default layout when a #2736
+  tool window (complexity, deps, time, usage, agent trace) was open. User
+  guide, command-line page, keybinding and command references and the
+  keybinding matrix updated.
+
 ## 2026-10-13 (`ike complexity` takes files and directories, #2936)
 
 - [Code Complexity](/architecture/complexity.md): new "Selection"
