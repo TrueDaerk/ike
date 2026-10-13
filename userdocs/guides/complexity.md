@@ -49,6 +49,21 @@ Closures and lambdas are named `(anonymous)#n`, numbered per file. Languages
 without a syntax grammar (and data formats like JSON or YAML) are not
 measured.
 
+## Per class and per file
+
+Press `b` in the Complexity window (or run *Complexity: Cycle Grouping*) to
+answer "which class / which file is the heaviest?". The Project tab cycles
+**none → class → file**, the File tab **none → class**. Grouped, each row is
+one class (the methods of a Go receiver type, or of a Python, PHP,
+TypeScript or JavaScript class, trait, interface or enum) or one file, with
+the number of functions, NLOC, the CCN and cognitive **sum** (`Σccn`,
+`Σcog`), average and maximum, the aggregate `cmt%` and how many of its
+functions are over a threshold. Free functions and lambdas belong to no
+class but count toward their file. The header still sums the whole tab;
+sorting and the filter work on the group columns (`fn:` matches the class
+or the file). `enter` opens the group's first function. Each tab remembers
+its grouping, and the layout keeps it across restarts.
+
 ## The Changes tab
 
 The third tab of the Complexity window compares every function in the files
@@ -63,7 +78,7 @@ current text. A renamed function appears as one removed and one added row.
 ## Command line
 
 ```
-ike complexity [--diff[=REV]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [PATH...]
+ike complexity [--diff[=REV]] [--by class|file] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [PATH...]
 ```
 
 | Flag | Effect |
@@ -71,6 +86,7 @@ ike complexity [--diff[=REV]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [
 | *(none)* | Measure every supported file under the named paths (default: the current directory) and print a table sorted by CCN, then a summary line. |
 | `PATH...` | One or more files or directories, mixed freely (`ike complexity pkg/ main.go`). A directory is walked; a file is measured as is. A file named twice, or also inside a named directory, counts once. A path that does not exist is an error (exit 2). |
 | `--diff[=REV]` | Compare the working tree (including uncommitted and untracked files) against `REV` (default `HEAD`; any branch, tag or sha) and print the changed, added and removed functions, the totals and a verdict. With paths, only changes in those files and directories count. |
+| `--by class`, `--by file` | Print one row per class or per file instead of per function: `FILE`, `CLASS` (class level only), `FUNCS`, `NLOC`, `CCN` (sum), `CCN_AVG`, `CCN_MAX`, `COG` (sum), `COG_AVG`, `COG_MAX`, `CMT%`, `OVER`, sorted by the CCN sum. With it, `--min N` keeps groups whose CCN or cognitive **sum** is at least `N`, and `--ccn` / `--cog` / `--cmt` keep groups whose **maximum** (or aggregate density) reaches the threshold. Not combinable with `--diff`. |
 | `--json` | Print JSON instead of text (fields below). |
 | `--min N` | Only list functions whose CCN **or** cognitive complexity is at least `N`. |
 | `--ccn N`, `--cog N` | Override the warning thresholds; given explicitly they also filter the rows to functions at or above either one. |
@@ -160,6 +176,23 @@ filter keeps, sorted by CCN descending. `kind` is `function`, `method` or
 `lambda`. `comment_density` is a ratio (0.55 = 55 %), `comment_lines` the
 body's comment-only lines; `cmt_warn` is the threshold in percent (`0` =
 off).
+
+Grouped report (`--by class --json`): `functions` gives way to `groups`,
+one object per row the filter keeps, with the summary's field names; `class`
+is present at the class level only.
+
+```json
+{
+  "summary": { "files": 3161, "functions": 33769, "…": "…" },
+  "groups": [
+    { "file": "internal/editor/view.go", "class": "Model", "functions": 212,
+      "nloc": 9120, "ccn_sum": 2410, "ccn_avg": 11.37, "ccn_max": 139,
+      "cog_sum": 2950, "cog_avg": 13.92, "cog_max": 237,
+      "over_threshold": 41, "comment_lines": 1310, "comment_density": 0.1256 }
+  ],
+  "skipped": { "files": 192, "languages": ["json", "markdown", "yaml"] }
+}
+```
 
 Diff report (`--diff --json`):
 

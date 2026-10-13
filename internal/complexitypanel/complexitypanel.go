@@ -5,8 +5,9 @@
 // file, with the function under the caret marked) — and a Changes tab slot
 // is reserved for the diff view of a later issue, so the tab order never
 // shifts. The rows are one grid (internal/gridview): file, function, line,
-// CCN, cognitive, NLOC, params, depth, comment density (cmt%, #2934); 's' cycles the sort column, 'S'
-// reverses it, the filter row (internal/filterbar over internal/filterexpr)
+// CCN, cognitive, NLOC, params, depth, comment density (cmt%, #2934) — or,
+// grouped with 'b' (#2937, group.go), one aggregate row per class or file;
+// 's' cycles the sort column, 'S' reverses it, the filter row (internal/filterbar over internal/filterexpr)
 // narrows by file:, lang:, fn:, min: and metric:, and bare words fuzzy over
 // the function names.
 //
@@ -74,17 +75,35 @@ const (
 	// ColCmt is the comment density in whole percent (#2934). It follows
 	// depth on screen; the value sits last so the older columns keep theirs.
 	ColCmt
+	// The group-row columns (#2937, group.go): the class, the unit count,
+	// the CCN and cognitive average and maximum and the over-threshold
+	// count. A group row reads ColNLOC, ColCCN, ColCog and ColCmt as the
+	// group's NLOC, sums and aggregate density.
+	ColClass
+	ColFuncs
+	ColCCNAvg
+	ColCCNMax
+	ColCogAvg
+	ColCogMax
+	ColOver
 )
 
 // columnLabels are the column headers in Column order.
-var columnLabels = []string{"file", "function", "line", "ccn", "cog", "nloc", "params", "depth", "change", "cmt%"}
+var columnLabels = []string{"file", "function", "line", "ccn", "cog", "nloc", "params", "depth", "change", "cmt%",
+	"class", "funcs", "ccn avg", "ccn max", "cog avg", "cog max", "over"}
 
 // numeric reports whether a column sorts as a number (descending by
 // default) rather than as text.
-func (c Column) numeric() bool { return c >= ColLine && c != ColChange }
+func (c Column) numeric() bool {
+	switch c {
+	case ColFile, ColFunc, ColChange, ColClass:
+		return false
+	}
+	return true
+}
 
 // lastColumn is the highest Column value.
-const lastColumn = ColCmt
+const lastColumn = ColOver
 
 // The per-tab column layouts, in display order: the File tab hides the
 // file column, the Changes tab leads with the section and drops params /
@@ -131,7 +150,7 @@ type CopyMsg struct{ Text string }
 var Schema = filterexpr.Schema{Fields: []filterexpr.Field{
 	{Name: "file", Aliases: []string{"path"}, ValueDoc: "a path substring or glob", Doc: "file: narrows by project-relative path (substring or glob)"},
 	{Name: "lang", Aliases: []string{"language"}, ValueDoc: "a language id", Doc: "lang: narrows by language id (go, php, …)"},
-	{Name: "fn", Aliases: []string{"func", "function"}, ValueDoc: "a function name part", Doc: "fn: narrows by function name (substring)"},
+	{Name: "fn", Aliases: []string{"func", "function"}, ValueDoc: "a function name part", Doc: "fn: narrows by function name (substring) — on group rows by class or file"},
 	{Name: "min", ValueDoc: "a number", Doc: "min: keeps rows at or above n on the sort column"},
 	{Name: "metric", Values: []string{"ccn", "cog", "cmt"}, Doc: "metric: sorts by cyclomatic or cognitive complexity, or comment density (cmt%)"},
 }}
@@ -155,12 +174,23 @@ type Row struct {
 	Before complexity.Function
 	// Dirty marks a Changes row whose head side is an unsaved buffer.
 	Dirty bool
+	// Group is set on a group row (#2937): the class or file aggregate the
+	// row stands for. Fn is then zero; Path / Rel / Lang name the file.
+	Group *complexity.Group
 }
 
 // value is the row's sort key on column c: a number for the metric
 // columns, the text for file / function. On the Changes tab the metric
 // columns sort by the absolute delta, so min: reads |Δ| there.
-func (r Row) value(c Column) (int, string) {
+func (r Row) value(c Column) (float64, string) {
+	if r.Group != nil {
+		return r.groupValue(c)
+	}
+	n, s := r.intValue(c)
+	return float64(n), s
+}
+
+func (r Row) intValue(c Column) (int, string) {
 	switch c {
 	case ColFile:
 		return 0, r.Rel
@@ -208,6 +238,9 @@ func abs(n int) int {
 // cell renders the row's text for column c: the plain metric on the
 // Project / File tabs, "before→after (Δ)" on the Changes tab.
 func (r Row) cell(c Column) string {
+	if r.Group != nil {
+		return r.groupCell(c)
+	}
 	switch c {
 	case ColFile:
 		return r.Rel
@@ -296,6 +329,10 @@ type Model struct {
 	changes   Changes
 	revField  ui.Field
 	prompting bool
+
+	// The grouping level of the Project and File tabs (#2937, group.go).
+	projectGroup complexity.Level
+	fileGroup    complexity.Level
 }
 
 // New returns an empty panel on the Project tab sorted by CCN descending;
@@ -379,11 +416,17 @@ func (m *Model) SetTab(t Tab) {
 	}
 	m.tab = t
 	m.cursor, m.top = 0, 0
+	if m.Grouping() != complexity.ByNone {
+		m.fitSort()
+	}
 	m.Refresh()
 }
 
 // layout is the selected tab's column order.
 func (m *Model) layout() []Column {
+	if g := m.groupLayout(); g != nil {
+		return g
+	}
 	switch m.tab {
 	case TabFile:
 		return fileLayout
@@ -493,12 +536,11 @@ func (m *Model) Selected() (Row, bool) {
 // filter and the sort, keeping the cursor on the same function where
 // possible.
 func (m *Model) Refresh() {
-	keepPath, keepLine, keepName, keepChange := "", -1, "", 0
+	keep := ""
 	if r, ok := m.Selected(); ok {
-		keepPath, keepLine, keepName, keepChange = r.Path, r.Fn.Line, r.Fn.Name, int(r.Change)
+		keep = r.key()
 	}
 	all := m.population()
-	m.total = len(all)
 	fns := make([]complexity.Function, 0, len(all))
 	for _, r := range all {
 		if r.Change == complexity.Removed {
@@ -506,7 +548,12 @@ func (m *Model) Refresh() {
 		}
 		fns = append(fns, r.Fn)
 	}
+	// The totals stay the whole tab's; a grouped tab then lists groups.
 	m.summary = complexity.Summarize(fns, m.ccnWarn, m.cogWarn, m.cmtWarn)
+	if m.Grouping() != complexity.ByNone {
+		all = m.groupRows(all)
+	}
+	m.total = len(all)
 	q := m.filter.Query()
 	switch q.Value("metric") {
 	case "ccn":
@@ -527,7 +574,7 @@ func (m *Model) Refresh() {
 	m.widths = m.columnWidths()
 	m.cursor = 0
 	for i, r := range m.rows {
-		if r.Path == keepPath && r.Fn.Line == keepLine && r.Fn.Name == keepName && int(r.Change) == keepChange {
+		if r.key() == keep {
 			m.cursor = i
 			break
 		}
@@ -590,7 +637,7 @@ func (m *Model) matches(q filterexpr.Query, r Row) bool {
 				return false
 			}
 		case "fn":
-			if !strings.Contains(strings.ToLower(r.Fn.Name), strings.ToLower(t.Value)) {
+			if !strings.Contains(strings.ToLower(r.label()), strings.ToLower(t.Value)) {
 				return false
 			}
 		case "min":
@@ -602,12 +649,12 @@ func (m *Model) matches(q filterexpr.Query, r Row) bool {
 			if !col.numeric() {
 				col = ColCCN
 			}
-			if v, _ := r.value(col); v < n {
+			if v, _ := r.value(col); v < float64(n) {
 				return false
 			}
 		}
 	}
-	_, ok := filterexpr.MatchText(q.Match, r.Fn.Name)
+	_, ok := filterexpr.MatchText(q.Match, r.label())
 	return ok
 }
 
@@ -639,6 +686,9 @@ func (m *Model) sortRows() {
 		if a.Rel != b.Rel {
 			return a.Rel < b.Rel
 		}
+		if a.Group != nil && b.Group != nil {
+			return a.Group.Class < b.Group.Class
+		}
 		return a.Fn.Line < b.Fn.Line
 	})
 }
@@ -649,7 +699,7 @@ func (m *Model) markCaret() {
 	best := -1
 	for i := range m.rows {
 		m.rows[i].Caret = false
-		if m.tab != TabFile {
+		if m.tab != TabFile || m.rows[i].Group != nil {
 			continue
 		}
 		fn := m.rows[i].Fn
@@ -714,8 +764,12 @@ const caretMark = "▸ "
 func (m *Model) headerLabels() []string {
 	layout := m.layout()
 	out := make([]string, len(layout))
+	grouped := m.Grouping() != complexity.ByNone
 	for i, c := range layout {
 		out[i] = columnLabels[c]
+		if l, ok := groupSumLabels[c]; ok && grouped {
+			out[i] = l
+		}
 	}
 	mark := " ▲"
 	if m.desc {
@@ -802,6 +856,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "S":
 		m.desc = !m.desc
 		m.Refresh()
+	case "b":
+		m.CycleGroup()
 	case "enter":
 		return m.open()
 	case "e":
@@ -827,7 +883,10 @@ func (m *Model) open() tea.Cmd {
 		return nil
 	}
 	msg := OpenLocationMsg{Path: r.Path, Line: r.Fn.Line}
-	if r.Change == complexity.Removed {
+	switch {
+	case r.Group != nil:
+		msg.Line = r.Group.Line // the group's earliest unit
+	case r.Change == complexity.Removed:
 		msg.Line = 0
 	}
 	return func() tea.Msg { return msg }
@@ -844,8 +903,12 @@ func (m *Model) copyRow() tea.Cmd {
 }
 
 // CopyText renders a row as "path:line: name ccn=.. cog=.."; a Changes
-// row carries both sides: "changed ccn=3→5 (+2) cog=1→1 (0)".
+// row carries both sides: "changed ccn=3→5 (+2) cog=1→1 (0)"; a group row
+// its aggregate (groupCopyText).
 func CopyText(r Row) string {
+	if r.Group != nil {
+		return groupCopyText(r)
+	}
 	head := r.Rel + ":" + strconv.Itoa(r.Fn.Line+1) + ": " + r.Fn.Name
 	if r.Change != 0 {
 		return head + " " + r.Change.String() + " ccn=" + r.metricCell(ccnOf, true) + " cog=" + r.metricCell(cogOf, true)
@@ -869,6 +932,9 @@ var csvHeader = []string{"file", "function", "kind", "line", "ccn", "cognitive",
 func (m *Model) CSV() string {
 	if m.tab == TabChanges {
 		return m.changesCSV()
+	}
+	if m.Grouping() != complexity.ByNone {
+		return m.groupCSV()
 	}
 	var b strings.Builder
 	writeCSVRow(&b, csvHeader)
@@ -996,6 +1062,8 @@ func (m *Model) emptyText() string {
 		return "(scanning the project…)"
 	case !m.filter.Empty():
 		return "(no row matches the filter)"
+	case m.Grouping() == complexity.ByClass && m.summary.Functions > 0:
+		return "(no class method among the measured functions)"
 	case m.tab == TabFile && m.file == "":
 		return "(no file focused)"
 	case m.tab == TabFile:
@@ -1015,6 +1083,12 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 	cells := make([]gridview.Cell, len(texts))
 	for c, t := range texts {
 		cells[c] = gridview.Cell{Text: t}
+	}
+	if r.Group != nil {
+		for c, col := range layout {
+			cells[c].Warn = m.groupWarn(r.Group, col)
+		}
+		return gridview.DataRow(pal, cells, m.widths, 0, m.width, i == m.cursor, m.focused)
 	}
 	if fi := m.layoutIndex(ColFunc); fi >= 0 && r.Caret {
 		cells[fi].Text = caretMark + cells[fi].Text
@@ -1041,8 +1115,13 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 func (m *Model) footer() string {
 	count := itoa(len(m.rows)) + "/" + itoa(m.total) + " rows"
 	hints := " · tab view · s sort · S reverse · enter open · e export · y copy · r rescan · / filter"
-	if m.tab == TabChanges {
+	switch {
+	case m.tab == TabChanges:
 		hints += " · R base"
+	case m.Grouping() == complexity.ByNone:
+		hints += " · b group"
+	default:
+		hints += " · b group: " + m.Grouping().String()
 	}
 	return lipgloss.NewStyle().Faint(true).Render(m.clip(" " + count + hints))
 }

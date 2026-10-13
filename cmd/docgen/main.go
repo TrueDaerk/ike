@@ -257,6 +257,7 @@ reporting, which fewer terminals implement. See
 		{keymap.Notebook, "Notebook viewer", "Active when a notebook viewer pane has focus."},
 		{keymap.Data, "Data viewer", "Active when a data grid pane has focus."},
 		{keymap.Preview, "Preview", "Active when the markdown preview, the HTML preview or the image viewer has focus."},
+		{keymap.Complexity, "Complexity tool window", "Active when the Complexity tool window has focus."},
 	} {
 		rows := byContext[ctx.key]
 		if len(rows) == 0 {

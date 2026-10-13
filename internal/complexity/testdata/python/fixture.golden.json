@@ -3,6 +3,7 @@
   "functions": [
     {
       "name": "else_if_chain",
+      "class": "",
       "kind": "function",
       "line": 8,
       "endLine": 19,
@@ -16,6 +17,7 @@
     },
     {
       "name": "match_arms",
+      "class": "",
       "kind": "function",
       "line": 22,
       "endLine": 32,
@@ -29,6 +31,7 @@
     },
     {
       "name": "nested_loops",
+      "class": "",
       "kind": "function",
       "line": 35,
       "endLine": 45,
@@ -42,6 +45,7 @@
     },
     {
       "name": "try_except",
+      "class": "",
       "kind": "function",
       "line": 48,
       "endLine": 57,
@@ -55,6 +59,7 @@
     },
     {
       "name": "ternaries",
+      "class": "",
       "kind": "function",
       "line": 60,
       "endLine": 63,
@@ -68,6 +73,7 @@
     },
     {
       "name": "boolean_sequences",
+      "class": "",
       "kind": "function",
       "line": 66,
       "endLine": 75,
@@ -81,6 +87,7 @@
     },
     {
       "name": "nested_closures",
+      "class": "",
       "kind": "function",
       "line": 78,
       "endLine": 85,
@@ -94,6 +101,7 @@
     },
     {
       "name": "total",
+      "class": "",
       "kind": "function",
       "line": 79,
       "endLine": 84,
@@ -107,6 +115,7 @@
     },
     {
       "name": "(anonymous)#1",
+      "class": "",
       "kind": "lambda",
       "line": 81,
       "endLine": 81,
@@ -120,6 +129,7 @@
     },
     {
       "name": "factorial",
+      "class": "",
       "kind": "function",
       "line": 88,
       "endLine": 91,
@@ -133,6 +143,7 @@
     },
     {
       "name": "Server.handle",
+      "class": "Server",
       "kind": "method",
       "line": 95,
       "endLine": 101,
@@ -146,6 +157,7 @@
     },
     {
       "name": "Server.send",
+      "class": "Server",
       "kind": "method",
       "line": 103,
       "endLine": 104,
@@ -159,6 +171,7 @@
     },
     {
       "name": "plain",
+      "class": "",
       "kind": "function",
       "line": 107,
       "endLine": 108,
@@ -172,6 +185,7 @@
     },
     {
       "name": "documented",
+      "class": "",
       "kind": "function",
       "line": 113,
       "endLine": 115,
@@ -185,6 +199,7 @@
     },
     {
       "name": "comment_heavy",
+      "class": "",
       "kind": "function",
       "line": 118,
       "endLine": 124,

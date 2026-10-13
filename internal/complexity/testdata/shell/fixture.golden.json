@@ -3,6 +3,7 @@
   "functions": [
     {
       "name": "else_if_chain",
+      "class": "",
       "kind": "function",
       "line": 8,
       "endLine": 21,
@@ -16,6 +17,7 @@
     },
     {
       "name": "case_arms",
+      "class": "",
       "kind": "function",
       "line": 23,
       "endLine": 39,
@@ -29,6 +31,7 @@
     },
     {
       "name": "nested_loops",
+      "class": "",
       "kind": "function",
       "line": 41,
       "endLine": 57,
@@ -42,6 +45,7 @@
     },
     {
       "name": "boolean_sequences",
+      "class": "",
       "kind": "function",
       "line": 59,
       "endLine": 68,
@@ -55,6 +59,7 @@
     },
     {
       "name": "nested_functions",
+      "class": "",
       "kind": "function",
       "line": 70,
       "endLine": 77,
@@ -68,6 +73,7 @@
     },
     {
       "name": "helper",
+      "class": "",
       "kind": "function",
       "line": 71,
       "endLine": 75,
@@ -81,6 +87,7 @@
     },
     {
       "name": "countdown",
+      "class": "",
       "kind": "function",
       "line": 79,
       "endLine": 85,
@@ -94,6 +101,7 @@
     },
     {
       "name": "select_loop",
+      "class": "",
       "kind": "function",
       "line": 87,
       "endLine": 94,
@@ -107,6 +115,7 @@
     },
     {
       "name": "plain",
+      "class": "",
       "kind": "function",
       "line": 96,
       "endLine": 98,
@@ -120,6 +129,7 @@
     },
     {
       "name": "documented",
+      "class": "",
       "kind": "function",
       "line": 102,
       "endLine": 104,
@@ -133,6 +143,7 @@
     },
     {
       "name": "comment_heavy",
+      "class": "",
       "kind": "function",
       "line": 106,
       "endLine": 112,

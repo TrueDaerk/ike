@@ -1558,6 +1558,7 @@ JetBrains is:
 | `bookmark.toggle` | `f11` | delivered | `—` | live |
 | `bookmark.toggleMnemonic` | `alt+f3` | fragile | `palette / Navigate menu` | live via palette / Navigate menu |
 | `completion.trigger` | `ctrl+space` | delivered | `—` | live |
+| `complexity.group` | `b` | delivered | `—` | live |
 | `complexity.toggle` | `cmd+alt+shift+x` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `debug.breakpointProperties` | `cmd+alt+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.breakpoints` | `cmd+shift+f8` | fragile | `palette / Run menu` | live via palette / Run menu |

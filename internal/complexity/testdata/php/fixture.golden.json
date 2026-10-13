@@ -3,6 +3,7 @@
   "functions": [
     {
       "name": "elseIfChain",
+      "class": "",
       "kind": "function",
       "line": 11,
       "endLine": 26,
@@ -16,6 +17,7 @@
     },
     {
       "name": "switchAndMatch",
+      "class": "",
       "kind": "function",
       "line": 28,
       "endLine": 49,
@@ -29,6 +31,7 @@
     },
     {
       "name": "nestedLoops",
+      "class": "",
       "kind": "function",
       "line": 51,
       "endLine": 71,
@@ -42,6 +45,7 @@
     },
     {
       "name": "tryCatch",
+      "class": "",
       "kind": "function",
       "line": 73,
       "endLine": 87,
@@ -55,6 +59,7 @@
     },
     {
       "name": "ternaries",
+      "class": "",
       "kind": "function",
       "line": 89,
       "endLine": 96,
@@ -68,6 +73,7 @@
     },
     {
       "name": "booleanSequences",
+      "class": "",
       "kind": "function",
       "line": 98,
       "endLine": 113,
@@ -81,6 +87,7 @@
     },
     {
       "name": "nestedClosures",
+      "class": "",
       "kind": "function",
       "line": 115,
       "endLine": 125,
@@ -94,6 +101,7 @@
     },
     {
       "name": "(anonymous)#1",
+      "class": "",
       "kind": "lambda",
       "line": 117,
       "endLine": 124,
@@ -107,6 +115,7 @@
     },
     {
       "name": "(anonymous)#2",
+      "class": "",
       "kind": "lambda",
       "line": 119,
       "endLine": 119,
@@ -120,6 +129,7 @@
     },
     {
       "name": "factorial",
+      "class": "",
       "kind": "function",
       "line": 127,
       "endLine": 133,
@@ -133,6 +143,7 @@
     },
     {
       "name": "labelledJumps",
+      "class": "",
       "kind": "function",
       "line": 135,
       "endLine": 149,
@@ -146,6 +157,7 @@
     },
     {
       "name": "Server::handle",
+      "class": "Server",
       "kind": "method",
       "line": 153,
       "endLine": 164,
@@ -159,6 +171,7 @@
     },
     {
       "name": "Server::send",
+      "class": "Server",
       "kind": "method",
       "line": 166,
       "endLine": 169,
@@ -172,6 +185,7 @@
     },
     {
       "name": "Loggable::log",
+      "class": "Loggable",
       "kind": "method",
       "line": 174,
       "endLine": 177,
@@ -185,6 +199,7 @@
     },
     {
       "name": "plain",
+      "class": "",
       "kind": "function",
       "line": 180,
       "endLine": 182,
@@ -198,6 +213,7 @@
     },
     {
       "name": "documented",
+      "class": "",
       "kind": "function",
       "line": 188,
       "endLine": 191,
@@ -211,6 +227,7 @@
     },
     {
       "name": "commentHeavy",
+      "class": "",
       "kind": "function",
       "line": 193,
       "endLine": 202,

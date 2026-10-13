@@ -441,6 +441,14 @@ Active when the markdown preview, the HTML preview or the image viewer has focus
 | Pin/unpin tab | `alt+shift+p` | `alt+shift+p` | `editor.tab.togglePin` |
 | Recent files | `ctrl+e` | `ctrl+e` | `palette.recentFiles` |
 
+## Complexity tool window
+
+Active when the Complexity tool window has focus.
+
+| Action | macOS | Linux / Windows | Command |
+|---|---|---|---|
+| Cycle complexity grouping (none/class/file) | `b` | `b` | `complexity.group` |
+
 ## Rebinding
 
 Bindings live under `[keymap.bindings]` in `settings.toml`, keyed by chord;

@@ -274,6 +274,7 @@ func (m *measurer) openUnit(c *highlight.SyntaxNode, nameField string) {
 				sep = "."
 			}
 			f.Name = q + sep + short
+			f.Class = q
 			f.Kind = KindMethod
 		} else if strings.Contains(c.Kind, "method") {
 			f.Kind = KindMethod

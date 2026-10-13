@@ -205,6 +205,47 @@ func TestGoldenAcceptance(t *testing.T) {
 	}
 }
 
+// TestGoldenClasses pins Function.Class (#2937) on every fixture: a Go
+// receiver, a Python class, a PHP class and trait and a TypeScript /
+// JavaScript class qualify their methods; every free function, lambda and
+// nested def carries no class.
+func TestGoldenClasses(t *testing.T) {
+	want := map[string]map[string]string{
+		"go":         {"Server.Handle": "Server"},
+		"python":     {"Server.handle": "Server", "Server.send": "Server"},
+		"php":        {"Server::handle": "Server", "Server::send": "Server", "Loggable::log": "Loggable"},
+		"typescript": {"Server.handle": "Server", "Server.send": "Server"},
+		"javascript": {"Server.handle": "Server", "Server.send": "Server"},
+	}
+	for dir, classes := range want {
+		src, _ := fixturePaths(t, filepath.Join("testdata", dir))
+		b, err := os.ReadFile(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fns, err := Measure(fixtureLang[dir], strings.Split(string(b), "\n"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		seen := 0
+		for _, f := range fns {
+			c, isMethod := classes[f.Name]
+			switch {
+			case isMethod:
+				seen++
+				if f.Class != c {
+					t.Errorf("%s: %s class %q, want %q", dir, f.Name, f.Class, c)
+				}
+			case f.Class != "":
+				t.Errorf("%s: %s (%s) class %q, want none", dir, f.Name, f.Kind, f.Class)
+			}
+		}
+		if seen != len(classes) {
+			t.Errorf("%s: found %d of the %d expected methods", dir, seen, len(classes))
+		}
+	}
+}
+
 // TestMeasureUnsupported pins ErrUnsupported for a language without a spec
 // and for an unknown language id.
 func TestMeasureUnsupported(t *testing.T) {

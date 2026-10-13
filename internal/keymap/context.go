@@ -58,6 +58,9 @@ const (
 	Hex Context = "hex"
 	// Notebook scopes bindings to a focused notebook viewer pane (#2425).
 	Notebook Context = "notebook"
+	// Complexity scopes bindings to a focused Complexity tool window
+	// (#2937); the pane advertises the context id "complexity".
+	Complexity Context = "complexity"
 )
 
 // WithLang narrows c to one buffer language (#1876): WithLang(Editor, "http")

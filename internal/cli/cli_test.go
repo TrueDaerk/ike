@@ -169,6 +169,8 @@ func TestParseComplexity(t *testing.T) {
 		{[]string{"--min=20", "--ccn", "10", "--cog=12"}, ComplexityArgs{Min: 20, CCN: 10, Cog: 12}},
 		{[]string{"--cmt", "40", "--json"}, ComplexityArgs{Cmt: 40, JSON: true}},
 		{[]string{"--cmt=100"}, ComplexityArgs{Cmt: 100}},
+		{[]string{"--by", "class"}, ComplexityArgs{By: "class"}},
+		{[]string{"--by=file", "--json", "src"}, ComplexityArgs{By: "file", JSON: true, Paths: []string{"src"}}},
 		{[]string{"--help"}, ComplexityArgs{Help: true}},
 		{[]string{"-h"}, ComplexityArgs{Help: true}},
 	}
@@ -185,6 +187,7 @@ func TestParseComplexity(t *testing.T) {
 	for _, args := range [][]string{
 		{"--min"}, {"--min", "x"}, {"--min=0"}, {"--ccn=-1"}, {"--cog", ""}, {"--cmt=0"}, {"--cmt", "101"}, {"--cmt"},
 		{"--diff="}, {"--bogus"}, {"a", "--bogus"},
+		{"--by"}, {"--by", "method"}, {"--by="}, {"--by=class", "--diff"}, {"--diff=main", "--by", "file"},
 	} {
 		if _, err := Parse(append([]string{"complexity"}, args...)); err == nil {
 			t.Errorf("Parse(complexity %q) accepted", args)

@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Code Complexity
-description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters, nesting depth and comment density (#2934) per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary, the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source, and the headless `ike complexity` CLI (#2922) printing the table of the project or of named files and directories (#2936) or the diff against a revision as text or JSON for CI and agents; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
+description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters, nesting depth and comment density (#2934) per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary with its per-class and per-file groups (#2937), the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source, and the headless `ike complexity` CLI (#2922) printing the table of the project or of named files and directories (#2936), per function or summed per class or file (#2937), or the diff against a revision as text or JSON for CI and agents; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
 resource: internal/complexity, internal/complexitypanel, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_problems.go, internal/app/complexity_segment.go, internal/complexitycli
 tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive, index, settings, telemetry, vcs, diff, problems, cli]
-timestamp: 2026-10-13T22:00:00Z
+timestamp: 2026-10-13T23:30:00Z
 ---
 
 # Code Complexity
@@ -49,6 +49,7 @@ language fails the build until its row is filled in.
 ```go
 type Function struct {
     Name      string // "renderWeek", "Server.handle", "Class::method", "(anonymous)#3"
+    Class     string // the method's qualifier, "Server"; "" for free functions and lambdas (#2937)
     Kind      string // function | method | lambda
     Line, EndLine int // 0-based header / last line
     NLOC      int    // non-blank, non-comment lines in the range
@@ -75,6 +76,12 @@ Python and TypeScript, `Class::method` in PHP (`MethodSep`). A function nested
 in a method keeps its bare name. Anonymous units are `(anonymous)#n`, numbered
 per file in source order. `Kind` is `lambda` for anonymous units, `method` for
 a qualified unit or a kind whose name says method, `function` otherwise.
+`Class` (#2937) carries the qualifier on its own — `Server` for
+`Server.Handle` and `Server::handle`, the trait for a PHP trait method — so
+consumers never parse the name; it is `""` for a free function, a lambda, a
+function nested in a method and a method kind without an enclosing class.
+`TestGoldenClasses` pins it per fixture (Go receiver, Python class, PHP class
+and trait, TypeScript / JavaScript class).
 
 **Params** counts the named children of the `ParamsField` node, a child
 declaring several names (Go's `a, b int`) once per name. **NLOC** counts the
@@ -197,6 +204,19 @@ number of functions **at or above** any warning threshold — CCN, cognitive,
 or a comment density of `cmtWarn` percent (a non-positive threshold disables
 that check). The thresholds come from the `[complexity]`
 settings of the later steps; the engine takes them as plain integers.
+
+**Groups (#2937).** `GroupFunctions(files, by, ccnWarn, cogWarn, cmtWarn)`
+(`group.go`) folds functions keyed by file into one `Group{File, Class,
+Line, Summary}` per class (`ByClass`: the units with a non-empty
+`Function.Class`, keyed by file and class — Go methods of one type in two
+files are two groups) or per file (`ByFile`: every unit). Each group is
+`Summarize` over its direct units, so the sums of the file groups equal the
+flat list's: a nested lambda is its own unit, counted in its file's group and
+in no class's, exactly as the flat list counts it — nothing twice. `Line` is
+the group's earliest unit (where "open" lands). The order is stable: CCN sum
+descending, then file, then class. `Level` (`ByNone` / `ByClass` / `ByFile`,
+`ParseLevel`, `String` = `""` / `class` / `file`) is the shared spelling of
+the CLI flag and the pane's persisted mode.
 
 ## Project index (#2916)
 
@@ -328,6 +348,29 @@ keeps bodies that are at least 40 % comment); bare words fuzzy-match
 the function names. `file:internal/app min:20` is "functions with CCN >= 20
 under internal/app"; adding `metric:cog` switches both to cognitive
 complexity.
+
+**Grouping (#2937).** `b` — the `complexity.group` command, bound to `b`
+in the `complexity` keymap context and in the palette as "Complexity: Cycle
+Grouping" — cycles the Project tab none → class → file and the File tab
+none → class (the Changes tab does not group; the command says so). A
+grouped tab replaces the function rows with one row per
+`complexity.GroupFunctions` group: columns file (Project only), class (class
+level only), funcs, nloc, `Σccn`, ccn avg, ccn max, `Σcog`, cog avg, cog max,
+`cmt%` (aggregate density) and over; the header totals stay the whole tab's.
+Sorting (`s` walks the group columns, `S`, header clicks) and the filter
+work on the group columns — `fn:` and bare words read the class (class
+level) or the path (file level), `min:` the sort column; a sort column the
+group layout lacks resets to CCN descending. Max CCN / max cog / `cmt%` and
+a non-zero over count take the warning colour. `enter` opens the group's
+earliest unit, `y` copies `path: Class funcs=2 ccn=9 (max 8) cog=12 (max
+12)`, `e` exports `file,class,functions,nloc,ccn_sum,ccn_avg,ccn_max,cog_sum,cog_avg,cog_max,comment_lines,cmt_pct,over_threshold`.
+Each tab keeps its own level. The levels persist in the layout as the
+pane identity's `Mode` (`project:file,file:class`; `GroupMode` /
+`SetGroupMode`, an unknown spelling ignored) — session layout, named
+layouts and hosted tabs alike — and the command saves the layout at once.
+A letter typed into the open filter row stays text: the app routes a
+printable, unmodified key to a focused one-line input before the keymap
+layer.
 
 **Actions.** `enter` / a double click sends `OpenLocationMsg{Path, Line}`
 and the app opens the file through `openPathAt`, so the caret lands on the
@@ -521,7 +564,7 @@ next to the other mark toggles).
 
 ## Headless CLI (#2922)
 
-`ike complexity [--diff[=REV]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [PATH...]`
+`ike complexity [--diff[=REV]] [--by class|file] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [PATH...]`
 is the terminal-free report for CI pipelines and coding agents. The grammar
 lives in `internal/cli` (`ComplexityArgs`, first argument only like
 `agent-hook`, so a file named `complexity` still opens as `./complexity`);
@@ -570,6 +613,19 @@ threshold; no filter flag keeps every row. The table carries a `CMT%`
 column, the summary line the aggregate density and the thresholds. The summary always covers every function.
 `complexity.enabled` is ignored — running the command is the request.
 
+**Groups (#2937).** `--by class` / `--by file` (or `--by=…`) switches the
+project report from the function table to `complexity.GroupFunctions` over
+the measured functions keyed by their relative path: columns `FILE`, `CLASS`
+(class level only), `FUNCS`, `NLOC`, `CCN` (sum), `CCN_AVG`, `CCN_MAX`, `COG`
+(sum), `COG_AVG`, `COG_MAX`, `CMT%`, `OVER`, sorted by CCN sum descending; the
+summary line is unchanged. The group filter: `--min N` keeps a CCN or
+cognitive **sum** ≥ N; an explicit `--ccn` / `--cog` / `--cmt` keeps groups
+whose **max** CCN, max cognitive or aggregate density is at or above its
+threshold; the `shown:` line reads `shown: 1 of 2 classes (ΣCCN or Σcog ≥ 5)`.
+An unknown level, or `--by` with `--diff`, is a usage error (exit 2,
+`--by is not supported with --diff`). Without `--by` the output is
+unchanged byte for byte. The flag is CLI-only (no setting, no command).
+
 **Diff.** `--diff[=REV]` (default `HEAD`) runs synchronously the same git
 plumbing as the Changes tab — `vcs.ResolveRev`, `vcs.ChangedFiles`, the
 status snapshot's untracked files (a collapsed untracked directory is walked)
@@ -585,7 +641,10 @@ metric), `added` and `removed` sections, the totals and
 
 **JSON.** Field names are snake_case and stable (documented in
 `userdocs/guides/complexity.md`; add, never rename): the project report is
-`{summary, functions, skipped}`, the diff `{rev, sha, base, head, delta,
+`{summary, functions, skipped}` — with `--by`, `{summary, groups, skipped}`,
+each group `{file, class (class level only), functions, nloc, ccn_sum,
+ccn_avg, ccn_max, cog_sum, cog_avg, cog_max, over_threshold, comment_lines,
+comment_density}` under the summary's field names — the diff `{rev, sha, base, head, delta,
 changed, added, removed, verdict, skipped}` with `verdict` one of
 `more_complex`, `less_complex`, `unchanged`. Line numbers are 1-based.
 `comment_lines` and `comment_density` (a ratio, four decimals) sit on every
