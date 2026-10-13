@@ -68,6 +68,9 @@ type complexityDiffState struct {
 	// a blob at a commit never changes, so a second run against the same
 	// base skips the git call for every file it already measured.
 	baseCache map[string][]complexity.Function
+	// funcText holds the base blobs the function diff (#2956) read, by the
+	// same "sha\x00path" key: a second 'd' in the file skips git.
+	funcText map[string]string
 }
 
 // complexityDiffTickMsg wakes the model to launch the debounced diff.

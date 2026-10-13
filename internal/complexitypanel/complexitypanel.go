@@ -1086,6 +1086,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.showSites()
 	case "i":
 		return m.toggleBaseline()
+	case "d":
+		return m.functionDiff()
 	case "enter":
 		return m.open()
 	case "e":
@@ -1410,9 +1412,9 @@ func (m *Model) footer() string {
 	hints := " · tab view · s sort · S reverse · enter open · e export · y copy · r rescan · / filter"
 	switch {
 	case m.tab == TabChanges && m.Grouping() == complexity.ByNone:
-		hints += " · R base · b group · space sites · m marks"
+		hints += " · d diff · R base · b group · space sites · m marks"
 	case m.tab == TabChanges:
-		hints += " · R base · b group: file"
+		hints += " · d diff · R base · b group: file"
 	case m.Grouping() == complexity.ByNone:
 		hints += " · b group · space sites · m marks · i accept"
 	default:

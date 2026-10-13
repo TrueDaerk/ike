@@ -4405,7 +4405,7 @@ func (m Model) diffSlot() (*pane.Instance, string, int, bool) {
 		return inst, target, tabIdx, hit
 	}
 	hostKey, tabIdx, inst, ok := m.findContent(func(c *pane.Instance) bool {
-		return c.Kind() == pane.KindDiff
+		return c.Kind() == pane.KindDiff && !isCxFuncDiff(c) // one per function (#2956)
 	})
 	return inst, hostKey, tabIdx, ok
 }
@@ -8639,6 +8639,18 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case complexitypanel.ShowSitesMsg:
 		return m.showComplexitySites(msg)
 
+	case ComplexityFunctionDiffMsg:
+		// complexity.functionDiff (#2956), d in the pane: the selected
+		// Changes row's function, base vs working tree.
+		return m, m.complexityFunctionDiff()
+
+	case complexitypanel.FunctionDiffMsg:
+		return m, m.openComplexityFunctionDiff(msg)
+
+	case cxFuncDiffMsg:
+		m.showComplexityFunctionDiff(msg)
+		return m, nil
+
 	case complexitypanel.ExportMsg:
 		// 'e' in the Complexity pane (#2917): the current tab as a CSV scratch.
 		return m.handleComplexityExport(msg)
@@ -11615,10 +11627,14 @@ func (m *Model) closeFocused() {
 // (guardedClosePane); shared by closeFocused, the pane.close command (#1128)
 // and the dead tool pane's ✕ action.
 func (m *Model) closePane(key string) {
+	cxDiff := isCxFuncDiff(m.activeWS().Panes.Get(key))
 	if m.closeKey(key) {
 		// Focus the leaf that now occupies the closed pane's position: the first
 		// leaf in walk order is a safe, always-present choice (explorer at minimum).
 		m.setFocus(m.focusAfterClose())
+		if cxDiff {
+			m.refocusComplexityAfterDiff() // #2956
+		}
 		m.syncExplorerOpen()
 		m.layout()
 		saveLayout(m.activeWS().Tree, m.activeWS().Panes)
@@ -11717,7 +11733,11 @@ func (m *Model) closeTab(inst *pane.Instance, idx int) {
 	// session. A global tool tab closing here is an explicit close-everywhere
 	// (#1903): record it so no stale layout resurrects the tool.
 	m.noteGlobalToolTabClose(inst.TabTerminal(idx))
+	cxDiff := isCxFuncDiff(inst.TabContent(idx))
 	inst.CloseTab(idx)
+	if cxDiff {
+		m.refocusComplexityAfterDiff() // #2956
+	}
 	m.syncExplorerOpen()
 	if next := inst.Editor(); next != nil && next.HasFile() && inst.Key() == m.activeWS().Panes.Focused() {
 		m.explorer().SetActive(next.Path())

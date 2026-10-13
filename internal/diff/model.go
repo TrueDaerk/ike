@@ -74,6 +74,10 @@ type Model struct {
 	// gutL/gutR cache the two line-number gutter widths for the current rows;
 	// 0 means "not measured yet", see gutterWidths.
 	gutL, gutR int
+	// lineOffL/lineOffR shift the displayed line numbers and the jump
+	// target (#2956): a diff of an excerpt — one function plus context —
+	// numbers its rows the way the file does.
+	lineOffL, lineOffR int
 
 	// Horizontal scrolling (#1700): the diff never soft-wraps — every row is
 	// exactly one visual line, clipped at its column edge. hoff is the shared
@@ -434,7 +438,27 @@ func (m *Model) Retarget(leftTitle, rightTitle, leftPath, rightPath, leftRev, ri
 	// The path (and thus the language) may change; the following SetContents
 	// re-parses both sides against the new one.
 	m.leftIx, m.rightIx = highlight.Index{}, highlight.Index{}
-	m.notice = "" // the removed-file notice belonged to the old pair (#2506)
+	m.notice = ""          // the removed-file notice belonged to the old pair (#2506)
+	m.SetLineOffsets(0, 0) // an excerpt's numbering (#2956) is the old pair's too
+}
+
+// SetLineOffsets shifts the displayed line numbers of each side — and the
+// right side's jump target — by a fixed count (#2956): the Complexity
+// window's function diff shows an excerpt starting at file line off+1.
+func (m *Model) SetLineOffsets(left, right int) {
+	m.lineOffL, m.lineOffR = max(0, left), max(0, right)
+	m.gutL, m.gutR = 0, 0
+}
+
+// LineOffsets reports the per-side line-number shift.
+func (m Model) LineOffsets() (left, right int) { return m.lineOffL, m.lineOffR }
+
+// shiftNo shifts a 1-based line number by off; 0 (no line) stays 0.
+func shiftNo(no, off int) int {
+	if no == 0 {
+		return 0
+	}
+	return no + off
 }
 
 // SetRevs records which revision backs each side ("" = a working-tree file),
@@ -743,7 +767,7 @@ func (m *Model) RenderEditSplit(edLines []string, topLine, height int) string {
 			row := m.res.Rows[ri]
 			runes := expand(row.Left)
 			gap := row.Kind == RowAdded
-			left = m.gutterCell(row.LeftNo, lw, row.Kind != RowAdded, false, st) +
+			left = m.gutterCell(shiftNo(row.LeftNo, m.lineOffL), lw, row.Kind != RowAdded, false, st) +
 				m.stampHScroll(renderSegment(runes, gap, m.hoff, colL,
 					st.base(row.Kind, false), st.emph(row.Kind, false), expandSpans(row.Left, row.LeftSpans),
 					sideCaps(m.leftIx, row.LeftNo, row.Left), hl, 0, 0, st.sel), runes, gap, colL)
@@ -914,6 +938,7 @@ func (m *Model) jump() tea.Cmd {
 		}
 	}
 	path := m.rightPath
+	line += m.lineOffR
 	return func() tea.Msg { return JumpMsg{Path: path, Line: line} }
 }
 
@@ -1186,7 +1211,7 @@ func (m *Model) render() {
 	m.lines = nil
 	m.rowStarts = make([]int, len(m.res.Rows))
 	m.sepLines = map[int]int{}
-	m.gutL, m.gutR = computeGutterWidths(m.res.Rows)
+	m.gutL, m.gutR = computeGutterWidths(m.res.Rows, m.lineOffL, m.lineOffR)
 	if m.w <= 0 {
 		return
 	}
@@ -1396,12 +1421,12 @@ func (m *Model) renderSideLine(line, ri int, marked bool, st styles, hl *highlig
 	selL0, selL1 := m.selColsLen(line, false, len(runesL))
 	selR0, selR1 := m.selColsLen(line, true, len(runesR))
 	var b strings.Builder
-	b.WriteString(m.gutterCell(row.LeftNo, lw, row.Kind != RowAdded, marked, st))
+	b.WriteString(m.gutterCell(shiftNo(row.LeftNo, m.lineOffL), lw, row.Kind != RowAdded, marked, st))
 	b.WriteString(m.stampHScroll(renderSegment(runesL, gapL, m.hoff, colL,
 		st.base(row.Kind, false), st.emph(row.Kind, false), expandSpans(row.Left, row.LeftSpans), capsL, hl,
 		selL0, selL1, st.sel), runesL, gapL, colL))
 	b.WriteString(st.colSep)
-	b.WriteString(m.gutterCell(row.RightNo, rw, row.Kind != RowRemoved, marked, st))
+	b.WriteString(m.gutterCell(shiftNo(row.RightNo, m.lineOffR), rw, row.Kind != RowRemoved, marked, st))
 	b.WriteString(m.stampHScroll(renderSegment(runesR, gapR, m.hoff, colR,
 		st.base(row.Kind, true), st.emph(row.Kind, true), expandSpans(row.Right, row.RightSpans), capsR, hl,
 		selR0, selR1, st.sel), runesR, gapR, colR))
@@ -1433,8 +1458,8 @@ func (m *Model) renderUnifiedLine(line int, vr vrow, marked bool, st styles, hl 
 	runes := expand(text)
 	sel0, sel1 := m.selColsLen(line, false, len(runes))
 	var b strings.Builder
-	b.WriteString(m.gutterCell(leftNo, lw, true, marked, st))
-	b.WriteString(m.gutterCell(rightNo, rw, true, false, st))
+	b.WriteString(m.gutterCell(shiftNo(leftNo, m.lineOffL), lw, true, marked, st))
+	b.WriteString(m.gutterCell(shiftNo(rightNo, m.lineOffR), rw, true, false, st))
 	b.WriteString(m.stampHScroll(renderSegment(runes, false, m.hoff, col, base, emph,
 		expandSpans(text, spans), caps, hl, sel0, sel1, st.sel), runes, false, col))
 	return b.String()
@@ -1447,11 +1472,12 @@ func (m Model) gutterWidths() (lw, rw int) {
 	if m.gutL > 0 {
 		return m.gutL, m.gutR
 	}
-	return computeGutterWidths(m.res.Rows)
+	return computeGutterWidths(m.res.Rows, m.lineOffL, m.lineOffR)
 }
 
-// computeGutterWidths derives the two gutter widths from the row list.
-func computeGutterWidths(rows []Row) (lw, rw int) {
+// computeGutterWidths derives the two gutter widths from the row list,
+// each side's numbers shifted by its line offset.
+func computeGutterWidths(rows []Row, offL, offR int) (lw, rw int) {
 	maxL, maxR := 1, 1
 	for _, r := range rows {
 		if r.LeftNo > maxL {
@@ -1461,7 +1487,7 @@ func computeGutterWidths(rows []Row) (lw, rw int) {
 			maxR = r.RightNo
 		}
 	}
-	return max(3, digits(maxL)), max(3, digits(maxR))
+	return max(3, digits(maxL+offL)), max(3, digits(maxR+offR))
 }
 
 // gutterCell renders one line-number cell: a one-cell marker column (the

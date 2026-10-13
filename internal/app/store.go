@@ -177,6 +177,11 @@ func contentIdentity(inst *pane.Instance) (paneIdentity, bool) {
 		// background (#1997).
 		return paneIdentity{Kind: "remote", Path: inst.Remote().Alias()}, true
 	case pane.KindDiff:
+		if isCxFuncDiff(inst) {
+			// A function excerpt (#2956) is session state, like the
+			// Changes tab it came from: the slot restores as an editor.
+			return paneIdentity{}, false
+		}
 		// Path/Path2 name the compared files; Rev/Rev2 mark revision-
 		// backed sides so restore re-reads blobs instead of files (#508).
 		lr, rr := inst.Diff().Revs()
