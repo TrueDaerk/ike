@@ -56,6 +56,9 @@ func TestParseErrors(t *testing.T) {
 		{"unknown sort", "sort:size", "sort: wants"},
 		{"empty label", "label:", "label: wants a label name"},
 		{"unterminated quote", `label:"bug`, "unterminated quote"},
+		// The Issues pane has no row gate to negate with (#2951).
+		{"negated qualifier", "-label:bug", "-label: issue filters cannot negate"},
+		{"negated word", "crash -flaky", "-flaky: issue filters cannot exclude"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

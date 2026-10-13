@@ -208,6 +208,12 @@ vim's page-forward motion.
 A pane with no search of its own says so ("No search in this pane") rather
 than doing nothing.
 
+Every **filter row** (Problems, Usages, TODO index, archive viewer,
+Complexity, …) speaks the same language: `field:value` terms plus plain
+words, and a leading `-` excludes — `-file:vendor` hides vendored files,
+`-source:complexity` hides complexity findings, `-wip` hides rows matching
+"wip". Write `--x` (or `"-x"`) to search for a literal leading dash.
+
 !!! tip "Looking something up in a playground result"
 
     In the jq/yq playground ++cmd+f++ works straight from the query line: it

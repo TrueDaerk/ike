@@ -64,6 +64,14 @@ max:20` does the same on cognitive complexity), `kind:method` (or
 name, and `depth:4`, `params:5`, `nloc:50` keep functions at or above that
 nesting depth, parameter count or code-line count.
 
+Put a `-` in front of any key to exclude instead of keep:
+`file:internal/app -file:*_test.go` lists everything under `internal/app`
+except the tests, `-fn:render` drops the renderers and `-lang:php` the PHP
+files. A bare `-word` drops every function whose name the word matches. To
+search for a literal leading dash, write `--x` (or quote it: `"-x"`). The
+same `-` works in every filter row — Problems, Usages, the TODO index, the
+archive viewer and the other tool windows.
+
 Closures and lambdas are named `(anonymous)#n`, numbered per file. Languages
 without a syntax grammar (and data formats like JSON or YAML) are not
 measured.

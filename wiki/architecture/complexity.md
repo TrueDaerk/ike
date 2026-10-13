@@ -461,6 +461,12 @@ nothing), `class:` is a substring of `Function.Class`, and `depth:`,
 `baseline:new|accepted|worsened` (#2958) keeps functions of that status
 against the accepted-debt baseline — on a group row, groups with such a
 member (`Summary.Accepted` / `Worsened` / the remaining over count).
+Every key takes a leading `-` to negate it (#2951): `matches` runs each
+field through `filterexpr.Query.KeepsAll` (positive repeats AND, a negated
+term drops what it matches) and the free text through `MatchFree`, so
+`file:internal/app -file:*_test.go` lists the non-test files under
+internal/app, `-fn:render` drops the renderers, `-lang:php` the PHP rows and
+a bare `-word` every row whose name it fuzzy-matches.
 
 **Hide tests (#2950).** `t` — the `complexity.toggleTests` command, bound to
 `t` in the `complexity` keymap context and in the palette as "Complexity:

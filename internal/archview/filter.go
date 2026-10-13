@@ -102,16 +102,14 @@ func (m *Model) matches(full string, isDir bool) bool {
 	if isDir {
 		kind = "dir"
 	}
-	if kinds := q.Values("type"); len(kinds) > 0 && !hasString(kinds, kind) {
+	// A negated term or word (-type:dir, -name:*.min.js) drops what it
+	// matches (#2951).
+	if !q.Keeps("type", func(v string) bool { return v == kind }) ||
+		!q.Keeps("name", func(v string) bool { return filterexpr.MatchPath(v, full) }) {
 		return false
 	}
-	if names := q.Values("name"); len(names) > 0 && !anyPath(names, full) {
-		return false
-	}
-	if _, ok := filterexpr.MatchText(q.Match, full); !ok {
-		return false
-	}
-	return true
+	_, ok := q.MatchFree(full)
+	return ok
 }
 
 // keeps reports whether n survives the filter: the node itself matches, or one
@@ -123,26 +121,6 @@ func (m *Model) keeps(n *node) bool {
 	}
 	for _, c := range n.children {
 		if m.keeps(c) {
-			return true
-		}
-	}
-	return false
-}
-
-// anyPath applies the name: values to an entry path, OR'd.
-func anyPath(pats []string, name string) bool {
-	for _, p := range pats {
-		if filterexpr.MatchPath(p, name) {
-			return true
-		}
-	}
-	return false
-}
-
-// hasString reports membership.
-func hasString(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
 			return true
 		}
 	}

@@ -28,47 +28,28 @@ var Schema = filterexpr.Schema{Fields: []filterexpr.Field{
 func (m *Model) Filter() *filterbar.Model { return &m.filter }
 
 // matches gates one reference through the filter. Terms of different fields
-// are AND'd, repeats of one field OR'd.
+// are AND'd, repeats of one field OR'd; a negated term or word
+// (-file:_test.go, -mock) drops what it matches (#2951).
 func (m *Model) matches(ref ilsp.Reference) bool {
 	q := m.filter.Query()
 	if q.Empty() {
 		return true
 	}
-	if files := q.Values("file"); len(files) > 0 && !m.pathMatches(files, ref.Path) {
+	if !q.Keeps("file", func(v string) bool { return m.pathMatches(v, ref.Path) }) ||
+		!q.Keeps("text", func(v string) bool {
+			return strings.Contains(strings.ToLower(ref.Preview), strings.ToLower(v))
+		}) {
 		return false
 	}
-	if texts := q.Values("text"); len(texts) > 0 && !anySubstring(texts, ref.Preview) {
-		return false
-	}
-	if _, ok := filterexpr.MatchText(q.Match, m.shorten(ref.Path)+" "+ref.Preview); !ok {
-		return false
-	}
-	return true
+	_, ok := q.MatchFree(m.shorten(ref.Path) + " " + ref.Preview)
+	return ok
 }
 
-// pathMatches applies the file: values to a path, OR'd, against both the path
-// as rendered (project-relative) and the raw one — a filter typed off the
+// pathMatches applies one file: value to a path, against both the path as
+// rendered (project-relative) and the raw one — a filter typed off the
 // screen has to hit what the screen shows.
-func (m *Model) pathMatches(pats []string, path string) bool {
-	shown := m.shorten(path)
-	for _, p := range pats {
-		if filterexpr.MatchPath(p, shown) || filterexpr.MatchPath(p, path) {
-			return true
-		}
-	}
-	return false
-}
-
-// anySubstring reports whether any needle is a case-insensitive substring of
-// hay.
-func anySubstring(needles []string, hay string) bool {
-	low := strings.ToLower(hay)
-	for _, n := range needles {
-		if strings.Contains(low, strings.ToLower(n)) {
-			return true
-		}
-	}
-	return false
+func (m *Model) pathMatches(pat, path string) bool {
+	return filterexpr.MatchPath(pat, m.shorten(path)) || filterexpr.MatchPath(pat, path)
 }
 
 // filePaths lists the files behind the current result set as completion

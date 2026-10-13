@@ -1,5 +1,20 @@
 # Log
 
+## 2026-10-13 (Negated filter terms, #2951)
+
+- [List Filter Syntax](/architecture/list-filters.md): a leading `-`
+  negates a fielded term or a bare word — `Term.Negated`,
+  `Query.Excludes`, the literal escapes (`-`, `"-x"`, `--x`), `Format`
+  round-tripping them; the new `Query.Keeps` / `KeepsAll` / `MatchFree`
+  helpers every pane now gates with; `Has` / `Value` / `Values` read
+  positive terms only; the Issues dialect rejects negation.
+- [Shared Building Blocks](/architecture/shared-building-blocks.md): the
+  `filterbar` row names the helpers.
+- [Code Complexity](/architecture/complexity.md): the filter paragraph
+  gains the negated keys (`KeepsAll`, `MatchFree`).
+- User guides: the complexity guide's filter keys and the search guide's
+  filter-row paragraph mention `-`.
+
 ## 2026-10-13 (Complexity extraction candidates, #2948)
 
 - [Code Complexity](/architecture/complexity.md): new "Extraction

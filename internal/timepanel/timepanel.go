@@ -183,23 +183,15 @@ func (m *Model) matches(s telemetry.Summary) bool {
 	if q.Empty() {
 		return true
 	}
-	if names := q.Values("project"); len(names) > 0 && !anyMatch(names, s.Name) {
+	// project: values OR'd as substrings of the rendered name; a negated
+	// term or word drops what it matches (#2951).
+	if !q.Keeps("project", func(v string) bool {
+		return strings.Contains(strings.ToLower(s.Name), strings.ToLower(v))
+	}) {
 		return false
 	}
-	if _, ok := filterexpr.MatchText(q.Match, s.Name); !ok {
-		return false
-	}
-	return true
-}
-
-// anyMatch ORs the project: values against the rendered name.
-func anyMatch(pats []string, name string) bool {
-	for _, p := range pats {
-		if strings.Contains(strings.ToLower(name), strings.ToLower(p)) {
-			return true
-		}
-	}
-	return false
+	_, ok := q.MatchFree(s.Name)
+	return ok
 }
 
 // Total is the selected range's active time across the visible rows.
