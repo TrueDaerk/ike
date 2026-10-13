@@ -119,7 +119,7 @@ func TestSortCycleAndReverse(t *testing.T) {
 		t.Fatalf("reversed cog order = %v", got)
 	}
 	// The cycle wraps to the file column, a text column sorted ascending.
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 5; i++ {
 		m.Update(key("s"))
 	}
 	if col, desc := m.SortColumn(); col != ColFile || desc {
@@ -254,10 +254,10 @@ func TestExportCSV(t *testing.T) {
 		t.Fatalf("export = %+v", msg)
 	}
 	lines := strings.Split(strings.TrimSpace(msg.CSV), "\n")
-	if len(lines) != 5 || lines[0] != "file,function,kind,line,ccn,cognitive,nloc,params,depth" {
+	if len(lines) != 5 || lines[0] != "file,function,kind,line,ccn,cognitive,nloc,params,depth,comment_lines,cmt_pct" {
 		t.Fatalf("csv = %q", msg.CSV)
 	}
-	if lines[1] != "internal/app/app.go,render,function,1,25,30,21,1,2" {
+	if lines[1] != "internal/app/app.go,render,function,1,25,30,21,1,2,0,0" {
 		t.Fatalf("first row = %q", lines[1])
 	}
 }
@@ -269,7 +269,7 @@ func TestWarnThresholdPaintsCells(t *testing.T) {
 	if strings.Count(warn, "\x1b[") <= strings.Count(plain, "\x1b[") {
 		t.Fatalf("the over-threshold row must carry extra styling:\nwarn=%q\nplain=%q", warn, plain)
 	}
-	m.SetWarn(100, 100)
+	m.SetWarn(100, 100, 0)
 	if s := m.Summary(); s.OverThreshold != 0 {
 		t.Fatalf("over threshold with 100/100 = %d", s.OverThreshold)
 	}

@@ -10,7 +10,9 @@
       "params": 1,
       "ccn": 5,
       "cognitive": 6,
-      "depth": 2
+      "depth": 2,
+      "commentLines": 1,
+      "commentDensity": 0.08333333333333333
     },
     {
       "name": "match_arms",
@@ -21,7 +23,9 @@
       "params": 1,
       "ccn": 6,
       "cognitive": 5,
-      "depth": 2
+      "depth": 2,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "nested_loops",
@@ -32,7 +36,9 @@
       "params": 1,
       "ccn": 6,
       "cognitive": 14,
-      "depth": 4
+      "depth": 4,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "try_except",
@@ -43,7 +49,9 @@
       "params": 1,
       "ccn": 4,
       "cognitive": 4,
-      "depth": 2
+      "depth": 2,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "ternaries",
@@ -54,7 +62,9 @@
       "params": 5,
       "ccn": 4,
       "cognitive": 4,
-      "depth": 2
+      "depth": 2,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "boolean_sequences",
@@ -65,7 +75,9 @@
       "params": 4,
       "ccn": 14,
       "cognitive": 12,
-      "depth": 1
+      "depth": 1,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "nested_closures",
@@ -76,7 +88,9 @@
       "params": 1,
       "ccn": 1,
       "cognitive": 5,
-      "depth": 3
+      "depth": 3,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "total",
@@ -87,7 +101,9 @@
       "params": 0,
       "ccn": 2,
       "cognitive": 3,
-      "depth": 2
+      "depth": 2,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "(anonymous)#1",
@@ -98,7 +114,9 @@
       "params": 1,
       "ccn": 2,
       "cognitive": 1,
-      "depth": 1
+      "depth": 1,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "factorial",
@@ -109,7 +127,9 @@
       "params": 1,
       "ccn": 2,
       "cognitive": 2,
-      "depth": 1
+      "depth": 1,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "Server.handle",
@@ -120,7 +140,9 @@
       "params": 3,
       "ccn": 4,
       "cognitive": 4,
-      "depth": 2
+      "depth": 2,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "Server.send",
@@ -131,7 +153,9 @@
       "params": 2,
       "ccn": 1,
       "cognitive": 0,
-      "depth": 0
+      "depth": 0,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "plain",
@@ -142,7 +166,35 @@
       "params": 0,
       "ccn": 1,
       "cognitive": 0,
-      "depth": 0
+      "depth": 0,
+      "commentLines": 0,
+      "commentDensity": 0
+    },
+    {
+      "name": "documented",
+      "kind": "function",
+      "line": 113,
+      "endLine": 115,
+      "nloc": 3,
+      "params": 1,
+      "ccn": 1,
+      "cognitive": 0,
+      "depth": 0,
+      "commentLines": 0,
+      "commentDensity": 0
+    },
+    {
+      "name": "comment_heavy",
+      "kind": "function",
+      "line": 118,
+      "endLine": 124,
+      "nloc": 3,
+      "params": 1,
+      "ccn": 1,
+      "cognitive": 0,
+      "depth": 0,
+      "commentLines": 4,
+      "commentDensity": 0.5714285714285714
     }
   ]
 }

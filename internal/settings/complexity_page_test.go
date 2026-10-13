@@ -6,6 +6,7 @@ package settings
 // persists and shows in the list.
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -39,7 +40,7 @@ func TestComplexityPageEntries(t *testing.T) {
 	if p.Description == "" {
 		t.Fatal("the Complexity page needs a description")
 	}
-	want := []string{"complexity.enabled", "complexity.exclude", "complexity.ccn_warn", "complexity.cognitive_warn", "complexity.problems", "complexity.status_segment"}
+	want := []string{"complexity.enabled", "complexity.exclude", "complexity.ccn_warn", "complexity.cognitive_warn", "complexity.comment_density_warn", "complexity.problems", "complexity.status_segment"}
 	if len(p.Entries) != len(want) {
 		t.Fatalf("Complexity page has %d entries, want %d: %+v", len(p.Entries), len(want), p.Entries)
 	}
@@ -181,5 +182,51 @@ func TestComplexityStatusSegmentToggles(t *testing.T) {
 	commit(t, m)
 	if config.Get().Complexity.StatusSegment {
 		t.Fatal("status_segment did not toggle back off")
+	}
+}
+
+// TestComplexityCommentDensityWarn: the comment-density threshold (#2934)
+// is a bounded percentage on the Complexity page; non-numeric input is
+// rejected in the form, an out-of-range value clamps, a sane value persists
+// and shows in the list, and 0 (off) is accepted.
+func TestComplexityCommentDensityWarn(t *testing.T) {
+	restoreConfig(t)
+	e := complexityEntry(t, "complexity.comment_density_warn")
+	if e.Type != Int || e.Min != 0 || e.Max != 100 {
+		t.Fatalf("comment_density_warn = %+v, want an Int bounded 0..100", e)
+	}
+	if got := config.Get().Complexity.CommentDensityWarn; got != 40 {
+		t.Fatalf("comment_density_warn must default to 40, got %d", got)
+	}
+	m := New([]Page{{Title: "Complexity", Entries: []Entry{e}}}, testOpts(t))
+	m.SetSize(100, 24)
+	m.Open()
+	m.Update(key("tab"))
+	m.Update(key("enter"))
+	ed, ok := m.editor.(*intEditor)
+	if !ok {
+		t.Fatalf("editor = %T, want *intEditor", m.editor)
+	}
+	ed.tf.Set("lots")
+	if cmd := m.Update(key("enter")); cmd != nil || ed.err == "" {
+		t.Fatalf("invalid threshold must not write (err=%q)", ed.err)
+	}
+	ed.tf.Set("250")
+	m.Update(key("enter"))
+	commit(t, m)
+	if got := config.Get().Complexity.CommentDensityWarn; got != 100 {
+		t.Fatalf("comment_density_warn = %d, want clamped 100", got)
+	}
+	for _, v := range []string{"55", "0"} {
+		m.Update(key("enter"))
+		m.editor.(*intEditor).tf.Set(v)
+		m.Update(key("enter"))
+		commit(t, m)
+		if got := config.Get().Complexity.CommentDensityWarn; fmt.Sprint(got) != v {
+			t.Fatalf("comment_density_warn = %d, want %s", got, v)
+		}
+	}
+	if view := m.View(); !strings.Contains(view, "Comment density warning") {
+		t.Fatalf("the entry list must show the setting:\n%s", view)
 	}
 }

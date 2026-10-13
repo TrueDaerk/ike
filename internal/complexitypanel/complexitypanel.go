@@ -5,7 +5,7 @@
 // file, with the function under the caret marked) — and a Changes tab slot
 // is reserved for the diff view of a later issue, so the tab order never
 // shifts. The rows are one grid (internal/gridview): file, function, line,
-// CCN, cognitive, NLOC, params, depth; 's' cycles the sort column, 'S'
+// CCN, cognitive, NLOC, params, depth, comment density (cmt%, #2934); 's' cycles the sort column, 'S'
 // reverses it, the filter row (internal/filterbar over internal/filterexpr)
 // narrows by file:, lang:, fn:, min: and metric:, and bare words fuzzy over
 // the function names.
@@ -71,27 +71,37 @@ const (
 	// ColChange is the Changes tab's section column: changed / added /
 	// removed (#2918).
 	ColChange
+	// ColCmt is the comment density in whole percent (#2934). It follows
+	// depth on screen; the value sits last so the older columns keep theirs.
+	ColCmt
 )
 
 // columnLabels are the column headers in Column order.
-var columnLabels = []string{"file", "function", "line", "ccn", "cog", "nloc", "params", "depth", "change"}
+var columnLabels = []string{"file", "function", "line", "ccn", "cog", "nloc", "params", "depth", "change", "cmt%"}
 
 // numeric reports whether a column sorts as a number (descending by
 // default) rather than as text.
 func (c Column) numeric() bool { return c >= ColLine && c != ColChange }
 
+// lastColumn is the highest Column value.
+const lastColumn = ColCmt
+
 // The per-tab column layouts, in display order: the File tab hides the
 // file column, the Changes tab leads with the section and drops params /
 // depth for the before→after metrics.
 var (
-	projectLayout = []Column{ColFile, ColFunc, ColLine, ColCCN, ColCog, ColNLOC, ColParams, ColDepth}
+	projectLayout = []Column{ColFile, ColFunc, ColLine, ColCCN, ColCog, ColNLOC, ColParams, ColDepth, ColCmt}
 	fileLayout    = projectLayout[1:]
-	changesLayout = []Column{ColChange, ColFunc, ColFile, ColLine, ColCCN, ColCog, ColNLOC}
+	changesLayout = []Column{ColChange, ColFunc, ColFile, ColLine, ColCCN, ColCog, ColNLOC, ColCmt}
 )
 
 // DefaultWarn is the warning threshold both metrics fall back to
 // (complexity.ccn_warn / complexity.cognitive_warn).
 const DefaultWarn = 15
+
+// DefaultCmtWarn is the comment-density threshold in percent
+// (complexity.comment_density_warn); 0 turns the check off.
+const DefaultCmtWarn = 40
 
 // OpenLocationMsg asks the root model to open Path with the caret on the
 // function header (enter / double click). Line is 0-based.
@@ -123,7 +133,7 @@ var Schema = filterexpr.Schema{Fields: []filterexpr.Field{
 	{Name: "lang", Aliases: []string{"language"}, ValueDoc: "a language id", Doc: "lang: narrows by language id (go, php, …)"},
 	{Name: "fn", Aliases: []string{"func", "function"}, ValueDoc: "a function name part", Doc: "fn: narrows by function name (substring)"},
 	{Name: "min", ValueDoc: "a number", Doc: "min: keeps rows at or above n on the sort column"},
-	{Name: "metric", Values: []string{"ccn", "cog"}, Doc: "metric: sorts by cyclomatic or cognitive complexity"},
+	{Name: "metric", Values: []string{"ccn", "cog", "cmt"}, Doc: "metric: sorts by cyclomatic or cognitive complexity, or comment density (cmt%)"},
 }}
 
 // Row is one function of the current tab, kept alongside the cells so the
@@ -169,6 +179,8 @@ func (r Row) value(c Column) (int, string) {
 			return abs(r.DeltaCognitive()), ""
 		case ColNLOC:
 			return abs(r.DeltaNLOC()), ""
+		case ColCmt:
+			return abs(r.DeltaCmt()), ""
 		}
 	}
 	switch c {
@@ -180,6 +192,8 @@ func (r Row) value(c Column) (int, string) {
 		return r.Fn.NLOC, ""
 	case ColParams:
 		return r.Fn.Params, ""
+	case ColCmt:
+		return cmtOf(r.Fn), ""
 	}
 	return r.Fn.Depth, ""
 }
@@ -217,6 +231,8 @@ func (r Row) cell(c Column) string {
 			return r.metricCell(ccnOf, true)
 		case ColCog:
 			return r.metricCell(cogOf, true)
+		case ColCmt:
+			return r.metricCell(cmtOf, true)
 		}
 		return r.metricCell(nlocOf, false)
 	}
@@ -225,6 +241,8 @@ func (r Row) cell(c Column) string {
 		return strconv.Itoa(r.Fn.CCN)
 	case ColCog:
 		return strconv.Itoa(r.Fn.Cognitive)
+	case ColCmt:
+		return strconv.Itoa(cmtOf(r.Fn))
 	}
 	return strconv.Itoa(r.Fn.NLOC)
 }
@@ -256,6 +274,7 @@ type Model struct {
 	hasView  bool
 	ccnWarn  int
 	cogWarn  int
+	cmtWarn  int
 	tab      Tab
 	sortCol  Column
 	desc     bool
@@ -283,7 +302,7 @@ type Model struct {
 // the snapshot arrives via Set.
 func New(pal *theme.Palette) Model {
 	m := Model{pal: pal, now: time.Now, filter: filterbar.New(Schema),
-		sortCol: ColCCN, desc: true, ccnWarn: DefaultWarn, cogWarn: DefaultWarn, pathLang: langOf}
+		sortCol: ColCCN, desc: true, ccnWarn: DefaultWarn, cogWarn: DefaultWarn, cmtWarn: DefaultCmtWarn, pathLang: langOf}
 	m.Refresh()
 	return m
 }
@@ -312,18 +331,23 @@ func (m *Model) SetRoot(root string) {
 }
 
 // SetWarn applies the warning thresholds (complexity.ccn_warn /
-// complexity.cognitive_warn); a value below 1 keeps the default.
-func (m *Model) SetWarn(ccn, cog int) {
+// complexity.cognitive_warn / complexity.comment_density_warn); a CCN or
+// cognitive value below 1 keeps the default, a comment-density value of 0
+// turns that check off and a negative one keeps the default.
+func (m *Model) SetWarn(ccn, cog, cmt int) {
 	if ccn < 1 {
 		ccn = DefaultWarn
 	}
 	if cog < 1 {
 		cog = DefaultWarn
 	}
-	if ccn == m.ccnWarn && cog == m.cogWarn {
+	if cmt < 0 {
+		cmt = DefaultCmtWarn
+	}
+	if ccn == m.ccnWarn && cog == m.cogWarn && cmt == m.cmtWarn {
 		return
 	}
-	m.ccnWarn, m.cogWarn = ccn, cog
+	m.ccnWarn, m.cogWarn, m.cmtWarn = ccn, cog, cmt
 	m.Refresh()
 }
 
@@ -408,7 +432,7 @@ func (m *Model) SortColumn() (Column, bool) { return m.sortCol, m.desc }
 // SetSort selects the sort column (a numeric column descending, a text one
 // ascending) and rebuilds the rows.
 func (m *Model) SetSort(c Column) {
-	if c < ColFile || c > ColChange {
+	if c < ColFile || c > lastColumn {
 		return
 	}
 	m.sortCol, m.desc = c, c.numeric()
@@ -482,13 +506,15 @@ func (m *Model) Refresh() {
 		}
 		fns = append(fns, r.Fn)
 	}
-	m.summary = complexity.Summarize(fns, m.ccnWarn, m.cogWarn)
+	m.summary = complexity.Summarize(fns, m.ccnWarn, m.cogWarn, m.cmtWarn)
 	q := m.filter.Query()
 	switch q.Value("metric") {
 	case "ccn":
 		m.sortCol, m.desc = ColCCN, true
 	case "cog":
 		m.sortCol, m.desc = ColCog, true
+	case "cmt":
+		m.sortCol, m.desc = ColCmt, true
 	}
 	m.rows = m.rows[:0]
 	for _, r := range all {
@@ -835,7 +861,7 @@ func (m *Model) export() tea.Cmd {
 }
 
 // csvHeader is the export's first row.
-var csvHeader = []string{"file", "function", "kind", "line", "ccn", "cognitive", "nloc", "params", "depth"}
+var csvHeader = []string{"file", "function", "kind", "line", "ccn", "cognitive", "nloc", "params", "depth", "comment_lines", "cmt_pct"}
 
 // CSV renders the current tab as comma-separated values: a header row and
 // one row per visible function, the file column included on every tab so
@@ -848,7 +874,7 @@ func (m *Model) CSV() string {
 	writeCSVRow(&b, csvHeader)
 	for _, r := range m.rows {
 		c := r.cells(projectLayout)
-		writeCSVRow(&b, []string{c[0], r.Fn.Name, r.Fn.Kind, c[2], c[3], c[4], c[5], c[6], c[7]})
+		writeCSVRow(&b, []string{c[0], r.Fn.Name, r.Fn.Kind, c[2], c[3], c[4], c[5], c[6], c[7], strconv.Itoa(r.Fn.CommentLines), c[8]})
 	}
 	return b.String()
 }
@@ -943,6 +969,7 @@ func (m *Model) totalsText() string {
 		"NLOC "+itoa(s.NLOC),
 		"CCN Σ"+itoa(s.CCNSum)+" avg "+fmt1(s.CCNAvg)+" max "+itoa(s.CCNMax),
 		"cog Σ"+itoa(s.CogSum)+" avg "+fmt1(s.CogAvg)+" max "+itoa(s.CogMax),
+		"cmt "+itoa(complexity.DensityPercent(s.CommentDensity))+"%",
 		itoa(s.OverThreshold)+" over",
 	)
 	return strings.Join(parts, " · ")
@@ -978,7 +1005,7 @@ func (m *Model) emptyText() string {
 }
 
 // renderRow draws one line as grid cells: the file (Project tab only),
-// function, line and the five metrics; a metric at or above its warning
+// function, line and the six metrics; a metric at or above its warning
 // threshold takes the warning colour, the File tab's caret row is marked
 // on the function cell.
 func (m *Model) renderRow(pal *theme.Palette, i int) string {
@@ -998,6 +1025,9 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 	}
 	if ci := m.layoutIndex(ColCog); ci >= 0 {
 		cells[ci].Warn = r.Fn.Cognitive >= m.cogWarn
+	}
+	if ci := m.layoutIndex(ColCmt); ci >= 0 {
+		cells[ci].Warn = r.Fn.CommentsOver(m.cmtWarn)
 	}
 	// The section column reads like a heading: named on the first row of
 	// each section, blank below it.

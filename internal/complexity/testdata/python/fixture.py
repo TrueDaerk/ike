@@ -107,3 +107,19 @@ class Server:
 
 def plain():
     pass
+
+
+# documented carries a comment above its header; it lies outside the unit,
+# and the docstring is a string statement, not a comment: density 0 (#2934).
+def documented(x):
+    """A docstring is not a comment."""
+    return x + 1
+
+
+def comment_heavy(x):
+    # first explain
+    # then explain more
+    y = x * 2
+    # and again
+    # and once more
+    return y

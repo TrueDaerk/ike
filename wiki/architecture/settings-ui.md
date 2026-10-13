@@ -362,7 +362,9 @@ any entry whose key the typed schema does not expose (no dead keys).
   list of files it never measures (`vendor/**`, `**/*_test.go`; the shared
   `globValidate` refuses a malformed pattern in the form), and the two
   warning thresholds `complexity.ccn_warn` / `complexity.cognitive_warn`
-  (Int, 1-200, default 15) the Complexity tool window paints cells against.
+  (Int, 1-200, default 15) the Complexity tool window paints cells against,
+  plus `complexity.comment_density_warn` (Int, 0-100 percent, default 40,
+  `0` = off, #2934) for the `cmt%` column, the hint and the Problems row.
   All apply live: off drops the index, on rewalks, a changed list rebuilds,
   a changed threshold repaints the open window. `complexity.problems` (Bool, default on, #2920) feeds over-threshold
   functions into the Problems window; off clears those rows. `complexity.status_segment` (Bool, default off,

@@ -299,18 +299,37 @@ func TestNLOC(t *testing.T) {
 		"	s := \"//not a comment\"",
 		"}",
 	}
-	got := nloc(lines, 0, len(lines)-1, comments{line: "//", block: [2]string{"/*", "*/"}})
-	if got != 5 {
-		t.Errorf("nloc = %d, want 5", got)
+	got, cmt := nloc(lines, 0, len(lines)-1, comments{line: "//", block: [2]string{"/*", "*/"}})
+	if got != 5 || cmt != 3 {
+		t.Errorf("nloc = %d/%d, want 5 code / 3 comment", got, cmt)
 	}
 	// Hash comments, no block syntax; the range is clamped.
-	got = nloc([]string{"a=1", "# only", "", "b=2 # tail"}, 0, 99, comments{line: "#"})
-	if got != 2 {
-		t.Errorf("nloc(#) = %d, want 2", got)
+	got, cmt = nloc([]string{"a=1", "# only", "", "b=2 # tail"}, 0, 99, comments{line: "#"})
+	if got != 2 || cmt != 1 {
+		t.Errorf("nloc(#) = %d/%d, want 2/1", got, cmt)
 	}
 	// No comment syntax at all: only blank lines are dropped.
-	if got := nloc([]string{"x", "", " "}, 0, 2, comments{}); got != 1 {
-		t.Errorf("nloc(none) = %d, want 1", got)
+	if got, cmt := nloc([]string{"x", "", " "}, 0, 2, comments{}); got != 1 || cmt != 0 {
+		t.Errorf("nloc(none) = %d/%d, want 1/0", got, cmt)
+	}
+	// A block comment running into the closing-brace line: the covered
+	// lines are comment, the brace line is code.
+	got, cmt = nloc([]string{"f() {", "  x()", "  /* a", "  b", "  c */ }"}, 0, 4, comments{line: "//", block: [2]string{"/*", "*/"}})
+	if got != 3 || cmt != 2 {
+		t.Errorf("nloc(block to end) = %d/%d, want 3/2", got, cmt)
+	}
+}
+
+func TestDensity(t *testing.T) {
+	if d := density(0, 0); d != 0 {
+		t.Errorf("density(0,0) = %v", d)
+	}
+	if d := density(9, 11); d != 0.55 {
+		t.Errorf("density(9,11) = %v, want 0.55", d)
+	}
+	f := Function{CommentDensity: 0.395}
+	if DensityPercent(f.CommentDensity) != 40 || !f.CommentsOver(40) || f.CommentsOver(41) || f.CommentsOver(0) {
+		t.Errorf("CommentsOver mis-rounds %v", f.CommentDensity)
 	}
 }
 
@@ -320,17 +339,29 @@ func TestSummarize(t *testing.T) {
 		{NLOC: 20, CCN: 15, Cognitive: 4},
 		{NLOC: 5, CCN: 1, Cognitive: 16},
 	}
-	s := Summarize(fns, 15, 15)
+	s := Summarize(fns, 15, 15, 0)
 	want := Summary{Functions: 3, NLOC: 35, CCNSum: 19, CCNAvg: 19.0 / 3, CCNMax: 15, CogSum: 22, CogAvg: 22.0 / 3, CogMax: 16, OverThreshold: 2}
 	if s != want {
 		t.Errorf("Summarize = %+v, want %+v", s, want)
 	}
-	if s := Summarize(nil, 15, 15); s != (Summary{}) {
+	if s := Summarize(nil, 15, 15, 0); s != (Summary{}) {
 		t.Errorf("Summarize(nil) = %+v, want zero", s)
 	}
 	// A non-positive threshold disables that check.
-	if s := Summarize(fns, 0, 15); s.OverThreshold != 1 {
+	if s := Summarize(fns, 0, 15, 0); s.OverThreshold != 1 {
 		t.Errorf("OverThreshold with CCN check off = %d, want 1", s.OverThreshold)
+	}
+	// Comment density: summed lines, aggregate ratio, its own threshold.
+	cm := []Function{
+		{NLOC: 6, CommentLines: 4, CommentDensity: 0.4},
+		{NLOC: 9, CommentLines: 1, CommentDensity: 0.1},
+	}
+	s = Summarize(cm, 0, 0, 40)
+	if s.CommentLines != 5 || s.CommentDensity != 0.25 || s.OverThreshold != 1 {
+		t.Errorf("Summarize(comments) = %+v, want 5 lines, 0.25, 1 over", s)
+	}
+	if s := Summarize(cm, 0, 0, 0); s.OverThreshold != 0 {
+		t.Errorf("cmtWarn 0 must disable the check, got %d over", s.OverThreshold)
 	}
 }
 

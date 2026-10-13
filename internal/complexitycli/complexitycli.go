@@ -48,6 +48,9 @@ type settings struct {
 	exclude []string
 	ccnWarn int
 	cogWarn int
+	// cmtWarn is the comment-density threshold in percent (#2934); 0 is
+	// off, as complexity.comment_density_warn = 0 configures it.
+	cmtWarn int
 }
 
 // Run executes the report for a and returns the exit code. Output goes to
@@ -116,12 +119,15 @@ func resolve(a cli.ComplexityArgs) (settings, error) {
 	}
 	c, _ := config.Load(config.Discover(abs))
 	s := settings{args: a, dir: abs, exclude: c.Complexity.Exclude,
-		ccnWarn: c.Complexity.CCNWarn, cogWarn: c.Complexity.CognitiveWarn}
+		ccnWarn: c.Complexity.CCNWarn, cogWarn: c.Complexity.CognitiveWarn, cmtWarn: c.Complexity.CommentDensityWarn}
 	if a.CCN > 0 {
 		s.ccnWarn = a.CCN
 	}
 	if a.Cog > 0 {
 		s.cogWarn = a.Cog
+	}
+	if a.Cmt > 0 {
+		s.cmtWarn = a.Cmt
 	}
 	if s.ccnWarn <= 0 {
 		s.ccnWarn = defaultWarn
@@ -132,22 +138,23 @@ func resolve(a cli.ComplexityArgs) (settings, error) {
 	return s, nil
 }
 
-// keep reports whether a row with these metrics passes the row filter:
-// --min N keeps CCN or cognitive ≥ N; an explicit --ccn / --cog keeps rows
-// at or above either threshold; no filter flag keeps everything.
-func (s settings) keep(ccn, cog int) bool {
+// keep reports whether a function passes the row filter: --min N keeps
+// CCN or cognitive ≥ N; an explicit --ccn / --cog / --cmt keeps rows at or
+// above any threshold (the comment density only while its threshold is
+// on); no filter flag keeps everything.
+func (s settings) keep(f complexity.Function) bool {
 	switch {
 	case s.args.Min > 0:
-		return ccn >= s.args.Min || cog >= s.args.Min
-	case s.args.CCN > 0 || s.args.Cog > 0:
-		return ccn >= s.ccnWarn || cog >= s.cogWarn
+		return f.CCN >= s.args.Min || f.Cognitive >= s.args.Min
+	case s.args.CCN > 0 || s.args.Cog > 0 || s.args.Cmt > 0:
+		return f.CCN >= s.ccnWarn || f.Cognitive >= s.cogWarn || f.CommentsOver(s.cmtWarn)
 	}
 	return true
 }
 
 // filtered reports whether any row filter is active.
 func (s settings) filtered() bool {
-	return s.args.Min > 0 || s.args.CCN > 0 || s.args.Cog > 0
+	return s.args.Min > 0 || s.args.CCN > 0 || s.args.Cog > 0 || s.args.Cmt > 0
 }
 
 // rel renders abs relative to the project directory, slash-separated.
@@ -292,11 +299,11 @@ func runProject(s settings) projectReport {
 	fns := make([]complexity.Function, len(r.all))
 	for i, rw := range r.all {
 		fns[i] = rw.fn
-		if s.keep(rw.fn.CCN, rw.fn.Cognitive) {
+		if s.keep(rw.fn) {
 			r.rows = append(r.rows, rw)
 		}
 	}
-	r.summary = complexity.Summarize(fns, s.ccnWarn, s.cogWarn)
+	r.summary = complexity.Summarize(fns, s.ccnWarn, s.cogWarn, s.cmtWarn)
 	return r
 }
 
@@ -455,7 +462,7 @@ func runDiff(s settings) (diffReport, error) {
 			r.headFiles++
 		}
 	})
-	r.diff = complexity.DiffProject(base, head, s.ccnWarn, s.cogWarn)
+	r.diff = complexity.DiffProject(base, head, s.ccnWarn, s.cogWarn, s.cmtWarn)
 	return r, nil
 }
 
@@ -478,17 +485,17 @@ func (r diffReport) sections() (changed []changeRow, added, removed []row) {
 		fd := r.diff.Files[p]
 		rel := r.s.rel(p)
 		for _, c := range fd.Changed {
-			if r.s.keep(c.Before.CCN, c.Before.Cognitive) || r.s.keep(c.After.CCN, c.After.Cognitive) {
+			if r.s.keep(c.Before) || r.s.keep(c.After) {
 				changed = append(changed, changeRow{file: rel, ch: c})
 			}
 		}
 		for _, f := range fd.Added {
-			if r.s.keep(f.CCN, f.Cognitive) {
+			if r.s.keep(f) {
 				added = append(added, row{file: rel, fn: f})
 			}
 		}
 		for _, f := range fd.Removed {
-			if r.s.keep(f.CCN, f.Cognitive) {
+			if r.s.keep(f) {
 				removed = append(removed, row{file: rel, fn: f})
 			}
 		}

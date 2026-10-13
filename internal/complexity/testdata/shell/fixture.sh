@@ -97,3 +97,17 @@ select_loop() {
 plain() {
   :
 }
+
+# documented carries a comment above its header; it lies outside the unit,
+# so the comment density stays 0 (#2934).
+documented() {
+  echo "$1"
+}
+
+comment_heavy() {
+  # first explain
+  # then explain more
+  local y=$1
+  # and again
+  echo "$y"
+}

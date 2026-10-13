@@ -25,11 +25,28 @@ const complexityProblemSource = "complexity"
 // complexityDiagnostics builds the feed from a snapshot: one warning per
 // function whose CCN reaches ccnWarn or whose cognitive complexity reaches
 // cogWarn, listing every metric over its threshold in one message. Code names
-// the first exceeded metric ("ccn" before "cognitive").
-func complexityDiagnostics(v complexity.View, ccnWarn, cogWarn int) map[string][]ilsp.Diagnostic {
+// the first exceeded metric ("ccn" before "cognitive"). A comment density
+// at or above cmtWarn percent (#2934; 0 = off) is its own warning on the
+// same line — "function foo: comment density 55% ≥ 40%", Code "comments" —
+// since it reads as a different problem than a complex body.
+func complexityDiagnostics(v complexity.View, ccnWarn, cogWarn, cmtWarn int) map[string][]ilsp.Diagnostic {
 	byPath := map[string][]ilsp.Diagnostic{}
+	warn := func(path string, fn complexity.Function, msg, code string) {
+		pos := buffer.Position{Line: fn.Line}
+		byPath[path] = append(byPath[path], ilsp.Diagnostic{
+			Range:    buffer.Range{Start: pos, End: pos},
+			Severity: 2,
+			Message:  msg,
+			Source:   complexityProblemSource,
+			Code:     code,
+		})
+	}
 	for path, fns := range v.Files {
 		for _, fn := range fns {
+			if fn.CommentsOver(cmtWarn) {
+				warn(path, fn, "function "+fn.Name+": comment density "+
+					strconv.Itoa(complexity.DensityPercent(fn.CommentDensity))+"% ≥ "+strconv.Itoa(cmtWarn)+"%", "comments")
+			}
 			overCCN := fn.CCN >= ccnWarn
 			overCog := fn.Cognitive >= cogWarn
 			if !overCCN && !overCog {
@@ -48,14 +65,7 @@ func complexityDiagnostics(v complexity.View, ccnWarn, cogWarn int) map[string][
 				}
 				msg += "cognitive " + strconv.Itoa(fn.Cognitive) + " ≥ " + strconv.Itoa(cogWarn)
 			}
-			pos := buffer.Position{Line: fn.Line}
-			byPath[path] = append(byPath[path], ilsp.Diagnostic{
-				Range:    buffer.Range{Start: pos, End: pos},
-				Severity: 2,
-				Message:  msg,
-				Source:   complexityProblemSource,
-				Code:     code,
-			})
+			warn(path, fn, msg, code)
 		}
 	}
 	return byPath
@@ -71,7 +81,7 @@ func (m *Model) feedComplexityProblems(c config.Complexity) {
 	if !c.Enabled || !c.Problems || m.complexityIndex == nil {
 		m.probStore.ClearTaskSource(complexityProblemSource)
 	} else {
-		byPath := complexityDiagnostics(m.complexityIndex.Snapshot(), c.CCNWarn, c.CognitiveWarn)
+		byPath := complexityDiagnostics(m.complexityIndex.Snapshot(), c.CCNWarn, c.CognitiveWarn, c.CommentDensityWarn)
 		m.probStore.SetTaskSource(complexityProblemSource, byPath)
 	}
 	m.refreshProblemsPanel()

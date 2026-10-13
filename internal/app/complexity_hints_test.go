@@ -8,6 +8,7 @@ package app
 // dropped, and switching the index off clears the hints.
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -24,7 +25,7 @@ func TestComplexityHintsForBuilder(t *testing.T) {
 		{Name: "cogOnly", Line: 20, CCN: 5, Cognitive: 25},
 		{Name: "lambda", Line: 20, CCN: 1, Cognitive: 0, Kind: complexity.KindLambda},
 	}
-	got := complexityHintsFor(fns, 15, 15)
+	got := complexityHintsFor(fns, 15, 15, 0)
 	want := []editor.ComplexityHint{
 		{Line: 2, Text: "CCN 3 · cog 2"},
 		{Line: 10, Text: "CCN 40 · cog 4", Warn: true},
@@ -38,8 +39,34 @@ func TestComplexityHintsForBuilder(t *testing.T) {
 			t.Errorf("hint %d = %+v, want %+v", i, got[i], want[i])
 		}
 	}
-	if complexityHintsFor(nil, 15, 15) != nil {
+	if complexityHintsFor(nil, 15, 15, 40) != nil {
 		t.Error("no functions, no hints")
+	}
+}
+
+// TestComplexityHintsCommentDensity: " · cmt 55%" joins the hint only at or
+// above complexity.comment_density_warn (#2934) and warns; 0 never shows it.
+func TestComplexityHintsCommentDensity(t *testing.T) {
+	fns := []complexity.Function{
+		{Name: "chatty", Line: 2, CCN: 3, Cognitive: 2, NLOC: 9, CommentLines: 11, CommentDensity: 0.55},
+		{Name: "edge", Line: 10, CCN: 1, Cognitive: 0, NLOC: 3, CommentLines: 2, CommentDensity: 0.4},
+		{Name: "quiet", Line: 20, CCN: 1, Cognitive: 0, NLOC: 7, CommentLines: 3, CommentDensity: 0.3},
+	}
+	got := complexityHintsFor(fns, 15, 15, 40)
+	want := []editor.ComplexityHint{
+		{Line: 2, Text: "CCN 3 · cog 2 · cmt 55%", Warn: true},
+		{Line: 10, Text: "CCN 1 · cog 0 · cmt 40%", Warn: true},
+		{Line: 20, Text: "CCN 1 · cog 0"},
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("hint %d = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+	for _, h := range complexityHintsFor(fns, 15, 15, 0) {
+		if h.Warn || strings.Contains(h.Text, "cmt") {
+			t.Errorf("threshold 0 must disable the density: %+v", h)
+		}
 	}
 }
 

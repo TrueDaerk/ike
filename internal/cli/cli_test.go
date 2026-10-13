@@ -163,6 +163,8 @@ func TestParseComplexity(t *testing.T) {
 		{[]string{"--diff", "src"}, ComplexityArgs{Diff: true, Dir: "src"}},
 		{[]string{"--min", "20"}, ComplexityArgs{Min: 20}},
 		{[]string{"--min=20", "--ccn", "10", "--cog=12"}, ComplexityArgs{Min: 20, CCN: 10, Cog: 12}},
+		{[]string{"--cmt", "40", "--json"}, ComplexityArgs{Cmt: 40, JSON: true}},
+		{[]string{"--cmt=100"}, ComplexityArgs{Cmt: 100}},
 		{[]string{"--help"}, ComplexityArgs{Help: true}},
 		{[]string{"-h"}, ComplexityArgs{Help: true}},
 	}
@@ -177,7 +179,7 @@ func TestParseComplexity(t *testing.T) {
 		}
 	}
 	for _, args := range [][]string{
-		{"--min"}, {"--min", "x"}, {"--min=0"}, {"--ccn=-1"}, {"--cog", ""},
+		{"--min"}, {"--min", "x"}, {"--min=0"}, {"--ccn=-1"}, {"--cog", ""}, {"--cmt=0"}, {"--cmt", "101"}, {"--cmt"},
 		{"--diff="}, {"--bogus"}, {"a", "b"},
 	} {
 		if _, err := Parse(append([]string{"complexity"}, args...)); err == nil {

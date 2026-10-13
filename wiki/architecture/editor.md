@@ -68,7 +68,8 @@ diagnostic/git colouring. One mark class lives outside the gutter: the
 **inline complexity hint** (0550, #2919, `complexityhints.go`) — `CCN 12 ·
 cog 8` as trailing virtual text at the end of every function header, after
 any code lens, dimmed-italic like a lens and in the warning tone when a
-metric reaches `complexity.ccn_warn` / `complexity.cognitive_warn`. The app
+metric reaches `complexity.ccn_warn` / `complexity.cognitive_warn`; a body
+at or above `complexity.comment_density_warn` appends ` · cmt 55%` (#2934). The app
 pushes `ComplexityHintsMsg{Path, Hints, Version}` per document (from the
 project index for a clean buffer, from a debounced off-loop `Measure` of the
 dirty text otherwise, see [complexity](./complexity.md#editor-surface-2919));

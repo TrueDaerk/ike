@@ -89,7 +89,7 @@ func TestDiffProjectSummariesAndVerdict(t *testing.T) {
 		"a.go": {unit("f", 0, 8, 4), unit("g", 10, 2, 1)},
 		"n.go": {unit("fresh", 0, 1, 0)}, // new file
 	}
-	d := DiffProject(base, head, 15, 15)
+	d := DiffProject(base, head, 15, 15, 0)
 	if d.Base.Functions != 3 || d.Base.CCNSum != 10 || d.Head.Functions != 3 || d.Head.CCNSum != 11 {
 		t.Fatalf("summaries = base %+v head %+v", d.Base, d.Head)
 	}
@@ -112,22 +112,22 @@ func TestDiffProjectVerdictTiebreakAndEmpty(t *testing.T) {
 	// ΣCCN equal (one up, one down), Σcognitive down: less complex.
 	base := map[string][]Function{"a.go": {unit("f", 0, 5, 9), unit("g", 10, 5, 1)}}
 	head := map[string][]Function{"a.go": {unit("f", 0, 6, 2), unit("g", 10, 4, 1)}}
-	d := DiffProject(base, head, 0, 0)
+	d := DiffProject(base, head, 0, 0, 0)
 	if d.DeltaCCN() != 0 || d.DeltaCognitive() != -7 || d.Verdict != LessComplex {
 		t.Fatalf("tiebreak: Δccn %d Δcog %d verdict %v", d.DeltaCCN(), d.DeltaCognitive(), d.Verdict)
 	}
 	// Cognitive up on equal CCN: more complex.
 	head["a.go"][0].Cognitive = 20
-	if d := DiffProject(base, head, 0, 0); d.Verdict != MoreComplex {
+	if d := DiffProject(base, head, 0, 0, 0); d.Verdict != MoreComplex {
 		t.Fatalf("cognitive rise must read more complex: %v", d.Verdict)
 	}
 	// Identical sides: unchanged, no files, empty.
-	same := DiffProject(base, base, 0, 0)
+	same := DiffProject(base, base, 0, 0, 0)
 	if !same.Empty() || same.Verdict != Unchanged || len(same.Files) != 0 || same.Verdict.String() != "unchanged" {
 		t.Fatalf("identical sides = %+v", same)
 	}
 	// Nothing at all.
-	none := DiffProject(nil, nil, 0, 0)
+	none := DiffProject(nil, nil, 0, 0, 0)
 	if !none.Empty() || none.Base.Functions != 0 || none.Head.Functions != 0 {
 		t.Fatalf("nil diff = %+v", none)
 	}

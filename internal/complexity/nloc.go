@@ -10,13 +10,17 @@ type comments struct {
 	block [2]string
 }
 
-// nloc counts the lines in lines[from..to] (inclusive, clamped) that carry
-// code: not blank, and not only a comment. A line comment hides the rest of
-// its line; a block comment hides everything up to its close, across lines.
+// nloc classifies the lines in lines[from..to] (inclusive, clamped): code
+// counts the lines that carry code — not blank, and not only a comment —
+// comment the comment-only lines, which are blank once their comments are
+// stripped but were not blank before. A line with code and a trailing
+// comment counts as code. A line comment hides the rest of its line; a
+// block comment hides everything up to its close, across lines, so every
+// line it covers is a comment line unless it also carries code.
 // Comment markers inside string literals are not recognised — a line that
 // also carries code before the marker still counts, so the error is confined
 // to a line that is nothing but a string starting with a marker.
-func nloc(lines []string, from, to int, cm comments) int {
+func nloc(lines []string, from, to int, cm comments) (code, comment int) {
 	if from < 0 {
 		from = 0
 	}
@@ -27,11 +31,11 @@ func nloc(lines []string, from, to int, cm comments) int {
 	if close == "" {
 		open = ""
 	}
-	n := 0
 	inBlock := false
 	for i := from; i <= to; i++ {
 		rest := lines[i]
-		code := false
+		blank := strings.TrimSpace(rest) == ""
+		hasCode := false
 		for rest != "" {
 			if inBlock {
 				idx := strings.Index(rest, close)
@@ -52,20 +56,32 @@ func nloc(lines []string, from, to int, cm comments) int {
 			}
 			switch {
 			case li < 0 && bi < 0:
-				code = code || strings.TrimSpace(rest) != ""
+				hasCode = hasCode || strings.TrimSpace(rest) != ""
 				rest = ""
 			case li >= 0 && (bi < 0 || li < bi):
-				code = code || strings.TrimSpace(rest[:li]) != ""
+				hasCode = hasCode || strings.TrimSpace(rest[:li]) != ""
 				rest = ""
 			default:
-				code = code || strings.TrimSpace(rest[:bi]) != ""
+				hasCode = hasCode || strings.TrimSpace(rest[:bi]) != ""
 				rest = rest[bi+len(open):]
 				inBlock = true
 			}
 		}
-		if code {
-			n++
+		switch {
+		case hasCode:
+			code++
+		case !blank:
+			comment++
 		}
 	}
-	return n
+	return code, comment
+}
+
+// density is the comment share of a body: comment / (code + comment), 0
+// when both are 0.
+func density(code, comment int) float64 {
+	if code+comment == 0 {
+		return 0
+	}
+	return float64(comment) / float64(code+comment)
 }

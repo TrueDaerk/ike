@@ -1,5 +1,16 @@
 # Log
 
+## 2026-10-13 (Comment density per function, #2934)
+
+- [Code Complexity](/architecture/complexity.md): `Function.CommentLines` /
+  `CommentDensity` (body only — doc comments above the header and Python
+  docstrings stay out), `Summarize` / `DiffProject` take the
+  `complexity.comment_density_warn` threshold (default 40 %, `0` = off);
+  the `cmt%` column, `metric:cmt`, the Changes-tab delta, the hint's
+  ` · cmt 55%`, the Problems `comments` row and the CLI's `CMT%` / `--cmt` /
+  `comment_lines` / `comment_density` documented in the metric table,
+  rules, settings and CLI sections; the user guide explains what 40 % means.
+
 ## 2026-10-13 (Complexity docs consolidation, #2923)
 
 - [Code Complexity](/architecture/complexity.md): consolidated into the one

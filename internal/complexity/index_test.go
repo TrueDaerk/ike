@@ -122,7 +122,7 @@ func TestIndexWalkListsEverySupportedFile(t *testing.T) {
 			t.Errorf("%s = %+v, want one function with CCN 2", p, fns)
 		}
 	}
-	if s := v.Summary(2, 0); s.Functions != 7 || s.OverThreshold != 6 || s.CCNMax != 2 {
+	if s := v.Summary(2, 0, 0); s.Functions != 7 || s.OverThreshold != 6 || s.CCNMax != 2 {
 		t.Fatalf("summary = %+v, want 7 functions, 6 at or over CCN 2", s)
 	}
 	st := x.Stats()

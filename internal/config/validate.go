@@ -716,6 +716,12 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "complexity.cognitive_warn", Message: fmt.Sprintf("threshold %d out of range (1\xe2\x80\x93200), using 15", w)})
 		c.Complexity.CognitiveWarn = 15
 	}
+	// The comment-density threshold (#2934) is a percentage; 0 turns the
+	// check off, anything past 100 could never fire.
+	if w := c.Complexity.CommentDensityWarn; w < 0 || w > 100 {
+		diags = append(diags, Diagnostic{Field: "complexity.comment_density_warn", Message: fmt.Sprintf("threshold %d out of range (0–100 %%), using 40", w)})
+		c.Complexity.CommentDensityWarn = 40
+	}
 	// The response viewer's highlight cap (#2353): a limit below 1 KiB would
 	// silently turn highlighting off, one past 64 MiB defeats the cap's
 	// purpose — both fall back to the default rather than either extreme.

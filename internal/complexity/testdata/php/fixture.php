@@ -181,3 +181,23 @@ trait Loggable
 function plain(): void
 {
 }
+
+/**
+ * documented carries a PHPDoc above its header; it lies outside the unit,
+ * so the comment density stays 0 (#2934).
+ */
+function documented(int $x): int
+{
+    return $x + 1;
+}
+
+function commentHeavy(int $x): int
+{
+    // first explain
+    // then explain more
+    $y = $x * 2;
+    /* a block
+       comment */
+    return $y;
+    /* closing note
+       runs into the last line */ }

@@ -10,7 +10,9 @@
       "params": 0,
       "ccn": 5,
       "cognitive": 6,
-      "depth": 2
+      "depth": 2,
+      "commentLines": 1,
+      "commentDensity": 0.07142857142857142
     },
     {
       "name": "case_arms",
@@ -21,7 +23,9 @@
       "params": 0,
       "ccn": 6,
       "cognitive": 5,
-      "depth": 2
+      "depth": 2,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "nested_loops",
@@ -32,7 +36,9 @@
       "params": 0,
       "ccn": 6,
       "cognitive": 11,
-      "depth": 4
+      "depth": 4,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "boolean_sequences",
@@ -43,7 +49,9 @@
       "params": 0,
       "ccn": 9,
       "cognitive": 6,
-      "depth": 1
+      "depth": 1,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "nested_functions",
@@ -54,7 +62,9 @@
       "params": 0,
       "ccn": 1,
       "cognitive": 2,
-      "depth": 2
+      "depth": 2,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "helper",
@@ -65,7 +75,9 @@
       "params": 0,
       "ccn": 2,
       "cognitive": 1,
-      "depth": 1
+      "depth": 1,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "countdown",
@@ -76,7 +88,9 @@
       "params": 0,
       "ccn": 2,
       "cognitive": 2,
-      "depth": 1
+      "depth": 1,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "select_loop",
@@ -87,7 +101,9 @@
       "params": 0,
       "ccn": 4,
       "cognitive": 3,
-      "depth": 2
+      "depth": 2,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "plain",
@@ -98,7 +114,35 @@
       "params": 0,
       "ccn": 1,
       "cognitive": 0,
-      "depth": 0
+      "depth": 0,
+      "commentLines": 0,
+      "commentDensity": 0
+    },
+    {
+      "name": "documented",
+      "kind": "function",
+      "line": 102,
+      "endLine": 104,
+      "nloc": 3,
+      "params": 0,
+      "ccn": 1,
+      "cognitive": 0,
+      "depth": 0,
+      "commentLines": 0,
+      "commentDensity": 0
+    },
+    {
+      "name": "comment_heavy",
+      "kind": "function",
+      "line": 106,
+      "endLine": 112,
+      "nloc": 4,
+      "params": 0,
+      "ccn": 1,
+      "cognitive": 0,
+      "depth": 0,
+      "commentLines": 3,
+      "commentDensity": 0.42857142857142855
     }
   ]
 }

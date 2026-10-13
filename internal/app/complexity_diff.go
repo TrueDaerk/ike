@@ -187,6 +187,7 @@ type cxDiffJob struct {
 	cache    map[string][]complexity.Function
 	ccnWarn  int
 	cogWarn  int
+	cmtWarn  int
 }
 
 // complexityDiffJob snapshots the model state the computation needs.
@@ -198,7 +199,7 @@ func (m Model) complexityDiffJob(key cxDiffKey) cxDiffJob {
 		job.index = m.complexityIndex.Snapshot()
 	}
 	c := config.Get().Complexity
-	job.ccnWarn, job.cogWarn = c.CCNWarn, c.CognitiveWarn
+	job.ccnWarn, job.cogWarn, job.cmtWarn = c.CCNWarn, c.CognitiveWarn, c.CommentDensityWarn
 	for _, key := range m.activeWS().Panes.Keys() {
 		inst := m.activeWS().Panes.Get(key)
 		if inst == nil || inst.Kind() != pane.KindEditor {
@@ -324,7 +325,7 @@ func runComplexityDiff(job cxDiffJob) tea.Msg {
 		changes: complexitypanel.Changes{
 			Rev:     job.key.rev,
 			Sha:     sha,
-			Diff:    complexity.DiffProject(base, head, job.ccnWarn, job.cogWarn),
+			Diff:    complexity.DiffProject(base, head, job.ccnWarn, job.cogWarn, job.cmtWarn),
 			Dirty:   dirty,
 			Renames: renames,
 			Ready:   true,

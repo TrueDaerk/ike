@@ -108,7 +108,7 @@ func TestProjectText(t *testing.T) {
 		t.Errorf("summary missing:\n%s", out)
 	}
 	// ccn_warn = 4 from the project config: branchy is over threshold.
-	if !strings.Contains(out, "1 over threshold (CCN ≥ 4 or cog ≥ 15)") {
+	if !strings.Contains(out, "1 over threshold (CCN ≥ 4 or cog ≥ 15 or cmt ≥ 40%)") || !strings.Contains(lines[0], "CMT%") {
 		t.Errorf("thresholds not read from the project config:\n%s", out)
 	}
 	if _, ok := lang.ByPath("data.json"); ok && !strings.Contains(out, "skipped: 1 file (no complexity spec: json)") {
@@ -171,6 +171,71 @@ func TestProjectJSON(t *testing.T) {
 	}
 	if _, ok := got.Skipped["languages"]; !ok {
 		t.Errorf("skipped lacks languages: %v", got.Skipped)
+	}
+}
+
+// chattyGo has one function whose body is 60 % comment (2 code lines, 3
+// comment lines) under a doc comment that does not count (#2934).
+const chattyGo = `package p
+
+// chatty is documented above its header; that comment stays out.
+func chatty() {
+	// one
+	// two
+	/* three */
+}
+`
+
+// TestProjectCmtFilter: --cmt N filters like --ccn / --cog, the JSON
+// carries comment_lines / comment_density on functions and the summary,
+// and the text table has a CMT% column (#2934).
+func TestProjectCmtFilter(t *testing.T) {
+	requireTrees(t)
+	dir := fixture(t)
+	write(t, dir, "chatty.go", chattyGo)
+	out, _, code := run(t, cli.ComplexityArgs{Dir: dir, Cmt: 40, JSON: true})
+	if code != ExitOK {
+		t.Fatalf("exit %d", code)
+	}
+	var got struct {
+		Summary   map[string]any   `json:"summary"`
+		Functions []map[string]any `json:"functions"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatalf("invalid JSON: %v\n%s", err, out)
+	}
+	// branchy stays for CCN ≥ 4 (project config), chatty for cmt ≥ 40;
+	// simple drops.
+	names := []string{}
+	for _, f := range got.Functions {
+		names = append(names, f["name"].(string))
+	}
+	if strings.Join(names, ",") != "branchy,chatty" {
+		t.Fatalf("--cmt 40 rows = %v", names)
+	}
+	c := got.Functions[1]
+	if c["comment_lines"] != float64(3) || c["comment_density"] != 0.6 || c["nloc"] != float64(2) {
+		t.Errorf("chatty = %v", c)
+	}
+	if b := got.Functions[0]; b["comment_lines"] != float64(0) || b["comment_density"] != float64(0) {
+		t.Errorf("branchy = %v", b)
+	}
+	for _, k := range []string{"comment_lines", "comment_density", "cmt_warn"} {
+		if _, ok := got.Summary[k]; !ok {
+			t.Errorf("summary lacks %q", k)
+		}
+	}
+	if got.Summary["cmt_warn"] != float64(40) || got.Summary["comment_lines"] != float64(3) || got.Summary["over_threshold"] != float64(2) {
+		t.Errorf("summary = %v", got.Summary)
+	}
+	// A threshold the function stays under drops it; the table shows CMT%.
+	out, _, _ = run(t, cli.ComplexityArgs{Dir: dir, Cmt: 61})
+	if strings.Contains(out, "chatty") || !strings.Contains(out, "CMT%") {
+		t.Errorf("--cmt 61 should drop chatty:\n%s", out)
+	}
+	out, _, _ = run(t, cli.ComplexityArgs{Dir: dir})
+	if !strings.Contains(out, "60\n") {
+		t.Errorf("the table must show chatty's 60:\n%s", out)
 	}
 }
 
@@ -284,6 +349,18 @@ func TestDiffJSON(t *testing.T) {
 	}
 	if got.Base["ccn_sum"] != float64(6) || got.Head["ccn_sum"] != float64(9) || got.Delta["ccn"] != float64(3) {
 		t.Errorf("base %v head %v delta %v", got.Base, got.Head, got.Delta)
+	}
+	// The comment density rides every side (#2934).
+	for name, m := range map[string]map[string]any{
+		"before": got.Changed[0]["before"].(map[string]any), "after": got.Changed[0]["after"].(map[string]any),
+		"delta": d, "base": got.Base, "head": got.Head, "top delta": got.Delta, "added": got.Added[0],
+	} {
+		if _, ok := m["comment_lines"]; !ok {
+			t.Errorf("%s lacks comment_lines: %v", name, m)
+		}
+		if _, ok := m["comment_density"]; !ok {
+			t.Errorf("%s lacks comment_density: %v", name, m)
+		}
 	}
 }
 
