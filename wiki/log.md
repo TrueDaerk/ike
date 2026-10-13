@@ -1,5 +1,15 @@
 # Log
 
+## 2026-10-13 (Complexity hint mode, #2966)
+
+- [Code Complexity](/architecture/complexity.md): "Editor surface" —
+  `editor.marks.complexity` becomes an `all` / `warn` / `off` enum (default
+  `all`), part of the hint key; `warn` keeps only over-threshold hints, `off`
+  clears like `complexity.enabled = false`; the legacy bool loads as `all` /
+  `off`; the site marks' mode (#2947) stays independent. Settings table
+  updated; [Editor](/architecture/editor.md) and
+  [Settings UI](/architecture/settings-ui.md) follow.
+
 ## 2026-10-13 (Filter keys kind:, class:, depth:, params:, nloc:, max:, #2952)
 
 - [Code Complexity](/architecture/complexity.md): "Filter" gains `max:`

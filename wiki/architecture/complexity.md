@@ -661,14 +661,22 @@ threshold, which paints the hint in the warning tone. The density joins the
 text — `CCN 3 · cog 2 · cmt 55%` — only at or above
 `complexity.comment_density_warn` (#2934), so the common hint stays short;
 `0` never shows it. A threshold change on reload changes the key,
-so every open buffer repaints. `complexity.enabled = false` sends one
-clearing push per buffer that holds hints; `editor.marks.complexity = false`
-hides them in the editor without a push (Settings > Editor > Diagnostics,
-next to the other mark toggles).
+so every open buffer repaints. `editor.marks.complexity` (#2966) picks the hint mode — `all` (every
+function, the default), `warn` (only the hints whose `Warn` flag is set:
+CCN, cognitive or comment density at or above its threshold) or `off` — in
+Settings > Editor > Diagnostics, next to the other mark toggles. The mode is
+part of the sync key, so a change repaints every open buffer;
+`complexity.enabled = false` and `off` both send one clearing push per
+buffer that holds hints. A settings file holding the pre-#2966 bool loads
+`true` as `all` and `false` as `off` without a diagnostic (`HintMode`'s
+TOML decode); an unknown mode falls back to `all` with one. The per-site
+marks' mode (#2947) is a separate setting: the function hint mode decides
+which headers carry `CCN n · cog m`, the site mode which branch sites are
+marked, and neither filters the other.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `editor.marks.complexity` | `true` | Render the inline complexity hints on function headers. |
+| `editor.marks.complexity` | `all` | Inline complexity hints on function headers: `all`, `warn` (over-threshold functions only) or `off`; a legacy `true` / `false` loads as `all` / `off`. |
 
 ## Headless CLI (#2922)
 

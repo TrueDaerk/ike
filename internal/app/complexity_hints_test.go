@@ -25,7 +25,7 @@ func TestComplexityHintsForBuilder(t *testing.T) {
 		{Name: "cogOnly", Line: 20, CCN: 5, Cognitive: 25},
 		{Name: "lambda", Line: 20, CCN: 1, Cognitive: 0, Kind: complexity.KindLambda},
 	}
-	got := complexityHintsFor(fns, 15, 15, 0)
+	got := complexityHintsFor(fns, 15, 15, 0, false)
 	want := []editor.ComplexityHint{
 		{Line: 2, Text: "CCN 3 · cog 2"},
 		{Line: 10, Text: "CCN 40 · cog 4", Warn: true},
@@ -39,7 +39,7 @@ func TestComplexityHintsForBuilder(t *testing.T) {
 			t.Errorf("hint %d = %+v, want %+v", i, got[i], want[i])
 		}
 	}
-	if complexityHintsFor(nil, 15, 15, 40) != nil {
+	if complexityHintsFor(nil, 15, 15, 40, false) != nil {
 		t.Error("no functions, no hints")
 	}
 }
@@ -52,7 +52,7 @@ func TestComplexityHintsCommentDensity(t *testing.T) {
 		{Name: "edge", Line: 10, CCN: 1, Cognitive: 0, NLOC: 3, CommentLines: 2, CommentDensity: 0.4},
 		{Name: "quiet", Line: 20, CCN: 1, Cognitive: 0, NLOC: 7, CommentLines: 3, CommentDensity: 0.3},
 	}
-	got := complexityHintsFor(fns, 15, 15, 40)
+	got := complexityHintsFor(fns, 15, 15, 40, false)
 	want := []editor.ComplexityHint{
 		{Line: 2, Text: "CCN 3 · cog 2 · cmt 55%", Warn: true},
 		{Line: 10, Text: "CCN 1 · cog 0 · cmt 40%", Warn: true},
@@ -63,7 +63,7 @@ func TestComplexityHintsCommentDensity(t *testing.T) {
 			t.Errorf("hint %d = %+v, want %+v", i, got[i], want[i])
 		}
 	}
-	for _, h := range complexityHintsFor(fns, 15, 15, 0) {
+	for _, h := range complexityHintsFor(fns, 15, 15, 0, false) {
 		if h.Warn || strings.Contains(h.Text, "cmt") {
 			t.Errorf("threshold 0 must disable the density: %+v", h)
 		}
@@ -178,5 +178,66 @@ func TestComplexityHintsWiring(t *testing.T) {
 	}
 	if k := m.cxHints.sent[src]; k.enabled {
 		t.Fatalf("sent key = %+v, want the disabled key", k)
+	}
+}
+
+// TestComplexityHintsWarnOnly: warn mode (#2966) keeps only the hints at or
+// above a threshold; all keeps both.
+func TestComplexityHintsWarnOnly(t *testing.T) {
+	fns := []complexity.Function{
+		{Name: "under", Line: 2, CCN: 3, Cognitive: 2},
+		{Name: "over", Line: 10, CCN: 40, Cognitive: 4},
+	}
+	if got := complexityHintsFor(fns, 15, 15, 0, false); len(got) != 2 {
+		t.Fatalf("all: got %+v, want both", got)
+	}
+	got := complexityHintsFor(fns, 15, 15, 0, true)
+	if len(got) != 1 || got[0].Line != 10 || !got[0].Warn {
+		t.Fatalf("warn: got %+v, want only the over-threshold function", got)
+	}
+}
+
+// TestComplexityHintsModeWiring: editor.marks.complexity is part of the key
+// (#2966): warn repaints with only the over-threshold hints, off clears.
+func TestComplexityHintsModeWiring(t *testing.T) {
+	m, src := complexityApp(t)
+	out, cmd := m.openPathAt(src, 0, 0)
+	m = out.(Model)
+	m = settleHints(t, m, cmd)
+	out, _ = m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
+	m = out.(Model)
+	if ed := m.editorForPath(src); ed == nil || !ed.HasComplexityHints() {
+		t.Fatal("all mode must hint the indexed buffer")
+	}
+	t.Cleanup(func() { c, _ := config.Load(config.Options{}); config.Set(c) })
+	fns := m.ComplexityIndex().Snapshot().Files[canonicalPath(src)]
+
+	c, _ := config.Load(config.Options{})
+	c.Editor.Marks.Complexity = config.HintWarn
+	c.Complexity.CCNWarn, c.Complexity.CognitiveWarn, c.Complexity.CommentDensityWarn = 2, 1000, 0
+	config.Set(c)
+	out, _ = m.Update(config.ConfigReloadedMsg{Config: c})
+	m = out.(Model)
+	ed := m.editorForPath(src)
+	over := 0
+	for _, fn := range fns {
+		_, ok := ed.ComplexityHintAt(fn.Line)
+		if want := fn.CCN >= 2; ok != want {
+			t.Errorf("warn: %s (CCN %d) hinted=%v, want %v", fn.Name, fn.CCN, ok, want)
+		}
+		if fn.CCN >= 2 {
+			over++
+		}
+	}
+	if over == 0 || over == len(fns) {
+		t.Fatalf("fixture must hold functions on both sides of the threshold: %d of %d", over, len(fns))
+	}
+
+	c.Editor.Marks.Complexity = config.HintOff
+	config.Set(c)
+	out, _ = m.Update(config.ConfigReloadedMsg{Config: c})
+	m = out.(Model)
+	if m.editorForPath(src).HasComplexityHints() {
+		t.Fatal("off must clear the hints")
 	}
 }

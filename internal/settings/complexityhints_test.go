@@ -7,17 +7,17 @@ import (
 	"ike/internal/config"
 )
 
-// complexityhints_test.go guards the inline complexity hints toggle
-// (#2919): present as a boolean on the Editor pages, on by default, and
-// editable end-to-end like any schema entry.
+// complexityhints_test.go guards the inline complexity hints mode
+// (#2919, #2966): an all / warn / off enum on the Editor pages, all by
+// default, and editable end-to-end like any schema entry.
 
-// TestComplexityMarksEntryShape: the key is a boolean and defaults to on.
+// TestComplexityMarksEntryShape: the key is a three-value enum, default all.
 func TestComplexityMarksEntryShape(t *testing.T) {
-	if e := testsEntry(t, "editor.marks.complexity"); e.Type != Bool {
-		t.Fatalf("editor.marks.complexity type = %v, want Bool", e.Type)
+	if e := testsEntry(t, "editor.marks.complexity"); e.Type != Enum || strings.Join(e.Options, ",") != "all,warn,off" {
+		t.Fatalf("editor.marks.complexity = %v %v, want Enum all/warn/off", e.Type, e.Options)
 	}
-	if d := config.Defaults(); d["editor.marks.complexity"] != "true" {
-		t.Fatal("editor.marks.complexity must default to on")
+	if d := config.Defaults(); d["editor.marks.complexity"] != "all" {
+		t.Fatal("editor.marks.complexity must default to all")
 	}
 }
 
@@ -30,15 +30,15 @@ func TestComplexityMarksRoundTrip(t *testing.T) {
 	m.SetSize(90, 24)
 	m.Open()
 
-	m.writeValue(e, false)
+	m.writeValue(e, "warn")
 	commit(t, m)
-	if config.Get().Editor.Marks.Complexity {
-		t.Fatal("persisted editor.marks.complexity must be false")
+	if config.Get().Editor.Marks.Complexity != config.HintWarn {
+		t.Fatal("persisted editor.marks.complexity must be warn")
 	}
-	if got := m.value("editor.marks.complexity"); got != "false" {
-		t.Fatalf("panel value = %q, want false", got)
+	if got := m.value("editor.marks.complexity"); got != "warn" {
+		t.Fatalf("panel value = %q, want warn", got)
 	}
-	if v := m.View(); !strings.Contains(v, " off") {
+	if v := m.View(); !strings.Contains(v, "warn") {
 		t.Fatalf("the entry row must render the value:\n%s", v)
 	}
 }

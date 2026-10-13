@@ -86,7 +86,8 @@ func (m Model) complexityHintsVisible() bool {
 	if m.cfg == nil {
 		return true
 	}
-	return boolOr(m.cfg, "editor.marks.complexity", true)
+	v, ok := m.cfg.Get("editor.marks.complexity")
+	return !ok || (v != "off" && v != "false")
 }
 
 // complexityHintTrailer renders a line's hint for the end-of-line flush:

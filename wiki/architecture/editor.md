@@ -78,7 +78,8 @@ dirty text otherwise, see [complexity](./complexity.md#editor-surface-2919));
 the end-of-line flush after the inlay hints and lenses and, unlike those,
 only whole: no room (a header at full width, the caret cell on the last
 column, a line wider than the pane) means no hint, never a truncated one
-over buffer text. Gated by `editor.marks.complexity`; cached hints survive a
+over buffer text. Hidden when `editor.marks.complexity` is `off` (the app also
+filters to over-threshold functions in `warn`); cached hints survive a
 toggle round-trip. A single-cell sign column means a line that is both
 a test and an overriding method shows only the test marker. A plain gutter
 click still toggles the breakpoint on every line; ctrl/cmd+click on a marker
