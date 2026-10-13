@@ -1179,6 +1179,12 @@ type Marks struct {
 	// or above a threshold) or "off"; the pre-#2966 bool still loads (true =
 	// all, false = off).
 	Complexity HintMode `toml:"complexity"`
+	// ComplexitySites gates the per-site complexity marks (#2947): `+1`,
+	// `+3 (nesting 2)` after every statement that adds to a function's
+	// cognitive complexity — inside functions at or above a threshold
+	// ("warn"), inside every function ("all") or nowhere ("off").
+	// Independent of Complexity.
+	ComplexitySites HintMode `toml:"complexity_sites"`
 }
 
 // HintMode is editor.marks.complexity (#2966): "all", "warn" or "off". It
@@ -1204,7 +1210,7 @@ func (h *HintMode) UnmarshalTOML(v any) error {
 	case string:
 		*h = HintMode(x)
 	default:
-		return fmt.Errorf("editor.marks.complexity: want all, warn or off, got %v", v)
+		return fmt.Errorf("complexity mark mode: want all, warn or off, got %v", v)
 	}
 	return nil
 }

@@ -11,7 +11,8 @@
 // narrows by file:, lang:, fn:, min:, max:, kind:, class:, depth:,
 // params:, nloc:, metric: and test:, and bare words fuzzy
 // over the function names; 't' hides the test files on every tab (#2950);
-// 'space' expands a function into its complexity sites (#2946, sites.go).
+// 'space' expands a function into its complexity sites (#2946, sites.go);
+// 'm' paints them in the editor once (#2947).
 //
 // The pane is a pure consumer: the root model hands it the index's immutable
 // View via Set on open and on every generation change, and tells it where
@@ -978,6 +979,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.ToggleTests()
 	case "space":
 		m.ToggleSites()
+	case "m":
+		return m.showSites()
 	case "enter":
 		return m.open()
 	case "e":
@@ -1250,9 +1253,9 @@ func (m *Model) footer() string {
 	hints := " · tab view · s sort · S reverse · enter open · e export · y copy · r rescan · / filter"
 	switch {
 	case m.tab == TabChanges:
-		hints += " · R base · space sites"
+		hints += " · R base · space sites · m marks"
 	case m.Grouping() == complexity.ByNone:
-		hints += " · b group · space sites"
+		hints += " · b group · space sites · m marks"
 	default:
 		hints += " · b group: " + m.Grouping().String()
 	}

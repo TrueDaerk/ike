@@ -1017,6 +1017,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			withAliases(appCommand("complexity.group", "Complexity: Cycle Grouping (None / Class / File)", ComplexityGroupMsg{}), "aggregate", "per class", "per file"),
 			withAliases(appCommand("complexity.toggleTests", "Complexity: Toggle Test Files", ComplexityToggleTestsMsg{}), "hide tests", "show tests"),
 			withAliases(appCommand("complexity.sites", "Complexity: Expand / Collapse Sites", ComplexitySitesMsg{}), "breakdown", "why complex", "per site"),
+			withAliases(appCommand("complexity.showSites", "Complexity: Mark Sites in Editor", ComplexityShowSitesMsg{}), "sonar", "site marks", "show increments"),
 			appCommand("deps.refresh", "Dependencies: Refresh Scan", DepsRefreshMsg{}),
 			appCommand("deps.audit", "Dependencies: Audit Vulnerabilities", DepsAuditMsg{}),
 			appCommand("deps.updateLatest", "Update Dependency to Latest", DepsUpdateLatestMsg{}),

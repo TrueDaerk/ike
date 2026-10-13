@@ -227,3 +227,33 @@ func TestSitesOnFileAndChangesTabs(t *testing.T) {
 		t.Error("a removed function expanded")
 	}
 }
+
+// TestMShowsSitesInEditor: 'm' on a function row (or one of its site
+// rows) asks the root model to paint that function's sites (#2947); a
+// group row has none to show.
+func TestMShowsSitesInEditor(t *testing.T) {
+	m := sitesPanel(t)
+	cmd := m.Update(key("m"))
+	if cmd == nil {
+		t.Fatal("m on a function row must emit ShowSitesMsg")
+	}
+	msg, ok := cmd().(ShowSitesMsg)
+	if !ok || msg.Path != "/proj/internal/app/app.go" || msg.Line != m.Rows()[0].Fn.Line {
+		t.Fatalf("msg = %+v (ok=%v)", msg, ok)
+	}
+	m.Update(key(" "))
+	m.Update(key("j"))
+	if r, _ := m.Selected(); r.Site == nil {
+		t.Fatal("the cursor must sit on a site row")
+	}
+	if got, ok := m.ShowSites(); !ok || got != msg {
+		t.Fatalf("on a site row: %+v (ok=%v), want the parent's %+v", got, ok, msg)
+	}
+	if !strings.Contains(m.View(), "m marks") {
+		t.Fatalf("footer must name m:\n%s", m.View())
+	}
+	m.CycleGroup()
+	if _, ok := m.ShowSites(); ok {
+		t.Fatal("a group row has no sites to show")
+	}
+}

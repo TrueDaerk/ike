@@ -100,6 +100,11 @@ func (m *Model) toggleComplexityTests() {
 // collapse it.
 type ComplexitySitesMsg struct{}
 
+// ComplexityShowSitesMsg runs complexity.showSites (#2947): paint the
+// selected function's per-site marks in the editor once, whatever
+// editor.marks.complexity_sites says, until the buffer changes.
+type ComplexityShowSitesMsg struct{}
+
 // toggleComplexitySites is the complexity.sites handler: it needs an open
 // panel with a function row selected; a selection with nothing to expand
 // (a group row, a removed function, a function without sites) says so.

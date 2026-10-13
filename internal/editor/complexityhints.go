@@ -101,13 +101,20 @@ func (m Model) complexityHintTrailer(line, room int) (string, int) {
 	if !ok {
 		return "", 0
 	}
-	text := complexityHintGap + h.Text
+	return m.complexityTrailerText(h.Text, h.Warn, room)
+}
+
+// complexityTrailerText styles one trailer — a header hint or a site mark
+// (#2947): the gap and the text, dimmed or in the warning tone, or "" when
+// it would not fit whole in room cells.
+func (m Model) complexityTrailerText(body string, warn bool, room int) (string, int) {
+	text := complexityHintGap + body
 	w := lipgloss.Width(text)
 	if w > room {
 		return "", 0
 	}
 	st := lipgloss.NewStyle().Italic(true)
-	if h.Warn {
+	if warn {
 		st = st.Foreground(m.theme().Warning)
 	} else {
 		st = st.Foreground(m.theme().InlayHint).Faint(true)

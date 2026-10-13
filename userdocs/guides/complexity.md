@@ -82,6 +82,21 @@ at its own depth, because Sonar counts a lambda's structure as part of the
 method it sits in. On the command line, `ike complexity --sites --json`
 prints the same breakdown.
 
+The editor shows the same costs where you edit, SonarLint style: after
+every line that adds to a function's cognitive complexity sits a dimmed
+`+1`, `+3 (nesting 2)` or `+1 ||` (a boolean run names its operator;
+several sites on one line join as `+1 · +1 &&`), in the warning colour from
+`+3` on — the nesting penalty is what to look at. Which functions get them
+is `editor.marks.complexity_sites` (Settings > Editor > Diagnostics, next to
+the header hints): `warn` (the default — only functions at or above a
+threshold), `all` or `off`. It is independent of `editor.marks.complexity`:
+switching the header hints off leaves the site marks alone. On a function
+header the `CCN · cog` hint wins over the site mark, and like the hint a
+mark that does not fit whole at the end of the line is not shown. Press `m`
+on a function row (or one of its site lines) in the Complexity window to
+paint that function's marks once, whatever the mode — the file opens if it
+is not open yet; the marks stay until you type in the buffer.
+
 ## Per class and per file
 
 Press `b` in the Complexity window (or run *Complexity: Cycle Grouping*) to
