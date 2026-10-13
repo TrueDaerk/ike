@@ -60,6 +60,15 @@ type Function struct {
     CommentLines   int     // comment-only lines in the range (#2934)
     CommentDensity float64 // CommentLines / (NLOC + CommentLines), 0 when both are 0
     Sites          []Site  // every CCN / cognitive increment, in source order (#2946)
+    Candidates     []Candidate // the best extraction candidates, saving descending (#2948)
+}
+
+type Candidate struct {
+    Line, EndLine    int    // the node's 0-based range, header line to last line
+    Kind             string // the node's site kind: "if", "for", "switch", "else", …
+    CogSaving        int    // cognitive points the file loses: the unit's loss minus the new unit's cost
+    NewCCN, NewCog   int    // the metrics the extracted function would have
+    RestCCN, RestCog int    // the metrics the enclosing unit would keep
 }
 
 type Site struct {
@@ -110,6 +119,51 @@ lambdas are part of the method they sit in), records them too, CCN-less,
 so its sum still holds. Recording is unconditional — `Measure` keeps its
 signature and `BenchmarkMeasure` stays well inside the 50 ms budget (about
 29 ms for the 5 000-line file on the dev machine).
+
+**Extraction candidates** (#2948, `candidates.go`). The classic answer to
+high cognitive complexity is extracting the deepest nested block into a
+function of its own, because the nesting penalty vanishes for the extracted
+code; the walk knows every nesting-raising node, its level and the sites
+inside it, so it computes that saving exactly. For every Branch, Selector
+and else body of a unit (not an else-if, which is part of its chain and is
+covered by the chain head's candidate; not a nested unit, which is already
+its own function — a closure's structures are the closure's candidates, and
+the enclosing unit's candidate counts the closure's sites at the enclosing
+nesting) the engine records a `Candidate`:
+
+- A **structural node** (`if`, `for`, `switch`, a nested `?:`) at level `L`
+  is extracted whole, header included, and lands at level 0 of the new
+  unit: the node itself goes from `1 + L` to `1`, every site inside keeps
+  its flat part and loses `L` of its nesting penalty (never below 0 — a
+  flat site, an else, a jump, a boolean run, loses nothing).
+  `CogSaving = L + L × (nested sites inside)`; `NewCCN = 1 + node.CCN +
+  Σ inside.CCN`; `NewCog = 1 + Σ inside.Cognitive − L × (nested sites
+  inside)`.
+- An **else body** cannot take its keyword along (`else { helper() }`
+  stays), so its own flat point stays with the rest and the body's sites,
+  which sat at `L + 1`, lose `L + 1`: `CogSaving = (L + 1) × (nested sites
+  inside)`, `NewCCN = 1 + Σ inside.CCN`, `NewCog = Σ inside.Cognitive −
+  (L + 1) × (nested sites inside)`.
+- `RestCCN = CCN + 1 − NewCCN` (the file's ΣCCN rises by one, as it
+  must) and `RestCog = Cognitive − CogSaving − NewCog`, so `RestCog +
+  NewCog == Cognitive − CogSaving` for every candidate.
+
+Worked example — an `if` at level 0 holding a `for` that holds two `if`s
+(CCN 5, cognitive 1 + 2 + 3 + 3 = 9): the outer `if` saves nothing (new fn
+ccn 5 cog 9, rest 1 / 0); the `for` (level 1) saves `1 + 1 × 2 = 3` (new
+fn ccn 4 cog 5, rest ccn 2 cog 1); each inner `if` (level 2) saves 2 (new
+fn ccn 2 cog 1, rest ccn 4 cog 6). The sums are O(sites) per unit: the
+unit keeps running totals of the sites appended so far (CCN, cognitive,
+how many carry a nesting penalty), a candidate snapshots them when its node
+is entered and reads the difference when it is left; every structural site
+inside a node at level `L` sits at level ≥ `L + 1` with a penalty equal to
+its level, so the count is all the saving needs. A unit keeps the best
+`MaxCandidates` (3) with `CogSaving ≥ MinCandidateSaving` (3), saving
+descending, then range ascending; overlapping candidates (an `if` inside a
+`for`) are both reported — the user chooses. `TestCandidatesAcceptanceFixture`
+pins the worked example with the derivation, `TestCandidateInvariants`
+re-derives every golden candidate site by site and checks the identities;
+`BenchmarkMeasure` stays at about 30 ms.
 
 **Params** counts the named children of the `ParamsField` node, a child
 declaring several names (Go's `a, b int`) once per name. **NLOC** counts the
@@ -482,9 +536,29 @@ export and the group rows ignore site rows. On a site row `enter` / a
 double click opens the file at the site's line and `y` copies
 `path:line: kind +cog (nesting n)`.
 
-**Actions.** `enter` / a double click sends `OpenLocationMsg{Path, Line}`
-and the app opens the file through `openPathAt`, so the caret lands on the
-function header and `nav.back` returns. `r` (and the palette's
+**Extraction candidates (#2948, `candidates.go`).** Under the site rows
+follow the function's `Function.Candidates`, one indented row each in the
+engine's order (best saving first): the function column reads `  extract
+120–160 (if): −18 cog · new fn ccn 9 cog 11 · rest ccn 12 cog 14` (a
+one-line node shows one number), the line column the header line, the
+other columns blank. `Row.Cand` / `Row.Parent` mark one; `Row.child()`
+(site or candidate) is what every site-skipping path tests, so the totals,
+the caret mark, the CSV export, the group rows and the hotspot scale skip
+them too, `space` / `m` / `i` on one act on the parent, and the cursor
+stays on the same candidate across a refresh (`Row.key` → `candKey`).
+`enter` / a double click sends `OpenLocationMsg{Path, Line, EndLine}`; the
+app opens the file through `openPathAt` and, when `EndLine` is past
+`Line`, calls `editor.SelectLines(Line, EndLine)` — a linewise visual
+selection over the range with the caret on the header (anchor on the last
+line, framed like a jump) — so `alt+enter` can offer the language server's
+*Extract function* on it. `y` copies `path:120–160: extract (if): −18 cog ·
+new fn ccn 9 cog 11 · rest ccn 12 cog 14`. Triggering the
+`refactor.extract.function` code action directly is a possible follow-up.
+
+**Actions.** `enter` / a double click sends `OpenLocationMsg{Path, Line,
+EndLine}` (`EndLine` set by a candidate row only) and the app opens the
+file through `openPathAt`, so the caret lands on the function header and
+`nav.back` returns. `r` (and the palette's
 `complexity.refresh`) rebuilds the index (`Index.Rebuild`; a disabled index
 or a build without a syntax tree is reported instead). `e` (and
 `complexity.export`) writes the current tab as a CSV scratch

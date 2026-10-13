@@ -67,7 +67,7 @@ func (m *Model) markHot() {
 	}
 	var scores []int
 	for _, r := range m.rows {
-		if r.Site == nil {
+		if !r.child() {
 			scores = append(scores, r.Hot)
 		}
 	}

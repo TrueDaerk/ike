@@ -83,6 +83,12 @@ type Function struct {
 	// cognitive total includes them at its nesting (Sonar), records them
 	// too, CCN-less.
 	Sites []Site `json:"sites,omitempty"`
+	// Candidates are the unit's extraction candidates (#2948,
+	// candidates.go): the nesting-raising nodes whose extraction into a
+	// function of their own would save the most cognitive complexity — at
+	// most MaxCandidates, each saving at least MinCandidateSaving, best
+	// first. A nested unit is its own function, never a candidate.
+	Candidates []Candidate `json:"candidates,omitempty"`
 	// Baseline is the unit's status against the accepted-debt baseline
 	// (#2958, baseline.go), left by Baseline.Stamp: new until a baseline
 	// classifies it. Not a measurement, so never serialised here — the

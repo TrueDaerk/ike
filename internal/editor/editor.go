@@ -1631,6 +1631,24 @@ func (m *Model) JumpTo(line, col int) {
 	m.SetScroll(top, m.view.Left)
 }
 
+// SelectLines leaves a linewise visual selection over the 0-based lines
+// first..last with the caret on first — the shape a Complexity extraction
+// candidate (#2948) is opened with, so the LSP code actions see the block
+// to extract. The landing is framed like JumpTo; the anchor sits on last.
+func (m *Model) SelectLines(first, last int) {
+	if last < first {
+		first, last = last, first
+	}
+	m.JumpTo(first, 0)
+	m.collapseCarets()
+	m.cursor = m.buf.ClampCursor(buffer.Position{Line: last, Col: 0})
+	m.enterVisual(VisualLine)
+	m.cursor = m.buf.ClampCursor(buffer.Position{Line: first, Col: 0})
+	m.desiredCol = m.cursor.Col
+	m.bumpRender()
+	m.emit(EventCursorMove)
+}
+
 // HasFile reports whether a file is currently open.
 func (m Model) HasFile() bool { return m.path != "" }
 

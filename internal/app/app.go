@@ -8640,8 +8640,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case complexitypanel.OpenLocationMsg:
 		// Enter / double click on a function row (#2917): the same path:line
-		// pipeline every jump surface uses, so nav.back returns.
-		return m.openPathAt(msg.Path, msg.Line, 0)
+		// pipeline every jump surface uses, so nav.back returns. An
+		// extraction candidate (#2948) also selects its range, so alt+enter
+		// can offer the language server's Extract function.
+		model, cmd := m.openPathAt(msg.Path, msg.Line, 0)
+		if mm, ok := model.(Model); ok && msg.EndLine > msg.Line {
+			if ed := mm.editorForPath(canonicalPath(msg.Path)); ed != nil {
+				ed.SelectLines(msg.Line, msg.EndLine)
+			}
+		}
+		return model, cmd
 
 	case complexitypanel.CopyMsg:
 		// 'y' / the copy chord in the Complexity pane (#2917).

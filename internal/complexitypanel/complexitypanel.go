@@ -137,10 +137,14 @@ const DefaultWarn = 15
 const DefaultCmtWarn = 40
 
 // OpenLocationMsg asks the root model to open Path with the caret on the
-// function header (enter / double click). Line is 0-based.
+// function header (enter / double click). Line is 0-based. An extraction
+// candidate (#2948) sets EndLine past Line: the app then selects the lines
+// Line–EndLine (a visual line selection, caret on the header) so the
+// language server's Extract function can be offered on it.
 type OpenLocationMsg struct {
-	Path string
-	Line int
+	Path    string
+	Line    int
+	EndLine int
 }
 
 // RefreshMsg asks the root model to rebuild the index ('r').
@@ -204,7 +208,10 @@ type Row struct {
 	// Site is set on a site row (#2946, sites.go): one increment of the
 	// expanded function, whose row sits at index Parent in the rows; Fn,
 	// Path, Rel, Lang and Change are the parent's.
-	Site   *complexity.Site
+	Site *complexity.Site
+	// Cand is set on an extraction-candidate row (#2948, candidates.go),
+	// a child row like a site row.
+	Cand   *complexity.Candidate
 	Parent int
 	// Commits is the row's file's commit count in the churn window and Hot
 	// its hotspot score (#2957, churn.go); both 0 outside git.
@@ -218,12 +225,23 @@ type Row struct {
 	Members []Row
 }
 
+// child reports whether r is a child row of an expanded function — a site
+// row or a candidate row — which the totals, the caret mark, the CSV
+// export and the group rows skip.
+func (r Row) child() bool { return r.Site != nil || r.Cand != nil }
+
 // value is the row's sort key on column c: a number for the metric
 // columns, the text for file / function. On the Changes tab the metric
 // columns sort by the absolute delta, so min: reads |Δ| there.
 func (r Row) value(c Column) (float64, string) {
 	if r.Group != nil {
 		return r.groupValue(c)
+	}
+	if r.Cand != nil {
+		if c == ColLine {
+			return float64(r.Cand.Line), ""
+		}
+		return 0, r.candCell(c)
 	}
 	if r.Site != nil {
 		switch c {
@@ -294,6 +312,9 @@ func abs(n int) int {
 func (r Row) cell(c Column) string {
 	if r.Group != nil {
 		return r.groupCell(c)
+	}
+	if r.Cand != nil {
+		return r.candCell(c)
 	}
 	if r.Site != nil {
 		return r.siteCell(c)
@@ -868,7 +889,7 @@ func (m *Model) markCaret() {
 	best := -1
 	for i := range m.rows {
 		m.rows[i].Caret = false
-		if m.tab != TabFile || m.rows[i].Group != nil || m.rows[i].Site != nil {
+		if m.tab != TabFile || m.rows[i].Group != nil || m.rows[i].child() {
 			continue
 		}
 		fn := m.rows[i].Fn
@@ -1059,6 +1080,9 @@ func (m *Model) open() tea.Cmd {
 	if !ok {
 		return nil
 	}
+	if r.Cand != nil {
+		return m.openCandidate(r)
+	}
 	if r.Site != nil {
 		return m.openSite(r)
 	}
@@ -1088,6 +1112,9 @@ func (m *Model) copyRow() tea.Cmd {
 func CopyText(r Row) string {
 	if r.Group != nil {
 		return groupCopyText(r)
+	}
+	if r.Cand != nil {
+		return candCopyText(r)
 	}
 	if r.Site != nil {
 		return siteCopyText(r)
@@ -1126,7 +1153,7 @@ func (m *Model) CSV() string {
 	}
 	writeCSVRow(&b, header)
 	for _, r := range m.rows {
-		if r.Site != nil {
+		if r.child() {
 			continue
 		}
 		c := r.cells(projectLayout)
@@ -1288,7 +1315,7 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 		}
 		return gridview.DataRow(pal, cells, m.widths, 0, m.width, i == m.cursor, m.focused)
 	}
-	if r.Site != nil {
+	if r.child() {
 		return gridview.DataRow(pal, cells, m.widths, 0, m.width, i == m.cursor, m.focused)
 	}
 	if fi := m.layoutIndex(ColFunc); fi >= 0 && r.Caret {

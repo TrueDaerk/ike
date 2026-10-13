@@ -90,6 +90,23 @@ at its own depth, because Sonar counts a lambda's structure as part of the
 method it sits in. On the command line, `ike complexity --sites --json`
 prints the same breakdown.
 
+Below the sites, the expanded function proposes **what to extract**: up to
+three lines like `extract 120–160 (if): −18 cog · new fn ccn 9 cog 11 ·
+rest ccn 12 cog 14`, best saving first. Each names a nested block — an
+`if`, a `for`, a `switch`, an `else` body — and what moving it into a
+function of its own would do: the file loses 18 cognitive points, because
+the block and everything inside it shed their nesting penalty; the new
+function would measure ccn 9 / cog 11, what remains of the old one ccn 12 /
+cog 14 (the two cyclomatic numbers add up to one more than before — a
+function always starts at 1). Only blocks saving at least 3 points are
+listed; a block at the top level saves nothing and never appears, and
+blocks nest, so an `if` inside a listed `for` may be listed too — pick the
+one that reads best. `enter` on a proposal opens the file with those lines
+selected and the caret on the block's first line, so `alt+enter` offers
+the language server's *Extract function* right away; `y` copies the
+proposal. The same proposals ride `ike complexity --sites --json` as
+`candidates`.
+
 The editor shows the same costs where you edit, SonarLint style: after
 every line that adds to a function's cognitive complexity sits a dimmed
 `+1`, `+3 (nesting 2)` or `+1 ||` (a boolean run names its operator;
@@ -247,7 +264,7 @@ ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--mi
 | `--ccn N`, `--cog N` | Override the warning thresholds; given explicitly they also filter the rows to functions at or above either one. |
 | `--cmt N` | Override the comment-density threshold (percent, 1-100); like `--ccn` / `--cog` it also filters the rows to functions at or above any threshold. |
 | `--no-tests` | Leave test files out (the same rule as `t` in the Complexity window, see [Hiding test files](#hiding-test-files)): the table, the groups, `--brief`, the summary and `--diff` ignore them; a line `tests hidden: N files` follows the summary and the JSON `summary` carries `"tests_hidden": true`. A test file you name explicitly is still measured. |
-| `--sites` | With `--json`: add `sites` to every function (and to the `after` side of every changed function under `--diff`), the per-site breakdown of [Why is this function complex?](#why-is-this-function-complex). The text table does not change; without the flag the JSON is exactly what it was. |
+| `--sites` | With `--json`: add `sites` and `candidates` to every function (and to the `after` side of every changed function under `--diff`), the per-site breakdown and the extraction proposals of [Why is this function complex?](#why-is-this-function-complex). The text table does not change; without the flag the JSON is exactly what it was. |
 | `--churn[=DAYS]` | Add the hotspot numbers (see [Hotspots](#hotspots-complexity--change-frequency)) from the commits of the last `DAYS` days (default: `complexity.churn_days`, 90): a `COMMITS` column in the function table, `COMMITS` and `HOT` in the `--by` tables, `commits=N  hot=N` on `--brief` lines, and in the JSON `commits` per function and group, `hot` per group and `summary.churn_days`. `ike complexity --churn=30 --by file` ranks the files to simplify first. Needs a git repository (exit 2 otherwise); not combinable with `--diff`. Without the flag the output is unchanged. |
 | `--baseline[=PATH]`, `--no-baseline` | Apply the [baseline](#accepted-debt-the-baseline). The project's `.ike/complexity-baseline.json` applies **by default** when it exists; a bare `--baseline` insists on it (exit 2 when it is missing), `--baseline=PATH` reads another file (relative to the current directory), `--no-baseline` reads none. With a baseline the text table marks accepted rows `name ✓`, a line `baseline: N accepted, N worsened (<file>)` follows the summary, the summary's over-threshold count and `excess` leave accepted functions out, and the JSON gains `baseline` per function and group and `accepted` in the summary. A malformed file is exit 2. `--diff` ignores the baseline (it compares revisions, not debt). |
 | `--write-baseline` | Write every function at or above the CCN or cognitive threshold — of the named paths, `--no-tests` respected, the row filters not — into the baseline file (the project file, or `--baseline=PATH`), replacing it, and print `baseline: N functions over threshold (CCN ≥ 15 or cog ≥ 15) written to .ike/complexity-baseline.json` instead of the report. The same file `Complexity: Accept All Over Threshold` writes in the IDE. Not combinable with `--diff` or `--no-baseline`. |
@@ -355,6 +372,9 @@ Project report:
         { "line": 264, "col": 1, "end_line": 270, "kind": "if", "ccn": 1, "cognitive": 1, "nesting": 0, "level": 0 },
         { "line": 264, "col": 6, "end_line": 264, "kind": "&&", "ccn": 2, "cognitive": 1, "nesting": 0, "level": 0 },
         { "line": 266, "col": 2, "end_line": 268, "kind": "switch", "ccn": 0, "cognitive": 2, "nesting": 1, "level": 1 }
+      ],
+      "candidates": [
+        { "line": 266, "end_line": 268, "kind": "switch", "cog_saving": 4, "new_ccn": 3, "new_cog": 2, "rest_ccn": 166, "rest_cog": 214 }
       ] }
   ],
   "skipped": { "files": 192, "languages": ["json", "markdown", "yaml"] }
@@ -374,8 +394,16 @@ function's CCN or cognitive complexity — `line` / `end_line` 1-based,
 `else if`, `elif`, `for`, `switch`, `case`, `catch`, `?:`, a boolean
 operator, `recursion`), `ccn` and `cognitive` the increments, `nesting`
 the part of `cognitive` that is the nesting penalty, `level` the nesting
-level. With `--diff --sites` every `changed` entry's `after` and every
-`added` entry carry it too. `baseline` is `accepted`, `worsened` or `new`
+level. `candidates` comes with the same flag: the function's extraction
+proposals, best first — `line` / `end_line` the block's 1-based range,
+`kind` the block (`if`, `for`, `switch`, `else`, …), `cog_saving` the
+cognitive points the file would lose, `new_ccn` / `new_cog` the metrics
+the extracted function would have, `rest_ccn` / `rest_cog` what the
+function would keep (`rest_cog + new_cog == cognitive − cog_saving`,
+`rest_ccn + new_ccn == ccn + 1`); a function without a block saving at
+least 3 points has no `candidates` key. With `--diff --sites` every
+`changed` entry's `after` and every `added` entry carry both. `baseline`
+is `accepted`, `worsened` or `new`
 against the [baseline](#accepted-debt-the-baseline) in effect and absent
 without one; `summary.accepted` counts the over-threshold functions the
 baseline accepts (always present, `0` without a baseline), while

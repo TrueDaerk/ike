@@ -11,6 +11,7 @@ import (
 
 	"ike/internal/complexity"
 	"ike/internal/complexitypanel"
+	"ike/internal/editor"
 	"ike/internal/pane"
 )
 
@@ -146,6 +147,43 @@ func TestComplexityPanelSeedsFollowsAndOpens(t *testing.T) {
 	m = out.(Model)
 	if l, _ := m.editorForPath(src).CursorPos(); l != line {
 		t.Fatalf("after nav.back caret line = %d, want %d", l, line)
+	}
+}
+
+// TestComplexityCandidateOpensSelection: an OpenLocationMsg with an EndLine
+// past Line (an extraction candidate, #2948) opens the file and leaves a
+// linewise visual selection over the range, caret on the header; a
+// line-only message keeps the plain jump.
+func TestComplexityCandidateOpensSelection(t *testing.T) {
+	m, src := complexityApp(t)
+	out, _ := m.Update(ComplexityToggleMsg{})
+	m = out.(Model)
+	out, _ = m.Update(complexitypanel.OpenLocationMsg{Path: src, Line: 20, EndLine: 28})
+	m = out.(Model)
+	ed := m.editorForPath(src)
+	if ed == nil {
+		t.Fatal("the source did not open")
+	}
+	if ed.ModeName() != editor.VisualLine {
+		t.Fatalf("mode = %v, want a visual line selection", ed.ModeName())
+	}
+	if l, _ := ed.CursorPos(); l != 20 {
+		t.Errorf("caret line = %d, want the header 20", l)
+	}
+	text, ok := ed.SelectionText()
+	if !ok || strings.Count(text, "\n") < 8 {
+		t.Errorf("selection = %q (ok=%v), want nine lines", text, ok)
+	}
+	// A plain function jump moves the caret only (the editor's mode is the
+	// jump's business, as for every jump surface); the anchor stays put.
+	out, _ = m.Update(complexitypanel.OpenLocationMsg{Path: src, Line: 5})
+	m = out.(Model)
+	ed = m.editorForPath(src)
+	if l, _ := ed.CursorPos(); l != 5 {
+		t.Errorf("after a plain jump: line %d, want 5", l)
+	}
+	if text, _ := ed.SelectionText(); strings.Count(text, "\n") < 20 {
+		t.Errorf("the anchor moved: selection %q", text)
 	}
 }
 
