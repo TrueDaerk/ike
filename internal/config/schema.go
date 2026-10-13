@@ -5,6 +5,8 @@ package config
 // LSP.Servers) are intentionally empty here — downstream roadmaps fill their
 // concrete entries through extend.go, never by editing these structs.
 
+import "fmt"
+
 // Config is the root configuration document. It is the only type the rest of
 // IKE reads; no TOML types leak past this package.
 type Config struct {
@@ -1173,7 +1175,38 @@ type Marks struct {
 	// Complexity gates the inline complexity hints on function headers
 	// (0550, #2919): `CCN 12 · cog 8` as trailing virtual text, fed from the
 	// complexity index and re-measured after edits.
-	Complexity bool `toml:"complexity"`
+	// The mode (#2966) is "all" (every function), "warn" (only functions at
+	// or above a threshold) or "off"; the pre-#2966 bool still loads (true =
+	// all, false = off).
+	Complexity HintMode `toml:"complexity"`
+}
+
+// HintMode is editor.marks.complexity (#2966): "all", "warn" or "off". It
+// decodes the legacy bool too, so an old settings file loads silently.
+type HintMode string
+
+// The editor.marks.complexity modes.
+const (
+	HintAll  HintMode = "all"
+	HintWarn HintMode = "warn"
+	HintOff  HintMode = "off"
+)
+
+// UnmarshalTOML accepts the enum string or the pre-#2966 bool.
+func (h *HintMode) UnmarshalTOML(v any) error {
+	switch x := v.(type) {
+	case bool:
+		if x {
+			*h = HintAll
+		} else {
+			*h = HintOff
+		}
+	case string:
+		*h = HintMode(x)
+	default:
+		return fmt.Errorf("editor.marks.complexity: want all, warn or off, got %v", v)
+	}
+	return nil
 }
 
 // Tabs holds editor-tab behaviour (Roadmap 0190). AlwaysShow renders the

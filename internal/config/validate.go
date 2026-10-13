@@ -523,6 +523,12 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "palette.recent.ranking", Message: fmt.Sprintf("unknown ranking %q, using \"recency\"", c.Palette.Recent.Ranking)})
 		c.Palette.Recent.Ranking = "recency"
 	}
+	switch c.Editor.Marks.Complexity {
+	case HintAll, HintWarn, HintOff:
+	default:
+		diags = append(diags, Diagnostic{Field: "editor.marks.complexity", Message: fmt.Sprintf("unknown mode %q, using \"all\"", c.Editor.Marks.Complexity)})
+		c.Editor.Marks.Complexity = HintAll
+	}
 	if !saveModes[c.Editor.AutoSave] {
 		diags = append(diags, Diagnostic{Field: "editor.auto_save", Message: fmt.Sprintf("unknown mode %q, using \"focus\"", c.Editor.AutoSave)})
 		c.Editor.AutoSave = "focus"

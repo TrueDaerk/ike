@@ -30,7 +30,10 @@ as a hint after the function header (`CCN 12 · cog 8`) and, unless
 density at or above `comment_density_warn` colours the `cmt%` cell, extends
 the hint (`CCN 3 · cog 2 · cmt 55%` — below the threshold the hint stays
 short) and adds its own Problems warning
-(`function foo: comment density 55% ≥ 40%`). The
+(`function foo: comment density 55% ≥ 40%`). Which headers carry a hint is
+`editor.marks.complexity` (Settings > Editor > Diagnostics): `all` (every
+function), `warn` (only functions at or above a threshold) or `off`; an
+older settings file with `true` / `false` keeps working as `all` / `off`. The
 optional `Δcx` status segment (`complexity.status_segment`) shows how the
 working tree compares with `HEAD`.
 

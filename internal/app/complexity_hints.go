@@ -13,8 +13,9 @@ package app
 // off-loop with complexity.Measure, stamped with the DocVersion it was taken
 // at, and routed to every view of the path like vcs.MarksMsg — the editor
 // drops a push whose version moved meanwhile, and the next settled pass
-// re-arms for the newer one. complexity.enabled = false clears every
-// buffer's hints once.
+// re-arms for the newer one. complexity.enabled = false or
+// editor.marks.complexity = off clears every buffer's hints once; the mode
+// (#2966) is part of the key, so all <-> warn repaints.
 
 import (
 	"strconv"
@@ -37,12 +38,13 @@ const cxHintDebounce = 250 * time.Millisecond
 // cxHintKey is the state one hint set answers for; a differing key means
 // the editor's hints are (or will be) out of date.
 type cxHintKey struct {
-	version int  // the buffer's DocVersion
-	gen     int  // index generation the hints came from; 0 when measured
-	ccn     int  // complexity.ccn_warn
-	cog     int  // complexity.cognitive_warn
-	cmt     int  // complexity.comment_density_warn
-	enabled bool // complexity.enabled
+	version int             // the buffer's DocVersion
+	gen     int             // index generation the hints came from; 0 when measured
+	ccn     int             // complexity.ccn_warn
+	cog     int             // complexity.cognitive_warn
+	cmt     int             // complexity.comment_density_warn
+	enabled bool            // complexity.enabled
+	mode    config.HintMode // editor.marks.complexity (#2966)
 }
 
 // complexityHintState is the sync's bookkeeping, shared by pointer across
@@ -74,8 +76,9 @@ type complexityHintMeasuredMsg struct {
 // The comment density (#2934) joins the text only at or above cmtWarn
 // percent (" · cmt 55%"), so the common hint stays short; 0 never shows it.
 // Several functions on one line (lambdas beside their enclosing header)
-// keep the first — the header's.
-func complexityHintsFor(fns []complexity.Function, ccnWarn, cogWarn, cmtWarn int) []editor.ComplexityHint {
+// keep the first — the header's. warnOnly (editor.marks.complexity = warn,
+// #2966) keeps only the Warn hints.
+func complexityHintsFor(fns []complexity.Function, ccnWarn, cogWarn, cmtWarn int, warnOnly bool) []editor.ComplexityHint {
 	if len(fns) == 0 {
 		return nil
 	}
@@ -91,11 +94,11 @@ func complexityHintsFor(fns []complexity.Function, ccnWarn, cogWarn, cmtWarn int
 		if overCmt {
 			text += " · cmt " + strconv.Itoa(complexity.DensityPercent(fn.CommentDensity)) + "%"
 		}
-		out = append(out, editor.ComplexityHint{
-			Line: fn.Line,
-			Text: text,
-			Warn: fn.CCN >= ccnWarn || fn.Cognitive >= cogWarn || overCmt,
-		})
+		warn := fn.CCN >= ccnWarn || fn.Cognitive >= cogWarn || overCmt
+		if warnOnly && !warn {
+			continue
+		}
+		out = append(out, editor.ComplexityHint{Line: fn.Line, Text: text, Warn: warn})
 	}
 	return out
 }
@@ -120,9 +123,9 @@ func (m Model) cxHintMeasurable(ed *editor.Model) bool {
 // cxHintKeyFor is the state key an editor's hints should answer for right
 // now; indexed reports whether the index snapshot already holds the
 // buffer's functions (clean buffer, file walked), the no-parse case.
-func (m Model) cxHintKeyFor(ed *editor.Model, view complexity.View, c config.Complexity) (key cxHintKey, indexed bool) {
-	key = cxHintKey{version: ed.DocVersion(), ccn: c.CCNWarn, cog: c.CognitiveWarn, cmt: c.CommentDensityWarn, enabled: c.Enabled}
-	if !c.Enabled {
+func (m Model) cxHintKeyFor(ed *editor.Model, view complexity.View, c config.Complexity, mode config.HintMode) (key cxHintKey, indexed bool) {
+	key = cxHintKey{version: ed.DocVersion(), ccn: c.CCNWarn, cog: c.CognitiveWarn, cmt: c.CommentDensityWarn, enabled: cxHintsOn(c, mode), mode: mode}
+	if !key.enabled {
 		return key, false
 	}
 	if !ed.Dirty() {
@@ -134,6 +137,12 @@ func (m Model) cxHintKeyFor(ed *editor.Model, view complexity.View, c config.Com
 	return key, false
 }
 
+// cxHintsOn reports whether hints are fed at all: the index is enabled and
+// editor.marks.complexity is not off (#2966).
+func cxHintsOn(c config.Complexity, mode config.HintMode) bool {
+	return c.Enabled && mode != config.HintOff
+}
+
 // complexityHintsSyncCmd runs once per settled Update pass: for every open
 // document it compares the wanted key with the delivered one and either
 // serves the hints from the index, clears them (switch off), or arms the
@@ -142,9 +151,10 @@ func (m *Model) complexityHintsSyncCmd() tea.Cmd {
 	if m.complexityIndex == nil || m.cxHints == nil {
 		return nil
 	}
-	c := config.Get().Complexity
+	cfg := config.Get()
+	c, mode := cfg.Complexity, cfg.Editor.Marks.Complexity
 	var view complexity.View
-	if c.Enabled {
+	if cxHintsOn(c, mode) {
 		view = m.complexityIndex.Snapshot()
 	}
 	st := m.cxHints
@@ -161,12 +171,12 @@ func (m *Model) complexityHintsSyncCmd() tea.Cmd {
 			}
 			seen[ed.Path()] = true
 			path := ed.Path()
-			key, indexed := m.cxHintKeyFor(ed, view, c)
+			key, indexed := m.cxHintKeyFor(ed, view, c, mode)
 			if st.sent[path] == key || st.pending[path] == key {
 				continue
 			}
 			switch {
-			case !c.Enabled:
+			case !key.enabled:
 				st.sent[path] = key
 				delete(st.pending, path)
 				if ed.HasComplexityHints() {
@@ -177,7 +187,7 @@ func (m *Model) complexityHintsSyncCmd() tea.Cmd {
 				delete(st.pending, path)
 				fns := view.Files[canonicalPath(path)]
 				cmds = append(cmds, m.routeToEditor(path, editor.ComplexityHintsMsg{
-					Path: path, Hints: complexityHintsFor(fns, c.CCNWarn, c.CognitiveWarn, c.CommentDensityWarn), Version: key.version,
+					Path: path, Hints: complexityHintsFor(fns, c.CCNWarn, c.CognitiveWarn, c.CommentDensityWarn, mode == config.HintWarn), Version: key.version,
 				}))
 			default:
 				st.pending[path] = key
@@ -236,6 +246,6 @@ func (m *Model) applyComplexityHints(msg complexityHintMeasuredMsg) tea.Cmd {
 	}
 	c := config.Get().Complexity
 	return m.routeToEditor(msg.path, editor.ComplexityHintsMsg{
-		Path: msg.path, Hints: complexityHintsFor(msg.fns, c.CCNWarn, c.CognitiveWarn, c.CommentDensityWarn), Version: msg.version,
+		Path: msg.path, Hints: complexityHintsFor(msg.fns, c.CCNWarn, c.CognitiveWarn, c.CommentDensityWarn, msg.key.mode == config.HintWarn), Version: msg.version,
 	})
 }

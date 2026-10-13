@@ -132,7 +132,7 @@ func defaults() *Config {
 				GitDeleted:  true,
 				Inheritance: true,
 				Coverage:    true,
-				Complexity:  true,
+				Complexity:  HintAll,
 			},
 		},
 		Explorer: Explorer{

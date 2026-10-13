@@ -112,14 +112,14 @@ func TestComplexityHintsWarnColour(t *testing.T) {
 func TestComplexityHintsConfigToggle(t *testing.T) {
 	m, path := loaded(t, "func A() {\n}\n")
 	m, _ = m.Update(cxHintsMsg(path, m.DocVersion(), ComplexityHint{Line: 0, Text: "CCN 1 · cog 0"}))
-	m.Configure(host.MapConfig{"editor.marks.complexity": "false"})
+	m.Configure(host.MapConfig{"editor.marks.complexity": "off"})
 	if got := firstLine(m); got != "func A() {" {
 		t.Errorf("rendered = %q, hints must hide while toggled off", got)
 	}
 	if _, ok := m.ComplexityHintAt(0); ok {
 		t.Error("ComplexityHintAt must answer nothing while toggled off")
 	}
-	m.Configure(host.MapConfig{"editor.marks.complexity": "true"})
+	m.Configure(host.MapConfig{"editor.marks.complexity": "all"})
 	if got, want := firstLine(m), "func A() {  CCN 1 · cog 0"; got != want {
 		t.Errorf("rendered = %q, want %q (cached hints resume)", got, want)
 	}
