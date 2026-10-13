@@ -190,6 +190,8 @@ func TestParseComplexity(t *testing.T) {
 		{[]string{"--baseline", "debt.json"}, ComplexityArgs{Baseline: true, Paths: []string{"debt.json"}}},
 		{[]string{"--no-baseline", "--by", "file"}, ComplexityArgs{NoBaseline: true, By: "file"}},
 		{[]string{"--write-baseline", "--baseline=debt.json"}, ComplexityArgs{WriteBaseline: true, Baseline: true, BaselinePath: "debt.json"}},
+		// --pins (#2959).
+		{[]string{"--pins", "--json"}, ComplexityArgs{Pins: true, JSON: true}},
 		{[]string{"--help"}, ComplexityArgs{Help: true}},
 		{[]string{"-h"}, ComplexityArgs{Help: true}},
 	}
@@ -230,6 +232,9 @@ func TestParseComplexity(t *testing.T) {
 		{[]string{"--write-baseline", "--diff"}, ErrWriteBaselineWithDiff},
 		{[]string{"--diff=main", "--write-baseline"}, ErrWriteBaselineWithDiff},
 		{[]string{"--write-baseline", "--no-baseline"}, ErrWriteBaselineWithNoBaseline},
+		{[]string{"--pins", "--diff"}, ErrPinsWithDiff},
+		{[]string{"--by", "file", "--pins"}, ErrPinsWithDiff},
+		{[]string{"--pins", "--brief"}, ErrPinsWithDiff},
 	} {
 		if _, err := Parse(append([]string{"complexity"}, c.args...)); err != c.want {
 			t.Errorf("Parse(complexity %q) error %v, want %v", c.args, err, c.want)

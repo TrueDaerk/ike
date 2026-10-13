@@ -230,6 +230,36 @@ with such a member).
 ▸ Accepted-debt baseline) ignores the file everywhere without deleting it.
 A malformed file is reported once and ignored.
 
+## Pinning the functions you are working on
+
+An optimisation session usually has a handful of targets. Select one in the
+Complexity window and press `p` (or run **Complexity: Pin / Unpin Selected
+Function**): the function is pinned together with its CCN and cognitive
+complexity *at that moment*. On the Project tab a **Pinned** section leads
+the list, whatever the sort, with a `since pin` column:
+
+```
+render ★   …   ccn 42→30 (−12) · cog 31→20 (−11)
+```
+
+The column is green when a metric fell and none rose, and in the warning
+colour when one rose. A pinned function that no longer exists (renamed,
+deleted) stays listed as `(gone)` until you unpin it. Pinned functions
+carry `★` after their name on the File and Changes tabs too, and
+`pinned:yes` / `pinned:no` filters on them. `p` on a group row only
+explains that pins are per function. Press `p` again to unpin.
+
+Pins are personal state, not project data: they live in
+`.ike/complexity-pins.json` (or `$IKE_CONFIG_DIR/complexity-pins.json`) and
+survive restarts. A pin follows its function when it moves inside its file
+(it is matched by file, name and position among functions of the same
+name).
+
+**Session Δ.** The Project tab's header also shows how far the whole
+session moved: `session Δexcess −120` compares the current excess with the
+first fully scanned snapshot of this IDE run. It is hidden while nothing
+changed.
+
 ## Hiding test files
 
 Test functions are rarely what you want to simplify, yet a table-driven
@@ -290,7 +320,7 @@ again for the function rows; the choice is kept with the layout.
 ## Command line
 
 ```
-ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [PATH...]
+ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [PATH...]
 ```
 
 | Flag | Effect |
@@ -308,6 +338,7 @@ ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--mi
 | `--sites` | With `--json`: add `sites` and `candidates` to every function (and to the `after` side of every changed function under `--diff`), the per-site breakdown and the extraction proposals of [Why is this function complex?](#why-is-this-function-complex). The text table does not change; without the flag the JSON is exactly what it was. |
 | `--churn[=DAYS]` | Add the hotspot numbers (see [Hotspots](#hotspots-complexity--change-frequency)) from the commits of the last `DAYS` days (default: `complexity.churn_days`, 90): a `COMMITS` column in the function table, `COMMITS` and `HOT` in the `--by` tables, `commits=N  hot=N` on `--brief` lines, and in the JSON `commits` per function and group, `hot` per group and `summary.churn_days`. `ike complexity --churn=30 --by file` ranks the files to simplify first. Needs a git repository (exit 2 otherwise); not combinable with `--diff`. Without the flag the output is unchanged. |
 | `--baseline[=PATH]`, `--no-baseline` | Apply the [baseline](#accepted-debt-the-baseline). The project's `.ike/complexity-baseline.json` applies **by default** when it exists; a bare `--baseline` insists on it (exit 2 when it is missing), `--baseline=PATH` reads another file (relative to the current directory), `--no-baseline` reads none. With a baseline the text table marks accepted rows `name ✓`, a line `baseline: N accepted, N worsened (<file>)` follows the summary, the summary's over-threshold count and `excess` leave accepted functions out, and the JSON gains `baseline` per function and group and `accepted` in the summary. A malformed file is exit 2. `--diff` ignores the baseline (it compares revisions, not debt). |
+| `--pins` | List only the [pinned](#pinning-the-functions-you-are-working-on) functions, with `PINNED_CCN`, `PINNED_COG`, `ΔCCN` and `ΔCOG` columns and a `pins: N pinned, N shown, N gone (<file>)` line. Without a pin file the table is empty (`pins: none`); a malformed file is exit 2. Not combinable with `--diff`, `--by` or `--brief`. Every report marks pinned rows `name ★`. |
 | `--write-baseline` | Write every function at or above the CCN or cognitive threshold — of the named paths, `--no-tests` respected, the row filters not — into the baseline file (the project file, or `--baseline=PATH`), replacing it, and print `baseline: N functions over threshold (CCN ≥ 15 or cog ≥ 15) written to .ike/complexity-baseline.json` instead of the report. The same file `Complexity: Accept All Over Threshold` writes in the IDE. Not combinable with `--diff` or `--no-baseline`. |
 
 The walk skips the same files as the Complexity window: hidden directories,
@@ -449,7 +480,9 @@ least 3 points has no `candidates` key. With `--diff --sites` every
 `changed` entry's `after` and every `added` entry carry both. `baseline`
 is `accepted`, `worsened` or `new`
 against the [baseline](#accepted-debt-the-baseline) in effect and absent
-without one; `summary.accepted` counts the over-threshold functions the
+without one; `pinned` (`{"ccn", "cognitive", "pinned_at"}`, the metrics at
+pin time) is present on every pinned function — project `functions`, the
+diff's `changed` and `added` — and absent otherwise; `summary.accepted` counts the over-threshold functions the
 baseline accepts (always present, `0` without a baseline), while
 `over_threshold` and `excess` count only the new and worsened ones.
 `ccn_p50` … `cog_p99` are nearest-rank percentiles over the summarized

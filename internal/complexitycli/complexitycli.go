@@ -72,6 +72,20 @@ type settings struct {
 	// --baseline=PATH named another.
 	baseline     *complexity.Baseline
 	baselinePath string
+	// pins is the pin list (#2959), empty without a file; pinsPath is
+	// where it was read from.
+	pins     *complexity.Pins
+	pinsPath string
+}
+
+// pinOf returns the pin of the function at (file, ordinal), nil when it
+// is not pinned.
+func (s settings) pinOf(file string, fn complexity.Function, ordinal int) *complexity.Pin {
+	p, ok := s.pins.Lookup(complexity.EntryKey{File: file, Function: fn.Name, Ordinal: ordinal})
+	if !ok {
+		return nil
+	}
+	return &p
 }
 
 // defaultChurnDays is the --churn window when neither the flag nor the
@@ -152,6 +166,9 @@ func Run(a cli.ComplexityArgs, stdout, stderr io.Writer) int {
 		return ExitError
 	case a.WriteBaseline && a.NoBaseline:
 		fmt.Fprintln(stderr, "ike complexity:", cli.ErrWriteBaselineWithNoBaseline)
+		return ExitError
+	case a.Pins && (a.Diff || by != complexity.ByNone || brief != complexity.ByNone):
+		fmt.Fprintln(stderr, "ike complexity:", cli.ErrPinsWithDiff)
 		return ExitError
 	}
 	if brief != complexity.ByNone {
@@ -274,6 +291,10 @@ func resolve(a cli.ComplexityArgs) (settings, error) {
 	}
 	if err := s.loadBaseline(); err != nil {
 		return settings{}, err
+	}
+	s.pinsPath = complexity.PinsPath(root)
+	if s.pins, err = complexity.LoadPins(s.pinsPath); err != nil {
+		return settings{}, fmt.Errorf("pins: %w", err)
 	}
 	return s, nil
 }
@@ -603,6 +624,9 @@ func runProject(s settings) projectReport {
 	fns := make([]complexity.Function, len(r.all))
 	for i, rw := range r.all {
 		fns[i] = rw.fn
+		if s.args.Pins && s.pinOf(rw.file, rw.fn, rw.ordinal) == nil {
+			continue
+		}
 		if s.keep(rw.fn) {
 			r.rows = append(r.rows, rw)
 		}
@@ -702,6 +726,21 @@ type diffReport struct {
 	skipped skipped
 	// baseFiles / headFiles count the measured files on each side.
 	baseFiles, headFiles int
+	// head is the working-tree measurement per absolute path — the
+	// ordinals the pins key on (#2959).
+	head map[string][]complexity.Function
+}
+
+// headOrdinal is a head-side unit's index among its file's same-named
+// units, -1 when the head measurement does not hold it.
+func (r diffReport) headOrdinal(path string, fn complexity.Function) int {
+	fns := r.head[path]
+	for i, ord := range complexity.Ordinals(fns) {
+		if fns[i].Name == fn.Name && fns[i].Line == fn.Line {
+			return ord
+		}
+	}
+	return -1
 }
 
 // diffFile is one file of the comparison: its base blob (baseRel "" when
@@ -846,6 +885,7 @@ func runDiff(s settings) (diffReport, error) {
 		}
 	})
 	r.diff = complexity.DiffProject(base, head, s.ccnWarn, s.cogWarn, s.cmtWarn)
+	r.head = head
 	return r, nil
 }
 
@@ -859,6 +899,7 @@ func inside(dir, path string) bool {
 type changeRow struct {
 	file string
 	ch   complexity.Change
+	pin  *complexity.Pin // #2959
 }
 
 // sections lists the changed, added and removed rows the filter keeps, by
@@ -869,12 +910,12 @@ func (r diffReport) sections() (changed []changeRow, added, removed []row) {
 		rel := r.s.rel(p)
 		for _, c := range fd.Changed {
 			if r.s.keep(c.Before) || r.s.keep(c.After) {
-				changed = append(changed, changeRow{file: rel, ch: c})
+				changed = append(changed, changeRow{file: rel, ch: c, pin: r.s.pinOf(rel, c.After, r.headOrdinal(p, c.After))})
 			}
 		}
 		for _, f := range fd.Added {
 			if r.s.keep(f) {
-				added = append(added, row{file: rel, fn: f})
+				added = append(added, row{file: rel, fn: f, ordinal: r.headOrdinal(p, f)})
 			}
 		}
 		for _, f := range fd.Removed {

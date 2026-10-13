@@ -49,8 +49,10 @@ bring their own.
 | Complexity: Accept / Drop Selected in Baseline | `complexity.baseline` | `i` | — | everywhere |
 | Complexity: Accept All Over Threshold | `complexity.baselineAll` | — | — | everywhere |
 | Complexity: Export Current Tab as CSV | `complexity.export` | — | — | everywhere |
+| Complexity: Diff Selected Function (Base vs Working Tree) | `complexity.functionDiff` | — | — | everywhere |
 | Complexity: Cycle Grouping (None / Class / File) | `complexity.group` | `b` | — | everywhere |
 | Complexity: Toggle Distribution (Histogram) | `complexity.histogram` | `shift+d` | — | everywhere |
+| Complexity: Pin / Unpin Selected Function | `complexity.pin` | — | — | everywhere |
 | Complexity: Rescan Project | `complexity.refresh` | — | — | everywhere |
 | Complexity: Mark Sites in Editor | `complexity.showSites` | `m` | — | everywhere |
 | Complexity: Expand / Collapse Sites | `complexity.sites` | `space` | — | everywhere |

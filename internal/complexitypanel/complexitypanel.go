@@ -105,12 +105,15 @@ const (
 	ColChangedN
 	ColAddedN
 	ColRemovedN
+	// ColSincePin is the Pinned section's pinned → current metrics
+	// (#2959, pins.go); it shows only while the section does.
+	ColSincePin
 )
 
 // columnLabels are the column headers in Column order.
 var columnLabels = []string{"file", "function", "line", "ccn", "cog", "nloc", "params", "depth", "change", "cmt%",
 	"class", "funcs", "ccn avg", "ccn max", "cog avg", "cog max", "over", "excess", "commits", "hot",
-	"changed", "added", "removed"}
+	"changed", "added", "removed", "since pin"}
 
 // numeric reports whether a column sorts as a number (descending by
 // default) rather than as text.
@@ -123,7 +126,7 @@ func (c Column) numeric() bool {
 }
 
 // lastColumn is the highest Column value.
-const lastColumn = ColRemovedN
+const lastColumn = ColSincePin
 
 // The per-tab column layouts, in display order: the File tab hides the
 // file column, the Changes tab leads with the section and drops params /
@@ -185,6 +188,7 @@ var Schema = filterexpr.Schema{Fields: []filterexpr.Field{
 	{Name: "metric", Values: []string{"ccn", "cog", "cmt", "hot", "commits"}, Doc: "metric: sorts by cyclomatic or cognitive complexity, comment density (cmt%), hotspot score (hot) or commits in the churn window"},
 	{Name: "test", Values: []string{"yes", "no"}, Doc: "test: no hides test files, test: yes keeps only them"},
 	{Name: "baseline", Values: []string{"new", "accepted", "worsened"}, Doc: "baseline: keeps functions the accepted-debt baseline classifies as new, accepted or worsened (groups: with such a member)"},
+	{Name: "pinned", Aliases: []string{"pin"}, Values: []string{"yes", "no"}, Doc: "pinned: yes keeps the pinned functions (groups: with a pinned member), pinned: no the rest"},
 }}
 
 // Row is one function of the current tab, kept alongside the cells so the
@@ -232,6 +236,13 @@ type Row struct {
 	// Members are a group row's function rows (#2958), so 'i' can accept
 	// every over-threshold member.
 	Members []Row
+	// Pin is the function's pin (#2959, pins.go), nil when unpinned;
+	// PinRow places the row in the Project tab's Pinned section, and Gone
+	// marks a pin whose function the snapshot no longer holds (Fn then
+	// carries the pinned name and metrics).
+	Pin    *complexity.Pin
+	PinRow bool
+	Gone   bool
 }
 
 // child reports whether r is a child row of an expanded function — a site
@@ -284,6 +295,8 @@ func (r Row) intValue(c Column) (int, string) {
 		return r.Commits, ""
 	case ColHot:
 		return r.Hot, ""
+	case ColSincePin:
+		return r.sinceValue(), ""
 	}
 	if r.Change != 0 {
 		switch c {
@@ -342,6 +355,9 @@ func (r Row) cell(c Column) string {
 		if r.Fn.Baseline == complexity.BaselineAccepted {
 			name += acceptedMark
 		}
+		if r.Pin != nil {
+			name += pinMark
+		}
 		if r.Dirty {
 			return name + dirtyMark
 		}
@@ -358,6 +374,11 @@ func (r Row) cell(c Column) string {
 		return strconv.Itoa(r.Commits)
 	case ColHot:
 		return strconv.Itoa(r.Hot)
+	case ColSincePin:
+		return r.sinceCell()
+	}
+	if r.Gone {
+		return "-" // no current metrics: the function is gone
 	}
 	if r.Change != 0 {
 		switch c {
@@ -457,6 +478,20 @@ type Model struct {
 
 	// hist shows the distribution row ('D', #2953, histogram.go).
 	hist bool
+
+	// The pins (#2959, pins.go): the list in effect, whether the Project
+	// tab shows its Pinned section, and the footer note of a refused 'p'.
+	pins       *complexity.Pins
+	pinSection bool
+	note       string
+	// The session Δ (#2959): the session's first settled snapshot, the
+	// excess it measures under the current settings (cached per
+	// sessionKey) and the Project tab's delta against it.
+	sessionBase    complexity.View
+	hasSessionBase bool
+	sessionKey     *sessionCacheKey
+	sessionExcess  int
+	sessionDelta   int
 }
 
 // New returns an empty panel on the Project tab sorted by CCN descending;
@@ -557,7 +592,11 @@ func (m *Model) layout() []Column {
 	case TabChanges:
 		return changesLayout
 	}
-	return m.churnLayout(projectLayout, projectChurnLayout)
+	l := m.churnLayout(projectLayout, projectChurnLayout)
+	if m.pinSection {
+		l = append(l[:len(l):len(l)], ColSincePin) // #2959
+	}
+	return l
 }
 
 // layoutIndex is the display position of column c on the selected tab, -1
@@ -664,16 +703,17 @@ func (m *Model) Refresh() {
 	if r, ok := m.Selected(); ok {
 		keep = r.key()
 	}
-	all := m.markTests(m.population())
+	all := m.markTests(m.markPins(m.population()))
 	fns := make([]complexity.Function, 0, len(all))
 	for _, r := range all {
-		if r.Change == complexity.Removed {
+		if r.Change == complexity.Removed || r.Gone {
 			continue // the Changes summary is the head side's
 		}
 		fns = append(fns, r.Fn)
 	}
 	// The totals stay the whole tab's; a grouped tab then lists groups.
 	m.summary = complexity.Summarize(fns, m.ccnWarn, m.cogWarn, m.cmtWarn)
+	m.updateSessionDelta()
 	switch {
 	case m.Grouping() == complexity.ByNone:
 	case m.tab == TabChanges:
@@ -827,6 +867,7 @@ func (m *Model) matches(q filterexpr.Query, r Row) bool {
 		{"nloc", atLeast("nloc")},
 		{"test", func(v string) bool { want, ok := testValue(v); return ok && r.Test == want }},
 		{"baseline", func(v string) bool { return baselineMatches(v, r) }},
+		{"pinned", func(v string) bool { return pinnedMatches(v, r) }},
 	}
 	for _, g := range gates {
 		if !q.KeepsAll(g.field, g.match) {
@@ -883,6 +924,12 @@ func (m *Model) sortRows() {
 	col, desc := m.sortCol, m.desc
 	sort.SliceStable(m.rows, func(i, j int) bool {
 		a, b := m.rows[i], m.rows[j]
+		if a.PinRow != b.PinRow {
+			return a.PinRow // the Pinned section leads (#2959)
+		}
+		if a.Gone != b.Gone {
+			return b.Gone // and closes with its gone pins
+		}
 		if a.Change != b.Change {
 			return a.sectionRank() < b.sectionRank()
 		}
@@ -906,6 +953,9 @@ func (m *Model) sortRows() {
 		}
 		if a.Group != nil && b.Group != nil {
 			return a.Group.Class < b.Group.Class
+		}
+		if a.Gone && a.Fn.Name != b.Fn.Name {
+			return a.Fn.Name < b.Fn.Name
 		}
 		return a.Fn.Line < b.Fn.Line
 	})
@@ -1039,6 +1089,7 @@ func (m *Model) stepFiltered(delta int) ui.MatchStep {
 }
 
 func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+	m.note = ""
 	if m.prompting {
 		return m.promptKey(msg)
 	}
@@ -1086,6 +1137,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.showSites()
 	case "i":
 		return m.toggleBaseline()
+	case "p":
+		return m.togglePin()
 	case "d":
 		return m.functionDiff()
 	case "enter":
@@ -1193,7 +1246,7 @@ func (m *Model) CSV() string {
 	}
 	writeCSVRow(&b, header)
 	for _, r := range m.rows {
-		if r.child() {
+		if r.child() || r.Gone {
 			continue
 		}
 		c := r.cells(projectLayout)
@@ -1307,6 +1360,9 @@ func (m *Model) totalsText() string {
 	if t := m.baselineTotals(); t != "" {
 		parts = append(parts, t)
 	}
+	if t := m.sessionTotals(); t != "" && m.tab == TabProject {
+		parts = append(parts, t)
+	}
 	return strings.Join(parts, " · ")
 }
 
@@ -1398,6 +1454,15 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 	if ci := m.layoutIndex(ColCmt); ci >= 0 {
 		cells[ci].Warn = r.Fn.CommentsOver(m.cmtWarn)
 	}
+	if r.Gone {
+		for c := range cells {
+			cells[c].Warn, cells[c].Muted = false, true
+		}
+	}
+	if si := m.layoutIndex(ColSincePin); si >= 0 {
+		rose, fell := r.sinceTone()
+		cells[si].Warn, cells[si].Good = rose, fell
+	}
 	// The section column reads like a heading: named on the first row of
 	// each section, blank below it.
 	if si := m.layoutIndex(ColChange); si >= 0 && i > 0 && m.rows[i-1].Change == r.Change {
@@ -1420,6 +1485,7 @@ func (m *Model) footer() string {
 	default:
 		hints += " · b group: " + m.Grouping().String() + " · i accept"
 	}
+	hints += m.pinFooter()
 	if m.hideTests {
 		hints += " · t tests: hidden"
 	} else {

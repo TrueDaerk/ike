@@ -97,6 +97,10 @@ type ComplexityArgs struct {
 	BaselinePath  string
 	NoBaseline    bool
 	WriteBaseline bool
+	// Pins lists only the pinned functions (#2959, complexity-pins.json
+	// in the state store) with their pinned metrics and the deltas. Not
+	// combinable with Diff, By or Brief.
+	Pins bool
 	// Paths are the files and directories to report on, as typed (#2936;
 	// none = the working directory). A directory is walked with the
 	// index's skip rules and the complexity.exclude globs; a file is
@@ -148,8 +152,12 @@ var ErrWriteBaselineWithDiff = errors.New("--write-baseline is not supported wit
 // `--no-baseline` (#2958).
 var ErrWriteBaselineWithNoBaseline = errors.New("--write-baseline and --no-baseline exclude each other")
 
+// ErrPinsWithDiff rejects `--pins` together with `--diff`, `--by` or
+// `--brief` (#2959): the pin list is a function table.
+var ErrPinsWithDiff = errors.New("--pins is not supported with --diff, --by or --brief")
+
 // ComplexityUsage is the one-line grammar of `ike complexity`.
-const ComplexityUsage = "usage: ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [PATH...]"
+const ComplexityUsage = "usage: ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [PATH...]"
 
 // Parse parses the arguments after the program name. Supported forms:
 //
@@ -265,6 +273,8 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 			ca.NoBaseline = true
 		case a == "--write-baseline":
 			ca.WriteBaseline = true
+		case a == "--pins":
+			ca.Pins = true
 		case name == "--baseline":
 			ca.Baseline = true
 			if hasVal {
@@ -360,6 +370,8 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 		return ComplexityArgs{}, ErrWriteBaselineWithDiff
 	case ca.WriteBaseline && ca.NoBaseline:
 		return ComplexityArgs{}, ErrWriteBaselineWithNoBaseline
+	case ca.Pins && (ca.Diff || ca.By != "" || ca.Brief != ""):
+		return ComplexityArgs{}, ErrPinsWithDiff
 	}
 	return ca, nil
 }

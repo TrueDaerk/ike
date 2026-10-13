@@ -1,5 +1,18 @@
 # Log
 
+## 2026-10-14 (pinned functions and the session Δ, #2959)
+
+- [Code Complexity](/architecture/complexity.md): the new "Pins" and
+  "Session Δ" paragraphs under the tool window — `complexity-pins.json` in
+  the state store (`complexity.Pins`, keyed by `EntryKey`, sorted, atomic),
+  `p` / `complexity.pin` (`PinToggleMsg`), the Pinned section with its
+  `since pin` column and colours (`gridview.Cell.Good`), `(gone)` rows, `★`
+  on every tab, the `pinned:` filter key, the header's `session Δexcess`
+  against the first settled snapshot per root; the CLI's `--pins` and the
+  JSON `pinned` object.
+- The complexity user guide: "Pinning the functions you are working on",
+  the `--pins` flag row and the `pinned` JSON field.
+
 ## 2026-10-14 (function diff from a Changes row, #2956)
 
 - [Code Complexity](/architecture/complexity.md): the new "Function diff"
