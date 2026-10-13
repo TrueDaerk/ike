@@ -274,6 +274,12 @@ func (s settings) keep(f complexity.Function) bool {
 	return true
 }
 
+// hidesTest reports whether --no-tests drops path (#2950); a file named
+// explicitly is kept, as the exclude globs keep it.
+func (s settings) hidesTest(path string) bool {
+	return s.args.NoTests && !s.named(path) && complexity.IsTestFile(s.dir, path)
+}
+
 // filtered reports whether any row filter is active.
 func (s settings) filtered() bool {
 	return s.args.Min > 0 || s.args.CCN > 0 || s.args.Cog > 0 || s.args.Cmt > 0
@@ -385,6 +391,8 @@ type projectReport struct {
 	rows    []row // the rows the filter keeps
 	summary complexity.Summary
 	skipped skipped
+	// tests counts the test files --no-tests dropped (#2950).
+	tests int
 }
 
 // runProject walks the named directories, adds the named files and
@@ -398,6 +406,10 @@ func runProject(s settings) projectReport {
 			return
 		}
 		seen[path] = true
+		if s.hidesTest(path) {
+			r.tests++
+			return
+		}
 		if measurable {
 			paths = append(paths, path)
 			return
@@ -578,6 +590,9 @@ func runDiff(s settings) (diffReport, error) {
 	// file named explicitly ignores the exclude globs (#2936).
 	gate := func(path string) bool {
 		if !s.selected(path) {
+			return false
+		}
+		if s.hidesTest(path) {
 			return false
 		}
 		if s.named(path) {

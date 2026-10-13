@@ -354,7 +354,25 @@ the sort column, and with it the column `min:` reads — `metric:cmt min:40`
 keeps bodies that are at least 40 % comment); bare words fuzzy-match
 the function names. `file:internal/app min:20` is "functions with CCN >= 20
 under internal/app"; adding `metric:cog` switches both to cognitive
-complexity.
+complexity. `test:no` hides the test files, `test:yes` keeps only them
+(#2950, `Row.Test`).
+
+**Hide tests (#2950).** `t` — the `complexity.toggleTests` command, bound to
+`t` in the `complexity` keymap context and in the palette as "Complexity:
+Toggle Test Files" — hides the test files on every tab at once; the footer
+hint reads `t tests: hidden`. A test file is what
+`complexity.IsTestFile(root, path)` says: the language's
+`lang.TestSpec.FilePattern` matches the base name (Go `_test.go`, Python
+`test_*.py` / `*_test.py`, PHP `*Test.php`), else the base name matches
+`*.spec.*`, `*.test.*`, `*_test.sh` or `*.bats`, else a directory of the
+project-relative path is `__tests__`, `tests`, `test` or `spec` (at any
+depth; `testdata` is not one). The toggle drops the rows before the totals
+are taken, so the header (and the Changes header and verdict, via
+`Diff.Without`, which re-runs `DiffProject` over the kept files) follows the
+visible population; `test:` and the toggle combine (both narrow). The state
+persists in the layout `Mode` beside the grouping
+(`project:file,file:class,tests:hidden`; `Mode` / `SetMode`, unknown tokens
+ignored) and the command saves the layout at once.
 
 **Grouping (#2937).** `b` — the `complexity.group` command, bound to `b`
 in the `complexity` keymap context and in the palette as "Complexity: Cycle
@@ -580,7 +598,7 @@ next to the other mark toggles).
 
 ## Headless CLI (#2922)
 
-`ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [PATH...]`
+`ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [PATH...]`
 is the terminal-free report for CI pipelines and coding agents. The grammar
 lives in `internal/cli` (`ComplexityArgs`, first argument only like
 `agent-hook`, so a file named `complexity` still opens as `./complexity`);
@@ -658,6 +676,17 @@ of the same level byte for byte (no `(free)` group). A level other than
 other`) or with `--diff` (`--brief is not supported with --diff`) is a
 usage error (exit 2). The level is taken only after `=`, so
 `--brief PATH` keeps PATH as a path.
+
+**No tests (#2950).** `--no-tests` (`ComplexityArgs.NoTests`) drops the
+files `complexity.IsTestFile` calls test code (see "Hide tests" above) from
+the walk, so the table, the groups, the brief lines and the summary all
+leave them out; the text adds `tests hidden: N files (--no-tests)` under the
+summary line and `; tests hidden` inside the `shown:` parentheses, and every
+JSON `summary` (and the diff's `base` / `head`) gains `tests_hidden: true`.
+Under `--diff` a test file is skipped like an excluded one (no `skipped:`
+count) and the text ends with `tests hidden (--no-tests)`. A file named
+explicitly is kept, as with the exclude globs. Without the flag the output
+is unchanged byte for byte.
 
 **Diff.** `--diff[=REV]` (default `HEAD`) runs synchronously the same git
 plumbing as the Changes tab — `vcscore.ResolveRev`, `vcscore.ChangedFiles`

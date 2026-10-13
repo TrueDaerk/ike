@@ -50,6 +50,7 @@ bring their own.
 | Complexity: Cycle Grouping (None / Class / File) | `complexity.group` | `b` | — | everywhere |
 | Complexity: Rescan Project | `complexity.refresh` | — | — | everywhere |
 | Complexity | `complexity.toggle` | `cmd+alt+shift+x` | — | everywhere |
+| Complexity: Toggle Test Files | `complexity.toggleTests` | `t` | — | everywhere |
 | Toggle Coverage Marks | `coverage.toggle` | — | — | everywhere |
 | Open Last Crash Log | `crash.openLastLog` | — | — | everywhere |
 | CSV: Column Profile | `csv.columnProfile` | — | — | `editor` pane |

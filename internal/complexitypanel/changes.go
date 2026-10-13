@@ -67,7 +67,7 @@ func (m *Model) Prompting() bool { return m.prompting }
 // unit, section order changed, added, removed.
 func (m *Model) changesRows() []Row {
 	var out []Row
-	d := m.changes.Diff
+	d := m.changesDiff()
 	for _, p := range d.Paths() {
 		fd := d.Files[p]
 		rel, id := m.relPath(p), m.pathLang(p)
@@ -83,6 +83,15 @@ func (m *Model) changesRows() []Row {
 		}
 	}
 	return out
+}
+
+// changesDiff is the Changes tab's comparison, re-run without the test
+// files while they are hidden (#2950) so the totals and the verdict follow.
+func (m *Model) changesDiff() complexity.Diff {
+	if !m.hideTests {
+		return m.changes.Diff
+	}
+	return m.changes.Diff.Without(func(p string) bool { return complexity.IsTestFile(m.root, p) })
 }
 
 // before / after are the two sides of a metric for a Changes row; an
@@ -166,7 +175,7 @@ func (m *Model) changesTotals() string {
 	if rev == "" {
 		rev = "HEAD"
 	}
-	d := c.Diff
+	d := m.changesDiff()
 	parts = append(parts,
 		"base "+rev+" → working tree",
 		"functions "+itoa(d.Base.Functions)+"→"+itoa(d.Head.Functions),

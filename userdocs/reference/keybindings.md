@@ -448,6 +448,7 @@ Active when the Complexity tool window has focus.
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|
 | Cycle complexity grouping (none/class/file) | `b` | `b` | `complexity.group` |
+| Toggle complexity test files | `t` | `t` | `complexity.toggleTests` |
 
 ## Rebinding
 

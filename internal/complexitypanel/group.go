@@ -106,6 +106,45 @@ func (m *Model) SetGroupMode(mode string) {
 	m.Refresh()
 }
 
+// HideTests reports whether the test files are hidden ('t', #2950).
+func (m *Model) HideTests() bool { return m.hideTests }
+
+// ToggleTests hides or shows the test files on every tab (#2950).
+func (m *Model) ToggleTests() {
+	m.hideTests = !m.hideTests
+	m.cursor, m.top = 0, 0
+	m.Refresh()
+}
+
+// testsHidden is the Mode token of the hide-tests toggle.
+const testsHidden = "tests:hidden"
+
+// Mode renders the pane's persisted display state for the layout store:
+// GroupMode, then "tests:hidden" while the test files are hidden (#2950) —
+// "project:file,file:class,tests:hidden".
+func (m *Model) Mode() string {
+	mode := m.GroupMode()
+	if !m.hideTests {
+		return mode
+	}
+	if mode == "" {
+		return testsHidden
+	}
+	return mode + "," + testsHidden
+}
+
+// SetMode restores Mode's form; unknown tokens (a newer build's) are
+// ignored.
+func (m *Model) SetMode(mode string) {
+	m.hideTests = false
+	for _, part := range strings.Split(mode, ",") {
+		if part == testsHidden {
+			m.hideTests = true
+		}
+	}
+	m.SetGroupMode(mode)
+}
+
 // groupLayout is the selected tab's group layout, nil when it does not
 // group.
 func (m *Model) groupLayout() []Column {
@@ -135,7 +174,7 @@ func (m *Model) groupRows(fnRows []Row) []Row {
 	for i := range groups {
 		g := &groups[i]
 		src := meta[g.File]
-		out[i] = Row{Path: g.File, Rel: src.Rel, Lang: src.Lang, Group: g}
+		out[i] = Row{Path: g.File, Rel: src.Rel, Lang: src.Lang, Test: src.Test, Group: g}
 	}
 	return out
 }

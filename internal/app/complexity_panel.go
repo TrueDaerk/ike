@@ -38,11 +38,12 @@ type ComplexityExportMsg struct{}
 type ComplexityGroupMsg struct{}
 
 // toolWindowMode is the persisted display mode of a tool window
-// (paneIdentity.Mode): the Complexity window's grouping levels (#2937),
-// "" for every other kind and for an ungrouped window.
+// (paneIdentity.Mode): the Complexity window's grouping levels (#2937) and
+// its hide-tests toggle (#2950), "" for every other kind and for a window
+// in its default state.
 func toolWindowMode(inst *pane.Instance) string {
 	if inst != nil && inst.Kind() == pane.KindComplexity {
-		return inst.Complexity().GroupMode()
+		return inst.Complexity().Mode()
 	}
 	return ""
 }
@@ -51,7 +52,7 @@ func toolWindowMode(inst *pane.Instance) string {
 // tool window.
 func restoreToolWindowMode(inst *pane.Instance, mode string) {
 	if inst != nil && inst.Kind() == pane.KindComplexity && mode != "" {
-		inst.Complexity().SetGroupMode(mode)
+		inst.Complexity().SetMode(mode)
 	}
 }
 
@@ -72,6 +73,25 @@ func (m *Model) cycleComplexityGroup() {
 	}
 	// The grouping is layout state: persist it now, so it survives
 	// without a clean quit.
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+}
+
+// ComplexityToggleTestsMsg runs complexity.toggleTests (#2950): hide or
+// show the test files on every tab of the Complexity window.
+type ComplexityToggleTestsMsg struct{}
+
+// toggleComplexityTests is the complexity.toggleTests handler: an unopened
+// panel is opened first, then the test files flip; the state is layout
+// state and saved at once, like the grouping.
+func (m *Model) toggleComplexityTests() {
+	p := m.complexityPanel()
+	if p == nil {
+		m.openComplexityPanel()
+		if p = m.complexityPanel(); p == nil {
+			return
+		}
+	}
+	p.ToggleTests()
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 

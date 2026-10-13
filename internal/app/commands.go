@@ -1015,6 +1015,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("complexity.refresh", "Complexity: Rescan Project", ComplexityRefreshMsg{}),
 			appCommand("complexity.export", "Complexity: Export Current Tab as CSV", ComplexityExportMsg{}),
 			withAliases(appCommand("complexity.group", "Complexity: Cycle Grouping (None / Class / File)", ComplexityGroupMsg{}), "aggregate", "per class", "per file"),
+			withAliases(appCommand("complexity.toggleTests", "Complexity: Toggle Test Files", ComplexityToggleTestsMsg{}), "hide tests", "show tests"),
 			appCommand("deps.refresh", "Dependencies: Refresh Scan", DepsRefreshMsg{}),
 			appCommand("deps.audit", "Dependencies: Audit Vulnerabilities", DepsAuditMsg{}),
 			appCommand("deps.updateLatest", "Update Dependency to Latest", DepsUpdateLatestMsg{}),

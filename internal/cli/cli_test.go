@@ -176,6 +176,7 @@ func TestParseComplexity(t *testing.T) {
 		{[]string{"--brief=class", "--json"}, ComplexityArgs{Brief: "class", JSON: true}},
 		{[]string{"--brief=file", "--min", "5"}, ComplexityArgs{Brief: "file", Min: 5}},
 		{[]string{"--brief", "class"}, ComplexityArgs{Brief: "file", Paths: []string{"class"}}},
+		{[]string{"--no-tests", "--brief"}, ComplexityArgs{NoTests: true, Brief: "file"}},
 		{[]string{"--help"}, ComplexityArgs{Help: true}},
 		{[]string{"-h"}, ComplexityArgs{Help: true}},
 	}
