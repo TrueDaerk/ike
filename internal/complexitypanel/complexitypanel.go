@@ -437,6 +437,9 @@ type Model struct {
 	// baseline is the accepted-debt baseline in effect (#2958,
 	// baseline.go), nil without one.
 	baseline *complexity.Baseline
+
+	// hist shows the distribution row ('D', #2953, histogram.go).
+	hist bool
 }
 
 // New returns an empty panel on the Project tab sorted by CCN descending;
@@ -1048,6 +1051,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.CycleGroup()
 	case "t":
 		m.ToggleTests()
+	case "D":
+		m.ToggleHistogram()
 	case "space":
 		m.ToggleSites()
 	case "m":
@@ -1184,7 +1189,7 @@ func csvField(s string) string {
 }
 
 // View renders the header with its tab bar and totals, the filter row, the
-// column header, the scrolled rows and the status row.
+// distribution row while it is on, the column header, the scrolled rows and the status row.
 func (m *Model) View() string {
 	pal := m.theme()
 	var b strings.Builder
@@ -1196,6 +1201,10 @@ func (m *Model) View() string {
 		b.WriteString(m.filter.View(m.width, pal))
 	}
 	b.WriteString("\n")
+	if m.histShown() {
+		b.WriteString(m.histView(pal))
+		b.WriteString("\n")
+	}
 	b.WriteString(gridview.HeaderRow(pal, m.headerLabels(), m.widths, 0, m.width))
 	b.WriteString("\n")
 	b.WriteString(m.renderRows(pal, m.bodyHeight()))
@@ -1252,8 +1261,8 @@ func (m *Model) totalsText() string {
 	parts = append(parts,
 		itoa(s.Functions)+" fns",
 		"NLOC "+itoa(s.NLOC),
-		"CCN Σ"+itoa(s.CCNSum)+" avg "+fmt1(s.CCNAvg)+" max "+itoa(s.CCNMax),
-		"cog Σ"+itoa(s.CogSum)+" avg "+fmt1(s.CogAvg)+" max "+itoa(s.CogMax),
+		metricTotals("CCN", s.CCNSum, s.CCNAvg, s.CCNMax, s.CCNP50, s.CCNP90, s.CCNP99, m.sortCol != ColCog),
+		metricTotals("cog", s.CogSum, s.CogAvg, s.CogMax, s.CogP50, s.CogP90, s.CogP99, m.sortCol == ColCog),
 		"cmt "+itoa(complexity.DensityPercent(s.CommentDensity))+"%",
 		itoa(s.OverThreshold)+" over",
 		"excess "+itoa(s.Excess),
@@ -1262,6 +1271,17 @@ func (m *Model) totalsText() string {
 		parts = append(parts, t)
 	}
 	return strings.Join(parts, " · ")
+}
+
+// metricTotals is one metric's "Σ avg max"; the sort metric's (#2953) adds
+// the percentiles between avg and max — "CCN Σ137301 avg 4.0 p50 2 p90 9
+// p99 28 max 170" — the other keeps the short form so the line stays short.
+func metricTotals(name string, sum int, avg float64, maxV, p50, p90, p99 int, pct bool) string {
+	s := name + " Σ" + itoa(sum) + " avg " + fmt1(avg)
+	if pct {
+		s += " p50 " + itoa(p50) + " p90 " + itoa(p90) + " p99 " + itoa(p99)
+	}
+	return s + " max " + itoa(maxV)
 }
 
 // renderRows draws the list scrolled around the cursor.
@@ -1359,18 +1379,27 @@ func (m *Model) footer() string {
 	} else {
 		hints += " · t tests"
 	}
+	if m.tab != TabChanges {
+		hints += " · D dist"
+	}
 	if m.tab != TabChanges && m.churn != nil {
 		hints += " · churn " + itoa(m.churnDays) + "d"
 	}
 	return lipgloss.NewStyle().Faint(true).Render(m.clip(" " + count + hints))
 }
 
-// chromeRows counts the header, filter, column-header and footer lines.
-const chromeRows = 4
+// chromeRows counts the header, filter, column-header and footer lines, and
+// the distribution row while it shows (#2953).
+func (m *Model) chromeRows() int {
+	if m.histShown() {
+		return 5
+	}
+	return 4
+}
 
 // bodyHeight is the room the list gets between the chrome lines.
 func (m *Model) bodyHeight() int {
-	h := m.height - chromeRows
+	h := m.height - m.chromeRows()
 	if h < 1 {
 		h = 1
 	}
@@ -1404,8 +1433,9 @@ func (m *Model) theme() *theme.Palette {
 }
 
 // Mouse control, mirroring the Usage pane: y 0 is the header, y 1 the filter
-// row, y 2 the column header, list rows start at y 3.
-const headerRows = 3
+// row, then the distribution row while it shows (#2953), the column header
+// and the list rows.
+func (m *Model) headerRows() int { return m.chromeRows() - 1 }
 
 // Wheel scrolls the list by delta rows (positive = down).
 func (m *Model) Wheel(delta int) {
@@ -1413,17 +1443,22 @@ func (m *Model) Wheel(delta int) {
 }
 
 // Click selects a row and opens it on a double click; a click on the
-// header's tab bar switches the tab, one on a column header sorts by it.
+// header's tab bar switches the tab, one on a column header sorts by it,
+// one on a distribution bucket narrows the list to it.
 func (m *Model) Click(x, y int) tea.Cmd {
-	switch y {
-	case 0:
+	hr := m.headerRows()
+	switch {
+	case y == 0:
 		m.clickHeader(x)
 		return nil
-	case 2:
+	case y == 2 && m.histShown():
+		m.clickHistogram(x)
+		return nil
+	case y == hr-1:
 		m.clickColumn(x)
 		return nil
 	}
-	return m.clicks.ClickRow(y, m.top, headerRows, m.bodyHeight(), len(m.rows), m.now(), &m.cursor,
+	return m.clicks.ClickRow(y, m.top, hr, m.bodyHeight(), len(m.rows), m.now(), &m.cursor,
 		func(int) tea.Cmd { return m.open() })
 }
 

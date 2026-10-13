@@ -45,6 +45,21 @@ type jsonSummary struct {
 	// Accepted counts the over-threshold functions the baseline accepts
 	// (#2958); OverThreshold counts only the new and worsened ones.
 	Accepted int `json:"accepted"`
+	// The nearest-rank percentiles and the 1–5 / 6–10 / 11–15 / 16–25 /
+	// 26+ histogram of both metrics (#2953).
+	CCNP50    int           `json:"ccn_p50"`
+	CCNP90    int           `json:"ccn_p90"`
+	CCNP99    int           `json:"ccn_p99"`
+	CogP50    int           `json:"cog_p50"`
+	CogP90    int           `json:"cog_p90"`
+	CogP99    int           `json:"cog_p99"`
+	Histogram jsonHistogram `json:"histogram"`
+}
+
+// jsonHistogram is the summary's per-metric bucket counts.
+type jsonHistogram struct {
+	CCN       [complexity.HistBucketCount]int `json:"ccn"`
+	Cognitive [complexity.HistBucketCount]int `json:"cognitive"`
 }
 
 func toJSONSummary(s complexity.Summary, files int, st settings) jsonSummary {
@@ -57,6 +72,9 @@ func toJSONSummary(s complexity.Summary, files int, st settings) jsonSummary {
 		TestsHidden: st.args.NoTests,
 		ChurnDays:   st.churnShown(),
 		Accepted:    s.Accepted,
+		CCNP50:      s.CCNP50, CCNP90: s.CCNP90, CCNP99: s.CCNP99,
+		CogP50: s.CogP50, CogP90: s.CogP90, CogP99: s.CogP99,
+		Histogram: jsonHistogram{CCN: s.CCNHist, Cognitive: s.CogHist},
 	}
 }
 
@@ -394,8 +412,9 @@ const acceptedMark = " ✓"
 // both project tables end with.
 func (r projectReport) writeSummaryLine(w io.Writer) {
 	s := r.summary
-	fmt.Fprintf(w, "\nsummary: %d functions in %d files · ΣCCN %d (avg %.1f, max %d) · Σcog %d (avg %.1f, max %d) · NLOC %d · cmt %d%% · %d over threshold (%s) · excess %d\n",
-		s.Functions, r.files, s.CCNSum, s.CCNAvg, s.CCNMax, s.CogSum, s.CogAvg, s.CogMax, s.NLOC,
+	fmt.Fprintf(w, "\nsummary: %d functions in %d files · ΣCCN %d (avg %.1f, p50 %d, p90 %d, p99 %d, max %d) · Σcog %d (avg %.1f, p50 %d, p90 %d, p99 %d, max %d) · NLOC %d · cmt %d%% · %d over threshold (%s) · excess %d\n",
+		s.Functions, r.files, s.CCNSum, s.CCNAvg, s.CCNP50, s.CCNP90, s.CCNP99, s.CCNMax,
+		s.CogSum, s.CogAvg, s.CogP50, s.CogP90, s.CogP99, s.CogMax, s.NLOC,
 		complexity.DensityPercent(s.CommentDensity), s.OverThreshold, r.s.thresholdText(), s.Excess)
 	if r.s.args.NoTests {
 		fmt.Fprintf(w, "tests hidden: %d %s (--no-tests)\n", r.tests, plural(r.tests, "file", "files"))

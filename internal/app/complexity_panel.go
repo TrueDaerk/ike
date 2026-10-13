@@ -95,6 +95,25 @@ func (m *Model) toggleComplexityTests() {
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 
+// ComplexityHistogramMsg runs complexity.histogram (#2953): show or hide
+// the Complexity window's distribution row.
+type ComplexityHistogramMsg struct{}
+
+// toggleComplexityHistogram is the complexity.histogram handler: an
+// unopened panel is opened first, then the row flips; the state is layout
+// state and saved at once, like the hide-tests toggle.
+func (m *Model) toggleComplexityHistogram() {
+	p := m.complexityPanel()
+	if p == nil {
+		m.openComplexityPanel()
+		if p = m.complexityPanel(); p == nil {
+			return
+		}
+	}
+	p.ToggleHistogram()
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+}
+
 // ComplexitySitesMsg runs complexity.sites (#2946): expand the selected
 // function row of the Complexity window into its complexity sites, or
 // collapse it.

@@ -1,5 +1,21 @@
 # Log
 
+## 2026-10-13 (Complexity distribution, #2953)
+
+- [Code Complexity](/architecture/complexity.md): the Summary section
+  gains the "Distribution" paragraph — nearest-rank `CCNP50/P90/P99`,
+  `CogP50/P90/P99`, `Histogram` over `HistBuckets` (`1–5` … `26+`),
+  `Summary.CCNHist` / `CogHist`; the tool window's header shows the sort
+  metric's percentiles, and the new "Distribution row" paragraph covers
+  `D` / `complexity.histogram`, the scaled bars, the warning buckets, the
+  bucket click through `min:` / `max:`, the dynamic `chromeRows()` and the
+  `hist:on` Mode token; the CLI paragraphs list the summary line's
+  percentiles and the JSON `ccn_p50` … `cog_p99` / `histogram` fields.
+- [Keybindings](/architecture/keybindings.md): the matrix row for
+  `complexity.histogram`.
+- The complexity user guide: "How bad is it overall?", the summary line
+  and the JSON example / field notes.
+
 ## 2026-10-13 (Negated filter terms, #2951)
 
 - [List Filter Syntax](/architecture/list-filters.md): a leading `-`

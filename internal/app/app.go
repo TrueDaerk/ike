@@ -8598,6 +8598,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toggleComplexityTests()
 		return m, nil
 
+	case ComplexityHistogramMsg:
+		// complexity.histogram (#2953), D in the pane: the distribution row.
+		m.toggleComplexityHistogram()
+		return m, nil
+
 	case ComplexitySitesMsg:
 		// complexity.sites (#2946), space in the pane: expand / collapse the
 		// selected function into its complexity sites.

@@ -1016,6 +1016,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("complexity.export", "Complexity: Export Current Tab as CSV", ComplexityExportMsg{}),
 			withAliases(appCommand("complexity.group", "Complexity: Cycle Grouping (None / Class / File)", ComplexityGroupMsg{}), "aggregate", "per class", "per file"),
 			withAliases(appCommand("complexity.toggleTests", "Complexity: Toggle Test Files", ComplexityToggleTestsMsg{}), "hide tests", "show tests"),
+			withAliases(appCommand("complexity.histogram", "Complexity: Toggle Distribution (Histogram)", ComplexityHistogramMsg{}), "percentiles", "distribution", "buckets"),
 			withAliases(appCommand("complexity.sites", "Complexity: Expand / Collapse Sites", ComplexitySitesMsg{}), "breakdown", "why complex", "per site"),
 			withAliases(appCommand("complexity.showSites", "Complexity: Mark Sites in Editor", ComplexityShowSitesMsg{}), "sonar", "site marks", "show increments"),
 			// The accepted-debt baseline (#2958): i in the pane toggles one
