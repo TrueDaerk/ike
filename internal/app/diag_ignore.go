@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/host"
 	ilsp "ike/internal/lsp"
 	"ike/internal/telemetry"
@@ -129,5 +130,5 @@ func (m *Model) ignoreDiagnostic(d ilsp.Diagnostic) tea.Cmd {
 	}
 	list = append(list, rule)
 	m.host.Notify(host.Info, "ignoring diagnostics matching "+rule)
-	return config.WriteAndReload(m.cfgOpts, config.ProjectScope, "lsp.diagnostics_ignore", list)
+	return configcmd.WriteAndReload(m.cfgOpts, config.ProjectScope, "lsp.diagnostics_ignore", list)
 }

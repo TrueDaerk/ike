@@ -4,6 +4,8 @@
 #   make            # build ./ike
 #   make install    # install to ~/.local/bin/ike
 #   make install BINDIR=/usr/local/bin
+#   make build-complexity    # build ./ike providing only `ike complexity` (no IDE)
+#   make install-complexity  # install that build to ~/.local/bin/ike (BINDIR= works too)
 #   make uninstall
 #   make clean
 #   make docs      # regenerate userdocs/reference from the source
@@ -26,7 +28,7 @@ DIRTY   := $(shell git diff --quiet 2>/dev/null || echo true)
 VERPKG  := ike/internal/version
 LDFLAGS := -X $(VERPKG).Commit=$(COMMIT) -X $(VERPKG).Dirty=$(DIRTY)
 
-.PHONY: all build install uninstall clean test docs shots docs-deploy version install-desktop icons
+.PHONY: all build install build-complexity install-complexity uninstall clean test docs shots docs-deploy version install-desktop icons
 
 all: build
 
@@ -36,6 +38,22 @@ build:
 install:
 	mkdir -p $(BINDIR)
 	$(GO) build -ldflags "$(LDFLAGS)" -o $(BINDIR)/$(BINARY) $(PACKAGE)
+
+# The complexity-only build (#2939): the same `ike` binary name, built with
+# the ike_complexity_only tag so it links only the complexity report — the
+# CLI parser, the engine, the git plumbing and the languages that carry a
+# complexity spec — without bubbletea, the IDE, LSP or WASM. `ike complexity`
+# works exactly as in the full build; every other invocation exits 2. A later
+# `make install` simply overwrites it with the full IDE. CGo stays required:
+# the Tree-sitter grammars are C.
+COMPLEXITY_TAGS := ike_complexity_only
+
+build-complexity:
+	$(GO) build -tags $(COMPLEXITY_TAGS) -ldflags "$(LDFLAGS)" -o $(BINARY) $(PACKAGE)
+
+install-complexity:
+	mkdir -p $(BINDIR)
+	$(GO) build -tags $(COMPLEXITY_TAGS) -ldflags "$(LDFLAGS)" -o $(BINDIR)/$(BINARY) $(PACKAGE)
 
 uninstall:
 	rm -f $(BINDIR)/$(BINARY)

@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/lang"
 )
 
@@ -77,7 +78,7 @@ func (t *ToolchainPage) acceptAll() tea.Cmd {
 		probes = append(probes, t.probe(l.ID, path))
 	}
 	t.envState = "accepted " + strconv.Itoa(len(muts)) + " detected toolchains"
-	return tea.Batch(append(probes, config.ApplyAndReload(t.opts, muts), t.restartCmd())...)
+	return tea.Batch(append(probes, configcmd.ApplyAndReload(t.opts, muts), t.restartCmd())...)
 }
 
 // renderDetail renders the toolchain page's detail column: what the category

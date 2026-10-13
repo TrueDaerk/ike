@@ -7,6 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/format"
 	"ike/internal/theme"
 )
@@ -267,7 +268,7 @@ func (f *formatForm) save() tea.Cmd {
 		muts = append(muts, config.Mutation{Scope: f.page.scope, Key: key, Value: formatValue(field, value)})
 	}
 	f.host.Pop()
-	return config.ApplyAndReload(f.page.opts, muts)
+	return configcmd.ApplyAndReload(f.page.opts, muts)
 }
 
 // reset drops the language's whole override (the page's "r" action) from the

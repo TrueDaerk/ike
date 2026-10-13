@@ -672,3 +672,20 @@ func TestBriefUsageErrors(t *testing.T) {
 		}
 	}
 }
+
+// TestSortRowsBreaksSameLineTies: two units on one line (closures passed
+// side by side) tie on CCN, cognitive, file and line; the order must not
+// depend on which parallel worker appended first (#2939).
+func TestSortRowsBreaksSameLineTies(t *testing.T) {
+	a := row{file: "x.go", fn: complexity.Function{Name: "(anonymous)#1", Line: 4, EndLine: 4, CCN: 1}}
+	b := row{file: "x.go", fn: complexity.Function{Name: "(anonymous)#2", Line: 4, EndLine: 4, CCN: 1}}
+	c := row{file: "x.go", fn: complexity.Function{Name: "(anonymous)#0", Line: 4, EndLine: 6, CCN: 1}}
+	for _, in := range [][]row{{a, b, c}, {c, b, a}, {b, c, a}} {
+		rows := append([]row(nil), in...)
+		sortRows(rows)
+		got := rows[0].fn.Name + " " + rows[1].fn.Name + " " + rows[2].fn.Name
+		if want := "(anonymous)#1 (anonymous)#2 (anonymous)#0"; got != want {
+			t.Fatalf("sortRows = %s, want %s", got, want)
+		}
+	}
+}

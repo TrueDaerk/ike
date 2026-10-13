@@ -1,0 +1,427 @@
+// Package vcscore is the bubbletea-free core of internal/vcs (#2939): the
+// git subprocess runner, the immutable status Snapshot, revision resolution
+// and blob reads. internal/vcs re-exports it (type aliases and thin wrappers)
+// and adds the tea.Cmd layer the UI drives; headless consumers — the
+// complexity-only build of `ike complexity` — import this package directly so
+// they link no UI runtime. Every call shells out to git with a timeout; UI
+// callers still run them inside a tea.Cmd, never from Update.
+package vcscore
+
+import (
+	"bytes"
+	"context"
+	"os/exec"
+	"path"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+// Timeout bounds every git subprocess. Status/rev-parse on a healthy repo
+// is milliseconds; the timeout only guards against hung filesystems.
+const Timeout = 5 * time.Second
+
+// FileStatus classifies one path in the working tree relative to HEAD/index.
+type FileStatus int
+
+const (
+	StatusNone FileStatus = iota
+	StatusModified
+	StatusAdded
+	StatusDeleted
+	StatusRenamed
+	StatusUntracked
+	StatusConflicted
+	// StatusPartiallyStaged is a file with an index version plus further
+	// worktree edits on top (#1868, porcelain "AM"/"MM"/"RM"): the staged
+	// content is not what the worktree holds. It reads as a modified file —
+	// there is unstaged work — but carries its own two-letter code.
+	StatusPartiallyStaged
+)
+
+// String returns the single-letter JetBrains-style badge for the status.
+// Partially staged files fold onto the worktree half of their pair ("M");
+// the exact pair is FileEntry.Code / Snapshot.Code.
+func (s FileStatus) String() string {
+	switch s {
+	case StatusModified, StatusPartiallyStaged:
+		return "M"
+	case StatusAdded:
+		return "A"
+	case StatusDeleted:
+		return "D"
+	case StatusRenamed:
+		return "R"
+	case StatusUntracked:
+		return "?"
+	case StatusConflicted:
+		return "U"
+	}
+	return ""
+}
+
+// Snapshot is one immutable view of the repository state. A nil *Snapshot
+// means "not a git repository" — consumers must treat that as a clean no-op.
+type Snapshot struct {
+	// Root is the absolute repository top-level directory.
+	Root string
+	// Branch is the current branch name; for a detached HEAD it holds the
+	// short commit hash and Detached is true.
+	Branch   string
+	Detached bool
+	// Ahead/Behind count commits relative to the upstream; both zero when no
+	// upstream is configured.
+	Ahead  int
+	Behind int
+	// Files maps repo-relative slash-separated paths to their status. Clean
+	// files are absent.
+	Files map[string]FileStatus
+	// Entries lists every changed file with its index/worktree detail for the
+	// commit UI, in parse order.
+	Entries []FileEntry
+	// dirs maps every repo-relative directory (slash-separated, "" for the
+	// root) containing at least one changed file to the dominant status of
+	// its subtree (#1053), for explorer tinting.
+	dirs map[string]FileStatus
+	// resolvedRoot caches EvalSymlinks(Root) for the symlinked-root fallback
+	// in relPath (#1099); rootResolved marks the (single) attempt. Lazily
+	// filled from the single-threaded update/render loop.
+	resolvedRoot string
+	rootResolved bool
+	// resolvedDirs memoizes EvalSymlinks per parent directory for the same
+	// fallback (#1886): relPath runs per explorer row per frame, and on a
+	// symlinked project root every row missed the fast Rel and paid a full
+	// per-path EvalSymlinks walk — the dominant render cost on medium
+	// projects. Same single-threaded-loop discipline as resolvedRoot.
+	resolvedDirs map[string]string
+	// codes maps repo-relative paths to their display code (#1868): the
+	// porcelain letters the explorer and the changes list render — "U",
+	// "A", "M", "AM", "MM". Empty for synthetic snapshots, whose consumers
+	// fall back to FileStatus.String.
+	codes map[string]string
+	// ignored is the set of repo-relative paths git ignores (#1045).
+	// Directory entries keep porcelain's trailing slash; git collapses a
+	// fully-ignored subtree to one such entry, so membership for deeper
+	// paths is a prefix check (see Ignored).
+	ignored map[string]bool
+}
+
+// Equal reports whether two snapshots describe the same repository state —
+// root, branch, divergence, every file's status and porcelain detail, the
+// ignore set — so a refresh that found nothing new can be told from one that
+// did (#2693). The lazily filled path caches are not state. Two nils are
+// equal; nil and non-nil never are.
+func (s *Snapshot) Equal(o *Snapshot) bool {
+	if s == nil || o == nil {
+		return s == o
+	}
+	if s.Root != o.Root || s.Branch != o.Branch || s.Detached != o.Detached ||
+		s.Ahead != o.Ahead || s.Behind != o.Behind ||
+		len(s.Files) != len(o.Files) || len(s.Entries) != len(o.Entries) ||
+		len(s.codes) != len(o.codes) || len(s.ignored) != len(o.ignored) {
+		return false
+	}
+	for p, st := range s.Files {
+		if ost, ok := o.Files[p]; !ok || ost != st {
+			return false
+		}
+	}
+	for i := range s.Entries {
+		if s.Entries[i] != o.Entries[i] {
+			return false
+		}
+	}
+	for p, c := range s.codes {
+		if oc, ok := o.codes[p]; !ok || oc != c {
+			return false
+		}
+	}
+	for p := range s.ignored {
+		if !o.ignored[p] {
+			return false
+		}
+	}
+	return true
+}
+
+// FileEntry is one changed file with the porcelain XY detail the commit UI
+// needs to tell staged from unstaged changes.
+type FileEntry struct {
+	Path   string
+	Status FileStatus
+	X, Y   byte // porcelain v2 staged/worktree letters; '?' for untracked
+	// From is the original path of a renamed (or copied) entry, "" otherwise
+	// (#2918): the Changes tab measures the base side under it.
+	From string
+}
+
+// Staged reports whether the entry has index (staged) changes.
+func (e FileEntry) Staged() bool { return e.X != '.' && e.X != '?' && e.X != 0 }
+
+// PartiallyStaged reports staged changes with further worktree edits on top.
+func (e FileEntry) PartiallyStaged() bool { return e.Staged() && e.Y != '.' }
+
+// Code is the entry's display badge (#1868): "U" for untracked, "C" for a
+// conflict, otherwise the porcelain letters that are not "." — "A" (staged),
+// "M" (worktree-only), "AM"/"MM" (staged, then edited again). Entries without
+// X/Y detail (synthetic snapshots) fall back to the status badge.
+func (e FileEntry) Code() string {
+	switch e.Status {
+	case StatusUntracked:
+		return "U"
+	case StatusConflicted:
+		return "C"
+	}
+	if c := statusCode(e.X, e.Y); c != "" {
+		return c
+	}
+	return e.Status.String()
+}
+
+// statusCode folds the porcelain X/Y pair into its visible letters: unset and
+// unchanged ("." / 0) halves drop out, and a copy ("C") reads as a rename so
+// the letter "C" keeps meaning "conflict".
+func statusCode(x, y byte) string {
+	out := make([]byte, 0, 2)
+	for _, l := range [2]byte{x, y} {
+		switch l {
+		case '.', 0, '?':
+		case 'C':
+			out = append(out, 'R')
+		default:
+			out = append(out, l)
+		}
+	}
+	return string(out)
+}
+
+// Code reports the display badge for path (absolute or repo-relative), or ""
+// when the snapshot carries no letters for it — a clean file, a directory, or
+// a synthetic snapshot.
+func (s *Snapshot) Code(path string) string {
+	if s == nil || len(s.codes) == 0 {
+		return ""
+	}
+	rel, ok := s.relPath(path)
+	if !ok {
+		return ""
+	}
+	return s.codes[rel]
+}
+
+// NewSnapshot builds a snapshot from explicit per-file statuses (repo-relative
+// slash paths), propagating dirty directories — for tests and synthetic states.
+func NewSnapshot(root string, files map[string]FileStatus) *Snapshot {
+	s := &Snapshot{Root: root, Files: map[string]FileStatus{}, dirs: map[string]FileStatus{}}
+	for p, st := range files {
+		s.add(p, st)
+	}
+	return s
+}
+
+// NewSnapshotFromEntries builds a snapshot from porcelain-style entries —
+// status plus index/worktree letters — so synthetic states carry the display
+// codes (#1868) a parsed snapshot has, not just the folded statuses.
+func NewSnapshotFromEntries(root string, entries ...FileEntry) *Snapshot {
+	s := &Snapshot{
+		Root:  root,
+		Files: map[string]FileStatus{},
+		dirs:  map[string]FileStatus{},
+		codes: map[string]string{},
+	}
+	for _, e := range entries {
+		s.addEntry(e.Path, e.Status, string([]byte{e.X, e.Y}))
+	}
+	return s
+}
+
+// AddIgnored records repo-relative slash-separated paths git ignores;
+// directory entries carry a trailing slash, matching porcelain output.
+// Exported for tests and synthetic states alongside NewSnapshot.
+func (s *Snapshot) AddIgnored(paths ...string) {
+	if s.ignored == nil {
+		s.ignored = map[string]bool{}
+	}
+	for _, p := range paths {
+		if p != "" {
+			s.ignored[p] = true
+		}
+	}
+}
+
+// Ignored reports whether path (absolute or repo-relative) is gitignored
+// (#1045): listed directly, or living under an ignored directory entry. A nil
+// snapshot or a path outside the repo reports false.
+func (s *Snapshot) Ignored(p string) bool {
+	if s == nil || len(s.ignored) == 0 {
+		return false
+	}
+	rel, ok := s.relPath(p)
+	if !ok || rel == "" {
+		return false
+	}
+	if s.ignored[rel] || s.ignored[rel+"/"] {
+		return true
+	}
+	for dir := path.Dir(rel); dir != "." && dir != "/"; dir = path.Dir(dir) {
+		if s.ignored[dir+"/"] {
+			return true
+		}
+	}
+	return false
+}
+
+// Status reports the status of path, which may be absolute or repo-relative.
+// It returns StatusNone for clean files, paths outside the repo, or a nil
+// snapshot.
+func (s *Snapshot) Status(path string) FileStatus {
+	if s == nil {
+		return StatusNone
+	}
+	rel, ok := s.relPath(path)
+	if !ok {
+		return StatusNone
+	}
+	return s.Files[rel]
+}
+
+// Contains reports whether path lies inside the snapshot's repository. A
+// clean tracked file and an unknown file outside the repo both have
+// StatusNone, so the file-scoped VCS actions (blame, range history, revert)
+// need this to tell them apart (#2026).
+func (s *Snapshot) Contains(path string) bool {
+	if s == nil {
+		return false
+	}
+	_, ok := s.relPath(path)
+	return ok
+}
+
+// DirDirty reports whether the directory at path (absolute or repo-relative)
+// contains at least one changed file, at any depth.
+func (s *Snapshot) DirDirty(path string) bool {
+	return s.DirStatus(path) != StatusNone
+}
+
+// DirStatus reports the dominant status of the subtree rooted at path
+// (#1053): the strongest child signal — conflicted over modified over added
+// over untracked — or StatusNone for a clean or unknown directory.
+func (s *Snapshot) DirStatus(path string) FileStatus {
+	if s == nil {
+		return StatusNone
+	}
+	rel, ok := s.relPath(path)
+	if !ok {
+		return StatusNone
+	}
+	return s.dirs[rel]
+}
+
+// relPath normalizes path to the repo-relative slash form used as map key.
+func (s *Snapshot) relPath(path string) (string, bool) {
+	if path == "" {
+		return "", true // the repo root itself
+	}
+	if filepath.IsAbs(path) {
+		rel, ok := relInside(s.Root, path)
+		if !ok {
+			// macOS tempdirs reach git through /private symlinks: retry with
+			// both sides resolved before declaring the path outside the repo.
+			// The resolved root is cached after the first miss (#1099) —
+			// relPath runs per explorer row per frame, and EvalSymlinks on
+			// the root each time was a per-row syscall.
+			if !s.rootResolved {
+				if r, err := filepath.EvalSymlinks(s.Root); err == nil {
+					s.resolvedRoot = r
+				}
+				s.rootResolved = true
+			}
+			if s.resolvedRoot == "" {
+				return "", false
+			}
+			// Resolve only the directory part, memoized per directory
+			// (#1886): rows in the same directory share one EvalSymlinks
+			// walk instead of paying a per-row syscall storm every frame.
+			// Keeping the base unresolved also matches git's view — a
+			// tracked symlink is reported as the entry itself, never as
+			// its target.
+			dir, base := filepath.Split(path)
+			dir = filepath.Clean(dir)
+			resolved, hit := s.resolvedDirs[dir]
+			if !hit {
+				resolved = ""
+				if r, err := filepath.EvalSymlinks(dir); err == nil {
+					resolved = r
+				}
+				if s.resolvedDirs == nil {
+					s.resolvedDirs = map[string]string{}
+				}
+				s.resolvedDirs[dir] = resolved
+			}
+			if resolved == "" {
+				return "", false
+			}
+			if rel, ok = relInside(s.resolvedRoot, filepath.Join(resolved, base)); !ok {
+				return "", false
+			}
+		}
+		path = rel
+	}
+	path = filepath.ToSlash(path)
+	if path == "." {
+		path = ""
+	}
+	return path, true
+}
+
+// relInside computes path relative to root, rejecting paths outside it.
+func relInside(root, path string) (string, bool) {
+	rel, err := filepath.Rel(root, path)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return rel, true
+}
+
+// Load synchronously builds a snapshot for the repository containing dir.
+// Callers inside the UI must wrap it via vcs.Refresh; Load itself is exported
+// for commands that already run inside a tea.Cmd.
+func Load(dir string) (*Snapshot, error) {
+	root, err := DetectRoot(dir)
+	if err != nil {
+		return nil, err
+	}
+	// --ignored rides the same invocation (#1045): git emits "! <path>"
+	// records, collapsing fully-ignored subtrees to one "dir/" entry, so the
+	// common path pays no extra subprocess.
+	out, err := RunGit(root, "status", "--porcelain=v2", "--branch", "--ignored", "-z")
+	if err != nil {
+		return nil, err
+	}
+	snap := parseStatus(out)
+	snap.Root = root
+	return snap, nil
+}
+
+// DetectRoot resolves the repository top-level directory containing dir.
+func DetectRoot(dir string) (string, error) {
+	out, err := RunGit(dir, "rev-parse", "--show-toplevel")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// RunGit executes one git command in dir with the package timeout.
+func RunGit(dir string, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, GitError(err, stderr.String())
+	}
+	return stdout.Bytes(), nil
+}

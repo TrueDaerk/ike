@@ -1,4 +1,4 @@
-package vcs
+package vcscore
 
 import (
 	"bytes"
@@ -8,9 +8,9 @@ import (
 	"strings"
 )
 
-// gitError folds a subprocess failure and its stderr into one error whose
+// GitError folds a subprocess failure and its stderr into one error whose
 // message is the decisive git line, not Go's generic "exit status 128".
-func gitError(err error, stderr string) error {
+func GitError(err error, stderr string) error {
 	msg := strings.TrimSpace(stderr)
 	if msg == "" {
 		return err

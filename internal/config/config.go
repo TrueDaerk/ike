@@ -4,8 +4,10 @@
 //
 // The package is leaf-level: its only IKE dependency is the equally leaf
 // internal/theme (colour-token validation, #1318); otherwise just the TOML
-// library, isolated in load.go, and bubbletea for the reload message in
-// watch.go — so any package can import it without cycles. internal/host backs host.API on top of
+// library, isolated in load.go. It does not import bubbletea (#2939): the
+// reload commands live in internal/configcmd — so any package can import it
+// without cycles, and the complexity-only build links it without the UI
+// runtime. internal/host backs host.API on top of
 // it; plugins read config as plain data and never touch this package directly.
 package config
 

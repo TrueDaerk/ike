@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/lang"
 	"ike/internal/ui"
 )
@@ -157,7 +158,7 @@ func (m Model) updateOnboarding(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "esc":
 		// Skip: install nothing, disable nothing — only remember the dialog
 		// has had its say (the write also creates the user settings file).
-		return m.closeOnboarding(), config.WriteAndReload(m.cfgOpts, config.UserScope, "lsp.onboarded", true)
+		return m.closeOnboarding(), configcmd.WriteAndReload(m.cfgOpts, config.UserScope, "lsp.onboarded", true)
 	}
 	return m, nil
 }

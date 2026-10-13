@@ -1,4 +1,4 @@
-package vcs
+package vcscore
 
 import "strings"
 
@@ -16,12 +16,12 @@ func ResolveRev(root, rev string) (string, error) {
 	if rev == "" {
 		rev = "HEAD"
 	}
-	out, err := runGit(root, "rev-parse", "--verify", "--quiet", rev+"^{commit}")
+	out, err := RunGit(root, "rev-parse", "--verify", "--quiet", rev+"^{commit}")
 	if err != nil {
 		// --quiet suppresses git's diagnostic, so a bad ref arrives as a
 		// bare exit status: say what was asked for.
 		if !strings.HasPrefix(err.Error(), "git: ") {
-			return "", gitError(err, "unknown revision: "+rev)
+			return "", GitError(err, "unknown revision: "+rev)
 		}
 		return "", err
 	}
@@ -35,9 +35,9 @@ func ResolveRev(root, rev string) (string, error) {
 // adds them from the status snapshot. Running inside a tea.Cmd is the
 // caller's job.
 func ChangedFiles(root, rev string) ([]CommitFile, error) {
-	out, err := runGit(root, "diff", "--name-status", "-M", rev, "--")
+	out, err := RunGit(root, "diff", "--name-status", "-M", rev, "--")
 	if err != nil {
 		return nil, err
 	}
-	return parseNameStatus(out), nil
+	return ParseNameStatus(out), nil
 }

@@ -70,7 +70,10 @@ class or per file with `--by`, one compact line per file or class with
 `--brief[=class]` — or of just the files and directories you
 name (or its change against a git revision), and exits without
 starting the IDE — for CI, pre-commit hooks and scripts. See
-[Code complexity](../guides/complexity.md#command-line).
+[Code complexity](../guides/complexity.md#command-line). If that report is
+all you need, `make install-complexity` installs a much smaller build that
+provides only `ike complexity`
+(see [Complexity-only install](../guides/complexity.md#complexity-only-install)).
 
 ## Environment variables
 

@@ -1,3 +1,5 @@
+//go:build !ike_complexity_only
+
 package main
 
 import (
@@ -111,9 +113,7 @@ func main() {
 	// line. Parse argv up front so a malformed invocation fails before any UI.
 	inv, err := cli.Parse(os.Args[1:])
 	if err != nil {
-		if len(os.Args) > 1 && os.Args[1] == "complexity" {
-			fmt.Fprintln(os.Stderr, "ike complexity:", err)
-			fmt.Fprintln(os.Stderr, cli.ComplexityUsage)
+		if complexityParseError(os.Args[1:], err, os.Stderr) {
 			os.Exit(complexitycli.ExitError)
 		}
 		fmt.Fprintln(os.Stderr, "ike:", err)

@@ -7,6 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/theme"
 	"ike/internal/ui"
 )
@@ -106,7 +107,7 @@ func (c *chordCapture) commit() tea.Cmd {
 		return nil
 	}
 	c.host.Pop()
-	return config.WriteAndReload(c.opts, c.scope, c.key, strings.Join(c.steps, " "))
+	return configcmd.WriteAndReload(c.opts, c.scope, c.key, strings.Join(c.steps, " "))
 }
 
 func (c *chordCapture) View(w, h int) string {

@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/editor"
 	"ike/internal/host"
 	"ike/internal/project"
@@ -293,7 +294,7 @@ func (m Model) handleActiveGroupWritten(msg project.ActiveGroupMsg) (tea.Model, 
 		m.host.Notify(host.Warn, "could not write project.active_group: "+msg.Err.Error())
 		return m, nil
 	}
-	return m, config.Reload(m.cfgOpts)
+	return m, configcmd.Reload(m.cfgOpts)
 }
 
 // capGroup is the group the background cap protects (workspace_evict.go):

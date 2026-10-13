@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/config"
+	"ike/internal/configcmd"
 )
 
 // staged.go is the staged-apply model (0460, #1296). Schema edits no longer
@@ -186,7 +187,7 @@ func (m *Model) applyChanges() tea.Cmd {
 	m.notice = "✓ applied " + plural(len(muts), "change")
 	m.writeErr = ""
 	m.rebuildEditor()
-	return config.ApplyAndReload(m.opts, muts)
+	return configcmd.ApplyAndReload(m.opts, muts)
 }
 
 // discardChanges drops every staged edit and undoes any live preview.

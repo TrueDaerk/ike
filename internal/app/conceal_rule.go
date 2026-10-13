@@ -7,6 +7,7 @@ import (
 
 	"ike/internal/concealexplain"
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/editor"
 	"ike/internal/host"
 )
@@ -35,7 +36,7 @@ func (m Model) writeConcealRule(msg editor.ConcealRuleMsg) tea.Cmd {
 		return nil
 	}
 	m.host.Notify(host.Info, msg.Note)
-	return config.WriteAndReload(m.cfgOpts, config.DefaultScope(msg.Setting), msg.Setting, next)
+	return configcmd.WriteAndReload(m.cfgOpts, config.DefaultScope(msg.Setting), msg.Setting, next)
 }
 
 // concealRuleList reads the live value of one of the two stores.

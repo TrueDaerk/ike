@@ -9,6 +9,7 @@ import (
 
 	"ike/internal/allfind"
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/host"
 	"ike/internal/project"
 	"ike/internal/search"
@@ -170,7 +171,7 @@ func (m *Model) startAllFind(msg allfind.ConfirmMsg) tea.Cmd {
 	if msg.Group == "" {
 		muts = append(muts, config.Mutation{Scope: config.UserScope, Key: "project.find_all.excluded_roots", Value: excluded})
 	}
-	return config.ApplyAndReload(m.cfgOpts, muts)
+	return configcmd.ApplyAndReload(m.cfgOpts, muts)
 }
 
 // splitAllFindGlobs turns a comma-separated glob field into a slice — the

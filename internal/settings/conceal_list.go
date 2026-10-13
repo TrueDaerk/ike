@@ -8,6 +8,7 @@ import (
 
 	"ike/internal/concealfilter"
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/numhint"
 )
 
@@ -112,7 +113,7 @@ func (p *concealListPanel) move(delta int) tea.Cmd {
 // pre-write value until the message came back would read as a lost edit.
 func (p *concealListPanel) commit(next []string) tea.Cmd {
 	p.entries = next
-	return config.WriteAndReload(p.page.opts, config.UserScope, p.row.key, next)
+	return configcmd.WriteAndReload(p.page.opts, config.UserScope, p.row.key, next)
 }
 
 // elementError reports why an element is invalid, "" when it is fine. It is

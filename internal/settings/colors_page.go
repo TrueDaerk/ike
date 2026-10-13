@@ -9,6 +9,7 @@ import (
 
 	"ike/internal/bracket"
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/highlight"
 	"ike/internal/theme"
 )
@@ -167,7 +168,7 @@ func (c *ColorsPage) candidates(name string) []string {
 func (c *ColorsPage) write(name, token string) tea.Cmd {
 	c.picking, c.custom, c.invalid = false, false, ""
 	c.notice = "✓ " + name + " → " + token
-	return config.WriteAndReload(c.opts, config.UserScope, "theme.captures."+name, token)
+	return configcmd.WriteAndReload(c.opts, config.UserScope, "theme.captures."+name, token)
 }
 
 // clear removes an override so the active theme's own colour returns.
@@ -178,7 +179,7 @@ func (c *ColorsPage) clear(name string) tea.Cmd {
 	}
 	c.picking, c.custom, c.invalid = false, false, ""
 	c.notice = "✓ " + name + " back to the theme default"
-	return config.RemoveAndReload(c.opts, config.UserScope, "theme.captures."+name)
+	return configcmd.RemoveAndReload(c.opts, config.UserScope, "theme.captures."+name)
 }
 
 // Update implements PageModel.

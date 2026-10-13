@@ -1,0 +1,65 @@
+# The complexity-only build (#2939): `make build-complexity` compiles cmd/ike
+# with the ike_complexity_only tag, linking only what `ike complexity` needs.
+# This job keeps that build compiling, keeps its dependency graph free of the
+# IDE (the cmd/ike deps test), and smoke-tests the binary on this repository.
+name: Complexity-only build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**.go"
+      - "**.scm"
+      - "go.mod"
+      - "go.sum"
+      - "Makefile"
+      - ".github/workflows/complexity-only.yml"
+  pull_request:
+    paths:
+      - "**.go"
+      - "**.scm"
+      - "go.mod"
+      - "go.sum"
+      - "Makefile"
+      - ".github/workflows/complexity-only.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # --diff smoke test below needs a parent commit.
+          fetch-depth: 2
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build the complexity-only binary
+        run: make build-complexity
+
+      - name: Version banner marks the build
+        run: ./ike --version | tee /dev/stderr | grep -q '(complexity-only)$'
+
+      - name: Every other invocation is refused with exit 2
+        run: |
+          set +e
+          ./ike somefile.go; code=$?
+          set -e
+          test "$code" -eq 2
+
+      - name: Smoke test — ike complexity --json on this repository
+        run: |
+          ./ike complexity --json . > report.json
+          python3 -c 'import json,sys; r=json.load(open("report.json")); n=len(r["functions"]); print(n, "functions,", r["skipped"]["files"], "skipped"); sys.exit(0 if n > 0 else 1)'
+          ./ike complexity --diff=HEAD~1 --json > /dev/null
+
+      - name: Vet and test the tagged packages
+        run: |
+          go vet -tags ike_complexity_only ./cmd/ike ./plugins/languages/register ./internal/complexity/... ./internal/complexitycli/... ./internal/config/... ./internal/vcs/...
+          go test -tags ike_complexity_only ./cmd/ike ./internal/complexity/... ./internal/complexitycli/... ./internal/vcs/vcscore/...

@@ -44,6 +44,7 @@ import (
 	"ike/internal/complexity"
 	"ike/internal/complexitypanel"
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/coverage"
 	"ike/internal/dataview"
 	"ike/internal/debug"
@@ -1936,7 +1937,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		},
 		func(id string, enable bool) tea.Cmd {
 			// The toggle is user preference, not project state: user scope.
-			write := config.WriteAndReload(m.cfgOpts, config.UserScope, "plugins."+id+".enabled", enable)
+			write := configcmd.WriteAndReload(m.cfgOpts, config.UserScope, "plugins."+id+".enabled", enable)
 			// Enabling a language plugin kicks the missing-server install
 			// (#131); the command re-reads config off disk, so it sees the
 			// write regardless of reload ordering.
@@ -5208,7 +5209,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// tree that just flipped. The reload applies the value live; a failed
 		// write surfaces as a config diagnostic and leaves this session's
 		// toggle standing.
-		return m, config.WriteAndReload(m.cfgOpts, config.UserScope, "explorer.show_hidden", msg.ShowHidden)
+		return m, configcmd.WriteAndReload(m.cfgOpts, config.UserScope, "explorer.show_hidden", msg.ShowHidden)
 
 	case RenameFileMsg:
 		// file.rename (shift+f6 / palette): explorer prompt on the selection,
@@ -5558,7 +5559,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, deliverCmd
 		}
 		m.host.Notify(host.Info, msg.Label+" — registered as project interpreter")
-		cmds := []tea.Cmd{deliverCmd, config.WriteAndReload(m.cfgOpts, config.ProjectScope, "lang."+msg.LangID+".interpreter", msg.Interpreter)}
+		cmds := []tea.Cmd{deliverCmd, configcmd.WriteAndReload(m.cfgOpts, config.ProjectScope, "lang."+msg.LangID+".interpreter", msg.Interpreter)}
 		if c, ok := m.reg.Command("lsp.restart"); ok {
 			cmds = append(cmds, m.dispatchCommand("lsp.restart", c))
 		}
@@ -7082,7 +7083,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			state = "on"
 		}
 		m.host.Notify(host.Info, "diff: ignore whitespace "+state)
-		return m, config.WriteAndReload(m.cfgOpts, config.DefaultScope("diff.ignore_whitespace"), "diff.ignore_whitespace", msg.On)
+		return m, configcmd.WriteAndReload(m.cfgOpts, config.DefaultScope("diff.ignore_whitespace"), "diff.ignore_whitespace", msg.On)
 
 	case diff.EditRequestMsg:
 		// 'e' in a diff pane (0340, #496): mount a live editor as the right
@@ -7996,7 +7997,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		// Reload so the still-open picker re-lists without the entry.
-		return m, config.Reload(m.cfgOpts)
+		return m, configcmd.Reload(m.cfgOpts)
 
 	case project.SwitchProjectMsg:
 		return m.handleSwitchProject(msg)
@@ -8065,7 +8066,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.host.Notify(host.Warn, "could not record project history: "+msg.Err.Error())
 			return m, nil
 		}
-		return m, config.Reload(m.cfgOpts)
+		return m, configcmd.Reload(m.cfgOpts)
 
 	case OpenImageMsg:
 		m.openImagePreview(msg.Path)

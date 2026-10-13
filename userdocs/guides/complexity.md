@@ -146,6 +146,29 @@ repository likewise) or a build without grammars.
 IKE, which carries the Tree-sitter grammars. A build made with
 `CGO_ENABLED=0` prints an error and exits 2.
 
+### Complexity-only install
+
+When the report is all you need — on a CI runner, in a container for a
+coding agent — install the **complexity-only build** instead of the IDE:
+
+```sh
+make install-complexity                        # ~/.local/bin/ike
+make install-complexity BINDIR=/usr/local/bin  # or another directory
+make build-complexity                          # just ./ike
+```
+
+It is the same `ike` binary, built with the `ike_complexity_only` tag
+(`go build -tags ike_complexity_only ./cmd/ike`), and compiles much faster:
+no terminal UI, LSP, debugger or plugin runtime, only the report and the
+grammars of the measured languages (Go, Python, PHP, TypeScript/JavaScript,
+Shell). `ike complexity` prints exactly what the full build prints on the
+same tree, `skipped:` line included. `ike --version` ends with
+`(complexity-only)`; any other invocation (`ike`, `ike file.go`, deep
+links, `ike agent-hook`) prints
+``ike: this ike build only provides `ike complexity`; install the full build for the IDE``
+and exits 2. A later `make install` overwrites it with the full IDE. It
+needs CGo like the full build.
+
 ### JSON fields
 
 The field names are stable: new fields may be added, existing ones are never
@@ -238,9 +261,10 @@ jobs:
           go-version: '1.26'
       - name: Build ike
         run: |
-          # cgo build (the default on ubuntu-latest, which ships a C compiler)
+          # cgo build (the default on ubuntu-latest, which ships a C compiler);
+          # the complexity-only build is all this job needs, and builds fastest
           git clone --depth 1 https://github.com/TrueDaerk/ike.git "$RUNNER_TEMP/ike-src"
-          (cd "$RUNNER_TEMP/ike-src" && go build -o "$RUNNER_TEMP/bin/ike" ./cmd/ike)
+          (cd "$RUNNER_TEMP/ike-src" && go build -tags ike_complexity_only -o "$RUNNER_TEMP/bin/ike" ./cmd/ike)
           echo "$RUNNER_TEMP/bin" >> "$GITHUB_PATH"
       - name: Complexity vs base
         run: |

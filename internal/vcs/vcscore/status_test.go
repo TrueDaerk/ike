@@ -1,4 +1,4 @@
-package vcs
+package vcscore
 
 import (
 	"os"
@@ -216,13 +216,10 @@ func TestLoadRealRepo(t *testing.T) {
 		t.Error("ignored/untracked classification crossed over")
 	}
 
-	// Not a repo: Load must fail, Refresh must resolve to a nil snapshot.
+	// Not a repo: Load must fail (vcs.Refresh then resolves to a nil snapshot).
 	outside := t.TempDir()
 	if _, err := Load(outside); err == nil {
 		t.Error("Load outside a repo did not fail")
-	}
-	if msg, ok := Refresh(outside)().(SnapshotMsg); !ok || msg.Snap != nil {
-		t.Errorf("Refresh outside a repo = %#v", msg)
 	}
 }
 

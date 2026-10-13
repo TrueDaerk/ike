@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Code Complexity
-description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters, nesting depth and comment density (#2934) per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary with its per-class and per-file groups (#2937), the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source, and the headless `ike complexity` CLI (#2922) printing the table of the project or of named files and directories (#2936), per function or summed per class or file (#2937), or the diff against a revision as text or JSON for CI and agents; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
-resource: internal/complexity, internal/complexitypanel, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_problems.go, internal/app/complexity_segment.go, internal/complexitycli
+description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters, nesting depth and comment density (#2934) per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary with its per-class and per-file groups (#2937), the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source, and the headless `ike complexity` CLI (#2922) printing the table of the project or of named files and directories (#2936), per function or summed per class or file (#2937), or the diff against a revision as text or JSON for CI and agents, also as a complexity-only build of the ike binary (#2939, build tag ike_complexity_only, make install-complexity) that links no IDE; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
+resource: internal/complexity, internal/complexitypanel, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_problems.go, internal/app/complexity_segment.go, internal/complexitycli, cmd/ike/complexityonly.go
 tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive, index, settings, telemetry, vcs, diff, problems, cli]
-timestamp: 2026-10-13T23:30:00Z
+timestamp: 2026-10-13T23:59:00Z
 ---
 
 # Code Complexity
@@ -582,7 +582,7 @@ absolute with symlinks resolved (macOS `/var` → `/private/var`, so paths
 compare with what git reports). The **project root** — config discovery,
 threshold defaults, root-relative slash paths in the output, the base of
 the exclude globs — is the working directory without paths, otherwise the
-git root of the first path (`vcs.DetectRoot`), else the first path when it
+git root of the first path (`vcscore.DetectRoot`), else the first path when it
 is a directory, else the working directory. A directory is walked with
 `complexity.WalkUnder(root, dir, …)` (the walk below, globs still relative
 to the root); a named file is measured directly — no skip rule and no
@@ -644,9 +644,10 @@ usage error (exit 2). The level is taken only after `=`, so
 `--brief PATH` keeps PATH as a path.
 
 **Diff.** `--diff[=REV]` (default `HEAD`) runs synchronously the same git
-plumbing as the Changes tab — `vcs.ResolveRev`, `vcs.ChangedFiles`, the
-status snapshot's untracked files (a collapsed untracked directory is walked)
-and `vcs.RevContent` per base blob — restricted to the selection (below a
+plumbing as the Changes tab — `vcscore.ResolveRev`, `vcscore.ChangedFiles`
+(the bubbletea-free core `vcs` re-exports, #2939), the status snapshot's
+untracked files (a collapsed untracked directory is walked) and
+`vcscore.RevContent` per base blob — restricted to the selection (below a
 named directory and measurable by the index's rules, or a named file with a
 spec; a named file inside a collapsed untracked directory is added even
 when the walk would skip it), then `complexity.DiffProject`; a named file
@@ -673,6 +674,56 @@ uses `commentLines` / `commentDensity`.
 **No cgo.** Without cgo there are no grammars; `complexity.Available()`
 (shared with the index's `Unavailable` stat) is false and the command
 prints a clear error and exits 2.
+
+**Row order.** The function table and `functions` are sorted by CCN
+descending, then cognitive descending, file, line, end line and name. The
+files are measured in parallel and rows arrive in finishing order, so the
+last three keys matter: two units on one line (closures passed side by
+side) used to swap between runs (#2939).
+
+**Complexity-only build (#2939).** `make build-complexity` /
+`make install-complexity` build the same `ike` binary with the
+`ike_complexity_only` build tag. `cmd/ike` is split by that tag: `main.go`,
+`agenthook.go`, `crashfallback.go` and the IDE audit tests are
+`!ike_complexity_only`; `complexityonly.go` is the tagged entry point —
+`runComplexityOnly` parses argv with `cli.Parse`, runs
+`complexitycli.Run` for `ike complexity …`, prints
+`version.FullVariant("complexity-only")` for `--version` / `-v`, and answers
+everything else (`ike`, a file target, `agent-hook`, an `ike://` link, a
+parse error outside `complexity`) with the one line
+``ike: this ike build only provides `ike complexity`; install the full build for the IDE``
+and exit 2. `complexity.go` (`complexityParseError`) is shared, so a bad
+`ike complexity` invocation fails identically in both binaries. The build
+links only the CLI parser, `config`, `vcs/vcscore`, `lang` / `highlight`,
+the engine and the language plugins that carry a spec (Go, PHP, Python,
+Shell, `web` for TypeScript/JavaScript) with their grammars. To keep that
+graph clean, `config`'s reload commands moved to `internal/configcmd`,
+`vcs`'s tea-free core to `internal/vcs/vcscore`, and
+`plugins/languages/register` registers its plugin-manager shim only in the
+full build (`shim.go` / `shim_none.go`). `TestComplexityOnlyBuildDeps`
+(both builds) runs `go list -deps -tags ike_complexity_only` and fails on
+bubbletea, bubbles, `internal/app`, `host`, `wasm`, `plugin`, `settings` or
+the LSP / tasks / format plugins.
+
+The report must match the full build byte for byte, including the
+`skipped` line, which names languages the build does not link. The
+generated `complexityonly_langs.go` registers a detection-only stand-in
+(id, extensions, file names) for every language without a spec, skipping
+ids a linked plugin already registered (`go.mod`, `html`, …); the patterns
+are exactly those that resolve to the language in the full build, and the
+stand-ins register in `package main`'s init, after every plugin, so
+extension and file-name collisions resolve as in the full build.
+`TestComplexityOnlyLangTable` (full build) regenerates it from the live
+registry and fails on drift
+(`IKE_GEN_COMPLEXITY_LANGS=1 go test ./cmd/ike -run TestComplexityOnlyLangTable`);
+the file also lists the spec'd language ids, and the tagged
+`TestComplexityOnlyLanguages` fails when one of them is not linked with its
+spec — a new spec'd language needs its blank import in
+`complexityonly.go`. The CI workflow `complexity-only.yml` builds the tagged
+binary, checks the banner and the refusal, runs
+`ike complexity --json .` on the repository, and vets and tests the tagged
+packages. CGo stays required: without it `complexity.Available()` is false
+and the command exits 2, as in the full build.
 
 ## Settings
 

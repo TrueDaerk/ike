@@ -6,6 +6,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/host"
 	"ike/internal/project"
 	"ike/internal/ui"
@@ -229,5 +230,5 @@ func (m Model) handleGroupSaved(msg project.GroupSavedMsg) (tea.Model, tea.Cmd) 
 	}
 	m.activeGroup = msg.Name
 	m.host.Notify(host.Info, "group "+msg.Name+" saved · "+pluralProjects(pending.count))
-	return m, tea.Batch(config.Reload(m.cfgOpts), project.SetActiveGroupCmd(m.cfgOpts, msg.Name))
+	return m, tea.Batch(configcmd.Reload(m.cfgOpts), project.SetActiveGroupCmd(m.cfgOpts, msg.Name))
 }

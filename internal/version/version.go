@@ -23,7 +23,7 @@ import (
 // "public API" SemVer talks about is the settings-file format, the keymap
 // schema and the plugin ABI — not a Go package API, since IKE ships as a
 // binary and is not importable.
-var Version = "0.6.163"
+var Version = "0.6.164"
 
 // Commit is the short git commit the binary was built from, stamped at build
 // time. Empty when built without the Makefile.
@@ -40,7 +40,14 @@ func Short() string { return Version }
 // there is one, and the toolchain and platform the binary was built for.
 //
 //	ike 0.1.0 (a1b2c3d, dirty) go1.26.0 darwin/arm64
-func Full() string {
+func Full() string { return FullVariant("") }
+
+// FullVariant is Full for a reduced build: a non-empty variant (e.g.
+// "complexity-only", #2939) is appended in parentheses, so a bug report from
+// such a binary says which build it came from.
+//
+//	ike 0.1.0 (a1b2c3d) go1.26.0 darwin/arm64 (complexity-only)
+func FullVariant(variant string) string {
 	var b strings.Builder
 	b.WriteString("ike ")
 	b.WriteString(Version)
@@ -50,6 +57,9 @@ func Full() string {
 		b.WriteString(")")
 	}
 	fmt.Fprintf(&b, " %s %s/%s", runtime.Version(), runtime.GOOS, runtime.GOARCH)
+	if variant != "" {
+		b.WriteString(" (" + variant + ")")
+	}
 	return b.String()
 }
 

@@ -234,8 +234,12 @@ the *entries*.
 - `Load(Options) (*Config, []Diagnostic)` runs the whole pipeline and never errors.
 - `Set` / `Get` hold the process-wide config; `Get` returns defaults before the
   first `Set`.
-- `watch.go` defines `ConfigReloadedMsg` (a `tea.Msg`) and `Reload(opts)` — the
-  reload seam; actual file-watching is left to its owning roadmap.
+- `watch.go` defines `ConfigReloadedMsg` (a `tea.Msg`) and the staged
+  `Mutation`; the commands producing the message — `Reload(opts)`, the reload
+  seam, and the write-then-reload helpers below — live in
+  `internal/configcmd` (#2939), so `config` itself never imports bubbletea and
+  the complexity-only build links it without the UI runtime. Actual
+  file-watching is left to its owning roadmap.
 - `write.go` exposes the typed setter seam (`WriteKey`/`RemoveKey`) with the
   bounded semantics; content rules for composite values (e.g. the recent-projects
   list) live with their owning package, which hands config the finished value.
@@ -263,7 +267,8 @@ control writes through:
   precedence — the settings UI renders it as the `@layer` suffix and colors
   overridden values (0380, #793). `.ike/settings.toml` is committable, so a
   team shares project conventions via the repo.
-- `WriteAndReload` / `RemoveAndReload` (watch.go) chain the write with the
+- `configcmd.WriteAndReload` / `RemoveAndReload` / `ApplyAndReload` (the
+  batch, one reload) chain the write with the
   normal `Load` pipeline and deliver `ConfigReloadedMsg` — a UI change applies
   through exactly the flow a manual file edit takes; write failures surface as
   a `Diagnostic` on the message.

@@ -1,11 +1,10 @@
 package settings
 
 import (
+	"ike/internal/configcmd"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-
-	"ike/internal/config"
 )
 
 // mouse.go is the settings panel's pointer affordance layer (0420, #885):
@@ -115,7 +114,7 @@ func (m *Model) runHintAction(action string) tea.Cmd {
 		return m.activate()
 	case "reset":
 		if r, ok := m.current(); ok && m.focus == formColumn {
-			return config.RemoveAndReload(m.opts, m.scopeFor(r.entry), r.entry.Key)
+			return configcmd.RemoveAndReload(m.opts, m.scopeFor(r.entry), r.entry.Key)
 		}
 	case "scope":
 		m.writeScope = (m.writeScope + 1) % 3

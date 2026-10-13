@@ -9,6 +9,7 @@ import (
 
 	"ike/internal/concealfilter"
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/theme"
 )
 
@@ -246,7 +247,7 @@ func (c *ConcealPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			return nil
 		}
 		c.note = row.title + " reset to its built-in default"
-		return config.RemoveAndReload(c.opts, config.UserScope, row.key)
+		return configcmd.RemoveAndReload(c.opts, config.UserScope, row.key)
 	}
 	return nil
 }
@@ -258,7 +259,7 @@ func (c *ConcealPage) activate(row concealRow) tea.Cmd {
 	case concealToggleRow:
 		on := !concealBool(row.key)
 		c.note = row.title + " " + onOff(on)
-		return config.WriteAndReload(c.opts, config.UserScope, row.key, on)
+		return configcmd.WriteAndReload(c.opts, config.UserScope, row.key, on)
 	case concealListRow:
 		if c.host != nil {
 			c.note = ""
@@ -278,7 +279,7 @@ func (c *ConcealPage) step(row concealRow, delta int) tea.Cmd {
 		return nil
 	}
 	c.note = row.title + " = " + strconv.Itoa(v)
-	return config.WriteAndReload(c.opts, config.UserScope, row.key, v)
+	return configcmd.WriteAndReload(c.opts, config.UserScope, row.key, v)
 }
 
 // onOff words a bool for the notice line.

@@ -1,16 +1,18 @@
 package settings
 
 import (
-	"charm.land/lipgloss/v2"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
+
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/keymap"
 )
 
@@ -153,7 +155,7 @@ func TestUnbindAndResetRoundTrip(t *testing.T) {
 	}
 	// Reset removes the override; the preset default falls back through the
 	// layers (the same RemoveAndReload the page's 'r' key issues).
-	apply(t, config.RemoveAndReload(k.opts, config.UserScope, "keymap.bindings.ctrl+shift+u"))
+	apply(t, configcmd.RemoveAndReload(k.opts, config.UserScope, "keymap.bindings.ctrl+shift+u"))
 	nb, ok := k.table().Lookup(keymap.MustParseChord("ctrl+shift+u"), keymap.Editor)
 	if !ok || nb.Command != "editor.case.toggle" {
 		t.Fatal("reset must restore the preset default")
@@ -785,7 +787,7 @@ func TestKeepBothWritesContextQualifiedOverride(t *testing.T) {
 	k, opts := keymapPage(t)
 	// An explorer-only command on an otherwise free chord, to collide with.
 	free := k.suggestChords(1)[0]
-	apply(t, config.WriteAndReload(opts, config.UserScope, "keymap.bindings.explorer."+free, "explorer.thing"))
+	apply(t, configcmd.WriteAndReload(opts, config.UserScope, "keymap.bindings.explorer."+free, "explorer.thing"))
 
 	b := selectChord(t, k, "ctrl+s") // an editor-scoped command
 	if b.Context != keymap.Editor {
@@ -822,7 +824,7 @@ func TestKeepBothWritesContextQualifiedOverride(t *testing.T) {
 func TestDetailShowsBothBindingsWithContexts(t *testing.T) {
 	k, opts := keymapPage(t)
 	b := selectChord(t, k, "ctrl+s")
-	apply(t, config.WriteAndReload(opts, config.UserScope, "keymap.bindings.explorer."+b.Chord.String(), "explorer.thing"))
+	apply(t, configcmd.WriteAndReload(opts, config.UserScope, "keymap.bindings.explorer."+b.Chord.String(), "explorer.thing"))
 	selectChord(t, k, "ctrl+s")
 
 	v := k.View(130, 40)
@@ -841,7 +843,7 @@ func TestDetailShowsBothBindingsWithContexts(t *testing.T) {
 func TestUnbindOfASharedChordSparesTheOtherContext(t *testing.T) {
 	k, opts := keymapPage(t)
 	b := selectChord(t, k, "ctrl+s")
-	apply(t, config.WriteAndReload(opts, config.UserScope, "keymap.bindings.explorer."+b.Chord.String(), "explorer.thing"))
+	apply(t, configcmd.WriteAndReload(opts, config.UserScope, "keymap.bindings.explorer."+b.Chord.String(), "explorer.thing"))
 	selectChord(t, k, "ctrl+s")
 	apply(t, unbind(t, k))
 
@@ -911,7 +913,7 @@ func TestShadowMarkersAndDetail(t *testing.T) {
 	k, opts := keymapPage(t)
 	// f1 is the global cheatsheet chord (GOOS-independent, unlike cmd+e);
 	// scoping another command onto it in the editor shadows it there.
-	apply(t, config.WriteAndReload(opts, config.UserScope, "keymap.bindings.editor.f1", "http.selectEnvironment"))
+	apply(t, configcmd.WriteAndReload(opts, config.UserScope, "keymap.bindings.editor.f1", "http.selectEnvironment"))
 	if len(k.table().Shadows()) == 0 {
 		t.Fatal("precondition: expected a shadow in the effective table")
 	}

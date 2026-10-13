@@ -1,3 +1,5 @@
+//go:build !ike_complexity_only
+
 package main
 
 import (

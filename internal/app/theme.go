@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/host"
 	"ike/internal/pane"
 	"ike/internal/plugin"
@@ -169,12 +170,12 @@ func (m *Model) selectTheme(name string) tea.Cmd {
 	// An explicit selection wins over auto sync (#1480): picking a theme
 	// while auto is on also turns auto off, so the choice sticks.
 	if v, _ := m.host.Config().Get("theme.auto"); v == "true" {
-		return config.ApplyAndReload(m.cfgOpts, []config.Mutation{
+		return configcmd.ApplyAndReload(m.cfgOpts, []config.Mutation{
 			{Scope: config.UserScope, Key: "theme.name", Value: sel.Name},
 			{Scope: config.UserScope, Key: "theme.auto", Value: false},
 		})
 	}
-	return config.WriteAndReload(m.cfgOpts, config.UserScope, "theme.name", sel.Name)
+	return configcmd.WriteAndReload(m.cfgOpts, config.UserScope, "theme.name", sel.Name)
 }
 
 // autoThemeEnabled reports whether [theme].auto is on in the live config.
