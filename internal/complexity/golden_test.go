@@ -307,6 +307,97 @@ func TestSitesSumToTotals(t *testing.T) {
 	}
 }
 
+// TestCandidateInvariants checks the extraction candidates (#2948) of every
+// unit of every fixture: at most MaxCandidates, each saving at least
+// MinCandidateSaving and never more than the unit's cognitive total, sorted
+// by saving then range, inside the unit, with RestCog + NewCog ==
+// Cognitive − CogSaving and RestCCN + NewCCN == CCN + 1 — and every number
+// equal to the slow site-by-site derivation from the unit's own site list.
+func TestCandidateInvariants(t *testing.T) {
+	seen := 0
+	for dir, langID := range fixtureLang {
+		src, _ := fixturePaths(t, filepath.Join("testdata", dir))
+		b, err := os.ReadFile(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fns, err := Measure(langID, strings.Split(string(b), "\n"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range fns {
+			if len(f.Candidates) > MaxCandidates {
+				t.Errorf("%s %s: %d candidates", dir, f.Name, len(f.Candidates))
+			}
+			for i, c := range f.Candidates {
+				seen++
+				switch {
+				case c.CogSaving < MinCandidateSaving || c.CogSaving > f.Cognitive:
+					t.Errorf("%s %s: saving out of range: %+v (cog %d)", dir, f.Name, c, f.Cognitive)
+				case c.RestCog+c.NewCog != f.Cognitive-c.CogSaving || c.RestCCN+c.NewCCN != f.CCN+1:
+					t.Errorf("%s %s: identity broken: %+v (ccn %d cog %d)", dir, f.Name, c, f.CCN, f.Cognitive)
+				case c.Line < f.Line || c.EndLine > f.EndLine || c.Line > c.EndLine || c.Kind == "":
+					t.Errorf("%s %s: malformed candidate %+v", dir, f.Name, c)
+				case i > 0 && (c.CogSaving > f.Candidates[i-1].CogSaving || c.CogSaving == f.Candidates[i-1].CogSaving && c.Line < f.Candidates[i-1].Line):
+					t.Errorf("%s %s: candidates out of order at %d: %+v", dir, f.Name, i, f.Candidates)
+				}
+				if want, ok := deriveCandidate(f, c); !ok {
+					t.Errorf("%s %s: candidate without a site: %+v", dir, f.Name, c)
+				} else if want != c {
+					t.Errorf("%s %s: candidate %+v, the site list gives %+v", dir, f.Name, c, want)
+				}
+			}
+		}
+	}
+	if seen == 0 {
+		t.Fatal("no fixture yields a candidate")
+	}
+}
+
+// deriveCandidate recomputes c from f's site list the slow way: the
+// node's own site is the first site with the candidate's range and kind,
+// the sites inside are every other site on the node's lines; a structural
+// node drops its own nesting penalty and `Nesting` of every inner site
+// (bounded by it), an else body keeps its point and the inner sites drop
+// one level more.
+func deriveCandidate(f Function, c Candidate) (Candidate, bool) {
+	own := -1
+	for i, s := range f.Sites {
+		if s.Line == c.Line && s.EndLine == c.EndLine && s.Kind == c.Kind {
+			own = i
+			break
+		}
+	}
+	if own < 0 {
+		return Candidate{}, false
+	}
+	o := f.Sites[own]
+	body := o.Nesting == 0 && o.Kind == "else"
+	drop := o.Nesting
+	if body {
+		drop = o.Level + 1
+	}
+	got := Candidate{Line: c.Line, EndLine: c.EndLine, Kind: c.Kind, NewCCN: 1}
+	if !body {
+		got.CogSaving, got.NewCog, got.NewCCN = o.Nesting, 1, 1+o.CCN
+	}
+	for i, s := range f.Sites {
+		if i == own || s.Line < c.Line || s.Line > c.EndLine {
+			continue
+		}
+		lose := s.Nesting
+		if lose > drop {
+			lose = drop
+		}
+		got.CogSaving += lose
+		got.NewCCN += s.CCN
+		got.NewCog += s.Cognitive - lose
+	}
+	got.RestCCN = f.CCN + 1 - got.NewCCN
+	got.RestCog = f.Cognitive - got.CogSaving - got.NewCog
+	return got, true
+}
+
 // TestGoldenClasses pins Function.Class (#2937) on every fixture: a Go
 // receiver, a Python class, a PHP class and trait and a TypeScript /
 // JavaScript class qualify their methods; every free function, lambda and

@@ -45,6 +45,10 @@ type unitState struct {
 	ccn     int
 	cog     int
 	sites   []Site // the increments recorded so far (#2946)
+	// Running sums over sites (#2948, candidates.go): CCN, cognitive and
+	// the number of sites carrying a nesting penalty.
+	sumCCN, sumCog, sumNested int
+	cands                     []Candidate // the extraction candidates, settled by finishCandidates
 }
 
 // frame is one node on the walk stack with the decisions taken on entering
@@ -57,10 +61,11 @@ type frame struct {
 	unit   bool // this node opened the innermost unit
 	scope  bool // a unit or a Nesting kind: the qualifier scope of the methods inside
 
-	nestKids     bool // children outside the header fields / else position raise nesting
-	headerExempt bool // with nestKids: children in headerFields do not raise (Branch, Selector)
-	isBranch     bool // a Branch: its alternative-position children are else / else-if
-	elseWrap     bool // an Else kind wrapping a Branch (`else if`): the Branch counts flat
+	nestKids     bool      // children outside the header fields / else position raise nesting
+	headerExempt bool      // with nestKids: children in headerFields do not raise (Branch, Selector)
+	isBranch     bool      // a Branch: its alternative-position children are else / else-if
+	elseWrap     bool      // an Else kind wrapping a Branch (`else if`): the Branch counts flat
+	cand         *candOpen // the extraction candidate this node opened (#2948), nil for none
 }
 
 type measurer struct {
@@ -152,6 +157,7 @@ func (m *measurer) enter(c *highlight.SyntaxNode, parentIdx int) {
 	switch {
 	case m.selector[c.Kind]:
 		m.cogNested(c, m.kindWord(c, "switch"))
+		fr.cand = m.openCandidate(c, false)
 		fr.nestKids, fr.headerExempt = true, true
 	case m.arm[c.Kind]:
 		m.ccn(c, m.kindWord(c, "case"))
@@ -160,6 +166,7 @@ func (m *measurer) enter(c *highlight.SyntaxNode, parentIdx int) {
 			m.ccnCogFlat(c, elseIfWord(m.kindWord(c, "?:")))
 		} else {
 			m.ccnCogNested(c, m.kindWord(c, "?:"))
+			fr.cand = m.openCandidate(c, false)
 		}
 		fr.isBranch, fr.nestKids, fr.headerExempt = true, true, true
 	case m.elseK[c.Kind]:
@@ -168,11 +175,13 @@ func (m *measurer) enter(c *highlight.SyntaxNode, parentIdx int) {
 			fr.elseWrap = true
 		case parent.isBranch:
 			m.cogFlat(c, "else")
+			fr.cand = m.openCandidate(c, true)
 			fr.nestKids = true
 		}
 	case elsePos:
 		// Go: a bare block in the if's alternative field is the else.
 		m.cogFlat(c, "else")
+		fr.cand = m.openCandidate(c, true)
 		fr.nestKids = true
 	}
 	if m.jump[c.Kind] && len(c.Children) > 0 {
@@ -190,6 +199,9 @@ func (m *measurer) enter(c *highlight.SyntaxNode, parentIdx int) {
 // exit undoes what enter did for f: closes the unit it opened and lowers the
 // nesting it raised.
 func (m *measurer) exit(f frame) {
+	if f.cand != nil {
+		m.closeCandidate(f.cand)
+	}
 	if f.unit {
 		m.closeUnit()
 	}
@@ -289,7 +301,18 @@ func (m *measurer) record(s Site, ccn int, nested bool, flat int) {
 			continue
 		}
 		u.cog += site.Cognitive
-		u.sites = append(u.sites, site)
+		u.add(site)
+	}
+}
+
+// add appends a site to the unit and keeps the running sums the extraction
+// candidates read (#2948).
+func (u *unitState) add(s Site) {
+	u.sites = append(u.sites, s)
+	u.sumCCN += s.CCN
+	u.sumCog += s.Cognitive
+	if s.Nesting > 0 {
+		u.sumNested++
 	}
 }
 
@@ -394,6 +417,7 @@ func (m *measurer) closeUnit() {
 		return a.Line < b.Line || a.Line == b.Line && a.Col < b.Col
 	})
 	f.Sites = u.sites
+	f.Candidates = finishCandidates(u.cands, u.ccn, u.cog)
 }
 
 // qualifier returns the class or receiver name a method unit c is qualified
@@ -517,7 +541,7 @@ func (m *measurer) recursion(c *highlight.SyntaxNode, field string) {
 	for _, u := range m.units {
 		if u.short == seg {
 			u.cog++
-			u.sites = append(u.sites, Site{Line: c.StartLine, Col: c.StartCol, EndLine: c.EndLine, Kind: "recursion", Cognitive: 1, Level: u.nesting})
+			u.add(Site{Line: c.StartLine, Col: c.StartCol, EndLine: c.EndLine, Kind: "recursion", Cognitive: 1, Level: u.nesting})
 		}
 	}
 }

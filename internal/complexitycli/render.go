@@ -82,8 +82,10 @@ type jsonFunction struct {
 	// and their share as a ratio (0.55).
 	CommentLines   int     `json:"comment_lines"`
 	CommentDensity float64 `json:"comment_density"`
-	// Sites is the per-site breakdown (#2946), present under --sites only.
-	Sites []jsonSite `json:"sites,omitempty"`
+	// Sites is the per-site breakdown (#2946), present under --sites only;
+	// Candidates the extraction candidates (#2948), under the same flag.
+	Sites      []jsonSite      `json:"sites,omitempty"`
+	Candidates []jsonCandidate `json:"candidates,omitempty"`
 	// Commits is the file's commit count in the --churn window (#2957),
 	// absent without the flag.
 	Commits *int `json:"commits,omitempty"`
@@ -118,10 +120,38 @@ func toJSONSites(f complexity.Function, wanted bool) []jsonSite {
 	return out
 }
 
+// jsonCandidate is one complexity.Candidate (#2948); line numbers are
+// 1-based.
+type jsonCandidate struct {
+	Line      int    `json:"line"`
+	EndLine   int    `json:"end_line"`
+	Kind      string `json:"kind"`
+	CogSaving int    `json:"cog_saving"`
+	NewCCN    int    `json:"new_ccn"`
+	NewCog    int    `json:"new_cog"`
+	RestCCN   int    `json:"rest_ccn"`
+	RestCog   int    `json:"rest_cog"`
+}
+
+// toJSONCandidates converts f's extraction candidates when wanted; nil
+// (omitted) otherwise.
+func toJSONCandidates(f complexity.Function, wanted bool) []jsonCandidate {
+	if !wanted || len(f.Candidates) == 0 {
+		return nil
+	}
+	out := make([]jsonCandidate, len(f.Candidates))
+	for i, c := range f.Candidates {
+		out[i] = jsonCandidate{Line: c.Line + 1, EndLine: c.EndLine + 1, Kind: c.Kind, CogSaving: c.CogSaving,
+			NewCCN: c.NewCCN, NewCog: c.NewCog, RestCCN: c.RestCCN, RestCog: c.RestCog}
+	}
+	return out
+}
+
 func toJSONFunction(file string, f complexity.Function, sites bool) jsonFunction {
 	return jsonFunction{File: file, Name: f.Name, Kind: f.Kind, Line: f.Line + 1, EndLine: f.EndLine + 1,
 		CCN: f.CCN, Cognitive: f.Cognitive, NLOC: f.NLOC, Params: f.Params, Depth: f.Depth,
-		CommentLines: f.CommentLines, CommentDensity: ratio(f.CommentDensity), Sites: toJSONSites(f, sites)}
+		CommentLines: f.CommentLines, CommentDensity: ratio(f.CommentDensity),
+		Sites: toJSONSites(f, sites), Candidates: toJSONCandidates(f, sites)}
 }
 
 // jsonMetrics is one side of a changed function.
@@ -134,13 +164,16 @@ type jsonMetrics struct {
 	// The comment density (#2934), as on jsonFunction.
 	CommentLines   int     `json:"comment_lines"`
 	CommentDensity float64 `json:"comment_density"`
-	// Sites is the after side's breakdown (#2946), under --sites only.
-	Sites []jsonSite `json:"sites,omitempty"`
+	// Sites is the after side's breakdown (#2946) and Candidates its
+	// extraction candidates (#2948), under --sites only.
+	Sites      []jsonSite      `json:"sites,omitempty"`
+	Candidates []jsonCandidate `json:"candidates,omitempty"`
 }
 
 func toJSONMetrics(f complexity.Function, sites bool) jsonMetrics {
 	return jsonMetrics{CCN: f.CCN, Cognitive: f.Cognitive, NLOC: f.NLOC, Params: f.Params, Depth: f.Depth,
-		CommentLines: f.CommentLines, CommentDensity: ratio(f.CommentDensity), Sites: toJSONSites(f, sites)}
+		CommentLines: f.CommentLines, CommentDensity: ratio(f.CommentDensity),
+		Sites: toJSONSites(f, sites), Candidates: toJSONCandidates(f, sites)}
 }
 
 // jsonDelta is after − before.

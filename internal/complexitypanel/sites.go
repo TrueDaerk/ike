@@ -8,7 +8,8 @@ package complexitypanel
 // line. One function is expanded at a time; the expansion is remembered
 // by file and function name, so a snapshot refresh that still holds the
 // function rebuilds its rows. On the Changes tab the after side's sites
-// are shown (a removed function has none in the working tree).
+// are shown (a removed function has none in the working tree). The
+// function's extraction candidates follow the sites (#2948, candidates.go).
 
 import (
 	"sort"
@@ -31,7 +32,7 @@ func (m *Model) ToggleSites() bool {
 	if !ok {
 		return false
 	}
-	if r.Site != nil {
+	if r.child() {
 		if r.Parent >= 0 && r.Parent < len(m.rows) {
 			m.cursor = r.Parent
 		}
@@ -62,7 +63,7 @@ func (m *Model) Expanded() (Row, bool) {
 		return Row{}, false
 	}
 	for _, r := range m.rows {
-		if r.Site == nil && r.expandKey() == m.expanded {
+		if !r.child() && r.expandKey() == m.expanded {
 			return r, true
 		}
 	}
@@ -84,10 +85,10 @@ func (m *Model) spliceSites() {
 		return
 	}
 	for i, r := range m.rows {
-		if r.Site != nil || r.expandKey() != m.expanded || len(r.Fn.Sites) == 0 {
+		if r.child() || r.expandKey() != m.expanded || len(r.Fn.Sites) == 0 {
 			continue
 		}
-		kids := siteRows(r, i)
+		kids := append(siteRows(r, i), candidateRows(r, i)...)
 		rows := make([]Row, 0, len(m.rows)+len(kids))
 		rows = append(rows, m.rows[:i+1]...)
 		rows = append(rows, kids...)

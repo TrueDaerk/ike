@@ -210,6 +210,9 @@ func (r Row) label() string {
 
 // key identifies a row across refreshes, so the cursor stays on it.
 func (r Row) key() string {
+	if r.Cand != nil {
+		return r.candKey()
+	}
 	if r.Site != nil {
 		return r.siteKey()
 	}

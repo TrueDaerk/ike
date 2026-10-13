@@ -72,8 +72,9 @@ type ComplexityArgs struct {
 	// header and no trailer. Not combinable with By or Diff.
 	Brief string
 	// Sites adds the per-site breakdown (complexity.Function.Sites, #2946)
-	// to the --json functions and to the diff's changed `after` side; the
-	// text renderings never show it.
+	// and the extraction candidates (Function.Candidates, #2948) to the
+	// --json functions and to the diff's changed `after` side; the text
+	// renderings never show them.
 	Sites bool
 	// NoTests drops the test files (complexity.IsTestFile, #2950) from
 	// every rendering; a test file in the diff is skipped like an excluded

@@ -60,7 +60,7 @@ func (r Row) item() BaselineItem {
 
 // accepted reports whether a function row is accepted by the baseline.
 func (r Row) accepted() bool {
-	return r.Group == nil && r.Site == nil && r.Fn.Baseline == complexity.BaselineAccepted
+	return r.Group == nil && !r.child() && r.Fn.Baseline == complexity.BaselineAccepted
 }
 
 // ToggleBaseline builds the BaselineToggleMsg for the selected row and
@@ -76,7 +76,7 @@ func (m *Model) ToggleBaseline() (tea.Cmd, bool) {
 	if !ok || m.tab == TabChanges {
 		return nil, false
 	}
-	if r.Site != nil && r.Parent >= 0 && r.Parent < len(m.rows) {
+	if r.child() && r.Parent >= 0 && r.Parent < len(m.rows) {
 		r = m.rows[r.Parent]
 	}
 	var msg BaselineToggleMsg

@@ -1,5 +1,19 @@
 # Log
 
+## 2026-10-13 (Complexity extraction candidates, #2948)
+
+- [Code Complexity](/architecture/complexity.md): new "Extraction
+  candidates" paragraph in the model — `Function.Candidates` /
+  `complexity.Candidate` (`candidates.go`), the arithmetic for a
+  structural node and an else body, the worked example, the O(sites)
+  running sums, the `MinCandidateSaving` / `MaxCandidates` filter — and a
+  tool-window paragraph: the candidate rows under the breakdown
+  (`Row.Cand`, `Row.child()`), `OpenLocationMsg.EndLine` →
+  `editor.SelectLines` (a visual line selection, caret on the header), the
+  copy text, and the CLI's `candidates` under `--sites`.
+- The complexity user guide: the "what to extract" paragraph, the
+  `--sites` row and the `candidates` JSON field.
+
 ## 2026-10-13 (Complexity baseline: accepted debt and ratchet mode, #2958)
 
 - [Code Complexity](/architecture/complexity.md): new "Baseline" section —

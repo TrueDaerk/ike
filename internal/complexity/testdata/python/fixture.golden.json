@@ -207,6 +207,38 @@
           "nesting": 3,
           "level": 3
         }
+      ],
+      "candidates": [
+        {
+          "line": 39,
+          "endLine": 44,
+          "kind": "while",
+          "cogSaving": 6,
+          "newCCN": 4,
+          "newCog": 5,
+          "restCCN": 3,
+          "restCog": 3
+        },
+        {
+          "line": 38,
+          "endLine": 44,
+          "kind": "for",
+          "cogSaving": 4,
+          "newCCN": 5,
+          "newCog": 9,
+          "restCCN": 2,
+          "restCog": 1
+        },
+        {
+          "line": 40,
+          "endLine": 41,
+          "kind": "if",
+          "cogSaving": 3,
+          "newCCN": 2,
+          "newCog": 1,
+          "restCCN": 5,
+          "restCog": 10
+        }
       ]
     },
     {
