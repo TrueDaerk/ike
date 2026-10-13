@@ -203,6 +203,108 @@ func TestGoldenAcceptance(t *testing.T) {
 	if f := byName["factorial"]; f.Cognitive != 2 {
 		t.Errorf("factorial cognitive %d, want 2 (if + recursion)", f.Cognitive)
 	}
+	// The sites (#2946). An else-if chain: the if and the two else-ifs are
+	// flat sites (Nesting 0), the else is a CCN-less site, and the if in the
+	// else body nests once.
+	wantSites := map[string][]Site{
+		"elseIfChain": {
+			{Line: 17, Col: 1, EndLine: 29, Kind: "if", CCN: 1, Cognitive: 1},
+			{Line: 19, Col: 8, EndLine: 29, Kind: "else if", CCN: 1, Cognitive: 1},
+			{Line: 21, Col: 8, EndLine: 29, Kind: "else if", CCN: 1, Cognitive: 1},
+			{Line: 23, Col: 8, EndLine: 29, Kind: "else", Cognitive: 1},
+			{Line: 26, Col: 2, EndLine: 28, Kind: "if", CCN: 1, Cognitive: 2, Nesting: 1, Level: 1},
+		},
+		// A switch with a default: one cognitive site for the switch, one
+		// CCN-only site per arm (the default is not an arm), the ifs in the
+		// arm bodies one level in.
+		"switchArms": {
+			{Line: 36, Col: 1, EndLine: 47, Kind: "switch", Cognitive: 1},
+			{Line: 37, Col: 1, EndLine: 41, Kind: "case", CCN: 1, Level: 1},
+			{Line: 38, Col: 2, EndLine: 40, Kind: "if", CCN: 1, Cognitive: 2, Nesting: 1, Level: 1},
+			{Line: 41, Col: 1, EndLine: 43, Kind: "case", CCN: 1, Level: 1},
+			{Line: 44, Col: 2, EndLine: 46, Kind: "if", CCN: 1, Cognitive: 2, Nesting: 1, Level: 1},
+		},
+		// A nested closure's structures are the closure's own sites (CCN
+		// there); the enclosing function records them CCN-less at its own
+		// nesting, which is what its cognitive total counts.
+		"nestedClosures": {
+			{Line: 127, Col: 3, EndLine: 129, Kind: "if", Cognitive: 3, Nesting: 2, Level: 2},
+			{Line: 131, Col: 2, EndLine: 133, Kind: "for", Cognitive: 2, Nesting: 1, Level: 1},
+		},
+		"(anonymous)#2": {
+			{Line: 127, Col: 3, EndLine: 129, Kind: "if", Cognitive: 2, Nesting: 1, Level: 1},
+			{Line: 131, Col: 2, EndLine: 133, Kind: "for", CCN: 1, Cognitive: 1},
+		},
+		"factorial": {
+			{Line: 140, Col: 1, EndLine: 142, Kind: "if", CCN: 1, Cognitive: 1},
+			{Line: 143, Col: 12, EndLine: 143, Kind: "recursion", Cognitive: 1},
+		},
+	}
+	for name, want := range wantSites {
+		if got := byName[name].Sites; !reflect.DeepEqual(got, want) {
+			t.Errorf("%s sites:\n got  %+v\n want %+v", name, got, want)
+		}
+	}
+	// A boolean run is one site per run of like operators at its first
+	// operator, its CCN the run's operator count: `a && b || c` is two
+	// sites of one CCN each; `a && b && c` one site of CCN 2.
+	bs := byName["booleanSequences"].Sites
+	runs := []Site{}
+	for _, s := range bs {
+		if s.Kind != "if" {
+			runs = append(runs, s)
+		}
+	}
+	wantRuns := []Site{
+		{Line: 106, Col: 6, EndLine: 106, Kind: "&&", CCN: 2, Cognitive: 1},
+		{Line: 109, Col: 6, EndLine: 109, Kind: "&&", CCN: 1, Cognitive: 1},
+		{Line: 109, Col: 11, EndLine: 109, Kind: "||", CCN: 1, Cognitive: 1},
+		{Line: 112, Col: 6, EndLine: 112, Kind: "&&", CCN: 1, Cognitive: 1},
+		{Line: 112, Col: 12, EndLine: 112, Kind: "||", CCN: 1, Cognitive: 1},
+		{Line: 112, Col: 18, EndLine: 112, Kind: "&&", CCN: 1, Cognitive: 1},
+		{Line: 115, Col: 6, EndLine: 115, Kind: "||", CCN: 1, Cognitive: 1},
+		{Line: 115, Col: 11, EndLine: 115, Kind: "&&", CCN: 1, Cognitive: 1},
+	}
+	if !reflect.DeepEqual(runs, wantRuns) {
+		t.Errorf("booleanSequences runs:\n got  %+v\n want %+v", runs, wantRuns)
+	}
+}
+
+// TestSitesSumToTotals asserts on every unit of every fixture that the
+// sites account for the totals (#2946): 1 + Σ CCN == CCN and Σ Cognitive ==
+// Cognitive, with the sites in source order and every nesting penalty
+// inside its increment.
+func TestSitesSumToTotals(t *testing.T) {
+	for dir, langID := range fixtureLang {
+		src, _ := fixturePaths(t, filepath.Join("testdata", dir))
+		b, err := os.ReadFile(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		fns, err := Measure(langID, strings.Split(string(b), "\n"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range fns {
+			ccn, cog := 1, 0
+			for i, s := range f.Sites {
+				ccn += s.CCN
+				cog += s.Cognitive
+				if s.Nesting > s.Cognitive || s.Nesting > s.Level || s.Kind == "" {
+					t.Errorf("%s %s: malformed site %+v", dir, f.Name, s)
+				}
+				if i > 0 && (s.Line < f.Sites[i-1].Line || s.Line == f.Sites[i-1].Line && s.Col < f.Sites[i-1].Col) {
+					t.Errorf("%s %s: sites out of source order at %d: %+v", dir, f.Name, i, f.Sites)
+				}
+				if s.Line < f.Line || s.EndLine > f.EndLine {
+					t.Errorf("%s %s: site outside the unit: %+v", dir, f.Name, s)
+				}
+			}
+			if ccn != f.CCN || cog != f.Cognitive {
+				t.Errorf("%s %s: sites sum to ccn %d cog %d, unit has %d and %d:\n%+v", dir, f.Name, ccn, cog, f.CCN, f.Cognitive, f.Sites)
+			}
+		}
+	}
 }
 
 // TestGoldenClasses pins Function.Class (#2937) on every fixture: a Go

@@ -59,6 +59,17 @@ type Function struct {
     Depth     int    // deepest nesting level reached inside the unit
     CommentLines   int     // comment-only lines in the range (#2934)
     CommentDensity float64 // CommentLines / (NLOC + CommentLines), 0 when both are 0
+    Sites          []Site  // every CCN / cognitive increment, in source order (#2946)
+}
+
+type Site struct {
+    Line, Col int    // 0-based position of the node's first token (a boolean run: its first operator)
+    EndLine   int    // last line of the node
+    Kind      string // "if", "else if", "elif", "for", "switch", "case", "catch", "?:", "&&", "and", "goto", "recursion", …
+    CCN       int    // 1 for a branch or an arm, the operator count of a boolean run, else 0
+    Cognitive int    // the whole cognitive increment
+    Nesting   int    // the part of Cognitive that is the nesting penalty; 0 for a flat increment
+    Level     int    // the nesting level the site sits at
 }
 ```
 
@@ -82,6 +93,23 @@ consumers never parse the name; it is `""` for a free function, a lambda, a
 function nested in a method and a method kind without an enclosing class.
 `TestGoldenClasses` pins it per fixture (Go receiver, Python class, PHP class
 and trait, TypeScript / JavaScript class).
+
+**Sites** (#2946) are the unit's increments: one record per branch,
+selector, arm, else, boolean run, jump and recursive call, in source order,
+so that `1 + Σ Sites.CCN == CCN` and `Σ Sites.Cognitive == Cognitive` for
+every unit (`TestSitesSumToTotals` asserts it over every fixture language).
+`Kind` is the node kind as the language spells it — the leading keyword
+when it is one (`if`, `elif`, `elseif`, `foreach`, `until`, `except`,
+`match`, `select`, `goto`), `else if` for a Go or TypeScript `if` in the
+else position, `?:` for a conditional expression, `case` for an arm the
+keyword does not lead (shell, PHP `match`), the operator of a boolean run
+(`&&`, `and`, `??`) and `recursion` for a recursive call. A nested unit's
+structures are the nested unit's own sites (with their CCN); the enclosing
+unit, whose cognitive total includes them at its own nesting (Sonar:
+lambdas are part of the method they sit in), records them too, CCN-less,
+so its sum still holds. Recording is unconditional — `Measure` keeps its
+signature and `BenchmarkMeasure` stays well inside the 50 ms budget (about
+29 ms for the 5 000-line file on the dev machine).
 
 **Params** counts the named children of the `ParamsField` node, a child
 declaring several names (Go's `a, b int`) once per name. **NLOC** counts the
@@ -133,13 +161,18 @@ splits Go and TS/JS closures but folds Python lambdas and PHP closures.
 **Cognitive** follows Sonar's white paper as gocognit and complexipy implement
 it. The details the walker gets right:
 
+- **Branch.** Every Branch records a site of its keyword (`if`, `for`,
+  `while`, `catch`, `?:`) with CCN 1 and `Cognitive = 1 + Level`,
+  `Nesting = Level`.
 - **Else-if is flat.** A Branch in the else position — the `alternative`
   field of a Branch (of another kind, or of the same kind only where the
   language has no `Else` kinds: Go's `else if`), the single Branch child of an
   `Else` kind (TS/PHP `else if`), or shell's unfielded `elif_clause` after the
   body — counts +1 without the nesting penalty; its body nests one level like
   the `if` body. A chained ternary in TS or PHP is the parent's own kind, so
-  it nests (+2) as Sonar does.
+  it nests (+2) as Sonar does. The site is flat: kind `else if` (or the
+  language's `elif` / `elseif`), CCN 1, Cognitive 1, Nesting 0. An `else`
+  records a CCN-less flat site of kind `else`.
 - **Headers do not nest.** Children in a Branch's or Selector's header fields
   (`condition`, `initializer`, `update`, `left`, `right`, `value`, `subject`,
   `parameter`, …) are walked at the node's own level: a ternary in an `if`
@@ -148,16 +181,24 @@ it. The details the walker gets right:
   once (Go's `default_case`, PHP's `default_statement` and TS's
   `switch_default` are not arms but sit inside the Selector, so an `if` in a
   default arm is at level + 1 — gocognit's number). Arms carry only CCN.
+  The Selector records one site (`switch`, `select`, `match`, CCN 0,
+  `1 + Level`), every arm a CCN-only site of kind `case`.
 - **Boolean runs.** A boolean-operator tree is flattened in source order
   through `parenthesized_expression` nodes and stops at any other operand:
   `a && b && c` is one run, `a && b || c` two, `a && (b || c) && d` three
   (gocognit 1.3 and SonarJS, whose ESTree has no parenthesis node; complexipy
   restarts the run at a parenthesis), `a && f(b || c)` two (the call is a new
-  expression). Every operator of the tree is consumed once.
+  expression). Every operator of the tree is consumed once. Each run is
+  one site at its first operator, of the operator's kind, CCN the run's
+  operator count, Cognitive 1: `a && b || c` is two sites, `a && b && c`
+  one of CCN 2.
 - **Recursion** compares the callee's last identifier segment with the unit's
   short name (`s.handle()`, `$this->handle()`, `self::m()` count; gocognit
   and complexipy count plain-identifier calls only), per call site, and
-  through closures: a closure calling its enclosing `f` adds to `f`.
+  through closures: a closure calling its enclosing `f` adds to `f`. Each
+  call is a site of kind `recursion` (Cognitive 1) at the call node, in
+  every unit it targets. A Jump with a target records a flat site of its
+  keyword (`goto`, `break`, `continue`).
 - **Loop else.** Python's `for … else` / `while … else` is an `Else` kind in
   the loop's `alternative` field and counts +1 (complexipy does not); a `try`'s
   `else` is no Branch's alternative and is free, as is `finally`.
@@ -397,6 +438,32 @@ A letter typed into the open filter row stays text: the app routes a
 printable, unmodified key to a focused one-line input before the keymap
 layer.
 
+**Breakdown (#2946, `sites.go`).** `space` — the `complexity.sites`
+command, bound to `space` in the `complexity` keymap context and in the
+palette as "Complexity: Expand / Collapse Sites" — expands the selected
+function row of an ungrouped Project or File tab (and the Changes tab,
+where it shows the *after* side; a removed function has nothing to expand)
+in place into one indented child row per `Function.Site`: the function
+column reads `  if +3 (nesting 2)` (`  case` for a CCN-only arm), the line
+column the site's line, `ccn` / `cog` the site's increments, the other
+columns blank. The children are sorted by cognitive cost descending, then
+line, and are spliced under their parent *after* the filter and the sort
+have placed the function rows (`Refresh` → `sortRows` → `spliceSites`), so
+they stay glued to it whatever the sort column; a filter that drops the
+parent drops them. One function is expanded at a time; `space` on the
+parent or on one of its site rows collapses it (the cursor returns to the
+parent); a row with nothing to expand (a group row, a removed function, a
+function without sites) leaves the list alone and the command says so. The
+expansion is remembered by file, function name and Changes section
+(`Row.expandKey`), not by line, so a snapshot refresh — the index
+re-measured a file, the base revision changed — rebuilds the rows with the
+same function open and the cursor on the same site (`Row.key` →
+`siteKey`). `Row.Site` / `Row.Parent` mark a site row and its parent's
+index; the totals, the row counter's denominator, the caret mark, the CSV
+export and the group rows ignore site rows. On a site row `enter` / a
+double click opens the file at the site's line and `y` copies
+`path:line: kind +cog (nesting n)`.
+
 **Actions.** `enter` / a double click sends `OpenLocationMsg{Path, Line}`
 and the app opens the file through `openPathAt`, so the caret lands on the
 function header and `nav.back` returns. `r` (and the palette's
@@ -598,7 +665,7 @@ next to the other mark toggles).
 
 ## Headless CLI (#2922)
 
-`ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [PATH...]`
+`ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [PATH...]`
 is the terminal-free report for CI pipelines and coding agents. The grammar
 lives in `internal/cli` (`ComplexityArgs`, first argument only like
 `agent-hook`, so a file named `complexity` still opens as `./complexity`);
@@ -687,6 +754,16 @@ Under `--diff` a test file is skipped like an excluded one (no `skipped:`
 count) and the text ends with `tests hidden (--no-tests)`. A file named
 explicitly is kept, as with the exclude globs. Without the flag the output
 is unchanged byte for byte.
+
+**Sites (#2946).** `--sites` (`ComplexityArgs.Sites`) adds the per-site
+breakdown to the JSON only: every `functions` entry of the project report
+(and every `added` entry of the diff) gains `sites`, one object per
+`Function.Site` — `line` and `end_line` 1-based, `col` 0-based bytes,
+`kind`, `ccn`, `cognitive`, `nesting`, `level` — and every `changed` entry's
+`after` side gains the same; the `before` side and the `removed` entries
+never carry it. Without the flag the JSON is byte-identical to before
+(`omitempty`), and the text table, the groups and the brief lines ignore the
+flag altogether.
 
 **Diff.** `--diff[=REV]` (default `HEAD`) runs synchronously the same git
 plumbing as the Changes tab — `vcscore.ResolveRev`, `vcscore.ChangedFiles`

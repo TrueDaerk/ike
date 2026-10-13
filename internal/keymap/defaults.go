@@ -784,6 +784,9 @@ var jetbrainsRows = []row{
 	{"b", "complexity.group", "Cycle complexity grouping (none/class/file)", Complexity, "Complexity grouping (#2937)"},
 	// …and t hides / shows the test files on every tab (#2950).
 	{"t", "complexity.toggleTests", "Toggle complexity test files", Complexity, "Complexity test files (#2950)"},
+	// …and space expands the selected function into its complexity sites
+	// (#2946): the breakdown of where every CCN / cognitive point comes from.
+	{"space", "complexity.sites", "Expand / collapse complexity sites", Complexity, "Complexity sites (#2946)"},
 	// Rerun and Stop (#1048, #1374): JetBrains' macOS Rerun (cmd+r) is taken by
 	// editor.replace, so rerun keeps the Windows-scheme F5 position with a cmd
 	// primary on darwin; stop's cmd+f2 is the macOS keymap verbatim. The ctrl

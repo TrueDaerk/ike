@@ -193,6 +193,9 @@ func (r Row) label() string {
 
 // key identifies a row across refreshes, so the cursor stays on it.
 func (r Row) key() string {
+	if r.Site != nil {
+		return r.siteKey()
+	}
 	if r.Group != nil {
 		return "g\x00" + r.Path + "\x00" + r.Group.Class
 	}
