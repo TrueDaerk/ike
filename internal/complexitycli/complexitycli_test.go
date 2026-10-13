@@ -535,3 +535,140 @@ func TestDiffSelectFile(t *testing.T) {
 		t.Errorf("untracked named file:\n%s", out)
 	}
 }
+
+// briefLines are the --brief output's lines, whitespace runs folded to one
+// space.
+func briefLines(out string) []string {
+	var lines []string
+	for _, l := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
+		if l != "" {
+			lines = append(lines, strings.Join(strings.Fields(l), " "))
+		}
+	}
+	return lines
+}
+
+func TestBriefFileText(t *testing.T) {
+	requireTrees(t)
+	dir := groupFixture(t)
+	out, stderr, code := run(t, cli.ComplexityArgs{Brief: "file", Paths: []string{dir}})
+	if code != ExitOK {
+		t.Fatalf("exit %d, stderr %q", code, stderr)
+	}
+	lines := briefLines(out)
+	if len(lines) != 2 {
+		t.Fatalf("lines = %q", lines)
+	}
+	// client.go: Send (CCN 5, cog 6) + Retry; server.go: Handle, Close, helper.
+	f := strings.Fields(lines[0])
+	if f[0] != "client.go" || f[1] != "funcs=2" || !strings.HasPrefix(f[2], "nloc=") || f[3] != "ccn=6" ||
+		f[4] != "cog=6" || f[5] != "max=5/6" || !strings.HasPrefix(f[6], "cmt=") || !strings.HasSuffix(f[6], "%") || len(f) != 7 {
+		t.Errorf("client line %q", lines[0])
+	}
+	if !strings.HasPrefix(lines[1], "server.go funcs=3 ") || !strings.Contains(lines[1], " ccn=4 cog=1 max=2/1 ") {
+		t.Errorf("server line %q", lines[1])
+	}
+	// Columns are aligned with two spaces at least.
+	if !strings.Contains(out, "client.go  funcs=2  nloc=") {
+		t.Errorf("not two-space separated:\n%s", out)
+	}
+	for _, no := range []string{"FILE", "summary:", "shown:", "skipped"} {
+		if strings.Contains(out, no) {
+			t.Errorf("brief output has %q:\n%s", no, out)
+		}
+	}
+}
+
+func TestBriefClassText(t *testing.T) {
+	requireTrees(t)
+	dir := groupFixture(t)
+	out, _, code := run(t, cli.ComplexityArgs{Brief: "class", Paths: []string{dir}})
+	if code != ExitOK {
+		t.Fatal(code)
+	}
+	lines := briefLines(out)
+	if len(lines) != 3 || !strings.HasPrefix(lines[0], "client.go Client funcs=2 ") ||
+		!strings.HasPrefix(lines[1], "server.go Server funcs=2 ") || !strings.HasPrefix(lines[2], "server.go (free) funcs=1 ") {
+		t.Fatalf("lines = %q", lines)
+	}
+	if !strings.Contains(lines[2], " ccn=1 cog=0 max=1/0 ") {
+		t.Errorf("(free) line %q", lines[2])
+	}
+}
+
+func TestBriefSingleFile(t *testing.T) {
+	requireTrees(t)
+	dir := groupFixture(t)
+	out, _, code := run(t, cli.ComplexityArgs{Brief: "file", Paths: []string{filepath.Join(dir, "server.go")}})
+	if lines := briefLines(out); code != ExitOK || len(lines) != 1 || !strings.Contains(lines[0], "funcs=3") {
+		t.Errorf("exit %d, lines %q", code, lines)
+	}
+}
+
+func TestBriefJSONIsByJSON(t *testing.T) {
+	requireTrees(t)
+	dir := groupFixture(t)
+	for _, level := range []string{"file", "class"} {
+		brief, _, _ := run(t, cli.ComplexityArgs{Brief: level, JSON: true, Paths: []string{dir}})
+		by, _, _ := run(t, cli.ComplexityArgs{By: level, JSON: true, Paths: []string{dir}})
+		if brief != by || !strings.Contains(brief, `"groups"`) {
+			t.Errorf("--brief=%s --json differs from --by %s --json:\n%s\nvs\n%s", level, level, brief, by)
+		}
+	}
+}
+
+func TestBriefFilters(t *testing.T) {
+	requireTrees(t)
+	dir := groupFixture(t)
+	cases := []struct {
+		args  cli.ComplexityArgs
+		first []string // the leading fields of each kept line
+	}{
+		// ΣCCN: Client 6, Server 3, (free) 1; client.go 6, server.go 4.
+		{cli.ComplexityArgs{Brief: "class", Min: 3}, []string{"client.go Client", "server.go Server"}},
+		{cli.ComplexityArgs{Brief: "file", Min: 5}, []string{"client.go"}},
+		// Max CCN: Client 5; max cog: client.go 6.
+		{cli.ComplexityArgs{Brief: "class", CCN: 5}, []string{"client.go Client"}},
+		{cli.ComplexityArgs{Brief: "file", Cog: 6}, []string{"client.go"}},
+		{cli.ComplexityArgs{Brief: "file", CCN: 50}, nil},
+	}
+	for _, c := range cases {
+		c.args.Paths = []string{dir}
+		out, _, code := run(t, c.args)
+		if code != ExitOK {
+			t.Fatal(code)
+		}
+		lines := briefLines(out)
+		if len(lines) != len(c.first) {
+			t.Errorf("%+v: lines %q, want %q", c.args, lines, c.first)
+			continue
+		}
+		for i, p := range c.first {
+			if !strings.HasPrefix(lines[i], p+" funcs=") {
+				t.Errorf("%+v: line %d %q, want prefix %q", c.args, i, lines[i], p)
+			}
+		}
+		if strings.Contains(out, "shown:") {
+			t.Errorf("%+v: brief printed a shown line", c.args)
+		}
+	}
+}
+
+func TestBriefUsageErrors(t *testing.T) {
+	requireTrees(t)
+	dir := groupFixture(t)
+	for _, c := range []struct {
+		args cli.ComplexityArgs
+		msg  string
+	}{
+		{cli.ComplexityArgs{Brief: "method"}, `--brief: "method" is not class or file`},
+		{cli.ComplexityArgs{Brief: "file", By: "file"}, "--brief and --by exclude each other"},
+		{cli.ComplexityArgs{Brief: "class", Diff: true}, "--brief is not supported with --diff"},
+	} {
+		c.args.Paths = []string{dir}
+		_, stderr, code := run(t, c.args)
+		if code != ExitError || !strings.Contains(stderr, c.msg) {
+			t.Errorf("%+v: exit %d, stderr %q", c.args, code, stderr)
+		}
+	}
+}

@@ -1,5 +1,15 @@
 # Log
 
+## 2026-10-13 (`ike complexity --brief[=class]`, #2938)
+
+- [Code Complexity](/architecture/complexity.md): new "Brief" paragraph in
+  "Headless CLI" — `--brief` / `--brief=class` print one compact
+  `funcs= nloc= ccn= cog= max= cmt=` line per file or class over the #2937
+  groups, no header or trailer, a `(free)` line per file at the class
+  level, the `--by` filter, the `--by` JSON unchanged, exit 2 for a bad
+  level or together with `--by` / `--diff`. User guide and command-line
+  page updated.
+
 ## 2026-10-13 (Complexity per class and per file, #2937)
 
 - [Code Complexity](/architecture/complexity.md): `Function.Class` (the

@@ -564,7 +564,7 @@ next to the other mark toggles).
 
 ## Headless CLI (#2922)
 
-`ike complexity [--diff[=REV]] [--by class|file] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [PATH...]`
+`ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [PATH...]`
 is the terminal-free report for CI pipelines and coding agents. The grammar
 lives in `internal/cli` (`ComplexityArgs`, first argument only like
 `agent-hook`, so a file named `complexity` still opens as `./complexity`);
@@ -625,6 +625,23 @@ threshold; the `shown:` line reads `shown: 1 of 2 classes (ΣCCN or Σcog ≥ 5)
 An unknown level, or `--by` with `--diff`, is a usage error (exit 2,
 `--by is not supported with --diff`). Without `--by` the output is
 unchanged byte for byte. The flag is CLI-only (no setting, no command).
+
+**Brief (#2938).** `--brief` (one line per file) and `--brief=class` (one
+line per class) are a second text renderer over the same groups
+(`ComplexityArgs.Brief`, `writeBriefText`): no header, no summary, no
+`shown:` / `skipped:` trailer, one tab-aligned line per kept group,
+columns two spaces apart —
+`<path>  [<Class>]  funcs=N  nloc=N  ccn=Σ  cog=Σ  max=CCN/cog  cmt=N%`, in
+the group order (CCN sum descending, then path, then class). At the class
+level a file's free functions and lambdas are one more line labelled
+`(free)` (`groupProject` hands them that class before `GroupFunctions`);
+`--by class` still leaves them out. The filter is the group filter of
+`--by`. With `--json` brief changes nothing: the output is the `--by` JSON
+of the same level byte for byte (no `(free)` group). A level other than
+`class` / `file`, `--brief` with `--by` (`--brief and --by exclude each
+other`) or with `--diff` (`--brief is not supported with --diff`) is a
+usage error (exit 2). The level is taken only after `=`, so
+`--brief PATH` keeps PATH as a path.
 
 **Diff.** `--diff[=REV]` (default `HEAD`) runs synchronously the same git
 plumbing as the Changes tab — `vcs.ResolveRev`, `vcs.ChangedFiles`, the

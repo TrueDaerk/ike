@@ -64,9 +64,10 @@ explicit file means you meant this directory, not your most recent one.
 
 ## Headless reports
 
-`ike complexity [--diff[=REV]] [--by class|file] [--json] [--min N] [PATH...]`
+`ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [PATH...]`
 prints the function complexity of the project — per function, or summed per
-class or per file with `--by` — or of just the files and directories you
+class or per file with `--by`, one compact line per file or class with
+`--brief[=class]` — or of just the files and directories you
 name (or its change against a git revision), and exits without
 starting the IDE — for CI, pre-commit hooks and scripts. See
 [Code complexity](../guides/complexity.md#command-line).
