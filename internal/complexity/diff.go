@@ -334,3 +334,59 @@ func verdict(deltas ...int) Verdict {
 	}
 	return Unchanged
 }
+
+// FileChange is one file of a diff folded into a row (#2955): its
+// classification counts and the Summary of its units on each side — a
+// removed unit counts on the base side only, an added one on the head side
+// only — so a branch reads per file: which got heavier, by how much.
+type FileChange struct {
+	File    string  `json:"file"`
+	Changed int     `json:"changed"`
+	Added   int     `json:"added"`
+	Removed int     `json:"removed"`
+	Before  Summary `json:"before"`
+	After   Summary `json:"after"`
+}
+
+// DeltaCCN is After.CCNSum - Before.CCNSum.
+func (f FileChange) DeltaCCN() int { return f.After.CCNSum - f.Before.CCNSum }
+
+// DeltaCognitive is After.CogSum - Before.CogSum.
+func (f FileChange) DeltaCognitive() int { return f.After.CogSum - f.Before.CogSum }
+
+// DeltaNLOC is After.NLOC - Before.NLOC.
+func (f FileChange) DeltaNLOC() int { return f.After.NLOC - f.Before.NLOC }
+
+// DeltaExcess is After.Excess - Before.Excess.
+func (f FileChange) DeltaExcess() int { return f.After.Excess - f.Before.Excess }
+
+// ByFile folds the diff per file (#2955): one FileChange per file with a
+// non-empty classification, each side summarised over every unit the diff
+// measured for that file (the classified units alone for a diff not built
+// by DiffProject), sorted by ΔCCN descending, then by file.
+func (d Diff) ByFile() []FileChange {
+	out := make([]FileChange, 0, len(d.Files))
+	for p, fd := range d.Files {
+		base, head := d.base[p], d.head[p]
+		if _, covered := d.BaseOf(p); !covered {
+			base, head = nil, nil
+			for _, c := range fd.Changed {
+				base = append(base, c.Before)
+				head = append(head, c.After)
+			}
+			base = append(base, fd.Removed...)
+			head = append(head, fd.Added...)
+		}
+		out = append(out, FileChange{File: p,
+			Changed: len(fd.Changed), Added: len(fd.Added), Removed: len(fd.Removed),
+			Before: Summarize(base, d.warn[0], d.warn[1], d.warn[2]),
+			After:  Summarize(head, d.warn[0], d.warn[1], d.warn[2])})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if a, b := out[i].DeltaCCN(), out[j].DeltaCCN(); a != b {
+			return a > b
+		}
+		return out[i].File < out[j].File
+	})
+	return out
+}

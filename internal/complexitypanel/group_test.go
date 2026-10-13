@@ -87,15 +87,19 @@ func TestGroupCycleFileTab(t *testing.T) {
 	if m.Grouping() != complexity.ByNone || len(m.Rows()) != 3 {
 		t.Fatalf("File tab skips the file level: %v, %d rows", m.Grouping(), len(m.Rows()))
 	}
-	// Each tab keeps its own level; the Changes tab never groups.
+	// Each tab keeps its own level; the Changes tab cycles none → file
+	// (#2955).
 	m.Update(key("b"))
 	m.SetTab(TabProject)
 	if m.Grouping() != complexity.ByNone {
 		t.Errorf("Project tab level = %v, want none", m.Grouping())
 	}
 	m.SetTab(TabChanges)
-	if m.CycleGroup() || m.Grouping() != complexity.ByNone {
-		t.Error("the Changes tab must not group")
+	if !m.CycleGroup() || m.Grouping() != complexity.ByFile {
+		t.Error("the Changes tab groups per file")
+	}
+	if m.CycleGroup(); m.Grouping() != complexity.ByNone {
+		t.Error("the Changes tab cycles back to none")
 	}
 }
 

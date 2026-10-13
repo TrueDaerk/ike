@@ -190,3 +190,55 @@ func TestDiffProjectVerdictReadsExcessFirst(t *testing.T) {
 		t.Fatalf("threshold crossing: Δexcess %d verdict %v", d.DeltaExcess(), d.Verdict)
 	}
 }
+
+// TestDiffByFile: ByFile sums each side of every classified file — a
+// removed unit on the base side only, an added one on the head side only —
+// reports the counts, leaves a file without a classified unit out, and
+// sorts by ΔCCN descending (#2955).
+func TestDiffByFile(t *testing.T) {
+	base := map[string][]Function{
+		"a.go":    {unit("keep", 0, 2, 1), unit("grow", 10, 3, 2), unit("gone", 20, 4, 4)},
+		"b.go":    {unit("shrink", 0, 9, 8)},
+		"same.go": {unit("same", 0, 5, 5)},
+	}
+	head := map[string][]Function{
+		"a.go":    {unit("keep", 0, 2, 1), unit("grow", 10, 7, 6), unit("new", 30, 2, 3)},
+		"b.go":    {unit("shrink", 0, 4, 3)},
+		"same.go": {unit("same", 3, 5, 5)},
+	}
+	fs := DiffProject(base, head, 15, 15, 40).ByFile()
+	if len(fs) != 2 {
+		t.Fatalf("ByFile = %+v, want a.go and b.go", fs)
+	}
+	a, b := fs[0], fs[1]
+	if a.File != "a.go" || a.Changed != 1 || a.Added != 1 || a.Removed != 1 {
+		t.Errorf("a.go counts = %+v", a)
+	}
+	// Base: keep 2 + grow 3 + gone 4; head: keep 2 + grow 7 + new 2.
+	if a.Before.CCNSum != 9 || a.After.CCNSum != 11 || a.DeltaCCN() != 2 {
+		t.Errorf("a.go ccn %d→%d", a.Before.CCNSum, a.After.CCNSum)
+	}
+	if a.Before.CogSum != 7 || a.After.CogSum != 10 || a.DeltaCognitive() != 3 {
+		t.Errorf("a.go cog %d→%d", a.Before.CogSum, a.After.CogSum)
+	}
+	if a.Before.Functions != 3 || a.After.Functions != 3 || a.DeltaNLOC() != 0 {
+		t.Errorf("a.go functions %d→%d nloc Δ%d", a.Before.Functions, a.After.Functions, a.DeltaNLOC())
+	}
+	if b.File != "b.go" || b.Changed != 1 || b.DeltaCCN() != -5 || b.DeltaCognitive() != -5 {
+		t.Errorf("b.go = %+v", b)
+	}
+}
+
+// TestDiffByFileWithoutMeasurements: a diff not built by DiffProject sums
+// the classified units alone.
+func TestDiffByFileWithoutMeasurements(t *testing.T) {
+	d := Diff{Files: map[string]FileDiff{"x.go": {
+		Changed: []Change{{Before: unit("f", 0, 1, 0), After: unit("f", 0, 4, 2)}},
+		Added:   []Function{unit("g", 10, 2, 0)},
+		Removed: []Function{unit("h", 20, 3, 1)},
+	}}}
+	fs := d.ByFile()
+	if len(fs) != 1 || fs[0].Before.CCNSum != 4 || fs[0].After.CCNSum != 6 || fs[0].Before.Functions != 2 {
+		t.Fatalf("ByFile = %+v", fs)
+	}
+}

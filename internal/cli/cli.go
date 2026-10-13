@@ -118,9 +118,9 @@ const agentHookCmd = "agent-hook"
 // argument only like agentHookCmd.
 const complexityCmd = "complexity"
 
-// ErrByWithDiff rejects `--by` together with `--diff` (#2937): the diff
-// report has no group rows yet.
-var ErrByWithDiff = errors.New("--by is not supported with --diff")
+// ErrByWithDiff rejects `--by class` together with `--diff` (#2937): the
+// diff report groups per file only (#2955).
+var ErrByWithDiff = errors.New("--by class is not supported with --diff")
 
 // ErrBriefWithBy rejects `--brief` together with `--by` (#2938).
 var ErrBriefWithBy = errors.New("--brief and --by exclude each other")
@@ -239,7 +239,7 @@ func Parse(args []string) (Invocation, error) {
 // parseComplexity parses the arguments after `ike complexity`. Numeric
 // flags take their value as `--min N` or `--min=N`; `--diff` takes its
 // revision only in the `--diff=REV` form, so `--diff PATH` keeps PATH as a
-// path. `--by` takes class or file in either form (#2937) and is an error
+// path. `--by` takes class or file in either form (#2937); class is an error
 // together with `--diff`. `--brief` takes its level only as `--brief=class`
 // (#2938), so `--brief PATH` keeps PATH as a path; it excludes `--by` and
 // `--diff`. `--churn` takes its window only as `--churn=DAYS` (#2957) and
@@ -347,7 +347,7 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 	case ca.Brief != "" && ca.Diff:
 		return ComplexityArgs{}, ErrBriefWithDiff
 	}
-	if ca.By != "" && ca.Diff {
+	if ca.By == "class" && ca.Diff {
 		return ComplexityArgs{}, ErrByWithDiff
 	}
 	if ca.Churn && ca.Diff {

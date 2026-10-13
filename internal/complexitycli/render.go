@@ -289,8 +289,38 @@ type jsonDiff struct {
 	Changed []jsonChange   `json:"changed"`
 	Added   []jsonFunction `json:"added"`
 	Removed []jsonFunction `json:"removed"`
-	Verdict string         `json:"verdict"`
-	Skipped jsonSkipped    `json:"skipped"`
+	// Files is the per-file fold under --by file (#2955), absent otherwise.
+	Files   *[]jsonFileChange `json:"files,omitempty"`
+	Verdict string            `json:"verdict"`
+	Skipped jsonSkipped       `json:"skipped"`
+}
+
+// jsonFileChange is one file of the --by file diff (#2955): the counts and
+// both sides of every sum with the delta.
+type jsonFileChange struct {
+	File         string `json:"file"`
+	Changed      int    `json:"changed"`
+	Added        int    `json:"added"`
+	Removed      int    `json:"removed"`
+	CCNBefore    int    `json:"ccn_before"`
+	CCNAfter     int    `json:"ccn_after"`
+	CCNDelta     int    `json:"ccn_delta"`
+	CogBefore    int    `json:"cog_before"`
+	CogAfter     int    `json:"cog_after"`
+	CogDelta     int    `json:"cog_delta"`
+	NLOCBefore   int    `json:"nloc_before"`
+	NLOCAfter    int    `json:"nloc_after"`
+	ExcessBefore int    `json:"excess_before"`
+	ExcessAfter  int    `json:"excess_after"`
+	ExcessDelta  int    `json:"excess_delta"`
+}
+
+func toJSONFileChange(fc fileChange) jsonFileChange {
+	return jsonFileChange{File: fc.file, Changed: fc.Changed, Added: fc.Added, Removed: fc.Removed,
+		CCNBefore: fc.Before.CCNSum, CCNAfter: fc.After.CCNSum, CCNDelta: fc.DeltaCCN(),
+		CogBefore: fc.Before.CogSum, CogAfter: fc.After.CogSum, CogDelta: fc.DeltaCognitive(),
+		NLOCBefore: fc.Before.NLOC, NLOCAfter: fc.After.NLOC,
+		ExcessBefore: fc.Before.Excess, ExcessAfter: fc.After.Excess, ExcessDelta: fc.DeltaExcess()}
 }
 
 func writeJSON(w io.Writer, v any) error {
@@ -370,6 +400,13 @@ func writeDiffJSON(w io.Writer, r diffReport) error {
 	}
 	for _, rw := range removed {
 		out.Removed = append(out.Removed, toJSONFunction(rw.file, rw.fn, false))
+	}
+	if r.by == complexity.ByFile {
+		files := []jsonFileChange{}
+		for _, fc := range r.files() {
+			files = append(files, toJSONFileChange(fc))
+		}
+		out.Files = &files
 	}
 	return writeJSON(w, out)
 }
@@ -537,13 +574,18 @@ func (s settings) thresholdText() string {
 	return t
 }
 
-// writeDiffText prints the changed / added / removed sections, the totals
-// and the verdict line.
+// writeDiffText prints the changed / added / removed sections — the
+// per-file table under --by file (#2955) — the totals and the verdict line.
 func writeDiffText(w io.Writer, r diffReport) {
 	fmt.Fprintf(w, "complexity vs %s (%s)\n", r.rev, shortSha(r.sha))
 	changed, added, removed := r.sections()
 	if len(changed)+len(added)+len(removed) == 0 {
 		fmt.Fprintln(w, "\nno function changed its complexity")
+	}
+	if r.by == complexity.ByFile {
+		writeDiffFilesText(w, r)
+		writeDiffTotals(w, r)
+		return
 	}
 	if len(changed) > 0 {
 		fmt.Fprintf(w, "\nchanged (%d):\n", len(changed))
@@ -575,6 +617,34 @@ func writeDiffText(w io.Writer, r diffReport) {
 	}
 	section("added", added)
 	section("removed", removed)
+	writeDiffTotals(w, r)
+}
+
+// writeDiffFilesText prints the --by file table (#2955): one row per file,
+// ΔCCN descending, the counts and every sum as before→after (Δ).
+func writeDiffFilesText(w io.Writer, r diffReport) {
+	files := r.files()
+	if len(files) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "\nfiles (%d):\n", len(files))
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "  FILE\tCHANGED\tADDED\tREMOVED\tCCN\tCOG\tNLOC\tEXCESS")
+	for _, fc := range files {
+		b, a := fc.Before, fc.After
+		fmt.Fprintf(tw, "  %s\t%d\t%d\t%d\t%d→%d (%s)\t%d→%d (%s)\t%d→%d\t%d→%d (%s)\n",
+			fc.file, fc.Changed, fc.Added, fc.Removed,
+			b.CCNSum, a.CCNSum, signed(fc.DeltaCCN()),
+			b.CogSum, a.CogSum, signed(fc.DeltaCognitive()),
+			b.NLOC, a.NLOC,
+			b.Excess, a.Excess, signed(fc.DeltaExcess()))
+	}
+	_ = tw.Flush()
+}
+
+// writeDiffTotals prints the totals, the verdict and the trailing notes of
+// the diff report.
+func writeDiffTotals(w io.Writer, r diffReport) {
 	b, h := r.diff.Base, r.diff.Head
 	fmt.Fprintf(w, "\ntotals: before %d functions, ΣCCN %d, Σcog %d, excess %d → after %d functions, ΣCCN %d, Σcog %d, excess %d\n",
 		b.Functions, b.CCNSum, b.CogSum, b.Excess, h.Functions, h.CCNSum, h.CogSum, h.Excess)

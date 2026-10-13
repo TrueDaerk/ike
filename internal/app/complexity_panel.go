@@ -57,8 +57,8 @@ func restoreToolWindowMode(inst *pane.Instance, mode string) {
 }
 
 // cycleComplexityGroup is the complexity.group handler: an unopened panel
-// is opened first, then the selected tab cycles its grouping; the Changes
-// tab does not group and says so.
+// is opened first, then the selected tab cycles its grouping — the Changes
+// tab per file (#2955); a tab that does not group says so.
 func (m *Model) cycleComplexityGroup() {
 	p := m.complexityPanel()
 	if p == nil {
@@ -68,7 +68,7 @@ func (m *Model) cycleComplexityGroup() {
 		}
 	}
 	if !p.CycleGroup() {
-		m.host.Notify(host.Info, "complexity: the Changes tab does not group")
+		m.host.Notify(host.Info, "complexity: this tab does not group")
 		return
 	}
 	// The grouping is layout state: persist it now, so it survives
