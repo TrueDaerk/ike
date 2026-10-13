@@ -77,7 +77,7 @@ func TestGroupByClassText(t *testing.T) {
 		t.Fatalf("exit %d, stderr %q", code, stderr)
 	}
 	header, rows := dataLines(out)
-	if want := "FILE CLASS FUNCS NLOC CCN CCN_AVG CCN_MAX COG COG_AVG COG_MAX CMT% OVER"; header != want {
+	if want := "FILE CLASS FUNCS NLOC CCN CCN_AVG CCN_MAX COG COG_AVG COG_MAX CMT% OVER EXCESS"; header != want {
 		t.Errorf("header %q, want %q", header, want)
 	}
 	if len(rows) != 2 || !strings.HasPrefix(rows[0], "client.go Client 2 ") || !strings.HasPrefix(rows[1], "server.go Server 2 ") {
@@ -140,7 +140,7 @@ func TestGroupJSON(t *testing.T) {
 		}
 		g := groups[0]
 		for _, k := range []string{"file", "functions", "nloc", "ccn_sum", "ccn_avg", "ccn_max", "cog_sum", "cog_avg", "cog_max",
-			"over_threshold", "comment_lines", "comment_density"} {
+			"over_threshold", "excess", "comment_lines", "comment_density"} {
 			if _, ok := g[k]; !ok {
 				t.Errorf("--by %s: group has no %q", by, k)
 			}

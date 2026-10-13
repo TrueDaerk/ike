@@ -108,7 +108,7 @@ func TestProjectText(t *testing.T) {
 		t.Errorf("summary missing:\n%s", out)
 	}
 	// ccn_warn = 4 from the project config: branchy is over threshold.
-	if !strings.Contains(out, "1 over threshold (CCN ≥ 4 or cog ≥ 15 or cmt ≥ 40%)") || !strings.Contains(lines[0], "CMT%") {
+	if !strings.Contains(out, "1 over threshold (CCN ≥ 4 or cog ≥ 15 or cmt ≥ 40%) · excess 1") || !strings.Contains(lines[0], "CMT%") {
 		t.Errorf("thresholds not read from the project config:\n%s", out)
 	}
 	if _, ok := lang.ByPath("data.json"); ok && !strings.Contains(out, "skipped: 1 file (no complexity spec: json)") {
@@ -151,7 +151,7 @@ func TestProjectJSON(t *testing.T) {
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatalf("invalid JSON: %v\n%s", err, out)
 	}
-	for _, k := range []string{"files", "functions", "nloc", "ccn_sum", "ccn_avg", "ccn_max", "cog_sum", "cog_avg", "cog_max", "over_threshold", "ccn_warn", "cog_warn"} {
+	for _, k := range []string{"files", "functions", "nloc", "ccn_sum", "ccn_avg", "ccn_max", "cog_sum", "cog_avg", "cog_max", "over_threshold", "excess", "ccn_warn", "cog_warn"} {
 		if _, ok := got.Summary[k]; !ok {
 			t.Errorf("summary lacks %q", k)
 		}
@@ -309,7 +309,8 @@ func TestDiffText(t *testing.T) {
 		"removed (1):",
 		"simple",
 		"totals: before 2 functions, ΣCCN 6,",
-		"verdict: MORE COMPLEX (ΣCCN +3,",
+		"totals: before 2 functions, ΣCCN 6, Σcog 6, excess 1 → after 2 functions, ΣCCN 9, Σcog 9, excess 3",
+		"verdict: MORE COMPLEX (excess +2, Σcog +3, ΣCCN +3)",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("diff text lacks %q:\n%s", want, out)
@@ -347,7 +348,8 @@ func TestDiffJSON(t *testing.T) {
 	if got.Changed[0]["name"] != "branchy" || d["ccn"] != float64(2) {
 		t.Errorf("changed[0] = %v", got.Changed[0])
 	}
-	if got.Base["ccn_sum"] != float64(6) || got.Head["ccn_sum"] != float64(9) || got.Delta["ccn"] != float64(3) {
+	if got.Base["ccn_sum"] != float64(6) || got.Head["ccn_sum"] != float64(9) || got.Delta["ccn"] != float64(3) ||
+		got.Base["excess"] != float64(1) || got.Head["excess"] != float64(3) || got.Delta["excess"] != float64(2) || d["excess"] != float64(2) {
 		t.Errorf("base %v head %v delta %v", got.Base, got.Head, got.Delta)
 	}
 	// The comment density rides every side (#2934).

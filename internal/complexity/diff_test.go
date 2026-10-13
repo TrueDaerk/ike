@@ -93,7 +93,8 @@ func TestDiffProjectSummariesAndVerdict(t *testing.T) {
 	if d.Base.Functions != 3 || d.Base.CCNSum != 10 || d.Head.Functions != 3 || d.Head.CCNSum != 11 {
 		t.Fatalf("summaries = base %+v head %+v", d.Base, d.Head)
 	}
-	if d.DeltaCCN() != 1 || d.Verdict != MoreComplex || d.Verdict.String() != "more complex" {
+	// No excess either side; Σcognitive 8 → 5 decides over ΣCCN +1 (#2945).
+	if d.DeltaCCN() != 1 || d.DeltaCognitive() != -3 || d.Verdict != LessComplex || d.Verdict.String() != "less complex" {
 		t.Fatalf("delta %d verdict %v", d.DeltaCCN(), d.Verdict)
 	}
 	c, a, r := d.Counts()
@@ -139,4 +140,30 @@ func namesOf(fns []Function) []string {
 		out = append(out, f.Name)
 	}
 	return out
+}
+
+func TestDiffProjectVerdictReadsExcessFirst(t *testing.T) {
+	// Extracting a nested block: ΣCCN rises by one, the excess drops to 0.
+	base := map[string][]Function{"a.go": {unit("f", 0, 20, 30)}}
+	head := map[string][]Function{"a.go": {unit("f", 0, 12, 14), unit("fBlock", 20, 9, 6)}}
+	d := DiffProject(base, head, 15, 15, 0)
+	if d.DeltaCCN() != 1 || d.DeltaExcess() != -20 || d.Verdict != LessComplex {
+		t.Fatalf("extraction: Δccn %d Δexcess %d verdict %v", d.DeltaCCN(), d.DeltaExcess(), d.Verdict)
+	}
+	// A trivial helper added to an otherwise unchanged file: unchanged.
+	head = map[string][]Function{"a.go": {unit("f", 0, 20, 30), unit("helper", 40, 1, 0)}}
+	if d := DiffProject(base, head, 15, 15, 0); d.Verdict != Unchanged || d.Empty() {
+		t.Fatalf("trivial helper: verdict %v Δccn %d", d.Verdict, d.DeltaCCN())
+	}
+	// Equal excess and cognitive, one more branch: more complex.
+	head = map[string][]Function{"a.go": {unit("f", 0, 21, 30)}}
+	if d := DiffProject(base, head, 0, 0, 0); d.DeltaDecisions() != 1 || d.Verdict != MoreComplex {
+		t.Fatalf("decision tiebreak: %d %v", d.DeltaDecisions(), d.Verdict)
+	}
+	// One function crossing the threshold: 14 → 16 is excess 0 → 1.
+	base = map[string][]Function{"a.go": {unit("f", 0, 14, 3), unit("g", 10, 2, 1)}}
+	head = map[string][]Function{"a.go": {unit("f", 0, 16, 3), unit("g", 10, 2, 1)}}
+	if d := DiffProject(base, head, 15, 15, 0); d.DeltaExcess() != 1 || d.Verdict != MoreComplex {
+		t.Fatalf("threshold crossing: Δexcess %d verdict %v", d.DeltaExcess(), d.Verdict)
+	}
 }

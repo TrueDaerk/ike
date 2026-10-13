@@ -86,11 +86,14 @@ const (
 	ColCogAvg
 	ColCogMax
 	ColOver
+	// ColExcess is a group's excess above the CCN and cognitive thresholds
+	// (#2945); it follows over on screen.
+	ColExcess
 )
 
 // columnLabels are the column headers in Column order.
 var columnLabels = []string{"file", "function", "line", "ccn", "cog", "nloc", "params", "depth", "change", "cmt%",
-	"class", "funcs", "ccn avg", "ccn max", "cog avg", "cog max", "over"}
+	"class", "funcs", "ccn avg", "ccn max", "cog avg", "cog max", "over", "excess"}
 
 // numeric reports whether a column sorts as a number (descending by
 // default) rather than as text.
@@ -103,7 +106,7 @@ func (c Column) numeric() bool {
 }
 
 // lastColumn is the highest Column value.
-const lastColumn = ColOver
+const lastColumn = ColExcess
 
 // The per-tab column layouts, in display order: the File tab hides the
 // file column, the Changes tab leads with the section and drops params /
@@ -1037,6 +1040,7 @@ func (m *Model) totalsText() string {
 		"cog Σ"+itoa(s.CogSum)+" avg "+fmt1(s.CogAvg)+" max "+itoa(s.CogMax),
 		"cmt "+itoa(complexity.DensityPercent(s.CommentDensity))+"%",
 		itoa(s.OverThreshold)+" over",
+		"excess "+itoa(s.Excess),
 	)
 	return strings.Join(parts, " · ")
 }

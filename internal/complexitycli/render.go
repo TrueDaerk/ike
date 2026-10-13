@@ -29,8 +29,10 @@ type jsonSummary struct {
 	CogAvg        float64 `json:"cog_avg"`
 	CogMax        int     `json:"cog_max"`
 	OverThreshold int     `json:"over_threshold"`
-	CCNWarn       int     `json:"ccn_warn"`
-	CogWarn       int     `json:"cog_warn"`
+	// Excess is the mass above the CCN and cognitive thresholds (#2945).
+	Excess  int `json:"excess"`
+	CCNWarn int `json:"ccn_warn"`
+	CogWarn int `json:"cog_warn"`
 	// The comment density (#2934): summed comment-only lines, the
 	// aggregate ratio and the threshold in percent (0 = off).
 	CommentLines   int     `json:"comment_lines"`
@@ -43,7 +45,7 @@ func toJSONSummary(s complexity.Summary, files int, st settings) jsonSummary {
 		Files: files, Functions: s.Functions, NLOC: s.NLOC,
 		CCNSum: s.CCNSum, CCNAvg: round2(s.CCNAvg), CCNMax: s.CCNMax,
 		CogSum: s.CogSum, CogAvg: round2(s.CogAvg), CogMax: s.CogMax,
-		OverThreshold: s.OverThreshold, CCNWarn: st.ccnWarn, CogWarn: st.cogWarn,
+		OverThreshold: s.OverThreshold, Excess: s.Excess, CCNWarn: st.ccnWarn, CogWarn: st.cogWarn,
 		CommentLines: s.CommentLines, CommentDensity: ratio(s.CommentDensity), CmtWarn: st.cmtWarn,
 	}
 }
@@ -100,6 +102,9 @@ type jsonDelta struct {
 	CCN       int `json:"ccn"`
 	Cognitive int `json:"cognitive"`
 	NLOC      int `json:"nloc,omitempty"`
+	// Excess is the delta above the CCN and cognitive thresholds (#2945),
+	// always present.
+	Excess int `json:"excess"`
 	// The comment density delta (#2934): lines and ratio, always present.
 	CommentLines   int     `json:"comment_lines"`
 	CommentDensity float64 `json:"comment_density"`
@@ -147,6 +152,7 @@ type jsonGroup struct {
 	CogAvg         float64 `json:"cog_avg"`
 	CogMax         int     `json:"cog_max"`
 	OverThreshold  int     `json:"over_threshold"`
+	Excess         int     `json:"excess"`
 	CommentLines   int     `json:"comment_lines"`
 	CommentDensity float64 `json:"comment_density"`
 }
@@ -156,7 +162,7 @@ func toJSONGroup(g complexity.Group) jsonGroup {
 	return jsonGroup{File: g.File, Class: g.Class, Functions: s.Functions, NLOC: s.NLOC,
 		CCNSum: s.CCNSum, CCNAvg: round2(s.CCNAvg), CCNMax: s.CCNMax,
 		CogSum: s.CogSum, CogAvg: round2(s.CogAvg), CogMax: s.CogMax,
-		OverThreshold: s.OverThreshold, CommentLines: s.CommentLines, CommentDensity: ratio(s.CommentDensity)}
+		OverThreshold: s.OverThreshold, Excess: s.Excess, CommentLines: s.CommentLines, CommentDensity: ratio(s.CommentDensity)}
 }
 
 // jsonGroups is the grouped project report: the functions array gives way
@@ -216,7 +222,7 @@ func writeDiffJSON(w io.Writer, r diffReport) error {
 		Rev: r.rev, Sha: r.sha,
 		Base: toJSONSummary(r.diff.Base, r.baseFiles, r.s),
 		Head: toJSONSummary(r.diff.Head, r.headFiles, r.s),
-		Delta: jsonDelta{CCN: r.diff.DeltaCCN(), Cognitive: r.diff.DeltaCognitive(),
+		Delta: jsonDelta{CCN: r.diff.DeltaCCN(), Cognitive: r.diff.DeltaCognitive(), Excess: r.diff.DeltaExcess(),
 			CommentLines:   r.diff.Head.CommentLines - r.diff.Base.CommentLines,
 			CommentDensity: ratio(r.diff.Head.CommentDensity - r.diff.Base.CommentDensity)},
 		Changed: make([]jsonChange, 0, len(changed)),
@@ -230,6 +236,7 @@ func writeDiffJSON(w io.Writer, r diffReport) error {
 			File: c.file, Name: c.ch.After.Name, Kind: c.ch.After.Kind, Line: c.ch.After.Line + 1,
 			Before: toJSONMetrics(c.ch.Before), After: toJSONMetrics(c.ch.After),
 			Delta: jsonDelta{CCN: c.ch.DeltaCCN(), Cognitive: c.ch.DeltaCognitive(), NLOC: c.ch.DeltaNLOC(),
+				Excess:       c.ch.After.Excess(r.s.ccnWarn, r.s.cogWarn) - c.ch.Before.Excess(r.s.ccnWarn, r.s.cogWarn),
 				CommentLines: c.ch.DeltaCommentLines(), CommentDensity: ratio(c.ch.DeltaCommentDensity())},
 		})
 	}
@@ -268,9 +275,9 @@ func writeProjectText(w io.Writer, r projectReport) {
 // both project tables end with.
 func (r projectReport) writeSummaryLine(w io.Writer) {
 	s := r.summary
-	fmt.Fprintf(w, "\nsummary: %d functions in %d files · ΣCCN %d (avg %.1f, max %d) · Σcog %d (avg %.1f, max %d) · NLOC %d · cmt %d%% · %d over threshold (%s)\n",
+	fmt.Fprintf(w, "\nsummary: %d functions in %d files · ΣCCN %d (avg %.1f, max %d) · Σcog %d (avg %.1f, max %d) · NLOC %d · cmt %d%% · %d over threshold (%s) · excess %d\n",
 		s.Functions, r.files, s.CCNSum, s.CCNAvg, s.CCNMax, s.CogSum, s.CogAvg, s.CogMax, s.NLOC,
-		complexity.DensityPercent(s.CommentDensity), s.OverThreshold, r.s.thresholdText())
+		complexity.DensityPercent(s.CommentDensity), s.OverThreshold, r.s.thresholdText(), s.Excess)
 }
 
 // writeGroupsText prints the group table (#2937, CCN sum descending), the
@@ -283,16 +290,16 @@ func writeGroupsText(w io.Writer, r groupReport) {
 	} else {
 		fmt.Fprint(tw, "FILE\t")
 	}
-	fmt.Fprintln(tw, "FUNCS\tNLOC\tCCN\tCCN_AVG\tCCN_MAX\tCOG\tCOG_AVG\tCOG_MAX\tCMT%\tOVER")
+	fmt.Fprintln(tw, "FUNCS\tNLOC\tCCN\tCCN_AVG\tCCN_MAX\tCOG\tCOG_AVG\tCOG_MAX\tCMT%\tOVER\tEXCESS")
 	for _, g := range r.groups {
 		if byClass {
 			fmt.Fprintf(tw, "%s\t%s\t", g.File, g.Class)
 		} else {
 			fmt.Fprintf(tw, "%s\t", g.File)
 		}
-		fmt.Fprintf(tw, "%d\t%d\t%d\t%.1f\t%d\t%d\t%.1f\t%d\t%d\t%d\n", g.Functions, g.NLOC,
+		fmt.Fprintf(tw, "%d\t%d\t%d\t%.1f\t%d\t%d\t%.1f\t%d\t%d\t%d\t%d\n", g.Functions, g.NLOC,
 			g.CCNSum, g.CCNAvg, g.CCNMax, g.CogSum, g.CogAvg, g.CogMax,
-			complexity.DensityPercent(g.CommentDensity), g.OverThreshold)
+			complexity.DensityPercent(g.CommentDensity), g.OverThreshold, g.Excess)
 	}
 	_ = tw.Flush()
 	r.writeSummaryLine(w)
@@ -396,10 +403,10 @@ func writeDiffText(w io.Writer, r diffReport) {
 	section("added", added)
 	section("removed", removed)
 	b, h := r.diff.Base, r.diff.Head
-	fmt.Fprintf(w, "\ntotals: before %d functions, ΣCCN %d, Σcog %d → after %d functions, ΣCCN %d, Σcog %d\n",
-		b.Functions, b.CCNSum, b.CogSum, h.Functions, h.CCNSum, h.CogSum)
-	fmt.Fprintf(w, "verdict: %s (ΣCCN %s, Σcog %s)\n", verdictText(r.diff.Verdict),
-		signed(r.diff.DeltaCCN()), signed(r.diff.DeltaCognitive()))
+	fmt.Fprintf(w, "\ntotals: before %d functions, ΣCCN %d, Σcog %d, excess %d → after %d functions, ΣCCN %d, Σcog %d, excess %d\n",
+		b.Functions, b.CCNSum, b.CogSum, b.Excess, h.Functions, h.CCNSum, h.CogSum, h.Excess)
+	fmt.Fprintf(w, "verdict: %s (excess %s, Σcog %s, ΣCCN %s)\n", verdictText(r.diff.Verdict),
+		signed(r.diff.DeltaExcess()), signed(r.diff.DeltaCognitive()), signed(r.diff.DeltaCCN()))
 	if l := r.skipped.line(); l != "" {
 		fmt.Fprintln(w, l)
 	}

@@ -54,7 +54,7 @@ func TestGroupCycleProjectTab(t *testing.T) {
 		t.Errorf("the header summary must stay the whole tab's: %+v vs %+v", m.Summary(), whole)
 	}
 	v := m.View()
-	for _, want := range []string{"class", "funcs", "Σccn", "ccn avg", "ccn max", "Σcog", "cog max", "over", "5.5", "b group: class", "5 fns"} {
+	for _, want := range []string{"class", "funcs", "Σccn", "ccn avg", "ccn max", "Σcog", "cog max", "over", "excess", "5.5", "b group: class", "5 fns"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("class view lacks %q:\n%s", want, v)
 		}
@@ -163,7 +163,8 @@ func TestGroupOpenCopyExportWarn(t *testing.T) {
 	ex, _ := m.Update(key("e"))().(ExportMsg)
 	lines := strings.Split(strings.TrimSpace(ex.CSV), "\n")
 	if len(lines) != 3 || lines[0] != strings.Join(groupCSVHeader, ",") ||
-		lines[2] != "a/server.go,Server,2,24,11,5.5,10,12,6.0,12,0,0,0" {
+		lines[1] != "b/client.py,Client,1,26,16,16.0,16,20,20.0,20,0,0,1,6" ||
+		lines[2] != "a/server.go,Server,2,24,11,5.5,10,12,6.0,12,0,0,0,0" {
 		t.Errorf("csv = %q", ex.CSV)
 	}
 	warn := m.renderRow(theme.DefaultPalette(), 0)  // Client: max CCN 16, max cog 20
@@ -209,6 +210,19 @@ func TestGroupModeRoundTrip(t *testing.T) {
 	r.SetGroupMode("file:file,project:method,bogus")
 	if r.projectGroup != complexity.ByNone || r.fileGroup != complexity.ByNone {
 		t.Errorf("garbage mode: project %v file %v", r.projectGroup, r.fileGroup)
+	}
+}
+
+func TestGroupExcessColumn(t *testing.T) {
+	m := groupPanel(t)
+	m.CycleGroup()
+	m.SetSort(ColExcess)
+	rows := m.Rows()
+	if col, desc := m.SortColumn(); col != ColExcess || !desc || len(rows) != 2 || rows[0].Group.Class != "Client" {
+		t.Fatalf("excess sort = %v %v %q", col, desc, labels(rows))
+	}
+	if rows[0].cell(ColExcess) != "6" || !m.groupWarn(rows[0].Group, ColExcess) || m.groupWarn(rows[1].Group, ColExcess) {
+		t.Errorf("excess cells = %q %q", rows[0].cell(ColExcess), rows[1].cell(ColExcess))
 	}
 }
 

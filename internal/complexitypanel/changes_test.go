@@ -73,7 +73,7 @@ func TestChangesTabSectionsAndCells(t *testing.T) {
 	}
 	m.SetSize(260, 12) // room for the whole header line
 	v := m.View()
-	for _, want := range []string{"base HEAD → working tree", "functions 3→3", "ΣCCN 20→20 (0)", "Σcog 17→24 (+7)", "more complex",
+	for _, want := range []string{"base HEAD → working tree", "functions 3→3", "ΣCCN 20→20 (0)", "Σcog 17→24 (+7)", "excess 0→5 (+5)", "more complex",
 		"1 renamed (removed + added): internal/ui/old.go → internal/ui/list.go", "change", "changed", "added", "removed", "R base", "4/4 rows"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("view missing %q:\n%s", want, v)

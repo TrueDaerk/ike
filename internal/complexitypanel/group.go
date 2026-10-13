@@ -17,7 +17,7 @@ import (
 
 // The group layouts, in display order: the File tab drops the file column.
 var (
-	classGroupLayout     = []Column{ColFile, ColClass, ColFuncs, ColNLOC, ColCCN, ColCCNAvg, ColCCNMax, ColCog, ColCogAvg, ColCogMax, ColCmt, ColOver}
+	classGroupLayout     = []Column{ColFile, ColClass, ColFuncs, ColNLOC, ColCCN, ColCCNAvg, ColCCNMax, ColCog, ColCogAvg, ColCogMax, ColCmt, ColOver, ColExcess}
 	fileGroupLayout      = append([]Column{ColFile}, classGroupLayout[2:]...)
 	fileTabClassLayout   = classGroupLayout[1:]
 	groupSumLabels       = map[Column]string{ColCCN: "Σccn", ColCog: "Σcog"}
@@ -188,6 +188,8 @@ func (r Row) groupValue(c Column) (float64, string) {
 		return float64(complexity.DensityPercent(g.CommentDensity)), ""
 	case ColOver:
 		return float64(g.OverThreshold), ""
+	case ColExcess:
+		return float64(g.Excess), ""
 	}
 	return 0, ""
 }
@@ -209,7 +211,7 @@ func (r Row) groupCell(c Column) string {
 
 // groupWarn reports whether a group row's cell in column c takes the
 // warning colour: a maximum or the aggregate density at or above its
-// threshold, any function over threshold.
+// threshold, any function over threshold, any excess.
 func (m *Model) groupWarn(g *complexity.Group, c Column) bool {
 	switch c {
 	case ColCCNMax:
@@ -220,6 +222,8 @@ func (m *Model) groupWarn(g *complexity.Group, c Column) bool {
 		return m.cmtWarn > 0 && complexity.DensityPercent(g.CommentDensity) >= m.cmtWarn
 	case ColOver:
 		return g.OverThreshold > 0
+	case ColExcess:
+		return g.Excess > 0
 	}
 	return false
 }
@@ -238,7 +242,7 @@ func groupCopyText(r Row) string {
 
 // groupCSVHeader is the grouped export's first row, the CLI's JSON names.
 var groupCSVHeader = []string{"file", "class", "functions", "nloc", "ccn_sum", "ccn_avg", "ccn_max",
-	"cog_sum", "cog_avg", "cog_max", "comment_lines", "cmt_pct", "over_threshold"}
+	"cog_sum", "cog_avg", "cog_max", "comment_lines", "cmt_pct", "over_threshold", "excess"}
 
 // groupCSV renders the visible group rows; the class column stays (empty
 // for a file group) so both levels share one header.
@@ -249,7 +253,7 @@ func (m *Model) groupCSV() string {
 		g := r.Group
 		writeCSVRow(&b, []string{r.Rel, g.Class, itoa(g.Functions), itoa(g.NLOC),
 			itoa(g.CCNSum), fmt1(g.CCNAvg), itoa(g.CCNMax), itoa(g.CogSum), fmt1(g.CogAvg), itoa(g.CogMax),
-			itoa(g.CommentLines), itoa(complexity.DensityPercent(g.CommentDensity)), itoa(g.OverThreshold)})
+			itoa(g.CommentLines), itoa(complexity.DensityPercent(g.CommentDensity)), itoa(g.OverThreshold), itoa(g.Excess)})
 	}
 	return b.String()
 }

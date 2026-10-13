@@ -22,6 +22,7 @@ the warning thresholds `ccn_warn` / `cognitive_warn` (15 by default) and
 | **params** | Parameter count. |
 | **depth** | Deepest nesting level inside the function. |
 | **cmt%** | Comment density: the share of the function *body* that is comment-only lines, `comment lines / (nloc + comment lines)`. |
+| **excess** | How far a function sits *above* the thresholds: `max(0, CCN − ccn_warn) + max(0, cog − cognitive_warn)`. A function at 20 / 30 with both thresholds at 15 has excess 20; anything at or below both has 0. The header and the summaries sum it — the number to drive down when optimising. |
 
 Values at or above `ccn_warn` / `cognitive_warn` show in the warning colour,
 as a hint after the function header (`CCN 12 · cog 8`) and, unless
@@ -57,8 +58,8 @@ answer "which class / which file is the heaviest?". The Project tab cycles
 one class (the methods of a Go receiver type, or of a Python, PHP,
 TypeScript or JavaScript class, trait, interface or enum) or one file, with
 the number of functions, NLOC, the CCN and cognitive **sum** (`Σccn`,
-`Σcog`), average and maximum, the aggregate `cmt%` and how many of its
-functions are over a threshold. Free functions and lambdas belong to no
+`Σcog`), average and maximum, the aggregate `cmt%`, how many of its
+functions are over a threshold (`over`) and their summed `excess`. Free functions and lambdas belong to no
 class but count toward their file. The header still sums the whole tab;
 sorting and the filter work on the group columns (`fn:` matches the class
 or the file). `enter` opens the group's first function. Each tab remembers
@@ -69,7 +70,17 @@ its grouping, and the layout keeps it across restarts.
 The third tab of the Complexity window compares every function in the files
 that differ from a base revision (`HEAD` by default; press `R` to pick any
 branch, tag or sha). The header sums it up:
-`base HEAD → working tree · functions 120→123 · ΣCCN 410→416 (+6) · … · more complex`.
+`base HEAD → working tree · functions 120→123 · ΣCCN 410→416 (+6) · Σcog 380→371 (-9) · excess 42→30 (-12) · less complex`.
+
+**How the verdict is decided.** The excess change decides; when it held,
+the Σcog change decides; when that held too, the CCN change — counted
+without the base 1 every function carries — decides; `unchanged` when all
+three held. *This rule changed:* earlier releases read ΣCCN first, so
+extracting a nested block into its own helper (one 20 / 30 function becoming
+12 / 14 + 9 / 6) raised ΣCCN by one and read **more complex** although the
+code got simpler — now it reads **less complex** (excess 20 → 0). Adding a
+trivial helper reads **unchanged**. The `Δcx` status segment shows the
+excess change as well.
 Rows are grouped as **changed** (before → after with Δ, largest change
 first; `cmt%` in percentage points), **added** and **removed**. Unsaved editor buffers count with their
 current text. A renamed function appears as one removed and one added row.
@@ -116,7 +127,7 @@ FILE                         FUNCTION                  LINE  CCN  COG  NLOC  PAR
 internal/config/validate.go  validate                  262   168  220  622   1       14
 internal/editor/view.go      Model.renderSpanUncached  949   139  237  368   6       21
 
-summary: 33769 functions in 3161 files · ΣCCN 136390 (avg 4.0, max 168) · Σcog 122149 (avg 3.6, max 237) · NLOC 466863 · cmt 12% · 1223 over threshold (CCN ≥ 15 or cog ≥ 15 or cmt ≥ 40%)
+summary: 33769 functions in 3161 files · ΣCCN 136390 (avg 4.0, max 168) · Σcog 122149 (avg 3.6, max 237) · NLOC 466863 · cmt 12% · 1223 over threshold (CCN ≥ 15 or cog ≥ 15 or cmt ≥ 40%) · excess 41870
 shown: 2 of 33769 functions (CCN or cog ≥ 40)
 skipped: 192 files (no complexity spec: json, markdown, yaml)
 
@@ -129,12 +140,12 @@ changed (1):
 added (1):
   internal/cli/cli.go  parseComplexity  L176  CCN 14  cog 17  NLOC 49  cmt 6%
 
-totals: before 12 functions, ΣCCN 40, Σcog 38 → after 13 functions, ΣCCN 57, Σcog 59
-verdict: MORE COMPLEX (ΣCCN +17, Σcog +21)
+totals: before 12 functions, ΣCCN 40, Σcog 38, excess 21 → after 13 functions, ΣCCN 57, Σcog 59, excess 30
+verdict: MORE COMPLEX (excess +9, Σcog +21, ΣCCN +17)
 ```
 
-The verdict reads the summed CCN; when that did not move, the summed
-cognitive complexity decides.
+The verdict reads the excess first, then Σcog, then ΣCCN (see
+[The Changes tab](#the-changes-tab); earlier releases read ΣCCN first).
 
 **Exit codes.** `0` whenever a report was printed — the command never fails
 because a function is over a threshold; that policy is yours (see the CI
@@ -182,7 +193,7 @@ Project report:
     "files": 3161, "functions": 33769, "nloc": 466863,
     "ccn_sum": 136390, "ccn_avg": 4.04, "ccn_max": 168,
     "cog_sum": 122149, "cog_avg": 3.62, "cog_max": 237,
-    "over_threshold": 1223, "ccn_warn": 15, "cog_warn": 15,
+    "over_threshold": 1223, "excess": 41870, "ccn_warn": 15, "cog_warn": 15,
     "comment_lines": 63650, "comment_density": 0.12, "cmt_warn": 40
   },
   "functions": [
@@ -199,7 +210,8 @@ Project report:
 filter keeps, sorted by CCN descending. `kind` is `function`, `method` or
 `lambda`. `comment_density` is a ratio (0.55 = 55 %), `comment_lines` the
 body's comment-only lines; `cmt_warn` is the threshold in percent (`0` =
-off).
+off). `excess` is the summed mass above the CCN and cognitive thresholds
+(see [Reading the numbers](#reading-the-numbers)).
 
 Grouped report (`--by class --json`): `functions` gives way to `groups`,
 one object per row the filter keeps, with the summary's field names; `class`
@@ -212,7 +224,7 @@ is present at the class level only.
     { "file": "internal/editor/view.go", "class": "Model", "functions": 212,
       "nloc": 9120, "ccn_sum": 2410, "ccn_avg": 11.37, "ccn_max": 139,
       "cog_sum": 2950, "cog_avg": 13.92, "cog_max": 237,
-      "over_threshold": 41, "comment_lines": 1310, "comment_density": 0.1256 }
+      "over_threshold": 41, "excess": 2894, "comment_lines": 1310, "comment_density": 0.1256 }
   ],
   "skipped": { "files": 192, "languages": ["json", "markdown", "yaml"] }
 }
@@ -225,12 +237,12 @@ Diff report (`--diff --json`):
   "rev": "main", "sha": "658ccf37…",
   "base": { "files": 12, "functions": 12, "ccn_sum": 40, "cog_sum": 38, "…": "…" },
   "head": { "files": 13, "functions": 13, "ccn_sum": 57, "cog_sum": 59, "…": "…" },
-  "delta": { "ccn": 17, "cognitive": 21, "comment_lines": 2, "comment_density": -0.004 },
+  "delta": { "ccn": 17, "cognitive": 21, "excess": 9, "comment_lines": 2, "comment_density": -0.004 },
   "changed": [
     { "file": "cmd/ike/main.go", "name": "main", "kind": "function", "line": 104,
       "before": { "ccn": 22, "cognitive": 29, "nloc": 103, "params": 0, "depth": 3, "comment_lines": 11, "comment_density": 0.0965 },
       "after":  { "ccn": 25, "cognitive": 33, "nloc": 111, "params": 0, "depth": 3, "comment_lines": 11, "comment_density": 0.0902 },
-      "delta":  { "ccn": 3, "cognitive": 4, "nloc": 8, "comment_lines": 0, "comment_density": -0.0063 } }
+      "delta":  { "ccn": 3, "cognitive": 4, "nloc": 8, "excess": 7, "comment_lines": 0, "comment_density": -0.0063 } }
   ],
   "added":   [ { "file": "…", "name": "…", "line": 176, "ccn": 14, "…": "…" } ],
   "removed": [],
@@ -240,8 +252,11 @@ Diff report (`--diff --json`):
 ```
 
 `base` and `head` have the same fields as the project `summary`, over the
-files that differ from `REV`. `verdict` is `more_complex`, `less_complex` or
-`unchanged`.
+files that differ from `REV`; both, the top-level `delta`, every changed
+function's `delta` and every group carry `excess`. `verdict` is
+`more_complex`, `less_complex` or `unchanged`, decided by the excess first
+(the rule changed — see [The Changes tab](#the-changes-tab)). A policy that
+wants the old ΣCCN reading keeps it with `jq -e '.delta.ccn <= 0' cx.json`.
 
 ### Gating a pull request in GitHub Actions
 
@@ -269,7 +284,7 @@ jobs:
       - name: Complexity vs base
         run: |
           ike complexity --diff=origin/${{ github.base_ref }} --json > cx.json
-          jq -r '"verdict: \(.verdict) (ΣCCN \(.delta.ccn), Σcog \(.delta.cognitive))"' cx.json
+          jq -r '"verdict: \(.verdict) (excess \(.delta.excess), Σcog \(.delta.cognitive), ΣCCN \(.delta.ccn))"' cx.json
           # policy: no function may end up at CCN ≥ 20 through this change
           jq -e '[.changed[].after.ccn, .added[].ccn] | all(. < 20)' cx.json
 ```

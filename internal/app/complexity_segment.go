@@ -13,8 +13,9 @@ import (
 )
 
 // complexity_segment.go is the opt-in "Δcx" status segment (Roadmap 0550,
-// #2921): the summed CCN delta of the working tree against the Changes
-// tab's base revision. It only reads the diff the Changes machinery stores;
+// #2921): the excess delta (#2945) — the mass above the CCN and cognitive
+// thresholds — of the working tree against the Changes tab's base
+// revision. It only reads the diff the Changes machinery stores;
 // complexityDiffWanted keeps that machinery armed while the segment is on.
 
 // complexitySegment renders "Δcx +4" / "Δcx -2" / "Δcx ±0"; hidden while
@@ -29,7 +30,7 @@ func (m Model) complexitySegment() string {
 	if ch.NotGit || !ch.Ready || len(ch.Diff.Files) == 0 {
 		return ""
 	}
-	d := ch.Diff.DeltaCCN()
+	d := ch.Diff.DeltaExcess()
 	switch {
 	case d > 0:
 		return "Δcx +" + strconv.Itoa(d)
@@ -40,7 +41,7 @@ func (m Model) complexitySegment() string {
 }
 
 // complexitySegmentColor is the verdict colour of the segment: warning when
-// the summed CCN rose, success when it fell, muted when it held.
+// the excess rose, success when it fell, muted when it held.
 func (m Model) complexitySegmentColor(seg string) color.Color {
 	switch {
 	case strings.HasPrefix(seg, "Δcx +"):
