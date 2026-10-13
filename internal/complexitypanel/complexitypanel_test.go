@@ -95,7 +95,7 @@ func TestProjectTabSortsByCCNDescending(t *testing.T) {
 		t.Fatalf("summary = %+v", s)
 	}
 	v := m.View()
-	for _, want := range []string{"Complexity", "Project", "File", "Changes", "5 fns", "max 25", "3 over", "gen 3", "ccn ▼", "5/5 rows"} {
+	for _, want := range []string{"Complexity", "Project", "File", "Changes", "5 fns", "max 25", "3 over", "excess 29", "gen 3", "ccn ▼", "5/5 rows"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("view missing %q:\n%s", want, v)
 		}

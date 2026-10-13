@@ -202,7 +202,14 @@ project — into functions, NLOC, Σ / avg / max CCN, Σ / avg / max cognitive,
 the summed `CommentLines` with the aggregate `CommentDensity`, and the
 number of functions **at or above** any warning threshold — CCN, cognitive,
 or a comment density of `cmtWarn` percent (a non-positive threshold disables
-that check). The thresholds come from the `[complexity]`
+that check). `Excess` (#2945) is the mass **above** the CCN and cognitive
+thresholds: `Function.Excess(ccnWarn, cogWarn)` = `max(0, CCN − ccnWarn) +
+max(0, cognitive − cogWarn)` (a unit at a threshold counts as over it but
+has no excess; a non-positive threshold drops its term), summed over the
+population. The over count says how many units cross a line, the excess how
+far — the primary signal for optimisation and what the diff verdict reads
+first. The thresholds stay parameters so a per-file threshold can feed
+them. The thresholds come from the `[complexity]`
 settings of the later steps; the engine takes them as plain integers.
 
 **Groups (#2937).** `GroupFunctions(files, by, ccnWarn, cogWarn, cmtWarn)`
@@ -322,8 +329,8 @@ in `Update`.
 **Header and columns.** The header line names the pane, draws the tab bar
 and the tab's `Summary` over its whole population: the index generation (or
 `scanning…` while the walk runs), functions, NLOC, sum / average / max CCN
-and cognitive complexity, the aggregate comment density (`cmt 12%`) and the
-count over threshold. The grid
+and cognitive complexity, the aggregate comment density (`cmt 12%`), the
+count over threshold and `excess N` (#2945). The grid
 (`gridview.HeaderRow` / `DataRow`, widths from the longest visible value,
 the file column capped at half the pane) has the columns file
 (project-relative; hidden on the File tab), function, line (1-based), ccn,
@@ -356,14 +363,14 @@ none → class (the Changes tab does not group; the command says so). A
 grouped tab replaces the function rows with one row per
 `complexity.GroupFunctions` group: columns file (Project only), class (class
 level only), funcs, nloc, `Σccn`, ccn avg, ccn max, `Σcog`, cog avg, cog max,
-`cmt%` (aggregate density) and over; the header totals stay the whole tab's.
+`cmt%` (aggregate density), over and excess (#2945); the header totals stay the whole tab's.
 Sorting (`s` walks the group columns, `S`, header clicks) and the filter
 work on the group columns — `fn:` and bare words read the class (class
 level) or the path (file level), `min:` the sort column; a sort column the
 group layout lacks resets to CCN descending. Max CCN / max cog / `cmt%` and
-a non-zero over count take the warning colour. `enter` opens the group's
+a non-zero over or excess count take the warning colour. `enter` opens the group's
 earliest unit, `y` copies `path: Class funcs=2 ccn=9 (max 8) cog=12 (max
-12)`, `e` exports `file,class,functions,nloc,ccn_sum,ccn_avg,ccn_max,cog_sum,cog_avg,cog_max,comment_lines,cmt_pct,over_threshold`.
+12)`, `e` exports `file,class,functions,nloc,ccn_sum,ccn_avg,ccn_max,cog_sum,cog_avg,cog_max,comment_lines,cmt_pct,over_threshold,excess`.
 Each tab keeps its own level. The levels persist in the layout as the
 pane identity's `Mode` (`project:file,file:class`; `GroupMode` /
 `SetGroupMode`, an unknown spelling ignored) — session layout, named
@@ -409,8 +416,17 @@ hash to tell a rename from a rewrite). `Changed` is sorted by |ΔCCN|
 descending. `DiffProject(base, head, ccnWarn, cogWarn, cmtWarn)` runs it per path
 over two `map[path][]Function`, keeps the files with a non-empty
 classification, summarises both sides (`Summarize`) and renders the
-**verdict**: `more complex` when ΣCCN rose, `less complex` when it fell,
-Σcognitive breaking the tie, `unchanged` otherwise.
+**verdict** (#2945): the first non-zero of Δexcess, Δ Σcognitive and
+Δ decision points (ΣCCN minus the function count, `DeltaDecisions`) decides
+— positive `more complex`, negative `less complex`, all three 0
+`unchanged`. Until #2945 ΣCCN decided; but CCN gives every unit a base 1,
+so extracting a nested block into its own function (the most common
+simplification: one 20 / 30 function into 12 / 14 + 9 / 6) raised ΣCCN by
+one and read *more complex* while the excess fell 20 → 0, and a trivial
+helper read *more complex* although nothing crossed a threshold. Reading the
+decision points rather than raw ΣCCN keeps that base 1 out of the last
+tiebreak, so the helper reads `unchanged`. `Diff.DeltaExcess()` is
+`Head.Excess − Base.Excess`; `DeltaCCN()` is unchanged.
 
 **Base revision and file list.** `vcs.ResolveRev(root, rev)` turns the
 typed base — `HEAD` by default; any `git rev-parse`-able ref: a branch, a
@@ -453,7 +469,7 @@ repository the tab says `not a git repository` and nothing runs. Nothing in
 `Update` runs git or parses.
 
 **Changes tab.** The header reads `base <rev> → working tree · functions
-n→m · ΣCCN a→b (Δ) · Σcog c→d (Δ) · <verdict>` plus the rename note
+n→m · ΣCCN a→b (Δ) · Σcog c→d (Δ) · excess e→f (Δ) · <verdict>` plus the rename note
 (`computing…` while a run is in flight). The grid keeps its sections —
 changed (|ΔCCN| descending), added, removed — with the section named on its
 first row, and the columns change, function, file, line, `ccn
@@ -502,8 +518,8 @@ editor paints no gutter mark or underline for them.
 ## Status segment (#2921)
 
 `internal/app/complexity_segment.go` renders the opt-in `complexity`
-status slot: `Δcx +4` / `Δcx -2` / `Δcx ±0`, the `DeltaCCN()` of the diff
-the Changes tab stores, tinted after layout (foreground only) in the
+status slot: `Δcx +4` / `Δcx -2` / `Δcx ±0`, the `DeltaExcess()` of the
+diff the Changes tab stores (#2945; until then `DeltaCCN()`), tinted after layout (foreground only) in the
 warning, success or muted (inlay-hint) colour. It is hidden while the
 setting or `complexity.enabled` is off, outside git and while the diff has
 no changed files. The segment is a pure consumer; `complexityDiffWanted`
@@ -655,16 +671,21 @@ without changes yields an empty diff and the `unchanged` verdict. The head side 
 uncapped like the tab's, so a file over the walk's cap does not read as
 all-removed. The text report prints `changed` (before→after with Δ per
 metric), `added` and `removed` sections, the totals and
-`verdict: MORE COMPLEX (ΣCCN +4, Σcog +2)`.
+`verdict: LESS COMPLEX (excess -12, Σcog -7, ΣCCN +1)`; the totals line
+and the project summary line carry `excess` too, the group table an
+`EXCESS` column.
 
 **JSON.** Field names are snake_case and stable (documented in
 `userdocs/guides/complexity.md`; add, never rename): the project report is
 `{summary, functions, skipped}` — with `--by`, `{summary, groups, skipped}`,
 each group `{file, class (class level only), functions, nloc, ccn_sum,
-ccn_avg, ccn_max, cog_sum, cog_avg, cog_max, over_threshold, comment_lines,
-comment_density}` under the summary's field names — the diff `{rev, sha, base, head, delta,
+ccn_avg, ccn_max, cog_sum, cog_avg, cog_max, over_threshold, excess,
+comment_lines, comment_density}` under the summary's field names — the diff `{rev, sha, base, head, delta,
 changed, added, removed, verdict, skipped}` with `verdict` one of
-`more_complex`, `less_complex`, `unchanged`. Line numbers are 1-based.
+`more_complex`, `less_complex`, `unchanged` (read by the #2945 rule above;
+`delta.ccn` keeps the old ΣCCN policy available). `excess` (#2945) sits on
+every summary (`summary`, `base`, `head`), the top-level `delta`, the
+delta of every changed function and every group. Line numbers are 1-based.
 `comment_lines` and `comment_density` (a ratio, four decimals) sit on every
 function, both sides and the delta of a changed function, the summaries and
 the top-level delta; the summaries also carry `cmt_warn` (#2934). The CLI

@@ -1,5 +1,19 @@
 # Log
 
+## 2026-10-13 (Excess score and verdict, #2945)
+
+- [Code Complexity](/architecture/complexity.md): "Summary" documents
+  `Function.Excess` / `Summary.Excess` (the mass above the CCN and cognitive
+  thresholds). "Changes vs HEAD" documents the verdict rule change — Δexcess
+  first, then Σcognitive, then the decision points (ΣCCN − functions) — and
+  why ΣCCN alone misread an extraction. The Project / File header, the
+  group rows (`excess` column, CSV), the Changes header, the `Δcx` segment
+  (now the excess delta) and the CLI text and JSON (`excess` on summaries,
+  delta, changed deltas and groups) carry it.
+- The complexity user guide: an `excess` row in "Reading the numbers", the
+  verdict rule (marked as changed) under "The Changes tab", the JSON fields
+  and the `delta.ccn` reading for a policy that wants the old rule.
+
 ## 2026-10-13 (Complexity-only build, #2939)
 
 - [Code Complexity](/architecture/complexity.md): new "Complexity-only

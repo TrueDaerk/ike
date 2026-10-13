@@ -340,7 +340,7 @@ func TestSummarize(t *testing.T) {
 		{NLOC: 5, CCN: 1, Cognitive: 16},
 	}
 	s := Summarize(fns, 15, 15, 0)
-	want := Summary{Functions: 3, NLOC: 35, CCNSum: 19, CCNAvg: 19.0 / 3, CCNMax: 15, CogSum: 22, CogAvg: 22.0 / 3, CogMax: 16, OverThreshold: 2}
+	want := Summary{Functions: 3, NLOC: 35, CCNSum: 19, CCNAvg: 19.0 / 3, CCNMax: 15, CogSum: 22, CogAvg: 22.0 / 3, CogMax: 16, OverThreshold: 2, Excess: 1}
 	if s != want {
 		t.Errorf("Summarize = %+v, want %+v", s, want)
 	}
@@ -362,6 +362,30 @@ func TestSummarize(t *testing.T) {
 	}
 	if s := Summarize(cm, 0, 0, 0); s.OverThreshold != 0 {
 		t.Errorf("cmtWarn 0 must disable the check, got %d over", s.OverThreshold)
+	}
+}
+
+func TestExcess(t *testing.T) {
+	// Straddling both thresholds: 20/30 is 5 + 15 over, 15/15 sits on them
+	// (over, no excess), 3/18 only above the cognitive one.
+	fns := []Function{
+		{CCN: 20, Cognitive: 30},
+		{CCN: 15, Cognitive: 15},
+		{CCN: 3, Cognitive: 18},
+	}
+	if e := fns[0].Excess(15, 15); e != 20 {
+		t.Errorf("Excess(20/30) = %d, want 20", e)
+	}
+	if s := Summarize(fns, 15, 15, 0); s.Excess != 23 || s.OverThreshold != 3 {
+		t.Errorf("Summarize straddling = excess %d over %d, want 23 / 3", s.Excess, s.OverThreshold)
+	}
+	below := []Function{{CCN: 14, Cognitive: 14}, {CCN: 1, Cognitive: 0}}
+	if s := Summarize(below, 15, 15, 0); s.Excess != 0 {
+		t.Errorf("Summarize below = excess %d, want 0", s.Excess)
+	}
+	// A non-positive threshold disables its term.
+	if e := fns[0].Excess(0, 15); e != 15 {
+		t.Errorf("Excess with the CCN check off = %d, want 15", e)
 	}
 }
 

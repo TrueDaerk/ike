@@ -47,9 +47,11 @@ func TestComplexitySegmentRendering(t *testing.T) {
 		base, head map[string][]complexity.Function
 		want       string
 	}{
-		{"positive", f(2), f(6), "Δcx +4"},
-		{"negative", f(6), f(4), "Δcx -2"},
-		{"added", nil, f(3), "Δcx +3"},
+		{"positive", f(17), f(21), "Δcx +4"},
+		{"negative", f(21), f(19), "Δcx -2"},
+		{"added", nil, f(18), "Δcx +3"},
+		// ΣCCN rose below the threshold: the excess held (#2945).
+		{"below threshold", f(2), f(6), "Δcx ±0"},
 	}
 	for _, tc := range cases {
 		m := cxSegmentApp(t, tc.base, tc.head)
@@ -57,7 +59,8 @@ func TestComplexitySegmentRendering(t *testing.T) {
 			t.Errorf("%s: segment = %q, want %q", tc.name, got, tc.want)
 		}
 	}
-	// Zero: a changed function whose CCN held (cognitive moved).
+	// Zero: a changed function whose excess held (cognitive moved below
+	// the threshold).
 	m := cxSegmentApp(t,
 		map[string][]complexity.Function{"/r/a.go": {{Name: "f", CCN: 3, Cognitive: 1, Line: 1}}},
 		map[string][]complexity.Function{"/r/a.go": {{Name: "f", CCN: 3, Cognitive: 4, Line: 1}}})

@@ -148,18 +148,22 @@ func abs(n int) int {
 	return n
 }
 
-// Verdict is the one-word reading of a project diff.
+// Verdict is the one-word reading of a project diff (#2945): the excess
+// delta decides, the summed cognitive complexity breaks a tie, the summed
+// CCN breaks the next one — read as decision points (ΣCCN minus the unit
+// count), so the base 1 every unit carries never tips it. ΣCCN alone
+// punished extracting a block into its own function (+1 per new unit) and
+// adding trivial helpers.
 type Verdict int
 
 const (
-	// Unchanged: the summed CCN and the summed cognitive complexity both
-	// stayed where they were.
+	// Unchanged: the excess, the summed cognitive complexity and the
+	// decision points all stayed where they were.
 	Unchanged Verdict = iota
-	// MoreComplex: the summed CCN rose, or stayed while the summed cognitive
-	// complexity rose.
+	// MoreComplex: the excess rose, or held while Σcognitive rose, or both
+	// held while the decision points (ΣCCN − functions) rose.
 	MoreComplex
-	// LessComplex: the summed CCN fell, or stayed while the summed cognitive
-	// complexity fell.
+	// LessComplex: the mirror of MoreComplex.
 	LessComplex
 )
 
@@ -185,7 +189,7 @@ type Diff struct {
 	// all files handed to DiffProject.
 	Base Summary `json:"base"`
 	Head Summary `json:"head"`
-	// Verdict reads the ΣCCN delta, Σcognitive as the tiebreaker.
+	// Verdict reads the excess delta, then Σcognitive, then ΣCCN − functions.
 	Verdict Verdict `json:"verdict"`
 }
 
@@ -222,6 +226,16 @@ func (d Diff) DeltaCCN() int { return d.Head.CCNSum - d.Base.CCNSum }
 // DeltaCognitive is Head.CogSum - Base.CogSum.
 func (d Diff) DeltaCognitive() int { return d.Head.CogSum - d.Base.CogSum }
 
+// DeltaExcess is Head.Excess - Base.Excess (#2945).
+func (d Diff) DeltaExcess() int { return d.Head.Excess - d.Base.Excess }
+
+// DeltaDecisions is the delta of ΣCCN minus the function count: the
+// branches, arms and boolean operators gained, without the base 1 of each
+// added or removed unit — the verdict's last tiebreak.
+func (d Diff) DeltaDecisions() int {
+	return (d.Head.CCNSum - d.Head.Functions) - (d.Base.CCNSum - d.Base.Functions)
+}
+
 // DiffProject compares two measurements keyed by path: base holds the
 // functions of every changed file at the base revision (absent for a file
 // the base does not have), head the working-tree functions (absent for a
@@ -251,21 +265,20 @@ func DiffProject(base, head map[string][]Function, ccnWarn, cogWarn, cmtWarn int
 	}
 	d.Base = Summarize(baseAll, ccnWarn, cogWarn, cmtWarn)
 	d.Head = Summarize(headAll, ccnWarn, cogWarn, cmtWarn)
-	d.Verdict = verdict(d.DeltaCCN(), d.DeltaCognitive())
+	d.Verdict = verdict(d.DeltaExcess(), d.DeltaCognitive(), d.DeltaDecisions())
 	return d
 }
 
-// verdict reads the summed deltas: CCN decides, cognitive breaks the tie.
-func verdict(dCCN, dCog int) Verdict {
-	switch {
-	case dCCN > 0:
-		return MoreComplex
-	case dCCN < 0:
-		return LessComplex
-	case dCog > 0:
-		return MoreComplex
-	case dCog < 0:
-		return LessComplex
+// verdict reads the summed deltas in priority order: the first non-zero
+// one decides — excess, then cognitive, then decision points.
+func verdict(deltas ...int) Verdict {
+	for _, d := range deltas {
+		switch {
+		case d > 0:
+			return MoreComplex
+		case d < 0:
+			return LessComplex
+		}
 	}
 	return Unchanged
 }

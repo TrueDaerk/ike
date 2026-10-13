@@ -148,7 +148,8 @@ func signed(n int) string {
 func (r Row) sectionRank() int { return int(r.Change) }
 
 // changesTotals renders the Changes tab's header: base → working tree,
-// the function counts, both sums with their deltas, the verdict, and the
+// the function counts, both sums and the excess with their deltas, the
+// verdict, and the
 // rename note.
 func (m *Model) changesTotals() string {
 	c := m.changes
@@ -171,6 +172,7 @@ func (m *Model) changesTotals() string {
 		"functions "+itoa(d.Base.Functions)+"→"+itoa(d.Head.Functions),
 		"ΣCCN "+itoa(d.Base.CCNSum)+"→"+itoa(d.Head.CCNSum)+" ("+signed(d.DeltaCCN())+")",
 		"Σcog "+itoa(d.Base.CogSum)+"→"+itoa(d.Head.CogSum)+" ("+signed(d.DeltaCognitive())+")",
+		"excess "+itoa(d.Base.Excess)+"→"+itoa(d.Head.Excess)+" ("+signed(d.DeltaExcess())+")",
 		d.Verdict.String(),
 	)
 	if n := len(c.Renames); n > 0 {
