@@ -8,8 +8,8 @@
 // CCN, cognitive, NLOC, params, depth, comment density (cmt%, #2934) — or,
 // grouped with 'b' (#2937, group.go), one aggregate row per class or file;
 // 's' cycles the sort column, 'S' reverses it, the filter row (internal/filterbar over internal/filterexpr)
-// narrows by file:, lang:, fn:, min: and metric:, and bare words fuzzy over
-// the function names.
+// narrows by file:, lang:, fn:, min:, metric: and test:, and bare words fuzzy
+// over the function names; 't' hides the test files on every tab (#2950).
 //
 // The pane is a pure consumer: the root model hands it the index's immutable
 // View via Set on open and on every generation change, and tells it where
@@ -156,6 +156,7 @@ var Schema = filterexpr.Schema{Fields: []filterexpr.Field{
 	{Name: "fn", Aliases: []string{"func", "function"}, ValueDoc: "a function name part", Doc: "fn: narrows by function name (substring) — on group rows by class or file"},
 	{Name: "min", ValueDoc: "a number", Doc: "min: keeps rows at or above n on the sort column"},
 	{Name: "metric", Values: []string{"ccn", "cog", "cmt"}, Doc: "metric: sorts by cyclomatic or cognitive complexity, or comment density (cmt%)"},
+	{Name: "test", Values: []string{"yes", "no"}, Doc: "test: no hides test files, test: yes keeps only them"},
 }}
 
 // Row is one function of the current tab, kept alongside the cells so the
@@ -177,6 +178,8 @@ type Row struct {
 	Before complexity.Function
 	// Dirty marks a Changes row whose head side is an unsaved buffer.
 	Dirty bool
+	// Test marks a row of a test file (complexity.IsTestFile, #2950).
+	Test bool
 	// Group is set on a group row (#2937): the class or file aggregate the
 	// row stands for. Fn is then zero; Path / Rel / Lang name the file.
 	Group *complexity.Group
@@ -336,6 +339,9 @@ type Model struct {
 	// The grouping level of the Project and File tabs (#2937, group.go).
 	projectGroup complexity.Level
 	fileGroup    complexity.Level
+
+	// hideTests drops the test files from every tab ('t', #2950).
+	hideTests bool
 }
 
 // New returns an empty panel on the Project tab sorted by CCN descending;
@@ -543,7 +549,7 @@ func (m *Model) Refresh() {
 	if r, ok := m.Selected(); ok {
 		keep = r.key()
 	}
-	all := m.population()
+	all := m.markTests(m.population())
 	fns := make([]complexity.Function, 0, len(all))
 	for _, r := range all {
 		if r.Change == complexity.Removed {
@@ -613,6 +619,26 @@ func (m *Model) population() []Row {
 	return out
 }
 
+// markTests flags the rows of test files and, while tests are hidden,
+// drops them — so the totals follow the visible population (#2950).
+func (m *Model) markTests(rows []Row) []Row {
+	out := rows[:0]
+	test := map[string]bool{}
+	for _, r := range rows {
+		t, ok := test[r.Path]
+		if !ok {
+			t = complexity.IsTestFile(m.root, r.Path)
+			test[r.Path] = t
+		}
+		if t && m.hideTests {
+			continue
+		}
+		r.Test = t
+		out = append(out, r)
+	}
+	return out
+}
+
 // relPath renders a path relative to the project root, the path itself
 // when it lies outside or no root is known.
 func (m *Model) relPath(path string) string {
@@ -655,10 +681,25 @@ func (m *Model) matches(q filterexpr.Query, r Row) bool {
 			if v, _ := r.value(col); v < float64(n) {
 				return false
 			}
+		case "test":
+			if want, ok := testValue(t.Value); !ok || r.Test != want {
+				return false
+			}
 		}
 	}
 	_, ok := filterexpr.MatchText(q.Match, r.label())
 	return ok
+}
+
+// testValue reads a test: value: yes keeps only test files, no hides them.
+func testValue(v string) (want, ok bool) {
+	switch strings.ToLower(v) {
+	case "yes":
+		return true, true
+	case "no":
+		return false, true
+	}
+	return false, false
 }
 
 // sortRows orders the visible rows by the sort column, ties by path and
@@ -861,6 +902,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.Refresh()
 	case "b":
 		m.CycleGroup()
+	case "t":
+		m.ToggleTests()
 	case "enter":
 		return m.open()
 	case "e":
@@ -1126,6 +1169,11 @@ func (m *Model) footer() string {
 		hints += " · b group"
 	default:
 		hints += " · b group: " + m.Grouping().String()
+	}
+	if m.hideTests {
+		hints += " · t tests: hidden"
+	} else {
+		hints += " · t tests"
 	}
 	return lipgloss.NewStyle().Faint(true).Render(m.clip(" " + count + hints))
 }

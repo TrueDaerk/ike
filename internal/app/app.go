@@ -8572,6 +8572,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.cycleComplexityGroup()
 		return m, nil
 
+	case ComplexityToggleTestsMsg:
+		// complexity.toggleTests (#2950), t in the pane: hide / show tests.
+		m.toggleComplexityTests()
+		return m, nil
+
 	case complexitypanel.ExportMsg:
 		// 'e' in the Complexity pane (#2917): the current tab as a CSV scratch.
 		return m.handleComplexityExport(msg)

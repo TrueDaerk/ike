@@ -1,5 +1,18 @@
 # Log
 
+## 2026-10-13 (Hide test files, #2950)
+
+- [Code Complexity](/architecture/complexity.md): "Tool window" gains the
+  `test:yes|no` filter key and a "Hide tests" paragraph — `t` /
+  `complexity.toggleTests`, `complexity.IsTestFile` (the language's
+  `TestSpec.FilePattern`, then the built-in name and directory fallback),
+  totals and the Changes verdict following the visible files
+  (`Diff.Without`), the `tests:hidden` token in the layout `Mode`.
+  "Headless CLI" gains "No tests": `--no-tests` across the table, groups,
+  brief and diff, the `tests hidden` lines and the JSON `tests_hidden`.
+- The complexity user guide: new "Hiding test files" section and the
+  `--no-tests` flag row.
+
 ## 2026-10-13 (Excess score and verdict, #2945)
 
 - [Code Complexity](/architecture/complexity.md): "Summary" documents

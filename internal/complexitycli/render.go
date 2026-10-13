@@ -38,6 +38,8 @@ type jsonSummary struct {
 	CommentLines   int     `json:"comment_lines"`
 	CommentDensity float64 `json:"comment_density"`
 	CmtWarn        int     `json:"cmt_warn"`
+	// TestsHidden is set under --no-tests (#2950).
+	TestsHidden bool `json:"tests_hidden,omitempty"`
 }
 
 func toJSONSummary(s complexity.Summary, files int, st settings) jsonSummary {
@@ -47,6 +49,7 @@ func toJSONSummary(s complexity.Summary, files int, st settings) jsonSummary {
 		CogSum: s.CogSum, CogAvg: round2(s.CogAvg), CogMax: s.CogMax,
 		OverThreshold: s.OverThreshold, Excess: s.Excess, CCNWarn: st.ccnWarn, CogWarn: st.cogWarn,
 		CommentLines: s.CommentLines, CommentDensity: ratio(s.CommentDensity), CmtWarn: st.cmtWarn,
+		TestsHidden: st.args.NoTests,
 	}
 }
 
@@ -264,7 +267,7 @@ func writeProjectText(w io.Writer, r projectReport) {
 	_ = tw.Flush()
 	r.writeSummaryLine(w)
 	if r.s.filtered() {
-		fmt.Fprintf(w, "shown: %d of %d functions (%s)\n", len(r.rows), r.summary.Functions, r.s.filterText())
+		fmt.Fprintf(w, "shown: %d of %d functions (%s%s)\n", len(r.rows), r.summary.Functions, r.s.filterText(), r.s.testsNote())
 	}
 	if l := r.skipped.line(); l != "" {
 		fmt.Fprintln(w, l)
@@ -278,6 +281,25 @@ func (r projectReport) writeSummaryLine(w io.Writer) {
 	fmt.Fprintf(w, "\nsummary: %d functions in %d files · ΣCCN %d (avg %.1f, max %d) · Σcog %d (avg %.1f, max %d) · NLOC %d · cmt %d%% · %d over threshold (%s) · excess %d\n",
 		s.Functions, r.files, s.CCNSum, s.CCNAvg, s.CCNMax, s.CogSum, s.CogAvg, s.CogMax, s.NLOC,
 		complexity.DensityPercent(s.CommentDensity), s.OverThreshold, r.s.thresholdText(), s.Excess)
+	if r.s.args.NoTests {
+		fmt.Fprintf(w, "tests hidden: %d %s (--no-tests)\n", r.tests, plural(r.tests, "file", "files"))
+	}
+}
+
+// testsNote is the shown line's --no-tests suffix (#2950).
+func (s settings) testsNote() string {
+	if s.args.NoTests {
+		return "; tests hidden"
+	}
+	return ""
+}
+
+// plural picks the noun for n.
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 // writeGroupsText prints the group table (#2937, CCN sum descending), the
@@ -308,7 +330,7 @@ func writeGroupsText(w io.Writer, r groupReport) {
 		if byClass {
 			noun = "classes"
 		}
-		fmt.Fprintf(w, "shown: %d of %d %s (%s)\n", len(r.groups), r.total, noun, r.s.groupFilterText())
+		fmt.Fprintf(w, "shown: %d of %d %s (%s%s)\n", len(r.groups), r.total, noun, r.s.groupFilterText(), r.s.testsNote())
 	}
 	if l := r.skipped.line(); l != "" {
 		fmt.Fprintln(w, l)
@@ -407,6 +429,9 @@ func writeDiffText(w io.Writer, r diffReport) {
 		b.Functions, b.CCNSum, b.CogSum, b.Excess, h.Functions, h.CCNSum, h.CogSum, h.Excess)
 	fmt.Fprintf(w, "verdict: %s (excess %s, Σcog %s, ΣCCN %s)\n", verdictText(r.diff.Verdict),
 		signed(r.diff.DeltaExcess()), signed(r.diff.DeltaCognitive()), signed(r.diff.DeltaCCN()))
+	if r.s.args.NoTests {
+		fmt.Fprintln(w, "tests hidden (--no-tests)")
+	}
 	if l := r.skipped.line(); l != "" {
 		fmt.Fprintln(w, l)
 	}

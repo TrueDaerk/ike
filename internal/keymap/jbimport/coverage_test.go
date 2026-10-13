@@ -80,6 +80,7 @@ var noCounterpart = map[string]string{
 	"agent.trace.toggle":               "IKE-only concept (0540, #2840): JetBrains has no coding-agent trace window",
 	"complexity.toggle":                "IKE-only concept (0550, #2917): JetBrains has no built-in complexity window (third-party plugins only)",
 	"complexity.group":                 "IKE-only concept (#2937): the grouping cycle of the Complexity window, which JetBrains does not have",
+	"complexity.toggleTests":           "IKE-only concept (#2950): the hide-tests toggle of the Complexity window, which JetBrains does not have",
 	"agent.ask":                        "IKE-only concept (0540, #2845): JetBrains has no coding-agent session fork to ask",
 	"markdown.preview":                 "no default JetBrains keymap action",
 	"html.preview":                     "no default JetBrains keymap action",

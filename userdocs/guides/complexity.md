@@ -65,6 +65,22 @@ sorting and the filter work on the group columns (`fn:` matches the class
 or the file). `enter` opens the group's first function. Each tab remembers
 its grouping, and the layout keeps it across restarts.
 
+## Hiding test files
+
+Test functions are rarely what you want to simplify, yet a table-driven
+test or a fake server easily tops the list. Press `t` in the Complexity
+window (or run *Complexity: Toggle Test Files*) to hide test files on every
+tab; the footer then reads `t tests: hidden`, the header totals and the
+Changes verdict count only the remaining files, and the layout remembers
+the choice. In the filter, `test:no` hides test files for one query and
+`test:yes` shows only them — handy to find the heaviest test.
+
+A file counts as a test when its language says so (Go `*_test.go`, Python
+`test_*.py` / `*_test.py`, PHP `*Test.php`), when its name looks like
+`*.spec.*`, `*.test.*`, `*_test.sh` or `*.bats`, or when it lies in a
+`__tests__`, `tests`, `test` or `spec` directory. To drop test files
+everywhere for good, use `complexity.exclude` (`**/*_test.go`) instead.
+
 ## The Changes tab
 
 The third tab of the Complexity window compares every function in the files
@@ -89,7 +105,7 @@ current text. A renamed function appears as one removed and one added row.
 ## Command line
 
 ```
-ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [PATH...]
+ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [PATH...]
 ```
 
 | Flag | Effect |
@@ -103,6 +119,7 @@ ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--mi
 | `--min N` | Only list functions whose CCN **or** cognitive complexity is at least `N`. |
 | `--ccn N`, `--cog N` | Override the warning thresholds; given explicitly they also filter the rows to functions at or above either one. |
 | `--cmt N` | Override the comment-density threshold (percent, 1-100); like `--ccn` / `--cog` it also filters the rows to functions at or above any threshold. |
+| `--no-tests` | Leave test files out (the same rule as `t` in the Complexity window, see [Hiding test files](#hiding-test-files)): the table, the groups, `--brief`, the summary and `--diff` ignore them; a line `tests hidden: N files` follows the summary and the JSON `summary` carries `"tests_hidden": true`. A test file you name explicitly is still measured. |
 
 The walk skips the same files as the Complexity window: hidden directories,
 `node_modules`, `vendor`, `dist`, `build`, `target`, virtualenvs, files over
@@ -211,7 +228,8 @@ filter keeps, sorted by CCN descending. `kind` is `function`, `method` or
 `lambda`. `comment_density` is a ratio (0.55 = 55 %), `comment_lines` the
 body's comment-only lines; `cmt_warn` is the threshold in percent (`0` =
 off). `excess` is the summed mass above the CCN and cognitive thresholds
-(see [Reading the numbers](#reading-the-numbers)).
+(see [Reading the numbers](#reading-the-numbers)). With `--no-tests` every
+summary gains `"tests_hidden": true`; without it the field is absent.
 
 Grouped report (`--by class --json`): `functions` gives way to `groups`,
 one object per row the filter keeps, with the summary's field names; `class`

@@ -49,7 +49,7 @@ type Invocation struct {
 }
 
 // ComplexityArgs is the parsed `ike complexity [--diff[=REV]] [--by class|file]
-// [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [PATH...]`. A zero threshold means "not given":
+// [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [PATH...]`. A zero threshold means "not given":
 // the report falls back to the configured warning thresholds.
 type ComplexityArgs struct {
 	// Diff selects the diff report against Rev ("" = HEAD).
@@ -71,6 +71,10 @@ type ComplexityArgs struct {
 	// JSON is the --by JSON — but prints one short line per group, no
 	// header and no trailer. Not combinable with By or Diff.
 	Brief string
+	// NoTests drops the test files (complexity.IsTestFile, #2950) from
+	// every rendering; a test file in the diff is skipped like an excluded
+	// one. A file named explicitly still counts, as with the exclude globs.
+	NoTests bool
 	// Paths are the files and directories to report on, as typed (#2936;
 	// none = the working directory). A directory is walked with the
 	// index's skip rules and the complexity.exclude globs; a file is
@@ -104,7 +108,7 @@ var ErrBriefWithBy = errors.New("--brief and --by exclude each other")
 var ErrBriefWithDiff = errors.New("--brief is not supported with --diff")
 
 // ComplexityUsage is the one-line grammar of `ike complexity`.
-const ComplexityUsage = "usage: ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [PATH...]"
+const ComplexityUsage = "usage: ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [PATH...]"
 
 // Parse parses the arguments after the program name. Supported forms:
 //
@@ -209,6 +213,8 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 			ca.Help = true
 		case a == "--json":
 			ca.JSON = true
+		case a == "--no-tests":
+			ca.NoTests = true
 		case name == "--diff":
 			ca.Diff = true
 			if hasVal {

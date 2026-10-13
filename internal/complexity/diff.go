@@ -191,6 +191,31 @@ type Diff struct {
 	Head Summary `json:"head"`
 	// Verdict reads the excess delta, then Σcognitive, then ΣCCN − functions.
 	Verdict Verdict `json:"verdict"`
+
+	// base / head keep the measurements DiffProject compared, warn its
+	// thresholds, so Without can re-run it over a subset of files (#2950).
+	base, head map[string][]Function
+	warn       [3]int
+}
+
+// Without re-runs the comparison without the files drop selects — the
+// Complexity window's hide-tests toggle (#2950) — so the summaries and the
+// verdict follow the visible files. A diff not built by DiffProject is
+// returned as is.
+func (d Diff) Without(drop func(path string) bool) Diff {
+	if d.base == nil && d.head == nil {
+		return d
+	}
+	keep := func(in map[string][]Function) map[string][]Function {
+		out := make(map[string][]Function, len(in))
+		for p, fns := range in {
+			if !drop(p) {
+				out[p] = fns
+			}
+		}
+		return out
+	}
+	return DiffProject(keep(d.base), keep(d.head), d.warn[0], d.warn[1], d.warn[2])
 }
 
 // Paths lists the files with a non-empty classification, sorted.
@@ -242,7 +267,7 @@ func (d Diff) DeltaDecisions() int {
 // deleted file). A path present in only one map diffs against nothing. The
 // summaries use the warning thresholds exactly like Summarize.
 func DiffProject(base, head map[string][]Function, ccnWarn, cogWarn, cmtWarn int) Diff {
-	d := Diff{Files: map[string]FileDiff{}}
+	d := Diff{Files: map[string]FileDiff{}, base: base, head: head, warn: [3]int{ccnWarn, cogWarn, cmtWarn}}
 	var baseAll, headAll []Function
 	seen := map[string]bool{}
 	for p, b := range base {
