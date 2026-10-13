@@ -41,6 +41,7 @@ type cxHintKey struct {
 	gen     int  // index generation the hints came from; 0 when measured
 	ccn     int  // complexity.ccn_warn
 	cog     int  // complexity.cognitive_warn
+	cmt     int  // complexity.comment_density_warn
 	enabled bool // complexity.enabled
 }
 
@@ -70,9 +71,11 @@ type complexityHintMeasuredMsg struct {
 
 // complexityHintsFor converts a file's functions into editor hints: one per
 // function at its header line, Warn when a metric reaches its threshold.
+// The comment density (#2934) joins the text only at or above cmtWarn
+// percent (" · cmt 55%"), so the common hint stays short; 0 never shows it.
 // Several functions on one line (lambdas beside their enclosing header)
 // keep the first — the header's.
-func complexityHintsFor(fns []complexity.Function, ccnWarn, cogWarn int) []editor.ComplexityHint {
+func complexityHintsFor(fns []complexity.Function, ccnWarn, cogWarn, cmtWarn int) []editor.ComplexityHint {
 	if len(fns) == 0 {
 		return nil
 	}
@@ -83,10 +86,15 @@ func complexityHintsFor(fns []complexity.Function, ccnWarn, cogWarn int) []edito
 			continue
 		}
 		seen[fn.Line] = true
+		text := "CCN " + strconv.Itoa(fn.CCN) + " · cog " + strconv.Itoa(fn.Cognitive)
+		overCmt := fn.CommentsOver(cmtWarn)
+		if overCmt {
+			text += " · cmt " + strconv.Itoa(complexity.DensityPercent(fn.CommentDensity)) + "%"
+		}
 		out = append(out, editor.ComplexityHint{
 			Line: fn.Line,
-			Text: "CCN " + strconv.Itoa(fn.CCN) + " · cog " + strconv.Itoa(fn.Cognitive),
-			Warn: fn.CCN >= ccnWarn || fn.Cognitive >= cogWarn,
+			Text: text,
+			Warn: fn.CCN >= ccnWarn || fn.Cognitive >= cogWarn || overCmt,
 		})
 	}
 	return out
@@ -113,7 +121,7 @@ func (m Model) cxHintMeasurable(ed *editor.Model) bool {
 // now; indexed reports whether the index snapshot already holds the
 // buffer's functions (clean buffer, file walked), the no-parse case.
 func (m Model) cxHintKeyFor(ed *editor.Model, view complexity.View, c config.Complexity) (key cxHintKey, indexed bool) {
-	key = cxHintKey{version: ed.DocVersion(), ccn: c.CCNWarn, cog: c.CognitiveWarn, enabled: c.Enabled}
+	key = cxHintKey{version: ed.DocVersion(), ccn: c.CCNWarn, cog: c.CognitiveWarn, cmt: c.CommentDensityWarn, enabled: c.Enabled}
 	if !c.Enabled {
 		return key, false
 	}
@@ -169,7 +177,7 @@ func (m *Model) complexityHintsSyncCmd() tea.Cmd {
 				delete(st.pending, path)
 				fns := view.Files[canonicalPath(path)]
 				cmds = append(cmds, m.routeToEditor(path, editor.ComplexityHintsMsg{
-					Path: path, Hints: complexityHintsFor(fns, c.CCNWarn, c.CognitiveWarn), Version: key.version,
+					Path: path, Hints: complexityHintsFor(fns, c.CCNWarn, c.CognitiveWarn, c.CommentDensityWarn), Version: key.version,
 				}))
 			default:
 				st.pending[path] = key
@@ -228,6 +236,6 @@ func (m *Model) applyComplexityHints(msg complexityHintMeasuredMsg) tea.Cmd {
 	}
 	c := config.Get().Complexity
 	return m.routeToEditor(msg.path, editor.ComplexityHintsMsg{
-		Path: msg.path, Hints: complexityHintsFor(msg.fns, c.CCNWarn, c.CognitiveWarn), Version: msg.version,
+		Path: msg.path, Hints: complexityHintsFor(msg.fns, c.CCNWarn, c.CognitiveWarn, c.CommentDensityWarn), Version: msg.version,
 	})
 }

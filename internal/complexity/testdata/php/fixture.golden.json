@@ -10,7 +10,9 @@
       "params": 1,
       "ccn": 5,
       "cognitive": 6,
-      "depth": 2
+      "depth": 2,
+      "commentLines": 1,
+      "commentDensity": 0.0625
     },
     {
       "name": "switchAndMatch",
@@ -21,7 +23,9 @@
       "params": 1,
       "ccn": 8,
       "cognitive": 6,
-      "depth": 2
+      "depth": 2,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "nestedLoops",
@@ -32,7 +36,9 @@
       "params": 1,
       "ccn": 7,
       "cognitive": 16,
-      "depth": 4
+      "depth": 4,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "tryCatch",
@@ -43,7 +49,9 @@
       "params": 1,
       "ccn": 4,
       "cognitive": 4,
-      "depth": 2
+      "depth": 2,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "ternaries",
@@ -54,7 +62,9 @@
       "params": 5,
       "ccn": 7,
       "cognitive": 6,
-      "depth": 2
+      "depth": 2,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "booleanSequences",
@@ -65,7 +75,9 @@
       "params": 4,
       "ccn": 14,
       "cognitive": 11,
-      "depth": 1
+      "depth": 1,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "nestedClosures",
@@ -76,7 +88,9 @@
       "params": 1,
       "ccn": 1,
       "cognitive": 5,
-      "depth": 3
+      "depth": 3,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "(anonymous)#1",
@@ -87,7 +101,9 @@
       "params": 0,
       "ccn": 2,
       "cognitive": 3,
-      "depth": 2
+      "depth": 2,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "(anonymous)#2",
@@ -98,7 +114,9 @@
       "params": 1,
       "ccn": 2,
       "cognitive": 1,
-      "depth": 1
+      "depth": 1,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "factorial",
@@ -109,7 +127,9 @@
       "params": 1,
       "ccn": 2,
       "cognitive": 2,
-      "depth": 1
+      "depth": 1,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "labelledJumps",
@@ -120,7 +140,9 @@
       "params": 1,
       "ccn": 4,
       "cognitive": 5,
-      "depth": 2
+      "depth": 2,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "Server::handle",
@@ -131,7 +153,9 @@
       "params": 2,
       "ccn": 4,
       "cognitive": 5,
-      "depth": 2
+      "depth": 2,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "Server::send",
@@ -142,7 +166,9 @@
       "params": 1,
       "ccn": 1,
       "cognitive": 0,
-      "depth": 0
+      "depth": 0,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "Loggable::log",
@@ -153,7 +179,9 @@
       "params": 1,
       "ccn": 1,
       "cognitive": 0,
-      "depth": 0
+      "depth": 0,
+      "commentLines": 0,
+      "commentDensity": 0
     },
     {
       "name": "plain",
@@ -164,7 +192,35 @@
       "params": 0,
       "ccn": 1,
       "cognitive": 0,
-      "depth": 0
+      "depth": 0,
+      "commentLines": 0,
+      "commentDensity": 0
+    },
+    {
+      "name": "documented",
+      "kind": "function",
+      "line": 188,
+      "endLine": 191,
+      "nloc": 4,
+      "params": 1,
+      "ccn": 1,
+      "cognitive": 0,
+      "depth": 0,
+      "commentLines": 0,
+      "commentDensity": 0
+    },
+    {
+      "name": "commentHeavy",
+      "kind": "function",
+      "line": 193,
+      "endLine": 202,
+      "nloc": 5,
+      "params": 1,
+      "ccn": 1,
+      "cognitive": 0,
+      "depth": 0,
+      "commentLines": 5,
+      "commentDensity": 0.5
     }
   ]
 }

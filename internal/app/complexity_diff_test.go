@@ -69,7 +69,7 @@ func TestComplexityDiffBookkeepingRunsNoGitInUpdate(t *testing.T) {
 	// The result lands and is shown; the key settles, no re-arm.
 	key := m.currentCxDiffKey()
 	res := complexitypanel.Changes{Rev: "", Sha: "abc", Ready: true,
-		Diff: complexity.DiffProject(nil, map[string][]complexity.Function{"/r/a.go": {{Name: "f", CCN: 2}}}, 15, 15)}
+		Diff: complexity.DiffProject(nil, map[string][]complexity.Function{"/r/a.go": {{Name: "f", CCN: 2}}}, 15, 15, 40)}
 	out, cmd = m.Update(complexityDiffMsg{key: key, changes: res, base: map[string][]complexity.Function{"abc\x00a.go": nil}})
 	m = out.(Model)
 	if m.cxDiff.computing || m.cxDiff.tickArmed || cmd != nil {

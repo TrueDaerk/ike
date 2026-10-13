@@ -72,7 +72,7 @@ func (m *Model) reconfigureComplexityIndex(cfg *config.Config) {
 	m.complexityIndex.Reconfigure(complexityOptions(cfg.Complexity))
 	// The tool window's warning thresholds follow the same reload (#2917).
 	if p := m.complexityPanel(); p != nil {
-		p.SetWarn(cfg.Complexity.CCNWarn, cfg.Complexity.CognitiveWarn)
+		p.SetWarn(cfg.Complexity.CCNWarn, cfg.Complexity.CognitiveWarn, cfg.Complexity.CommentDensityWarn)
 	}
 	// So do the Problems feed's rows (#2920): a moved threshold adds or
 	// drops rows, a switched-off feed or index clears them.

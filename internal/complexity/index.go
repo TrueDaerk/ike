@@ -99,12 +99,12 @@ func (v View) Functions() int {
 }
 
 // Summary aggregates every function of the snapshot (see Summarize).
-func (v View) Summary(ccnWarn, cogWarn int) Summary {
+func (v View) Summary(ccnWarn, cogWarn, cmtWarn int) Summary {
 	all := make([]Function, 0, v.Functions())
 	for _, p := range v.Paths() {
 		all = append(all, v.Files[p]...)
 	}
-	return Summarize(all, ccnWarn, cogWarn)
+	return Summarize(all, ccnWarn, cogWarn, cmtWarn)
 }
 
 // Stats describes the index for a status report and the complexity.scan

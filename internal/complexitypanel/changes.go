@@ -101,6 +101,9 @@ func ccnOf(f complexity.Function) int  { return f.CCN }
 func cogOf(f complexity.Function) int  { return f.Cognitive }
 func nlocOf(f complexity.Function) int { return f.NLOC }
 
+// cmtOf is the comment density in whole percent (#2934).
+func cmtOf(f complexity.Function) int { return complexity.DensityPercent(f.CommentDensity) }
+
 // DeltaCCN is the row's CCN delta: after - before, the whole value for an
 // added unit, its negation for a removed one.
 func (r Row) DeltaCCN() int { b, a := r.sides(ccnOf); return a - b }
@@ -110,6 +113,10 @@ func (r Row) DeltaCognitive() int { b, a := r.sides(cogOf); return a - b }
 
 // DeltaNLOC is the NLOC delta (see DeltaCCN).
 func (r Row) DeltaNLOC() int { b, a := r.sides(nlocOf); return a - b }
+
+// DeltaCmt is the comment-density delta in percentage points (see
+// DeltaCCN).
+func (r Row) DeltaCmt() int { b, a := r.sides(cmtOf); return a - b }
 
 // metricCell renders "before→after (Δ)" for a Changes row; the missing
 // side of an added or removed unit is "-".
@@ -226,7 +233,8 @@ func (m *Model) promptView() string {
 
 // changesCSVHeader is the Changes tab's export header.
 var changesCSVHeader = []string{"change", "file", "function", "kind", "line",
-	"ccn_before", "ccn_after", "ccn_delta", "cog_before", "cog_after", "cog_delta", "nloc_before", "nloc_after"}
+	"ccn_before", "ccn_after", "ccn_delta", "cog_before", "cog_after", "cog_delta", "nloc_before", "nloc_after",
+	"cmt_before", "cmt_after", "cmt_delta"}
 
 // changesCSV renders the Changes tab: both sides of every metric plus the
 // deltas, one row per visible unit.
@@ -237,10 +245,12 @@ func (m *Model) changesCSV() string {
 		cb, ca := r.sides(ccnOf)
 		gb, ga := r.sides(cogOf)
 		nb, na := r.sides(nlocOf)
+		tb, ta := r.sides(cmtOf)
 		writeCSVRow(&b, []string{r.Change.String(), r.Rel, r.Fn.Name, r.Fn.Kind, strconv.Itoa(r.Fn.Line + 1),
 			strconv.Itoa(cb), strconv.Itoa(ca), strconv.Itoa(ca - cb),
 			strconv.Itoa(gb), strconv.Itoa(ga), strconv.Itoa(ga - gb),
-			strconv.Itoa(nb), strconv.Itoa(na)})
+			strconv.Itoa(nb), strconv.Itoa(na),
+			strconv.Itoa(tb), strconv.Itoa(ta), strconv.Itoa(ta - tb)})
 	}
 	return b.String()
 }

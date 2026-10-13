@@ -148,3 +148,21 @@ function* generator(n: number): Generator<number> {
 }
 
 function plain(): void {}
+
+/**
+ * documented carries a JSDoc above its header; it lies outside the unit,
+ * so the comment density stays 0 (#2934).
+ */
+function documented(x) {
+  return x + 1;
+}
+
+function commentHeavy(x) {
+  // first explain
+  // then explain more
+  const y = x * 2;
+  /* a block
+     comment */
+  return y;
+  /* closing note
+     runs into the last line */ }

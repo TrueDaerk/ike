@@ -166,3 +166,23 @@ done:
 
 // plain has no branches at all.
 func plain() {}
+
+// documented carries a doc comment above its header; the comment lies
+// outside the unit, so its comment density stays 0 (#2934).
+func documented(x int) int {
+	return x + 1
+}
+
+// commentHeavy is more comment than code: 6 comment-only lines against
+// 4 code lines (density 0.6). The block comment closes on the line before
+// the closing brace, which gofmt keeps on its own line.
+func commentHeavy(x int) int {
+	// first explain
+	// then explain more
+	y := x * 2
+	// and again
+	/* a block
+	   comment */
+	return y /* trailing block
+	runs on */
+}

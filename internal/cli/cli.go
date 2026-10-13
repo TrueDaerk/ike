@@ -48,7 +48,7 @@ type Invocation struct {
 }
 
 // ComplexityArgs is the parsed `ike complexity [--diff[=REV]] [--json]
-// [--min N] [--ccn N] [--cog N] [DIR]`. A zero threshold means "not given":
+// [--min N] [--ccn N] [--cog N] [--cmt N] [DIR]`. A zero threshold means "not given":
 // the report falls back to the configured warning thresholds.
 type ComplexityArgs struct {
 	// Diff selects the diff report against Rev ("" = HEAD).
@@ -58,8 +58,10 @@ type ComplexityArgs struct {
 	JSON bool
 	// Min keeps only the rows whose CCN or cognitive complexity is at least
 	// Min; CCN and Cog are the warning thresholds (and, given explicitly,
-	// the row filter: CCN ≥ CCN or cognitive ≥ Cog).
-	Min, CCN, Cog int
+	// the row filter: CCN ≥ CCN or cognitive ≥ Cog). Cmt is the
+	// comment-density threshold in percent (#2934, 1–100), a row filter
+	// like CCN and Cog.
+	Min, CCN, Cog, Cmt int
 	// Dir is the project directory to report on ("" = the working
 	// directory).
 	Dir string
@@ -77,7 +79,7 @@ const agentHookCmd = "agent-hook"
 const complexityCmd = "complexity"
 
 // ComplexityUsage is the one-line grammar of `ike complexity`.
-const ComplexityUsage = "usage: ike complexity [--diff[=REV]] [--json] [--min N] [--ccn N] [--cog N] [DIR]"
+const ComplexityUsage = "usage: ike complexity [--diff[=REV]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [DIR]"
 
 // Parse parses the arguments after the program name. Supported forms:
 //
@@ -186,7 +188,7 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 				}
 				ca.Rev = val
 			}
-		case name == "--min" || name == "--ccn" || name == "--cog":
+		case name == "--min" || name == "--ccn" || name == "--cog" || name == "--cmt":
 			if !hasVal {
 				if i+1 >= len(args) {
 					return ComplexityArgs{}, fmt.Errorf("%s needs a number", name)
@@ -203,6 +205,11 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 				ca.Min = n
 			case "--ccn":
 				ca.CCN = n
+			case "--cmt":
+				if n > 100 {
+					return ComplexityArgs{}, fmt.Errorf("--cmt: %d is not a percentage (1–100)", n)
+				}
+				ca.Cmt = n
 			default:
 				ca.Cog = n
 			}

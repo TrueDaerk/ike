@@ -1,15 +1,16 @@
 # Code complexity
 
 IKE measures the **cyclomatic** (CCN) and **cognitive** complexity, the
-non-comment lines (NLOC), parameters and nesting depth of every function in
-the project — from the syntax tree it already has, with no external tool
+non-comment lines (NLOC), parameters, nesting depth and comment density of
+every function in the project — from the syntax tree it already has, with no external tool
 installed. Inside the IDE the **Complexity** window (`cmd+alt+shift+x`)
 lists every function and, on its Changes tab, compares the working tree
 against a revision. The same report is available without a terminal UI, for
 CI pipelines and coding agents: `ike complexity`.
 
 Settings live under `[complexity]` (Settings ▸ Complexity): `exclude` globs,
-and the warning thresholds `ccn_warn` / `cognitive_warn` (15 by default).
+the warning thresholds `ccn_warn` / `cognitive_warn` (15 by default) and
+`comment_density_warn` (40 % by default, `0` turns it off).
 
 ## Reading the numbers
 
@@ -20,12 +21,29 @@ and the warning thresholds `ccn_warn` / `cognitive_warn` (15 by default).
 | **nloc** | Lines that are neither blank nor comment-only. |
 | **params** | Parameter count. |
 | **depth** | Deepest nesting level inside the function. |
+| **cmt%** | Comment density: the share of the function *body* that is comment-only lines, `comment lines / (nloc + comment lines)`. |
 
 Values at or above `ccn_warn` / `cognitive_warn` show in the warning colour,
 as a hint after the function header (`CCN 12 · cog 8`) and, unless
-`complexity.problems` is off, as warnings in the Problems window. The
+`complexity.problems` is off, as warnings in the Problems window. A comment
+density at or above `comment_density_warn` colours the `cmt%` cell, extends
+the hint (`CCN 3 · cog 2 · cmt 55%` — below the threshold the hint stays
+short) and adds its own Problems warning
+(`function foo: comment density 55% ≥ 40%`). The
 optional `Δcx` status segment (`complexity.status_segment`) shows how the
 working tree compares with `HEAD`.
+
+**What 40 % means.** CCN and cognitive complexity never see comments, and
+NLOC leaves them out, so a function with a comment between every statement
+looks *simpler* than it reads. At the default 40 %, two of every five
+non-blank lines of the body are comment: past that point the comments
+usually narrate *what* the code does — a sign the code wants better names or
+smaller functions instead. Only the body counts: a doc comment above the
+header (Go doc comment, PHPDoc, JSDoc) is wanted and never raises the
+density, and a Python docstring is a string, not a comment. A line with code
+and a trailing comment counts as code. In the Complexity window,
+`metric:cmt min:40` in the filter lists exactly the functions at or above
+40 %.
 
 Closures and lambdas are named `(anonymous)#n`, numbered per file. Languages
 without a syntax grammar (and data formats like JSON or YAML) are not
@@ -38,14 +56,14 @@ that differ from a base revision (`HEAD` by default; press `R` to pick any
 branch, tag or sha). The header sums it up:
 `base HEAD → working tree · functions 120→123 · ΣCCN 410→416 (+6) · … · more complex`.
 Rows are grouped as **changed** (before → after with Δ, largest change
-first), **added** and **removed**. Unsaved editor buffers count with their
+first; `cmt%` in percentage points), **added** and **removed**. Unsaved editor buffers count with their
 current text. A renamed function appears as one removed and one added row.
 `enter` jumps to the function, `e` exports CSV, `y` copies the row.
 
 ## Command line
 
 ```
-ike complexity [--diff[=REV]] [--json] [--min N] [--ccn N] [--cog N] [DIR]
+ike complexity [--diff[=REV]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [DIR]
 ```
 
 | Flag | Effect |
@@ -55,6 +73,7 @@ ike complexity [--diff[=REV]] [--json] [--min N] [--ccn N] [--cog N] [DIR]
 | `--json` | Print JSON instead of text (fields below). |
 | `--min N` | Only list functions whose CCN **or** cognitive complexity is at least `N`. |
 | `--ccn N`, `--cog N` | Override the warning thresholds; given explicitly they also filter the rows to functions at or above either one. |
+| `--cmt N` | Override the comment-density threshold (percent, 1-100); like `--ccn` / `--cog` it also filters the rows to functions at or above any threshold. |
 
 The walk skips the same files as the Complexity window: hidden directories,
 `node_modules`, `vendor`, `dist`, `build`, `target`, virtualenvs, files over
@@ -65,11 +84,11 @@ are counted in a final `skipped:` line.
 
 ```
 $ ike complexity --min 40 .
-FILE                         FUNCTION                  LINE  CCN  COG  NLOC  PARAMS
-internal/config/validate.go  validate                  262   168  220  622   1
-internal/editor/view.go      Model.renderSpanUncached  949   139  237  368   6
+FILE                         FUNCTION                  LINE  CCN  COG  NLOC  PARAMS  CMT%
+internal/config/validate.go  validate                  262   168  220  622   1       14
+internal/editor/view.go      Model.renderSpanUncached  949   139  237  368   6       21
 
-summary: 33769 functions in 3161 files · ΣCCN 136390 (avg 4.0, max 168) · Σcog 122149 (avg 3.6, max 237) · NLOC 466863 · 1223 over threshold (CCN ≥ 15 or cog ≥ 15)
+summary: 33769 functions in 3161 files · ΣCCN 136390 (avg 4.0, max 168) · Σcog 122149 (avg 3.6, max 237) · NLOC 466863 · cmt 12% · 1223 over threshold (CCN ≥ 15 or cog ≥ 15 or cmt ≥ 40%)
 shown: 2 of 33769 functions (CCN or cog ≥ 40)
 skipped: 192 files (no complexity spec: json, markdown, yaml)
 
@@ -77,10 +96,10 @@ $ ike complexity --diff=main
 complexity vs main (658ccf3)
 
 changed (1):
-  cmd/ike/main.go  main  L104  CCN 22→25 (+3)  cog 29→33 (+4)  NLOC 103→111 (+8)
+  cmd/ike/main.go  main  L104  CCN 22→25 (+3)  cog 29→33 (+4)  NLOC 103→111 (+8)  cmt 10%→9% (-1)
 
 added (1):
-  internal/cli/cli.go  parseComplexity  L176  CCN 14  cog 17  NLOC 49
+  internal/cli/cli.go  parseComplexity  L176  CCN 14  cog 17  NLOC 49  cmt 6%
 
 totals: before 12 functions, ΣCCN 40, Σcog 38 → after 13 functions, ΣCCN 57, Σcog 59
 verdict: MORE COMPLEX (ΣCCN +17, Σcog +21)
@@ -112,12 +131,14 @@ Project report:
     "files": 3161, "functions": 33769, "nloc": 466863,
     "ccn_sum": 136390, "ccn_avg": 4.04, "ccn_max": 168,
     "cog_sum": 122149, "cog_avg": 3.62, "cog_max": 237,
-    "over_threshold": 1223, "ccn_warn": 15, "cog_warn": 15
+    "over_threshold": 1223, "ccn_warn": 15, "cog_warn": 15,
+    "comment_lines": 63650, "comment_density": 0.12, "cmt_warn": 40
   },
   "functions": [
     { "file": "internal/config/validate.go", "name": "validate", "kind": "function",
       "line": 262, "end_line": 1047, "ccn": 168, "cognitive": 220,
-      "nloc": 622, "params": 1, "depth": 5 }
+      "nloc": 622, "params": 1, "depth": 5,
+      "comment_lines": 101, "comment_density": 0.1397 }
   ],
   "skipped": { "files": 192, "languages": ["json", "markdown", "yaml"] }
 }
@@ -125,7 +146,9 @@ Project report:
 
 `summary` always covers every function; `functions` holds the rows the
 filter keeps, sorted by CCN descending. `kind` is `function`, `method` or
-`lambda`.
+`lambda`. `comment_density` is a ratio (0.55 = 55 %), `comment_lines` the
+body's comment-only lines; `cmt_warn` is the threshold in percent (`0` =
+off).
 
 Diff report (`--diff --json`):
 
@@ -134,12 +157,12 @@ Diff report (`--diff --json`):
   "rev": "main", "sha": "658ccf37…",
   "base": { "files": 12, "functions": 12, "ccn_sum": 40, "cog_sum": 38, "…": "…" },
   "head": { "files": 13, "functions": 13, "ccn_sum": 57, "cog_sum": 59, "…": "…" },
-  "delta": { "ccn": 17, "cognitive": 21 },
+  "delta": { "ccn": 17, "cognitive": 21, "comment_lines": 2, "comment_density": -0.004 },
   "changed": [
     { "file": "cmd/ike/main.go", "name": "main", "kind": "function", "line": 104,
-      "before": { "ccn": 22, "cognitive": 29, "nloc": 103, "params": 0, "depth": 3 },
-      "after":  { "ccn": 25, "cognitive": 33, "nloc": 111, "params": 0, "depth": 3 },
-      "delta":  { "ccn": 3, "cognitive": 4, "nloc": 8 } }
+      "before": { "ccn": 22, "cognitive": 29, "nloc": 103, "params": 0, "depth": 3, "comment_lines": 11, "comment_density": 0.0965 },
+      "after":  { "ccn": 25, "cognitive": 33, "nloc": 111, "params": 0, "depth": 3, "comment_lines": 11, "comment_density": 0.0902 },
+      "delta":  { "ccn": 3, "cognitive": 4, "nloc": 8, "comment_lines": 0, "comment_density": -0.0063 } }
   ],
   "added":   [ { "file": "…", "name": "…", "line": 176, "ccn": 14, "…": "…" } ],
   "removed": [],

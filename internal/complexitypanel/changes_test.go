@@ -27,7 +27,7 @@ func sampleChanges() Changes {
 	return Changes{
 		Rev:     "HEAD",
 		Sha:     "abc1234",
-		Diff:    complexity.DiffProject(base, head, 15, 15),
+		Diff:    complexity.DiffProject(base, head, 15, 15, 40),
 		Dirty:   map[string]bool{"/proj/internal/app/app.go": true},
 		Renames: []string{"internal/ui/old.go → internal/ui/list.go"},
 		Ready:   true,
@@ -124,7 +124,7 @@ func TestChangesSortAndFilterOnDelta(t *testing.T) {
 		col, _ := m.SortColumn()
 		seen = append(seen, col)
 	}
-	if seen[0] != ColCog || seen[1] != ColNLOC || seen[2] != ColChange || seen[len(seen)-1] != ColCCN {
+	if seen[0] != ColCog || seen[1] != ColNLOC || seen[2] != ColCmt || seen[3] != ColChange || seen[len(seen)-1] != ColCCN {
 		t.Fatalf("sort cycle = %v", seen)
 	}
 }
@@ -153,10 +153,10 @@ func TestChangesOpenCopyExport(t *testing.T) {
 	if lines[0] != strings.Join(changesCSVHeader, ",") || len(lines) != 5 {
 		t.Fatalf("csv = %q", exp.CSV)
 	}
-	if lines[1] != "changed,internal/app/app.go,render,function,1,10,15,5,12,20,8,21,25" {
+	if lines[1] != "changed,internal/app/app.go,render,function,1,10,15,5,12,20,8,21,25,0,0,0" {
 		t.Errorf("csv row = %q", lines[1])
 	}
-	if lines[4] != "removed,internal/ui/old.go,gone,function,1,6,0,-6,2,0,-2,10,0" {
+	if lines[4] != "removed,internal/ui/old.go,gone,function,1,6,0,-6,2,0,-2,10,0,0,0,0" {
 		t.Errorf("removed csv row = %q", lines[4])
 	}
 }

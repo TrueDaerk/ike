@@ -57,6 +57,14 @@ func (c Change) DeltaCognitive() int { return c.After.Cognitive - c.Before.Cogni
 // DeltaNLOC is After.NLOC - Before.NLOC.
 func (c Change) DeltaNLOC() int { return c.After.NLOC - c.Before.NLOC }
 
+// DeltaCommentLines is After.CommentLines - Before.CommentLines.
+func (c Change) DeltaCommentLines() int { return c.After.CommentLines - c.Before.CommentLines }
+
+// DeltaCommentDensity is After.CommentDensity - Before.CommentDensity.
+func (c Change) DeltaCommentDensity() float64 {
+	return c.After.CommentDensity - c.Before.CommentDensity
+}
+
 // FileDiff is the classified comparison of one file. Changed is sorted by
 // |ΔCCN| descending (ties by |Δcognitive|, then by head line), Added and
 // Removed keep source order.
@@ -71,12 +79,13 @@ func (d FileDiff) Empty() bool {
 	return len(d.Changed) == 0 && len(d.Added) == 0 && len(d.Removed) == 0
 }
 
-// metricsEqual reports whether two units carry the same five metrics; the
+// metricsEqual reports whether two units carry the same metrics; the
 // position (Line / EndLine) and the kind are not metrics — a function that
-// only moved is unchanged.
+// only moved is unchanged. The comment density follows from NLOC and
+// CommentLines.
 func metricsEqual(a, b Function) bool {
 	return a.CCN == b.CCN && a.Cognitive == b.Cognitive && a.NLOC == b.NLOC &&
-		a.Params == b.Params && a.Depth == b.Depth
+		a.Params == b.Params && a.Depth == b.Depth && a.CommentLines == b.CommentLines
 }
 
 // DiffFunctions compares the base measurement of a file with its head
@@ -218,7 +227,7 @@ func (d Diff) DeltaCognitive() int { return d.Head.CogSum - d.Base.CogSum }
 // the base does not have), head the working-tree functions (absent for a
 // deleted file). A path present in only one map diffs against nothing. The
 // summaries use the warning thresholds exactly like Summarize.
-func DiffProject(base, head map[string][]Function, ccnWarn, cogWarn int) Diff {
+func DiffProject(base, head map[string][]Function, ccnWarn, cogWarn, cmtWarn int) Diff {
 	d := Diff{Files: map[string]FileDiff{}}
 	var baseAll, headAll []Function
 	seen := map[string]bool{}
@@ -240,8 +249,8 @@ func DiffProject(base, head map[string][]Function, ccnWarn, cogWarn int) Diff {
 			d.Files[p] = fd
 		}
 	}
-	d.Base = Summarize(baseAll, ccnWarn, cogWarn)
-	d.Head = Summarize(headAll, ccnWarn, cogWarn)
+	d.Base = Summarize(baseAll, ccnWarn, cogWarn, cmtWarn)
+	d.Head = Summarize(headAll, ccnWarn, cogWarn, cmtWarn)
 	d.Verdict = verdict(d.DeltaCCN(), d.DeltaCognitive())
 	return d
 }

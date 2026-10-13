@@ -33,7 +33,7 @@ func cxSegmentApp(t *testing.T, base, head map[string][]complexity.Function) Mod
 	t.Helper()
 	m, _ := timeApp(t)
 	m.vcs.snap = vcs.NewSnapshot("/r", map[string]vcs.FileStatus{"a.go": vcs.StatusModified})
-	m.cxDiff.result = complexitypanel.Changes{Ready: true, Diff: complexity.DiffProject(base, head, 15, 15)}
+	m.cxDiff.result = complexitypanel.Changes{Ready: true, Diff: complexity.DiffProject(base, head, 15, 15, 40)}
 	return m
 }
 

@@ -7,6 +7,7 @@ package app
 // rows.
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -29,7 +30,7 @@ func TestComplexityDiagnosticsBuilder(t *testing.T) {
 		},
 		"/p/b.go": {{Name: "fine", Line: 1, CCN: 14, Cognitive: 14}},
 	}}
-	got := complexityDiagnostics(v, 15, 15)
+	got := complexityDiagnostics(v, 15, 15, 0)
 	if _, ok := got["/p/b.go"]; ok || len(got) != 1 {
 		t.Fatalf("only a.go may hold findings: %v", got)
 	}
@@ -54,8 +55,43 @@ func TestComplexityDiagnosticsBuilder(t *testing.T) {
 		}
 	}
 	// A threshold is inclusive per metric: at 41 / 26 nothing is over.
-	if got := complexityDiagnostics(v, 41, 26); len(got) != 0 {
+	if got := complexityDiagnostics(v, 41, 26, 0); len(got) != 0 {
 		t.Fatalf("raised thresholds still flag %v", got)
+	}
+}
+
+// TestComplexityDiagnosticsCommentDensity: a body at or above
+// complexity.comment_density_warn (#2934) is its own warning with Code
+// "comments", beside any CCN / cognitive row; 0 turns it off.
+func TestComplexityDiagnosticsCommentDensity(t *testing.T) {
+	v := complexity.View{Files: map[string][]complexity.Function{
+		"/p/a.go": {
+			{Name: "foo", Line: 3, CCN: 2, NLOC: 9, CommentLines: 11, CommentDensity: 0.55},
+			{Name: "below", Line: 9, CCN: 2, NLOC: 7, CommentLines: 3, CommentDensity: 0.3},
+			{Name: "both", Line: 20, CCN: 30, NLOC: 6, CommentLines: 4, CommentDensity: 0.4},
+		},
+	}}
+	ds := complexityDiagnostics(v, 15, 15, 40)["/p/a.go"]
+	want := []struct {
+		line      int
+		msg, code string
+	}{
+		{3, "function foo: comment density 55% ≥ 40%", "comments"},
+		{20, "function both: comment density 40% ≥ 40%", "comments"},
+		{20, "function both: CCN 30 ≥ 15", "ccn"},
+	}
+	if len(ds) != len(want) {
+		t.Fatalf("got %d diagnostics, want %d: %+v", len(ds), len(want), ds)
+	}
+	for i, w := range want {
+		if d := ds[i]; d.Message != w.msg || d.Code != w.code || d.Severity != 2 || d.Range.Start.Line != w.line {
+			t.Errorf("diag %d = %+v, want line %d %q code %q", i, d, w.line, w.msg, w.code)
+		}
+	}
+	for _, d := range complexityDiagnostics(v, 15, 15, 0)["/p/a.go"] {
+		if d.Code == "comments" {
+			t.Errorf("threshold 0 must disable the density row: %+v", d)
+		}
 	}
 }
 
@@ -80,9 +116,16 @@ func TestComplexityProblemsFeedWiring(t *testing.T) {
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	t.Chdir(proj)
 	writeComplexityFixture(t, proj)
+	// A comment-heavy unit (#2934): 2 code lines, 3 comment lines (60 %),
+	// CCN 1 — only the comment-density threshold can flag it.
+	chatty := filepath.Join(proj, "src", "c.go")
+	if err := os.WriteFile(chatty, []byte("package a\n\nfunc C() {\n\t// one\n\t// two\n\t// three\n}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 
 	cfg, _ := config.Load(config.Options{})
 	cfg.Complexity.CCNWarn = 2
+	cfg.Complexity.CommentDensityWarn = 0
 	config.Set(cfg)
 	t.Cleanup(func() { c, _ := config.Load(config.Options{}); config.Set(c) })
 	m := NewWith(registry.New(), host.FromConfig(cfg))
@@ -92,7 +135,7 @@ func TestComplexityProblemsFeedWiring(t *testing.T) {
 	}
 	m.Init()
 	a := filepath.Join(proj, "src", "a.go")
-	waitComplexity(t, x, "the walk", func(v complexity.View) bool { return len(v.Files[a]) == 1 })
+	waitComplexity(t, x, "the walk", func(v complexity.View) bool { return len(v.Files[a]) == 1 && len(v.Files[chatty]) == 1 })
 
 	// Unrelated findings the feed must never touch.
 	lsp := ilsp.Diagnostic{Severity: 1, Message: "undefined: y", Source: "gopls"}
@@ -115,6 +158,7 @@ func TestComplexityProblemsFeedWiring(t *testing.T) {
 	reload := func(mut func(c *config.Config)) {
 		c, _ := config.Load(config.Options{})
 		c.Complexity.CCNWarn = 2
+		c.Complexity.CommentDensityWarn = 0
 		mut(c)
 		config.Set(c)
 		tm, _ := m.Update(config.ConfigReloadedMsg{Config: c})
@@ -127,6 +171,16 @@ func TestComplexityProblemsFeedWiring(t *testing.T) {
 	reload(func(c *config.Config) {})
 	if rows := complexityRows(m.probStore); len(rows) != 1 {
 		t.Fatalf("a lowered threshold must add the row: %v", rows)
+	}
+	// The comment-density threshold re-evaluates on reload too: on, the
+	// chatty unit joins; back at 0, it leaves.
+	reload(func(c *config.Config) { c.Complexity.CommentDensityWarn = 40 })
+	if rows := complexityRows(m.probStore); len(rows) != 2 || rows[1] != "c.go: function C: comment density 60% ≥ 40%" {
+		t.Fatalf("comment_density_warn=40 must add the density row: %v", rows)
+	}
+	reload(func(c *config.Config) {})
+	if rows := complexityRows(m.probStore); len(rows) != 1 {
+		t.Fatalf("comment_density_warn=0 must drop the density row: %v", rows)
 	}
 
 	// The feed switch off clears its rows and nothing else.
@@ -166,7 +220,7 @@ func TestComplexityProblemsSourceFilter(t *testing.T) {
 	s.Set("/p/a.go", []ilsp.Diagnostic{{Severity: 1, Message: "undefined: y", Source: "gopls"}})
 	s.SetTaskSource("complexity", complexityDiagnostics(complexity.View{Files: map[string][]complexity.Function{
 		"/p/a.go": {{Name: "A", Line: 4, CCN: 20}},
-	}}, 15, 15))
+	}}, 15, 15, 40))
 	p := problems.New(nil)
 	p.SetSize(120, 12)
 	p.SetStore(s)

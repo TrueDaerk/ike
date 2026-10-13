@@ -29,6 +29,11 @@
 //   - Depth is the deepest nesting level a unit's walk reaches, closures
 //     included; NLOC the lines of the unit's range that are neither blank nor
 //     comment-only, by the language's comment markers.
+//   - CommentLines are the comment-only lines of the unit's range (#2934),
+//     CommentDensity = CommentLines / (NLOC + CommentLines). Only the body
+//     counts: a doc comment above the header (Go doc comment, PHPDoc, JSDoc)
+//     lies outside the range, and a Python docstring is a string statement,
+//     not a comment, so neither raises the density.
 package complexity
 
 import (
@@ -61,6 +66,21 @@ type Function struct {
 	CCN       int    `json:"ccn"`       // cyclomatic complexity
 	Cognitive int    `json:"cognitive"` // cognitive complexity
 	Depth     int    `json:"depth"`     // deepest nesting level reached inside the unit
+	// CommentLines are the comment-only lines in [Line, EndLine];
+	// CommentDensity is CommentLines / (NLOC + CommentLines) as a ratio
+	// (0.55), 0 when the unit has neither.
+	CommentLines   int     `json:"commentLines"`
+	CommentDensity float64 `json:"commentDensity"`
+}
+
+// DensityPercent is d rounded to a whole percent — the unit the UI, the CLI
+// and the complexity.comment_density_warn threshold use.
+func DensityPercent(d float64) int { return int(d*100 + 0.5) }
+
+// CommentsOver reports whether f's comment density is at or above warn
+// percent; a non-positive warn disables the check.
+func (f Function) CommentsOver(warn int) bool {
+	return warn > 0 && DensityPercent(f.CommentDensity) >= warn
 }
 
 // syntaxTree is the parse seam — a variable so a test can hand Measure a nil
@@ -92,27 +112,32 @@ type Summary struct {
 	CogSum        int     `json:"cogSum"`
 	CogAvg        float64 `json:"cogAvg"`
 	CogMax        int     `json:"cogMax"`
-	OverThreshold int     `json:"overThreshold"` // functions at or above either warning threshold
+	OverThreshold int     `json:"overThreshold"` // functions at or above any warning threshold
+	// CommentLines sums the functions' comment-only lines; CommentDensity is
+	// CommentLines / (NLOC + CommentLines) over the aggregate (#2934).
+	CommentLines   int     `json:"commentLines"`
+	CommentDensity float64 `json:"commentDensity"`
 }
 
 // Summarize aggregates fns. A function is over threshold when its CCN is at
-// or above ccnWarn or its cognitive complexity at or above cogWarn; a
-// non-positive threshold disables that metric's check. Averages are 0 for an
-// empty list.
-func Summarize(fns []Function, ccnWarn, cogWarn int) Summary {
+// or above ccnWarn, its cognitive complexity at or above cogWarn or its
+// comment density at or above cmtWarn percent; a non-positive threshold
+// disables that metric's check. Averages are 0 for an empty list.
+func Summarize(fns []Function, ccnWarn, cogWarn, cmtWarn int) Summary {
 	var s Summary
 	for _, f := range fns {
 		s.Functions++
 		s.NLOC += f.NLOC
 		s.CCNSum += f.CCN
 		s.CogSum += f.Cognitive
+		s.CommentLines += f.CommentLines
 		if f.CCN > s.CCNMax {
 			s.CCNMax = f.CCN
 		}
 		if f.Cognitive > s.CogMax {
 			s.CogMax = f.Cognitive
 		}
-		if (ccnWarn > 0 && f.CCN >= ccnWarn) || (cogWarn > 0 && f.Cognitive >= cogWarn) {
+		if (ccnWarn > 0 && f.CCN >= ccnWarn) || (cogWarn > 0 && f.Cognitive >= cogWarn) || f.CommentsOver(cmtWarn) {
 			s.OverThreshold++
 		}
 	}
@@ -120,5 +145,6 @@ func Summarize(fns []Function, ccnWarn, cogWarn int) Summary {
 		s.CCNAvg = float64(s.CCNSum) / float64(s.Functions)
 		s.CogAvg = float64(s.CogSum) / float64(s.Functions)
 	}
+	s.CommentDensity = density(s.NLOC, s.CommentLines)
 	return s
 }

@@ -519,7 +519,13 @@ type Complexity struct {
 	Exclude       []string `toml:"exclude"`
 	CCNWarn       int      `toml:"ccn_warn"`
 	CognitiveWarn int      `toml:"cognitive_warn"`
-	Problems      bool     `toml:"problems"`
+	// CommentDensityWarn (#2934) is the comment share of a function body,
+	// in percent (0–100), a function is flagged at: the tool window colours
+	// its cmt% cell, the inline hint appends the density, the Problems feed
+	// lists it and the summary counts it as over threshold. 0 turns the
+	// check off.
+	CommentDensityWarn int  `toml:"comment_density_warn"`
+	Problems           bool `toml:"problems"`
 	// StatusSegment shows the "Δcx" status segment (#2921).
 	StatusSegment bool `toml:"status_segment"`
 }

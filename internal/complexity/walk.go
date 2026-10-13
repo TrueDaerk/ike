@@ -282,7 +282,8 @@ func (m *measurer) openUnit(c *highlight.SyntaxNode, nameField string) {
 	if m.spec.ParamsField != "" {
 		f.Params = countParams(c.Child(m.spec.ParamsField))
 	}
-	f.NLOC = nloc(m.lines, c.StartLine, c.EndLine, m.cm)
+	f.NLOC, f.CommentLines = nloc(m.lines, c.StartLine, c.EndLine, m.cm)
+	f.CommentDensity = density(f.NLOC, f.CommentLines)
 	m.out = append(m.out, f)
 	m.units = append(m.units, &unitState{idx: len(m.out) - 1, short: short, ccn: 1})
 }
