@@ -997,6 +997,24 @@ func (r *Registry) AddDiffTitled(leftTitle, rightTitle, rightPath string) string
 	return key
 }
 
+// AddDiffModelKey creates a read-only titled diff viewer whose model carries
+// an exact key — the Complexity window's per-function diff (#2956), whose
+// model key names the function so reopening it finds the viewer wherever it
+// lives (pane or content tab). The instance key stays in the diff family
+// ("diff", then "diff:N"), so a saved layout restores the slot.
+func (r *Registry) AddDiffModelKey(modelKey, leftTitle, rightTitle, rightPath string) string {
+	r.diffs++
+	key := diffKeyBase
+	if r.diffs > 1 {
+		key = diffKeyBase + ":" + strconv.Itoa(r.diffs)
+	}
+	inst := &Instance{key: key, kind: KindDiff, cfg: r.cfg, pal: r.pal}
+	inst.df = diff.New(modelKey, leftTitle, rightTitle, rightPath, r.pal)
+	r.applyDiffConfig(inst)
+	r.put(inst)
+	return key
+}
+
 // AddDiffRevKey recreates a revision-backed diff viewer under an exact key
 // (#508): a non-empty rev labels its side "name @ rev" and marks it for
 // git-blob restore; a revision-backed right side is read-only.

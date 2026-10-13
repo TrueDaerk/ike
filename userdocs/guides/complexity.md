@@ -267,6 +267,16 @@ first; `cmt%` in percentage points), **added** and **removed**. Unsaved editor b
 current text. A renamed function appears as one removed and one added row.
 `enter` jumps to the function, `e` exports CSV, `y` copies the row.
 
+**Which edit cost the points?** Press `d` on a function row to open a diff
+of just that function: its version at the base revision on the left, the
+working tree (unsaved edits included) on the right, each with three lines of
+context and numbered like the file — titled `handle @ HEAD → working tree`.
+An added function shows an empty left side, a removed one an empty right
+side. `enter` on a change jumps to that line in the editor. Each function
+gets its own diff; pressing `d` on it again brings the open one back, and
+closing it returns you to the Complexity window. The diff is read-only (the
+left side is a stored revision).
+
 **Per file.** Press `b` to see the change per file instead: one row per
 file with how many functions changed, were added and were removed, and the
 file's CCN, cognitive, NLOC and excess sums before → after with the

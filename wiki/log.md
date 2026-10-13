@@ -1,5 +1,20 @@
 # Log
 
+## 2026-10-14 (function diff from a Changes row, #2956)
+
+- [Code Complexity](/architecture/complexity.md): the new "Function diff"
+  paragraph — `d` / `complexity.functionDiff` on a Changes row sends
+  `FunctionDiffMsg{Path, Name, Ordinal, Change}`; the app reads the base blob
+  (cached per `(sha, path)`) and the head text off-loop, re-locates the head
+  unit, cuts both to the range ±3 lines and opens a read-only viewer keyed
+  `cxdiff:<path>:<name>#<ordinal>`, titled `<name> @ <rev> → working tree`,
+  refocused in place on reopen, not persisted, focus back to the Complexity
+  window on close.
+- [Diff Viewer](/architecture/diff-viewer.md): function diffs are never the
+  single-diff slot; `Model.SetLineOffsets` numbers an excerpt like the file.
+- The complexity user guide: "Which edit cost the points?" under the Changes
+  tab.
+
 ## 2026-10-14 (Changes tab per file, #2955)
 
 - [Code Complexity](/architecture/complexity.md): the diff paragraph

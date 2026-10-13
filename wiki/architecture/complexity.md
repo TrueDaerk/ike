@@ -898,6 +898,32 @@ base, `enter` applies, `esc` cancels); an invalid ref keeps the previous
 base and shows git's message in the header. The base revision is session
 state, not a setting.
 
+**Function diff (#2956).** `d` on a Changes function row (a site or
+candidate row stands for its parent; file rows, the Project and File tabs do
+nothing and their footers do not list it) sends
+`complexitypanel.FunctionDiffMsg{Path, Name, Ordinal, Change}` — the
+`complexity.Change` with both ranges, the missing side zero on an added or
+removed row; `Ordinal` is the unit's index among the file's same-named
+units (read off the index's head measurement; a removed unit sits past every
+head unit of its name). The palette runs the same as `complexity.functionDiff`
+(ledgered `reasonPaneKey`). The app (`complexity_funcdiff.go`) reads the head
+text in `Update` (dirty buffer, else disk) and launches a `tea.Cmd` that reads
+the base blob at the Changes tab's `Sha` (`vcs.RevContent`, cached per
+`(sha, path)` for the session beside the measurement cache), re-measures the
+head to re-locate `name#ordinal` (an edit since the last diff run still cuts
+the right range), and cuts both texts to the function range ±3 lines. The
+excerpt opens in a read-only diff viewer (`Registry.AddDiffModelKey`, placed
+by `openDiffLeaf`) whose **model key** is `cxdiff:<path>:<name>#<ordinal>`,
+titled `<name> @ <rev> → working tree`; `diff.Model.SetLineOffsets` numbers
+each side the way the file does, so `enter` on a hunk opens the editor at the
+head function's line (`JumpMsg` adds the right offset). The right side is
+bound to the file only while the unit exists there (a removed unit binds
+none). Reopening the same function refreshes and refocuses its viewer; a
+different function opens another. A function viewer is never the
+single-diff-window slot (`diffSlot` / `diffInPane` skip it), does not persist
+in the layout (its slot restores as an editor), and closing it — pane or
+content tab — hands focus back to the Complexity window.
+
 **Changes per file (#2955).** `b` on the Changes tab cycles none → file
 (`changesgroup.go`): one row per `Diff.ByFile()` entry of the visible
 units, columns file, changed, added, removed, `Σccn before→after (Δ)`,

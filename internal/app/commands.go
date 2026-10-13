@@ -1019,6 +1019,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			withAliases(appCommand("complexity.histogram", "Complexity: Toggle Distribution (Histogram)", ComplexityHistogramMsg{}), "percentiles", "distribution", "buckets"),
 			withAliases(appCommand("complexity.sites", "Complexity: Expand / Collapse Sites", ComplexitySitesMsg{}), "breakdown", "why complex", "per site"),
 			withAliases(appCommand("complexity.showSites", "Complexity: Mark Sites in Editor", ComplexityShowSitesMsg{}), "sonar", "site marks", "show increments"),
+			withAliases(appCommand("complexity.functionDiff", "Complexity: Diff Selected Function (Base vs Working Tree)", ComplexityFunctionDiffMsg{}), "function diff", "what changed", "compare function"),
 			// The accepted-debt baseline (#2958): i in the pane toggles one
 			// function or group, the bulk accept asks first.
 			withAliases(appCommand("complexity.baseline", "Complexity: Accept / Drop Selected in Baseline", ComplexityBaselineMsg{}), "accept debt", "ignore complexity", "baseline"),

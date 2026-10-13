@@ -575,7 +575,11 @@ and the diff landed away from the eye.
   pane retargets that tab; a diff someone parked in another pane is left
   alone. `diff.windows = "multi"` skips the reuse and adds another tab. The
   re-open-same-pair shortcut (#509, `findDiffPane`) is untouched: an already
-  open identical diff is focused wherever in the workspace it lives.
+  open identical diff is focused wherever in the workspace it lives. The
+  Complexity window's function diffs (#2956, model key `cxdiff:…`) are one
+  viewer per function and never serve as the slot; they show an excerpt
+  numbered like the file through `Model.SetLineOffsets` (gutter and `enter`
+  jump; a `Retarget` resets the offsets).
 - **`diff.placement`** selects the mode: `focused` (default) is the above,
   `split` restores the pre-#2507 behaviour exactly — `placeDiffLeaf` beside
   the active editor with the workspace-wide single slot. The key is editable

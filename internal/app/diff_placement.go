@@ -71,10 +71,10 @@ func (m Model) diffInPane(key string) (*pane.Instance, int, bool) {
 		return nil, -1, false
 	}
 	if inst.Kind() == pane.KindDiff {
-		return inst, -1, true
+		return inst, -1, !isCxFuncDiff(inst)
 	}
 	for i := 0; i < inst.TabCount(); i++ {
-		if c := inst.TabContent(i); c != nil && c.Kind() == pane.KindDiff {
+		if c := inst.TabContent(i); c != nil && c.Kind() == pane.KindDiff && !isCxFuncDiff(c) {
 			return c, i, true
 		}
 	}
