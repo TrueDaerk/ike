@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
 )
@@ -162,11 +163,11 @@ func TestLSPPageEnableTogglesAndReset(t *testing.T) {
 
 	// The master switch is a schema row on Language Support, not a page
 	// letter any more; the page still reports its state.
-	drainLSP(t, p, config.WriteAndReload(p.opts, config.DefaultScope("lsp.enabled"), "lsp.enabled", false))
+	drainLSP(t, p, configcmd.WriteAndReload(p.opts, config.DefaultScope("lsp.enabled"), "lsp.enabled", false))
 	if v := p.View(120, 40); !strings.Contains(v, "off (master)") {
 		t.Fatalf("rows must show the master off state:\n%s", v)
 	}
-	drainLSP(t, p, config.WriteAndReload(p.opts, config.DefaultScope("lsp.enabled"), "lsp.enabled", true)) // back on
+	drainLSP(t, p, configcmd.WriteAndReload(p.opts, config.DefaultScope("lsp.enabled"), "lsp.enabled", true)) // back on
 
 	// r resets every override (#887); the per-server disable goes with it.
 	drainLSP(t, p, p.Update(key("r")))

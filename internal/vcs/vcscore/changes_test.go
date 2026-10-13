@@ -1,4 +1,4 @@
-package vcs
+package vcscore
 
 import (
 	"os"

@@ -6,7 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/pane"
 	"ike/internal/plugin"
 	"ike/internal/watch"
@@ -114,7 +114,7 @@ func (m *Model) routeWatchEvent(msg watch.EventMsg) tea.Cmd {
 		// re-run the reload pipeline — theme, keymap, editor behavior
 		// re-apply live, diagnostics toast via the normal path. No VCS
 		// refresh: .ike is not part of the working tree view.
-		return config.Reload(m.cfgOpts)
+		return configcmd.Reload(m.cfgOpts)
 	}
 	if msg.Kind == watch.GitChanged {
 		// Repository metadata changed under .git (#738): an external commit,

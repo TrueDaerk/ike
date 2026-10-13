@@ -1,5 +1,27 @@
 # Log
 
+## 2026-10-13 (Complexity-only build, #2939)
+
+- [Code Complexity](/architecture/complexity.md): new "Complexity-only
+  build" paragraph in "Headless CLI" — the `ike_complexity_only` build tag,
+  `make build-complexity` / `make install-complexity`, the tagged
+  `complexityonly.go` entry point (complexity report, `--version` with the
+  `(complexity-only)` marker, exit 2 with one line for everything else), the
+  linked package set and the `go list -deps` guard test, the generated
+  detection-only language table that keeps the `skipped` line identical
+  (`TestComplexityOnlyLangTable`, `IKE_GEN_COMPLEXITY_LANGS=1`), and the
+  `complexity-only.yml` CI job. New "Row order" paragraph: the function rows
+  tie-break on end line and name, so two units on one line no longer swap
+  between runs. The Diff paragraph names the `vcscore` plumbing.
+- [Config](/architecture/config.md): the reload commands (`Reload`,
+  `WriteAndReload`, `RemoveAndReload`, `ApplyAndReload`) moved to
+  `internal/configcmd`; `config` no longer imports bubbletea.
+- [VCS](/architecture/vcs.md): new "Core split" paragraph — the
+  bubbletea-free `internal/vcs/vcscore` (git runner, snapshot, status parser,
+  `ResolveRev` / `ChangedFiles` / `RevContent`), re-exported by `vcs`.
+- README, the complexity user guide and the command-line page document the
+  complexity-only install.
+
 ## 2026-10-13 (`ike complexity --brief[=class]`, #2938)
 
 - [Code Complexity](/architecture/complexity.md): new "Brief" paragraph in

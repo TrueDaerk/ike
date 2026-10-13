@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/tour"
 	"ike/internal/ui"
 )
@@ -58,7 +59,7 @@ func (m *Model) maybeOpenTour() tea.Cmd {
 	}
 	m.tourPending = false
 	m.openTour()
-	return config.WriteAndReload(m.cfgOpts, config.UserScope, "ui.onboarded", true)
+	return configcmd.WriteAndReload(m.cfgOpts, config.UserScope, "ui.onboarded", true)
 }
 
 // openTour shows the tour from its first page.

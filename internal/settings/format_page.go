@@ -8,6 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/format"
 	"ike/internal/theme"
 )
@@ -176,7 +177,7 @@ func (p *FormatPage) scopeLabel() string {
 // write persists one [format.<lang>] key at the page's write scope.
 func (p *FormatPage) write(id, key string, value any) tea.Cmd {
 	p.notice = ""
-	return config.WriteAndReload(p.opts, p.scope, "format."+id+"."+key, value)
+	return configcmd.WriteAndReload(p.opts, p.scope, "format."+id+"."+key, value)
 }
 
 // reset removes the language's whole override — every key this page can
@@ -195,7 +196,7 @@ func (p *FormatPage) reset(row formatRow) tea.Cmd {
 		return nil
 	}
 	p.notice = ""
-	return config.ApplyAndReload(p.opts, muts)
+	return configcmd.ApplyAndReload(p.opts, muts)
 }
 
 // layers lists the addressable config layers — a scope without a file path

@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/lang"
 	"ike/internal/theme"
 )
@@ -402,7 +403,7 @@ func (t *ToolchainPage) update(key tea.KeyPressMsg) tea.Cmd {
 		}
 	case "r":
 		if l, ok := t.current(); ok {
-			return tea.Batch(config.RemoveAndReload(t.opts, config.ProjectScope, "lang."+l.ID+".interpreter"), t.restartCmd())
+			return tea.Batch(configcmd.RemoveAndReload(t.opts, config.ProjectScope, "lang."+l.ID+".interpreter"), t.restartCmd())
 		}
 	case "p":
 		// Probe the effective interpreter's version asynchronously.
@@ -687,7 +688,7 @@ func (t *ToolchainPage) choose(path string) tea.Cmd {
 	}
 	t.picking = false
 	return tea.Batch(
-		config.WriteAndReload(t.opts, config.ProjectScope, "lang."+l.ID+".interpreter", path),
+		configcmd.WriteAndReload(t.opts, config.ProjectScope, "lang."+l.ID+".interpreter", path),
 		t.probe(l.ID, path),
 		t.restartCmd(),
 	)

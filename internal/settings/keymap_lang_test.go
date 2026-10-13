@@ -7,6 +7,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/keymap"
 	"ike/internal/lang"
 )
@@ -123,7 +124,7 @@ func TestKeepBothByFileTypeWritesLangQualifiedOverride(t *testing.T) {
 // key (sparing the broader levels) and "r" resets it.
 func TestLangScopedRowRoundTripsThroughPage(t *testing.T) {
 	k, opts := keymapPage(t)
-	apply(t, config.WriteAndReload(opts, config.UserScope, "keymap.bindings.editor[http].cmd+e", "http.selectEnvironment"))
+	apply(t, configcmd.WriteAndReload(opts, config.UserScope, "keymap.bindings.editor[http].cmd+e", "http.selectEnvironment"))
 
 	found := false
 	for i, r := range k.rows() {
@@ -160,11 +161,11 @@ func TestSeparableContextsLangLevel(t *testing.T) {
 		a, b keymap.Context
 		want bool
 	}{
-		{http, golang, true},          // disjoint languages
-		{http, keymap.Editor, false},  // narrows its own pane
-		{http, keymap.Global, false},  // global overlaps everything
-		{http, keymap.Diff, true},     // different panes
-		{http, http, false},           // same scope
+		{http, golang, true},                   // disjoint languages
+		{http, keymap.Editor, false},           // narrows its own pane
+		{http, keymap.Global, false},           // global overlaps everything
+		{http, keymap.Diff, true},              // different panes
+		{http, http, false},                    // same scope
 		{keymap.Editor, keymap.Explorer, true}, // the #1312 base case
 	}
 	for _, c := range cases {

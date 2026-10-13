@@ -24,7 +24,7 @@ import (
 	"ike/internal/config"
 	"ike/internal/lang"
 	"ike/internal/safego"
-	"ike/internal/vcs"
+	"ike/internal/vcs/vcscore"
 )
 
 // Exit codes.
@@ -215,7 +215,7 @@ func projectRoot(a cli.ComplexityArgs, first target) (string, error) {
 	if !first.isDir {
 		dir = filepath.Dir(dir)
 	}
-	if repo, err := vcs.DetectRoot(dir); err == nil && repo != "" {
+	if repo, err := vcscore.DetectRoot(dir); err == nil && repo != "" {
 		if ev, err := filepath.EvalSymlinks(repo); err == nil {
 			repo = ev
 		}
@@ -446,8 +446,10 @@ func runProject(s settings) projectReport {
 	return r
 }
 
-// sortRows orders by CCN descending, then cognitive descending, then file
-// and line, so the output is stable.
+// sortRows orders by CCN descending, then cognitive descending, then file,
+// line, end line and name, so the output is stable: rows arrive in the
+// order the parallel workers finish, and two units on one line (closures
+// passed side by side) must not swap between runs (#2939).
 func sortRows(rows []row) {
 	sort.Slice(rows, func(i, j int) bool {
 		a, b := rows[i], rows[j]
@@ -460,7 +462,13 @@ func sortRows(rows []row) {
 		if a.file != b.file {
 			return a.file < b.file
 		}
-		return a.fn.Line < b.fn.Line
+		if a.fn.Line != b.fn.Line {
+			return a.fn.Line < b.fn.Line
+		}
+		if a.fn.EndLine != b.fn.EndLine {
+			return a.fn.EndLine < b.fn.EndLine
+		}
+		return a.fn.Name < b.fn.Name
 	})
 }
 
@@ -544,7 +552,7 @@ func runDiff(s settings) (diffReport, error) {
 		rev = "HEAD"
 	}
 	r := diffReport{s: s, rev: rev}
-	repo, err := vcs.DetectRoot(s.dir)
+	repo, err := vcscore.DetectRoot(s.dir)
 	if err != nil {
 		return r, err
 	}
@@ -553,12 +561,12 @@ func runDiff(s settings) (diffReport, error) {
 	if ev, err := filepath.EvalSymlinks(repo); err == nil {
 		repo = ev
 	}
-	sha, err := vcs.ResolveRev(repo, rev)
+	sha, err := vcscore.ResolveRev(repo, rev)
 	if err != nil {
 		return r, err
 	}
 	r.sha = sha
-	changed, err := vcs.ChangedFiles(repo, sha)
+	changed, err := vcscore.ChangedFiles(repo, sha)
 	if err != nil {
 		return r, err
 	}
@@ -592,11 +600,11 @@ func runDiff(s settings) (diffReport, error) {
 		seen[head] = true
 		df := diffFile{baseRel: f.Path, baseAbs: head, headAbs: head}
 		switch f.Status {
-		case vcs.StatusAdded:
+		case vcscore.StatusAdded:
 			df.baseRel, df.baseAbs = "", ""
-		case vcs.StatusDeleted:
+		case vcscore.StatusDeleted:
 			df.headAbs = ""
-		case vcs.StatusRenamed:
+		case vcscore.StatusRenamed:
 			if f.OldPath != "" {
 				df.baseRel, df.baseAbs = f.OldPath, abs(f.OldPath)
 			}
@@ -608,7 +616,7 @@ func runDiff(s settings) (diffReport, error) {
 	}
 	// Untracked files are not in `git diff`: everything they hold is added.
 	// git collapses an untracked directory to one "dir/" record.
-	snap, err := vcs.Load(s.dir)
+	snap, err := vcscore.Load(s.dir)
 	if err != nil {
 		return r, err
 	}
@@ -620,7 +628,7 @@ func runDiff(s settings) (diffReport, error) {
 		files = append(files, diffFile{headAbs: path})
 	}
 	for _, e := range snap.Entries {
-		if e.Status != vcs.StatusUntracked {
+		if e.Status != vcscore.StatusUntracked {
 			continue
 		}
 		p := abs(strings.TrimSuffix(e.Path, "/"))
@@ -644,7 +652,7 @@ func runDiff(s settings) (diffReport, error) {
 	parallel(files, func(df diffFile) {
 		var bfns, hfns []complexity.Function
 		if df.baseRel != "" {
-			if content, err := vcs.RevContent(repo, sha, df.baseRel); err == nil {
+			if content, err := vcscore.RevContent(repo, sha, df.baseRel); err == nil {
 				bfns, _ = measureFile(df.baseRel, content)
 			}
 		}

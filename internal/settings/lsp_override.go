@@ -8,6 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/config"
+	"ike/internal/configcmd"
 )
 
 // lsp_override.go is the Language Servers page's override editor: one form
@@ -126,7 +127,7 @@ func (f *lspOverrideForm) commit() tea.Cmd {
 	if len(muts) == 0 {
 		return nil
 	}
-	return config.ApplyAndReload(f.page.opts, muts)
+	return configcmd.ApplyAndReload(f.page.opts, muts)
 }
 
 func (f *lspOverrideForm) View(w, h int) string {

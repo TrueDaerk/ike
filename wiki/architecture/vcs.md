@@ -15,6 +15,15 @@ in `Update`**. Consumers read immutable snapshots; they never run git
 themselves. Non-git workspaces see a nil snapshot and degrade to quiet no-ops
 everywhere.
 
+**Core split (#2939).** The bubbletea-free half — the `git` runner with its
+timeout, `FileStatus`, the `Snapshot` model and its porcelain parser,
+`Load` / `DetectRoot`, `ResolveRev` / `ChangedFiles` and `RevContent` —
+lives in `internal/vcs/vcscore`. `internal/vcs` re-exports it through type
+aliases and thin wrappers (`vcs.Snapshot`, `vcs.Load`, … keep their
+spelling) and adds the `tea.Cmd` / message layer. Headless callers import
+`vcscore` directly: `ike complexity` does, so the complexity-only build links
+no UI runtime.
+
 ## The split (#750): file-context native, workflow via tool panes
 
 Since #750 the native VCS integration is deliberately limited to what an

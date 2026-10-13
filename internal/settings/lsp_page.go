@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
 	"ike/internal/theme"
@@ -258,7 +259,7 @@ func settingsJSON(id string) string {
 // commitInput writes the edited override through write-back (project scope).
 // write persists one [lsp.servers.<id>] override to the project config.
 func (p *LSPPage) write(id, key string, value any) tea.Cmd {
-	return config.WriteAndReload(p.opts, config.ProjectScope, "lsp.servers."+id+"."+key, value)
+	return configcmd.WriteAndReload(p.opts, config.ProjectScope, "lsp.servers."+id+"."+key, value)
 }
 
 // theme returns the active palette, defaulting when none was threaded in.

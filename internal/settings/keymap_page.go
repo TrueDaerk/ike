@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/keymap"
 	"ike/internal/keymap/jbimport"
 	"ike/internal/theme"
@@ -305,14 +306,14 @@ func (k *KeymapPage) Update(key tea.KeyPressMsg) tea.Cmd {
 			chord := b.Chord.String()
 			key := k.unbindKeyFor(b)
 			k.host.Push(newConfirm(k.host, "unbind "+chord, "Unbind", k.pal, func() tea.Cmd {
-				return config.WriteAndReload(k.opts, config.UserScope, key, "")
+				return configcmd.WriteAndReload(k.opts, config.UserScope, key, "")
 			}))
 		}
 	case "r":
 		// Reset to preset: remove the override; the default falls back. A
 		// never-bound command has no override to remove.
 		if b, ok := k.current(); ok && !b.nobind {
-			return config.RemoveAndReload(k.opts, config.UserScope, k.overrideKeyFor(b))
+			return configcmd.RemoveAndReload(k.opts, config.UserScope, k.overrideKeyFor(b))
 		}
 	case "backspace":
 		// List mode: backspace shortens the filter from the end, through the

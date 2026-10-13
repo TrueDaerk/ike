@@ -93,24 +93,6 @@ func TestWriteKeyRefusesBrokenFile(t *testing.T) {
 	}
 }
 
-func TestWriteAndReloadDeliversFreshConfig(t *testing.T) {
-	userDir := t.TempDir()
-	opts := Options{UserPath: filepath.Join(userDir, fileName)}
-	msg := WriteAndReload(opts, UserScope, "editor.scroll_off", 7)()
-	rm, ok := msg.(ConfigReloadedMsg)
-	if !ok {
-		t.Fatalf("expected ConfigReloadedMsg, got %#v", msg)
-	}
-	if rm.Config.Editor.ScrollOff != 7 {
-		t.Fatalf("reload must carry the written value, got %d", rm.Config.Editor.ScrollOff)
-	}
-	// A write error (no layer path) surfaces as a diagnostic, not a crash.
-	msg = WriteAndReload(Options{}, ProjectScope, "editor.tab_width", 2)()
-	if rm = msg.(ConfigReloadedMsg); len(rm.Diags) == 0 {
-		t.Fatal("write failure must surface as a diagnostic")
-	}
-}
-
 func TestDefaultScope(t *testing.T) {
 	cases := map[string]Scope{
 		"theme.name":                 UserScope,

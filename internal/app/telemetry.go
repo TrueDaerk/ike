@@ -13,6 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/config"
+	"ike/internal/configcmd"
 	"ike/internal/diag"
 	"ike/internal/host"
 	"ike/internal/keymap"
@@ -454,7 +455,7 @@ func (m Model) muteWarmupNotice() tea.Cmd {
 	}
 	roots := append(append([]string{}, cfg.WarmupNoticeMutedRoots...), filepath.Clean(root))
 	m.host.Notify(host.Info, "silent language server notice muted for "+base+" (Settings › Language Support)")
-	return config.ApplyAndReload(m.cfgOpts, []config.Mutation{
+	return configcmd.ApplyAndReload(m.cfgOpts, []config.Mutation{
 		{Scope: config.UserScope, Key: "lsp.warmup_notice_muted_roots", Value: roots},
 	})
 }

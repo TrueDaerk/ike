@@ -45,6 +45,22 @@ make install BINDIR=/usr/local/bin  # or pick another directory
 (Or build without installing: `make` produces `./ike`; plain
 `go build -o ike ./cmd/ike` works too.)
 
+Only want the headless complexity report (`ike complexity`, for CI or
+coding agents) and not the IDE? The complexity-only build compiles much
+less — no terminal UI, LSP or plugin runtime, just the report and the
+grammars of the languages it measures:
+
+```sh
+make install-complexity                        # ~/.local/bin/ike, `ike complexity` only
+make install-complexity BINDIR=/usr/local/bin  # BINDIR works as for `make install`
+```
+
+(`make build-complexity` produces `./ike`; plain
+`go build -tags ike_complexity_only -o ike ./cmd/ike` works too.) It is
+the same `ike` binary name: every other invocation exits with a hint to
+install the full build, and a later `make install` simply replaces it.
+Like the full build it needs CGo (a C compiler) for the Tree-sitter grammars.
+
 Check what you built with `ike --version` — a Makefile build stamps the commit
 and whether the tree was clean:
 

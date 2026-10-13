@@ -49,6 +49,21 @@ func TestFullWithCommit(t *testing.T) {
 	}
 }
 
+// TestFullVariantMarksReducedBuild: the complexity-only build (#2939) ends
+// its banner with the variant; the full build's banner carries none.
+func TestFullVariantMarksReducedBuild(t *testing.T) {
+	restore(t)
+	Commit, Dirty = "a1b2c3d", ""
+
+	got := FullVariant("complexity-only")
+	if !strings.HasSuffix(got, " (complexity-only)") || !strings.HasPrefix(got, Full()) {
+		t.Fatalf("FullVariant() = %q, want Full() + \" (complexity-only)\"", got)
+	}
+	if FullVariant("") != Full() {
+		t.Fatalf("FullVariant(\"\") = %q, want Full() = %q", FullVariant(""), Full())
+	}
+}
+
 // TestFullMarksDirty guards the case that matters when someone reports a bug
 // from a local build: the banner has to say the tree was not clean.
 func TestFullMarksDirty(t *testing.T) {
