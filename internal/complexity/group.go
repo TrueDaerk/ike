@@ -55,6 +55,10 @@ type Group struct {
 	// Line is the 0-based first line of the group's earliest unit — where
 	// "open the group" lands.
 	Line int
+	// DepthMax and ParamsMax are the largest Depth / Params over the
+	// group's functions (the depth: / params: filter on group rows).
+	DepthMax  int
+	ParamsMax int
 	Summary
 }
 
@@ -88,6 +92,8 @@ func GroupFunctions(files map[string][]Function, by Level, ccnWarn, cogWarn, cmt
 			if f.Line < g.Line {
 				g.Line = f.Line
 			}
+			g.DepthMax = max(g.DepthMax, f.Depth)
+			g.ParamsMax = max(g.ParamsMax, f.Params)
 		}
 		out = append(out, g)
 	}

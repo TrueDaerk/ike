@@ -46,6 +46,13 @@ and a trailing comment counts as code. In the Complexity window,
 `metric:cmt min:40` in the filter lists exactly the functions at or above
 40 %.
 
+The filter row knows more keys: `max:` bounds the sort column from above
+(`min:15 max:30` lists functions with CCN 15 to 30; `metric:cog min:10
+max:20` does the same on cognitive complexity), `kind:method` (or
+`function`, `lambda`) keeps one kind of unit, `class:` matches the class
+name, and `depth:4`, `params:5`, `nloc:50` keep functions at or above that
+nesting depth, parameter count or code-line count.
+
 Closures and lambdas are named `(anonymous)#n`, numbered per file. Languages
 without a syntax grammar (and data formats like JSON or YAML) are not
 measured.
