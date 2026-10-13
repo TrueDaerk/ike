@@ -8,7 +8,8 @@
 // CCN, cognitive, NLOC, params, depth, comment density (cmt%, #2934) — or,
 // grouped with 'b' (#2937, group.go), one aggregate row per class or file;
 // 's' cycles the sort column, 'S' reverses it, the filter row (internal/filterbar over internal/filterexpr)
-// narrows by file:, lang:, fn:, min:, metric: and test:, and bare words fuzzy
+// narrows by file:, lang:, fn:, min:, max:, kind:, class:, depth:,
+// params:, nloc:, metric: and test:, and bare words fuzzy
 // over the function names; 't' hides the test files on every tab (#2950);
 // 'space' expands a function into its complexity sites (#2946, sites.go).
 //
@@ -156,6 +157,12 @@ var Schema = filterexpr.Schema{Fields: []filterexpr.Field{
 	{Name: "lang", Aliases: []string{"language"}, ValueDoc: "a language id", Doc: "lang: narrows by language id (go, php, …)"},
 	{Name: "fn", Aliases: []string{"func", "function"}, ValueDoc: "a function name part", Doc: "fn: narrows by function name (substring) — on group rows by class or file"},
 	{Name: "min", ValueDoc: "a number", Doc: "min: keeps rows at or above n on the sort column"},
+	{Name: "max", ValueDoc: "a number", Doc: "max: keeps rows at or below n on the sort column"},
+	{Name: "kind", ValueDoc: "function, method or lambda", Doc: "kind: keeps functions, methods or lambdas"},
+	{Name: "class", ValueDoc: "a class name part", Doc: "class: narrows by class (substring)"},
+	{Name: "depth", ValueDoc: "a number", Doc: "depth: keeps rows nesting at least n deep (groups: the deepest function)"},
+	{Name: "params", ValueDoc: "a number", Doc: "params: keeps rows with at least n parameters (groups: the most of a function)"},
+	{Name: "nloc", ValueDoc: "a number", Doc: "nloc: keeps rows with at least n code lines (groups: the sum)"},
 	{Name: "metric", Values: []string{"ccn", "cog", "cmt"}, Doc: "metric: sorts by cyclomatic or cognitive complexity, or comment density (cmt%)"},
 	{Name: "test", Values: []string{"yes", "no"}, Doc: "test: no hides test files, test: yes keeps only them"},
 }}
@@ -694,7 +701,7 @@ func (m *Model) matches(q filterexpr.Query, r Row) bool {
 			if !strings.Contains(strings.ToLower(r.label()), strings.ToLower(t.Value)) {
 				return false
 			}
-		case "min":
+		case "min", "max":
 			n, err := strconv.Atoi(t.Value)
 			if err != nil {
 				return false
@@ -703,7 +710,25 @@ func (m *Model) matches(q filterexpr.Query, r Row) bool {
 			if !col.numeric() {
 				col = ColCCN
 			}
-			if v, _ := r.value(col); v < float64(n) {
+			v, _ := r.value(col)
+			if (t.Field == "min" && v < float64(n)) || (t.Field == "max" && v > float64(n)) {
+				return false
+			}
+		case "kind":
+			if r.Group != nil || !strings.EqualFold(t.Value, r.Fn.Kind) {
+				return false
+			}
+		case "class":
+			class := r.Fn.Class
+			if r.Group != nil {
+				class = r.Group.Class
+			}
+			if !strings.Contains(strings.ToLower(class), strings.ToLower(t.Value)) {
+				return false
+			}
+		case "depth", "params", "nloc":
+			n, err := strconv.Atoi(t.Value)
+			if err != nil || r.attr(t.Field) < n {
 				return false
 			}
 		case "test":
@@ -714,6 +739,28 @@ func (m *Model) matches(q filterexpr.Query, r Row) bool {
 	}
 	_, ok := filterexpr.MatchText(q.Match, r.label())
 	return ok
+}
+
+// attr is the row's depth / params / nloc for the at-least filter keys:
+// the function's value, on a group row the deepest depth, the most
+// params and the NLOC sum.
+func (r Row) attr(field string) int {
+	if g := r.Group; g != nil {
+		switch field {
+		case "depth":
+			return g.DepthMax
+		case "params":
+			return g.ParamsMax
+		}
+		return g.NLOC
+	}
+	switch field {
+	case "depth":
+		return r.Fn.Depth
+	case "params":
+		return r.Fn.Params
+	}
+	return r.Fn.NLOC
 }
 
 // testValue reads a test: value: yes keeps only test files, no hides them.

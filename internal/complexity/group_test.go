@@ -94,6 +94,21 @@ func TestGroupFunctionsTiesAndNone(t *testing.T) {
 	}
 }
 
+func TestGroupDepthParamsMax(t *testing.T) {
+	gs := GroupFunctions(map[string][]Function{"a.go": {
+		{Name: "S.a", Class: "S", Depth: 3, Params: 1, CCN: 2},
+		{Name: "S.b", Class: "S", Depth: 1, Params: 4, CCN: 1},
+		{Name: "f", Depth: 7, Params: 9, CCN: 1},
+	}}, ByClass, 15, 15, 0)
+	if len(gs) != 1 || gs[0].DepthMax != 3 || gs[0].ParamsMax != 4 {
+		t.Errorf("class group = %+v", gs)
+	}
+	gs = GroupFunctions(map[string][]Function{"a.go": {{Depth: 3, Params: 1}, {Depth: 7, Params: 9}}}, ByFile, 15, 15, 0)
+	if len(gs) != 1 || gs[0].DepthMax != 7 || gs[0].ParamsMax != 9 {
+		t.Errorf("file group = %+v", gs)
+	}
+}
+
 func TestParseLevel(t *testing.T) {
 	for _, l := range []Level{ByNone, ByClass, ByFile} {
 		if got, ok := ParseLevel(l.String()); !ok || got != l {

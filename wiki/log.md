@@ -1,5 +1,13 @@
 # Log
 
+## 2026-10-13 (Filter keys kind:, class:, depth:, params:, nloc:, max:, #2952)
+
+- [Code Complexity](/architecture/complexity.md): "Filter" gains `max:`
+  (at-most on the sort column, |Δ| on the Changes tab), `kind:`, `class:`,
+  `depth:`, `params:`, `nloc:`; the group paragraph says how they read a
+  group row (`Group.DepthMax` / `ParamsMax`).
+- The complexity user guide: a paragraph on the new filter keys.
+
 ## 2026-10-13 (Per-site complexity breakdown, #2946)
 
 - [Code Complexity](/architecture/complexity.md): "Model" gains

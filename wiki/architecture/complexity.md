@@ -396,7 +396,11 @@ keeps bodies that are at least 40 % comment); bare words fuzzy-match
 the function names. `file:internal/app min:20` is "functions with CCN >= 20
 under internal/app"; adding `metric:cog` switches both to cognitive
 complexity. `test:no` hides the test files, `test:yes` keeps only them
-(#2950, `Row.Test`).
+(#2950, `Row.Test`). `max:` is the at-most counterpart of `min:` on the
+same column (`min:15 max:30` is the closed range); `kind:function|method|lambda`
+matches `Function.Kind` exactly (case-insensitive; an unknown kind matches
+nothing), `class:` is a substring of `Function.Class`, and `depth:`,
+`params:`, `nloc:` keep rows at or above n on that attribute (#2952).
 
 **Hide tests (#2950).** `t` — the `complexity.toggleTests` command, bound to
 `t` in the `complexity` keymap context and in the palette as "Complexity:
@@ -425,7 +429,10 @@ level only), funcs, nloc, `Σccn`, ccn avg, ccn max, `Σcog`, cog avg, cog max,
 `cmt%` (aggregate density), over and excess (#2945); the header totals stay the whole tab's.
 Sorting (`s` walks the group columns, `S`, header clicks) and the filter
 work on the group columns — `fn:` and bare words read the class (class
-level) or the path (file level), `min:` the sort column; a sort column the
+level) or the path (file level), `min:` / `max:` the sort column, `class:`
+the group's class, `nloc:` the NLOC sum, `depth:` / `params:` the maximum
+over the group's functions (`Group.DepthMax` / `ParamsMax`); `kind:` matches
+no group row; a sort column the
 group layout lacks resets to CCN descending. Max CCN / max cog / `cmt%` and
 a non-zero over or excess count take the warning colour. `enter` opens the group's
 earliest unit, `y` copies `path: Class funcs=2 ccn=9 (max 8) cog=12 (max
@@ -561,7 +568,7 @@ first row, and the columns change, function, file, line, `ccn
 before→after (Δ)`, `cog before→after (Δ)`, `nloc before→after`, `cmt%
 before→after (Δ)` in percentage points (the missing
 side of an added / removed unit is `-`). The same filter row applies —
-`file:`, `fn:`, `lang:`, `metric:`, and `min:` on |Δ| of the sort column —
+`file:`, `fn:`, `lang:`, `metric:`, and `min:` / `max:` on |Δ| of the sort column —
 and `s` / `S` / the header click sort inside the sections. `enter` opens the
 function (a removed one opens its file at the first line), `e` exports the
 tab as CSV (`change,file,function,kind,line,ccn_before,ccn_after,ccn_delta,

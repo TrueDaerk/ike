@@ -85,7 +85,8 @@ func TestChangesTabSectionsAndCells(t *testing.T) {
 		t.Errorf("section label must appear once:\n%s", v)
 	}
 	// The grid shows the Changes layout: no params / depth columns.
-	if strings.Contains(v, "params") || strings.Contains(v, "depth") {
+	// (The filter placeholder names the params: / depth: keys.)
+	if hdr := strings.Join(m.headerLabels(), " "); strings.Contains(hdr, "params") || strings.Contains(hdr, "depth") {
 		t.Errorf("Changes tab must not show params / depth:\n%s", v)
 	}
 }
@@ -108,6 +109,12 @@ func TestChangesSortAndFilterOnDelta(t *testing.T) {
 	m.Refresh()
 	if got := names(m.Rows()); strings.Join(got, ",") != "render" {
 		t.Fatalf("metric:cog min:3 rows = %v", got)
+	}
+	// max: mirrors min: on |Δ|; |ΔCCN| render 5, tiny 1, fresh 2, gone 6.
+	m.filter.SetText("metric:ccn max:2")
+	m.Refresh()
+	if got := names(m.Rows()); strings.Join(got, ",") != "tiny,fresh" {
+		t.Fatalf("max:2 rows = %v", got)
 	}
 	m.filter.SetText("file:ui/")
 	m.Refresh()
