@@ -18,6 +18,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"ike/internal/cli"
 	"ike/internal/complexity"
@@ -60,6 +61,53 @@ type settings struct {
 	// cmtWarn is the comment-density threshold in percent (#2934); 0 is
 	// off, as complexity.comment_density_warn = 0 configures it.
 	cmtWarn int
+	// churnDays is the --churn window (#2957): the flag's value, else
+	// complexity.churn_days. churn holds the commits per project-relative
+	// path in it, nil without --churn.
+	churnDays int
+	churn     map[string]int
+}
+
+// defaultChurnDays is the --churn window when neither the flag nor the
+// config names one.
+const defaultChurnDays = 90
+
+// loadChurn fetches the commits per file for --churn (#2957) —
+// synchronously, like --diff; outside a repository it is an error.
+func (s *settings) loadChurn(now time.Time) error {
+	if _, err := vcscore.DetectRoot(s.dir); err != nil {
+		return fmt.Errorf("--churn needs a git repository: %s is not inside one", s.dir)
+	}
+	counts, err := vcscore.Churn(s.dir, now.AddDate(0, 0, -s.churnDays))
+	if err != nil {
+		return err
+	}
+	s.churn = counts
+	return nil
+}
+
+// hot is a group's --churn numbers: its file's commits and the hotspot
+// score over the group's aggregate (complexity.Hot).
+func (s settings) hot(g complexity.Group) (commits, hot int) {
+	commits = s.churn[g.File]
+	return commits, complexity.Hot(commits, g.Summary)
+}
+
+// churnShown is the summary's churn_days: the window under --churn, 0
+// (omitted) without it.
+func (s settings) churnShown() int {
+	if s.churn == nil {
+		return 0
+	}
+	return s.churnDays
+}
+
+// churnHeader is cols under --churn, "" without it.
+func (s settings) churnHeader(cols string) string {
+	if s.churn == nil {
+		return ""
+	}
+	return cols
 }
 
 // Run executes the report for a and returns the exit code. Output goes to
@@ -87,6 +135,9 @@ func Run(a cli.ComplexityArgs, stdout, stderr io.Writer) int {
 	case by != complexity.ByNone && a.Diff:
 		fmt.Fprintln(stderr, "ike complexity:", cli.ErrByWithDiff)
 		return ExitError
+	case a.Churn && a.Diff:
+		fmt.Fprintln(stderr, "ike complexity:", cli.ErrChurnWithDiff)
+		return ExitError
 	}
 	if brief != complexity.ByNone {
 		// --brief folds like --by: the JSON stays the full group report.
@@ -100,6 +151,12 @@ func Run(a cli.ComplexityArgs, stdout, stderr io.Writer) int {
 	if err != nil {
 		fmt.Fprintln(stderr, "ike complexity:", err)
 		return ExitError
+	}
+	if a.Churn {
+		if err := s.loadChurn(time.Now()); err != nil {
+			fmt.Fprintln(stderr, "ike complexity:", err)
+			return ExitError
+		}
 	}
 	if a.Diff {
 		r, err := runDiff(s)
@@ -181,6 +238,13 @@ func resolve(a cli.ComplexityArgs) (settings, error) {
 	}
 	if s.cogWarn <= 0 {
 		s.cogWarn = defaultWarn
+	}
+	s.churnDays = c.Complexity.ChurnDays
+	if a.ChurnDays > 0 {
+		s.churnDays = a.ChurnDays
+	}
+	if s.churnDays <= 0 {
+		s.churnDays = defaultChurnDays
 	}
 	return s, nil
 }

@@ -40,7 +40,7 @@ func TestComplexityPageEntries(t *testing.T) {
 	if p.Description == "" {
 		t.Fatal("the Complexity page needs a description")
 	}
-	want := []string{"complexity.enabled", "complexity.exclude", "complexity.ccn_warn", "complexity.cognitive_warn", "complexity.comment_density_warn", "complexity.problems", "complexity.status_segment"}
+	want := []string{"complexity.enabled", "complexity.exclude", "complexity.ccn_warn", "complexity.cognitive_warn", "complexity.comment_density_warn", "complexity.problems", "complexity.status_segment", "complexity.churn_days"}
 	if len(p.Entries) != len(want) {
 		t.Fatalf("Complexity page has %d entries, want %d: %+v", len(p.Entries), len(want), p.Entries)
 	}
@@ -228,5 +228,52 @@ func TestComplexityCommentDensityWarn(t *testing.T) {
 	}
 	if view := m.View(); !strings.Contains(view, "Comment density warning") {
 		t.Fatalf("the entry list must show the setting:\n%s", view)
+	}
+}
+
+// TestComplexityChurnDays: the hotspot window (#2957) is a bounded day
+// count on the Complexity page; non-numeric input is rejected in the form,
+// an out-of-range value clamps, a sane value persists and shows in the
+// list.
+func TestComplexityChurnDays(t *testing.T) {
+	restoreConfig(t)
+	e := complexityEntry(t, "complexity.churn_days")
+	if e.Type != Int || e.Min != 1 || e.Max != 3650 {
+		t.Fatalf("churn_days = %+v, want an Int bounded 1..3650", e)
+	}
+	if got := config.Get().Complexity.ChurnDays; got != 90 {
+		t.Fatalf("churn_days must default to 90, got %d", got)
+	}
+	m := New([]Page{{Title: "Complexity", Entries: []Entry{e}}}, testOpts(t))
+	m.SetSize(100, 24)
+	m.Open()
+	m.Update(key("tab"))
+	if view := m.View(); !strings.Contains(view, "Hotspot churn window") || !strings.Contains(view, "90") {
+		t.Fatalf("the entry list must show the setting and its value:\n%s", view)
+	}
+	m.Update(key("enter"))
+	ed, ok := m.editor.(*intEditor)
+	if !ok {
+		t.Fatalf("editor = %T, want *intEditor", m.editor)
+	}
+	ed.tf.Set("a quarter")
+	if cmd := m.Update(key("enter")); cmd != nil || ed.err == "" {
+		t.Fatalf("an invalid window must not write (err=%q)", ed.err)
+	}
+	ed.tf.Set("9999")
+	m.Update(key("enter"))
+	commit(t, m)
+	if got := config.Get().Complexity.ChurnDays; got != 3650 {
+		t.Fatalf("churn_days = %d, want clamped 3650", got)
+	}
+	m.Update(key("enter"))
+	m.editor.(*intEditor).tf.Set("30")
+	m.Update(key("enter"))
+	commit(t, m)
+	if got := config.Get().Complexity.ChurnDays; got != 30 {
+		t.Fatalf("churn_days = %d, want 30", got)
+	}
+	if view := m.View(); !strings.Contains(view, "30") {
+		t.Fatalf("the entry list must show the new value:\n%s", view)
 	}
 }

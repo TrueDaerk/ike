@@ -178,6 +178,10 @@ func TestParseComplexity(t *testing.T) {
 		{[]string{"--brief", "class"}, ComplexityArgs{Brief: "file", Paths: []string{"class"}}},
 		{[]string{"--no-tests", "--brief"}, ComplexityArgs{NoTests: true, Brief: "file"}},
 		{[]string{"--sites", "--json"}, ComplexityArgs{Sites: true, JSON: true}},
+		// --churn[=DAYS] (#2957): the window only after "=".
+		{[]string{"--churn"}, ComplexityArgs{Churn: true}},
+		{[]string{"--churn=30", "--by", "file"}, ComplexityArgs{Churn: true, ChurnDays: 30, By: "file"}},
+		{[]string{"--churn", "30"}, ComplexityArgs{Churn: true, Paths: []string{"30"}}},
 		{[]string{"--help"}, ComplexityArgs{Help: true}},
 		{[]string{"-h"}, ComplexityArgs{Help: true}},
 	}
@@ -196,6 +200,7 @@ func TestParseComplexity(t *testing.T) {
 		{"--diff="}, {"--bogus"}, {"a", "--bogus"},
 		{"--by"}, {"--by", "method"}, {"--by="}, {"--by=class", "--diff"}, {"--diff=main", "--by", "file"},
 		{"--brief=method"}, {"--brief="},
+		{"--churn=0"}, {"--churn="}, {"--churn=x"}, {"--churn=3651"},
 	} {
 		if _, err := Parse(append([]string{"complexity"}, args...)); err == nil {
 			t.Errorf("Parse(complexity %q) accepted", args)
@@ -209,6 +214,8 @@ func TestParseComplexity(t *testing.T) {
 		{[]string{"--by=class", "--brief=class"}, ErrBriefWithBy},
 		{[]string{"--brief", "--diff"}, ErrBriefWithDiff},
 		{[]string{"--diff=main", "--brief=class"}, ErrBriefWithDiff},
+		{[]string{"--churn", "--diff"}, ErrChurnWithDiff},
+		{[]string{"--diff=main", "--churn=30"}, ErrChurnWithDiff},
 	} {
 		if _, err := Parse(append([]string{"complexity"}, c.args...)); err != c.want {
 			t.Errorf("Parse(complexity %q) error %v, want %v", c.args, err, c.want)

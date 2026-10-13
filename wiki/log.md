@@ -1,5 +1,21 @@
 # Log
 
+## 2026-10-13 (Hotspots: churn × complexity per file, #2957)
+
+- [Code Complexity](/architecture/complexity.md): new "Hotspots" section —
+  `vcscore.Churn` (one `git log --name-only --relative --since`, renames
+  not followed), the app's pulled fetch keyed on (VCS snapshot generation,
+  `complexity.churn_days`, root) in `complexity_churn.go`, the panel's
+  `commits` / `hot` columns (`complexity.Hot`: commits × Σexcess, × ΣCCN
+  without excess), `metric:hot|commits`, the top-decile warning, the
+  `churn 90d` footer; "Headless CLI" gains `--churn[=DAYS]`; the settings
+  table and the limitations list the churn window and the rename split.
+- [VCS / Git Integration](/architecture/vcs.md): the churn helper and
+  `vcs.ChurnCmd`; [Settings UI](/architecture/settings-ui.md) lists
+  `complexity.churn_days`.
+- The complexity user guide: a "Hotspots" section and the `--churn` flag;
+  the settings reference regenerated.
+
 ## 2026-10-13 (Live Δ against the base in the header hint, #2949)
 
 - [Code Complexity](/architecture/complexity.md): "Editor surface" gains

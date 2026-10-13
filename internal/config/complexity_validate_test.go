@@ -27,3 +27,26 @@ func TestValidateComplexityCommentDensityWarn(t *testing.T) {
 		}
 	}
 }
+
+// The hotspot churn window (#2957) defaults to 90 days and falls back to it
+// outside 1–3650.
+func TestValidateComplexityChurnDays(t *testing.T) {
+	if c := defaults(); c.Complexity.ChurnDays != 90 {
+		t.Errorf("default window = %d, want 90", c.Complexity.ChurnDays)
+	}
+	for _, bad := range []int{0, -5, 3651} {
+		c := defaults()
+		c.Complexity.ChurnDays = bad
+		diags := validate(c)
+		if c.Complexity.ChurnDays != 90 || len(diagsFor(diags, "complexity.churn_days")) != 1 {
+			t.Errorf("window %d validated to %d (%v), want the 90 fallback reported once", bad, c.Complexity.ChurnDays, diags)
+		}
+	}
+	for _, ok := range []int{1, 30, 3650} {
+		c := defaults()
+		c.Complexity.ChurnDays = ok
+		if diags := validate(c); len(diagsFor(diags, "complexity.churn_days")) != 0 || c.Complexity.ChurnDays != ok {
+			t.Errorf("%d is a valid window: %d, %v", ok, c.Complexity.ChurnDays, diags)
+		}
+	}
+}

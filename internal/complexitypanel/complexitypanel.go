@@ -92,11 +92,16 @@ const (
 	// ColExcess is a group's excess above the CCN and cognitive thresholds
 	// (#2945); it follows over on screen.
 	ColExcess
+	// ColCommits and ColHot are the hotspot columns (#2957, churn.go): a
+	// file's commits in the churn window and, on a file group, commits ×
+	// excess. They show only inside a git repository.
+	ColCommits
+	ColHot
 )
 
 // columnLabels are the column headers in Column order.
 var columnLabels = []string{"file", "function", "line", "ccn", "cog", "nloc", "params", "depth", "change", "cmt%",
-	"class", "funcs", "ccn avg", "ccn max", "cog avg", "cog max", "over", "excess"}
+	"class", "funcs", "ccn avg", "ccn max", "cog avg", "cog max", "over", "excess", "commits", "hot"}
 
 // numeric reports whether a column sorts as a number (descending by
 // default) rather than as text.
@@ -109,7 +114,7 @@ func (c Column) numeric() bool {
 }
 
 // lastColumn is the highest Column value.
-const lastColumn = ColExcess
+const lastColumn = ColHot
 
 // The per-tab column layouts, in display order: the File tab hides the
 // file column, the Changes tab leads with the section and drops params /
@@ -164,7 +169,7 @@ var Schema = filterexpr.Schema{Fields: []filterexpr.Field{
 	{Name: "depth", ValueDoc: "a number", Doc: "depth: keeps rows nesting at least n deep (groups: the deepest function)"},
 	{Name: "params", ValueDoc: "a number", Doc: "params: keeps rows with at least n parameters (groups: the most of a function)"},
 	{Name: "nloc", ValueDoc: "a number", Doc: "nloc: keeps rows with at least n code lines (groups: the sum)"},
-	{Name: "metric", Values: []string{"ccn", "cog", "cmt"}, Doc: "metric: sorts by cyclomatic or cognitive complexity, or comment density (cmt%)"},
+	{Name: "metric", Values: []string{"ccn", "cog", "cmt", "hot", "commits"}, Doc: "metric: sorts by cyclomatic or cognitive complexity, comment density (cmt%), hotspot score (hot) or commits in the churn window"},
 	{Name: "test", Values: []string{"yes", "no"}, Doc: "test: no hides test files, test: yes keeps only them"},
 }}
 
@@ -197,6 +202,10 @@ type Row struct {
 	// Path, Rel, Lang and Change are the parent's.
 	Site   *complexity.Site
 	Parent int
+	// Commits is the row's file's commit count in the churn window and Hot
+	// its hotspot score (#2957, churn.go); both 0 outside git.
+	Commits int
+	Hot     int
 }
 
 // value is the row's sort key on column c: a number for the metric
@@ -231,6 +240,10 @@ func (r Row) intValue(c Column) (int, string) {
 		return r.Fn.Line, ""
 	case ColChange:
 		return r.sectionRank(), ""
+	case ColCommits:
+		return r.Commits, ""
+	case ColHot:
+		return r.Hot, ""
 	}
 	if r.Change != 0 {
 		switch c {
@@ -291,6 +304,10 @@ func (r Row) cell(c Column) string {
 		return strconv.Itoa(r.Fn.Depth)
 	case ColChange:
 		return r.Change.String()
+	case ColCommits:
+		return strconv.Itoa(r.Commits)
+	case ColHot:
+		return strconv.Itoa(r.Hot)
 	}
 	if r.Change != 0 {
 		switch c {
@@ -374,6 +391,13 @@ type Model struct {
 	// expanded is the expandKey of the function row whose sites are shown
 	// ('space', #2946, sites.go); "" when none is.
 	expanded string
+
+	// The hotspot columns (#2957, churn.go): commits per project-relative
+	// path in the last churnDays days, nil outside git (the columns hide);
+	// hotWarn is the top-decile hot score of the visible rows.
+	churn     map[string]int
+	churnDays int
+	hotWarn   int
 }
 
 // New returns an empty panel on the Project tab sorted by CCN descending;
@@ -470,11 +494,11 @@ func (m *Model) layout() []Column {
 	}
 	switch m.tab {
 	case TabFile:
-		return fileLayout
+		return m.churnLayout(fileLayout, fileChurnLayout)
 	case TabChanges:
 		return changesLayout
 	}
-	return projectLayout
+	return m.churnLayout(projectLayout, projectChurnLayout)
 }
 
 // layoutIndex is the display position of column c on the selected tab, -1
@@ -603,6 +627,10 @@ func (m *Model) Refresh() {
 		m.sortCol, m.desc = ColCog, true
 	case "cmt":
 		m.sortCol, m.desc = ColCmt, true
+	case "hot":
+		m.sortCol, m.desc = ColHot, true
+	case "commits":
+		m.sortCol, m.desc = ColCommits, true
 	}
 	m.rows = m.rows[:0]
 	for _, r := range all {
@@ -611,6 +639,7 @@ func (m *Model) Refresh() {
 		}
 	}
 	m.sortRows()
+	m.markHot()
 	m.spliceSites()
 	m.markCaret()
 	m.widths = m.columnWidths()
@@ -630,7 +659,7 @@ func (m *Model) population() []Row {
 	add := func(path string, fns []complexity.Function) {
 		rel, id := m.relPath(path), m.pathLang(path)
 		for _, fn := range fns {
-			out = append(out, Row{Path: path, Rel: rel, Lang: id, Fn: fn})
+			out = append(out, Row{Path: path, Rel: rel, Lang: id, Fn: fn, Commits: m.churn[rel], Hot: m.fnHot(m.churn[rel], fn)})
 		}
 	}
 	switch m.tab {
@@ -1066,13 +1095,21 @@ func (m *Model) CSV() string {
 		return m.groupCSV()
 	}
 	var b strings.Builder
-	writeCSVRow(&b, csvHeader)
+	header := csvHeader
+	if m.churn != nil {
+		header = append(header[:len(header):len(header)], "commits") // #2957
+	}
+	writeCSVRow(&b, header)
 	for _, r := range m.rows {
 		if r.Site != nil {
 			continue
 		}
 		c := r.cells(projectLayout)
-		writeCSVRow(&b, []string{c[0], r.Fn.Name, r.Fn.Kind, c[2], c[3], c[4], c[5], c[6], c[7], strconv.Itoa(r.Fn.CommentLines), c[8]})
+		fields := []string{c[0], r.Fn.Name, r.Fn.Kind, c[2], c[3], c[4], c[5], c[6], c[7], strconv.Itoa(r.Fn.CommentLines), c[8]}
+		if m.churn != nil {
+			fields = append(fields, strconv.Itoa(r.Commits))
+		}
+		writeCSVRow(&b, fields)
 	}
 	return b.String()
 }
@@ -1219,7 +1256,7 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 	}
 	if r.Group != nil {
 		for c, col := range layout {
-			cells[c].Warn = m.groupWarn(r.Group, col)
+			cells[c].Warn = m.groupWarn(r.Group, col) || col == ColHot && m.hotWarns(r)
 		}
 		return gridview.DataRow(pal, cells, m.widths, 0, m.width, i == m.cursor, m.focused)
 	}
@@ -1263,6 +1300,9 @@ func (m *Model) footer() string {
 		hints += " · t tests: hidden"
 	} else {
 		hints += " · t tests"
+	}
+	if m.tab != TabChanges && m.churn != nil {
+		hints += " · churn " + itoa(m.churnDays) + "d"
 	}
 	return lipgloss.NewStyle().Faint(true).Render(m.clip(" " + count + hints))
 }

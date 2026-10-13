@@ -10,7 +10,8 @@ CI pipelines and coding agents: `ike complexity`.
 
 Settings live under `[complexity]` (Settings ▸ Complexity): `exclude` globs,
 the warning thresholds `ccn_warn` / `cognitive_warn` (15 by default) and
-`comment_density_warn` (40 % by default, `0` turns it off).
+`comment_density_warn` (40 % by default, `0` turns it off), and the
+hotspot window `churn_days` (90 by default).
 
 ## Reading the numbers
 
@@ -117,6 +118,23 @@ sorting and the filter work on the group columns (`fn:` matches the class
 or the file). `enter` opens the group's first function. Each tab remembers
 its grouping, and the layout keeps it across restarts.
 
+## Hotspots: complexity × change frequency
+
+A complex function nobody has touched in a year costs less than a simpler
+one edited every week. Inside a git repository the Complexity window adds a
+`commits` column to the function rows — how many commits touched the
+function's file in the last 90 days — and, grouped per file (`b` twice),
+`commits` and `hot`: commits × the file's `excess`, or commits × its
+`Σccn` when nothing in it exceeds a threshold. Sort by it with
+`metric:hot` in the filter (or `s` until the header marks `hot`): the top
+rows are where simplifying pays off first. The top tenth of the visible
+`hot` values is painted in the warning colour, and the footer names the
+window (`churn 90d`). Change the window in **Settings > Complexity >
+Hotspot churn window** (`complexity.churn_days`, 1–3650 days); outside a
+git repository the columns are hidden. The counts come from one `git log`
+per refresh of the git status. A renamed file is not followed: its commits
+before the rename count under the old name.
+
 ## Hiding test files
 
 Test functions are rarely what you want to simplify, yet a table-driven
@@ -157,7 +175,7 @@ current text. A renamed function appears as one removed and one added row.
 ## Command line
 
 ```
-ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [PATH...]
+ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [PATH...]
 ```
 
 | Flag | Effect |
@@ -173,6 +191,7 @@ ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--mi
 | `--cmt N` | Override the comment-density threshold (percent, 1-100); like `--ccn` / `--cog` it also filters the rows to functions at or above any threshold. |
 | `--no-tests` | Leave test files out (the same rule as `t` in the Complexity window, see [Hiding test files](#hiding-test-files)): the table, the groups, `--brief`, the summary and `--diff` ignore them; a line `tests hidden: N files` follows the summary and the JSON `summary` carries `"tests_hidden": true`. A test file you name explicitly is still measured. |
 | `--sites` | With `--json`: add `sites` to every function (and to the `after` side of every changed function under `--diff`), the per-site breakdown of [Why is this function complex?](#why-is-this-function-complex). The text table does not change; without the flag the JSON is exactly what it was. |
+| `--churn[=DAYS]` | Add the hotspot numbers (see [Hotspots](#hotspots-complexity--change-frequency)) from the commits of the last `DAYS` days (default: `complexity.churn_days`, 90): a `COMMITS` column in the function table, `COMMITS` and `HOT` in the `--by` tables, `commits=N  hot=N` on `--brief` lines, and in the JSON `commits` per function and group, `hot` per group and `summary.churn_days`. `ike complexity --churn=30 --by file` ranks the files to simplify first. Needs a git repository (exit 2 otherwise); not combinable with `--diff`. Without the flag the output is unchanged. |
 
 The walk skips the same files as the Complexity window: hidden directories,
 `node_modules`, `vendor`, `dist`, `build`, `target`, virtualenvs, files over
@@ -299,7 +318,8 @@ level. With `--diff --sites` every `changed` entry's `after` and every
 
 Grouped report (`--by class --json`): `functions` gives way to `groups`,
 one object per row the filter keeps, with the summary's field names; `class`
-is present at the class level only.
+is present at the class level only. With `--churn`, every group gains `commits` and
+`hot`, every function `commits`, and the summary `churn_days`.
 
 ```json
 {

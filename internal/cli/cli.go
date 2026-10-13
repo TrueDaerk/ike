@@ -49,7 +49,7 @@ type Invocation struct {
 }
 
 // ComplexityArgs is the parsed `ike complexity [--diff[=REV]] [--by class|file]
-// [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [PATH...]`. A zero threshold means "not given":
+// [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [PATH...]`. A zero threshold means "not given":
 // the report falls back to the configured warning thresholds.
 type ComplexityArgs struct {
 	// Diff selects the diff report against Rev ("" = HEAD).
@@ -79,6 +79,13 @@ type ComplexityArgs struct {
 	// every rendering; a test file in the diff is skipped like an excluded
 	// one. A file named explicitly still counts, as with the exclude globs.
 	NoTests bool
+	// Churn adds the hotspot columns (#2957): the commits per file in the
+	// last ChurnDays days (0 = complexity.churn_days) as COMMITS on the
+	// function and group tables and HOT (commits × excess) on the group
+	// tables, and the matching JSON fields. Needs a git repository; not
+	// combinable with Diff.
+	Churn     bool
+	ChurnDays int
 	// Paths are the files and directories to report on, as typed (#2936;
 	// none = the working directory). A directory is walked with the
 	// index's skip rules and the complexity.exclude globs; a file is
@@ -111,8 +118,15 @@ var ErrBriefWithBy = errors.New("--brief and --by exclude each other")
 // ErrByWithDiff.
 var ErrBriefWithDiff = errors.New("--brief is not supported with --diff")
 
+// ErrChurnWithDiff rejects `--churn` together with `--diff` (#2957): the
+// diff report has no per-file rows to rank.
+var ErrChurnWithDiff = errors.New("--churn is not supported with --diff")
+
+// ChurnDaysMax bounds `--churn=DAYS` like complexity.churn_days.
+const ChurnDaysMax = 3650
+
 // ComplexityUsage is the one-line grammar of `ike complexity`.
-const ComplexityUsage = "usage: ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [PATH...]"
+const ComplexityUsage = "usage: ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [PATH...]"
 
 // Parse parses the arguments after the program name. Supported forms:
 //
@@ -205,7 +219,8 @@ func Parse(args []string) (Invocation, error) {
 // path. `--by` takes class or file in either form (#2937) and is an error
 // together with `--diff`. `--brief` takes its level only as `--brief=class`
 // (#2938), so `--brief PATH` keeps PATH as a path; it excludes `--by` and
-// `--diff`. Every other argument is a path, in order (#2936);
+// `--diff`. `--churn` takes its window only as `--churn=DAYS` (#2957) and
+// excludes `--diff`. Every other argument is a path, in order (#2936);
 // an unknown flag is an error.
 func parseComplexity(args []string) (ComplexityArgs, error) {
 	var ca ComplexityArgs
@@ -221,6 +236,15 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 			ca.NoTests = true
 		case a == "--sites":
 			ca.Sites = true
+		case name == "--churn":
+			ca.Churn = true
+			if hasVal {
+				n, ok := parseNum(val)
+				if !ok || n > ChurnDaysMax {
+					return ComplexityArgs{}, fmt.Errorf("--churn: %q is not a number of days (1–%d)", val, ChurnDaysMax)
+				}
+				ca.ChurnDays = n
+			}
 		case name == "--diff":
 			ca.Diff = true
 			if hasVal {
@@ -288,6 +312,9 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 	}
 	if ca.By != "" && ca.Diff {
 		return ComplexityArgs{}, ErrByWithDiff
+	}
+	if ca.Churn && ca.Diff {
+		return ComplexityArgs{}, ErrChurnWithDiff
 	}
 	return ca, nil
 }
