@@ -1,9 +1,9 @@
 ---
 type: concept
 title: Code Complexity
-description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters, nesting depth and comment density (#2934) per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary with its per-class and per-file groups (#2937), the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source, the hotspot columns (#2957) multiplying complexity by the commits per file from one git log, the accepted-debt baseline (#2958, a committed .ike/complexity-baseline.json that turns every surface into a ratchet flagging only new and worsened functions), and the headless `ike complexity` CLI (#2922) printing the table of the project or of named files and directories (#2936), per function or summed per class or file (#2937), or the diff against a revision as text or JSON for CI and agents, also as a complexity-only build of the ike binary (#2939, build tag ike_complexity_only, make install-complexity) that links no IDE; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
-resource: internal/complexity, internal/complexitypanel, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_churn.go, internal/app/complexity_baseline.go, internal/vcs/vcscore/churn.go, internal/app/complexity_problems.go, internal/app/complexity_segment.go, internal/complexitycli, cmd/ike/complexityonly.go
-tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive, index, settings, telemetry, vcs, diff, problems, cli, baseline]
+description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters, nesting depth and comment density (#2934) per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary with its per-class and per-file groups (#2937), the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source, the hotspot columns (#2957) multiplying complexity by the commits per file from one git log, the accepted-debt baseline (#2958, a committed .ike/complexity-baseline.json that turns every surface into a ratchet flagging only new and worsened functions), the optimisation-session pins (#2959, functions pinned with their metrics in the state store's complexity-pins.json, a Pinned section with a since-pin delta and a session Δexcess in the header), and the headless `ike complexity` CLI (#2922) printing the table of the project or of named files and directories (#2936), per function or summed per class or file (#2937), or the diff against a revision as text or JSON for CI and agents, also as a complexity-only build of the ike binary (#2939, build tag ike_complexity_only, make install-complexity) that links no IDE; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
+resource: internal/complexity, internal/complexitypanel, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_churn.go, internal/app/complexity_baseline.go, internal/app/complexity_pins.go, internal/vcs/vcscore/churn.go, internal/app/complexity_problems.go, internal/app/complexity_segment.go, internal/complexitycli, cmd/ike/complexityonly.go
+tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive, index, settings, telemetry, vcs, diff, problems, cli, baseline, pins]
 timestamp: 2026-10-14T00:30:00Z
 ---
 
@@ -441,7 +441,8 @@ it, CCN otherwise) with its percentiles between average and max, `CCN
 Σ137301 avg 4.0 p50 2 p90 9 p99 28 max 170` (#2953), the other in the
 short form so the line stays within reason — the aggregate comment density (`cmt 12%`), the
 count over threshold, `excess N` (#2945) and, with a baseline in effect,
-`N accepted` (#2958, [below](#baseline-2958)). The grid
+`N accepted` (#2958, [below](#baseline-2958)) and, on the Project tab,
+`session Δexcess −120` (#2959, see Pins below). The grid
 (`gridview.HeaderRow` / `DataRow`, widths from the longest visible value,
 the file column capped at half the pane) has the columns file
 (project-relative; hidden on the File tab), function, line (1-based), ccn,
@@ -476,6 +477,8 @@ nothing), `class:` is a substring of `Function.Class`, and `depth:`,
 `baseline:new|accepted|worsened` (#2958) keeps functions of that status
 against the accepted-debt baseline — on a group row, groups with such a
 member (`Summary.Accepted` / `Worsened` / the remaining over count).
+`pinned:yes|no` (#2959) keeps the pinned functions or the rest (groups:
+with a pinned member).
 Every key takes a leading `-` to negate it (#2951): `matches` runs each
 field through `filterexpr.Query.KeepsAll` (positive repeats AND, a negated
 term drops what it matches) and the free text through `MatchFree`, so
@@ -610,6 +613,44 @@ one row per visible function, the file column on every tab) and opens it.
 `y` / the copy chord puts `path:line: name ccn=.. cog=..` on the clipboard
 (and the clipboard history). The wheel scrolls, a click selects. The
 single keys are the pane's own (keybind audit ledger, `reasonPaneKey`).
+
+**Pins** (#2959, `internal/complexity/pins.go`,
+`internal/complexitypanel/pins.go`, `internal/app/complexity_pins.go`).
+An optimisation session has a handful of targets; a pin remembers one
+function *and the metrics it had when pinned*, so the panel shows what a
+refactor achieved. `complexity.Pins` is the file `complexity-pins.json` in
+the state store (`PinsPath(root)`: `$IKE_CONFIG_DIR/complexity-pins.json`
+when set — the `bookmarks.File()` rule — else `<root>/.ike/`), entries
+`{file, function, ordinal, ccn, cognitive, pinned_at}` keyed by the
+baseline's matcher (`EntryKey`: project-relative path, name, ordinal among
+same-named units), sorted by file, function, ordinal and written atomically
+(temp file + rename) on every change; the last unpin removes the file. The
+app loads it lazily (`complexityPinsState.list`, a malformed file reads as
+empty) on the first panel seed or `p`. `p` (`complexity.pin`, "Complexity:
+Pin / Unpin Selected Function"; the pane's own key, `reasonPaneKey`) is
+`TogglePin`: a function row (a site / candidate row stands for its
+function, a Changes row for its head side via `changeOrdinal`) or a gone
+pin sends `PinToggleMsg{Rel, Fn, Ordinal}`; a group or Changes file row
+and a removed function put the reason in the footer until the next key.
+`markPins` sets `Row.Pin` on every tab (` ★` after the name, after a
+baseline ` ✓`); on the ungrouped Project tab the pinned rows move into the
+**Pinned** section (`Row.PinRow`), which `sortRows` puts first whatever
+the sort, gone pins last, and the layout gains a `since pin` column
+(`ColSincePin`, only while the section has rows): `ccn 42→30 (−12) · cog
+31→20 (−11)` (`Pin.SinceText`), in the success colour
+(`gridview.Cell.Good`) when a metric fell and none rose, the warning colour
+when one rose. A pin the settled snapshot no longer holds stays listed as a
+muted `(gone)` row (`Row.Gone`, `-` metrics, left out of the totals and the
+CSV) until it is unpinned; nothing is marked gone while the walk runs.
+
+**Session Δ** (#2959). The app records the first settled snapshot of the
+index (walk finished, enabled, measurable) per project root in a
+process-lifetime map (`complexitySessionBase`, on every
+`ComplexityChangedMsg` and panel seed) and hands it to the pane
+(`SetSessionBase`). `updateSessionDelta` measures the base under the
+current thresholds, baseline and hide-tests rule (cached until one
+changes) and the Project tab's header appends `session Δexcess −120`
+(current minus base excess), hidden while it is 0.
 
 **Settings** (`complexity.ccn_warn`, `complexity.cognitive_warn`, Settings >
 Complexity, Int 1-200, default 15; `complexity.comment_density_warn`, Int
@@ -1101,7 +1142,7 @@ the request, so with both modes `off` the edit clears the marks at once.
 
 ## Headless CLI (#2922)
 
-`ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [PATH...]`
+`ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [PATH...]`
 is the terminal-free report for CI pipelines and coding agents. The grammar
 lives in `internal/cli` (`ComplexityArgs`, first argument only like
 `agent-hook`, so a file named `complexity` still opens as `./complexity`);
@@ -1184,6 +1225,17 @@ the output is unchanged byte for byte.
 `NoBaseline`, `WriteBaseline`; the path only after `=`) apply or seed the
 accepted-debt file — see [Baseline](#baseline-2958) for the flags, the
 `✓` rows, the `baseline:` line and the JSON fields.
+
+**Pins (#2959).** `--pins` (`ComplexityArgs.Pins`; with `--diff`, `--by`
+or `--brief` a usage error, `cli.ErrPinsWithDiff`) keeps only the pinned
+functions of the [pin file](#tool-window-2917) — read from
+`complexity.PinsPath(root)`, a missing file is no pins, a malformed one
+exit 2 — and adds `PINNED_CCN  PINNED_COG  ΔCCN  ΔCOG` columns and a
+`pins: N pinned, N shown, N gone (<file>)` trailer (`pins: none` without
+a file). Every report marks pinned rows `name ★` in the text table and
+gives every pinned function — project `functions`, diff `changed` (head
+side) and `added` — `pinned: {ccn, cognitive, pinned_at}` in the JSON
+(`diffReport.head` keeps the head measurement for the ordinals).
 
 **Brief (#2938).** `--brief` (one line per file) and `--brief=class` (one
 line per class) are a second text renderer over the same groups

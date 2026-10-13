@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"text/tabwriter"
+	"time"
 
 	"ike/internal/complexity"
 )
@@ -110,6 +111,24 @@ type jsonFunction struct {
 	// Baseline is "accepted", "worsened" or "new" against the baseline in
 	// effect (#2958), absent without one.
 	Baseline string `json:"baseline,omitempty"`
+	// Pinned is the function's pin (#2959): the metrics it was pinned at
+	// and when; absent on an unpinned function.
+	Pinned *jsonPinned `json:"pinned,omitempty"`
+}
+
+// jsonPinned is a pin's recorded side.
+type jsonPinned struct {
+	CCN       int       `json:"ccn"`
+	Cognitive int       `json:"cognitive"`
+	PinnedAt  time.Time `json:"pinned_at"`
+}
+
+// toJSONPinned converts a pin; nil (omitted) for none.
+func toJSONPinned(p *complexity.Pin) *jsonPinned {
+	if p == nil {
+		return nil
+	}
+	return &jsonPinned{CCN: p.CCN, Cognitive: p.Cognitive, PinnedAt: p.PinnedAt}
 }
 
 // jsonSite is one complexity.Site; line numbers are 1-based, the column
@@ -217,6 +236,8 @@ type jsonChange struct {
 	Before jsonMetrics `json:"before"`
 	After  jsonMetrics `json:"after"`
 	Delta  jsonDelta   `json:"delta"`
+	// Pinned is the head side's pin (#2959), absent when unpinned.
+	Pinned *jsonPinned `json:"pinned,omitempty"`
 }
 
 // jsonSkipped reports the files a language claims but no spec measures.
@@ -340,6 +361,7 @@ func writeProjectJSON(w io.Writer, r projectReport) error {
 		if r.s.baseline != nil {
 			jf.Baseline = rw.fn.Baseline.String()
 		}
+		jf.Pinned = toJSONPinned(r.s.pinOf(rw.file, rw.fn, rw.ordinal))
 		if r.s.churn != nil {
 			n := r.s.churn[rw.file]
 			jf.Commits = &n
@@ -393,10 +415,13 @@ func writeDiffJSON(w io.Writer, r diffReport) error {
 			Delta: jsonDelta{CCN: c.ch.DeltaCCN(), Cognitive: c.ch.DeltaCognitive(), NLOC: c.ch.DeltaNLOC(),
 				Excess:       c.ch.After.Excess(r.s.ccnWarn, r.s.cogWarn) - c.ch.Before.Excess(r.s.ccnWarn, r.s.cogWarn),
 				CommentLines: c.ch.DeltaCommentLines(), CommentDensity: ratio(c.ch.DeltaCommentDensity())},
+			Pinned: toJSONPinned(c.pin),
 		})
 	}
 	for _, rw := range added {
-		out.Added = append(out.Added, toJSONFunction(rw.file, rw.fn, r.s.args.Sites))
+		jf := toJSONFunction(rw.file, rw.fn, r.s.args.Sites)
+		jf.Pinned = toJSONPinned(r.s.pinOf(rw.file, rw.fn, rw.ordinal))
+		out.Added = append(out.Added, jf)
 	}
 	for _, rw := range removed {
 		out.Removed = append(out.Removed, toJSONFunction(rw.file, rw.fn, false))
@@ -417,22 +442,37 @@ func writeDiffJSON(w io.Writer, r diffReport) error {
 // the skipped line.
 func writeProjectText(w io.Writer, r projectReport) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "FILE\tFUNCTION\tLINE\tCCN\tCOG\tNLOC\tPARAMS\tCMT%"+r.s.churnHeader("\tCOMMITS"))
+	head := "FILE\tFUNCTION\tLINE\tCCN\tCOG\tNLOC\tPARAMS\tCMT%" + r.s.churnHeader("\tCOMMITS")
+	if r.s.args.Pins {
+		head += "\tPINNED_CCN\tPINNED_COG\tΔCCN\tΔCOG"
+	}
+	fmt.Fprintln(tw, head)
 	for _, rw := range r.rows {
 		f := rw.fn
 		name := f.Name
 		if f.Baseline == complexity.BaselineAccepted {
 			name += acceptedMark
 		}
+		pin := r.s.pinOf(rw.file, f, rw.ordinal)
+		if pin != nil {
+			name += pinMark
+		}
 		fmt.Fprintf(tw, "%s\t%s\t%d\t%d\t%d\t%d\t%d\t%d", rw.file, name, f.Line+1, f.CCN, f.Cognitive, f.NLOC, f.Params,
 			complexity.DensityPercent(f.CommentDensity))
 		if r.s.churn != nil {
 			fmt.Fprintf(tw, "\t%d", r.s.churn[rw.file])
 		}
+		if r.s.args.Pins && pin != nil {
+			dc, dg := pin.SincePin(f)
+			fmt.Fprintf(tw, "\t%d\t%d\t%s\t%s", pin.CCN, pin.Cognitive, complexity.SignedDelta(dc), complexity.SignedDelta(dg))
+		}
 		fmt.Fprintln(tw)
 	}
 	_ = tw.Flush()
 	r.writeSummaryLine(w)
+	if r.s.args.Pins {
+		r.writePinsLine(w)
+	}
 	if r.s.filtered() {
 		fmt.Fprintf(w, "shown: %d of %d functions (%s%s)\n", len(r.rows), r.summary.Functions, r.s.filterText(), r.s.testsNote())
 	}
@@ -444,6 +484,31 @@ func writeProjectText(w io.Writer, r projectReport) {
 // acceptedMark follows the name of a function the baseline accepts (#2958)
 // in the text table, as the tool window marks it.
 const acceptedMark = " ✓"
+
+// pinMark follows the name of a pinned function (#2959), as the tool
+// window marks it.
+const pinMark = " ★"
+
+// writePinsLine is --pins' trailer: how many pins the table shows and how
+// many name a function the report no longer measures (gone).
+func (r projectReport) writePinsLine(w io.Writer) {
+	n := r.s.pins.Len()
+	if n == 0 {
+		fmt.Fprintf(w, "pins: none (%s)\n", r.s.rel(r.s.pinsPath))
+		return
+	}
+	seen := map[complexity.EntryKey]bool{}
+	for _, rw := range r.all {
+		seen[complexity.EntryKey{File: rw.file, Function: rw.fn.Name, Ordinal: rw.ordinal}] = true
+	}
+	gone := 0
+	for _, p := range r.s.pins.Pinned {
+		if !seen[p.Key()] {
+			gone++
+		}
+	}
+	fmt.Fprintf(w, "pins: %d pinned, %d shown, %d gone (%s)\n", n, len(r.rows), gone, r.s.rel(r.s.pinsPath))
+}
 
 // writeSummaryLine prints the blank line and the whole-project summary
 // both project tables end with.

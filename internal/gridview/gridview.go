@@ -40,6 +40,10 @@ type Cell struct {
 	// Muted paints the cell faint: a warning the baseline accepted (the
 	// Complexity window, #2958). Warn wins when both are set.
 	Muted bool
+	// Good paints the cell's text in the success colour: a pinned
+	// function whose metrics fell (the Complexity window, #2959). Warn
+	// wins when both are set.
+	Good bool
 }
 
 // NullCell is the glyph a Null cell draws as — visibly distinct from the
@@ -76,7 +80,7 @@ func DataRow(pal *theme.Palette, cells []Cell, widths []int, colOff, w int, sele
 			text, style = NullCell, nullStyle
 		}
 		chunk := PadTo(text, widths[c])
-		if cell.Cursor || cell.Match || cell.Warn || cell.Muted {
+		if cell.Cursor || cell.Match || cell.Warn || cell.Muted || cell.Good {
 			chunk = ClipTo(chunk, budget)
 			b.WriteString(markStyle(pal, style, cell, focused).Render(chunk))
 			budget -= lipgloss.Width(chunk)
@@ -104,6 +108,8 @@ func DataRow(pal *theme.Palette, cells []Cell, widths []int, colOff, w int, sele
 func markStyle(pal *theme.Palette, style lipgloss.Style, cell Cell, focused bool) lipgloss.Style {
 	if cell.Warn {
 		style = style.Foreground(pal.Warning)
+	} else if cell.Good {
+		style = style.Foreground(pal.Success)
 	} else if cell.Muted {
 		style = style.Faint(true)
 	}

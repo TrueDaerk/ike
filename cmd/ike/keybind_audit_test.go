@@ -112,6 +112,9 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	// (and after a threshold change); it rewrites a committed file behind
 	// a confirmation, so the palette is the right doorway.
 	{"complexity.baselineAll", reasonOccasional},
+	// Pinning a function for an optimisation session (#2959) is the
+	// pane's own 'p'.
+	{"complexity.pin", reasonPaneKey},
 	{"deps.updateLatest", reasonIntention},
 	{"http.", reasonPaneKey}, // the response pane's single keys
 	// #2423's GraphQL schema commands carve themselves out of that family:

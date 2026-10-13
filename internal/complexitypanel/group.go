@@ -249,6 +249,9 @@ func (r Row) key() string {
 	if r.Group != nil {
 		return "g\x00" + r.Path + "\x00" + r.Group.Class
 	}
+	if r.Gone {
+		return "x\x00" + r.Rel + "\x00" + r.Fn.Name + "\x00" + strconv.Itoa(r.Ordinal)
+	}
 	return "f\x00" + r.Path + "\x00" + strconv.Itoa(r.Fn.Line) + "\x00" + r.Fn.Name + "\x00" + strconv.Itoa(int(r.Change))
 }
 

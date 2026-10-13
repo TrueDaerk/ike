@@ -342,6 +342,9 @@ type Model struct {
 	// confirmation dialog open in the shell.
 	cxBase       *complexityBaselineState
 	cxBaseDialog bool
+	// cxPins is the optimisation-session pin list (0551, #2959), loaded
+	// lazily and shared by pointer like cxBase.
+	cxPins *complexityPinsState
 	// cxHints is the inline complexity hint feed's bookkeeping (0550,
 	// #2919): the state key delivered or armed per open document, shared by
 	// pointer like cxDiff.
@@ -1716,6 +1719,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		cxDiff:          &complexityDiffState{},
 		cxChurn:         &complexityChurnState{},
 		cxBase:          newComplexityBaselineState(root),
+		cxPins:          newComplexityPinsState(root),
 		cxHints:         &complexityHintState{sent: map[string]cxHintKey{}, pending: map[string]cxHintKey{}, show: map[string]cxShowSites{}, measured: map[string]complexityHintMeasuredMsg{}},
 		ws:              wsMgr,
 		recentEditor:    edKey,
@@ -8540,6 +8544,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// republishes its rows (#2920); the status segment of a later step
 		// will too. The Changes tab keys on the generation (#2918).
 		m.noteComplexityGen(msg.Gen)
+		m.applyComplexitySession() // the session Δ's base, once (#2959)
 		m.refreshComplexityPanel()
 		m.reportComplexityBaseline() // a malformed baseline, once (#2958)
 		m.feedComplexityProblems(config.Get().Complexity)
@@ -8613,6 +8618,16 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// complexity.baseline (#2958), i in the pane: accept the selected
 		// function or group into the baseline, or drop it again.
 		return m, m.toggleComplexityBaselineRow()
+
+	case ComplexityPinMsg:
+		// complexity.pin (#2959), p in the pane: pin or unpin the selected
+		// function.
+		return m, m.toggleComplexityPinRow()
+
+	case complexitypanel.PinToggleMsg:
+		// The pane's 'p' (#2959): toggle the pin, save the file.
+		m.handleComplexityPinToggle(msg)
+		return m, nil
 
 	case ComplexityBaselineAllMsg:
 		// complexity.baselineAll (#2958): every over-threshold function,

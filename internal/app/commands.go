@@ -1023,6 +1023,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			// The accepted-debt baseline (#2958): i in the pane toggles one
 			// function or group, the bulk accept asks first.
 			withAliases(appCommand("complexity.baseline", "Complexity: Accept / Drop Selected in Baseline", ComplexityBaselineMsg{}), "accept debt", "ignore complexity", "baseline"),
+			// Optimisation-session pins (#2959): p in the pane.
+			withAliases(appCommand("complexity.pin", "Complexity: Pin / Unpin Selected Function", ComplexityPinMsg{}), "pin function", "track function", "since pin"),
 			withAliases(appCommand("complexity.baselineAll", "Complexity: Accept All Over Threshold", ComplexityBaselineAllMsg{}), "seed baseline", "accept all debt", "ratchet"),
 			appCommand("deps.refresh", "Dependencies: Refresh Scan", DepsRefreshMsg{}),
 			appCommand("deps.audit", "Dependencies: Audit Vulnerabilities", DepsAuditMsg{}),
