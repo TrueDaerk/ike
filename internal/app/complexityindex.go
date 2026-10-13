@@ -84,8 +84,9 @@ func (m *Model) reconfigureComplexityIndex(cfg *config.Config) {
 // complexityScanRecorder is the callback the complexity index reports a
 // completed project walk through: one complexity.scan op event per walk —
 // the initial one and every rebuild — carrying the walk's duration, the
-// file and function counts it left behind and whether it stopped at the
-// file cap. The phase is error when the build has no syntax tree at all
+// file and function counts it left behind, how many files it took from the
+// persisted cache (#2967) and whether it stopped at the file cap; a damaged
+// cache adds cache=corrupt, the one line the ignored file leaves behind. The phase is error when the build has no syntax tree at all
 // (the walk can never fill), ok otherwise. It runs on the index's timer
 // goroutine, so it touches nothing but the recorder. No path travels.
 func complexityScanRecorder(r *telemetry.Recorder) func(complexity.Stats) {
@@ -94,11 +95,16 @@ func complexityScanRecorder(r *telemetry.Recorder) func(complexity.Stats) {
 		if s.Unavailable {
 			phase = telemetry.OpPhaseError
 		}
-		r.Op(telemetry.OpComplexityScan, phase, map[string]string{
+		detail := map[string]string{
 			"ms":        strconv.FormatInt(s.LastScan.Milliseconds(), 10),
 			"files":     strconv.Itoa(s.Files),
 			"functions": strconv.Itoa(s.Functions),
+			"cached":    strconv.Itoa(s.Cached),
 			"truncated": strconv.FormatBool(s.Truncated),
-		})
+		}
+		if s.CacheCorrupt {
+			detail["cache"] = "corrupt"
+		}
+		r.Op(telemetry.OpComplexityScan, phase, detail)
 	}
 }

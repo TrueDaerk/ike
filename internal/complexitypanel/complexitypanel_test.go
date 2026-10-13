@@ -327,6 +327,15 @@ func TestEmptyStates(t *testing.T) {
 	if v := m.View(); !strings.Contains(v, "scanning…") || !strings.Contains(v, "(scanning the project…)") {
 		t.Fatalf("scanning view:\n%s", v)
 	}
+	// A walk seeded from the persisted cache says so in the header (#2967).
+	m.Set(complexity.View{Gen: 1, Files: map[string][]complexity.Function{}}, complexity.Stats{Enabled: true, Cached: 2981})
+	if v := m.View(); !strings.Contains(v, "gen 1 (2981 cached)") {
+		t.Fatalf("cached view:\n%s", v)
+	}
+	m.Set(complexity.View{Gen: 2, Files: map[string][]complexity.Function{}}, complexity.Stats{Enabled: true})
+	if v := m.View(); !strings.Contains(v, "gen 2") || strings.Contains(v, "cached") {
+		t.Fatalf("cold view:\n%s", v)
+	}
 	m.Set(complexity.View{Files: map[string][]complexity.Function{}}, complexity.Stats{Enabled: false})
 	if !strings.Contains(m.View(), "complexity.enabled is off") {
 		t.Fatalf("disabled view:\n%s", m.View())

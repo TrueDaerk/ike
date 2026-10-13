@@ -183,12 +183,14 @@ func TestComplexityOptionsFromHostConfig(t *testing.T) {
 }
 
 // TestComplexityScanRecorder: a finished walk is one complexity.scan op with
-// counts and duration only; a build without a tree reports the error phase.
+// counts and duration only (plus cache=corrupt for a damaged cache, #2967);
+// a build without a tree reports the error phase.
 func TestComplexityScanRecorder(t *testing.T) {
 	dir := t.TempDir()
 	r := telemetry.New(dir, nil)
 	rec := complexityScanRecorder(r)
-	rec(complexity.Stats{Enabled: true, Files: 12, Functions: 80, LastScan: 1500 * time.Millisecond})
+	rec(complexity.Stats{Enabled: true, Files: 12, Functions: 80, Cached: 9, LastScan: 1500 * time.Millisecond})
+	rec(complexity.Stats{Enabled: true, Files: 3, CacheCorrupt: true})
 	rec(complexity.Stats{Enabled: true, Unavailable: true})
 	r.Command("editor.save", telemetry.SourceKeybind)
 	r.Close()
@@ -199,19 +201,22 @@ func TestComplexityScanRecorder(t *testing.T) {
 			ops = append(ops, ev)
 		}
 	}
-	if len(ops) != 2 {
-		t.Fatalf("ops = %v, want two complexity.scan events", evs)
+	if len(ops) != 3 {
+		t.Fatalf("ops = %v, want three complexity.scan events", evs)
 	}
-	if d := ops[0].Data; d["phase"] != telemetry.OpPhaseOK || d["ms"] != "1500" || d["files"] != "12" || d["functions"] != "80" || d["truncated"] != "false" {
+	if d := ops[0].Data; d["phase"] != telemetry.OpPhaseOK || d["ms"] != "1500" || d["files"] != "12" || d["functions"] != "80" || d["cached"] != "9" || d["truncated"] != "false" || d["cache"] != "" {
 		t.Fatalf("ok payload = %v", d)
 	}
-	if d := ops[1].Data; d["phase"] != telemetry.OpPhaseError {
+	if d := ops[1].Data; d["phase"] != telemetry.OpPhaseOK || d["cache"] != "corrupt" || d["cached"] != "0" {
+		t.Fatalf("corrupt-cache payload = %v", d)
+	}
+	if d := ops[2].Data; d["phase"] != telemetry.OpPhaseError {
 		t.Fatalf("error payload = %v", d)
 	}
 	for _, ev := range ops {
 		for k := range ev.Data {
 			switch k {
-			case "id", "phase", "ms", "files", "functions", "truncated":
+			case "id", "phase", "ms", "files", "functions", "cached", "cache", "truncated":
 			default:
 				t.Fatalf("unexpected field %q in %v", k, ev.Data)
 			}

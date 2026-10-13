@@ -1,5 +1,19 @@
 # Log
 
+## 2026-10-14 (persisted complexity index, #2967)
+
+- [Code Complexity](/architecture/complexity.md): the new "Persistence"
+  paragraph under the project index — `complexity-index.gob` in the state
+  store (`persist.go`, mirroring the PHP index cache: gob header with
+  `SpecVersion` and root, one stamped record per file, atomic save after the
+  walk), the seeded launch that measures only files whose stamp moved, the
+  quiet cold walk for another root or spec version, the reported and
+  rewritten corrupt cache; Lifecycle: `Rebuild` and a changed exclude list
+  ignore the seed, re-enabling uses it; `Stats.Cached` / `CacheCorrupt` and
+  the header's `gen N (M cached)`.
+- [Usage Telemetry](/architecture/usage-telemetry.md): schema v17 — the
+  `complexity.scan` op gains `cached` and `cache=corrupt`.
+
 ## 2026-10-14 (pinned functions and the session Δ, #2959)
 
 - [Code Complexity](/architecture/complexity.md): the new "Pins" and
