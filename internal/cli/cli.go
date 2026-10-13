@@ -48,7 +48,7 @@ type Invocation struct {
 	Complexity *ComplexityArgs
 }
 
-// ComplexityArgs is the parsed `ike complexity [--diff[=REV]] [--by class|file]
+// ComplexityArgs is the parsed `ike complexity [--diff[=REV|A..B]] [--by class|file]
 // [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [PATH...]`. A zero threshold means "not given":
 // the report falls back to the configured warning thresholds.
 type ComplexityArgs struct {
@@ -157,7 +157,7 @@ var ErrWriteBaselineWithNoBaseline = errors.New("--write-baseline and --no-basel
 var ErrPinsWithDiff = errors.New("--pins is not supported with --diff, --by or --brief")
 
 // ComplexityUsage is the one-line grammar of `ike complexity`.
-const ComplexityUsage = "usage: ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [PATH...]"
+const ComplexityUsage = "usage: ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [PATH...]"
 
 // Parse parses the arguments after the program name. Supported forms:
 //

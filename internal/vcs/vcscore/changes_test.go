@@ -118,3 +118,98 @@ func TestResolveRevAndChangedFilesRealRepo(t *testing.T) {
 		t.Fatalf("RevContent(main, old.go) = %q, %v", content, err)
 	}
 }
+
+func TestParseRevRange(t *testing.T) {
+	for _, tc := range []struct {
+		spec, base, head string
+		ranged           bool
+	}{
+		{"HEAD", "HEAD", "", false},
+		{" main ", "main", "", false},
+		{"", "", "", false},
+		{"main@{1.week.ago}", "main@{1.week.ago}", "", false},
+		{"main..HEAD", "main", "HEAD", true},
+		{"v1..v2", "v1", "v2", true},
+		{"abc123..def456", "abc123", "def456", true},
+		{"main@{1.week.ago}..main", "main@{1.week.ago}", "main", true},
+	} {
+		base, head, ranged, err := ParseRevRange(tc.spec)
+		if err != nil || base != tc.base || head != tc.head || ranged != tc.ranged {
+			t.Errorf("ParseRevRange(%q) = %q, %q, %v, %v; want %q, %q, %v", tc.spec, base, head, ranged, err, tc.base, tc.head, tc.ranged)
+		}
+	}
+	for _, spec := range []string{"a..", "..b", "..", "a...b", "a..b..c"} {
+		if _, _, _, err := ParseRevRange(spec); err == nil || err.Error() == "" {
+			t.Errorf("ParseRevRange(%q) must fail with a message, got %v", spec, err)
+		}
+	}
+}
+
+func TestChangedFilesBetweenRealRepo(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not installed")
+	}
+	dir := t.TempDir()
+	run := func(args ...string) string {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir, "-c", "user.email=t@t", "-c", "user.name=t"}, args...)...)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	write := func(name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run("init", "-b", "main")
+	write("keep.go", "package p\n")
+	write("mod.go", "package p\n\nfunc f() {}\n")
+	write("gone.go", "package p\n\nfunc g() {}\n")
+	write("old.go", "package p\n\nfunc old() {}\n// a\n// b\n// c\n// d\n")
+	run("add", ".")
+	run("commit", "-m", "init")
+	base := run("rev-parse", "HEAD")
+	write("mod.go", "package p\n\nfunc f() { if true {} }\n")
+	write("new.go", "package p\n\nfunc n() {}\n")
+	run("rm", "-q", "gone.go")
+	run("mv", "old.go", "renamed.go")
+	run("add", ".")
+	run("commit", "-m", "work")
+	head := run("rev-parse", "HEAD")
+	// Working-tree edits and untracked files play no part.
+	write("keep.go", "package p\n\n// edited\n")
+	write("untracked.go", "package p\n")
+
+	root, err := DetectRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	files, err := ChangedFilesBetween(root, base, head)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]CommitFile{}
+	for _, f := range files {
+		got[f.Path] = f
+	}
+	for path, want := range map[string]CommitFile{
+		"mod.go":     {Path: "mod.go", Status: StatusModified},
+		"new.go":     {Path: "new.go", Status: StatusAdded},
+		"gone.go":    {Path: "gone.go", Status: StatusDeleted},
+		"renamed.go": {Path: "renamed.go", OldPath: "old.go", Status: StatusRenamed},
+	} {
+		if got[path] != want {
+			t.Errorf("%s = %+v, want %+v", path, got[path], want)
+		}
+	}
+	if len(files) != 4 {
+		t.Errorf("files = %+v", files)
+	}
+	if _, err := ChangedFilesBetween(root, base, "no-such-ref"); err == nil {
+		t.Error("an unknown head must fail")
+	}
+}

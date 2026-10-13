@@ -325,6 +325,117 @@ func TestRunComplexityDiffProjectSubdirectoryAndExclude(t *testing.T) {
 	}
 }
 
+func TestRunComplexityDiffRanged(t *testing.T) {
+	dir := gitRepo(t)
+	root, err := vcs.DetectRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A ranged job carries no snapshot; a dirty buffer of a file the range
+	// touches must not leak in either.
+	dirty := map[string]string{filepath.Join(root, "branch.go"): "package p\n\nfunc onBranch() {}\n\nfunc unsaved() {}\n"}
+	job := cxDiffJob{key: cxDiffKey{rev: "main..feature", rangeGen: 1}, repoRoot: root, projRoot: root, dirty: dirty, ccnWarn: 15, cogWarn: 15}
+	msg := runComplexityDiff(job).(complexityDiffMsg)
+	if msg.err != "" {
+		t.Fatal(msg.err)
+	}
+	c := msg.changes
+	if !c.Ready || c.Sha == "" || c.HeadSha == "" || c.Sha == c.HeadSha || c.HeadRev != "feature" || c.Rev != "main..feature" {
+		t.Fatalf("changes = %+v", c)
+	}
+	if c.BaseRev() != "main" || c.HeadName() != "feature" {
+		t.Errorf("ends = %q → %q", c.BaseRev(), c.HeadName())
+	}
+	// Only the committed branch file: the working tree's edit, deletion,
+	// rename and untracked file play no part.
+	if len(c.Diff.Files) != 1 {
+		t.Fatalf("files = %v", c.Diff.Paths())
+	}
+	fd := c.Diff.Files[filepath.Join(root, "branch.go")]
+	if len(fd.Added) != 1 || fd.Added[0].Name != "onBranch" || len(c.Dirty) != 0 {
+		t.Errorf("branch.go = %+v dirty=%v", fd, c.Dirty)
+	}
+	// The head blob was measured fresh and offered to the cache under the
+	// head sha; a second run reads it from there.
+	key := c.HeadSha + "\x00branch.go"
+	if _, ok := msg.base[key]; !ok || len(msg.base) != 1 {
+		t.Fatalf("cache additions = %v", keysOf(msg.base))
+	}
+	job.cache = msg.base
+	if msg = runComplexityDiff(job).(complexityDiffMsg); msg.err != "" || len(msg.base) != 0 {
+		t.Fatalf("cached head blob measured again: %v / %q", keysOf(msg.base), msg.err)
+	}
+	// complexity.exclude gates both sides.
+	job.cache, job.exclude = nil, []string{"*.go"}
+	if msg = runComplexityDiff(job).(complexityDiffMsg); msg.err != "" || !msg.changes.Diff.Empty() {
+		t.Fatalf("excluded = %+v / %q", msg.changes.Diff, msg.err)
+	}
+	// An unknown head: git's message, no diff.
+	job.exclude, job.key.rev = nil, "main..no-such-ref"
+	if msg = runComplexityDiff(job).(complexityDiffMsg); !strings.Contains(msg.err, "no-such-ref") || msg.changes.Ready {
+		t.Fatalf("unknown head = %+v", msg)
+	}
+}
+
+func TestComplexityDiffRangedKeyIgnoresWorkingTree(t *testing.T) {
+	m := changesApp(t)
+	m.vcs.snap = vcs.NewSnapshot("/r", map[string]vcs.FileStatus{"a.go": vcs.StatusModified})
+	m.cxDiff.snapGen = 1
+	m.cxDiff.key = m.currentCxDiffKey()
+	m.cxDiff.result = complexitypanel.Changes{Ready: true}
+	out, cmd := m.Update(complexitypanel.SetBaseMsg{Rev: "main..feature"})
+	m = out.(Model)
+	if m.cxDiff.rev != "main..feature" || cmd == nil || !m.cxDiff.tickArmed {
+		t.Fatalf("R main..feature: rev=%q cmd=%v armed=%v", m.cxDiff.rev, cmd != nil, m.cxDiff.tickArmed)
+	}
+	key := m.currentCxDiffKey()
+	if key.snapGen != 0 || key.indexGen != 0 || key.rangeGen == 0 {
+		t.Fatalf("ranged key = %+v", key)
+	}
+	// The ranged job reads neither the snapshot nor the buffers.
+	if job := m.complexityDiffJob(key); job.snap != nil || len(job.dirty) != 0 {
+		t.Fatalf("ranged job = snap %v dirty %v", job.snap != nil, job.dirty)
+	}
+	out, _ = m.Update(complexityDiffTickMsg{})
+	m = out.(Model)
+	res := complexitypanel.Changes{Rev: "main..feature", Sha: "aaa", HeadRev: "feature", HeadSha: "bbb", Ready: true}
+	out, _ = m.Update(complexityDiffMsg{key: key, changes: res})
+	m = out.(Model)
+	if v := m.complexityPanel().View(); !strings.Contains(v, "base main → feature") {
+		t.Fatalf("the header must name both ends:\n%s", v)
+	}
+	// Editing, saving and a VCS refresh do not re-run a ranged diff.
+	out, _ = m.Update(ComplexityChangedMsg{Gen: 9})
+	m = out.(Model)
+	out, _ = m.Update(vcs.SnapshotMsg{Snap: vcs.NewSnapshot("/r", map[string]vcs.FileStatus{"b.go": vcs.StatusModified})})
+	m = out.(Model)
+	if m.cxDiff.tickArmed || m.cxDiff.computing || m.cxDiff.key != m.currentCxDiffKey() {
+		t.Fatalf("working-tree movement re-armed a ranged diff (armed=%v)", m.cxDiff.tickArmed)
+	}
+	// A malformed range keeps the previous base and shows the message.
+	out, _ = m.Update(complexitypanel.SetBaseMsg{Rev: "main.."})
+	m = out.(Model)
+	if m.cxDiff.rev != "main..feature" || m.cxDiff.tickArmed || !strings.Contains(m.ComplexityChanges().Err, "two refs") {
+		t.Fatalf("malformed range: rev=%q err=%q armed=%v", m.cxDiff.rev, m.ComplexityChanges().Err, m.cxDiff.tickArmed)
+	}
+	if v := m.complexityPanel().View(); !strings.Contains(v, `base main..feature kept · "main..": a revision`) {
+		t.Fatalf("the pane must show the range error:\n%s", v)
+	}
+	// 'r' re-runs it; so does 'R' with the same range.
+	out, _ = m.Update(complexitypanel.RefreshMsg{})
+	m = out.(Model)
+	if !m.cxDiff.tickArmed {
+		t.Fatal("r must re-arm a ranged diff")
+	}
+	m.cxDiff.tickArmed = false
+	m.cxDiff.key = m.currentCxDiffKey()
+	out, _ = m.Update(complexitypanel.SetBaseMsg{Rev: "main..feature"})
+	m = out.(Model)
+	if !m.cxDiff.tickArmed || m.ComplexityChanges().Err != "" {
+		t.Fatalf("R with the same range must re-run (armed=%v err=%q)", m.cxDiff.tickArmed, m.ComplexityChanges().Err)
+	}
+}
+
 func keysOf(m map[string][]complexity.Function) []string {
 	var out []string
 	for k := range m {

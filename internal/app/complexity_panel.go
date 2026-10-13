@@ -217,6 +217,7 @@ func (m *Model) syncComplexityPanel() {
 // complexity.refresh); the panel shows the scanning state until the
 // settled generation change re-reads it.
 func (m *Model) rebuildComplexityIndex() tea.Cmd {
+	m.rearmComplexityRange() // a ranged Changes diff re-runs too (#2961)
 	if m.complexityIndex == nil {
 		return nil
 	}

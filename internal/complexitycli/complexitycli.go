@@ -717,10 +717,14 @@ func (s settings) keepGroup(g complexity.Group) bool {
 
 // diffReport is the measured comparison against a revision.
 type diffReport struct {
-	s    settings
-	rev  string // as typed; "HEAD" by default
-	sha  string
-	diff complexity.Diff
+	s   settings
+	rev string // the base as typed; "HEAD" by default
+	sha string
+	// headRev / headSha are the head end of --diff=A..B (#2961); headSha is
+	// "" when the head side is the working tree.
+	headRev string
+	headSha string
+	diff    complexity.Diff
 	// by is the --by level: ByFile prints the per-file table (#2955).
 	by      complexity.Level
 	skipped skipped
@@ -744,20 +748,29 @@ func (r diffReport) headOrdinal(path string, fn complexity.Function) int {
 }
 
 // diffFile is one file of the comparison: its base blob (baseRel "" when
-// the base has none) and its working-tree side (headAbs "" when deleted);
-// baseAbs keys a rename's removed side under the old path.
+// the base has none) and its head side (headAbs "" when deleted; headRel
+// its blob path in a ranged diff); baseAbs keys a rename's removed side
+// under the old path.
 type diffFile struct {
-	baseRel, baseAbs, headAbs string
+	baseRel, baseAbs, headRel, headAbs string
 }
 
 // runDiff compares the working tree under the directory against rev: the
 // files git reports as changed plus the untracked ones, both sides measured.
+// A range A..B (#2961) compares two commits instead: the files that differ
+// between them, the head side read from B, the working tree ignored.
 func runDiff(s settings) (diffReport, error) {
-	rev := s.args.Rev
+	rev, headRev, ranged, err := vcscore.ParseRevRange(s.args.Rev)
+	if err != nil {
+		return diffReport{s: s}, err
+	}
 	if rev == "" {
 		rev = "HEAD"
 	}
-	r := diffReport{s: s, rev: rev}
+	r := diffReport{s: s, rev: rev, headRev: "working tree"}
+	if ranged {
+		r.headRev = headRev
+	}
 	repo, err := vcscore.DetectRoot(s.dir)
 	if err != nil {
 		return r, err
@@ -772,7 +785,15 @@ func runDiff(s settings) (diffReport, error) {
 		return r, err
 	}
 	r.sha = sha
-	changed, err := vcscore.ChangedFiles(repo, sha)
+	var changed []vcscore.CommitFile
+	if ranged {
+		if r.headSha, err = vcscore.ResolveRev(repo, headRev); err != nil {
+			return r, err
+		}
+		changed, err = vcscore.ChangedFilesBetween(repo, sha, r.headSha)
+	} else {
+		changed, err = vcscore.ChangedFiles(repo, sha)
+	}
 	if err != nil {
 		return r, err
 	}
@@ -807,12 +828,12 @@ func runDiff(s settings) (diffReport, error) {
 	for _, f := range changed {
 		head := abs(f.Path)
 		seen[head] = true
-		df := diffFile{baseRel: f.Path, baseAbs: head, headAbs: head}
+		df := diffFile{baseRel: f.Path, baseAbs: head, headRel: f.Path, headAbs: head}
 		switch f.Status {
 		case vcscore.StatusAdded:
 			df.baseRel, df.baseAbs = "", ""
 		case vcscore.StatusDeleted:
-			df.headAbs = ""
+			df.headRel, df.headAbs = "", ""
 		case vcscore.StatusRenamed:
 			if f.OldPath != "" {
 				df.baseRel, df.baseAbs = f.OldPath, abs(f.OldPath)
@@ -822,6 +843,11 @@ func runDiff(s settings) (diffReport, error) {
 			continue
 		}
 		files = append(files, df)
+	}
+	if ranged {
+		// Two commits: the working tree and its untracked files play no part.
+		r.measure(repo, files)
+		return r, nil
 	}
 	// Untracked files are not in `git diff`: everything they hold is added.
 	// git collapses an untracked directory to one "dir/" record.
@@ -854,18 +880,32 @@ func runDiff(s settings) (diffReport, error) {
 			}
 		}
 	}
+	r.measure(repo, files)
+	return r, nil
+}
 
+// measure measures both sides of every file and diffs them: the base blob
+// at r.sha, the head side from r.headSha's blob in a ranged diff (#2961),
+// else from the working tree.
+func (r *diffReport) measure(repo string, files []diffFile) {
+	s := r.s
 	base := map[string][]complexity.Function{}
 	head := map[string][]complexity.Function{}
 	var mu sync.Mutex
 	parallel(files, func(df diffFile) {
 		var bfns, hfns []complexity.Function
 		if df.baseRel != "" {
-			if content, err := vcscore.RevContent(repo, sha, df.baseRel); err == nil {
+			if content, err := vcscore.RevContent(repo, r.sha, df.baseRel); err == nil {
 				bfns, _ = measureFile(df.baseRel, content)
 			}
 		}
-		if df.headAbs != "" {
+		switch {
+		case df.headAbs == "":
+		case r.headSha != "":
+			if content, err := vcscore.RevContent(repo, r.headSha, df.headRel); err == nil {
+				hfns, _ = measureFile(df.headRel, content)
+			}
+		default:
 			// No size cap here: the base blob has none either, and a file
 			// over the walk's cap must not read as all-removed (the
 			// Changes tab reads it uncapped too).
@@ -886,7 +926,6 @@ func runDiff(s settings) (diffReport, error) {
 	})
 	r.diff = complexity.DiffProject(base, head, s.ccnWarn, s.cogWarn, s.cmtWarn)
 	r.head = head
-	return r, nil
 }
 
 // inside reports whether path lies under dir.

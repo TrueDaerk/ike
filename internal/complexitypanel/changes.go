@@ -21,10 +21,15 @@ import (
 // Changes is the data behind the Changes tab, handed in whole by the root
 // model.
 type Changes struct {
-	// Rev is the base revision as the user named it ("HEAD", "main",
-	// "HEAD~3"); Sha the commit it resolved to, "" before the first run.
+	// Rev is the revision spec as the user named it ("HEAD", "main",
+	// "HEAD~3", or a range "main..feature", #2961); Sha the base commit it
+	// resolved to, "" before the first run.
 	Rev string
 	Sha string
+	// HeadRev / HeadSha are the head end of a ranged diff (#2961), both ""
+	// when the head side is the working tree.
+	HeadRev string
+	HeadSha string
 	// Diff is the classified comparison, keyed by absolute path (the base
 	// path for a deleted file).
 	Diff complexity.Diff
@@ -43,6 +48,29 @@ type Changes struct {
 	Computing bool
 	Ready     bool
 	NotGit    bool
+}
+
+// BaseRev is the base end of Rev as the header names it: the A of "A..B",
+// HEAD for an empty spec.
+func (c Changes) BaseRev() string {
+	rev := c.Rev
+	if c.HeadRev != "" {
+		rev, _, _ = strings.Cut(rev, "..")
+		rev = strings.TrimSpace(rev)
+	}
+	if rev == "" {
+		rev = "HEAD"
+	}
+	return rev
+}
+
+// HeadName is the head end as the header names it: the B of "A..B", else
+// "working tree".
+func (c Changes) HeadName() string {
+	if c.HeadRev != "" {
+		return c.HeadRev
+	}
+	return "working tree"
 }
 
 // SetBaseMsg asks the root model to compare against another base revision
@@ -171,13 +199,9 @@ func (m *Model) changesTotals() string {
 	case c.Computing:
 		parts = append(parts, "computing…")
 	}
-	rev := c.Rev
-	if rev == "" {
-		rev = "HEAD"
-	}
 	d := m.changesDiff()
 	parts = append(parts,
-		"base "+rev+" → working tree",
+		"base "+c.BaseRev()+" → "+c.HeadName(),
 		"functions "+itoa(d.Base.Functions)+"→"+itoa(d.Head.Functions),
 		"ΣCCN "+itoa(d.Base.CCNSum)+"→"+itoa(d.Head.CCNSum)+" ("+signed(d.DeltaCCN())+")",
 		"Σcog "+itoa(d.Base.CogSum)+"→"+itoa(d.Head.CogSum)+" ("+signed(d.DeltaCognitive())+")",
@@ -203,11 +227,10 @@ func (m *Model) changesEmpty() string {
 	case !m.filter.Empty():
 		return "(no row matches the filter)"
 	}
-	rev := c.Rev
-	if rev == "" {
-		rev = "HEAD"
+	if c.HeadRev != "" {
+		return "(no function changed its metrics between " + c.BaseRev() + " and " + c.HeadRev + ")"
 	}
-	return "(no function changed its metrics against " + rev + ")"
+	return "(no function changed its metrics against " + c.BaseRev() + ")"
 }
 
 // promptBase opens the base-revision prompt seeded with the current base.
@@ -239,7 +262,7 @@ func (m *Model) promptKey(msg tea.KeyPressMsg) tea.Cmd {
 
 // promptView renders the prompt in the filter row's place.
 func (m *Model) promptView() string {
-	return m.clip(" base revision (branch, tag, sha, HEAD~3): " + m.revField.View())
+	return m.clip(" base revision (branch, tag, sha, HEAD~3, or A..B):" + m.revField.View())
 }
 
 // changesCSVHeader is the Changes tab's export header.

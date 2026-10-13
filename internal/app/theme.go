@@ -222,6 +222,9 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	// [complexity] edits too (0550, #2916): the master switch drops or
 	// rebuilds the complexity index, a changed exclude list rewalks.
 	m.reconfigureComplexityIndex(cfg)
+	// A ranged Changes diff (#2961) ignores the working tree, so the
+	// thresholds and excludes it measured with re-run it explicitly.
+	m.rearmComplexityRange()
 	// [backup] edits apply live too: interval changes re-arm, disabling purges
 	// existing snapshots (Roadmap 0210, #167).
 	m.reconfigureBackup(hcfg)

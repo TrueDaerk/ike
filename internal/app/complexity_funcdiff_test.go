@@ -2,6 +2,7 @@ package app
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -203,6 +204,59 @@ func TestComplexityFunctionDiffAddedRowAndOffsets(t *testing.T) {
 	got, off := cxExcerpt(text, complexity.Function{Line: 5, EndLine: 6})
 	if off != 2 || got != "l2\nl3\nl4\nl5\nl6\nl7\nl8\nl9" {
 		t.Fatalf("excerpt = %q @ %d", got, off)
+	}
+}
+
+func TestComplexityFunctionDiffRanged(t *testing.T) {
+	dir := gitRepo(t)
+	root, err := vcs.DetectRoot(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Commit the working tree's f edit, then edit f again on disk: the
+	// ranged diff's right side is the commit, not the disk (#2961).
+	for _, args := range [][]string{{"add", "-A"}, {"commit", "-qm", "work"}} {
+		cmd := exec.Command("git", append([]string{"-C", root, "-c", "user.email=t@t", "-c", "user.name=t"}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	mod := filepath.Join(root, "mod.go")
+	if err := os.WriteFile(mod, []byte("package p\n\nfunc f(a int) int { return a }\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	snap, err := vcs.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := changesApp(t)
+	m.vcs.snap = snap
+	msg := runComplexityDiff(cxDiffJob{key: cxDiffKey{rev: "main..HEAD", rangeGen: 1}, repoRoot: root, projRoot: root, ccnWarn: 15, cogWarn: 15}).(complexityDiffMsg)
+	if msg.err != "" {
+		t.Fatal(msg.err)
+	}
+	m.cxDiff.result = msg.changes
+	m.complexityPanel().SetChanges(msg.changes)
+	fd := msg.changes.Diff.Files[mod]
+	if len(fd.Changed) != 1 {
+		t.Fatalf("mod.go = %+v", fd)
+	}
+	req := complexitypanel.FunctionDiffMsg{Path: mod, Name: "f", Change: fd.Changed[0]}
+	m, fmsg := runFuncDiff(t, m, req)
+	if fmsg.err != "" || !strings.Contains(fmsg.right, "if a < 0") || strings.Contains(fmsg.right, "return a }") {
+		t.Fatalf("ranged right side must be the head commit: %+v", fmsg)
+	}
+	inst, ok := funcDiffViewer(m, cxFuncDiffKey(mod, "f", 0))
+	if !ok {
+		t.Fatal("no viewer")
+	}
+	l, r := inst.Diff().Titles()
+	if l != "f @ main" || r != "f @ main → HEAD" || inst.Diff().RightPath() != "" {
+		t.Fatalf("titles = %q / %q, right path %q", l, r, inst.Diff().RightPath())
+	}
+	// Both blobs are cached: base and head.
+	if len(m.cxDiff.funcText) != 2 {
+		t.Fatalf("cache = %d", len(m.cxDiff.funcText))
 	}
 }
 
