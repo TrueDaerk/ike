@@ -70,13 +70,27 @@ func Run(a cli.ComplexityArgs, stdout, stderr io.Writer) int {
 		return ExitOK
 	}
 	by, ok := complexity.ParseLevel(a.By)
+	brief, briefOK := complexity.ParseLevel(a.Brief)
 	switch {
 	case !ok:
 		fmt.Fprintf(stderr, "ike complexity: --by: %q is not class or file\n", a.By)
 		return ExitError
+	case !briefOK:
+		fmt.Fprintf(stderr, "ike complexity: --brief: %q is not class or file\n", a.Brief)
+		return ExitError
+	case brief != complexity.ByNone && by != complexity.ByNone:
+		fmt.Fprintln(stderr, "ike complexity:", cli.ErrBriefWithBy)
+		return ExitError
+	case brief != complexity.ByNone && a.Diff:
+		fmt.Fprintln(stderr, "ike complexity:", cli.ErrBriefWithDiff)
+		return ExitError
 	case by != complexity.ByNone && a.Diff:
 		fmt.Fprintln(stderr, "ike complexity:", cli.ErrByWithDiff)
 		return ExitError
+	}
+	if brief != complexity.ByNone {
+		// --brief folds like --by: the JSON stays the full group report.
+		by = brief
 	}
 	if !available() {
 		fmt.Fprintln(stderr, "ike complexity: this build has no syntax trees (built without cgo); use a cgo build of ike")
@@ -106,14 +120,16 @@ func Run(a cli.ComplexityArgs, stdout, stderr io.Writer) int {
 	}
 	r := runProject(s)
 	if by != complexity.ByNone {
-		g := groupProject(r, by)
-		if a.JSON {
-			if err := writeGroupsJSON(stdout, g); err != nil {
+		switch {
+		case a.JSON:
+			if err := writeGroupsJSON(stdout, groupProject(r, by, "")); err != nil {
 				fmt.Fprintln(stderr, "ike complexity:", err)
 				return ExitError
 			}
-		} else {
-			writeGroupsText(stdout, g)
+		case brief != complexity.ByNone:
+			writeBriefText(stdout, groupProject(r, by, freeLabel))
+		default:
+			writeGroupsText(stdout, groupProject(r, by, ""))
 		}
 		return ExitOK
 	}
@@ -458,12 +474,22 @@ type groupReport struct {
 	groups []complexity.Group // the groups the filter keeps, CCN sum descending
 }
 
+// freeLabel is the class column of the per-file group --brief=class folds a
+// file's free functions and lambdas into (#2938).
+const freeLabel = "(free)"
+
 // groupProject folds the project report's functions into the groups of by,
-// keyed by the project-relative path, and applies the group filter.
-func groupProject(r projectReport, by complexity.Level) groupReport {
+// keyed by the project-relative path, and applies the group filter. A
+// non-empty free collects, per class, the class-less units of a file into
+// one more group of that class name; "" leaves them out as --by class does.
+func groupProject(r projectReport, by complexity.Level, free string) groupReport {
 	files := map[string][]complexity.Function{}
 	for _, rw := range r.all {
-		files[rw.file] = append(files[rw.file], rw.fn)
+		fn := rw.fn
+		if by == complexity.ByClass && fn.Class == "" {
+			fn.Class = free
+		}
+		files[rw.file] = append(files[rw.file], fn)
 	}
 	s := r.s
 	all := complexity.GroupFunctions(files, by, s.ccnWarn, s.cogWarn, s.cmtWarn)

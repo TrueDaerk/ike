@@ -48,8 +48,8 @@ type Invocation struct {
 	Complexity *ComplexityArgs
 }
 
-// ComplexityArgs is the parsed `ike complexity [--diff[=REV]] [--json]
-// [--min N] [--ccn N] [--cog N] [--cmt N] [PATH...]`. A zero threshold means "not given":
+// ComplexityArgs is the parsed `ike complexity [--diff[=REV]] [--by class|file]
+// [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [PATH...]`. A zero threshold means "not given":
 // the report falls back to the configured warning thresholds.
 type ComplexityArgs struct {
 	// Diff selects the diff report against Rev ("" = HEAD).
@@ -66,6 +66,11 @@ type ComplexityArgs struct {
 	// By switches the project report to group rows (#2937): "class" or
 	// "file"; "" is the function table. Not combinable with Diff.
 	By string
+	// Brief selects the compact text rendering (#2938): "file" (a bare
+	// --brief) or "class"; "" is off. It folds the report like By — the
+	// JSON is the --by JSON — but prints one short line per group, no
+	// header and no trailer. Not combinable with By or Diff.
+	Brief string
 	// Paths are the files and directories to report on, as typed (#2936;
 	// none = the working directory). A directory is walked with the
 	// index's skip rules and the complexity.exclude globs; a file is
@@ -91,8 +96,15 @@ const complexityCmd = "complexity"
 // report has no group rows yet.
 var ErrByWithDiff = errors.New("--by is not supported with --diff")
 
+// ErrBriefWithBy rejects `--brief` together with `--by` (#2938).
+var ErrBriefWithBy = errors.New("--brief and --by exclude each other")
+
+// ErrBriefWithDiff rejects `--brief` together with `--diff` (#2938), like
+// ErrByWithDiff.
+var ErrBriefWithDiff = errors.New("--brief is not supported with --diff")
+
 // ComplexityUsage is the one-line grammar of `ike complexity`.
-const ComplexityUsage = "usage: ike complexity [--diff[=REV]] [--by class|file] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [PATH...]"
+const ComplexityUsage = "usage: ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [PATH...]"
 
 // Parse parses the arguments after the program name. Supported forms:
 //
@@ -183,7 +195,9 @@ func Parse(args []string) (Invocation, error) {
 // flags take their value as `--min N` or `--min=N`; `--diff` takes its
 // revision only in the `--diff=REV` form, so `--diff PATH` keeps PATH as a
 // path. `--by` takes class or file in either form (#2937) and is an error
-// together with `--diff`. Every other argument is a path, in order (#2936);
+// together with `--diff`. `--brief` takes its level only as `--brief=class`
+// (#2938), so `--brief PATH` keeps PATH as a path; it excludes `--by` and
+// `--diff`. Every other argument is a path, in order (#2936);
 // an unknown flag is an error.
 func parseComplexity(args []string) (ComplexityArgs, error) {
 	var ca ComplexityArgs
@@ -215,6 +229,14 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 				return ComplexityArgs{}, fmt.Errorf("--by: %q is not class or file", val)
 			}
 			ca.By = val
+		case name == "--brief":
+			ca.Brief = "file"
+			if hasVal {
+				if val != "class" && val != "file" {
+					return ComplexityArgs{}, fmt.Errorf("--brief: %q is not class or file", val)
+				}
+				ca.Brief = val
+			}
 		case name == "--min" || name == "--ccn" || name == "--cog" || name == "--cmt":
 			if !hasVal {
 				if i+1 >= len(args) {
@@ -245,6 +267,12 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 		default:
 			ca.Paths = append(ca.Paths, a)
 		}
+	}
+	switch {
+	case ca.Brief != "" && ca.By != "":
+		return ComplexityArgs{}, ErrBriefWithBy
+	case ca.Brief != "" && ca.Diff:
+		return ComplexityArgs{}, ErrBriefWithDiff
 	}
 	if ca.By != "" && ca.Diff {
 		return ComplexityArgs{}, ErrByWithDiff

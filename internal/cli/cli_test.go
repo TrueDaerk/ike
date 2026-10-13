@@ -171,6 +171,11 @@ func TestParseComplexity(t *testing.T) {
 		{[]string{"--cmt=100"}, ComplexityArgs{Cmt: 100}},
 		{[]string{"--by", "class"}, ComplexityArgs{By: "class"}},
 		{[]string{"--by=file", "--json", "src"}, ComplexityArgs{By: "file", JSON: true, Paths: []string{"src"}}},
+		// --brief[=class] (#2938): the level only after "=".
+		{[]string{"--brief"}, ComplexityArgs{Brief: "file"}},
+		{[]string{"--brief=class", "--json"}, ComplexityArgs{Brief: "class", JSON: true}},
+		{[]string{"--brief=file", "--min", "5"}, ComplexityArgs{Brief: "file", Min: 5}},
+		{[]string{"--brief", "class"}, ComplexityArgs{Brief: "file", Paths: []string{"class"}}},
 		{[]string{"--help"}, ComplexityArgs{Help: true}},
 		{[]string{"-h"}, ComplexityArgs{Help: true}},
 	}
@@ -188,9 +193,23 @@ func TestParseComplexity(t *testing.T) {
 		{"--min"}, {"--min", "x"}, {"--min=0"}, {"--ccn=-1"}, {"--cog", ""}, {"--cmt=0"}, {"--cmt", "101"}, {"--cmt"},
 		{"--diff="}, {"--bogus"}, {"a", "--bogus"},
 		{"--by"}, {"--by", "method"}, {"--by="}, {"--by=class", "--diff"}, {"--diff=main", "--by", "file"},
+		{"--brief=method"}, {"--brief="},
 	} {
 		if _, err := Parse(append([]string{"complexity"}, args...)); err == nil {
 			t.Errorf("Parse(complexity %q) accepted", args)
+		}
+	}
+	for _, c := range []struct {
+		args []string
+		want error
+	}{
+		{[]string{"--brief", "--by", "file"}, ErrBriefWithBy},
+		{[]string{"--by=class", "--brief=class"}, ErrBriefWithBy},
+		{[]string{"--brief", "--diff"}, ErrBriefWithDiff},
+		{[]string{"--diff=main", "--brief=class"}, ErrBriefWithDiff},
+	} {
+		if _, err := Parse(append([]string{"complexity"}, c.args...)); err != c.want {
+			t.Errorf("Parse(complexity %q) error %v, want %v", c.args, err, c.want)
 		}
 	}
 	inv, err := Parse([]string{"main.go", "complexity"})

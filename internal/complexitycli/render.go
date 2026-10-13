@@ -308,6 +308,24 @@ func writeGroupsText(w io.Writer, r groupReport) {
 	}
 }
 
+// writeBriefText prints the --brief rendering (#2938): one aligned line per
+// group kept — path, class (per class only), funcs, nloc, the CCN and
+// cognitive sums, max CCN / max cognitive and the comment density — with no
+// header, summary, shown or skipped line.
+func writeBriefText(w io.Writer, r groupReport) {
+	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	for _, g := range r.groups {
+		if r.by == complexity.ByClass {
+			fmt.Fprintf(tw, "%s\t%s\t", g.File, g.Class)
+		} else {
+			fmt.Fprintf(tw, "%s\t", g.File)
+		}
+		fmt.Fprintf(tw, "funcs=%d\tnloc=%d\tccn=%d\tcog=%d\tmax=%d/%d\tcmt=%d%%\n", g.Functions, g.NLOC,
+			g.CCNSum, g.CogSum, g.CCNMax, g.CogMax, complexity.DensityPercent(g.CommentDensity))
+	}
+	_ = tw.Flush()
+}
+
 // groupFilterText describes the active group filter: the sums for --min,
 // the maxima and the aggregate density for the thresholds.
 func (s settings) groupFilterText() string {
