@@ -122,3 +122,22 @@ func TestParseLevel(t *testing.T) {
 		t.Error("an unknown level parsed")
 	}
 }
+
+// TestHot: commits times the excess, the CCN sum when nothing exceeds, 0
+// without commits (#2957).
+func TestHot(t *testing.T) {
+	cases := []struct {
+		commits int
+		s       Summary
+		want    int
+	}{
+		{3, Summary{Excess: 7, CCNSum: 40}, 21},
+		{3, Summary{CCNSum: 40}, 120},
+		{0, Summary{Excess: 7, CCNSum: 40}, 0},
+	}
+	for _, c := range cases {
+		if got := Hot(c.commits, c.s); got != c.want {
+			t.Errorf("Hot(%d, %+v) = %d, want %d", c.commits, c.s, got, c.want)
+		}
+	}
+}

@@ -160,6 +160,7 @@ func (m *Model) seedComplexityPanel(p *complexitypanel.Model) {
 	p.SetWarn(c.CCNWarn, c.CognitiveWarn, c.CommentDensityWarn)
 	p.Set(m.complexityIndex.Snapshot(), m.complexityIndex.Stats())
 	m.seedComplexityChanges(p)
+	m.seedComplexityChurn(p)
 }
 
 // refreshComplexityPanel re-reads the snapshot into an open panel: the

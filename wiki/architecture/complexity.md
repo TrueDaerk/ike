@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Code Complexity
-description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters, nesting depth and comment density (#2934) per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary with its per-class and per-file groups (#2937), the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source, and the headless `ike complexity` CLI (#2922) printing the table of the project or of named files and directories (#2936), per function or summed per class or file (#2937), or the diff against a revision as text or JSON for CI and agents, also as a complexity-only build of the ike binary (#2939, build tag ike_complexity_only, make install-complexity) that links no IDE; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
-resource: internal/complexity, internal/complexitypanel, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_problems.go, internal/app/complexity_segment.go, internal/complexitycli, cmd/ike/complexityonly.go
+description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters, nesting depth and comment density (#2934) per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary with its per-class and per-file groups (#2937), the project index (#2916) that measures every supported file in the background, keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source, the hotspot columns (#2957) multiplying complexity by the commits per file from one git log, and the headless `ike complexity` CLI (#2922) printing the table of the project or of named files and directories (#2936), per function or summed per class or file (#2937), or the diff against a revision as text or JSON for CI and agents, also as a complexity-only build of the ike binary (#2939, build tag ike_complexity_only, make install-complexity) that links no IDE; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
+resource: internal/complexity, internal/complexitypanel, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_churn.go, internal/vcs/vcscore/churn.go, internal/app/complexity_problems.go, internal/app/complexity_segment.go, internal/complexitycli, cmd/ike/complexityonly.go
 tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive, index, settings, telemetry, vcs, diff, problems, cli]
-timestamp: 2026-10-13T23:59:00Z
+timestamp: 2026-10-13T23:59:30Z
 ---
 
 # Code Complexity
@@ -390,8 +390,9 @@ schema (`/`, the find chord `cmd+f` / `ctrl+f`; `cmd+g` / `cmd+shift+g`
 step the cursor through the filtered rows like the TODO index): `file:`
 (substring or glob over the project-relative path), `lang:` (language id),
 `fn:` (function name substring), `min:` (keeps rows at or above n on the
-sort column, CCN when the sort column is text), `metric:ccn|cog|cmt` (sets
-the sort column, and with it the column `min:` reads — `metric:cmt min:40`
+sort column, CCN when the sort column is text), `metric:ccn|cog|cmt|hot|commits` (sets
+the sort column, and with it the column `min:` reads; `hot` / `commits` are
+the [hotspot](#hotspots-2957) columns) — `metric:cmt min:40`
 keeps bodies that are at least 40 % comment); bare words fuzzy-match
 the function names. `file:internal/app min:20` is "functions with CCN >= 20
 under internal/app"; adding `metric:cog` switches both to cognitive
@@ -492,6 +493,58 @@ single keys are the pane's own (keybind audit ledger, `reasonPaneKey`).
 Complexity, Int 1-200, default 15; `complexity.comment_density_warn`, Int
 0-100, default 40) apply live through the same config
 reload that reconfigures the index.
+
+## Hotspots (#2957)
+
+Complexity alone ranks badly: a 170-point function nobody touched in a year
+costs less than a 40-point one edited every week. The hotspot columns
+multiply complexity by change frequency (Adam Tornhill's hotspot analysis);
+git has the frequency for free.
+
+**Churn.** `vcscore.Churn(root, since)` (`internal/vcs/vcscore/churn.go`)
+counts the commits per path in one call for the whole tree:
+`git log -z --format= --name-only --relative --since=<RFC 3339> -- .` run
+in `root`, so the keys are slash paths relative to `root` — the project root
+the panel's `Row.Rel` and the CLI's output paths use, even when the project
+is a subdirectory of the repository. Renames are **not followed**: `git log
+--name-only` names each path as of its commit, so a renamed file's history
+splits between its old and new name (`--follow` works per path only and
+would cost one git call per file). Merge commits list no files. The call
+carries the package's 5 s timeout; `vcs.ChurnCmd` wraps it in a `tea.Cmd`
+returning `vcs.ChurnMsg{Root, Since, Counts, Err}` like `LogCmd`.
+
+**Fetch (`internal/app/complexity_churn.go`).** Pulled like the Changes
+diff: on every settled Update pass, while the Complexity window is open,
+`complexityChurnSyncCmd` compares the key of the cached counts —
+(VCS snapshot generation `cxDiff.snapGen`, `complexity.churn_days`, index
+root) — with the current one and launches one `vcs.ChurnCmd` when they
+differ (one run at a time, `complexityChurnState.fetching`). A distinct VCS
+snapshot or a changed window therefore re-fetches once, a closed window
+costs nothing, and reopening the window on the same generation re-seeds the
+pane from the cache (`seedComplexityChurn` in `seedComplexityPanel`)
+without git. `applyComplexityChurn` stores the result under the launched
+key; a git error stores `nil` under that key, so it is not retried every
+pass. Outside a repository (`m.vcs.snap == nil`) the pane gets `nil`.
+
+**Panel (`internal/complexitypanel/churn.go`).** `SetChurn(counts, days)`;
+`nil` hides the columns, an empty map (no commits in the window) shows
+zeros. Inside a repository the Project / File function layouts gain
+`commits` (the row's file's count, `Row.Commits`) and the file-group layout
+`commits` and `hot` = commits × Σexcess, falling back to commits × ΣCCN
+when the file exceeds nothing (`complexity.Hot`, `Row.Hot`); class groups
+and the Changes tab carry neither. `metric:hot` / `metric:commits` sort by
+them and `s` cycles through them with the other columns; on the function
+list `metric:hot` sorts by the function's own `Hot(commits, excess or CCN)`
+without showing the column. The `hot` cell takes the warning colour on the
+top decile of the visible rows (`markHot`: the ⌈n/10⌉-th highest score, at
+least one row, nothing while every score is 0). The footer shows
+`churn 90d`; the CSV export appends `commits` (functions) or
+`commits,hot` (file groups). A sort column the layout loses when the
+repository goes away resets to CCN. The directory tree view (#2954) is where
+the same two columns land on directory and file nodes once it exists.
+
+**Setting.** `complexity.churn_days` (Settings > Complexity, Int 1-3650,
+default 90) is the window; a change applies live through the key.
 
 ## Changes vs HEAD (#2918)
 
@@ -745,7 +798,7 @@ the request, so with both modes `off` the edit clears the marks at once.
 
 ## Headless CLI (#2922)
 
-`ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [PATH...]`
+`ike complexity [--diff[=REV]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [PATH...]`
 is the terminal-free report for CI pipelines and coding agents. The grammar
 lives in `internal/cli` (`ComplexityArgs`, first argument only like
 `agent-hook`, so a file named `complexity` still opens as `./complexity`);
@@ -806,6 +859,19 @@ threshold; the `shown:` line reads `shown: 1 of 2 classes (ΣCCN or Σcog ≥ 5)
 An unknown level, or `--by` with `--diff`, is a usage error (exit 2,
 `--by is not supported with --diff`). Without `--by` the output is
 unchanged byte for byte. The flag is CLI-only (no setting, no command).
+
+**Churn (#2957).** `--churn[=DAYS]` (`ComplexityArgs.Churn` / `ChurnDays`;
+the window only after `=`, 1-3650, else `complexity.churn_days`, else 90)
+runs `vcscore.Churn(root, now − DAYS)` synchronously, like `--diff`, and
+adds `COMMITS` to the function table and `COMMITS` and `HOT`
+(`complexity.Hot` over the group's summary; class groups take their file's
+commits) to the group tables, `commits=N  hot=N` to the brief lines, a
+`churn: commits in the last N days (git log, renames not followed)` line
+under the summary, and JSON `commits` per function and per group, `hot` per
+group and `summary.churn_days`. Outside a repository it exits 2 with
+`--churn needs a git repository: <root> is not inside one`; with `--diff` it
+is a usage error (`--churn is not supported with --diff`). Without the flag
+the output is unchanged byte for byte.
 
 **Brief (#2938).** `--brief` (one line per file) and `--brief=class` (one
 line per class) are a second text renderer over the same groups
@@ -946,9 +1012,13 @@ scope), validated in the form and by `config.Validate`:
 | `complexity.comment_density_warn` | `40` | Comment-density threshold in percent (0-100, `0` = off): `cmt%` colour, the hint's ` · cmt 55%`, the Problems `comments` row, `--cmt` default, over-threshold count. |
 | `complexity.problems` | `true` | Publish over-threshold functions into Problems. |
 | `complexity.status_segment` | `false` | Show the `Δcx` status segment. |
+| `complexity.churn_days` | `90` | Hotspot window in days (1-3650): the commits the `commits` / `hot` columns count; `--churn`'s default. |
 
 ## Limitations
 
+- **Churn does not follow renames.** The hotspot `commits` count a path's
+  commits as named at each commit; a renamed file starts again at 0 under
+  its new name.
 - **No grammar, no metrics.** Only languages with a Tree-sitter grammar and a
   `ComplexitySpec` are measured; the others are rows in the audit ledger and
   are absent from every surface. A build without cgo measures nothing (the

@@ -155,7 +155,7 @@ func (m *Model) groupLayout() []Column {
 		}
 		return classGroupLayout
 	case complexity.ByFile:
-		return fileGroupLayout
+		return m.churnLayout(fileGroupLayout, fileGroupChurnLayout)
 	}
 	return nil
 }
@@ -175,6 +175,11 @@ func (m *Model) groupRows(fnRows []Row) []Row {
 		g := &groups[i]
 		src := meta[g.File]
 		out[i] = Row{Path: g.File, Rel: src.Rel, Lang: src.Lang, Test: src.Test, Group: g}
+		if g.Class == "" {
+			// A file group carries its file's hotspot numbers (#2957).
+			out[i].Commits = m.churn[src.Rel]
+			out[i].Hot = complexity.Hot(out[i].Commits, g.Summary)
+		}
 	}
 	return out
 }
@@ -232,6 +237,10 @@ func (r Row) groupValue(c Column) (float64, string) {
 		return float64(g.OverThreshold), ""
 	case ColExcess:
 		return float64(g.Excess), ""
+	case ColCommits:
+		return float64(r.Commits), ""
+	case ColHot:
+		return float64(r.Hot), ""
 	}
 	return 0, ""
 }
@@ -287,15 +296,25 @@ var groupCSVHeader = []string{"file", "class", "functions", "nloc", "ccn_sum", "
 	"cog_sum", "cog_avg", "cog_max", "comment_lines", "cmt_pct", "over_threshold", "excess"}
 
 // groupCSV renders the visible group rows; the class column stays (empty
-// for a file group) so both levels share one header.
+// for a file group) so both levels share one header. File groups inside a
+// repository append commits and hot (#2957).
 func (m *Model) groupCSV() string {
 	var b strings.Builder
-	writeCSVRow(&b, groupCSVHeader)
+	hot := m.layoutIndex(ColHot) >= 0
+	header := groupCSVHeader
+	if hot {
+		header = append(header[:len(header):len(header)], "commits", "hot")
+	}
+	writeCSVRow(&b, header)
 	for _, r := range m.rows {
 		g := r.Group
-		writeCSVRow(&b, []string{r.Rel, g.Class, itoa(g.Functions), itoa(g.NLOC),
+		fields := []string{r.Rel, g.Class, itoa(g.Functions), itoa(g.NLOC),
 			itoa(g.CCNSum), fmt1(g.CCNAvg), itoa(g.CCNMax), itoa(g.CogSum), fmt1(g.CogAvg), itoa(g.CogMax),
-			itoa(g.CommentLines), itoa(complexity.DensityPercent(g.CommentDensity)), itoa(g.OverThreshold), itoa(g.Excess)})
+			itoa(g.CommentLines), itoa(complexity.DensityPercent(g.CommentDensity)), itoa(g.OverThreshold), itoa(g.Excess)}
+		if hot {
+			fields = append(fields, itoa(r.Commits), itoa(r.Hot))
+		}
+		writeCSVRow(&b, fields)
 	}
 	return b.String()
 }

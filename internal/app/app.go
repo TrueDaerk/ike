@@ -334,6 +334,9 @@ type Model struct {
 	// the generations the diff keys on and the last result, shared by
 	// pointer like vcs.
 	cxDiff *complexityDiffState
+	// cxChurn is the hotspot columns' cached churn map (0551, #2957),
+	// shared by pointer like cxDiff.
+	cxChurn *complexityChurnState
 	// cxHints is the inline complexity hint feed's bookkeeping (0550,
 	// #2919): the state key delivered or armed per open document, shared by
 	// pointer like cxDiff.
@@ -1706,6 +1709,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		phpIndex:        phpIdx,
 		complexityIndex: cxIdx,
 		cxDiff:          &complexityDiffState{},
+		cxChurn:         &complexityChurnState{},
 		cxHints:         &complexityHintState{sent: map[string]cxHintKey{}, pending: map[string]cxHintKey{}, show: map[string]cxShowSites{}, measured: map[string]complexityHintMeasuredMsg{}},
 		ws:              wsMgr,
 		recentEditor:    edKey,
@@ -4612,6 +4616,11 @@ func (m Model) updateUnguarded(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Its Changes tab pulls the diff against the base revision here too
 	// (#2918): a moved snapshot / index generation arms the debounce tick.
 	if sync := mm.complexityDiffSyncCmd(); sync != nil {
+		cmd = tea.Batch(cmd, sync)
+	}
+	// Its hotspot columns pull the churn map the same way (#2957): one
+	// `git log` per VCS snapshot generation while the window is open.
+	if sync := mm.complexityChurnSyncCmd(); sync != nil {
 		cmd = tea.Batch(cmd, sync)
 	}
 	// Inline complexity hints follow every open document here (#2919): a
@@ -8537,6 +8546,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case complexityDiffMsg:
 		// The comparison landed (#2918).
 		m.applyComplexityDiff(msg)
+		return m, nil
+
+	case vcs.ChurnMsg:
+		// The hotspot churn map landed (#2957).
+		m.applyComplexityChurn(msg)
 		return m, nil
 
 	case complexityHintTickMsg:

@@ -109,3 +109,15 @@ func GroupFunctions(files map[string][]Function, by Level, ccnWarn, cogWarn, cmt
 	})
 	return out
 }
+
+// Hot is the hotspot score of a file (#2957, Tornhill's churn ×
+// complexity): its commits in the churn window times its excess above the
+// thresholds, or times its CCN sum when nothing exceeds — so a file of
+// small functions still ranks by how much code it changes how often.
+func Hot(commits int, s Summary) int {
+	mass := s.Excess
+	if mass == 0 {
+		mass = s.CCNSum
+	}
+	return commits * mass
+}

@@ -530,6 +530,9 @@ type Complexity struct {
 	Problems           bool `toml:"problems"`
 	// StatusSegment shows the "Δcx" status segment (#2921).
 	StatusSegment bool `toml:"status_segment"`
+	// ChurnDays (#2957) is the hotspot window in days: the Complexity window
+	// counts each file's commits since that many days ago (1–3650).
+	ChurnDays int `toml:"churn_days"`
 }
 
 // Debug holds debugger behaviour (0360). PHP carries the web/request listen

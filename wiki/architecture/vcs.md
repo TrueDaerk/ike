@@ -4,7 +4,7 @@ title: VCS / Git Integration
 description: "Epics 0320/0330, slimmed by #750 — git status snapshot behind explorer coloring, branch status-line segment, gutter diff markers, file-vs-HEAD diff, hunk/file revert, inline blame, and a read-only changes tool window; git *workflow* (staging, commits, branches, log) is delegated to custom tool panes, with lazygit preconfigured; all git calls async via tea.Cmd."
 resource: internal/vcs
 tags: [architecture, vcs, git]
-timestamp: 2026-10-13T18:00:00Z
+timestamp: 2026-10-13T23:59:30Z
 ---
 
 # VCS / Git Integration (Epics 0320/0330, slimmed by #750)
@@ -17,7 +17,7 @@ everywhere.
 
 **Core split (#2939).** The bubbletea-free half — the `git` runner with its
 timeout, `FileStatus`, the `Snapshot` model and its porcelain parser,
-`Load` / `DetectRoot`, `ResolveRev` / `ChangedFiles` and `RevContent` —
+`Load` / `DetectRoot`, `ResolveRev` / `ChangedFiles`, `RevContent` and `Churn` —
 lives in `internal/vcs/vcscore`. `internal/vcs` re-exports it through type
 aliases and thin wrappers (`vcs.Snapshot`, `vcs.Load`, … keep their
 spelling) and adds the `tea.Cmd` / message layer. Headless callers import
@@ -106,6 +106,14 @@ only a snapshot refresh (save, watcher, VCS command) triggers them.
   `tea.Cmd` with bounded concurrency; status rename records keep their
   origin in `FileEntry.From`. See
   [Code Complexity § Changes vs HEAD](/architecture/complexity.md#changes-vs-head-2918).
+- **Churn per file** (`internal/vcs/vcscore/churn.go`, `internal/vcs/churn.go`,
+  #2957) — `Churn(root, since)` counts the commits per root-relative path in
+  one `git log -z --format= --name-only --relative --since=… -- .`; renames
+  are not followed (a renamed file's history splits between its names),
+  merges list no files. `ChurnCmd` wraps it for the Complexity window's
+  hotspot columns, fetched once per snapshot generation; `ike complexity
+  --churn` calls `vcscore.Churn` directly. See
+  [Code Complexity § Hotspots](/architecture/complexity.md#hotspots-2957).
 - **Inline blame** (`internal/vcs/blame.go`, `vcs.blameLine`, palette) —
   toggleable dimmed EOL annotation on the cursor line ("author, when ·
   summary", "not committed yet"); whole-file porcelain blame cached per

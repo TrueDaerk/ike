@@ -40,6 +40,8 @@ type jsonSummary struct {
 	CmtWarn        int     `json:"cmt_warn"`
 	// TestsHidden is set under --no-tests (#2950).
 	TestsHidden bool `json:"tests_hidden,omitempty"`
+	// ChurnDays is the --churn window in days (#2957), absent without it.
+	ChurnDays int `json:"churn_days,omitempty"`
 }
 
 func toJSONSummary(s complexity.Summary, files int, st settings) jsonSummary {
@@ -50,6 +52,7 @@ func toJSONSummary(s complexity.Summary, files int, st settings) jsonSummary {
 		OverThreshold: s.OverThreshold, Excess: s.Excess, CCNWarn: st.ccnWarn, CogWarn: st.cogWarn,
 		CommentLines: s.CommentLines, CommentDensity: ratio(s.CommentDensity), CmtWarn: st.cmtWarn,
 		TestsHidden: st.args.NoTests,
+		ChurnDays:   st.churnShown(),
 	}
 }
 
@@ -77,6 +80,9 @@ type jsonFunction struct {
 	CommentDensity float64 `json:"comment_density"`
 	// Sites is the per-site breakdown (#2946), present under --sites only.
 	Sites []jsonSite `json:"sites,omitempty"`
+	// Commits is the file's commit count in the --churn window (#2957),
+	// absent without the flag.
+	Commits *int `json:"commits,omitempty"`
 }
 
 // jsonSite is one complexity.Site; line numbers are 1-based, the column
@@ -188,6 +194,10 @@ type jsonGroup struct {
 	Excess         int     `json:"excess"`
 	CommentLines   int     `json:"comment_lines"`
 	CommentDensity float64 `json:"comment_density"`
+	// Commits and Hot (commits × excess, × ΣCCN without excess) are the
+	// --churn hotspot numbers (#2957), absent without the flag.
+	Commits *int `json:"commits,omitempty"`
+	Hot     *int `json:"hot,omitempty"`
 }
 
 func toJSONGroup(g complexity.Group) jsonGroup {
@@ -232,7 +242,12 @@ func writeProjectJSON(w io.Writer, r projectReport) error {
 		Skipped:   toJSONSkipped(r.skipped),
 	}
 	for _, rw := range r.rows {
-		out.Functions = append(out.Functions, toJSONFunction(rw.file, rw.fn, r.s.args.Sites))
+		jf := toJSONFunction(rw.file, rw.fn, r.s.args.Sites)
+		if r.s.churn != nil {
+			n := r.s.churn[rw.file]
+			jf.Commits = &n
+		}
+		out.Functions = append(out.Functions, jf)
 	}
 	return writeJSON(w, out)
 }
@@ -244,7 +259,12 @@ func writeGroupsJSON(w io.Writer, r groupReport) error {
 		Skipped: toJSONSkipped(r.skipped),
 	}
 	for _, g := range r.groups {
-		out.Groups = append(out.Groups, toJSONGroup(g))
+		jg := toJSONGroup(g)
+		if r.s.churn != nil {
+			commits, hot := r.s.hot(g)
+			jg.Commits, jg.Hot = &commits, &hot
+		}
+		out.Groups = append(out.Groups, jg)
 	}
 	return writeJSON(w, out)
 }
@@ -288,11 +308,15 @@ func writeDiffJSON(w io.Writer, r diffReport) error {
 // the skipped line.
 func writeProjectText(w io.Writer, r projectReport) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "FILE\tFUNCTION\tLINE\tCCN\tCOG\tNLOC\tPARAMS\tCMT%")
+	fmt.Fprintln(tw, "FILE\tFUNCTION\tLINE\tCCN\tCOG\tNLOC\tPARAMS\tCMT%"+r.s.churnHeader("\tCOMMITS"))
 	for _, rw := range r.rows {
 		f := rw.fn
-		fmt.Fprintf(tw, "%s\t%s\t%d\t%d\t%d\t%d\t%d\t%d\n", rw.file, f.Name, f.Line+1, f.CCN, f.Cognitive, f.NLOC, f.Params,
+		fmt.Fprintf(tw, "%s\t%s\t%d\t%d\t%d\t%d\t%d\t%d", rw.file, f.Name, f.Line+1, f.CCN, f.Cognitive, f.NLOC, f.Params,
 			complexity.DensityPercent(f.CommentDensity))
+		if r.s.churn != nil {
+			fmt.Fprintf(tw, "\t%d", r.s.churn[rw.file])
+		}
+		fmt.Fprintln(tw)
 	}
 	_ = tw.Flush()
 	r.writeSummaryLine(w)
@@ -313,6 +337,9 @@ func (r projectReport) writeSummaryLine(w io.Writer) {
 		complexity.DensityPercent(s.CommentDensity), s.OverThreshold, r.s.thresholdText(), s.Excess)
 	if r.s.args.NoTests {
 		fmt.Fprintf(w, "tests hidden: %d %s (--no-tests)\n", r.tests, plural(r.tests, "file", "files"))
+	}
+	if r.s.churn != nil {
+		fmt.Fprintf(w, "churn: commits in the last %d %s (git log, renames not followed)\n", r.s.churnDays, plural(r.s.churnDays, "day", "days"))
 	}
 }
 
@@ -342,16 +369,21 @@ func writeGroupsText(w io.Writer, r groupReport) {
 	} else {
 		fmt.Fprint(tw, "FILE\t")
 	}
-	fmt.Fprintln(tw, "FUNCS\tNLOC\tCCN\tCCN_AVG\tCCN_MAX\tCOG\tCOG_AVG\tCOG_MAX\tCMT%\tOVER\tEXCESS")
+	fmt.Fprintln(tw, "FUNCS\tNLOC\tCCN\tCCN_AVG\tCCN_MAX\tCOG\tCOG_AVG\tCOG_MAX\tCMT%\tOVER\tEXCESS"+r.s.churnHeader("\tCOMMITS\tHOT"))
 	for _, g := range r.groups {
 		if byClass {
 			fmt.Fprintf(tw, "%s\t%s\t", g.File, g.Class)
 		} else {
 			fmt.Fprintf(tw, "%s\t", g.File)
 		}
-		fmt.Fprintf(tw, "%d\t%d\t%d\t%.1f\t%d\t%d\t%.1f\t%d\t%d\t%d\t%d\n", g.Functions, g.NLOC,
+		fmt.Fprintf(tw, "%d\t%d\t%d\t%.1f\t%d\t%d\t%.1f\t%d\t%d\t%d\t%d", g.Functions, g.NLOC,
 			g.CCNSum, g.CCNAvg, g.CCNMax, g.CogSum, g.CogAvg, g.CogMax,
 			complexity.DensityPercent(g.CommentDensity), g.OverThreshold, g.Excess)
+		if r.s.churn != nil {
+			commits, hot := r.s.hot(g)
+			fmt.Fprintf(tw, "\t%d\t%d", commits, hot)
+		}
+		fmt.Fprintln(tw)
 	}
 	_ = tw.Flush()
 	r.writeSummaryLine(w)
@@ -379,8 +411,13 @@ func writeBriefText(w io.Writer, r groupReport) {
 		} else {
 			fmt.Fprintf(tw, "%s\t", g.File)
 		}
-		fmt.Fprintf(tw, "funcs=%d\tnloc=%d\tccn=%d\tcog=%d\tmax=%d/%d\tcmt=%d%%\n", g.Functions, g.NLOC,
+		fmt.Fprintf(tw, "funcs=%d\tnloc=%d\tccn=%d\tcog=%d\tmax=%d/%d\tcmt=%d%%", g.Functions, g.NLOC,
 			g.CCNSum, g.CogSum, g.CCNMax, g.CogMax, complexity.DensityPercent(g.CommentDensity))
+		if r.s.churn != nil {
+			commits, hot := r.s.hot(g)
+			fmt.Fprintf(tw, "\tcommits=%d\thot=%d", commits, hot)
+		}
+		fmt.Fprintln(tw)
 	}
 	_ = tw.Flush()
 }
