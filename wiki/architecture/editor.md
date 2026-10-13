@@ -80,7 +80,16 @@ only whole: no room (a header at full width, the caret cell on the last
 column, a line wider than the pane) means no hint, never a truncated one
 over buffer text. Hidden when `editor.marks.complexity` is `off` (the app also
 filters to over-threshold functions in `warn`); cached hints survive a
-toggle round-trip. A single-cell sign column means a line that is both
+toggle round-trip. A fourth store beside it holds the per-site complexity
+marks (#2947, `internal/editor/complexitysites.go`):
+`ComplexitySiteMarksMsg{Path, Marks, Version}` with one
+`ComplexitySiteMark{Line, Text, Warn}` per contributing line (`+1`,
+`+3 (nesting 2)`, `+1 ||`), the same version drop, and the hint's slot,
+gap, style and whole-or-nothing fit in the end-of-line flush
+(`complexityTrailer`); a visible header hint on the same line wins. The
+editor does not gate the marks on a setting — the app pushes only what
+`editor.marks.complexity_sites` or a panel `m` asks for, and
+`editor.marks.complexity = off` does not hide them. A single-cell sign column means a line that is both
 a test and an overriding method shows only the test marker. A plain gutter
 click still toggles the breakpoint on every line; ctrl/cmd+click on a marker
 line runs that test (see /architecture/run-configurations.md).

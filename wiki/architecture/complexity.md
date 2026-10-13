@@ -445,6 +445,11 @@ A letter typed into the open filter row stays text: the app routes a
 printable, unmodified key to a focused one-line input before the keymap
 layer.
 
+**Editor marks (#2947).** `m` on a function row (or a site row: its
+parent) emits `ShowSitesMsg{Path, Line}` — the one-shot site marks in the
+editor, see [Editor surface](#editor-surface-2919); the footer names it as
+`m marks`.
+
 **Breakdown (#2946, `sites.go`).** `space` — the `complexity.sites`
 command, bound to `space` in the `complexity` keymap context and in the
 palette as "Complexity: Expand / Collapse Sites" — expands the selected
@@ -636,9 +641,10 @@ lenses and inline debugger values, fed per open document and routed like
 **Sync.** `complexityHintsSyncCmd` runs on the settled pass of every
 `Update`, the Structure pane's pattern (#1025): every open document of a
 language with a complexity spec (not excluded, not a degraded large file)
-wants hints for one state key `cxHintKey{version, gen, ccn, cog, cmt, enabled}`
+wants hints for one state key `cxHintKey{version, gen, ccn, cog, cmt, enabled, mode, sites, show}`
 — the buffer's `DocVersion`, the index generation the hints came from, the
-three warning thresholds and the master switch. The key last delivered (or
+three warning thresholds, the master switch, the hint and site-mark modes
+and a pending one-shot site request (below). The key last delivered (or
 launched) per path is remembered in `sent`, the key a debounce is armed for
 in `pending`; a document whose wanted key matches either costs nothing. A
 **clean buffer the index holds** is served on the spot from the snapshot —
@@ -674,9 +680,38 @@ marks' mode (#2947) is a separate setting: the function hint mode decides
 which headers carry `CCN n · cog m`, the site mode which branch sites are
 marked, and neither filters the other.
 
+**Site marks (#2947).** The same measurement also feeds a second editor
+store, the Sonar-style per-site marks (`editor.ComplexitySiteMark{Line,
+Text, Warn}` in `ComplexitySiteMarksMsg{Path, Marks, Version}`, editor side
+`internal/editor/complexitysites.go`). `cxMarkPushes` derives both from one
+`[]complexity.Function` — the snapshot's for an indexed buffer, one
+`cxHintMeasure` (the `cxMeasureText` seam) per key for a dirty one — and
+routes the hint and the mark pushes side by side; the debounce, the
+version drop and `routeToEditor` are the hints'. The key grows `sites`
+(`editor.marks.complexity_sites`) and `show`; `enabled` is the master
+switch and either mode not `off` (or a pending `show`), so with the header
+hints off the hint push is an empty clear and the marks still flow.
+`complexitySiteMarksFor(fns, ccnWarn, cogWarn, mode, showLine)` takes the
+cognitive sites (`Cognitive > 0`; CCN-only arms carry no mark) of every
+function `all` admits, of `warn`'s functions at or above a threshold
+(the per-file overrides of #2960 plug in at the same thresholds), and of
+the function whose header is `showLine`; a site a nested unit shares with
+its encloser is marked once (the encloser's copy, at its nesting); one mark
+per line, the sites joined in column order: `+1`, `+3 (nesting 2)`,
+`+1 ||` (a boolean run names its operator), `+1 · +1 &&`. `Warn` is an
+increment of 3 or more. **One-shot `m`.** `m` in the Complexity window
+(`complexity.showSites`, Complexity keymap context) sends
+`complexitypanel.ShowSitesMsg{Path, Line}` for the selected function (a
+site row's parent); the app opens the file if no view shows it and records
+`cxShowSites{line, version}` in the hint state. While the buffer stays at
+that version the key carries `show = line + 1` and the function's marks are
+pushed whatever the mode; the first settled pass at another version spends
+the request, so with both modes `off` the edit clears the marks at once.
+
 | Key | Default | Meaning |
 |---|---|---|
 | `editor.marks.complexity` | `all` | Inline complexity hints on function headers: `all`, `warn` (over-threshold functions only) or `off`; a legacy `true` / `false` loads as `all` / `off`. |
+| `editor.marks.complexity_sites` | `warn` | Per-site marks after every contributing line: `warn` (inside functions at or above a threshold), `all` or `off`; independent of `editor.marks.complexity`. |
 
 ## Headless CLI (#2922)
 

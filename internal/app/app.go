@@ -1706,7 +1706,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		phpIndex:        phpIdx,
 		complexityIndex: cxIdx,
 		cxDiff:          &complexityDiffState{},
-		cxHints:         &complexityHintState{sent: map[string]cxHintKey{}, pending: map[string]cxHintKey{}},
+		cxHints:         &complexityHintState{sent: map[string]cxHintKey{}, pending: map[string]cxHintKey{}, show: map[string]cxShowSites{}},
 		ws:              wsMgr,
 		recentEditor:    edKey,
 		recent:          recent,
@@ -8582,6 +8582,20 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// selected function into its complexity sites.
 		m.toggleComplexitySites()
 		return m, nil
+
+	case ComplexityShowSitesMsg:
+		// complexity.showSites (#2947), m in the pane: paint the selected
+		// function's site marks in the editor once.
+		if p := m.complexityPanel(); p != nil {
+			if req, ok := p.ShowSites(); ok {
+				return m.showComplexitySites(req)
+			}
+		}
+		m.host.Notify(host.Info, "complexity: select a function row to mark its sites")
+		return m, nil
+
+	case complexitypanel.ShowSitesMsg:
+		return m.showComplexitySites(msg)
 
 	case complexitypanel.ExportMsg:
 		// 'e' in the Complexity pane (#2917): the current tab as a CSV scratch.

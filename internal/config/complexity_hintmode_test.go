@@ -44,6 +44,38 @@ func TestComplexityHintModeLoad(t *testing.T) {
 	}
 }
 
+// TestComplexitySitesModeLoad: editor.marks.complexity_sites (#2947) loads
+// its three modes, defaults to warn and falls back to warn on an unknown
+// value with a diagnostic.
+func TestComplexitySitesModeLoad(t *testing.T) {
+	if got := Defaults()["editor.marks.complexity_sites"]; got != "warn" {
+		t.Fatalf("default = %q, want warn", got)
+	}
+	cases := []struct {
+		raw   string
+		want  HintMode
+		diags int
+	}{
+		{`"all"`, HintAll, 0},
+		{`"warn"`, HintWarn, 0},
+		{`"off"`, HintOff, 0},
+		{`"loud"`, HintWarn, 1},
+	}
+	for _, tc := range cases {
+		user := filepath.Join(t.TempDir(), "config.toml")
+		if err := os.WriteFile(user, []byte("[editor.marks]\ncomplexity_sites = "+tc.raw+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		cfg, diags := Load(Options{UserPath: user})
+		if cfg.Editor.Marks.ComplexitySites != tc.want {
+			t.Errorf("%s: mode = %q, want %q", tc.raw, cfg.Editor.Marks.ComplexitySites, tc.want)
+		}
+		if len(diags) != tc.diags || (tc.diags == 1 && diags[0].Field != "editor.marks.complexity_sites") {
+			t.Errorf("%s: diagnostics = %+v, want %d", tc.raw, diags, tc.diags)
+		}
+	}
+}
+
 func TestComplexityHintModeDefault(t *testing.T) {
 	if got := Defaults()["editor.marks.complexity"]; got != "all" {
 		t.Fatalf("default = %q, want all", got)

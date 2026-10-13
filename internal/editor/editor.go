@@ -706,6 +706,9 @@ type Model struct {
 	// 0-based header line; pushed by the app stamped with the document
 	// version they were measured at. See complexityhints.go.
 	cxHints map[int]ComplexityHint
+	// cxSites are the per-site complexity marks (#2947), keyed by the
+	// 0-based line, pushed like cxHints. See complexitysites.go.
+	cxSites map[int]ComplexitySiteMark
 	// Vim marks (#1151): marks are this view's local marks (m{a-z}),
 	// per-session like the caret set; markLines is the last observed line
 	// count for the edit-shift delta (the bpLines pattern). gm holds the
@@ -1827,6 +1830,12 @@ func (m Model) updateMsg(msg tea.Msg) (Model, tea.Cmd) {
 		// document version is dropped, nil clears.
 		if msg.Path == m.path {
 			m.SetComplexityHints(msg.Hints, msg.Version)
+		}
+		return m, nil
+	case ComplexitySiteMarksMsg:
+		// Per-site complexity marks (#2947), the same version rule.
+		if msg.Path == m.path {
+			m.SetComplexitySiteMarks(msg.Marks, msg.Version)
 		}
 		return m, nil
 	case vcs.MarksMsg:

@@ -208,7 +208,8 @@ any entry whose key the typed schema does not expose (no dead keys).
 - **Diagnostics** (#1259) — the per-source, per-severity decoration toggles
   (`editor.marks.lsp_*`, `editor.marks.git_*`, `editor.marks.inheritance`,
   `editor.marks.coverage`, `editor.marks.complexity` (enum `all` / `warn` / `off`, #2966) for the inline
-  complexity hints, #2919; user scope) and the
+  complexity hints, #2919, and `editor.marks.complexity_sites` (enum `off` /
+  `warn` / `all`, default `warn`, #2947) for the per-site marks; user scope) and the
   project-scoped `lsp.diagnostics_ignore` rule list the editor's
   "Ignore Diagnostic Under Caret" command appends to.
 - **Explorer** — hidden files, git-status colours, file-type icons, autoscroll

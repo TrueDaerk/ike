@@ -1559,6 +1559,7 @@ JetBrains is:
 | `bookmark.toggleMnemonic` | `alt+f3` | fragile | `palette / Navigate menu` | live via palette / Navigate menu |
 | `completion.trigger` | `ctrl+space` | delivered | `—` | live |
 | `complexity.group` | `b` | delivered | `—` | live |
+| `complexity.showSites` | `m` | delivered | `—` | live |
 | `complexity.sites` | `space` | delivered | `—` | live |
 | `complexity.toggle` | `cmd+alt+shift+x` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `complexity.toggleTests` | `t` | delivered | `—` | live |

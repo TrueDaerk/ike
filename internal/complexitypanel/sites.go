@@ -162,6 +162,34 @@ func siteCopyText(r Row) string {
 	return r.Rel + ":" + strconv.Itoa(r.Site.Line+1) + ": " + r.Site.Kind + siteCost(r.Site)
 }
 
+// ShowSitesMsg asks the root model to paint one function's per-site marks
+// in the editor once (#2947, 'm'), whatever editor.marks.complexity_sites
+// says, until the buffer's version moves. Path is the file, Line the
+// function's 0-based header line.
+type ShowSitesMsg struct {
+	Path string
+	Line int
+}
+
+// ShowSites is the selection's ShowSitesMsg: a function row, or the parent
+// of a site row. A group row or a removed function has none.
+func (m *Model) ShowSites() (ShowSitesMsg, bool) {
+	r, ok := m.Selected()
+	if !ok || r.Group != nil || r.Change == complexity.Removed || r.Path == "" {
+		return ShowSitesMsg{}, false
+	}
+	return ShowSitesMsg{Path: r.Path, Line: r.Fn.Line}, true
+}
+
+// showSites is the pane's 'm'.
+func (m *Model) showSites() tea.Cmd {
+	msg, ok := m.ShowSites()
+	if !ok {
+		return nil
+	}
+	return func() tea.Msg { return msg }
+}
+
 // openSite asks the root model to open the site's line.
 func (m *Model) openSite(r Row) tea.Cmd {
 	msg := OpenLocationMsg{Path: r.Path, Line: r.Site.Line}

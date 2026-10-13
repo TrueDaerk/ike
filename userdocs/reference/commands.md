@@ -49,6 +49,7 @@ bring their own.
 | Complexity: Export Current Tab as CSV | `complexity.export` | — | — | everywhere |
 | Complexity: Cycle Grouping (None / Class / File) | `complexity.group` | `b` | — | everywhere |
 | Complexity: Rescan Project | `complexity.refresh` | — | — | everywhere |
+| Complexity: Mark Sites in Editor | `complexity.showSites` | `m` | — | everywhere |
 | Complexity: Expand / Collapse Sites | `complexity.sites` | `space` | — | everywhere |
 | Complexity | `complexity.toggle` | `cmd+alt+shift+x` | — | everywhere |
 | Complexity: Toggle Test Files | `complexity.toggleTests` | `t` | — | everywhere |

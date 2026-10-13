@@ -42,3 +42,36 @@ func TestComplexityMarksRoundTrip(t *testing.T) {
 		t.Fatalf("the entry row must render the value:\n%s", v)
 	}
 }
+
+// TestComplexitySitesEntryShape: editor.marks.complexity_sites (#2947) is
+// an off / warn / all enum on the Editor pages, default warn.
+func TestComplexitySitesEntryShape(t *testing.T) {
+	if e := testsEntry(t, "editor.marks.complexity_sites"); e.Type != Enum || strings.Join(e.Options, ",") != "off,warn,all" {
+		t.Fatalf("editor.marks.complexity_sites = %v %v, want Enum off/warn/all", e.Type, e.Options)
+	}
+	if d := config.Defaults(); d["editor.marks.complexity_sites"] != "warn" {
+		t.Fatal("editor.marks.complexity_sites must default to warn")
+	}
+}
+
+// TestComplexitySitesRoundTrip: picking a mode in the panel persists, the
+// reloaded config reads it back and the list row renders it.
+func TestComplexitySitesRoundTrip(t *testing.T) {
+	restoreConfig(t)
+	e := testsEntry(t, "editor.marks.complexity_sites")
+	m := New([]Page{{Title: "Editor", Entries: []Entry{e}}}, testOpts(t))
+	m.SetSize(90, 24)
+	m.Open()
+
+	m.writeValue(e, "all")
+	commit(t, m)
+	if config.Get().Editor.Marks.ComplexitySites != config.HintAll {
+		t.Fatal("persisted editor.marks.complexity_sites must be all")
+	}
+	if got := m.value("editor.marks.complexity_sites"); got != "all" {
+		t.Fatalf("panel value = %q, want all", got)
+	}
+	if v := m.View(); !strings.Contains(v, "all") {
+		t.Fatalf("the entry row must render the value:\n%s", v)
+	}
+}

@@ -1,5 +1,18 @@
 # Log
 
+## 2026-10-13 (Inline per-site complexity marks, #2947)
+
+- [Code Complexity](/architecture/complexity.md): "Editor surface" gains
+  "Site marks" — `ComplexitySiteMarksMsg` fed by the hints' measurement
+  (`cxMarkPushes`, one `cxHintMeasure` per key), the key's `sites` / `show`
+  fields, `complexitySiteMarksFor` (mode filter, dedupe, texts, `Warn` at
+  +3) and the panel's one-shot `m` (`complexity.showSites`,
+  `ShowSitesMsg`); the settings table lists `editor.marks.complexity_sites`.
+- [Editor](/architecture/editor.md): the site-mark store beside the header
+  hints; [Settings UI](/architecture/settings-ui.md) lists the new enum;
+  [Keybindings](/architecture/keybindings.md) matrix row for `m`.
+- The complexity user guide: a paragraph on the editor's site marks.
+
 ## 2026-10-13 (Complexity hint mode, #2966)
 
 - [Code Complexity](/architecture/complexity.md): "Editor surface" —

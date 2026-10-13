@@ -1214,8 +1214,10 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 			// The complexity hint (0550, #2919) comes last, after any code
 			// lens, and only whole: it never truncates and never counts
 			// toward the right-edge mark — a header with no room shows none.
+			// A per-site mark (#2947) takes the same slot on the lines the
+			// header hint leaves free.
 			if hi >= len(hints) {
-				if cx, w := m.complexityHintTrailer(line, width-disp); w > 0 {
+				if cx, w := m.complexityTrailer(line, width-disp); w > 0 {
 					b.WriteString(cx)
 					disp += w
 				}
