@@ -30,6 +30,8 @@ type Entry struct {
 	Path   string
 	Line   int // 0-based; rendered 1-based
 	Col    int
+	// Warn paints the name in the palette's warning colour (#2964).
+	Warn bool
 }
 
 // Row is one tree node: its entry, the protocol item the host expands it
@@ -433,7 +435,11 @@ func (t *Tree[T]) RenderRows(width, height int, pal *theme.Palette, displayPath 
 			out = append(out, clip.Render(sel.Render(row)))
 			continue
 		}
-		row := dim.Render(indent+marker+" ") + name.Render(r.Entry.Name) +
+		label := name.Render(r.Entry.Name)
+		if r.Entry.Warn {
+			label = name.Foreground(pal.Warning).Render(r.Entry.Name)
+		}
+		row := dim.Render(indent+marker+" ") + label +
 			dim.Render(detail+loc)
 		out = append(out, clip.Render(row))
 	}

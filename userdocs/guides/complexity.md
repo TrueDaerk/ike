@@ -146,6 +146,23 @@ on a function row (or one of its site lines) in the Complexity window to
 paint that function's marks once, whatever the mode — the file opens if it
 is not open yet; the marks stay until you type in the buffer.
 
+## Let an agent simplify it
+
+Press `a` on a function row — on any tab; on a site or candidate row it
+means the function above it — and IKE asks Claude Code to simplify that
+function: a fresh `claude -p` session (no tools, the model and turn limit of
+`agent.ask.*`) gets the function's source, its metrics, its complexity
+sites and its best extraction candidate, and the instruction to reduce the
+cognitive complexity without changing the behaviour, keep the public
+signature, keep the tests green and answer with a unified diff plus one
+paragraph on what changed and why. A notification says the run started;
+the answer opens as a Markdown scratch with the diff fenced, ready to read
+or to apply by hand. One run per function at a time — `a` again while it
+runs only reminds you. Without the `claude` command on `PATH` the
+notification tells you to install Claude Code; a failed run shows the
+error. The scratch is advice, not an edit: nothing in your files changes
+until you apply the diff.
+
 ## Different thresholds per path or language
 
 One set of limits rarely fits a whole project: legacy code, generated files
@@ -782,6 +799,19 @@ that as a diff of the JSON file for review.
 An agent can ask "did I make this more complex?" with
 `ike complexity --diff --json` (against `HEAD`, so it sees its own
 uncommitted edits) and read `verdict`, `delta` and the `changed` entries.
+
+IKE can run that check for the agent. Turn on **Agent verdict on Stop**
+(`complexity.agent_verdict`, Settings ▸ Complexity, off by default) and
+install the Claude Code hooks ("Claude Hooks: Install" — run it again if
+you installed them before, so the `Stop` hook is added): at the end of
+every agent turn IKE diffs the working tree against `HEAD` in its own
+process and posts a row into the Agent Trace window of that session —
+`complexity: LESS COMPLEX (excess −12)`, in the warning colour when the
+excess rose, so you see at a glance whether the turn made things worse.
+When the trace window is not showing that session the verdict arrives as a
+notification instead. The hook itself never waits for the diff, so the
+agent is not slowed down. Pressing `a` on a function asks the agent to
+simplify it — see [Let an agent simplify it](#let-an-agent-simplify-it).
 With a baseline, `ike complexity --json | jq '[.functions[] | select(.baseline
 != "accepted")]'` lists exactly the functions it has to simplify before the
 ratchet passes, and `ike complexity --write-baseline` is how it records the

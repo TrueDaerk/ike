@@ -40,7 +40,7 @@ func TestComplexityPageEntries(t *testing.T) {
 	if p.Description == "" {
 		t.Fatal("the Complexity page needs a description")
 	}
-	want := []string{"complexity.enabled", "complexity.exclude", "complexity.ccn_warn", "complexity.cognitive_warn", "complexity.comment_density_warn", "complexity.overrides", "complexity.problems", "complexity.status_segment", "complexity.churn_days", "complexity.trend_commits", "complexity.baseline"}
+	want := []string{"complexity.enabled", "complexity.exclude", "complexity.ccn_warn", "complexity.cognitive_warn", "complexity.comment_density_warn", "complexity.overrides", "complexity.problems", "complexity.status_segment", "complexity.churn_days", "complexity.trend_commits", "complexity.baseline", "complexity.agent_verdict"}
 	if len(p.Entries) != len(want) {
 		t.Fatalf("Complexity page has %d entries, want %d: %+v", len(p.Entries), len(want), p.Entries)
 	}
@@ -50,7 +50,7 @@ func TestComplexityPageEntries(t *testing.T) {
 			t.Errorf("entry %d = %+v, want user-scoped %s with title and description", i, e, key)
 		}
 	}
-	for _, key := range []string{"complexity.enabled", "complexity.problems", "complexity.status_segment", "complexity.baseline"} {
+	for _, key := range []string{"complexity.enabled", "complexity.problems", "complexity.status_segment", "complexity.baseline", "complexity.agent_verdict"} {
 		if e := complexityEntry(t, key); e.Type != Bool {
 			t.Errorf("%s type = %v, want Bool", key, e.Type)
 		}

@@ -1,5 +1,26 @@
 # Log
 
+## 2026-10-14 (agent simplifies a function on request; Stop hook posts verdict, #2964)
+
+- [Code Complexity](/architecture/complexity.md): the new "Agent" section —
+  `a` on a function row → `complexitypanel.AskAgentMsg`, the prompt
+  (`agentask.Simplify` / `SimplifyPrompt`: source, metrics, sites, best
+  extraction candidate, the fixed instruction), the fresh-session argv
+  (`agentask.FreshCommand`) run through `agentask.Run` in the project root,
+  the `.md` scratch with the diff fenced, one run per function, the
+  install / failure notifications; the `Stop` hook verdict
+  (`complexityVerdictCmd` → `runComplexityDiff` against `HEAD`, the
+  `complexity: LESS COMPLEX (excess −12)` note row); the
+  `complexity.agent_verdict` settings row; `complexity.askAgent` in the
+  keybind ledger.
+- [Agent trace](/architecture/agent-trace.md): `Stop` joins the hooked
+  events (`agenttrace.HookEvents`, `deeplink.AgentEvents`); the binding on
+  a `Stop`; the new **note** row (`NodeNote`, `Warn`, re-applied after every
+  rebuild).
+- [Settings UI](/architecture/settings-ui.md): `complexity.agent_verdict`.
+- The complexity user guide: the new "Let an agent simplify it" section and
+  the verdict in "For coding agents"; the settings reference regenerated.
+
 ## 2026-10-14 (trend tab: ΣCCN, Σcog and excess over the last N commits, #2962)
 
 - [Code Complexity](/architecture/complexity.md): the new "Trend" section —

@@ -334,6 +334,9 @@ type Model struct {
 	// the generations the diff keys on and the last result, shared by
 	// pointer like vcs.
 	cxDiff *complexityDiffState
+	// cxAgent tracks the simplify-agent runs in flight (0551, #2964),
+	// shared by pointer like cxDiff.
+	cxAgent *complexityAgentState
 	// cxChurn is the hotspot columns' cached churn map (0551, #2957),
 	// shared by pointer like cxDiff.
 	cxChurn *complexityChurnState
@@ -1064,7 +1067,11 @@ type Model struct {
 	tracePending  bool
 	traceShownRev int
 	traceTickAt   time.Time
-	traceTicks    int
+	// traceNodes is the tree the last read built, before the notes;
+	// traceNotes the rows IKE posted per session id (#2964).
+	traceNodes []agenttrace.Node
+	traceNotes map[string][]traceNote
+	traceTicks int
 	// recentToolTerm is the session key of the tool terminal the keyboard
 	// last sat in — what the trace follows when the focus is elsewhere.
 	recentToolTerm string
@@ -8693,6 +8700,21 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case cxFuncDiffMsg:
 		m.showComplexityFunctionDiff(msg)
 		return m, nil
+
+	case ComplexityAskAgentMsg:
+		// complexity.askAgent (#2964), a in the pane: ask the agent to
+		// simplify the selected function.
+		return m, m.complexityAskAgent()
+
+	case complexitypanel.AskAgentMsg:
+		return m, m.startComplexityAgent(msg)
+
+	case cxAgentDoneMsg:
+		return m.handleComplexityAgentDone(msg)
+
+	case cxVerdictMsg:
+		// The Stop hook's complexity verdict (#2964).
+		return m.handleComplexityVerdict(msg)
 
 	case complexitypanel.ExportMsg:
 		// 'e' in the Complexity pane (#2917): the current tab as a CSV scratch.

@@ -241,7 +241,8 @@ session.
 ## Claude Code hooks (#2843)
 
 Discovery guesses; the hook push knows. Claude Code runs a command hook on
-`SessionStart`, `SessionEnd` and `UserPromptSubmit` with the hook input JSON
+`SessionStart`, `SessionEnd`, `UserPromptSubmit` and `Stop` (the end of an
+agent turn, #2964) with the hook input JSON
 (`session_id`, `transcript_path`, `cwd`, `hook_event_name`, …) on stdin.
 IKE's hooks run `ike agent-hook <event>`, which forwards the session to a
 running IKE, and IKE binds it to the terminal the agent runs in.
@@ -313,7 +314,10 @@ knows which terminal it ran in. An `AgentEventMsg` binds the session to:
 The binding (`Model.agentSessions`, keyed by terminal session key) holds the
 session id, transcript path, cwd and last event; `SessionEnd` keeps it but
 marks it ended, and the next `SessionStart` (e.g. after `/clear`) replaces
-it. `agentSessionLocator(t)` is what the trace window (#2840) calls off the
+it. A `Stop` refreshes the binding like a prompt and, with
+`complexity.agent_verdict` on, also runs the complexity verdict
+([complexity](./complexity.md#agent-2964)) — whether or not a terminal
+matched, since its note is filed by session id. `agentSessionLocator(t)` is what the trace window (#2840) calls off the
 Update loop: a live hook binding wins, otherwise `agenttrace.Discover` on the
 terminal's cwd.
 
@@ -350,7 +354,13 @@ runs after every read:
   `Agent` calls included); the row's detail is `<agent type> ·
   <description>`. The subagent's prompt and texts are not shown — the
   `Agent` row is the decision;
-- a **separator** row for a compaction (`— context compacted —`).
+- a **separator** row for a compaction (`— context compacted —`);
+- a **note** row (`NodeNote`, #2964) IKE posted itself: the Stop hook's
+  complexity verdict (`complexity: LESS COMPLEX (excess −12)`, the time as
+  detail, `Warn` → the warning colour when the excess rose). Notes are not
+  events: the app appends them under the last turn after every rebuild
+  (`traceWithNotes`, keyed `note:<unix nanos>/<n>`), so they survive the
+  live reads.
 
 Node keys come from event indices (`t3`, `e17`, `e17/f0`, `e17/x`), which the
 append-only `Events` slice keeps stable, so the tree host can carry state

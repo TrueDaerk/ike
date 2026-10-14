@@ -37,7 +37,7 @@ type hookEntry struct {
 }
 
 // HookEvents are the Claude Code events IKE hooks, in install order.
-var HookEvents = []string{"SessionStart", "SessionEnd", "UserPromptSubmit"}
+var HookEvents = []string{"SessionStart", "SessionEnd", "UserPromptSubmit", "Stop"}
 
 // hookTimeout is the per-hook timeout written into settings.json, seconds.
 // The CLI bounds every socket step at 2s; the hook must never stall a prompt.
@@ -71,7 +71,7 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
 }
 
-var hookCommandRE = regexp.MustCompile(`^(.+) agent-hook (SessionStart|SessionEnd|UserPromptSubmit)$`)
+var hookCommandRE = regexp.MustCompile(`^(.+) agent-hook (SessionStart|SessionEnd|UserPromptSubmit|Stop)$`)
 
 // IsIKEHook reports whether a hook command is one IKE wrote (the marker).
 func IsIKEHook(command string) bool {

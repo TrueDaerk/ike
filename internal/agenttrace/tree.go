@@ -33,6 +33,9 @@ const (
 	// NodeRewind marks where the transcript went back (#2860); the turns a
 	// rewind abandoned nest below it.
 	NodeRewind
+	// NodeNote is a row IKE posted itself (#2964): the Stop hook's
+	// complexity verdict. It belongs to no event (Event is -1).
+	NodeNote
 )
 
 // String returns the lowercase name used in tests.
@@ -50,6 +53,8 @@ func (k NodeKind) String() string {
 		return "separator"
 	case NodeRewind:
 		return "rewind"
+	case NodeNote:
+		return "note"
 	}
 	return "unknown"
 }
@@ -85,6 +90,9 @@ type Node struct {
 	// result has not arrived.
 	Error   bool
 	Pending bool
+	// Warn renders the row in the warning tone (#2964): a note whose
+	// verdict went the wrong way.
+	Warn bool
 	// At and Until bound a tool call (and its file nodes) in time: when the
 	// call was issued and when its result arrived (zero while pending).
 	// Change-feed linking (link.go) matches external writes against them.

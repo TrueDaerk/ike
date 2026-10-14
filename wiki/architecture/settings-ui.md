@@ -383,7 +383,11 @@ any entry whose key the typed schema does not expose (no dead keys).
   re-walks the open tab. `complexity.baseline` (Bool,
   default on, #2958) applies the project's `.ike/complexity-baseline.json`
   — accepted functions leave the over counts, Problems and the warning
-  colour; off ignores the file everywhere, on re-applies it live. Listed in the Languages
+  colour; off ignores the file everywhere, on re-applies it live.
+  `complexity.agent_verdict` (Bool, default off, #2964) runs the complexity
+  diff on a coding agent's `Stop` hook event and posts the verdict into the
+  Agent Trace window; read at event time, so a change applies to the next
+  turn. Listed in the Languages
   group after PHP (see [complexity](./complexity.md#project-index-2916) and
   [the tool window](./complexity.md#tool-window-2917)).
 - **Dependencies** (#2419) — `deps.auto_scan`, the background dependency
