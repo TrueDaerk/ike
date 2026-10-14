@@ -259,6 +259,13 @@ const (
 	// when the build has no syntax tree at all (the index can never fill),
 	// "ok" otherwise. No path travels.
 	OpComplexityScan = "complexity.scan"
+	// One completed trend walk (0551, #2962): the Trend tab of the Complexity
+	// window or `ike complexity --trend` measured the project at the last N
+	// commits. "ms" is the walk's duration, "points" how many commits it
+	// measured and "files" how many file blobs it read and measured (the
+	// rest came from the per-blob cache). The phase is "error" when the
+	// repository could not be read. No path travels.
+	OpComplexityTrend = "complexity.trend"
 )
 
 // CommandSlowThreshold is the dispatch duration from which a command event

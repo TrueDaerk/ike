@@ -192,6 +192,11 @@ func TestParseComplexity(t *testing.T) {
 		{[]string{"--write-baseline", "--baseline=debt.json"}, ComplexityArgs{WriteBaseline: true, Baseline: true, BaselinePath: "debt.json"}},
 		// --pins (#2959).
 		{[]string{"--pins", "--json"}, ComplexityArgs{Pins: true, JSON: true}},
+		// --trend[=N] (#2962): the window only after "=".
+		{[]string{"--trend"}, ComplexityArgs{Trend: true}},
+		{[]string{"--trend=5", "--json"}, ComplexityArgs{Trend: true, TrendCommits: 5, JSON: true}},
+		{[]string{"--trend", "5"}, ComplexityArgs{Trend: true, Paths: []string{"5"}}},
+		{[]string{"--trend=10", "--churn", "--no-tests"}, ComplexityArgs{Trend: true, TrendCommits: 10, Churn: true, NoTests: true}},
 		{[]string{"--help"}, ComplexityArgs{Help: true}},
 		{[]string{"-h"}, ComplexityArgs{Help: true}},
 	}
@@ -211,6 +216,7 @@ func TestParseComplexity(t *testing.T) {
 		{"--by"}, {"--by", "method"}, {"--by="}, {"--by=class", "--diff"}, {"--diff=main", "--by", "class"},
 		{"--brief=method"}, {"--brief="},
 		{"--churn=0"}, {"--churn="}, {"--churn=x"}, {"--churn=3651"},
+		{"--trend=0"}, {"--trend="}, {"--trend=x"}, {"--trend=501"},
 		{"--baseline="}, {"--baseline=  "},
 	} {
 		if _, err := Parse(append([]string{"complexity"}, args...)); err == nil {
@@ -233,6 +239,10 @@ func TestParseComplexity(t *testing.T) {
 		{[]string{"--diff=main", "--write-baseline"}, ErrWriteBaselineWithDiff},
 		{[]string{"--write-baseline", "--no-baseline"}, ErrWriteBaselineWithNoBaseline},
 		{[]string{"--pins", "--diff"}, ErrPinsWithDiff},
+		{[]string{"--trend", "--diff"}, ErrTrendWithDiff},
+		{[]string{"--diff=main", "--trend=5"}, ErrTrendWithDiff},
+		{[]string{"--trend", "--by", "file"}, ErrTrendWithDiff},
+		{[]string{"--brief", "--trend"}, ErrTrendWithDiff},
 		{[]string{"--by", "file", "--pins"}, ErrPinsWithDiff},
 		{[]string{"--pins", "--brief"}, ErrPinsWithDiff},
 	} {

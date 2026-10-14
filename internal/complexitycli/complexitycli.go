@@ -71,6 +71,9 @@ type settings struct {
 	// path in it, nil without --churn.
 	churnDays int
 	churn     map[string]int
+	// trendCommits is the --trend window (#2962): the flag's value, else
+	// complexity.trend_commits.
+	trendCommits int
 	// baseline is the accepted-debt baseline in effect (#2958), nil
 	// without one (no file, --no-baseline); baselinePath is the file it
 	// came from or --write-baseline writes — the project file unless
@@ -175,6 +178,9 @@ func Run(a cli.ComplexityArgs, stdout, stderr io.Writer) int {
 	case a.Pins && (a.Diff || by != complexity.ByNone || brief != complexity.ByNone):
 		fmt.Fprintln(stderr, "ike complexity:", cli.ErrPinsWithDiff)
 		return ExitError
+	case a.Trend && (a.Diff || by != complexity.ByNone || brief != complexity.ByNone):
+		fmt.Fprintln(stderr, "ike complexity:", cli.ErrTrendWithDiff)
+		return ExitError
 	}
 	if brief != complexity.ByNone {
 		// --brief folds like --by: the JSON stays the full group report.
@@ -194,6 +200,9 @@ func Run(a cli.ComplexityArgs, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "ike complexity:", err)
 			return ExitError
 		}
+	}
+	if a.Trend {
+		return runTrendReport(s, stdout, stderr)
 	}
 	if a.Diff {
 		r, err := runDiff(s)
@@ -291,6 +300,13 @@ func resolve(a cli.ComplexityArgs) (settings, error) {
 	cx.CCNWarn, cx.CognitiveWarn, cx.CommentDensityWarn = s.ccnWarn, s.cogWarn, s.cmtWarn
 	s.res, s.overrides = complexity.ResolverFor(cx, root), len(cx.ThresholdOverrides())
 	s.churnDays = c.Complexity.ChurnDays
+	s.trendCommits = c.Complexity.TrendCommits
+	if a.TrendCommits > 0 {
+		s.trendCommits = a.TrendCommits
+	}
+	if s.trendCommits <= 0 {
+		s.trendCommits = defaultTrendCommits
+	}
 	if a.ChurnDays > 0 {
 		s.churnDays = a.ChurnDays
 	}

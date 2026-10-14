@@ -464,7 +464,8 @@ macOS.
 
 **Tabs.** `Project` lists every function of the index snapshot, `File` the
 focused editor's file, `Changes` the diff against a base revision (#2918,
-[below](#changes-vs-head-2918)); `tab` / `shift+tab` and a click on the
+[below](#changes-vs-head-2918)), `Trend` the project's sums at each of the
+last N commits (#2962, [below](#trend-2962)); `tab` / `shift+tab` and a click on the
 header's tab bar switch. The pane is a pure consumer: the app seeds it with
 `Index.Snapshot()` and `Index.Stats()` when it opens or is restored from a
 layout (`wireToolWindow`), re-reads the snapshot on every
@@ -1113,6 +1114,145 @@ changed 3 added 1 removed 0 ccn 40→52 (+12) cog 31→44 (+13)`, `e` exports
 cog_after,cog_delta,nloc_before,nloc_after`; `space` / `m` have nothing to
 expand. The level persists as `changes:file` in the layout `Mode`.
 
+## Trend (#2962)
+
+The fourth tab, **Trend**, is the history epic 0550 deferred: the
+project's ΣCCN, Σcog, excess and over-threshold count at each of the last
+`complexity.trend_commits` commits, so a week of merges reads as one
+sparkline instead of thirty diffs. The engine half is
+`internal/complexity/trend.go` over the plumbing in
+`internal/vcs/vcscore/trend.go`, the app half
+`internal/app/complexity_trend.go`, the rendering
+`internal/complexitypanel/trend.go`, the CLI
+`internal/complexitycli/trend.go`.
+
+**Points and the incremental walk.** `complexity.ListTrendCommits(repo,
+rev, n)` lists the last `n` commits of `rev` (HEAD) along the **first parent
+only** (`vcscore.FirstParentLog`, `git log --first-parent -n N
+--format=%H%x00%h%x00%ct%x00%s`) oldest first: a merge commit is a point,
+the side branch it merged is not — the trend answers "what did `main` look
+like after each landing", not "what did every commit on every branch
+measure". `complexity.WalkTrend(job, commits)` then measures the project at
+every point, returning a `Trend{Points []TrendPoint}` where a `TrendPoint`
+is `{Sha, Short, Time, Subject, Files, Summary}` — `Short` git's own `%h`,
+`Summary` the same `complexity.Summary` the Project tab and the CLI print
+(`Summer` over every measurable file of the tree, each under the
+thresholds `job.Res` resolves for it, #2960). The walk is incremental: the
+**oldest point reads the whole tree** (`vcscore.TreeBlobs`, `git ls-tree
+-r`), filtered through the index's rules — inside the project root (a
+project that is a subdirectory of its repository measures its own files
+only), a language with a complexity spec, not `complexity.exclude`d, and
+`job.Keep` for the CLI's selection and `--no-tests` — and **every later
+point applies the blob diff** against the previous one
+(`vcscore.ChangedBlobsBetween`, `git diff-tree -r -M --raw`): a modified or
+added file is re-measured, a deleted one dropped, a rename moves its entry
+(its measurement travels with it when the blob did not change). Thirty
+points therefore cost one tree plus twenty-nine small diffs. Blob contents
+come through one `git cat-file --batch` process per batch
+(`vcscore.BlobContents`), not one `git show` per file, measured by up to
+`job.Workers` (4) goroutines; `job.Measure` is the measurement seam the
+tests count calls through.
+
+**Cache.** A `complexity.TrendCache` (safe for concurrent use) remembers
+two things: the measured functions **per blob id and language** — a file
+untouched between two commits keeps its blob, the same bytes under another
+extension measure again — and the **file map per commit sha**. A second
+walk in the session re-measures nothing it has seen: a new head after a
+commit costs that commit's changed files, a shorter or longer window
+(`complexity.trend_commits`) costs the points it adds, a walk after the
+project moved to another branch only the blobs that branch introduced.
+`Reset` drops it; the app resets on `r` and on a config reload, since the
+exclude globs decide what the cached file maps hold. `Trend.Measured` counts
+the blobs a walk actually read and measured — the telemetry's `files`.
+
+**App half.** `complexity_trend.go` mirrors the Changes tab's pull model:
+`cxTrend *complexityTrendState` (shared by pointer like `cxDiff`) holds the
+key of the trend the pane shows — `(VCS snapshot generation,
+trend_commits, project root, rebuild generation)` — and once per settled
+Update pass, while the **Trend tab is on screen** inside a repository
+(`complexityTrendWanted`), `complexityTrendSyncCmd` compares it with the
+current key and launches `startComplexityTrend` when they differ: the pane
+gets `Computing`, the walk runs in a `safego.Go` goroutine
+(`runComplexityTrend`: `ListTrendCommits` + `WalkTrend` with the model's
+`complexityResolver` thresholds, the index's excludes and the session
+cache), one `tea.Cmd` waits for its `complexityTrendMsg`, and a 200 ms
+`complexityTrendTickMsg` chain relays `job.Progress` into the pane's
+`computing… 12/30` until the result lands or the key moves. A snapshot
+refresh after a commit re-walks (cheaply, through the cache); a working-tree
+edit refreshes the snapshot too, which costs one `git log` and N cached
+points. `applyComplexityTrend` stores the points (or keeps the previous
+ones and shows a git error inline), settles the key so a failure does not
+retry every pass, and records the telemetry op. `rearmComplexityTrend` ('r'
+via `rebuildComplexityIndex`, a config reload via `applyTheme`'s reload
+path) bumps the rebuild generation and resets the cache. Outside a
+repository the pane is told `NotGit` and nothing runs; a closed tab costs
+nothing; a reopened pane is seeded with the session's points
+(`seedComplexityTrend`).
+
+**Panel.** `complexitypanel.Trend{Points, Window, Computing, Done, Total,
+Ready, NotGit, Err}` arrives whole through `SetTrend`. The header reads
+`last 30 commits · Σexcess 4120 → 3980 (-140) · ΣCCN … · Σcog …` (oldest →
+newest; `last 7 commits (window 30)` on a young repository, `computing…
+12/30` while the walk runs, `trend kept · <git error>` after a failure),
+and a **sparkline row** under the filter row — `▁▂▃▄▅▆▇█` scaled between
+the lowest and highest excess, oldest left, the selected commit's bar in
+the accent colour, a click selecting that commit; it takes the
+distribution row's chrome line (`chromeRows` 5), so `D` does nothing here.
+The grid lists one row per commit, newest first: `commit` (`%h`), `date`,
+`subject`, `funcs`, `Σccn (Δ)`, `Σcog (Δ)`, `excess (Δ)`, `over (Δ)` — the
+sum and its change against the previous (older) point, the oldest row
+without a Δ; a positive excess Δ takes the warning colour, a negative one
+the success colour. The rows ride the shared `Row` as `Row.Trend
+*TrendRow` (`Point`, `Prev`, `Index`): `trendCell` / `trendValue` render
+and sort them, `trendMatches` applies the filter row — the bare words match
+the short sha and the subject, `min:` / `max:` bound the sort column's
+value, the function-level keys match no commit — and `trendKey` keeps the
+cursor on the commit across refreshes. `s` cycles commit → date → subject
+→ funcs → the four Δ columns; the sum columns sort by their **signed Δ**,
+so `excess (Δ) ▼` lists the commits that cost the most first; ties keep
+newest first. `enter` sends `TrendBaseMsg{Rev: short}` and the app sets the
+Changes base to `<short>..HEAD` (the ranged path of #2961) and switches the
+tab, so the question "what changed since that commit" is one key away;
+`e` exports `commit,sha,date,subject,functions,ccn_sum,ccn_delta,cog_sum,
+cog_delta,excess,excess_delta,over,over_delta`; `y` copies `43b2a00
+2026-10-14 subject: fns 120 Σccn 410 (+6) Σcog 380 (-9) excess 42 (-12)
+over 3 (0)`; `r` recomputes. Grouping, the breakdown, the site marks, the
+baseline, the pins, the function diff and the base prompt do not apply —
+`trendKey` swallows `b v D space m i p d R` and the footer says `no
+grouping or breakdown on this tab`. `t` (hidden tests) is a working-tree
+rule and leaves the trend alone. The tab is reachable by `tab` /
+`shift+tab` and the header tab bar like the others.
+
+**CLI.** `ike complexity --trend[=N]` (`cli.ComplexityArgs.Trend` /
+`TrendCommits`, the window only after `=`, 1–500, else
+`complexity.trend_commits`, else 30) walks the repository of the first path
+over the named paths' selection with the report's thresholds and
+`--no-tests` rule and prints the points **oldest first**: `complexity
+trend: last 5 commits (first parent)`, a `COMMIT DATE SUBJECT FUNCS CCN COG
+EXCESS OVER` table with `sum (Δ)` cells, and a `totals: <oldest> →
+<newest>: ΣCCN a → b (Δ), Σcog …, excess …, over …` line. `--json` prints
+`{"commits": N, "points": [{"sha", "short", "time" (RFC 3339 UTC),
+"subject", "summary": <the project summary fields>, "delta": {"functions",
+"ccn", "cognitive", "excess", "over_threshold"}}]}`. `--trend` with `--diff`,
+`--by` or `--brief` is `cli.ErrTrendWithDiff` (exit 2); outside a
+repository it exits 2 with git's message. `--churn` and the baseline flags
+are accepted and ignored by the trend.
+
+**Telemetry.** One `complexity.trend` op per landed walk (the app's
+`applyComplexityTrend`): `ms` the walk's duration, `points` the commits it
+measured, `files` the blobs it read and measured (the rest came from the
+cache); phase `error` when git failed. No path travels. See
+[Usage telemetry](./usage-telemetry.md).
+
+**Why first parent.** Walking every commit would put a feature branch's
+twelve intermediate states between two `main` landings and make the
+sparkline jump on work that never existed on the branch the user reads; the
+first-parent chain is what `git log --first-parent` shows and what a
+release history means. The side effect is documented in the user guide: a
+squash merge and a merge commit both read as one point, and a commit only
+reachable through a side branch never appears.
+
+
 ## Problems feed (#2920)
 
 `internal/app/complexity_problems.go` publishes every over-threshold
@@ -1537,10 +1677,15 @@ scope), validated in the form and by `config.Validate`:
 | `complexity.problems` | `true` | Publish over-threshold functions into Problems. |
 | `complexity.status_segment` | `false` | Show the `Δcx` status segment. |
 | `complexity.churn_days` | `90` | Hotspot window in days (1-3650): the commits the `commits` / `hot` columns count; `--churn`'s default. |
+| `complexity.trend_commits` | `30` | Trend window in commits (1-500, #2962): how many first-parent commits the Trend tab and `--trend` measure the project at. |
 | `complexity.baseline` | `true` | Apply `.ike/complexity-baseline.json` (#2958): accepted functions leave the over counts, Problems and the warning colour; off ignores the file everywhere. |
 
 ## Limitations
 
+- **The trend follows the first parent only.** A commit reachable only
+  through a merged side branch is never a point; a merge and a squash merge
+  both read as one. The trend measures every file of the tree, so `t`
+  (hidden tests) does not narrow it; `--no-tests` on the CLI does.
 - **Churn does not follow renames.** The hotspot `commits` count a path's
   commits as named at each commit; a renamed file starts again at 0 under
   its new name.

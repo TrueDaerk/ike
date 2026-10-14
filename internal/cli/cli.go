@@ -101,6 +101,11 @@ type ComplexityArgs struct {
 	// in the state store) with their pinned metrics and the deltas. Not
 	// combinable with Diff, By or Brief.
 	Pins bool
+	// Trend prints the project's sums at each of the last TrendCommits
+	// first-parent commits (#2962), oldest first; 0 = complexity.trend_commits.
+	// Not combinable with Diff, By or Brief.
+	Trend        bool
+	TrendCommits int
 	// Paths are the files and directories to report on, as typed (#2936;
 	// none = the working directory). A directory is walked with the
 	// index's skip rules and the complexity.exclude globs; a file is
@@ -156,8 +161,15 @@ var ErrWriteBaselineWithNoBaseline = errors.New("--write-baseline and --no-basel
 // `--brief` (#2959): the pin list is a function table.
 var ErrPinsWithDiff = errors.New("--pins is not supported with --diff, --by or --brief")
 
+// ErrTrendWithDiff rejects `--trend` together with `--diff`, `--by` or
+// `--brief` (#2962): the trend is a table of commits.
+var ErrTrendWithDiff = errors.New("--trend is not supported with --diff, --by or --brief")
+
+// TrendCommitsMax bounds `--trend=N` like complexity.trend_commits.
+const TrendCommitsMax = 500
+
 // ComplexityUsage is the one-line grammar of `ike complexity`.
-const ComplexityUsage = "usage: ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [PATH...]"
+const ComplexityUsage = "usage: ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [--trend[=N]] [PATH...]"
 
 // Parse parses the arguments after the program name. Supported forms:
 //
@@ -253,7 +265,9 @@ func Parse(args []string) (Invocation, error) {
 // `--diff`. `--churn` takes its window only as `--churn=DAYS` (#2957) and
 // excludes `--diff`. `--baseline` takes its file only as `--baseline=PATH`
 // (#2958) and excludes `--no-baseline`; `--write-baseline` excludes
-// `--diff` and `--no-baseline`. Every other argument is a path, in order (#2936);
+// `--diff` and `--no-baseline`. `--trend` takes its window only as
+// `--trend=N` (#2962) and excludes `--diff`, `--by` and `--brief`. Every
+// other argument is a path, in order (#2936);
 // an unknown flag is an error.
 func parseComplexity(args []string) (ComplexityArgs, error) {
 	var ca ComplexityArgs
@@ -291,6 +305,15 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 					return ComplexityArgs{}, fmt.Errorf("--churn: %q is not a number of days (1–%d)", val, ChurnDaysMax)
 				}
 				ca.ChurnDays = n
+			}
+		case name == "--trend":
+			ca.Trend = true
+			if hasVal {
+				n, ok := parseNum(val)
+				if !ok || n > TrendCommitsMax {
+					return ComplexityArgs{}, fmt.Errorf("--trend: %q is not a number of commits (1–%d)", val, TrendCommitsMax)
+				}
+				ca.TrendCommits = n
 			}
 		case name == "--diff":
 			ca.Diff = true
@@ -372,6 +395,8 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 		return ComplexityArgs{}, ErrWriteBaselineWithNoBaseline
 	case ca.Pins && (ca.Diff || ca.By != "" || ca.Brief != ""):
 		return ComplexityArgs{}, ErrPinsWithDiff
+	case ca.Trend && (ca.Diff || ca.By != "" || ca.Brief != ""):
+		return ComplexityArgs{}, ErrTrendWithDiff
 	}
 	return ca, nil
 }

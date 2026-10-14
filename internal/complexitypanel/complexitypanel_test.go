@@ -206,18 +206,22 @@ func TestFileTabFollowsCaret(t *testing.T) {
 	if got := names(m.Rows()); strings.Join(got, ",") != "Page::show" || m.CaretRow() != 0 {
 		t.Fatalf("switched rows = %v caret=%d", got, m.CaretRow())
 	}
-	// tab moves on to Changes (#2918), then wraps to Project.
+	// tab moves on to Changes (#2918) and Trend (#2962), then wraps to Project.
 	m.Update(key("tab"))
 	if m.Tab() != TabChanges {
 		t.Fatalf("tab after File = %v, want Changes", m.Tab())
+	}
+	m.Update(key("tab"))
+	if m.Tab() != TabTrend {
+		t.Fatalf("tab after Changes = %v, want Trend", m.Tab())
 	}
 	m.Update(key("tab"))
 	if m.Tab() != TabProject {
 		t.Fatalf("tab after wrap = %v, want Project", m.Tab())
 	}
 	m.Update(key("shift+tab"))
-	if m.Tab() != TabChanges {
-		t.Fatalf("shift+tab = %v, want Changes", m.Tab())
+	if m.Tab() != TabTrend {
+		t.Fatalf("shift+tab = %v, want Trend", m.Tab())
 	}
 }
 

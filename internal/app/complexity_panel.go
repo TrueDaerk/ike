@@ -205,6 +205,7 @@ func (m *Model) seedComplexityPanel(p *complexitypanel.Model) {
 	p.Set(m.complexityIndex.Snapshot(), m.complexityIndex.Stats())
 	m.seedComplexityChanges(p)
 	m.seedComplexityChurn(p)
+	m.seedComplexityTrend(p)
 }
 
 // refreshComplexityPanel re-reads the snapshot into an open panel: the
@@ -238,6 +239,7 @@ func (m *Model) syncComplexityPanel() {
 // settled generation change re-reads it.
 func (m *Model) rebuildComplexityIndex() tea.Cmd {
 	m.rearmComplexityRange() // a ranged Changes diff re-runs too (#2961)
+	m.rearmComplexityTrend() // and the Trend tab walks afresh (#2962)
 	if m.complexityIndex == nil {
 		return nil
 	}
