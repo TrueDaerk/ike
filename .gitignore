@@ -10,8 +10,12 @@
 
 # Built binaries (make / go build)
 /ike
+/ike.exe
 /docgen
 /shotgen
+
+# Release archives (make release-archive, scripts/release/package.sh)
+/dist/
 
 # mkdocs build output (make docs-deploy / mkdocs build, gh-pages branch)
 /site
