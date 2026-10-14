@@ -175,7 +175,7 @@ func TestXMQConfiguredPath(t *testing.T) {
 // TestXMQTimeout: a hanging binary ends as the shared timeout message, not a
 // leaked goroutine — CommandContext kills it when the context ends.
 func TestXMQTimeout(t *testing.T) {
-	fakeXMQ(t, "sleep 30")
+	fakeXMQ(t, "/bin/sleep 30") // absolute: the fake runs with PATH reduced to its own dir
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	in, err := DialectXMQ.Parse("<r/>")

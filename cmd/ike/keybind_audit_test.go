@@ -3,6 +3,7 @@
 package main
 
 import (
+	"os/exec"
 	"sort"
 	"strings"
 	"testing"
@@ -332,6 +333,14 @@ func TestUnboundLedgerIsCurrent(t *testing.T) {
 		ids = append(ids, c.ID)
 	}
 	for _, f := range unboundFamilies {
+		// A tool.<name> command exists only while that tool is on PATH (the
+		// default layer preconfigures lazygit when it finds the binary, #750);
+		// on a machine without it the entry is not stale, just dormant (#2997).
+		if name, ok := strings.CutPrefix(f.prefix, "tool."); ok {
+			if _, err := exec.LookPath(name); err != nil {
+				continue
+			}
+		}
 		matched := false
 		for _, id := range ids {
 			if strings.HasPrefix(id, f.prefix) {

@@ -7,6 +7,8 @@ package settings
 // own old value, and the write through to layout.pane_slots.
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -154,6 +156,14 @@ func TestPaneSlotHintsSkipCustomToolShadowedByBuiltin(t *testing.T) {
 // commit and reaches layout.pane_slots.
 func TestPaneSlotEditorPersistsACustomTool(t *testing.T) {
 	restoreConfig(t)
+	// The form's commit reloads the config from disk, whose default layer only
+	// carries lazygit when the binary is on PATH (#750): a fake one keeps the
+	// test independent of what the machine has installed (#2997).
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "lazygit"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	withCustomToolSlots(t, "vcs=3")
 	m, ed := openPaneSlotEditor(t)
 	ed.idx = len(ed.items)
