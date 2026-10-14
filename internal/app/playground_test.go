@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -14,6 +13,7 @@ import (
 
 	"ike/internal/editor"
 	"ike/internal/jqplay"
+	"ike/internal/keymap"
 	"ike/internal/layout"
 	"ike/internal/pane"
 	"ike/internal/scratch"
@@ -925,7 +925,7 @@ func (c *playTestClip) Write(s string) error  { c.text = s; return nil }
 // playCopyKey is the app keymap's editor.copy chord as a key event: cmd+c on
 // macOS, folded to ctrl+c everywhere else (keymap.NormalizeKey).
 func playCopyKey() tea.KeyPressMsg {
-	if runtime.GOOS == "darwin" {
+	if keymap.GOOS == "darwin" {
 		return tea.KeyPressMsg{Code: 'c', Mod: tea.ModMeta}
 	}
 	return tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
