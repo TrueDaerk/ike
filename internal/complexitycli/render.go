@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"text/tabwriter"
 	"time"
 
 	"ike/internal/complexity"
@@ -445,7 +444,7 @@ func writeDiffJSON(w io.Writer, r diffReport) error {
 // writeProjectText prints the table (CCN descending), the summary line and
 // the skipped line.
 func writeProjectText(w io.Writer, r projectReport) {
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	tw := r.s.newTable(w, colPath, colName)
 	head := "FILE\tFUNCTION\tLINE\tCCN\tCOG\tNLOC\tPARAMS\tCMT%" + r.s.churnHeader("\tCOMMITS")
 	if r.s.args.Pins {
 		head += "\tPINNED_CCN\tPINNED_COG\tΔCCN\tΔCOG"
@@ -552,7 +551,7 @@ func plural(n int, one, many string) string {
 // writeGroupsText prints the group table (#2937, CCN sum descending), the
 // summary line and the skipped line; the CLASS column only per class.
 func writeGroupsText(w io.Writer, r groupReport) {
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	tw := r.s.newTable(w, colPath, r.classKind())
 	byClass := r.by == complexity.ByClass
 	if byClass {
 		fmt.Fprint(tw, "FILE\tCLASS\t")
@@ -589,12 +588,21 @@ func writeGroupsText(w io.Writer, r groupReport) {
 	}
 }
 
+// classKind is the group tables' second column: the class name per class,
+// a number per file (#2992).
+func (r groupReport) classKind() colKind {
+	if r.by == complexity.ByClass {
+		return colName
+	}
+	return colNum
+}
+
 // writeBriefText prints the --brief rendering (#2938): one aligned line per
 // group kept — path, class (per class only), funcs, nloc, the CCN and
 // cognitive sums, max CCN / max cognitive and the comment density — with no
 // header, summary, shown or skipped line.
 func writeBriefText(w io.Writer, r groupReport) {
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	tw := r.s.newTable(w, colPath, r.classKind())
 	for _, g := range r.groups {
 		if r.by == complexity.ByClass {
 			fmt.Fprintf(tw, "%s\t%s\t", g.File, g.Class)
@@ -671,7 +679,7 @@ func writeDiffText(w io.Writer, r diffReport) {
 	}
 	if len(changed) > 0 {
 		fmt.Fprintf(w, "\nchanged (%d):\n", len(changed))
-		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		tw := r.s.newTable(w, colPath, colName)
 		for _, c := range changed {
 			b, a := c.ch.Before, c.ch.After
 			bc, ac := complexity.DensityPercent(b.CommentDensity), complexity.DensityPercent(a.CommentDensity)
@@ -689,7 +697,7 @@ func writeDiffText(w io.Writer, r diffReport) {
 			return
 		}
 		fmt.Fprintf(w, "\n%s (%d):\n", title, len(rows))
-		tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+		tw := r.s.newTable(w, colPath, colName)
 		for _, rw := range rows {
 			f := rw.fn
 			fmt.Fprintf(tw, "  %s\t%s\tL%d\tCCN %d\tcog %d\tNLOC %d\tcmt %d%%\n", rw.file, f.Name, f.Line+1, f.CCN, f.Cognitive, f.NLOC,
@@ -710,7 +718,7 @@ func writeDiffFilesText(w io.Writer, r diffReport) {
 		return
 	}
 	fmt.Fprintf(w, "\nfiles (%d):\n", len(files))
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	tw := r.s.newTable(w, colPath)
 	fmt.Fprintln(tw, "  FILE\tCHANGED\tADDED\tREMOVED\tCCN\tCOG\tNLOC\tEXCESS")
 	for _, fc := range files {
 		b, a := fc.Before, fc.After

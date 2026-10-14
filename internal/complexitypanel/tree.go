@@ -460,12 +460,12 @@ func (m *Model) renderTree(pal *theme.Palette, height int) string {
 			cells[c] = gridview.Cell{Text: t}
 		}
 		m.treeWarn(rows[i].Item, layout, cells)
-		return gridview.DataRow(pal, cells, m.widths, 0, m.width, i == m.tree.Cursor(), m.focused)
+		return m.dataRow(cells, i == m.tree.Cursor())
 	})
 }
 
 // treeWidths sizes the tree layout's columns to the visible rows; the
-// name column is capped at half the pane like the grid's file column.
+// name column shares the text budget like the grid's (#2992).
 func (m *Model) treeWidths(ws []int) []int {
 	layout := m.layout()
 	for _, r := range m.tree.Visible() {
@@ -475,12 +475,7 @@ func (m *Model) treeWidths(ws []int) []int {
 			}
 		}
 	}
-	if fi := m.layoutIndex(ColFunc); fi >= 0 {
-		if max := m.width / 2; max > 12 && ws[fi] > max {
-			ws[fi] = max
-		}
-	}
-	return ws
+	return m.fitWidths(ws)
 }
 
 // markTreeHot computes the hot column's warning threshold over the

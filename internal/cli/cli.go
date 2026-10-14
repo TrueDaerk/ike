@@ -49,7 +49,7 @@ type Invocation struct {
 }
 
 // ComplexityArgs is the parsed `ike complexity [--diff[=REV|A..B]] [--by class|file]
-// [--brief[=class]] [--json | --md] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [PATH...]`. A zero threshold means "not given":
+// [--brief[=class]] [--json | --md] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--width N] [PATH...]`. A zero threshold means "not given":
 // the report falls back to the configured warning thresholds.
 type ComplexityArgs struct {
 	// Diff selects the diff report against Rev ("" = HEAD).
@@ -110,6 +110,15 @@ type ComplexityArgs struct {
 	// Not combinable with Diff, By or Brief.
 	Trend        bool
 	TrendCommits int
+	// Width limits the lines of every text table (#2992): the text columns
+	// (paths, names, subjects) share what the numeric columns leave and
+	// are truncated with an ellipsis — paths from the left, names from the
+	// right. WidthSet records an explicit `--width N` (N ≥ WidthMin, 0 =
+	// unlimited); without it cmd/ike sets the terminal width, or
+	// DefaultWidth when stdout is not a terminal
+	// (complexitycli.ResolveWidth). JSON and Markdown ignore it.
+	Width    int
+	WidthSet bool
 	// Paths are the files and directories to report on, as typed (#2936;
 	// none = the working directory). A directory is walked with the
 	// index's skip rules and the complexity.exclude globs; a file is
@@ -176,8 +185,15 @@ var ErrMarkdownWithJSON = errors.New("--md and --json exclude each other")
 // TrendCommitsMax bounds `--trend=N` like complexity.trend_commits.
 const TrendCommitsMax = 500
 
+// WidthMin is the narrowest `--width N` (#2992); 0 means unlimited.
+const WidthMin = 40
+
+// DefaultWidth is the text tables' line limit when stdout is not a
+// terminal or its size is unknown (#2992).
+const DefaultWidth = 120
+
 // ComplexityUsage is the one-line grammar of `ike complexity`.
-const ComplexityUsage = "usage: ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json | --md] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [--trend[=N]] [PATH...]"
+const ComplexityUsage = "usage: ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json | --md] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [--trend[=N]] [--width N] [PATH...]"
 
 // Parse parses the arguments after the program name. Supported forms:
 //
@@ -274,7 +290,8 @@ func Parse(args []string) (Invocation, error) {
 // excludes `--diff`. `--baseline` takes its file only as `--baseline=PATH`
 // (#2958) and excludes `--no-baseline`; `--write-baseline` excludes
 // `--diff` and `--no-baseline`. `--trend` takes its window only as
-// `--trend=N` (#2962) and excludes `--diff`, `--by` and `--brief`. Every
+// `--trend=N` (#2962) and excludes `--diff`, `--by` and `--brief`.
+// `--width` takes 0 (unlimited) or at least WidthMin columns (#2992). Every
 // other argument is a path, in order (#2936);
 // an unknown flag is an error.
 func parseComplexity(args []string) (ComplexityArgs, error) {
@@ -353,6 +370,22 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 				}
 				ca.Brief = val
 			}
+		case name == "--width":
+			if !hasVal {
+				if i+1 >= len(args) {
+					return ComplexityArgs{}, fmt.Errorf("--width needs a number")
+				}
+				i++
+				val = args[i]
+			}
+			n, ok := parseNum(val)
+			if val == "0" {
+				n, ok = 0, true
+			}
+			if !ok || n > 0 && n < WidthMin {
+				return ComplexityArgs{}, fmt.Errorf("--width: %q is not 0 (unlimited) or at least %d columns", val, WidthMin)
+			}
+			ca.Width, ca.WidthSet = n, true
 		case name == "--min" || name == "--ccn" || name == "--cog" || name == "--cmt":
 			if !hasVal {
 				if i+1 >= len(args) {

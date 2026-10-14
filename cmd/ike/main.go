@@ -138,6 +138,14 @@ func main() {
 	// `ike complexity …` (#2922): the headless complexity report for CI and
 	// agents — no terminal, exit 0 on a report, 2 on a usage or git error.
 	if inv.Complexity != nil {
+		// The text tables fit the terminal (#2992); a pipe gets the default.
+		cols := 0
+		if term.IsTerminal(os.Stdout.Fd()) {
+			if w, _, err := term.GetSize(os.Stdout.Fd()); err == nil {
+				cols = w
+			}
+		}
+		complexitycli.ResolveWidth(inv.Complexity, cols)
 		os.Exit(complexitycli.Run(*inv.Complexity, os.Stdout, os.Stderr))
 	}
 	// `ike agent-hook <event>` (#2843): a Claude Code hook forwarding the

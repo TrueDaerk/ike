@@ -178,6 +178,9 @@ func TestParseComplexity(t *testing.T) {
 		{[]string{"--brief"}, ComplexityArgs{Brief: "file"}},
 		{[]string{"--brief=class", "--json"}, ComplexityArgs{Brief: "class", JSON: true}},
 		{[]string{"--brief=file", "--min", "5"}, ComplexityArgs{Brief: "file", Min: 5}},
+		{[]string{"--width", "100"}, ComplexityArgs{Width: 100, WidthSet: true}},
+		{[]string{"--width=0"}, ComplexityArgs{WidthSet: true}},
+		{[]string{"--width=40", "x.go"}, ComplexityArgs{Width: 40, WidthSet: true, Paths: []string{"x.go"}}},
 		{[]string{"--brief", "class"}, ComplexityArgs{Brief: "file", Paths: []string{"class"}}},
 		{[]string{"--no-tests", "--brief"}, ComplexityArgs{NoTests: true, Brief: "file"}},
 		{[]string{"--sites", "--json"}, ComplexityArgs{Sites: true, JSON: true}},
@@ -220,6 +223,7 @@ func TestParseComplexity(t *testing.T) {
 		{"--churn=0"}, {"--churn="}, {"--churn=x"}, {"--churn=3651"},
 		{"--trend=0"}, {"--trend="}, {"--trend=x"}, {"--trend=501"},
 		{"--baseline="}, {"--baseline=  "},
+		{"--width"}, {"--width", "20"}, {"--width=39"}, {"--width=x"}, {"--width="}, {"--width=-1"},
 	} {
 		if _, err := Parse(append([]string{"complexity"}, args...)); err == nil {
 			t.Errorf("Parse(complexity %q) accepted", args)
