@@ -158,6 +158,29 @@ sorting and the filter work on the group columns (`fn:` matches the class
 or the file). `enter` opens the group's first function. Each tab remembers
 its grouping, and the layout keeps it across restarts.
 
+## The directory tree
+
+Press `v` in the Complexity window (or run *Complexity: Toggle Tree /
+Grid View*) to turn the Project tab into a tree: the project root, its
+directories (every level — this is what you drill through), the files,
+the classes and the functions. Each directory, file and class row shows
+the same aggregates as the file grouping — the number of functions, NLOC,
+`Σccn`, ccn max, `Σcog`, cog max, `cmt%`, `over` and `excess` (and
+`commits` / `hot` in a git repository) — summed over everything below it,
+so "which subsystem is the heaviest, and inside it which file" is a few
+`l` presses: children sort by `Σccn` (or by the column `s` picks). A
+function row shows its own metrics in the matching columns. `enter` (or a
+double click) opens a function and unfolds or folds anything else; `l` /
+`h` unfold / fold (a second `h` climbs to the parent); `space` on a
+function shows its breakdown. The filter works on the functions and
+prunes the branches that end up empty, unfolding the rest so the matches
+are visible. `y` copies the selected node's aggregate line, `e` exports
+the rows you can see as CSV with a `path` column, `i` accepts a whole
+directory's over-threshold functions into the baseline. The header, the
+distribution row and the test-file toggle are the grid's; `v` again
+returns to it, and the layout remembers the view (the footer reads `v
+tree` or `v grid`).
+
 ## Hotspots: complexity × change frequency
 
 A complex function nobody has touched in a year costs less than a simpler

@@ -99,7 +99,7 @@ func (m *Model) markPins(rows []Row) []Row {
 	if set == nil {
 		return rows
 	}
-	section := m.tab == TabProject && m.Grouping() == complexity.ByNone
+	section := m.tab == TabProject && m.Grouping() == complexity.ByNone && !m.treeActive()
 	found := map[complexity.EntryKey]bool{}
 	for i := range rows {
 		r := &rows[i]

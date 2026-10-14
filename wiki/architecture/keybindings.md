@@ -1564,6 +1564,7 @@ JetBrains is:
 | `complexity.sites` | `space` | delivered | `—` | live |
 | `complexity.toggle` | `cmd+alt+shift+x` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `complexity.toggleTests` | `t` | delivered | `—` | live |
+| `complexity.view` | `v` | delivered | `—` | live |
 | `debug.breakpointProperties` | `cmd+alt+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.breakpoints` | `cmd+shift+f8` | fragile | `palette / Run menu` | live via palette / Run menu |
 | `debug.console` | `cmd+5` | fragile | `palette` | live via palette |

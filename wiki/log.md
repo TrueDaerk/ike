@@ -1,5 +1,21 @@
 # Log
 
+## 2026-10-14 (directory tree view of the Project tab, #2954)
+
+- [Code Complexity](/architecture/complexity.md): the new "Tree view"
+  paragraph under Tool window — `v` / `complexity.view`, the `hiertree`
+  over root → directory → file → class → function with every directory
+  level kept, the node keys `hiertree.Refresh` carries expansion and
+  selection by, the per-node `Summarize` aggregates on the file-group
+  columns (plus commits / hot), the function leaves' cells, the sort and
+  filter semantics (`fnTreeValue`, `expandBranches`), the key routing
+  through `hiertree.Key`, the breakdown as function children, the copy
+  and CSV export with a `path` column, the `view:tree` Mode token.
+- [Keybindings](/architecture/keybindings.md): the `complexity.view` row
+  in the delivery matrix.
+- The complexity user guide: the new "The directory tree" section; the
+  command and keybinding references regenerated.
+
 ## 2026-10-14 (diff between two revisions, #2961)
 
 - [Code Complexity](/architecture/complexity.md): the new "Two revisions"

@@ -38,8 +38,9 @@ type ComplexityExportMsg struct{}
 type ComplexityGroupMsg struct{}
 
 // toolWindowMode is the persisted display mode of a tool window
-// (paneIdentity.Mode): the Complexity window's grouping levels (#2937) and
-// its hide-tests toggle (#2950), "" for every other kind and for a window
+// (paneIdentity.Mode): the Complexity window's grouping levels (#2937),
+// its hide-tests toggle (#2950), its distribution row (#2953) and its tree
+// view (#2954), "" for every other kind and for a window
 // in its default state.
 func toolWindowMode(inst *pane.Instance) string {
 	if inst != nil && inst.Kind() == pane.KindComplexity {
@@ -111,6 +112,25 @@ func (m *Model) toggleComplexityHistogram() {
 		}
 	}
 	p.ToggleHistogram()
+	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
+}
+
+// ComplexityViewMsg runs complexity.view (#2954): switch the Complexity
+// window's Project tab between the grid and the directory tree.
+type ComplexityViewMsg struct{}
+
+// toggleComplexityView is the complexity.view handler: an unopened panel
+// is opened first, then the view flips; the state is layout state and
+// saved at once, like the grouping.
+func (m *Model) toggleComplexityView() {
+	p := m.complexityPanel()
+	if p == nil {
+		m.openComplexityPanel()
+		if p = m.complexityPanel(); p == nil {
+			return
+		}
+	}
+	p.ToggleTreeView()
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 }
 

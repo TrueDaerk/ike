@@ -244,6 +244,35 @@ func (t *Tree[T]) Toggle(r *Row[T]) tea.Cmd {
 	return t.Expand(r)
 }
 
+// Collapse folds a row; a collapsed row is left alone.
+func (t *Tree[T]) Collapse(r *Row[T]) { r.expanded = false }
+
+// Marker is the row's fold glyph: "…" while its children are in flight,
+// "▾" expanded, "·" for a loaded leaf, "▸" otherwise.
+func (r *Row[T]) Marker() string {
+	switch {
+	case r.loading:
+		return "…"
+	case r.expanded:
+		return "▾"
+	case r.loaded && len(r.children) == 0:
+		return "·"
+	}
+	return "▸"
+}
+
+// Window clamps the cursor onto the visible rows, scrolls the render
+// window of height rows to show it (the shared ui.ScrollToShow follow) and
+// returns the visible rows with the window's first index — for a host that
+// renders rows in its own shape (the Complexity window's grid cells,
+// #2954) instead of through RenderRows, which is built on it.
+func (t *Tree[T]) Window(height int) (rows []*Row[T], top int) {
+	rows = t.Visible()
+	t.cursor = ui.ClampIndex(t.cursor, len(rows))
+	t.top = ui.ScrollToShow(t.top, t.cursor, height, len(rows))
+	return rows, t.top
+}
+
 // Expand fetches (or re-shows) a row's children: a loaded row just unfolds,
 // a row already in flight or a tree without a fetch does nothing.
 func (t *Tree[T]) Expand(r *Row[T]) tea.Cmd {
@@ -369,12 +398,10 @@ func (t *Tree[T]) Key(key string, page int, onEnter func(Row[T]) tea.Cmd, onTogg
 // negative Line prints the path alone (#2840: a trace file node whose line
 // could not be resolved).
 func (t *Tree[T]) RenderRows(width, height int, pal *theme.Palette, displayPath func(string) string, empty string) []string {
-	rows := t.Visible()
+	rows, _ := t.Window(height)
 	if len(rows) == 0 {
 		return []string{lipgloss.NewStyle().Faint(true).Render(empty)}
 	}
-	t.cursor = ui.ClampIndex(t.cursor, len(rows))
-	t.top = ui.ScrollToShow(t.top, t.cursor, height, len(rows))
 
 	sel := lipgloss.NewStyle().Background(pal.SelectionMuted)
 	name := lipgloss.NewStyle().Bold(true)
@@ -388,15 +415,7 @@ func (t *Tree[T]) RenderRows(width, height int, pal *theme.Palette, displayPath 
 	var out []string
 	for i := t.top; i < len(rows) && i < t.top+height; i++ {
 		r := rows[i]
-		marker := "▸"
-		switch {
-		case r.loading:
-			marker = "…"
-		case r.expanded:
-			marker = "▾"
-		case r.loaded && len(r.children) == 0:
-			marker = "·"
-		}
+		marker := r.Marker()
 		indent := strings.Repeat("  ", r.depth)
 		loc := ""
 		if r.Entry.Path != "" {
