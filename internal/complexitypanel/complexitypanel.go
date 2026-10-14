@@ -1820,3 +1820,15 @@ func (m *Model) PasteText(text string) bool {
 	m.Refresh()
 	return true
 }
+
+// SelectCaret moves the cursor onto the File tab's caret row (#2965, the
+// alt+enter entries) and reports whether there was one.
+func (m *Model) SelectCaret() bool {
+	i := m.CaretRow()
+	if i < 0 {
+		return false
+	}
+	m.cursor = i
+	m.clampScroll()
+	return true
+}

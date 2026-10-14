@@ -1,5 +1,13 @@
 # Log
 
+## 2026-10-14 (intention entries on a function header, #2965)
+
+- [Code Complexity](/architecture/complexity.md): "Intentions" under Editor
+  surface — the `complexity` alt+enter provider and its five
+  `complexity.*AtCaret` commands (ledger: `reasonIntention`).
+- [Intention actions](/architecture/intention-actions.md): the `deps` and
+  `complexity` providers.
+
 ## 2026-10-14 (agent simplifies a function on request; Stop hook posts verdict, #2964)
 
 - [Code Complexity](/architecture/complexity.md): the new "Agent" section —

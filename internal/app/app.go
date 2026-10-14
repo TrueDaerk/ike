@@ -8701,6 +8701,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.showComplexityFunctionDiff(msg)
 		return m, nil
 
+	case ComplexityBreakdownAtCaretMsg, ComplexityOpenAtCaretMsg, ComplexityBaselineAtCaretMsg,
+		ComplexityPinAtCaretMsg, ComplexityAskAtCaretMsg:
+		// The alt+enter entries on a function (#2965).
+		return m, m.handleComplexityAtCaret(msg)
+
 	case ComplexityAskAgentMsg:
 		// complexity.askAgent (#2964), a in the pane: ask the agent to
 		// simplify the selected function.

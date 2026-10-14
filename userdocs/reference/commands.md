@@ -47,13 +47,18 @@ bring their own.
 | Toggle Bookmark with Mnemonic | `bookmark.toggleMnemonic` | `alt+f3` | — | everywhere |
 | Basic Completion | `completion.trigger` | `ctrl+space` | — | `editor` pane |
 | Complexity: Ask Agent to Simplify Selected Function | `complexity.askAgent` | — | — | everywhere |
+| Complexity: Ask Agent to Simplify Function at Caret | `complexity.askAtCaret` | — | — | everywhere |
 | Complexity: Accept / Drop Selected in Baseline | `complexity.baseline` | `i` | — | everywhere |
 | Complexity: Accept All Over Threshold | `complexity.baselineAll` | — | — | everywhere |
+| Complexity: Accept / Drop Function at Caret in Baseline | `complexity.baselineAtCaret` | — | — | everywhere |
+| Complexity: Show Breakdown of Function at Caret | `complexity.breakdownAtCaret` | — | — | everywhere |
 | Complexity: Export Current Tab as CSV | `complexity.export` | — | — | everywhere |
 | Complexity: Diff Selected Function (Base vs Working Tree) | `complexity.functionDiff` | — | — | everywhere |
 | Complexity: Cycle Grouping (None / Class / File) | `complexity.group` | `b` | — | everywhere |
 | Complexity: Toggle Distribution (Histogram) | `complexity.histogram` | `shift+d` | — | everywhere |
+| Complexity: Open Function at Caret in Window | `complexity.openAtCaret` | — | — | everywhere |
 | Complexity: Pin / Unpin Selected Function | `complexity.pin` | — | — | everywhere |
+| Complexity: Pin / Unpin Function at Caret | `complexity.pinAtCaret` | — | — | everywhere |
 | Complexity: Rescan Project | `complexity.refresh` | — | — | everywhere |
 | Complexity: Mark Sites in Editor | `complexity.showSites` | `m` | — | everywhere |
 | Complexity: Expand / Collapse Sites | `complexity.sites` | `space` | — | everywhere |

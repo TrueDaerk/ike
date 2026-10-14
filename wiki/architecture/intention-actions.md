@@ -62,6 +62,12 @@ rather than through provider-side reach-ins. The right-click context menu
 (`editorContextItems`, #1020) is deliberately compatible: it could be fed
 from the same providers later.
 
+The app also merges two model-aware providers: `deps` (`depsIntention`,
+"Update to <latest>" on an outdated manifest line, #2419) and `complexity`
+(the caret function's breakdown / window / baseline / pin / agent entries,
+#2965, built per call in `openIntentions` because it reads the model's
+index).
+
 ## The flow
 
 `alt+enter` keeps the `lsp.codeAction` command id (JetBrains keymap import
