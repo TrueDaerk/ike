@@ -12,9 +12,10 @@
 # The hosted macOS runner has three cores and is three to four times slower
 # than a developer machine: with every package in flight at once, internal/app
 # (3000 sequential tests, many of them spawning shells) was starved past the
-# timeout while the wasm packages compiled. So the suite runs in two steps —
-# everything else in parallel, then internal/app alone with the machine to
-# itself — each under its own 5-minute bound.
+# timeout while the wasm packages compiled, and pty-backed tests in other
+# packages missed their spawn bounds. So the suite runs in three steps — the
+# bulk of the packages two at a time, the wasm packages, then internal/app
+# alone with the machine to itself — each under its own 5-minute bound.
 name: Test
 
 on:
@@ -39,10 +40,15 @@ jobs:
       - name: Vet
         run: go vet ./...
 
-      - name: Test (every package but internal/app)
+      - name: Test (every package but wasm and internal/app)
         env:
           CGO_ENABLED: "1"
-        run: go test $(go list ./... | grep -v '^ike/internal/app$') -timeout 5m
+        run: go test $(go list ./... | grep -v '^ike/internal/app$' | grep -v '^ike/internal/wasm') -p 2 -timeout 5m
+
+      - name: Test wasm
+        env:
+          CGO_ENABLED: "1"
+        run: go test ./internal/wasm/... -timeout 5m
 
       - name: Test internal/app
         env:
