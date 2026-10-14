@@ -295,7 +295,11 @@ func dispatchWS(ctx context.Context, key, target string, resolved *httpfile.Requ
 	})
 
 	// The initial messages, in file order; a wait-for-server gate pauses until
-	// the server has said something since the previous send.
+	// the server has said something since the previous send. The count is
+	// snapshotted BEFORE the send (#3000): taken after it, a reply that lands
+	// on the loopback before the snapshot is counted as already seen and the
+	// gate waits for a second reply that never comes — every few runs on
+	// Linux, where the echo beats the goroutine back to the next line.
 	sendErr := func() error {
 		seen := int64(0)
 		for _, msg := range messages {
@@ -308,10 +312,10 @@ func dispatchWS(ctx context.Context, key, target string, resolved *httpfile.Requ
 					}
 				}
 			}
+			seen = session.received.Load()
 			if err := session.Send(msg.Text); err != nil {
 				return err
 			}
-			seen = session.received.Load()
 		}
 		return nil
 	}()

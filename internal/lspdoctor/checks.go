@@ -30,6 +30,10 @@ const versionTimeout = 5 * time.Second
 // manager's doubled request timeout for the handshake.
 const initTimeout = 10 * time.Second
 
+// stderrSettle bounds the wait for a server's exit after a failed handshake,
+// so its last stderr line is captured before the diagnosis reads it (#3000).
+const stderrSettle = 500 * time.Millisecond
+
 // SpawnResult is the spawn + initialize probe's evidence.
 type SpawnResult struct {
 	Err        string // spawn or initialize failure text; "" on success
@@ -165,6 +169,15 @@ func spawnInit(srv Server) SpawnResult {
 		ProcessID: os.Getpid(),
 	})
 	if err != nil {
+		// A server that dies on the handshake errors the initialize with the
+		// EOF of its stdout — which can land before the copy goroutine has
+		// delivered its last stderr line (every fifth run on Linux, #3000).
+		// Wait (bounded) for the exit: cmd.Wait completes the capture. A
+		// server that errored but lives on costs the doctor the bound.
+		select {
+		case <-proc.Exited():
+		case <-time.After(stderrSettle):
+		}
 		return SpawnResult{Err: err.Error(), Stderr: transport.ErrorLine(proc.Stderr())}
 	}
 	name := ""
