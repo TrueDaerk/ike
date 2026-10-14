@@ -68,7 +68,7 @@ func (m *Model) armPerfTick() tea.Cmd {
 	}
 	m.perfTickArmed = true
 	gen := m.modelGen
-	return tea.Tick(perfHUDInterval(m.host.Config()), func(time.Time) tea.Msg {
+	return tickCmd(perfHUDInterval(m.host.Config()), func(time.Time) tea.Msg {
 		return perfTickMsg{gen: gen}
 	})
 }

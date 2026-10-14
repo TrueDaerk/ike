@@ -50,7 +50,7 @@ func ageStructBurst(m *Model) { m.structLastAt = time.Now().Add(-2 * structBurst
 // needs. Nothing in the sequence changes the buffer, so nothing else may reach
 // the language server.
 func TestStructureDispatchesOnceAcrossFocusSaveAndSwitch(t *testing.T) {
-	base := t.TempDir()
+	base := projectTempDir(t)
 	rootA, rootB := filepath.Join(base, "a"), filepath.Join(base, "b")
 	for _, d := range []string{rootA, rootB} {
 		if err := os.MkdirAll(d, 0o755); err != nil {

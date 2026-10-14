@@ -135,7 +135,7 @@ func (m *Model) armMouseHoverTick() tea.Cmd {
 		d = 0
 	}
 	gen := m.modelGen
-	return tea.Tick(d, func(time.Time) tea.Msg { return mouseHoverTickMsg{gen: gen} })
+	return tickCmd(d, func(time.Time) tea.Msg { return mouseHoverTickMsg{gen: gen} })
 }
 
 // mouseHoverTick handles the idle wake: fire when the pointer is still

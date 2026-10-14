@@ -1,0 +1,34 @@
+# The full test suite (#2997): `go vet ./...` and `go test ./...` on every PR
+# and every push to main, with a hard 5-minute test timeout so a red suite or
+# a package that has grown slow fails the PR instead of the next developer's
+# afternoon. The budget: the whole run under 2 minutes on a ~10-core
+# developer machine, no package over 60 s (CONTRIBUTING.md, "Building and
+# testing").
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        env:
+          CGO_ENABLED: "1"
+        run: go test ./... -timeout 5m

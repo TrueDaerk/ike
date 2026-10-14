@@ -66,7 +66,7 @@ type termCaps struct {
 // the arming model's generation, so a tick outliving a project switch retires
 // on arrival.
 func termCheckTick(gen int64) tea.Cmd {
-	return tea.Tick(termCheckGrace, func(time.Time) tea.Msg { return termCheckMsg{gen: gen} })
+	return tickCmd(termCheckGrace, func(time.Time) tea.Msg { return termCheckMsg{gen: gen} })
 }
 
 // insideTmux reports whether IKE runs under tmux (or screen), which consumes

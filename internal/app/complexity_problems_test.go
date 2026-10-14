@@ -109,6 +109,7 @@ func complexityRows(s *problems.Store) []string {
 }
 
 func TestComplexityProblemsFeedWiring(t *testing.T) {
+	withProjectWalks(t)
 	proj := t.TempDir()
 	if r, err := filepath.EvalSymlinks(proj); err == nil {
 		proj = r

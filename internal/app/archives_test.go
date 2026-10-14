@@ -286,7 +286,7 @@ func TestOpenArchiveEntryReadOnly(t *testing.T) {
 	// the virtual path ends in "main.go", so the extension lookup answers.
 	// (Language plugins are registered by cmd/ike, so the test registers the
 	// one it asserts on.)
-	lang.Register(lang.Language{ID: "go-archive-test", Extensions: []string{"go"}})
+	registerTestLang(t, lang.Language{ID: "go-archive-test", Extensions: []string{"go"}})
 	l, ok := lang.ByPath(ed.Path())
 	if !ok || l.ID != "go-archive-test" {
 		t.Fatalf("language for %q = %v/%v", ed.Path(), l.ID, ok)

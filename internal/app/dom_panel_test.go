@@ -129,12 +129,16 @@ func TestDOMEditRetriggersParse(t *testing.T) {
 	m, _ := domSeed(t)
 	tm, _ := m.Update(DOMToggleMsg{}) // focus the editor
 	m = tm.(Model)
-	before := m.domPanel().DocVersion()
-	// An insert bumps the document version; the settled pass reparses.
-	tm, _ = m.Update(tea.KeyPressMsg{Code: 'i', Text: "i"})
+	// An HTML tab opens in its Preview view (#2766); typing needs the source.
+	tm, _ = m.Update(HTMLViewMsg{})
 	m = tm.(Model)
-	tm, cmd := m.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
-	m = domDeliver(t, tm.(Model), cmd)
+	before := m.domPanel().DocVersion()
+	// An insert bumps the document version; the settled pass reparses. The
+	// keys resolve through the keymap into commands, so they are drained like
+	// the program loop would: the drain also runs the spawned parse and feeds
+	// the domParsedMsg back (#2997).
+	m = drainKey(m, tea.KeyPressMsg{Code: 'i', Text: "i"})
+	m = drainKey(m, tea.KeyPressMsg{Code: 'x', Text: "x"})
 	if m.domPanel().DocVersion() == before {
 		t.Fatal("the reparse must carry the new document version")
 	}

@@ -501,11 +501,13 @@ func TestNeverBoundCommandCapturesFirstChord(t *testing.T) {
 	}
 	k.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	c := capturePanel(t, k)
-	c.Update(tea.KeyPressMsg{Code: 'g', Mod: tea.ModCtrl | tea.ModAlt})
+	// ctrl+alt+shift+q is free in the default table (ctrl+alt+g became
+	// playground.structure, #2793), so the capture lands without a conflict prompt.
+	c.Update(tea.KeyPressMsg{Code: 'q', Mod: tea.ModCtrl | tea.ModAlt | tea.ModShift})
 	apply(t, c.Update(tea.KeyPressMsg{Code: tea.KeyEnter}))
-	nb, ok := k.table().Lookup(keymap.MustParseChord("ctrl+alt+g"), keymap.Global)
+	nb, ok := k.table().Lookup(keymap.MustParseChord("ctrl+alt+shift+q"), keymap.Global)
 	if !ok || nb.Command != "tool.lazygit" {
-		t.Fatalf("ctrl+alt+g must resolve to tool.lazygit, got %+v ok=%v", nb, ok)
+		t.Fatalf("ctrl+alt+shift+q must resolve to tool.lazygit, got %+v ok=%v", nb, ok)
 	}
 	// Once bound, the command shows as a normal user-layer row, not nobind.
 	for _, r := range k.rows() {

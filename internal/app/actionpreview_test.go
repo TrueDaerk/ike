@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	ilsp "ike/internal/lsp"
 	"ike/internal/palette"
@@ -47,7 +48,8 @@ func settlePreview(t *testing.T, m Model, row palette.Item) tea.Cmd {
 // footerOf renders the preview footer of one row.
 func footerOf(t *testing.T, m Model, row palette.Item) string {
 	t.Helper()
-	return strings.Join(m.actions.Footer(row, 60), "\n")
+	// Unstyled: the diff lines carry intra-line change highlights (#2847).
+	return ansi.Strip(strings.Join(m.actions.Footer(row, 60), "\n"))
 }
 
 // TestIntentionPreviewShowsBuiltinEdit: highlighting a built-in intention that

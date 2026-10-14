@@ -14,7 +14,6 @@ import (
 
 	"ike/internal/editor"
 	"ike/internal/jqplay"
-	"ike/internal/lang"
 	"ike/internal/layout"
 	"ike/internal/pane"
 	"ike/internal/scratch"
@@ -138,7 +137,7 @@ func playCaretApp(t *testing.T) Model {
 	// the unregistered path it was written against, and avoids the real
 	// plugin's LSP server popping the install prompt over the dialog under
 	// test.
-	lang.Register(lang.Language{ID: "json", Extensions: []string{"jqseed"}})
+	withTestExtension(t, "json", "jqseed")
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "seed.jqseed")
 	if err := os.WriteFile(path, []byte("{\n  \"spec\": {\n    \"name\": \"ike\"\n  }\n}\n"), 0o644); err != nil {

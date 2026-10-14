@@ -115,21 +115,31 @@ var intentionalDefaultShadows = map[string]string{
 // pairs where both sides are shipped defaults are skipped. Input order is
 // preserved so the result is deterministic.
 func detectShadows(bindings []Binding) []Shadow {
+	// Chord strings once, and the candidates grouped by chord: the pairwise
+	// scan over ~800 bindings re-rendered every chord 640k times per table
+	// build, which every model start and config reload paid (#2997).
+	chords := make([]string, len(bindings))
+	byChord := make(map[string][]int, len(bindings))
+	for i, b := range bindings {
+		chords[i] = b.Chord.String()
+		byChord[chords[i]] = append(byChord[chords[i]], i)
+	}
 	var out []Shadow
-	for _, w := range bindings {
+	for i, w := range bindings {
 		if w.Context == Global {
 			continue
 		}
-		for _, h := range bindings {
-			if !w.Context.Shadows(h.Context) || h.Chord.String() != w.Chord.String() || h.Command == w.Command {
+		for _, j := range byChord[chords[i]] {
+			h := bindings[j]
+			if !w.Context.Shadows(h.Context) || h.Command == w.Command {
 				continue
 			}
 			if w.Layer == LayerDefault && h.Layer == LayerDefault {
-				if _, ok := intentionalDefaultShadows[shadowKey(w.Chord.String(), w.Command, h.Command)]; ok {
+				if _, ok := intentionalDefaultShadows[shadowKey(chords[i], w.Command, h.Command)]; ok {
 					continue
 				}
 			}
-			out = append(out, Shadow{Chord: w.Chord.String(), Winner: w, Hidden: h})
+			out = append(out, Shadow{Chord: chords[i], Winner: w, Hidden: h})
 		}
 	}
 	return out

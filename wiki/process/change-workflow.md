@@ -124,3 +124,66 @@ never guessed), plus a golden fixture under `internal/complexity/testdata/<lang>
 `reasonNoGrammar` claim no longer holds, is **stale and fails**. See
 [languages](/architecture/languages.md) § Complexity spec and
 [complexity](/architecture/complexity.md).
+
+## The test suite stays fast and green (#2997)
+
+`go test ./...` is the gate: the `Test` workflow (`.github/workflows/test.yml`)
+runs `go vet ./...` and `go test ./... -timeout 5m` on every PR and every push
+to `main`. The budget is the whole run **under 2 minutes** on a ~10-core
+developer machine with a warm build cache, **no package over 60 s**, and
+nothing excluded from the default run. A red suite or a package that has grown
+slow fails the PR, not the next developer's afternoon.
+
+What keeps the budget, and what a new test must follow:
+
+- **No test waits on real time where a seam exists.** `internal/app` runs
+  commands synchronously (`drainCmd`, `settle`), so a `tea.Tick` executed in a
+  drain *sleeps its delay*. Every timer the app schedules goes through
+  `tickCmd` (`internal/app/tick.go`); the package tests install a hook
+  (`tick_test.go`) that lets debounces under 500 ms run for real and **defers**
+  longer timers — toast expiry, grace periods, idle timeouts — as a command
+  that delivers nothing. A test that needs such a timer to lapse calls
+  `fireDeferredTicks`; a live test that drives a real loop against a fake
+  agent or shell opts back into real timers with `realTicks(t)`. Per-buffer
+  debounces have the same shape in `debounceTick`.
+- **No test model walks the package directory.** `Init` starts the TODO scan
+  and the complexity index walk, and the first completion request scans the
+  word and symbol indexes' root; with the test cwd being `internal/app` that
+  meant ~1000 Go files through tree-sitter per model — seven busy cores for
+  the whole run. `TestMain` turns the Init walks off (`initProjectWalks`) and
+  points the completion indexes at an empty root (`completionIndexRoot`);
+  a test that asserts on a walk calls `withProjectWalks(t)`. A project switch
+  changes the process cwd: a test that switches wraps it in `t.Chdir`, and
+  the model-construction guard (`cwdguard_test.go`) puts a vanished cwd back.
+- **Polling loops are bounded by the work, not by hope.** A remaining
+  poll-and-sleep loop has a deadline of **≤ 2 s** and a comment saying why the
+  operation cannot take longer; fixtures are small (the complexity fixture
+  walks a one-file temp root, not the package directory).
+- **Fixtures do not leak into later tests.** `lang.Register` replaces an
+  entry wholesale, so a grammar-less stand-in strips the real plugin's grammar
+  from every later test in the binary: register through `registerTestLang`
+  (restores the previous entry), `ensureLang` (keeps an existing one) or
+  `withTestExtension`. The app tests start with the welcome tour and the
+  first-start LSP dialog off (`tourAutoOpen`, `onboardingAutoOpen` in
+  `TestMain`) — both would swallow scripted keys — and with `SHELL=/bin/sh`,
+  so a terminal test never depends on the developer's login shell.
+- **Pty tests pass or skip fast.** `internal/terminal` probes once per binary
+  whether `/bin/sh` reaches a prompt on a pty (`requirePTY`, called from
+  `waitFor`); without one every pty test skips with the reason in
+  microseconds instead of timing out one by one.
+- **Measurements run on request.** A test that only logs timings over a huge
+  fixture (the 100 MB `TestNDJSONOpenPhases` case) skips unless
+  `IKE_SLOW_TESTS=1` is set; it is the one thing the default run leaves out,
+  and CONTRIBUTING.md says how to run it.
+- **Deterministic ledgers are part of the change.** A new default chord needs
+  its `noCounterpart` row in `internal/keymap/jbimport/coverage_test.go` (or
+  an `actionMap` entry), and a new tool window its id in
+  `config.PaneSlotTools()`; the keydoctor grid and the settings capture tests
+  read the real default table, so they move when it does.
+
+Measure before claiming: `go test -count=1 -json ./internal/app | jq -r
+'select(.Action=="pass" or .Action=="fail") | select(.Test!=null) |
+"\(.Elapsed)\t\(.Test)"' | sort -rn | head` lists a package's slowest tests;
+`go test -count=1 -json ./... | jq -r 'select(.Test==null) |
+select(.Action=="pass" or .Action=="fail") | "\(.Elapsed)\t\(.Package)"' |
+sort -rn | head` the slowest packages.

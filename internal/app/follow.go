@@ -31,7 +31,7 @@ func (m *Model) armFollowTick() tea.Cmd {
 	}
 	m.followTickArmed = true
 	gen := m.modelGen
-	return tea.Tick(followInterval(m.host.Config()), func(time.Time) tea.Msg {
+	return tickCmd(followInterval(m.host.Config()), func(time.Time) tea.Msg {
 		return followTickMsg{gen: gen}
 	})
 }

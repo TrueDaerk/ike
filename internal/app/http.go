@@ -1202,7 +1202,7 @@ func (m *Model) startHTTPFlight(key string, e *httpFlightEntry) tea.Cmd {
 	}
 	m.httpTickArmed = true
 	gen := m.modelGen
-	return tea.Tick(httpFlightTick, func(time.Time) tea.Msg { return httpTickMsg{gen: gen} })
+	return tickCmd(httpFlightTick, func(time.Time) tea.Msg { return httpTickMsg{gen: gen} })
 }
 
 // finishHTTPFlight drops a finished dispatch and returns its entry — nil when

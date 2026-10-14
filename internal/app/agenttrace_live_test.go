@@ -88,6 +88,7 @@ func (l *traceLoop) pump(t *testing.T, m Model, d time.Duration, step func(), un
 // that turn. It returns the model, the loop and the transcript.
 func liveTrace(t *testing.T) (Model, *traceLoop, string) {
 	t.Helper()
+	realTicks(t) // the panel polls the transcript on a real 1 s tick
 	m, _ := openWatcher(t)
 	cfg := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", cfg)

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	ilsp "ike/internal/lsp"
 )
@@ -53,7 +54,7 @@ func openRenamePreview(t *testing.T) (Model, *int) {
 
 func TestLSPRenamePreviewListsFilesAndDiff(t *testing.T) {
 	m, _ := openRenamePreview(t)
-	body := m.lspRenamePreviewBody(80)
+	body := ansi.Strip(m.lspRenamePreviewBody(80)) // unstyled: intra-line diff highlights (#2847)
 	for _, want := range []string{"Greet", "Greeting", "2 edits", "1 edit", "3 edits in 2 files"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("preview body missing %q:\n%s", want, body)
@@ -83,7 +84,7 @@ func TestLSPRenamePreviewSelectionFollowsCursor(t *testing.T) {
 	if m.lspRenamePreview.cursor != 1 {
 		t.Fatalf("j must move the cursor, got %d", m.lspRenamePreview.cursor)
 	}
-	body := m.lspRenamePreviewBody(80)
+	body := ansi.Strip(m.lspRenamePreviewBody(80)) // unstyled: intra-line diff highlights (#2847)
 	if !strings.Contains(body, "diff for /proj/b.go") {
 		t.Fatalf("the diff must follow the selection:\n%s", body)
 	}

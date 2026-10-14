@@ -28,12 +28,14 @@ func notify(m Model, sev host.Severity, text string) (Model, tea.Cmd) {
 
 func TestToastExpiry(t *testing.T) {
 	m := newSized()
-	m, cmd := notify(m, host.Info, "saved")
+	takeDeferredTicks()
+	m, _ = notify(m, host.Info, "saved")
 	if len(m.toasts) != 1 {
 		t.Fatalf("toasts = %d want 1", len(m.toasts))
 	}
-	if cmd == nil {
-		t.Fatal("info toast must schedule an expiry tick")
+	// The expiry is a long timer, so the test tick hook defers it (#2997).
+	if ticks := takeDeferredTicks(); len(ticks) != 1 {
+		t.Fatalf("info toast must schedule one expiry tick, got %d", len(ticks))
 	}
 	tm, _ := m.Update(toastExpireMsg{id: m.toasts[0].id})
 	if m = tm.(Model); len(m.toasts) != 0 {

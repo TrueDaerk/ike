@@ -200,7 +200,7 @@ func (m *Model) complexityDiffSyncCmd() tea.Cmd {
 		return nil
 	}
 	st.tickArmed = true
-	return tea.Tick(cxDiffDebounce, func(time.Time) tea.Msg { return complexityDiffTickMsg{} })
+	return tickCmd(cxDiffDebounce, func(time.Time) tea.Msg { return complexityDiffTickMsg{} })
 }
 
 // startComplexityDiff runs on the debounce tick: it gathers the inputs the

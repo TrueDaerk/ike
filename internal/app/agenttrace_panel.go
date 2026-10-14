@@ -429,7 +429,7 @@ func (m *Model) armTraceTick(bump bool) tea.Cmd {
 	}
 	m.traceTickAt = time.Now()
 	gen := m.traceTickGen
-	return tea.Tick(agentTraceInterval, func(time.Time) tea.Msg { return traceTickMsg{gen: gen} })
+	return tickCmd(agentTraceInterval, func(time.Time) tea.Msg { return traceTickMsg{gen: gen} })
 }
 
 // ensureTraceTick restarts the poll when its chain died (#2857): nil while

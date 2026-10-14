@@ -81,7 +81,7 @@ func (m *Model) drainNotifications() tea.Cmd {
 		m.toasts = append([]toast{{id: m.toastSeq, sev: n.Severity, text: n.Text}}, m.toasts...)
 		if n.Severity != host.Error {
 			id := m.toastSeq
-			ticks = append(ticks, tea.Tick(timeout, func(time.Time) tea.Msg {
+			ticks = append(ticks, tickCmd(timeout, func(time.Time) tea.Msg {
 				return toastExpireMsg{id: id}
 			}))
 		}

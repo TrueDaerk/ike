@@ -66,23 +66,37 @@ func TestComplexityToggleLifecycle(t *testing.T) {
 }
 
 // complexityApp builds a model whose project root holds one Go file the
-// index can measure, and waits for the walk to finish.
+// index can measure, and waits for the walk to finish. The root is a temp
+// copy of this package's complexity_panel.go, not the package directory
+// itself: walking ~1000 sources through tree-sitter per test was what made
+// every complexity test time out in a full parallel run (#2997).
 func complexityApp(t *testing.T) (Model, string) {
 	t.Helper()
+	body, err := os.ReadFile("complexity_panel.go")
+	if err != nil {
+		t.Skipf("the test cwd does not hold the panel source: %v", err)
+	}
+	root := t.TempDir()
+	if r, err := filepath.EvalSymlinks(root); err == nil {
+		root = r
+	}
+	src := filepath.Join(root, "complexity_panel.go")
+	if err := os.WriteFile(src, body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(root)
 	m, _ := timeApp(t)
 	idx := m.ComplexityIndex()
 	if idx == nil || !idx.Available() {
 		t.Skip("no syntax tree in this build")
 	}
-	root := idx.Root()
-	src := filepath.Join(root, "complexity_panel.go")
-	if _, err := os.Stat(src); err != nil {
-		t.Skipf("the project root %s does not hold the panel source", root)
-	}
 	idx.Start()
-	deadline := time.Now().Add(20 * time.Second)
-	for !idx.ScanDone() && time.Now().Before(deadline) {
-		time.Sleep(20 * time.Millisecond)
+	// One file to parse: the walk is a matter of milliseconds and the settle
+	// timer that publishes the first generation fires right behind it, so the
+	// bound only guards against a hung index.
+	deadline := time.Now().Add(2 * time.Second)
+	for (!idx.ScanDone() || idx.Snapshot().Gen == 0) && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
 	}
 	if !idx.ScanDone() {
 		t.Fatal("the project walk did not finish")

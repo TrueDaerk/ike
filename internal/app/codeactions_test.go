@@ -152,7 +152,7 @@ func TestMergedActivation(t *testing.T) {
 // every test model) so the doc-path probes resolve like in the compiled app.
 func intentionModel(t *testing.T, name, content string, line, col int) Model {
 	t.Helper()
-	lang.Register(lang.Language{ID: "json", Extensions: []string{"json"}})
+	ensureLang(lang.Language{ID: "json", Extensions: []string{"json"}})
 	m := sizedWith(t, registry.Global(), 100, 40)
 	path := filepath.Join(t.TempDir(), name)
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {

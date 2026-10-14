@@ -1118,7 +1118,7 @@ type playDimMsg struct {
 // gen is still pending playDimDelay from now (#2777).
 func armPlayDim(s *playState) tea.Cmd {
 	gen := s.gen
-	return tea.Tick(playDimDelay, func(time.Time) tea.Msg {
+	return tickCmd(playDimDelay, func(time.Time) tea.Msg {
 		return playDimMsg{st: s, gen: gen}
 	})
 }
@@ -1149,7 +1149,7 @@ type playSpinMsg struct {
 // gen is still pending playSpinDelay from now (#2778).
 func armPlaySpin(s *playState) tea.Cmd {
 	gen := s.gen
-	return tea.Tick(playSpinDelay, func(time.Time) tea.Msg {
+	return tickCmd(playSpinDelay, func(time.Time) tea.Msg {
 		return playSpinMsg{st: s, gen: gen}
 	})
 }
@@ -1169,7 +1169,7 @@ func (m *Model) firePlaySpin(msg playSpinMsg) tea.Cmd {
 	if !m.playSrcShown() {
 		return nil
 	}
-	return tea.Tick(playSpinInterval, func(time.Time) tea.Msg {
+	return tickCmd(playSpinInterval, func(time.Time) tea.Msg {
 		return playSpinMsg{st: s, gen: s.gen}
 	})
 }
@@ -1267,7 +1267,7 @@ func (m *Model) schedulePlayEval() tea.Cmd {
 	s.gen++
 	s.pending, s.dimming, s.spinning, s.spinFrame = true, false, false, 0
 	gen := s.gen
-	return tea.Batch(tea.Tick(playDebounce, func(time.Time) tea.Msg {
+	return tea.Batch(tickCmd(playDebounce, func(time.Time) tea.Msg {
 		return playDebounceMsg{st: s, gen: gen}
 	}), armPlayDim(s), armPlaySpin(s))
 }
@@ -3126,7 +3126,7 @@ func (m *Model) playTyped() tea.Cmd {
 	s.typing = true
 	s.hgen++
 	st, gen := s, s.hgen
-	return tea.Tick(playHintIdle, func(time.Time) tea.Msg {
+	return tickCmd(playHintIdle, func(time.Time) tea.Msg {
 		return playHintIdleMsg{st: st, gen: gen}
 	})
 }

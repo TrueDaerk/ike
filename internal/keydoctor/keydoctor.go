@@ -184,7 +184,10 @@ func (m *Model) View() string {
 	}
 	boxW := m.width - 4
 	boxH := m.height - 2
-	innerW, innerH := boxW-4, boxH-2
+	// The frame's Width below is its outer width: the border and the padding
+	// both come out of it, so the content is six cells narrower (#2997: the
+	// old boxW-4 let a row filled to the computed width wrap its last chord).
+	innerW, innerH := boxW-6, boxH-2
 	var body string
 	switch m.ph {
 	case summary:
@@ -230,18 +233,45 @@ func (m *Model) probeBody(w, h int) string {
 }
 
 // targetGrid lays the targets out in as many columns as the height forces,
-// clipped to the width — the run is order-independent, so a clipped column
-// costs visibility, not correctness. Each column is only as wide as its own
-// longest target (#2305): a single global width made the rightmost column of
-// the grown default set fall off the edge, hiding chords the user still has
-// to press.
+// each column only as wide as its own longest target (#2305). When even a
+// zero gap cannot fit every column into the width — the default table has
+// outgrown a 160-column terminal (#2997) — the grid falls back to a dense
+// flow: cells wrap row by row like words in a paragraph, and if the flow is
+// taller than the box it scrolls so the next pending chord is always on
+// screen. Either way the user is never asked to press a chord they cannot
+// see.
 func (m *Model) targetGrid(w, h int) string {
 	targets := m.sess.Targets()
-	next := m.sess.Next()
+	if cols, ok := m.targetColumns(targets, w, h); ok {
+		return cols
+	}
+	return m.targetFlow(targets, w, h)
+}
+
+// cellStyle returns the mark and style of one target cell.
+func (m *Model) cellStyle(t, next string) (string, lipgloss.Style) {
 	nextStyle := lipgloss.NewStyle().Background(m.theme().Selection).Foreground(m.theme().SelectionText).Bold(true)
 	okStyle := lipgloss.NewStyle().Foreground(m.theme().Success)
 	warnStyle := lipgloss.NewStyle().Foreground(m.theme().Warning)
 	dimStyle := lipgloss.NewStyle().Foreground(m.theme().Secondary).Faint(true)
+	mark, style := " · ", lipgloss.NewStyle()
+	switch got := m.sess.Hit(t); {
+	case got == t:
+		mark, style = " ✓ ", okStyle
+	case got != "":
+		mark, style = " ≈ ", warnStyle
+	case m.sess.Skipped(t):
+		mark, style = " − ", dimStyle
+	case t == next:
+		style = nextStyle
+	}
+	return mark, style
+}
+
+// targetColumns is the columnar layout; ok is false when no gap makes the
+// columns fit the width.
+func (m *Model) targetColumns(targets []string, w, h int) (string, bool) {
+	next := m.sess.Next()
 	// Column text widths first, so the gap between them can shrink until the
 	// whole grid fits the box instead of spilling over its right edge.
 	var textW []int
@@ -255,8 +285,8 @@ func (m *Model) targetGrid(w, h int) string {
 		}
 		textW = append(textW, maxLen)
 	}
-	gap := 2
-	for ; gap > 0; gap-- {
+	gap, fits := 2, false
+	for ; gap >= 0 && !fits; gap-- {
 		total := 0
 		for i, tw := range textW {
 			total += 3 + tw // mark + label
@@ -264,32 +294,63 @@ func (m *Model) targetGrid(w, h int) string {
 				total += gap
 			}
 		}
-		if total <= w {
-			break
-		}
+		fits = total <= w
 	}
+	if !fits {
+		return "", false
+	}
+	gap++ // undo the loop's final decrement
 	var cols []string
 	for i, start := 0, 0; start < len(targets); i, start = i+1, start+h {
 		end := min(start+h, len(targets))
 		colW := textW[i] + 3 + gap
 		var lines []string
 		for _, t := range targets[start:end] {
-			mark, style := " · ", lipgloss.NewStyle()
-			switch got := m.sess.Hit(t); {
-			case got == t:
-				mark, style = " ✓ ", okStyle
-			case got != "":
-				mark, style = " ≈ ", warnStyle
-			case m.sess.Skipped(t):
-				mark, style = " − ", dimStyle
-			case t == next:
-				style = nextStyle
-			}
+			mark, style := m.cellStyle(t, next)
 			lines = append(lines, style.Render(mark+pad(t, colW-3)))
 		}
 		cols = append(cols, strings.Join(lines, "\n"))
 	}
-	return lipgloss.NewStyle().MaxWidth(w).Render(lipgloss.JoinHorizontal(lipgloss.Top, cols...))
+	return lipgloss.NewStyle().MaxWidth(w).Render(lipgloss.JoinHorizontal(lipgloss.Top, cols...)), true
+}
+
+// targetFlow is the dense wrapped layout, scrolled to keep the next pending
+// chord visible when the rows outnumber the box height.
+func (m *Model) targetFlow(targets []string, w, h int) string {
+	next := m.sess.Next()
+	var rows []string
+	var row strings.Builder
+	rowLen, nextRow := 0, 0
+	// Cells are measured the way the box renders them, and a row keeps one
+	// cell of slack: a row filled to the exact width wrapped its last chord
+	// onto a line of its own.
+	for _, t := range targets {
+		cell := lipgloss.Width(" · " + t) // mark + label
+		if rowLen > 0 && rowLen+1+cell >= w {
+			rows = append(rows, row.String())
+			row.Reset()
+			rowLen = 0
+		}
+		if rowLen > 0 {
+			row.WriteByte(' ')
+			rowLen++
+		}
+		if t == next {
+			nextRow = len(rows)
+		}
+		mark, style := m.cellStyle(t, next)
+		row.WriteString(style.Render(mark + t))
+		rowLen += cell
+	}
+	if rowLen > 0 {
+		rows = append(rows, row.String())
+	}
+	if len(rows) > h {
+		off := nextRow - h/2
+		off = max(0, min(off, len(rows)-h))
+		rows = rows[off : off+h]
+	}
+	return strings.Join(rows, "\n")
 }
 
 // summaryBody is the finish screen: counts plus the save/discard decision.

@@ -345,7 +345,7 @@ func (m Model) handleNetChallenge(c netlink.Challenge) (tea.Model, tea.Cmd) {
 
 // netPairTick schedules the next countdown tick for popup generation gen.
 func (m Model) netPairTick(gen int) tea.Cmd {
-	return tea.Tick(time.Second, func(time.Time) tea.Msg { return netPairTickMsg{gen: gen} })
+	return tickCmd(time.Second, func(time.Time) tea.Msg { return netPairTickMsg{gen: gen} })
 }
 
 // handleNetPairTick redraws the bar, or ends the popup once the code is

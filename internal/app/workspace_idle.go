@@ -63,7 +63,7 @@ func armWorkspaceIdle(root string) tea.Cmd {
 	if timeout <= 0 || root == "" {
 		return nil
 	}
-	return tea.Tick(timeout, func(time.Time) tea.Msg { return workspaceIdleMsg{root: root} })
+	return tickCmd(timeout, func(time.Time) tea.Msg { return workspaceIdleMsg{root: root} })
 }
 
 // handleWorkspaceIdle fires the workspace-idle hooks (the LSP bridge stops

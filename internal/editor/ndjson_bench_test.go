@@ -38,6 +38,12 @@ func TestNDJSONOpenPhases(t *testing.T) {
 		n, wd int
 	}{{"small-900KB", 2000, 450}, {"big-100MB", 200_000, 500}} {
 		t.Run(fx.name, func(t *testing.T) {
+			// The 100 MB case is a measurement, not a check: it alone took the
+			// editor package past a minute in a full parallel run (#2997), so it
+			// runs on request — IKE_SLOW_TESTS=1 go test ./internal/editor -run NDJSON -v.
+			if fx.n > 10_000 && os.Getenv("IKE_SLOW_TESTS") == "" {
+				t.Skip("100 MB phase measurement; set IKE_SLOW_TESTS=1 to run it")
+			}
 			path := ndjsonFixture(t, t.TempDir(), fx.n, fx.wd)
 			t0 := time.Now()
 			data, err := os.ReadFile(path)

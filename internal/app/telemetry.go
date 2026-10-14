@@ -357,7 +357,7 @@ type switchLSPQuietMsg struct{ wait *switchLSPWait }
 
 // armSwitchLSPQuiet schedules the quiet fallback for the wait just armed.
 func armSwitchLSPQuiet(wait *switchLSPWait) tea.Cmd {
-	return tea.Tick(switchLSPQuietTimeout, func(time.Time) tea.Msg { return switchLSPQuietMsg{wait: wait} })
+	return tickCmd(switchLSPQuietTimeout, func(time.Time) tea.Msg { return switchLSPQuietMsg{wait: wait} })
 }
 
 // switchLSPNoticeMsg fires when the warm-up notice threshold for one armed
@@ -385,7 +385,7 @@ func armSwitchLSPNotice(wait *switchLSPWait) tea.Cmd {
 	if d <= 0 {
 		return nil
 	}
-	return tea.Tick(d, func(time.Time) tea.Msg { return switchLSPNoticeMsg{wait: wait} })
+	return tickCmd(d, func(time.Time) tea.Msg { return switchLSPNoticeMsg{wait: wait} })
 }
 
 // noteSwitchLSPSilent raises the silent-server notice (#2629): the switch

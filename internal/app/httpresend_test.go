@@ -105,9 +105,17 @@ func TestHTTPResendRepeatsStoredRequestAfterEdit(t *testing.T) {
 	}
 	// The settled pass may batch side commands (e.g. the symbol-refresh
 	// debounce, #2319) alongside the resend; find it in the batch.
-	msg, ok := findMsg[httppane.ResendMsg](cmd)
-	if !ok {
-		t.Fatalf("no ResendMsg produced by %T", cmd())
+	// ctrl+r resolves through the keymap to the http.resend command
+	// (HTTPResendMsg); the pane's own ResendMsg is the header-button path.
+	// Either lands in resendHTTPRequest. The cmd is never run blindly here: a
+	// batched timer would stall the test (#2997).
+	var msg tea.Msg
+	if resend, ok := findMsg[HTTPResendMsg](cmd); ok {
+		msg = resend
+	} else if resend, ok := findMsg[httppane.ResendMsg](cmd); ok {
+		msg = resend
+	} else {
+		t.Fatal("ctrl+r in the response pane produced neither HTTPResendMsg nor httppane.ResendMsg")
 	}
 	out, cmd = m.Update(msg)
 	m = out.(Model)

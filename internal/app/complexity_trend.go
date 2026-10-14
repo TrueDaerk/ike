@@ -173,7 +173,7 @@ func (m *Model) startComplexityTrend(key cxTrendKey) tea.Cmd {
 	st.totalCh = total
 	return tea.Batch(
 		func() tea.Msg { return <-done },
-		tea.Tick(cxTrendTick, func(time.Time) tea.Msg { return complexityTrendTickMsg{key: key} }),
+		tickCmd(cxTrendTick, func(time.Time) tea.Msg { return complexityTrendTickMsg{key: key} }),
 	)
 }
 
@@ -235,7 +235,7 @@ func (m *Model) complexityTrendProgress(msg complexityTrendTickMsg) tea.Cmd {
 			p.SetTrend(st.result)
 		}
 	}
-	return tea.Tick(cxTrendTick, func(time.Time) tea.Msg { return complexityTrendTickMsg{key: msg.key} })
+	return tickCmd(cxTrendTick, func(time.Time) tea.Msg { return complexityTrendTickMsg{key: msg.key} })
 }
 
 // applyComplexityTrend stores a finished walk: on success the pane shows
