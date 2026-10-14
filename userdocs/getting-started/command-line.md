@@ -64,7 +64,7 @@ explicit file means you meant this directory, not your most recent one.
 
 ## Headless reports
 
-`ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json] [--min N] [--no-tests] [PATH...]`
+`ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json | --md] [--min N] [--no-tests] [PATH...]`
 prints the function complexity of the project — per function, or summed per
 class or per file with `--by`, one compact line per file or class with
 `--brief[=class]`, without test files with `--no-tests` — or of just the files and directories you

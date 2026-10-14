@@ -151,6 +151,9 @@ func Run(a cli.ComplexityArgs, stdout, stderr io.Writer) int {
 	case !ok:
 		fmt.Fprintf(stderr, "ike complexity: --by: %q is not class or file\n", a.By)
 		return ExitError
+	case a.MD && a.JSON:
+		fmt.Fprintln(stderr, "ike complexity:", cli.ErrMarkdownWithJSON)
+		return ExitError
 	case !briefOK:
 		fmt.Fprintf(stderr, "ike complexity: --brief: %q is not class or file\n", a.Brief)
 		return ExitError
@@ -211,9 +214,12 @@ func Run(a cli.ComplexityArgs, stdout, stderr io.Writer) int {
 			fmt.Fprintln(stderr, "ike complexity:", err)
 			return ExitError
 		}
-		if a.JSON {
+		switch {
+		case a.MD:
+			WriteMarkdown(stdout, diffMarkdown(r))
+		case a.JSON:
 			err = writeDiffJSON(stdout, r)
-		} else {
+		default:
 			writeDiffText(stdout, r)
 		}
 		if err != nil {
@@ -240,11 +246,19 @@ func Run(a cli.ComplexityArgs, stdout, stderr io.Writer) int {
 				fmt.Fprintln(stderr, "ike complexity:", err)
 				return ExitError
 			}
+		case a.MD && brief != complexity.ByNone:
+			WriteMarkdown(stdout, briefMarkdown(groupProject(r, by, freeLabel)))
+		case a.MD:
+			WriteMarkdown(stdout, groupsMarkdown(groupProject(r, by, "")))
 		case brief != complexity.ByNone:
 			writeBriefText(stdout, groupProject(r, by, freeLabel))
 		default:
 			writeGroupsText(stdout, groupProject(r, by, ""))
 		}
+		return ExitOK
+	}
+	if a.MD {
+		WriteMarkdown(stdout, projectMarkdown(r))
 		return ExitOK
 	}
 	if a.JSON {

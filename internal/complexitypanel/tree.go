@@ -622,7 +622,7 @@ func (m *Model) treeClick(y int) tea.Cmd {
 
 // treeFooter is the key hint line of the tree view.
 func (m *Model) treeFooter() string {
-	return " · tab view · v grid · s sort · S reverse · enter open/fold · l/h unfold/fold · e export · y copy · r rescan · / filter · space sites · m marks · i accept"
+	return " · tab view · v grid · s sort · S reverse · enter open/fold · l/h unfold/fold · e csv · E md · y copy · r rescan · / filter · space sites · m marks · i accept"
 }
 
 // treeCSVHeader is the tree export's first row: the path leads, so a

@@ -23,7 +23,8 @@
 // View via Set on open and on every generation change, and tells it where
 // the caret is via Follow. Enter / a double click asks the root model to
 // open the function's file (OpenLocationMsg), 'r' to rebuild the index
-// (RefreshMsg), 'e' to write the current tab as a CSV scratch (ExportMsg),
+// (RefreshMsg), 'e' to write the current tab as a CSV scratch (ExportMsg) and
+// 'E' as a Markdown one (ExportMarkdownMsg, #2963, markdown.go),
 // 'y' to copy the row (CopyMsg). Nothing here touches the filesystem.
 package complexitypanel
 
@@ -1144,10 +1145,9 @@ func (m *Model) columnWidths() []int {
 // caretMark prefixes the function under the caret on the File tab.
 const caretMark = "▸ "
 
-// headerLabels are the tab's column labels with the sort marker on the
-// sort column.
-func (m *Model) headerLabels() []string {
-	layout := m.layout()
+// columnTitles are layout's labels: the group sums and the tree's name
+// column relabelled, no sort marker.
+func (m *Model) columnTitles(layout []Column) []string {
 	out := make([]string, len(layout))
 	grouped := m.Grouping() != complexity.ByNone
 	tree := m.treeActive()
@@ -1160,6 +1160,13 @@ func (m *Model) headerLabels() []string {
 			out[i] = l
 		}
 	}
+	return out
+}
+
+// headerLabels are the tab's column labels with the sort marker on the
+// sort column.
+func (m *Model) headerLabels() []string {
+	out := m.columnTitles(m.layout())
 	mark := " ▲"
 	if m.desc {
 		mark = " ▼"
@@ -1280,6 +1287,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.open()
 	case "e":
 		return m.export()
+	case "E":
+		return m.exportMarkdown() // #2963
 	case "y":
 		return m.copyRow()
 	case "r":
@@ -1650,7 +1659,7 @@ func (m *Model) footer() string {
 	if m.tab == TabTrend {
 		return lipgloss.NewStyle().Faint(true).Render(m.clip(" " + count + m.trendFooter())) // #2962
 	}
-	hints := " · tab view · s sort · S reverse · enter open · e export · y copy · r rescan · / filter"
+	hints := " · tab view · s sort · S reverse · enter open · e csv · E md · y copy · r rescan · / filter"
 	switch {
 	case m.treeActive():
 		hints = m.treeFooter()

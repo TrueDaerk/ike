@@ -714,6 +714,15 @@ or a build without a syntax tree is reported instead). `e` (and
 `complexity.export`) writes the current tab as a CSV scratch
 (`ExportMsg{Label, CSV}`: header `file,function,kind,line,ccn,cognitive,nloc,params,depth,comment_lines,cmt_pct`,
 one row per visible function, the file column on every tab) and opens it.
+`E` (and `complexity.exportMarkdown`, #2963) writes the same rows as
+Markdown (`ExportMarkdownMsg{Label, Markdown}`, `Model.Markdown` in
+`internal/complexitypanel/markdown.go`) to a `.md` scratch through
+`complexitycli.WriteMarkdown`: the headline is the tab's totals line (the
+Changes tab: `Complexity: <VERDICT>` with the totals as a note and one
+table per changed / added / removed section, the section column dropped),
+the header the on-screen labels without the sort marker, the rows the
+visible ones in the view's order (breakdown rows left out; the tree's
+indented with no-break spaces).
 `y` / the copy chord puts `path:line: name ccn=.. cog=..` on the clipboard
 (and the clipboard history). The wheel scrolls, a click selects. The
 single keys are the pane's own (keybind audit ledger, `reasonPaneKey`).
@@ -1437,7 +1446,7 @@ chords: the keybind ledger records them with `reasonIntention`.
 
 ## Headless CLI (#2922)
 
-`ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [PATH...]`
+`ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json | --md] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [PATH...]`
 is the terminal-free report for CI pipelines and coding agents. The grammar
 lives in `internal/cli` (`ComplexityArgs`, first argument only like
 `agent-hook`, so a file named `complexity` still opens as `./complexity`);
@@ -1448,6 +1457,21 @@ names it), a git
 error (an unknown `--diff` ref prints git's message on stderr) or a build
 without syntax trees. The report never fails on thresholds — gating is the
 caller's policy over the JSON.
+
+**Markdown (#2963).** `--md` (exclusive with `--json`:
+`cli.ErrMarkdownWithJSON`, exit 2) renders every report through
+`complexitycli.WriteMarkdown` (`internal/complexitycli/markdown.go`): a
+`Markdown{Headline, Notes, Sections}` value, the headline bold, each
+`MarkdownSection{Title, Header, Numeric, Rows}` a GFM table with the numeric
+columns right-aligned and the rows past `MarkdownFold` (30) in a
+`<details>` block; `MarkdownEscape` escapes `|`, backticks, `*` and `<` and
+folds newlines. `projectMarkdown` / `groupsMarkdown` reuse the text
+summary and trailer lines (`trailerLines`), `briefMarkdown` is the brief's
+columns without a headline, `diffMarkdown` the PR-comment payload —
+`Complexity: MORE COMPLEX (excess +2, …)`, the revisions, the totals, the
+Changed / Added / Removed tables (cells `5→7 (+2)`) or the Files table under
+`--by file` — and `trendMarkdown` the commit table. The types are exported
+for the tool window's `E`.
 
 **Selection (#2936).** `ComplexityArgs.Paths` holds any number of files and
 directories, mixed; none means the working directory. Each path is made

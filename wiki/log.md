@@ -1,5 +1,16 @@
 # Log
 
+## 2026-10-14 (Markdown export of the Complexity window and `--md`, #2963)
+
+- [Code Complexity](/architecture/complexity.md): Tool window "Actions" —
+  `E` / `complexity.exportMarkdown` (`ExportMarkdownMsg`, a `.md` scratch,
+  ledger: `reasonPaneKey`); Headless CLI — the `--md` rendering
+  (`complexitycli.Markdown`, `WriteMarkdown`, `MarkdownFold`,
+  `MarkdownEscape`), exclusive with `--json`.
+- The complexity user guide: `--md` in the flag table, the Changes tab's
+  `E`, and the sticky pull-request comment workflow
+  (`gh pr comment --edit-last`); the commands reference regenerated.
+
 ## 2026-10-14 (intention entries on a function header, #2965)
 
 - [Code Complexity](/architecture/complexity.md): "Intentions" under Editor

@@ -165,6 +165,7 @@ func TestPinKeyEmitsToggleOrExplains(t *testing.T) {
 	if cmd := m.Update(key("p")); cmd != nil {
 		t.Fatal("p on a group row must not emit a toggle")
 	}
+	m.SetSize(200, 12) // the note sits at the footer's tail
 	if v := m.View(); !strings.Contains(v, "p pins a function row, not a group") {
 		t.Errorf("footer lacks the group note:\n%s", v)
 	}

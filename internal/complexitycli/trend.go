@@ -68,9 +68,12 @@ func runTrendReport(s settings, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "ike complexity:", err)
 		return ExitError
 	}
-	if s.args.JSON {
+	switch {
+	case s.args.MD:
+		WriteMarkdown(stdout, trendMarkdown(r))
+	case s.args.JSON:
 		err = writeTrendJSON(stdout, r)
-	} else {
+	default:
 		writeTrendText(stdout, r)
 	}
 	if err != nil {

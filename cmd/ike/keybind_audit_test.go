@@ -106,6 +106,8 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	// are bound in the Complexity context and need no entry here).
 	{"complexity.refresh", reasonPaneKey},
 	{"complexity.export", reasonPaneKey},
+	// The Markdown export (#2963) is the pane's own 'E'.
+	{"complexity.exportMarkdown", reasonPaneKey},
 	// The Changes tab's function diff (#2956) is the pane's own 'd'.
 	{"complexity.functionDiff", reasonPaneKey},
 	// Asking the agent to simplify a function (#2964) is the pane's own 'a'.

@@ -8621,7 +8621,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case ComplexityExportMsg:
 		// complexity.export (#2917): the pane's 'e' from the palette.
-		return m, m.exportComplexityPanel()
+		return m, m.exportComplexityPanel("e")
+
+	case ComplexityExportMarkdownMsg:
+		// complexity.exportMarkdown (#2963): the pane's 'E' from the palette.
+		return m, m.exportComplexityPanel("E")
 
 	case ComplexityGroupMsg:
 		// complexity.group (#2937), b in the pane: cycle the tab's grouping.
@@ -8724,6 +8728,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case complexitypanel.ExportMsg:
 		// 'e' in the Complexity pane (#2917): the current tab as a CSV scratch.
 		return m.handleComplexityExport(msg)
+
+	case complexitypanel.ExportMarkdownMsg:
+		// 'E' in the Complexity pane (#2963): the current tab as a Markdown scratch.
+		return m.handleComplexityMarkdownExport(msg)
 
 	case complexitypanel.OpenLocationMsg:
 		// Enter / double click on a function row (#2917): the same path:line

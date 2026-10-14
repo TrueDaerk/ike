@@ -166,6 +166,8 @@ func TestParseComplexity(t *testing.T) {
 		{[]string{"--json", "pkg/", "--min", "3", "main.go", "-"}, ComplexityArgs{JSON: true, Min: 3, Paths: []string{"pkg/", "main.go", "-"}}},
 		{[]string{"--diff=main", "x.go", "x.go"}, ComplexityArgs{Diff: true, Rev: "main", Paths: []string{"x.go", "x.go"}}},
 		{[]string{"--diff=main", "--by", "file"}, ComplexityArgs{Diff: true, Rev: "main", By: "file"}},
+		{[]string{"--md", "--diff=origin/main"}, ComplexityArgs{MD: true, Diff: true, Rev: "origin/main"}},
+		{[]string{"--brief", "--md"}, ComplexityArgs{MD: true, Brief: "file"}},
 		{[]string{"--min", "20"}, ComplexityArgs{Min: 20}},
 		{[]string{"--min=20", "--ccn", "10", "--cog=12"}, ComplexityArgs{Min: 20, CCN: 10, Cog: 12}},
 		{[]string{"--cmt", "40", "--json"}, ComplexityArgs{Cmt: 40, JSON: true}},
@@ -245,6 +247,8 @@ func TestParseComplexity(t *testing.T) {
 		{[]string{"--brief", "--trend"}, ErrTrendWithDiff},
 		{[]string{"--by", "file", "--pins"}, ErrPinsWithDiff},
 		{[]string{"--pins", "--brief"}, ErrPinsWithDiff},
+		{[]string{"--md", "--json"}, ErrMarkdownWithJSON},
+		{[]string{"--json", "--diff", "--md"}, ErrMarkdownWithJSON},
 	} {
 		if _, err := Parse(append([]string{"complexity"}, c.args...)); err != c.want {
 			t.Errorf("Parse(complexity %q) error %v, want %v", c.args, err, c.want)
