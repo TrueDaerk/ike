@@ -151,6 +151,8 @@ jobs:
           Write-Host $out
           if ($code -ne 1) { throw "ike-gui.cmd exited $code, want 1" }
           if ("$out" -notmatch 'scoop install wezterm') { throw "hint missing: $out" }
+          # pwsh would otherwise end the step with the launcher's expected 1.
+          exit 0
 
       - name: Validate the winget manifests
         if: matrix.goos == 'windows' && matrix.goarch == 'amd64'
