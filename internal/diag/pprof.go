@@ -13,7 +13,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"runtime/pprof"
-	"syscall"
 	"time"
 )
 
@@ -35,8 +34,12 @@ func Start(warn func(string)) {
 			}
 		})
 	}
+	sigs := dumpSignals()
+	if len(sigs) == 0 {
+		return
+	}
 	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGUSR1)
+	signal.Notify(sig, sigs...)
 	safego.Go("diag.Start", func() {
 		for range sig {
 			if _, err := Dump(); err != nil {
