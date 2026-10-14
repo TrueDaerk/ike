@@ -36,7 +36,7 @@ func TestComplexityHintsDeltaBuilder(t *testing.T) {
 		{Name: "dup", Line: 31, CCN: 1, Cognitive: 0},
 		{Name: "dup", Line: 41, CCN: 5, Cognitive: 1},
 	}
-	got := complexityHintsFor(head, 100, 100, 0, false, base, true)
+	got := complexityHintsFor(head, complexity.Thresholds{CCN: 100, Cog: 100, Cmt: 0}, false, base, true)
 	want := []string{
 		"CCN 14 (−6) · cog 24 (−7)",
 		"CCN 14 · cog 24 (−7)",
@@ -60,7 +60,7 @@ func TestComplexityHintsDeltaBuilder(t *testing.T) {
 		t.Errorf("a rise must warn: %+v", d)
 	}
 	// Outside the diff nothing joins the hint.
-	for i, h := range complexityHintsFor(head, 100, 100, 0, false, nil, false) {
+	for i, h := range complexityHintsFor(head, complexity.Thresholds{CCN: 100, Cog: 100, Cmt: 0}, false, nil, false) {
 		if h.Plain() != h.Text || h.Deltas != ([2]editor.ComplexityDelta{}) {
 			t.Errorf("hint %d outside the diff carries a Δ: %+v", i, h)
 		}
@@ -71,7 +71,7 @@ func TestComplexityHintsDeltaBuilder(t *testing.T) {
 // as applyComplexityDiff does on success.
 func cxDeltaLand(m Model, path string, base, head []complexity.Function) Model {
 	p := canonicalPath(path)
-	d := complexity.DiffProject(map[string][]complexity.Function{p: base}, map[string][]complexity.Function{p: head}, 15, 15, 40)
+	d := complexity.DiffProject(map[string][]complexity.Function{p: base}, map[string][]complexity.Function{p: head}, complexity.Uniform(complexity.Thresholds{CCN: 15, Cog: 15, Cmt: 40}))
 	out, _ := m.Update(complexityDiffMsg{key: m.currentCxDiffKey(), changes: complexitypanel.Changes{Ready: true, Diff: d}})
 	return out.(Model)
 }

@@ -61,6 +61,11 @@ type settings struct {
 	// cmtWarn is the comment-density threshold in percent (#2934); 0 is
 	// off, as complexity.comment_density_warn = 0 configures it.
 	cmtWarn int
+	// res resolves a file's thresholds through complexity.overrides
+	// (#2960) over the three above; overrides counts the entries. An
+	// explicit --ccn / --cog / --cmt beats both (see th).
+	res       complexity.Resolver
+	overrides int
 	// churnDays is the --churn window (#2957): the flag's value, else
 	// complexity.churn_days. churn holds the commits per project-relative
 	// path in it, nil without --churn.
@@ -282,6 +287,9 @@ func resolve(a cli.ComplexityArgs) (settings, error) {
 	if s.cogWarn <= 0 {
 		s.cogWarn = defaultWarn
 	}
+	cx := c.Complexity
+	cx.CCNWarn, cx.CognitiveWarn, cx.CommentDensityWarn = s.ccnWarn, s.cogWarn, s.cmtWarn
+	s.res, s.overrides = complexity.ResolverFor(cx, root), len(cx.ThresholdOverrides())
 	s.churnDays = c.Complexity.ChurnDays
 	if a.ChurnDays > 0 {
 		s.churnDays = a.ChurnDays
@@ -344,7 +352,7 @@ func writeBaseline(r projectReport) (int, error) {
 	s := r.s
 	b := complexity.NewBaseline(s.ccnWarn, s.cogWarn)
 	for _, rw := range r.all {
-		if rw.fn.Over(s.ccnWarn, s.cogWarn) {
+		if s.th(rw.file).Over(rw.fn) {
 			b.Accept(rw.file, rw.fn, rw.ordinal)
 		}
 	}
@@ -429,16 +437,40 @@ func (s settings) selected(path string) bool {
 	return false
 }
 
+// th is the thresholds path's functions are judged by (#2960): the
+// complexity.overrides entry matching it over the globals, an explicit
+// --ccn / --cog / --cmt beating both. path is absolute or project-relative.
+func (s settings) th(path string) complexity.Thresholds {
+	t := complexity.Thresholds{CCN: s.ccnWarn, Cog: s.cogWarn, Cmt: s.cmtWarn}
+	if s.res != nil {
+		if !filepath.IsAbs(path) && s.dir != "" {
+			path = filepath.Join(s.dir, filepath.FromSlash(path))
+		}
+		t = s.res(path)
+	}
+	if s.args.CCN > 0 {
+		t.CCN = s.args.CCN
+	}
+	if s.args.Cog > 0 {
+		t.Cog = s.args.Cog
+	}
+	if s.args.Cmt > 0 {
+		t.Cmt = s.args.Cmt
+	}
+	return t
+}
+
 // keep reports whether a function passes the row filter: --min N keeps
 // CCN or cognitive ≥ N; an explicit --ccn / --cog / --cmt keeps rows at or
 // above any threshold (the comment density only while its threshold is
 // on); no filter flag keeps everything.
-func (s settings) keep(f complexity.Function) bool {
+func (s settings) keep(path string, f complexity.Function) bool {
 	switch {
 	case s.args.Min > 0:
 		return f.CCN >= s.args.Min || f.Cognitive >= s.args.Min
 	case s.args.CCN > 0 || s.args.Cog > 0 || s.args.Cmt > 0:
-		return f.CCN >= s.ccnWarn || f.Cognitive >= s.cogWarn || f.CommentsOver(s.cmtWarn)
+		t := s.th(path)
+		return f.CCN >= t.CCN || f.Cognitive >= t.Cog || t.CommentsOver(f)
 	}
 	return true
 }
@@ -621,17 +653,17 @@ func runProject(s settings) projectReport {
 		}
 	})
 	sortRows(r.all)
-	fns := make([]complexity.Function, len(r.all))
-	for i, rw := range r.all {
-		fns[i] = rw.fn
+	var sum complexity.Summer
+	for _, rw := range r.all {
+		sum.Add(rw.fn, s.th(rw.file))
 		if s.args.Pins && s.pinOf(rw.file, rw.fn, rw.ordinal) == nil {
 			continue
 		}
-		if s.keep(rw.fn) {
+		if s.keep(rw.file, rw.fn) {
 			r.rows = append(r.rows, rw)
 		}
 	}
-	r.summary = complexity.Summarize(fns, s.ccnWarn, s.cogWarn, s.cmtWarn)
+	r.summary = sum.Summary()
 	return r
 }
 
@@ -689,7 +721,7 @@ func groupProject(r projectReport, by complexity.Level, free string) groupReport
 		files[rw.file] = append(files[rw.file], fn)
 	}
 	s := r.s
-	all := complexity.GroupFunctions(files, by, s.ccnWarn, s.cogWarn, s.cmtWarn)
+	all := complexity.GroupFunctions(files, by, s.th)
 	g := groupReport{projectReport: r, by: by, total: len(all)}
 	for _, gr := range all {
 		if s.keepGroup(gr) {
@@ -703,12 +735,13 @@ func groupProject(r projectReport, by complexity.Level, free string) groupReport
 // ≥ N; an explicit --ccn / --cog / --cmt keeps groups whose max CCN, max
 // cognitive or aggregate comment density is at or above its threshold.
 func (s settings) keepGroup(g complexity.Group) bool {
+	t := s.th(g.File)
 	switch {
 	case s.args.Min > 0:
 		return g.CCNSum >= s.args.Min || g.CogSum >= s.args.Min
 	case s.args.CCN > 0 || s.args.Cog > 0 || s.args.Cmt > 0:
-		return g.CCNMax >= s.ccnWarn || g.CogMax >= s.cogWarn ||
-			s.cmtWarn > 0 && complexity.DensityPercent(g.CommentDensity) >= s.cmtWarn
+		return g.CCNMax >= t.CCN || g.CogMax >= t.Cog ||
+			t.Cmt > 0 && complexity.DensityPercent(g.CommentDensity) >= t.Cmt
 	}
 	return true
 }
@@ -924,7 +957,7 @@ func (r *diffReport) measure(repo string, files []diffFile) {
 			r.headFiles++
 		}
 	})
-	r.diff = complexity.DiffProject(base, head, s.ccnWarn, s.cogWarn, s.cmtWarn)
+	r.diff = complexity.DiffProject(base, head, s.th)
 	r.head = head
 }
 
@@ -948,17 +981,17 @@ func (r diffReport) sections() (changed []changeRow, added, removed []row) {
 		fd := r.diff.Files[p]
 		rel := r.s.rel(p)
 		for _, c := range fd.Changed {
-			if r.s.keep(c.Before) || r.s.keep(c.After) {
+			if r.s.keep(p, c.Before) || r.s.keep(p, c.After) {
 				changed = append(changed, changeRow{file: rel, ch: c, pin: r.s.pinOf(rel, c.After, r.headOrdinal(p, c.After))})
 			}
 		}
 		for _, f := range fd.Added {
-			if r.s.keep(f) {
+			if r.s.keep(p, f) {
 				added = append(added, row{file: rel, fn: f, ordinal: r.headOrdinal(p, f)})
 			}
 		}
 		for _, f := range fd.Removed {
-			if r.s.keep(f) {
+			if r.s.keep(p, f) {
 				removed = append(removed, row{file: rel, fn: f})
 			}
 		}

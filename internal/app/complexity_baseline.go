@@ -214,20 +214,21 @@ func baselineCount(n int, items []complexitypanel.BaselineItem) string {
 }
 
 // overThresholdFunctions lists every function of the index snapshot at or
-// above a CCN or cognitive threshold, keyed the baseline's way.
+// above a CCN or cognitive threshold — its file's, #2960 — keyed the
+// baseline's way.
 func (m Model) overThresholdFunctions() []complexitypanel.BaselineItem {
 	if m.complexityIndex == nil {
 		return nil
 	}
-	c := config.Get().Complexity
+	res := m.complexityResolver(config.Get().Complexity)
 	root := m.complexityIndex.Root()
 	v := m.complexityIndex.Snapshot()
 	var out []complexitypanel.BaselineItem
 	for _, path := range v.Paths() {
 		fns := v.Files[path]
-		rel := baselineRel(root, path)
+		rel, th := baselineRel(root, path), res(path)
 		for i, ord := range complexity.Ordinals(fns) {
-			if fns[i].Over(c.CCNWarn, c.CognitiveWarn) {
+			if th.Over(fns[i]) {
 				out = append(out, complexitypanel.BaselineItem{Rel: rel, Fn: fns[i], Ordinal: ord})
 			}
 		}
@@ -268,7 +269,11 @@ func (m Model) complexityBaselineDialogBody(n int) string {
 	c := config.Get().Complexity
 	var b strings.Builder
 	b.WriteString("Record " + plural(n, "function", "functions") + " at or above the thresholds\n")
-	b.WriteString("(CCN ≥ " + strconv.Itoa(c.CCNWarn) + " or cognitive ≥ " + strconv.Itoa(c.CognitiveWarn) + ") as accepted debt in\n")
+	b.WriteString("(CCN ≥ " + strconv.Itoa(c.CCNWarn) + " or cognitive ≥ " + strconv.Itoa(c.CognitiveWarn))
+	if len(c.Overrides) > 0 {
+		b.WriteString(", or a file's complexity.overrides entry") // #2960
+	}
+	b.WriteString(") as accepted debt in\n")
 	b.WriteString(displayPath(m.cxBase.path) + "?\n\n")
 	b.WriteString("The file replaces any earlier baseline. Only functions that are\n")
 	b.WriteString("new or got worse will count as over threshold afterwards;\n")

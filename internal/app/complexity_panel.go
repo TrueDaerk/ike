@@ -196,7 +196,7 @@ func (m *Model) seedComplexityPanel(p *complexitypanel.Model) {
 	}
 	p.SetRoot(m.complexityIndex.Root())
 	c := config.Get().Complexity
-	p.SetWarn(c.CCNWarn, c.CognitiveWarn, c.CommentDensityWarn)
+	m.setComplexityPanelThresholds(p, c)
 	p.SetBaseline(m.complexityBaseline()) // #2958
 	p.SetPins(m.complexityPins())         // #2959
 	if v, ok := m.complexitySessionBase(); ok {

@@ -123,7 +123,7 @@ func TestChangesGroupOpenCopyExport(t *testing.T) {
 	// enter opens the file at its first changed function.
 	base := map[string][]complexity.Function{"/proj/a.go": {fn("keep", 0, 5, 1, 0), fn("grow", 30, 40, 2, 1)}}
 	head := map[string][]complexity.Function{"/proj/a.go": {fn("keep", 0, 5, 1, 0), fn("grow", 30, 40, 5, 4), fn("new", 50, 55, 1, 0)}}
-	m.SetChanges(Changes{Rev: "HEAD", Diff: complexity.DiffProject(base, head, 15, 15, 40), Ready: true})
+	m.SetChanges(Changes{Rev: "HEAD", Diff: complexity.DiffProject(base, head, complexity.Uniform(complexity.Thresholds{CCN: 15, Cog: 15, Cmt: 40})), Ready: true})
 	msg := m.Update(key("enter"))().(OpenLocationMsg)
 	if msg.Path != "/proj/a.go" || msg.Line != 30 {
 		t.Errorf("enter = %+v, want a.go line 30", msg)

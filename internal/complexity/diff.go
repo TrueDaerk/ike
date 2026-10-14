@@ -209,10 +209,10 @@ type Diff struct {
 	// Verdict reads the excess delta, then Σcognitive, then ΣCCN − functions.
 	Verdict Verdict `json:"verdict"`
 
-	// base / head keep the measurements DiffProject compared, warn its
-	// thresholds, so Without can re-run it over a subset of files (#2950).
+	// base / head keep the measurements DiffProject compared, res its
+	// threshold resolver, so Without can re-run it over a subset of files (#2950).
 	base, head map[string][]Function
-	warn       [3]int
+	res        Resolver
 }
 
 // Without re-runs the comparison without the files drop selects — the
@@ -232,7 +232,7 @@ func (d Diff) Without(drop func(path string) bool) Diff {
 		}
 		return out
 	}
-	return DiffProject(keep(d.base), keep(d.head), d.warn[0], d.warn[1], d.warn[2])
+	return DiffProject(keep(d.base), keep(d.head), d.res)
 }
 
 // BaseOf returns the base measurement DiffProject compared for path and
@@ -292,16 +292,23 @@ func (d Diff) DeltaDecisions() int {
 // functions of every changed file at the base revision (absent for a file
 // the base does not have), head the working-tree functions (absent for a
 // deleted file). A path present in only one map diffs against nothing. The
-// summaries use the warning thresholds exactly like Summarize.
-func DiffProject(base, head map[string][]Function, ccnWarn, cogWarn, cmtWarn int) Diff {
-	d := Diff{Files: map[string]FileDiff{}, base: base, head: head, warn: [3]int{ccnWarn, cogWarn, cmtWarn}}
-	var baseAll, headAll []Function
+// summaries judge each file by the thresholds res resolves for its path
+// (#2960), exactly like SummarizeFiles.
+func DiffProject(base, head map[string][]Function, res Resolver) Diff {
+	d := Diff{Files: map[string]FileDiff{}, base: base, head: head, res: res}
+	var baseAll, headAll Summer
+	add := func(a *Summer, p string, fns []Function) {
+		t := res(p)
+		for _, f := range fns {
+			a.Add(f, t)
+		}
+	}
 	seen := map[string]bool{}
 	for p, b := range base {
 		seen[p] = true
-		baseAll = append(baseAll, b...)
+		add(&baseAll, p, b)
 		h := head[p]
-		headAll = append(headAll, h...)
+		add(&headAll, p, h)
 		if fd := DiffFunctions(b, h); !fd.Empty() {
 			d.Files[p] = fd
 		}
@@ -310,13 +317,13 @@ func DiffProject(base, head map[string][]Function, ccnWarn, cogWarn, cmtWarn int
 		if seen[p] {
 			continue
 		}
-		headAll = append(headAll, h...)
+		add(&headAll, p, h)
 		if fd := DiffFunctions(nil, h); !fd.Empty() {
 			d.Files[p] = fd
 		}
 	}
-	d.Base = Summarize(baseAll, ccnWarn, cogWarn, cmtWarn)
-	d.Head = Summarize(headAll, ccnWarn, cogWarn, cmtWarn)
+	d.Base = baseAll.Summary()
+	d.Head = headAll.Summary()
 	d.Verdict = verdict(d.DeltaExcess(), d.DeltaCognitive(), d.DeltaDecisions())
 	return d
 }
@@ -377,10 +384,14 @@ func (d Diff) ByFile() []FileChange {
 			base = append(base, fd.Removed...)
 			head = append(head, fd.Added...)
 		}
+		t := Thresholds{}
+		if d.res != nil {
+			t = d.res(p)
+		}
 		out = append(out, FileChange{File: p,
 			Changed: len(fd.Changed), Added: len(fd.Added), Removed: len(fd.Removed),
-			Before: Summarize(base, d.warn[0], d.warn[1], d.warn[2]),
-			After:  Summarize(head, d.warn[0], d.warn[1], d.warn[2])})
+			Before: Summarize(base, t),
+			After:  Summarize(head, t)})
 	}
 	sort.Slice(out, func(i, j int) bool {
 		if a, b := out[i].DeltaCCN(), out[j].DeltaCCN(); a != b {

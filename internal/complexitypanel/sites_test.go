@@ -212,7 +212,7 @@ func TestSitesOnFileAndChangesTabs(t *testing.T) {
 		"/proj/internal/ui/old.go":  {fn("gone", 0, 9, 6, 2)},
 	}
 	base["/proj/internal/ui/old.go"][0].Sites = []complexity.Site{{Line: 1, Col: 1, EndLine: 2, Kind: "if", CCN: 1, Cognitive: 1}}
-	c.Diff = complexity.DiffProject(base, head, 15, 15, 40)
+	c.Diff = complexity.DiffProject(base, head, complexity.Uniform(complexity.Thresholds{CCN: 15, Cog: 15, Cmt: 40}))
 	m.SetChanges(c)
 	m.SetTab(TabChanges)
 	m.Update(key(" "))

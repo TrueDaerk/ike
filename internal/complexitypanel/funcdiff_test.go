@@ -56,7 +56,7 @@ func TestFunctionDiffOrdinals(t *testing.T) {
 	base := map[string][]complexity.Function{"/proj/a.go": {fn("h", 0, 2, 1, 0), fn("h", 4, 6, 1, 0)}}
 	head := map[string][]complexity.Function{"/proj/a.go": {fn("h", 0, 2, 1, 0), fn("h", 4, 8, 3, 2), fn("h", 10, 12, 1, 0)}}
 	m.Set(complexity.View{Files: head}, complexity.Stats{Enabled: true})
-	m.SetChanges(Changes{Rev: "HEAD", Sha: "abc", Diff: complexity.DiffProject(base, head, 15, 15, 40), Ready: true})
+	m.SetChanges(Changes{Rev: "HEAD", Sha: "abc", Diff: complexity.DiffProject(base, head, complexity.Uniform(complexity.Thresholds{CCN: 15, Cog: 15, Cmt: 40})), Ready: true})
 	m.SetTab(TabChanges)
 	got := map[int]int{}
 	for i, r := range m.Rows() {

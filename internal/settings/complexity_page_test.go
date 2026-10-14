@@ -40,7 +40,7 @@ func TestComplexityPageEntries(t *testing.T) {
 	if p.Description == "" {
 		t.Fatal("the Complexity page needs a description")
 	}
-	want := []string{"complexity.enabled", "complexity.exclude", "complexity.ccn_warn", "complexity.cognitive_warn", "complexity.comment_density_warn", "complexity.problems", "complexity.status_segment", "complexity.churn_days", "complexity.baseline"}
+	want := []string{"complexity.enabled", "complexity.exclude", "complexity.ccn_warn", "complexity.cognitive_warn", "complexity.comment_density_warn", "complexity.overrides", "complexity.problems", "complexity.status_segment", "complexity.churn_days", "complexity.baseline"}
 	if len(p.Entries) != len(want) {
 		t.Fatalf("Complexity page has %d entries, want %d: %+v", len(p.Entries), len(want), p.Entries)
 	}
@@ -57,6 +57,9 @@ func TestComplexityPageEntries(t *testing.T) {
 	}
 	if e := complexityEntry(t, "complexity.exclude"); e.Type != List || e.ValidateEntry == nil {
 		t.Errorf("exclude = %+v, want a validated List", e)
+	}
+	if e := complexityEntry(t, "complexity.overrides"); e.Type != List || e.ValidateEntry == nil {
+		t.Errorf("overrides = %+v, want a validated List", e)
 	}
 	for _, key := range []string{"complexity.ccn_warn", "complexity.cognitive_warn"} {
 		if e := complexityEntry(t, key); e.Type != Int || e.Min != 1 || e.Max != 200 {

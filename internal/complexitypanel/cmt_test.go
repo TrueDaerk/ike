@@ -117,7 +117,7 @@ func TestCmtCSVAndChanges(t *testing.T) {
 	}
 	base := map[string][]complexity.Function{"/proj/a.go": {withCmt(fn("f", 0, 9, 3, 2), 0)}}
 	head := map[string][]complexity.Function{"/proj/a.go": {withCmt(fn("f", 0, 9, 3, 2), 10)}}
-	m.SetChanges(Changes{Rev: "HEAD", Diff: complexity.DiffProject(base, head, 15, 15, 40), Ready: true})
+	m.SetChanges(Changes{Rev: "HEAD", Diff: complexity.DiffProject(base, head, complexity.Uniform(complexity.Thresholds{CCN: 15, Cog: 15, Cmt: 40})), Ready: true})
 	m.SetTab(TabChanges)
 	rows := m.Rows()
 	if len(rows) != 1 || rows[0].cell(ColCmt) != "0→50 (+50)" || rows[0].DeltaCmt() != 50 {

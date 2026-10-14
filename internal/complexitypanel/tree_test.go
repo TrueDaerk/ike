@@ -104,7 +104,7 @@ func TestTreeShapeAndAggregates(t *testing.T) {
 	}
 	a := rows[1].Group
 	fns := []complexity.Function{method("Box", "Open", 1, 10, 4, 3), fn("free", 12, 20, 2, 1), treeView().Files["/proj/a/b/y.go"][0]}
-	if a.Summary != complexity.Summarize(fns, DefaultWarn, DefaultWarn, DefaultCmtWarn) {
+	if a.Summary != complexity.Summarize(fns, complexity.Thresholds{CCN: DefaultWarn, Cog: DefaultWarn, Cmt: DefaultCmtWarn}) {
 		t.Errorf("a aggregate = %+v", a.Summary)
 	}
 	if a.Functions != 3 || a.CCNSum != 26 || a.CCNMax != 20 || a.OverThreshold != 1 || a.Excess != 15 {

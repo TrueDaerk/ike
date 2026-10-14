@@ -52,15 +52,13 @@ const cxHintDebounce = 250 * time.Millisecond
 // cxHintKey is the state one hint set answers for; a differing key means
 // the editor's hints are (or will be) out of date.
 type cxHintKey struct {
-	version int             // the buffer's DocVersion
-	gen     int             // index generation the hints came from; 0 when measured
-	ccn     int             // complexity.ccn_warn
-	cog     int             // complexity.cognitive_warn
-	cmt     int             // complexity.comment_density_warn
-	enabled bool            // complexity.enabled and anything to show
-	mode    config.HintMode // editor.marks.complexity (#2966)
-	sites   config.HintMode // editor.marks.complexity_sites (#2947)
-	show    int             // a panel `m` function's header line + 1; 0 none (#2947)
+	version int                   // the buffer's DocVersion
+	gen     int                   // index generation the hints came from; 0 when measured
+	th      complexity.Thresholds // the file's resolved thresholds (#2960)
+	enabled bool                  // complexity.enabled and anything to show
+	mode    config.HintMode       // editor.marks.complexity (#2966)
+	sites   config.HintMode       // editor.marks.complexity_sites (#2947)
+	show    int                   // a panel `m` function's header line + 1; 0 none (#2947)
 	// diff / diffGen are the Changes diff the Δ comes from (#2949): the
 	// key and result generation of the run that covers the file, zero when
 	// none does or the hints are off — a landed run repaints its files.
@@ -115,9 +113,10 @@ type complexityHintMeasuredMsg struct {
 }
 
 // complexityHintsFor converts a file's functions into editor hints: one per
-// function at its header line, Warn when a metric reaches its threshold.
-// The comment density (#2934) joins the text only at or above cmtWarn
-// percent (" · cmt 55%"), so the common hint stays short; 0 never shows it.
+// function at its header line, Warn when a metric reaches its threshold in
+// th, the file's resolved thresholds (#2960). The comment density (#2934)
+// joins the text only at or above th.Cmt percent (" · cmt 55%"), so the
+// common hint stays short; 0 never shows it.
 // Several functions on one line (lambdas beside their enclosing header)
 // keep the first — the header's. warnOnly (editor.marks.complexity = warn,
 // #2966) keeps only the Warn hints.
@@ -128,7 +127,7 @@ type complexityHintMeasuredMsg struct {
 // and the CCN / cognitive that moved carry their Δ — `CCN 14 (−6) · cog
 // 24 (−7)`; an unpaired function reads `(new)`. The Δ is taken against the
 // live measurement fns, so it follows typing without a new diff run.
-func complexityHintsFor(fns []complexity.Function, ccnWarn, cogWarn, cmtWarn int, warnOnly bool, base []complexity.Function, diffed bool) []editor.ComplexityHint {
+func complexityHintsFor(fns []complexity.Function, th complexity.Thresholds, warnOnly bool, base []complexity.Function, diffed bool) []editor.ComplexityHint {
 	if len(fns) == 0 {
 		return nil
 	}
@@ -152,14 +151,14 @@ func complexityHintsFor(fns []complexity.Function, ccnWarn, cogWarn, cmtWarn int
 		if pairs != nil && pairs[i] >= 0 {
 			h.Deltas[1] = cxHintDelta(len(text), fn.Cognitive-base[pairs[i]].Cognitive)
 		}
-		overCmt := fn.CommentsOver(cmtWarn)
+		overCmt := th.CommentsOver(fn)
 		if overCmt {
 			text += " · cmt " + strconv.Itoa(complexity.DensityPercent(fn.CommentDensity)) + "%"
 		}
 		if pairs != nil && pairs[i] < 0 {
 			text += " (new)"
 		}
-		warn := fn.CCN >= ccnWarn || fn.Cognitive >= cogWarn || overCmt
+		warn := fn.CCN >= th.CCN || fn.Cognitive >= th.Cog || overCmt
 		if warnOnly && !warn {
 			continue
 		}
@@ -255,9 +254,9 @@ func (m *Model) cxMarkPushes(path string, version int, fns []complexity.Function
 	var hints []editor.ComplexityHint
 	if key.mode != config.HintOff {
 		base, diffed := m.cxHintBase(path)
-		hints = complexityHintsFor(fns, key.ccn, key.cog, key.cmt, key.mode == config.HintWarn, base, diffed)
+		hints = complexityHintsFor(fns, key.th, key.mode == config.HintWarn, base, diffed)
 	}
-	marks := complexitySiteMarksFor(fns, key.ccn, key.cog, key.sites, key.show-1)
+	marks := complexitySiteMarksFor(fns, key.th.CCN, key.th.Cog, key.sites, key.show-1)
 	return tea.Batch(
 		m.routeToEditor(path, editor.ComplexityHintsMsg{Path: path, Hints: hints, Version: version}),
 		m.routeToEditor(path, editor.ComplexitySiteMarksMsg{Path: path, Marks: marks, Version: version}),
@@ -295,7 +294,7 @@ func (m Model) cxHintMeasurable(ed *editor.Model) bool {
 // now; indexed reports whether the index snapshot already holds the
 // buffer's functions (clean buffer, file walked), the no-parse case.
 func (m Model) cxHintKeyFor(ed *editor.Model, view complexity.View, c config.Complexity, marks config.Marks) (key cxHintKey, indexed bool) {
-	key = cxHintKey{version: ed.DocVersion(), ccn: c.CCNWarn, cog: c.CognitiveWarn, cmt: c.CommentDensityWarn,
+	key = cxHintKey{version: ed.DocVersion(), th: m.complexityThresholdsFor(c, ed.Path()),
 		mode: marks.Complexity, sites: marks.ComplexitySites}
 	if req, ok := m.cxHints.show[ed.Path()]; ok {
 		if req.version == key.version {

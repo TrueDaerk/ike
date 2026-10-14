@@ -75,7 +75,7 @@ func TestToggleTestsChangesTab(t *testing.T) {
 		"/proj/srv/server.go":      {fn("Handle", 0, 20, 10, 12)},
 		"/proj/srv/server_test.go": {fn("runFakeServer", 0, 90, 52, 60)},
 	}
-	m.SetChanges(Changes{Rev: "HEAD", Diff: complexity.DiffProject(base, head, 15, 15, 40), Ready: true})
+	m.SetChanges(Changes{Rev: "HEAD", Diff: complexity.DiffProject(base, head, complexity.Uniform(complexity.Thresholds{CCN: 15, Cog: 15, Cmt: 40})), Ready: true})
 	m.SetTab(TabChanges)
 	if len(m.Rows()) != 2 || !strings.Contains(m.totalsText(), "ΣCCN 48→62") {
 		t.Fatalf("rows %v totals %q", names(m.Rows()), m.totalsText())

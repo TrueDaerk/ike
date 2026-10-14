@@ -193,10 +193,11 @@ func pinnedMatches(v string, r Row) bool {
 // sessionCacheKey is what the session base's excess depends on besides
 // the snapshot.
 type sessionCacheKey struct {
-	hideTests        bool
-	ccnWarn, cogWarn int
-	baseline         *complexity.Baseline
-	root             string
+	hideTests bool
+	// thGen counts the SetThresholds calls that changed the thresholds.
+	thGen    int
+	baseline *complexity.Baseline
+	root     string
 }
 
 // updateSessionDelta recomputes the Project tab's session Δ: the current
@@ -206,7 +207,7 @@ func (m *Model) updateSessionDelta() {
 	if !m.hasSessionBase || m.tab != TabProject {
 		return
 	}
-	key := sessionCacheKey{m.hideTests, m.ccnWarn, m.cogWarn, m.baseline, m.root}
+	key := sessionCacheKey{m.hideTests, m.thGen, m.baseline, m.root}
 	if m.sessionKey == nil || *m.sessionKey != key {
 		excess := 0
 		for _, p := range m.sessionBase.Paths() {
@@ -214,9 +215,10 @@ func (m *Model) updateSessionDelta() {
 				continue
 			}
 			fns, _ := m.classify(m.relPath(p), m.sessionBase.Files[p])
+			t := m.th(p)
 			for _, f := range fns {
 				if f.Baseline != complexity.BaselineAccepted {
-					excess += f.Excess(m.ccnWarn, m.cogWarn)
+					excess += t.Excess(f)
 				}
 			}
 		}

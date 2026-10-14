@@ -87,7 +87,7 @@ func (m *Model) ToggleBaseline() (tea.Cmd, bool) {
 			switch {
 			case mem.accepted():
 				accepted = append(accepted, mem.item())
-			case mem.Fn.Over(m.ccnWarn, m.cogWarn):
+			case m.th(mem.Path).Over(mem.Fn):
 				pending = append(pending, mem.item())
 			}
 		}
@@ -101,7 +101,7 @@ func (m *Model) ToggleBaseline() (tea.Cmd, bool) {
 		}
 	case r.accepted():
 		msg.Items, msg.Remove = []BaselineItem{r.item()}, true
-	case r.Fn.Over(m.ccnWarn, m.cogWarn):
+	case m.th(r.Path).Over(r.Fn):
 		msg.Items = []BaselineItem{r.item()}
 	default:
 		return nil, false

@@ -200,7 +200,7 @@ func (m *Model) groupRows(fnRows []Row) []Row {
 		files[r.Path] = append(files[r.Path], r.Fn)
 		meta[r.Path] = r
 	}
-	groups := complexity.GroupFunctions(files, m.Grouping(), m.ccnWarn, m.cogWarn, m.cmtWarn)
+	groups := complexity.GroupFunctions(files, m.Grouping(), m.th)
 	out := make([]Row, len(groups))
 	for i := range groups {
 		g := &groups[i]
@@ -320,15 +320,17 @@ func (r Row) groupCell(c Column) string {
 
 // groupWarn reports whether a group row's cell in column c takes the
 // warning colour: a maximum or the aggregate density at or above its
-// threshold, any function over threshold, any excess.
+// threshold — the thresholds of the group's file (a directory node: of its
+// path, #2960) — any function over threshold, any excess.
 func (m *Model) groupWarn(g *complexity.Group, c Column) bool {
+	t := m.th(g.File)
 	switch c {
 	case ColCCNMax:
-		return g.CCNMax >= m.ccnWarn
+		return g.CCNMax >= t.CCN
 	case ColCogMax:
-		return g.CogMax >= m.cogWarn
+		return g.CogMax >= t.Cog
 	case ColCmt:
-		return m.cmtWarn > 0 && complexity.DensityPercent(g.CommentDensity) >= m.cmtWarn
+		return t.Cmt > 0 && complexity.DensityPercent(g.CommentDensity) >= t.Cmt
 	case ColOver:
 		return g.OverThreshold > 0
 	case ColExcess:

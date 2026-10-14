@@ -53,8 +53,8 @@ func (m *Model) Churn() (map[string]int, int) { return m.churn, m.churnDays }
 // fnHot is a function row's hot score — only a sort key (metric:hot on the
 // function list), the column shows on file groups: commits × the
 // function's excess, × its CCN when it exceeds nothing.
-func (m *Model) fnHot(commits int, fn complexity.Function) int {
-	return complexity.Hot(commits, complexity.Summary{Excess: fn.Excess(m.ccnWarn, m.cogWarn), CCNSum: fn.CCN})
+func (m *Model) fnHot(path string, commits int, fn complexity.Function) int {
+	return complexity.Hot(commits, complexity.Summary{Excess: m.th(path).Excess(fn), CCNSum: fn.CCN})
 }
 
 // markHot computes the warning threshold of the hot column: the score at

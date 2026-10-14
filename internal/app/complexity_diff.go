@@ -237,9 +237,7 @@ type cxDiffJob struct {
 	index    complexity.View
 	dirty    map[string]string // absolute path -> unsaved buffer text
 	cache    map[string][]complexity.Function
-	ccnWarn  int
-	cogWarn  int
-	cmtWarn  int
+	res      complexity.Resolver // the per-file thresholds (#2960)
 }
 
 // complexityDiffJob snapshots the model state the computation needs.
@@ -250,8 +248,7 @@ func (m Model) complexityDiffJob(key cxDiffKey) cxDiffJob {
 		job.exclude = m.complexityIndex.Options().Exclude
 		job.index = m.complexityIndex.Snapshot()
 	}
-	c := config.Get().Complexity
-	job.ccnWarn, job.cogWarn, job.cmtWarn = c.CCNWarn, c.CognitiveWarn, c.CommentDensityWarn
+	job.res = m.complexityResolver(config.Get().Complexity)
 	if _, _, ranged, _ := vcs.ParseRevRange(key.rev); ranged {
 		// Two commits (#2961): the working tree — snapshot, buffers, disk —
 		// plays no part.
@@ -406,7 +403,7 @@ func runComplexityDiff(job cxDiffJob) tea.Msg {
 			Sha:     sha,
 			HeadRev: headRev,
 			HeadSha: job.headSha,
-			Diff:    complexity.DiffProject(base, head, job.ccnWarn, job.cogWarn, job.cmtWarn),
+			Diff:    complexity.DiffProject(base, head, job.res),
 			Dirty:   dirty,
 			Renames: renames,
 			Ready:   true,
