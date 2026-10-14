@@ -190,6 +190,11 @@ func TestNotebookMissingJupyterHint(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	m.toasts = nil
+	// The hint is gated on the run dying within nbRunFastExit of its start —
+	// wall clock, measured from the spawn. Under the whole suite's load a
+	// shell has taken three seconds to spawn and exit here, which is the
+	// box, not the heuristic under test; the exit is "fast" by construction.
+	m.nbRun.started = time.Now()
 	tm, _ = m.Update(terminal.ExitedMsg{Key: term.SessionKey()})
 	m = tm.(Model)
 	if !hasToast(m, "pip install jupyter nbconvert") {

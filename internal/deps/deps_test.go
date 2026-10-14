@@ -386,7 +386,10 @@ func TestScanReportsMissingToolsWithHints(t *testing.T) {
 	root := t.TempDir()
 	write(t, filepath.Join(root, "go.mod"), goMod)
 	bin := t.TempDir() // empty: no go, no govulncheck
-	toolPath(t, bin)
+	// The empty dir alone, not toolPath's /usr/bin and /bin: the hosted
+	// Ubuntu runner has a go at /usr/bin/go, and nothing here runs a shell
+	// (#3000).
+	t.Setenv("PATH", bin)
 	res := NewScanner().Scan(context.Background(), root, false)
 	if len(res.Manifests) != 1 || len(res.Manifests[0].Deps) != 3 {
 		t.Fatalf("manifest must still be listed without the toolchain: %+v", res)

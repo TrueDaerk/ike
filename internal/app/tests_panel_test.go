@@ -136,7 +136,11 @@ func TestCapturedRunFillsPanel(t *testing.T) {
 	if got := p.FailedIDs(); len(got) != 1 || got[0] != "TestBad" {
 		t.Fatalf("failed ids = %v", got)
 	}
-	if !strings.Contains(stripped(m), "1 passed") || !strings.Contains(stripped(m), "1 failed") {
+	// The summary shares its row with the run's path, whose temp-dir digits
+	// vary in length: when it wraps, "1 failed" straddles a border, so the
+	// check reads the panel as one line (#3000).
+	flat := strings.Join(strings.Fields(strings.ReplaceAll(stripped(m), "│", " ")), " ")
+	if !strings.Contains(flat, "1 passed") || !strings.Contains(flat, "1 failed") {
 		t.Fatalf("summary must render:\n%s", stripped(m))
 	}
 }

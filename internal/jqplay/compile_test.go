@@ -46,12 +46,20 @@ func TestCompileXMQShellWords(t *testing.T) {
 // so even a long program compiles far below the debounce the run waits for.
 func TestCompileIsBoundedByProgram(t *testing.T) {
 	prog := strings.Repeat(".a | ", 2000) + ".b"
-	start := time.Now()
-	if err := Compile(DialectJQ, prog); err != "" {
-		t.Fatalf("long valid program: %s", err)
+	// The best of three: a single measurement under the full suite's load
+	// (every package compiling and testing at once) has read 170 ms for a
+	// 20 ms compile, and the guard is about the algorithm, not the
+	// scheduler (#3000).
+	best := time.Hour
+	for range 3 {
+		start := time.Now()
+		if err := Compile(DialectJQ, prog); err != "" {
+			t.Fatalf("long valid program: %s", err)
+		}
+		best = min(best, time.Since(start))
 	}
-	if d := time.Since(start); d > 100*time.Millisecond {
-		t.Errorf("compiling a 10k-character program took %v", d)
+	if best > 100*time.Millisecond {
+		t.Errorf("compiling a 10k-character program took %v at best", best)
 	}
 }
 
