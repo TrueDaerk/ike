@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // ptyProbe is the once-per-binary answer to "can this environment run a
@@ -34,13 +36,30 @@ func requirePTY(t *testing.T) {
 		}
 		defer s.Close()
 		deadline := time.Now().Add(ptyProbeDeadline)
-		for time.Now().Before(deadline) {
-			if strings.Contains(plainView(s), "$") {
+		for !strings.Contains(plainView(s), "$") {
+			if !time.Now().Before(deadline) {
+				ptyProbeErr = fmt.Errorf("no shell prompt on the pty within %s", ptyProbeDeadline)
 				return
 			}
 			time.Sleep(10 * time.Millisecond)
 		}
-		ptyProbeErr = fmt.Errorf("no shell prompt on the pty within %s", ptyProbeDeadline)
+		// Second half: a command that prints and exits at once. The hosted
+		// macOS CI VM delivers the interactive prompt but loses the output of
+		// a fast-exiting child between the slave closing and the master read,
+		// which is the failure mode of every command-session test (#2997).
+		cs, err := StartCommandSession("probe", []string{"/bin/sh", "-c", "echo probe-ok"}, t.TempDir(), 80, 24, nil, c.send)
+		if err != nil {
+			ptyProbeErr = fmt.Errorf("command spawn: %w", err)
+			return
+		}
+		defer cs.Close()
+		for !strings.Contains(plainView(cs), "probe-ok") && !strings.Contains(ansi.Strip(cs.HistoryLine(0)), "probe-ok") {
+			if !time.Now().Before(deadline) {
+				ptyProbeErr = fmt.Errorf("a fast-exiting command's output never reached the grid within %s", ptyProbeDeadline)
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
 	})
 	if ptyProbeErr != nil {
 		t.Skipf("no usable pty shell in this environment: %v", ptyProbeErr)
