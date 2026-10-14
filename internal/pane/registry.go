@@ -787,7 +787,10 @@ func (r *Registry) AddMerge(path string) string {
 	}
 	inst := &Instance{key: key, kind: KindMerge, cfg: r.cfg, pal: r.pal}
 	ed := newEditorModel(r.cfg, r.pal, r.regs)
-	if err := ed.Load(path); err != nil {
+	// Synchronous on purpose (#2996): the merge model takes the editor's
+	// document right here, and an asynchronous landing would overwrite the
+	// contents it installs.
+	if err := ed.LoadSync(path); err != nil {
 		ed.NewFile(path)
 	}
 	inst.mg = merge.New(key, path, &ed, r.pal)

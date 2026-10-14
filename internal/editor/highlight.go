@@ -34,6 +34,11 @@ func (m Model) maybeReparse(beforeVersion int, cmd tea.Cmd) (Model, tea.Cmd) {
 	if sc := m.takeSearchCmd(); sc != nil {
 		cmd = tea.Batch(cmd, sc)
 	}
+	// A parked asynchronous load (#2996) starts on whichever update comes
+	// first, should the triggering path not have drained it itself.
+	if lc := m.TakeLoadCmd(); lc != nil {
+		cmd = tea.Batch(cmd, lc)
+	}
 	if m.docVersion == beforeVersion {
 		return m, cmd
 	}
@@ -69,6 +74,13 @@ func (m *Model) parseCmd() tea.Cmd {
 	// One parse at a time per view, newest snapshot first (#2770,
 	// parsegate.go): a burst of changes during a parse costs one more
 	// parse, of the text as it stands when the running one finishes.
+	// A line-scoped language (#2996, linescoped.go) parses the visible
+	// window line by line through the per-line cache, never the buffer.
+	if m.lineScoped() {
+		snap := m.lineScopedSnapshot(m.ParseKey(), langPath)
+		cache := m.lineSpans
+		return m.parseGate.schedule(snap, func(s parseSnapshot) tea.Msg { return parseLineScoped(s, supported, cache) })
+	}
 	snap := parseSnapshot{key: m.ParseKey(), langPath: langPath, version: m.docVersion, lines: m.buf.Lines()}
 	return m.parseGate.schedule(snap, func(s parseSnapshot) tea.Msg { return parseSnapshotMsg(s, supported) })
 }

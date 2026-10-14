@@ -770,6 +770,9 @@ func (m Model) runExLine() (Model, tea.Cmd) {
 					m.cmdMsg = "E: " + err.Error()
 				}
 			}
+			// A big file reads off the loop (#2996): the command carrying
+			// the read rides out with this key.
+			return m, m.TakeLoadCmd()
 		}
 	case "g", "global", "v", "vglobal":
 		m.cmdMsg = "E: :" + cmd.Name + " is not implemented yet"

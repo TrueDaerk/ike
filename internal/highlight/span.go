@@ -45,6 +45,12 @@ type SpansMsg struct {
 	// Notes are the Go-computed lint notes (#1623) produced by the same pass;
 	// nil when the language registers no Lint.
 	Notes []lang.Note
+	// Windowed marks a line-scoped parse (#2996): Spans and Notes cover only
+	// the buffer lines [WinFrom, WinTo) — the viewport plus a margin — and
+	// the editor re-parses when the viewport leaves that window. A
+	// whole-document parse leaves it false.
+	Windowed       bool
+	WinFrom, WinTo int
 }
 
 // Index is a per-line lookup over a span set, built once when the editor caches

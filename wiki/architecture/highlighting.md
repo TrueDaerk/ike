@@ -4,7 +4,7 @@ title: Syntax Highlighting
 description: The Tree-sitter lexical highlighting layer — per-language grammars parsed off the event loop into capture spans, cached by document version, resolved to theme colours, and applied per cell in the editor's renderLine; plus the pure-Go bracket-pair tracker behind rainbow brackets, unmatched-bracket errors and depth-coloured indent guides.
 resource: internal/highlight
 tags: [architecture, highlighting, tree-sitter, syntax, editor, theme, cgo, brackets]
-timestamp: 2026-09-28T14:00:00Z
+timestamp: 2026-10-14T11:00:00Z
 ---
 
 # Syntax Highlighting
@@ -278,6 +278,43 @@ schedules a parse (`parseCmd` returns nil before the grammar check) — the CGo 
 scales with file size, so this is the single biggest degradation win. The
 palette command `editor.forceCodeInsight` re-enables it per document; see
 `/architecture/editor.md`.
+
+### Line-scoped parsing (#2996)
+
+An ndjson / jsonl file is a stream of independent JSON documents, one per
+line, often thousands of cells long. Parsed as one document the cost is the
+file's, not the viewport's: the 100 MB fixture (200 000 lines × 500 B) takes
+~42 s of CGo and yields seven million spans whose on-loop index build alone
+stalls the loop for ~700 ms; even the 900 KB fixture under the cliff spent
+138 ms parsing and 5 ms indexing 68 000 spans for ~50 visible lines. A
+language flagged **`lang.Language.LineScoped`** (`internal/editor/linescoped.go`)
+is parsed differently:
+
+- `parseCmd` snapshots only the **parse window** — the visible rows plus a
+  margin of one screen (at least 50 lines) above and below — and the
+  off-loop command parses it **one line at a time**, each line as its own
+  document (`HighlightScoped` over a one-line slice: grammar, Go spans,
+  bracket pairing, linter and the Unicode hygiene scan, exactly the
+  whole-document services). Folds and sticky scopes are not collected: a
+  line-long document has nothing multi-line.
+- Every line's spans are cached **by line text** (`lineSpanCache`, a
+  per-view pointer like the parse gate; two generations of 4096 entries),
+  so a scroll re-parses only the lines that entered the window and an edit
+  only the line it changed; the parse gate still serialises the commands.
+- The result is a **windowed** `SpansMsg` (`Windowed`, `WinFrom`, `WinTo`);
+  the editor records the window and, after every `Update` (and through
+  `ScrollCmd` for the wheel and scrollbar scrolls the app drives outside
+  `Update`), schedules the next parse when the viewport has left it
+  (`windowParseCmd`). Lines outside the window carry no spans until the
+  next parse lands — a few milliseconds.
+- The parse is exempt from the large-file cliff (`FeatureOff` returns false
+  for `FeatureHighlight` on a line-scoped buffer), so an ndjson file of any
+  size highlights, while LSP sync, the VCS gutter and the rest keep their
+  gate.
+
+The measured window parse (60 lines of the fixture) is 4–6 ms off-loop and
+its landing 0.1–0.2 ms on-loop, independent of the file's size. `ndjson` is
+the only line-scoped language; plain `json` parses as one document.
 
 ## Testing
 

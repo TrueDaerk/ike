@@ -136,7 +136,10 @@ func (m Model) SearchPending() bool { return m.searchPending != nil }
 // Close releases what the view holds outside the update loop (#2734): a
 // background search scan stops, so a closed tab never keeps a goroutine
 // walking its buffer. The pane calls it when the tab closes.
-func (m *Model) Close() { m.cancelSearchScan() }
+func (m *Model) Close() {
+	m.cancelSearchScan()
+	m.cancelLoad() // a pending asynchronous load stops too (#2996)
+}
 
 // applySearchScan lands a background scan's answer — only the one the view
 // is waiting for: the generation, the route key and the document version

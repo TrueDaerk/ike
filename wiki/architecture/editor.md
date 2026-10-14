@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-10-14T09:00:00Z
+timestamp: 2026-10-14T11:00:00Z
 ---
 
 # Editor
@@ -2144,7 +2144,13 @@ overridden (`InsightOff`), code insight degrades deliberately instead of
 stalling:
 
 - `parseCmd` returns nil — no Tree-sitter parse ever runs (the CGo parse cost
-  scales with file size), so typing stays flat.
+  scales with file size), so typing stays flat. The one exemption is a
+  **line-scoped** language (`lang.Language.LineScoped`, ndjson/jsonl, #2996):
+  its parse covers only the visible lines, so its cost is bounded by the pane
+  and `FeatureOff(FeatureHighlight)` stays false past the cliff — the other
+  services keep their gate, and the badge counts them (`[large: 4 features
+  off]` instead of `[large file]`). See `/architecture/highlighting.md`,
+  "Line-scoped parsing".
 - Change events ship no `Text` payload — the per-keystroke `buf.String()`
   re-join is skipped; the LSP bridge's `didOpen` gate means nothing consumes it.
 - The LSP bridge skips `didOpen` (see `/architecture/lsp.md`); diagnostics and
@@ -2157,6 +2163,53 @@ stalling:
   #2159); viewport match highlighting stays, it is per-line.
 - The on-save LSP chain (organize imports / format) is skipped — the save
   writes raw.
+
+### Asynchronous open (#2996)
+
+`Load` used to read, decode and split the file on the Update goroutine —
+for a file of tens of megabytes a stall of hundreds of milliseconds (seconds
+on a cold cache) during which no frame was drawn and no key handled. Now a
+file of **`asyncLoadBytes` (4 MB, a constant in `asyncload.go`, not a
+setting) or more** reads off the loop:
+
+- `Load` stats the path, installs an empty **read-only placeholder** under it
+  through `installDoc` (the per-document reset every load performs: buffer,
+  language sniff, breakpoints/marks, encoding, vault state, cursor, history,
+  insight layers) and parks the command that does the read, the vault
+  decryption, the decode and the buffer build (`buildDoc`, pure) on a
+  goroutine. The large-file flag is provisional from the stat size, so no
+  gated service ever sees the placeholder (no `didOpen`, no gutter diff).
+- The caller batches `TakeLoadCmd()` into its returned command: the open
+  funnel (`openPathMode`), the `:e` ex command, the deferred-tab drain
+  (`drainLazyLoads`). `maybeReparse` drains it too, so a path that forgot
+  starts the read on the next update. The constructor-time opens — CLI
+  targets and restored tabs — cannot return a command; the app's `Init`
+  sweep uses `ResumeLoadCmd()` for every view still loading.
+- The result lands as `editor.LoadMsg`, routed by `ParseKey` like a parse
+  result (`routeToEditorKey`); `applyLoad` checks the per-view generation
+  (`loadStore`, bumped by a newer load, `NewFile`, a share, `Close`) and
+  installs the document through the same `installDoc`, so buffer, cursor,
+  encoding / EOL detection, vault handling, breakpoints and marks come out
+  exactly as after a synchronous load; the undo hash was computed off-loop
+  (`restoreUndoHash`). A caret / framing restore requested meanwhile
+  (`SetCursor` / `SetScroll` from a deferred tab) is parked on the pending
+  load and applied after the landing. The app then runs the wiring the open
+  skipped (`wireLoadedDoc`: gutter diff and coverage marks, the large-file
+  toast); `EventFileOpened` fired at open time, once.
+- A read or decode error lands as `LoadMsg.Err`: the placeholder stays,
+  writable again, with the error on the ex line and an app notification.
+- Closing the tab cancels the read (`Close` → `cancelLoad`); a result that
+  still arrives is dropped by the generation.
+- While loading the `largefile` status-line slot reads `[loading…]` (or
+  `[large file · loading…]`), the tab is read-only (no insert, no `:w` — a
+  write would truncate the file to the placeholder) and everything else —
+  tab switches, other panes — works.
+
+Smaller files keep the synchronous path, as do the callers that need the
+text in hand (`LoadSync`: the merge tool, the diff-side editor, crash
+recovery). The watcher's poll-fallback hash cap is set at construction, not
+only in `StartWatcher`: the CLI open's `Track` otherwise hashed the whole
+file on the constructor thread before the first frame.
 
 ### Per-feature thresholds (#2159)
 

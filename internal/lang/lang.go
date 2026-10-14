@@ -128,6 +128,18 @@ type Language struct {
 	// override it per language via `[lang.<id>] template` in the config.
 	Template string
 
+	// LineScoped marks a line-oriented format whose every line is a complete,
+	// independent document of the grammar (#2996): ndjson / jsonl. The
+	// editor then never parses the whole buffer — it parses the visible
+	// lines (plus a margin) one at a time, caches the spans by line text and
+	// re-parses on scroll, so highlighting costs the viewport, not the file,
+	// and stays on past the large-file cliff (only the parse is exempt; the
+	// other degraded services keep their gate). Folds and sticky scopes are
+	// not collected for a line-scoped language: a document that is one line
+	// long has nothing multi-line to fold. False — the default — parses the
+	// buffer as one document.
+	LineScoped bool
+
 	// Regions optionally detects embedded-language regions in a buffer of this
 	// language (#1303). It exists for hosts whose embedded regions cannot be
 	// expressed as a Tree-sitter injection query because the region's language

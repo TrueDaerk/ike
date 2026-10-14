@@ -1,6 +1,7 @@
 package app
 
 import (
+	"ike/internal/largefile"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -240,6 +241,11 @@ func largeFileSegment(_ Model, ed *editor.Model) string {
 	if ed.SearchPending() {
 		pending = "searching…"
 	}
+	if ed.Loading() {
+		// The file itself is still being read (#2996): nothing else about
+		// the document is known yet.
+		pending = "loading…"
+	}
 	off := ed.DegradedFeatures()
 	badge := ""
 	switch {
@@ -248,8 +254,9 @@ func largeFileSegment(_ Model, ed *editor.Model) string {
 			return ""
 		}
 		return "[" + pending + "]"
-	case ed.InsightOff():
-		// The base cliff (#149): everything is off.
+	case ed.InsightOff() && len(off) == int(largefile.FeatureCount):
+		// The base cliff (#149): everything is off. A line-scoped language
+		// past it keeps its highlighting (#2996) and counts below instead.
 		badge = "large file"
 	case len(off) == 1:
 		badge = "large: " + off[0].Label() + " off"

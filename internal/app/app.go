@@ -1833,6 +1833,10 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	applySecretMaskingKeys()                        // custom secret key patterns (#1712)
 	m.palette.SetMaxWidth(popupMaxWidth())
 	m.watcher = watch.New(m.host.Send)
+	// The poll fallback's hash cap applies from the first Track (#2996):
+	// StartWatcher sets it too, but the CLI open runs before that, and an
+	// uncapped Track hashed a 100 MB file on the constructor thread.
+	m.watcher.SetHashLimit(largefile.LimitsFrom(m.host.Config().Get).MaxBytes)
 	// The change feed hides exactly what the watcher would never have walked
 	// into (#2000): dot-directories and vendored noise below the watch root.
 	m.feed.Ignore = feedIgnore(m.watcher)
@@ -4557,7 +4561,15 @@ func (m Model) initUnguarded() tea.Cmd {
 			if !ed.HasFile() {
 				continue
 			}
-			cmds = append(cmds, ed.Reparse())
+			if ed.Loading() {
+				// A big CLI target or restored tab reads off the loop
+				// (#2996): the open ran on the constructor thread, where
+				// its command was dropped, so the read starts here; the
+				// landing schedules the parse.
+				cmds = append(cmds, ed.ResumeLoadCmd())
+			} else {
+				cmds = append(cmds, ed.Reparse())
+			}
 			if path := ed.Path(); !opened[path] {
 				opened[path] = true
 				cmds = append(cmds, m.fireHooks(plugin.EventFileOpened, path)...)
@@ -7146,7 +7158,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// The file is open elsewhere: edit the same document (#142), so
 			// the tab and the diff column never diverge.
 			ed.ShareDocumentWith(prev)
-		} else if err := ed.Load(msg.Path); err != nil {
+		} else if err := ed.LoadSync(msg.Path); err != nil {
+			// Synchronous (#2996): the diff-side editor lives outside the
+			// tab routing an asynchronous landing travels over.
 			m.host.Notify(host.Error, "edit: "+err.Error())
 			return m, nil
 		}
@@ -8469,6 +8483,20 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 		return m, m.routeToEditorKey(msg.Key, msg)
+
+	case editor.LoadMsg:
+		// An asynchronous load landing (#2996): every view of the path
+		// installs the document (the editor schedules its parse), then the
+		// wiring the open skipped while the text was on its way — gutter
+		// diff and coverage marks, the large-file toast — runs now.
+		if msg.Err != nil {
+			m.host.Notify(host.Error, "cannot open "+displayPath(msg.Path)+": "+msg.Err.Error())
+		}
+		cmds := []tea.Cmd{m.routeToEditorKey(msg.Key, msg)}
+		if msg.Err == nil {
+			cmds = append(cmds, m.wireLoadedDoc(msg.Path))
+		}
+		return m, tea.Batch(cmds...)
 
 	case highlight.SpansMsg:
 		// The inline playground's result buffer (#1970) lives outside every
@@ -10424,12 +10452,19 @@ func (m Model) openPathMode(path string, newPane, forceEditor bool) (tea.Model, 
 			m.setFocus(key)
 			m.layout()
 			saveLayout(m.activeWS().Tree, m.activeWS().Panes)
-			cmds = append(cmds, m.activeWS().Panes.Get(key).Editor().Reparse())
-			// Gutter diff markers for the fresh buffer (Roadmap 0320, #464).
-			cmds = append(cmds, m.vcsMarksCmd(m.activeWS().Panes.Get(key).Editor()))
-			// Stored coverage marks for the fresh buffer (#2081).
-			if cmd := m.coverageMarksCmd(path); cmd != nil {
-				cmds = append(cmds, cmd)
+			ed := m.activeWS().Panes.Get(key).Editor()
+			if ed.Loading() {
+				// A big file reads off the loop (#2996): start the read; the
+				// parse and the marks follow its LoadMsg (wireLoadedDoc).
+				cmds = append(cmds, ed.TakeLoadCmd())
+			} else {
+				cmds = append(cmds, ed.Reparse())
+				// Gutter diff markers for the fresh buffer (Roadmap 0320, #464).
+				cmds = append(cmds, m.vcsMarksCmd(ed))
+				// Stored coverage marks for the fresh buffer (#2081).
+				if cmd := m.coverageMarksCmd(path); cmd != nil {
+					cmds = append(cmds, cmd)
+				}
 			}
 		}
 	}
@@ -10445,7 +10480,33 @@ func (m Model) notifyLargeFile(ed *editor.Model) {
 		return
 	}
 	m.largeToasted[ed.Path()] = true
+	if !ed.FeatureOff(largefile.FeatureHighlight) {
+		// A line-scoped language (#2996) keeps highlighting past the cliff.
+		m.host.Notify(host.Warn, "large file: language features disabled (highlighting stays on per line)")
+		return
+	}
 	m.host.Notify(host.Warn, "large file: highlighting and language features disabled")
+}
+
+// wireLoadedDoc runs the fresh-buffer wiring for every view of path once an
+// asynchronous load landed (#2996): the gutter diff and coverage marks and
+// the large-file toast that openPathMode / drainLazyLoads skipped while the
+// text was on its way. The parse is the editor's own (applyLoad returns it);
+// the watcher, the MRU and EventFileOpened already ran at open time — the
+// LSP bridge reads the file itself, and plugins get the event once.
+func (m *Model) wireLoadedDoc(path string) tea.Cmd {
+	var cmds []tea.Cmd
+	for _, ed := range m.editorViewsForPath(path) {
+		cmds = append(cmds, m.vcsMarksCmd(ed))
+		m.notifyLargeFile(ed)
+	}
+	if cmd := m.coverageMarksCmd(path); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	// A preview opened against the placeholder (an HTML tab in Preview
+	// view, #2766) renders the real text now.
+	cmds = append(cmds, m.syncPreviewsFor(path, nil)...)
+	return tea.Batch(cmds...)
 }
 
 // forceCodeInsight handles editor.forceCodeInsight (#149): it lifts the
@@ -10730,12 +10791,22 @@ func (m *Model) drainLazyLoads() tea.Cmd {
 		if m.watcher != nil {
 			m.watcher.Track(path)
 		}
+		loading := false
 		for _, ed := range m.editorViewsForPath(path) {
+			if ed.Loading() {
+				// A big restored file reads off the loop (#2996): the marks
+				// follow its LoadMsg (wireLoadedDoc).
+				loading = true
+				cmds = append(cmds, ed.TakeLoadCmd())
+				continue
+			}
 			cmds = append(cmds, ed.Reparse(), m.vcsMarksCmd(ed))
 			m.notifyLargeFile(ed)
 		}
-		if cmd := m.coverageMarksCmd(path); cmd != nil {
-			cmds = append(cmds, cmd)
+		if !loading {
+			if cmd := m.coverageMarksCmd(path); cmd != nil {
+				cmds = append(cmds, cmd)
+			}
 		}
 		cmds = append(cmds, m.fireHooks(plugin.EventFileOpened, path)...)
 	}
@@ -13265,6 +13336,8 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			case msg.Button == tea.MouseWheelDown:
 				inst.Editor().ScrollBy(lines)
 			}
+			// A line-scoped buffer (#2996) re-parses the rows that scrolled in.
+			return m, inst.Editor().ScrollCmd()
 		}
 		return m, nil
 	}
@@ -13415,6 +13488,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 					if m.play != nil && ed == m.play.resultEd {
 						return m, m.playPageCmd() // the thumb reached the loaded end (#2796)
 					}
+					return m, ed.ScrollCmd() // line-scoped re-parse (#2996)
 				}
 			}
 		case dragExplScroll:
