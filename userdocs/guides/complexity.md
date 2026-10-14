@@ -372,6 +372,15 @@ first; `cmt%` in percentage points), **added** and **removed**. Unsaved editor b
 current text. A renamed function appears as one removed and one added row.
 `enter` jumps to the function, `e` exports CSV, `y` copies the row.
 
+**Pasting into a pull request.** `E` (or `Complexity: Export Current Tab as
+Markdown`) writes the current tab as Markdown to a scratch file and opens
+it: on the Changes tab a bold verdict, the totals and one table each for
+changed, added and removed; on the other tabs the totals line and the
+table. The rows are the ones you see — filter and sort apply — and rows past
+the 30th fold into a `<details>` block. It is the same rendering as
+`ike complexity --diff --md` (see [Posting the verdict as a pull-request
+comment](#posting-the-verdict-as-a-pull-request-comment)).
+
 **Comparing two revisions.** `R` also takes a range `A..B` — review a pull
 request branch without checking it out (`main..feature`), or ask whether
 `main` got more complex this week (`main@{1.week.ago}..main`). The header
@@ -464,7 +473,7 @@ measure by default; a change recomputes the open tab.
 ## Command line
 
 ```
-ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [--trend[=N]] [PATH...]
+ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json | --md] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [--trend[=N]] [PATH...]
 ```
 
 | Flag | Effect |
@@ -476,6 +485,7 @@ ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json] 
 | `--by class`, `--by file` | Print one row per class or per file instead of per function: `FILE`, `CLASS` (class level only), `FUNCS`, `NLOC`, `CCN` (sum), `CCN_AVG`, `CCN_MAX`, `COG` (sum), `COG_AVG`, `COG_MAX`, `CMT%`, `OVER`, sorted by the CCN sum. With it, `--min N` keeps groups whose CCN or cognitive **sum** is at least `N`, and `--ccn` / `--cog` / `--cmt` keep groups whose **maximum** (or aggregate density) reaches the threshold. With `--diff`, `--by file` prints the change per file instead of per function (`FILE`, `CHANGED`, `ADDED`, `REMOVED`, then `CCN`, `COG`, `NLOC`, `EXCESS` as before→after (Δ), the biggest CCN increase first) and the JSON gains a `files` array; `--by class` is not combinable with `--diff`. |
 | `--brief`, `--brief=class` | Print one compact line per file (or per class), no header and no summary: `<path>  [<Class>]  funcs=12  nloc=340  ccn=48  cog=61  max=14/19  cmt=8%` — `ccn` / `cog` are sums, `max` is the largest CCN / cognitive complexity. At the class level a file's free functions and lambdas get one extra `(free)` line. Filters like `--by`; with `--json` the output is that of `--by file` / `--by class`. Not combinable with `--by` or `--diff`. |
 | `--json` | Print JSON instead of text (fields below). |
+| `--md` | Print GitHub-flavoured Markdown instead of text, ready for a pull-request description or comment: a bold summary line (the verdict under `--diff`), the notes, and a table per section with the numbers right-aligned, before→after cells as `5→7 (+2)` and every row past the 30th folded into a `<details>` block. Works with `--diff` (changed / added / removed tables, or the per-file table with `--by file`), `--by`, `--brief` and `--trend`. `|`, backticks, `*` and `<` in names and paths are escaped. Not combinable with `--json` (exit 2). |
 | `--min N` | Only list functions whose CCN **or** cognitive complexity is at least `N`. |
 | `--ccn N`, `--cog N` | Override the warning thresholds — the global ones and every `complexity.overrides` entry; given explicitly they also filter the rows to functions at or above either one. |
 | `--cmt N` | Override the comment-density threshold (percent, 1-100); like `--ccn` / `--cog` it also filters the rows to functions at or above any threshold. |
@@ -793,6 +803,31 @@ allow new functions under a higher bar, select on `.baseline == "worsened"
 or (.baseline == "new" and .ccn >= 20)` instead. The job runs on the
 checkout's own baseline, so a pull request that accepts more debt shows
 that as a diff of the JSON file for review.
+
+### Posting the verdict as a pull-request comment
+
+`--diff --md` renders the comparison as Markdown — the verdict in bold, the
+revisions and totals, then the changed, added and removed functions — so a
+job can keep one comment on the pull request up to date:
+
+```yaml
+    permissions:
+      pull-requests: write
+    steps:
+      # … checkout with fetch-depth: 0 and the ike build as above …
+      - name: Complexity comment
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ike complexity --diff=origin/${{ github.base_ref }} --md > cx.md
+          # edit the job's last comment; post a new one the first time
+          gh pr comment ${{ github.event.pull_request.number }} --edit-last --body-file cx.md \
+            || gh pr comment ${{ github.event.pull_request.number }} --body-file cx.md
+```
+
+An action such as `marocchino/sticky-pull-request-comment` with `path: cx.md`
+does the same. A report of more than 30 functions per section keeps the
+rest inside a collapsed `<details>` block.
 
 ### For coding agents
 

@@ -393,5 +393,5 @@ func (m *Model) trendKey(k string) (tea.Cmd, bool) {
 
 // trendFooter is the Trend tab's hint line.
 func (m *Model) trendFooter() string {
-	return " · tab view · s sort · S reverse · enter changes since · e export · y copy · r recompute · / filter · no grouping or breakdown on this tab"
+	return " · tab view · s sort · S reverse · enter changes since · e csv · E md · y copy · r recompute · / filter · no grouping or breakdown on this tab"
 }

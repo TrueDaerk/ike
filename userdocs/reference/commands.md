@@ -53,6 +53,7 @@ bring their own.
 | Complexity: Accept / Drop Function at Caret in Baseline | `complexity.baselineAtCaret` | — | — | everywhere |
 | Complexity: Show Breakdown of Function at Caret | `complexity.breakdownAtCaret` | — | — | everywhere |
 | Complexity: Export Current Tab as CSV | `complexity.export` | — | — | everywhere |
+| Complexity: Export Current Tab as Markdown | `complexity.exportMarkdown` | — | — | everywhere |
 | Complexity: Diff Selected Function (Base vs Working Tree) | `complexity.functionDiff` | — | — | everywhere |
 | Complexity: Cycle Grouping (None / Class / File) | `complexity.group` | `b` | — | everywhere |
 | Complexity: Toggle Distribution (Histogram) | `complexity.histogram` | `shift+d` | — | everywhere |

@@ -49,7 +49,7 @@ type Invocation struct {
 }
 
 // ComplexityArgs is the parsed `ike complexity [--diff[=REV|A..B]] [--by class|file]
-// [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [PATH...]`. A zero threshold means "not given":
+// [--brief[=class]] [--json | --md] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [PATH...]`. A zero threshold means "not given":
 // the report falls back to the configured warning thresholds.
 type ComplexityArgs struct {
 	// Diff selects the diff report against Rev ("" = HEAD).
@@ -57,6 +57,10 @@ type ComplexityArgs struct {
 	Rev  string
 	// JSON selects the machine-readable rendering.
 	JSON bool
+	// MD selects the GitHub-flavoured Markdown rendering (#2963): the
+	// project, group, brief, trend and diff reports as a pull-request
+	// comment. Not combinable with JSON.
+	MD bool
 	// Min keeps only the rows whose CCN or cognitive complexity is at least
 	// Min; CCN and Cog are the warning thresholds (and, given explicitly,
 	// the row filter: CCN ≥ CCN or cognitive ≥ Cog). Cmt is the
@@ -165,11 +169,15 @@ var ErrPinsWithDiff = errors.New("--pins is not supported with --diff, --by or -
 // `--brief` (#2962): the trend is a table of commits.
 var ErrTrendWithDiff = errors.New("--trend is not supported with --diff, --by or --brief")
 
+// ErrMarkdownWithJSON rejects `--md` together with `--json` (#2963): one
+// rendering per report.
+var ErrMarkdownWithJSON = errors.New("--md and --json exclude each other")
+
 // TrendCommitsMax bounds `--trend=N` like complexity.trend_commits.
 const TrendCommitsMax = 500
 
 // ComplexityUsage is the one-line grammar of `ike complexity`.
-const ComplexityUsage = "usage: ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [--trend[=N]] [PATH...]"
+const ComplexityUsage = "usage: ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json | --md] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [--trend[=N]] [PATH...]"
 
 // Parse parses the arguments after the program name. Supported forms:
 //
@@ -279,6 +287,8 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 			ca.Help = true
 		case a == "--json":
 			ca.JSON = true
+		case a == "--md":
+			ca.MD = true
 		case a == "--no-tests":
 			ca.NoTests = true
 		case a == "--sites":
@@ -373,6 +383,9 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 		default:
 			ca.Paths = append(ca.Paths, a)
 		}
+	}
+	if ca.MD && ca.JSON {
+		return ComplexityArgs{}, ErrMarkdownWithJSON
 	}
 	switch {
 	case ca.Brief != "" && ca.By != "":

@@ -59,6 +59,7 @@ func TestChurnFunctionRows(t *testing.T) {
 			t.Errorf("%s %s commits = %d, want %d", r.Rel, r.Fn.Name, r.Commits, want)
 		}
 	}
+	m.SetSize(240, 12) // the footer's tail holds the churn window
 	if v := m.View(); !strings.Contains(v, "churn 90d") {
 		t.Errorf("footer lacks the churn window:\n%s", v)
 	}

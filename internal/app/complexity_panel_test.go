@@ -224,6 +224,30 @@ func TestComplexityExportWritesCSVScratch(t *testing.T) {
 	}
 }
 
+// TestComplexityExportMarkdownScratch: complexity.exportMarkdown runs the
+// pane's 'E' (#2963), whose message writes a .md scratch and opens it.
+func TestComplexityExportMarkdownScratch(t *testing.T) {
+	m, _ := timeApp(t)
+	out, cmd := m.Update(ComplexityExportMarkdownMsg{})
+	m = out.(Model)
+	if m.complexityPanel() == nil || cmd == nil {
+		t.Fatal("the palette export must open the panel and run 'E'")
+	}
+	msg, ok := cmd().(complexitypanel.ExportMarkdownMsg)
+	if !ok || msg.Label != "Project" || !strings.Contains(msg.Markdown, "| file | function |") {
+		t.Fatalf("E yields %+v", msg)
+	}
+	out, _ = m.Update(msg)
+	m = out.(Model)
+	ed := m.activeEditor()
+	if ed == nil || !ed.HasFile() || filepath.Ext(ed.Path()) != ".md" {
+		t.Fatal("the Markdown export did not open a .md scratch")
+	}
+	if data := mustRead(t, ed.Path()); string(data) != msg.Markdown {
+		t.Errorf("scratch content = %q", data)
+	}
+}
+
 func TestComplexityCopyAndRefreshMessages(t *testing.T) {
 	m, _ := timeApp(t)
 	out, _ := m.Update(complexitypanel.CopyMsg{Text: "a.go:1: f ccn=2 cog=1"})

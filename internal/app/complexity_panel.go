@@ -33,6 +33,10 @@ type ComplexityRefreshMsg struct{}
 // palette.
 type ComplexityExportMsg struct{}
 
+// ComplexityExportMarkdownMsg runs complexity.exportMarkdown (#2963): the
+// pane's 'E' from the palette.
+type ComplexityExportMarkdownMsg struct{}
+
 // ComplexityGroupMsg runs complexity.group (#2937): cycle the current
 // tab's grouping — none → class → file on Project, none → class on File.
 type ComplexityGroupMsg struct{}
@@ -256,9 +260,10 @@ func (m *Model) rebuildComplexityIndex() tea.Cmd {
 	return nil
 }
 
-// exportComplexityPanel runs the pane's CSV export from the palette; an
-// unopened panel is opened first so the export has a tab to render.
-func (m *Model) exportComplexityPanel() tea.Cmd {
+// exportComplexityPanel runs the pane's CSV ('e') or Markdown ('E') export
+// from the palette; an unopened panel is opened first so the export has a
+// tab to render.
+func (m *Model) exportComplexityPanel(key string) tea.Cmd {
 	p := m.complexityPanel()
 	if p == nil {
 		m.openComplexityPanel()
@@ -267,7 +272,7 @@ func (m *Model) exportComplexityPanel() tea.Cmd {
 			return nil
 		}
 	}
-	return p.Update(tea.KeyPressMsg{Code: 'e', Text: "e"})
+	return p.Update(tea.KeyPressMsg{Code: rune(key[0]), Text: key})
 }
 
 // handleComplexityExport writes the pane's CSV view to a scratch file ('e')
@@ -279,5 +284,17 @@ func (m Model) handleComplexityExport(msg complexitypanel.ExportMsg) (tea.Model,
 		return m, nil
 	}
 	m.host.Notify(host.Info, "complexity: "+strings.ToLower(msg.Label)+" exported to "+displayPath(path))
+	return m.openPathAt(path, 0, 0)
+}
+
+// handleComplexityMarkdownExport writes the pane's Markdown view to a
+// scratch file ('E', #2963) and opens it, like the CSV export.
+func (m Model) handleComplexityMarkdownExport(msg complexitypanel.ExportMarkdownMsg) (tea.Model, tea.Cmd) {
+	path, err := scratch.CreateWithContent("md", []byte(msg.Markdown))
+	if err != nil {
+		m.host.Notify(host.Error, "complexity: export failed: "+err.Error())
+		return m, nil
+	}
+	m.host.Notify(host.Info, "complexity: "+strings.ToLower(msg.Label)+" exported as Markdown to "+displayPath(path))
 	return m.openPathAt(path, 0, 0)
 }
