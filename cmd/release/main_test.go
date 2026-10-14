@@ -218,3 +218,23 @@ func TestCheckedInManifestsAreGenerated(t *testing.T) {
 		}
 	}
 }
+
+// TestWindowsLauncherScriptsAreASCII guards the scripts the Windows archive
+// ships: Windows PowerShell 5.1 reads a BOM-less UTF-8 .ps1 in the ANSI code
+// page and cmd.exe parses a .cmd in the OEM code page, so one stray em dash
+// turns into mojibake — or a parse error inside a string.
+func TestWindowsLauncherScriptsAreASCII(t *testing.T) {
+	for _, name := range []string{"ike-gui.cmd", "install-desktop.ps1"} {
+		raw, err := os.ReadFile(filepath.Join("..", "..", "deploy", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, b := range raw {
+			if b > 0x7f {
+				line := 1 + strings.Count(string(raw[:i]), "\n")
+				t.Errorf("deploy/%s:%d: non-ASCII byte 0x%02x", name, line, b)
+				break
+			}
+		}
+	}
+}
