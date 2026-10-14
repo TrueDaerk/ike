@@ -260,7 +260,7 @@ func TestMergeEnvOverrides(t *testing.T) {
 // TestSessionEnvInjection: a spawned shell sees the overlay (end to end).
 func TestSessionEnvInjection(t *testing.T) {
 	c := &collector{}
-	s, err := StartSession("terminal", "/bin/sh", t.TempDir(), 80, 24,
+	s, err := StartSession("terminal", testShell, t.TempDir(), 80, 24,
 		[]string{"IKE_SHIM_MARK=active"}, c.send)
 	if err != nil {
 		t.Fatal(err)

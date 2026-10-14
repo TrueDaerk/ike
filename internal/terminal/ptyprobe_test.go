@@ -28,8 +28,12 @@ const ptyProbeDeadline = 5 * time.Second
 func requirePTY(t *testing.T) {
 	t.Helper()
 	ptyProbeOnce.Do(func() {
+		if testShellErr != "" {
+			ptyProbeErr = fmt.Errorf("%s (#3000)", testShellErr)
+			return
+		}
 		c := &collector{}
-		s, err := StartSession("probe", "/bin/sh", t.TempDir(), 80, 24, nil, c.send)
+		s, err := StartSession("probe", testShell, t.TempDir(), 80, 24, nil, c.send)
 		if err != nil {
 			ptyProbeErr = fmt.Errorf("spawn: %w", err)
 			return

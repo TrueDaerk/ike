@@ -311,9 +311,11 @@ func (m *Model) launchRun(root string, store run.Store, cfg *run.Config, created
 		m.host.Notify(host.Error, "run: no pane to place the run tool")
 		return nil
 	}
-	// The tap installs onto the fresh session right after the spawn — the
-	// child has not produced output yet, so the tee sees the run's whole
-	// stream. A notebook run (#2682) chains its missing-jupyter watch on.
+	// The tap installs onto the fresh session right after the spawn; what a
+	// fast child printed before that moment the session retained and replays
+	// into the tap (terminal.Session.SetTap, #3000), so the tee sees the
+	// run's whole stream. A notebook run (#2682) chains its missing-jupyter
+	// watch on.
 	tap = m.watchNotebookRun(cfg, tap)
 	if tap != nil {
 		if term := m.runToolTerminal(); term != nil {

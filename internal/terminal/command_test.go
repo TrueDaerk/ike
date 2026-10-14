@@ -52,7 +52,7 @@ func TestStartCommandSessionEmptyArgv(t *testing.T) {
 // (#1905): StartCommand takes the model over with a fresh command session.
 func TestModelStartCommandReplacesSession(t *testing.T) {
 	c := &collector{}
-	m := New("terminal", "/bin/sh", t.TempDir(), 80, 24, nil, c.send)
+	m := New("terminal", testShell, t.TempDir(), 80, 24, nil, c.send)
 	t.Cleanup(m.Close)
 	m.StartCommand("terminal", []string{"/bin/sh", "-c", "echo took-over"}, t.TempDir(), nil)
 	if !m.IsCommand() {

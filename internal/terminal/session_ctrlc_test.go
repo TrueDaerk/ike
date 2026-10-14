@@ -36,6 +36,14 @@ func TestSendKeyCtrlCDiscardsSpooledBacklog(t *testing.T) {
 	s.SendKey(vt.KeyPressEvent{Code: 'c', Mod: vt.ModCtrl})
 	s.gridMu.Unlock()
 
+	// Let the shell take the interrupt and prompt again before typing: bash
+	// 5 drops the byte that arrives while its SIGINT handler resets readline
+	// (the typed "e" vanished and "cho" ran, #3000). Two prompts are on the
+	// grid already — the ready-marker line's and the idle one.
+	waitFor(t, "prompt after the interrupt", func() bool {
+		return strings.Count(plainView(s), "$") >= 3
+	})
+
 	// Post-abort output must still flow (the prompt, new commands).
 	for _, r := range "echo after-abort\r" {
 		s.SendKey(keyFor(r))
