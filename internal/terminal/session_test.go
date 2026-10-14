@@ -53,7 +53,7 @@ func waitFor(t *testing.T, what string, cond func() bool) {
 // startSh spawns a plain /bin/sh session for grid assertions.
 func startSh(t *testing.T, c *collector) *Session {
 	t.Helper()
-	s, err := StartSession("terminal", "/bin/sh", t.TempDir(), 80, 24, nil, c.send)
+	s, err := StartSession("terminal", testShell, t.TempDir(), 80, 24, nil, c.send)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -570,7 +570,7 @@ func TestSessionClear(t *testing.T) {
 // render an OutputMsg-driven frame previously paid for every terminal pane.
 func BenchmarkSessionView(b *testing.B) {
 	c := &collector{}
-	s, err := StartSession("bench", "/bin/sh", b.TempDir(), 200, 60, nil, c.send)
+	s, err := StartSession("bench", testShell, b.TempDir(), 200, 60, nil, c.send)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -627,7 +627,7 @@ func TestSessionResizeDebounce(t *testing.T) {
 // the debounce.
 func BenchmarkSessionResizeApply(b *testing.B) {
 	c := &collector{}
-	s, err := StartSession("bench", "/bin/sh", b.TempDir(), 200, 60, nil, c.send)
+	s, err := StartSession("bench", testShell, b.TempDir(), 200, 60, nil, c.send)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -898,6 +898,10 @@ func TestSendEOFExitsIdleShell(t *testing.T) {
 	c := &collector{}
 	s := startSh(t, c)
 	waitFor(t, "idle prompt", func() bool { return !s.Busy() })
+	// Busy() clears as soon as the shell owns the foreground, before readline
+	// has set the terminal up: a ctrl+d that early is the canonical-mode EOF
+	// of an empty queue and never reaches readline on bash 5 (#3000).
+	waitPrompt(t, s)
 	s.SendKey(vt.KeyPressEvent{Code: 'd', Mod: vt.ModCtrl})
 	waitFor(t, "shell exit", func() bool {
 		return c.has(func(m tea.Msg) bool { _, ok := m.(ExitedMsg); return ok })
@@ -911,7 +915,7 @@ func TestSessionCloseLeavesNoGoroutines(t *testing.T) {
 	c := &collector{}
 	baseline := runtime.NumGoroutine()
 	for i := 0; i < 5; i++ {
-		s, err := StartSession("terminal", "/bin/sh", t.TempDir(), 80, 24, nil, c.send)
+		s, err := StartSession("terminal", testShell, t.TempDir(), 80, 24, nil, c.send)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -972,6 +976,7 @@ func TestExitNotifiesWhileFeedLoopWedged(t *testing.T) {
 	c := &collector{}
 	s := startSh(t, c)
 	waitFor(t, "idle prompt", func() bool { return !s.Busy() })
+	waitPrompt(t, s) // readline must be up before the EOF (#3000), see TestSendEOFExitsIdleShell
 	release := wedgeFeedLoop(t, s)
 
 	s.SendKey(vt.KeyPressEvent{Code: 'd', Mod: vt.ModCtrl})

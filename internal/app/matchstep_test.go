@@ -1,11 +1,11 @@
 package app
 
 import (
-	"runtime"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/keymap"
 	"ike/internal/pane"
 )
 
@@ -19,7 +19,7 @@ import (
 // gives the search.prevMatch twin.
 func stepChord(back bool) tea.KeyPressMsg {
 	mod := tea.ModMeta
-	if runtime.GOOS != "darwin" {
+	if keymap.GOOS != "darwin" {
 		mod = tea.ModCtrl
 	}
 	if back {

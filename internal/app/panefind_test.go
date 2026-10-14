@@ -1,12 +1,12 @@
 package app
 
 import (
-	"runtime"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/keymap"
 	"ike/internal/pane"
 )
 
@@ -17,7 +17,7 @@ import (
 // findChord is the app keymap's search.open chord as a key event: cmd+f on
 // macOS, folded to ctrl+f everywhere else (keymap.NormalizeKey).
 func findChord() tea.KeyPressMsg {
-	if runtime.GOOS == "darwin" {
+	if keymap.GOOS == "darwin" {
 		return tea.KeyPressMsg{Code: 'f', Mod: tea.ModMeta}
 	}
 	return tea.KeyPressMsg{Code: 'f', Mod: tea.ModCtrl}

@@ -262,7 +262,11 @@ func TestBrowserNotFoundKeepsTextMode(t *testing.T) {
 }
 
 func TestFindBrowserResolution(t *testing.T) {
-	browserEnv(t, "chromium", fakeBrowserScript)
+	argLog, _ := browserEnv(t, "chromium", fakeBrowserScript)
+	// Only the fake's dir on PATH: browserEnv keeps /usr/bin for the fakes
+	// that run, and the hosted Ubuntu runner has a real google-chrome there
+	// that outranks chromium in browserCandidates (#3000). Nothing runs here.
+	t.Setenv("PATH", filepath.Join(filepath.Dir(argLog), "bin"))
 	p, ok := FindBrowser("")
 	if !ok || filepath.Base(p) != "chromium" {
 		t.Fatalf("auto-detect = %q, %v; want the chromium on PATH", p, ok)

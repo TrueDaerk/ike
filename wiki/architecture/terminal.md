@@ -4,7 +4,7 @@ title: Integrated Terminal
 description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); pinned mode docking the popup to the bottom edge with the toggle chord as a focus switch, plus a project/global popup scope that carries one shell across projects (#2406); popup focus loss blurs instead of hiding, with a statusbar activity indicator for the hidden layer (#2309), and the wheel outside the layer's boxes scrolls the pane below while the layer keeps focus (#2343); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); sending the editor's selection (else the caret's line) to a shell as a bracketed paste, optionally submitted (#2542); re-running the last shell command from anywhere, prompt-gated and without moving the keyboard (#2543); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192); unbound control chords forward to the pty instead of being recorded as missing keybinds, and a plain shell tab closes when its shell ends by EOF (#2701); pane.maximize zooms the focused popup box or floating panel over the body and restores it (#2899), and view.zenMode does the same with the chrome hidden (#2905).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
-timestamp: 2026-10-02T12:00:00Z
+timestamp: 2026-10-14T14:00:00Z
 ---
 
 # Integrated Terminal (Roadmap 0170)
@@ -67,7 +67,13 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
   `pty.Start`'s immediate close, a child that prints and exits at once could
   drain the master's queue unread on macOS (the reader woke to EIO with the
   output gone — an empty Run tool; every command-session test on the hosted
-  CI VM). The reaper closes the slave after `Wait`, so EIO means drained; pane resizes propagate through `pty.Setsize`
+  CI VM). The reaper closes the slave after `Wait`, so EIO means drained —
+  and then **waits for the reader to reach it** (`readDone`, bounded by
+  `exitDrainBound` = 1 s, #3000) before `release` closes the master: closing
+  the master with output still queued in the kernel discards it, which on
+  Linux lost a print-and-exit command's whole output every other run. The
+  bound is only reached when a disowned grandchild still holds the slave;
+  the exit is reported after it either way. Pane resizes propagate through `pty.Setsize`
   (SIGWINCH for the child) and the emulator — **debounced** (#804): a rapid
   burst (divider drag) folds into one trailing apply of the final size, so
   the child redraws once instead of per drag step. A quiet **height-only**

@@ -148,6 +148,15 @@ type Session struct {
 	// read but must not retain. Guarded by tapMu (SetTap races the feed).
 	tapMu sync.Mutex
 	tap   func([]byte)
+	// early retains a command session's output until its first SetTap, up to
+	// earlyLimit, and is replayed to that tap (#3000): the Run tool installs
+	// the problem-matcher tee and the notebook watch right after the spawn,
+	// but a `sh -c` that prints and exits has replayed its whole output by
+	// then on Linux, so without this the tee saw nothing. earlyOff ends the
+	// retention — after the first SetTap, or at once for shells and pipes,
+	// which are never tapped.
+	early    []byte
+	earlyOff bool
 
 	// out decouples the PTY read loop from the emulator feed (#734): PTY
 	// output is spooled immediately so the kernel TTY queue stays drained
@@ -163,6 +172,11 @@ type Session struct {
 	ioWG   sync.WaitGroup
 	wlWG   sync.WaitGroup
 	wlStop atomic.Bool
+	// readDone closes when the read loop has drained the master to its
+	// error: waitExit waits for it (bounded) before closing the PTY, so a
+	// fast-exiting child's last output is read rather than discarded with
+	// the descriptor (#3000). nil on pipe sessions, which have no reader.
+	readDone chan struct{}
 	// emClosed makes the emulator's retirement idempotent: it outlives the
 	// child (#1951) and is closed by whichever teardown path gets there
 	// first — the pane's Close, before or after the exit.
@@ -218,6 +232,8 @@ func NewPipeSession(key string, w, h int, send func(tea.Msg)) *Session {
 		send: send,
 		w:    w, h: h,
 		argv: []string{},
+
+		earlyOff: true, // debug pipes are never tapped
 	}
 	applyDefaultScrollback(s.em)
 	s.mouseModes = make(map[ansi.Mode]struct{})
@@ -242,12 +258,52 @@ func (s *Session) IsPipe() bool { return s.ptmx == nil && s.cmd == nil }
 
 // SetTap installs (or, with nil, removes) the output tee (#1915): fn runs on
 // the feed goroutine for every replayed chunk, so it must stay cheap and must
-// not retain the slice. Install it right after the session starts — chunks
-// replayed before that are not delivered retroactively.
+// not retain the slice. A command session's output replayed before its first
+// SetTap is retained (up to earlyLimit) and handed to fn first, on the
+// caller's goroutine but under the same lock the feed loop takes before
+// calling fn — so fn never runs concurrently with itself (#3000). Later
+// SetTap calls replay nothing.
 func (s *Session) SetTap(fn func([]byte)) {
 	s.tapMu.Lock()
+	defer s.tapMu.Unlock()
 	s.tap = fn
+	early := s.early
+	s.early, s.earlyOff = nil, true
+	if fn != nil && len(early) > 0 {
+		fn(early)
+	}
+}
+
+// earlyLimit bounds the output a command session retains for a tap installed
+// after the spawn (#3000); a run that printed more than this before the tee
+// arrived loses the excess, as every run lost everything before.
+const earlyLimit = 64 * 1024
+
+// tee hands the replayed chunks to the tap, or retains them for the tap that
+// is not installed yet (#3000). The retention decision and the tap read share
+// one lock hold, so a chunk is either retained for the replay or delivered
+// after it — never both, never neither.
+func (s *Session) tee(chunks ...[]byte) {
+	s.tapMu.Lock()
+	tap := s.tap
+	if tap == nil && !s.earlyOff {
+		for _, c := range chunks {
+			room := earlyLimit - len(s.early)
+			if room <= 0 {
+				break
+			}
+			if len(c) > room {
+				c = c[:room]
+			}
+			s.early = append(s.early, c...)
+		}
+	}
 	s.tapMu.Unlock()
+	if tap != nil {
+		for _, c := range chunks {
+			tap(c)
+		}
+	}
 }
 
 // FeedBytes spools raw bytes into the emulator — the pipe session's input
@@ -358,9 +414,13 @@ func startSession(key string, argv []string, isCommand bool, dir string, w, h in
 		tty:   tty,
 		cmd:   cmd,
 		w:     w, h: h,
+
+		readDone: make(chan struct{}),
 	}
 	if isCommand {
 		s.argv = append([]string(nil), argv...)
+	} else {
+		s.earlyOff = true // plain shells are never tapped
 	}
 	applyDefaultScrollback(s.em)
 	s.mouseModes = make(map[ansi.Mode]struct{})
@@ -409,6 +469,7 @@ func startSession(key string, argv []string, isCommand bool, dir string, w, h in
 func (s *Session) readLoop() {
 	defer s.ioWG.Done()
 	defer s.out.close()
+	defer close(s.readDone)
 	buf := make([]byte, 32*1024)
 	for {
 		n, err := s.ptmx.Read(buf)
@@ -430,12 +491,6 @@ func (s *Session) feedLoop() {
 		if !ok {
 			return
 		}
-		s.tapMu.Lock()
-		tap := s.tap
-		s.tapMu.Unlock()
-		if tap != nil {
-			tap(chunk)
-		}
 		var extra [][]byte
 		if s.parked.Load() {
 			// Parked (#1522): nobody watches, so interactivity doesn't
@@ -443,10 +498,10 @@ func (s *Session) feedLoop() {
 			// pass (one lock, one version tick) instead of waking per chunk.
 			extra = s.out.drain(parkedBatchMax - len(chunk))
 		}
-		if tap != nil {
-			for _, c := range extra {
-				tap(c)
-			}
+		if len(extra) == 0 {
+			s.tee(chunk)
+		} else {
+			s.tee(append([][]byte{chunk}, extra...)...)
 		}
 		s.gridMu.Lock()
 		_, _ = s.em.Write(chunk)
@@ -494,9 +549,22 @@ func (s *Session) writeLoop() {
 func (s *Session) waitExit() {
 	_ = s.cmd.Wait()
 	// The child is gone: release the slave so the reader sees EIO once the
-	// queue is drained (spawn_unix.go).
+	// queue is drained (spawn_unix.go) — and let it drain before release
+	// closes the master. Closing the master with output still queued in the
+	// kernel discards it, and a command that prints and exits at once (the
+	// run panes' everyday case) loses its whole output that way on Linux
+	// roughly every other run (#3000). The wait is bounded: a grandchild
+	// still holding the slave (a disowned background job) keeps the reader
+	// from ever seeing EIO, and the pane must not wait on it to report the
+	// exit.
 	if s.tty != nil {
 		_ = s.tty.Close()
+		if s.readDone != nil {
+			select {
+			case <-s.readDone:
+			case <-time.After(exitDrainBound):
+			}
+		}
 	}
 	s.mu.Lock()
 	if state := s.cmd.ProcessState; state != nil {
@@ -511,6 +579,12 @@ func (s *Session) waitExit() {
 		s.join() // the emulator stays open for the exited pane (#1951)
 	}
 }
+
+// exitDrainBound is how long waitExit lets the reader drain the master after
+// the child exited before closing the PTY regardless (#3000). The drain
+// itself takes microseconds — the reader only has to be scheduled once — so
+// the bound is only ever reached when something else still holds the slave.
+const exitDrainBound = time.Second
 
 // SetParked flags the session as belonging to a parked background workspace
 // (#1522). While parked, output produces no OutputMsg — every send is a full

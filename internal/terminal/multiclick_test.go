@@ -9,7 +9,7 @@ import (
 // startNarrowSh spawns a 20-column /bin/sh so ordinary output soft-wraps.
 func startNarrowSh(t *testing.T, c *collector) *Session {
 	t.Helper()
-	s, err := StartSession("terminal", "/bin/sh", t.TempDir(), 20, 24, nil, c.send)
+	s, err := StartSession("terminal", testShell, t.TempDir(), 20, 24, nil, c.send)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -185,7 +185,7 @@ func TestDoubleClickSelectsWord(t *testing.T) {
 // hard newline before the marker line survives.
 func TestReflowShrinkRewraps(t *testing.T) {
 	c := &collector{}
-	s, err := StartSession("terminal", "/bin/sh", t.TempDir(), 40, 24, nil, c.send)
+	s, err := StartSession("terminal", testShell, t.TempDir(), 40, 24, nil, c.send)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +250,7 @@ func TestReflowShrinkRewraps(t *testing.T) {
 // edge.
 func TestReflowGrowUnwraps(t *testing.T) {
 	c := &collector{}
-	s, err := StartSession("terminal", "/bin/sh", t.TempDir(), 20, 24, nil, c.send)
+	s, err := StartSession("terminal", testShell, t.TempDir(), 20, 24, nil, c.send)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +286,7 @@ func TestReflowGrowUnwraps(t *testing.T) {
 // scrollback rewrap at the new width too, and read as soft-wrapped.
 func TestReflowScrollbackRewraps(t *testing.T) {
 	c := &collector{}
-	s, err := StartSession("terminal", "/bin/sh", t.TempDir(), 40, 24, nil, c.send)
+	s, err := StartSession("terminal", testShell, t.TempDir(), 40, 24, nil, c.send)
 	if err != nil {
 		t.Fatal(err)
 	}

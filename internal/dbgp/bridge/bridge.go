@@ -32,6 +32,11 @@ import (
 // client confirmed the terminal launch.
 const acceptTimeout = 30 * time.Second
 
+// deadSessionGrace is how long reapDeadSession waits for the live session's
+// read loop to notice a closed socket before treating the session as alive
+// (#3000).
+const deadSessionGrace = 100 * time.Millisecond
+
 // teardownTimeout bounds the polite detach/stop round trip during teardown
 // (#1375): an engine mid-run does not process commands until it breaks, so
 // dbgp.Conn.Call would otherwise wait forever and leak the goroutine with the
@@ -598,10 +603,21 @@ func (b *bridge) dropConn(dc *dbgp.Conn, att attempt, reason, detail string) {
 func (b *bridge) reapDeadSession() {
 	b.mu.Lock()
 	dc := b.dc
-	dead := dc != nil && dc.Closed()
 	b.mu.Unlock()
-	if !dead {
+	if dc == nil {
 		return
+	}
+	// The death is what the connection's read loop observes; the next request
+	// dialing in right after its predecessor's socket closed can complete its
+	// handshake before that loop has run (Linux loopback, every fifth run,
+	// #3000) and would be turned away as a latecomer. Give the loop a bounded
+	// moment — a genuinely busy session costs the newcomer's detach that long.
+	deadline := time.Now().Add(deadSessionGrace)
+	for !dc.Closed() {
+		if time.Now().After(deadline) {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 	b.event("output", map[string]any{"category": "console",
 		"output": "Debugged request ended without a reply — listening…\n"})

@@ -1,5 +1,22 @@
 # Log
 
+## 2026-10-14 (the suite runs on Linux too, #3000)
+
+- [Change workflow](/process/change-workflow.md): "The test suite stays
+  fast and green" — the pty tests' `testShell` (bash as `sh` where `/bin/sh`
+  is dash), typing only after `waitPrompt`, and the `keymap.GOOS = "darwin"`
+  pin in the keymap, settings, tour and app test mains; CI as a
+  macOS + Linux matrix.
+- [Integrated Terminal](/architecture/terminal.md): PTY lifecycle — the
+  reaper waits for the reader to drain the master (`readDone`,
+  `exitDrainBound`) before closing it, so a print-and-exit command keeps its
+  output on Linux.
+- [Tasks & Problem Matchers](/architecture/tasks.md): the output tee — a
+  command session retains its early output (`earlyLimit`) and replays it
+  into the first `SetTap`.
+- [Debugger](/architecture/debugger.md): dead-session reaping waits
+  `deadSessionGrace` for the read loop before judging a newcomer a latecomer.
+
 ## 2026-10-14 (big-file open off the loop, line-scoped ndjson highlighting, #2996)
 
 - [Editor](/architecture/editor.md): "Asynchronous open" under large-file

@@ -47,6 +47,11 @@ func TestMain(m *testing.M) {
 	// machine missing a registered server it would open in front of every
 	// model and eat scripted keys (#2997). onboardLang re-enables it.
 	onboardingAutoOpen = false
+	// The dispatch tests feed cmd chords and expect the macOS-only default
+	// rows, the platform the suite is written against; a Linux build host
+	// would fold them onto ctrl and fail by the dozen (#3000). Tests of the
+	// fold itself pin keymap.GOOS to "linux" and restore it.
+	keymap.GOOS = "darwin"
 	// Nor does a test model walk the package directory for TODO tags and
 	// complexity on Init (#2997); withProjectWalks opts a test back in.
 	initProjectWalks = false

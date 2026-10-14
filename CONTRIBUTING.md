@@ -105,8 +105,19 @@ machine with a warm build cache (measured: 85 s for the whole run, of which
 `internal/app`, the largest package, is about 65 s alone and 80 s inside the
 parallel run — the one package still over the 60 s per-package budget).
 CI (`.github/workflows/test.yml`) runs `go vet ./...` and
-`go test ./... -timeout 5m` on every PR and push to `main`, so a red suite or a
-package that has grown slow fails the PR.
+`go test ./... -timeout 5m` on every PR and push to `main`, on **macOS and
+Linux**, so a red suite or a package that has grown slow fails the PR.
+
+The suite is written against the macOS default keymap and pins it: the
+`keymap`, `settings`, `tour` and `app` test packages set `keymap.GOOS =
+"darwin"` in their `TestMain`, so a chord test behaves the same on every
+build host, and a test of the Cmd→Ctrl fold pins `"linux"` itself. On Linux
+(measured on a 10-core arm64 VM, uncached packages: 65–90 s for the whole
+run, `internal/app` 45–72 s inside it) the one extra prerequisite is **bash on PATH**:
+Debian's and Ubuntu's `/bin/sh` is dash, which has no line editing, so the
+pty tests drive bash in POSIX mode instead (`internal/terminal/testmain_test.go`)
+and skip with that reason when there is none. `git` needs no identity
+configured — the `internal/vcs` tests set one through the environment.
 
 The default run excludes one thing: measurements. A test that only prints
 phase timings over a huge fixture (`TestNDJSONOpenPhases`, 100 MB) skips
@@ -116,12 +127,12 @@ unless `IKE_SLOW_TESTS=1` is set:
 IKE_SLOW_TESTS=1 go test ./internal/editor -run NDJSON -v
 ```
 
-The only environment-dependent tests are the pty-backed terminal tests: they probe once whether `/bin/sh`
-reaches a prompt on a pty and skip with a reason within milliseconds when it
-does not (sandboxes, some CI runners), never timing out one by one. The app
-tests pin `SHELL=/bin/sh` and start with the welcome tour and the first-start
-LSP dialog off, so they do not depend on your login shell or installed
-language servers.
+The only environment-dependent tests are the pty-backed terminal tests: they
+probe once whether the test shell reaches a prompt on a pty and skip with a
+reason within milliseconds when it does not (sandboxes, some CI runners),
+never timing out one by one. The app tests pin `SHELL=/bin/sh` and start with
+the welcome tour and the first-start LSP dialog off, so they do not depend on
+your login shell or installed language servers.
 
 A slow or flaky test is a bug. Before adding one, read the "test suite" section
 of [wiki/process/change-workflow.md](wiki/process/change-workflow.md): timers

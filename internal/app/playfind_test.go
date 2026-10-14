@@ -1,13 +1,13 @@
 package app
 
 import (
-	"runtime"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/editor"
+	"ike/internal/keymap"
 )
 
 // playfind_test.go covers #2383: the find chord (editor.find, default cmd+f)
@@ -17,7 +17,7 @@ import (
 // playFindKey is the app keymap's editor.find chord as a key event: cmd+f on
 // macOS, folded to ctrl+f everywhere else (keymap.NormalizeKey).
 func playFindKey() tea.KeyPressMsg {
-	if runtime.GOOS == "darwin" {
+	if keymap.GOOS == "darwin" {
 		return tea.KeyPressMsg{Code: 'f', Mod: tea.ModMeta}
 	}
 	return tea.KeyPressMsg{Code: 'f', Mod: tea.ModCtrl}
@@ -27,7 +27,7 @@ func playFindKey() tea.KeyPressMsg {
 // a key event: cmd+g / cmd+shift+g on macOS, f3 / shift+f3 elsewhere, where
 // keymap.NormalizeKey has no cmd to fold.
 func playMatchStepKey(prev bool) tea.KeyPressMsg {
-	if runtime.GOOS == "darwin" {
+	if keymap.GOOS == "darwin" {
 		if prev {
 			return tea.KeyPressMsg{Code: 'g', Mod: tea.ModMeta | tea.ModShift}
 		}

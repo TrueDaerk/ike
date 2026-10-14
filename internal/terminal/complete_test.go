@@ -265,7 +265,7 @@ func startShModel(t *testing.T, c *collector) *Model {
 // that need known files to complete against.
 func startShModelIn(t *testing.T, c *collector, dir string) *Model {
 	t.Helper()
-	m := New("terminal", "/bin/sh", dir, 80, 24, nil, c.send)
+	m := New("terminal", testShell, dir, 80, 24, nil, c.send)
 	if m.sess == nil {
 		t.Fatalf("spawn failed: %s", m.err)
 	}
@@ -654,7 +654,7 @@ func TestAutoRefreshKeepsFocus(t *testing.T) {
 // command soft-wraps, for the wrapped-line tests (#1431).
 func startNarrowShModel(t *testing.T, c *collector, dir string) *Model {
 	t.Helper()
-	m := New("terminal", "/bin/sh", dir, 30, 24, nil, c.send)
+	m := New("terminal", testShell, dir, 30, 24, nil, c.send)
 	if m.sess == nil {
 		t.Fatalf("spawn failed: %s", m.err)
 	}
@@ -812,7 +812,7 @@ func TestWrappedLineAutoSuggestAfterWrap(t *testing.T) {
 // completes on demand.
 func TestEarlyWrapBlankLastColumnSilent(t *testing.T) {
 	c := &collector{}
-	m := New("terminal", "/bin/sh", t.TempDir(), 30, 24, []string{"PS1="}, c.send)
+	m := New("terminal", testShell, t.TempDir(), 30, 24, []string{"PS1="}, c.send)
 	if m.sess == nil {
 		t.Fatalf("spawn failed: %s", m.err)
 	}
@@ -904,7 +904,7 @@ func TestWrappedCompletionAfterResize(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := &collector{}
-	m := New("terminal", "/bin/sh", dir, 80, 24, nil, c.send)
+	m := New("terminal", testShell, dir, 80, 24, nil, c.send)
 	if m.sess == nil {
 		t.Fatalf("spawn failed: %s", m.err)
 	}
@@ -945,7 +945,7 @@ func TestWrappedCompletionAfterResize(t *testing.T) {
 // tail. ctrl+space still completes on demand.
 func TestAutoSuggestSuppressedWithoutPrompt(t *testing.T) {
 	c := &collector{}
-	m := New("terminal", "/bin/sh", t.TempDir(), 80, 24, []string{"PS1="}, c.send)
+	m := New("terminal", testShell, t.TempDir(), 80, 24, []string{"PS1="}, c.send)
 	if m.sess == nil {
 		t.Fatalf("spawn failed: %s", m.err)
 	}

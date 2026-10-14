@@ -222,8 +222,12 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	// (ctrl+l), because it is the one worth a chord — "I lost the caret, put
 	// it back in the middle". Top and bottom are placement fine-tuning one
 	// reaches for inside a vim session, where zt/zb are already at hand.
-	{"editor.scrollCaretTop", reasonVimKey},         // zt
-	{"editor.scrollCaretBottom", reasonVimKey},      // zb
+	{"editor.scrollCaretTop", reasonVimKey},    // zt
+	{"editor.scrollCaretBottom", reasonVimKey}, // zb
+	// ctrl+l is a darwinRows chord (#2700): off macOS the plain key is what
+	// cmd+l (editor.goToLine) folds onto, so `zz` and the palette are the
+	// doorways there (#3000).
+	{"editor.scrollCaretCenter", reasonPlatformChord},
 	{"editor.tab.closeOthers", reasonPlatformChord}, // cmd+alt+w on macOS (#2538)
 	// #2538's remaining batch closes: the tab context menu and the File menu
 	// are where they are discovered, and cmd+w's neighbourhood has room for

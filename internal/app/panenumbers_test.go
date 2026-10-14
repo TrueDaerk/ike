@@ -2,7 +2,6 @@ package app
 
 import (
 	"image/color"
-	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -13,6 +12,7 @@ import (
 
 	"ike/internal/config"
 	"ike/internal/host"
+	"ike/internal/keymap"
 	"ike/internal/layout"
 	"ike/internal/pane"
 	"ike/internal/registry"
@@ -249,7 +249,7 @@ func TestPaneFocusIndexFocusesThatPane(t *testing.T) {
 // must resolve through the keymap layer to pane.focus<n>. macOS only — off
 // macOS the Cmd→Ctrl fold owns these chords, and the prompt is the doorway.
 func TestPaneFocusChordFocusesThatPane(t *testing.T) {
-	if runtime.GOOS != "darwin" {
+	if keymap.GOOS != "darwin" {
 		t.Skip("ctrl+digit pane focus ships on macOS only (#2407)")
 	}
 	m := numberedApp(t, noSlots())

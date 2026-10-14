@@ -4,7 +4,7 @@ title: Change Workflow
 description: The lifecycle of every change — issue first, issue branch, version bump, PR, merge, branch cleanup, plus the settings-UI, default-keybind, shared-building-block and span-family-ledger obligations.
 tags: [process, git, release]
 resource: internal/version/version.go
-timestamp: 2026-09-03T00:00:00Z
+timestamp: 2026-10-14T14:00:00Z
 ---
 
 # Change Workflow
@@ -168,9 +168,28 @@ What keeps the budget, and what a new test must follow:
   `TestMain`) — both would swallow scripted keys — and with `SHELL=/bin/sh`,
   so a terminal test never depends on the developer's login shell.
 - **Pty tests pass or skip fast.** `internal/terminal` probes once per binary
-  whether `/bin/sh` reaches a prompt on a pty (`requirePTY`, called from
+  whether the test shell reaches a prompt on a pty (`requirePTY`, called from
   `waitFor`); without one every pty test skips with the reason in
-  microseconds instead of timing out one by one.
+  microseconds instead of timing out one by one. The interactive tests drive
+  **readline line editing** (cursor motion, history, mid-line completion
+  edits), so the shell is `testShell` (`testmain_test.go`, #3000): `/bin/sh`
+  where that is bash (macOS), otherwise bash from PATH through a symlink named
+  `sh` — POSIX mode, no rc files, the stock `sh-5.2$ ` prompt — since Debian
+  and Ubuntu's `/bin/sh` is dash, which swallows every editing key. The
+  package's `TestMain` gives the shells an empty `HOME` and no `$ENV`. Type
+  into a shell only after `waitPrompt`: `Busy()` clears before readline is up,
+  and bash 5 loses a ctrl+d sent that early, as it loses the byte typed in
+  the millisecond after a ctrl+c (`TestSendKeyCtrlCDiscardsSpooledBacklog`
+  waits for the interrupt's prompt first).
+- **The suite runs on macOS and Linux, pinned to the macOS keymap.** The
+  tests feed cmd chords and expect the macOS-only default rows, so the
+  `keymap`, `settings`, `tour` and `app` packages pin `keymap.GOOS =
+  "darwin"` in their `TestMain` (#3000); a test of the Cmd→Ctrl fold sets
+  `GOOS` to `"linux"` itself and restores it. A command whose only chord is a
+  `darwinRows` row carries a `reasonPlatformChord` entry in the keybind
+  audit ledger, which reads the running platform's table. A test that
+  genuinely needs macOS skips with a reason naming the dependency; CI
+  (`test.yml`) runs both platforms as a matrix with fail-fast off.
 - **Measurements run on request.** A test that only logs timings over a huge
   fixture (the 100 MB `TestNDJSONOpenPhases` case) skips unless
   `IKE_SLOW_TESTS=1` is set; it is the one thing the default run leaves out,
