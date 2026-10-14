@@ -43,6 +43,13 @@ func TestMain(m *testing.M) {
 	// the welcome tour (#658) would auto-open and swallow scripted input. The
 	// first-run tests re-enable it locally.
 	tourAutoOpen = false
+	// The same goes for the first-start LSP onboarding dialog (#301): on a
+	// machine missing a registered server it would open in front of every
+	// model and eat scripted keys (#2997). onboardLang re-enables it.
+	onboardingAutoOpen = false
+	// Nor does a test model walk the package directory for TODO tags and
+	// complexity on Init (#2997); withProjectWalks opts a test back in.
+	initProjectWalks = false
 	// The per-buffer debounce wakes (backup, idle autosave, .http vars) arm
 	// on every keystroke into a dirty buffer since #2541, and drainCmd runs a
 	// key's commands synchronously: a real tea.Tick would sleep its 2s
@@ -53,6 +60,11 @@ func TestMain(m *testing.M) {
 	debounceTick = func(time.Duration, func(time.Time) tea.Msg) tea.Cmd {
 		return func() tea.Msg { return nil }
 	}
+	// The terminal tests spawn $SHELL and wait for its prompt. A developer's
+	// login shell brings its rc files, plugins and prompt along — and in a
+	// sandbox may never reach a prompt at all — so every test shell is the
+	// plain /bin/sh the terminal package tests use as well (#2997).
+	os.Setenv("SHELL", "/bin/sh")
 	dir, err := os.MkdirTemp("", "ike-app-test")
 	if err == nil {
 		testStoreRoot = dir
@@ -63,6 +75,12 @@ func TestMain(m *testing.M) {
 		// to $HOME/.ike. Without this, those tests read the developer's real
 		// layouts.json and session, and a personal default layout (say, one
 		// with two terminals) silently changes what every model starts with.
+		// The completion indexes scan this empty root instead of the package
+		// directory (#2997).
+		empty := filepath.Join(dir, "emptyroot")
+		if os.MkdirAll(empty, 0o755) == nil {
+			completionIndexRoot = func(string) string { return empty }
+		}
 		home := filepath.Join(dir, "home")
 		if os.MkdirAll(home, 0o755) == nil {
 			os.Setenv("HOME", home)

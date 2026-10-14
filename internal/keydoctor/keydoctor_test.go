@@ -144,3 +144,21 @@ func TestDoctorSummaryKeysAreNotProbeEvidence(t *testing.T) {
 		t.Fatalf("summary keys leaked into the session: %q", got)
 	}
 }
+
+// TestDoctorFlowKeepsNextTargetVisible (#2997): when the target set no
+// longer fits the columnar grid, the dense flow scrolls so the chord the
+// user is asked to press next is always on screen, even on a small terminal
+// and deep into the run.
+func TestDoctorFlowKeepsNextTargetVisible(t *testing.T) {
+	m := New()
+	m.SetSize(100, 30)
+	m.Open("testterm")
+	for i := 0; i < len(m.sess.Targets()); i += 25 {
+		for j := 0; j < 25; j++ {
+			m.sess.SkipNext()
+		}
+		if next := m.sess.Next(); next != "" && !strings.Contains(m.View(), next) {
+			t.Fatalf("next target %q (after %d skips) missing from the doctor view", next, i+25)
+		}
+	}
+}

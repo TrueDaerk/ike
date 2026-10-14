@@ -26,6 +26,7 @@ import (
 // (A, CCN 2, is over) and the density check off, walked to completion.
 func baselineApp(t *testing.T) (Model, string) {
 	t.Helper()
+	withProjectWalks(t) // the tests below assert on the Init walk of proj
 	proj := t.TempDir()
 	if r, err := filepath.EvalSymlinks(proj); err == nil {
 		proj = r
@@ -80,6 +81,7 @@ func writeBaselineFile(t *testing.T, proj string, ccn, cog int) string {
 }
 
 func TestComplexityBaselineAppliesToProblemsAndPanel(t *testing.T) {
+	withProjectWalks(t)
 	proj := t.TempDir()
 	if r, err := filepath.EvalSymlinks(proj); err == nil {
 		proj = r

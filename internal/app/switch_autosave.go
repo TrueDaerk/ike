@@ -127,7 +127,7 @@ func (m Model) beginSwitchAutoSave(root string) (tea.Model, tea.Cmd) {
 	}
 	if len(m.pendingSwitchSaves()) > 0 {
 		m.autoSaveSwitch = &autoSaveSwitch{root: root}
-		cmds = append(cmds, tea.Tick(autoSaveSwitchTimeout, func(time.Time) tea.Msg {
+		cmds = append(cmds, tickCmd(autoSaveSwitchTimeout, func(time.Time) tea.Msg {
 			return autoSaveSwitchTimeoutMsg{}
 		}))
 		return m, tea.Batch(cmds...)

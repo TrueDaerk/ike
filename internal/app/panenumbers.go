@@ -130,7 +130,7 @@ func (m *Model) raisePaneNumberHint() tea.Cmd {
 	m.paneNumHint = true
 	m.paneNumHintGen++
 	gen := m.paneNumHintGen
-	return tea.Tick(paneNumberHintTTL, func(time.Time) tea.Msg {
+	return tickCmd(paneNumberHintTTL, func(time.Time) tea.Msg {
 		return paneNumberHintMsg{gen: gen}
 	})
 }

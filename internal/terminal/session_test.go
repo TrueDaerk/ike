@@ -39,6 +39,7 @@ func (c *collector) has(pred func(tea.Msg) bool) bool {
 // waitFor polls until cond holds or the deadline passes.
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
+	requirePTY(t)
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		if cond() {

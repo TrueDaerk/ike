@@ -410,7 +410,9 @@ func TestPopupBroadcastBorders(t *testing.T) {
 	}
 	out, _ := m.Update(tea.KeyPressMsg{Code: 'i', Mod: tea.ModSuper | tea.ModShift})
 	m = out.(Model)
-	if on := strings.Count(m.renderPopupTerm(), focus); on != 2*off {
+	// Twice the border runs, give or take the odd run the renderer merges with
+	// an identically styled neighbour when the shells' content shifts (#2997).
+	if on := strings.Count(m.renderPopupTerm(), focus); on < 2*off-2 || on > 2*off+2 {
 		t.Fatalf("broadcast should focus-border both sides: off=%d on=%d", off, on)
 	}
 	out, _ = m.Update(tea.KeyPressMsg{Code: 'i', Mod: tea.ModSuper | tea.ModShift})

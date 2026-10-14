@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -61,14 +62,19 @@ func TestDeadBindingsRebindPersists(t *testing.T) {
 	}
 	old, fresh := target.Binding.Chord, target.Suggestions[0]
 
-	out, cmd := m.Update(keydoctor.RebindMsg{Command: target.Binding.Command, Old: old, New: fresh})
+	// The unbind lands under the finding's context when another context
+	// shares the chord (#2820), so the expected key is computed the way the
+	// handler computes it: which finding comes first depends on the terminal
+	// the test runs in (#2997).
+	oldKey := strings.TrimPrefix(keymap.ScopedOverrideKey(target.Binding.Context, old.String(), m.effectiveBindings()), "keymap.bindings.")
+	out, cmd := m.Update(keydoctor.RebindMsg{Command: target.Binding.Command, Context: target.Binding.Context, Old: old, New: fresh})
 	m = out.(Model)
 	reload := runForReload(t, cmd)
 	if got := reload.Config.Keymap.Bindings[fresh.String()]; got != target.Binding.Command {
 		t.Fatalf("keymap.bindings[%q] = %q, want %q", fresh, got, target.Binding.Command)
 	}
-	if got, ok := reload.Config.Keymap.Bindings[old.String()]; !ok || got != "" {
-		t.Fatalf("old chord %q = %q (present=%v), want an empty unbind", old, got, ok)
+	if got, ok := reload.Config.Keymap.Bindings[oldKey]; !ok || got != "" {
+		t.Fatalf("old chord %q = %q (present=%v), want an empty unbind", oldKey, got, ok)
 	}
 
 	// The reload lands: the report re-audits, and the repaired chord is gone.

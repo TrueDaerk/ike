@@ -44,6 +44,11 @@ func onboardingLangs() []lang.Language {
 	return out
 }
 
+// onboardingAutoOpen is the test seam for the dialog (#2997): the app tests
+// run on fresh config dirs with servers missing, so without it every model
+// would start behind the picker and scripted keys would be swallowed.
+var onboardingAutoOpen = true
+
 // scanOnboarding decides at startup whether the dialog is due: the LSP
 // subsystem and auto-install on, not onboarded yet, and at least one server
 // to offer. The gate is the lsp.onboarded flag alone, NOT the settings file's
@@ -52,7 +57,7 @@ func onboardingLangs() []lang.Language {
 // still hasn't had its say. The prompt itself waits for the first window size
 // (maybeOpenOnboarding).
 func (m *Model) scanOnboarding() {
-	if m.cfgOpts.UserPath == "" {
+	if m.cfgOpts.UserPath == "" || !onboardingAutoOpen {
 		return
 	}
 	c := config.Get()

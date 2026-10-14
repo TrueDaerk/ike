@@ -175,7 +175,10 @@ func TestNotebookMissingJupyterHint(t *testing.T) {
 		t.Fatal("the notebook run must be watched")
 	}
 	t.Cleanup(term.Close)
-	deadline := time.Now().Add(5 * time.Second)
+	// A real shell on a pty prints and exits in milliseconds; the bound is only
+	// for a hung spawn, and sized for a loaded CI runner where the package-level
+	// parallelism has been seen to stretch a spawn past five seconds (#2997).
+	deadline := time.Now().Add(15 * time.Second)
 	for {
 		_, exited := term.ExitCode()
 		if exited && m.nbRun.missingJupyter() {

@@ -823,7 +823,7 @@ func PaneSlotTools() []string {
 	return []string{
 		"terminal", "vcs", "problems", "structure", "usages", "breakpoints",
 		"tests", "issues", "dom", "xdoctor", "lspdoctor", "deps", "time",
-		"usage", "debug", "http",
+		"usage", "agenttrace", "complexity", "debug", "http",
 	}
 }
 

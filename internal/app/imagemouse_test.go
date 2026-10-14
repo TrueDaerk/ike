@@ -169,15 +169,13 @@ func TestImageZoomKeysReachFocusedPane(t *testing.T) {
 		t.Fatal("- at fit is a no-op")
 	}
 	// A zoom change flows through the same Update pass's reconcile as
-	// delete-placement + re-place with a crop, without a retransmission.
+	// delete + transmit of the visible crop + re-place (#2730): Kitty ignores
+	// placement crops on Unicode placeholders, so the pixels themselves change.
 	tm, cmd := m.Update(tea.KeyPressMsg{Code: '=', Text: "="})
 	m = tm.(Model)
 	raw := rawStrings(cmd)
-	if !strings.Contains(raw, "d=i") || !strings.Contains(raw, "a=p") || !strings.Contains(raw, "x=") {
-		t.Fatalf("a zoom change must re-place the image with a crop, got %.200q", raw)
-	}
-	if strings.Contains(raw, "a=t") {
-		t.Fatal("a zoom change must not retransmit the pixels")
+	if !strings.Contains(raw, "d=I") || !strings.Contains(raw, "a=t") || !strings.Contains(raw, "a=p") {
+		t.Fatalf("a zoom change must delete, retransmit the crop and re-place, got %.200q", raw)
 	}
 	if rawStrings(m.imageSyncCmd()) != "" {
 		t.Fatal("the reconcile is idempotent once the crop is applied")

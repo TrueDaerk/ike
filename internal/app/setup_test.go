@@ -161,6 +161,13 @@ func TestToolchainSummaryMarksMissing(t *testing.T) {
 	m = finishTourFully(t, m)
 	tm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape}) // theme: keep
 	m = tm.(Model)
+	// The test binary may carry language plugins with install recipes (the
+	// http highlight tests import the json plugin), in which case the flow's
+	// forced LSP dialog comes first; esc skips it like a user would (#2997).
+	if m.onboardingOpen() {
+		tm, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+		m = tm.(Model)
+	}
 	if !m.toolchainInfoOpen() {
 		t.Fatal("without LSP recipes the flow must land on the toolchain summary")
 	}

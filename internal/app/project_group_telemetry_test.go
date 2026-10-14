@@ -43,7 +43,11 @@ func groupOps(t *testing.T, m Model, id string) []telemetry.Event {
 			}
 			var ev telemetry.Event
 			if err := json.Unmarshal([]byte(line), &ev); err != nil {
-				t.Fatalf("bad JSONL line %q: %v", line, err)
+				// The directory is shared with every model an earlier test left
+				// running; one of them may be mid-write (#2997). This session's
+				// own events are flushed above, so a torn line is never ours.
+				t.Logf("skipping torn JSONL line %q: %v", line, err)
+				continue
 			}
 			if ev.SID == sid && ev.Type == telemetry.TypeOp && ev.Data["id"] == id {
 				out = append(out, ev)

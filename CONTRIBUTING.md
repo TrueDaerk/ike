@@ -98,6 +98,41 @@ go test ./...        # the full test suite
 make version         # build, then print what `ike --version` reports
 ```
 
+### The test suite
+
+`go test ./...` is expected to finish in **under 2 minutes** on a ~10-core
+machine with a warm build cache (measured: 85 s for the whole run, of which
+`internal/app`, the largest package, is about 65 s alone and 80 s inside the
+parallel run — the one package still over the 60 s per-package budget).
+CI (`.github/workflows/test.yml`) runs `go vet ./...` and
+`go test ./... -timeout 5m` on every PR and push to `main`, so a red suite or a
+package that has grown slow fails the PR.
+
+The default run excludes one thing: measurements. A test that only prints
+phase timings over a huge fixture (`TestNDJSONOpenPhases`, 100 MB) skips
+unless `IKE_SLOW_TESTS=1` is set:
+
+```sh
+IKE_SLOW_TESTS=1 go test ./internal/editor -run NDJSON -v
+```
+
+The only environment-dependent tests are the pty-backed terminal tests: they probe once whether `/bin/sh`
+reaches a prompt on a pty and skip with a reason within milliseconds when it
+does not (sandboxes, some CI runners), never timing out one by one. The app
+tests pin `SHELL=/bin/sh` and start with the welcome tour and the first-start
+LSP dialog off, so they do not depend on your login shell or installed
+language servers.
+
+A slow or flaky test is a bug. Before adding one, read the "test suite" section
+of [wiki/process/change-workflow.md](wiki/process/change-workflow.md): timers
+go through the tick seam instead of sleeping, polling deadlines stay at or
+under 2 s and say why, fixtures stay small and do not leak into later tests.
+To find the slow spots:
+
+```sh
+go test -count=1 -json ./internal/app | jq -r 'select(.Action=="pass" or .Action=="fail") | select(.Test!=null) | "\(.Elapsed)\t\(.Test)"' | sort -rn | head
+```
+
 The version number lives in `internal/version` and is bumped there. Builds
 through the Makefile stamp the commit and a dirty marker into the binary via
 `-ldflags`; a plain `go build` leaves them empty, which is fine.

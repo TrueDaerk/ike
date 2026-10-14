@@ -386,7 +386,7 @@ func (m *Model) complexityHintsSyncCmd() tea.Cmd {
 				}
 			default:
 				st.pending[path] = key
-				cmds = append(cmds, tea.Tick(cxHintDebounce, func(time.Time) tea.Msg {
+				cmds = append(cmds, tickCmd(cxHintDebounce, func(time.Time) tea.Msg {
 					return complexityHintTickMsg{path: path, key: key}
 				}))
 			}

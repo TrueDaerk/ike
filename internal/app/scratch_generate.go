@@ -224,7 +224,7 @@ func (s *tdGenState) setText(dsl string) {
 func (s *tdGenState) dirtyPreview() tea.Cmd {
 	s.prevGen++
 	gen := s.prevGen
-	return tea.Tick(tdPreviewDebounce, func(time.Time) tea.Msg {
+	return tickCmd(tdPreviewDebounce, func(time.Time) tea.Msg {
 		return tdPreviewTickMsg{gen: gen}
 	})
 }

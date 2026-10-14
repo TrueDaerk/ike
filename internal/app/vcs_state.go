@@ -47,7 +47,7 @@ func (m Model) scheduleVCSRefresh() tea.Cmd {
 		return nil
 	}
 	m.vcs.tickArmed = true
-	return tea.Tick(vcsDebounce, func(time.Time) tea.Msg { return vcsTickMsg{} })
+	return tickCmd(vcsDebounce, func(time.Time) tea.Msg { return vcsTickMsg{} })
 }
 
 // startVCSRefresh launches the git status run, or queues a follow-up when one

@@ -49,7 +49,9 @@ func waitComplexity(t *testing.T, x *complexity.Index, what string, cond func(v 
 		if cond(x.Snapshot()) {
 			return
 		}
-		if time.Since(start) > 10*time.Second {
+		// The roots are temp dirs of a few files: a walk or a re-measure is
+		// milliseconds of work, the bound only catches a hung index (#2997).
+		if time.Since(start) > 2*time.Second {
 			t.Fatalf("timed out waiting for %s: %v", what, x.Snapshot().Paths())
 		}
 		time.Sleep(5 * time.Millisecond)
@@ -62,6 +64,7 @@ func waitComplexity(t *testing.T, x *complexity.Index, what string, cond func(v 
 // master switch off drops the snapshot and on rebuilds it, and the exclude
 // list applies on reload.
 func TestComplexityIndexBuiltWalkedAndToggledLive(t *testing.T) {
+	withProjectWalks(t)
 	proj := t.TempDir()
 	if r, err := filepath.EvalSymlinks(proj); err == nil {
 		proj = r

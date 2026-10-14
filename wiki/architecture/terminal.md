@@ -62,7 +62,12 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
 
 - **PTY lifecycle** via `creack/pty`: the shell (`terminal.shell` config
   override → `$SHELL` → `/bin/sh`) spawns in the project root with
-  `TERM=xterm-256color`; pane resizes propagate through `pty.Setsize`
+  `TERM=xterm-256color`. The pair is opened by hand (`spawn_unix.go`, #2997)
+  so the parent keeps the **slave** open until the child has exited: with
+  `pty.Start`'s immediate close, a child that prints and exits at once could
+  drain the master's queue unread on macOS (the reader woke to EIO with the
+  output gone — an empty Run tool; every command-session test on the hosted
+  CI VM). The reaper closes the slave after `Wait`, so EIO means drained; pane resizes propagate through `pty.Setsize`
   (SIGWINCH for the child) and the emulator — **debounced** (#804): a rapid
   burst (divider drag) folds into one trailing apply of the final size, so
   the child redraws once instead of per drag step. A quiet **height-only**

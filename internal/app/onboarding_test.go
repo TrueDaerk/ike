@@ -17,6 +17,8 @@ import (
 // it from the onboarding offer for later tests in the package.
 func onboardLang(t *testing.T, id string) {
 	t.Helper()
+	onboardingAutoOpen = true
+	t.Cleanup(func() { onboardingAutoOpen = false })
 	lang.Register(lang.Language{ID: id, Extensions: []string{id}, Server: &lang.ServerSpec{
 		Language: id,
 		Command:  "definitely-missing-" + id + "-server",

@@ -61,7 +61,7 @@ func (m *Model) testWatchSaved(path string) tea.Cmd {
 	m.testWatch.seq++
 	m.testWatch.cfg, m.testWatch.root = cfg, root
 	seq := m.testWatch.seq
-	return tea.Tick(m.testWatchDelay(), func(time.Time) tea.Msg {
+	return tickCmd(m.testWatchDelay(), func(time.Time) tea.Msg {
 		return testWatchFireMsg{seq: seq}
 	})
 }

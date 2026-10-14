@@ -416,7 +416,9 @@ therefore *owns* a number.
   each number and each tool appears at most once, and the tool is one of
   `config.PaneSlotTools()` (the tool windows' layout keys: `terminal`, `vcs`,
   `problems`, `structure`, `usages`, `breakpoints`, `tests`, `issues`, `dom`,
-  `xdoctor`, `lspdoctor`, `deps`, `time`, `usage`, `debug`, `http`). The
+  `xdoctor`, `lspdoctor`, `deps`, `time`, `usage`, `agenttrace`, `complexity`,
+  `debug`, `http`; the last two windows joined the list in #2997, which
+  keeps `paneSlotDefs` and the list in step by test). The
   parser is shared (`config.ParsePaneSlots`): the config layer drops a
   broken entry with a `layout.pane_slots` diagnostic, the settings form
   rejects it before it is staged, and the app numbers from the same reading.

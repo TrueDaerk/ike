@@ -287,7 +287,7 @@ func (m *Model) startAgentAsk(question string) tea.Cmd {
 
 // armAskSpin schedules the next spinner frame.
 func (m *Model) armAskSpin(gen int64) tea.Cmd {
-	return tea.Tick(askSpinInterval, func(time.Time) tea.Msg { return askSpinMsg{gen: gen} })
+	return tickCmd(askSpinInterval, func(time.Time) tea.Msg { return askSpinMsg{gen: gen} })
 }
 
 // handleAskSpin advances the spinner while the fork still runs.

@@ -161,7 +161,7 @@ func (m Model) timeSegmentCmd() tea.Cmd {
 	gen := m.timeTickGen
 	return tea.Batch(
 		m.timeReadCmd(),
-		tea.Tick(timeSegmentInterval, func(time.Time) tea.Msg { return timeTickMsg{gen: gen} }),
+		tickCmd(timeSegmentInterval, func(time.Time) tea.Msg { return timeTickMsg{gen: gen} }),
 	)
 }
 
@@ -175,7 +175,7 @@ func (m Model) handleTimeTick(msg timeTickMsg) (tea.Model, tea.Cmd) {
 	gen := m.timeTickGen
 	return m, tea.Batch(
 		m.timeReadCmd(),
-		tea.Tick(timeSegmentInterval, func(time.Time) tea.Msg { return timeTickMsg{gen: gen} }),
+		tickCmd(timeSegmentInterval, func(time.Time) tea.Msg { return timeTickMsg{gen: gen} }),
 	)
 }
 

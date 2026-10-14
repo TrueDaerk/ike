@@ -19,9 +19,9 @@ import (
 // — id and extension only, like bufferLangLangs, deliberately not the
 // language plugins whose ServerSpec would open the missing-server prompt.
 func dataLangs() {
-	lang.Register(lang.Language{ID: "json", Extensions: []string{"json"}})
-	lang.Register(lang.Language{ID: "yaml", Extensions: []string{"yaml", "yml"}})
-	lang.Register(lang.Language{ID: "dockerfile", Filenames: []string{"Dockerfile"}})
+	ensureLang(lang.Language{ID: "json", Extensions: []string{"json"}})
+	ensureLang(lang.Language{ID: "yaml", Extensions: []string{"yaml", "yml"}})
+	ensureLang(lang.Language{ID: "dockerfile", Filenames: []string{"Dockerfile"}})
 }
 
 // typedBuffer is a file-less buffer holding content and treated as langID.

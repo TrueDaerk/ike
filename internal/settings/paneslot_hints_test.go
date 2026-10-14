@@ -7,6 +7,7 @@ package settings
 // own old value, and the write through to layout.pane_slots.
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -155,17 +156,25 @@ func TestPaneSlotHintsSkipCustomToolShadowedByBuiltin(t *testing.T) {
 func TestPaneSlotEditorPersistsACustomTool(t *testing.T) {
 	restoreConfig(t)
 	withCustomToolSlots(t, "vcs=3")
-	m, ed := openPaneSlotEditor(t)
+	// The form's commit reloads the config from disk, so the custom tool has
+	// to be in the user file — not only in the in-memory fixture, and not the
+	// lazygit the default layer adds only where the binary is installed (#750,
+	// #2997).
+	opts := testOpts(t)
+	if err := os.WriteFile(opts.UserPath, []byte("[[tools.custom]]\nname = \"k9s\"\ncommand = \"k9s\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	m, ed := openPaneSlotEditorWith(t, opts)
 	ed.idx = len(ed.items)
 	m.Update(key("enter"))
-	ed.tf.Set("lazygit=6")
+	ed.tf.Set("k9s=6")
 	m.Update(key("enter"))
 	if ed.err != "" {
 		t.Fatalf("err = %q, want the custom tool accepted", ed.err)
 	}
 	apply(t, m.applyChanges())
-	if got := strings.Join(config.Get().Layout.PaneSlots, ","); got != "vcs=3,lazygit=6" {
-		t.Fatalf("pane_slots = %q, want %q", got, "vcs=3,lazygit=6")
+	if got := strings.Join(config.Get().Layout.PaneSlots, ","); got != "vcs=3,k9s=6" {
+		t.Fatalf("pane_slots = %q, want %q", got, "vcs=3,k9s=6")
 	}
 }
 
@@ -184,11 +193,18 @@ func paneSlotPages() []Page {
 // openPaneSlotEditor opens the Reserved pane numbers entry's list editor.
 func openPaneSlotEditor(t *testing.T) (*Model, *listEditor) {
 	t.Helper()
+	return openPaneSlotEditorWith(t, testOpts(t))
+}
+
+// openPaneSlotEditorWith is openPaneSlotEditor over an explicit user-scope
+// config, for a test that seeds the settings file first.
+func openPaneSlotEditorWith(t *testing.T, opts config.Options) (*Model, *listEditor) {
+	t.Helper()
 	pages := paneSlotPages()
 	if len(pages) == 0 {
 		t.Fatal("layout.pane_slots must be a schema entry (settings coverage, #2592)")
 	}
-	m := New(pages, testOpts(t))
+	m := New(pages, opts)
 	m.SetSize(90, 24)
 	m.Open()
 	m.Update(key("tab"))

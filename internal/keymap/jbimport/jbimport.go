@@ -172,6 +172,8 @@ var actionMap = map[string]string{
 	"GotoClass":            "project.goToClass",
 	"GotoSymbol":           "project.goToClass",
 	"RecentFiles":          "palette.recentFiles",
+	"RecentLocations":      "nav.recentLocations",
+	"JumpToLastChange":     "nav.lastEdit",
 	"ManageRecentProjects": "project.switch",
 	"Back":                 "nav.back",
 	"Forward":              "nav.forward",

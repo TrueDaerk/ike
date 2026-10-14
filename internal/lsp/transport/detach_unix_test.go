@@ -3,8 +3,9 @@
 package transport
 
 import (
-	"syscall"
 	"testing"
+
+	"golang.org/x/sys/unix"
 )
 
 // TestDetachedNewSession verifies Spec.Detached starts the process in its own
@@ -18,14 +19,14 @@ func TestDetachedNewSession(t *testing.T) {
 	defer p.Stop()
 
 	pid := p.cmd.Process.Pid
-	sid, err := syscall.Getsid(pid)
+	sid, err := unix.Getsid(pid)
 	if err != nil {
 		t.Fatalf("getsid: %v", err)
 	}
 	if sid != pid {
 		t.Fatalf("detached process sid = %d, want %d (own session leader)", sid, pid)
 	}
-	if own, _ := syscall.Getsid(0); sid == own {
+	if own, _ := unix.Getsid(0); sid == own {
 		t.Fatalf("detached process shares the caller's session %d", own)
 	}
 }
@@ -39,11 +40,11 @@ func TestAttachedSharesSession(t *testing.T) {
 	}
 	defer p.Stop()
 
-	sid, err := syscall.Getsid(p.cmd.Process.Pid)
+	sid, err := unix.Getsid(p.cmd.Process.Pid)
 	if err != nil {
 		t.Fatalf("getsid: %v", err)
 	}
-	if own, _ := syscall.Getsid(0); sid != own {
+	if own, _ := unix.Getsid(0); sid != own {
 		t.Fatalf("attached process sid = %d, want caller session %d", sid, own)
 	}
 }

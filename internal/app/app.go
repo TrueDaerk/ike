@@ -1534,11 +1534,19 @@ func (m *Model) notifyKeymapDiags() {
 	}
 }
 
+// newModelHook, when set, runs before every model is built. It is nil in the
+// binary; the package tests use it to notice a working directory an earlier
+// test's project switch left behind and deleted (#2997).
+var newModelHook func()
+
 // NewWith returns a root model backed by an explicit registry and config. It
 // applies per-plugin enable/disable flags before the registry is queried, builds
 // the pane registry (explorer singleton + one editor), then restores any saved
 // layout and session.
 func NewWith(reg *registry.Registry, cfg host.Config) Model {
+	if newModelHook != nil {
+		newModelHook()
+	}
 	return newWithHost(reg, cfg, host.New(cfg))
 }
 
@@ -1577,8 +1585,8 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	engine.Delay = func() time.Duration {
 		return time.Duration(config.Get().LSP.CompletionDelayMs) * time.Millisecond
 	}
-	engine.Register(words.New(root))
-	engine.Register(symbols.New(root))
+	engine.Register(words.New(completionIndexRoot(root)))
+	engine.Register(symbols.New(completionIndexRoot(root)))
 	// The PHP declaration index (0520, #2667) is not a completion source:
 	// it observes buffer edits and watcher events beside the symbol index
 	// and answers the trait features' consumer-scope queries. Its scan
@@ -3282,7 +3290,7 @@ func (m *Model) clearWhichKey() {
 // the timer and popup rules to let a leader sequence run from its query line.
 func (m *Model) armPendingChord() tea.Cmd {
 	m.whichKeyGen++
-	cmds := []tea.Cmd{tea.Tick(keymap.TimeoutDuration, func(time.Time) tea.Msg {
+	cmds := []tea.Cmd{tickCmd(keymap.TimeoutDuration, func(time.Time) tea.Msg {
 		return keymapTimeoutMsg{}
 	})}
 	switch on, delay := whichKeyConfig(); {
@@ -3292,7 +3300,7 @@ func (m *Model) armPendingChord() tea.Cmd {
 		m.showWhichKey()
 	default:
 		gen := m.whichKeyGen
-		cmds = append(cmds, tea.Tick(delay, func(time.Time) tea.Msg {
+		cmds = append(cmds, tickCmd(delay, func(time.Time) tea.Msg {
 			return whichKeyDelayMsg{gen: gen}
 		}))
 	}
@@ -4503,6 +4511,20 @@ func (m Model) explorer() *explorer.Model {
 	return m.activeWS().Panes.Get(pane.ExplorerKey).Explorer()
 }
 
+// initProjectWalks gates the project-wide walks Init starts — the TODO scan
+// and the complexity index walk. Always on in the binary. The package tests
+// turn it off: a walk of the whole package directory per test model is what
+// kept seven cores busy for the length of the suite (#2997); the tests that
+// assert on a walk opt back in (withProjectWalks).
+var initProjectWalks = true
+
+// completionIndexRoot maps the project root to the directory the word and
+// symbol completion indexes scan on their first request. The identity in the
+// binary; the package tests point it at an empty directory, since a scan of
+// the package directory per test model that completes something was a
+// measurable share of the suite's CPU (#2997). withProjectWalks restores it.
+var completionIndexRoot = func(root string) string { return root }
+
 // Init implements tea.Model.
 func (m Model) initUnguarded() tea.Cmd {
 	cmds := []tea.Cmd{m.explorer().Init()}
@@ -4512,10 +4534,12 @@ func (m Model) initUnguarded() tea.Cmd {
 	// The TODO index's initial full scan (#61): Init runs after main.go wires
 	// the sender (and again after a project switch), so the streamed results
 	// land and the status-line count is live without opening the overlay.
-	m.todo.Rescan()
+	if initProjectWalks {
+		m.todo.Rescan()
+	}
 	// The complexity index's project walk (0550, #2916) starts here for the
 	// same reason; its settled changes arrive as ComplexityChangedMsg.
-	if m.complexityIndex != nil {
+	if m.complexityIndex != nil && initProjectWalks {
 		m.complexityIndex.Start()
 	}
 	// Every restored data viewer opens its database in the background (#1795),
@@ -5919,7 +5943,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.httpTickArmed = true
 		gen := m.modelGen
-		return m, tea.Tick(httpFlightTick, func(time.Time) tea.Msg { return httpTickMsg{gen: gen} })
+		return m, tickCmd(httpFlightTick, func(time.Time) tea.Msg { return httpTickMsg{gen: gen} })
 
 	case HTTPCancelMsg:
 		// http.cancel (palette, x in the response pane, #1272).

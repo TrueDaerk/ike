@@ -629,6 +629,7 @@ func TestProjectClockPausesWhileBlurred(t *testing.T) {
 // switch closes the departing project's budget, the quit closes the last one's,
 // and both carry the hashed token — never a path.
 func TestTelemetryProjectLeaveEvents(t *testing.T) {
+	t.Chdir(t.TempDir()) // performSwitch chdirs into the target; restore after (#2997)
 	m := telemetryModel(t, host.MapConfig{})
 	m.usage.Command("before.switch", telemetry.SourceInternal) // open the session file
 	leaving := telemetryProjectToken()

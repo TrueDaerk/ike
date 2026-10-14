@@ -746,6 +746,13 @@ get **no verdict**), `ctrl+d`/`esc` end probing into a summary, where
 `enter`/`y` saves, `r` saves and opens the dead-binding report (#2161),
 `d`/`n` discards without touching the store, and `esc` resumes probing.
 
+The probing screen lays the targets out in columns, each as wide as its own
+longest chord with the gap shrinking until the set fits (#2305). Once even a
+zero gap cannot fit — the default table outgrew a 160-column terminal
+(#2997) — the grid falls back to a dense row-wrapped flow that scrolls so the
+next pending chord is always on screen (`targetFlow`); `TestDoctorGridShowsEveryTarget`
+and `TestDoctorFlowKeepsNextTargetVisible` pin both layouts.
+
 A saved run persists as a **per-terminal override set** in
 `keyprobe.json` under the config dir (`$IKE_CONFIG_DIR`, else `~/.ike`) —
 `keymap.ProbeStore` in `internal/keymap/probestore.go`, keyed by

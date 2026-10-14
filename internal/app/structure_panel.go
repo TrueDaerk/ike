@@ -144,7 +144,7 @@ func (m *Model) structureSyncCmd() tea.Cmd {
 	m.structDebPath, m.structDebVersion = path, version
 	m.structDebSeq++
 	seq := m.structDebSeq
-	return tea.Tick(structDebounceDelay, func(time.Time) tea.Msg {
+	return tickCmd(structDebounceDelay, func(time.Time) tea.Msg {
 		return structDebounceMsg{seq: seq}
 	})
 }
