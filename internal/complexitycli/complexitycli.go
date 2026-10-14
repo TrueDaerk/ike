@@ -154,6 +154,9 @@ func Run(a cli.ComplexityArgs, stdout, stderr io.Writer) int {
 	case a.MD && a.JSON:
 		fmt.Fprintln(stderr, "ike complexity:", cli.ErrMarkdownWithJSON)
 		return ExitError
+	case a.Width < 0 || a.Width > 0 && a.Width < cli.WidthMin:
+		fmt.Fprintf(stderr, "ike complexity: --width: %d is not 0 (unlimited) or at least %d columns\n", a.Width, cli.WidthMin)
+		return ExitError
 	case !briefOK:
 		fmt.Fprintf(stderr, "ike complexity: --brief: %q is not class or file\n", a.Brief)
 		return ExitError

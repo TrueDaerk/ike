@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"path/filepath"
-	"text/tabwriter"
 	"time"
 
 	"ike/internal/complexity"
@@ -146,7 +145,7 @@ func writeTrendText(w io.Writer, r trendReport) {
 		return
 	}
 	fmt.Fprintln(w)
-	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
+	tw := r.s.newTable(w, colNum, colNum, colName)
 	fmt.Fprintln(tw, "COMMIT\tDATE\tSUBJECT\tFUNCS\tCCN\tCOG\tEXCESS\tOVER")
 	for i, p := range pts {
 		s := p.Summary

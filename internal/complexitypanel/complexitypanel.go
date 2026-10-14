@@ -1126,20 +1126,9 @@ func (m *Model) columnWidths() []int {
 			}
 		}
 	}
-	// The file column is capped so a deep path never pushes the metrics off
-	// the pane; the rest are short by nature.
-	if fi := m.layoutIndex(ColFile); fi >= 0 {
-		if max := m.width / 2; max > 12 && ws[fi] > max {
-			ws[fi] = max
-		}
-	}
-	// So is a commit subject (#2962).
-	if si := m.layoutIndex(ColSubject); si >= 0 {
-		if max := m.width / 3; max > 12 && ws[si] > max {
-			ws[si] = max
-		}
-	}
-	return ws
+	// The text columns share what the numeric ones leave (#2992), so a deep
+	// path or a long name never pushes the metrics off the pane.
+	return m.fitWidths(ws)
 }
 
 // caretMark prefixes the function under the caret on the File tab.
@@ -1452,7 +1441,7 @@ func (m *Model) View() string {
 		b.WriteString(m.sparkView(pal)) // #2962
 		b.WriteString("\n")
 	}
-	b.WriteString(gridview.HeaderRow(pal, m.headerLabels(), m.widths, 0, m.width))
+	b.WriteString(gridview.HeaderRow(pal, m.fitLabels(m.headerLabels()), m.widths, 0, m.width))
 	b.WriteString("\n")
 	if m.treeActive() {
 		b.WriteString(m.renderTree(pal, m.bodyHeight()))
@@ -1600,23 +1589,23 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 		if ei := m.layoutIndex(ColExcessDelta); ei >= 0 {
 			cells[ei].Warn, cells[ei].Good = tr.DeltaExcess() > 0, tr.DeltaExcess() < 0
 		}
-		return gridview.DataRow(pal, cells, m.widths, 0, m.width, i == m.cursor, m.focused)
+		return m.dataRow(cells, i == m.cursor)
 	}
 	if r.Group != nil {
 		for c, col := range layout {
 			cells[c].Warn = m.groupWarn(r.Group, col) || col == ColHot && m.hotWarns(r)
 		}
-		return gridview.DataRow(pal, cells, m.widths, 0, m.width, i == m.cursor, m.focused)
+		return m.dataRow(cells, i == m.cursor)
 	}
 	if fc := r.FileChange; fc != nil {
 		// A file that got heavier takes the warning colour.
 		for c, col := range layout {
 			cells[c].Warn = fileChangeDelta(fc, col) > 0
 		}
-		return gridview.DataRow(pal, cells, m.widths, 0, m.width, i == m.cursor, m.focused)
+		return m.dataRow(cells, i == m.cursor)
 	}
 	if r.child() {
-		return gridview.DataRow(pal, cells, m.widths, 0, m.width, i == m.cursor, m.focused)
+		return m.dataRow(cells, i == m.cursor)
 	}
 	if fi := m.layoutIndex(ColFunc); fi >= 0 && r.Caret {
 		cells[fi].Text = caretMark + cells[fi].Text
@@ -1650,12 +1639,16 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 	if si := m.layoutIndex(ColChange); si >= 0 && i > 0 && m.rows[i-1].Change == r.Change {
 		cells[si].Text = ""
 	}
-	return gridview.DataRow(pal, cells, m.widths, 0, m.width, i == m.cursor, m.focused)
+	return m.dataRow(cells, i == m.cursor)
 }
 
 // footer shows the filtered / total counts and the key hints.
 func (m *Model) footer() string {
 	count := itoa(len(m.rows)) + "/" + itoa(m.total) + " rows"
+	if full := m.clippedText(); full != "" {
+		// The cursor row's truncated cells in full (#2992) lead the footer.
+		count = full + " · " + count
+	}
 	if m.tab == TabTrend {
 		return lipgloss.NewStyle().Faint(true).Render(m.clip(" " + count + m.trendFooter())) // #2962
 	}

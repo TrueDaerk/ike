@@ -491,8 +491,8 @@ count over threshold, `excess N` (#2945) and, with a baseline in effect,
 line names them after the generation: `thresholds ccn 30 cog 30
 (legacy/**)` (the comment density joins when it differs from the global,
 #2960). The grid
-(`gridview.HeaderRow` / `DataRow`, widths from the longest visible value,
-the file column capped at half the pane) has the columns file
+(`gridview.HeaderRow` / `DataRow`, widths from the longest visible value
+under the column budget below) has the columns file
 (project-relative; hidden on the File tab), function, line (1-based), ccn,
 cog, nloc, params, depth, `cmt%` (the comment density in whole percent,
 #2934). `s` cycles the sort column (default CCN
@@ -505,6 +505,28 @@ CCN, cognitive or `cmt%` cell at or above its file's threshold —
 (`gridview.Cell.Warn`); on a function the baseline accepts the same cells
 render muted instead (`gridview.Cell.Muted`) and the name carries ` ✓`.
 The status row shows `filtered/total rows` and the key hints.
+
+**Column budget (#2992).** No text cell may push the metrics off the pane.
+`Model.fitWidths` (`internal/complexitypanel/fit.go`) runs at the end of
+`columnWidths` and `treeWidths`: the numeric columns keep their natural
+width, and the text columns — file, function / tree name, class, section,
+commit subject — share what is left of the pane (minus the leading space and
+the two-space gaps) through `gridview.FitWidths`: they keep their width when
+they fit together, otherwise the room is split proportionally to their
+natural widths, never below `gridview.MinTextWidth` (12; a column already
+narrower keeps its own). On a pane too narrow even for those minima every
+text column is squeezed to its minimum and `DataRow` clips the line as
+before. Every row goes through `Model.dataRow`, which truncates an
+overflowing text cell with an ellipsis before `DataRow`: a path from the
+left (`gridview.TruncLeft`, `…/complexitypanel/complexitypanel.go` keeps the
+file name), every other text from the right (`gridview.TruncRight`,
+`SomeLongClassName::someVeryLo…`). `gridview.TruncMarked` keeps the caret
+`▸ ` and the trailing ` ✓` / ` ★` / `*` marks of a function cell and the
+sort marker of a header label (`fitLabels`); the caret cell's occurrence
+highlight is a cell flag and survives. When the cursor row has a truncated
+cell, the status row leads with its full text (`clippedText`: the full path,
+the full name, ` · ` joined). The CSV and Markdown exports read the rows,
+not the cells, so they keep the full text.
 
 **Filter.** The filter row is the shared `filterbar` over a `filterexpr`
 schema (`/`, the find chord `cmd+f` / `ctrl+f`; `cmd+g` / `cmd+shift+g`
@@ -1446,7 +1468,7 @@ chords: the keybind ledger records them with `reasonIntention`.
 
 ## Headless CLI (#2922)
 
-`ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json | --md] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [PATH...]`
+`ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json | --md] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [--trend[=N]] [--width N] [PATH...]`
 is the terminal-free report for CI pipelines and coding agents. The grammar
 lives in `internal/cli` (`ComplexityArgs`, first argument only like
 `agent-hook`, so a file named `complexity` still opens as `./complexity`);
@@ -1457,6 +1479,26 @@ names it), a git
 error (an unknown `--diff` ref prints git's message on stderr) or a build
 without syntax trees. The report never fails on thresholds — gating is the
 caller's policy over the JSON.
+
+**Line width (#2992).** Every text table — the project and pins table, the
+`--by` group tables, the `--brief` lines, the `--diff` sections and its
+`--by file` table, the `--trend` commits — is written through
+`settings.newTable` (`internal/complexitycli/table.go`) instead of a bare
+`tabwriter`: it buffers the tab-separated lines and on `Flush` fits them
+into `ComplexityArgs.Width` with the tool window's rule — numeric columns
+keep their natural width, the text columns (paths, function and class
+names, commit subjects) share the rest through `gridview.FitWidths` (minimum
+12) and are truncated with the same ellipsis rules (paths from the left,
+names from the right with ` ✓` / ` ★` kept, a leading indent kept), then
+aligned two spaces apart with widths measured by `lipgloss.Width`. The
+limit is `--width N` (`cli.WidthMin` 40 or more; `--width 0` is unlimited —
+the plain `tabwriter` output of before; `--width 20` is a usage error, exit
+2). Without the flag `cmd/ike` measures stdout (`charmbracelet/x/term`
+`GetSize`) and `complexitycli.ResolveWidth` sets the terminal width, or
+`cli.DefaultWidth` (120) when stdout is not a terminal or its size is
+unknown; `Run` itself never probes, so tests pass the width. The summary,
+trailer and verdict lines are prose and stay unwrapped; `--json` and `--md`
+ignore the limit.
 
 **Markdown (#2963).** `--md` (exclusive with `--json`:
 `cli.ErrMarkdownWithJSON`, exit 2) renders every report through

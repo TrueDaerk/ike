@@ -116,6 +116,7 @@ these blocks is the [Complexity](/architecture/complexity.md) tool window
 | --- | --- | --- |
 | `hiertree.Tree[T]` | `internal/hiertree` | a lazily expanding hierarchy (call hierarchy, type hierarchy) or an in-memory one (the Agent Trace window, #2840): rows, expand/collapse, parent walk, stale-reply bookkeeping, renderer; `Static` for synchronous children, `Refresh` to rebuild without losing expansion/selection, `Wheel`/`SetCursor`/`Top` for the list-mouse helpers |
 | `gridview.DataRow`, `HeaderRow`, `Sidebar` | `internal/gridview` | a column grid with a sidebar (data viewer, Elasticsearch console) or without one (the Complexity window, #2917: `Cell.Warn` paints an over-threshold metric in the warning colour) |
+| `gridview.FitWidths`, `TruncLeft`, `TruncRight`, `TruncMarked` | `internal/gridview` | the text-column budget and ellipsis truncation (#2992): text columns share what the numeric ones leave (minimum `MinTextWidth`), paths cut from the left, names from the right with their marks kept — the Complexity window and the `ike complexity` text tables |
 | `palette.FuzzyItems[T]`, `SortByScore` | `internal/palette/fuzzyitems.go` | a palette mode that fuzzy-matches a slice into items |
 | `codepreview.TargetFrom[T]` | `internal/codepreview` | building a preview target from match ranges |
 | `imgview.PlacedImage`, `SyncSeqs` | `internal/imgview` | inline images placed in a scrolling view |
