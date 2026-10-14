@@ -3,19 +3,21 @@
 # a package that has grown slow fails the PR instead of the next developer's
 # afternoon. The budget: the whole run under 2 minutes on a ~10-core
 # developer machine, no package over 60 s (CONTRIBUTING.md, "Building and
-# testing"). The job runs on macOS: the suite is written against the macOS
-# default keymap (cmd chords) and pty behaviour, and the first Linux run
-# showed 71 platform-specific failures across ten packages — tracked
-# separately as Linux test portability (#3000). macOS minutes are free for
-# a public repository.
+# testing"). The job runs on macOS and on Linux (#3000): the suite is written
+# against the macOS default keymap and pins it (keymap.GOOS = "darwin" in the
+# keymap, settings, tour and app test mains), and the pty tests drive bash
+# where /bin/sh is dash, so both platforms run the same tests. macOS minutes
+# are free for a public repository; the two jobs run independently
+# (fail-fast off) so one platform's failure still shows the other's result.
 #
-# The hosted macOS runner has three cores and is three to four times slower
-# than a developer machine: with every package in flight at once, internal/app
-# (3000 sequential tests, many of them spawning shells) was starved past the
-# timeout while the wasm packages compiled, and pty-backed tests in other
-# packages missed their spawn bounds. So the suite runs in three steps — the
-# bulk of the packages two at a time, the wasm packages, then internal/app
-# alone with the machine to itself — each under its own 5-minute bound.
+# The hosted runners have three (macOS) or four (Linux) cores and are three
+# to four times slower than a developer machine: with every package in flight
+# at once, internal/app (3000 sequential tests, many of them spawning shells)
+# was starved past the timeout while the wasm packages compiled, and
+# pty-backed tests in other packages missed their spawn bounds. So the suite
+# runs in three steps — the bulk of the packages two at a time, the wasm
+# packages, then internal/app alone with the machine to itself — each under
+# its own 5-minute bound.
 name: Test
 
 on:
@@ -28,7 +30,11 @@ permissions:
 
 jobs:
   test:
-    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 

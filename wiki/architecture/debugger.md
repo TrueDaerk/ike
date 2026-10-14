@@ -4,7 +4,7 @@ title: Debugger
 description: Work streams 0350/0360 — DAP debug sessions over run configurations; breakpoints hit (with conditions, hit counts and logpoints), paused-line marker, IntelliJ stepping chords (F7/F8/F9/Shift+F8) plus run-to-cursor (Alt+F9), one session at a time; a combined debug area (frames/variables panel + debuggee console behind internal tabs) with per-project watch expressions, an evaluate popup (Alt+F8) and inline variable values in the editor; Python via debugpy, Go via delve (dlv dap over a socket), PHP via the in-process Xdebug/DBGp bridge.
 resource: internal/app/debugsession.go
 tags: [architecture, debug, dap, dbgp, xdebug, delve, run, breakpoints, watches, evaluate]
-timestamp: 2026-09-03T00:00:00Z
+timestamp: 2026-10-14T14:00:00Z
 ---
 
 # Debugger (0350)
@@ -330,7 +330,12 @@ went unnoticed: `b.dc` stayed set and the bridge answered *every* later request
 with "one session at a time" until the user pressed continue — the intermittent
 capture the issue reported. Before deciding a connection is a latecomer the
 bridge now checks `Conn.Closed()` on the live session and, if it is gone, ends
-the run like a normal request end.
+the run like a normal request end. The check waits up to `deadSessionGrace`
+(100 ms) for the live session's read loop to observe a closed socket (#3000):
+the next request dialing in right after its predecessor's socket closed could
+complete its handshake before that loop ran — every fifth run on a Linux
+loopback — and was turned away as a latecomer. A genuinely busy session costs
+the newcomer's detach that long.
 
 Settings live in `[debug.php]`:
 

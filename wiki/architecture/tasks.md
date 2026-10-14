@@ -4,7 +4,7 @@ title: Tasks & Problem Matchers
 description: Task discovery (Makefile targets, package.json scripts, justfile recipes) behind the lang.TaskProvider seam, run through the Run Task picker as ephemeral or promoted run configurations; named regex problem matchers tee the run terminal's output into per-run Problems entries (#1915).
 resource: internal/matcher
 tags: [architecture, tasks, run, problems, matchers, languages, config]
-timestamp: 2026-08-17T18:00:00Z
+timestamp: 2026-10-14T14:00:00Z
 ---
 
 # Tasks & Problem Matchers (#1915)
@@ -118,7 +118,12 @@ re-running anything. `terminal.Session` grew an optional tap
 the tap on the feed goroutine — **off the render loop** — before writing the
 emulator. `launchRun` builds a `taskCollector` for configurations with
 matchers and installs it on the fresh Run-tool session right after the
-spawn.
+spawn. What a fast child printed before that moment is not lost (#3000): a
+command session retains its output until the first `SetTap` (up to
+`earlyLimit`, 64 KiB) and replays it into the tap — under the tap lock, so
+the tap never runs concurrently with itself; a `sh -c` that prints and exits
+had replayed everything before the tee arrived on Linux, leaving the matcher
+and the notebook watch (#2682) with nothing.
 
 The collector feeds the engine, resolves relative paths against the run's
 cwd, converts to 0-based `ilsp.Diagnostic`s (Source = the configuration
