@@ -40,7 +40,11 @@ func termRefRow(t *testing.T, m Model, key, ref string) (row, col int) {
 	for _, r := range "printf '" + ref + "\\n'\r" {
 		inst.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
-	deadline := time.Now().Add(5 * time.Second)
+	// The wait covers the shell's spawn, not just the printf: a real shell on
+	// a pty answers in milliseconds, and the bound is sized for the hosted
+	// 4-core Linux runner, where the package's load has stretched a spawn
+	// past five seconds (#2997, #3000).
+	deadline := time.Now().Add(15 * time.Second)
 	for time.Now().Before(deadline) {
 		for y, line := range strings.Split(ansi.Strip(inst.Terminal().View()), "\n") {
 			if strings.TrimRight(line, " ") == ref {
