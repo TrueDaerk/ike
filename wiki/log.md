@@ -1,5 +1,19 @@
 # Log
 
+## 2026-10-14 (big-file open off the loop, line-scoped ndjson highlighting, #2996)
+
+- [Editor](/architecture/editor.md): "Asynchronous open" under large-file
+  mode — `asyncLoadBytes`, the placeholder, `LoadMsg`, `TakeLoadCmd` /
+  `ResumeLoadCmd`, `LoadSync`, the `[loading…]` badge; the line-scoped
+  exemption in the degradation list.
+- [Syntax Highlighting](/architecture/highlighting.md): "Line-scoped
+  parsing" — the parse window, the per-line text cache, windowed `SpansMsg`,
+  `ScrollCmd`.
+- [Language Registry](/architecture/languages.md): `Language.LineScoped` and
+  the "Line-scoped languages" section.
+- [Performance & Diagnostics](/architecture/performance.md): the #2996
+  measurement and the before/after tables.
+
 ## 2026-10-14 (long pipe tables: a caret move lays out rows, never the block, #2993)
 
 - [Editor](/architecture/editor.md): "A caret move never re-renders a block"

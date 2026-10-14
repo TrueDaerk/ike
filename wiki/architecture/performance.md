@@ -4,7 +4,7 @@ title: Performance & Diagnostics
 description: Idle-behavior rules (who may wake the render loop, and how often), the render budget and the always-on per-message-type pass accounting, the per-keystroke fan-out budget while typing (#2541), the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, the heartbeat freeze dump (#2627), the opt-in update-loop trace log, the freeze-triage procedure, the selection-overlay rule for drag latency (#2495), and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/perfhud
 tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog, startup, freeze, render-budget]
-timestamp: 2026-10-14T09:00:00Z
+timestamp: 2026-10-14T11:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -962,6 +962,46 @@ The rules this adds:
 - **Byte offsets convert in one pass.** `search.runeCounter` replaced the
   per-match `runeCol` rescan; anything mapping many byte offsets on one line
   to rune columns walks the line once.
+
+## Big-file open and line-scoped highlighting (#2996)
+
+Opening a very large ndjson file froze the IDE until it was loaded and
+highlighted. Measured with two generated fixtures (`ndjsonFixture` in
+`internal/editor/ndjson_fixture_test.go`: 200 000 lines × 500 B ≈ 100 MB,
+and 2 000 lines × 450 B ≈ 900 KB, just under the cliff) in-package
+(`TestNDJSONOpenPhases`) and in the real binary (tmux, `startup:` line,
+`perf.trace_log`), the stall had three parts, none of which the
+instrumentation attributed before:
+
+| Step | 900 KB fixture | 100 MB fixture |
+| --- | --- | --- |
+| `os.ReadFile` + decode + split (`Load`, on the loop) | 2 ms | 57 ms warm cache |
+| `watch.Track` content hash on the CLI open (before `StartWatcher` capped it) | — | 43 ms |
+| whole-document parse (off-loop; past the cliff only when forced / raised) | 138 ms | 42 **s** |
+| `SpansMsg` landing: index of every span (on the loop) | 4.8 ms (68k spans) | 684 ms (7M spans) |
+| first `View` (long lines are already windowed, #2734) | 10 ms | 7 ms |
+
+So on a warm page cache the 100 MB open was ~100 ms before the first frame
+(`cli-open 98ms`, first frame 116 ms) — seconds on a cold disk — and any
+ndjson file the user had raised the cliff for paid the whole-document parse
+plus a sub-second index stall. After #2996:
+
+| Measure | Before | After |
+| --- | --- | --- |
+| 100 MB: `cli-open` phase / first frame | 98 ms / 116 ms | 1 ms / 18 ms |
+| 100 MB: on-loop landing cost | 57 ms `Load` (+43 ms hash) | 37 µs (`LoadMsg`) |
+| 100 MB: parse per window (60 lines) / landing | 42 s / 684 ms (if parsed) | 5 ms / 0.1 ms |
+| 900 KB: parse / landing | 138 ms / 4.8 ms | 4 ms / 0.2 ms |
+| longest Update pass during the open | no `slow update` line (200 ms threshold) | none |
+
+The 100 MB file read landed ~80 ms after start with the tab, status line
+(`[large file · loading…]`) and keys live meanwhile. The three changes: the
+asynchronous open path (`/architecture/editor.md`, "Asynchronous open"),
+line-scoped parsing for `ndjson` (`/architecture/highlighting.md`,
+"Line-scoped parsing") and the watcher's hash cap set at construction. The
+long-line render path needed nothing: `renderLine` already bounds its
+decoration scans to the window (#2734), and the first `View` of 5 000-cell
+lines measured 7–10 ms.
 
 ## Long pipe tables: a caret move lays out rows, never the block (#2993)
 

@@ -124,32 +124,43 @@ func (m *Model) applyEditorSync(msg editor.SyncMsg) tea.Cmd {
 	}
 	// Markdown previews of the document re-render debounced off the same
 	// seam (#62), pulling the text fresh from the originating editor.
-	previews := m.previewsForPath(msg.Path)
-	htmlPreviews := m.htmlPreviewsForPath(msg.Path)
-	if len(previews) > 0 || len(htmlPreviews) > 0 {
-		src := skip
-		if src == nil {
-			if key := m.editorWithFile(msg.Path); key != "" {
-				src = m.activeWS().Panes.Get(key).EditorForPath(msg.Path)
-			}
-		}
-		if src != nil {
-			text := src.Text()
-			line, _ := src.CursorPos()
-			for _, inst := range previews {
-				if cmd := inst.Preview().SetSource(text); cmd != nil {
-					cmds = append(cmds, cmd)
-				}
-				inst.Preview().SetCursorLine(line)
-			}
-			// HTML previews (#2740) ride the same seam and debounce.
-			for _, inst := range htmlPreviews {
-				if cmd := inst.HTMLPreview().SetSource(text); cmd != nil {
-					cmds = append(cmds, cmd)
-				}
-				inst.HTMLPreview().SetCursorLine(line)
-			}
+	cmds = append(cmds, m.syncPreviewsFor(msg.Path, skip)...)
+	return tea.Batch(cmds...)
+}
+
+// syncPreviewsFor re-renders every markdown and HTML preview of path from
+// src — the originating editor, or any view of the file when nil. The sync
+// seam above calls it per change; an asynchronous load landing (#2996)
+// calls it too, since the preview opened against the empty placeholder.
+func (m *Model) syncPreviewsFor(path string, src *editor.Model) []tea.Cmd {
+	previews := m.previewsForPath(path)
+	htmlPreviews := m.htmlPreviewsForPath(path)
+	if len(previews) == 0 && len(htmlPreviews) == 0 {
+		return nil
+	}
+	if src == nil {
+		if key := m.editorWithFile(path); key != "" {
+			src = m.activeWS().Panes.Get(key).EditorForPath(path)
 		}
 	}
-	return tea.Batch(cmds...)
+	if src == nil {
+		return nil
+	}
+	var cmds []tea.Cmd
+	text := src.Text()
+	line, _ := src.CursorPos()
+	for _, inst := range previews {
+		if cmd := inst.Preview().SetSource(text); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		inst.Preview().SetCursorLine(line)
+	}
+	// HTML previews (#2740) ride the same seam and debounce.
+	for _, inst := range htmlPreviews {
+		if cmd := inst.HTMLPreview().SetSource(text); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
+		inst.HTMLPreview().SetCursorLine(line)
+	}
+	return cmds
 }

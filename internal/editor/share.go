@@ -93,6 +93,18 @@ func (m *Model) ShareDocumentWith(src *Model) {
 	m.hlIndex = src.hlIndex
 	m.semIndex = src.semIndex
 	m.hlVersion = src.hlVersion
+	// A line-scoped index (#2996) covers the source view's window; this
+	// view's own windowParseCmd re-parses once it scrolls elsewhere.
+	m.hlWindowed, m.hlWinFrom, m.hlWinTo = src.hlWindowed, src.hlWinFrom, src.hlWinTo
+	// A document still loading (#2996) lands in both views: the LoadMsg is
+	// routed by key, and the copied generation lets this view accept it.
+	// Cancelling here never touches the source's goroutine — the generation
+	// store stays per view.
+	m.cancelLoad()
+	m.loading = src.loading
+	if m.loading != nil {
+		m.readOnly = true // no edit lands in the placeholder (asyncload.go)
+	}
 	// Fold ranges are document-derived and travel with the share — the
 	// server-provided set (#1912) included; the collapsed set is per-view
 	// state (#144) and starts empty.

@@ -9,6 +9,7 @@ package app
 
 import (
 	"fmt"
+	"ike/internal/editor"
 	"os"
 	"path/filepath"
 	"strings"
@@ -117,8 +118,13 @@ func TestHTMLPreviewLargePageTruncated(t *testing.T) {
 	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	tm, _ := m.openPath(path, false)
+	tm, openCmd := m.openPath(path, false)
 	m = tm.(Model)
+	// A 5 MB file reads off the loop (#2996): land it before asking for the
+	// preview, which otherwise renders the empty placeholder.
+	if lm, ok := asyncLoadRunCmds(openCmd).(editor.LoadMsg); ok {
+		m = step(m, lm)
+	}
 
 	start := time.Now()
 	out, _ := m.Update(HTMLPreviewMsg{})

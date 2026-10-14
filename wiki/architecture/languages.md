@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-10-13T18:00:00Z
+timestamp: 2026-10-14T11:00:00Z
 ---
 
 # Language Registry
@@ -38,6 +38,7 @@ type Language struct {
     SpaceAfter   []rune     // punctuation typed with a following space (#1326): ':' in JSON
     ScopeNodes   []string   // sticky-scroll scope node kinds (#168); empty = inert
     FoldNodes    []string   // foldable region node kinds (#144); empty = ScopeNodes
+    LineScoped   bool       // every line is its own document (#2996): parsed per visible line; ndjson
     Complexity   *ComplexitySpec // complexity node kinds + boolean operators (#2914); nil = not measured
     Postfix          []PostfixTemplate // postfix-completion templates (#1913); empty = inert
     PostfixExprNodes []string          // Tree-sitter kinds that count as the expression before the dot
@@ -91,6 +92,21 @@ before the dot. Go declares `if`/`nil`/`err`/`for`/`range`/`ret`/`var`/`print`,
 Python `if`/`for`/`ret`/`print`/`not`/`len`; a language declaring none leaves
 the feature inert for its files. `PostfixFor(path)` resolves both for a buffer.
 See [completion](./completion.md).
+
+### Line-scoped languages (#2996)
+
+`LineScoped: true` marks a line-oriented format whose every line is a
+complete, independent document of the grammar — `ndjson`/`jsonl`, one JSON
+value per line. The editor then never parses the buffer as a whole: it
+parses the visible lines (plus a margin) one at a time, caches their spans by
+line text and re-parses on scroll, so highlighting costs the viewport, not
+the file, and stays on past the large-file cliff (only the parse is exempt;
+LSP sync, the VCS gutter and the rest keep their gate). Folds and sticky
+scopes are not collected for such a language (`FoldNodes` may stay declared
+for the grammar's sake). The default, `false`, parses the buffer as one
+document — `json` keeps it, since a `.json` file is one document and its
+error recovery across lines matters. See `/architecture/highlighting.md`,
+"Line-scoped parsing".
 
 ### User file associations (#1365)
 

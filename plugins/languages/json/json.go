@@ -8,7 +8,9 @@
 //
 // ndjson/jsonl registers as its own language id sharing the grammar but
 // deliberately **without** a server: the JSON server treats multiple top-level
-// values as an error and would flag every line of a stream.
+// values as an error and would flag every line of a stream. It is LineScoped
+// (#2996): the editor highlights it per visible line instead of parsing the
+// whole stream as one document.
 //
 // Comment syntax stays empty even though the jsonc extension maps here: strict
 // JSON has no comments, and advertising "//" would let comment-toggle corrupt
@@ -69,6 +71,12 @@ func init() {
 		ID:         "ndjson",
 		Extensions: []string{"ndjson", "jsonl"},
 		Grammar:    g,
+		// Every line is its own JSON document (#2996): the editor parses the
+		// visible lines, not the stream, so a 100 MB log highlights like a
+		// 1 KB one. FoldNodes stay declared for the grammar's sake, but a
+		// line-scoped parse collects no folds (one line has no multi-line
+		// object to collapse).
+		LineScoped: true,
 		FoldNodes:  []string{"object", "array"},
 		SpaceAfter: []rune{':'},
 		Spans:      jsonSpans,

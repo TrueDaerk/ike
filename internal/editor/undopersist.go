@@ -25,10 +25,20 @@ func (m Model) persistentUndo() bool {
 // large-file mode (#149) opt out entirely — load stays flat, no hashing.
 func (m *Model) restoreUndo(data []byte) {
 	if m.largeFile {
-		m.diskHash = ""
+		m.restoreUndoHash("")
 		return
 	}
-	m.diskHash = undostore.Hash(data)
+	m.restoreUndoHash(undostore.Hash(data))
+}
+
+// restoreUndoHash is restoreUndo with the on-disk hash already computed —
+// off the loop for an asynchronous load (#2996); "" means a large file,
+// whose undo is never persisted.
+func (m *Model) restoreUndoHash(hash string) {
+	m.diskHash = hash
+	if hash == "" {
+		return
+	}
 	// A vault document (#2293) opts out of persistent undo entirely: the
 	// snapshots would carry decrypted text into ~/.ike in plaintext.
 	if m.vault || !m.persistentUndo() {

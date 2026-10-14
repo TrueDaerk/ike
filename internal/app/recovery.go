@@ -446,7 +446,9 @@ func (m *Model) restoreSnapshot(snap backup.Snapshot) tea.Cmd {
 			}
 			// Establish the path from the base file when it still exists; a deleted
 			// base just leaves the recovered text under no path.
-			loaded = inst.Editor().Load(snap.Path) == nil
+			// Synchronous (#2996): the recovered text lands as an edit
+			// against the on-disk version right below.
+			loaded = inst.Editor().LoadSync(snap.Path) == nil
 		}
 	} else {
 		key = m.spawnEditor()

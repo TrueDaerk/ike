@@ -13,7 +13,6 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"ike/internal/ansiblevault"
 	"ike/internal/complete/mru"
 	"ike/internal/concealfilter"
 	"ike/internal/coverage"
@@ -419,6 +418,19 @@ type Model struct {
 	// first (#2770, parsegate.go); a pointer so every value copy of the
 	// Model shares it.
 	parseGate *parseGate
+	// Line-scoped highlighting (#2996, linescoped.go): the per-line parse
+	// cache (a shared pointer like parseGate) and the window the last
+	// landed parse covered — hlIndex holds spans only for [hlWinFrom,
+	// hlWinTo) while hlWindowed is set.
+	lineSpans          *lineSpanCache
+	hlWindowed         bool
+	hlWinFrom, hlWinTo int
+	// Asynchronous load (#2996, asyncload.go): the per-view cancellation
+	// generation, the load the view waits for and the parked command that
+	// reads the file.
+	load    *loadStore
+	loading *pendingLoad
+	loadCmd tea.Cmd
 	// Rich inline rendering. conceal holds the per-line concealed column
 	// ranges split out of the same parse as hlIndex — markdown marker chrome
 	// (@conceal captures, #881) and stand-in replacements like decoded
@@ -868,6 +880,8 @@ func New() Model {
 		parseTag:           nextParseTag(),
 		sbcache:            &sbCache{},
 		parseGate:          &parseGate{},
+		lineSpans:          newLineSpanCache(),
+		load:               newLoadStore(),
 		stickyCache:        &stickyStore{},
 		foldIdx:            &foldIndex{},
 		mode:               Normal,
@@ -1159,28 +1173,35 @@ func (m *Model) applyLangIndent() {
 // bytes are decoded (#66): a BOM or the files.encoding fallback picks the
 // character encoding, the line-ending flavor is detected and remembered for
 // save, and mixed line endings surface as a warning on the ex line.
+//
+// A file of asyncLoadBytes or more loads off the update loop (#2996,
+// asyncload.go): Load installs an empty read-only placeholder under the
+// path, returns nil at once and parks the command that reads the file —
+// the caller batches TakeLoadCmd into its returned command, and the result
+// lands as a LoadMsg. A read error of such a file therefore surfaces on the
+// ex line (and through the app's LoadMsg handling), not as Load's error.
+// Callers that need the text in hand use LoadSync.
 func (m *Model) Load(path string) error {
+	st, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if st.IsDir() || st.Size() < asyncLoadBytes {
+		return m.LoadSync(path)
+	}
+	m.loadAsync(path, st.Size())
+	return nil
+}
+
+// LoadSync is Load on the calling goroutine regardless of size: the merge
+// tool, the diff-side editor and crash recovery need the text before they
+// return. Tests use it where they assert on the buffer right after the call.
+func (m *Model) LoadSync(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	// Transparent Ansible Vault editing (#2293): an `$ANSIBLE_VAULT;` file
-	// decrypts into the buffer when a password source is available; save
-	// re-encrypts. Without a source — or with the wrong password — the
-	// ciphertext loads as before, with the reason on the ex line. raw keeps
-	// the on-disk bytes: diskHash must describe the file, not the buffer.
-	raw := data
-	isVault, vaultPass, vaultLabel := false, "", ""
-	vaultNote := ""
-	if ansiblevault.IsVault(data) {
-		plain, pass, note := m.decryptVault(data)
-		if note != "" {
-			vaultNote = note
-		} else {
-			isVault, vaultPass, vaultLabel = true, pass, ansiblevault.Label(data)
-			data = plain
-		}
-	}
+	m.cancelLoad() // the text this read replaces is no longer awaited (#2996)
 	// Resolve .editorconfig before decoding: its charset is the decode
 	// fallback (#63). Restore the previous identity if the decode fails, so a
 	// failed :e leaves the open buffer untouched.
@@ -1188,16 +1209,34 @@ func (m *Model) Load(path string) error {
 	m.path = path
 	m.clearLangOverride() // the file name classifies the buffer now (#2033)
 	m.resolveEditorconfig()
-	text, info, err := textenc.Decode(data, m.fallbackEncoding())
+	// Transparent Ansible Vault editing (#2293) happens inside buildDoc: an
+	// `$ANSIBLE_VAULT;` file decrypts into the buffer when a password source
+	// is available; save re-encrypts. Without a source — or with the wrong
+	// password — the ciphertext loads as before, with the reason on the ex
+	// line. The undo hash describes the on-disk bytes, not the buffer.
+	doc, err := buildDoc(data, m.loadInputsFor())
 	if err != nil {
 		m.path, m.ec, m.langOverride = prevPath, prevEC, prevLang
 		return err
 	}
-	m.buf = buffer.FromString(text)
+	m.installDoc(path, prevPath, doc)
+	return nil
+}
+
+// installDoc makes doc the view's document under path — the per-document
+// reset every load performs: buffer, language sniff, breakpoints and marks,
+// encoding and line endings, vault state, the large-file flag, cursor and
+// mode, history and the cached insight layers. Shared by the synchronous
+// load, the async placeholder and the async landing, so all three leave the
+// view in the same state. prevPath is the path before this load (the
+// dependency-file confirmation survives a reload of the same path).
+func (m *Model) installDoc(path, prevPath string, doc loadedDoc) {
+	m.buf = doc.buf
 	m.sniffLanguage()
 	m.seedBreakpointLines()
 	m.seedMarkLines()
 	m.clearLocalMarks() // local marks belong to the previous content (#1151)
+	info := doc.info
 	m.eol, m.enc, m.mixedEOL = info.EOL, info.Encoding, info.MixedEOL
 	if eol, ok := m.editorconfigEOL(); ok {
 		// end_of_line applies on save, like every EditorConfig client: the
@@ -1209,12 +1248,12 @@ func (m *Model) Load(path string) error {
 		m.cmdMsg = "W: mixed line endings, first is " + string(info.EOL) +
 			" — saving normalizes; file.setLineEndings converts explicitly"
 	}
-	m.vault, m.vaultPass, m.vaultLabel = isVault, vaultPass, vaultLabel
-	if vaultNote != "" {
-		m.cmdMsg = vaultNote
+	m.vault, m.vaultPass, m.vaultLabel = doc.vault, doc.vaultPass, doc.vaultLabel
+	if doc.vaultNote != "" {
+		m.cmdMsg = doc.vaultNote
 	}
-	m.largeFile = m.limits().Exceeded(int64(len(data)), m.buf.LineCount())
-	m.docBytes = int64(len(data))
+	m.largeFile = doc.large
+	m.docBytes = doc.bytes
 	m.readOnly = false // a real file replaced any read-only preview (#1762)
 	// A different file in the same view stops following (#1928); the app's
 	// follow tick self-stops once no view follows. A real file also replaces
@@ -1242,9 +1281,10 @@ func (m *Model) Load(path string) error {
 	m.hist = history.New()
 	m.changes = changeList{} // the change list follows the history (#1174)
 	m.pendingImport = nil    // a late auto-import belongs to the text that was just replaced (#2610)
-	m.restoreUndo(raw)       // hash the on-disk bytes — for a vault file the ciphertext
+	m.restoreUndoHash(doc.hash)
 	m.docVersion++
 	m.hlIndex = highlight.Index{}
+	m.hlWindowed = false // a fresh document has no parsed window yet (#2996)
 	m.conceal = nil
 	m.decodes = nil
 	m.notes = nil
@@ -1256,7 +1296,6 @@ func (m *Model) Load(path string) error {
 	m.lensesByLine = nil
 	m.applyConfig() // pick the .editorconfig overrides up before the next Update
 	m.scroll()
-	return nil
 }
 
 // NewFile points the editor at a not-yet-existing path (CLI open of a missing
@@ -1266,6 +1305,7 @@ func (m *Model) Load(path string) error {
 // discarding it by quitting loses nothing user-authored. Everything else
 // resets exactly like Load.
 func (m *Model) NewFile(path string) {
+	m.cancelLoad() // the text a pending load would install is no longer wanted (#2996)
 	m.path = path
 	m.clearLangOverride() // the file name classifies the buffer now (#2033)
 	m.resolveEditorconfig()
@@ -1479,6 +1519,12 @@ func (m Model) thresholds() largefile.Thresholds {
 // once the load-time size exceeds it. ForceCodeInsight lifts every feature at
 // once, matching the base override.
 func (m Model) FeatureOff(f largefile.Feature) bool {
+	// A line-scoped language (#2996) parses only the visible lines, so its
+	// highlight cost is bounded by the pane, not the file: the parse is
+	// exempt from the cliff while every other service keeps its gate.
+	if f == largefile.FeatureHighlight && m.lineScoped() {
+		return false
+	}
 	if m.largeFile {
 		return !largefile.Forced(m.path)
 	}
@@ -1581,6 +1627,12 @@ func (m *Model) SelectionText() (text string, ok bool) {
 // interactive motions — otherwise position-based actions (rename, references)
 // right after a jump would query the pre-jump location (#371).
 func (m *Model) SetCursor(line, col int) {
+	if m.loading != nil {
+		// The text is still on its way (#2996): park the request and apply
+		// it when the load lands, instead of clamping it against the
+		// placeholder's single empty line.
+		m.loading.cursor = &buffer.Position{Line: line, Col: col}
+	}
 	m.bumpRender() // the cursor cell + current-line styling move (#614)
 	m.cursor = m.buf.ClampCursor(buffer.Position{Line: line, Col: col})
 	m.desiredCol = m.cursor.Col
@@ -1720,6 +1772,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case tea.KeyPressMsg, ActionMsg:
 		nm.refreshFollowPause()
 	}
+	// A line-scoped buffer (#2996) re-parses when the message scrolled the
+	// viewport out of the last parsed window; nil for every other buffer.
+	if pc := nm.windowParseCmd(); pc != nil {
+		cmd = tea.Batch(cmd, pc)
+	}
 	return nm, cmd
 }
 
@@ -1735,6 +1792,9 @@ func (m Model) updateMsg(msg tea.Msg) (Model, tea.Cmd) {
 	case SearchScanMsg:
 		// A background search landing (#2734, searchscan.go).
 		return m.applySearchScan(msg)
+	case LoadMsg:
+		// An asynchronous load landing (#2996, asyncload.go).
+		return m.applyLoad(msg)
 	case highlight.SpansMsg:
 		// Accept a parse result only if it matches the current document and
 		// version; a newer edit since the parse was scheduled drops it.
@@ -1744,6 +1804,9 @@ func (m Model) updateMsg(msg tea.Msg) (Model, tea.Cmd) {
 			// disappears elsewhere.
 			style, conceal, extents, decodes := concealSplit(msg.Spans)
 			m.hlIndex = highlight.NewIndex(style)
+			// A line-scoped parse (#2996) covers a window of lines; the
+			// next scroll past it schedules the next one.
+			m.hlWindowed, m.hlWinFrom, m.hlWinTo = msg.Windowed, msg.WinFrom, msg.WinTo
 			m.conceal = conceal
 			m.concealExt = extents
 			m.decodes = decodes
@@ -2169,6 +2232,9 @@ const bottomOverscroll = 5
 // cursor, so the file reopens scrolled exactly as it was left. Apply it after the
 // editor has been sized.
 func (m *Model) SetScroll(top, left int) {
+	if m.loading != nil {
+		m.loading.top, m.loading.left, m.loading.hasScroll = top, left, true // parked, see SetCursor (#2996)
+	}
 	// Bounded overscroll past the end (#1134, #1535): scrolling stops with
 	// bottomOverscroll empty rows below the last line instead of an
 	// almost-empty screen, and never past the point where only the last line

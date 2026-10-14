@@ -64,6 +64,13 @@ func (m *Model) resolveVaultPassword() (pass, source string, err error) {
 // the file or the buffer.
 func (m *Model) decryptVault(data []byte) (plain []byte, pass, note string) {
 	pass, source, err := m.resolveVaultPassword()
+	return decryptVaultWith(data, pass, source, err)
+}
+
+// decryptVaultWith is decryptVault with the password source already
+// resolved (pass, source, err from resolveVaultPassword) — pure, so an
+// asynchronous load (#2996) runs it on its goroutine.
+func decryptVaultWith(data []byte, pass, source string, err error) (plain []byte, _ string, note string) {
 	if err != nil {
 		if errors.Is(err, ansiblevault.ErrNoPasswordSource) {
 			return nil, "", "W: Ansible Vault file — no password source (" +

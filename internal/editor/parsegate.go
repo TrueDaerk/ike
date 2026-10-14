@@ -35,6 +35,10 @@ type parseSnapshot struct {
 	langPath string
 	version  int
 	lines    []string
+	// A line-scoped snapshot (#2996, linescoped.go) holds only the parse
+	// window's lines; winFrom is the buffer line of lines[0].
+	windowed bool
+	winFrom  int
 }
 
 // parseGate is shared by every copy of a view's Model (a pointer field, like
