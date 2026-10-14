@@ -55,9 +55,9 @@ func (m *Model) histMetric() Column {
 // histCounts are the row's bucket counts and the metric's warning threshold.
 func (m *Model) histCounts() ([complexity.HistBucketCount]int, int) {
 	if m.histMetric() == ColCog {
-		return m.summary.CogHist, m.cogWarn
+		return m.summary.CogHist, m.global.Cog
 	}
-	return m.summary.CCNHist, m.ccnWarn
+	return m.summary.CCNHist, m.global.CCN
 }
 
 // histSegment is one bucket as the row draws it: the plain text and the

@@ -38,8 +38,15 @@ type change struct {
 }
 
 // flatten renders a staged value the way config.Flat renders the live one, so
-// a staged row and a written row read identically.
-func flatten(v any) string { return fmt.Sprint(v) }
+// a staged row and a written row read identically. A string list joins with
+// commas like Flat's list keys, so an element holding a space
+// (complexity.overrides' "legacy/** ccn=30", #2960) stays one element.
+func flatten(v any) string {
+	if l, ok := v.([]string); ok {
+		return strings.Join(l, ",")
+	}
+	return fmt.Sprint(v)
+}
 
 // value reads an entry's effective value: the staged one when the panel holds
 // an edit for it, otherwise the live config.

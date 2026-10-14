@@ -339,18 +339,18 @@ func TestSummarize(t *testing.T) {
 		{NLOC: 20, CCN: 15, Cognitive: 4},
 		{NLOC: 5, CCN: 1, Cognitive: 16},
 	}
-	s := Summarize(fns, 15, 15, 0)
+	s := Summarize(fns, Thresholds{CCN: 15, Cog: 15, Cmt: 0})
 	want := Summary{Functions: 3, NLOC: 35, CCNSum: 19, CCNAvg: 19.0 / 3, CCNMax: 15, CogSum: 22, CogAvg: 22.0 / 3, CogMax: 16, OverThreshold: 2, Excess: 1,
 		CCNP50: 3, CCNP90: 15, CCNP99: 15, CogP50: 4, CogP90: 16, CogP99: 16,
 		CCNHist: [5]int{2, 0, 1, 0, 0}, CogHist: [5]int{2, 0, 0, 1, 0}}
 	if s != want {
 		t.Errorf("Summarize = %+v, want %+v", s, want)
 	}
-	if s := Summarize(nil, 15, 15, 0); s != (Summary{}) {
+	if s := Summarize(nil, Thresholds{CCN: 15, Cog: 15, Cmt: 0}); s != (Summary{}) {
 		t.Errorf("Summarize(nil) = %+v, want zero", s)
 	}
 	// A non-positive threshold disables that check.
-	if s := Summarize(fns, 0, 15, 0); s.OverThreshold != 1 {
+	if s := Summarize(fns, Thresholds{CCN: 0, Cog: 15, Cmt: 0}); s.OverThreshold != 1 {
 		t.Errorf("OverThreshold with CCN check off = %d, want 1", s.OverThreshold)
 	}
 	// Comment density: summed lines, aggregate ratio, its own threshold.
@@ -358,11 +358,11 @@ func TestSummarize(t *testing.T) {
 		{NLOC: 6, CommentLines: 4, CommentDensity: 0.4},
 		{NLOC: 9, CommentLines: 1, CommentDensity: 0.1},
 	}
-	s = Summarize(cm, 0, 0, 40)
+	s = Summarize(cm, Thresholds{CCN: 0, Cog: 0, Cmt: 40})
 	if s.CommentLines != 5 || s.CommentDensity != 0.25 || s.OverThreshold != 1 {
 		t.Errorf("Summarize(comments) = %+v, want 5 lines, 0.25, 1 over", s)
 	}
-	if s := Summarize(cm, 0, 0, 0); s.OverThreshold != 0 {
+	if s := Summarize(cm, Thresholds{CCN: 0, Cog: 0, Cmt: 0}); s.OverThreshold != 0 {
 		t.Errorf("cmtWarn 0 must disable the check, got %d over", s.OverThreshold)
 	}
 }
@@ -372,18 +372,18 @@ func TestPercentiles(t *testing.T) {
 	for i := 1; i <= 100; i++ {
 		fns = append(fns, Function{CCN: 101 - i, Cognitive: i})
 	}
-	s := Summarize(fns, 0, 0, 0)
+	s := Summarize(fns, Thresholds{CCN: 0, Cog: 0, Cmt: 0})
 	if s.CCNP50 != 50 || s.CCNP90 != 90 || s.CCNP99 != 99 {
 		t.Errorf("CCN p50/p90/p99 over 1…100 = %d/%d/%d, want 50/90/99", s.CCNP50, s.CCNP90, s.CCNP99)
 	}
 	if s.CogP50 != 50 || s.CogP90 != 90 || s.CogP99 != 99 {
 		t.Errorf("cog p50/p90/p99 over 1…100 = %d/%d/%d, want 50/90/99", s.CogP50, s.CogP90, s.CogP99)
 	}
-	s = Summarize([]Function{{CCN: 7, Cognitive: 12}}, 0, 0, 0)
+	s = Summarize([]Function{{CCN: 7, Cognitive: 12}}, Thresholds{CCN: 0, Cog: 0, Cmt: 0})
 	if s.CCNP50 != 7 || s.CCNP90 != 7 || s.CCNP99 != 7 || s.CogP50 != 12 || s.CogP99 != 12 {
 		t.Errorf("single function percentiles = %+v, want its own values", s)
 	}
-	s = Summarize(nil, 0, 0, 0)
+	s = Summarize(nil, Thresholds{CCN: 0, Cog: 0, Cmt: 0})
 	if s.CCNP50 != 0 || s.CCNP90 != 0 || s.CCNP99 != 0 || s.CogP99 != 0 {
 		t.Errorf("empty percentiles = %+v, want 0", s)
 	}
@@ -431,11 +431,11 @@ func TestExcess(t *testing.T) {
 	if e := fns[0].Excess(15, 15); e != 20 {
 		t.Errorf("Excess(20/30) = %d, want 20", e)
 	}
-	if s := Summarize(fns, 15, 15, 0); s.Excess != 23 || s.OverThreshold != 3 {
+	if s := Summarize(fns, Thresholds{CCN: 15, Cog: 15, Cmt: 0}); s.Excess != 23 || s.OverThreshold != 3 {
 		t.Errorf("Summarize straddling = excess %d over %d, want 23 / 3", s.Excess, s.OverThreshold)
 	}
 	below := []Function{{CCN: 14, Cognitive: 14}, {CCN: 1, Cognitive: 0}}
-	if s := Summarize(below, 15, 15, 0); s.Excess != 0 {
+	if s := Summarize(below, Thresholds{CCN: 15, Cog: 15, Cmt: 0}); s.Excess != 0 {
 		t.Errorf("Summarize below = excess %d, want 0", s.Excess)
 	}
 	// A non-positive threshold disables its term.

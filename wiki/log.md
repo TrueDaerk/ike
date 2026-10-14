@@ -1,5 +1,23 @@
 # Log
 
+## 2026-10-14 (per-language and per-path thresholds, #2960)
+
+- [Code Complexity](/architecture/complexity.md): the new "Per-file
+  thresholds" paragraph under Summary — `Thresholds`, `Resolver`,
+  `ResolverFor` / `ThresholdsFor` (first matching `complexity.overrides`
+  entry, missing keys from the globals), `Summer` / `SummarizeFiles`, the
+  resolver taken by `View.Summary`, `GroupFunctions` and `DiffProject`, and
+  why the matching lives in `complexity` rather than `config`; the
+  `complexity.overrides` settings row; every surface's threshold sentence
+  (panel colours / totals and the File tab's `thresholds …` label, session
+  Δ, Changes diff, Problems feed, hint key `th`, site marks, CLI with
+  `--ccn` / `--cog` / `--cmt` beating the overrides).
+- [Settings UI](/architecture/settings-ui.md): the overrides list and its
+  validator on the Complexity page, and the list split fix: a lone
+  element holding a space is no longer split into its words.
+- The complexity user guide: the new "Different thresholds per path or
+  language" section; the settings reference regenerated.
+
 ## 2026-10-14 (directory tree view of the Project tab, #2954)
 
 - [Code Complexity](/architecture/complexity.md): the new "Tree view"

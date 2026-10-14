@@ -55,7 +55,7 @@ func TestPairUnitsAndBaseOf(t *testing.T) {
 	if got := PairUnits(base, head); !reflect.DeepEqual(got, []int{1, 0, 2, -1}) {
 		t.Fatalf("pairs = %v", got)
 	}
-	d := DiffProject(map[string][]Function{"m.go": base}, map[string][]Function{"m.go": head, "n.go": head}, 15, 15, 40)
+	d := DiffProject(map[string][]Function{"m.go": base}, map[string][]Function{"m.go": head, "n.go": head}, Uniform(Thresholds{CCN: 15, Cog: 15, Cmt: 40}))
 	if b, ok := d.BaseOf("m.go"); !ok || len(b) != 3 {
 		t.Errorf("BaseOf(m.go) = %v, %v", b, ok)
 	}
@@ -112,7 +112,7 @@ func TestDiffProjectSummariesAndVerdict(t *testing.T) {
 		"a.go": {unit("f", 0, 8, 4), unit("g", 10, 2, 1)},
 		"n.go": {unit("fresh", 0, 1, 0)}, // new file
 	}
-	d := DiffProject(base, head, 15, 15, 0)
+	d := DiffProject(base, head, Uniform(Thresholds{CCN: 15, Cog: 15, Cmt: 0}))
 	if d.Base.Functions != 3 || d.Base.CCNSum != 10 || d.Head.Functions != 3 || d.Head.CCNSum != 11 {
 		t.Fatalf("summaries = base %+v head %+v", d.Base, d.Head)
 	}
@@ -136,22 +136,22 @@ func TestDiffProjectVerdictTiebreakAndEmpty(t *testing.T) {
 	// ΣCCN equal (one up, one down), Σcognitive down: less complex.
 	base := map[string][]Function{"a.go": {unit("f", 0, 5, 9), unit("g", 10, 5, 1)}}
 	head := map[string][]Function{"a.go": {unit("f", 0, 6, 2), unit("g", 10, 4, 1)}}
-	d := DiffProject(base, head, 0, 0, 0)
+	d := DiffProject(base, head, Uniform(Thresholds{CCN: 0, Cog: 0, Cmt: 0}))
 	if d.DeltaCCN() != 0 || d.DeltaCognitive() != -7 || d.Verdict != LessComplex {
 		t.Fatalf("tiebreak: Δccn %d Δcog %d verdict %v", d.DeltaCCN(), d.DeltaCognitive(), d.Verdict)
 	}
 	// Cognitive up on equal CCN: more complex.
 	head["a.go"][0].Cognitive = 20
-	if d := DiffProject(base, head, 0, 0, 0); d.Verdict != MoreComplex {
+	if d := DiffProject(base, head, Uniform(Thresholds{CCN: 0, Cog: 0, Cmt: 0})); d.Verdict != MoreComplex {
 		t.Fatalf("cognitive rise must read more complex: %v", d.Verdict)
 	}
 	// Identical sides: unchanged, no files, empty.
-	same := DiffProject(base, base, 0, 0, 0)
+	same := DiffProject(base, base, Uniform(Thresholds{CCN: 0, Cog: 0, Cmt: 0}))
 	if !same.Empty() || same.Verdict != Unchanged || len(same.Files) != 0 || same.Verdict.String() != "unchanged" {
 		t.Fatalf("identical sides = %+v", same)
 	}
 	// Nothing at all.
-	none := DiffProject(nil, nil, 0, 0, 0)
+	none := DiffProject(nil, nil, Uniform(Thresholds{CCN: 0, Cog: 0, Cmt: 0}))
 	if !none.Empty() || none.Base.Functions != 0 || none.Head.Functions != 0 {
 		t.Fatalf("nil diff = %+v", none)
 	}
@@ -169,24 +169,24 @@ func TestDiffProjectVerdictReadsExcessFirst(t *testing.T) {
 	// Extracting a nested block: ΣCCN rises by one, the excess drops to 0.
 	base := map[string][]Function{"a.go": {unit("f", 0, 20, 30)}}
 	head := map[string][]Function{"a.go": {unit("f", 0, 12, 14), unit("fBlock", 20, 9, 6)}}
-	d := DiffProject(base, head, 15, 15, 0)
+	d := DiffProject(base, head, Uniform(Thresholds{CCN: 15, Cog: 15, Cmt: 0}))
 	if d.DeltaCCN() != 1 || d.DeltaExcess() != -20 || d.Verdict != LessComplex {
 		t.Fatalf("extraction: Δccn %d Δexcess %d verdict %v", d.DeltaCCN(), d.DeltaExcess(), d.Verdict)
 	}
 	// A trivial helper added to an otherwise unchanged file: unchanged.
 	head = map[string][]Function{"a.go": {unit("f", 0, 20, 30), unit("helper", 40, 1, 0)}}
-	if d := DiffProject(base, head, 15, 15, 0); d.Verdict != Unchanged || d.Empty() {
+	if d := DiffProject(base, head, Uniform(Thresholds{CCN: 15, Cog: 15, Cmt: 0})); d.Verdict != Unchanged || d.Empty() {
 		t.Fatalf("trivial helper: verdict %v Δccn %d", d.Verdict, d.DeltaCCN())
 	}
 	// Equal excess and cognitive, one more branch: more complex.
 	head = map[string][]Function{"a.go": {unit("f", 0, 21, 30)}}
-	if d := DiffProject(base, head, 0, 0, 0); d.DeltaDecisions() != 1 || d.Verdict != MoreComplex {
+	if d := DiffProject(base, head, Uniform(Thresholds{CCN: 0, Cog: 0, Cmt: 0})); d.DeltaDecisions() != 1 || d.Verdict != MoreComplex {
 		t.Fatalf("decision tiebreak: %d %v", d.DeltaDecisions(), d.Verdict)
 	}
 	// One function crossing the threshold: 14 → 16 is excess 0 → 1.
 	base = map[string][]Function{"a.go": {unit("f", 0, 14, 3), unit("g", 10, 2, 1)}}
 	head = map[string][]Function{"a.go": {unit("f", 0, 16, 3), unit("g", 10, 2, 1)}}
-	if d := DiffProject(base, head, 15, 15, 0); d.DeltaExcess() != 1 || d.Verdict != MoreComplex {
+	if d := DiffProject(base, head, Uniform(Thresholds{CCN: 15, Cog: 15, Cmt: 0})); d.DeltaExcess() != 1 || d.Verdict != MoreComplex {
 		t.Fatalf("threshold crossing: Δexcess %d verdict %v", d.DeltaExcess(), d.Verdict)
 	}
 }
@@ -206,7 +206,7 @@ func TestDiffByFile(t *testing.T) {
 		"b.go":    {unit("shrink", 0, 4, 3)},
 		"same.go": {unit("same", 3, 5, 5)},
 	}
-	fs := DiffProject(base, head, 15, 15, 40).ByFile()
+	fs := DiffProject(base, head, Uniform(Thresholds{CCN: 15, Cog: 15, Cmt: 40})).ByFile()
 	if len(fs) != 2 {
 		t.Fatalf("ByFile = %+v, want a.go and b.go", fs)
 	}

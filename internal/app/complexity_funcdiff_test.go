@@ -231,7 +231,7 @@ func TestComplexityFunctionDiffRanged(t *testing.T) {
 	}
 	m := changesApp(t)
 	m.vcs.snap = snap
-	msg := runComplexityDiff(cxDiffJob{key: cxDiffKey{rev: "main..HEAD", rangeGen: 1}, repoRoot: root, projRoot: root, ccnWarn: 15, cogWarn: 15}).(complexityDiffMsg)
+	msg := runComplexityDiff(cxDiffJob{key: cxDiffKey{rev: "main..HEAD", rangeGen: 1}, repoRoot: root, projRoot: root, res: complexity.Uniform(complexity.Thresholds{CCN: 15, Cog: 15})}).(complexityDiffMsg)
 	if msg.err != "" {
 		t.Fatal(msg.err)
 	}

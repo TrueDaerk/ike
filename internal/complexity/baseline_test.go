@@ -192,7 +192,7 @@ func TestOrdinalsAndStamp(t *testing.T) {
 	// Summarize: only new and worsened over-threshold units count, the
 	// accepted one moves to Accepted and out of the excess.
 	fns = append(fns, Function{Name: "h", CCN: 40, Cognitive: 50})
-	s := Summarize(fns, 15, 15, 0)
+	s := Summarize(fns, Thresholds{CCN: 15, Cog: 15, Cmt: 0})
 	if s.OverThreshold != 2 || s.Accepted != 1 || s.Worsened != 1 || s.Excess != (17-15)+(40-15)+(50-15) {
 		t.Fatalf("summary over=%d accepted=%d worsened=%d excess=%d", s.OverThreshold, s.Accepted, s.Worsened, s.Excess)
 	}
@@ -200,7 +200,7 @@ func TestOrdinalsAndStamp(t *testing.T) {
 	for i := range fns {
 		fns[i].Baseline = BaselineNew
 	}
-	if s := Summarize(fns, 15, 15, 0); s.OverThreshold != 3 || s.Accepted != 0 || s.Excess != 5+2+25+35 {
+	if s := Summarize(fns, Thresholds{CCN: 15, Cog: 15, Cmt: 0}); s.OverThreshold != 3 || s.Accepted != 0 || s.Excess != 5+2+25+35 {
 		t.Fatalf("unstamped summary over=%d accepted=%d excess=%d", s.OverThreshold, s.Accepted, s.Excess)
 	}
 	// A nil baseline's Stamp leaves everything new.

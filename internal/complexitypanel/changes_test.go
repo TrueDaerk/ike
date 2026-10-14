@@ -27,7 +27,7 @@ func sampleChanges() Changes {
 	return Changes{
 		Rev:     "HEAD",
 		Sha:     "abc1234",
-		Diff:    complexity.DiffProject(base, head, 15, 15, 40),
+		Diff:    complexity.DiffProject(base, head, complexity.Uniform(complexity.Thresholds{CCN: 15, Cog: 15, Cmt: 40})),
 		Dirty:   map[string]bool{"/proj/internal/app/app.go": true},
 		Renames: []string{"internal/ui/old.go → internal/ui/list.go"},
 		Ready:   true,

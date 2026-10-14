@@ -10,8 +10,10 @@ CI pipelines and coding agents: `ike complexity`.
 
 Settings live under `[complexity]` (Settings ▸ Complexity): `exclude` globs,
 the warning thresholds `ccn_warn` / `cognitive_warn` (15 by default) and
-`comment_density_warn` (40 % by default, `0` turns it off), the
-hotspot window `churn_days` (90 by default) and the `baseline` switch
+`comment_density_warn` (40 % by default, `0` turns it off), per-path and
+per-language `overrides` of those thresholds (see
+[Different thresholds per path or language](#different-thresholds-per-path-or-language)),
+the hotspot window `churn_days` (90 by default) and the `baseline` switch
 (on by default) that applies the project's accepted-debt file (see
 [Accepted debt: the baseline](#accepted-debt-the-baseline)).
 
@@ -142,6 +144,38 @@ mark that does not fit whole at the end of the line is not shown. Press `m`
 on a function row (or one of its site lines) in the Complexity window to
 paint that function's marks once, whatever the mode — the file opens if it
 is not open yet; the marks stay until you type in the buffer.
+
+## Different thresholds per path or language
+
+One set of limits rarely fits a whole project: legacy code, generated files
+and tests can live with more, a strict core wants less. `complexity.overrides`
+(Settings ▸ Complexity ▸ Threshold overrides) is a list of entries
+`<selector> ccn=N cog=N cmt=N`:
+
+```toml
+[complexity]
+overrides = ["legacy/** ccn=30 cog=30", "lang:php cog=25 cmt=0", "*_test.go ccn=40 cog=40"]
+```
+
+- The **selector** is a glob over the project-relative path, with the same
+  rules as `exclude` (`legacy/**`; a pattern without a slash also matches the
+  file name anywhere, `*_test.go`), or `lang:<id>` for every file of a
+  language (`lang:php`, `lang:go`).
+- Each of `ccn=` (1–200), `cog=` (1–200) and `cmt=` (0–100, `0` off) is
+  optional — a key the entry leaves out keeps the global value — but an
+  entry needs at least one.
+- The **first** matching entry, in list order, decides; a file no entry
+  matches keeps the global thresholds.
+
+The file's thresholds apply everywhere a threshold does: the Complexity
+window's warning colours and `over` / `excess` totals (the File tab's header
+names the thresholds in force, `thresholds ccn 30 cog 30 (legacy/**)`), the
+inline hints and site marks, the Problems feed, the Changes tab and its
+status segment, the baseline's *accept all*, and `ike complexity` — where an
+explicit `--ccn` / `--cog` / `--cmt` still beats every override. The
+Settings form refuses a malformed entry with a message naming it; a bad
+entry in a settings file is dropped with a warning. A change applies at
+once — the Problems rows and the hints follow without a restart.
 
 ## Per class and per file
 
@@ -367,7 +401,7 @@ ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json] 
 | `--brief`, `--brief=class` | Print one compact line per file (or per class), no header and no summary: `<path>  [<Class>]  funcs=12  nloc=340  ccn=48  cog=61  max=14/19  cmt=8%` — `ccn` / `cog` are sums, `max` is the largest CCN / cognitive complexity. At the class level a file's free functions and lambdas get one extra `(free)` line. Filters like `--by`; with `--json` the output is that of `--by file` / `--by class`. Not combinable with `--by` or `--diff`. |
 | `--json` | Print JSON instead of text (fields below). |
 | `--min N` | Only list functions whose CCN **or** cognitive complexity is at least `N`. |
-| `--ccn N`, `--cog N` | Override the warning thresholds; given explicitly they also filter the rows to functions at or above either one. |
+| `--ccn N`, `--cog N` | Override the warning thresholds — the global ones and every `complexity.overrides` entry; given explicitly they also filter the rows to functions at or above either one. |
 | `--cmt N` | Override the comment-density threshold (percent, 1-100); like `--ccn` / `--cog` it also filters the rows to functions at or above any threshold. |
 | `--no-tests` | Leave test files out (the same rule as `t` in the Complexity window, see [Hiding test files](#hiding-test-files)): the table, the groups, `--brief`, the summary and `--diff` ignore them; a line `tests hidden: N files` follows the summary and the JSON `summary` carries `"tests_hidden": true`. A test file you name explicitly is still measured. |
 | `--sites` | With `--json`: add `sites` and `candidates` to every function (and to the `after` side of every changed function under `--diff`), the per-site breakdown and the extraction proposals of [Why is this function complex?](#why-is-this-function-complex). The text table does not change; without the flag the JSON is exactly what it was. |

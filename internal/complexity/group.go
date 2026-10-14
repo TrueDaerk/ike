@@ -64,9 +64,10 @@ type Group struct {
 
 // GroupFunctions folds files (functions per path) into the groups of level
 // by: one per (file, class) for ByClass, one per file for ByFile; nil for
-// ByNone. Each group is Summarize over its units with the given thresholds.
+// ByNone. Each group is Summarize over its units with the thresholds res
+// resolves for its file.
 // The order is stable: CCN sum descending, then file, then class.
-func GroupFunctions(files map[string][]Function, by Level, ccnWarn, cogWarn, cmtWarn int) []Group {
+func GroupFunctions(files map[string][]Function, by Level, res Resolver) []Group {
 	if by != ByClass && by != ByFile {
 		return nil
 	}
@@ -87,7 +88,7 @@ func GroupFunctions(files map[string][]Function, by Level, ccnWarn, cogWarn, cmt
 	out := make([]Group, 0, len(members))
 	for k, fns := range members {
 		g := Group{File: k.file, Class: k.class, Line: fns[0].Line,
-			Summary: Summarize(fns, ccnWarn, cogWarn, cmtWarn)}
+			Summary: Summarize(fns, res(k.file))}
 		for _, f := range fns {
 			if f.Line < g.Line {
 				g.Line = f.Line

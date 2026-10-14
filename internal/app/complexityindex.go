@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"ike/internal/complexity"
+	"ike/internal/complexitypanel"
 	"ike/internal/config"
 	"ike/internal/host"
 	"ike/internal/telemetry"
@@ -62,6 +63,38 @@ func complexityOptions(c config.Complexity) complexity.Options {
 	return complexity.Options{Enabled: c.Enabled, Exclude: append([]string(nil), c.Exclude...)}
 }
 
+// complexityRoot is the root complexity paths are project-relative to: the
+// index's, "" without an index.
+func (m *Model) complexityRoot() string {
+	if m.complexityIndex == nil {
+		return ""
+	}
+	return m.complexityIndex.Root()
+}
+
+// complexityResolver resolves a file's warning thresholds under c (#2960):
+// the first complexity.overrides entry matching it, the globals otherwise.
+// Every threshold consumer — the panel, the hints, the Problems feed, the
+// Changes diff and the status segment — judges through one.
+func (m *Model) complexityResolver(c config.Complexity) complexity.Resolver {
+	return complexity.ResolverFor(c, m.complexityRoot())
+}
+
+// setComplexityPanelThresholds hands the tool window c's thresholds: the
+// globals, and the resolver while there are overrides.
+func (m *Model) setComplexityPanelThresholds(p *complexitypanel.Model, c config.Complexity) {
+	var res complexity.Resolver
+	if len(c.ThresholdOverrides()) > 0 {
+		res = m.complexityResolver(c)
+	}
+	p.SetThresholds(complexity.Global(c), res)
+}
+
+// complexityThresholdsFor is path's resolved thresholds under c.
+func (m *Model) complexityThresholdsFor(c config.Complexity, path string) complexity.Thresholds {
+	return complexity.ThresholdsFor(c, m.complexityRoot(), canonicalPath(path))
+}
+
 // reconfigureComplexityIndex applies a reloaded [complexity] section live:
 // the master switch drops or rebuilds the index, a changed exclude list
 // rebuilds the walk.
@@ -72,7 +105,7 @@ func (m *Model) reconfigureComplexityIndex(cfg *config.Config) {
 	m.complexityIndex.Reconfigure(complexityOptions(cfg.Complexity))
 	// The tool window's warning thresholds follow the same reload (#2917).
 	if p := m.complexityPanel(); p != nil {
-		p.SetWarn(cfg.Complexity.CCNWarn, cfg.Complexity.CognitiveWarn, cfg.Complexity.CommentDensityWarn)
+		m.setComplexityPanelThresholds(p, cfg.Complexity)
 	}
 	// So do the Problems feed's rows (#2920): a moved threshold adds or
 	// drops rows, a switched-off feed or index clears them — and the

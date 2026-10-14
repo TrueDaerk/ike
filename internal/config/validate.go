@@ -734,6 +734,19 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "complexity.comment_density_warn", Message: fmt.Sprintf("threshold %d out of range (0–100 %%), using 40", w)})
 		c.Complexity.CommentDensityWarn = 40
 	}
+	// The threshold overrides (#2960): an entry that does not parse would
+	// silently judge its files by the globals, so it is dropped loudly.
+	if c.Complexity.Overrides != nil {
+		kept := c.Complexity.Overrides[:0]
+		for _, e := range c.Complexity.Overrides {
+			if _, err := ParseThresholdOverride(e); err != nil {
+				diags = append(diags, Diagnostic{Field: "complexity.overrides", Message: err.Error() + ", ignoring it"})
+				continue
+			}
+			kept = append(kept, e)
+		}
+		c.Complexity.Overrides = kept
+	}
 	// The hotspot churn window (#2957): at least a day, at most ten years.
 	if d := c.Complexity.ChurnDays; d < 1 || d > 3650 {
 		diags = append(diags, Diagnostic{Field: "complexity.churn_days", Message: fmt.Sprintf("window %d out of range (1–3650 days), using 90", d)})

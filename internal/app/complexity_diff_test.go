@@ -69,7 +69,7 @@ func TestComplexityDiffBookkeepingRunsNoGitInUpdate(t *testing.T) {
 	// The result lands and is shown; the key settles, no re-arm.
 	key := m.currentCxDiffKey()
 	res := complexitypanel.Changes{Rev: "", Sha: "abc", Ready: true,
-		Diff: complexity.DiffProject(nil, map[string][]complexity.Function{"/r/a.go": {{Name: "f", CCN: 2}}}, 15, 15, 40)}
+		Diff: complexity.DiffProject(nil, map[string][]complexity.Function{"/r/a.go": {{Name: "f", CCN: 2}}}, complexity.Uniform(complexity.Thresholds{CCN: 15, Cog: 15, Cmt: 40}))}
 	out, cmd = m.Update(complexityDiffMsg{key: key, changes: res, base: map[string][]complexity.Function{"abc\x00a.go": nil}})
 	m = out.(Model)
 	if m.cxDiff.computing || m.cxDiff.tickArmed || cmd != nil {
@@ -196,7 +196,7 @@ func TestRunComplexityDiffRealRepo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	job := cxDiffJob{key: cxDiffKey{snapGen: 1, rev: ""}, repoRoot: root, projRoot: root, snap: snap, dirty: map[string]string{}, ccnWarn: 15, cogWarn: 15}
+	job := cxDiffJob{key: cxDiffKey{snapGen: 1, rev: ""}, repoRoot: root, projRoot: root, snap: snap, dirty: map[string]string{}, res: complexity.Uniform(complexity.Thresholds{CCN: 15, Cog: 15})}
 	msg := runComplexityDiff(job).(complexityDiffMsg)
 	if msg.err != "" {
 		t.Fatal(msg.err)
@@ -334,7 +334,7 @@ func TestRunComplexityDiffRanged(t *testing.T) {
 	// A ranged job carries no snapshot; a dirty buffer of a file the range
 	// touches must not leak in either.
 	dirty := map[string]string{filepath.Join(root, "branch.go"): "package p\n\nfunc onBranch() {}\n\nfunc unsaved() {}\n"}
-	job := cxDiffJob{key: cxDiffKey{rev: "main..feature", rangeGen: 1}, repoRoot: root, projRoot: root, dirty: dirty, ccnWarn: 15, cogWarn: 15}
+	job := cxDiffJob{key: cxDiffKey{rev: "main..feature", rangeGen: 1}, repoRoot: root, projRoot: root, dirty: dirty, res: complexity.Uniform(complexity.Thresholds{CCN: 15, Cog: 15})}
 	msg := runComplexityDiff(job).(complexityDiffMsg)
 	if msg.err != "" {
 		t.Fatal(msg.err)

@@ -278,43 +278,78 @@ func percentiles(fns []Function, metric string) (p50, p90, p99 int) {
 	return rank(50), rank(90), rank(99)
 }
 
-// Summarize aggregates fns. A function is over threshold when its CCN is at
-// or above ccnWarn, its cognitive complexity at or above cogWarn or its
-// comment density at or above cmtWarn percent; a non-positive threshold
-// disables that metric's check. A unit the baseline accepts
-// (Function.Baseline, #2958) is neither over threshold on CCN / cognitive
-// nor counted in Excess — it is counted in Accepted instead; the comment
-// density check is not part of the baseline. Excess sums Function.Excess
-// with the CCN and cognitive thresholds. Averages are 0 for an empty list.
-func Summarize(fns []Function, ccnWarn, cogWarn, cmtWarn int) Summary {
-	var s Summary
+// Summarize aggregates fns, every function judged by t (see Summer).
+func Summarize(fns []Function, t Thresholds) Summary {
+	var a Summer
 	for _, f := range fns {
-		s.Functions++
-		s.NLOC += f.NLOC
-		s.CCNSum += f.CCN
-		s.CogSum += f.Cognitive
-		s.CommentLines += f.CommentLines
-		accepted := f.Baseline == BaselineAccepted
-		if !accepted {
-			s.Excess += f.Excess(ccnWarn, cogWarn)
-		}
-		if f.CCN > s.CCNMax {
-			s.CCNMax = f.CCN
-		}
-		if f.Cognitive > s.CogMax {
-			s.CogMax = f.Cognitive
-		}
-		over := f.Over(ccnWarn, cogWarn)
-		switch {
-		case over && accepted:
-			s.Accepted++
-		case over && f.Baseline == BaselineWorsened:
-			s.Worsened++
-		}
-		if over && !accepted || f.CommentsOver(cmtWarn) {
-			s.OverThreshold++
+		a.Add(f, t)
+	}
+	return a.Summary()
+}
+
+// SummarizeFiles aggregates every function of files, each file's functions
+// judged by the thresholds res resolves for its path (#2960).
+func SummarizeFiles(files map[string][]Function, res Resolver) Summary {
+	var a Summer
+	for p, fns := range files {
+		t := res(p)
+		for _, f := range fns {
+			a.Add(f, t)
 		}
 	}
+	return a.Summary()
+}
+
+// Summer accumulates a Summary function by function, each under its own
+// thresholds — the aggregate of a population whose files have differing
+// thresholds (#2960). A function is over threshold when its CCN is at or
+// above t.CCN, its cognitive complexity at or above t.Cog or its comment
+// density at or above t.Cmt percent; a non-positive threshold disables that
+// metric's check. A unit the baseline accepts (Function.Baseline, #2958) is
+// neither over threshold on CCN / cognitive nor counted in Excess — it is
+// counted in Accepted instead; the comment density check is not part of the
+// baseline. Excess sums Function.Excess with the CCN and cognitive
+// thresholds. The zero Summer is empty and ready to use.
+type Summer struct {
+	s   Summary
+	fns []Function
+}
+
+// Add counts f, judged by t.
+func (a *Summer) Add(f Function, t Thresholds) {
+	s := &a.s
+	a.fns = append(a.fns, f)
+	s.Functions++
+	s.NLOC += f.NLOC
+	s.CCNSum += f.CCN
+	s.CogSum += f.Cognitive
+	s.CommentLines += f.CommentLines
+	accepted := f.Baseline == BaselineAccepted
+	if !accepted {
+		s.Excess += t.Excess(f)
+	}
+	if f.CCN > s.CCNMax {
+		s.CCNMax = f.CCN
+	}
+	if f.Cognitive > s.CogMax {
+		s.CogMax = f.Cognitive
+	}
+	over := t.Over(f)
+	switch {
+	case over && accepted:
+		s.Accepted++
+	case over && f.Baseline == BaselineWorsened:
+		s.Worsened++
+	}
+	if over && !accepted || t.CommentsOver(f) {
+		s.OverThreshold++
+	}
+}
+
+// Summary is the aggregate of the functions added so far. Averages are 0
+// for an empty population.
+func (a *Summer) Summary() Summary {
+	s, fns := a.s, a.fns
 	if s.Functions > 0 {
 		s.CCNAvg = float64(s.CCNSum) / float64(s.Functions)
 		s.CogAvg = float64(s.CogSum) / float64(s.Functions)

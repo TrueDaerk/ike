@@ -315,6 +315,7 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "complexity.ccn_warn", Type: Int, Title: "Cyclomatic warning threshold", Description: "Cyclomatic complexity (CCN) a function counts as complex at: the Complexity tool window paints the cell in the warning colour and the summary counts it as over threshold. 1\xe2\x80\x93200, default 15", Scope: config.UserScope, Min: 1, Max: 200},
 			{Key: "complexity.cognitive_warn", Type: Int, Title: "Cognitive warning threshold", Description: "Cognitive complexity a function counts as complex at: the Complexity tool window paints the cell in the warning colour and the summary counts it as over threshold. 1\xe2\x80\x93200, default 15", Scope: config.UserScope, Min: 1, Max: 200},
 			{Key: "complexity.comment_density_warn", Type: Int, Title: "Comment density warning", Description: "Share of a function body, in percent, that is comment-only lines (the cmt% column): at or above it the Complexity tool window paints the cell in the warning colour, the inline hint appends \"cmt 55%\", the Problems feed lists the function and the summary counts it as over threshold. Doc comments above the header and Python docstrings do not count. 0\xe2\x80\x93100, default 40, 0 turns the check off", Scope: config.UserScope, Min: 0, Max: 100},
+			{Key: "complexity.overrides", Type: List, Title: "Threshold overrides", Description: "Per-path and per-language warning thresholds, one \"<selector> ccn=N cog=N cmt=N\" entry each: the selector is a glob over the project-relative path (the Excluded files rules: \"legacy/**\", \"*_test.go\") or lang:<id> (\"lang:php\"); ccn= and cog= take 1–200, cmt= 0–100 (0 off), and a key the entry leaves out keeps the global threshold. The first matching entry in list order wins and applies everywhere a threshold does: the Complexity window's warning colours and over / excess counts (the File tab names the thresholds in force), the inline hints, the Problems feed, the Changes diff, the status segment and ike complexity (whose --ccn / --cog / --cmt still beat it). Example: \"legacy/** ccn=30 cog=30\", \"lang:php cog=25 cmt=0\"", Scope: config.UserScope, ValidateEntry: thresholdOverrideValidate},
 			{Key: "complexity.problems", Type: Bool, Title: "Problems feed", Description: "List every function at or above a warning threshold in the Problems tool window as a warning under the source \"complexity\" (filter with source:complexity); enter jumps to the function. Off clears the rows and leaves LSP, lint and task findings untouched", Scope: config.UserScope},
 			{Key: "complexity.status_segment", Type: Bool, Title: "Status segment", Description: "Show the summed cyclomatic complexity delta of the working tree against the base revision in the status line (\"Δcx +4\"): warning colour when it rose, success when it fell. Hidden outside git repositories and while the diff is empty; a click opens the Complexity window on its Changes tab. Off by default", Scope: config.UserScope},
 			{Key: "complexity.churn_days", Type: Int, Title: "Hotspot churn window", Description: "Days of git history the Complexity window counts commits over for its hotspot columns: commits per file, and hot = commits × the file's excess (× its summed CCN when nothing exceeds), so a complex file edited every week ranks above an untouched one. Renamed files are not followed. Hidden outside git repositories. 1\xe2\x80\x933650, default 90", Scope: config.UserScope, Min: 1, Max: 3650},
@@ -544,6 +545,16 @@ func issueFilterValidate(v string) string {
 func globValidate(_ func(key string) string, text string) string {
 	if _, err := filepath.Match(strings.TrimSpace(text), "x"); err != nil {
 		return "invalid glob pattern"
+	}
+	return ""
+}
+
+// thresholdOverrideValidate checks one complexity.overrides element (#2960)
+// with the grammar config.Validate applies: the message names the entry
+// and what is wrong with it.
+func thresholdOverrideValidate(_ func(key string) string, text string) string {
+	if _, err := config.ParseThresholdOverride(text); err != nil {
+		return err.Error()
 	}
 	return ""
 }

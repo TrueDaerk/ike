@@ -417,7 +417,7 @@ func writeDiffJSON(w io.Writer, r diffReport) error {
 			File: c.file, Name: c.ch.After.Name, Kind: c.ch.After.Kind, Line: c.ch.After.Line + 1,
 			Before: toJSONMetrics(c.ch.Before, false), After: toJSONMetrics(c.ch.After, r.s.args.Sites),
 			Delta: jsonDelta{CCN: c.ch.DeltaCCN(), Cognitive: c.ch.DeltaCognitive(), NLOC: c.ch.DeltaNLOC(),
-				Excess:       c.ch.After.Excess(r.s.ccnWarn, r.s.cogWarn) - c.ch.Before.Excess(r.s.ccnWarn, r.s.cogWarn),
+				Excess:       r.s.th(c.file).Excess(c.ch.After) - r.s.th(c.file).Excess(c.ch.Before),
 				CommentLines: c.ch.DeltaCommentLines(), CommentDensity: ratio(c.ch.DeltaCommentDensity())},
 			Pinned: toJSONPinned(c.pin),
 		})
@@ -634,11 +634,20 @@ func (s settings) filterText() string {
 }
 
 // thresholdText names the warning thresholds: "CCN ≥ 15 or cog ≥ 15 or
-// cmt ≥ 40%", the comment density left out while it is off.
+// cmt ≥ 40%", the comment density left out while it is off, and how many
+// complexity.overrides entries judge some files differently (#2960):
+// "… · 2 overrides".
 func (s settings) thresholdText() string {
 	t := fmt.Sprintf("CCN ≥ %d or cog ≥ %d", s.ccnWarn, s.cogWarn)
 	if s.cmtWarn > 0 {
 		t += fmt.Sprintf(" or cmt ≥ %d%%", s.cmtWarn)
+	}
+	switch {
+	case s.overrides == 0, s.args.CCN > 0 && s.args.Cog > 0 && s.args.Cmt > 0:
+	case s.overrides == 1:
+		t += " · 1 override"
+	default:
+		t += fmt.Sprintf(" · %d overrides", s.overrides)
 	}
 	return t
 }

@@ -24,7 +24,7 @@ func groupFixture() map[string][]Function {
 }
 
 func TestGroupFunctionsByClass(t *testing.T) {
-	gs := GroupFunctions(groupFixture(), ByClass, 15, 15, 0)
+	gs := GroupFunctions(groupFixture(), ByClass, Uniform(Thresholds{CCN: 15, Cog: 15, Cmt: 0}))
 	if len(gs) != 2 {
 		t.Fatalf("got %d class groups, want 2: %+v", len(gs), gs)
 	}
@@ -46,7 +46,7 @@ func TestGroupFunctionsByClass(t *testing.T) {
 
 func TestGroupFunctionsByFile(t *testing.T) {
 	files := groupFixture()
-	gs := GroupFunctions(files, ByFile, 15, 15, 0)
+	gs := GroupFunctions(files, ByFile, Uniform(Thresholds{CCN: 15, Cog: 15, Cmt: 0}))
 	if len(gs) != 2 {
 		t.Fatalf("got %d file groups, want 2", len(gs))
 	}
@@ -58,7 +58,7 @@ func TestGroupFunctionsByFile(t *testing.T) {
 		if g.Class != "" {
 			t.Errorf("file group %s has class %q", g.File, g.Class)
 		}
-		if want := Summarize(files[g.File], 15, 15, 0); !reflect.DeepEqual(g.Summary, want) {
+		if want := Summarize(files[g.File], Thresholds{CCN: 15, Cog: 15, Cmt: 0}); !reflect.DeepEqual(g.Summary, want) {
 			t.Errorf("%s summary = %+v, want %+v", g.File, g.Summary, want)
 		}
 		all = append(all, files[g.File]...)
@@ -67,7 +67,7 @@ func TestGroupFunctionsByFile(t *testing.T) {
 		sumNLOC += g.NLOC
 		sumFns += g.Functions
 	}
-	flat := Summarize(all, 15, 15, 0)
+	flat := Summarize(all, Thresholds{CCN: 15, Cog: 15, Cmt: 0})
 	if sumCCN != flat.CCNSum || sumCog != flat.CogSum || sumNLOC != flat.NLOC || sumFns != flat.Functions {
 		t.Errorf("group sums CCN %d cog %d NLOC %d fns %d, flat %+v", sumCCN, sumCog, sumNLOC, sumFns, flat)
 	}
@@ -81,7 +81,7 @@ func TestGroupFunctionsTiesAndNone(t *testing.T) {
 		"b.go": {{Name: "B.x", Class: "B", CCN: 2}},
 		"a.go": {{Name: "Z.x", Class: "Z", CCN: 2}, {Name: "A.x", Class: "A", CCN: 2}},
 	}
-	gs := GroupFunctions(files, ByClass, 15, 15, 0)
+	gs := GroupFunctions(files, ByClass, Uniform(Thresholds{CCN: 15, Cog: 15, Cmt: 0}))
 	var got []string
 	for _, g := range gs {
 		got = append(got, g.File+"/"+g.Class)
@@ -89,7 +89,7 @@ func TestGroupFunctionsTiesAndNone(t *testing.T) {
 	if want := []string{"a.go/A", "a.go/Z", "b.go/B"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("tie order = %v, want %v", got, want)
 	}
-	if GroupFunctions(files, ByNone, 15, 15, 0) != nil {
+	if GroupFunctions(files, ByNone, Uniform(Thresholds{CCN: 15, Cog: 15, Cmt: 0})) != nil {
 		t.Error("ByNone should yield no groups")
 	}
 }
@@ -99,11 +99,11 @@ func TestGroupDepthParamsMax(t *testing.T) {
 		{Name: "S.a", Class: "S", Depth: 3, Params: 1, CCN: 2},
 		{Name: "S.b", Class: "S", Depth: 1, Params: 4, CCN: 1},
 		{Name: "f", Depth: 7, Params: 9, CCN: 1},
-	}}, ByClass, 15, 15, 0)
+	}}, ByClass, Uniform(Thresholds{CCN: 15, Cog: 15, Cmt: 0}))
 	if len(gs) != 1 || gs[0].DepthMax != 3 || gs[0].ParamsMax != 4 {
 		t.Errorf("class group = %+v", gs)
 	}
-	gs = GroupFunctions(map[string][]Function{"a.go": {{Depth: 3, Params: 1}, {Depth: 7, Params: 9}}}, ByFile, 15, 15, 0)
+	gs = GroupFunctions(map[string][]Function{"a.go": {{Depth: 3, Params: 1}, {Depth: 7, Params: 9}}}, ByFile, Uniform(Thresholds{CCN: 15, Cog: 15, Cmt: 0}))
 	if len(gs) != 1 || gs[0].DepthMax != 7 || gs[0].ParamsMax != 9 {
 		t.Errorf("file group = %+v", gs)
 	}

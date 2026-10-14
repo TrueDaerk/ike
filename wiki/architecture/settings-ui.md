@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-10-14T00:30:00Z
+timestamp: 2026-10-14T12:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -365,7 +365,14 @@ any entry whose key the typed schema does not expose (no dead keys).
   warning thresholds `complexity.ccn_warn` / `complexity.cognitive_warn`
   (Int, 1-200, default 15) the Complexity tool window paints cells against,
   plus `complexity.comment_density_warn` (Int, 0-100 percent, default 40,
-  `0` = off, #2934) for the `cmt%` column, the hint and the Problems row.
+  `0` = off, #2934) for the `cmt%` column, the hint and the Problems row,
+  and `complexity.overrides` (List, #2960): per-path / per-language
+  `<selector> ccn=N cog=N cmt=N` entries the form checks with
+  `thresholdOverrideValidate` (`config.ParseThresholdOverride`, the message
+  names the entry). Its entries hold spaces, so a list value splits on
+  spaces only in the bracketed typed form (`[80 120]`); a comma-less plain
+  value — a lone entry — is one element, and a staged `[]string` flattens
+  comma-joined like `Flat`.
   All apply live: off drops the index, on rewalks, a changed list rebuilds,
   a changed threshold repaints the open window. `complexity.problems` (Bool, default on, #2920) feeds over-threshold
   functions into the Problems window; off clears those rows. `complexity.status_segment` (Bool, default off,

@@ -374,6 +374,7 @@ func (c *Config) Flat() map[string]string {
 	put("complexity.ccn_warn", c.Complexity.CCNWarn)
 	put("complexity.cognitive_warn", c.Complexity.CognitiveWarn)
 	put("complexity.comment_density_warn", c.Complexity.CommentDensityWarn)
+	put("complexity.overrides", strings.Join(c.Complexity.Overrides, ","))
 	put("complexity.problems", c.Complexity.Problems)
 	put("complexity.status_segment", c.Complexity.StatusSegment)
 	put("complexity.churn_days", c.Complexity.ChurnDays)

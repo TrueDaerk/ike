@@ -305,10 +305,12 @@ func (m *Model) fnNode(r Row) treeNode {
 // params maxima the filter keys read and the Members 'i' accepts.
 func (m *Model) aggregateRow(path, rel, class string, rows []Row) Row {
 	fns := make([]complexity.Function, len(rows))
+	var sum complexity.Summer
 	for i, r := range rows {
 		fns[i] = r.Fn
+		sum.Add(r.Fn, m.th(r.Path)) // a directory spans files of differing thresholds (#2960)
 	}
-	g := &complexity.Group{File: path, Class: class, Summary: complexity.Summarize(fns, m.ccnWarn, m.cogWarn, m.cmtWarn)}
+	g := &complexity.Group{File: path, Class: class, Summary: sum.Summary()}
 	for i, f := range fns {
 		if i == 0 || f.Line < g.Line {
 			g.Line = f.Line
@@ -368,12 +370,12 @@ func (m *Model) fnTreeValue(r Row, c Column) int {
 	case ColCogMax:
 		return r.Fn.Cognitive
 	case ColOver:
-		if r.Fn.Over(m.ccnWarn, m.cogWarn) {
+		if m.th(r.Path).Over(r.Fn) {
 			return 1
 		}
 		return 0
 	case ColExcess:
-		return r.Fn.Excess(m.ccnWarn, m.cogWarn)
+		return m.th(r.Path).Excess(r.Fn)
 	}
 	n, _ := r.intValue(c)
 	return n
@@ -410,7 +412,7 @@ func (m *Model) fnTreeCell(r Row, c Column) string {
 	case ColFuncs, ColCCNMax, ColCogMax, ColOver, ColHot:
 		return ""
 	case ColExcess:
-		return strconv.Itoa(r.Fn.Excess(m.ccnWarn, m.cogWarn))
+		return strconv.Itoa(m.th(r.Path).Excess(r.Fn))
 	}
 	return r.cell(c)
 }
@@ -432,15 +434,15 @@ func (m *Model) treeWarn(n treeNode, layout []Column, cells []gridview.Cell) {
 	for i, c := range layout {
 		switch c {
 		case ColCCN:
-			cells[i].Warn = r.Fn.CCN >= m.ccnWarn && !accepted
-			cells[i].Muted = r.Fn.CCN >= m.ccnWarn && accepted
+			cells[i].Warn = r.Fn.CCN >= m.th(r.Path).CCN && !accepted
+			cells[i].Muted = r.Fn.CCN >= m.th(r.Path).CCN && accepted
 		case ColCog:
-			cells[i].Warn = r.Fn.Cognitive >= m.cogWarn && !accepted
-			cells[i].Muted = r.Fn.Cognitive >= m.cogWarn && accepted
+			cells[i].Warn = r.Fn.Cognitive >= m.th(r.Path).Cog && !accepted
+			cells[i].Muted = r.Fn.Cognitive >= m.th(r.Path).Cog && accepted
 		case ColCmt:
-			cells[i].Warn = r.Fn.CommentsOver(m.cmtWarn)
+			cells[i].Warn = m.th(r.Path).CommentsOver(r.Fn)
 		case ColExcess:
-			cells[i].Warn = r.Fn.Excess(m.ccnWarn, m.cogWarn) > 0 && !accepted
+			cells[i].Warn = m.th(r.Path).Excess(r.Fn) > 0 && !accepted
 		}
 	}
 }
@@ -654,7 +656,7 @@ func (m *Model) treeCSV() string {
 			f := r.Fn
 			fields = []string{r.Rel, n.Kind.String(), f.Name, "", itoa(f.NLOC),
 				itoa(f.CCN), "", itoa(f.Cognitive), "",
-				itoa(f.CommentLines), itoa(cmtOf(f)), "", itoa(f.Excess(m.ccnWarn, m.cogWarn))}
+				itoa(f.CommentLines), itoa(cmtOf(f)), "", itoa(m.th(r.Path).Excess(f))}
 			if hot {
 				fields = append(fields, itoa(r.Commits), "")
 			}

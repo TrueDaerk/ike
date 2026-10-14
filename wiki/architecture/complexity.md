@@ -4,7 +4,7 @@ title: Code Complexity
 description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters, nesting depth and comment density (#2934) per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary with its per-class and per-file groups (#2937), the project index (#2916) that measures every supported file in the background, persists it across sessions (#2967, a stamped complexity-index.gob in the state store), keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source, the hotspot columns (#2957) multiplying complexity by the commits per file from one git log, the accepted-debt baseline (#2958, a committed .ike/complexity-baseline.json that turns every surface into a ratchet flagging only new and worsened functions), the optimisation-session pins (#2959, functions pinned with their metrics in the state store's complexity-pins.json, a Pinned section with a since-pin delta and a session Δexcess in the header), and the headless `ike complexity` CLI (#2922) printing the table of the project or of named files and directories (#2936), per function or summed per class or file (#2937), or the diff against a revision as text or JSON for CI and agents, also as a complexity-only build of the ike binary (#2939, build tag ike_complexity_only, make install-complexity) that links no IDE; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
 resource: internal/complexity, internal/complexitypanel, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_churn.go, internal/app/complexity_baseline.go, internal/app/complexity_pins.go, internal/vcs/vcscore/churn.go, internal/app/complexity_problems.go, internal/app/complexity_segment.go, internal/complexitycli, cmd/ike/complexityonly.go
 tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive, index, settings, telemetry, vcs, diff, problems, cli, baseline, pins]
-timestamp: 2026-10-14T00:30:00Z
+timestamp: 2026-10-14T12:00:00Z
 ---
 
 # Code Complexity
@@ -292,20 +292,36 @@ about 29 ms on the dev machine (budget 50 ms).
 
 ## Summary
 
-`Summarize(fns, ccnWarn, cogWarn, cmtWarn)` aggregates a list — a file or a
+`Summarize(fns, t Thresholds)` aggregates a list — a file or a
 project — into functions, NLOC, Σ / avg / max CCN, Σ / avg / max cognitive,
 the summed `CommentLines` with the aggregate `CommentDensity`, and the
 number of functions **at or above** any warning threshold — CCN, cognitive,
-or a comment density of `cmtWarn` percent (a non-positive threshold disables
+or a comment density of `t.Cmt` percent (a non-positive threshold disables
 that check). `Excess` (#2945) is the mass **above** the CCN and cognitive
 thresholds: `Function.Excess(ccnWarn, cogWarn)` = `max(0, CCN − ccnWarn) +
 max(0, cognitive − cogWarn)` (a unit at a threshold counts as over it but
 has no excess; a non-positive threshold drops its term), summed over the
 population. The over count says how many units cross a line, the excess how
 far — the primary signal for optimisation and what the diff verdict reads
-first. The thresholds stay parameters so a per-file threshold can feed
-them. The thresholds come from the `[complexity]`
-settings of the later steps; the engine takes them as plain integers.
+first.
+
+**Per-file thresholds (#2960).** `Thresholds{CCN, Cog, Cmt, Source}` is the
+set one file is judged by, and a `Resolver` (`func(path string) Thresholds`)
+hands every consumer the set of each file: `ResolverFor(config.Complexity,
+root)` / `ThresholdsFor(c, root, path)` take the first
+`complexity.overrides` entry whose selector matches the file — a glob over
+the project-relative path with the `complexity.exclude` rules (`Excluded`),
+or `lang:<id>` against the language `lang.ByPath` resolves — fill the keys
+it leaves out from the globals and name the selector in `Source`; no match
+is the globals (`Global(c)`, `Source` empty), and without overrides the
+resolver is `Uniform(global)`. A population mixing files is aggregated with
+a `Summer` (`Add(f, t)` per function, then `Summary()`), which
+`SummarizeFiles(files, res)`, `View.Summary(res)`, `GroupFunctions(files,
+by, res)` and `DiffProject(base, head, res)` use; `Summarize` is the
+single-set case. The resolver lives in `complexity`, not `config`: `config`
+sits below `lang` in the import graph and cannot resolve a language, so
+`config` owns the grammar (`ParseThresholdOverride`, `ThresholdOverrides`)
+and `complexity` the matching.
 
 **Distribution (#2953).** An average of 4 next to a maximum of 170 says
 nothing about the shape, so `Summarize` also takes the **nearest-rank**
@@ -319,12 +335,12 @@ counts the population per `HistBuckets` bucket — `1–5`, `6–10`, `11–15`,
 first (`HistBucketOf`) — so the buckets sum to the population;
 `Summary.CCNHist` / `CogHist` hold both.
 
-**Groups (#2937).** `GroupFunctions(files, by, ccnWarn, cogWarn, cmtWarn)`
+**Groups (#2937).** `GroupFunctions(files, by, res)`
 (`group.go`) folds functions keyed by file into one `Group{File, Class,
 Line, Summary}` per class (`ByClass`: the units with a non-empty
 `Function.Class`, keyed by file and class — Go methods of one type in two
 files are two groups) or per file (`ByFile`: every unit). Each group is
-`Summarize` over its direct units, so the sums of the file groups equal the
+`Summarize` over its direct units under its file's thresholds (`res`), so the sums of the file groups equal the
 flat list's: a nested lambda is its own unit, counted in its file's group and
 in no class's, exactly as the flat list counts it — nothing twice. `Line` is
 the group's earliest unit (where "open" lands). The order is stable: CCN sum
@@ -423,6 +439,7 @@ inside one settle window collapses into one notification.
 | `complexity.ccn_warn` | `15` | The cyclomatic threshold (#2917): the tool window paints a CCN cell at or above it in the warning colour and `Summary.OverThreshold` counts the function. 1-200; out of range falls back to the default with a diagnostic. |
 | `complexity.cognitive_warn` | `15` | The same for cognitive complexity. |
 | `complexity.comment_density_warn` | `40` | The comment-density threshold in percent (#2934): 0-100, `0` turns the check off; out of range falls back to 40 with a diagnostic. |
+| `complexity.overrides` | `[]` | Per-path and per-language thresholds (#2960), one `<selector> ccn=N cog=N cmt=N` entry each: the selector is a glob over the project-relative path (the `complexity.exclude` rules) or `lang:<id>`; each key is optional (the global value applies to a missing one), ranges 1-200 / 1-200 / 0-100, at least one key. The first matching entry in list order wins (`legacy/** ccn=30 cog=30`, `lang:php cog=25 cmt=0`, `*_test.go ccn=40 cog=40`). A malformed entry is refused in the Settings form with a message naming it and dropped with a diagnostic by `config.Validate`. Every threshold surface below reads the resolved set of each file. |
 
 **Telemetry.** One `complexity.scan` op per completed walk (the initial one
 and every rebuild), phase `ok` with `ms`, `files`, `functions`, `cached`
@@ -468,7 +485,11 @@ it, CCN otherwise) with its percentiles between average and max, `CCN
 short form so the line stays within reason — the aggregate comment density (`cmt 12%`), the
 count over threshold, `excess N` (#2945) and, with a baseline in effect,
 `N accepted` (#2958, [below](#baseline-2958)) and, on the Project tab,
-`session Δexcess −120` (#2959, see Pins below). The grid
+`session Δexcess −120` (#2959, see Pins below). On the File tab, when a
+`complexity.overrides` entry sets the followed file's thresholds, the
+line names them after the generation: `thresholds ccn 30 cog 30
+(legacy/**)` (the comment density joins when it differs from the global,
+#2960). The grid
 (`gridview.HeaderRow` / `DataRow`, widths from the longest visible value,
 the file column capped at half the pane) has the columns file
 (project-relative; hidden on the File tab), function, line (1-based), ccn,
@@ -476,9 +497,10 @@ cog, nloc, params, depth, `cmt%` (the comment density in whole percent,
 #2934). `s` cycles the sort column (default CCN
 descending; a numeric column starts descending, a text column ascending),
 `S` reverses, a click on a column header sorts by it (again: reverses). A
-CCN, cognitive or `cmt%` cell at or above `complexity.ccn_warn` /
-`complexity.cognitive_warn` / `complexity.comment_density_warn` (unless 0)
-renders in the palette's warning colour
+CCN, cognitive or `cmt%` cell at or above its file's threshold —
+`complexity.ccn_warn` / `complexity.cognitive_warn` /
+`complexity.comment_density_warn` (unless 0), or the matching
+`complexity.overrides` entry (#2960) — renders in the palette's warning colour
 (`gridview.Cell.Warn`); on a function the baseline accepts the same cells
 render muted instead (`gridview.Cell.Muted`) and the name carries ` ✓`.
 The status row shows `filtered/total rows` and the key hints.
@@ -729,14 +751,18 @@ index (walk finished, enabled, measurable) per project root in a
 process-lifetime map (`complexitySessionBase`, on every
 `ComplexityChangedMsg` and panel seed) and hands it to the pane
 (`SetSessionBase`). `updateSessionDelta` measures the base under the
-current thresholds, baseline and hide-tests rule (cached until one
-changes) and the Project tab's header appends `session Δexcess −120`
+current thresholds (per file, #2960), baseline and hide-tests rule (cached
+until one changes) and the Project tab's header appends `session Δexcess −120`
 (current minus base excess), hidden while it is 0.
 
 **Settings** (`complexity.ccn_warn`, `complexity.cognitive_warn`, Settings >
 Complexity, Int 1-200, default 15; `complexity.comment_density_warn`, Int
-0-100, default 40) apply live through the same config
-reload that reconfigures the index.
+0-100, default 40; `complexity.overrides`, List, #2960) apply live through
+the same config reload that reconfigures the index: the app hands the pane
+the globals and, while there are overrides, the resolver
+(`SetThresholds(global, res)`, cached per path); every warning colour, over
+and excess count, group row, hotspot score and session Δ judges a row by
+its own file's set, a directory node of the tree view sums its files'.
 
 ## Hotspots (#2957)
 
@@ -936,9 +962,10 @@ comment lines) differ as `Changed` (before / after / Δ), an unpaired head unit 
 `Added`, an unpaired base unit as `Removed`. A unit that only moved is
 unchanged; a renamed function is removed + added (the engine has no body
 hash to tell a rename from a rewrite). `Changed` is sorted by |ΔCCN|
-descending. `DiffProject(base, head, ccnWarn, cogWarn, cmtWarn)` runs it per path
+descending. `DiffProject(base, head, res)` runs it per path
 over two `map[path][]Function`, keeps the files with a non-empty
-classification, summarises both sides (`Summarize`) and renders the
+classification, summarises both sides (a `Summer`, each file under the
+thresholds `res` resolves for it, #2960) and renders the
 **verdict** (#2945): the first non-zero of Δexcess, Δ Σcognitive and
 Δ decision points (ΣCCN minus the function count, `DeltaDecisions`) decides
 — positive `more complex`, negative `less complex`, all three 0
@@ -983,7 +1010,9 @@ the last (an `Equal` refresh moves nothing), the index generation with every
 hidden tab costs nothing; one computation runs at a time; a result whose
 inputs moved meanwhile is followed by a fresh run. The tick gathers the
 inputs in `Update` — the snapshot, the index `View`, the text of every dirty
-buffer, `complexity.exclude`, the warning thresholds — and launches one
+buffer, `complexity.exclude`, the threshold resolver (#2960: each file's
+summaries, the `Δexcess` the verdict and the status segment read, judge it
+by its own thresholds) — and launches one
 `tea.Cmd` that resolves the base, lists the files, and measures both sides
 of each with four workers: the base side by `git show <sha>:<path>` +
 `Measure` (every git call under the package's 5 s timeout; a blob the base
@@ -1095,16 +1124,19 @@ function — every *new or worsened* one once a baseline is in effect
 task-source channel (`Store.SetTaskSource("complexity", byPath)`), the same
 seam the dependency scanner uses. On every `ComplexityChangedMsg` and every
 config reload `feedComplexityProblems` reads the index snapshot and the
-pure builder `complexityDiagnostics(view, ccnWarn, cogWarn, cmtWarn, baseline, root)` emits one
-warning per function at or above a threshold, anchored at its header line:
+pure builder `complexityDiagnostics(view, resolver, baseline, root)` emits one
+warning per function at or above its file's threshold (the globals or the
+matching `complexity.overrides` entry, #2960 — the message names the threshold
+in force), anchored at its header line:
 `function <name>: CCN 40 ≥ 15`, `function <name>: cognitive 25 ≥ 15`, or
 both joined by a comma when both are over; `Source` is `complexity`,
 `Code` the first exceeded metric (`ccn` before `cognitive`). A body whose
-comment density reaches `complexity.comment_density_warn` (#2934; `0` = off)
+comment density reaches the file's comment threshold (#2934; `0` = off)
 is a separate warning on the same line, `function <name>: comment density
 55% ≥ 40%` with `Code` `comments`. Each publish
 replaces the source wholesale, so a raised threshold or a simplified
-function drops its row and a lowered threshold adds rows without a restart.
+function drops its row and a lowered threshold — or a reloaded override —
+adds rows without a restart.
 `complexity.problems = false` or `complexity.enabled = false` calls
 `ClearTaskSource("complexity")`, leaving LSP, lint and other task findings
 untouched. Rows navigate like any diagnostic and filter with
@@ -1146,9 +1178,10 @@ lenses and inline debugger values, fed per open document and routed like
 **Sync.** `complexityHintsSyncCmd` runs on the settled pass of every
 `Update`, the Structure pane's pattern (#1025): every open document of a
 language with a complexity spec (not excluded, not a degraded large file)
-wants hints for one state key `cxHintKey{version, gen, ccn, cog, cmt, enabled, mode, sites, show, diff, diffGen}`
+wants hints for one state key `cxHintKey{version, gen, th, enabled, mode, sites, show, diff, diffGen}`
 — the buffer's `DocVersion`, the index generation the hints came from, the
-three warning thresholds, the master switch, the hint and site-mark modes
+file's resolved thresholds (`th`, #2960 — so an override reload repaints
+exactly the files whose set moved), the master switch, the hint and site-mark modes
 and a pending one-shot site request (below), and the Changes diff the Δ
 comes from (#2949, below). The key last delivered (or
 launched) per path is remembered in `sent`, the key a debounce is armed for
@@ -1165,13 +1198,13 @@ version it was taken at, and is routed only while it is still the sent key.
 The editor drops a push whose version moved meanwhile; the next settled pass
 re-arms. Closed documents are forgotten so a reopen starts fresh.
 
-**Hints.** `complexityHintsFor(fns, ccnWarn, cogWarn, cmtWarn)` emits one
+**Hints.** `complexityHintsFor(fns, th, …)` emits one
 `editor.ComplexityHint{Line, Text, Warn, Deltas}` per function at its header line
 (the first unit on a line wins, so a lambda beside its header does not
 replace it); `Warn` when CCN, cognitive or the comment density reaches its
 threshold, which paints the hint in the warning tone. The density joins the
 text — `CCN 3 · cog 2 · cmt 55%` — only at or above
-`complexity.comment_density_warn` (#2934), so the common hint stays short;
+the file's comment threshold (#2934), so the common hint stays short;
 `0` never shows it. A threshold change on reload changes the key,
 so every open buffer repaints. `editor.marks.complexity` (#2966) picks the hint mode — `all` (every
 function, the default), `warn` (only the hints whose `Warn` flag is set:
@@ -1226,7 +1259,7 @@ hints off the hint push is an empty clear and the marks still flow.
 `complexitySiteMarksFor(fns, ccnWarn, cogWarn, mode, showLine)` takes the
 cognitive sites (`Cognitive > 0`; CCN-only arms carry no mark) of every
 function `all` admits, of `warn`'s functions at or above a threshold
-(the per-file overrides of #2960 plug in at the same thresholds), and of
+(the file's resolved thresholds, #2960), and of
 the function whose header is `showLine`; a site a nested unit shares with
 its encloser is marked once (the encloser's copy, at its nesting); one mark
 per line, the sites joined in column order: `+1`, `+3 (nesting 2)`,
@@ -1289,8 +1322,12 @@ claims are not counted.
 **Settings.** `config.Load(config.Discover(root))` reads the user layer and
 `<root>/.ike/settings.toml`: `complexity.exclude` and the warning thresholds
 (15 without config) and `complexity.comment_density_warn` (40 without
-config, `0` = off). `--ccn` / `--cog` / `--cmt` (percent, 1-100) override
-the thresholds. The row filter: `--min N` keeps rows with CCN or cognitive ≥
+config, `0` = off) and `complexity.overrides` (#2960): every file's rows, the
+summary, the groups, the diff and `--write-baseline` judge it by its
+resolved thresholds, and the summary's threshold text counts the entries
+(`CCN ≥ 15 or cog ≥ 15 or cmt ≥ 40% · 2 overrides`). `--ccn` / `--cog` /
+`--cmt` (percent, 1-100) override the thresholds — each beats the
+overrides too, for its metric. The row filter: `--min N` keeps rows with CCN or cognitive ≥
 N; an explicit `--ccn` / `--cog` / `--cmt` keeps rows at or above any
 threshold; no filter flag keeps every row. The table carries a `CMT%`
 column, the summary line the aggregate density, the thresholds and both

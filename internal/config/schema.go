@@ -526,8 +526,13 @@ type Complexity struct {
 	// its cmt% cell, the inline hint appends the density, the Problems feed
 	// lists it and the summary counts it as over threshold. 0 turns the
 	// check off.
-	CommentDensityWarn int  `toml:"comment_density_warn"`
-	Problems           bool `toml:"problems"`
+	CommentDensityWarn int `toml:"comment_density_warn"`
+	// Overrides (#2960) are per-path and per-language thresholds, one
+	// `<selector> ccn=N cog=N cmt=N` entry each (ParseThresholdOverride):
+	// the first entry whose selector matches a file sets its thresholds, a
+	// key the entry leaves out keeps the global value.
+	Overrides []string `toml:"overrides"`
+	Problems  bool     `toml:"problems"`
 	// StatusSegment shows the "Δcx" status segment (#2921).
 	StatusSegment bool `toml:"status_segment"`
 	// ChurnDays (#2957) is the hotspot window in days: the Complexity window

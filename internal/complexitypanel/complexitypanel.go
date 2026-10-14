@@ -426,13 +426,16 @@ type Model struct {
 	focused bool
 	pal     *theme.Palette
 
-	root     string
-	view     complexity.View
-	stats    complexity.Stats
-	hasView  bool
-	ccnWarn  int
-	cogWarn  int
-	cmtWarn  int
+	root    string
+	view    complexity.View
+	stats   complexity.Stats
+	hasView bool
+	// The warning thresholds (#2960): global the configured ones, resolve
+	// the per-file resolver (nil: global everywhere), thCache its answers.
+	global   complexity.Thresholds
+	resolve  complexity.Resolver
+	thCache  map[string]complexity.Thresholds
+	thGen    int // bumped by every SetThresholds that changes them
 	tab      Tab
 	sortCol  Column
 	desc     bool
@@ -506,7 +509,8 @@ type Model struct {
 // the snapshot arrives via Set.
 func New(pal *theme.Palette) Model {
 	m := Model{pal: pal, now: time.Now, filter: filterbar.New(Schema),
-		sortCol: ColCCN, desc: true, ccnWarn: DefaultWarn, cogWarn: DefaultWarn, cmtWarn: DefaultCmtWarn, pathLang: langOf}
+		sortCol: ColCCN, desc: true, pathLang: langOf,
+		global: complexity.Thresholds{CCN: DefaultWarn, Cog: DefaultWarn, Cmt: DefaultCmtWarn}}
 	m.Refresh()
 	return m
 }
@@ -534,25 +538,70 @@ func (m *Model) SetRoot(root string) {
 	}
 }
 
-// SetWarn applies the warning thresholds (complexity.ccn_warn /
-// complexity.cognitive_warn / complexity.comment_density_warn); a CCN or
-// cognitive value below 1 keeps the default, a comment-density value of 0
-// turns that check off and a negative one keeps the default.
+// SetWarn applies global warning thresholds for every file (see
+// SetThresholds).
 func (m *Model) SetWarn(ccn, cog, cmt int) {
-	if ccn < 1 {
-		ccn = DefaultWarn
+	m.SetThresholds(complexity.Thresholds{CCN: ccn, Cog: cog, Cmt: cmt}, nil)
+}
+
+// SetThresholds applies the warning thresholds: global the configured
+// complexity.ccn_warn / complexity.cognitive_warn /
+// complexity.comment_density_warn, res the per-file resolver of the
+// complexity.overrides entries (#2960), nil when there are none. A global
+// CCN or cognitive value below 1 keeps the default, a comment-density value
+// of 0 turns that check off and a negative one keeps the default.
+func (m *Model) SetThresholds(global complexity.Thresholds, res complexity.Resolver) {
+	if global.CCN < 1 {
+		global.CCN = DefaultWarn
 	}
-	if cog < 1 {
-		cog = DefaultWarn
+	if global.Cog < 1 {
+		global.Cog = DefaultWarn
 	}
-	if cmt < 0 {
-		cmt = DefaultCmtWarn
+	if global.Cmt < 0 {
+		global.Cmt = DefaultCmtWarn
 	}
-	if ccn == m.ccnWarn && cog == m.cogWarn && cmt == m.cmtWarn {
+	if res == nil && m.resolve == nil && global == m.global {
 		return
 	}
-	m.ccnWarn, m.cogWarn, m.cmtWarn = ccn, cog, cmt
+	m.global, m.resolve, m.thCache = global, res, nil
+	m.thGen++
 	m.Refresh()
+}
+
+// th is the thresholds path's functions are judged by: the resolver's
+// answer, cached per path, or the global thresholds.
+func (m *Model) th(path string) complexity.Thresholds {
+	if m.resolve == nil {
+		return m.global
+	}
+	if t, ok := m.thCache[path]; ok {
+		return t
+	}
+	if m.thCache == nil {
+		m.thCache = map[string]complexity.Thresholds{}
+	}
+	t := m.resolve(path)
+	m.thCache[path] = t
+	return t
+}
+
+// thresholdsLabel is the File tab's "thresholds ccn 30 cog 30 (legacy/**)"
+// when an override sets the followed file's thresholds (#2960); "" on the
+// other tabs and for a file judged by the globals.
+func (m *Model) thresholdsLabel() string {
+	if m.tab != TabFile || m.file == "" {
+		return ""
+	}
+	path := m.file
+	if _, ok := m.view.Files[path]; !ok {
+		if abs, err := filepath.Abs(path); err == nil {
+			path = abs
+		}
+	}
+	if l := m.th(path).Label(m.global); l != "" {
+		return "thresholds " + l
+	}
+	return ""
 }
 
 // Set replaces the index snapshot and its stats and rebuilds the rows.
@@ -716,15 +765,15 @@ func (m *Model) Refresh() {
 		keep = r.key()
 	}
 	all := m.markTests(m.markPins(m.population()))
-	fns := make([]complexity.Function, 0, len(all))
+	var sum complexity.Summer
 	for _, r := range all {
 		if r.Change == complexity.Removed || r.Gone {
 			continue // the Changes summary is the head side's
 		}
-		fns = append(fns, r.Fn)
+		sum.Add(r.Fn, m.th(r.Path))
 	}
 	// The totals stay the whole tab's; a grouped tab then lists groups.
-	m.summary = complexity.Summarize(fns, m.ccnWarn, m.cogWarn, m.cmtWarn)
+	m.summary = sum.Summary()
 	m.updateSessionDelta()
 	switch {
 	case m.treeActive(): // the tree groups per directory itself (#2954)
@@ -779,7 +828,7 @@ func (m *Model) population() []Row {
 		rel, id := m.relPath(path), m.pathLang(path)
 		fns, ords := m.classify(rel, fns)
 		for i, fn := range fns {
-			out = append(out, Row{Path: path, Rel: rel, Lang: id, Fn: fn, Commits: m.churn[rel], Hot: m.fnHot(m.churn[rel], fn), Ordinal: ords[i]})
+			out = append(out, Row{Path: path, Rel: rel, Lang: id, Fn: fn, Commits: m.churn[rel], Hot: m.fnHot(path, m.churn[rel], fn), Ordinal: ords[i]})
 		}
 	}
 	switch m.tab {
@@ -1392,6 +1441,9 @@ func (m *Model) totalsText() string {
 	case m.hasView:
 		parts = append(parts, "gen "+itoa(m.view.Gen))
 	}
+	if t := m.thresholdsLabel(); t != "" {
+		parts = append(parts, t)
+	}
 	parts = append(parts,
 		itoa(s.Functions)+" fns",
 		"NLOC "+itoa(s.NLOC),
@@ -1488,15 +1540,15 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 	// instead of in the warning colour.
 	accepted := r.Fn.Baseline == complexity.BaselineAccepted
 	if ci := m.layoutIndex(ColCCN); ci >= 0 {
-		cells[ci].Warn = r.Fn.CCN >= m.ccnWarn && !accepted
-		cells[ci].Muted = r.Fn.CCN >= m.ccnWarn && accepted
+		cells[ci].Warn = r.Fn.CCN >= m.th(r.Path).CCN && !accepted
+		cells[ci].Muted = r.Fn.CCN >= m.th(r.Path).CCN && accepted
 	}
 	if ci := m.layoutIndex(ColCog); ci >= 0 {
-		cells[ci].Warn = r.Fn.Cognitive >= m.cogWarn && !accepted
-		cells[ci].Muted = r.Fn.Cognitive >= m.cogWarn && accepted
+		cells[ci].Warn = r.Fn.Cognitive >= m.th(r.Path).Cog && !accepted
+		cells[ci].Muted = r.Fn.Cognitive >= m.th(r.Path).Cog && accepted
 	}
 	if ci := m.layoutIndex(ColCmt); ci >= 0 {
-		cells[ci].Warn = r.Fn.CommentsOver(m.cmtWarn)
+		cells[ci].Warn = m.th(r.Path).CommentsOver(r.Fn)
 	}
 	if r.Gone {
 		for c := range cells {

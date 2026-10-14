@@ -790,13 +790,16 @@ func newListEditor(m *Model, e Entry) *listEditor {
 }
 
 // splitList parses the flat rendering of a list value ("[a b]" from the typed
-// schema, or a comma-separated string) into its elements.
+// schema, or a comma-separated string) into its elements. Only the bracketed
+// form splits on spaces: a comma-less plain string is one element, so a
+// lone element holding a space ("legacy/** ccn=30", #2960) survives.
 func splitList(v string) []string {
 	v = strings.TrimSpace(v)
+	bracketed := strings.HasPrefix(v, "[") && strings.HasSuffix(v, "]")
 	v = strings.TrimPrefix(v, "[")
 	v = strings.TrimSuffix(v, "]")
 	sep := ","
-	if !strings.Contains(v, ",") {
+	if bracketed && !strings.Contains(v, ",") {
 		sep = " "
 	}
 	var out []string

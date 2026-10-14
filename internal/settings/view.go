@@ -819,7 +819,7 @@ func affordanceValue(e Entry, val string) string {
 			val = "off"
 		}
 	case List, IntList:
-		val = strings.Join(splitList(strings.Trim(val, "[]")), ", ")
+		val = strings.Join(splitList(val), ", ")
 	case Chord:
 		if val != "" {
 			val = "[" + val + "]"
