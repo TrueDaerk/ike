@@ -188,6 +188,9 @@ func (m *Model) openIntentions(msg ilsp.CodeActionsMsg) tea.Cmd {
 		for _, p := range m.reg.IntentionProviders() {
 			items = append(items, p.Items(cx)...)
 		}
+		// The complexity entries (#2965) read the model's index, baseline and
+		// pins, so the provider is built per call rather than registered.
+		items = append(items, m.complexityIntention().Items(cx)...)
 	}
 	m.actions.SetMerged(msg, items)
 	m.actions.SetPalette(m.pal())

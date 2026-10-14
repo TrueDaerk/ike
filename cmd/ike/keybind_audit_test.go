@@ -121,6 +121,11 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	// pane's own 'p'.
 	{"complexity.pin", reasonPaneKey},
 	{"deps.updateLatest", reasonIntention},
+	{"complexity.breakdownAtCaret", reasonIntention},
+	{"complexity.openAtCaret", reasonIntention},
+	{"complexity.baselineAtCaret", reasonIntention},
+	{"complexity.pinAtCaret", reasonIntention},
+	{"complexity.askAtCaret", reasonIntention},
 	{"http.", reasonPaneKey}, // the response pane's single keys
 	// #2423's GraphQL schema commands carve themselves out of that family:
 	// neither is a pane key. Introspection runs once per endpoint (and again

@@ -1028,6 +1028,12 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			withAliases(appCommand("complexity.baseline", "Complexity: Accept / Drop Selected in Baseline", ComplexityBaselineMsg{}), "accept debt", "ignore complexity", "baseline"),
 			// Optimisation-session pins (#2959): p in the pane.
 			withAliases(appCommand("complexity.pin", "Complexity: Pin / Unpin Selected Function", ComplexityPinMsg{}), "pin function", "track function", "since pin"),
+			// The caret-side alt+enter entries (#2965).
+			appCommand("complexity.breakdownAtCaret", "Complexity: Show Breakdown of Function at Caret", ComplexityBreakdownAtCaretMsg{}),
+			appCommand("complexity.openAtCaret", "Complexity: Open Function at Caret in Window", ComplexityOpenAtCaretMsg{}),
+			appCommand("complexity.baselineAtCaret", "Complexity: Accept / Drop Function at Caret in Baseline", ComplexityBaselineAtCaretMsg{}),
+			appCommand("complexity.pinAtCaret", "Complexity: Pin / Unpin Function at Caret", ComplexityPinAtCaretMsg{}),
+			appCommand("complexity.askAtCaret", "Complexity: Ask Agent to Simplify Function at Caret", ComplexityAskAtCaretMsg{}),
 			withAliases(appCommand("complexity.baselineAll", "Complexity: Accept All Over Threshold", ComplexityBaselineAllMsg{}), "seed baseline", "accept all debt", "ratchet"),
 			appCommand("deps.refresh", "Dependencies: Refresh Scan", DepsRefreshMsg{}),
 			appCommand("deps.audit", "Dependencies: Audit Vulnerabilities", DepsAuditMsg{}),

@@ -1418,6 +1418,23 @@ the request, so with both modes `off` the edit clears the marks at once.
 | `editor.marks.complexity` | `all` | Inline complexity hints on function headers: `all`, `warn` (over-threshold functions only) or `off`; a legacy `true` / `false` loads as `all` / `off`. |
 | `editor.marks.complexity_sites` | `warn` | Per-site marks after every contributing line: `warn` (inside functions at or above a threshold), `all` or `off`; independent of `editor.marks.complexity`. |
 
+**Intentions (#2965, `complexity_intention.go`).** `alt+enter` on a function
+header — or anywhere inside a function, the innermost measured unit holding
+the caret (the File tab follow's lookup) — adds the `complexity` provider's
+entries behind the LSP actions: *Show complexity breakdown*
+(`complexity.breakdownAtCaret`, a function with sites), *Open in Complexity
+window* (`complexity.openAtCaret`), *Accept into* / *Remove from complexity
+baseline* (`complexity.baselineAtCaret`; accept only for an over-threshold
+function, omitted with `complexity.baseline` off), *Pin* / *Unpin in
+Complexity window* (`complexity.pinAtCaret`) and *Ask agent to simplify*
+(`complexity.askAtCaret`). Outside a function, in an unmeasured file or
+with `complexity.enabled` off there are none. Each command opens the window
+on the File tab, selects the caret's row (`complexitypanel.SelectCaret`) and
+delegates to the pane's own action (`ToggleSites`, `ToggleBaseline`,
+`TogglePin`, `AskAgent`). The provider reads the model's index, baseline and
+pins, so `openIntentions` builds it per call instead of registering it. No
+chords: the keybind ledger records them with `reasonIntention`.
+
 ## Headless CLI (#2922)
 
 `ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [PATH...]`
