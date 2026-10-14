@@ -59,6 +59,9 @@ type Session struct {
 
 	mu   sync.Mutex
 	ptmx *os.File
+	// tty is the slave end, held open until the child exits so a fast exit
+	// cannot drain the master's queue unread (spawn_unix.go); nil on Windows.
+	tty  *os.File
 	cmd  *exec.Cmd
 	w, h int
 	// Resize debounce (#804): lastResize stamps the leading apply; a burst
@@ -341,7 +344,7 @@ func startSession(key string, argv []string, isCommand bool, dir string, w, h in
 		// The agent hook (#2843) reports these back so IKE can bind a coding
 		// agent's session to the pane it runs in.
 		"IKE_SESSION="+key, "IKE_PID="+strconv.Itoa(os.Getpid())))
-	ptmx, err := pty.StartWithSize(cmd, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)})
+	ptmx, tty, err := startOnPTY(cmd, w, h)
 	if err != nil {
 		return nil, fmt.Errorf("terminal: start %s: %w", argv[0], err)
 	}
@@ -352,6 +355,7 @@ func startSession(key string, argv []string, isCommand bool, dir string, w, h in
 		em:    vt.NewSafeEmulator(w, h),
 		send:  send,
 		ptmx:  ptmx,
+		tty:   tty,
 		cmd:   cmd,
 		w:     w, h: h,
 	}
@@ -489,6 +493,11 @@ func (s *Session) writeLoop() {
 // freezing the whole update loop.
 func (s *Session) waitExit() {
 	_ = s.cmd.Wait()
+	// The child is gone: release the slave so the reader sees EIO once the
+	// queue is drained (spawn_unix.go).
+	if s.tty != nil {
+		_ = s.tty.Close()
+	}
 	s.mu.Lock()
 	if state := s.cmd.ProcessState; state != nil {
 		s.exitCode, s.exited = state.ExitCode(), true
