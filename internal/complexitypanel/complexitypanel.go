@@ -7,6 +7,8 @@
 // shifts. The rows are one grid (internal/gridview): file, function, line,
 // CCN, cognitive, NLOC, params, depth, comment density (cmt%, #2934) — or,
 // grouped with 'b' (#2937, group.go), one aggregate row per class or file;
+// 'v' switches the Project tab to a directory tree with per-node aggregates
+// (#2954, tree.go);
 // 's' cycles the sort column, 'S' reverses it, the filter row (internal/filterbar over internal/filterexpr)
 // narrows by file:, lang:, fn:, min:, max:, kind:, class:, depth:,
 // params:, nloc:, metric: and test:, and bare words fuzzy
@@ -39,6 +41,7 @@ import (
 	"ike/internal/filterbar"
 	"ike/internal/filterexpr"
 	"ike/internal/gridview"
+	"ike/internal/hiertree"
 	"ike/internal/lang"
 	"ike/internal/theme"
 	"ike/internal/ui"
@@ -479,6 +482,11 @@ type Model struct {
 	// hist shows the distribution row ('D', #2953, histogram.go).
 	hist bool
 
+	// The tree view of the Project tab ('v', #2954, tree.go): whether it
+	// is on, and the hiertree it shows.
+	treeView bool
+	tree     hiertree.Tree[treeNode]
+
 	// The pins (#2959, pins.go): the list in effect, whether the Project
 	// tab shows its Pinned section, and the footer note of a refused 'p'.
 	pins       *complexity.Pins
@@ -575,14 +583,15 @@ func (m *Model) SetTab(t Tab) {
 	}
 	m.tab = t
 	m.cursor, m.top = 0, 0
-	if m.Grouping() != complexity.ByNone {
-		m.fitSort()
-	}
+	m.fitSort()
 	m.Refresh()
 }
 
 // layout is the selected tab's column order.
 func (m *Model) layout() []Column {
+	if m.treeActive() {
+		return m.churnLayout(treeLayout, treeChurnLayout) // #2954
+	}
 	if g := m.groupLayout(); g != nil {
 		return g
 	}
@@ -689,6 +698,9 @@ func (m *Model) Summary() complexity.Summary { return m.summary }
 
 // Selected returns the row under the cursor.
 func (m *Model) Selected() (Row, bool) {
+	if m.treeActive() {
+		return m.treeSelected()
+	}
 	if m.cursor < 0 || m.cursor >= len(m.rows) {
 		return Row{}, false
 	}
@@ -715,6 +727,7 @@ func (m *Model) Refresh() {
 	m.summary = complexity.Summarize(fns, m.ccnWarn, m.cogWarn, m.cmtWarn)
 	m.updateSessionDelta()
 	switch {
+	case m.treeActive(): // the tree groups per directory itself (#2954)
 	case m.Grouping() == complexity.ByNone:
 	case m.tab == TabChanges:
 		all = m.changesFileRows(all)
@@ -745,6 +758,9 @@ func (m *Model) Refresh() {
 	m.markHot()
 	m.spliceSites()
 	m.markCaret()
+	if m.treeActive() {
+		m.buildTree() // keeps its own expansion and selection
+	}
 	m.widths = m.columnWidths()
 	m.cursor = 0
 	for i, r := range m.rows {
@@ -845,6 +861,9 @@ func (m *Model) matches(q filterexpr.Query, r Row) bool {
 				col = ColCCN
 			}
 			x, _ := r.value(col)
+			if m.treeActive() && r.Group == nil {
+				x = float64(m.fnTreeValue(r, col)) // the tree's aggregate columns on a leaf
+			}
 			if min {
 				return x >= float64(n)
 			}
@@ -1003,6 +1022,9 @@ func (m *Model) columnWidths() []int {
 	for i, l := range labels {
 		ws[i] = lipgloss.Width(l)
 	}
+	if m.treeActive() {
+		return m.treeWidths(ws)
+	}
 	fnCol := m.layoutIndex(ColFunc)
 	for _, r := range m.rows {
 		for i, c := range r.cells(layout) {
@@ -1033,9 +1055,13 @@ func (m *Model) headerLabels() []string {
 	layout := m.layout()
 	out := make([]string, len(layout))
 	grouped := m.Grouping() != complexity.ByNone
+	tree := m.treeActive()
 	for i, c := range layout {
 		out[i] = columnLabels[c]
-		if l, ok := groupSumLabels[c]; ok && grouped {
+		if l, ok := groupSumLabels[c]; ok && grouped && !tree {
+			out[i] = l
+		}
+		if l, ok := treeLabels[c]; ok && tree {
 			out[i] = l
 		}
 	}
@@ -1109,6 +1135,11 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if ui.CopyChord(msg.String()) {
 		return m.copyRow()
 	}
+	if m.treeActive() {
+		if cmd, handled := m.treeKeyPress(msg.String()); handled {
+			return cmd
+		}
+	}
 	if ui.ListNav(msg.String(), &m.cursor, len(m.rows), m.bodyHeight(), ui.NavFull) {
 		m.clampScroll()
 		return nil
@@ -1127,6 +1158,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.Refresh()
 	case "b":
 		m.CycleGroup()
+	case "v":
+		m.ToggleTreeView()
 	case "t":
 		m.ToggleTests()
 	case "D":
@@ -1230,6 +1263,9 @@ var csvHeader = []string{"file", "function", "kind", "line", "ccn", "cognitive",
 // one row per visible function, the file column included on every tab so
 // an export stays self-describing.
 func (m *Model) CSV() string {
+	if m.treeActive() {
+		return m.treeCSV()
+	}
 	if m.tab == TabChanges {
 		if m.Grouping() == complexity.ByFile {
 			return m.changesFileCSV()
@@ -1297,7 +1333,11 @@ func (m *Model) View() string {
 	}
 	b.WriteString(gridview.HeaderRow(pal, m.headerLabels(), m.widths, 0, m.width))
 	b.WriteString("\n")
-	b.WriteString(m.renderRows(pal, m.bodyHeight()))
+	if m.treeActive() {
+		b.WriteString(m.renderTree(pal, m.bodyHeight()))
+	} else {
+		b.WriteString(m.renderRows(pal, m.bodyHeight()))
+	}
 	b.WriteString(m.footer())
 	return b.String()
 }
@@ -1480,6 +1520,13 @@ func (m *Model) footer() string {
 	count := itoa(len(m.rows)) + "/" + itoa(m.total) + " rows"
 	hints := " · tab view · s sort · S reverse · enter open · e export · y copy · r rescan · / filter"
 	switch {
+	case m.treeActive():
+		hints = m.treeFooter()
+	case m.tab == TabProject:
+		hints = " · tab view · v tree" + hints[len(" · tab view"):]
+	}
+	switch {
+	case m.treeActive():
 	case m.tab == TabChanges && m.Grouping() == complexity.ByNone:
 		hints += " · d diff · R base · b group · space sites · m marks"
 	case m.tab == TabChanges:
@@ -1555,6 +1602,10 @@ func (m *Model) headerRows() int { return m.chromeRows() - 1 }
 
 // Wheel scrolls the list by delta rows (positive = down).
 func (m *Model) Wheel(delta int) {
+	if m.treeActive() {
+		m.tree.Wheel(delta, m.bodyHeight())
+		return
+	}
 	ui.WheelWindow(&m.top, &m.cursor, delta, len(m.rows), m.bodyHeight())
 }
 
@@ -1573,6 +1624,8 @@ func (m *Model) Click(x, y int) tea.Cmd {
 	case y == hr-1:
 		m.clickColumn(x)
 		return nil
+	case m.treeActive():
+		return m.treeClick(y)
 	}
 	return m.clicks.ClickRow(y, m.top, hr, m.bodyHeight(), len(m.rows), m.now(), &m.cursor,
 		func(int) tea.Cmd { return m.open() })

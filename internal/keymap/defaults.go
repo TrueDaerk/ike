@@ -787,6 +787,9 @@ var jetbrainsRows = []row{
 	// …and D ("distribution") shows / hides the histogram row under the
 	// filter row (#2953); a bucket click narrows the list to it.
 	{"D", "complexity.histogram", "Toggle complexity distribution row", Complexity, "Complexity distribution (#2953)"},
+	// …and v ("view") switches the Project tab between the grid and the
+	// directory tree with per-node aggregates (#2954).
+	{"v", "complexity.view", "Toggle complexity tree / grid view", Complexity, "Complexity tree view (#2954)"},
 	// …and space expands the selected function into its complexity sites
 	// (#2946): the breakdown of where every CCN / cognitive point comes from.
 	{"space", "complexity.sites", "Expand / collapse complexity sites", Complexity, "Complexity sites (#2946)"},

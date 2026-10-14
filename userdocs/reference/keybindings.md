@@ -453,6 +453,7 @@ Active when the Complexity tool window has focus.
 | Mark complexity sites in the editor | `m` | `m` | `complexity.showSites` |
 | Toggle complexity distribution row | `shift+d` | `shift+d` | `complexity.histogram` |
 | Toggle complexity test files | `t` | `t` | `complexity.toggleTests` |
+| Toggle complexity tree / grid view | `v` | `v` | `complexity.view` |
 
 ## Rebinding
 

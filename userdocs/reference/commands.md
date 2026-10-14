@@ -58,6 +58,7 @@ bring their own.
 | Complexity: Expand / Collapse Sites | `complexity.sites` | `space` | — | everywhere |
 | Complexity | `complexity.toggle` | `cmd+alt+shift+x` | — | everywhere |
 | Complexity: Toggle Test Files | `complexity.toggleTests` | `t` | — | everywhere |
+| Complexity: Toggle Tree / Grid View | `complexity.view` | `v` | — | everywhere |
 | Toggle Coverage Marks | `coverage.toggle` | — | — | everywhere |
 | Open Last Crash Log | `crash.openLastLog` | — | — | everywhere |
 | CSV: Column Profile | `csv.columnProfile` | — | — | `editor` pane |

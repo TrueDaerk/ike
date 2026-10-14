@@ -54,6 +54,10 @@ func (m *Model) CycleGroup() bool {
 	default:
 		return false
 	}
+	if m.treeActive() {
+		m.note = "the tree groups per directory, file and class; v returns to the grid"
+		return true
+	}
 	next := cycle[0]
 	for i, l := range cycle {
 		if l == *cur {
@@ -131,9 +135,10 @@ func (m *Model) ToggleTests() {
 const testsHidden = "tests:hidden"
 
 // Mode renders the pane's persisted display state for the layout store:
-// GroupMode, then "tests:hidden" while the test files are hidden (#2950)
-// and "hist:on" while the distribution row shows (#2953) —
-// "project:file,file:class,tests:hidden,hist:on".
+// GroupMode, then "tests:hidden" while the test files are hidden (#2950),
+// "hist:on" while the distribution row shows (#2953) and "view:tree" while
+// the Project tab shows the tree (#2954) —
+// "project:file,file:class,tests:hidden,hist:on,view:tree".
 func (m *Model) Mode() string {
 	var parts []string
 	if g := m.GroupMode(); g != "" {
@@ -145,19 +150,24 @@ func (m *Model) Mode() string {
 	if m.hist {
 		parts = append(parts, histOn)
 	}
+	if m.treeView {
+		parts = append(parts, viewTree)
+	}
 	return strings.Join(parts, ",")
 }
 
 // SetMode restores Mode's form; unknown tokens (a newer build's) are
 // ignored.
 func (m *Model) SetMode(mode string) {
-	m.hideTests, m.hist = false, false
+	m.hideTests, m.hist, m.treeView = false, false, false
 	for _, part := range strings.Split(mode, ",") {
 		switch part {
 		case testsHidden:
 			m.hideTests = true
 		case histOn:
 			m.hist = true
+		case viewTree:
+			m.treeView = true
 		}
 	}
 	m.SetGroupMode(mode)

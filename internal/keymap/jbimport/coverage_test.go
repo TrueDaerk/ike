@@ -82,6 +82,7 @@ var noCounterpart = map[string]string{
 	"complexity.group":                 "IKE-only concept (#2937): the grouping cycle of the Complexity window, which JetBrains does not have",
 	"complexity.toggleTests":           "IKE-only concept (#2950): the hide-tests toggle of the Complexity window, which JetBrains does not have",
 	"complexity.histogram":             "IKE-only concept (#2953): the distribution row of the Complexity window, which JetBrains does not have",
+	"complexity.view":                  "IKE-only concept (#2954): the grid / tree view switch of the Complexity window, which JetBrains does not have",
 	"complexity.baseline":              "IKE-only concept (#2958): the accepted-debt baseline toggle of the Complexity window, which JetBrains does not have",
 	"agent.ask":                        "IKE-only concept (0540, #2845): JetBrains has no coding-agent session fork to ask",
 	"markdown.preview":                 "no default JetBrains keymap action",

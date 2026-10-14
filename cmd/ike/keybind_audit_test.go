@@ -108,6 +108,9 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	{"complexity.export", reasonPaneKey},
 	// The Changes tab's function diff (#2956) is the pane's own 'd'.
 	{"complexity.functionDiff", reasonPaneKey},
+	// The grid ↔ tree switch of the Project tab (#2954) is the pane's own
+	// 'v' (also bound in the Complexity context, like b / t / D).
+	{"complexity.view", reasonPaneKey},
 	// Seeding the accepted-debt baseline (#2958) happens once per project
 	// (and after a threshold change); it rewrites a committed file behind
 	// a confirmation, so the palette is the right doorway.

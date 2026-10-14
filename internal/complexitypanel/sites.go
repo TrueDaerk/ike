@@ -28,6 +28,9 @@ const siteIndent = "  "
 // parent. It reports false when the selection has nothing to expand: no
 // row, a group row, a removed function, or a function without sites.
 func (m *Model) ToggleSites() bool {
+	if m.treeActive() {
+		return m.toggleTreeSites() // #2954
+	}
 	r, ok := m.Selected()
 	if !ok {
 		return false
@@ -81,7 +84,7 @@ func (r Row) expandKey() string {
 // children stay glued under their parent whatever the sort. A grouped tab
 // has no function rows and nothing to expand.
 func (m *Model) spliceSites() {
-	if m.expanded == "" || m.Grouping() != complexity.ByNone {
+	if m.expanded == "" || m.Grouping() != complexity.ByNone || m.treeActive() {
 		return
 	}
 	for i, r := range m.rows {

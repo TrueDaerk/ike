@@ -8608,6 +8608,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.toggleComplexityHistogram()
 		return m, nil
 
+	case ComplexityViewMsg:
+		// complexity.view (#2954), v in the pane: the grid ↔ tree switch.
+		m.toggleComplexityView()
+		return m, nil
+
 	case ComplexitySitesMsg:
 		// complexity.sites (#2946), space in the pane: expand / collapse the
 		// selected function into its complexity sites.

@@ -551,6 +551,61 @@ The bucket the filter names renders bold, and a second click on it clears
 both keys. The state persists as `hist:on` in the layout `Mode`
 (`project:file,tests:hidden,hist:on`); the Changes tab has no row.
 
+**Tree view (#2954, `tree.go`).** `v` — the `complexity.view` command,
+bound to `v` in the `complexity` keymap context and in the palette as
+"Complexity: Toggle Tree / Grid View" — switches the Project tab between
+the grid and a `hiertree` directory tree: root → directory → … → file →
+class → function, a class level only where functions carry a `Class`
+(free functions sit directly under the file), every directory level kept
+(no chain collapsing — the levels are what the user drills through). The
+tree is built from the filtered function rows (`treeRoot`: the
+project-relative paths split on `/`) and served by `hiertree.Static`, the
+whole tree in memory; a node's key (`dir\0rel`, `file\0path`,
+`class\0path\0class`, `fn\0path\0name\0change\0ordinal`) is what
+`hiertree.Refresh` carries the expansion and the selection by, so a
+`ComplexityChangedMsg` (`Set` → `Refresh` → `buildTree`) keeps both; the
+first build opens the tree with the root expanded, and a non-empty filter
+unfolds every directory, file and class so the matches show
+(`expandBranches`). Each directory, file and class node is a group row
+(`Row.Group`, `aggregateRow`: `complexity.Summarize` over the function
+rows below it with `DepthMax` / `ParamsMax`, `Members` for `i`), computed
+once per rebuild, bottom-up; the root row equals the tab's totals. The
+layout (`treeLayout`, `name`, funcs, nloc, `Σccn`, ccn max, `Σcog`, cog
+max, `cmt%`, over, excess, plus commits and hot inside a repository — a
+file node its file's, a class node its file's commits over the class
+summary, a directory the sums) is extensible for later node columns. A
+function leaf shows its own metrics in nloc, `Σccn`, `Σcog`, `cmt%`,
+excess and commits, the count, the maxima and over blank
+(`fnTreeCell`); its name carries the grid's marks (`✓`, `★`). Children
+sort by the sort column (`sortNodes`: `Σccn` descending by default, the
+name column as text; `s` cycles the tree layout, `S` reverses, header
+clicks sort) — a function leaf reads the aggregate columns as its own
+metric (`fnTreeValue`: ccn max → CCN, over → 0 / 1, excess), which
+`min:` / `max:` read too. Warning colour: the group rule on a node
+(`groupWarn`), the function rule on a leaf. Keys: the list navigation
+and `enter` / `l` / `h` / `space` / `tab` go through `hiertree.Key`
+(`treeKeyPress`) — `enter` opens a function (`OpenLocationMsg`) or a
+breakdown row's line and toggles any other node, `l` / `right` unfold,
+`h` / `left` fold or climb to the parent, `tab` cycles the tab; `space`
+(`ToggleSites` → `toggleTreeSites`) toggles a function's breakdown — a
+function with sites or candidates carries them as children (#2946 /
+#2948, in the breakdown's order), a function without reports "nothing to
+expand", a breakdown row folds its parent, an aggregate node toggles.
+`b` leaves the tree alone and says so in the footer. `Selected` reads
+the tree cursor, so `y` (`groupCopyText`: `a: funcs=3 ccn=26 (max 20)
+cog=29 (max 25)`), `i`, `p`, `m` and `d` work on the selected node; `e`
+exports the visible rows (breakdown rows left out) as
+`path,kind,name,functions,nloc,ccn_sum,ccn_max,cog_sum,cog_max,comment_lines,cmt_pct,over_threshold,excess`
+(+ `commits,hot`), kind one of dir / file / class / function. The mouse:
+a click selects, a double click acts as `enter`, the wheel scrolls the
+tree window (`hiertree.Window` / `Wheel`, the shared follow). The header
+totals, the tab bar, the distribution row and the hide-tests toggle are
+the grid's; the Pinned section does not form (a gone pin has no node).
+The state persists as `view:tree` in the layout `Mode`
+(`project:file,tests:hidden,hist:on,view:tree`) and the command saves
+the layout at once; the footer reads `v tree` on the grid, `v grid` on
+the tree.
+
 **Grouping (#2937).** `b` — the `complexity.group` command, bound to `b`
 in the `complexity` keymap context and in the palette as "Complexity: Cycle
 Grouping" — cycles the Project tab none → class → file and the File tab
