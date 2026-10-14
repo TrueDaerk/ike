@@ -159,7 +159,15 @@ jobs:
         shell: pwsh
         run: |
           if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Host 'winget not on this image - skipped'; exit 0 }
-          Get-ChildItem deploy/winget -Directory | ForEach-Object { winget validate --manifest $_.FullName; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE } }
+          # Warnings exit non-zero too — e.g. the zero placeholder hashes the
+          # checked-in set carries before its first release — so the verdict
+          # is the "succeeded" line, not the exit code.
+          foreach ($d in Get-ChildItem deploy/winget -Directory) {
+            $out = winget validate --manifest $d.FullName 2>&1 | Out-String
+            Write-Host $out
+            if ($out -notmatch 'Manifest validation succeeded') { throw "winget validate failed for $($d.Name)" }
+          }
+          exit 0
 
       - uses: actions/upload-artifact@v4
         with:
