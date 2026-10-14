@@ -1,5 +1,15 @@
 # Log
 
+## 2026-10-14 (long pipe tables: a caret move lays out rows, never the block, #2993)
+
+- [Editor](/architecture/editor.md): "A caret move never re-renders a block"
+  under the per-cell table reveal — `tableView`, `layoutTableRow`, the
+  stored cells/widths/alignments, the `tableRenders` test seam.
+- [Markdown Preview](/architecture/markdown-preview.md): Scroll sync — a
+  caret move never renders; the long-table fixture and benchmarks.
+- [Performance & Diagnostics](/architecture/performance.md): the #2993
+  measurement and the before/after table.
+
 ## 2026-10-14 (Markdown export of the Complexity window and `--md`, #2963)
 
 - [Code Complexity](/architecture/complexity.md): Tool window "Actions" —

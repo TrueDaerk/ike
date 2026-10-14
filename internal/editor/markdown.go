@@ -2,6 +2,7 @@ package editor
 
 import (
 	"strings"
+	"sync/atomic"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -363,6 +364,13 @@ type mdTableBlock struct {
 	start, end int
 	rows       []string
 	widths     []int
+	// cells holds every row's inline-rendered cell texts (the delimiter row
+	// raw) and aligns the per-column alignment, so a row can be re-laid-out
+	// on its own — the cursor's raw-revealed cell (#1599) changes one row's
+	// cells and at most one column's width, and must not cost a render of
+	// the whole block per visible row (#2993).
+	cells  [][]string
+	aligns []int
 }
 
 // cellSeg is one cell's source segment on a pipe row: the [from, to) rune
@@ -415,23 +423,55 @@ type mdTableState struct {
 // (#1599, tableRowsAt); secondary carets or a selection inside the block
 // still flip it fully raw.
 func (m Model) mdTableRow(line int) (string, bool) {
-	rows, rawLine, b, ok := m.tableRowsAt(line)
+	v, rawLine, ok := m.tableRowsAt(line)
 	if !ok || line == rawLine {
 		return "", false
 	}
-	return rows[line-b.start], true
+	return v.row(line), true
+}
+
+// tableView is the box-drawn display of one table block under the current
+// caret state: the block, the column widths in effect and the cursor's
+// raw-revealed cell, if any (#1599). Rows are laid out on demand by row():
+// the pre-rendered rows serve while no cell is raw, and a raw cell re-lays
+// out only the rows actually asked for, from the block's rendered cells. The
+// whole-block re-render this replaces ran once per visible row and per
+// column mapping, which made a caret move in a 5000-row table cost seconds
+// (#2993); now a caret move inside a table costs O(visible rows × columns)
+// regardless of the table's length.
+type tableView struct {
+	blk    mdTableBlock
+	widths []int
+	raw    *mdRawCell
+}
+
+// row returns the display row for buffer line, which must lie in the block.
+func (v tableView) row(line int) string {
+	ri := line - v.blk.start
+	if v.raw == nil || ri < 0 || ri >= len(v.blk.cells) {
+		return v.blk.rows[ri]
+	}
+	cells := v.blk.cells[ri]
+	rawCell := -1
+	if ri == v.raw.row && v.raw.cell < len(cells) {
+		cells = append([]string(nil), cells...)
+		cells[v.raw.cell] = v.raw.display()
+		rawCell = v.raw.cell
+	}
+	return layoutTableRow(cells, v.widths, v.blk.aligns, ri, rawCell)
 }
 
 // tableRowsAt resolves the box-drawn display of the table block containing
-// line: the display rows, the block (carrying the widths the rows were laid
-// out with), and rawLine — the one block line showing raw pipe source (-1
-// when none; the cursor on table chrome or the delimiter row reveals its
-// whole row). ok=false when line is in no block or the block renders fully
-// raw: rendering off, soft wrap, secondary carets or a selection inside the
-// block (their styling only renders through the raw cell loop).
-func (m Model) tableRowsAt(line int) (rows []string, rawLine int, b mdTableBlock, ok bool) {
+// line: the view (the block, the widths its rows are laid out with and the
+// raw-revealed cell), and rawLine — the one block line showing raw pipe
+// source (-1 when none; the cursor on table chrome or the delimiter row
+// reveals its whole row). ok=false when line is in no block or the block
+// renders fully raw: rendering off, soft wrap, secondary carets or a
+// selection inside the block (their styling only renders through the raw
+// cell loop).
+func (m Model) tableRowsAt(line int) (v tableView, rawLine int, ok bool) {
 	if !m.mdRenderOn() || m.softWrap || m.mdTables == nil {
-		return nil, 0, mdTableBlock{}, false
+		return tableView{}, 0, false
 	}
 	for _, blk := range m.tableBlocks() {
 		if line < blk.start || line > blk.end {
@@ -439,18 +479,18 @@ func (m Model) tableRowsAt(line int) (rows []string, rawLine int, b mdTableBlock
 		}
 		for _, c := range m.carets {
 			if c.pos.Line >= blk.start && c.pos.Line <= blk.end {
-				return nil, 0, mdTableBlock{}, false
+				return tableView{}, 0, false
 			}
 		}
 		if s, e, sel := m.selectionSpansLines(); sel && s <= blk.end && e >= blk.start {
-			return nil, 0, mdTableBlock{}, false
+			return tableView{}, 0, false
 		}
 		if m.focused && m.cursor.Line >= blk.start && m.cursor.Line <= blk.end {
 			return m.tableCursorRows(blk)
 		}
-		return blk.rows, -1, blk, true
+		return tableView{blk: blk, widths: blk.widths}, -1, true
 	}
-	return nil, 0, mdTableBlock{}, false
+	return tableView{}, 0, false
 }
 
 // selectionSpansLines returns the inclusive line range of the active visual
@@ -469,28 +509,37 @@ func (m Model) selectionSpansLines() (start, end int, ok bool) {
 	return start, end, true
 }
 
-// tableCursorRows renders blk with the cursor inside it (#1599): the frame
-// stays box-drawn and only the cursor's cell shows raw source, re-laid-out so
-// the column grows to fit the raw text. The cursor on the delimiter row or on
-// table chrome (a pipe, the indent before the first pipe, past the last cell)
+// tableCursorRows views blk with the cursor inside it (#1599): the frame
+// stays box-drawn and only the cursor's cell shows raw source, its column
+// grown to fit the raw text. The cursor on the delimiter row or on table
+// chrome (a pipe, the indent before the first pipe, past the last cell)
 // reveals its whole row as raw source instead — reaching the cell edge
-// de-conceals the borders.
-func (m Model) tableCursorRows(blk mdTableBlock) (rows []string, rawLine int, b mdTableBlock, ok bool) {
+// de-conceals the borders. Only the widths are computed here; the rows come
+// from the view on demand (#2993). The raw text is the cell's source with
+// its markers and padding, never narrower than its rendered form, so growing
+// the one column is the exact layout a full re-render would produce.
+func (m Model) tableCursorRows(blk mdTableBlock) (v tableView, rawLine int, ok bool) {
 	row := m.cursor.Line - blk.start
 	if row == 1 {
-		return blk.rows, m.cursor.Line, blk, true
+		return tableView{blk: blk, widths: blk.widths}, m.cursor.Line, true
 	}
 	cell, segs := m.rawCellAt(m.cursor.Line)
 	if cell < 0 {
-		return blk.rows, m.cursor.Line, blk, true
+		return tableView{blk: blk, widths: blk.widths}, m.cursor.Line, true
 	}
 	raw := &mdRawCell{
 		row: row, cell: cell, seg: segs[cell],
 		text:      []rune(m.buf.Line(m.cursor.Line)),
 		cursorCol: m.cursor.Col, style: m.cursorStyle(),
 	}
-	nb := renderTableWith(m.buf.Lines(), blk.start, blk.end, m.cellStyles(), raw)
-	return nb.rows, -1, nb, true
+	widths := blk.widths
+	if cell < len(widths) {
+		if w := lipgloss.Width(raw.display()); w > widths[cell] {
+			widths = append([]int(nil), widths...)
+			widths[cell] = w
+		}
+	}
+	return tableView{blk: blk, widths: widths, raw: raw}, -1, true
 }
 
 // rawCellAt returns the index of the cell revealed raw on line — the cell the
@@ -818,24 +867,16 @@ func (rc *mdRawCell) display() string {
 // (#945) — emphasis attributes, code/link theme styles, marker chrome dropped
 // — so widths and alignment size by what is displayed, and the rows carry the
 // styling (borders faint) ready for the ANSI-aware window in renderTableRow.
+// The rendered cells, widths and alignments stay on the block so a single
+// row can be laid out again later (tableView, #2993).
 func renderTable(lines []string, start, end int, st mdCellStyles) mdTableBlock {
-	return renderTableWith(lines, start, end, st, nil)
-}
-
-// renderTableWith is renderTable with an optional raw-revealed cell (#1599):
-// that cell renders its raw source (untrimmed, left-anchored, cursor styled)
-// instead of its inline-rendered form, and the widths grow to fit it.
-func renderTableWith(lines []string, start, end int, st mdCellStyles, raw *mdRawCell) mdTableBlock {
+	tableRenders.Add(1)
 	rows := make([][]string, 0, end-start+1)
 	cols := 0
 	for i := start; i <= end; i++ {
 		cells := splitCells(lines[i])
 		if i != start+1 { // the delimiter row stays raw
 			for ci := range cells {
-				if raw != nil && i-start == raw.row && ci == raw.cell {
-					cells[ci] = raw.display()
-					continue
-				}
 				cells[ci] = renderCellInline(cells[ci], st)
 			}
 		}
@@ -868,52 +909,63 @@ func renderTableWith(lines []string, start, end int, st mdCellStyles, raw *mdRaw
 		}
 	}
 
-	border := lipgloss.NewStyle().Faint(true)
-	pipe := border.Render("│")
-	b := mdTableBlock{start: start, end: end, widths: widths}
+	b := mdTableBlock{start: start, end: end, widths: widths, cells: rows, aligns: aligns}
+	b.rows = make([]string, 0, len(rows))
 	for ri, cells := range rows {
-		if ri == 1 {
-			var s strings.Builder
-			s.WriteString(border.Render("├"))
-			for ci, w := range widths {
-				if ci > 0 {
-					s.WriteString(border.Render("┼"))
-				}
-				s.WriteString(border.Render(strings.Repeat("─", w+2)))
-			}
-			s.WriteString(border.Render("┤"))
-			b.rows = append(b.rows, s.String())
-			continue
-		}
-		var s strings.Builder
-		s.WriteString(pipe)
-		for ci, w := range widths {
-			if ci > 0 {
-				s.WriteString(pipe)
-			}
-			cell := ""
-			if ci < len(cells) {
-				cell = cells[ci]
-			}
-			pad := w - lipgloss.Width(cell)
-			left, right := 0, pad
-			switch aligns[ci] {
-			case alignRight:
-				left, right = pad, 0
-			case alignCenter:
-				left, right = pad/2, pad-pad/2
-			}
-			if raw != nil && ri == raw.row && ci == raw.cell {
-				// The raw-revealed cell stays left-anchored so its source
-				// columns map 1:1 onto the display region (#1599).
-				left, right = 0, pad
-			}
-			s.WriteString(" " + strings.Repeat(" ", left) + cell + strings.Repeat(" ", right) + " ")
-		}
-		s.WriteString(pipe)
-		b.rows = append(b.rows, s.String())
+		b.rows = append(b.rows, layoutTableRow(cells, widths, aligns, ri, -1))
 	}
 	return b
+}
+
+// tableRenders counts whole-block table renders — the test seam for the
+// #2993 rule that a caret move or click never re-renders a block; only a
+// document change (tableBlocks' version check) does.
+var tableRenders atomic.Int64
+
+// layoutTableRow lays out one display row of a table: row index 1 is the
+// delimiter row and draws the ├─┼─┤ rule, every other row its cells padded
+// to widths and aligned per aligns. rawCell names the cell revealed raw on
+// this row (-1 for none, #1599): it stays left-anchored so its source
+// columns map 1:1 onto the display region.
+func layoutTableRow(cells []string, widths, aligns []int, ri, rawCell int) string {
+	border := lipgloss.NewStyle().Faint(true)
+	var s strings.Builder
+	if ri == 1 {
+		s.WriteString(border.Render("├"))
+		for ci, w := range widths {
+			if ci > 0 {
+				s.WriteString(border.Render("┼"))
+			}
+			s.WriteString(border.Render(strings.Repeat("─", w+2)))
+		}
+		s.WriteString(border.Render("┤"))
+		return s.String()
+	}
+	pipe := border.Render("│")
+	s.WriteString(pipe)
+	for ci, w := range widths {
+		if ci > 0 {
+			s.WriteString(pipe)
+		}
+		cell := ""
+		if ci < len(cells) {
+			cell = cells[ci]
+		}
+		pad := w - lipgloss.Width(cell)
+		left, right := 0, pad
+		switch aligns[ci] {
+		case alignRight:
+			left, right = pad, 0
+		case alignCenter:
+			left, right = pad/2, pad-pad/2
+		}
+		if ci == rawCell {
+			left, right = 0, pad
+		}
+		s.WriteString(" " + strings.Repeat(" ", left) + cell + strings.Repeat(" ", right) + " ")
+	}
+	s.WriteString(pipe)
+	return s.String()
 }
 
 // --- display↔source column mapping on box-drawn rows (#1599) ---------------
@@ -936,7 +988,7 @@ func tableCellStart(widths []int, ci int) int {
 // concealed. disp counts display cells from the line start; ok=false when the
 // line does not currently render box-drawn.
 func (m Model) tableClickCol(line, disp int) (int, bool) {
-	_, rawLine, b, ok := m.tableRowsAt(line)
+	b, rawLine, ok := m.tableRowsAt(line)
 	if !ok || line == rawLine {
 		return 0, false
 	}
@@ -982,7 +1034,7 @@ func (m Model) tableClickCol(line, disp int) (int, bool) {
 // display column from the line start — DisplayOffset's table branch,
 // tableClickCol's inverse (same exact/approximate split).
 func (m Model) tableDisplayCol(line, col int) (int, bool) {
-	_, rawLine, b, ok := m.tableRowsAt(line)
+	b, rawLine, ok := m.tableRowsAt(line)
 	if !ok || line == rawLine {
 		return 0, false
 	}

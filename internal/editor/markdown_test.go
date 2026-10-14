@@ -14,7 +14,7 @@ import (
 
 // mdLoaded loads content under a .md path (the table layer checks the
 // language) with a registered bare markdown language, sized and focused.
-func mdLoaded(t *testing.T, content string) (Model, string) {
+func mdLoaded(t testing.TB, content string) (Model, string) {
 	t.Helper()
 	lang.Register(lang.Language{ID: "markdown", Extensions: []string{"md"}})
 	path := filepath.Join(t.TempDir(), "doc.md")

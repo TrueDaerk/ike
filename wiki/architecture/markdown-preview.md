@@ -4,7 +4,7 @@ title: Markdown Preview
 description: "#62 — rendered live preview pane for markdown buffers: glamour-rendered ANSI split beside the editor, debounced re-render off the editor change seam, heading-anchored cursor scroll sync, theme-aware styling, layout persistence; #2180 — followable links and inline Kitty-rendered local images; #2421 — fenced mermaid diagrams rendered by an external renderer, async and cached, as ASCII or as an embedded PNG."
 resource: internal/preview
 tags: [architecture, markdown, preview, pane, glamour, links, kitty, diagrams, mermaid]
-timestamp: 2026-09-03T00:00:00Z
+timestamp: 2026-10-14T09:00:00Z
 ---
 
 # Markdown Preview (#62)
@@ -211,6 +211,19 @@ between two headings shifts neither of them out of sync. A focused preview
 also scrolls directly — `j/k`, arrows, `pgup/pgdown`, `ctrl+u/ctrl+d`, `g/G` —
 and the mouse wheel scrolls it unfocused; the next cursor move in the source
 re-syncs the view, including after a link selection scrolled it elsewhere.
+
+A caret move never renders (#2993): `SetCursorLine` is `follow` → `mapLine`,
+a walk of the heading anchors plus a newline count of the source — nothing
+proportional to the rendered document. Only a source change (`SetSource`,
+debounced), a resize or a palette change runs glamour again, and `View`
+touches only the viewport rows. On the 5000-row pipe-table fixture
+(`testdata/longtable.md`, the Complexity window's Markdown export shape,
+#2963) a render costs ~300 ms, a `SetCursorLine` ~7 µs and a 50-row `View`
+~60 µs (`longtable_bench_test.go`; `TestCaretMoveNeverRenders` counts
+renders across caret moves). The one-to-two-second click of #2993 was not
+the preview's at all but the editor's own pipe-table rendering with the
+caret inside the block — see [Editor](./editor.md), "A caret move never
+re-renders a block".
 
 ## Future work
 

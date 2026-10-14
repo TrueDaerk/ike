@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-10-13T18:00:00Z
+timestamp: 2026-10-14T09:00:00Z
 ---
 
 # Editor
@@ -2318,8 +2318,8 @@ attributes in `styleAt`):
   window as any other line (ANSI-aware, since the rows carry styling).
 - **Per-cell table reveal** (#1599): the cursor entering the block no longer
   flips it raw — the frame stays box-drawn and only the cursor's cell shows
-  raw source (`tableCursorRows` re-renders the block with that cell
-  untrimmed, left-anchored and cursor-styled, columns growing to fit). The
+  raw source (`tableCursorRows` views the block with that cell untrimmed,
+  left-anchored and cursor-styled, its column grown to fit). The
   cursor on table chrome — a pipe, the delimiter row, the indent, past the
   last cell — reveals its whole row raw instead (reaching the cell edge
   de-conceals the borders). Secondary carets or a selection touching the
@@ -2329,6 +2329,21 @@ attributes in `styleAt`):
   on the block's stored column widths): border clicks land on the pipe they
   draw, cell clicks inside the cell's source segment — exact in the
   raw-revealed cell, approximate in rendered cells.
+- **A caret move never re-renders a block** (#2993): `renderTable` runs once
+  per document version (`tableBlocks`) and keeps the inline-rendered cells,
+  the column widths and the alignments on the `mdTableBlock`; the caret's raw
+  cell is a `tableView` over that block — the stored widths with the raw
+  cell's column grown — whose `row` lays out one display row on demand from
+  the stored cells (`layoutTableRow`). So a frame with the caret inside a
+  table costs the visible rows times the columns, never the table's length.
+  The whole-block re-render this replaced ran once per visible row and once
+  per click/display column mapping: a click in a 5000-row table (the
+  Complexity window's Markdown export, #2963) took 1.7 s per frame, now
+  3 ms (`BenchmarkTableCaretMoveView`; `TestTableCaretMoveRendersNoBlock`
+  counts block renders through `tableRenders`,
+  `TestTableRawCellViewMatchesFullRender` pins the layout to the full
+  re-render's). Raw source is never narrower than its rendered form (the
+  renderer only drops markers), so growing the one column is exact.
 - **Cell inline rendering** (#945): cell content renders its inline markdown
   inside the box-drawing rows — the per-line conceal/style pipeline cannot
   follow text into the re-laid-out cells, so `renderCellInline` is a small
