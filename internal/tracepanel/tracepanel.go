@@ -427,7 +427,7 @@ func (m *Model) rows(nodes []agenttrace.Node) []hiertree.Row[agenttrace.Node] {
 // rows that carry a file — the location, with the 1-based FileRef line
 // mapped onto hiertree's 0-based Line (-1 = unknown).
 func entry(n agenttrace.Node, linked bool) hiertree.Entry {
-	e := hiertree.Entry{Name: n.Label, Detail: n.Detail, Line: -1}
+	e := hiertree.Entry{Name: n.Label, Detail: n.Detail, Line: -1, Warn: n.Warn}
 	if linked {
 		e.Detail = strings.TrimSpace(e.Detail + " " + linkMark)
 	}

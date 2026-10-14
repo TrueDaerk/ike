@@ -546,6 +546,10 @@ type Complexity struct {
 	// threshold in the Problems feed, the tool window's totals and group
 	// rows or the CLI summary. Off ignores the file everywhere.
 	Baseline bool `toml:"baseline"`
+	// AgentVerdict (#2964) makes the Stop hook event of a coding agent
+	// (agent.hooks.install) diff the working tree against HEAD in IKE's
+	// process and post the verdict into the Agent Trace window.
+	AgentVerdict bool `toml:"agent_verdict"`
 }
 
 // Debug holds debugger behaviour (0360). PHP carries the web/request listen

@@ -404,7 +404,8 @@ func (m Model) handleTraceRead(msg traceReadMsg) (tea.Model, tea.Cmd) {
 	p.SetRead(msg.at, msg.added)
 	changed := msg.saved != nil
 	if msg.rev != m.traceShownRev || !p.HasSession() || msg.info != p.Info() {
-		p.Set(msg.nodes, msg.info)
+		m.traceNodes = msg.nodes
+		p.Set(m.traceWithNotes(msg.nodes, msg.info.ID), msg.info)
 		p.SetPath(msg.stops)
 		m.traceShownRev = msg.rev
 		changed = true

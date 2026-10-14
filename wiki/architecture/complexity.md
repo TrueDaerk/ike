@@ -616,7 +616,7 @@ function with sites or candidates carries them as children (#2946 /
 expand", a breakdown row folds its parent, an aggregate node toggles.
 `b` leaves the tree alone and says so in the footer. `Selected` reads
 the tree cursor, so `y` (`groupCopyText`: `a: funcs=3 ccn=26 (max 20)
-cog=29 (max 25)`), `i`, `p`, `m` and `d` work on the selected node; `e`
+cog=29 (max 25)`), `i`, `p`, `m`, `d` and `a` work on the selected node; `e`
 exports the visible rows (breakdown rows left out) as
 `path,kind,name,functions,nloc,ccn_sum,ccn_max,cog_sum,cog_max,comment_lines,cmt_pct,over_threshold,excess`
 (+ `commits,hot`), kind one of dir / file / class / function. The mouse:
@@ -1662,6 +1662,62 @@ binary, checks the banner and the refusal, runs
 packages. CGo stays required: without it `complexity.Available()` is false
 and the command exits 2, as in the full build.
 
+## Agent (#2964)
+
+Two bridges to a coding agent, both built on epic 0540's headless runner
+(`internal/agentask`) and Claude Code hooks (`agent.hooks.install`).
+
+**Simplify on request.** `a` on a function row of any tab (a site or
+candidate row stands for its parent; a group, file, removed or Trend row
+refuses with a footer note) sends `complexitypanel.AskAgentMsg{Path, Line,
+EndLine, Name, CCN, Cognitive, Lang, Fn}`; `complexity.askAgent` is the
+palette's spelling (keybind-less, `reasonPaneKey` in the ledger). The app
+(`complexity_agent.go`) cuts the function's source out of the open buffer
+(the unsaved text when the file is open) or the disk, converts the row into
+`agentask.Simplify` — path, language, range, metrics, the sites (#2946) and
+the best extraction candidate by saving (#2948) — and builds the prompt with
+`agentask.SimplifyPrompt`: the ask marker, `File: … (lang), lines a–b`,
+`Function: name (CCN n, cognitive m)`, the site lines (capped at
+`MaxSimplifySites`), the candidate line, the source fenced in its language
+(capped at `MaxSimplifySource`), then the fixed `SimplifyInstruction`
+(*reduce the cognitive complexity … without changing its behaviour; keep
+the public signature; keep tests green; answer with a unified diff against
+the file and one paragraph on what you changed and why*). The argv is
+`agentask.FreshCommand` — `agentask.Command` without `--resume` /
+`--fork-session`: a fresh `claude -p` session on the `agent.ask.*` model and
+turn limit, tool-less, JSON output, the explain-only system prompt — run
+through `agentask.Run` in the project root off the Update loop. One run per
+function at a time (`cxAgent.running`, keyed path + name + line): `a` again
+while it runs only notifies. The answer opens as a `.md` scratch — a heading
+naming the function, the answer with a bare unified diff fenced as
+```` ```diff ```` (`fenceDiff`). A missing `claude` reuses agent.ask's
+install message; a failed run notifies with the runner's error (the first
+stderr line). The session the run leaves behind is tagged by the ask marker
+and its id is added to `askForks`, so trace discovery skips it.
+
+**Verdict on Stop.** With `complexity.agent_verdict` on, the `Stop` hook
+event — Claude Code's end-of-turn hook, now one of `agenttrace.HookEvents`
+and `deeplink.AgentEvents` — makes `handleAgentEvent` schedule
+`complexityVerdictCmd` (`complexity_verdict.go`) beside the terminal
+binding, whether or not a terminal matched. Off the loop it detects the
+session cwd's repository and runs the Changes tab's diff job
+(`runComplexityDiff`, the `--diff` equivalent) against `HEAD`: the full job
+of `complexityDiffJob` — snapshot, index, dirty buffers, base cache, the
+per-file thresholds — when that repository is the project's own, else a
+bare job on the detected root. The result is worded by
+`complexityVerdictText` as `complexity: LESS COMPLEX (excess −12)` (the
+excess delta always; `, cognitive ±n` when the excess held and the cognitive
+sum decided) and posted as `cxVerdictMsg`: the note is filed per session id
+(`traceNotes`, the last 50) and, when the trace pane shows that live
+session, the tree is re-set with the note appended under the last turn as an
+`agenttrace.NodeNote` row (`Warn` for a positive excess delta → the warning
+colour through `hiertree.Entry.Warn`); `handleTraceRead` re-applies the
+notes to every rebuilt tree (`traceWithNotes`). A pane not showing the
+session gets a toast instead. The hook process itself is unchanged: it
+forwards the event and exits 0 at once — the diff never blocks the agent.
+Off, nothing runs. Users who installed the hooks before #2964 run
+`agent.hooks.install` again to add the `Stop` entry.
+
 ## Settings
 
 All keys live in the `[complexity]` section (Settings > Complexity, user
@@ -1679,6 +1735,7 @@ scope), validated in the form and by `config.Validate`:
 | `complexity.churn_days` | `90` | Hotspot window in days (1-3650): the commits the `commits` / `hot` columns count; `--churn`'s default. |
 | `complexity.trend_commits` | `30` | Trend window in commits (1-500, #2962): how many first-parent commits the Trend tab and `--trend` measure the project at. |
 | `complexity.baseline` | `true` | Apply `.ike/complexity-baseline.json` (#2958): accepted functions leave the over counts, Problems and the warning colour; off ignores the file everywhere. |
+| `complexity.agent_verdict` | `false` | Diff the working tree against `HEAD` on the agent's `Stop` hook event and post the verdict into the Agent Trace window (#2964); off runs nothing. |
 
 ## Limitations
 

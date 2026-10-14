@@ -58,9 +58,12 @@ type agentSession struct {
 // handleAgentEvent binds the event's session to its terminal. Unmatched
 // events are dropped: the pane then falls back to discovery.
 func (m Model) handleAgentEvent(ev deeplink.Event) (tea.Model, tea.Cmd) {
+	// A Stop with complexity.agent_verdict on runs the verdict (#2964)
+	// whether or not a terminal matches: the note is filed by session id.
+	verdict := m.complexityVerdictCmd(ev)
 	key := m.agentEventTarget(ev)
 	if key == "" {
-		return m, nil
+		return m, verdict
 	}
 	if m.agentSessions == nil {
 		m.agentSessions = map[string]agentSession{}
@@ -75,7 +78,7 @@ func (m Model) handleAgentEvent(ev deeplink.Event) (tea.Model, tea.Cmd) {
 	s.Ended = ev.Event == "SessionEnd"
 	m.agentSessions[key] = s
 	// An open trace pane (#2840) looks its session up again right away.
-	return m, m.traceRelocateCmd()
+	return m, tea.Batch(m.traceRelocateCmd(), verdict)
 }
 
 // agentTerm is one terminal an agent may run in.

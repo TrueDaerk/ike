@@ -1274,6 +1274,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.togglePin()
 	case "d":
 		return m.functionDiff()
+	case "a":
+		return m.askAgent() // #2964
 	case "enter":
 		return m.open()
 	case "e":
@@ -1665,6 +1667,9 @@ func (m *Model) footer() string {
 		hints += " · b group · space sites · m marks · i accept"
 	default:
 		hints += " · b group: " + m.Grouping().String() + " · i accept"
+	}
+	if !m.treeActive() && m.tab != TabTrend && m.Grouping() == complexity.ByNone {
+		hints += " · a agent" // #2964: function rows only
 	}
 	hints += m.pinFooter()
 	if m.hideTests {

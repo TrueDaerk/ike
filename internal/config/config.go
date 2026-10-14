@@ -380,6 +380,7 @@ func (c *Config) Flat() map[string]string {
 	put("complexity.churn_days", c.Complexity.ChurnDays)
 	put("complexity.trend_commits", c.Complexity.TrendCommits)
 	put("complexity.baseline", c.Complexity.Baseline)
+	put("complexity.agent_verdict", c.Complexity.AgentVerdict)
 
 	put("debug.inline_values", c.Debug.InlineValues)
 	put("debug.session_end", c.Debug.SessionEnd)

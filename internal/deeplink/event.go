@@ -25,7 +25,7 @@ import (
 
 // AgentEvents are the hook event names an event message may carry: the ones
 // `agent.hooks.install` registers.
-var AgentEvents = []string{"SessionStart", "SessionEnd", "UserPromptSubmit"}
+var AgentEvents = []string{"SessionStart", "SessionEnd", "UserPromptSubmit", "Stop"}
 
 // Event is one agent lifecycle push. The JSON names are Claude Code's hook
 // input field names, so the CLI forwards what it read verbatim.
