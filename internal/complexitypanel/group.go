@@ -77,6 +77,9 @@ func (m *Model) CycleGroup() bool {
 func (m *Model) fitSort() {
 	if m.layoutIndex(m.sortCol) < 0 {
 		m.sortCol, m.desc = ColCCN, true
+		if m.tab == TabTrend {
+			m.sortCol = ColCommit // newest first (#2962)
+		}
 	}
 }
 
@@ -235,6 +238,8 @@ func (r Row) aggregate() bool { return r.Group != nil || r.FileChange != nil }
 // class group's class, a file group's or a Changes file row's path.
 func (r Row) label() string {
 	switch {
+	case r.Trend != nil:
+		return r.trendLabel()
 	case r.FileChange != nil:
 		return r.Rel
 	case r.Group == nil:
@@ -247,6 +252,9 @@ func (r Row) label() string {
 
 // key identifies a row across refreshes, so the cursor stays on it.
 func (r Row) key() string {
+	if r.Trend != nil {
+		return r.trendKey()
+	}
 	if r.Cand != nil {
 		return r.candKey()
 	}

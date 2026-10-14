@@ -324,6 +324,14 @@ counts by the version's interval before comparing sessions.
     never fill). Like `php.trait.index_scan` it **never opens a session file
     on its own**: the walk finishes after every launch, so it is held and
     written once a real usage event starts the session. No path travels.
+  - `complexity.trend` (0551, #2962) - one completed walk of the
+    [Trend tab](complexity.md#trend-2962) or `ike complexity --trend`: the
+    project measured at the last N first-parent commits. `ms` is the walk's
+    duration, `points` how many commits it measured and `files` how many
+    file blobs it read and measured (the rest came from the session's
+    per-blob cache, so a re-walk after one commit reads a handful). The
+    phase is `ok`, or `error` when git failed. The walk is user-triggered
+    (the tab on screen, `r`), so it is ordinary usage. No path travels.
   - `palette.pick` (#2551) — a palette row was activated, the counterpart of
     `palette.dismiss`. `mode` is the mode's prefix rune, `query_len` the number
     of runes typed — **never the query itself** — `rank` the **0-based index**

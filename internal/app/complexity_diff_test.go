@@ -412,7 +412,11 @@ func TestComplexityDiffRangedKeyIgnoresWorkingTree(t *testing.T) {
 	if m.cxDiff.tickArmed || m.cxDiff.computing || m.cxDiff.key != m.currentCxDiffKey() {
 		t.Fatalf("working-tree movement re-armed a ranged diff (armed=%v)", m.cxDiff.tickArmed)
 	}
-	// A malformed range keeps the previous base and shows the message.
+	// A malformed range keeps the previous base and shows the message
+	// (the window is widened so the four-tab header bar, #2962, leaves the
+	// whole message room).
+	out, _ = m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
+	m = out.(Model)
 	out, _ = m.Update(complexitypanel.SetBaseMsg{Rev: "main.."})
 	m = out.(Model)
 	if m.cxDiff.rev != "main..feature" || m.cxDiff.tickArmed || !strings.Contains(m.ComplexityChanges().Err, "two refs") {

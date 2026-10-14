@@ -538,6 +538,9 @@ type Complexity struct {
 	// ChurnDays (#2957) is the hotspot window in days: the Complexity window
 	// counts each file's commits since that many days ago (1–3650).
 	ChurnDays int `toml:"churn_days"`
+	// TrendCommits (#2962) is the Trend tab's window: the project is measured
+	// at each of that many last first-parent commits (1–500).
+	TrendCommits int `toml:"trend_commits"`
 	// Baseline (#2958) applies the project's accepted-debt file,
 	// .ike/complexity-baseline.json: an accepted function is not over
 	// threshold in the Problems feed, the tool window's totals and group

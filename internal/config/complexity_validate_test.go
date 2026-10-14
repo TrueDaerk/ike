@@ -50,3 +50,26 @@ func TestValidateComplexityChurnDays(t *testing.T) {
 		}
 	}
 }
+
+// The trend window (#2962) defaults to 30 commits and falls back to it
+// outside 1–500.
+func TestValidateComplexityTrendCommits(t *testing.T) {
+	if c := defaults(); c.Complexity.TrendCommits != 30 {
+		t.Errorf("default window = %d, want 30", c.Complexity.TrendCommits)
+	}
+	for _, bad := range []int{0, -1, 501} {
+		c := defaults()
+		c.Complexity.TrendCommits = bad
+		diags := validate(c)
+		if c.Complexity.TrendCommits != 30 || len(diagsFor(diags, "complexity.trend_commits")) != 1 {
+			t.Errorf("window %d validated to %d (%v), want the 30 fallback reported once", bad, c.Complexity.TrendCommits, diags)
+		}
+	}
+	for _, ok := range []int{1, 30, 500} {
+		c := defaults()
+		c.Complexity.TrendCommits = ok
+		if diags := validate(c); len(diagsFor(diags, "complexity.trend_commits")) != 0 || c.Complexity.TrendCommits != ok {
+			t.Errorf("%d is a valid window: %d, %v", ok, c.Complexity.TrendCommits, diags)
+		}
+	}
+}

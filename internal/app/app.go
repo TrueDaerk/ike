@@ -337,6 +337,9 @@ type Model struct {
 	// cxChurn is the hotspot columns' cached churn map (0551, #2957),
 	// shared by pointer like cxDiff.
 	cxChurn *complexityChurnState
+	// cxTrend is the Trend tab's state (0551, #2962): the walk's key, its
+	// cache and the last result, shared by pointer like cxDiff.
+	cxTrend *complexityTrendState
 	// cxBase is the accepted-debt baseline (0551, #2958), shared by
 	// pointer like cxDiff; cxBaseDialog marks the "accept all"
 	// confirmation dialog open in the shell.
@@ -1718,6 +1721,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		complexityIndex: cxIdx,
 		cxDiff:          &complexityDiffState{},
 		cxChurn:         &complexityChurnState{},
+		cxTrend:         &complexityTrendState{},
 		cxBase:          newComplexityBaselineState(root),
 		cxPins:          newComplexityPinsState(root),
 		cxHints:         &complexityHintState{sent: map[string]cxHintKey{}, pending: map[string]cxHintKey{}, show: map[string]cxShowSites{}, measured: map[string]complexityHintMeasuredMsg{}},
@@ -4631,6 +4635,11 @@ func (m Model) updateUnguarded(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Its hotspot columns pull the churn map the same way (#2957): one
 	// `git log` per VCS snapshot generation while the window is open.
 	if sync := mm.complexityChurnSyncCmd(); sync != nil {
+		cmd = tea.Batch(cmd, sync)
+	}
+	// Its Trend tab pulls the last-N-commits walk the same way (#2962):
+	// one walk per VCS snapshot generation while the tab is on screen.
+	if sync := mm.complexityTrendSyncCmd(); sync != nil {
 		cmd = tea.Batch(cmd, sync)
 	}
 	// Inline complexity hints follow every open document here (#2919): a
@@ -8563,6 +8572,20 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case vcs.ChurnMsg:
 		// The hotspot churn map landed (#2957).
 		m.applyComplexityChurn(msg)
+		return m, nil
+
+	case complexityTrendMsg:
+		// The Trend tab's walk landed (#2962).
+		m.applyComplexityTrend(msg)
+		return m, nil
+
+	case complexityTrendTickMsg:
+		// The walk is running (#2962): relay its progress to the pane.
+		return m, m.complexityTrendProgress(msg)
+
+	case complexitypanel.TrendBaseMsg:
+		// enter on a Trend row (#2962): the Changes tab against that commit.
+		m.setComplexityTrendBase(msg.Rev)
 		return m, nil
 
 	case complexityHintTickMsg:

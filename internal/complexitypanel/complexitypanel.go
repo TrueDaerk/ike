@@ -58,13 +58,16 @@ const (
 	// TabChanges lists the functions whose metrics differ between a base
 	// revision and the working tree (#2918, changes.go).
 	TabChanges
+	// TabTrend lists the project's sums at each of the last N commits
+	// (#2962, trend.go).
+	TabTrend
 )
 
 // tabNames labels the tabs in display order.
-var tabNames = []string{"Project", "File", "Changes"}
+var tabNames = []string{"Project", "File", "Changes", "Trend"}
 
 // enabledTabs are the tabs the keyboard and the mouse can reach.
-var enabledTabs = []Tab{TabProject, TabFile, TabChanges}
+var enabledTabs = []Tab{TabProject, TabFile, TabChanges, TabTrend}
 
 // Column is one grid column; the order is the display order.
 type Column int
@@ -111,25 +114,36 @@ const (
 	// ColSincePin is the Pinned section's pinned → current metrics
 	// (#2959, pins.go); it shows only while the section does.
 	ColSincePin
+	// The Trend tab's columns (#2962, trend.go): the commit, its date and
+	// subject, and the project sums with their Δ against the previous
+	// point; fns reuses ColFuncs.
+	ColCommit
+	ColDate
+	ColSubject
+	ColCCNDelta
+	ColCogDelta
+	ColExcessDelta
+	ColOverDelta
 )
 
 // columnLabels are the column headers in Column order.
 var columnLabels = []string{"file", "function", "line", "ccn", "cog", "nloc", "params", "depth", "change", "cmt%",
 	"class", "funcs", "ccn avg", "ccn max", "cog avg", "cog max", "over", "excess", "commits", "hot",
-	"changed", "added", "removed", "since pin"}
+	"changed", "added", "removed", "since pin",
+	"commit", "date", "subject", "Σccn (Δ)", "Σcog (Δ)", "excess (Δ)", "over (Δ)"}
 
 // numeric reports whether a column sorts as a number (descending by
 // default) rather than as text.
 func (c Column) numeric() bool {
 	switch c {
-	case ColFile, ColFunc, ColChange, ColClass:
+	case ColFile, ColFunc, ColChange, ColClass, ColSubject:
 		return false
 	}
 	return true
 }
 
 // lastColumn is the highest Column value.
-const lastColumn = ColSincePin
+const lastColumn = ColOverDelta
 
 // The per-tab column layouts, in display order: the File tab hides the
 // file column, the Changes tab leads with the section and drops params /
@@ -246,6 +260,9 @@ type Row struct {
 	Pin    *complexity.Pin
 	PinRow bool
 	Gone   bool
+	// Trend is set on a Trend tab row (#2962, trend.go): one commit with
+	// the project's sums; every function field is zero.
+	Trend *TrendRow
 }
 
 // child reports whether r is a child row of an expanded function — a site
@@ -257,6 +274,9 @@ func (r Row) child() bool { return r.Site != nil || r.Cand != nil }
 // columns, the text for file / function. On the Changes tab the metric
 // columns sort by the absolute delta, so min: reads |Δ| there.
 func (r Row) value(c Column) (float64, string) {
+	if r.Trend != nil {
+		return r.trendValue(c)
+	}
 	if r.Group != nil {
 		return r.groupValue(c)
 	}
@@ -338,6 +358,9 @@ func abs(n int) int {
 // cell renders the row's text for column c: the plain metric on the
 // Project / File tabs, "before→after (Δ)" on the Changes tab.
 func (r Row) cell(c Column) string {
+	if r.Trend != nil {
+		return r.trendCell(c)
+	}
 	if r.Group != nil {
 		return r.groupCell(c)
 	}
@@ -457,6 +480,9 @@ type Model struct {
 	changes   Changes
 	revField  ui.Field
 	prompting bool
+
+	// The Trend tab (#2962, trend.go): its data.
+	trend Trend
 
 	// The grouping level of the Project and File tabs (#2937, group.go).
 	projectGroup complexity.Level
@@ -649,6 +675,8 @@ func (m *Model) layout() []Column {
 		return m.churnLayout(fileLayout, fileChurnLayout)
 	case TabChanges:
 		return changesLayout
+	case TabTrend:
+		return trendLayout
 	}
 	l := m.churnLayout(projectLayout, projectChurnLayout)
 	if m.pinSection {
@@ -767,8 +795,8 @@ func (m *Model) Refresh() {
 	all := m.markTests(m.markPins(m.population()))
 	var sum complexity.Summer
 	for _, r := range all {
-		if r.Change == complexity.Removed || r.Gone {
-			continue // the Changes summary is the head side's
+		if r.Change == complexity.Removed || r.Gone || r.Trend != nil {
+			continue // the Changes summary is the head side's; a Trend row is no function
 		}
 		sum.Add(r.Fn, m.th(r.Path))
 	}
@@ -846,6 +874,8 @@ func (m *Model) population() []Row {
 		}
 	case TabChanges:
 		out = m.changesRows()
+	case TabTrend:
+		out = m.trendRows()
 	}
 	return out
 }
@@ -856,6 +886,10 @@ func (m *Model) markTests(rows []Row) []Row {
 	out := rows[:0]
 	test := map[string]bool{}
 	for _, r := range rows {
+		if r.Trend != nil {
+			out = append(out, r) // a commit row (#2962) is no file
+			continue
+		}
 		t, ok := test[r.Path]
 		if !ok {
 			t = complexity.IsTestFile(m.root, r.Path)
@@ -888,6 +922,9 @@ func (m *Model) relPath(path string) string {
 func (m *Model) matches(q filterexpr.Query, r Row) bool {
 	if q.Empty() {
 		return true
+	}
+	if r.Trend != nil {
+		return m.trendMatches(q, r) // #2962
 	}
 	class := r.Fn.Class
 	if r.Group != nil {
@@ -1025,6 +1062,9 @@ func (m *Model) sortRows() {
 		if a.Gone && a.Fn.Name != b.Fn.Name {
 			return a.Fn.Name < b.Fn.Name
 		}
+		if a.Trend != nil && b.Trend != nil {
+			return a.Trend.Index > b.Trend.Index // ties newest first (#2962)
+		}
 		return a.Fn.Line < b.Fn.Line
 	})
 }
@@ -1090,6 +1130,12 @@ func (m *Model) columnWidths() []int {
 	if fi := m.layoutIndex(ColFile); fi >= 0 {
 		if max := m.width / 2; max > 12 && ws[fi] > max {
 			ws[fi] = max
+		}
+	}
+	// So is a commit subject (#2962).
+	if si := m.layoutIndex(ColSubject); si >= 0 {
+		if max := m.width / 3; max > 12 && ws[si] > max {
+			ws[si] = max
 		}
 	}
 	return ws
@@ -1193,6 +1239,11 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.clampScroll()
 		return nil
 	}
+	if m.tab == TabTrend {
+		if cmd, handled := m.trendKey(msg.String()); handled {
+			return cmd // #2962
+		}
+	}
 	switch msg.String() {
 	case "/":
 		m.filter.Focus()
@@ -1279,6 +1330,9 @@ func (m *Model) copyRow() tea.Cmd {
 // row carries both sides: "changed ccn=3→5 (+2) cog=1→1 (0)"; a group row
 // its aggregate (groupCopyText).
 func CopyText(r Row) string {
+	if r.Trend != nil {
+		return trendCopyText(r)
+	}
 	if r.Group != nil {
 		return groupCopyText(r)
 	}
@@ -1314,6 +1368,9 @@ var csvHeader = []string{"file", "function", "kind", "line", "ccn", "cognitive",
 func (m *Model) CSV() string {
 	if m.treeActive() {
 		return m.treeCSV()
+	}
+	if m.tab == TabTrend {
+		return m.trendCSV() // #2962
 	}
 	if m.tab == TabChanges {
 		if m.Grouping() == complexity.ByFile {
@@ -1380,6 +1437,10 @@ func (m *Model) View() string {
 		b.WriteString(m.histView(pal))
 		b.WriteString("\n")
 	}
+	if m.sparkShown() {
+		b.WriteString(m.sparkView(pal)) // #2962
+		b.WriteString("\n")
+	}
 	b.WriteString(gridview.HeaderRow(pal, m.headerLabels(), m.widths, 0, m.width))
 	b.WriteString("\n")
 	if m.treeActive() {
@@ -1427,6 +1488,9 @@ func (m *Model) headerLine(pal *theme.Palette) string {
 func (m *Model) totalsText() string {
 	if m.tab == TabChanges {
 		return m.changesTotals()
+	}
+	if m.tab == TabTrend {
+		return m.trendTotals() // #2962
 	}
 	s := m.summary
 	// The index state leads, so a narrow pane still shows it.
@@ -1485,6 +1549,9 @@ func (m *Model) emptyText() string {
 	if m.tab == TabChanges {
 		return m.changesEmpty()
 	}
+	if m.tab == TabTrend {
+		return m.trendEmpty() // #2962
+	}
 	switch {
 	case m.hasView && m.stats.Unavailable:
 		return "(no syntax tree in this build — the index cannot measure)"
@@ -1515,6 +1582,14 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 	cells := make([]gridview.Cell, len(texts))
 	for c, t := range texts {
 		cells[c] = gridview.Cell{Text: t}
+	}
+	if tr := r.Trend; tr != nil {
+		// A commit that added excess takes the warning colour, one that
+		// removed some the success colour (#2962).
+		if ei := m.layoutIndex(ColExcessDelta); ei >= 0 {
+			cells[ei].Warn, cells[ei].Good = tr.DeltaExcess() > 0, tr.DeltaExcess() < 0
+		}
+		return gridview.DataRow(pal, cells, m.widths, 0, m.width, i == m.cursor, m.focused)
 	}
 	if r.Group != nil {
 		for c, col := range layout {
@@ -1570,6 +1645,9 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 // footer shows the filtered / total counts and the key hints.
 func (m *Model) footer() string {
 	count := itoa(len(m.rows)) + "/" + itoa(m.total) + " rows"
+	if m.tab == TabTrend {
+		return lipgloss.NewStyle().Faint(true).Render(m.clip(" " + count + m.trendFooter())) // #2962
+	}
 	hints := " · tab view · s sort · S reverse · enter open · e export · y copy · r rescan · / filter"
 	switch {
 	case m.treeActive():
@@ -1606,7 +1684,7 @@ func (m *Model) footer() string {
 // chromeRows counts the header, filter, column-header and footer lines, and
 // the distribution row while it shows (#2953).
 func (m *Model) chromeRows() int {
-	if m.histShown() {
+	if m.histShown() || m.sparkShown() {
 		return 5
 	}
 	return 4
@@ -1672,6 +1750,9 @@ func (m *Model) Click(x, y int) tea.Cmd {
 		return nil
 	case y == 2 && m.histShown():
 		m.clickHistogram(x)
+		return nil
+	case y == 2 && m.sparkShown():
+		m.clickSpark(x) // #2962
 		return nil
 	case y == hr-1:
 		m.clickColumn(x)

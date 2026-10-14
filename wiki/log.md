@@ -1,5 +1,23 @@
 # Log
 
+## 2026-10-14 (trend tab: ΣCCN, Σcog and excess over the last N commits, #2962)
+
+- [Code Complexity](/architecture/complexity.md): the new "Trend" section —
+  `complexity.ListTrendCommits` / `WalkTrend` over `vcscore.FirstParentLog`,
+  `TreeBlobs`, `ChangedBlobsBetween` and the batched `BlobContents`
+  (first parent only, the oldest point reads the tree, every later point
+  the blob diff), the per-blob / per-sha `TrendCache`, the app's pull
+  model in `complexity_trend.go` with the progress tick, the panel's
+  fourth tab (header, sparkline, newest-first rows with Δ, the keys that
+  do not apply, enter → `<sha>..HEAD` on the Changes tab), `ike complexity
+  --trend[=N]` text and JSON, the `complexity.trend` op; the
+  `complexity.trend_commits` settings row; the first-parent limitation.
+- [Usage telemetry](/architecture/usage-telemetry.md): the `complexity.trend`
+  op.
+- [Settings UI](/architecture/settings-ui.md): `complexity.trend_commits`.
+- The complexity user guide: the new "The Trend tab" section, the `--trend`
+  flag row and its JSON; the settings reference regenerated.
+
 ## 2026-10-14 (per-language and per-path thresholds, #2960)
 
 - [Code Complexity](/architecture/complexity.md): the new "Per-file

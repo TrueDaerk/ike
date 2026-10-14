@@ -225,6 +225,9 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	// A ranged Changes diff (#2961) ignores the working tree, so the
 	// thresholds and excludes it measured with re-run it explicitly.
 	m.rearmComplexityRange()
+	// The Trend tab (#2962) measured under them too: drop its cache and
+	// walk again.
+	m.rearmComplexityTrend()
 	// [backup] edits apply live too: interval changes re-arm, disabling purges
 	// existing snapshots (Roadmap 0210, #167).
 	m.reconfigureBackup(hcfg)

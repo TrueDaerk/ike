@@ -378,7 +378,9 @@ any entry whose key the typed schema does not expose (no dead keys).
   functions into the Problems window; off clears those rows. `complexity.status_segment` (Bool, default off,
   #2921) shows the `Δcx` status segment live. `complexity.churn_days` (Int,
   1-3650, default 90, #2957) is the hotspot window of the `commits` / `hot`
-  columns; a change re-fetches the churn live. `complexity.baseline` (Bool,
+  columns; a change re-fetches the churn live. `complexity.trend_commits`
+  (Int, 1-500, default 30, #2962) is the Trend tab's window; a change
+  re-walks the open tab. `complexity.baseline` (Bool,
   default on, #2958) applies the project's `.ike/complexity-baseline.json`
   — accepted functions leave the over counts, Problems and the warning
   colour; off ignores the file everywhere, on re-applies it live. Listed in the Languages

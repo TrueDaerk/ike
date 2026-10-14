@@ -752,6 +752,11 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "complexity.churn_days", Message: fmt.Sprintf("window %d out of range (1–3650 days), using 90", d)})
 		c.Complexity.ChurnDays = 90
 	}
+	// The trend window (#2962): at least one commit, at most 500.
+	if n := c.Complexity.TrendCommits; n < 1 || n > 500 {
+		diags = append(diags, Diagnostic{Field: "complexity.trend_commits", Message: fmt.Sprintf("window %d out of range (1–500 commits), using 30", n)})
+		c.Complexity.TrendCommits = 30
+	}
 	// The response viewer's highlight cap (#2353): a limit below 1 KiB would
 	// silently turn highlighting off, one past 64 MiB defeats the cap's
 	// purpose — both fall back to the default rather than either extreme.

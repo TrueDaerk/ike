@@ -13,7 +13,8 @@ the warning thresholds `ccn_warn` / `cognitive_warn` (15 by default) and
 `comment_density_warn` (40 % by default, `0` turns it off), per-path and
 per-language `overrides` of those thresholds (see
 [Different thresholds per path or language](#different-thresholds-per-path-or-language)),
-the hotspot window `churn_days` (90 by default) and the `baseline` switch
+the hotspot window `churn_days` (90 by default), the trend window
+`trend_commits` (30 by default, see [The Trend tab](#the-trend-tab)) and the `baseline` switch
 (on by default) that applies the project's accepted-debt file (see
 [Accepted debt: the baseline](#accepted-debt-the-baseline)).
 
@@ -385,10 +386,68 @@ first changed function, `y` copies `path: changed 3 added 1 removed 0 ccn
 40→52 (+12) cog 31→44 (+13)`, `e` exports one CSV row per file. Press `b`
 again for the function rows; the choice is kept with the layout.
 
+## The Trend tab
+
+The fourth tab answers "is the project getting more complex?" over the
+last commits instead of against one base: it measures the whole project at
+each of the last 30 commits (`complexity.trend_commits`) and lists them,
+newest first, with their sums and how much each commit moved them. The
+header reads `last 30 commits · Σexcess 4120 → 3980 (-140) · ΣCCN … ·
+Σcog …` (oldest → newest), and a sparkline under the filter row draws the
+excess of every commit, oldest on the left:
+
+```
+ excess ▃▃▄▄▅▅▆▇█▇▇▆▅▄▃▂▁ 3980–4210 · oldest → newest
+ commit ▼  date        subject                     funcs  Σccn (Δ)     Σcog (Δ)     excess (Δ)   over (Δ)
+ 43b2a00    2026-10-14  per-path thresholds          34942  144055 (+220) 129431 (+201) 18193 (+42)  1404 (+3)
+ 777a23d    2026-10-14  tree view of the Project tab 34891  143835 (+319) 129230 (+282) 18151 (-6)   1401 (-1)
+```
+
+Each row is one commit: its short sha, date and subject, the function
+count, and the summed CCN, summed cognitive complexity, excess and
+over-threshold count with the change against the previous (older) commit.
+A commit that **added** excess shows it in the warning colour, one that
+removed some in the success colour; the oldest row has no change. Only the
+**first parent** is followed: a merge commit is one point (the state of the
+branch after the merge landed), the commits of the branch it merged are
+not listed on their own, and a squash merge reads the same as a merge
+commit. The thresholds are the current ones, including the per-path and
+per-language overrides.
+
+- `s` cycles the sort column; the sum columns sort by their change, so
+  `excess (Δ) ▼` puts the commits that cost the most at the top. `S`
+  reverses.
+- The filter row matches the subject and the short sha (`render`,
+  `43b2a0`); `min:` / `max:` bound the sort column's change (`min:10` on
+  `excess (Δ)` keeps the commits that added ten or more).
+- `enter` switches to the [Changes tab](#the-changes-tab) comparing that
+  commit against `HEAD` (`43b2a00..HEAD`) — "what changed since this
+  commit" is one key away; `R` there takes you anywhere else.
+- A click on a sparkline bar selects that commit's row.
+- `e` exports one CSV row per commit (`commit, sha, date, subject,
+  functions, ccn_sum, ccn_delta, cog_sum, cog_delta, excess, excess_delta,
+  over, over_delta`); `y` copies the row as `43b2a00 2026-10-14 subject:
+  fns 120 Σccn 410 (+6) Σcog 380 (-9) excess 42 (-12) over 3 (0)`.
+- `r` measures again from scratch.
+
+Grouping (`b`), the tree view, the breakdown (`space`, `m`), the
+distribution row, the baseline and the pins do not apply here — a row is a
+commit, not a function — and the footer says so. The first walk reads the
+whole tree at the oldest commit and then only the files each later commit
+changed, so it takes a few seconds on a large project; `computing… 12/30`
+counts it down. Afterwards the measurements are kept for the session: a
+new commit, a changed window or a return to the tab re-measures only what
+is new. Outside a git repository the tab says so.
+
+**Trend window** (`complexity.trend_commits`, Settings ▸ Complexity, 1–500,
+default 30) sets how many commits the tab and `ike complexity --trend`
+measure by default; a change recomputes the open tab.
+
+
 ## Command line
 
 ```
-ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [PATH...]
+ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [--trend[=N]] [PATH...]
 ```
 
 | Flag | Effect |
@@ -409,6 +468,7 @@ ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json] 
 | `--baseline[=PATH]`, `--no-baseline` | Apply the [baseline](#accepted-debt-the-baseline). The project's `.ike/complexity-baseline.json` applies **by default** when it exists; a bare `--baseline` insists on it (exit 2 when it is missing), `--baseline=PATH` reads another file (relative to the current directory), `--no-baseline` reads none. With a baseline the text table marks accepted rows `name ✓`, a line `baseline: N accepted, N worsened (<file>)` follows the summary, the summary's over-threshold count and `excess` leave accepted functions out, and the JSON gains `baseline` per function and group and `accepted` in the summary. A malformed file is exit 2. `--diff` ignores the baseline (it compares revisions, not debt). |
 | `--pins` | List only the [pinned](#pinning-the-functions-you-are-working-on) functions, with `PINNED_CCN`, `PINNED_COG`, `ΔCCN` and `ΔCOG` columns and a `pins: N pinned, N shown, N gone (<file>)` line. Without a pin file the table is empty (`pins: none`); a malformed file is exit 2. Not combinable with `--diff`, `--by` or `--brief`. Every report marks pinned rows `name ★`. |
 | `--write-baseline` | Write every function at or above the CCN or cognitive threshold — of the named paths, `--no-tests` respected, the row filters not — into the baseline file (the project file, or `--baseline=PATH`), replacing it, and print `baseline: N functions over threshold (CCN ≥ 15 or cog ≥ 15) written to .ike/complexity-baseline.json` instead of the report. The same file `Complexity: Accept All Over Threshold` writes in the IDE. Not combinable with `--diff` or `--no-baseline`. |
+| `--trend[=N]` | Measure the project at each of the last `N` commits (default: `complexity.trend_commits`, 30; first parent only, so a merge is one point) and print them oldest first: `COMMIT`, `DATE`, `SUBJECT`, `FUNCS`, then `CCN`, `COG`, `EXCESS`, `OVER` as `sum (Δ against the previous commit)`, and a `totals: <oldest> → <newest>: …` line — the [Trend tab](#the-trend-tab) on the command line. With paths, only files in those files and directories count; `--no-tests` and the thresholds apply. `--json` prints `{"commits": N, "points": [...]}` with the project summary fields per point. Needs a git repository (exit 2 otherwise); not combinable with `--diff`, `--by` or `--brief`. |
 
 The walk skips the same files as the Complexity window: hidden directories,
 `node_modules`, `vendor`, `dist`, `build`, `target`, virtualenvs, files over
@@ -622,6 +682,25 @@ per file, the biggest CCN increase first:
     "nloc_before": 103, "nloc_after": 140,
     "excess_before": 21, "excess_after": 30, "excess_delta": 9 }
 ]
+```
+
+Trend (`--trend --json`), the points oldest first, every `summary` with the
+fields of the project report, `delta` against the previous point (all zero
+on the oldest):
+
+```json
+{
+  "commits": 30,
+  "points": [
+    { "sha": "600390f7…", "short": "600390f7", "time": "2026-10-14T09:12:40Z", "subject": "persist the index",
+      "summary": { "files": 3161, "functions": 34811, "ccn_sum": 143365, "cog_sum": 128806, "excess": 18093, "over_threshold": 1380, "...": "…" },
+      "delta": { "functions": 0, "ccn": 0, "cognitive": 0, "excess": 0, "over_threshold": 0 } },
+    { "sha": "fd45e55c…", "short": "fd45e55c", "time": "2026-10-14T10:03:11Z", "subject": "diff between two revisions",
+      "summary": { "files": 3163, "functions": 34828, "ccn_sum": 143516, "cog_sum": 128948, "excess": 18120, "over_threshold": 1384, "...": "…" },
+      "delta": { "functions": 17, "ccn": 151, "cognitive": 142, "excess": 27, "over_threshold": 4 } }
+  ],
+  "skipped": { "files": 0, "languages": [] }
+}
 ```
 
 ### Gating a pull request in GitHub Actions

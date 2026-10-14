@@ -41,7 +41,7 @@ func (m *Model) ToggleHistogram() {
 
 // histShown reports whether the row takes a body line: it is on and the tab
 // lists measured functions (the Changes tab has its own base → head totals).
-func (m *Model) histShown() bool { return m.hist && m.tab != TabChanges }
+func (m *Model) histShown() bool { return m.hist && m.tab != TabChanges && m.tab != TabTrend }
 
 // histMetric is the column the row counts: cognitive while the list sorts by
 // it, CCN otherwise.
