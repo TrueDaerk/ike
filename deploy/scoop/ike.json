@@ -1,0 +1,53 @@
+{
+    "version": "0.6.193",
+    "description": "IKE, a JetBrains-inspired terminal IDE with vim-style editing, launched in a dedicated WezTerm window",
+    "homepage": "https://github.com/TrueDaerk/ike",
+    "license": {
+        "identifier": "MIT with Commons Clause",
+        "url": "https://github.com/TrueDaerk/ike/blob/main/LICENSE"
+    },
+    "depends": "extras/wezterm",
+    "notes": [
+        "Start IKE from the Start menu (Ike) or run `ike-gui` in a project directory.",
+        "`ike` alone runs IKE in the current terminal."
+    ],
+    "architecture": {
+        "64bit": {
+            "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+            "url": "https://github.com/TrueDaerk/ike/releases/download/v0.6.193/ike_0.6.193_windows_amd64.zip"
+        },
+        "arm64": {
+            "hash": "0000000000000000000000000000000000000000000000000000000000000000",
+            "url": "https://github.com/TrueDaerk/ike/releases/download/v0.6.193/ike_0.6.193_windows_arm64.zip"
+        }
+    },
+    "bin": [
+        "ike.exe",
+        "ike-gui.cmd",
+        "keyprobe.exe"
+    ],
+    "shortcuts": [
+        [
+            "..\\..\\wezterm\\current\\wezterm-gui.exe",
+            "Ike",
+            "--config-file \"$dir\\wezterm-ike.lua\" start --always-new-process",
+            "ike.ico"
+        ]
+    ],
+    "checkver": {
+        "github": "https://github.com/TrueDaerk/ike"
+    },
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/TrueDaerk/ike/releases/download/v$version/ike_$version_windows_amd64.zip"
+            },
+            "arm64": {
+                "url": "https://github.com/TrueDaerk/ike/releases/download/v$version/ike_$version_windows_arm64.zip"
+            }
+        },
+        "hash": {
+            "url": "https://github.com/TrueDaerk/ike/releases/download/v$version/checksums.txt"
+        }
+    }
+}
