@@ -3,7 +3,11 @@
 # a package that has grown slow fails the PR instead of the next developer's
 # afternoon. The budget: the whole run under 2 minutes on a ~10-core
 # developer machine, no package over 60 s (CONTRIBUTING.md, "Building and
-# testing").
+# testing"). The job runs on macOS: the suite is written against the macOS
+# default keymap (cmd chords) and pty behaviour, and the first Linux run
+# showed 71 platform-specific failures across ten packages — tracked
+# separately as Linux test portability (#3000). macOS minutes are free for
+# a public repository.
 name: Test
 
 on:
@@ -16,7 +20,7 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
