@@ -6,7 +6,7 @@
   The Windows counterpart of scripts/install-desktop.sh, for installs that do
   not create the entry themselves: an unpacked release zip and winget (Scoop
   does it through its manifest's `shortcuts`). Run it from the directory that
-  holds ike.exe, wezterm-ike.lua and ike.ico — the release archive ships it
+  holds ike.exe, wezterm-ike.lua and ike.ico - the release archive ships it
   there:
 
     powershell -ExecutionPolicy Bypass -File .\install-desktop.ps1
