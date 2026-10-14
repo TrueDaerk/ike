@@ -4,7 +4,7 @@ title: Performance & Diagnostics
 description: Idle-behavior rules (who may wake the render loop, and how often), the render budget and the always-on per-message-type pass accounting, the per-keystroke fan-out budget while typing (#2541), the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, the heartbeat freeze dump (#2627), the opt-in update-loop trace log, the freeze-triage procedure, the selection-overlay rule for drag latency (#2495), and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/perfhud
 tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog, startup, freeze, render-budget]
-timestamp: 2026-09-28T14:00:00Z
+timestamp: 2026-10-14T09:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -962,3 +962,31 @@ The rules this adds:
 - **Byte offsets convert in one pass.** `search.runeCounter` replaced the
   per-match `runeCol` rescan; anything mapping many byte offsets on one line
   to rune columns walks the line once.
+
+## Long pipe tables: a caret move lays out rows, never the block (#2993)
+
+Reported as "an editor click takes 1–2 s with the Markdown preview open on
+a very long pipe table"; measured (tmux, `perf.trace_log`, pprof over eight
+clicks), the preview was innocent — the gap between `tea.MouseClickMsg` and
+the next message was 1.5–1.8 s with and without the preview pane, no
+`slow update` line (the cost was the View pass), and 85 % of the CPU sat in
+`editor.renderTableWith`. With the caret inside a box-drawn table, every
+visible row's render (and the click's display↔source column mapping)
+re-rendered the whole block to reveal the caret's cell raw: 40 visible rows
+× a 5000-row table per frame.
+
+| Measurement (5000-row table, `testdata/longtable.md` shape) | Before | After |
+| --- | --- | --- |
+| editor frame after a caret move inside the table (`BenchmarkTableCaretMoveView`, 80×40) | 1.69 s | 3.0 ms |
+| `preview.Render` of the fixture at width 100 | 315 ms | 296 ms (unchanged) |
+| `preview.SetCursorLine` | 6.6 µs | 6.6 µs |
+| preview `View`, 50 rows | 63 µs | 61 µs |
+| tmux: `MouseClickMsg` → next trace line, preview open | 1.77 s | 3–5 ms |
+
+The rule: the block renders once per document version and keeps its cells,
+widths and alignments; the caret's raw cell is a view over it that lays out
+one row on demand (`tableView.row`, `layoutTableRow` —
+[Editor](./editor.md)). The preview side already obeyed it: `SetCursorLine`
+never renders, `View` touches the viewport rows only
+([Markdown Preview](./markdown-preview.md), "Scroll sync"), and both now
+have a counting test and a benchmark on the fixture.

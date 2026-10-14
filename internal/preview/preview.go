@@ -82,6 +82,7 @@ type Model struct {
 	anchors []heading
 	cursor  int // last known source cursor line (0-based), for follow scroll
 	top     int // first rendered line shown
+	renders int // glamour renders so far — the test seam for "a caret move never renders" (#2993)
 
 	// Link following (#2180): the rendered document's hyperlinks in reading
 	// order and the selected one, -1 while nothing is selected.
@@ -166,7 +167,10 @@ func (m *Model) SetSourceImmediate(text string) {
 }
 
 // SetCursorLine records the source cursor line and scrolls the rendered view
-// to its mapped position.
+// to its mapped position. It never renders (#2993): a caret move costs the
+// anchor walk of mapLine and nothing proportional to the rendered document —
+// only a source change (SetSource, debounced), a resize or a palette change
+// runs glamour again.
 func (m *Model) SetCursorLine(line int) {
 	m.cursor = line
 	m.follow()
@@ -388,6 +392,7 @@ func (m *Model) render() {
 	if m.w <= 0 {
 		return
 	}
+	m.renders++
 	// Diagram fences are resolved against the source before glamour sees it
 	// (#2421): a fence with a finished rendering becomes a sentinel the
 	// substitution below replaces, an unrendered one keeps its code block.
