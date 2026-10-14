@@ -1,15 +1,41 @@
 # Installation
 
-IKE is a single Go binary with no runtime dependencies. There are no
-prebuilt releases yet — you build it from source.
+IKE is a single Go binary with no runtime dependencies. Download a prebuilt
+release or build it from source.
 
-## Requirements
+## Prebuilt releases
+
+Every tagged release on the
+[releases page](https://github.com/TrueDaerk/ike/releases) carries:
+
+| Asset | Contents |
+|---|---|
+| `ike_<version>_<os>_<arch>.tar.gz` / `.zip` | the full IDE plus `keyprobe` — Linux and macOS as `.tar.gz`, Windows as `.zip`, each for amd64 and arm64 |
+| `ike-complexity_<version>_<os>_<arch>.*` | the [complexity-only build](../guides/complexity.md) — `ike complexity` without the IDE |
+| `checksums.txt` | SHA-256 of every archive |
+
+Unpack the archive and put `ike` on your `PATH`. On Windows, use a package
+manager instead — one command installs IKE, WezTerm and a Start-menu entry:
+
+```powershell
+scoop bucket add extras
+scoop install https://raw.githubusercontent.com/TrueDaerk/ike/main/deploy/scoop/ike.json
+```
+
+Details, winget and the plain-zip route: [Desktop launcher → Windows](desktop-launcher.md#windows).
+
+On macOS, a downloaded binary carries the quarantine flag; clear it once with
+`xattr -d com.apple.quarantine ike` (the archives are not notarized).
+
+## Building from source
+
+### Requirements
 
 - [Go 1.26+](https://go.dev/dl/)
 - A terminal with truecolor, mouse reporting, and Kitty keyboard protocol
   support. This one is not optional — see [Terminal setup](terminal-setup.md).
 
-## Build and install
+### Build and install
 
 ```sh
 git clone https://github.com/TrueDaerk/ike.git
@@ -30,7 +56,8 @@ echo $PATH | tr ':' '\n' | grep -q "$HOME/.local/bin" || \
 
 On macOS and Linux, `make install-desktop` additionally installs IKE as a
 clickable desktop application wrapping Ghostty — see
-[Desktop launcher](desktop-launcher.md).
+[Desktop launcher](desktop-launcher.md). On Windows the package managers
+install the WezTerm-based launcher.
 
 ## Per-platform notes
 
@@ -55,6 +82,11 @@ clickable desktop application wrapping Ghostty — see
     ```
 
 === "Windows"
+
+    The easy path is the [one-command install](desktop-launcher.md#windows)
+    above. To build yourself you need Go plus a C compiler for the
+    Tree-sitter grammars (CGo) — e.g. [MSYS2](https://www.msys2.org/) with
+    its UCRT64 `gcc` on `PATH`:
 
     ```sh
     go build -o ike.exe ./cmd/ike

@@ -4,7 +4,7 @@ title: Deep Links (ike:// URL scheme)
 description: The ike:// URL scheme — parse/normalise/resolve in internal/deeplink, per-instance socket hand-off, history→projects-dir→clone resolution, file/tool payload after the switch, the group= form that opens a project group and lands on a member (#2576), OS registration per platform (#2396), the socket's `event` message for agent hook pushes (#2843)
 resource: internal/deeplink
 tags: [deeplink, url-scheme, ipc, project-switching, agents]
-timestamp: 2026-10-01T12:00:00Z
+timestamp: 2026-10-14T15:00:00Z
 ---
 
 # Deep Links (ike:// URL scheme)
@@ -181,7 +181,8 @@ click goes nowhere) (#2518).
 - **Linux** — `deploy/ike.desktop` declares `MimeType=x-scheme-handler/ike;`
   and `Exec=ike-gui %u`; the install script runs
   `xdg-mime default ike.desktop x-scheme-handler/ike`.
-- **Windows** (documented; no build exercised yet) — register under
+- **Windows** (documented; not done by the Windows install, see
+  [Releases & Desktop Launchers](./release-and-launchers.md)) — register under
   `HKCU\Software\Classes\ike`: default value `URL:IKE deep link`, string
   value `URL Protocol` (empty), and `shell\open\command` =
   `"C:\path\to\ike.exe" "%1"`.

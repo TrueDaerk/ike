@@ -34,6 +34,13 @@ IKE is a single Go binary. You need [Go 1.26+](https://go.dev/dl/) and a
 terminal with truecolor, mouse, and Kitty keyboard protocol support
 (see [Platform notes](#platform-notes)).
 
+**Prebuilt binaries:** every tagged release on the
+[releases page](https://github.com/TrueDaerk/ike/releases) carries
+`ike_<version>_<os>_<arch>` archives for Linux, macOS and Windows (amd64 and
+arm64), the complexity-only `ike-complexity_…` archives and a
+`checksums.txt`. On Windows one command installs IKE together with WezTerm
+and a Start-menu entry — see [Platform notes](#platform-notes).
+
 Build from source (all platforms):
 
 
@@ -87,7 +94,14 @@ ike +42 main.go                   # vim-style line prefix
 git log | ike -                   # pipe stdin into a scratch buffer
 ```
 
-### Desktop launcher (macOS & Linux)
+### Desktop launcher
+
+On **Windows** the Scoop / winget install brings the launcher along: a
+Start-menu entry **Ike** and `ike-gui`, both opening IKE in a dedicated,
+pre-configured [WezTerm](https://wezterm.org/) window — see
+[Desktop launcher → Windows](userdocs/getting-started/desktop-launcher.md#windows).
+
+On **macOS & Linux**:
 
 IKE can install as a first-class desktop application wrapping
 [Ghostty](https://ghostty.org/) (user-installed prerequisite):
@@ -150,7 +164,7 @@ with `kLSApplicationNotFoundErr`, in a browser with no visible effect).
 |---|---|
 | **Linux** | Works in terminals with Kitty keyboard protocol support (Ghostty, kitty, wezterm, foot, Alacritty, …). Put the binary on your `PATH`, e.g. `install ike ~/.local/bin/`. |
 | **macOS** | Works in Ghostty, kitty, wezterm, iTerm2 (3.5+), Alacritty, …. Install with `go build -o /usr/local/bin/ike ./cmd/ike` (or any `PATH` directory). |
-| **Windows** | Build with `go build -o ike.exe ./cmd/ike` and run in a terminal with Kitty keyboard protocol support (e.g. wezterm). WSL2 also works well — follow the Linux notes there. |
+| **Windows** | One command installs IKE, WezTerm and a Start-menu entry: `scoop install https://raw.githubusercontent.com/TrueDaerk/ike/main/deploy/scoop/ike.json` (after `scoop bucket add extras`) — see [Desktop launcher → Windows](userdocs/getting-started/desktop-launcher.md#windows); winget manifests live in `deploy/winget/`. Building from source needs Go plus MSYS2/MinGW for CGo. WSL2 also works well — follow the Linux notes there. |
 
 ### Optional tools
 

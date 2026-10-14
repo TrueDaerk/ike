@@ -1,0 +1,254 @@
+# Release (#3002): prebuilt IKE archives on a GitHub Release.
+#
+# Pushing a tag v<version> — which must equal Version in
+# internal/version/version.go, the job `check` fails otherwise — builds IKE
+# with CGo (the Tree-sitter grammars are C) for six platforms and publishes
+#
+#   ike_<version>_<os>_<arch>.{zip,tar.gz}             the full IDE
+#   ike-complexity_<version>_<os>_<arch>.{zip,tar.gz}  `ike complexity` only (#2939)
+#   checksums.txt                                       SHA-256 of every archive
+#   ike.json, TrueDaerk.Ike*.yaml                       the Scoop / winget manifests
+#
+# .zip on Windows, .tar.gz elsewhere. The Windows archive also carries the
+# WezTerm launcher (ike-gui.cmd, install-desktop.ps1, wezterm-ike.lua,
+# ike.ico). The regenerated manifests are attached to the release AND
+# committed back to main (deploy/scoop/ike.json, deploy/winget/<version>/),
+# so `scoop install`/`scoop update` from the raw manifest URL follow the
+# newest release.
+#
+# Why a plain Actions matrix rather than GoReleaser: every target needs a
+# native CGo toolchain (MSYS2/MinGW on Windows, Apple clang on macOS, gcc on
+# Linux), so the builds have to run on per-OS runners anyway, and stitching
+# per-runner GoReleaser outputs into one release is a GoReleaser Pro feature
+# (split/merge). The matrix runs scripts/release/package.sh — the same script
+# `make release-archive` runs locally — which builds through the Makefile, so
+# the commit / dirty stamp uses the Makefile's LDFLAGS.
+#
+# Runners: Linux amd64/arm64 build natively (ubuntu-latest, ubuntu-24.04-arm);
+# macOS builds both architectures on macos-latest (arm64), amd64 through
+# `clang -arch x86_64`; Windows builds natively on windows-latest (MSYS2
+# UCRT64 gcc) and windows-11-arm (MSYS2 CLANGARM64 clang). Cross-compiling
+# CGo for Windows from Linux is deliberately not attempted.
+#
+# workflow_dispatch builds the selected ref and publishes only when that ref
+# is a v* tag; a pull request touching the release machinery builds every
+# archive without publishing, so a broken Windows build shows up in review.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - "scripts/release/**"
+      - "cmd/release/**"
+      - "deploy/**"
+      - "Makefile"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Read the version from internal/version
+        id: version
+        run: echo "version=$(go run ./cmd/release version)" >> "$GITHUB_OUTPUT"
+
+      - name: The tag matches internal/version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: go run ./cmd/release check-tag "$GITHUB_REF_NAME"
+
+  build:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { goos: linux, goarch: amd64, runner: ubuntu-latest }
+          - { goos: linux, goarch: arm64, runner: ubuntu-24.04-arm }
+          - { goos: darwin, goarch: arm64, runner: macos-latest }
+          - { goos: darwin, goarch: amd64, runner: macos-latest, cc: "clang -arch x86_64" }
+          - { goos: windows, goarch: amd64, runner: windows-latest, msystem: UCRT64 }
+          - { goos: windows, goarch: arm64, runner: windows-11-arm, msystem: CLANGARM64, cc: clang }
+    runs-on: ${{ matrix.runner }}
+    name: build ${{ matrix.goos }}/${{ matrix.goarch }}
+    steps:
+      # Keep LF in the checkout: the Tree-sitter queries and other embedded
+      # files must be byte-identical across platforms, and a CRLF conversion
+      # would also mark the tree dirty in the version stamp. .gitattributes
+      # still gives the .cmd/.ps1 launchers their CRLF.
+      - name: Disable CRLF conversion
+        if: matrix.goos == 'windows'
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Set up MSYS2 (C toolchain, make, zip)
+        if: matrix.goos == 'windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: ${{ matrix.msystem }}
+          update: false
+          path-type: inherit
+          install: make zip
+          pacboy: toolchain:p
+
+      - name: Build and package (Unix)
+        if: matrix.goos != 'windows'
+        env:
+          CC: ${{ matrix.cc }}
+        run: |
+          [ -n "$CC" ] || unset CC
+          scripts/release/package.sh ${{ matrix.goos }} ${{ matrix.goarch }}
+
+      - name: Build and package (Windows)
+        if: matrix.goos == 'windows'
+        shell: msys2 {0}
+        env:
+          CC: ${{ matrix.cc }}
+        run: |
+          [ -n "$CC" ] || unset CC
+          scripts/release/package.sh ${{ matrix.goos }} ${{ matrix.goarch }}
+
+      # The launcher's no-WezTerm path: a one-line hint and exit code 1. Only
+      # meaningful where WezTerm is absent (the hosted images do not ship it).
+      - name: ike-gui.cmd without WezTerm exits 1 with the hint
+        if: matrix.goos == 'windows'
+        shell: pwsh
+        run: |
+          $zip = "dist/ike_${{ needs.check.outputs.version }}_windows_${{ matrix.goarch }}.zip"
+          $dir = Join-Path $env:RUNNER_TEMP 'ike-zip'
+          Expand-Archive $zip -DestinationPath $dir -Force
+          Get-ChildItem $dir | Format-Table Name, Length
+          if ((Get-Command wezterm-gui.exe -ErrorAction SilentlyContinue) -or (Test-Path "$env:ProgramFiles\WezTerm")) {
+            Write-Host 'WezTerm present on the runner - skipped'; exit 0
+          }
+          $env:SCOOP = Join-Path $env:RUNNER_TEMP 'no-scoop'
+          $out = & cmd /c "`"$dir\ike-gui.cmd`" 2>&1"
+          $code = $LASTEXITCODE
+          Write-Host $out
+          if ($code -ne 1) { throw "ike-gui.cmd exited $code, want 1" }
+          if ("$out" -notmatch 'scoop install wezterm') { throw "hint missing: $out" }
+          # pwsh would otherwise end the step with the launcher's expected 1.
+          exit 0
+
+      - name: Validate the winget manifests
+        if: matrix.goos == 'windows' && matrix.goarch == 'amd64'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { Write-Host 'winget not on this image - skipped'; exit 0 }
+          # Warnings exit non-zero too — e.g. the zero placeholder hashes the
+          # checked-in set carries before its first release — so the verdict
+          # is the "succeeded" line, not the exit code.
+          foreach ($d in Get-ChildItem deploy/winget -Directory) {
+            $out = winget validate --manifest $d.FullName 2>&1 | Out-String
+            Write-Host $out
+            if ($out -notmatch 'Manifest validation succeeded') { throw "winget validate failed for $($d.Name)" }
+          }
+          exit 0
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: archive-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
+          if-no-files-found: error
+
+  release:
+    needs: [check, build]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.check.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: archive-*
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums and package-manager manifests
+        run: |
+          go run ./cmd/release checksums dist
+          cat dist/checksums.txt
+          go run ./cmd/release manifests dist
+          cp deploy/scoop/ike.json "deploy/winget/$VERSION"/*.yaml dist/
+          test "$(ls dist/ike_*_*.* dist/ike-complexity_*_*.* | wc -l)" -eq 12
+
+      - name: Publish the GitHub Release
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* --verify-tag --title "IKE $VERSION" --generate-notes
+          fi
+
+      # Commit the regenerated manifests to main, so the raw Scoop manifest
+      # URL installs (and `scoop update` follows) this release. A re-run for
+      # an older tag never moves main's manifests backwards.
+      - name: Commit the manifests back to main
+        run: |
+          set -euo pipefail
+          stash="$RUNNER_TEMP/manifests"
+          mkdir -p "$stash"
+          cp -r deploy/scoop deploy/winget "$stash/"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          for attempt in 1 2 3; do
+            git fetch origin main
+            git checkout -f -B release-manifests origin/main
+            git clean -fdq deploy
+            current="$(jq -r .version deploy/scoop/ike.json 2>/dev/null || echo 0)"
+            if [ "$(printf '%s\n%s\n' "$current" "$VERSION" | sort -V | tail -1)" != "$VERSION" ]; then
+              echo "main already carries the manifests for $current - nothing to do"
+              exit 0
+            fi
+            rm -rf deploy/scoop deploy/winget
+            cp -r "$stash/scoop" "$stash/winget" deploy/
+            git add -A deploy/scoop deploy/winget
+            if git diff --cached --quiet; then
+              echo "manifests unchanged"
+              exit 0
+            fi
+            git commit -m "chore(release): Scoop and winget manifests for v$VERSION"
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "push raced with another commit - retrying"
+          done
+          exit 1

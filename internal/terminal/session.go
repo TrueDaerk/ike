@@ -23,7 +23,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/vt"
 	"github.com/creack/pty"
-	"golang.org/x/sys/unix"
 
 	"ike/internal/safego"
 	"ike/internal/theme"
@@ -1138,7 +1137,7 @@ func (s *Session) AtPrompt() bool {
 	if s.closed.Load() || s.cmd == nil || s.cmd.Process == nil || s.ptmx == nil || s.IsCommand() {
 		return false
 	}
-	pgrp, err := unix.IoctlGetInt(int(s.ptmx.Fd()), unix.TIOCGPGRP)
+	pgrp, err := foregroundPgrp(s.ptmx)
 	if err != nil {
 		return true
 	}
@@ -1156,7 +1155,7 @@ func (s *Session) ForegroundPid() int {
 	if s.IsCommand() {
 		return s.Pid()
 	}
-	pgrp, err := unix.IoctlGetInt(int(s.ptmx.Fd()), unix.TIOCGPGRP)
+	pgrp, err := foregroundPgrp(s.ptmx)
 	if err != nil || pgrp <= 0 || pgrp == s.cmd.Process.Pid {
 		return 0
 	}

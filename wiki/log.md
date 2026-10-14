@@ -1,5 +1,18 @@
 # Log
 
+## 2026-10-14 (Windows install: release workflow, Scoop/winget, WezTerm launcher, #3002)
+
+- New [Releases & Desktop Launchers](/architecture/release-and-launchers.md):
+  the `v*` tag release workflow (per-OS CGo matrix, `scripts/release/package.sh`,
+  `cmd/release` for the tag check, checksums and manifests), the Scoop and
+  winget manifests committed back to main, the `deploy/` launcher layout
+  including the WezTerm-based Windows launcher, and the Windows build
+  portability split files.
+- [Performance & Diagnostics](/architecture/performance.md): no `SIGUSR1`
+  dump on Windows.
+- [Deep Links](/architecture/deep-links.md): the Windows install does not
+  register the scheme.
+
 ## 2026-10-14 (the suite runs on Linux too, #3000)
 
 - [Change workflow](/process/change-workflow.md): "The test suite stays

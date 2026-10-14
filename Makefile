@@ -14,6 +14,7 @@
 #   make version   # print the version the next build will carry
 #   make install-desktop  # desktop launcher: Ike.app (macOS) / ike.desktop (Linux)
 #   make icons     # regenerate deploy/icon from the Go source (macOS tools)
+#   make release-archive  # build + package this platform's release archives into dist/
 
 BINARY  := ike
 PACKAGE := ./cmd/ike
@@ -28,7 +29,7 @@ DIRTY   := $(shell git diff --quiet 2>/dev/null || echo true)
 VERPKG  := ike/internal/version
 LDFLAGS := -X $(VERPKG).Commit=$(COMMIT) -X $(VERPKG).Dirty=$(DIRTY)
 
-.PHONY: all build install build-complexity install-complexity uninstall clean test docs shots docs-deploy version install-desktop icons
+.PHONY: all build install build-complexity install-complexity uninstall clean test docs shots docs-deploy version install-desktop icons release-archive
 
 all: build
 
@@ -103,12 +104,14 @@ install-desktop:
 
 # Regenerate the checked-in icon artefacts from the Go source. Needs macOS
 # (sips + iconutil); the results are committed so installs stay tool-free.
+# ike.ico (the Windows Start-menu icon, #3002) packs the hicolor PNGs.
 icons:
 	$(GO) run ./deploy/icon/gen
 	for s in 16 24 32 48 64 128 256 512; do \
 		mkdir -p deploy/icon/hicolor/$${s}x$${s}/apps; \
 		sips -z $$s $$s deploy/icon/ike-1024.png --out deploy/icon/hicolor/$${s}x$${s}/apps/ike.png >/dev/null; \
 	done
+	$(GO) run ./deploy/icon/ico
 	rm -rf /tmp/ike.iconset && mkdir -p /tmp/ike.iconset
 	for s in 16 32 128 256 512; do \
 		sips -z $$s $$s deploy/icon/ike-1024.png --out /tmp/ike.iconset/icon_$${s}x$${s}.png >/dev/null; \
@@ -116,3 +119,9 @@ icons:
 	done
 	iconutil -c icns /tmp/ike.iconset -o deploy/icon/ike.icns
 	rm -rf /tmp/ike.iconset
+
+# Build and package this platform's release archives into dist/ (#3002) — the
+# same script each job of .github/workflows/release.yml runs: the full build,
+# the complexity-only build, the version-stamp smoke test.
+release-archive:
+	./scripts/release/package.sh $$($(GO) env GOOS) $$($(GO) env GOARCH)

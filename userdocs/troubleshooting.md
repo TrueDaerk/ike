@@ -174,7 +174,8 @@ describing the feeling. Its refresh interval and history span are on the
 
 **Profiling**, when the HUD says a pane is expensive and you want the stack:
 `IKE_PPROF=<addr>` serves `net/http/pprof`, and `SIGUSR1` writes goroutine and
-heap dumps to `IKE_PPROF_DIR`.
+heap dumps to `IKE_PPROF_DIR` (not on Windows, which has no `SIGUSR1` — use
+**Write Heap Dump** from the palette there).
 
 **Memory**, when the process footprint looks bloated: **Memory Statistics**
 in the palette prints a heap summary (a growing "in use" number is a real

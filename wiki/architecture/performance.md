@@ -4,7 +4,7 @@ title: Performance & Diagnostics
 description: Idle-behavior rules (who may wake the render loop, and how often), the render budget and the always-on per-message-type pass accounting, the per-keystroke fan-out budget while typing (#2541), the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, the heartbeat freeze dump (#2627), the opt-in update-loop trace log, the freeze-triage procedure, the selection-overlay rule for drag latency (#2495), and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/perfhud
 tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog, startup, freeze, render-budget]
-timestamp: 2026-10-14T11:00:00Z
+timestamp: 2026-10-14T15:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -734,7 +734,9 @@ Off by default; `diag.Start` in `cmd/ike/main.go` wires them:
   `/debug/pprof/goroutine?debug=1` for stacks.
 - `SIGUSR1` writes `ike-<pid>-<time>-goroutines.txt` and `-heap.pprof` to
   `IKE_PPROF_DIR` (default: the OS temp dir) — the no-listener option for a
-  session that is already misbehaving.
+  session that is already misbehaving. Windows has no `SIGUSR1`
+  (`dumpSignals` is empty there, #3002): use **Write Heap Dump** or the
+  `IKE_PPROF` endpoint.
 - Palette commands (#1537), always available: **Memory Statistics**
   (`diag.memoryStats`) scavenges (`debug.FreeOSMemory`) and toasts a one-line
   `runtime.ReadMemStats` summary — `HeapInuse` growing means a real leak,

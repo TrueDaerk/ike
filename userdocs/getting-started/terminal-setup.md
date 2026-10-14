@@ -31,7 +31,11 @@ The second one bites more often than the first.
 | iTerm2 3.5+ | macOS | Its Keys preferences |
 
 On Windows, WezTerm is the reliable choice; Windows Terminal does not
-implement the protocol.
+implement the protocol. The one-command install —
+`scoop install https://raw.githubusercontent.com/TrueDaerk/ike/main/deploy/scoop/ike.json`
+— brings WezTerm along with a dedicated, already-cleared config and a
+Start-menu entry, so none of the manual steps below apply there; see
+[Desktop launcher → Windows](desktop-launcher.md#windows).
 
 Inside `tmux` some chords are lost regardless — `ctrl+tab` in particular is
 consumed by tmux and never forwarded.
@@ -101,6 +105,9 @@ definitively.
 ```sh
 go run ./cmd/keyprobe
 ```
+
+The release archives ship it prebuilt as `keyprobe` (`keyprobe.exe` on
+Windows) next to `ike`.
 
 It lists the chords IKE cares about. Press them, then quit with ++ctrl+d++. On
 exit it prints one `PROBE` line per chord — delivered or missing, and what

@@ -2,10 +2,8 @@ package perfhud
 
 import (
 	"os"
-	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 )
 
 // mem.go resolves the process footprint the Go runtime does not report. The
@@ -31,17 +29,8 @@ func rss() (bytes uint64, peak bool) {
 			}
 		}
 	}
-	var ru syscall.Rusage
-	if err := syscall.Getrusage(syscall.RUSAGE_SELF, &ru); err != nil {
-		return 0, false
+	if n := peakRSS(); n > 0 {
+		return n, true
 	}
-	if ru.Maxrss <= 0 {
-		return 0, false
-	}
-	n := uint64(ru.Maxrss)
-	if runtime.GOOS != "darwin" {
-		// Darwin reports bytes; Linux and the BSDs report kilobytes.
-		n *= 1024
-	}
-	return n, true
+	return 0, false
 }

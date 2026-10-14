@@ -1,14 +1,15 @@
 # Desktop launcher
 
-IKE can install as a first-class desktop application on macOS and Linux:
-an **Ike** icon in the Dock / app grid that opens a dedicated
-[Ghostty](https://ghostty.org/) window running `ike` as the sole process.
-When IKE exits, the window closes.
+IKE can install as a first-class desktop application: an **Ike** icon in
+the Dock / app grid / Start menu that opens a dedicated terminal window
+running `ike` as the sole process. When IKE exits, the window closes.
 
-Ghostty stays a user-installed prerequisite — install it from
-[ghostty.org](https://ghostty.org/) first.
+- **macOS and Linux** wrap [Ghostty](https://ghostty.org/), a user-installed
+  prerequisite — install it from [ghostty.org](https://ghostty.org/) first.
+- **Windows** wraps [WezTerm](https://wezterm.org/); the package managers
+  install it for you — see [Windows](#windows).
 
-## Install
+## Install (macOS, Linux)
 
 From the repository root:
 
@@ -85,4 +86,105 @@ to change the default size.
   WezTerm or foot running `ike` directly — without the dedicated config,
   so the terminal's own chords may shadow IKE's
   (see [terminal setup](terminal-setup.md)).
-- **Windows** is not covered; use the [manual setup](terminal-setup.md).
+- **Windows:** see [Windows](#windows) below.
+
+## Windows
+
+On Windows the launcher wraps [WezTerm](https://wezterm.org/) — Ghostty has
+no Windows build, and Windows Terminal does not speak the Kitty keyboard
+protocol. One package-manager command installs IKE, WezTerm and the launcher.
+
+### Install
+
+With [Scoop](https://scoop.sh/):
+
+```powershell
+scoop bucket add extras        # WezTerm lives in the extras bucket
+scoop install https://raw.githubusercontent.com/TrueDaerk/ike/main/deploy/scoop/ike.json
+```
+
+This installs WezTerm as a dependency, puts `ike`, `ike-gui` and `keyprobe`
+on your `PATH`, and creates the Start-menu entry **Ike** (under *Scoop
+Apps*). `scoop update ike` follows new releases: the release workflow keeps
+the manifest at that URL current.
+
+With winget, from a checkout of the repository (the package is not in the
+public winget catalogue yet):
+
+```powershell
+winget install --manifest deploy\winget\<version>
+& (Get-ChildItem "$env:LOCALAPPDATA\Microsoft\WinGet\Packages\TrueDaerk.Ike_*\install-desktop.ps1").FullName
+```
+
+winget installs WezTerm (`wez.wezterm`) as a dependency and puts `ike` on
+your `PATH`; it cannot create Start-menu entries for a zip package, so the
+second line runs the bundled `install-desktop.ps1` for that.
+
+Without a package manager, download `ike_<version>_windows_<arch>.zip` from
+the [releases page](https://github.com/TrueDaerk/ike/releases), unpack it
+anywhere, install WezTerm, and run
+`powershell -ExecutionPolicy Bypass -File install-desktop.ps1` in the
+unpacked folder (`-Uninstall` removes the entry again).
+
+### What gets installed
+
+The Windows release zip carries, side by side:
+
+| File | Role |
+|---|---|
+| `ike.exe` | IKE itself |
+| `keyprobe.exe` | the [key probe](terminal-setup.md#verifying-with-keyprobe) |
+| `wezterm-ike.lua` | the dedicated WezTerm config, loaded *exclusively* (`--config-file`), so your own WezTerm config never interferes |
+| `ike-gui.cmd` | the launcher for a shell: opens IKE in its own WezTerm window on the current directory |
+| `install-desktop.ps1` | creates / removes the Start-menu entry for zip and winget installs |
+| `ike.ico` | the Start-menu icon |
+
+`wezterm-ike.lua` is the counterpart of Ghostty's `ike.conf`: Kitty keyboard
+protocol on, all WezTerm key bindings off (`disable_default_key_bindings`)
+plus the minimal re-adds below, truecolor, no tab bar, the bundled
+JetBrains Mono with Windows font fallbacks, the `ike.exe` from its own
+folder as the program, and the window closes when IKE exits. A package update
+replaces it — keep personal changes in a copy.
+
+| Binding | Action |
+|---|---|
+| `ctrl+shift+q` | quit the window |
+| `ctrl+plus` / `ctrl+-` / `ctrl+0` | font zoom in / out / reset |
+| `ctrl+,` / `ctrl+shift+,` | open the config in Notepad / reload it |
+
+### Launching
+
+- **Start menu → Ike** opens IKE on your home directory, which IKE never
+  treats as a project: it reopens your last project instead.
+- **`ike-gui`** in a terminal opens IKE on the current directory; extra
+  arguments go to `ike` (`ike-gui main.go`). It finds `wezterm-gui.exe` via
+  `%IKE_WEZTERM%`, the Scoop install, the WezTerm installer / winget location
+  (`%ProgramFiles%\WezTerm`, `%LOCALAPPDATA%\Programs\WezTerm`), then
+  `PATH`. Without WezTerm it prints a one-line hint and exits 1.
+- **`ike`** alone runs IKE in the terminal you are in — fine in a WezTerm
+  you configured yourself ([terminal setup](terminal-setup.md)).
+
+The launcher always starts a separate WezTerm process
+(`start --always-new-process`): a running WezTerm would otherwise open the
+window with your own config instead of IKE's.
+
+### Known limitations on Windows
+
+- The **integrated terminal** and the tools that run on a pseudo-terminal
+  (Run configurations, tasks) do not start on Windows yet — the PTY library
+  IKE uses has no Windows backend. Editing, LSP, search and everything else
+  work.
+- `ike://` deep links are not registered by the Windows install.
+
+### Publishing to winget (maintainers)
+
+The release workflow regenerates `deploy/winget/<version>/` on every tag
+but does not submit it. To publish a release to the public catalogue:
+
+1. Fork [`microsoft/winget-pkgs`](https://github.com/microsoft/winget-pkgs).
+2. Copy the three files of `deploy/winget/<version>/` to
+   `manifests/t/TrueDaerk/Ike/<version>/` in the fork.
+3. Run `winget validate --manifest manifests\t\TrueDaerk\Ike\<version>`
+   and `winget install --manifest …` on a Windows machine.
+4. Open a pull request against `microsoft/winget-pkgs`; once merged,
+   `winget install TrueDaerk.Ike` works for everyone.
