@@ -1,5 +1,5 @@
 {
-    "version": "0.6.193",
+    "version": "0.7.0",
     "description": "IKE, a JetBrains-inspired terminal IDE with vim-style editing, launched in a dedicated WezTerm window",
     "homepage": "https://github.com/TrueDaerk/ike",
     "license": {
@@ -13,12 +13,12 @@
     ],
     "architecture": {
         "64bit": {
-            "hash": "0000000000000000000000000000000000000000000000000000000000000000",
-            "url": "https://github.com/TrueDaerk/ike/releases/download/v0.6.193/ike_0.6.193_windows_amd64.zip"
+            "hash": "5940b1149d3e8fadd9d7ba78b620590c6e6db65e9006fa1d06bc9c762390ddb2",
+            "url": "https://github.com/TrueDaerk/ike/releases/download/v0.7.0/ike_0.7.0_windows_amd64.zip"
         },
         "arm64": {
-            "hash": "0000000000000000000000000000000000000000000000000000000000000000",
-            "url": "https://github.com/TrueDaerk/ike/releases/download/v0.6.193/ike_0.6.193_windows_arm64.zip"
+            "hash": "fae239305c6b3864714e2dd7a5e08da412be9e72423d71269941cccfdcd25e65",
+            "url": "https://github.com/TrueDaerk/ike/releases/download/v0.7.0/ike_0.7.0_windows_arm64.zip"
         }
     },
     "bin": [
