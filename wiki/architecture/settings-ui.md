@@ -387,7 +387,10 @@ any entry whose key the typed schema does not expose (no dead keys).
   `complexity.agent_verdict` (Bool, default off, #2964) runs the complexity
   diff on a coding agent's `Stop` hook event and posts the verdict into the
   Agent Trace window; read at event time, so a change applies to the next
-  turn. Listed in the Languages
+  turn. `complexity.agent_apply` (Bool, default on, #3009) applies the
+  simplify agent's diff (`a` in the tool window) to the function's buffer
+  as one undoable edit; off only opens the answer as a scratch; read when a
+  run finishes. Listed in the Languages
   group after PHP (see [complexity](./complexity.md#project-index-2916) and
   [the tool window](./complexity.md#tool-window-2917)).
 - **Dependencies** (#2419) — `deps.auto_scan`, the background dependency

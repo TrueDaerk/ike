@@ -801,7 +801,9 @@ in order:
    hunk's after lines (context and added) must occur exactly once and are
    replaced by its before lines, last hunk first, so later unrelated edits
    survive; a diff with whole contents but no hunks needs the file to be
-   exactly its after. A clean check raises the feed's confirmation shell
+   exactly its after. The splice (`spliceHunks`) is shared with
+   `agenttrace.Apply`, which runs it forward for the Complexity window's
+   simplify agent (#3009, complexity.md "Agent"). A clean check raises the feed's confirmation shell
    ("Revert agent change", `cfRevertTrace`); `enter` checks again, opens
    the file when needed (`openForRevert`, shared with the feed revert) and
    lands the result through `applyBufferRestore` — one undoable edit, a

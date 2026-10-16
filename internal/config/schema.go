@@ -550,6 +550,10 @@ type Complexity struct {
 	// (agent.hooks.install) diff the working tree against HEAD in IKE's
 	// process and post the verdict into the Agent Trace window.
 	AgentVerdict bool `toml:"agent_verdict"`
+	// AgentApply (#3009) applies the simplify agent's diff (the window's
+	// `a`) to the open buffer as one undoable edit; off only opens the
+	// answer as a scratch.
+	AgentApply bool `toml:"agent_apply"`
 }
 
 // Debug holds debugger behaviour (0360). PHP carries the web/request listen

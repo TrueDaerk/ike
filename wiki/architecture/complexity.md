@@ -2,9 +2,9 @@
 type: concept
 title: Code Complexity
 description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters, nesting depth and comment density (#2934) per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary with its per-class and per-file groups (#2937), the project index (#2916) that measures every supported file in the background, persists it across sessions (#2967, a stamped complexity-index.gob in the state store), keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source, the hotspot columns (#2957) multiplying complexity by the commits per file from one git log, the accepted-debt baseline (#2958, a committed .ike/complexity-baseline.json that turns every surface into a ratchet flagging only new and worsened functions), the optimisation-session pins (#2959, functions pinned with their metrics in the state store's complexity-pins.json, a Pinned section with a since-pin delta and a session Δexcess in the header), and the headless `ike complexity` CLI (#2922) printing the table of the project or of named files and directories (#2936), per function or summed per class or file (#2937), or the diff against a revision as text or JSON for CI and agents, also as a complexity-only build of the ike binary (#2939, build tag ike_complexity_only, make install-complexity) that links no IDE; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
-resource: internal/complexity, internal/complexitypanel, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_churn.go, internal/app/complexity_baseline.go, internal/app/complexity_pins.go, internal/vcs/vcscore/churn.go, internal/app/complexity_problems.go, internal/app/complexity_segment.go, internal/complexitycli, cmd/ike/complexityonly.go
+resource: internal/complexity, internal/complexitypanel, internal/app/complexity_agent.go, internal/agentask/simplify.go, internal/agentask/answerdiff.go, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_churn.go, internal/app/complexity_baseline.go, internal/app/complexity_pins.go, internal/vcs/vcscore/churn.go, internal/app/complexity_problems.go, internal/app/complexity_segment.go, internal/complexitycli, cmd/ike/complexityonly.go
 tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive, index, settings, telemetry, vcs, diff, problems, cli, baseline, pins]
-timestamp: 2026-10-14T12:00:00Z
+timestamp: 2026-10-16T12:00:00Z
 ---
 
 # Code Complexity
@@ -1764,19 +1764,100 @@ the best extraction candidate by saving (#2948) — and builds the prompt with
 `MaxSimplifySites`), the candidate line, the source fenced in its language
 (capped at `MaxSimplifySource`), then the fixed `SimplifyInstruction`
 (*reduce the cognitive complexity … without changing its behaviour; keep
-the public signature; keep tests green; answer with a unified diff against
-the file and one paragraph on what you changed and why*). The argv is
-`agentask.FreshCommand` — `agentask.Command` without `--resume` /
-`--fork-session`: a fresh `claude -p` session on the `agent.ask.*` model and
-turn limit, tool-less, JSON output, the explain-only system prompt — run
-through `agentask.Run` in the project root off the Update loop. One run per
-function at a time (`cxAgent.running`, keyed path + name + line): `a` again
-while it runs only notifies. The answer opens as a `.md` scratch — a heading
-naming the function, the answer with a bare unified diff fenced as
-```` ```diff ```` (`fenceDiff`). A missing `claude` reuses agent.ask's
-install message; a failed run notifies with the runner's error (the first
-stderr line). The session the run leaves behind is tagged by the ask marker
-and its id is added to `askForks`, so trace discovery skips it.
+the public signature; keep tests green. You have no tools and cannot read
+files; the complete function source is in the fenced block above. Answer
+with the unified diff against the file first, in a ```` ```diff ```` fence,
+then one paragraph*). The tool-lessness is spelled out since #3009: the
+CLAUDE.md files Claude Code loads automatically pushed a model into printing
+a textual `Read` call as its whole answer. The argv is
+`agentask.SimplifyCommand` — `agentask.Command` without `--resume` /
+`--fork-session` (`FreshCommand`) and with `SimplifySystemPrompt` appended
+instead of the explain-only one: a fresh `claude -p` session on the
+`agent.ask.*` model and turn limit, tool-less, JSON output — run by
+`agentask.RunSimplify` in the project root off the Update loop.
+
+**Answer validation and the one retry (#3009).** `agentask.ParseAnswerDiff`
+reads the first ```` ```diff ```` / ```` ```patch ```` fence, else a bare
+`--- a/… / +++ b/…` block, into file sections of `agenttrace.DiffHunk`s
+(`@@` starts a hunk; ` `, `-`, `+` rows; a blank line is an empty context
+row; `\ No newline`, `diff` and `index` lines are skipped; the header counts
+are informational). An answer without a hunk gets exactly one follow-up in
+the same session — `agentask.SimplifyFollowUp`, `FollowUp` resuming the
+run's session id with `NoDiffFollowUp` (*Your answer contained no unified
+diff. Answer with the diff now.*); a second diff-less answer is final.
+`RunSimplify` takes the runner as a parameter (`agentask.Runner`), which is
+the seam the tests fake.
+
+**Apply (#3009, `complexity.agent_apply`, default on).** The agent stays
+tool-less; IKE applies its diff, so the change lands as **one undoable edit
+in the open buffer, dirty and unsaved** — reviewed in the editor with the
+gutter diff, reverted with `u`, no file written behind the user's back and
+no git state touched. `cxAgentHunks` keeps the sections naming no file or a
+path that is a suffix of the function's file; a section for another file
+refuses the apply. `agenttrace.Apply` is the agent-trace revert's splice run
+forward (`spliceHunks`, shared with `Revert`, agent-trace.md "Revert agent
+change"): each hunk's before lines (context and removed) must occur exactly
+once and are replaced by its after lines, last hunk first; a miss returns a
+`*agenttrace.HunkError` naming the hunk (`hunk 2 of 3`) and nothing is
+applied. The check runs first against the buffer, or the disk when the file
+is not open; only then the scratch (below) opens, the function's file opens
+after it — so it is the tab in front and the editor sits on the function's
+header — and the edit is made last through `applyBufferRestore`, the local
+history's one-change restore. That order matters: a tab switch *after* the
+edit would hand the dirty buffer to `editor.auto_save = "focus"`, and the
+apply never saves. A cmd off the loop re-measures the new text
+(`cxMeasureText`, the function found again by name nearest its old header)
+and `cxAgentAppliedMsg` notifies `complexity: applied the agent's diff to
+<fn> (−n excess) — CCN a → b, cognitive c → d; u reverts, save writes it`,
+the excess taken under the file's thresholds. The Complexity window follows
+through its normal buffer-change path. A hunk that does not match opens the
+scratch in front with `complexity: the agent's diff does not apply cleanly
+(hunk 2 of 3) — opened as <scratch>`, so `git apply --3way` stays the
+fallback; a diff-less answer after the retry opens it with `complexity: the
+agent answered without a diff — opened as <scratch>`. With
+`complexity.agent_apply` off the answer only opens as the scratch, as
+before #3009.
+
+**The scratch.** A `.md` scratch (`cxAgentScratch.body`): a heading naming
+the function, its location and metrics, `Model: … · session log: …`, a
+quoted line saying what happened to the diff, then the answer with a bare
+unified diff fenced as ```` ```diff ```` (`fenceDiff`). It opens in a
+background tab behind the function's file after a successful apply (the
+documented choice over putting the explanation into the notification), in
+front otherwise.
+
+**Progress and cancel (#3009).** A run is a `cxAgentRun` in
+`cxAgent.running` (keyed `complexitypanel.AgentKey`: path + name + header
+line; a sequence id per run), carrying its `context.CancelFunc`, model and
+start time. While any run is in flight the status line's `complexityagent`
+segment shows `[agent: simplify <fn> m:ss]` (the oldest run named, `+n` for
+the others) — also in the line a focused tool pane gets, so it is visible
+while the Complexity window has the focus. Its clock is repainted by `cxAgentTickMsg`, a one-second tick
+armed on demand by the run's start, re-armed only while a run is in flight
+and stamped with the model generation — the idle rules of performance.md;
+an idle session never wakes for it. The tick also re-syncs the pane's marks
+(`SetAgentRunning`), so a window opened mid-run picks them up: the running
+function's row leads its name with `⟳` and the footer adds `esc cancel
+agent`. `esc` on that row (`complexitypanel.CancelAgentMsg`) or
+`complexity.cancelAgent` (palette; `A` in the Complexity context; the
+selected row's run, else every run) cancels: the process is killed through
+the context, the slot is freed at once — `a` on the row starts a fresh run —
+and `complexity: cancelled the agent for <fn>` is notified; the cancelled
+run's result is dropped by its sequence id. One run per function at a time:
+`a` again while it runs only notifies and names the ways to cancel.
+
+**Failure, logs, telemetry.** A missing `claude` reuses agent.ask's install
+message; a failed run notifies with the runner's error. Every notification
+after a run carries a second line `model <m> · session log
+~/.claude/projects/<project>/<session-id>.jsonl` (`cxSessionLog`:
+`agenttrace.ProjectsDir`, `EncodeCWD` of the project root, the id from the
+JSON result; the home directory shortened to `~` through `filepath`, so
+Windows paths work alike), and the scratch header names the same. The
+sessions the run leaves behind are tagged by the ask marker and their ids
+are added to `askForks`, so trace discovery skips them. Each finished run is
+one `complexity.agent` telemetry op: `outcome` applied / not_applied /
+no_diff / scratch / failed / cancelled, `ms`, `retried`; the phase is error
+for failed, canceled for cancelled.
 
 **Verdict on Stop.** With `complexity.agent_verdict` on, the `Stop` hook
 event — Claude Code's end-of-turn hook, now one of `agenttrace.HookEvents`
@@ -1819,6 +1900,7 @@ scope), validated in the form and by `config.Validate`:
 | `complexity.trend_commits` | `30` | Trend window in commits (1-500, #2962): how many first-parent commits the Trend tab and `--trend` measure the project at. |
 | `complexity.baseline` | `true` | Apply `.ike/complexity-baseline.json` (#2958): accepted functions leave the over counts, Problems and the warning colour; off ignores the file everywhere. |
 | `complexity.agent_verdict` | `false` | Diff the working tree against `HEAD` on the agent's `Stop` hook event and post the verdict into the Agent Trace window (#2964); off runs nothing. |
+| `complexity.agent_apply` | `true` | Apply the simplify agent's diff (`a`) to the function's open buffer as one undoable edit and report the metrics before → after (#3009); off only opens the answer as a scratch. |
 
 ## Limitations
 

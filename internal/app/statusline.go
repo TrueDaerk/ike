@@ -59,6 +59,7 @@ var statusLeft = []statusSegment{
 	{id: "forge", render: func(m Model, _ *editor.Model) string { return m.forgeBadgeSegment() }},
 	{id: "todo", render: func(m Model, _ *editor.Model) string { return m.todoSegment() }},
 	{id: "complexity", render: func(m Model, _ *editor.Model) string { return m.complexitySegment() }},
+	{id: "complexityagent", render: func(m Model, _ *editor.Model) string { return m.complexityAgentSegment() }},
 	{id: "http", render: func(m Model, _ *editor.Model) string { return m.httpFlightSegment() }},
 	{id: "deps", render: func(m Model, _ *editor.Model) string { return m.depsSegment() }},
 	{id: "projecttime", render: func(m Model, _ *editor.Model) string { return m.projectTimeSegment() }},
@@ -640,6 +641,11 @@ func (m Model) statusLine() string {
 			left += " │ " + s
 		}
 		if s := m.notifSegment(); s != "" {
+			left += " │ " + s
+		}
+		// A running simplify agent (#3009) is started from the Complexity
+		// window, so its clock must show while that pane has the focus.
+		if s := m.complexityAgentSegment(); s != "" {
 			left += " │ " + s
 		}
 		// The popup activity indicator (#2309) is layer state, not an editor

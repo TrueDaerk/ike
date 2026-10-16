@@ -40,7 +40,7 @@ func TestComplexityPageEntries(t *testing.T) {
 	if p.Description == "" {
 		t.Fatal("the Complexity page needs a description")
 	}
-	want := []string{"complexity.enabled", "complexity.exclude", "complexity.ccn_warn", "complexity.cognitive_warn", "complexity.comment_density_warn", "complexity.overrides", "complexity.problems", "complexity.status_segment", "complexity.churn_days", "complexity.trend_commits", "complexity.baseline", "complexity.agent_verdict"}
+	want := []string{"complexity.enabled", "complexity.exclude", "complexity.ccn_warn", "complexity.cognitive_warn", "complexity.comment_density_warn", "complexity.overrides", "complexity.problems", "complexity.status_segment", "complexity.churn_days", "complexity.trend_commits", "complexity.baseline", "complexity.agent_verdict", "complexity.agent_apply"}
 	if len(p.Entries) != len(want) {
 		t.Fatalf("Complexity page has %d entries, want %d: %+v", len(p.Entries), len(want), p.Entries)
 	}
@@ -50,7 +50,7 @@ func TestComplexityPageEntries(t *testing.T) {
 			t.Errorf("entry %d = %+v, want user-scoped %s with title and description", i, e, key)
 		}
 	}
-	for _, key := range []string{"complexity.enabled", "complexity.problems", "complexity.status_segment", "complexity.baseline", "complexity.agent_verdict"} {
+	for _, key := range []string{"complexity.enabled", "complexity.problems", "complexity.status_segment", "complexity.baseline", "complexity.agent_verdict", "complexity.agent_apply"} {
 		if e := complexityEntry(t, key); e.Type != Bool {
 			t.Errorf("%s type = %v, want Bool", key, e.Type)
 		}
@@ -325,5 +325,32 @@ func TestComplexityTrendCommits(t *testing.T) {
 	}
 	if view := m.View(); !strings.Contains(view, "12") {
 		t.Fatalf("the entry list must show the new value:\n%s", view)
+	}
+}
+
+// TestComplexityAgentApplyToggles: the auto-apply switch of the simplify
+// agent (#3009) defaults on, shows in the list, flips on enter (a Bool has
+// no invalid input to reject) and persists.
+func TestComplexityAgentApplyToggles(t *testing.T) {
+	restoreConfig(t)
+	m := New([]Page{{Title: "Complexity", Entries: []Entry{complexityEntry(t, "complexity.agent_apply")}}}, testOpts(t))
+	m.SetSize(100, 24)
+	m.Open()
+	m.Update(key("tab"))
+	if !config.Get().Complexity.AgentApply {
+		t.Fatal("complexity.agent_apply must default to on")
+	}
+	if view := m.View(); !strings.Contains(view, "Apply the agent's diff") {
+		t.Fatalf("the entry list must show the setting:\n%s", view)
+	}
+	m.Update(key("enter"))
+	commit(t, m)
+	if config.Get().Complexity.AgentApply {
+		t.Fatal("agent_apply did not toggle off")
+	}
+	m.Update(key("enter"))
+	commit(t, m)
+	if !config.Get().Complexity.AgentApply {
+		t.Fatal("agent_apply did not toggle back on")
 	}
 }

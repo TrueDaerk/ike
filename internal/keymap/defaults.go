@@ -800,6 +800,9 @@ var jetbrainsRows = []row{
 	// function or group into the accepted-debt baseline, or drops it
 	// (#2958); the bulk accept is palette-only.
 	{"i", "complexity.baseline", "Accept / drop in the complexity baseline", Complexity, "Complexity baseline (#2958)"},
+	// …and A cancels the simplify agent's run (#3009) — the shifted twin of
+	// the pane's own 'a' that starts it; esc on the running row does the same.
+	{"A", "complexity.cancelAgent", "Cancel the complexity agent", Complexity, "Complexity agent (#3009)"},
 	// Rerun and Stop (#1048, #1374): JetBrains' macOS Rerun (cmd+r) is taken by
 	// editor.replace, so rerun keeps the Windows-scheme F5 position with a cmd
 	// primary on darwin; stop's cmd+f2 is the macOS keymap verbatim. The ctrl
