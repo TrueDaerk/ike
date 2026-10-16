@@ -530,6 +530,11 @@ type Model struct {
 	sessionKey     *sessionCacheKey
 	sessionExcess  int
 	sessionDelta   int
+
+	// agentRunning holds the AgentKey of every function the simplify
+	// agent is working on (#3009, askagent.go): its row carries agentMark
+	// and esc on it cancels the run.
+	agentRunning map[string]bool
 }
 
 // New returns an empty panel on the Project tab sorted by CCN descending;
@@ -1272,6 +1277,8 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.functionDiff()
 	case "a":
 		return m.askAgent() // #2964
+	case "esc":
+		return m.cancelAgent() // #3009: only on a running row
 	case "enter":
 		return m.open()
 	case "e":
@@ -1611,6 +1618,9 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 		cells[fi].Text = caretMark + cells[fi].Text
 		cells[fi].Match = true
 	}
+	if fi := m.layoutIndex(ColFunc); fi >= 0 && m.agentRunningOn(r) {
+		cells[fi].Text = agentMark + cells[fi].Text // #3009
+	}
 	// An accepted function (#2958) keeps its over-threshold cells, muted
 	// instead of in the warning colour.
 	accepted := r.Fn.Baseline == complexity.BaselineAccepted
@@ -1672,6 +1682,9 @@ func (m *Model) footer() string {
 	}
 	if !m.treeActive() && m.tab != TabTrend && m.Grouping() == complexity.ByNone {
 		hints += " · a agent" // #2964: function rows only
+		if m.selectedAgentRunning() {
+			hints += " · esc cancel agent" // #3009
+		}
 	}
 	hints += m.pinFooter()
 	if m.hideTests {

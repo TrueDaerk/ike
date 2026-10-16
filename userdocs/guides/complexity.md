@@ -155,13 +155,34 @@ function: a fresh `claude -p` session (no tools, the model and turn limit of
 sites and its best extraction candidate, and the instruction to reduce the
 cognitive complexity without changing the behaviour, keep the public
 signature, keep the tests green and answer with a unified diff plus one
-paragraph on what changed and why. A notification says the run started;
-the answer opens as a Markdown scratch with the diff fenced, ready to read
-or to apply by hand. One run per function at a time — `a` again while it
-runs only reminds you. Without the `claude` command on `PATH` the
+paragraph on what changed and why. The prompt tells the agent it has no
+tools and must answer from the source it was given; an answer without a
+diff gets one follow-up asking for it.
+
+When the answer arrives, IKE applies the diff to the function's file in the
+editor — opening it if needed — as **one undoable edit**: the buffer is
+modified but not saved, the editor jumps to the function, and a
+notification reports the change, e.g. `complexity: applied the agent's diff
+to render (−3 excess) — CCN 12 → 6, cognitive 20 → 9`. Review it with the
+gutter diff, press `u` to throw the whole change away, or save to keep it.
+Nothing is written to disk and git is never touched. The agent's
+explanation opens as a Markdown scratch in a tab behind the file. If a hunk
+of the diff does not match your file (it changed meanwhile, or the agent
+invented lines), nothing is applied and the scratch opens in front, naming
+the hunk that failed, so you can still apply it by hand (for example with
+`git apply --3way`). Turn off **Apply the agent's diff**
+(`complexity.agent_apply`, Settings ▸ Complexity) to only get the scratch.
+
+While the agent works, the status line shows `[agent: simplify render
+0:42]` and the function's row in the Complexity window starts with `⟳`.
+Press `esc` on that row, `A` in the Complexity window, or run **Complexity:
+Cancel Agent** from the palette to stop it; `a` then starts a fresh run.
+One run per function at a time — `a` again while it runs only reminds you.
+Every notification after a run, and the scratch header, name the model and
+the session log (`~/.claude/projects/<project>/<session-id>.jsonl`), so a
+strange answer can be inspected. Without the `claude` command on `PATH` the
 notification tells you to install Claude Code; a failed run shows the
-error. The scratch is advice, not an edit: nothing in your files changes
-until you apply the diff.
+error.
 
 ## Different thresholds per path or language
 

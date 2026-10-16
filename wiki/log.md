@@ -1,5 +1,21 @@
 # Log
 
+## 2026-10-16 (Complexity agent: apply the diff, progress, cancel, retry, #3009)
+
+- [Code Complexity](/architecture/complexity.md) "Agent": `a` applies the
+  agent's unified diff to the function's buffer as one undoable edit
+  (`agentask.ParseAnswerDiff`, `agenttrace.Apply`) and reports the metrics
+  before → after; a mismatching hunk applies nothing and names itself; a
+  diff-less answer gets one follow-up (`agentask.RunSimplify`); the
+  hardened prompt and `SimplifySystemPrompt`; the `[agent: simplify …]`
+  status segment on a demand-armed tick, the pane's `⟳` mark, `esc` /
+  `complexity.cancelAgent` (`A`); the session log in notifications and the
+  scratch header; the `complexity.agent` telemetry op; the
+  `complexity.agent_apply` setting.
+- [Agent Trace](/architecture/agent-trace.md): the revert's hunk splice is
+  shared with `agenttrace.Apply`.
+- [Settings UI](/architecture/settings-ui.md): `complexity.agent_apply`.
+
 ## 2026-10-14 (Windows install: release workflow, Scoop/winget, WezTerm launcher, #3002)
 
 - New [Releases & Desktop Launchers](/architecture/release-and-launchers.md):

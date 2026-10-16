@@ -1,6 +1,7 @@
 package agentask
 
 import (
+	"context"
 	"strconv"
 	"strings"
 
@@ -13,14 +14,27 @@ import (
 // complexity of one function. The prompt carries the function's source, its
 // metrics, its complexity sites and its best extraction candidate, then the
 // fixed instruction; the answer is a unified diff and a paragraph, which the
-// app shows as a markdown scratch. The prompt opens with AskMarker like
-// every ask, so discovery skips the session the run leaves behind.
+// app applies to the open buffer and shows as a markdown scratch (#3009).
+// An answer without a parseable diff gets exactly one follow-up in the same
+// session (RunSimplify). The prompt opens with AskMarker like every ask, so
+// discovery skips the session the run leaves behind.
 
 // SimplifyInstruction is the fixed instruction every simplify prompt ends
-// with.
+// with. It says outright that the session has no tools (#3009): the
+// CLAUDE.md files Claude Code loads push the model toward a Read call,
+// which a tool-less session only prints.
 const SimplifyInstruction = "Reduce the cognitive complexity of this function without changing its behaviour; " +
-	"keep the public signature; keep tests green; answer with a unified diff against the file " +
-	"and one paragraph on what you changed and why."
+	"keep the public signature; keep tests green. " +
+	"You have no tools and cannot read files; the complete function source is in the fenced block above. " +
+	"Answer with the unified diff against the file first, in a ```diff fence, " +
+	"then one paragraph on what you changed and why."
+
+// SimplifySystemPrompt replaces SystemPrompt for a simplify run (#3009).
+const SimplifySystemPrompt = "You have no tools and cannot read or modify files. " +
+	"Answer only from the source in the prompt: a unified diff in a ```diff fence first, then one paragraph."
+
+// NoDiffFollowUp is the one follow-up a diff-less answer gets (#3009).
+const NoDiffFollowUp = "Your answer contained no unified diff. Answer with the diff now."
 
 // MaxSimplifySource caps the function source carried in the prompt, in
 // bytes; a longer function is cut at a line boundary with a trailing note.
@@ -134,4 +148,81 @@ func FreshCommand(opts Options, prompt string) []string {
 		}
 	}
 	return out
+}
+
+// SimplifyCommand is FreshCommand with SimplifySystemPrompt appended
+// instead of the explain-only one.
+func SimplifyCommand(opts Options, prompt string) []string {
+	return withSystemPrompt(FreshCommand(opts, prompt), SimplifySystemPrompt)
+}
+
+// SimplifyFollowUp is the no-diff follow-up: FollowUp resuming the run's
+// own session with NoDiffFollowUp, under SimplifySystemPrompt.
+func SimplifyFollowUp(sessionID string, opts Options) []string {
+	return withSystemPrompt(FollowUp(sessionID, opts, Prompt(Context{}, NoDiffFollowUp)), SimplifySystemPrompt)
+}
+
+// withSystemPrompt swaps the --append-system-prompt value of argv.
+func withSystemPrompt(argv []string, system string) []string {
+	for i := 0; i+1 < len(argv); i++ {
+		if argv[i] == "--append-system-prompt" {
+			argv[i+1] = system
+		}
+	}
+	return argv
+}
+
+// Runner runs one argv in dir — Run, or a fake in tests.
+type Runner func(ctx context.Context, dir string, argv []string) (Result, error)
+
+// SimplifyResult is a finished simplify run: the last answer, the parsed
+// diff when it held one, and whether the no-diff follow-up ran. Sessions
+// lists every session id the run left behind (the fresh one and, after a
+// follow-up, the one it answered in) for discovery to skip.
+type SimplifyResult struct {
+	Result
+	Diff     AnswerDiff
+	HasDiff  bool
+	Retried  bool
+	Sessions []string
+}
+
+// RunSimplify runs the simplify prompt in a fresh session and, when the
+// answer holds no parseable diff, asks once more in the same session with
+// NoDiffFollowUp. It never retries twice; a failed follow-up returns the
+// first answer with the follow-up's error.
+func RunSimplify(ctx context.Context, run Runner, dir string, opts Options, prompt string) (SimplifyResult, error) {
+	res, err := run(ctx, dir, SimplifyCommand(opts, prompt))
+	out := SimplifyResult{Result: res}
+	out.noteSession(res.ForkID)
+	if err != nil {
+		return out, err
+	}
+	if out.Diff, out.HasDiff = ParseAnswerDiff(res.Answer); out.HasDiff || res.ForkID == "" {
+		return out, nil
+	}
+	out.Retried = true
+	again, err := run(ctx, dir, SimplifyFollowUp(res.ForkID, opts))
+	out.noteSession(again.ForkID)
+	if err != nil {
+		return out, err
+	}
+	out.Result = again
+	if again.ForkID == "" {
+		out.ForkID = res.ForkID
+	}
+	out.Diff, out.HasDiff = ParseAnswerDiff(again.Answer)
+	return out, nil
+}
+
+func (r *SimplifyResult) noteSession(id string) {
+	if id == "" {
+		return
+	}
+	for _, s := range r.Sessions {
+		if s == id {
+			return
+		}
+	}
+	r.Sessions = append(r.Sessions, id)
 }

@@ -52,6 +52,7 @@ bring their own.
 | Complexity: Accept All Over Threshold | `complexity.baselineAll` | — | — | everywhere |
 | Complexity: Accept / Drop Function at Caret in Baseline | `complexity.baselineAtCaret` | — | — | everywhere |
 | Complexity: Show Breakdown of Function at Caret | `complexity.breakdownAtCaret` | — | — | everywhere |
+| Complexity: Cancel Agent | `complexity.cancelAgent` | `shift+a` | — | everywhere |
 | Complexity: Export Current Tab as CSV | `complexity.export` | — | — | everywhere |
 | Complexity: Export Current Tab as Markdown | `complexity.exportMarkdown` | — | — | everywhere |
 | Complexity: Diff Selected Function (Base vs Working Tree) | `complexity.functionDiff` | — | — | everywhere |

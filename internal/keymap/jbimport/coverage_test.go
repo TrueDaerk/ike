@@ -86,6 +86,7 @@ var noCounterpart = map[string]string{
 	"complexity.baseline":              "IKE-only concept (#2958): the accepted-debt baseline toggle of the Complexity window, which JetBrains does not have",
 	"complexity.sites":                 "IKE-only concept (#2946): the site fold of the Complexity window, which JetBrains does not have",
 	"complexity.showSites":             "IKE-only concept (#2947): editor marks for the Complexity window, which JetBrains does not have",
+	"complexity.cancelAgent":           "IKE-only concept (#3009): cancels the Complexity window's simplify agent, which JetBrains does not have",
 	"usage.toggle":                     "IKE-only concept (#2552): JetBrains has no usage report window",
 	"notebook.run":                     "IKE-only concept (#2682): the notebook viewer runs nbconvert; JetBrains' Jupyter cell actions belong to a plugin an exported keymap does not carry",
 	"terminal.sendSelection":           "IKE-only concept (#2542): JetBrains sends a selection to a console via Execute Selection, a language-console action with no terminal counterpart",

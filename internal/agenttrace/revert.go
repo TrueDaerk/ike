@@ -2,6 +2,7 @@ package agenttrace
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 )
 
@@ -11,7 +12,8 @@ import (
 // turned around — its after lines are looked up in the current content and
 // replaced by its before lines — so later, unrelated edits to the file
 // survive. A hunk whose after lines are gone (or appear more than once) is a
-// conflict: nothing is reverted.
+// conflict: nothing is reverted. Apply (#3009) is the same splice run
+// forward, for the complexity agent's diff.
 
 // ErrNoSnapshot means the diff does not know what the file held before.
 var ErrNoSnapshot = errors.New("no snapshot to revert to")
@@ -58,29 +60,82 @@ func Revert(d ChangeDiff, now string) (string, error) {
 		}
 		return "", ErrConflict
 	}
-	lines := strings.Split(now, "\n")
+	out, err := spliceHunks(now, d.Hunks, false)
+	if err != nil {
+		var he *HunkError
+		if errors.As(err, &he) {
+			err = he.Err // V names no hunk: the change is one unit there
+		}
+		if err == ErrApplied {
+			err = ErrReverted
+		}
+		return "", err
+	}
+	return out, nil
+}
+
+// ErrApplied means the content already holds the hunk's target side.
+var ErrApplied = errors.New("the file already holds the change")
+
+// HunkError is a hunk that did not apply: Index is 0-based, Total the
+// hunk count, Err the reason (ErrConflict, ErrAmbiguous, ErrApplied).
+type HunkError struct {
+	Index, Total int
+	Err          error
+}
+
+func (e *HunkError) Error() string {
+	return "hunk " + strconv.Itoa(e.Index+1) + " of " + strconv.Itoa(e.Total) + ": " + e.Err.Error()
+}
+
+func (e *HunkError) Unwrap() error { return e.Err }
+
+// Apply returns now with hunks applied forward (#3009) — the complexity
+// agent's diff: each hunk's before lines (context and removed) must occur
+// exactly once in now and are replaced by its after lines (context and
+// added). Any hunk that does not match fails the whole apply with a
+// *HunkError naming it; nothing is applied then.
+func Apply(hunks []DiffHunk, now string) (string, error) {
+	if len(hunks) == 0 {
+		return "", ErrNoSnapshot
+	}
+	return spliceHunks(now, hunks, true)
+}
+
+// spliceHunks replaces, for every hunk, one side by the other in text:
+// forward finds the before lines and puts the after lines, backward (the
+// revert) the other way round. A miss whose replacement is already present
+// reports ErrApplied.
+func spliceHunks(text string, hunks []DiffHunk, forward bool) (string, error) {
+	lines := strings.Split(text, "\n")
 	// Last hunk first: an earlier hunk's replacement never shifts the
 	// positions a later one was found at.
-	for i := len(d.Hunks) - 1; i >= 0; i-- {
-		before, after := hunkSides(d.Hunks[i])
-		if len(after) == 0 {
-			// A pure deletion without context: nothing marks where the
-			// removed lines went.
-			return "", ErrConflict
+	for i := len(hunks) - 1; i >= 0; i-- {
+		from, to := hunkSides(hunks[i])
+		if !forward {
+			from, to = to, from
 		}
-		at, err := findBlock(lines, after)
-		if err == ErrConflict && len(before) > 0 {
-			if _, again := findBlock(lines, before); again == nil {
-				err = ErrReverted
+		fail := func(err error) (string, error) {
+			return "", &HunkError{Index: i, Total: len(hunks), Err: err}
+		}
+		if len(from) == 0 {
+			// A pure insertion / deletion without context: nothing marks
+			// where the lines go.
+			return fail(ErrConflict)
+		}
+		at, err := findBlock(lines, from)
+		if err == ErrConflict && len(to) > 0 {
+			if _, again := findBlock(lines, to); again == nil {
+				err = ErrApplied
 			}
 		}
 		if err != nil {
-			return "", err
+			return fail(err)
 		}
-		next := make([]string, 0, len(lines)-len(after)+len(before))
+		next := make([]string, 0, len(lines)-len(from)+len(to))
 		next = append(next, lines[:at]...)
-		next = append(next, before...)
-		next = append(next, lines[at+len(after):]...)
+		next = append(next, to...)
+		next = append(next, lines[at+len(from):]...)
 		lines = next
 	}
 	return strings.Join(lines, "\n"), nil

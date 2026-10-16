@@ -78,3 +78,41 @@ func TestAskAgentRefusesGroupAndRemovedRows(t *testing.T) {
 		t.Fatal("a removed function has no source to simplify")
 	}
 }
+
+// TestAgentRunningMarkAndEscCancel (#3009): a running function's row
+// carries the ⟳ mark and the footer hint, esc on it sends the cancel
+// request; esc on another row sends nothing; the mark goes with the slot.
+func TestAgentRunningMarkAndEscCancel(t *testing.T) {
+	m := newPanel(t)
+	r := m.Rows()[0]
+	esc := func() tea.Msg {
+		cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+		if cmd == nil {
+			return nil
+		}
+		return cmd()
+	}
+	if esc() != nil {
+		t.Fatal("esc without a run must send nothing")
+	}
+	m.SetAgentRunning(map[string]bool{AgentKey(r.Path, r.Fn.Name, r.Fn.Line): true})
+	m.SetSize(400, 20) // room for the whole footer
+	view := m.View()
+	if !strings.Contains(view, agentMark+r.Fn.Name) || !strings.Contains(view, "esc cancel agent") {
+		t.Fatalf("the running row must carry the mark and the hint:\n%s", view)
+	}
+	msg, ok := esc().(CancelAgentMsg)
+	if !ok || msg.Key() != AgentKey(r.Path, r.Fn.Name, r.Fn.Line) {
+		t.Fatalf("esc on the running row = %+v ok=%v", msg, ok)
+	}
+	if len(m.Rows()) > 1 {
+		m.cursor = 1
+		if esc() != nil {
+			t.Fatal("esc on a row without a run must send nothing")
+		}
+	}
+	m.SetAgentRunning(nil)
+	if strings.Contains(m.View(), agentMark) {
+		t.Fatal("the mark must go with the run")
+	}
+}

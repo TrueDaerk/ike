@@ -8773,6 +8773,25 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case cxAgentDoneMsg:
 		return m.handleComplexityAgentDone(msg)
 
+	case cxAgentAppliedMsg:
+		// The re-measure after an applied agent diff (#3009).
+		m.handleComplexityAgentApplied(msg)
+		return m, nil
+
+	case cxAgentTickMsg:
+		// The agent run's status segment clock (#3009).
+		return m, m.handleComplexityAgentTick(msg)
+
+	case ComplexityCancelAgentMsg:
+		// complexity.cancelAgent (#3009).
+		m.complexityCancelAgent()
+		return m, nil
+
+	case complexitypanel.CancelAgentMsg:
+		// esc on a running row of the Complexity window (#3009).
+		m.cancelComplexityAgent(msg.Key())
+		return m, nil
+
 	case cxVerdictMsg:
 		// The Stop hook's complexity verdict (#2964).
 		return m.handleComplexityVerdict(msg)

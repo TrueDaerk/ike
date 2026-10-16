@@ -266,6 +266,15 @@ const (
 	// rest came from the per-blob cache). The phase is "error" when the
 	// repository could not be read. No path travels.
 	OpComplexityTrend = "complexity.trend"
+	// One finished simplify-agent run of the Complexity window's `a` (#3009).
+	// "outcome" is "applied" (the diff landed in the buffer), "not_applied"
+	// (a hunk did not match, or the diff named another file), "no_diff" (no
+	// diff even after the one follow-up), "scratch" (complexity.agent_apply
+	// off: the answer only opened as a scratch), "failed" or "cancelled";
+	// "ms" is the run's wall time and "retried" whether the no-diff
+	// follow-up ran. The phase is "error" for failed, "canceled" for
+	// cancelled, "ok" otherwise. No path, name or answer travels.
+	OpComplexityAgent = "complexity.agent"
 )
 
 // CommandSlowThreshold is the dispatch duration from which a command event
