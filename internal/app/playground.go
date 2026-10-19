@@ -721,6 +721,14 @@ func (m Model) playFocused() bool {
 	return focused == s.paneKey && m.playSrcShown()
 }
 
+// floatAbovePlayground reports whether a floating-shell layer — the Help
+// overlay opened with F1, or any other shell content — is open above the
+// focused playground and must take the key before it (#3011). The welcome
+// tour is excluded: it pages host-level and passes its try-it keys through.
+func (m Model) floatAbovePlayground() bool {
+	return m.floats.IsOpen() && !m.tourOpen()
+}
+
 // playSrcShown reports whether the hosting pane still shows the document the
 // playground queries (#2355). Before this the mode rendered over whatever the
 // pane held, so opening a file into it left the file invisible behind the
@@ -1861,9 +1869,11 @@ func (m Model) updatePlayBufferKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Global keymap scope (#1983) before the buffer sees them — the same
 	// eligibility rule the main dispatch applies to a capturing editor.
 	// Plain and shift-only keys stay with the buffer: they are motions,
-	// search input and typed prompt text.
+	// search input and typed prompt text. Function keys are neither, so they
+	// resolve too — f1 opens the Help overlay from here as from the query
+	// line (#3011).
 	if k, ok := keymap.FromKeyMsg(msg); ok &&
-		(k.Has(keymap.ModCtrl) || k.Has(keymap.ModAlt) || k.Has(keymap.ModMeta)) {
+		(k.Has(keymap.ModCtrl) || k.Has(keymap.ModAlt) || k.Has(keymap.ModMeta) || keymap.IsFunctionKey(k.Base)) {
 		if handled, cmd := m.playGlobalChord(msg); handled {
 			return m, cmd
 		}

@@ -133,6 +133,9 @@ func csiParamEncoded(base string) bool {
 	return isFunctionKey(base)
 }
 
+// IsFunctionKey reports whether a base key is one of the fN function keys.
+func IsFunctionKey(base string) bool { return isFunctionKey(base) }
+
 // isFunctionKey reports whether a base key is one of the fN function keys.
 func isFunctionKey(base string) bool {
 	if len(base) < 2 || base[0] != 'f' {

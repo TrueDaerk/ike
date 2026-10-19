@@ -10056,7 +10056,14 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.playSaveFileOpen() {
 			return m.updatePlaySaveFilePrompt(msg)
 		}
-		if m.playFocused() {
+		// A floating-shell layer opened from the focused playground — the
+		// Help overlay (F1), a prompt further down — sits above it and takes
+		// the key first (#3011): esc closes that layer, not the playground,
+		// and the overlay's filter typing never leaks into the query line.
+		// The palette (language cheatsheet, saved-filter picker) is already
+		// checked above. The tour is exempt like in the floats branch below:
+		// its try-it keys must reach the playground.
+		if m.playFocused() && !m.floatAbovePlayground() {
 			return m.updatePlayground(msg)
 		}
 		// The new-project wizard (#1718) mirrors it, with three steps walked
