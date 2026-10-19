@@ -709,6 +709,54 @@ func (m *Model) Wheel(delta int) {
 	m.clampScroll()
 }
 
+// Click moves the byte cursor to the byte under the pane-local cell (x, y)
+// and makes the clicked column active, like a keyboard move: a pending
+// nibble commits and the selection drops. It reports whether (x, y) hit a
+// byte cell; the gutter, the gaps, the inspector row and the footer miss.
+// A click past the end of the data in the last row lands on the last byte.
+func (m *Model) Click(x, y int) bool {
+	if m.err != nil || m.size == 0 || y < 0 || y >= m.bodyRows() {
+		return false
+	}
+	row := m.top + int64(y)*int64(m.perRow)
+	if row >= m.size {
+		return false
+	}
+	i, col, ok := m.cellAt(x)
+	if !ok {
+		return false
+	}
+	m.commitNibble()
+	m.notice = ""
+	m.anchor = -1
+	m.cur = row + int64(i)
+	if m.cur >= m.size {
+		m.cur = m.size - 1
+	}
+	if col != colText {
+		m.inserting = false
+	}
+	m.col = col
+	m.clampScroll()
+	return true
+}
+
+// cellAt maps a pane-local x to the in-row byte index and column it hits,
+// following renderRow's layout.
+func (m *Model) cellAt(x int) (int, column, bool) {
+	hexX := m.offsetWidth() + 2
+	for i := 0; i < m.perRow; i++ {
+		if at := hexX + 3*i + i/8; x == at || x == at+1 {
+			return i, colHex, true
+		}
+	}
+	textX := hexX + 3*m.perRow + m.perRow/8
+	if i := x - textX; i >= 0 && i < m.perRow {
+		return i, colText, true
+	}
+	return 0, colHex, false
+}
+
 // liveScanMax bounds the file size the search rescans on every keystroke
 // (#2461). findAll streams the whole file per query, so a live search over
 // a multi-gigabyte file would stall typing; above the bound the matches are
