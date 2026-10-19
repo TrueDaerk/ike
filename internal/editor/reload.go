@@ -185,6 +185,7 @@ func (m Model) reloadFrom(data []byte) (Model, tea.Cmd) {
 	}
 	m.largeFile = m.limits().Exceeded(int64(len(data)), m.buf.LineCount())
 	m.docBytes = int64(len(data))
+	m.longestLine = m.buf.LongestLine()
 	m.hist.Reset()
 	m.diskHash = "" // re-keyed below unless large-file mode opts out (#148)
 	if !m.largeFile {

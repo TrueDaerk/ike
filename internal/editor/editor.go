@@ -363,7 +363,10 @@ type Model struct {
 	// verdict is re-evaluated on follow appends, and re-measuring the whole
 	// buffer per append would be the exact cost the flag avoids.
 	docBytes int64
-	focused  bool
+	// longestLine is the byte length of the longest line, measured alongside
+	// docBytes; past largefile.MaxFormatLineBytes formatting is off.
+	longestLine int
+	focused     bool
 	// dimmed renders the whole buffer body faint, above the syntax colour but
 	// below the cursor/selection/search styling that already wins the cell
 	// switch in render.go — a caller-driven "this content is stale" cue
@@ -1254,6 +1257,7 @@ func (m *Model) installDoc(path, prevPath string, doc loadedDoc) {
 	}
 	m.largeFile = doc.large
 	m.docBytes = doc.bytes
+	m.longestLine = doc.longest
 	m.readOnly = false // a real file replaced any read-only preview (#1762)
 	// A different file in the same view stops following (#1928); the app's
 	// follow tick self-stops once no view follows. A real file also replaces
@@ -1325,6 +1329,7 @@ func (m *Model) NewFile(path string) {
 	}
 	m.largeFile = false // a template seed is never large
 	m.docBytes = 0
+	m.longestLine = m.buf.LongestLine()
 	m.readOnly = false // a new file is writable from its first :w (#1762)
 	// Fresh content replaces any merged rotation set the view held (#1996),
 	// whose follow source names a file this buffer has nothing to do with.
@@ -1375,6 +1380,7 @@ func (m *Model) RestoreText(text string) {
 	m.clearLocalMarks() // recovered text is a fresh starting point (#1151)
 	m.largeFile = m.limits().Exceeded(int64(len(text)), m.buf.LineCount())
 	m.docBytes = int64(len(text))
+	m.longestLine = m.buf.LongestLine()
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
 	m.mode = Normal
@@ -1472,6 +1478,18 @@ func (m Model) LargeFile() bool { return m.largeFile }
 // the size the large-file verdicts were decided from (#2159).
 func (m Model) DocBytes() int64 { return m.docBytes }
 
+// growLongestLine folds the lines from index from to the end into
+// longestLine, for appends that only touch the tail of the buffer.
+func (m *Model) growLongestLine(from int) {
+	for i := max(from, 0); i < m.buf.LineCount(); i++ {
+		m.longestLine = max(m.longestLine, len(m.buf.Line(i)))
+	}
+}
+
+// LongestLine reports the byte length of the document's longest line as of
+// the last load/reload/set — the input of largefile.LineOff.
+func (m Model) LongestLine() int { return m.longestLine }
+
 // InsightOff reports whether code insight is degraded for this document
 // (#149): flagged large and not overridden per path via ForceCodeInsight. The
 // status line renders its indicator off this, and parseCmd/emit gate on it.
@@ -1516,7 +1534,8 @@ func (m Model) thresholds() largefile.Thresholds {
 // FeatureOff reports whether one per-edit service is degraded for this
 // document (#2159): past the base thresholds everything is off (like
 // InsightOff); below them a feature whose own KB threshold is set switches off
-// once the load-time size exceeds it. ForceCodeInsight lifts every feature at
+// once the load-time size exceeds it, and formatting switches off once the
+// longest line exceeds largefile.MaxFormatLineBytes. ForceCodeInsight lifts every feature at
 // once, matching the base override.
 func (m Model) FeatureOff(f largefile.Feature) bool {
 	// A line-scoped language (#2996) parses only the visible lines, so its
@@ -1525,7 +1544,7 @@ func (m Model) FeatureOff(f largefile.Feature) bool {
 	if f == largefile.FeatureHighlight && m.lineScoped() {
 		return false
 	}
-	if m.largeFile {
+	if m.largeFile || largefile.LineOff(f, m.longestLine) {
 		return !largefile.Forced(m.path)
 	}
 	t := m.thresholds()

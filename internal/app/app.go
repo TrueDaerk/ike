@@ -14954,7 +14954,12 @@ func (m Model) largeFileDetailView() string {
 	rows := []string{title, ""}
 	for f := largefile.Feature(0); f < largefile.FeatureCount; f++ {
 		if ed.FeatureOff(f) {
-			rows = append(rows, off.Render("✗ "+f.Label()+" — off ("+f.Key()+")"))
+			reason := f.Key()
+			if !ed.LargeFile() && largefile.LineOff(f, ed.LongestLine()) {
+				reason = "longest line " + strconv.Itoa(ed.LongestLine()/1024) + " KB > " +
+					strconv.Itoa(largefile.MaxFormatLineBytes/1024) + " KB"
+			}
+			rows = append(rows, off.Render("✗ "+f.Label()+" — off ("+reason+")"))
 		} else {
 			rows = append(rows, on.Render("✓ "+f.Label()+" — on"))
 		}

@@ -69,6 +69,7 @@ func (m *Model) ShareDocumentWith(src *Model) {
 	m.dirty = src.dirty
 	m.stale = src.stale
 	m.largeFile = src.largeFile
+	m.docBytes, m.longestLine = src.docBytes, src.longestLine
 	m.diskHash = src.diskHash
 	m.eol, m.enc, m.mixedEOL = src.eol, src.enc, src.mixedEOL
 	m.vault, m.vaultPass, m.vaultLabel = src.vault, src.vaultPass, src.vaultLabel

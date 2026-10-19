@@ -30,7 +30,7 @@ func TestLargeFileDetailsPopup(t *testing.T) {
 		t.Fatal("editor.largeFileDetails must open the popup for a degraded document")
 	}
 	frame := m.render()
-	for _, want := range []string{"syntax highlighting", "LSP sync", "VCS gutter diff", "search match counter", "format on save"} {
+	for _, want := range []string{"syntax highlighting", "LSP sync", "VCS gutter diff", "search match counter", "format"} {
 		if !strings.Contains(frame, want) {
 			t.Fatalf("the popup must list %q; frame misses it", want)
 		}

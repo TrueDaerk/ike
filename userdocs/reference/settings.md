@@ -237,7 +237,7 @@ secrets — are documented together, with screenshots, in
 | LSP sync off above (KB) | `files.large_file_lsp_kb` | integer | `0` | user | Stop syncing the document to language servers (didOpen/didChange) once the file exceeds this size; 0 follows the base thresholds. The status line badges the degradation |
 | VCS gutter off above (KB) | `files.large_file_vcs_kb` | integer | `0` | user | Skip the gutter diff-marker recompute (git show + whole-file diff per refresh) once the file exceeds this size; 0 follows the base thresholds. The status line badges the degradation |
 | Search counter off above (KB) | `files.large_file_search_kb` | integer | `0` | user | Hide the search match counter (a bounded buffer scan per edit while highlights are armed) once the file exceeds this size; 0 follows the base thresholds. Match highlighting in the viewport stays |
-| Format on save off above (KB) | `files.large_file_format_kb` | integer | `0` | user | Skip the on-save LSP chain (organize imports, format) once the file exceeds this size; 0 follows the base thresholds. The save itself is unaffected |
+| Formatting off above (KB) | `files.large_file_format_kb` | integer | `0` | user | Skip formatting (the on-save LSP chain and Reformat File) once the file exceeds this size; 0 follows the base thresholds. The save itself is unaffected |
 
 ### Explorer
 

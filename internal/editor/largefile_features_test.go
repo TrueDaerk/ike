@@ -104,3 +104,44 @@ func TestBaseCliffDegradesEveryFeature(t *testing.T) {
 		t.Fatalf("past the base cliff every feature is off, got %v", off)
 	}
 }
+
+func TestLongLineDegradesOnlyFormat(t *testing.T) {
+	cfg := host.MapConfig{"editor.format_on_save": "true"}
+	src, _ := singleLineJSON(largefile.MaxFormatLineBytes+1, 0)
+	m, _ := loadedWith(t, cfg, "min.json", src+"\nsecond line\n")
+	if m.LargeFile() {
+		t.Fatal("setup: the file must stay below the base cliff")
+	}
+	if m.LongestLine() != len(src) {
+		t.Fatalf("LongestLine = %d, want %d", m.LongestLine(), len(src))
+	}
+	off := m.DegradedFeatures()
+	if len(off) != 1 || off[0] != largefile.FeatureFormat {
+		t.Fatalf("DegradedFeatures = %v, want [FeatureFormat]", off)
+	}
+	if cmd := m.beginSaveChain(false); cmd != nil {
+		t.Fatal("a document with an over-long line must save raw, without the format chain")
+	}
+	if m.ForceCodeInsight() == nil || m.FeatureOff(largefile.FeatureFormat) {
+		t.Fatal("force must lift the long-line degradation")
+	}
+}
+
+func TestLongLineBelowThresholdKeepsFormat(t *testing.T) {
+	m, _ := loadedWith(t, host.MapConfig{}, "min.json", strings.Repeat("x", largefile.MaxFormatLineBytes))
+	if m.FeatureOff(largefile.FeatureFormat) {
+		t.Fatal("a line at the threshold must keep formatting on")
+	}
+}
+
+func TestReadOnlyAppendTracksLongestLine(t *testing.T) {
+	m := New()
+	m.ShowReadOnly("result.txt", "short")
+	if m.LongestLine() != len("short") {
+		t.Fatalf("LongestLine = %d after set", m.LongestLine())
+	}
+	m.AppendReadOnly(strings.Repeat("x", 10) + "\nyy")
+	if m.LongestLine() != len("short")+10 {
+		t.Fatalf("LongestLine = %d, the continued last line must count", m.LongestLine())
+	}
+}

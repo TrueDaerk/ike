@@ -14,6 +14,9 @@ import (
 // document/range formatting). Like replace.go it batches every edit into one
 // history change — a single undo reverts the whole formatting pass — and
 // applies bottom-up so earlier positions stay valid while later ones shift.
+// buffer.ApplyAll runs a well-formed batch in one pass over the buffer, so a
+// formatter answering with tens of thousands of edits inside one long line
+// rebuilds that line once instead of once per edit.
 
 // TextEdit is one range rewrite in 0-based editor rune coordinates: the
 // [Start, End) span becomes Text (which may contain newlines). It mirrors the
@@ -58,19 +61,17 @@ func (m *Model) applyTextEdits(edits []TextEdit, amend bool) int {
 	})
 
 	cursorBefore := m.cursor
-	var fwd, inv []buffer.Edit
-	for _, e := range sorted {
-		be := buffer.Edit{
+	fwd := make([]buffer.Edit, len(sorted))
+	for i, e := range sorted {
+		fwd[i] = buffer.Edit{
 			Range: buffer.Range{
 				Start: buffer.Position{Line: e.StartLine, Col: e.StartCol},
 				End:   buffer.Position{Line: e.EndLine, Col: e.EndCol},
 			},
 			Text: e.Text,
 		}
-		inverse, _ := m.buf.Apply(be)
-		fwd = append(fwd, be)
-		inv = append(inv, inverse)
 	}
+	inv := m.buf.ApplyAll(fwd)
 	m.cursor = m.buf.ClampCursor(m.cursor)
 	change := history.Change{
 		Forwards:     fwd,

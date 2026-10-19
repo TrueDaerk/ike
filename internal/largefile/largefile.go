@@ -18,6 +18,13 @@ const (
 	DefaultMaxLines = 100_000
 )
 
+// MaxFormatLineBytes is the longest-line threshold of FeatureFormat: a
+// document with a longer line (minified JSON, bundled JS) is not formatted —
+// neither on save nor explicitly — even below the byte and line limits, since
+// a formatter answers such a line with tens of thousands of edits. A constant,
+// not a setting.
+const MaxFormatLineBytes = 256 * 1024
+
 // Limits are the evaluated thresholds. A zero or negative value disables that
 // guard (a file can then only be flagged by the other one).
 type Limits struct {
@@ -81,8 +88,10 @@ const (
 	// FeatureSearch is the search match tally: a capped but still large buffer
 	// scan per keystroke while search highlights are armed.
 	FeatureSearch
-	// FeatureFormat is the on-save LSP chain (organize imports / format),
-	// which ships and rewrites the full buffer.
+	// FeatureFormat is the on-save LSP chain (organize imports / format) and
+	// the explicit reformat commands, which ship and rewrite the full buffer.
+	// Besides the byte thresholds it also degrades past MaxFormatLineBytes
+	// (see LineOff).
 	FeatureFormat
 	// FeatureCount bounds iteration over the features.
 	FeatureCount
@@ -105,7 +114,7 @@ var featureLabels = [FeatureCount]string{
 	FeatureLSP:       "LSP sync",
 	FeatureVCS:       "VCS gutter diff",
 	FeatureSearch:    "search match counter",
-	FeatureFormat:    "format on save",
+	FeatureFormat:    "format",
 }
 
 // Label returns the feature's user-facing name.
@@ -161,6 +170,12 @@ func (t Thresholds) Off(f Feature, bytes int64, lines int) bool {
 	}
 	b := t.FeatureBytes[f]
 	return b > 0 && bytes > b
+}
+
+// LineOff reports whether feature f is degraded by the length of a document's
+// longest line (in bytes): only FeatureFormat has a line-length threshold.
+func LineOff(f Feature, longestLine int) bool {
+	return f == FeatureFormat && longestLine > MaxFormatLineBytes
 }
 
 // Override set: paths whose user forced code insight back on despite the flag

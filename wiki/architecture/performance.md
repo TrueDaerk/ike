@@ -4,7 +4,7 @@ title: Performance & Diagnostics
 description: Idle-behavior rules (who may wake the render loop, and how often), the render budget and the always-on per-message-type pass accounting, the per-keystroke fan-out budget while typing (#2541), the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, the heartbeat freeze dump (#2627), the opt-in update-loop trace log, the freeze-triage procedure, the selection-overlay rule for drag latency (#2495), and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/perfhud
 tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog, startup, freeze, render-budget]
-timestamp: 2026-10-14T15:00:00Z
+timestamp: 2026-10-19T12:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -867,6 +867,29 @@ Two guards keep typing flat regardless of file size:
   than the small-file case (which still schedules a parse). The deterministic
   companion `TestKeystrokeAvoidsFullBufferWorkWhenLarge` asserts no change
   text ships and no parse schedules on the degraded path.
+
+## Large formatting batches: one-pass apply and the long-line gate (#3012)
+
+A freeze dump showed the Update loop stuck for a minute in
+`buffer.Apply` while applying 37,147 LSP format edits to a minified JSON file
+— one line of ~1 MB. Applied one by one, every edit re-sliced, re-joined and
+re-split that line (and Clamp/byteOffset rescanned it), roughly 37 GB of
+string work. Two changes keep this off the loop:
+
+- **One-pass apply**: `ApplyTextEdits` hands the sorted batch to
+  `buffer.ApplyAll`, which walks the buffer once and rebuilds every touched
+  line once (see "Format & organize imports on save" in
+  `/architecture/editor.md`). `BenchmarkApplyTextEditsSingleLine` (40,000
+  edits in one 1 MB line, `internal/editor/textedit_batch_test.go`) runs in
+  ~12 ms; the per-edit path needs ~0.66 s for just 400 of those edits
+  (`BenchmarkApplyEachSingleLine`), so over a minute for the full batch.
+  `BenchmarkApplyTextEditsManyLines` (10,000 edits across 100k lines) runs in
+  ~4 ms against ~2.8 s per edit (`BenchmarkApplyEachManyLines`: every
+  line-count-changing edit re-spliced the whole slice). With these numbers
+  the batch stays on the Update goroutine.
+- **Long-line gate**: a document whose longest line exceeds
+  `largefile.MaxFormatLineBytes` (256 KB) is not formatted at all — neither
+  on save nor explicitly — and shows `[large: format off]`.
 
 ## Long HTML buffers: bounding the per-keystroke parse fan-out (#2770)
 
