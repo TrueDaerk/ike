@@ -64,21 +64,15 @@ func (m *Model) openProblemQuickFixes(msg ilsp.CodeActionsMsg) tea.Cmd {
 		m.host.Notify(host.Info, "no quick fixes for this problem")
 		return nil
 	}
-	m.palette.SetSize(m.width, m.height)
-	cx := m.paletteContext()
-	if x, y, w, ok := m.problemsPopupAnchor(m.actions.Len()); ok {
-		m.palette.OpenAnchoredWith(cx, actionsPrefix, "", x, y, w)
-		return m.palette.SelectionKick()
-	}
-	m.palette.OpenLocked(cx, actionsPrefix)
-	return m.palette.SelectionKick()
+	x, y, w, ok := m.problemsPopupAnchor(m.actions.Len())
+	return m.openActionsPopup(x, y, w, ok)
 }
 
 // problemsPopupAnchor places the quick-fix popup one row below the marked
 // Problems row — caretPopupAnchor's math for a list pane, where the row is
 // the cursor's offset in the visible window plus the pane's own header line.
-// ok is false without a laid-out Problems pane to anchor on, which sends the
-// caller to the centered palette.
+// ok is false without a laid-out Problems pane to anchor on, or when the box
+// cannot be kept on screen, which sends the caller to the centered palette.
 func (m Model) problemsPopupAnchor(rows int) (x, y, w int, ok bool) {
 	p := m.problemsPanel()
 	leaf, shown := m.toolWindowLeaf(pane.KindProblems) // pane or active hosted tab (#2736)
@@ -89,6 +83,5 @@ func (m Model) problemsPopupAnchor(rows int) (x, y, w int, ok bool) {
 	x = r.X + paneContentX
 	// +1 for the pane's scope header, +1 to sit *below* the marked row.
 	y = r.Y + m.contentYOff(leaf) + p.CursorRow() + 2
-	x, y, w = m.fitPopupAnchor(x, y, rows)
-	return x, y, w, true
+	return m.fitPopupAnchor(x, y, rows)
 }

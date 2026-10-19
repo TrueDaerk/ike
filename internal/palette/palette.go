@@ -647,6 +647,8 @@ type Dismissal struct {
 	// code-actions popup is dismissed a third of the time, and the log could
 	// not say what had been on offer — two low-value entries or a real choice.
 	Kinds string
+	// Anchored says whether the box sat at an anchor or was centered.
+	Anchored bool
 }
 
 // Pick describes a row activated out of the palette (#2551): the mode that was
@@ -667,6 +669,9 @@ type Pick struct {
 	// merely shown, which is what a ranking decision needs.
 	Kinds      string
 	PickedKind string
+	// Anchored says whether the box sat at an anchor (the caret, a Problems
+	// row) or was centered.
+	Anchored bool
 }
 
 // notePick records the activation of the row at rank out of results rows
@@ -684,6 +689,7 @@ func (p *Palette) notePick(rank, results int, picked Item) {
 		Results:    results,
 		Kinds:      p.kindSummary(),
 		PickedKind: sanitizeKind(picked.Kind),
+		Anchored:   p.anchored,
 	}
 }
 
@@ -807,9 +813,10 @@ func (p *Palette) dismiss() tea.Cmd {
 	opened := p.openedAt
 	results := p.resultCount() // read before Close drops the list (#2490)
 	kinds := p.kindSummary()   // likewise: the offered kinds (#2635)
+	anchored := p.anchored
 	p.Close()
 	if m != nil {
-		d := &Dismissal{Prefix: m.Prefix(), QueryLen: len([]rune(body)), Results: results, Kinds: kinds}
+		d := &Dismissal{Prefix: m.Prefix(), QueryLen: len([]rune(body)), Results: results, Kinds: kinds, Anchored: anchored}
 		if !opened.IsZero() {
 			d.Open = p.clock().Sub(opened)
 		}

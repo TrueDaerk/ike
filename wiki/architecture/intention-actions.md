@@ -4,7 +4,7 @@ title: Intention Actions
 description: The alt+enter popup — LSP code actions merged with built-in caret-dependent intention actions through a plugin-registered provider seam, opened anchored at the caret, with a debounced diff preview of the highlighted action.
 resource: internal/intention
 tags: [architecture, intentions, code-actions, palette, plugins, shortcuts]
-timestamp: 2026-09-23T12:00:00Z
+timestamp: 2026-10-19T12:00:00Z
 ---
 
 # Intention Actions
@@ -100,8 +100,30 @@ Empty merged list → the "no code actions here" toast (only honest verdict
 lives here now). Otherwise the picker opens **anchored one row below the
 caret** (`caretPopupAnchor` — the `compositeLSPPopups` math: pane rect +
 gutter + `DisplayOffset`/`DisplayRow`, shifted left at the right edge,
-flipped above when it would cross the bottom), falling back to the centered
-locked box without a laid-out editor pane. Fuzzy filtering works as before;
+flipped above when it would cross the bottom).
+
+**Placement rules.** The anchor is only used when it can be seen:
+
+- the active editor pane must be laid out (`m.lay.Panes` holds its rect);
+- the caret's display cell must lie inside the editor's viewport — a caret
+  scrolled above, below or right of the visible rows and columns has no
+  on-screen anchor (the absolute row is never used);
+- `fitPopupAnchor` shifts the box left at the right screen edge and flips it
+  above the anchor row when it would cross the bottom; if even that leaves
+  the budgeted box (`min(rows,12) + 5 + actionPreviewMaxLines` tall) off
+  screen, the anchor is rejected;
+- after `OpenAnchoredWith` the rendered box is measured once more
+  (`paletteOnScreen`): a box that leaves the terminal at the origin the
+  compositor would place it re-opens centered.
+
+In every rejected case `openActionsPopup` opens the **centered locked box**
+(`OpenLocked`) instead — an open picker that nothing draws is never an
+outcome. The compositor draws the palette above the popup-terminal layer and
+the floating-terminal panels, so a hidden-but-retained or blurred popup
+terminal cannot cover it. The `"!"` mode's `palette.pick` / `palette.dismiss`
+telemetry carries `anchored` (`true` / `false`), so a centered fallback is
+visible in the log. The Problems pane's quick-fix picker (#2175) goes through
+the same `openActionsPopup` and the same rules. Fuzzy filtering works as before;
 built-in kinds ("copy", "http", "vcs", "test", …) pass through
 `actionKindLabel` unchanged. The code-lens picker (#1912) leaves
 `Intentions` false and keeps the centered list.

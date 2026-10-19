@@ -4,7 +4,7 @@ title: Usage Telemetry
 description: Local-only usage recording — command (with outcome), keybinding, layout, session, heartbeat, freeze-with-goroutine-dump, operation-lifecycle, palette-pick, palette-dismissal and project-time events appended as per-session JSONL under ~/.ike/telemetry, asynchronous and content-free, switched by telemetry.enabled.
 resource: internal/telemetry/telemetry.go
 tags: [architecture, telemetry, usage, jsonl, privacy, diagnostics]
-timestamp: 2026-10-13T00:30:00Z
+timestamp: 2026-10-19T12:00:00Z
 ---
 
 # Usage Telemetry
@@ -61,6 +61,7 @@ currently 16); readers must tolerate unknown fields and filter on `v`.
 | 15 | #2716 | The `http.flight` end phases gain `redirects` — how many redirects the exchange followed before it landed on the response the pane shows (a 301 → 302 → 200 is `2`). Go fires the DNS, connect and TLS hooks once per hop and the v8 breakdown *accumulates* them, so without the count a three-hop chain is indistinguishable from one slow host with a 3× handshake. The field is **omitted when no redirect was followed**, so on v15 absence reads as zero, below v15 as "not recorded". Structural only: the count, never a URL, host or `Location`. |
 | 16 | #2885 | The `php.trait.index_scan` op gains `cached` — how many of the walk's `files` were taken from the persisted [PHP index cache](php-trait-index.md#persistence-across-sessions-2885) instead of being parsed. A warm start reads `cached` equal to `files` with a small `ms`; a cold walk, a `php.traitIndex.rebuild` and a session with `php.index.cache` off read `0`. Structural only — a count, never a path. Absence below v16 means "no cache existed": every file was parsed. |
 | 17 | #2967 | The `complexity.scan` op gains `cached` — how many of the walk's `files` were taken from the persisted [complexity index cache](complexity.md#project-index-2916) instead of being measured — and `cache` = `corrupt` when the cache the walk tried to seed from was damaged (it is ignored and rewritten; the field is omitted otherwise). A warm start reads `cached` equal to `files`; a cold walk, a rebuild and a changed `complexity.exclude` read `0`. Structural only — a count and a marker, never a path. Absence below v17 means every file was measured. |
+| 18 | #3013 | The `palette.pick` and `palette.dismiss` events of the code-actions mode (`"!"`) gain `anchored` — `true` when the box sat at its caret or Problems-row anchor, `false` when no on-screen anchor existed and the picker opened centered instead (a caret scrolled out of view, a stale pane rect, a box that would leave the terminal). A flag, never a position. Omitted for every other mode; below v18 it means "not recorded". |
 
 An export spanning versions therefore needs three guards: filter v1 `command`
 events on `data.source != "internal"`, treat a missing `ok`/`ms` on v4 as
@@ -345,7 +346,9 @@ counts by the version's interval before comparing sessions.
     also carries `kinds` (the offered summary, see `palette.dismiss`) and
     `picked_kind`, the chosen row's own kind — so "which kinds are picked out
     of which offers" is answerable; the fields are omitted for every other
-    mode.
+    mode. Since v18 (#3013) the same mode also carries `anchored`
+    (`true` / `false`): whether the box sat at its anchor or fell back to the
+    centered palette because no on-screen anchor existed.
   - `palette.dismiss` (#2408) — a palette mode closed with esc instead of a
     pick, the one palette outcome that otherwise leaves no trace at all.
     `mode` is the mode's prefix rune (`":"`, `"@"`, `"%"`, …), `query_len` the
@@ -363,7 +366,8 @@ counts by the version's interval before comparing sessions.
     `kindSummaryMax` (12) kinds are named, followed by `…`. **Titles never
     travel** — they quote the user's code, kinds do not. Without them a
     dismissal of the intention popup said only "two to four rows were
-    rejected", never what they were. Picks keep going through the ordinary command funnel, so
+    rejected", never what they were. Since v18 (#3013) the code-actions
+    mode also carries `anchored` (`true` / `false`, see `palette.pick`). Picks keep going through the ordinary command funnel, so
     the dismissal rate per mode is `palette.dismiss` over its opens. A mode
     that re-opens itself with a seeded query (the directory descend) starts a
     new open and is timed on its own.

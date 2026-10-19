@@ -1,5 +1,16 @@
 # Log
 
+## 2026-10-19 (Intention popup never opens invisibly, #3013)
+
+- [Intention Actions](/architecture/intention-actions.md): placement rules
+  for the anchored picker — `caretPopupAnchor` rejects a caret scrolled out
+  of the editor viewport and a box `fitPopupAnchor` cannot keep on screen,
+  `openActionsPopup` measures the rendered box once more
+  (`paletteOnScreen`) and re-opens it centered (`OpenLocked`) whenever the
+  anchor would leave the terminal; the Problems quick-fix picker shares the
+  seam. The `"!"` mode's `palette.pick` / `palette.dismiss` events carry
+  `anchored` (schema v18, [usage telemetry](/architecture/usage-telemetry.md)).
+
 ## 2026-10-16 (Complexity agent: apply the diff, progress, cancel, retry, #3009)
 
 - [Code Complexity](/architecture/complexity.md) "Agent": `a` applies the
