@@ -175,7 +175,13 @@ import (
 // of being measured — and "cache":"corrupt" when the cache it tried to seed
 // from was damaged (ignored and rewritten). Structural only — a count and a
 // marker. Absence below v17 means every file was measured.
-const SchemaVersion = 17
+//
+// v18: the "palette.dismiss" and "palette.pick" events of the code-actions
+// mode ("!") gain "anchored" — "true" when the box sat at its caret or
+// Problems-row anchor, "false" when no on-screen anchor existed and the
+// picker opened centered instead. Absent for every other mode, and below v18
+// it means "not recorded".
+const SchemaVersion = 18
 
 // defaultFlushInterval is how often the writer goroutine flushes the
 // bufio.Writer on its own, independent of buffer fill or explicit Flush
@@ -519,9 +525,11 @@ func (r *Recorder) CommandOutcome(id, source string, ok bool, d time.Duration) {
 // #2490 the row count tells a fruitless search (results 0 on a typed query)
 // from a deliberate change of mind. Since #2635 kinds carries the code-actions
 // mode's offered-kind summary ("builtin,quickfix*2"); it is empty — and the
-// field then absent — for every other mode. A negative count is clamped to
-// zero.
-func (r *Recorder) PaletteDismiss(mode string, queryLen, results int, kinds string, d time.Duration) {
+// field then absent — for every other mode. anchored is "true" or "false" for
+// the code-actions mode (whether the box sat at its anchor or fell back to
+// the centered box) and "" — the field absent — elsewhere. A negative count
+// is clamped to zero.
+func (r *Recorder) PaletteDismiss(mode string, queryLen, results int, kinds string, d time.Duration, anchored string) {
 	if d < 0 {
 		d = 0
 	}
@@ -537,6 +545,9 @@ func (r *Recorder) PaletteDismiss(mode string, queryLen, results int, kinds stri
 	if kinds != "" {
 		data["kinds"] = kinds
 	}
+	if anchored != "" {
+		data["anchored"] = anchored
+	}
 	r.record(TypePaletteDismiss, data)
 }
 
@@ -550,8 +561,11 @@ func (r *Recorder) PaletteDismiss(mode string, queryLen, results int, kinds stri
 // query travels; a picked command's id is already in that next command event.
 // Since #2635 kinds carries the code-actions mode's offered-kind summary and
 // pickedKind the chosen row's own kind; both are empty — and the fields then
-// absent — for every other mode. A negative rank or count is clamped to zero.
-func (r *Recorder) PalettePick(mode string, queryLen, rank, results int, kinds, pickedKind string) {
+// absent — for every other mode. anchored is "true" or "false" for the
+// code-actions mode (whether the box sat at its anchor or fell back to the
+// centered box) and "" — the field absent — elsewhere. A negative rank or
+// count is clamped to zero.
+func (r *Recorder) PalettePick(mode string, queryLen, rank, results int, kinds, pickedKind, anchored string) {
 	if rank < 0 {
 		rank = 0
 	}
@@ -569,6 +583,9 @@ func (r *Recorder) PalettePick(mode string, queryLen, rank, results int, kinds, 
 	}
 	if pickedKind != "" {
 		data["picked_kind"] = pickedKind
+	}
+	if anchored != "" {
+		data["anchored"] = anchored
 	}
 	r.record(TypePalettePick, data)
 }

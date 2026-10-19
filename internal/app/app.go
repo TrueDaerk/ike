@@ -3578,7 +3578,18 @@ func (m Model) recordPaletteDismissal() {
 	if !ok {
 		return
 	}
-	m.usage.PaletteDismiss(string(d.Prefix), d.QueryLen, d.Results, d.Kinds, d.Open)
+	m.usage.PaletteDismiss(string(d.Prefix), d.QueryLen, d.Results, d.Kinds, d.Open, actionsPlacement(d.Prefix, d.Anchored))
+}
+
+// actionsPlacement is the "anchored" telemetry value of a code-actions
+// outcome: "true" when the box sat at its caret or Problems-row anchor,
+// "false" when it fell back to the centered box because no on-screen anchor
+// existed. Every other mode reports "" and the field stays absent.
+func actionsPlacement(prefix rune, anchored bool) string {
+	if prefix != actionsPrefix {
+		return ""
+	}
+	return strconv.FormatBool(anchored)
 }
 
 // recordPalettePick turns a palette row activation into a telemetry event
@@ -3594,7 +3605,7 @@ func (m Model) recordPalettePick() {
 	if !ok {
 		return
 	}
-	m.usage.PalettePick(string(p.Prefix), p.QueryLen, p.Rank, p.Results, p.Kinds, p.PickedKind)
+	m.usage.PalettePick(string(p.Prefix), p.QueryLen, p.Rank, p.Results, p.Kinds, p.PickedKind, actionsPlacement(p.Prefix, p.Anchored))
 }
 
 // recentRankingFrecency reads palette.recent.ranking (#2399): whether the

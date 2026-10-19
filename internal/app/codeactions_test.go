@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/ansiblevault"
 	"ike/internal/editor"
 	"ike/internal/httpfile"
 	"ike/internal/intention"
@@ -153,6 +154,10 @@ func TestMergedActivation(t *testing.T) {
 func intentionModel(t *testing.T, name, content string, line, col int) Model {
 	t.Helper()
 	ensureLang(lang.Language{ID: "json", Extensions: []string{"json"}})
+	// A vault password source in the developer's shell would add "Treat as
+	// Vault File" to every offer; the fixture decides that itself.
+	t.Setenv(ansiblevault.EnvPassword, "")
+	t.Setenv(ansiblevault.EnvPasswordFile, "")
 	m := sizedWith(t, registry.Global(), 100, 40)
 	path := filepath.Join(t.TempDir(), name)
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {

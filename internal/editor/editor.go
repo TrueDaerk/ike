@@ -1609,6 +1609,26 @@ func (m Model) Cursor() (line, col int) { return m.cursor.Line + 1, m.cursor.Col
 // CursorPos returns the 0-based line and column, for session persistence.
 func (m Model) CursorPos() (line, col int) { return m.cursor.Line, m.cursor.Col }
 
+// CursorInView reports whether the caret's display cell lies inside the
+// editor's viewport: its row within the body rows and, without soft wrap, its
+// column inside the horizontal window. An overlay anchored at the caret
+// (the intention popup) must not be placed when this is false — DisplayRow
+// and DisplayOffset then name a cell nothing drew.
+func (m Model) CursorInView() bool {
+	line, col := m.cursor.Line, m.cursor.Col
+	if row := m.DisplayRow(line, col); row < 0 || row >= m.height {
+		return false
+	}
+	if m.softWrap {
+		return true
+	}
+	if col < m.view.Left {
+		return false
+	}
+	off := m.DisplayOffset(line, col)
+	return off >= 0 && off < m.view.TextWidth(m.buf.LineCount())
+}
+
 // SelectionLines returns the 1-based, inclusive line range of the active
 // visual selection; ok is false outside visual mode. Used by range-scoped
 // actions like Show History for Selection (#1430).

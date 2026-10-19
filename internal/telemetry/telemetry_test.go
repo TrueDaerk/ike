@@ -128,10 +128,10 @@ func TestSchemaCarriesOnlyStructuralFields(t *testing.T) {
 	r.Op("http.flight", "error", map[string]string{"ms": "9", "stream": "false", "reason": "refused"})
 	r.Op("project.switch", "lsp", map[string]string{"ms": "0", "skipped": "no_server_docs"})
 	r.CommandOutcome("editor.save", SourceKeybind, false, 0)
-	r.PaletteDismiss("%", 4, 7, "", 900*time.Millisecond)
-	r.PalettePick(":", 3, 2, 9, "", "")
-	r.PaletteDismiss("!", 0, 3, "builtin,quickfix*2", 700*time.Millisecond)
-	r.PalettePick("!", 0, 1, 3, "builtin,quickfix*2", "quickfix")
+	r.PaletteDismiss("%", 4, 7, "", 900*time.Millisecond, "")
+	r.PalettePick(":", 3, 2, 9, "", "", "")
+	r.PaletteDismiss("!", 0, 3, "builtin,quickfix*2", 700*time.Millisecond, "false")
+	r.PalettePick("!", 0, 1, 3, "builtin,quickfix*2", "quickfix", "true")
 	r.Op("session.restore", "ok", map[string]string{"ms": "12", "panes": "2", "tabs": "7", "missing": "1"})
 	r.ProjectLeave("ab12cd34ef56", "switch", time.Minute)
 	r.Freeze(0, 60*time.Second, true)
@@ -152,6 +152,7 @@ func TestSchemaCarriesOnlyStructuralFields(t *testing.T) {
 		"rank":        true,                                                                           // palette.pick (#2551) — a row index, never the picked item
 		"kinds":       true,                                                                           // palette.pick/dismiss (#2635) — LSP CodeActionKind tokens plus the "builtin" marker, never a title
 		"picked_kind": true,                                                                           // palette.pick (#2635) — the chosen row's kind, never its title
+		"anchored":    true,                                                                           // palette.pick/dismiss (v18) — whether the code-actions box sat at its anchor, a flag
 		"panes":       true,                                                                           // session.restore (#2403) — a pane count
 		"tabs":        true,                                                                           // session.restore (#2551) — a tab count
 		"missing":     true,                                                                           // session.restore (#2551) — a count of vanished files
@@ -654,7 +655,7 @@ func TestCommandOutcomeShapes(t *testing.T) {
 func TestPaletteDismissEvent(t *testing.T) {
 	dir := t.TempDir()
 	r := New(dir, nil)
-	r.PaletteDismiss("%", 4, 0, "", 1500*time.Millisecond)
+	r.PaletteDismiss("%", 4, 0, "", 1500*time.Millisecond, "")
 	r.Close()
 
 	evs := readSession(t, dir)
@@ -672,8 +673,8 @@ func TestPaletteDismissEvent(t *testing.T) {
 func TestPaletteDismissResults(t *testing.T) {
 	dir := t.TempDir()
 	r := New(dir, nil)
-	r.PaletteDismiss(":", 3, 12, "", time.Second)
-	r.PaletteDismiss("@", 0, -1, "", time.Second)
+	r.PaletteDismiss(":", 3, 12, "", time.Second, "")
+	r.PaletteDismiss("@", 0, -1, "", time.Second, "")
 	r.Close()
 
 	evs := readSession(t, dir)
@@ -749,7 +750,7 @@ func TestPHPTraitIndexScanNeverOpensASession(t *testing.T) {
 func TestPalettePickEvent(t *testing.T) {
 	dir := t.TempDir()
 	r := New(dir, nil)
-	r.PalettePick("@", 5, 3, 20, "", "")
+	r.PalettePick("@", 5, 3, 20, "", "", "")
 	r.Close()
 
 	evs := readSession(t, dir)
@@ -771,9 +772,9 @@ func TestPalettePickEvent(t *testing.T) {
 func TestPaletteKindFields(t *testing.T) {
 	dir := t.TempDir()
 	r := New(dir, nil)
-	r.PaletteDismiss("!", 0, 3, "builtin,quickfix*2", 700*time.Millisecond)
-	r.PalettePick("!", 0, 1, 3, "builtin,quickfix*2", "quickfix")
-	r.PalettePick("@", 5, 3, 20, "", "")
+	r.PaletteDismiss("!", 0, 3, "builtin,quickfix*2", 700*time.Millisecond, "")
+	r.PalettePick("!", 0, 1, 3, "builtin,quickfix*2", "quickfix", "")
+	r.PalettePick("@", 5, 3, 20, "", "", "")
 	r.Close()
 
 	evs := readSession(t, dir)
@@ -799,7 +800,7 @@ func TestPaletteKindFields(t *testing.T) {
 func TestPalettePickClampsNegatives(t *testing.T) {
 	dir := t.TempDir()
 	r := New(dir, nil)
-	r.PalettePick(":", 0, -1, -4, "", "")
+	r.PalettePick(":", 0, -1, -4, "", "", "")
 	r.Close()
 
 	evs := readSession(t, dir)
@@ -811,17 +812,18 @@ func TestPalettePickClampsNegatives(t *testing.T) {
 	}
 }
 
-// The version analysis scripts branch on (#2885, #2967).
-func TestSchemaVersionIsSeventeen(t *testing.T) {
-	if SchemaVersion != 17 {
-		t.Fatalf("SchemaVersion = %d, want 17", SchemaVersion)
+// The version analysis scripts branch on (#2885, #2967, the code-actions
+// "anchored" flag).
+func TestSchemaVersionIsEighteen(t *testing.T) {
+	if SchemaVersion != 18 {
+		t.Fatalf("SchemaVersion = %d, want 18", SchemaVersion)
 	}
 	dir := t.TempDir()
 	r := New(dir, nil)
 	r.Command("editor.save", SourceKeybind)
 	r.Close()
-	if evs := readSession(t, dir); len(evs) != 1 || evs[0].V != 17 {
-		t.Fatalf("events must be stamped v17, got %v", evs)
+	if evs := readSession(t, dir); len(evs) != 1 || evs[0].V != 18 {
+		t.Fatalf("events must be stamped v18, got %v", evs)
 	}
 }
 

@@ -4,7 +4,7 @@ title: Problems Tool Window
 description: Singleton bottom-split pane aggregating LSP diagnostics project-wide — grouped by file, errors first, enter/double-click jumps to the location, 'a' applies a code action without leaving the pane, '/' filters with the shared list-filter syntax and 'f' is its current-file sugar; consumes the publishDiagnostics flow plus the Go-computed lint notes and per-run task-matcher findings, the deps and complexity (#2920) task sources (#1024, part of #33; notes #1654; tasks #1915; quick fixes #2175; shared filter #2156).
 resource: internal/problems/problems.go
 tags: [architecture, lsp, diagnostics, tool-window, pane, tasks, code-actions, filter]
-timestamp: 2026-10-13T18:00:00Z
+timestamp: 2026-10-19T12:00:00Z
 ---
 
 # Problems Tool Window (#1024)
@@ -180,7 +180,10 @@ from outside an editor:
 4. The app fills the *same* `actionsMode` the intention popup uses (LSP
    actions only: with no caret, no intention provider could apply) and opens
    the picker anchored under the marked row, `caretPopupAnchor`'s math for a
-   list pane. Picking a row runs the bridge's `Apply` continuation.
+   list pane — through the same `openActionsPopup` as the intention popup, so
+   an anchor that would leave the screen opens the picker centered instead
+   (see [intention actions](intention-actions.md)). Picking a row runs the
+   bridge's `Apply` continuation.
 5. Applying goes through the shared WorkspaceEdit path
    (`plugins/lsp/workspace_edit.go`): an open buffer gets one
    `FormatEditsMsg`, applied as a single undo unit, so `u` takes the fix

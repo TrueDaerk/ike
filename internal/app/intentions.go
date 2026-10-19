@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"ike/internal/editor"
 	"ike/internal/host"
@@ -198,14 +199,39 @@ func (m *Model) openIntentions(msg ilsp.CodeActionsMsg) tea.Cmd {
 		m.host.Notify(host.Info, "no code actions here")
 		return nil
 	}
+	x, y, w, ok := m.caretPopupAnchor(m.actions.Len())
+	return m.openActionsPopup(x, y, w, ok)
+}
+
+// openActionsPopup opens the code-actions picker at the anchor when one was
+// found and the box it renders lies on screen; otherwise it opens the
+// centered locked box. An open picker that nothing draws is never an option:
+// a caret scrolled out of view, a stale pane rectangle or a box taller than
+// its budget all land in the centered fallback, which the "!" mode's
+// telemetry reports as anchored=false.
+func (m *Model) openActionsPopup(x, y, w int, anchored bool) tea.Cmd {
 	m.palette.SetSize(m.width, m.height)
 	cx := m.paletteContext()
-	if x, y, w, ok := m.caretPopupAnchor(m.actions.Len()); ok {
+	if anchored {
 		m.palette.OpenAnchoredWith(cx, actionsPrefix, "", x, y, w)
-		return m.palette.SelectionKick()
+		if m.paletteOnScreen() {
+			return m.palette.SelectionKick()
+		}
 	}
 	m.palette.OpenLocked(cx, actionsPrefix)
 	return m.palette.SelectionKick()
+}
+
+// paletteOnScreen reports whether the open palette's rendered box lies fully
+// inside the terminal at the origin the compositor places it.
+func (m Model) paletteOnScreen() bool {
+	v := m.palette.View()
+	if v == "" {
+		return false
+	}
+	w, h := lipgloss.Width(v), lipgloss.Height(v)
+	x, y := m.palette.Origin(m.width, m.height, w, h)
+	return x >= 0 && y >= 0 && x+w <= m.width && y+h <= m.height
 }
 
 // intentionPopupWidth is the anchored intention box's outer width: wide
@@ -216,7 +242,9 @@ const intentionPopupWidth = 46
 // caretPopupAnchor places the intention popup one row below the caret — the
 // compositeLSPPopups math for the focused editor, shifted left at the right
 // screen edge and flipped above the caret when the box would cross the
-// bottom. ok is false without a laid-out editor pane to anchor on.
+// bottom. ok is false without a laid-out editor pane to anchor on, when the
+// caret cell is scrolled out of the editor's viewport, or when no placement
+// keeps the box on screen — the caller centers the picker then.
 func (m Model) caretPopupAnchor(rows int) (x, y, w int, ok bool) {
 	key := m.activeEditorKey()
 	if key == "" {
@@ -231,19 +259,25 @@ func (m Model) caretPopupAnchor(rows int) (x, y, w int, ok bool) {
 	if ed == nil {
 		return 0, 0, 0, false
 	}
+	if !ed.CursorInView() {
+		return 0, 0, 0, false
+	}
 	line, col := ed.CursorPos()
 	x = r.X + paneContentX + ed.GutterWidth() + ed.DisplayOffset(line, col)
 	y = r.Y + m.contentYOff(key) + ed.DisplayRow(line, col) + 1
-	x, y, w = m.fitPopupAnchor(x, y, rows)
-	return x, y, w, true
+	if y < 0 || y > m.height || x < 0 || x > m.width {
+		return 0, 0, 0, false
+	}
+	return m.fitPopupAnchor(x, y, rows)
 }
 
 // fitPopupAnchor fits an intention-sized box whose top-left would be (x, y):
 // shifted left at the right screen edge, flipped above the anchor row when it
 // would cross the bottom. The caret anchor and the Problems pane's quick-fix
 // anchor (#2175) place their row differently but must land on screen the same
-// way, so the clamping lives here rather than in each.
-func (m Model) fitPopupAnchor(x, y, rows int) (int, int, int) {
+// way, so the clamping lives here rather than in each. ok is false when the
+// budgeted box does not fit the terminal at all.
+func (m Model) fitPopupAnchor(x, y, rows int) (int, int, int, bool) {
 	w := intentionPopupWidth
 	if x+w > m.width {
 		x = m.width - w
@@ -264,7 +298,7 @@ func (m Model) fitPopupAnchor(x, y, rows int) (int, int, int) {
 			y = 0
 		}
 	}
-	return x, y, w
+	return x, y, w, y+h <= m.height && x+w <= m.width
 }
 
 // insertCurlAsRequest lands the caret line's curl command as an .http block
