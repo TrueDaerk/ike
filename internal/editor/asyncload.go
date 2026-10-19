@@ -99,6 +99,7 @@ type loadedDoc struct {
 	buf                              *buffer.Buffer
 	info                             textenc.Info
 	bytes                            int64 // decoded (plaintext) size, the large-file input
+	longest                          int   // byte length of the longest line
 	large                            bool
 	hash                             string // undostore.Hash of the on-disk bytes; "" when large
 	vault                            bool
@@ -139,6 +140,7 @@ func buildDoc(data []byte, in loadInputs) (loadedDoc, error) {
 	d.buf = buffer.FromString(text)
 	d.info = info
 	d.bytes = int64(len(data))
+	d.longest = d.buf.LongestLine()
 	d.large = in.limits.Exceeded(d.bytes, d.buf.LineCount())
 	if !d.large {
 		// restoreUndo's hash of the on-disk bytes — the ciphertext for a

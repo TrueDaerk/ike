@@ -11,6 +11,7 @@ import (
 	"ike/internal/format"
 	"ike/internal/host"
 	"ike/internal/lang"
+	"ike/internal/largefile"
 	ilsp "ike/internal/lsp"
 	"ike/internal/safego"
 )
@@ -36,6 +37,10 @@ func (m *Model) handleReformat(ranged bool) tea.Cmd {
 	path := ed.Path()
 	if path == "" {
 		m.host.Notify(host.Info, "reformat needs a file-backed buffer")
+		return nil
+	}
+	if ed.FeatureOff(largefile.FeatureFormat) {
+		m.host.Notify(host.Info, "large file: formatting is off — Force Code Insight re-enables it")
 		return nil
 	}
 	langID := ""

@@ -46,6 +46,7 @@ func (m *Model) ShowReadOnly(path, text string) {
 	m.clearVaultState() // a preview is not vault-backed (#2293)
 	m.largeFile = m.limits().Exceeded(int64(len(text)), m.buf.LineCount())
 	m.docBytes = int64(len(text))
+	m.longestLine = m.buf.LongestLine()
 	m.cursor = buffer.Position{}
 	m.desiredCol = 0
 	m.mode = Normal
@@ -100,11 +101,13 @@ func (m *Model) AppendReadOnly(text string) tea.Cmd {
 		return nil
 	}
 	segs := strings.Split(text, "\n")
+	from := m.buf.LineCount() - 1
 	m.buf.AppendToLastLine(segs[0])
 	for _, s := range segs[1:] {
 		m.buf.AppendLine(s)
 	}
 	m.docBytes += int64(len(text))
+	m.growLongestLine(from)
 	if !m.largeFile && m.limits().Exceeded(m.docBytes, m.buf.LineCount()) {
 		m.largeFile = true
 	}

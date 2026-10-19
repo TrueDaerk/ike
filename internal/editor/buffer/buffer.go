@@ -52,6 +52,15 @@ func (b *Buffer) Lines() []string {
 	return cp
 }
 
+// LongestLine returns the byte length of the longest line.
+func (b *Buffer) LongestLine() int {
+	n := 0
+	for _, l := range b.lines {
+		n = max(n, len(l))
+	}
+	return n
+}
+
 // RuneLen returns the rune length of line i (0 for out-of-range lines).
 func (b *Buffer) RuneLen(i int) int { return runeLen(b.Line(i)) }
 

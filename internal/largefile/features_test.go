@@ -63,3 +63,17 @@ func TestFeatureLabelsAndKeysComplete(t *testing.T) {
 		t.Fatal("out-of-range features must yield empty strings")
 	}
 }
+
+func TestLineOffOnlyGatesFormat(t *testing.T) {
+	if !LineOff(FeatureFormat, MaxFormatLineBytes+1) {
+		t.Fatal("formatting must degrade past the longest-line threshold")
+	}
+	if LineOff(FeatureFormat, MaxFormatLineBytes) {
+		t.Fatal("a line exactly at the threshold is not over it")
+	}
+	for f := Feature(0); f < FeatureCount; f++ {
+		if f != FeatureFormat && LineOff(f, 1<<30) {
+			t.Fatalf("%s has no line-length threshold", f.Label())
+		}
+	}
+}

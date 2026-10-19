@@ -331,6 +331,7 @@ func (m Model) followAppend(text string) (Model, tea.Cmd) {
 	// kept shipping its entire text with every append's EventChange — an
 	// O(document) join per poll on the update loop, growing without bound.
 	m.docBytes += int64(len(text))
+	m.growLongestLine(prevCount - 1)
 	if !m.largeFile && m.limits().Exceeded(m.docBytes, m.buf.LineCount()) {
 		m.largeFile = true
 	}

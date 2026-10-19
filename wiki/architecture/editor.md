@@ -4,7 +4,7 @@ title: Editor
 description: Vim-like modal editor pane built from buffer/mode/motion/operator/textobject/register/history/viewport/search sub-packages.
 resource: internal/editor
 tags: [architecture, editor, vim]
-timestamp: 2026-10-14T11:00:00Z
+timestamp: 2026-10-19T12:00:00Z
 ---
 
 # Editor
@@ -1974,6 +1974,21 @@ context menu, #2253) — same 2 s time box and never-block rule, but it toasts
 when no file is focused or the server does not offer the kind, because an
 explicitly invoked command that stays silent reads as broken.
 
+**Applying the edits (#3012).** Every formatting result — on save, Reformat
+File, rename and code actions — lands through `Model.ApplyTextEdits`
+(`editor/textedit.go`), which sorts the edits bottom-up and hands them to
+`buffer.ApplyAll` as one history change. A well-formed batch (bottom-up,
+non-overlapping, every position inside the buffer — what LSP guarantees) is
+applied in **one pass**: the buffer is walked top-down once, unchanged runs
+and replacement texts go into a fresh line slice, and every touched line is
+rebuilt exactly once, so the cost is linear in buffer plus edit size no
+matter how many edits share a line. Forward and inverse edits are the same
+as per-edit application would record, so undo, redo and
+`ApplyTextEditsAmend` are unchanged. A malformed batch (overlapping,
+unsorted, out of range) falls back to one `buffer.Apply` per edit, which
+keeps the old clamping behaviour exactly. Single-edit callers keep using
+`buffer.Apply`.
+
 ## Untitled buffers & save-as (#730)
 
 An empty editor pane (fresh start, split leaf) is a typable **untitled
@@ -2162,7 +2177,7 @@ stalling:
 - The search match counter hides (`searchTally` skips its bounded buffer scan,
   #2159); viewport match highlighting stays, it is per-line.
 - The on-save LSP chain (organize imports / format) is skipped — the save
-  writes raw.
+  writes raw — and Reformat File / Selection is refused with a toast.
 
 ### Asynchronous open (#2996)
 
@@ -2215,7 +2230,8 @@ file on the constructor thread before the first frame.
 
 Below the base cliff each per-edit service can degrade on its own:
 `largefile.Feature` enumerates highlighting, LSP sync, the VCS gutter diff,
-the search match counter, and format-on-save, and the
+the search match counter, and formatting (the on-save chain and the explicit
+reformat commands), and the
 `files.large_file_<feature>_kb` keys (Settings → Files & Session) hold one KB
 threshold each — 0 (the default) means the feature simply follows the base
 thresholds; a positive value switches that feature off earlier. Per-feature
@@ -2224,6 +2240,16 @@ regardless. `Model.FeatureOff(f)` is the per-service verdict (decided from the
 load-time byte size, `Model.docBytes`), `Model.DegradedFeatures()` the list
 the status line renders. The LSP bridge's `didOpen` gate honours the LSP
 feature threshold too (`largeFileGated` goes through `Thresholds.Off`).
+
+**Long-line gate (#3012).** Formatting also degrades when the document's
+longest line exceeds `largefile.MaxFormatLineBytes` (256 KB, a constant, not a
+setting; `largefile.LineOff`), even far below the byte and line limits: a
+minified 1 MB JSON file is one line, and a formatter answers it with tens of
+thousands of edits. The longest line is measured next to `docBytes` at
+load/reload/set (`Model.longestLine`, `buffer.LongestLine`, computed off-loop
+for an async open) and grown on follow / read-only appends. The status line
+then reads `[large: format off]`, the detail popup names the line length as
+the reason, and Force Code Insight lifts it like every other degradation.
 
 UX: a one-time warn toast on open, plus a dedicated `largefile` status-line
 segment — `[large file]` past the base cliff, `[large: <feature> off]` /
