@@ -14524,6 +14524,12 @@ func (m Model) paneClick(key string, msg mouseEvent) (tea.Model, tea.Cmd) {
 		if msg.Button == tea.MouseLeft {
 			return m, inst.Archive().Click(localX, localY)
 		}
+	case pane.KindHex:
+		// Hex-viewer clicks: a press on a byte in the hex or text column
+		// moves the byte cursor there and activates that column.
+		if msg.Button == tea.MouseLeft {
+			inst.Hex().Click(localX, localY)
+		}
 	case pane.KindData:
 		// Data-viewer clicks (#1788): the clicked half takes the region
 		// focus, a sidebar click selects the object and a double-click loads

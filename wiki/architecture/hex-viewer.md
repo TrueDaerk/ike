@@ -4,7 +4,7 @@ title: Hex Viewer
 description: "#2420 — binary files open as offset|hex|ASCII over windowed reads: byte cursor with inspector row, range selection with hex/raw copy, string and byte-sequence search, overwrite editing in the hex and text columns with in-place save (#2876), the files.binary_open routing setting and the Open File As… chooser."
 resource: internal/hexview
 tags: [architecture, hex, binary, pane, viewer, openas, editing]
-timestamp: 2026-10-02T00:00:00Z
+timestamp: 2026-10-19T00:00:00Z
 ---
 
 # Hex Viewer (#2420)
@@ -50,6 +50,18 @@ the open search line / copy menu).
 Navigation is the usual list set: `j/k` rows, `h/l` bytes, `pgup/pgdn` and
 `ctrl+d/ctrl+u` (half) pages, `g/G` ends, mouse wheel. The byte cursor's
 offset shows dec and hex in the footer.
+
+**Mouse.** A left click on a byte (`Model.Click`, routed from the app's
+pane-click dispatch, which also focuses the pane) moves the cursor there: a
+hex cell (either digit) activates the hex column, a character in the text
+column activates the text column on the same byte, and the mirror highlight
+follows. Like a keyboard move it drops a range selection and commits a
+half-typed nibble; a hex click ends text insertion, a text click keeps it.
+Clicks on the offset gutter, the gaps and separators, the inspector row and
+footer, or rows below the data miss and leave the cursor alone; a click past
+the data in the last row lands on the last byte. Hit-testing (`cellAt`)
+mirrors `renderRow`'s layout for every row width and honours the scroll
+offset. Drag-to-select is not supported.
 
 ## Inspector row
 
@@ -108,7 +120,7 @@ text insertion overwrites like typing.
 - **Hex column:** the first nibble replaces the cursor byte's high nibble
   at once (the half-edit shows: `12` → `a2`) and the cursor stays; the
   second completes the byte and advances. Moving away — any non-digit key,
-  the wheel, a search step — commits the half-edit as is.
+  the wheel, a click, a search step — commits the half-edit as is.
 - **Text column:** a key writes its UTF-8 bytes consecutively and advances
   past them. A character that would run past the end of the file is refused
   with a footer notice.
