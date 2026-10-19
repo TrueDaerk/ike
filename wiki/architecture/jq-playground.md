@@ -215,6 +215,16 @@ visible. Returning the focus to the pane resumes the query line as it was;
 the pane's `esc` remains the way to close the mode. The hosting pane closing
 from elsewhere closes the playground with it.
 
+The mode's keyboard sits **below every popup opened from it** (#3011): the
+command palette in any mode (the language cheatsheet, the saved-filter picker)
+and any floating-shell layer (the Help overlay on `F1`, the playground's own
+name and save-file prompts) take the key first, in every focus — query line,
+result buffer, detached result pane. `esc` closes the topmost popup only (the
+Help overlay clears an active filter first) and leaves program, caret, toggles
+and result untouched; the next `esc` reaches the playground and closes it,
+arming the `esc esc` palette detector as before. Only the welcome tour is
+exempt, so its try-it keys still reach the query line.
+
 ## Bound to the document, not to the pane
 
 The mode is mounted in a pane, but it belongs to the **document it queries**

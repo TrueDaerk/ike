@@ -42,6 +42,13 @@ with an active filter, `q`/`?` act as letters, `backspace` edits, and `esc`
 first clears the filter before a second `esc` closes; each open starts
 unfiltered. See [Floating Shell](/architecture/floating-shell.md).
 
+The overlay outranks a keyboard-owning mode it was opened from (#3011): with
+the jq playground focused (query line, result buffer, or the detached result
+pane) the open shell takes every key before the playground's own handler, so
+`esc` closes the sheet — or clears its filter first — and filter typing, `q`,
+`?` and scroll keys never reach the query line. The next `esc`, with no layer
+above, closes the playground as usual.
+
 ## Views (#656, #2182)
 
 The overlay has **three views**; `tab` cycles them (`Help` implements the
