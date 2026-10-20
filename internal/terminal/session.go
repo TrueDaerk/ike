@@ -22,7 +22,6 @@ import (
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/charmbracelet/x/vt"
-	"github.com/creack/pty"
 
 	"ike/internal/safego"
 	"ike/internal/theme"
@@ -56,8 +55,10 @@ type Session struct {
 	em   *vt.SafeEmulator
 	send func(tea.Msg)
 
-	mu   sync.Mutex
-	ptmx *os.File
+	mu sync.Mutex
+	// ptmx is the parent side of the pseudo-terminal: a creack/pty master on
+	// unix, a ConPTY pseudo console on Windows (#3005).
+	ptmx ptyMaster
 	// tty is the slave end, held open until the child exits so a fast exit
 	// cannot drain the master's queue unread (spawn_unix.go); nil on Windows.
 	tty  *os.File
@@ -180,18 +181,6 @@ type Session struct {
 	// child (#1951) and is closed by whichever teardown path gets there
 	// first — the pane's Close, before or after the exit.
 	emClosed atomic.Bool
-}
-
-// Shell resolves the shell to spawn: the config override first, $SHELL next,
-// /bin/sh as the safety net.
-func Shell(override string) string {
-	if override != "" {
-		return override
-	}
-	if s := os.Getenv("SHELL"); s != "" {
-		return s
-	}
-	return "/bin/sh"
 }
 
 // StartSession spawns shell in dir on a new PTY sized w×h and starts the read
@@ -542,7 +531,7 @@ func (s *Session) writeLoop() {
 	buf := make([]byte, 4096)
 	for {
 		n, err := s.em.Read(buf)
-		if n > 0 && !s.wlStop.Load() {
+		if n > 0 && !s.wlStop.Load() && s.ptmx != nil {
 			_, _ = s.ptmx.Write(buf[:n])
 		}
 		if err != nil || s.wlStop.Load() {
@@ -715,7 +704,7 @@ func (s *Session) applyResizeLocked(w, h int) {
 		s.w, s.h = w, h
 		s.lastResize = time.Now()
 		if s.ptmx != nil && !s.closed.Load() {
-			_ = pty.Setsize(s.ptmx, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)})
+			_ = s.ptmx.Resize(w, h)
 		}
 		s.em.Resize(w, h)
 		s.replayLocked(lines, tail, w)
@@ -738,7 +727,7 @@ func (s *Session) applyResizeLocked(w, h int) {
 	s.w, s.h = w, h
 	s.lastResize = time.Now()
 	if s.ptmx != nil && !s.closed.Load() {
-		_ = pty.Setsize(s.ptmx, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)})
+		_ = s.ptmx.Resize(w, h)
 	}
 	s.em.Resize(w, h)
 	if h > oldH {
@@ -1634,7 +1623,9 @@ func (s *Session) release() {
 	if s.cmd != nil && s.cmd.Process != nil {
 		_ = s.cmd.Process.Kill()
 	}
-	_ = s.ptmx.Close()
+	if s.ptmx != nil {
+		_ = s.ptmx.Close()
+	}
 	if s.out != nil {
 		s.out.close()
 	}

@@ -1,10 +1,10 @@
 ---
 type: architecture
 title: Releases & Desktop Launchers
-description: How IKE is shipped outside a source build — the tag-triggered release workflow (per-OS CGo matrix, full + complexity-only archives, checksums), the Scoop / winget manifests it regenerates and commits back, and the deploy/ layout of the desktop launchers (Ghostty on macOS/Linux, WezTerm on Windows) (#1567, #3002)
+description: How IKE is shipped outside a source build — the tag-triggered release workflow (per-OS CGo matrix, full + complexity-only archives, checksums), the Scoop / winget manifests it regenerates and commits back, and the deploy/ layout of the desktop launchers (Ghostty on macOS/Linux, WezTerm on Windows), plus the per-OS pseudo-terminal behind the Windows build (#1567, #3002, #3005)
 resource: deploy
 tags: [release, packaging, scoop, winget, launcher, ghostty, wezterm, windows, ci]
-timestamp: 2026-10-14T15:00:00Z
+timestamp: 2026-10-20T10:00:00Z
 ---
 
 # Releases & Desktop Launchers
@@ -117,7 +117,11 @@ to the existing `spawn_*.go` / `cwd_*.go`. A quick local check:
 `GOOS=windows CGO_ENABLED=0 go build ./...` type-checks everything outside
 the cgo grammar bindings.
 
-Known gap: `creack/pty` v1.1.24 has no ConPTY backend (`StartWithSize`
-returns `ErrUnsupported` on Windows), so the integrated terminal and every
-PTY-backed tool (Run configurations, tasks) cannot spawn on Windows yet; the
-binary, editor, LSP and complexity report are unaffected.
+The pseudo-terminal itself is per-OS behind one interface (`ptyMaster`,
+`internal/terminal/pty.go`): `creack/pty` on unix, and on Windows a ConPTY
+pseudo console built directly on `golang.org/x/sys/windows`
+(`spawn_windows.go`, #3005) — `creack/pty` v1.1.24 has no ConPTY backend.
+The Windows session is covered by `conpty_windows_test.go`, which the Test
+workflow's `windows` job runs on `windows-latest` (the only Windows test
+step; the rest of the suite drives `/bin/sh`). Details in
+[Terminal](./terminal.md#session-sessiongo).

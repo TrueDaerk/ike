@@ -62,3 +62,32 @@ jobs:
         env:
           CGO_ENABLED: "1"
         run: go test ./internal/app -timeout 5m
+
+  # The ConPTY session (#3005) is the one piece of the terminal the unix jobs
+  # cannot exercise, so a Windows job runs the terminal package's ConPTY
+  # tests (plus the pure helpers behind the Windows spawn) on windows-latest.
+  # Only those: the rest of the package drives /bin/sh. CGO stays off — the
+  # terminal package has no cgo dependency, and the MSYS2 toolchain the
+  # release build needs would cost minutes here for nothing.
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Disable CRLF conversion
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Vet internal/terminal
+        env:
+          CGO_ENABLED: "0"
+        run: go vet ./internal/terminal
+
+      - name: Test ConPTY
+        env:
+          CGO_ENABLED: "0"
+        run: go test ./internal/terminal -run 'ConPTY|ShellOrder|ShellOverride|EnvironmentBlock' -v -timeout 5m
