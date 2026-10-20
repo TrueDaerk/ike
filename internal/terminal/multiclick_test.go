@@ -28,20 +28,34 @@ func printWrapped(t *testing.T, s *Session) int {
 	for _, r := range "printf '%s\\n' " + wrapped30 + "\r" {
 		s.SendKey(keyFor(r))
 	}
-	waitFor(t, "wrapped output", func() bool {
-		return strings.Contains(plainView(s), "ABCDEFGHIJ")
-	})
-	// The echoed command wraps too; the output's first row is the one whose
-	// full 20 columns are exactly the head of wrapped30 and that continues
-	// into a row starting with the tail.
-	sb := s.ScrollbackLen()
-	for v := 0; v < sb+24; v++ {
-		if s.LineText(v) == wrapped30[:20] && strings.HasPrefix(s.LineText(v+1), wrapped30[20:]) {
+	return waitWrappedRows(t, s, "")
+}
+
+// waitWrappedRows waits for wrapped30's output rows — the row whose full 20
+// columns are exactly its head, continued by a row starting with its tail,
+// and, with a non-empty follow, a third row starting with follow — and
+// returns the first row's virtual line index. The wait is on the rows
+// themselves (#3006): the echoed command line wraps too and can hold any
+// substring of the output, so a substring wait could end on the echo before
+// the output had landed. follow is a marker the typed command does not
+// contain literally.
+func waitWrappedRows(t *testing.T, s *Session, follow string) int {
+	t.Helper()
+	find := func() int {
+		sb := s.ScrollbackLen()
+		for v := 0; v < sb+24; v++ {
+			if s.LineText(v) != wrapped30[:20] || !strings.HasPrefix(s.LineText(v+1), wrapped30[20:]) {
+				continue
+			}
+			if follow != "" && !strings.HasPrefix(s.LineText(v+2), follow) {
+				continue
+			}
 			return v
 		}
+		return -1
 	}
-	t.Fatalf("wrapped output rows not found; view:\n%s", plainView(s))
-	return -1
+	waitFor(t, "wrapped output rows", func() bool { return find() >= 0 })
+	return find()
 }
 
 // screenRow converts a virtual line index to the pane-local row a mouse event
@@ -394,22 +408,14 @@ func TestTripleClickDragExtendsLineWise(t *testing.T) {
 	s := startNarrowSh(t, c)
 	m := Model{sess: s, h: 24, w: 20}
 
-	for _, r := range "printf '%s\\nzzz-mark\\n' " + wrapped30 + "\r" {
+	// The marker is assembled by printf from two arguments, so the echoed
+	// command line never contains it and the wait ends on the output alone
+	// (#3006): the kernel echoes keys typed before the shell is up at column
+	// 0, where a literal marker matched a substring wait at once.
+	for _, r := range "printf '%s\\nzzz-%s\\n' " + wrapped30 + " mark\r" {
 		s.SendKey(keyFor(r))
 	}
-	waitFor(t, "output", func() bool { return strings.Contains(plainView(s), "zzz-mark") })
-	sb := s.ScrollbackLen()
-	v := -1
-	for i := 0; i < sb+24; i++ {
-		if s.LineText(i) == wrapped30[:20] && s.LineText(i+1) == wrapped30[20:] &&
-			strings.HasPrefix(s.LineText(i+2), "zzz-mark") {
-			v = i
-			break
-		}
-	}
-	if v < 0 {
-		t.Fatalf("rows not found; view:\n%s", plainView(s))
-	}
+	v := waitWrappedRows(t, s, "zzz-mark")
 
 	// Triple click on the marker line (third press held), then drag up into
 	// the wrapped chain: the whole logical line above joins the selection.
