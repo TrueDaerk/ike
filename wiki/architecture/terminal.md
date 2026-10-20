@@ -57,6 +57,11 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
   non-nil argv so it reports like a command session), while the session stays
   open and feedable for trailing output; it only closes with the pane or when
   a new session replaces it. `IsPipe()` distinguishes it.
+- `Session.InjectOutput` / `Model.InjectOutput` spool bytes as if the child
+  had written them on **any** session, PTY-backed included — the test seam
+  (#3006) behind the app's terminal link tests, which render a reference
+  without a shell round trip. The bytes take the feed loop's ordinary path
+  and interleave with the child's output only at chunk boundaries.
 
 ## Session (`session.go`)
 

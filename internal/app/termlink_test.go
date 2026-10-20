@@ -31,27 +31,28 @@ func openWideTerminal(t *testing.T) (Model, string) {
 	return m, key
 }
 
-// termRefRow types a printf into the focused terminal pane that outputs the
-// reference and waits until it renders, returning the content-local row and
-// the column of its first rune.
+// termRefRow renders the reference on its own row of the focused terminal
+// pane and waits until it is on screen, returning the content-local row and
+// the column of its first rune. The reference is injected as child output
+// (#3006) rather than typed as a printf: the tests are about what the pane
+// does with a reference on its grid, and a shell round trip on a loaded
+// hosted runner has taken longer than any deadline worth keeping. The
+// shell's own prompt may land before or after the injected rows, never
+// inside them, so the reference is found by substring and its column
+// returned.
 func termRefRow(t *testing.T, m Model, key, ref string) (row, col int) {
 	t.Helper()
 	inst := m.activeWS().Panes.Get(key)
-	for _, r := range "printf '" + ref + "\\n'\r" {
-		inst.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
-	}
-	// The wait covers the shell's spawn, not just the printf: a real shell on
-	// a pty answers in milliseconds, and the bound is sized for the hosted
-	// 4-core Linux runner, where the package's load has stretched a spawn
-	// past five seconds (#2997, #3000).
-	deadline := time.Now().Add(15 * time.Second)
+	inst.Terminal().InjectOutput([]byte("\r\n" + ref + "\r\n"))
+	// The feed loop is in-process: the bound only catches a hung session.
+	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
 		for y, line := range strings.Split(ansi.Strip(inst.Terminal().View()), "\n") {
-			if strings.TrimRight(line, " ") == ref {
-				return y, 0
+			if x := strings.Index(line, ref); x >= 0 {
+				return y, x
 			}
 		}
-		time.Sleep(20 * time.Millisecond)
+		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("reference %q never rendered", ref)
 	return 0, 0

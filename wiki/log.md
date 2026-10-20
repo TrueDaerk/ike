@@ -1,5 +1,16 @@
 # Log
 
+## 2026-10-20 (Flaky CI tests on hosted runners, #3006)
+
+- [Change workflow](/process/change-workflow.md): a test waits on the thing
+  it asserts, never on a proxy — the producer leak check reads the
+  producer's done channel (`jqplay.Producer.Done`), the session-base test
+  waits for the walk to settle (`!Stats().Scanning`), the multi-click
+  tests wait for the output rows with a marker the echoed command cannot
+  contain, and the terminal link tests inject the reference as child output
+  ([Terminal](/architecture/terminal.md) `InjectOutput`,
+  [jq playground](/architecture/jq-playground.md)).
+
 ## 2026-10-19 (Intention popup never opens invisibly, #3013)
 
 - [Intention Actions](/architecture/intention-actions.md): placement rules

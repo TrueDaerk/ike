@@ -825,7 +825,9 @@ between them:
   compile error, closing the mode, and parking for a project switch (a
   parked producer cannot follow its result into another model, so the run
   is marked pending and re-runs on resume). A page that outlives its run —
-  the generation moved on — is dropped like a stale result.
+  the generation moved on — is dropped like a stale result. The producer
+  closes its done channel on every exit (`Done()`, `Wait(d)`): the leak
+  check reads that, not a process-wide goroutine count (#3006).
 - **The deadline counts computing time only.** A `pageContext` runs the
   `EvalTimeout` timer while a page is being computed and stops it between
   pages, so a result left half-loaded for an hour is not timed out for

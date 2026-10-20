@@ -2,7 +2,6 @@ package app
 
 import (
 	"fmt"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -160,48 +159,55 @@ func TestPlayPagesFoldsAndSearchCoverAppendedPages(t *testing.T) {
 }
 
 // TestPlayPagesProgramChangeStopsProducer is the leak check: a program
-// change while pages are pending cancels the producer, and the goroutines
-// it held are gone.
+// change while pages are pending cancels the producer, and the goroutine it
+// held is gone. The proof is the producer's own done channel, not a
+// process-wide goroutine count (#3006): the count also sees every earlier
+// test's goroutine still winding down, so a snapshot taken while one of
+// those exits made a live producer look like no goroutine at all.
 func TestPlayPagesProgramChangeStopsProducer(t *testing.T) {
 	m := openJQ(t, playApp(t, bigJSONArray(5000)))
 	m = setProgram(m, ".[0]")
-	waitGoroutines(t, runtime.NumGoroutine()) // settle
-	base := runtime.NumGoroutine()
 	m = setProgram(m, ".[] | .i")
 	s := m.play
 	if s.producer == nil {
 		t.Fatal("the run must be paged")
 	}
-	if runtime.NumGoroutine() <= base {
-		t.Fatal("a paged run must hold its producer goroutine")
-	}
+	p := s.producer
+	requireProducerAlive(t, p)
 	m = setProgram(m, ".[0]")
 	if s.producer != nil || s.runCtx != nil || s.cancel != nil {
 		t.Fatalf("the program change must drop the producer: producer=%v ctx=%v cancel=%v", s.producer != nil, s.runCtx != nil, s.cancel != nil)
 	}
-	waitGoroutines(t, base)
+	requireProducerGone(t, p)
 	// The same on close.
 	m = setProgram(m, ".[] | .i")
 	if m.play.producer == nil {
 		t.Fatal("the run must be paged")
 	}
+	p = m.play.producer
+	requireProducerAlive(t, p)
 	m.closePlayground()
-	waitGoroutines(t, base)
+	requireProducerGone(t, p)
 }
 
-// waitGoroutines waits for the goroutine count to fall back to at most n.
-func waitGoroutines(t *testing.T, n int) {
+// requireProducerAlive fails unless p's goroutine is still running: a paged
+// run suspended between pages has not closed its done channel.
+func requireProducerAlive(t *testing.T, p *jqplay.Producer) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if runtime.NumGoroutine() <= n {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
+	select {
+	case <-p.Done():
+		t.Fatal("a paged run must hold its producer goroutine")
+	default:
 	}
-	buf := make([]byte, 1<<16)
-	buf = buf[:runtime.Stack(buf, true)]
-	t.Fatalf("%d goroutines still alive, want at most %d:\n%s", runtime.NumGoroutine(), n, buf)
+}
+
+// requireProducerGone waits for p's goroutine to exit. The bound only
+// catches a leak: a cancelled producer leaves within microseconds.
+func requireProducerGone(t *testing.T, p *jqplay.Producer) {
+	t.Helper()
+	if !p.Wait(3 * time.Second) {
+		t.Fatal("the cancelled producer's goroutine is still alive")
+	}
 }
 
 // TestPlayPagesCapReportsStoppedAt: the enlarged total budget still ends

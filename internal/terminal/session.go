@@ -314,6 +314,19 @@ func (s *Session) FeedBytes(b []byte) {
 	s.out.put(b)
 }
 
+// InjectOutput spools b as if the child had written it, on any session —
+// the test seam behind the app's link tests (#3006): a reference rendered
+// this way needs no shell round trip, which a loaded hosted runner has
+// stretched past any sane deadline. The bytes take the feed loop's ordinary
+// path (tap, emulator, repaint), interleaving with the child's own output
+// only at chunk boundaries.
+func (s *Session) InjectOutput(b []byte) {
+	if s.closed.Load() || len(b) == 0 {
+		return
+	}
+	s.out.put(b)
+}
+
 // FinishPipe marks a pipe session's debuggee as ended (#1370): the exit
 // status is recorded (shown in the pane's dead view when hasCode) and the
 // pane renders the exited state — but the session stays open and feedable, so

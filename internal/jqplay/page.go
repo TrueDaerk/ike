@@ -175,6 +175,12 @@ func (p *Producer) Next(ctx context.Context) (pg Page, ok bool) {
 // Stop ends the producer: the goroutine exits, computing or suspended.
 func (p *Producer) Stop() { p.cancel() }
 
+// Done is closed when the producer's goroutine has exited: the test seam
+// that proves a paged run holds its goroutine and a cancelled one lets it
+// go, without a process-wide goroutine count that every other test's
+// winding-down goroutine disturbs (#3006).
+func (p *Producer) Done() <-chan struct{} { return p.done }
+
 // Wait blocks until the producer's goroutine has exited, or d passed; it
 // reports which. Tests use it to prove a cancelled producer does not leak.
 func (p *Producer) Wait(d time.Duration) bool {

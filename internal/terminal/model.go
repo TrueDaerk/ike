@@ -160,6 +160,15 @@ func (m *Model) FeedText(text string) {
 	m.sess.FeedBytes([]byte(text))
 }
 
+// InjectOutput renders b as if the child had written it (#3006): the test
+// seam behind the app's link tests, see Session.InjectOutput. A no-op
+// without a live session.
+func (m *Model) InjectOutput(b []byte) {
+	if m.sess != nil {
+		m.sess.InjectOutput(b)
+	}
+}
+
 // SetOutputTap tees the session's raw output through fn (#1915): the
 // problem-matcher seam for run sessions. fn runs on the session's feed
 // goroutine; nil removes the tap. A no-op without a live session.

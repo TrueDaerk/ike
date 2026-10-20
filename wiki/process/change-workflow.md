@@ -181,6 +181,20 @@ What keeps the budget, and what a new test must follow:
   and bash 5 loses a ctrl+d sent that early, as it loses the byte typed in
   the millisecond after a ctrl+c (`TestSendKeyCtrlCDiscardsSpooledBacklog`
   waits for the interrupt's prompt first).
+- **A test waits on the thing it asserts, never on a proxy of it (#3006).**
+  The hosted runners are slow and loaded, and three proxies broke there: a
+  `runtime.NumGoroutine` snapshot (every earlier test's goroutine still
+  winding down moves it — the producer leak check reads
+  `jqplay.Producer.Done()` / `Wait` instead), a measure landing before the
+  walk has finished (`baselineApp` waits for `!Stats().Scanning`, which is
+  what the session base keys on), and a substring of the expected output
+  that the echoed command line also contains (the multi-click tests wait for
+  the output *rows* and assemble their marker from two printf arguments, so
+  the kernel echo of keys typed before the shell is up — at column 0 —
+  cannot match). A pane test about what the grid does with a reference
+  injects it as child output (`terminal.Model.InjectOutput`, `termRefRow`)
+  instead of typing a printf through the shell: no spawn, no deadline sized
+  for a loaded runner.
 - **The suite runs on macOS and Linux, pinned to the macOS keymap.** The
   tests feed cmd chords and expect the macOS-only default rows, so the
   `keymap`, `settings`, `tour` and `app` packages pin `keymap.GOOS =

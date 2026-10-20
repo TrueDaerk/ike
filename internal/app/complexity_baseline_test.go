@@ -47,7 +47,14 @@ func baselineApp(t *testing.T) (Model, string) {
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 160, Height: 40})
 	m = out.(Model)
 	a := filepath.Join(proj, "src", "a.go")
-	waitComplexity(t, m.ComplexityIndex(), "the walk", func(v complexity.View) bool { return len(v.Files[a]) == 1 })
+	// The session base (#2959) is recorded only once the walk has settled,
+	// so wait for the walk's end as well as a.go's measure: the measure
+	// lands first, and a test asserting on the base right after it raced
+	// the walk's last steps on a loaded runner (#3006).
+	ix := m.ComplexityIndex()
+	waitComplexity(t, ix, "the walk", func(v complexity.View) bool {
+		return len(v.Files[a]) == 1 && !ix.Stats().Scanning
+	})
 	return dismissOnboarding(m), proj
 }
 
