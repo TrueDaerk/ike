@@ -10290,7 +10290,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// A printable key typed into such an input is text (#2937): a
 		// pane-scoped single-letter binding — the Complexity window's b —
 		// must not take the letter from the pane's filter row.
-		if k, ok := keymap.FromKeyMsg(msg); ok && utf8.RuneCountInString(k.Base) == 1 && !k.NonTyping() && !m.keys.Pending() && m.lineInputFocused() {
+		// A plain space is text there too (#2978): the window binds space to
+		// complexity.sites, which ate the space between filter terms.
+		if k, ok := keymap.FromKeyMsg(msg); ok && (utf8.RuneCountInString(k.Base) == 1 || k.Base == "space") && !k.NonTyping() && !m.keys.Pending() && m.lineInputFocused() {
 			return m.routeKey(msg)
 		}
 		// Keybinding layer (Roadmap 0080): resolve IDE-level chords to registered
