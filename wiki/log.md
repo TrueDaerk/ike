@@ -1,5 +1,16 @@
 # Log
 
+## 2026-10-20 (Ubuntu CI flakes: git maintenance daemon, two proxy waits, #3018)
+
+- [Change workflow](/process/change-workflow.md): a test's git leaves no
+  daemon behind — every package with git fixtures calls
+  `gittest.DisableAutoMaintenance()` (new `internal/gittest`) from
+  `TestMain`, since git 2.47's post-commit `maintenance run --auto --detach`
+  (a background geometric repack by default from 2.52) raced the `t.TempDir`
+  cleanup; two more proxy waits named (`TestSessionResizeWidthRoundTrip`
+  types after `waitPrompt`, `TestDoctorAcceptedTrace` waits for `continued`
+  before disconnecting).
+
 ## 2026-10-20 (Flaky CI tests on hosted runners, #3006)
 
 - [Change workflow](/process/change-workflow.md): a test waits on the thing

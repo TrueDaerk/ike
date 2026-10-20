@@ -117,6 +117,11 @@ func TestDoctorAcceptedTrace(t *testing.T) {
 	if b.Mapped == nil || *b.Mapped || b.FileURI != "file:///var/www/html/other.php" {
 		t.Fatalf("unmapped accepted trace = %+v, want mapped=false", b)
 	}
+	// The accepted trace precedes the run the bridge sends from a goroutine;
+	// disconnecting right behind it raced that run with the teardown's
+	// detach, and the engine read "detach" where it expected "run" (hosted
+	// Linux runner, #3018). The request's end is what the engine answers.
+	waitEvent(t, events, "continued")
 	_ = s.Disconnect()
 }
 

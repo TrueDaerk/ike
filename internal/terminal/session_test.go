@@ -666,6 +666,12 @@ func resizeNow(s *Session, w, h int) {
 func TestSessionResizeWidthRoundTrip(t *testing.T) {
 	c := &collector{}
 	s := startSh(t, c)
+	// Type only once the prompt is up: keys sent while the shell still starts
+	// are echoed by the line discipline at column 0, and readline then draws
+	// the prompt and the line again behind that echo — 67 + 8 + 67 columns,
+	// which wraps the echoed line the wait below counts and timed out the
+	// test on the hosted Linux runner (#3018).
+	waitPrompt(t, s)
 
 	long := "0123456789abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmno" // 62 cols
 	for _, r := range "echo " + long + "\r" {
