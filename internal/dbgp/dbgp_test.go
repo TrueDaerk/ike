@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -17,6 +19,11 @@ type fakeEngine struct {
 	conn net.Conn
 	r    *bufio.Reader
 
+	// wg tracks the scripted sender goroutines started via spawn; closed is
+	// set once the test cleanup tore the pipe down (#3004).
+	wg     sync.WaitGroup
+	closed atomic.Bool
+
 	t *testing.T
 }
 
@@ -25,8 +32,11 @@ func newFakeEngine(t *testing.T) (*fakeEngine, *Conn, chan Stream) {
 	client, server := net.Pipe()
 	streams := make(chan Stream, 8)
 	c := NewConn(client, func(s Stream) { streams <- s })
-	t.Cleanup(func() { _ = c.Close(); _ = server.Close() })
-	return &fakeEngine{conn: server, r: bufio.NewReader(server), t: t}, c, streams
+	e := &fakeEngine{conn: server, r: bufio.NewReader(server), t: t}
+	// Close first so a sender blocked on a dead peer unblocks, then wait for
+	// every spawned sender: none may outlive the test (#3004).
+	t.Cleanup(func() { e.closed.Store(true); _ = c.Close(); _ = server.Close(); e.wg.Wait() })
+	return e, c, streams
 }
 
 // send frames one XML packet to the client.
@@ -34,16 +44,26 @@ func (e *fakeEngine) send(xmlBody string) {
 	e.t.Helper()
 	payload := `<?xml version="1.0" encoding="UTF-8"?>` + "\n" + xmlBody
 	msg := fmt.Sprintf("%d\x00%s\x00", len(payload), payload)
-	if _, err := e.conn.Write([]byte(msg)); err != nil {
+	if _, err := e.conn.Write([]byte(msg)); err != nil && !e.closed.Load() {
 		e.t.Fatalf("engine write: %v", err)
 	}
+}
+
+// spawn runs a scripted engine step on its own goroutine; the test cleanup
+// waits for it, so it cannot write or log after the test completed.
+func (e *fakeEngine) spawn(fn func()) {
+	e.wg.Add(1)
+	go func() {
+		defer e.wg.Done()
+		fn()
+	}()
 }
 
 // read returns the next NUL-terminated command line from the client.
 func (e *fakeEngine) read() string {
 	e.t.Helper()
 	line, err := e.r.ReadString(0)
-	if err != nil {
+	if err != nil && !e.closed.Load() {
 		e.t.Fatalf("engine read: %v", err)
 	}
 	return strings.TrimSuffix(line, "\x00")
@@ -125,13 +145,13 @@ func TestContinuationBreakResponse(t *testing.T) {
 func TestStackAndContexts(t *testing.T) {
 	engine, c, _ := newFakeEngine(t)
 
-	go func() {
+	engine.spawn(func() {
 		line := engine.read()
 		engine.send(`<response xmlns="urn:debugger_protocol_v1" command="stack_get" transaction_id="` + tid(t, line) + `">` +
 			`<stack where="foo" level="0" type="file" filename="file:///proj/lib.php" lineno="3"/>` +
 			`<stack where="{main}" level="1" type="file" filename="file:///proj/test.php" lineno="9"/>` +
 			`</response>`)
-	}()
+	})
 	frames, err := c.StackGet()
 	if err != nil {
 		t.Fatalf("StackGet: %v", err)
@@ -140,11 +160,11 @@ func TestStackAndContexts(t *testing.T) {
 		t.Fatalf("unexpected frames: %+v", frames)
 	}
 
-	go func() {
+	engine.spawn(func() {
 		line := engine.read()
 		engine.send(`<response xmlns="urn:debugger_protocol_v1" command="context_names" transaction_id="` + tid(t, line) + `">` +
 			`<context name="Locals" id="0"/><context name="Superglobals" id="1"/></response>`)
-	}()
+	})
 	ctxs, err := c.ContextNames(0)
 	if err != nil {
 		t.Fatalf("ContextNames: %v", err)
@@ -158,7 +178,7 @@ func TestContextGetNestedProperties(t *testing.T) {
 	engine, c, _ := newFakeEngine(t)
 
 	val := base64.StdEncoding.EncodeToString([]byte("hello"))
-	go func() {
+	engine.spawn(func() {
 		line := engine.read()
 		engine.send(`<response xmlns="urn:debugger_protocol_v1" command="context_get" transaction_id="` + tid(t, line) + `">` +
 			`<property name="$s" fullname="$s" type="string" size="5" encoding="base64"><![CDATA[` + val + `]]></property>` +
@@ -166,7 +186,7 @@ func TestContextGetNestedProperties(t *testing.T) {
 			`<property name="0" fullname="$arr[0]" type="int">1</property>` +
 			`<property name="1" fullname="$arr[1]" type="int">2</property>` +
 			`</property></response>`)
-	}()
+	})
 	props, err := c.ContextGet(0, 0)
 	if err != nil {
 		t.Fatalf("ContextGet: %v", err)
@@ -189,14 +209,14 @@ func TestContextGetNestedProperties(t *testing.T) {
 func TestPropertySetSendsBase64Data(t *testing.T) {
 	engine, c, _ := newFakeEngine(t)
 
-	go func() {
+	engine.spawn(func() {
 		line := engine.read()
 		want := "-- " + base64.StdEncoding.EncodeToString([]byte("99"))
 		if !strings.Contains(line, want) {
 			t.Errorf("property_set line %q missing %q", line, want)
 		}
 		engine.send(`<response xmlns="urn:debugger_protocol_v1" command="property_set" transaction_id="` + tid(t, line) + `" success="1"/>`)
-	}()
+	})
 	if err := c.PropertySet("$x", 0, "99"); err != nil {
 		t.Fatalf("PropertySet: %v", err)
 	}
@@ -205,11 +225,11 @@ func TestPropertySetSendsBase64Data(t *testing.T) {
 func TestCommandError(t *testing.T) {
 	engine, c, _ := newFakeEngine(t)
 
-	go func() {
+	engine.spawn(func() {
 		line := engine.read()
 		engine.send(`<response xmlns="urn:debugger_protocol_v1" command="property_get" transaction_id="` + tid(t, line) + `">` +
 			`<error code="300"><message>can not get property</message></error></response>`)
-	}()
+	})
 	_, err := c.PropertyGet("$nope", 0, 0)
 	var derr *Error
 	if !errors.As(err, &derr) || derr.Code != 300 {
@@ -306,7 +326,7 @@ func TestLatin1EncodedPacket(t *testing.T) {
 // doctor can name the concrete cause instead of a generic 30s timeout.
 func TestWaitInitMalformedPacket(t *testing.T) {
 	e, c, _ := newFakeEngine(t)
-	go e.send(`<init fileuri="file:///x.php"><broken></init>`)
+	e.spawn(func() { e.send(`<init fileuri="file:///x.php"><broken></init>`) })
 	if _, err := c.WaitInit(3 * time.Second); !errors.Is(err, ErrBadInit) {
 		t.Fatalf("WaitInit = %v, want ErrBadInit", err)
 	}
@@ -316,7 +336,7 @@ func TestWaitInitMalformedPacket(t *testing.T) {
 // an unknown kind is a broken handshake too, not a silent timeout.
 func TestWaitInitUnsupportedPacket(t *testing.T) {
 	e, c, _ := newFakeEngine(t)
-	go e.send(`<notify name="something"/>`)
+	e.spawn(func() { e.send(`<notify name="something"/>`) })
 	if _, err := c.WaitInit(3 * time.Second); !errors.Is(err, ErrBadInit) {
 		t.Fatalf("WaitInit = %v, want ErrBadInit", err)
 	}
@@ -326,10 +346,10 @@ func TestWaitInitUnsupportedPacket(t *testing.T) {
 // *after* the init keeps being skipped, not fatal.
 func TestWaitInitSurvivesLateGarbage(t *testing.T) {
 	e, c, _ := newFakeEngine(t)
-	go func() {
+	e.spawn(func() {
 		e.send(`<init fileuri="file:///x.php" idekey="k" language="PHP"/>`)
 		e.send(`<init fileuri="x"><broken></init>`)
-	}()
+	})
 	init, err := c.WaitInit(3 * time.Second)
 	if err != nil || init.IDEKey != "k" {
 		t.Fatalf("WaitInit = %+v, %v", init, err)
