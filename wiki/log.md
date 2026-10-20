@@ -1,5 +1,12 @@
 # Log
 
+## 2026-10-20 (paste replaces the selected search prefill, #3020)
+
+- [Editor](/architecture/editor.md), [search](/architecture/search.md): a
+  paste into the `/` / `?` line while its prefill (#2826, #2063) is still
+  selected replaces it like a typed rune and re-runs the preview; after an
+  arrow key dropped the selection it inserts at the cursor as before.
+
 ## 2026-10-20 (Ubuntu CI flakes: git maintenance daemon, two proxy waits, #3018)
 
 - [Change workflow](/process/change-workflow.md): a test's git leaves no
