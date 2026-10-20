@@ -16,6 +16,7 @@ import (
 
 	"ike/internal/editor"
 	"ike/internal/explorer"
+	"ike/internal/gittest"
 	"ike/internal/host"
 	"ike/internal/keymap"
 	"ike/internal/layout"
@@ -70,6 +71,9 @@ func TestMain(m *testing.M) {
 	// sandbox may never reach a prompt at all — so every test shell is the
 	// plain /bin/sh the terminal package tests use as well (#2997).
 	os.Setenv("SHELL", "/bin/sh")
+	// The git fixtures commit into t.TempDir trees; no commit may leave a
+	// maintenance daemon behind to race the cleanup (#3018).
+	gittest.DisableAutoMaintenance()
 	dir, err := os.MkdirTemp("", "ike-app-test")
 	if err == nil {
 		testStoreRoot = dir

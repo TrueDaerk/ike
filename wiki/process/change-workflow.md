@@ -194,7 +194,28 @@ What keeps the budget, and what a new test must follow:
   cannot match). A pane test about what the grid does with a reference
   injects it as child output (`terminal.Model.InjectOutput`, `termRefRow`)
   instead of typing a printf through the shell: no spawn, no deadline sized
-  for a loaded runner.
+  for a loaded runner. Two more of the kind fell on the Linux runner (#3018):
+  a 62-column echo typed *before* the prompt (the line discipline echoes the
+  keys at column 0, readline draws prompt and line again behind them, and the
+  wrapped line never matches — `TestSessionResizeWidthRoundTrip` now
+  `waitPrompt`s first), and a bridge test disconnecting right behind the
+  "accepted" trace, which precedes the run the bridge sends from a goroutine
+  (`TestDoctorAcceptedTrace` waits for the request's `continued` first).
+- **A test's git leaves no daemon behind (#3018).** Since git 2.47 a commit
+  (as a fetch, a merge, a rebase) ends by spawning `git maintenance run
+  --auto --detach`, a child that outlives the commit; git 2.52 made the
+  geometric strategy its default, whose repack fires once the sampled bucket
+  `.git/objects/17` holds two loose objects — for a tiny fixture, the moment
+  a commit hash starts with `17`. The daemon's `git repack` then recreates
+  `.git/objects/pack` while `t.TempDir`'s cleanup is deleting the repository
+  ("unlinkat …/.git: directory not empty", `TestChurnFunctionTextAndBrief`
+  on ubuntu-latest; reproducible under CPU load with git 2.55). Every package whose
+  tests commit into temp trees — `app`, `complexity`, `complexitycli`,
+  `forge`, `project`, `vcs`, `vcscore` — calls
+  `gittest.DisableAutoMaintenance()` from `TestMain` (`internal/gittest`): it
+  sets `maintenance.auto=false` and `gc.auto=0` through `GIT_CONFIG_COUNT`,
+  which reaches the fixtures' gits and the code's alike. A new package with
+  git fixtures does the same.
 - **The suite runs on macOS and Linux, pinned to the macOS keymap.** The
   tests feed cmd chords and expect the macOS-only default rows, so the
   `keymap`, `settings`, `tour` and `app` packages pin `keymap.GOOS =
