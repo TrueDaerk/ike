@@ -140,6 +140,9 @@ func TestSessionAltScreenAndColors(t *testing.T) {
 }
 
 func TestShellResolution(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix resolution order; Windows is covered by TestWindowsShellOrder (#3005)")
+	}
 	if got := Shell("/bin/zsh"); got != "/bin/zsh" {
 		t.Fatalf("override should win, got %q", got)
 	}

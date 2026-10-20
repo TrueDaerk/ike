@@ -10,6 +10,14 @@ import (
 	"github.com/creack/pty"
 )
 
+// unixPTY is the master end of a creack/pty pair as the session's ptyMaster.
+type unixPTY struct{ *os.File }
+
+// Resize applies TIOCSWINSZ; the child gets SIGWINCH from the kernel.
+func (p *unixPTY) Resize(w, h int) error {
+	return pty.Setsize(p.File, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)})
+}
+
 // startOnPTY starts cmd as the session leader of a fresh pty sized w×h and
 // returns both ends. The slave stays open in the parent on purpose (#2997):
 // creack/pty's Start closes it right after the fork, and on macOS a child
@@ -19,13 +27,13 @@ import (
 // failing on the hosted CI VM. Keeping one slave fd until the child has
 // exited keeps the queue alive; the reaper closes it after Wait, which is
 // when the reader's EIO means "drained", not "lost".
-func startOnPTY(cmd *exec.Cmd, w, h int) (ptmx, tty *os.File, err error) {
-	ptmx, tty, err = pty.Open()
+func startOnPTY(cmd *exec.Cmd, w, h int) (ptmx ptyMaster, tty *os.File, err error) {
+	master, tty, err := pty.Open()
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := pty.Setsize(ptmx, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)}); err != nil {
-		_ = ptmx.Close()
+	if err := pty.Setsize(master, &pty.Winsize{Cols: uint16(w), Rows: uint16(h)}); err != nil {
+		_ = master.Close()
 		_ = tty.Close()
 		return nil, nil, err
 	}
@@ -36,9 +44,9 @@ func startOnPTY(cmd *exec.Cmd, w, h int) (ptmx, tty *os.File, err error) {
 	cmd.SysProcAttr.Setsid = true
 	cmd.SysProcAttr.Setctty = true
 	if err := cmd.Start(); err != nil {
-		_ = ptmx.Close()
+		_ = master.Close()
 		_ = tty.Close()
 		return nil, nil, err
 	}
-	return ptmx, tty, nil
+	return &unixPTY{master}, tty, nil
 }

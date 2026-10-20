@@ -168,12 +168,19 @@ The launcher always starts a separate WezTerm process
 (`start --always-new-process`): a running WezTerm would otherwise open the
 window with your own config instead of IKE's.
 
+### The integrated terminal on Windows
+
+The integrated terminal, the popup terminal and the tools that run on a
+pseudo-terminal (Run configurations, tasks) use the Windows pseudo console
+(ConPTY), available since Windows 10 version 1809. The default shell is
+PowerShell 7 (`pwsh.exe`) when it is on the `PATH`, otherwise Windows
+PowerShell, otherwise `%COMSPEC%` (`cmd.exe`); a `$SHELL` variable that names
+a runnable program wins, and the `terminal.shell` setting overrides all of
+that. Job-control queries have no Windows equivalent, so the "shell is busy"
+guards treat the shell as idle.
+
 ### Known limitations on Windows
 
-- The **integrated terminal** and the tools that run on a pseudo-terminal
-  (Run configurations, tasks) do not start on Windows yet — the PTY library
-  IKE uses has no Windows backend. Editing, LSP, search and everything else
-  work.
 - `ike://` deep links are not registered by the Windows install.
 
 ### Publishing to winget (maintainers)
