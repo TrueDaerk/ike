@@ -115,6 +115,13 @@ func createConsoleProcess(cmd *exec.Cmd, console windows.Handle) (*os.Process, e
 	}
 	si := &windows.StartupInfoEx{ProcThreadAttributeList: attrs.List()}
 	si.Cb = uint32(unsafe.Sizeof(*si))
+	// STARTF_USESTDHANDLES with no handles is the documented way to make the
+	// child's stdio the pseudo console's: without it CreateProcess hands the
+	// child IKE's own standard handles, and when those are redirected (the
+	// launcher, a CI step) the child writes past the console straight into
+	// them. Seen on the hosted runner: cmd.exe's banner landed in the job
+	// log instead of the session.
+	si.Flags = windows.STARTF_USESTDHANDLES
 
 	path, err := windows.UTF16PtrFromString(cmd.Path)
 	if err != nil {

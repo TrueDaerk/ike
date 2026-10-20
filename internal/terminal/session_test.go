@@ -126,8 +126,13 @@ func TestSessionAltScreenAndColors(t *testing.T) {
 	for _, r := range cmd {
 		s.SendKey(keyFor(r))
 	}
+	// The typed command itself contains the mark (the shell echoes it on
+	// row 1), so the wait must look for the addressed output on row 3 — a
+	// plain substring match fired on the echo before the printf ran and
+	// failed the row check on the hosted Linux runner (#3005).
 	waitFor(t, "styled output", func() bool {
-		return strings.Contains(plainView(s), "RED-MARK")
+		lines := strings.Split(plainView(s), "\n")
+		return len(lines) >= 3 && strings.Contains(lines[2], "RED-MARK")
 	})
 	// The styled view keeps the SGR color around the mark.
 	if !strings.Contains(s.View(), "RED-MARK") {
