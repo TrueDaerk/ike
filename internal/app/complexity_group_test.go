@@ -62,6 +62,28 @@ func TestComplexityGroupCommandAndKey(t *testing.T) {
 	}
 }
 
+// TestComplexityFilterTypesSpace pins #2978: a space typed into the focused
+// filter row is text, not the space-bound complexity.sites command.
+func TestComplexityFilterTypesSpace(t *testing.T) {
+	m, _ := timeApp(t)
+	m = dismissOnboarding(m)
+	out, _ := m.Update(ComplexityToggleMsg{})
+	m = out.(Model)
+	m = cxGroupType(m, '/')
+	if !m.complexityPanel().Filtering() {
+		t.Fatal("/ must focus the filter row")
+	}
+	for _, r := range "file:app test" {
+		m = cxGroupType(m, r)
+	}
+	if got := m.complexityPanel().FilterText(); got != "file:app test" {
+		t.Fatalf("filter text = %q, want %q", got, "file:app test")
+	}
+	if hasToast(m, "no sites") {
+		t.Fatalf("space fired complexity.sites: %v", toastTexts(m))
+	}
+}
+
 func TestComplexityGroupPersists(t *testing.T) {
 	m, _ := timeApp(t)
 	out, _ := m.Update(ComplexityToggleMsg{})

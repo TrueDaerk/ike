@@ -1183,6 +1183,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 // Filtering reports whether the filter row holds the keyboard (#2409).
 func (m *Model) Filtering() bool { return m.filter.Active() }
 
+// FilterText is the filter row's raw text.
+func (m *Model) FilterText() string { return m.filter.Text() }
+
 // OpenSearch implements the pane's Searchable capability (#2409): the shared
 // find chord focuses the filter row, exactly as "/" does.
 func (m *Model) OpenSearch() bool {
