@@ -79,6 +79,21 @@ func TestLineSearchKeyEditsThroughTheField(t *testing.T) {
 	}
 }
 
+// TestLineSearchPasteReplacesSelectedQuery (#3020): a reopened prompt keeps
+// the last query with the caret at its end, so a paste refines it; once the
+// query is selected (select-all) a paste replaces it, like typing does.
+func TestLineSearchPasteReplacesSelectedQuery(t *testing.T) {
+	s := LineSearch{Field: NewField("foo"), Cur: -1}
+	s.Start()
+	if !s.Paste("bar") || s.Text != "foobar" {
+		t.Fatalf("paste without a selection appends at the caret, got %q", s.Text)
+	}
+	s.Key(tea.KeyPressMsg{Code: 'a', Mod: tea.ModSuper})
+	if !s.Paste("baz") || s.Text != "baz" || s.Field.Cur != 3 {
+		t.Fatalf("paste over the selected query replaces it, got %q cur %d", s.Text, s.Field.Cur)
+	}
+}
+
 func TestLineSearchSetMatchesKeepsTheNearestSurvivingMatch(t *testing.T) {
 	s := LineSearch{Field: NewField("q")}
 	s.SetMatches([]int{2, 5, 9})

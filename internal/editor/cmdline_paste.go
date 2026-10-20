@@ -35,13 +35,23 @@ func (m *Model) pasteIntoPrompt(text string) bool {
 // pasteCmdline inserts at the command-line cursor, then re-runs the same
 // hooks a typed rune triggers: incremental search preview on the "/" line,
 // the live re-filter on the "|" line (#2255), path-suggest refresh on the
-// ":" line, and the history-recall reset (#1171).
+// ":" line, and the history-recall reset (#1171). A paste over a preselected
+// range (the "/" prefill, #2826 / #2063) replaces it, exactly like a typed
+// rune does in updateCommandLine (#3020); a paste that flattens to nothing
+// leaves the prefill and its selection alone.
 func (m *Model) pasteCmdline(text string) {
-	out, ncur, changed := ui.PasteText(m.cmdline, m.cmdCur, text)
+	line, cur := m.cmdline, m.cmdCur
+	if m.cmdSelStart < m.cmdSelEnd {
+		r := []rune(line)
+		line = string(append(r[:m.cmdSelStart:m.cmdSelStart], r[m.cmdSelEnd:]...))
+		cur = m.cmdSelStart
+	}
+	out, ncur, changed := ui.PasteText(line, cur, text)
 	if !changed {
 		return
 	}
 	m.bumpRender()
+	m.cmdSelStart, m.cmdSelEnd = 0, 0
 	m.cmdline, m.cmdCur = out, ncur
 	m.cmdHistIdx = -1
 	switch {

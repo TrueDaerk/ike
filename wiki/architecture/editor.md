@@ -224,7 +224,8 @@ Cluster-aware motion is a possible follow-up, not part of this change.
   through `pasteIntoPrompt` (`internal/editor/cmdline_paste.go`) — the paste
   lands in the open input, flattened to one line by `ui.PasteText` exactly
   like overlay fields, and re-runs the same hooks typing does (incsearch
-  preview / path suggest). The `:s///c` confirm prompt has no input but still
+  preview / path suggest); a paste over the selected `/` prefill replaces it
+  like a typed rune (#3020). The `:s///c` confirm prompt has no input but still
   swallows the block, so a paste can never fall through into the buffer while
   any of these own the keyboard.
   Copy/cut answer with a feedback toast ("copied 3 lines", "cut 12 chars",

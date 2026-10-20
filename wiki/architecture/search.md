@@ -152,7 +152,8 @@ direction, history — see [editor](editor.md)), but it follows the same
   which every editor of the project pushes to; a query the app seeded for
   `f3`/`cmd+g` (#2623). With none of them the line opens empty. The
   incremental preview runs on the prefill immediately. The first typed
-  character replaces it, backspace clears it, `end`/`→`/`←` drop the mark and
+  character replaces it, so does a paste (#3020), backspace clears it,
+  `end`/`→`/`←` drop the mark and
   keep the text for editing, `enter` re-commits it (vim's `/<CR>`), and `esc`
   restores cursor and viewport to where the line was opened (#255).
 - **History (#1171).** `↑`/`↓` walk the shared `/` `?` bucket, newest
