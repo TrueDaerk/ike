@@ -355,6 +355,15 @@ func ExternalDefault(langID string) (External, bool) {
 	return specs[0], true
 }
 
+// ExternalDefaultChain returns a copy of the language's registered default
+// chain in resolution order, nil when it has none — the install offer
+// (#3023) reads which tool a chain prefers and whether any of it resolves.
+func ExternalDefaultChain(langID string) []External {
+	extMu.Lock()
+	defer extMu.Unlock()
+	return append([]External(nil), externalDefaults[langID]...)
+}
+
 // ExternalDefaultLangs lists the languages with a registered default external
 // formatter (sorted registration-independent output is the caller's job).
 func ExternalDefaultLangs() []string {
@@ -411,6 +420,10 @@ func SetExternalEnabled(f func(langID string) bool) {
 	enabledHook = f
 	extMu.Unlock()
 }
+
+// ExternalEnabled reports whether external formatting is on for a language
+// (`[format.<lang>] enabled`, via the installed hook).
+func ExternalEnabled(langID string) bool { return externalEnabled(langID) }
 
 func externalEnabled(langID string) bool {
 	extMu.Lock()

@@ -77,6 +77,7 @@ func defaults() *Config {
 			InsertFinalNewline:     true,
 			FormatOnSave:           false,
 			OrganizeImportsOnSave:  false,
+			PrettierInstallPrompt:  true,
 			Editorconfig:           true,
 			ShowWhitespace:         "none",
 			IndentGuides:           false,

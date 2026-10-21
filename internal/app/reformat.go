@@ -29,7 +29,12 @@ import (
 const reformatTimeout = 15 * time.Second
 
 // handleReformat services one reformat request against the active editor.
-func (m *Model) handleReformat(ranged bool) tea.Cmd {
+func (m *Model) handleReformat(ranged bool) tea.Cmd { return m.reformat(ranged, true) }
+
+// reformat runs the request; offer allows the prettier install prompt
+// (#3023) to interrupt it. The prompt's own re-runs pass false, so one
+// reformat asks at most once.
+func (m *Model) reformat(ranged, offer bool) tea.Cmd {
 	ed := m.activeEditor()
 	if ed == nil {
 		return nil
@@ -89,6 +94,12 @@ func (m *Model) handleReformat(ranged bool) tea.Cmd {
 		m.host.Notify(host.Info, "no range formatter for "+langName+" — reformatting the whole file")
 	}
 
+	if offer && m.prettierOfferApplies(langID) {
+		// Only the whole-file path asks (#3023): a selection served by a range
+		// formatter never reaches prettier, which formats no line ranges.
+		m.openPrettierOffer(prettierReformat{path: path, ranged: ranged})
+		return nil
+	}
 	prov, ok := format.Resolve(langID, path)
 	if !ok {
 		m.host.Notify(host.Warn, "no formatter for "+langName)

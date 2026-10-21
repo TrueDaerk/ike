@@ -322,11 +322,11 @@ func TestFormatPageClickOpensForm(t *testing.T) {
 	if p.sel == 0 && len(rows) > 1 {
 		other = 1
 	}
-	p.Click(0, other+formatHeadLines)
+	p.Click(0, other+p.headLines())
 	if p.sel != other {
 		t.Fatalf("a press must select row %d, sel = %d", other, p.sel)
 	}
-	p.Click(0, other+formatHeadLines)
+	p.Click(0, other+p.headLines())
 	if _, ok := p.host.(*stubHost).top().(*formatForm); !ok {
 		t.Fatal("a press on the selection must open the form")
 	}
