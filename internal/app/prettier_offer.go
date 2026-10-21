@@ -54,9 +54,12 @@ const (
 // prettierOfferMsg is a picked prompt row.
 type prettierOfferMsg struct{ choice prettierChoice }
 
-// prettierReformat is the reformat request the prompt interrupted: the file
-// and whether it was the explicit Reformat Selection command.
+// prettierReformat is the reformat request the prompt interrupted: the
+// buffer (its editor.ParseKey, so an unsaved buffer is found again too,
+// #3029), its file ("" when unsaved) and whether it was the explicit
+// Reformat Selection command.
 type prettierReformat struct {
+	key    string
 	path   string
 	ranged bool
 }
@@ -197,15 +200,19 @@ func (m *Model) answerPrettierOffer(msg prettierOfferMsg) tea.Cmd {
 }
 
 // rerunReformat runs the interrupted request again without the prompt, when
-// its file is still the active editor's; otherwise it only says so. note,
+// its buffer is still the active editor; otherwise it only says so. note,
 // when set, is shown first.
 func (m *Model) rerunReformat(req prettierReformat, note string) tea.Cmd {
 	if note != "" {
 		m.host.Notify(host.Info, note)
 	}
 	ed := m.activeEditor()
-	if ed == nil || ed.Path() != req.path {
-		m.host.Notify(host.Info, "reformat "+baseName(req.path)+" again to format it")
+	if ed == nil || ed.ParseKey() != req.key {
+		name := "the buffer"
+		if req.path != "" {
+			name = baseName(req.path)
+		}
+		m.host.Notify(host.Info, "reformat "+name+" again to format it")
 		return nil
 	}
 	return m.reformat(req.ranged, false)

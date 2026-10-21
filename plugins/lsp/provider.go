@@ -33,6 +33,9 @@ func lspProvider(b *bridge) format.Provider {
 			return ""
 		},
 		Tier: format.TierLSP,
+		// The server formats its open document; an unsaved buffer has none,
+		// so the tier is skipped for it (#3029).
+		NeedsFile: true,
 		Available: func(path string) bool {
 			mgr := b.manager()
 			return mgr != nil && mgr.FormatSupported(path)

@@ -9077,6 +9077,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// An answer to the reformat's prettier install prompt (#3023).
 		return m, m.answerPrettierOffer(msg)
 
+	case reformatBufferEditsMsg:
+		// An unsaved buffer's reformat result (#3029), routed by view key.
+		return m, m.applyBufferReformat(msg)
+
 	case ilsp.FormatEditsMsg:
 		// lsp.format / rename / code actions: applied as one undo unit
 		// (editor/textedit.go) through exactly ONE view. Views of the same

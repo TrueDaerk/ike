@@ -27,7 +27,8 @@ import (
 //	${FILE}            the file the tool formats: the buffer's real path in
 //	                   stdin mode (context only — content still arrives on
 //	                   stdin, e.g. prettier --stdin-filepath), the temp copy
-//	                   in temp-file mode
+//	                   in temp-file mode; for an unsaved buffer (#3029) the
+//	                   synthetic project-root name, never created on disk
 //	${TAB_WIDTH}       Options.TabWidth
 //	${INDENT_STYLE}    "space" or "tab" per Options.UseSpaces
 //	${MAX_LINE_LENGTH} Options.MaxLineLength (0 when unlimited)
