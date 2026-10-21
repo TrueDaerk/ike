@@ -212,6 +212,7 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "editor.trim_trailing_whitespace", Type: Bool, Title: "Trim trailing whitespace", Description: "Strip line-end whitespace on save", Scope: config.UserScope},
 			{Key: "editor.format_on_save", Type: Bool, Title: "Format on save", Description: "Run LSP document formatting before every manual save (autosave stays raw)", Scope: config.UserScope},
 			{Key: "editor.organize_imports_on_save", Type: Bool, Title: "Organize imports on save", Description: "Apply the server's organize-imports action before every manual save (autosave stays raw)", Scope: config.UserScope},
+			{Key: "editor.prettier_install_prompt", Type: Bool, Title: "Offer to install prettier", Description: "Ask to install prettier (npm install -g prettier) when a reformat of JSON, JS/TS, CSS, HTML, YAML, Ansible or Markdown finds no formatter tool installed; answering no turns this off for every project. Settings → Formatters installs prettier directly and resets a declined offer", Scope: config.UserScope},
 			{Key: "editor.insert_final_newline", Type: Bool, Title: "Insert final newline", Description: "End every saved file with a newline", Scope: config.UserScope},
 			{Key: "editor.editorconfig", Type: Bool, Title: "EditorConfig", Description: "Honour .editorconfig files per buffer", Scope: config.UserScope},
 			{Key: "editor.line_numbers", Type: Bool, Title: "Line numbers", Description: "Show the line-number gutter", Scope: config.UserScope},

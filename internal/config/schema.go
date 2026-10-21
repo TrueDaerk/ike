@@ -950,6 +950,11 @@ type Editor struct {
 	// stay raw.
 	FormatOnSave          bool `toml:"format_on_save"`
 	OrganizeImportsOnSave bool `toml:"organize_imports_on_save"`
+	// PrettierInstallPrompt offers to install prettier when a reformat of a
+	// language whose chain prefers it finds no formatter tool installed
+	// (#3023). Answering the prompt with "no" turns it off at user scope, so
+	// it is never asked again in any project; Settings → Formatters resets it.
+	PrettierInstallPrompt bool `toml:"prettier_install_prompt"`
 	// Editorconfig honours .editorconfig files (#63): their matching sections
 	// override the [editor] indent/trim/final-newline/EOL/charset values per
 	// buffer. On by default; false ignores them entirely.

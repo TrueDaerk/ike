@@ -125,6 +125,7 @@ func (c *Config) Flat() map[string]string {
 	put("editor.insert_final_newline", c.Editor.InsertFinalNewline)
 	put("editor.format_on_save", c.Editor.FormatOnSave)
 	put("editor.organize_imports_on_save", c.Editor.OrganizeImportsOnSave)
+	put("editor.prettier_install_prompt", c.Editor.PrettierInstallPrompt)
 	put("editor.editorconfig", c.Editor.Editorconfig)
 	put("editor.show_whitespace", c.Editor.ShowWhitespace)
 	put("editor.indent_guides", c.Editor.IndentGuides)

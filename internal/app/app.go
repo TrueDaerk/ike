@@ -1292,6 +1292,12 @@ type Model struct {
 	// actions is the palette mode listing the latest code-action offer
 	// (lsp.codeAction, #8), same pattern as refs.
 	actions *actionsMode
+	// prettierPending is the reformat the prettier install prompt interrupted
+	// (#3023), prettierRerun the one waiting for the install it started, and
+	// prettierDeclined bridges a "no" until its config write reloads.
+	prettierPending  *prettierReformat
+	prettierRerun    *prettierReformat
+	prettierDeclined bool
 	// pasteHist is the palette mode over the focused editor's yank/delete
 	// history (#57), same pattern as refs.
 	pasteHist *pasteHistMode
@@ -3521,7 +3527,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, projPeek, groups, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, recentLocs, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, tabs, snippetPick, ssh, remoteHosts, playFilters, playCheat, playExport, bufLang, openAs)
+	return palette.New(pcfg, cmd, file, dir, proj, projPeek, groups, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, recentLocs, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, tabs, snippetPick, ssh, remoteHosts, playFilters, playCheat, playExport, bufLang, openAs, prettierOfferMode{})
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -7288,7 +7294,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case toolcatalog.InstallResultMsg:
 		// A tool install from the setup dialog or the Tools settings page
-		// finished (#751–#753, #759).
+		// finished (#751–#753, #759). prettier is a formatter, not a tool
+		// pane: its install came from the reformat prompt or the Formatters
+		// page (#3023).
+		if msg.Name == toolcatalog.Prettier.Name {
+			return m, m.prettierInstalled(msg)
+		}
 		if msg.Err != nil {
 			text := "installing " + msg.Name + " failed: " + msg.Err.Error()
 			if msg.Detail != "" {
@@ -8363,6 +8374,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// recomputes so config-backed lists (recent projects, #842) reflect
 		// the reload immediately; Refresh is a no-op while closed.
 		m.reloadConfig(msg.Config)
+		// A declined prettier offer is config from here on (#3023) — and a
+		// reset from Settings → Formatters must be able to re-enable it.
+		m.prettierDeclined = false
 		// Re-arm the explorer auto-refresh poll if the reload re-enabled it
 		// (#2163) — disabling retires the chain, and without this no scan
 		// would ever restart it. A no-op on every other reload.
@@ -9047,6 +9061,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case format.RangeRequestMsg:
 		return m, m.handleReformat(true)
+
+	case prettierOfferMsg:
+		// An answer to the reformat's prettier install prompt (#3023).
+		return m, m.answerPrettierOffer(msg)
 
 	case ilsp.FormatEditsMsg:
 		// lsp.format / rename / code actions: applied as one undo unit

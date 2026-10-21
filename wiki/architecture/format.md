@@ -4,7 +4,7 @@ title: Formatter Registry
 description: The neutral reformat layer — providers (config override, external command, LSP, built-in) registered per language, one resolution chain behind lsp.format/lsp.formatRange and format-on-save, edits applied as one undo unit.
 resource: internal/format
 tags: [architecture, format, reformat, registry, lsp, plugins]
-timestamp: 2026-09-10T00:00:00Z
+timestamp: 2026-10-21T00:00:00Z
 ---
 
 # Formatter Registry
@@ -172,6 +172,50 @@ plugins can exceed the 2 s budget. That case is *safe, not flaky*: the step's
 context expires, the chain falls through without edits and the file is written
 unformatted — the save is never blocked or lost. `cmd+alt+l` still formats it.
 
+### Installing prettier from IKE (#3023)
+
+Without prettier the JSON / web / YAML / Ansible / Markdown chains fall back
+to a tool that may only re-indent, so IKE offers the install in two places.
+Both run the one async install runner the tool panes use
+(`toolcatalog.Install` with the `toolcatalog.Prettier` entry, always
+`npm install -g prettier` — a global install, never a project-local one) and
+share its tracking (`toolcatalog.Installing` / `LastInstall`): while an
+install runs, no second one starts and no second prompt opens. The result
+arrives as `toolcatalog.InstallResultMsg`; the app answers a prettier result
+with a toast (the error carries the tail of npm's output) instead of the
+tool-pane "open it with…" note.
+
+- **Prompt on reformat** (`internal/app/prettier_offer.go`). A whole-file
+  reformat — Reformat File, or a selection that falls back to the whole file —
+  asks first when the language's default chain *leads with* prettier
+  (`format.ExternalDefaultChain`), external formatting is on, no
+  `[format.<lang>]` override `command` is configured, **no** spec of the chain
+  is installed (biome, yamlfmt, mdformat or a project-local
+  `node_modules/.bin/prettier` all count) and
+  `editor.prettier_install_prompt` is still on. A selection served by a
+  range formatter never asks — prettier formats no line ranges. The prompt is
+  a locked palette mode (`'¦'`) opened anchored and **centered in the editor
+  pane** that asked — #3013's anchored placement, falling back to the centered
+  box when it does not fit — with digit shortcuts:
+  - `1` *Yes, install and reformat* starts the install; on success the
+    interrupted request runs again (if its file is still the active editor)
+    and prettier formats it. A failed install leaves the buffer untouched.
+  - `2` *No, never ask again* writes `editor.prettier_install_prompt = false`
+    at **user** scope (all projects, survives restarts) and reformats with the
+    rest of the chain right away.
+  - Without `npm` on PATH there is no install row: an inert line names the
+    command to run by hand, `1` reformats without prettier this once (not a
+    decline — the next reformat asks again), `2` declines as above.
+  - `esc` cancels the reformat; nothing is stored.
+
+  The prompt's own re-runs (`reformat(ranged, false)`) never ask again, so one
+  reformat shows it at most once.
+- **Formatters settings page**: a second header line shows prettier's state
+  (installed / installed in this project / not installed / installing / the
+  last install's error) and whether the reformat prompt is on or declined.
+  `i` installs (or, without npm, says so and names the command), `u` resets a
+  declined prompt by removing the key from every layer.
+
 ## Formatters settings page (#1402, #1662)
 
 `internal/settings/format_page.go` (registered by `plugins/format`) lists one
@@ -198,6 +242,8 @@ only reporting them, reaching parity with the Language Servers page:
 - `s` picks the write layer (project ↔ user), like the panel's own scope
   selector (#794); it starts on the conventional layer for `format.*`
   (project) and falls back to user when there is no project to write to.
+- `i` installs prettier, `u` re-enables a declined reformat install prompt
+  (#3023, see [Installing prettier from IKE](#installing-prettier-from-ike-3023)).
 
 The page never learns about individual languages. A plugin that ships a
 built-in formatter declares it with `format.RegisterBuiltin(langID, keys…)`

@@ -180,33 +180,46 @@ type InstallResultMsg struct {
 // Install returns a command that installs the entry's binary via the first
 // available recipe and re-verifies PATH afterwards (an exit-0 installer whose
 // target still does not resolve is a failure, not a success). Already
-// installed is an immediate success.
+// installed is an immediate success. The install is tracked by entry name
+// from the moment the command is built (Installing, LastInstall — #3023):
+// while one runs, a second request returns nil instead of starting a second
+// installer.
 func Install(e Entry) tea.Cmd {
-	return func() tea.Msg {
-		if e.Installed() {
-			return InstallResultMsg{Name: e.Name}
-		}
-		argv, ok := e.InstallArgv()
-		if !ok {
-			return InstallResultMsg{
-				Name: e.Name,
-				Err:  errors.New("no supported installer found (needs " + e.installers() + ")"),
-			}
-		}
-		out, err := RunInstall(argv)
-		ran := strings.Join(argv, " ")
-		if err != nil {
-			return InstallResultMsg{Name: e.Name, Err: err, Detail: ran + ": " + outputTail(out)}
-		}
-		if !e.Installed() {
-			return InstallResultMsg{
-				Name:   e.Name,
-				Err:    errors.New(e.Command + " still not on PATH after install"),
-				Detail: ran,
-			}
-		}
-		return InstallResultMsg{Name: e.Name, Detail: ran}
+	if !beginInstall(e.Name) {
+		return nil
 	}
+	return func() tea.Msg {
+		r := install(e)
+		endInstall(r)
+		return r
+	}
+}
+
+// install runs one install attempt to completion.
+func install(e Entry) InstallResultMsg {
+	if e.Installed() {
+		return InstallResultMsg{Name: e.Name}
+	}
+	argv, ok := e.InstallArgv()
+	if !ok {
+		return InstallResultMsg{
+			Name: e.Name,
+			Err:  errors.New("no supported installer found (needs " + e.installers() + ")"),
+		}
+	}
+	out, err := RunInstall(argv)
+	ran := strings.Join(argv, " ")
+	if err != nil {
+		return InstallResultMsg{Name: e.Name, Err: err, Detail: ran + ": " + outputTail(out)}
+	}
+	if !e.Installed() {
+		return InstallResultMsg{
+			Name:   e.Name,
+			Err:    errors.New(e.Command + " still not on PATH after install"),
+			Detail: ran,
+		}
+	}
+	return InstallResultMsg{Name: e.Name, Detail: ran}
 }
 
 // outputTail keeps the last few lines of installer output for the error toast.

@@ -1,5 +1,18 @@
 # Log
 
+## 2026-10-21 (install prettier from Settings and on first reformat, #3023)
+
+- [Formatter registry](/architecture/format.md): a reformat of JSON, JS/TS,
+  CSS, HTML, YAML, Ansible or Markdown with no tool of the language's chain
+  installed (and no override) opens a prompt centered in the editor pane:
+  install prettier (`npm install -g prettier`, async) and reformat with it,
+  or reformat without it and never ask again — persisted at user scope as
+  `editor.prettier_install_prompt = false` (Settings → Editor lists it).
+  Without npm the prompt names the command instead of offering the install.
+  Settings → Formatters shows prettier's state, installs it with `i` and
+  resets a declined prompt with `u`. The install reuses `toolcatalog.Install`,
+  which now tracks running installs so none starts twice.
+
 ## 2026-10-20 (paste replaces the selected search prefill, #3020)
 
 - [Editor](/architecture/editor.md), [search](/architecture/search.md): a
