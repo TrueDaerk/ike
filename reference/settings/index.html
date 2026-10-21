@@ -2838,6 +2838,14 @@ secrets — are documented together, with screenshots, in
 <td>Apply the server's organize-imports action before every manual save (autosave stays raw)</td>
 </tr>
 <tr>
+<td>Offer to install prettier</td>
+<td><code>editor.prettier_install_prompt</code></td>
+<td>boolean</td>
+<td><code>true</code></td>
+<td>user</td>
+<td>Ask to install prettier (npm install -g prettier) when a reformat of JSON, JS/TS, CSS, HTML, YAML, Ansible or Markdown finds no formatter tool installed; answering no turns this off for every project. Settings → Formatters installs prettier directly and resets a declined offer</td>
+</tr>
+<tr>
 <td>Insert final newline</td>
 <td><code>editor.insert_final_newline</code></td>
 <td>boolean</td>
@@ -3201,7 +3209,7 @@ secrets — are documented together, with screenshots, in
 <td>boolean</td>
 <td><code>true</code></td>
 <td>user</td>
-<td>Mask dotenv values whose key names a secret (*_TOKEN, *_SECRET, PASSWORD, …) as ••••; the raw value reappears under the caret; toggle per view via Toggle Secret Masking</td>
+<td>Mask dotenv values whose key names a secret (<em>_TOKEN, </em>_SECRET, PASSWORD, …) as ••••; the raw value reappears under the caret; toggle per view via Toggle Secret Masking</td>
 </tr>
 <tr>
 <td>Secret masking key patterns</td>
@@ -3217,7 +3225,7 @@ secrets — are documented together, with screenshots, in
 <td>list</td>
 <td><em>(empty)</em></td>
 <td>user</td>
-<td>Map field names to the unit their numbers are read in, overriding the key heuristics of the byte size, duration, digit grouping and radix hints. Each entry is written "pattern=unit", the pattern matched case-insensitively over the whole field name with * wildcards ("*_bytes=bytes", "retention=s", "created_at=timestamp-s", "session_id=none"). Units: bytes, a duration unit (ns, us, ms, s, min, h, d), timestamp-s, timestamp-ms, octal, hex, group, none. A mapped field is read in that unit and no other — a value in a bytes field draws as a byte size even where its digits also read as a timestamp — and none silences every stand-in over the field's values. The unit is the base the raw number is read <em>in</em>, not just the family it draws as: with "request_timeout=s" the value 1500 is 1500 seconds and draws as "25m"</td>
+<td>Map field names to the unit their numbers are read in, overriding the key heuristics of the byte size, duration, digit grouping and radix hints. Each entry is written "pattern=unit", the pattern matched case-insensitively over the whole field name with * wildcards ("<em>_bytes=bytes", "retention=s", "created_at=timestamp-s", "session_id=none"). Units: bytes, a duration unit (ns, us, ms, s, min, h, d), timestamp-s, timestamp-ms, octal, hex, group, none. A mapped field is read in that unit and no other — a value in a bytes field draws as a byte size even where its digits also read as a timestamp — and none silences every stand-in over the field's values. The unit is the base the raw number is read </em>in*, not just the family it draws as: with "request_timeout=s" the value 1500 is 1500 seconds and draws as "25m"</td>
 </tr>
 <tr>
 <td>Vault stand-in</td>
@@ -3233,7 +3241,7 @@ secrets — are documented together, with screenshots, in
 <td>list</td>
 <td><em>(empty)</em></td>
 <td>user</td>
-<td>Restrict every conceal family (timestamps, number hints, secret masking, Markdown/CSV/log rendering, …) to the files matching one of these globs; empty means every file. A pattern without a separator matches the file's base name ("*.py", "Makefile"), one with a separator the whole path, anchored at any segment boundary unless it starts with / or ** ("vendor/<strong>", "</strong>/config/**"); matching is case-insensitive. Composes with the per-family toggles — a stand-in draws only if its family is on and the file passes the filter — and an explicit per-view toggle still wins</td>
+<td>Restrict every conceal family (timestamps, number hints, secret masking, Markdown/CSV/log rendering, …) to the files matching one of these globs; empty means every file. A pattern without a separator matches the file's base name ("<em>.py", "Makefile"), one with a separator the whole path, anchored at any segment boundary unless it starts with / or ** ("vendor/</em><em>", "</em><em>/config/</em>*"); matching is case-insensitive. Composes with the per-family toggles — a stand-in draws only if its family is on and the file passes the filter — and an explicit per-view toggle still wins</td>
 </tr>
 <tr>
 <td>Conceal file exclude patterns</td>
@@ -3241,7 +3249,7 @@ secrets — are documented together, with screenshots, in
 <td>list</td>
 <td><em>(empty)</em></td>
 <td>user</td>
-<td>Switch every conceal family off in the files matching one of these globs, written like the include patterns ("*.log", "<strong>/testdata/</strong>"). Exclude beats include, so a file matching both conceals nothing</td>
+<td>Switch every conceal family off in the files matching one of these globs, written like the include patterns ("<em>.log", "</em><em>/testdata/</em>*"). Exclude beats include, so a file matching both conceals nothing</td>
 </tr>
 <tr>
 <td>Conceal file rules per family</td>
@@ -4482,7 +4490,7 @@ list of keys.</p>
 <td>list</td>
 <td><em>(empty)</em></td>
 <td>user</td>
-<td>Comma-separated glob patterns of files the index never measures, matched against the project-relative path ("vendor/<strong>", "</strong>/*_test.go", "src/gen/**"); a pattern without a slash also matches the file name anywhere ("*_test.go"). Hidden and build directories and files above the size cap are skipped either way</td>
+<td>Comma-separated glob patterns of files the index never measures, matched against the project-relative path ("vendor/<strong>", "</strong>/<em>_test.go", "src/gen/</em><em>"); a pattern without a slash also matches the file name anywhere ("</em>_test.go"). Hidden and build directories and files above the size cap are skipped either way</td>
 </tr>
 <tr>
 <td>Cyclomatic warning threshold</td>
@@ -4514,7 +4522,7 @@ list of keys.</p>
 <td>list</td>
 <td><em>(empty)</em></td>
 <td>user</td>
-<td>Per-path and per-language warning thresholds, one "<selector> ccn=N cog=N cmt=N" entry each: the selector is a glob over the project-relative path (the Excluded files rules: "legacy/**", "<em>_test.go") or lang:<id> ("lang:php"); ccn= and cog= take 1–200, cmt= 0–100 (0 off), and a key the entry leaves out keeps the global threshold. The first matching entry in list order wins and applies everywhere a threshold does: the Complexity window's warning colours and over / excess counts (the File tab names the thresholds in force), the inline hints, the Problems feed, the Changes diff, the status segment and ike complexity (whose --ccn / --cog / --cmt still beat it). Example: "legacy/</em>* ccn=30 cog=30", "lang:php cog=25 cmt=0"</td>
+<td>Per-path and per-language warning thresholds, one "<selector> ccn=N cog=N cmt=N" entry each: the selector is a glob over the project-relative path (the Excluded files rules: "legacy/<strong>", "*_test.go") or lang:<id> ("lang:php"); ccn= and cog= take 1–200, cmt= 0–100 (0 off), and a key the entry leaves out keeps the global threshold. The first matching entry in list order wins and applies everywhere a threshold does: the Complexity window's warning colours and over / excess counts (the File tab names the thresholds in force), the inline hints, the Problems feed, the Changes diff, the status segment and ike complexity (whose --ccn / --cog / --cmt still beat it). Example: "legacy/</strong> ccn=30 cog=30", "lang:php cog=25 cmt=0"</td>
 </tr>
 <tr>
 <td>Problems feed</td>
@@ -4612,12 +4620,12 @@ the config file only ever holds what actually differs. The same overrides can
 be written by hand as a <code>[format.&lt;languageID&gt;]</code> table, mirroring
 <code>[lsp.servers.*]</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="k">[format.python]</span>
-<span class="n">command</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"ruff"</span>
-<span class="n">args</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"format"</span><span class="p">,</span><span class="w"> </span><span class="s2">"--stdin-filename"</span><span class="p">,</span><span class="w"> </span><span class="s2">"${FILE}"</span><span class="p">,</span><span class="w"> </span><span class="s2">"-"</span><span class="p">]</span>
-<span class="n">range_args</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"format"</span><span class="p">,</span><span class="w"> </span><span class="s2">"--range"</span><span class="p">,</span><span class="w"> </span><span class="s2">"${START_LINE}-${END_LINE}"</span><span class="p">,</span><span class="w"> </span><span class="s2">"-"</span><span class="p">]</span>
+<span class="n">command</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;ruff&quot;</span>
+<span class="n">args</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;format&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;--stdin-filename&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;${FILE}&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;-&quot;</span><span class="p">]</span>
+<span class="n">range_args</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;format&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;--range&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;${START_LINE}-${END_LINE}&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;-&quot;</span><span class="p">]</span>
 <span class="n">enabled</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="w">      </span><span class="c1"># false switches external formatting off for the language</span>
 <span class="n">temp_file</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="w">   </span><span class="c1"># true for tools that cannot read stdin</span>
-<span class="n">install</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"pip install ruff"</span>
+<span class="n">install</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;pip install ruff&quot;</span>
 </code></pre></div>
 <p>The command reads the buffer on stdin and prints the formatted text on
 stdout (set <code>temp_file = true</code> for in-place-only tools; IKE then formats a
@@ -5175,9 +5183,9 @@ the command palette as <code>ES Console: &lt;name&gt;</code>, opening a read-onl
 index sidebar, paged hit grid, per-index Query-DSL buffers with
 mapping-aware completion. The same entries can be written by hand:</p>
 <div class="highlight"><pre><span></span><code><span class="k">[[elasticsearch.endpoints]]</span>
-<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"prod"</span>
-<span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"https://es.example.com:9200"</span>
-<span class="n">api_key</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"..."</span><span class="w">        </span><span class="c1"># or username/password for basic auth</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;prod&quot;</span>
+<span class="n">url</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;https://es.example.com:9200&quot;</span>
+<span class="n">api_key</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;...&quot;</span><span class="w">        </span><span class="c1"># or username/password for basic auth</span>
 </code></pre></div>
 <p>Like every TOML list the endpoint list replaces across layers: a
 project-scope <code>[[elasticsearch.endpoints]]</code> table hides the user-scope one.</p>

@@ -1866,7 +1866,7 @@ the manifest at that URL current.</p>
 <p>With winget, from a checkout of the repository (the package is not in the
 public winget catalogue yet):</p>
 <div class="highlight"><pre><span></span><code><span class="n">winget</span> <span class="n">install</span> <span class="p">-</span><span class="n">-manifest</span> <span class="n">deploy</span><span class="p">\</span><span class="n">winget</span><span class="p">\&lt;</span><span class="n">version</span><span class="p">&gt;</span>
-<span class="p">&amp;</span> <span class="p">(</span><span class="nb">Get-ChildItem</span> <span class="s2">"$env:LOCALAPPDATA\Microsoft\WinGet\Packages\TrueDaerk.Ike_*\install-desktop.ps1"</span><span class="p">).</span><span class="n">FullName</span>
+<span class="p">&amp;</span> <span class="p">(</span><span class="nb">Get-ChildItem</span> <span class="s2">&quot;$env:LOCALAPPDATA\Microsoft\WinGet\Packages\TrueDaerk.Ike_*\install-desktop.ps1&quot;</span><span class="p">).</span><span class="n">FullName</span>
 </code></pre></div>
 <p>winget installs WezTerm (<code>wez.wezterm</code>) as a dependency and puts <code>ike</code> on
 your <code>PATH</code>; it cannot create Start-menu entries for a zip package, so the

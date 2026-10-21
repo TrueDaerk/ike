@@ -1979,7 +1979,7 @@ count them.</p>
 Expression</strong> and <strong>… as yq Expression</strong> copy the same position as an expression
 the matching CLI tool takes, quoting keys where those tools need it:</p>
 <div class="highlight"><pre><span></span><code>.spec.containers[2].name
-.metadata.labels["app.kubernetes.io/name"]
+.metadata.labels[&quot;app.kubernetes.io/name&quot;]
 </code></pre></div>
 <p>The path is read from the document as written: a YAML alias (<code>*base</code>) or merge
 key (<code>&lt;&lt;</code>) is reported where it stands, never as the values it would pull in.</p>

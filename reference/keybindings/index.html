@@ -4112,8 +4112,8 @@ reporting, which fewer terminals implement. See
 <p>Bindings live under <code>[keymap.bindings]</code> in <code>settings.toml</code>, keyed by chord;
 the value is the command ID, and an empty value unbinds the chord:</p>
 <div class="highlight"><pre><span></span><code><span class="k">[keymap.bindings]</span>
-<span class="s2">"cmd+7"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"editor.commentLine"</span>
-<span class="s2">"cmd+j"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">""</span><span class="w">                      </span><span class="c1"># unbind</span>
+<span class="s2">&quot;cmd+7&quot;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;editor.commentLine&quot;</span>
+<span class="s2">&quot;cmd+j&quot;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="w">                      </span><span class="c1"># unbind</span>
 </code></pre></div>
 <p>A chord may be qualified with the pane it applies in — <code>global</code>, <code>editor</code>,
 <code>explorer</code>, <code>palette</code>, <code>diff</code> or any other pane context
@@ -4121,11 +4121,11 @@ the value is the command ID, and an empty value unbinds the chord:</p>
 different commands depending on what has focus. The qualified form only touches its own
 context; the bare form applies wherever the chord is bound:</p>
 <div class="highlight"><pre><span></span><code><span class="k">[keymap.bindings.editor]</span>
-<span class="s2">"ctrl+g"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"editor.nextOccurrence"</span>
+<span class="s2">&quot;ctrl+g&quot;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;editor.nextOccurrence&quot;</span>
 
 <span class="c1"># The same thing written as a dotted key:</span>
 <span class="k">[keymap.bindings]</span>
-<span class="s2">"editor.ctrl+g"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"editor.nextOccurrence"</span>
+<span class="s2">&quot;editor.ctrl+g&quot;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;editor.nextOccurrence&quot;</span>
 </code></pre></div>
 <p>The keymap settings page offers this as <strong>keep both, resolve by context</strong> when a
 captured chord collides with a command in another pane.</p>
@@ -4136,7 +4136,7 @@ and keeps its usual meaning everywhere else:</p>
 <div class="highlight"><pre><span></span><code><span class="k">[keymap.bindings]</span>
 <span class="c1"># cmd+e picks the HTTP environment in .http files only;</span>
 <span class="c1"># every other editor keeps the default (recent files).</span>
-<span class="s2">"editor[http].cmd+e"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"http.selectEnvironment"</span>
+<span class="s2">&quot;editor[http].cmd+e&quot;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;http.selectEnvironment&quot;</span>
 </code></pre></div>
 <p><code>&lt;lang&gt;</code> is a language id as shown in Settings → Languages (<code>http</code>, <code>go</code>,
 <code>markdown</code>, …). Precedence goes from narrow to broad: <code>editor[&lt;lang&gt;]</code> wins

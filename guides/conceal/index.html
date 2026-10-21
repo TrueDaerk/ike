@@ -2103,7 +2103,7 @@ timestamp? Left alone, the guesses can be wrong:</p>
 <p><code>editor.number_hint_units</code> (Settings → Editor) maps field names to units and
 ends the guessing. Each entry is written <code>pattern=unit</code>:</p>
 <div class="highlight"><pre><span></span><code><span class="k">[editor]</span>
-<span class="n">number_hint_units</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"retention_*=s"</span><span class="p">,</span><span class="w"> </span><span class="s2">"chunk_span=bytes"</span><span class="p">,</span><span class="w"> </span><span class="s2">"session_id=none"</span><span class="p">]</span>
+<span class="n">number_hint_units</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;retention_*=s&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;chunk_span=bytes&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;session_id=none&quot;</span><span class="p">]</span>
 </code></pre></div>
 <p><img alt="The same fields with editor.number_hint_units pinning each unit" src="../../screenshots/features/conceal-number-units.png" /></p>
 <p>Patterns match case-insensitively over the whole field name with <code>*</code> wildcards,
@@ -2410,10 +2410,10 @@ whole key name with <code>*</code> wildcards, and a <code>-</code> (or <code>!</
 masking:</p>
 <div class="highlight"><pre><span></span><code><span class="k">[editor]</span>
 <span class="n">secret_masking_keys</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
-<span class="w">  </span><span class="s2">"MY_API_KEY"</span><span class="p">,</span><span class="w">     </span><span class="c1"># a key the built-in patterns miss</span>
-<span class="w">  </span><span class="s2">"*_LICENSE"</span><span class="p">,</span><span class="w">      </span><span class="c1"># …and every key ending in it</span>
-<span class="w">  </span><span class="s2">"db_pass*"</span><span class="p">,</span>
-<span class="w">  </span><span class="s2">"-PUBLIC_TOKEN"</span><span class="p">,</span><span class="w">  </span><span class="c1"># a key the built-in patterns would mask, kept readable</span>
+<span class="w">  </span><span class="s2">&quot;MY_API_KEY&quot;</span><span class="p">,</span><span class="w">     </span><span class="c1"># a key the built-in patterns miss</span>
+<span class="w">  </span><span class="s2">&quot;*_LICENSE&quot;</span><span class="p">,</span><span class="w">      </span><span class="c1"># …and every key ending in it</span>
+<span class="w">  </span><span class="s2">&quot;db_pass*&quot;</span><span class="p">,</span>
+<span class="w">  </span><span class="s2">&quot;-PUBLIC_TOKEN&quot;</span><span class="p">,</span><span class="w">  </span><span class="c1"># a key the built-in patterns would mask, kept readable</span>
 <span class="p">]</span>
 </code></pre></div>
 <p>Earlier entries win, so a specific name can precede a wildcard covering it, and
@@ -2622,7 +2622,7 @@ the format is rendered.</p>
 <p>The switches above are global: on means on everywhere. The second dimension is
 <em>where</em>, and it is written as file patterns:</p>
 <div class="highlight"><pre><span></span><code><span class="k">[editor]</span>
-<span class="n">conceal_exclude</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"**/testdata/**"</span><span class="p">,</span><span class="w"> </span><span class="s2">"*.min.js"</span><span class="p">]</span>
+<span class="n">conceal_exclude</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;**/testdata/**&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;*.min.js&quot;</span><span class="p">]</span>
 </code></pre></div>
 <p><code>editor.conceal_include</code> restricts every family to the files it matches;
 <code>editor.conceal_exclude</code> switches them off in the files it matches. Both are
@@ -2639,10 +2639,10 @@ entry is written <code>family=pattern</code>, the pattern prefixed <code>-</code
 bare for an include, the family named by its setting key without the <code>editor.</code>
 prefix:</p>
 <div class="highlight"><pre><span></span><code><span class="k">[editor]</span>
-<span class="n">conceal_include</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">"*.yaml"</span><span class="p">,</span><span class="w"> </span><span class="s2">"*.env"</span><span class="p">]</span><span class="w">     </span><span class="c1"># conceal only in config files…</span>
+<span class="n">conceal_include</span><span class="w">    </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="s2">&quot;*.yaml&quot;</span><span class="p">,</span><span class="w"> </span><span class="s2">&quot;*.env&quot;</span><span class="p">]</span><span class="w">     </span><span class="c1"># conceal only in config files…</span>
 <span class="n">conceal_file_rules</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
-<span class="w">  </span><span class="s2">"secret_masking=-**/testdata/**"</span><span class="p">,</span><span class="w">          </span><span class="c1"># …but never mask the fixtures</span>
-<span class="w">  </span><span class="s2">"cron_hints=*.log"</span><span class="p">,</span><span class="w">                        </span><span class="c1"># …and read cron in logs anyway</span>
+<span class="w">  </span><span class="s2">&quot;secret_masking=-**/testdata/**&quot;</span><span class="p">,</span><span class="w">          </span><span class="c1"># …but never mask the fixtures</span>
+<span class="w">  </span><span class="s2">&quot;cron_hints=*.log&quot;</span><span class="p">,</span><span class="w">                        </span><span class="c1"># …and read cron in logs anyway</span>
 <span class="p">]</span>
 </code></pre></div>
 <p>A family whose own rules decide a file is done there — that is what makes the

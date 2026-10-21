@@ -2340,7 +2340,7 @@ files work as they are.</p>
 <span class="na">Content-Type</span><span class="o">:</span> <span class="l">application/json</span>
 <span class="na">Authorization</span><span class="o">:</span> <span class="l">Bearer {{$env TOKEN}}</span>
 
-<span class="p">{</span><span class="nt">"name"</span><span class="p">:</span><span class="w"> </span><span class="s2">"example"</span><span class="p">}</span>
+<span class="p">{</span><span class="nt">&quot;name&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;example&quot;</span><span class="p">}</span>
 </code></pre></div>
 <ul>
 <li><code>###</code> separates requests; the text after it names the following one.</li>
@@ -2403,9 +2403,9 @@ file use it like any other <code>{{name}}</code>:</p>
 <p>Everything right of the <code>=</code> is a <a href="https://jqlang.github.io/jq/">jq</a> expression
 evaluated against the response body — the same language as the jq playground,
 so it is not limited to plain paths:</p>
-<div class="highlight"><pre><span></span><code><span class="err"># @capture id    = .items[] | select(.state=="done") | .id</span>
+<div class="highlight"><pre><span></span><code><span class="err"># @capture id    = .items[] | select(.state==&quot;done&quot;) | .id</span>
 <span class="err"># @capture token = .data.access_token</span>
-<span class="err"># @capture where = .task | "\(.node):\(.id)"</span>
+<span class="err"># @capture where = .task | &quot;\(.node):\(.id)&quot;</span>
 </code></pre></div>
 <p>A string is captured without its quotes (it is going into a URL or a header),
 anything else keeps its JSON spelling. When several values come out, the first
@@ -2444,11 +2444,11 @@ content is a single <code>&lt; file</code> line embeds that file:</p>
 <span class="err">Content-Type: multipart/form-data; boundary=bound</span>
 
 <span class="err">--bound</span>
-<span class="err">Content-Disposition: form-data; name="import"; filename="import.csv"</span>
+<span class="err">Content-Disposition: form-data; name=&quot;import&quot;; filename=&quot;import.csv&quot;</span>
 
 <span class="err">&lt; leads.csv</span>
 <span class="err">--bound</span>
-<span class="err">Content-Disposition: form-data; name="note"</span>
+<span class="err">Content-Disposition: form-data; name=&quot;note&quot;</span>
 
 <span class="err">inline text</span>
 <span class="err">--bound--</span>
@@ -2540,11 +2540,11 @@ without retyping. Copy the command, then run <strong>Import curl Command…</str
 (<code>http.importCurl</code>) with the <code>.http</code> file open: the prompt is already filled
 with the command from your clipboard, and <span class="keys"><kbd class="key-enter">Enter</kbd></span> appends the block to the
 end of the file and puts the cursor on it, ready to run.</p>
-<div class="highlight"><pre><span></span><code>curl 'https://api.example.com/v1/things?page=2' \
+<div class="highlight"><pre><span></span><code>curl &#39;https://api.example.com/v1/things?page=2&#39; \
   -X POST \
-  -H 'accept: application/json' \
-  -H 'content-type: application/json' \
-  --data-raw '{"name":"thing"}'
+  -H &#39;accept: application/json&#39; \
+  -H &#39;content-type: application/json&#39; \
+  --data-raw &#39;{&quot;name&quot;:&quot;thing&quot;}&#39;
 </code></pre></div>
 <p>becomes</p>
 <div class="highlight"><pre><span></span><code><span class="err">### POST /v1/things</span>
@@ -2552,7 +2552,7 @@ end of the file and puts the cursor on it, ready to run.</p>
 <span class="err">accept: application/json</span>
 <span class="err">content-type: application/json</span>
 
-<span class="err">{"name":"thing"}</span>
+<span class="err">{&quot;name&quot;:&quot;thing&quot;}</span>
 </code></pre></div>
 <p>Understood: <code>-X</code>, the URL (and <code>--url</code>), <code>-H</code>, <code>-d</code> / <code>--data*</code> (including
 <code>--data-urlencode</code>, and <code>-d @file</code> as a <code>&lt; file</code> body), <code>--json</code>, <code>-F</code> forms
@@ -2645,11 +2645,11 @@ it, and an optional JSON <code>variables</code> object follows it after a blank 
 <span class="err">}</span>
 
 <span class="err">{</span>
-<span class="err">  "episode": "EMPIRE"</span>
+<span class="err">  &quot;episode&quot;: &quot;EMPIRE&quot;</span>
 <span class="err">}</span>
 </code></pre></div>
 <p>Running that sends</p>
-<div class="highlight"><pre><span></span><code><span class="p">{</span><span class="nt">"query"</span><span class="p">:</span><span class="s2">"query Hero($episode: Episode) {\n  hero(episode: $episode) {\n    name\n  }\n}"</span><span class="p">,</span><span class="nt">"variables"</span><span class="p">:{</span><span class="nt">"episode"</span><span class="p">:</span><span class="s2">"EMPIRE"</span><span class="p">},</span><span class="nt">"operationName"</span><span class="p">:</span><span class="s2">"Hero"</span><span class="p">}</span>
+<div class="highlight"><pre><span></span><code><span class="p">{</span><span class="nt">&quot;query&quot;</span><span class="p">:</span><span class="s2">&quot;query Hero($episode: Episode) {\n  hero(episode: $episode) {\n    name\n  }\n}&quot;</span><span class="p">,</span><span class="nt">&quot;variables&quot;</span><span class="p">:{</span><span class="nt">&quot;episode&quot;</span><span class="p">:</span><span class="s2">&quot;EMPIRE&quot;</span><span class="p">},</span><span class="nt">&quot;operationName&quot;</span><span class="p">:</span><span class="s2">&quot;Hero&quot;</span><span class="p">}</span>
 </code></pre></div>
 <p>as a <code>POST</code> with <code>Content-Type: application/json</code>. The operation name is picked
 up from the first named operation, so a document with several operations still
@@ -2721,9 +2721,9 @@ separated by <code>===</code> lines:</p>
 <span class="err">WEBSOCKET wss://example.com/socket</span>
 <span class="err">Sec-WebSocket-Protocol: chat</span>
 
-<span class="err">{"join": "lobby"}</span>
+<span class="err">{&quot;join&quot;: &quot;lobby&quot;}</span>
 <span class="err">=== wait-for-server</span>
-<span class="err">{"say": "hello"}</span>
+<span class="err">{&quot;say&quot;: &quot;hello&quot;}</span>
 </code></pre></div>
 <p>Running it connects, sends the messages in order — <code>=== wait-for-server</code>
 pauses until the server has said something before the next message goes out —

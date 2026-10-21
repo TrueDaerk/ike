@@ -1931,7 +1931,7 @@ a few that are inherently project-specific are not.</p>
 <span class="n">format_on_save</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span>
 
 <span class="k">[theme]</span>
-<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"gruvbox"</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;gruvbox&quot;</span>
 </code></pre></div>
 <p><code>$IKE_CONFIG_DIR</code> relocates the user layer if you keep your dotfiles
 elsewhere.</p>
@@ -2004,9 +2004,9 @@ command with no binding at all — palette-only commands, your tool panes — is
 listed at the end so it can be bound.</p>
 <h3 id="by-hand">By hand<a class="headerlink" href="#by-hand" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="k">[keymap.bindings]</span>
-<span class="s2">"cmd+7"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"editor.commentLine"</span>
-<span class="s2">"ctrl+shift+k"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"editor.duplicateLine"</span>
-<span class="s2">"cmd+d"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">""</span><span class="w">                          </span><span class="c1"># unbind</span>
+<span class="s2">&quot;cmd+7&quot;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;editor.commentLine&quot;</span>
+<span class="s2">&quot;ctrl+shift+k&quot;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;editor.duplicateLine&quot;</span>
+<span class="s2">&quot;cmd+d&quot;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;&quot;</span><span class="w">                          </span><span class="c1"># unbind</span>
 </code></pre></div>
 <p>The key is the chord, the value the command ID; an empty value unbinds. The
 <a href="../../reference/commands/">commands reference</a> lists every ID, including the
@@ -2035,7 +2035,7 @@ ex-commands — are the editor's own and are not part of the keymap layer.
 <h2 id="themes">Themes<a class="headerlink" href="#themes" title="Permanent link">&para;</a></h2>
 <p>One setting recolours everything — syntax, file tree, chrome:</p>
 <div class="highlight"><pre><span></span><code><span class="k">[theme]</span>
-<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"tokyo-night"</span>
+<span class="n">name</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;tokyo-night&quot;</span>
 </code></pre></div>
 <p><img alt="IKE with the monokai-pro theme — the one every screenshot in this documentation uses" src="../../screenshots/monokai-pro.png" /></p>
 <p>Twenty-eight themes ship with IKE: <code>default</code>, <code>tokyo-night</code>, <code>nord</code>, <code>gruvbox</code>,
@@ -2094,9 +2094,9 @@ token in use. <code>(derived)</code> marks a slot with no token of its own.</p>
 tells you whether the colour comes from the theme or from your config.</p>
 <p>Overrides live under <code>[theme.captures]</code> and are written at user scope:</p>
 <div class="highlight"><pre><span></span><code><span class="k">[theme.captures]</span>
-<span class="n">comment</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"#7f8c98"</span>
-<span class="s2">"keyword.control"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"magenta"</span>
-<span class="s2">"rainbow.0"</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"42"</span>
+<span class="n">comment</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;#7f8c98&quot;</span>
+<span class="s2">&quot;keyword.control&quot;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;magenta&quot;</span>
+<span class="s2">&quot;rainbow.0&quot;</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;42&quot;</span>
 </code></pre></div>
 <p>A token is a hex colour (<code>#rrggbb</code> or <code>#rgb</code>), a named colour, or an ANSI
 palette index.</p>

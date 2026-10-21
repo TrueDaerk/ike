@@ -1881,13 +1881,13 @@ with no language server running — the local completion engine answers them
 independently.</p>
 <h3 id="writing-your-own">Writing your own<a class="headerlink" href="#writing-your-own" title="Permanent link">&para;</a></h3>
 <div class="highlight"><pre><span></span><code><span class="k">[[snippets]]</span>
-<span class="n">trigger</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"ifn"</span>
-<span class="n">language</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"go"</span>
-<span class="n">body</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"if $1 == nil {</span><span class="se">\\</span><span class="s2">n</span><span class="se">\\</span><span class="s2">t$0</span><span class="se">\\</span><span class="s2">n}"</span>
+<span class="n">trigger</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;ifn&quot;</span>
+<span class="n">language</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;go&quot;</span>
+<span class="n">body</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;if $1 == nil {</span><span class="se">\\</span><span class="s2">n</span><span class="se">\\</span><span class="s2">t$0</span><span class="se">\\</span><span class="s2">n}&quot;</span>
 
 <span class="k">[[snippets]]</span>
-<span class="n">trigger</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"todo"</span>
-<span class="n">body</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"TODO($1): $0"</span>
+<span class="n">trigger</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;todo&quot;</span>
+<span class="n">body</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">&quot;TODO($1): $0&quot;</span>
 </code></pre></div>
 <p><code>trigger</code> is the word you type. <code>body</code> is the template, with <code>$1</code>, <code>$2</code> … as
 placeholders and <code>$0</code> as the final cursor position. <code>language</code> restricts it to

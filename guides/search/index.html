@@ -1855,10 +1855,10 @@ matching nothing. YAML documents resolve anchors, aliases and <code>&lt;&lt;:</c
 keys the same way the yq playground does.</p>
 <h3 id="replacing-in-the-file">Replacing in the file<a class="headerlink" href="#replacing-in-the-file" title="Permanent link">&para;</a></h3>
 <p><span class="keys"><kbd class="key-command">Cmd</kbd><span>+</span><kbd class="key-r">R</kbd></span> opens replace, or use vim's substitute directly:</p>
-<div class="highlight"><pre><span></span><code>:s/old/new/           " this line, first match
-:%s/old/new/g         " whole file, every match
-:'&lt;,'&gt;s/old/new/g     " the visual selection
-:s/old/new/gc         " confirm each match interactively
+<div class="highlight"><pre><span></span><code>:s/old/new/           &quot; this line, first match
+:%s/old/new/g         &quot; whole file, every match
+:&#39;&lt;,&#39;&gt;s/old/new/g     &quot; the visual selection
+:s/old/new/gc         &quot; confirm each match interactively
 </code></pre></div>
 <p>The <code>c</code> flag turns the substitution into a walk: each match is shown in turn
 and you accept or skip it. <code>\v</code> switches the pattern to a fuller regex
