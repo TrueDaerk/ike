@@ -6,7 +6,9 @@ import "ike/internal/pane"
 // editor's normal mode "@" floats the file-only finder over the editor; the
 // read-only list/view tool windows have no meaning of their own for the key,
 // so it opens the same finder over the panel, and the pick lands as a tab in
-// the panel's pane rather than in some other editor.
+// the panel's pane rather than in some other editor. The hex view joins them
+// in its NORMAL navigation state (#3026); while it takes typed input "@"
+// stays a byte / query character.
 
 // panelAtFinder reports whether "@" opens the file finder over the focused
 // tool panel: the panel is one of the list/view windows without an "@"
@@ -29,6 +31,10 @@ func (m Model) panelAtFinder() bool {
 		return !inst.LineInputOpen()
 	case pane.KindStructure, pane.KindTests, pane.KindDoctor, pane.KindLSPDoctor:
 		return true
+	case pane.KindHex:
+		// The hex view takes typed input in EDIT mode (#3026): "@" is a
+		// byte while inserting, query text in the search line.
+		return !inst.Hex().TakesText()
 	}
 	return false
 }

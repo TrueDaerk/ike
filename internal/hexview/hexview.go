@@ -182,6 +182,9 @@ func (m *Model) Matches() []int64 {
 // Searching reports whether the search line is open (tests).
 func (m *Model) Searching() bool { return m.search.Open }
 
+// SearchQuery returns the search line's query text (tests).
+func (m *Model) SearchQuery() string { return m.search.Text }
+
 // Close releases the file handle. A zero-value model (after a tab detach
 // moved the live one) holds nothing and releases nothing.
 func (m *Model) Close() {
@@ -627,6 +630,12 @@ func (m *Model) redoEdit() {
 // keymap layer and its global single-key meanings, as for an editor in
 // insert mode.
 func (m *Model) Capturing() bool { return m.col == colText && m.inserting }
+
+// TakesText reports whether a typed character is input for the viewer
+// rather than a free key (#3026): text insertion (Capturing), the open
+// search line, or the copy menu. Outside those, in NORMAL navigation, the
+// app may give a key like "@" a meaning of its own.
+func (m *Model) TakesText() bool { return m.Capturing() || m.search.Open || m.copyMenu }
 
 // Dirty reports whether the pane holds edits not yet written to disk.
 func (m *Model) Dirty() bool { return len(m.overlay) > 0 }
