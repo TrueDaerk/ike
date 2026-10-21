@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked and frecency-boosted with a "did you mean" fallback over aliases, keybind labels and menu paths, "@" finds files with the hump matcher, ranked by tier, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself; a pick of a bound command toasts its chord, a third pick of an unbound one offers a key.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-09-22T12:00:00Z
+timestamp: 2026-10-21T12:00:00Z
 ---
 
 # Command Palette
@@ -66,6 +66,17 @@ Four entry points, all from a non-capturing context:
   *anchored* over the editor pane via `OpenAnchored(cx, '@', x, y, w)`. The root
   composites it with `overlay.Place` at the pane's interior top-left rather than
   `overlay.Center`.
+- **`@` in a tool panel** (#3025) — the same anchored file-only finder floats
+  over a read-only list/view tool window that has no use for the key: Agent
+  Trace, Complexity, Problems, Structure, Usages, Breakpoints, Test Results,
+  Xdebug / LSP Doctor, Dependencies, Time and Usage (`panelAtFinder` in
+  `internal/app/panelfinder.go`). The pick lands as a **new tab in that
+  panel's pane**: the pane converts into a tab host in place (`ensureTabHost`,
+  the panel stays its first tab), the file opens there — skipping the
+  cross-pane dedupe — and is focused. `@` stays text wherever an input holds
+  the keyboard (an open search line / filter row / prompt / picker, the
+  terminal, an editor in insert mode), and panels with composers or consoles
+  of their own (VCS, Issues, HTTP, DOM, Debug, data viewers) never open it.
 - **`project.goToFile`** (default `cmd+shift+o`, or from the palette itself) —
   opens the **centered** palette locked to the `@` file mode via
   `OpenLocked(cx, '@')`, so go-to-file works from any context, not just an

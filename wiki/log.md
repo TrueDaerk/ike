@@ -1,5 +1,14 @@
 # Log
 
+## 2026-10-21 (@ file finder from tool panels, #3025)
+
+- [Command palette](/architecture/command-palette.md): `@` in a read-only
+  tool panel (Agent Trace, Complexity, Problems, Structure, …) with no open
+  input floats the file-only finder over the panel; the pick opens as a new
+  tab in the panel's pane, which converts into a tab host. Editor behavior is
+  unchanged; `@` in an open panel input, the terminal or insert mode stays
+  text.
+
 ## 2026-10-21 (install prettier from Settings and on first reformat, #3023)
 
 - [Formatter registry](/architecture/format.md): a reformat of JSON, JS/TS,

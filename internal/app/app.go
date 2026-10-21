@@ -243,6 +243,14 @@ type Model struct {
 	// command is queued and consumed by the first viewer open that follows
 	// (takeViewerTabHost); "" restores the split behaviour.
 	viewerTabHost string
+	// panelFinderHost is the tool panel the open anchored "@" finder was
+	// opened from (#3025); its pick lands as a tab in that panel's pane.
+	// "" while the finder belongs to an editor or is closed.
+	panelFinderHost string
+	// fileTabHost forces the pane a plain file open lands in (#3025),
+	// overriding fileEditorKey and the cross-pane dedupe for exactly one
+	// open (openPathMode consumes it).
+	fileTabHost string
 	// htmlSourceNav marks an open that targets a source position — a jump
 	// to a line (openPathAt) — which lands an HTML file in Source view
 	// whatever preview.html_open_mode says (#2766).
@@ -8470,6 +8478,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.openDiffPane(left, msg.Path)
 			return m, nil
 		}
+		// A pick from the "@" finder opened over a tool panel (#3025) lands
+		// as a tab in that panel's pane, converting it into a tab host.
+		m.routePanelFinderPick()
 		// A palette pick opens where the user is working: a file lands in the
 		// focused pane's tab list, and so does a viewer file — the '@' finder
 		// on a .duckdb opens the data viewer as a tab in the focused pane
@@ -9730,6 +9741,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd := m.palette.Update(msg)
 			m.recordPaletteDismissal()
 			m.recordPalettePick()
+			if !m.palette.IsOpen() && cmd == nil {
+				m.panelFinderHost = "" // dismissed: no pick to route (#3025)
+			}
 			if !m.palette.IsOpen() && cmd == nil && m.diffPick != 0 {
 				// The picker was dismissed mid diff.files flow (#60): abandon
 				// the pending picks so a later "@" open is a plain file open.
@@ -10274,6 +10288,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.openFilePaletteAnchored()
 			return m, nil
 		}
+		// The same finder floats over a tool panel that has no use for "@"
+		// (#3025); the pick opens as a tab in that panel's pane.
+		if keys == "@" && m.panelAtFinder() {
+			m.openPanelFilePalette()
+			return m, nil
+		}
 		// A find/replace field open in the focused editor owns alt+enter (#2600):
 		// there the chord inserts a line break into the pattern / replacement.
 		// It has to be claimed ahead of the keymap layer, which binds alt+enter
@@ -10474,15 +10494,22 @@ func (m Model) openPathMode(path string, newPane, forceEditor bool) (tea.Model, 
 	}
 	var cmds []tea.Cmd
 	if h, ok := m.reg.ResolveHandler(path, readHead(path)); ok && !forceEditor {
+		m.fileTabHost = "" // a viewer follows viewerTabHost instead (#3025)
 		cmds = append(cmds, h.Open(m.host, path))
 	} else {
 		m.viewerTabHost = "" // no handler, so no viewer open to honour it (#1825)
 		key := m.fileEditorKey()
+		forced := m.fileTabHost != "" && m.activeWS().Panes.Get(m.fileTabHost) != nil
+		if forced {
+			key = m.fileTabHost // the "@" finder's panel pane (#3025)
+		}
+		m.fileTabHost = ""
 		// A file already open in ANY editor pane focuses that pane's tab
 		// instead of opening a duplicate in the current pane (#930) — the
 		// #272 same-pane dedupe extended across panes, like re-opened diffs
-		// (#509). An explicit new-pane open keeps its meaning.
-		if !newPane {
+		// (#509). An explicit new-pane open keeps its meaning, and so does a
+		// forced panel-pane open (#3025).
+		if !newPane && !forced {
 			if k := m.editorWithFile(path); k != "" {
 				key = k
 			}
@@ -11096,6 +11123,7 @@ func (m *Model) openPalette() {
 // focused editor pane (its top-left interior), falling back to the centered
 // palette if the pane has no computed rectangle yet.
 func (m *Model) openFilePaletteAnchored() {
+	m.panelFinderHost = ""
 	m.palette.SetSize(m.width, m.height)
 	x, y, w, ok := m.paneAnchor()
 	if !ok {
@@ -12874,6 +12902,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 		if msg.action == mousePress {
 			if !inRect(msg.X, msg.Y, bx, by, lipgloss.Width(v), lipgloss.Height(v)) {
 				m.palette.Close()
+				m.panelFinderHost = "" // dismissed: no pick to route (#3025)
 				return m, nil
 			}
 			// A left press inside the box hits the row layout (#820): rows
