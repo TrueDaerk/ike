@@ -64,6 +64,10 @@ type Edit struct {
 // settings. Text-based providers read Lines; the LSP provider reads only Path
 // (the server holds the synced document).
 type Request struct {
+	// Path is the buffer's file. For an unsaved buffer with a known language
+	// (#3029) it is a synthetic name in the project root carrying the
+	// language's extension — context for tools that infer their parser from
+	// ${FILE} (prettier --stdin-filepath); nothing ever reads or writes it.
 	Path     string
 	Language string // language id (lang.Language.ID), "" when unknown
 	Lines    []string
@@ -100,6 +104,12 @@ type Provider struct {
 
 	// Tier places the provider in the resolution chain.
 	Tier Tier
+
+	// NeedsFile marks a provider that cannot serve a buffer without a real
+	// file (the LSP tier: the server formats its open document, and an
+	// unsaved buffer has none). Resolution skips it for such buffers, as if
+	// it were unavailable (#3029).
+	NeedsFile bool
 
 	// Available reports whether the provider can format path right now
 	// (binary on PATH, ready server with the capability). Nil means always.
@@ -140,8 +150,12 @@ func (p Provider) serves(langID string) bool {
 	return false
 }
 
-// available reports whether the provider can run for path right now.
-func (p Provider) available(path string) bool {
+// available reports whether the provider can run for path right now;
+// fileBacked is false for an unsaved buffer's synthetic path.
+func (p Provider) available(path string, fileBacked bool) bool {
+	if p.NeedsFile && !fileBacked {
+		return false
+	}
 	return p.Format != nil && (p.Available == nil || p.Available(path))
 }
 
@@ -187,8 +201,15 @@ func chain(langID string) []Provider {
 // provider in tier order. ok is false when no provider can format the buffer
 // — the caller reports "no formatter for <language>" instead of a no-op.
 func Resolve(langID, path string) (Provider, bool) {
+	return ResolveBuffer(langID, path, true)
+}
+
+// ResolveBuffer is Resolve for a buffer that may have no file (#3029):
+// with fileBacked false, path is a synthetic name and providers that need a
+// real file are skipped — the chain falls through to the next one.
+func ResolveBuffer(langID, path string, fileBacked bool) (Provider, bool) {
 	for _, p := range chain(langID) {
-		if p.available(path) {
+		if p.available(path, fileBacked) {
 			return p, true
 		}
 	}
@@ -201,9 +222,15 @@ func Resolve(langID, path string) (Provider, bool) {
 // (#1401). wholeFileOnly reports the consolation case: providers exist for
 // the language, but none of the available ones does ranges.
 func ResolveRange(langID, path string) (p Provider, ok, wholeFileOnly bool) {
+	return ResolveRangeBuffer(langID, path, true)
+}
+
+// ResolveRangeBuffer is ResolveRange for a buffer that may have no file, with
+// ResolveBuffer's fileBacked semantics.
+func ResolveRangeBuffer(langID, path string, fileBacked bool) (p Provider, ok, wholeFileOnly bool) {
 	any := false
 	for _, c := range chain(langID) {
-		if !c.available(path) {
+		if !c.available(path, fileBacked) {
 			continue
 		}
 		any = true

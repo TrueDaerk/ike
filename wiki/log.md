@@ -1,5 +1,15 @@
 # Log
 
+## 2026-10-21 (reformat unsaved buffers with a known language, #3029)
+
+- [Formatter registry](/architecture/format.md): Reformat File / Selection
+  work on a file-less buffer typed via "Treat Buffer as …". External tools
+  get a synthetic project-root `${FILE}` with the language's extension
+  (never created on disk); providers marked `NeedsFile` (the LSP tier) are
+  skipped so the chain falls through; the result applies by view key as one
+  undo unit. An untyped buffer says a language must be set first. The
+  prettier install offer covers unsaved buffers too.
+
 ## 2026-10-21 (@ file finder from the hex view, #3026)
 
 - [Hex viewer](/architecture/hex-viewer.md): `@` in NORMAL navigation floats

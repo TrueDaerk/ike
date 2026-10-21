@@ -3,15 +3,18 @@ package app
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/editor"
 	"ike/internal/format"
 	"ike/internal/host"
 	"ike/internal/lang"
 	"ike/internal/largefile"
+	"ike/internal/pane"
 	ilsp "ike/internal/lsp"
 	"ike/internal/safego"
 )
@@ -39,13 +42,14 @@ func (m *Model) reformat(ranged, offer bool) tea.Cmd {
 	if ed == nil {
 		return nil
 	}
-	path := ed.Path()
-	if path == "" {
-		m.host.Notify(host.Info, "reformat needs a file-backed buffer")
-		return nil
-	}
 	if ed.FeatureOff(largefile.FeatureFormat) {
 		m.host.Notify(host.Info, "large file: formatting is off — Force Code Insight re-enables it")
+		return nil
+	}
+	root, _ := os.Getwd() // project root: external tools run with it as cwd
+	path, fileBacked, ok := reformatPath(ed.Path(), ed.LangPath(), root)
+	if !ok {
+		m.host.Notify(host.Info, "reformat: no language set — choose a language for this buffer first")
 		return nil
 	}
 	langID := ""
@@ -53,13 +57,18 @@ func (m *Model) reformat(ranged, offer bool) tea.Cmd {
 	if l, ok := lang.ByPath(path); ok {
 		langID, langName = l.ID, l.ID
 	}
-	root, _ := os.Getwd() // project root: external tools run with it as cwd
 	req := format.Request{
 		Path:     path,
 		Language: langID,
 		Lines:    strings.Split(ed.Text(), "\n"),
 		Options:  ed.FormatOptions(),
 		Root:     root,
+	}
+	// An unsaved buffer's edits route back by its view key — its synthetic
+	// path names no view (#3029).
+	bufferKey := ""
+	if !fileBacked {
+		bufferKey = ed.ParseKey()
 	}
 
 	start, end, sel := ed.SelectionSpan()
@@ -72,10 +81,10 @@ func (m *Model) reformat(ranged, offer bool) tea.Cmd {
 		// Reformat Selected (#1603): the plain reformat command is
 		// context-sensitive — an active visual selection formats only the
 		// selected range, JetBrains' Reformat Code semantics.
-		prov, ok, wholeFileOnly := format.ResolveRange(langID, path)
+		prov, ok, wholeFileOnly := format.ResolveRangeBuffer(langID, path, fileBacked)
 		if ok {
 			s, e := format.Pos{Line: start.Line, Col: start.Col}, format.Pos{Line: end.Line, Col: end.Col}
-			return m.runReformat(prov, req, func(ctx context.Context) (format.Result, error) {
+			return m.runReformat(prov, req, bufferKey, func(ctx context.Context) (format.Result, error) {
 				return prov.FormatRange(ctx, req, s, e)
 			})
 		}
@@ -97,23 +106,42 @@ func (m *Model) reformat(ranged, offer bool) tea.Cmd {
 	if offer && m.prettierOfferApplies(langID) {
 		// Only the whole-file path asks (#3023): a selection served by a range
 		// formatter never reaches prettier, which formats no line ranges.
-		m.openPrettierOffer(prettierReformat{path: path, ranged: ranged})
+		m.openPrettierOffer(prettierReformat{key: ed.ParseKey(), path: ed.Path(), ranged: ranged})
 		return nil
 	}
-	prov, ok := format.Resolve(langID, path)
+	prov, ok := format.ResolveBuffer(langID, path, fileBacked)
 	if !ok {
 		m.host.Notify(host.Warn, "no formatter for "+langName)
 		return nil
 	}
-	return m.runReformat(prov, req, func(ctx context.Context) (format.Result, error) {
+	return m.runReformat(prov, req, bufferKey, func(ctx context.Context) (format.Result, error) {
 		return prov.Format(ctx, req)
 	})
 }
 
+// reformatPath picks the path a reformat resolves and hands its formatters
+// (#3029): the buffer's file when it has one; for an unsaved buffer with a
+// known language a synthetic name in the project root carrying the language's
+// extension (from the editor's language path), so ${FILE}-reading tools pick
+// the right parser and still find project config. fileBacked is false for
+// the synthetic case; ok is false for an unsaved buffer without a language.
+func reformatPath(path, langPath, root string) (fmtPath string, fileBacked, ok bool) {
+	if path != "" {
+		return path, true, true
+	}
+	if langPath == "" {
+		return "", false, false
+	}
+	// LangPath is never a real path (editor/langoverride.go): only its base
+	// name — the extension, or a Dockerfile-style name — is kept.
+	return filepath.Join(root, filepath.Base(langPath)), false, true
+}
+
 // runReformat executes the resolved provider off the Update loop and reports
-// the outcome: edits as a FormatEditsMsg, the source as a status toast
+// the outcome: edits as a FormatEditsMsg (or, for an unsaved buffer, a
+// reformatBufferEditsMsg keyed by bufferKey), the source as a status toast
 // (`reformat: gopls`), failures as an error toast with the buffer untouched.
-func (m *Model) runReformat(prov format.Provider, req format.Request, run func(ctx context.Context) (format.Result, error)) tea.Cmd {
+func (m *Model) runReformat(prov format.Provider, req format.Request, bufferKey string, run func(ctx context.Context) (format.Result, error)) tea.Cmd {
 	name := prov.DisplayName(req.Path)
 	h := m.host
 	return func() tea.Msg {
@@ -138,9 +166,49 @@ func (m *Model) runReformat(prov format.Provider, req format.Request, run func(c
 					Text: e.Text,
 				}
 			}
-			h.Send(ilsp.FormatEditsMsg{Path: req.Path, Edits: out})
+			if bufferKey != "" {
+				h.Send(reformatBufferEditsMsg{key: bufferKey, edits: out})
+			} else {
+				h.Send(ilsp.FormatEditsMsg{Path: req.Path, Edits: out})
+			}
 			h.Send(ilsp.ServerStatusMsg{Text: "reformat: " + name, Kind: ilsp.ServerEventInfo})
 		})
 		return nil
 	}
+}
+
+// reformatBufferEditsMsg carries an unsaved buffer's reformat result (#3029)
+// to the view answering to key (editor.ParseKey), the route a path-keyed
+// FormatEditsMsg cannot take for a buffer with no file.
+type reformatBufferEditsMsg struct {
+	key   string
+	edits []ilsp.FormatEdit
+}
+
+// applyBufferReformat applies an unsaved buffer's reformat result as one undo
+// unit through exactly one view, like the FormatEditsMsg route. A buffer that
+// was saved or closed meanwhile no longer answers to the key and drops it.
+func (m *Model) applyBufferReformat(msg reformatBufferEditsMsg) tea.Cmd {
+	for _, key := range m.activeWS().Panes.Keys() {
+		inst := m.activeWS().Panes.Get(key)
+		if inst == nil || inst.Kind() != pane.KindEditor {
+			continue
+		}
+		for _, ed := range inst.Editors() {
+			if ed.HasFile() || ed.ParseKey() != msg.key {
+				continue
+			}
+			edits := make([]editor.TextEdit, len(msg.edits))
+			for i, e := range msg.edits {
+				edits[i] = editor.TextEdit{
+					StartLine: e.StartLine, StartCol: e.StartCol,
+					EndLine: e.EndLine, EndCol: e.EndCol,
+					Text: e.Text,
+				}
+			}
+			ed.ApplyTextEdits(edits)
+			return ed.ReparseEdits()
+		}
+	}
+	return nil
 }

@@ -193,3 +193,33 @@ func TestEditsForResultPassthrough(t *testing.T) {
 		t.Fatalf("got %+v", got)
 	}
 }
+
+// TestResolveBufferSkipsNeedsFile: a provider that needs a real file (the
+// LSP tier) serves saved files as before but is skipped for an unsaved
+// buffer, which falls through to the next provider (#3029).
+func TestResolveBufferSkipsNeedsFile(t *testing.T) {
+	ResetForTest()
+	t.Cleanup(ResetForTest)
+	lsp := provider("lsp", TierLSP)
+	lsp.NeedsFile = true
+	lsp.FormatRange = func(ctx context.Context, req Request, s, e Pos) (Result, error) { return Result{}, nil }
+	Register(lsp)
+
+	if p, ok := ResolveBuffer("json", "/p/a.json", true); !ok || p.Name != "lsp" {
+		t.Fatalf("a saved file keeps the LSP tier, got %q ok=%v", p.Name, ok)
+	}
+	if _, ok := ResolveBuffer("json", "/p/buffer.json", false); ok {
+		t.Fatal("an unsaved buffer must not resolve a file-needing provider")
+	}
+	if _, ok, whole := ResolveRangeBuffer("json", "/p/buffer.json", false); ok || whole {
+		t.Fatalf("range resolution must skip it too, ok=%v wholeFileOnly=%v", ok, whole)
+	}
+
+	Register(provider("builtin", TierBuiltin, "json"))
+	if p, ok := ResolveBuffer("json", "/p/buffer.json", false); !ok || p.Name != "builtin" {
+		t.Fatalf("an unsaved buffer must fall through to the built-in, got %q ok=%v", p.Name, ok)
+	}
+	if p, ok := Resolve("json", "/p/a.json"); !ok || p.Name != "lsp" {
+		t.Fatalf("Resolve stays file-backed, got %q ok=%v", p.Name, ok)
+	}
+}

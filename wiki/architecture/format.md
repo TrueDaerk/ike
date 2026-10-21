@@ -97,6 +97,37 @@ capability, `NameFor` reports the server binary's name for the status toast,
 and its `Format` reads only `Request.Path` — the manager owns the synced
 document text and the UTF-16 conversion, exactly as before.
 
+## Unsaved buffers (#3029)
+
+A file-less buffer whose language is known — through
+["Treat Buffer as …"](/architecture/languages.md), whose synthetic language
+path (`editor.Model.LangPath()`) drives highlighting — reformats like a saved
+file of that type. `reformatPath` (`internal/app/reformat.go`) builds a
+**synthetic path**: the project root (cwd) joined with the language path's
+base name (`buffer.md`, `buffer.json`, `Dockerfile`). It resolves the
+language and the chain, and external tools see it as `${FILE}` — so
+`prettier --stdin-filepath` infers the parser from the extension and still
+finds the project's `.prettierrc` / `biome.json`. Nothing reads or writes
+that path: stdin tools get the buffer on stdin, temp-file tools keep
+formatting their own temp copy (which carries the extension).
+
+Providers that cannot serve a buffer without a real file set
+`Provider.NeedsFile` — the LSP tier does, because the server formats its
+open document and an unsaved buffer has none. `ResolveBuffer` /
+`ResolveRangeBuffer` (called with `fileBacked = false`) skip such providers
+as if they were unavailable, so the chain falls through to the next one, or
+ends in the usual "no formatter for `<language>`" notice. `Resolve` /
+`ResolveRange` stay the file-backed variants (format-on-save, `Has`).
+
+The result cannot route by path, so it travels as a
+`reformatBufferEditsMsg` keyed by the view's `editor.Model.ParseKey()` and
+lands as the same single undo unit through one view (cursor clamped,
+`ReparseEdits`). A buffer saved or closed while the tool ran drops the
+result. A file-less buffer **without** a language gets "reformat: no language
+set — choose a language for this buffer first". The #3023 prettier offer
+applies unchanged; its interrupted request remembers the buffer by parse
+key, so the re-run after an install finds an unsaved buffer again.
+
 ## External command formatters (#1402)
 
 `format.External` (external.go) is the generic ecosystem-CLI invoker: a
