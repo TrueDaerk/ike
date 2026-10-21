@@ -7,8 +7,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"ike/internal/pane"
 	"ike/internal/palette"
+	"ike/internal/pane"
 )
 
 // panelfinder_test.go covers the "@" file finder from a tool panel (#3025):
