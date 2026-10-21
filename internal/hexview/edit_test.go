@@ -253,3 +253,31 @@ func TestPasteOverwritesInInsertion(t *testing.T) {
 		t.Fatalf("paste must overwrite at the cursor, got % x cursor %d", got[:3], m.Cursor())
 	}
 }
+
+// TestTakesText (#3026): the viewer reports typed characters as its input in
+// text insertion, the open search line and the copy menu, and as free keys in
+// NORMAL navigation — including the hex column, whose digits are edits but
+// whose other characters ("@") mean nothing to it.
+func TestTakesText(t *testing.T) {
+	cases := []struct {
+		name string
+		keys []string
+		want bool
+	}{
+		{"normal hex column", nil, false},
+		{"text column navigating", []string{"tab"}, false},
+		{"text insertion", []string{"i"}, true},
+		{"insertion left with esc", []string{"i", "esc"}, false},
+		{"search line open", []string{"/"}, true},
+		{"copy menu open", []string{"y"}, true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newModel(t, seq())
+			key(m, tc.keys...)
+			if got := m.TakesText(); got != tc.want {
+				t.Fatalf("TakesText() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}

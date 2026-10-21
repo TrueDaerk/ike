@@ -1,5 +1,14 @@
 # Log
 
+## 2026-10-21 (@ file finder from the hex view, #3026)
+
+- [Hex viewer](/architecture/hex-viewer.md): `@` in NORMAL navigation floats
+  the file-only finder over the viewer and the pick opens as a tab in its
+  pane (the #3025 tool-panel route); in text insertion it is written as a
+  byte, in the search line it is query text (`Model.TakesText`).
+- [Command palette](/architecture/command-palette.md): the hex view joins
+  the panes the tool-panel `@` finder supports.
+
 ## 2026-10-21 (@ file finder from tool panels, #3025)
 
 - [Command palette](/architecture/command-palette.md): `@` in a read-only

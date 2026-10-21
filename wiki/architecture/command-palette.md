@@ -70,7 +70,9 @@ Four entry points, all from a non-capturing context:
   over a read-only list/view tool window that has no use for the key: Agent
   Trace, Complexity, Problems, Structure, Usages, Breakpoints, Test Results,
   Xdebug / LSP Doctor, Dependencies, Time and Usage (`panelAtFinder` in
-  `internal/app/panelfinder.go`). The pick lands as a **new tab in that
+  `internal/app/panelfinder.go`) — and the hex view in NORMAL navigation
+  (#3026; in text insertion `@` is a byte, see
+  [hex viewer](/architecture/hex-viewer.md)). The pick lands as a **new tab in that
   panel's pane**: the pane converts into a tab host in place (`ensureTabHost`,
   the panel stays its first tab), the file opens there — skipping the
   cross-pane dedupe — and is focused. `@` stays text wherever an input holds

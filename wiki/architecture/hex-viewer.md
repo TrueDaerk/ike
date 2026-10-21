@@ -4,7 +4,7 @@ title: Hex Viewer
 description: "#2420 — binary files open as offset|hex|ASCII over windowed reads: byte cursor with inspector row, range selection with hex/raw copy, string and byte-sequence search, overwrite editing in the hex and text columns with in-place save (#2876), the files.binary_open routing setting and the Open File As… chooser."
 resource: internal/hexview
 tags: [architecture, hex, binary, pane, viewer, openas, editing]
-timestamp: 2026-10-19T00:00:00Z
+timestamp: 2026-10-21T12:00:00Z
 ---
 
 # Hex Viewer (#2420)
@@ -116,6 +116,15 @@ counts the state as text-capturing (`Model.Capturing`, read by
 `editorCapturing`), so plain keys bypass the keymap layer, `?` help, the
 esc-esc palette and `q`, exactly as for an editor in insert mode. A paste in
 text insertion overwrites like typing.
+
+**`@` file finder (#3026).** In NORMAL navigation (either column, no
+insertion, search line or copy menu open) `@` floats the file-only finder
+over the viewer, as in an editor's normal mode; the pick opens as a new tab
+in the viewer's pane — the tool-panel route of the
+[command palette](/architecture/command-palette.md) (`panelAtFinder`). While
+the viewer takes typed input (`Model.TakesText`: text insertion, the search
+line, the copy menu) `@` stays input — a byte while inserting, query text in
+the search line.
 
 - **Hex column:** the first nibble replaces the cursor byte's high nibble
   at once (the half-edit shows: `12` → `a2`) and the cursor stays; the
