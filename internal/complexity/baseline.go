@@ -71,8 +71,9 @@ func ParseStatus(s string) (Status, bool) {
 // BaselineFileName is the file's name inside the project's .ike directory.
 const BaselineFileName = "complexity-baseline.json"
 
-// BaselineVersion is the format version the file carries.
-const BaselineVersion = 1
+// BaselineVersion is the format version the file carries: 2 since the
+// hidden set joined (#3031, hidden.go); a version 1 file still loads.
+const BaselineVersion = 2
 
 // BaselinePath is the project file: <root>/.ike/complexity-baseline.json.
 func BaselinePath(root string) string {
@@ -105,6 +106,9 @@ type Baseline struct {
 	CCNWarn       int     `json:"ccn_warn"`
 	CognitiveWarn int     `json:"cognitive_warn"`
 	Accepted      []Entry `json:"accepted"`
+	// Hidden is the hidden set (#3031, hidden.go), nil while nothing is
+	// hidden so a plain baseline keeps its shape.
+	Hidden *HiddenSet `json:"hidden,omitempty"`
 	// index maps a key to its position in Accepted, built on the first
 	// lookup and dropped by every mutation: a project index stamps tens of
 	// thousands of units against a thousand entries.
@@ -132,13 +136,19 @@ func LoadBaseline(path string) (*Baseline, error) {
 	if err := json.Unmarshal(data, &b); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	if b.Version != BaselineVersion {
+	if b.Version < 1 || b.Version > BaselineVersion {
 		return nil, fmt.Errorf("%s: unsupported version %d (this build writes %d)", path, b.Version, BaselineVersion)
 	}
 	for i, e := range b.Accepted {
 		if e.File == "" || e.Function == "" || e.Ordinal < 0 {
 			return nil, fmt.Errorf("%s: accepted[%d] needs a file, a function and an ordinal ≥ 0", path, i)
 		}
+	}
+	if err := b.Hidden.validate(path); err != nil {
+		return nil, err
+	}
+	if b.Hidden.Len() == 0 {
+		b.Hidden = nil
 	}
 	if b.Accepted == nil {
 		b.Accepted = []Entry{}
@@ -152,6 +162,11 @@ func LoadBaseline(path string) (*Baseline, error) {
 func (b *Baseline) Save(path string) error {
 	if b.Version == 0 {
 		b.Version = BaselineVersion
+	}
+	if b.Hidden.Len() == 0 {
+		b.Hidden = nil
+	} else if b.Version < BaselineVersion {
+		b.Version = BaselineVersion // the hidden section needs the newer reader
 	}
 	if b.Accepted == nil {
 		b.Accepted = []Entry{}

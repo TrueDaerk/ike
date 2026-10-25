@@ -40,6 +40,7 @@ secrets — are documented together, with screenshots, in
 | Trim trailing whitespace | `editor.trim_trailing_whitespace` | boolean | `true` | user | Strip line-end whitespace on save |
 | Format on save | `editor.format_on_save` | boolean | `false` | user | Run LSP document formatting before every manual save (autosave stays raw) |
 | Organize imports on save | `editor.organize_imports_on_save` | boolean | `false` | user | Apply the server's organize-imports action before every manual save (autosave stays raw) |
+| Offer to install prettier | `editor.prettier_install_prompt` | boolean | `true` | user | Ask to install prettier (npm install -g prettier) when a reformat of JSON, JS/TS, CSS, HTML, YAML, Ansible or Markdown finds no formatter tool installed; answering no turns this off for every project. Settings → Formatters installs prettier directly and resets a declined offer |
 | Insert final newline | `editor.insert_final_newline` | boolean | `true` | user | End every saved file with a newline |
 | EditorConfig | `editor.editorconfig` | boolean | `true` | user | Honour .editorconfig files per buffer |
 | Line numbers | `editor.line_numbers` | boolean | `true` | user | Show the line-number gutter |

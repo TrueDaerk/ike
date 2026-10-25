@@ -17,7 +17,10 @@
 // 'm' paints them in the editor once (#2947); 'i' accepts the selected
 // function (or a group's over-threshold functions) into the accepted-debt
 // baseline, or drops it again (#2958, baseline.go), and `baseline:`
-// filters by that status.
+// filters by that status; 'x' hides the selected function (or a group's /
+// tree node's file through complexity.exclude) from every surface, 'X' the
+// selected row's file, 'H' toggles the `hidden:yes` view that lists the
+// hidden functions so one can be un-hidden (#3031, hidden.go).
 //
 // The pane is a pure consumer: the root model hands it the index's immutable
 // View via Set on open and on every generation change, and tells it where
@@ -207,6 +210,7 @@ var Schema = filterexpr.Schema{Fields: []filterexpr.Field{
 	{Name: "test", Values: []string{"yes", "no"}, Doc: "test: no hides test files, test: yes keeps only them"},
 	{Name: "baseline", Values: []string{"new", "accepted", "worsened"}, Doc: "baseline: keeps functions the accepted-debt baseline classifies as new, accepted or worsened (groups: with such a member)"},
 	{Name: "pinned", Aliases: []string{"pin"}, Values: []string{"yes", "no"}, Doc: "pinned: yes keeps the pinned functions (groups: with a pinned member), pinned: no the rest"},
+	{Name: "hidden", Values: []string{"yes", "no"}, Doc: "hidden: yes lists the hidden functions (muted, ✕) so one can be un-hidden with x, hidden: no the rest; without the term hidden functions are left out everywhere"},
 }}
 
 // Row is one function of the current tab, kept alongside the cells so the
@@ -264,6 +268,9 @@ type Row struct {
 	// Trend is set on a Trend tab row (#2962, trend.go): one commit with
 	// the project's sums; every function field is zero.
 	Trend *TrendRow
+	// Hidden marks a function the hidden set drops (#3031, hidden.go);
+	// such a row is listed only under hidden:yes.
+	Hidden bool
 }
 
 // child reports whether r is a child row of an expanded function — a site
@@ -381,6 +388,9 @@ func (r Row) cell(c Column) string {
 		name := r.Fn.Name
 		if r.Fn.Baseline == complexity.BaselineAccepted {
 			name += acceptedMark
+		}
+		if r.Hidden {
+			name += hiddenMark // #3031: shown by hidden:yes only
 		}
 		if r.Pin != nil {
 			name += pinMark
@@ -508,6 +518,11 @@ type Model struct {
 	// baseline is the accepted-debt baseline in effect (#2958,
 	// baseline.go), nil without one.
 	baseline *complexity.Baseline
+
+	// hidden is the hidden set in effect (#3031, hidden.go), nil without
+	// one; hiddenN counts the current tab's hidden functions.
+	hidden  *complexity.HiddenSet
+	hiddenN int
 
 	// hist shows the distribution row ('D', #2953, histogram.go).
 	hist bool
@@ -798,7 +813,7 @@ func (m *Model) Refresh() {
 	if r, ok := m.Selected(); ok {
 		keep = r.key()
 	}
-	all := m.markTests(m.markPins(m.population()))
+	all := m.markHidden(m.markTests(m.markPins(m.population())))
 	var sum complexity.Summer
 	for _, r := range all {
 		if r.Change == complexity.Removed || r.Gone || r.Trend != nil {
@@ -861,8 +876,9 @@ func (m *Model) population() []Row {
 	add := func(path string, fns []complexity.Function) {
 		rel, id := m.relPath(path), m.pathLang(path)
 		fns, ords := m.classify(rel, fns)
+		mask := m.hidden.Mask(rel, fns) // #3031
 		for i, fn := range fns {
-			out = append(out, Row{Path: path, Rel: rel, Lang: id, Fn: fn, Commits: m.churn[rel], Hot: m.fnHot(path, m.churn[rel], fn), Ordinal: ords[i]})
+			out = append(out, Row{Path: path, Rel: rel, Lang: id, Fn: fn, Commits: m.churn[rel], Hot: m.fnHot(path, m.churn[rel], fn), Ordinal: ords[i], Hidden: hiddenOf(mask, i)})
 		}
 	}
 	switch m.tab {
@@ -979,6 +995,7 @@ func (m *Model) matches(q filterexpr.Query, r Row) bool {
 		{"test", func(v string) bool { want, ok := testValue(v); return ok && r.Test == want }},
 		{"baseline", func(v string) bool { return baselineMatches(v, r) }},
 		{"pinned", func(v string) bool { return pinnedMatches(v, r) }},
+		{"hidden", func(v string) bool { return hiddenMatches(v, r) }},
 	}
 	for _, g := range gates {
 		if !q.KeepsAll(g.field, g.match) {
@@ -1274,6 +1291,12 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.showSites()
 	case "i":
 		return m.toggleBaseline()
+	case "x":
+		return m.toggleHide() // #3031
+	case "X":
+		return m.hideFile()
+	case "H":
+		m.ToggleHiddenView()
 	case "p":
 		return m.togglePin()
 	case "d":
@@ -1530,6 +1553,9 @@ func (m *Model) totalsText() string {
 	if t := m.baselineTotals(); t != "" {
 		parts = append(parts, t)
 	}
+	if t := m.hiddenTotals(); t != "" {
+		parts = append(parts, t) // #3031
+	}
 	if t := m.sessionTotals(); t != "" && m.tab == TabProject {
 		parts = append(parts, t)
 	}
@@ -1569,6 +1595,8 @@ func (m *Model) emptyText() string {
 		return "(complexity.enabled is off)"
 	case m.stats.Scanning && m.total == 0:
 		return "(scanning the project…)"
+	case m.ShowingHidden() && m.hiddenN == 0:
+		return "(nothing hidden on this tab — x on a row hides it, H leaves this view)"
 	case !m.filter.Empty():
 		return "(no row matches the filter)"
 	case m.Grouping() == complexity.ByClass && m.summary.Functions > 0:
@@ -1638,7 +1666,7 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 	if ci := m.layoutIndex(ColCmt); ci >= 0 {
 		cells[ci].Warn = m.th(r.Path).CommentsOver(r.Fn)
 	}
-	if r.Gone {
+	if r.Gone || r.Hidden { // a hidden row (#3031) shows muted under hidden:yes
 		for c := range cells {
 			cells[c].Warn, cells[c].Muted = false, true
 		}
@@ -1690,6 +1718,9 @@ func (m *Model) footer() string {
 		}
 	}
 	hints += m.pinFooter()
+	if m.tab != TabTrend {
+		hints += m.hiddenFooter() // #3031
+	}
 	if m.hideTests {
 		hints += " · t tests: hidden"
 	} else {

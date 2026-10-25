@@ -803,6 +803,15 @@ var jetbrainsRows = []row{
 	// …and A cancels the simplify agent's run (#3009) — the shifted twin of
 	// the pane's own 'a' that starts it; esc on the running row does the same.
 	{"A", "complexity.cancelAgent", "Cancel the complexity agent", Complexity, "Complexity agent (#3009)"},
+	// …and x ("exclude") hides the selected function — or, on a group, file
+	// or tree-directory row, the file through complexity.exclude — from every
+	// Complexity surface (#3031); X hides the row's whole file from a function
+	// row too, and H ("hidden") toggles the hidden:yes view that lists the
+	// hidden functions so one can be un-hidden with x. h itself is the tab
+	// cycle, hence the shifted letter; all three are layout-safe single keys.
+	{"x", "complexity.hide", "Hide / un-hide function or file in Complexity", Complexity, "Complexity hidden set (#3031)"},
+	{"X", "complexity.hideFile", "Hide the row's file in Complexity", Complexity, "Complexity hidden set (#3031)"},
+	{"H", "complexity.showHidden", "Show / leave hidden complexity functions", Complexity, "Complexity hidden set (#3031)"},
 	// Rerun and Stop (#1048, #1374): JetBrains' macOS Rerun (cmd+r) is taken by
 	// editor.replace, so rerun keeps the Windows-scheme F5 position with a cmd
 	// primary on darwin; stop's cmd+f2 is the macOS keymap verbatim. The ctrl

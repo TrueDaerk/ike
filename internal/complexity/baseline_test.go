@@ -27,7 +27,7 @@ func TestBaselineRoundTripSorted(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := `{
-  "version": 1,
+  "version": 2,
   "ccn_warn": 15,
   "cognitive_warn": 15,
   "accepted": [
@@ -69,7 +69,7 @@ func TestBaselineRoundTripSorted(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Version != 1 || got.CCNWarn != 15 || got.CognitiveWarn != 15 || got.Len() != 4 || got.Accepted[3].File != "z/last.go" {
+	if got.Version != BaselineVersion || got.CCNWarn != 15 || got.CognitiveWarn != 15 || got.Len() != 4 || got.Accepted[3].File != "z/last.go" {
 		t.Fatalf("loaded %+v", got)
 	}
 	// Re-accepting replaces the metrics instead of adding a second entry.
@@ -97,7 +97,7 @@ func TestLoadBaselineMissingAndMalformed(t *testing.T) {
 	}
 	cases := map[string]string{
 		"bad json":    `{"version": 1, "accepted": [`,
-		"bad version": `{"version": 2, "accepted": []}`,
+		"bad version": `{"version": 3, "accepted": []}`,
 		"no file":     `{"version": 1, "accepted": [{"function": "f", "ordinal": 0}]}`,
 		"no function": `{"version": 1, "accepted": [{"file": "a.go", "ordinal": 0}]}`,
 		"bad ordinal": `{"version": 1, "accepted": [{"file": "a.go", "function": "f", "ordinal": -1}]}`,

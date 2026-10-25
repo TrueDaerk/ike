@@ -57,11 +57,14 @@ bring their own.
 | Complexity: Export Current Tab as Markdown | `complexity.exportMarkdown` | — | — | everywhere |
 | Complexity: Diff Selected Function (Base vs Working Tree) | `complexity.functionDiff` | — | — | everywhere |
 | Complexity: Cycle Grouping (None / Class / File) | `complexity.group` | `b` | — | everywhere |
+| Complexity: Hide / Un-hide Selected Function or File | `complexity.hide` | `x` | — | everywhere |
+| Complexity: Hide Selected Row's File | `complexity.hideFile` | `shift+x` | — | everywhere |
 | Complexity: Toggle Distribution (Histogram) | `complexity.histogram` | `shift+d` | — | everywhere |
 | Complexity: Open Function at Caret in Window | `complexity.openAtCaret` | — | — | everywhere |
 | Complexity: Pin / Unpin Selected Function | `complexity.pin` | — | — | everywhere |
 | Complexity: Pin / Unpin Function at Caret | `complexity.pinAtCaret` | — | — | everywhere |
 | Complexity: Rescan Project | `complexity.refresh` | — | — | everywhere |
+| Complexity: Show / Leave Hidden Functions | `complexity.showHidden` | `shift+h` | — | everywhere |
 | Complexity: Mark Sites in Editor | `complexity.showSites` | `m` | — | everywhere |
 | Complexity: Expand / Collapse Sites | `complexity.sites` | `space` | — | everywhere |
 | Complexity | `complexity.toggle` | `cmd+alt+shift+x` | — | everywhere |

@@ -127,7 +127,7 @@ func writeTrendJSON(w io.Writer, r trendReport) error {
 	for i, p := range r.trend.Points {
 		out.Points = append(out.Points, jsonTrendPoint{
 			Sha: p.Sha, Short: p.Short, Time: p.Time.UTC().Format(time.RFC3339), Subject: p.Subject,
-			Summary: toJSONSummary(p.Summary, p.Files, r.s),
+			Summary: toJSONSummary(p.Summary, p.Files, r.s, 0),
 			Delta:   trendDelta(r.trend.Points, i),
 		})
 	}

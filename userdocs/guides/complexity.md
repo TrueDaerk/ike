@@ -326,6 +326,44 @@ with such a member).
 ▸ Accepted-debt baseline) ignores the file everywhere without deleting it.
 A malformed file is reported once and ignored.
 
+## Hiding functions and files
+
+The baseline is for debt you own but live with. Some rows are not debt at
+all: a downloaded library under `static/lib/`, a vendored helper, the
+anonymous module initialisers (`(anonymous)#2`) that carry a JavaScript
+file's whole complexity and bury the functions you wrote. Those should not
+be looked at — and **hidden** is the stronger action for them. A hidden
+function or file disappears from every Complexity surface as if it had
+never been measured: all tabs, the grid and the tree, the groups, the
+histogram, the Problems window, the exports and `ike complexity`. The
+header counts what left (`3 hidden`).
+
+- **`x` on a function row** hides that function. It is matched like a
+  baseline entry (path, name, position among same-named functions), so
+  `(anonymous)#2` hides exactly that unit and survives edits above it. The
+  entry lands in the `hidden` section of `.ike/complexity-baseline.json`
+  (format version 2; commit the file and a fresh checkout hides the same
+  set). This works whether or not the baseline setting is on.
+- **`x` on a file, group or tree row** hides the whole file — a directory
+  node in the tree hides the directory (`vendor/**`). This adds a pattern
+  to **Settings > Complexity > Excluded files** (`complexity.exclude`, in
+  the project settings), so the index stops measuring the file at once;
+  remove the pattern there to bring it back.
+- **`X` on any row** hides the row's file, from a function row too.
+- **`H`** shows the hidden functions instead — the filter term
+  `hidden:yes`, listed muted with ` ✕` — so you can un-hide one with `x`
+  without it being visible first. `H` again leaves the view. `hidden:no`
+  is the complement; without either term hidden functions are simply gone.
+
+Hiding and accepting are independent: hiding an accepted function keeps
+its baseline entry, un-hiding restores its status. The accept-all action
+and `--write-baseline` keep the hidden section when they reseed the file.
+
+Press `f1` while the window is focused: the help overlay leads with every
+key the window handles — the list, the filter row and its vocabulary, the
+Changes tab's `d` and `R`, the agent keys — including the fixed ones no
+keymap lists.
+
 ## Pinning the functions you are working on
 
 An optimisation session usually has a handful of targets. Select one in the
@@ -494,7 +532,7 @@ measure by default; a change recomputes the open tab.
 ## Command line
 
 ```
-ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json | --md] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [--trend[=N]] [PATH...]
+ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json | --md] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [--show-hidden] [--trend[=N]] [PATH...]
 ```
 
 | Flag | Effect |
@@ -515,6 +553,7 @@ ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json |
 | `--churn[=DAYS]` | Add the hotspot numbers (see [Hotspots](#hotspots-complexity--change-frequency)) from the commits of the last `DAYS` days (default: `complexity.churn_days`, 90): a `COMMITS` column in the function table, `COMMITS` and `HOT` in the `--by` tables, `commits=N  hot=N` on `--brief` lines, and in the JSON `commits` per function and group, `hot` per group and `summary.churn_days`. `ike complexity --churn=30 --by file` ranks the files to simplify first. Needs a git repository (exit 2 otherwise); not combinable with `--diff`. Without the flag the output is unchanged. |
 | `--baseline[=PATH]`, `--no-baseline` | Apply the [baseline](#accepted-debt-the-baseline). The project's `.ike/complexity-baseline.json` applies **by default** when it exists; a bare `--baseline` insists on it (exit 2 when it is missing), `--baseline=PATH` reads another file (relative to the current directory), `--no-baseline` reads none. With a baseline the text table marks accepted rows `name ✓`, a line `baseline: N accepted, N worsened (<file>)` follows the summary, the summary's over-threshold count and `excess` leave accepted functions out, and the JSON gains `baseline` per function and group and `accepted` in the summary. A malformed file is exit 2. `--diff` ignores the baseline (it compares revisions, not debt). |
 | `--pins` | List only the [pinned](#pinning-the-functions-you-are-working-on) functions, with `PINNED_CCN`, `PINNED_COG`, `ΔCCN` and `ΔCOG` columns and a `pins: N pinned, N shown, N gone (<file>)` line. Without a pin file the table is empty (`pins: none`); a malformed file is exit 2. Not combinable with `--diff`, `--by` or `--brief`. Every report marks pinned rows `name ★`. |
+| `--show-hidden` | List the functions the baseline file's `hidden` section hides (see [Hiding functions and files](#hiding-functions-and-files)). By default they are left out of every project report — table, groups, `--brief`, `--md`, summary and JSON, with or without `--no-baseline` — and a line `hidden: N functions left out (.ike/complexity-baseline.json)` follows the summary (JSON: `summary.hidden`). With the flag they are listed, marked `name ✕` (JSON: `"hidden": true`). Files hidden through `complexity.exclude` are never measured either way. `--diff` and `--trend` ignore the set, as they ignore the baseline. |
 | `--write-baseline` | Write every function at or above the CCN or cognitive threshold — of the named paths, `--no-tests` respected, the row filters not — into the baseline file (the project file, or `--baseline=PATH`), replacing it, and print `baseline: N functions over threshold (CCN ≥ 15 or cog ≥ 15) written to .ike/complexity-baseline.json` instead of the report. The same file `Complexity: Accept All Over Threshold` writes in the IDE. Not combinable with `--diff` or `--no-baseline`. |
 | `--trend[=N]` | Measure the project at each of the last `N` commits (default: `complexity.trend_commits`, 30; first parent only, so a merge is one point) and print them oldest first: `COMMIT`, `DATE`, `SUBJECT`, `FUNCS`, then `CCN`, `COG`, `EXCESS`, `OVER` as `sum (Δ against the previous commit)`, and a `totals: <oldest> → <newest>: …` line — the [Trend tab](#the-trend-tab) on the command line. With paths, only files in those files and directories count; `--no-tests` and the thresholds apply. `--json` prints `{"commits": N, "points": [...]}` with the project summary fields per point. Needs a git repository (exit 2 otherwise); not combinable with `--diff`, `--by` or `--brief`. |
 

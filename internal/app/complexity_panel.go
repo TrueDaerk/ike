@@ -202,6 +202,7 @@ func (m *Model) seedComplexityPanel(p *complexitypanel.Model) {
 	c := config.Get().Complexity
 	m.setComplexityPanelThresholds(p, c)
 	p.SetBaseline(m.complexityBaseline()) // #2958
+	p.SetHidden(m.complexityHidden())     // #3031
 	p.SetPins(m.complexityPins())         // #2959
 	if v, ok := m.complexitySessionBase(); ok {
 		p.SetSessionBase(v)

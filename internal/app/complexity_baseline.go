@@ -104,6 +104,7 @@ func (m *Model) applyComplexityBaseline() {
 	m.reportComplexityBaseline()
 	if p := m.complexityPanel(); p != nil {
 		p.SetBaseline(m.complexityBaseline())
+		p.SetHidden(m.complexityHidden()) // #3031: the same file's hidden section
 	}
 	m.feedComplexityProblems(config.Get().Complexity)
 }
@@ -227,8 +228,9 @@ func (m Model) overThresholdFunctions() []complexitypanel.BaselineItem {
 	for _, path := range v.Paths() {
 		fns := v.Files[path]
 		rel, th := baselineRel(root, path), res(path)
+		mask := m.complexityHidden().Mask(rel, fns) // a hidden function (#3031) is nobody's debt
 		for i, ord := range complexity.Ordinals(fns) {
-			if th.Over(fns[i]) {
+			if th.Over(fns[i]) && !(mask != nil && mask[i]) {
 				out = append(out, complexitypanel.BaselineItem{Rel: rel, Fn: fns[i], Ordinal: ord})
 			}
 		}
@@ -310,6 +312,7 @@ func (m *Model) acceptAllComplexityBaseline() {
 	}
 	c := config.Get().Complexity
 	b := complexity.NewBaseline(c.CCNWarn, c.CognitiveWarn)
+	b.Hidden = m.cxBase.baseline.HiddenOf() // the hidden set (#3031) survives a reseed
 	items := m.overThresholdFunctions()
 	for _, it := range items {
 		b.Accept(it.Rel, it.Fn, it.Ordinal)

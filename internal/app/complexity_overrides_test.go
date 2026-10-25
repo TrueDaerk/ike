@@ -32,7 +32,7 @@ func TestComplexityDiagnosticsPerFileThresholds(t *testing.T) {
 		"/p/src/new.go":    {{Name: "New", Line: 1, CCN: 20}},
 	}}
 	c := config.Complexity{CCNWarn: 15, CognitiveWarn: 15, Overrides: []string{"legacy/** ccn=30"}}
-	got := complexityDiagnostics(v, complexity.ResolverFor(c, "/p"), nil, "/p")
+	got := complexityDiagnostics(v, complexity.ResolverFor(c, "/p"), nil, nil, "/p")
 	if len(got["/p/legacy/old.go"]) != 0 {
 		t.Fatalf("legacy/** ccn=30 must keep Old off the feed: %+v", got)
 	}
@@ -40,7 +40,7 @@ func TestComplexityDiagnosticsPerFileThresholds(t *testing.T) {
 		t.Fatalf("New stays on the feed under the globals: %+v", ds)
 	}
 	c.Overrides = []string{"legacy/** ccn=18"}
-	ds := complexityDiagnostics(v, complexity.ResolverFor(c, "/p"), nil, "/p")["/p/legacy/old.go"]
+	ds := complexityDiagnostics(v, complexity.ResolverFor(c, "/p"), nil, nil, "/p")["/p/legacy/old.go"]
 	if len(ds) != 1 || ds[0].Message != "function Old: CCN 20 ≥ 18" {
 		t.Fatalf("the row must name the file's own threshold: %+v", ds)
 	}

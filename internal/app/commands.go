@@ -1030,6 +1030,11 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			withAliases(appCommand("complexity.baseline", "Complexity: Accept / Drop Selected in Baseline", ComplexityBaselineMsg{}), "accept debt", "ignore complexity", "baseline"),
 			// Optimisation-session pins (#2959): p in the pane.
 			withAliases(appCommand("complexity.pin", "Complexity: Pin / Unpin Selected Function", ComplexityPinMsg{}), "pin function", "track function", "since pin"),
+			// The hidden set (#3031): x hides the selected function (or a
+			// group's file), X the row's file, H lists the hidden functions.
+			withAliases(appCommand("complexity.hide", "Complexity: Hide / Un-hide Selected Function or File", ComplexityHideMsg{}), "hide function", "exclude function", "unhide", "anonymous"),
+			withAliases(appCommand("complexity.hideFile", "Complexity: Hide Selected Row's File", ComplexityHideFileMsg{}), "exclude file", "vendor", "complexity.exclude"),
+			withAliases(appCommand("complexity.showHidden", "Complexity: Show / Leave Hidden Functions", ComplexityShowHiddenMsg{}), "hidden functions", "unhide", "hidden:yes"),
 			// The caret-side alt+enter entries (#2965).
 			appCommand("complexity.breakdownAtCaret", "Complexity: Show Breakdown of Function at Caret", ComplexityBreakdownAtCaretMsg{}),
 			appCommand("complexity.openAtCaret", "Complexity: Open Function at Caret in Window", ComplexityOpenAtCaretMsg{}),
