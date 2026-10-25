@@ -45,6 +45,10 @@ type jsonSummary struct {
 	// Accepted counts the over-threshold functions the baseline accepts
 	// (#2958); OverThreshold counts only the new and worsened ones.
 	Accepted int `json:"accepted"`
+	// Hidden counts the functions of the hidden set (#3031) — left out of
+	// `functions` and every total unless --show-hidden listed them; absent
+	// when nothing is hidden.
+	Hidden int `json:"hidden,omitempty"`
 	// The nearest-rank percentiles and the 1–5 / 6–10 / 11–15 / 16–25 /
 	// 26+ histogram of both metrics (#2953).
 	CCNP50    int           `json:"ccn_p50"`
@@ -62,7 +66,7 @@ type jsonHistogram struct {
 	Cognitive [complexity.HistBucketCount]int `json:"cognitive"`
 }
 
-func toJSONSummary(s complexity.Summary, files int, st settings) jsonSummary {
+func toJSONSummary(s complexity.Summary, files int, st settings, hidden int) jsonSummary {
 	return jsonSummary{
 		Files: files, Functions: s.Functions, NLOC: s.NLOC,
 		CCNSum: s.CCNSum, CCNAvg: round2(s.CCNAvg), CCNMax: s.CCNMax,
@@ -72,6 +76,7 @@ func toJSONSummary(s complexity.Summary, files int, st settings) jsonSummary {
 		TestsHidden: st.args.NoTests,
 		ChurnDays:   st.churnShown(),
 		Accepted:    s.Accepted,
+		Hidden:      hidden,
 		CCNP50:      s.CCNP50, CCNP90: s.CCNP90, CCNP99: s.CCNP99,
 		CogP50: s.CogP50, CogP90: s.CogP90, CogP99: s.CogP99,
 		Histogram: jsonHistogram{CCN: s.CCNHist, Cognitive: s.CogHist},
@@ -113,6 +118,9 @@ type jsonFunction struct {
 	// Pinned is the function's pin (#2959): the metrics it was pinned at
 	// and when; absent on an unpinned function.
 	Pinned *jsonPinned `json:"pinned,omitempty"`
+	// Hidden marks a function of the hidden set listed by --show-hidden
+	// (#3031); absent otherwise.
+	Hidden bool `json:"hidden,omitempty"`
 }
 
 // jsonPinned is a pin's recorded side.
@@ -355,7 +363,7 @@ func writeJSON(w io.Writer, v any) error {
 
 func writeProjectJSON(w io.Writer, r projectReport) error {
 	out := jsonProject{
-		Summary:   toJSONSummary(r.summary, r.files, r.s),
+		Summary:   toJSONSummary(r.summary, r.files, r.s, r.hidden),
 		Functions: make([]jsonFunction, 0, len(r.rows)),
 		Skipped:   toJSONSkipped(r.skipped),
 	}
@@ -365,6 +373,7 @@ func writeProjectJSON(w io.Writer, r projectReport) error {
 			jf.Baseline = rw.fn.Baseline.String()
 		}
 		jf.Pinned = toJSONPinned(r.s.pinOf(rw.file, rw.fn, rw.ordinal))
+		jf.Hidden = rw.hidden
 		if r.s.churn != nil {
 			n := r.s.churn[rw.file]
 			jf.Commits = &n
@@ -376,7 +385,7 @@ func writeProjectJSON(w io.Writer, r projectReport) error {
 
 func writeGroupsJSON(w io.Writer, r groupReport) error {
 	out := jsonGroups{
-		Summary: toJSONSummary(r.summary, r.files, r.s),
+		Summary: toJSONSummary(r.summary, r.files, r.s, r.hidden),
 		Groups:  make([]jsonGroup, 0, len(r.groups)),
 		Skipped: toJSONSkipped(r.skipped),
 	}
@@ -400,8 +409,8 @@ func writeDiffJSON(w io.Writer, r diffReport) error {
 	changed, added, removed := r.sections()
 	out := jsonDiff{
 		Rev: r.rev, Sha: r.sha, HeadRev: r.headRev, HeadSha: r.headSha,
-		Base: toJSONSummary(r.diff.Base, r.baseFiles, r.s),
-		Head: toJSONSummary(r.diff.Head, r.headFiles, r.s),
+		Base: toJSONSummary(r.diff.Base, r.baseFiles, r.s, 0),
+		Head: toJSONSummary(r.diff.Head, r.headFiles, r.s, 0),
 		Delta: jsonDelta{CCN: r.diff.DeltaCCN(), Cognitive: r.diff.DeltaCognitive(), Excess: r.diff.DeltaExcess(),
 			CommentLines:   r.diff.Head.CommentLines - r.diff.Base.CommentLines,
 			CommentDensity: ratio(r.diff.Head.CommentDensity - r.diff.Base.CommentDensity)},
@@ -460,6 +469,9 @@ func writeProjectText(w io.Writer, r projectReport) {
 		if pin != nil {
 			name += pinMark
 		}
+		if rw.hidden {
+			name += hiddenMark // #3031, --show-hidden
+		}
 		fmt.Fprintf(tw, "%s\t%s\t%d\t%d\t%d\t%d\t%d\t%d", rw.file, name, f.Line+1, f.CCN, f.Cognitive, f.NLOC, f.Params,
 			complexity.DensityPercent(f.CommentDensity))
 		if r.s.churn != nil {
@@ -491,6 +503,10 @@ const acceptedMark = " ✓"
 // pinMark follows the name of a pinned function (#2959), as the tool
 // window marks it.
 const pinMark = " ★"
+
+// hiddenMark follows the name of a hidden function --show-hidden lists
+// (#3031), as the Complexity window's hidden:yes view marks it.
+const hiddenMark = " ✕"
 
 // writePinsLine is --pins' trailer: how many pins the table shows and how
 // many name a function the report no longer measures (gone).
@@ -529,6 +545,14 @@ func (r projectReport) writeSummaryLine(w io.Writer) {
 	}
 	if r.s.baseline != nil {
 		fmt.Fprintf(w, "baseline: %d accepted, %d worsened (%s)\n", s.Accepted, s.Worsened, r.s.rel(r.s.baselinePath))
+	}
+	if r.hidden > 0 {
+		// The hidden set (#3031): what the report left out, or lists ✕.
+		verb := "left out"
+		if r.s.args.ShowHidden {
+			verb = "shown (--show-hidden)"
+		}
+		fmt.Fprintf(w, "hidden: %d %s %s (%s)\n", r.hidden, plural(r.hidden, "function", "functions"), verb, r.s.rel(r.s.baselinePath))
 	}
 }
 

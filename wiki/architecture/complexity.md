@@ -485,7 +485,8 @@ it, CCN otherwise) with its percentiles between average and max, `CCN
 Σ137301 avg 4.0 p50 2 p90 9 p99 28 max 170` (#2953), the other in the
 short form so the line stays within reason — the aggregate comment density (`cmt 12%`), the
 count over threshold, `excess N` (#2945) and, with a baseline in effect,
-`N accepted` (#2958, [below](#baseline-2958)) and, on the Project tab,
+`N accepted` (#2958, [below](#baseline-2958)), with hidden functions in the
+tab's population `N hidden` (#3031, [below](#hidden-set-3031)) and, on the Project tab,
 `session Δexcess −120` (#2959, see Pins below). On the File tab, when a
 `complexity.overrides` entry sets the followed file's thresholds, the
 line names them after the generation: `thresholds ccn 30 cog 30
@@ -549,7 +550,10 @@ nothing), `class:` is a substring of `Function.Class`, and `depth:`,
 against the accepted-debt baseline — on a group row, groups with such a
 member (`Summary.Accepted` / `Worsened` / the remaining over count).
 `pinned:yes|no` (#2959) keeps the pinned functions or the rest (groups:
-with a pinned member).
+with a pinned member). `hidden:yes|no` (#3031, [below](#hidden-set-3031))
+lists the hidden functions — which no other filter can reach, since without
+the term they are dropped before the rows are built — or the rest (groups:
+with such a member).
 Every key takes a leading `-` to negate it (#2951): `matches` runs each
 field through `filterexpr.Query.KeepsAll` (positive repeats AND, a negated
 term drops what it matches) and the free text through `MatchFree`, so
@@ -976,6 +980,127 @@ the flags, JSON and text, the malformed file), `app/complexity_baseline_test.go`
 (Problems and panel, the setting, the watcher route, a malformed file
 reported once, `i`, the dialog), `watch/watch_test.go`
 (`TestBaselineFileEvents`).
+
+## Hidden set (#3031)
+
+The baseline is the wrong tool for code that should not be looked at at
+all — a downloaded library under `static/lib/*.min.js`, a vendored helper,
+the anonymous module initialisers (`(anonymous)#n`) that carry a JS file's
+whole complexity and drown the functions a developer owns. An accepted
+function keeps its row, its metrics and its share of every aggregate; a
+**hidden** one is dropped from every Complexity surface as if it had never
+been measured. It still *is* measured, so it can be un-hidden.
+
+**Two levels, two stores.** A **function** hide is a post-measure filter
+recorded in the baseline file; a **file** hide is a `complexity.exclude`
+glob, so the index never measures the file (`classify` drops it "without
+queueing", the Settings form shows the pattern, and the index already
+rewalks when the list changes) — one exclusion mechanism, not two.
+
+**Format.** `.ike/complexity-baseline.json` gained a `hidden` section and
+**version 2** (`complexity.BaselineVersion`; `LoadBaseline` still reads
+version 1, writes version 2, and omits the section while it is empty so a
+plain baseline keeps its shape):
+
+```json
+{"version": 2, "ccn_warn": 15, "cognitive_warn": 15, "accepted": [],
+ "hidden": [
+  {"file": "static/lib/app.js", "function": "(anonymous)", "ordinal": 2}
+]}
+```
+
+`complexity.HiddenSet` (`internal/complexity/hidden.go`) is the section:
+`HiddenEntry` is the baseline's key without the metrics — project-relative
+slash path, `Function.Name`, ordinal among the file's same-named units
+(`complexity.Ordinals`, the pairing rule of the baseline and `PairUnits`),
+so `(anonymous)#2` hides exactly the second anonymous unit and a function
+that moves inside its file stays hidden. It marshals as the entry array,
+sorts and de-duplicates on save, validates like the accepted entries (file,
+function, ordinal ≥ 0), and answers `Has`, `Add`, `Remove`, `Mask(file,
+fns) []bool` and `Visible(file, fns)`; every method accepts a nil set as
+"nothing hidden". `Baseline.Hide` / `Unhide` / `HiddenOf` keep the section
+and drop it when it empties. The hidden set and the baseline are
+independent: hiding an accepted function leaves its `accepted` entry,
+un-hiding restores its status.
+
+**App** (`internal/app/complexity_hidden.go`). The set rides
+`complexityBaselineState` — read at build time, re-read on every
+`watch.BaselineChanged` — but **not** the `complexity.baseline` setting:
+`complexityHidden()` hands every surface the loaded set while the baseline
+is on or off, and `x` writes the file either way (a missing file is created
+from the current thresholds). `applyComplexityBaseline` hands it to the
+panel (`SetHidden`) beside `SetBaseline` and republishes the Problems feed;
+`complexityDiagnostics` skips a hidden unit entirely (no CCN / cognitive
+and no comment-density row); `overThresholdFunctions` — the bulk accept's
+population — skips it too, and both `acceptAllComplexityBaseline` and
+`ike complexity --write-baseline` carry the section over when they reseed
+the file. A file hide (`HideFileMsg`) appends the globs to the effective
+`complexity.exclude` and writes the list through
+`configcmd.WriteAndReload` into the layer that already holds the key — the
+project file when none does, since a hidden vendor tree is project data —
+so `reconfigureComplexityIndex` rewalks without the file; an already
+excluded glob says so and writes nothing.
+
+**Panel** (`internal/complexitypanel/hidden.go`). `population` masks each
+file's units (`Row.Hidden`; a Changes row is placed in the snapshot through
+`changeOrdinal`, like a pin), and `markHidden` — after `markPins` and
+`markTests`, before the totals — counts them (`N hidden` in the header) and
+drops them unless the filter names the `hidden:` field, so the totals, the
+group rows, the tree, the histogram, the CSV / Markdown exports and the
+copy text all follow the visible population. Under `hidden:yes` the hidden
+rows are listed muted with ` ✕` after the name. Keys, all bound in the
+`complexity` context: `x` (`complexity.hide`, "Complexity: Hide / Un-hide
+Selected Function or File") is `ToggleHide` — a function row (a site or
+candidate row stands for its function, a Changes row for its working-tree
+side) yields `HideToggleMsg{Items}`, or `Remove: true` on a `✕` row; a
+group, Changes file or tree file row yields `HideFileMsg` with the
+project-relative path as the glob, a tree directory `dir/**`; the tree's
+root, a Trend row, a removed function and a gone pin are refused with the
+reason in the footer. `X` (`complexity.hideFile`) is `HideFile`: the same
+file glob from a function row too. `H` (`complexity.showHidden`) is
+`ToggleHiddenView`: sets or clears the `hidden:yes` term, so the hidden
+functions can be un-hidden without being visible first — the un-hide list
+the feature needs. The footer hints `x hide` always and `H hidden` once
+something is hidden (`H hidden: shown` in the view); the empty hidden view
+says `(nothing hidden on this tab …)`. Hidden *files* are not rows (the
+index never measured them): their list is the Excluded files entry of
+Settings > Complexity, where a glob is removed again.
+
+**CLI.** `settings.hidden` is the file's section, loaded with the baseline
+and — unlike it — kept under `--no-baseline` (hiding is not accepting).
+`runProject` skips a hidden unit after `Stamp`, before the rows are built,
+so the table, `--by` / `--brief` groups, `--md`, the summary and the JSON
+leave it out; the summary line gains `hidden: N functions left out
+(.ike/complexity-baseline.json)` and the JSON summary `hidden: N` (omitted
+at 0). `--show-hidden` (`ComplexityArgs.ShowHidden`) keeps the rows
+instead, marked ` ✕` in the text and Markdown tables and `"hidden": true`
+in the JSON, with `hidden: N functions shown (--show-hidden)`. `--diff` and
+`--trend` compare revisions and ignore the set, as they ignore the baseline.
+
+**Help sheet** (`internal/app/complexity_help.go`). The window's keyboard
+is mostly fixed pane keys no registry scope lists, so — the playground's
+pattern (`playhelp.go`, `help.withExtraLeading`) — `complexityHelpGroups`
+contributes, while the window is focused, five `Focused` groups that lead
+the help overlay: *list* (tab cycle, navigation, enter, `s` / `S`, every
+single-letter action, `e` / `E` / `y` / `r`, `/`), *filter row* (typing,
+`tab` completion, `enter` / `esc`, the match steps), *filter vocabulary*
+(every field of `complexitypanel.Schema` with its doc — `baseline:`,
+`hidden:`, `test:`, `metric:`, …, generated so a new field documents
+itself), *Changes tab* (`d`, `R`, `b`, `x`) and *agent* (`a`, `A` / `esc`).
+A row naming a command shows the chord bound to it in the live keymap
+(`shift+x` for a rebound or shifted key), a fixed key is listed verbatim.
+Unfocused, it contributes nothing.
+
+**Tests.** `complexity/hidden_test.go` (round trip, version 1 load, the
+version bump, ordinal matching, malformed entries),
+`complexitypanel/hidden_test.go` (rows / totals / groups / export, the
+header count, `hidden:yes` marking and un-hide, `x` / `X` / `H`, the tree
+directory glob and root refusal), `complexitycli/hidden_test.go` (default
+omission with and without the baseline, JSON and Markdown, `--show-hidden`,
+`--write-baseline` keeping the section, flag parsing),
+`app/complexity_hidden_test.go` (every surface on `x`, `H` + `x` un-hide,
+the setting off, the watcher route, `X` writing `complexity.exclude` and the
+rewalk, the help groups and their order in the overlay).
 
 ## Changes vs HEAD (#2918)
 
@@ -1468,7 +1593,7 @@ chords: the keybind ledger records them with `reasonIntention`.
 
 ## Headless CLI (#2922)
 
-`ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json | --md] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [--trend[=N]] [--width N] [PATH...]`
+`ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json | --md] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [--show-hidden] [--trend[=N]] [--width N] [PATH...]`
 is the terminal-free report for CI pipelines and coding agents. The grammar
 lives in `internal/cli` (`ComplexityArgs`, first argument only like
 `agent-hook`, so a file named `complexity` still opens as `./complexity`);
@@ -1618,6 +1743,16 @@ of the same level byte for byte (no `(free)` group). A level other than
 other`) or with `--diff` (`--brief is not supported with --diff`) is a
 usage error (exit 2). The level is taken only after `=`, so
 `--brief PATH` keeps PATH as a path.
+
+**Hidden set (#3031).** The baseline file's `hidden` section applies to
+every project report by default, with or without `--no-baseline`: a hidden
+function is skipped after `Stamp`, so the table, the groups, `--brief`,
+`--md`, the summary and the JSON leave it out, and the text adds
+`hidden: N functions left out (.ike/complexity-baseline.json)` under the
+summary (JSON: `summary.hidden`). `--show-hidden` (`ComplexityArgs.ShowHidden`)
+lists them instead, marked ` ✕` (JSON: `"hidden": true` per function, the
+line reads `shown (--show-hidden)`). `--write-baseline` keeps the section.
+See [Hidden set](#hidden-set-3031).
 
 **No tests (#2950).** `--no-tests` (`ComplexityArgs.NoTests`) drops the
 files `complexity.IsTestFile` calls test code (see "Hide tests" above) from
@@ -1890,7 +2025,7 @@ scope), validated in the form and by `config.Validate`:
 | Key | Default | Meaning |
 |---|---|---|
 | `complexity.enabled` | `true` | Master switch for the index and every surface reading it. |
-| `complexity.exclude` | `[]` | `internal/pathglob` patterns of files never measured. |
+| `complexity.exclude` | `[]` | `internal/pathglob` patterns of files never measured; `x` / `X` on a file, group or tree row in the window append one (#3031). |
 | `complexity.ccn_warn` | `15` | Cyclomatic warning threshold (1-200): tool-window colour, hints, Problems, over-threshold count. |
 | `complexity.cognitive_warn` | `15` | The same for cognitive complexity. |
 | `complexity.comment_density_warn` | `40` | Comment-density threshold in percent (0-100, `0` = off): `cmt%` colour, the hint's ` · cmt 55%`, the Problems `comments` row, `--cmt` default, over-threshold count. |

@@ -80,6 +80,10 @@ type settings struct {
 	// --baseline=PATH named another.
 	baseline     *complexity.Baseline
 	baselinePath string
+	// hidden is the baseline file's hidden set (#3031), nil without one;
+	// unlike baseline it survives --no-baseline, since hiding is not
+	// accepting. --show-hidden keeps the functions it names in the report.
+	hidden *complexity.HiddenSet
 	// pins is the pin list (#2959), empty without a file; pinsPath is
 	// where it was read from.
 	pins     *complexity.Pins
@@ -365,6 +369,11 @@ func (s *settings) loadBaseline() error {
 	}
 	s.baselinePath = path
 	if a.NoBaseline {
+		// The hidden set (#3031) is not the baseline: it applies even when
+		// the baseline is refused, from a file that loads.
+		if b, err := complexity.LoadBaseline(path); err == nil {
+			s.hidden = b.HiddenOf()
+		}
 		return nil
 	}
 	b, err := complexity.LoadBaseline(path)
@@ -374,7 +383,7 @@ func (s *settings) loadBaseline() error {
 	if b == nil && a.Baseline && !a.WriteBaseline {
 		return fmt.Errorf("--baseline: no baseline file at %s (seed one with --write-baseline)", s.rel(path))
 	}
-	s.baseline = b
+	s.baseline, s.hidden = b, b.HiddenOf()
 	return nil
 }
 
@@ -384,6 +393,7 @@ func (s *settings) loadBaseline() error {
 func writeBaseline(r projectReport) (int, error) {
 	s := r.s
 	b := complexity.NewBaseline(s.ccnWarn, s.cogWarn)
+	b.Hidden = s.hidden // the hidden set (#3031) survives a reseed
 	for _, rw := range r.all {
 		if s.th(rw.file).Over(rw.fn) {
 			b.Accept(rw.file, rw.fn, rw.ordinal)
@@ -618,6 +628,9 @@ type row struct {
 	// ordinal is the unit's index among its file's same-named units in
 	// source order — the baseline's key (#2958).
 	ordinal int
+	// hidden marks a function of the hidden set kept by --show-hidden
+	// (#3031); without the flag such a row is never built.
+	hidden bool
 }
 
 // projectReport is the measured project.
@@ -630,6 +643,9 @@ type projectReport struct {
 	skipped skipped
 	// tests counts the test files --no-tests dropped (#2950).
 	tests int
+	// hidden counts the functions of the hidden set (#3031): left out of
+	// the report by default, listed under --show-hidden.
+	hidden int
 }
 
 // runProject walks the named directories, adds the named files and
@@ -681,8 +697,16 @@ func runProject(s settings) projectReport {
 		rel := s.rel(path)
 		// Stamped before the CCN sort: the baseline keys on source order.
 		s.baseline.Stamp(rel, fns)
+		mask := s.hidden.Mask(rel, fns) // #3031: the same key
 		for i, ord := range complexity.Ordinals(fns) {
-			r.all = append(r.all, row{file: rel, fn: fns[i], ordinal: ord})
+			hidden := mask != nil && mask[i]
+			if hidden {
+				r.hidden++
+				if !s.args.ShowHidden {
+					continue
+				}
+			}
+			r.all = append(r.all, row{file: rel, fn: fns[i], ordinal: ord, hidden: hidden})
 		}
 	})
 	sortRows(r.all)

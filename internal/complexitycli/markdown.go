@@ -223,6 +223,9 @@ func projectMarkdown(r projectReport) Markdown {
 		if pin != nil {
 			name += pinMark
 		}
+		if rw.hidden {
+			name += hiddenMark // #3031
+		}
 		cells := []string{rw.file, name, itoa(f.Line + 1), itoa(f.CCN), itoa(f.Cognitive), itoa(f.NLOC), itoa(f.Params),
 			itoa(complexity.DensityPercent(f.CommentDensity))}
 		if r.s.churn != nil {

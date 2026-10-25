@@ -110,6 +110,17 @@ func (m *Model) changesRows() []Row {
 			out = append(out, Row{Path: p, Rel: rel, Lang: id, Fn: f, Before: f, Change: complexity.Removed, Dirty: dirty})
 		}
 	}
+	if m.hidden.Len() > 0 {
+		// A hidden function (#3031) leaves the Changes tab too; its head
+		// side is placed in the snapshot the way the pins do.
+		for i := range out {
+			r := &out[i]
+			if r.Change == complexity.Removed {
+				continue
+			}
+			r.Hidden = m.hidden.Has(complexity.EntryKey{File: r.Rel, Function: r.Fn.Name, Ordinal: m.changeOrdinal(*r)})
+		}
+	}
 	return out
 }
 

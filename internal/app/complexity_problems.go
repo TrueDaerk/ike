@@ -32,7 +32,7 @@ const complexityProblemSource = "complexity"
 // at or above the file's comment threshold (#2934; 0 = off) is its own warning on the
 // same line — "function foo: comment density 55% ≥ 40%", Code "comments" —
 // since it reads as a different problem than a complex body.
-func complexityDiagnostics(v complexity.View, res complexity.Resolver, b *complexity.Baseline, root string) map[string][]ilsp.Diagnostic {
+func complexityDiagnostics(v complexity.View, res complexity.Resolver, b *complexity.Baseline, hidden *complexity.HiddenSet, root string) map[string][]ilsp.Diagnostic {
 	byPath := map[string][]ilsp.Diagnostic{}
 	warn := func(path string, fn complexity.Function, msg, code string) {
 		pos := buffer.Position{Line: fn.Line}
@@ -48,13 +48,17 @@ func complexityDiagnostics(v complexity.View, res complexity.Resolver, b *comple
 		th := res(path)
 		ccnWarn, cogWarn, cmtWarn := th.CCN, th.Cog, th.Cmt
 		statuses := make([]complexity.Status, len(fns))
+		rel := baselineRel(root, path)
 		if b != nil {
-			rel := baselineRel(root, path)
 			for i, ord := range complexity.Ordinals(fns) {
 				statuses[i] = b.Classify(rel, fns[i], ord)
 			}
 		}
+		mask := hidden.Mask(rel, fns) // a hidden function (#3031) has no row at all
 		for i, fn := range fns {
+			if mask != nil && mask[i] {
+				continue
+			}
 			if th.CommentsOver(fn) {
 				warn(path, fn, "function "+fn.Name+": comment density "+
 					strconv.Itoa(complexity.DensityPercent(fn.CommentDensity))+"% ≥ "+strconv.Itoa(cmtWarn)+"%", "comments")
@@ -97,7 +101,7 @@ func (m *Model) feedComplexityProblems(c config.Complexity) {
 		m.probStore.ClearTaskSource(complexityProblemSource)
 	} else {
 		byPath := complexityDiagnostics(m.complexityIndex.Snapshot(), m.complexityResolver(c),
-			m.complexityBaseline(), m.complexityIndex.Root())
+			m.complexityBaseline(), m.complexityHidden(), m.complexityIndex.Root())
 		m.probStore.SetTaskSource(complexityProblemSource, byPath)
 	}
 	m.refreshProblemsPanel()

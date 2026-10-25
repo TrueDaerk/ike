@@ -8767,6 +8767,29 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.handleComplexityBaselineToggle(msg)
 		return m, nil
 
+	case ComplexityHideMsg:
+		// complexity.hide (#3031), x in the pane: hide the selected function
+		// or the selected group's file, or un-hide a shown hidden function.
+		return m, m.hideComplexityRow()
+
+	case ComplexityHideFileMsg:
+		// complexity.hideFile (#3031), X in the pane: the row's whole file.
+		return m, m.hideComplexityFileRow()
+
+	case ComplexityShowHiddenMsg:
+		// complexity.showHidden (#3031), H in the pane: the hidden:yes view.
+		m.toggleComplexityHiddenView()
+		return m, nil
+
+	case complexitypanel.HideToggleMsg:
+		// The pane's 'x' on a function (#3031): hide / un-hide, save the file.
+		m.handleComplexityHideToggle(msg)
+		return m, nil
+
+	case complexitypanel.HideFileMsg:
+		// The pane's 'x' / 'X' on a file (#3031): a complexity.exclude glob.
+		return m, m.handleComplexityHideFile(msg)
+
 	case ComplexityShowSitesMsg:
 		// complexity.showSites (#2947), m in the pane: paint the selected
 		// function's site marks in the editor once.
@@ -11085,6 +11108,9 @@ func (m *Model) openHelp() {
 	// (#2237); its keys lead the sheet as their own context while it is
 	// focused, and contribute nothing otherwise.
 	extra = append(extra, m.playgroundHelpGroups()...)
+	// The Complexity window's keyboard (#3031) is mostly fixed pane keys no
+	// registry scope lists; its sheet leads the same way while it is focused.
+	extra = append(extra, m.complexityHelpGroups()...)
 	m.help.SetExtra(extra...)
 	m.help.SetFilter("") // each open starts unfiltered (#271)
 	m.help.Snapshot(m.helpContext(), m.focusLang())

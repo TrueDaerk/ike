@@ -105,6 +105,11 @@ type ComplexityArgs struct {
 	// in the state store) with their pinned metrics and the deltas. Not
 	// combinable with Diff, By or Brief.
 	Pins bool
+	// ShowHidden keeps the functions the baseline file's hidden set drops
+	// (#3031): by default they are left out of every project report as if
+	// unmeasured; with the flag they are listed, marked ✕ in the text and
+	// Markdown tables and `hidden: true` in the JSON.
+	ShowHidden bool
 	// Trend prints the project's sums at each of the last TrendCommits
 	// first-parent commits (#2962), oldest first; 0 = complexity.trend_commits.
 	// Not combinable with Diff, By or Brief.
@@ -193,7 +198,7 @@ const WidthMin = 40
 const DefaultWidth = 120
 
 // ComplexityUsage is the one-line grammar of `ike complexity`.
-const ComplexityUsage = "usage: ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json | --md] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [--trend[=N]] [--width N] [PATH...]"
+const ComplexityUsage = "usage: ike complexity [--diff[=REV|A..B]] [--by class|file] [--brief[=class]] [--json | --md] [--min N] [--ccn N] [--cog N] [--cmt N] [--no-tests] [--sites] [--churn[=DAYS]] [--baseline[=PATH] | --no-baseline] [--write-baseline] [--pins] [--show-hidden] [--trend[=N]] [--width N] [PATH...]"
 
 // Parse parses the arguments after the program name. Supported forms:
 //
@@ -316,6 +321,8 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 			ca.WriteBaseline = true
 		case a == "--pins":
 			ca.Pins = true
+		case a == "--show-hidden":
+			ca.ShowHidden = true
 		case name == "--baseline":
 			ca.Baseline = true
 			if hasVal {

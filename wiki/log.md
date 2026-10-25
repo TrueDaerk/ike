@@ -1,5 +1,19 @@
 # Log
 
+## 2026-10-25 (Complexity: hide functions / files, help sheet, #3031)
+
+- [Code Complexity](/architecture/complexity.md): a **hidden set** next to
+  the baseline — `x` hides the selected function (a `hidden` section in
+  `.ike/complexity-baseline.json`, format version 2, version 1 still loads)
+  or, on a group / file / tree row, the file through a `complexity.exclude`
+  glob; `X` hides the row's file, `H` toggles the `hidden:yes` view that
+  lists the hidden functions (muted, ` ✕`) so one can be un-hidden. Hidden
+  functions leave every tab, the tree, the groups, the histogram, the
+  Problems feed, the exports and `ike complexity` (`--show-hidden` lists
+  them); the header counts `N hidden`. The help overlay leads with a
+  Complexity section listing every pane key and the filter vocabulary while
+  the window is focused.
+
 ## 2026-10-21 (reformat unsaved buffers with a known language, #3029)
 
 - [Formatter registry](/architecture/format.md): Reformat File / Selection
