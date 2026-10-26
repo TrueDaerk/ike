@@ -1200,6 +1200,9 @@ func TestEscapeShellWord(t *testing.T) {
 		{"-flagfile", "-flagfile"},
 		{"hash#bang!", `hash\#bang\!`},
 		{"cur{ly}~", `cur\{ly\}\~`},
+		{"~", "~"},
+		{"~/Downloads/test q4.csv", `~/Downloads/test\ q4.csv`},
+		{"~~", `~\~`},
 	}
 	for _, tc := range cases {
 		if got := escapeShellWord(tc.in); got != tc.want {
@@ -1245,6 +1248,34 @@ func TestAcceptContinuesEscapedWord(t *testing.T) {
 	waitFor(t, "remainder extends escaped word", func() bool {
 		return strings.Contains(m.lineBeforeCursor(), `My\ Documents/`)
 	})
+}
+
+// TestAcceptKeepsLeadingTilde (#3033): accepting a `~/` path keeps the
+// tilde unescaped so the shell still expands it, on the remainder, the
+// retype and the continued-escape paths alike.
+func TestAcceptKeepsLeadingTilde(t *testing.T) {
+	for _, tc := range []struct{ typed, word, want string }{
+		{"mv ~/Downloads/test", "~/Downloads/test", `mv ~/Downloads/test\ q4.csv`},
+		{"mv ~/downloads/test", "~/downloads/test", `mv ~/Downloads/test\ q4.csv`},
+		{`mv ~/Downloads/test\ q`, `~/Downloads/test\ q`, `mv ~/Downloads/test\ q4.csv`},
+	} {
+		t.Run(tc.typed, func(t *testing.T) {
+			c := &collector{}
+			m := startShModel(t, c)
+			for _, r := range tc.typed {
+				m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
+			}
+			waitFor(t, "echo of typed word", func() bool {
+				_, word := parseCmdline(m.lineBeforeCursor())
+				return word == tc.word
+			})
+			m.comp = completion{open: true, items: []candidate{{text: "~/Downloads/test q4.csv", kind: candFinal}}, sel: 0, word: tc.word}
+			m.acceptCompletion()
+			waitFor(t, "unescaped leading tilde", func() bool {
+				return strings.HasSuffix(strings.TrimRight(m.lineBeforeCursor(), " "), tc.want)
+			})
+		})
+	}
 }
 
 // TestAcceptCaseCorrectEscapes (#1539): the erase-and-retype path (#968)
