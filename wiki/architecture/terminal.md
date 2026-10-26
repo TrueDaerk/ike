@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Integrated Terminal
-description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); pinned mode docking the popup to the bottom edge with the toggle chord as a focus switch, plus a project/global popup scope that carries one shell across projects (#2406); popup focus loss blurs instead of hiding, with a statusbar activity indicator for the hidden layer (#2309), and the wheel outside the layer's boxes scrolls the pane below while the layer keeps focus (#2343); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); sending the editor's selection (else the caret's line) to a shell as a bracketed paste, optionally submitted (#2542); re-running the last shell command from anywhere, prompt-gated and without moving the keyboard (#2543); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192); unbound control chords forward to the pty instead of being recorded as missing keybinds, and a plain shell tab closes when its shell ends by EOF (#2701); pane.maximize zooms the focused popup box or floating panel over the body and restores it (#2899), and view.zenMode does the same with the chrome hidden (#2905).
+description: Roadmap 0170 — PTY-spawned shell rendered through a VT emulator as a pane; raw key routing with a documented reserved set, scrollback paging + search, tmux-style copy mode with vim motions and in-mode search (#2162), clickable file:line references with keyboard hint mode (#2254), layout restore as fresh shells, sessions surviving project switches; command sessions + occupied tracking for run-in-terminal (0350); popup terminal overlay outside the pane layout (#1398) with side-by-side split and input broadcast (#1427), titlebar move with persisted position, tab tear-out into z-ordered floating panels, and a global (cross-project) panel toggle (#1793); pinned mode docking the popup to the bottom edge with the toggle chord as a focus switch, plus a project/global popup scope that carries one shell across projects (#2406); popup focus loss blurs instead of hiding, with a statusbar activity indicator for the hidden layer (#2309), and the wheel outside the layer's boxes scrolls the pane below while the layer keeps focus (#2343); SSH host profiles opening a connected terminal from ~/.ssh/config (#1938); sending the editor's selection (else the caret's line) to a shell as a bracketed paste, optionally submitted (#2542); re-running the last shell command from anywhere, prompt-gated and without moving the keyboard (#2543); a finished session closes with the ordinary close action in every placement, marked as exited in the chrome (#2192); unbound control chords forward to the pty instead of being recorded as missing keybinds, and a plain shell tab closes when its shell ends by EOF (#2701); pane.maximize zooms the focused popup box or floating panel over the body and restores it (#2899), and view.zenMode does the same with the chrome hidden (#2905); cmd+drag anywhere in a floating panel moves it while a motionless cmd+click still opens a reference (#3035).
 resource: internal/terminal
 tags: [architecture, terminal, pty, vt, pane, run]
 timestamp: 2026-10-20T10:00:00Z
@@ -539,6 +539,18 @@ affairs (`cmd+d` split, `cmd+shift+i` broadcast) no-op while a panel holds
 the keys — the focus keys are the exception: they cross the whole layer
 (#1806).
 
+**cmd+drag move** (#3035): besides the title-row move, a panel moves when
+grabbed **anywhere in its content** with cmd (`ModSuper`/`ModMeta`) held. The
+press alone cannot tell a link click from a move, so a cmd+press (outside the
+scrollbar, panel not maximized) arms the same `floatMoveDrag` with `armed`
+set and the content-local press cell kept: the first motion that changes the
+cell clears `armed` and moves the panel exactly like a title-row drag (same
+`ui.ClampDelta` bounds); a release that saw no motion runs
+`floatMoveLinkOpen`, opening the reference under the press as cmd+click
+always did (inert without one). A cmd+drag therefore never anchors a
+selection nor opens a link; plain presses and drags are untouched. A
+maximized panel cannot move, so its cmd+click opens the link on the press.
+
 **Global toggle** (#1793): every panel's title row leads with the ●/○ button.
 `○` (project-owned, the default) keeps #1407 semantics: the panel parks in
 `wsExtras.floats` on a switch, counts in the busy guards, and dies with the
@@ -744,7 +756,8 @@ keyboard (`hints.go`):
   before `Model.LinkAt` hands the target to the app's `openPathAt` funnel
   (nav history records). A plain click stays a selection press, untouched; a
   cmd+click without a link under it is inert so it can never steal a
-  selection anchor. `LinkAt` scans the whole soft-wrap-joined logical line,
+  selection anchor. In a floating panel the open waits for the release, since
+  a cmd+drag there moves the panel instead (#3035). `LinkAt` scans the whole soft-wrap-joined logical line,
   so wrapped references still resolve.
 - **Affordance**: an always-on subtle underline (SGR 4/24, no color reset) on
   reference spans. The live screen decorates inside the version-keyed render

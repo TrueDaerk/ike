@@ -12767,6 +12767,7 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			dx, dy := msg.X-d.lastX, msg.Y-d.lastY
 			if dx != 0 || dy != 0 {
 				d.lastX, d.lastY = msg.X, msg.Y
+				d.armed = false // a cmd+press moved: no link open (#3035)
 				if d.target != nil {
 					d.target.x = ui.ClampDelta(d.target.x, dx, 0, max(m.width-d.target.w, 0))
 					d.target.y = ui.ClampDelta(d.target.y, dy, 0, max(m.height-d.target.h, 0))
@@ -12776,9 +12777,12 @@ func (m Model) handleMouse(msg mouseEvent) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case mouseRelease:
-			moved := m.floatMove.target == nil
+			d := m.floatMove
 			m.floatMove = nil
-			if moved {
+			if d.armed {
+				return m.floatMoveLinkOpen(d)
+			}
+			if d.target == nil {
 				m.popupTermPersistPos()
 			}
 			return m, nil
