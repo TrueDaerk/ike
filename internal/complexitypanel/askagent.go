@@ -27,6 +27,22 @@ type AskAgentMsg struct {
 	Cognitive int
 	Lang      string
 	Fn        complexity.Function
+	// Dup is set on a request from the Duplicates tab (#3045): the
+	// occurrences of a clone group that all lie in Path, which the agent
+	// extracts into one shared helper. Fn is then empty, Name labels the
+	// group, Line / EndLine span its first to its last occurrence and
+	// Tokens is the clone's length.
+	Dup    []complexity.Occurrence
+	Tokens int
+}
+
+// Task names the run in the status segment and the notifications:
+// "simplify render" or "extract 2 duplicates of lines 5–7" (#3045).
+func (a AskAgentMsg) Task() string {
+	if a.Dup != nil {
+		return "extract " + a.Name
+	}
+	return "simplify " + a.Name
 }
 
 // AskAgent reports the request for the selected row: a function row of
@@ -34,6 +50,10 @@ type AskAgentMsg struct {
 // or file row, a removed function, a Trend row or no selection.
 func (m *Model) AskAgent() (AskAgentMsg, bool) {
 	r, ok := m.Selected()
+	if ok && r.Dup != nil {
+		req, why := dupAgentRequest(r)
+		return req, why == "" // #3045
+	}
 	if ok && r.child() && r.Parent >= 0 && r.Parent < len(m.rows) {
 		r = m.rows[r.Parent]
 	}
@@ -91,6 +111,10 @@ func (m *Model) SetAgentRunning(keys map[string]bool) {
 
 // agentRunningOn reports a function row the agent is working on.
 func (m *Model) agentRunningOn(r Row) bool {
+	if r.Dup != nil {
+		req, why := dupAgentRequest(r)
+		return why == "" && m.agentRunning[req.Key()] // #3045
+	}
 	if len(m.agentRunning) == 0 || r.Path == "" || r.Fn.Name == "" || r.aggregate() || r.Trend != nil {
 		return false
 	}

@@ -1,5 +1,15 @@
 # Log
 
+## 2026-10-26 (Complexity: extract same-file duplicates with the agent, #3045)
+
+- [Code Complexity](/architecture/complexity.md): `a` on a Duplicates-tab
+  group whose occurrences all lie in one file runs the simplify agent with
+  the new extract prompt (`agentask.ExtractPrompt`: every occurrence with
+  its line range plus the file) asking for one diff that adds a shared
+  helper and replaces every occurrence; the apply, scratch fallback, cancel
+  and notifications are the simplify run's. A multi-file group is refused
+  with a message.
+
 ## 2026-10-26 (Complexity: duplicate code detection, Duplicates tab, #3044)
 
 - [Code Complexity](/architecture/complexity.md): the index tokenizes every

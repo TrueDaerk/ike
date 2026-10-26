@@ -1704,6 +1704,13 @@ func (m *Model) renderRow(pal *theme.Palette, i int) string {
 		}
 		return m.dataRow(cells, i == m.cursor)
 	}
+	if r.Dup != nil && !r.occurrence() && m.agentRunningOn(r) {
+		if fi := m.layoutIndex(ColFile); fi >= 0 {
+			// #3045: trailing — a long location is cut from the left.
+			cells[fi].Text += " " + strings.TrimSpace(agentMark)
+		}
+		return m.dataRow(cells, i == m.cursor)
+	}
 	if r.child() {
 		return m.dataRow(cells, i == m.cursor)
 	}

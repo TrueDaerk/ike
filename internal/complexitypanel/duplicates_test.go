@@ -304,3 +304,55 @@ func TestDuplicatesSwallowsFunctionKeys(t *testing.T) {
 	}
 	var _ tea.Cmd
 }
+
+func TestDuplicatesAskAgentSameFileOnly(t *testing.T) {
+	m := dupPanel(t)
+	// Row 0 spans two files: `a` refuses and says why in the footer.
+	if cmd := m.Update(key("a")); cmd != nil {
+		t.Fatal("a multi-file group must not ask the agent")
+	}
+	if why := m.DuplicateAgentRefusal(); why != "this clone group spans 2 files — a extracts duplicates within one file only" {
+		t.Fatalf("refusal = %q", why)
+	}
+	if _, ok := m.AskAgent(); ok {
+		t.Fatal("AskAgent must refuse a multi-file group")
+	}
+	if !strings.Contains(m.dupFooter(), "spans 2 files") {
+		t.Errorf("footer = %q", m.dupFooter())
+	}
+	// Row 2 (the PHP pair) lies in one file: `a` names every occurrence.
+	m.Update(key("j"))
+	m.Update(key("j"))
+	if strings.Contains(m.dupFooter(), "spans") || !strings.Contains(m.dupFooter(), "a extract") {
+		t.Errorf("footer = %q", m.dupFooter())
+	}
+	cmd := m.Update(key("a"))
+	if cmd == nil {
+		t.Fatal("a same-file group must ask the agent")
+	}
+	req, ok := cmd().(AskAgentMsg)
+	if !ok || req.Path != "/proj/web/index.php" || req.Line != 0 || req.EndLine != 21 || req.Lang != "php" || req.Tokens != 55 || len(req.Dup) != 2 {
+		t.Fatalf("request = %+v", req)
+	}
+	if req.Name != "2 duplicates of lines 1–10" || req.Task() != "extract 2 duplicates of lines 1–10" {
+		t.Fatalf("name = %q task = %q", req.Name, req.Task())
+	}
+	// An occurrence row stands for its group; the running group carries ⟳
+	// and esc cancels it.
+	m.ToggleDuplicate()
+	m.Update(key("j"))
+	if r, ok := m.AskAgent(); !ok || r.Key() != req.Key() {
+		t.Fatalf("occurrence row request = %+v", r)
+	}
+	m.SetAgentRunning(map[string]bool{req.Key(): true})
+	if !strings.Contains(m.View(), "web/index.php:1–10 ⟳") {
+		t.Errorf("the running group must carry the mark:\n%s", m.View())
+	}
+	cmd = m.Update(key("esc"))
+	if cmd == nil {
+		t.Fatal("esc on a running group must cancel")
+	}
+	if c, ok := cmd().(CancelAgentMsg); !ok || c.Key() != req.Key() {
+		t.Fatalf("cancel = %+v", c)
+	}
+}

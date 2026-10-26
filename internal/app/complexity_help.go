@@ -80,6 +80,7 @@ var complexityDuplicatesHelpKeys = []complexityHelpKey{
 	{Key: "enter · double click", Title: "On an occurrence: open the file with the duplicated lines selected"},
 	{Key: "t", Command: "complexity.toggleTests", Title: "Hide the occurrences in test files; a group left with one copy leaves the list"},
 	{Key: "y", Title: "Copy the group as one line: dup 120 tokens × 2: a.go:11–41, b.go:6–36"},
+	{Key: "a", Title: "Ask the coding agent to extract a same-file group into one shared helper (a group spanning several files is refused); applied like the simplify run"},
 }
 
 // complexityAgentHelpKeys documents the simplify agent's keys.
