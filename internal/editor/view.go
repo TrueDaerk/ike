@@ -1054,37 +1054,16 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	if lens, ok := m.lineLensHint(line); ok {
 		hints = append(append([]ilsp.InlayHint(nil), hints...), lens)
 	}
-	hi := 0
-	for hi < len(hints) && hints[hi].Col < left {
-		hi++
-	}
+	hi := firstHintFrom(hints, left)
 	hintStyle := lipgloss.NewStyle().Foreground(m.theme().InlayHint).Italic(true)
-	emitHint := func(b *strings.Builder, disp int, h ilsp.InlayHint) int {
-		text := hintText(h)
-		if w := width - disp; lipgloss.Width(text) > w {
-			text = truncate(text, w)
-		}
-		b.WriteString(hintStyle.Render(text))
-		return disp + lipgloss.Width(text)
-	}
 
 	// View-option overlays (#64), precomputed per span: the first column of
 	// the trailing-whitespace run, the end of the leading indent, and the
 	// display-cell offset of `from` measured from the line start so indent
 	// guides and rulers align with the line's own columns regardless of
 	// horizontal scroll or wrap segment.
-	trailStart := len(runes)
-	if m.wsMode != wsNone {
-		for trailStart > 0 && (runes[trailStart-1] == ' ' || runes[trailStart-1] == '\t') {
-			trailStart--
-		}
-	}
-	indentEnd := 0
-	if m.indentGuides {
-		for indentEnd < len(runes) && (runes[indentEnd] == ' ' || runes[indentEnd] == '\t') {
-			indentEnd++
-		}
-	}
+	trailStart := m.trailingWSStart(runes)
+	indentEnd := m.leadingIndentEnd(runes)
 	wsStyle := lipgloss.NewStyle().Foreground(m.theme().Whitespace)
 	// Indent guides (#64) carry one style per depth slot when depth coloring
 	// is on (#1628), a single flat style otherwise; guideSlot picks the entry.
@@ -1104,14 +1083,6 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 		sgrSpans = parseSGRSpans(runes)
 	}
 	rulerBG := m.theme().Ruler
-	isRuler := func(cell int) bool {
-		for _, r := range m.rulers {
-			if r == cell {
-				return true
-			}
-		}
-		return false
-	}
 	// Cell layout (#2526, cells.go): the display width of every column —
 	// wide glyphs take two cells, the columns a grapheme cluster absorbs take
 	// none. The loop, the click map and DisplayOffset all read this table.
@@ -1132,7 +1103,7 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	col := left
 	for ; disp < width && (to < 0 || col < to); col++ {
 		for hi < len(hints) && hints[hi].Col == col && disp < width {
-			disp = emitHint(&b, disp, hints[hi])
+			disp = emitInlayHint(&b, hintStyle, width, disp, hints[hi])
 			hi++
 		}
 		if disp >= width {
@@ -1176,29 +1147,8 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 						// only its tail is on screen.
 						repl = string([]rune(repl)[padSkip:])
 					}
-					if w := lipgloss.Width(repl); w > 0 {
-						if disp+w > width {
-							// The stand-in straddles the right edge (#1847):
-							// render the prefix that fits, exactly like a tab
-							// clipping there. Dropping it whole would let the
-							// text after the range slide left into the cells
-							// the alignment padding owns — the next *sv column
-							// glued onto a short field.
-							repl = clipCells(repl, width-disp)
-							w = lipgloss.Width(repl)
-						}
-						st, _ := m.styleAt(line, col)
-						switch {
-						case cr.standIn:
-							st = st.Background(m.theme().SelectionMuted)
-						case hasSVCol && col >= svStart && col < svEnd:
-							// The sv padding belongs to its column: tinting it
-							// keeps the stripe one uninterrupted block (#1659).
-							st = st.Background(svTint)
-						}
-						b.WriteString(st.Render(repl))
-						disp += w
-					}
+					inSV := hasSVCol && col >= svStart && col < svEnd
+					disp = m.writeStandIn(&b, line, col, width, disp, repl, cr.standIn, inSV, svTint)
 				}
 				contentCells += cw.at(runes, col, m.tabWidth)
 				continue
@@ -1208,7 +1158,7 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 			// Nothing meaningful left on this line; flush hints anchored at or
 			// past the line end (a type hint after the last token) first.
 			for hi < len(hints) && disp < width {
-				disp = emitHint(&b, disp, hints[hi])
+				disp = emitInlayHint(&b, hintStyle, width, disp, hints[hi])
 				hi++
 			}
 			// The complexity hint (0550, #2919) comes last, after any code
@@ -1277,14 +1227,7 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 			overlay = nil
 		}
 
-		inMatch, inCurrent := false, false
-		for _, s := range matchSpans {
-			if col >= s.Start && col < s.End {
-				inMatch = true
-				inCurrent = line == m.cursor.Line && m.cursor.Col >= s.Start && m.cursor.Col < s.End
-				break
-			}
-		}
+		inMatch, inCurrent := m.searchMatchAt(line, col, matchSpans)
 		if !inMatch {
 			for _, s := range domSpans {
 				if col >= s.start && col < s.end {
@@ -1327,19 +1270,10 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 			if cells > 1 {
 				b.WriteString(strings.Repeat(" ", cells-1))
 			}
-		case cursorHere && isTab && cells > 1:
-			// Cursor on a tab: highlight only the first cell (which may carry
-			// a whitespace/guide glyph), leave the rest plain. A wide glyph
-			// (#2526) instead highlights whole — it is one glyph, both cells.
-			b.WriteString(cursorStyle.Render(string([]rune(cell)[0])))
-			b.WriteString(strings.Repeat(" ", cells-1))
 		case cursorHere:
-			b.WriteString(cursorStyle.Render(cell))
-		case caretHere && isTab && cells > 1:
-			b.WriteString(caretStyle.Render(string([]rune(cell)[0])))
-			b.WriteString(strings.Repeat(" ", cells-1))
+			b.WriteString(renderCaretCell(cursorStyle, cell, isTab, cells))
 		case caretHere:
-			b.WriteString(caretStyle.Render(cell))
+			b.WriteString(renderCaretCell(caretStyle, cell, isTab, cells))
 		case leapMatch:
 			// The typed span of a label-jump target (#787), below the cursor
 			// and carets but above the selection and search styling.
@@ -1360,16 +1294,7 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 				// colour; cursor/selection/search already won above.
 				st, styled = *overlay, true
 			}
-			if sp, ok := sgrSpanAt(sgrSpans, col); ok {
-				// SGR interpretation (#1469): the sequence's own runes dim
-				// like the ␛ glyph; the text it governs takes the file's own
-				// colour/attributes in place of the syntax colour.
-				if sp.Seq {
-					st, styled = ctrlStyle, true
-				} else if overlay == nil {
-					st, styled = sp.apply(st), true
-				}
-			}
+			st, styled = applySGRSpan(sgrSpans, col, st, styled, overlay != nil, ctrlStyle)
 			if hasSVCol && col >= svStart && col < svEnd {
 				// Caret column stripe (#1659): the lowest background layer —
 				// ruler, conflict and occurrence tints all paint over it;
@@ -1377,7 +1302,7 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 				st = st.Background(svTint)
 				styled = true
 			}
-			if isRuler(abs) {
+			if m.onRuler(abs) {
 				// Ruler tint (#64): a background stripe under everything the
 				// higher-priority overlays didn't claim.
 				st = st.Background(rulerBG)
@@ -1398,18 +1323,7 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 				st = st.Faint(true).Bold(true)
 				styled = true
 			}
-			if kind, ok := m.occurrenceAt(line, col); ok {
-				// Occurrence mark (#172): a subtle background under the syntax
-				// colour; cursor/selection/search already won above.
-				st = st.Background(m.occurrenceColor(kind))
-				styled = true
-			}
-			if m.snippetSelAt(line, col) {
-				// Pre-selected snippet placeholder (#2146): reads as a
-				// selection so the replace-on-type affordance is visible.
-				st = st.Background(m.theme().SelectionMuted)
-				styled = true
-			}
+			st, styled = m.markCellStyle(line, col, st, styled)
 			for _, id := range ids {
 				// Identifier colors (#1626): the hash-keyed rainbow color
 				// replaces the syntax foreground, leaving the backgrounds
@@ -1431,20 +1345,7 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 					break
 				}
 			}
-			if sev, ok := m.diagSeverityAt(line, col); ok {
-				// Diagnostic underline composes over the syntax colour (syntax base <
-				// diagnostic underline); cursor/selection already won above.
-				st = st.Underline(true).UnderlineColor(m.diagColor(sev))
-				styled = true
-			}
-			if m.dimmed {
-				// Stale-content cue (#2777): faint composes over whatever the
-				// syntax/identifier/swatch colour above chose. Cursor,
-				// selection and search already rendered and returned in the
-				// earlier cases, so they never reach here.
-				st = st.Faint(true)
-				styled = true
-			}
+			st, styled = m.finishCellStyle(line, col, st, styled)
 			if styled {
 				b.WriteString(st.Render(cell))
 			} else {
@@ -1460,29 +1361,184 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	// Ruler columns past the content end (#64): pad with blanks so the ruler
 	// reads as a continuous stripe on short lines. Only the unbounded final
 	// span pads — wrapped middle segments are already full width.
-	if to < 0 && len(m.rulers) > 0 {
-		maxRuler := 0
-		for _, r := range m.rulers {
-			if r > maxRuler {
-				maxRuler = r
-			}
-		}
-		rulerStyle := lipgloss.NewStyle().Background(rulerBG)
-		for abs := startCells + contentCells; disp < width && abs <= maxRuler; abs++ {
-			if isRuler(abs) {
-				b.WriteString(rulerStyle.Render(" "))
-			} else {
-				b.WriteString(" ")
-			}
-			disp++
-		}
-	}
+	disp = m.padRulerTail(&b, to, startCells+contentCells, disp, width, rulerBG)
 	// The right-edge mark's condition (#2377): the width budget ran out with
 	// buffer cells or inlay hints still queued. Read off the cell loop rather
 	// than re-measured, so every width oddity it just handled — tabs, conceal
 	// stand-ins, sv alignment, double-width runes — is counted once.
 	over := disp >= width && (col < len(runes) || hi < len(hints))
 	return b.String(), over
+}
+
+// firstHintFrom returns the index of the first hint anchored at or after col.
+func firstHintFrom(hints []ilsp.InlayHint, col int) int {
+	hi := 0
+	for hi < len(hints) && hints[hi].Col < col {
+		hi++
+	}
+	return hi
+}
+
+// emitInlayHint writes one inlay hint at display offset disp, truncated to the
+// room left before the right edge, and returns the new display offset.
+func emitInlayHint(b *strings.Builder, style lipgloss.Style, width, disp int, h ilsp.InlayHint) int {
+	text := hintText(h)
+	if w := width - disp; lipgloss.Width(text) > w {
+		text = truncate(text, w)
+	}
+	b.WriteString(style.Render(text))
+	return disp + lipgloss.Width(text)
+}
+
+// trailingWSStart returns the first column of the trailing-whitespace run
+// (#64), or len(runes) when whitespace display is off.
+func (m Model) trailingWSStart(runes []rune) int {
+	start := len(runes)
+	if m.wsMode == wsNone {
+		return start
+	}
+	for start > 0 && (runes[start-1] == ' ' || runes[start-1] == '\t') {
+		start--
+	}
+	return start
+}
+
+// leadingIndentEnd returns the end of the leading indent (#64), or 0 when
+// indent guides are off.
+func (m Model) leadingIndentEnd(runes []rune) int {
+	end := 0
+	if !m.indentGuides {
+		return end
+	}
+	for end < len(runes) && (runes[end] == ' ' || runes[end] == '\t') {
+		end++
+	}
+	return end
+}
+
+// onRuler reports whether cell is a ruler column.
+func (m Model) onRuler(cell int) bool {
+	for _, r := range m.rulers {
+		if r == cell {
+			return true
+		}
+	}
+	return false
+}
+
+// padRulerTail pads blanks past the content end (#64) so a ruler reads as a
+// continuous stripe on short lines. Only the unbounded final span (to < 0)
+// pads — wrapped middle segments are already full width. It returns the new
+// display offset.
+func (m Model) padRulerTail(b *strings.Builder, to, abs, disp, width int, rulerBG color.Color) int {
+	if to >= 0 || len(m.rulers) == 0 {
+		return disp
+	}
+	maxRuler := 0
+	for _, r := range m.rulers {
+		if r > maxRuler {
+			maxRuler = r
+		}
+	}
+	rulerStyle := lipgloss.NewStyle().Background(rulerBG)
+	for ; disp < width && abs <= maxRuler; abs++ {
+		if m.onRuler(abs) {
+			b.WriteString(rulerStyle.Render(" "))
+		} else {
+			b.WriteString(" ")
+		}
+		disp++
+	}
+	return disp
+}
+
+// writeStandIn emits a conceal range's stand-in at display offset disp
+// (#1585) and returns the new offset. Its tint is the decoded-stand-in
+// background, or the caret column stripe when the cell sits in it (#1659).
+func (m Model) writeStandIn(b *strings.Builder, line, col, width, disp int, repl string, standIn, inSV bool, svTint color.Color) int {
+	w := lipgloss.Width(repl)
+	if w == 0 {
+		return disp
+	}
+	if disp+w > width {
+		// The stand-in straddles the right edge (#1847): render the prefix
+		// that fits, exactly like a tab clipping there, so the text after the
+		// range cannot slide left into the cells the alignment padding owns.
+		repl = clipCells(repl, width-disp)
+		w = lipgloss.Width(repl)
+	}
+	st, _ := m.styleAt(line, col)
+	switch {
+	case standIn:
+		st = st.Background(m.theme().SelectionMuted)
+	case inSV:
+		st = st.Background(svTint)
+	}
+	b.WriteString(st.Render(repl))
+	return disp + w
+}
+
+// searchMatchAt reports whether col lies in a search match and whether that
+// match is the one under the cursor (#255, #2145).
+func (m Model) searchMatchAt(line, col int, spans []search.Span) (inMatch, inCurrent bool) {
+	for _, s := range spans {
+		if col >= s.Start && col < s.End {
+			return true, line == m.cursor.Line && m.cursor.Col >= s.Start && m.cursor.Col < s.End
+		}
+	}
+	return false, false
+}
+
+// renderCaretCell draws a cursor or caret cell. On a tab only the first cell
+// takes the style (it may carry a whitespace/guide glyph) and the rest stays
+// plain; a wide glyph (#2526) instead highlights whole — one glyph, both cells.
+func renderCaretCell(style lipgloss.Style, cell string, isTab bool, cells int) string {
+	if isTab && cells > 1 {
+		return style.Render(string([]rune(cell)[0])) + strings.Repeat(" ", cells-1)
+	}
+	return style.Render(cell)
+}
+
+// applySGRSpan folds an interpreted SGR sequence (#1469) into the cell style:
+// the sequence's own runes dim like the ␛ glyph; the text it governs takes the
+// file's own colour/attributes in place of the syntax colour, unless an overlay
+// glyph already replaced it.
+func applySGRSpan(spans []sgrSpan, col int, st lipgloss.Style, styled, overlaid bool, ctrlStyle lipgloss.Style) (lipgloss.Style, bool) {
+	sp, ok := sgrSpanAt(spans, col)
+	if !ok {
+		return st, styled
+	}
+	if sp.Seq {
+		return ctrlStyle, true
+	}
+	if !overlaid {
+		return sp.apply(st), true
+	}
+	return st, styled
+}
+
+// markCellStyle layers the occurrence mark (#172) and the pre-selected snippet
+// placeholder (#2146) backgrounds under the syntax colour.
+func (m Model) markCellStyle(line, col int, st lipgloss.Style, styled bool) (lipgloss.Style, bool) {
+	if kind, ok := m.occurrenceAt(line, col); ok {
+		st, styled = st.Background(m.occurrenceColor(kind)), true
+	}
+	if m.snippetSelAt(line, col) {
+		st, styled = st.Background(m.theme().SelectionMuted), true
+	}
+	return st, styled
+}
+
+// finishCellStyle composes the diagnostic underline over the cell style and
+// the stale-content faint cue (#2777) over everything else.
+func (m Model) finishCellStyle(line, col int, st lipgloss.Style, styled bool) (lipgloss.Style, bool) {
+	if sev, ok := m.diagSeverityAt(line, col); ok {
+		st, styled = st.Underline(true).UnderlineColor(m.diagColor(sev)), true
+	}
+	if m.dimmed {
+		st, styled = st.Faint(true), true
+	}
+	return st, styled
 }
 
 // clipCells cuts s to at most w display cells (#1847): the hard cut a run of
