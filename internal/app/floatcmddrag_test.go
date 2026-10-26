@@ -12,9 +12,9 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// floatcmddrag_test.go — cmd+drag anywhere in a floating terminal panel moves
-// it (#3035), while a cmd+click without motion still opens the file reference
-// under the pointer (#1168).
+// floatcmddrag_test.go — alt/cmd+drag anywhere in a floating terminal panel moves
+// it (#3035, #3041; alt is what a real terminal reports), while a click without
+// motion still opens the file reference under the pointer (#1168).
 
 // floatPanelWithRef tears out a wide floating panel, prints a reference to an
 // existing file into its session, and returns the screen cell of the
@@ -49,14 +49,14 @@ func floatPanelWithRef(t *testing.T) (Model, *floatTerm, int, int, string) {
 	return m, f, 0, 0, ""
 }
 
-func cmdPress(x, y int) tea.MouseMsg {
-	return tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft, Mod: tea.ModSuper}
+func altPress(x, y int) tea.MouseMsg {
+	return tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft, Mod: tea.ModAlt}
 }
 
 func TestFloatPanelCmdDragMovesPanel(t *testing.T) {
 	m, f, x, y, path := floatPanelWithRef(t)
 	x0, y0 := f.x, f.y
-	m = step(m, cmdPress(x, y))
+	m = step(m, altPress(x, y))
 	if m.floatMove == nil || m.floatMove.target != f {
 		t.Fatal("a cmd+press in the panel content must arm the move drag")
 	}
@@ -79,7 +79,7 @@ func TestFloatPanelCmdDragMovesPanel(t *testing.T) {
 
 func TestFloatPanelCmdDragClampsToScreen(t *testing.T) {
 	m, f, x, y, _ := floatPanelWithRef(t)
-	m = step(m, cmdPress(x, y))
+	m = step(m, altPress(x, y))
 	m = step(m, motion(x+10_000, y+10_000))
 	m = step(m, release(x+10_000, y+10_000))
 	if f.x != max(m.width-f.w, 0) || f.y != max(m.height-f.h, 0) {
@@ -88,7 +88,7 @@ func TestFloatPanelCmdDragClampsToScreen(t *testing.T) {
 }
 
 func TestFloatPanelCmdClickWithoutMotionOpensReference(t *testing.T) {
-	for _, mod := range []tea.KeyMod{tea.ModSuper, tea.ModMeta} {
+	for _, mod := range []tea.KeyMod{tea.ModAlt, tea.ModSuper, tea.ModMeta} {
 		m, f, x, y, path := floatPanelWithRef(t)
 		x0, y0 := f.x, f.y
 		m = step(m, tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft, Mod: mod})
@@ -163,7 +163,7 @@ func popupWithRef(t *testing.T) (Model, int, int, string) {
 func TestPopupCmdDragMovesBox(t *testing.T) {
 	m, x, y, path := popupWithRef(t)
 	x0, y0, _, _ := m.popupTermRect()
-	m = step(m, cmdPress(x, y))
+	m = step(m, altPress(x, y))
 	if m.floatMove == nil || m.floatMove.target != nil || !m.floatMove.armed {
 		t.Fatal("a cmd+press in the popup content must arm the box move drag")
 	}
@@ -186,7 +186,7 @@ func TestPopupCmdDragMovesBox(t *testing.T) {
 func TestPopupCmdClickWithoutMotionOpensReference(t *testing.T) {
 	m, x, y, path := popupWithRef(t)
 	x0, y0, _, _ := m.popupTermRect()
-	m = step(m, cmdPress(x, y))
+	m = step(m, altPress(x, y))
 	m = step(m, release(x, y))
 	ed := m.editorForPath(path)
 	if ed == nil {

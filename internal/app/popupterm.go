@@ -814,9 +814,10 @@ func (m Model) popupTermMouse(msg mouseEvent) (tea.Model, tea.Cmd, bool) {
 			return m, nil, true
 		}
 		// cmd+click opens a file:line reference (#1168); like a floating
-		// panel (#3035), a cmd+press on an unmaximized box arms a move
-		// drag and the release decides between link open and move (#3039).
-		if msg.Mod&(tea.ModSuper|tea.ModMeta) != 0 {
+		// panel (#3035), an alt/cmd+press on an unmaximized box arms a move
+		// drag and the release decides between link open and move (#3039,
+		// #3041).
+		if msg.Mod&moveDragMods != 0 {
 			if !m.popup.maximized {
 				m.floatMove = &floatMoveDrag{lastX: msg.X, lastY: msg.Y, armed: true, linkX: lx, linkY: ly, linkInst: inst}
 				return m, nil, true
