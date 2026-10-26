@@ -1097,6 +1097,16 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 		}
 	}
 
+	glyphs := cellGlyphKit{
+		ws: wsStyle, ctrl: ctrlStyle, invis: invisStyle, guides: guideStyles,
+		trailStart: trailStart, indentEnd: indentEnd,
+	}
+	overlays := overlayStyles{
+		cursor: cursorStyle, caret: caretStyle, leapLabel: leapLabelStyle,
+		leapMatch: leapMatchStyle, sel: selStyle, curMatch: curMatchStyle,
+		match: matchStyle, filter: filterStyle,
+	}
+
 	var b strings.Builder
 	disp := 0         // display cells emitted so far (buffer cells + inlay hints)
 	contentCells := 0 // buffer cells emitted so far (excludes inlay hints)
@@ -1121,15 +1131,7 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 		cursorHere := isCursorLine && col <= m.cursor.Col && m.cursor.Col < end
 		caretHere := m.focused && m.caretOnRange(line, col, end)
 		selected := hasSel && end-1 >= selStart && col <= selEnd
-		var leapRune rune
-		leapHere, leapMatch := false, false
-		if leapActive {
-			if lr, ok := m.leapLabelAt(line, col); ok {
-				leapRune, leapHere = lr, true
-			} else {
-				leapMatch = m.leapMatchAt(line, col)
-			}
-		}
+		leapRune, leapHere, leapMatch := m.leapCellAt(leapActive, line, col)
 		if col < len(runes) {
 			if cr, ok := rangeAt(conceals, col); ok {
 				// Concealed cell: marker chrome (#881) emits nothing; a
@@ -1157,21 +1159,7 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 		if col >= len(runes) && !cursorHere && !caretHere && !selected && !leapHere {
 			// Nothing meaningful left on this line; flush hints anchored at or
 			// past the line end (a type hint after the last token) first.
-			for hi < len(hints) && disp < width {
-				disp = emitInlayHint(&b, hintStyle, width, disp, hints[hi])
-				hi++
-			}
-			// The complexity hint (0550, #2919) comes last, after any code
-			// lens, and only whole: it never truncates and never counts
-			// toward the right-edge mark — a header with no room shows none.
-			// A per-site mark (#2947) takes the same slot on the lines the
-			// header hint leaves free.
-			if hi >= len(hints) {
-				if cx, w := m.complexityTrailer(line, width-disp); w > 0 {
-					b.WriteString(cx)
-					disp += w
-				}
-			}
+			disp, hi = m.flushLineEnd(&b, line, width, disp, hi, hints, hintStyle)
 			break
 		}
 
@@ -1180,46 +1168,7 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 		var overlay *lipgloss.Style // whitespace/guide foreground for this cell (#64)
 		abs := startCells + contentCells
 		if col < len(runes) {
-			switch r := runes[col]; {
-			case r == '\t':
-				isTab = true
-				cell, cells = strings.Repeat(" ", m.tabWidth), m.tabWidth
-				if m.wsVisible(col, trailStart) {
-					cell = "→" + strings.Repeat(" ", cells-1)
-					overlay = &wsStyle
-				} else if m.guideAt(col, indentEnd, abs) {
-					cell = "│" + strings.Repeat(" ", cells-1)
-					overlay = &guideStyles[guideSlot(abs, m.tabWidth, len(guideStyles))]
-				}
-			case r == ' ' && m.wsVisible(col, trailStart):
-				cell = "·"
-				overlay = &wsStyle
-			case r == ' ' && m.guideAt(col, indentEnd, abs):
-				cell = "│"
-				overlay = &guideStyles[guideSlot(abs, m.tabWidth, len(guideStyles))]
-			case isCtrlRune(r):
-				// Control byte (#1469): a one-cell placeholder glyph, never
-				// the raw byte — one buffer rune stays one display cell, so
-				// click mapping and caret rendering stay aligned.
-				cell = ctrlGlyph(r)
-				overlay = &ctrlStyle
-			case end == col+1:
-				if g, ok := unihint.Placeholder(r); ok {
-					// Invisible/format rune (#1654): the one-cell placeholder,
-					// never the raw (zero-width) rune.
-					cell = g
-					overlay = &invisStyle
-				} else {
-					// A lone rune, possibly double-width (#2526).
-					cell, cells = string(r), cw.at(runes, col, m.tabWidth)
-				}
-			default:
-				// A grapheme cluster (#2526): the whole sequence — base, skin
-				// tone, joiners, combining marks — goes to the terminal as one
-				// string, budgeted at the cluster's width. cleanCluster already
-				// kept placeholder runes out of here.
-				cell, cells = string(runes[col:end]), cw.at(runes, col, m.tabWidth)
-			}
+			cell, cells, isTab, overlay = m.cellGlyph(runes, col, end, abs, cw.at(runes, col, m.tabWidth), &glyphs)
 		}
 		if disp+cells > width { // clamp a tab or wide glyph straddling the right edge
 			cells = width - disp
@@ -1261,33 +1210,14 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 				"id=ike-"+strconv.Itoa(line)+"-"+strconv.Itoa(link.start)))
 		}
 
-		switch {
-		case leapHere:
-			// Label jump (#787): the label glyph replaces the cell, above even
-			// the cursor — it is what the next key acts on. On a tab only the
-			// first cell carries the glyph, like the cursor.
-			b.WriteString(leapLabelStyle.Render(string(leapRune)))
-			if cells > 1 {
-				b.WriteString(strings.Repeat(" ", cells-1))
-			}
-		case cursorHere:
-			b.WriteString(renderCaretCell(cursorStyle, cell, isTab, cells))
-		case caretHere:
-			b.WriteString(renderCaretCell(caretStyle, cell, isTab, cells))
-		case leapMatch:
-			// The typed span of a label-jump target (#787), below the cursor
-			// and carets but above the selection and search styling.
-			b.WriteString(leapMatchStyle.Render(cell))
-		case selected:
-			b.WriteString(selStyle.Render(cell))
-		case inCurrent:
-			b.WriteString(curMatchStyle.Render(cell))
-		case inMatch:
-			b.WriteString(matchStyle.Render(cell))
-		case inFilter:
-			// Below the search overlays, above the syntax colour (#2255).
-			b.WriteString(filterStyle.Render(cell))
-		default:
+		if s, ok := renderOverlayCell(cellFlags{
+			leapHere: leapHere, leapMatch: leapMatch, cursorHere: cursorHere,
+			caretHere: caretHere, selected: selected, inCurrent: inCurrent,
+			inMatch: inMatch, inFilter: inFilter, isTab: isTab,
+			leapRune: leapRune, cell: cell, cells: cells,
+		}, &overlays); ok {
+			b.WriteString(s)
+		} else {
 			st, styled := m.styleAt(line, col)
 			if overlay != nil {
 				// Whitespace glyphs / indent guides (#64) replace the syntax
@@ -1368,6 +1298,144 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	// stand-ins, sv alignment, double-width runes — is counted once.
 	over := disp >= width && (col < len(runes) || hi < len(hints))
 	return b.String(), over
+}
+
+// leapCellAt reports the label-jump state of one cell (#787): the label rune
+// drawn over it, or whether it lies in the typed span of a target.
+func (m Model) leapCellAt(active bool, line, col int) (r rune, label, match bool) {
+	if !active {
+		return 0, false, false
+	}
+	if lr, ok := m.leapLabelAt(line, col); ok {
+		return lr, true, false
+	}
+	return 0, false, m.leapMatchAt(line, col)
+}
+
+// flushLineEnd emits the hints anchored at or past the line end, then the
+// complexity trailer, and returns the updated display width and hint index.
+func (m Model) flushLineEnd(b *strings.Builder, line, width, disp, hi int, hints []ilsp.InlayHint, hintStyle lipgloss.Style) (int, int) {
+	for hi < len(hints) && disp < width {
+		disp = emitInlayHint(b, hintStyle, width, disp, hints[hi])
+		hi++
+	}
+	// The complexity hint (0550, #2919) comes last, after any code
+	// lens, and only whole: it never truncates and never counts
+	// toward the right-edge mark — a header with no room shows none.
+	// A per-site mark (#2947) takes the same slot on the lines the
+	// header hint leaves free.
+	if hi >= len(hints) {
+		if cx, w := m.complexityTrailer(line, width-disp); w > 0 {
+			b.WriteString(cx)
+			disp += w
+		}
+	}
+	return disp, hi
+}
+
+// cellGlyphKit bundles the per-span styles and offsets cellGlyph reads.
+type cellGlyphKit struct {
+	ws, ctrl, invis       lipgloss.Style
+	guides                []lipgloss.Style
+	trailStart, indentEnd int
+}
+
+// cellGlyph picks the text and overlay style of one buffer cell: tabs,
+// visible whitespace, indent guides, control bytes, placeholders, lone runes
+// and grapheme clusters. w is the cell's display width from the cell table.
+func (m Model) cellGlyph(runes []rune, col, end, abs, w int, k *cellGlyphKit) (cell string, cells int, isTab bool, overlay *lipgloss.Style) {
+	cell, cells = " ", 1
+	switch r := runes[col]; {
+	case r == '\t':
+		isTab = true
+		cell, cells = strings.Repeat(" ", m.tabWidth), m.tabWidth
+		if m.wsVisible(col, k.trailStart) {
+			cell = "→" + strings.Repeat(" ", cells-1)
+			overlay = &k.ws
+		} else if m.guideAt(col, k.indentEnd, abs) {
+			cell = "│" + strings.Repeat(" ", cells-1)
+			overlay = &k.guides[guideSlot(abs, m.tabWidth, len(k.guides))]
+		}
+	case r == ' ' && m.wsVisible(col, k.trailStart):
+		cell = "·"
+		overlay = &k.ws
+	case r == ' ' && m.guideAt(col, k.indentEnd, abs):
+		cell = "│"
+		overlay = &k.guides[guideSlot(abs, m.tabWidth, len(k.guides))]
+	case isCtrlRune(r):
+		// Control byte (#1469): a one-cell placeholder glyph, never
+		// the raw byte — one buffer rune stays one display cell, so
+		// click mapping and caret rendering stay aligned.
+		cell = ctrlGlyph(r)
+		overlay = &k.ctrl
+	case end == col+1:
+		if g, ok := unihint.Placeholder(r); ok {
+			// Invisible/format rune (#1654): the one-cell placeholder,
+			// never the raw (zero-width) rune.
+			cell = g
+			overlay = &k.invis
+		} else {
+			// A lone rune, possibly double-width (#2526).
+			cell, cells = string(r), w
+		}
+	default:
+		// A grapheme cluster (#2526): the whole sequence — base, skin
+		// tone, joiners, combining marks — goes to the terminal as one
+		// string, budgeted at the cluster's width. cleanCluster already
+		// kept placeholder runes out of here.
+		cell, cells = string(runes[col:end]), w
+	}
+	return cell, cells, isTab, overlay
+}
+
+// cellFlags is the overlay state of one cell, tested by renderOverlayCell.
+type cellFlags struct {
+	leapHere, leapMatch, cursorHere, caretHere bool
+	selected, inCurrent, inMatch, inFilter     bool
+	isTab                                      bool
+	leapRune                                   rune
+	cell                                       string
+	cells                                      int
+}
+
+// overlayStyles holds the styles of the overlays that outrank syntax colour.
+type overlayStyles struct {
+	cursor, caret, leapLabel, leapMatch lipgloss.Style
+	sel, curMatch, match, filter        lipgloss.Style
+}
+
+// renderOverlayCell renders a cell claimed by a higher-priority overlay, in
+// priority order. ok is false when none claims it and syntax styling applies.
+func renderOverlayCell(f cellFlags, s *overlayStyles) (out string, ok bool) {
+	switch {
+	case f.leapHere:
+		// Label jump (#787): the label glyph replaces the cell, above even
+		// the cursor — it is what the next key acts on. On a tab only the
+		// first cell carries the glyph, like the cursor.
+		out = s.leapLabel.Render(string(f.leapRune))
+		if f.cells > 1 {
+			out += strings.Repeat(" ", f.cells-1)
+		}
+		return out, true
+	case f.cursorHere:
+		return renderCaretCell(s.cursor, f.cell, f.isTab, f.cells), true
+	case f.caretHere:
+		return renderCaretCell(s.caret, f.cell, f.isTab, f.cells), true
+	case f.leapMatch:
+		// The typed span of a label-jump target (#787), below the cursor
+		// and carets but above the selection and search styling.
+		return s.leapMatch.Render(f.cell), true
+	case f.selected:
+		return s.sel.Render(f.cell), true
+	case f.inCurrent:
+		return s.curMatch.Render(f.cell), true
+	case f.inMatch:
+		return s.match.Render(f.cell), true
+	case f.inFilter:
+		// Below the search overlays, above the syntax colour (#2255).
+		return s.filter.Render(f.cell), true
+	}
+	return "", false
 }
 
 // firstHintFrom returns the index of the first hint anchored at or after col.
