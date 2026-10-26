@@ -321,6 +321,36 @@ func TestComplexityAgentHunkMismatchAppliesNothing(t *testing.T) {
 	}
 }
 
+// TestComplexityAgentElidedDiffRetriesThenNotesIt covers #3050: a diff with
+// a "..." placeholder gets the one follow-up asking for the complete diff;
+// when that one is elided too, the apply misses and the scratch's note
+// names the left-out lines, not an edited file.
+func TestComplexityAgentElidedDiffRetriesThenNotesIt(t *testing.T) {
+	m, file, req := cxAgentApp(t)
+	elided := "```diff\n@@ -1,40 +1,40 @@\n \tif a > 0 {\n \t\t... (rest unchanged)\n-\treturn b\n+\treturn 0\n```\nWhy."
+	f := &fakeCxRunner{answers: []agentask.Result{{Answer: elided, ForkID: "s1"}, {Answer: elided, ForkID: "s1"}}}
+	useFakeCxRunner(t, f)
+	m, _ = cxAgentDone(t, m, req)
+	if f.runs != 2 {
+		t.Fatalf("an elided diff must get exactly one follow-up, ran %d", f.runs)
+	}
+	if !hasToast(m, "does not apply cleanly (hunk 1 of 1, the diff leaves lines out) — opened as ") {
+		t.Fatalf("toasts = %v", toastTexts(m))
+	}
+	if ed := m.editorForPath(file); ed != nil && ed.Dirty() {
+		t.Fatal("nothing may be applied")
+	}
+	body := newestAgentScratch(t)
+	for _, part := range []string{"does not match the buffer", "The diff leaves lines out — hunk 1 stands a placeholder in for lines (\"... (rest unchanged)\")", "also after the follow-up asking for the complete diff", "git apply --3way"} {
+		if !strings.Contains(body, part) {
+			t.Errorf("scratch lacks %q:\n%s", part, body)
+		}
+	}
+	if strings.Contains(body, "edited since") {
+		t.Errorf("a forward miss is not an edited file:\n%s", body)
+	}
+}
+
 func TestComplexityAgentNoDiffRetriesOnceThenScratch(t *testing.T) {
 	m, file, req := cxAgentApp(t)
 	f := &fakeCxRunner{answers: []agentask.Result{

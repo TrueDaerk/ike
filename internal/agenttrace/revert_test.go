@@ -53,11 +53,11 @@ func TestApply(t *testing.T) {
 	}{
 		{"hunk", one, "a\nb\nc\nd\ne\n", "a\nb\nC\nd\ne\n", nil, 0},
 		{"two hunks, last first", two, "a\nm\ny\nz\n", "a\nx\nm\ny\nZ\n", nil, 0},
-		{"conflict", one, "a\nb\nX\nd\n", "", ErrConflict, 1},
-		{"second hunk misses", two, "a\nm\ny\nq\n", "", ErrConflict, 2},
+		{"no match", one, "a\nb\nX\nd\n", "", ErrNoMatch, 1},
+		{"second hunk misses", two, "a\nm\ny\nq\n", "", ErrNoMatch, 2},
 		{"already applied", one, "a\nb\nC\nd\n", "", ErrApplied, 1},
 		{"ambiguous", one, "b\nc\nd\nb\nc\nd", "", ErrAmbiguous, 1},
-		{"bare insertion", []DiffHunk{{Lines: []string{"+new"}}}, "a\n", "", ErrConflict, 1},
+		{"bare insertion", []DiffHunk{{Lines: []string{"+new"}}}, "a\n", "", ErrNoMatch, 1},
 		{"no hunks", nil, "a\n", "", ErrNoSnapshot, 0},
 	}
 	for _, c := range cases {

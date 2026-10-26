@@ -27,14 +27,27 @@ const SimplifyInstruction = "Reduce the cognitive complexity of this function wi
 	"keep the public signature; keep tests green. " +
 	"You have no tools and cannot read files; the complete function source is in the fenced block above. " +
 	"Answer with the unified diff against the file first, in a ```diff fence, " +
-	"then one paragraph on what you changed and why."
+	"then one paragraph on what you changed and why. " +
+	DiffInFull
 
 // SimplifySystemPrompt replaces SystemPrompt for a simplify run (#3009).
 const SimplifySystemPrompt = "You have no tools and cannot read or modify files. " +
-	"Answer only from the source in the prompt: a unified diff in a ```diff fence first, then one paragraph."
+	"Answer only from the source in the prompt: a unified diff in a ```diff fence first, then one paragraph. " +
+	DiffInFull
+
+// DiffInFull ends every diff-asking instruction (#3050): a long function
+// tempts the model to stand a "..." placeholder in for a region it leaves
+// alone, and such a diff never matches the buffer.
+const DiffInFull = "Write every line of the diff in full, exactly as in the source: " +
+	"never shorten it with \"...\", \"[...]\" or an \"unchanged\" note standing in for lines."
 
 // NoDiffFollowUp is the one follow-up a diff-less answer gets (#3009).
 const NoDiffFollowUp = "Your answer contained no unified diff. Answer with the diff now."
+
+// ElidedDiffFollowUp is the one follow-up a diff that leaves lines out gets
+// (#3050): "..." placeholders or a hunk shorter than its header counts.
+const ElidedDiffFollowUp = "Your diff left lines out (a \"...\" placeholder, or a hunk shorter than its @@ header counts), so it cannot be applied. " +
+	"Answer with the complete diff now, every line written in full."
 
 // MaxSimplifySource caps the function source carried in the prompt, in
 // bytes; a longer function is cut at a line boundary with a trailing note.
@@ -156,10 +169,11 @@ func SimplifyCommand(opts Options, prompt string) []string {
 	return withSystemPrompt(FreshCommand(opts, prompt), SimplifySystemPrompt)
 }
 
-// SimplifyFollowUp is the no-diff follow-up: FollowUp resuming the run's
-// own session with NoDiffFollowUp, under SimplifySystemPrompt.
-func SimplifyFollowUp(sessionID string, opts Options) []string {
-	return withSystemPrompt(FollowUp(sessionID, opts, Prompt(Context{}, NoDiffFollowUp)), SimplifySystemPrompt)
+// SimplifyFollowUp is the one follow-up a run gets: FollowUp resuming the
+// run's own session with ask — NoDiffFollowUp or ElidedDiffFollowUp —
+// under SimplifySystemPrompt.
+func SimplifyFollowUp(sessionID string, opts Options, ask string) []string {
+	return withSystemPrompt(FollowUp(sessionID, opts, Prompt(Context{}, ask)), SimplifySystemPrompt)
 }
 
 // withSystemPrompt swaps the --append-system-prompt value of argv.
@@ -176,7 +190,8 @@ func withSystemPrompt(argv []string, system string) []string {
 type Runner func(ctx context.Context, dir string, argv []string) (Result, error)
 
 // SimplifyResult is a finished simplify run: the last answer, the parsed
-// diff when it held one, and whether the no-diff follow-up ran. Sessions
+// diff when it held one, and whether the one follow-up ran (a diff-less or
+// an elided answer, #3050; Diff.Elided says what the last answer left out). Sessions
 // lists every session id the run left behind (the fresh one and, after a
 // follow-up, the one it answered in) for discovery to skip.
 type SimplifyResult struct {
@@ -188,9 +203,10 @@ type SimplifyResult struct {
 }
 
 // RunSimplify runs the simplify prompt in a fresh session and, when the
-// answer holds no parseable diff, asks once more in the same session with
-// NoDiffFollowUp. It never retries twice; a failed follow-up returns the
-// first answer with the follow-up's error.
+// answer holds no parseable diff — or one that leaves lines out (#3050) —
+// asks once more in the same session with NoDiffFollowUp or
+// ElidedDiffFollowUp. It never retries twice; a failed follow-up returns
+// the first answer with the follow-up's error.
 func RunSimplify(ctx context.Context, run Runner, dir string, opts Options, prompt string) (SimplifyResult, error) {
 	res, err := run(ctx, dir, SimplifyCommand(opts, prompt))
 	out := SimplifyResult{Result: res}
@@ -198,11 +214,16 @@ func RunSimplify(ctx context.Context, run Runner, dir string, opts Options, prom
 	if err != nil {
 		return out, err
 	}
-	if out.Diff, out.HasDiff = ParseAnswerDiff(res.Answer); out.HasDiff || res.ForkID == "" {
+	out.Diff, out.HasDiff = ParseAnswerDiff(res.Answer)
+	if (out.HasDiff && out.Diff.Elided == "") || res.ForkID == "" {
 		return out, nil
 	}
+	ask := NoDiffFollowUp
+	if out.HasDiff {
+		ask = ElidedDiffFollowUp
+	}
 	out.Retried = true
-	again, err := run(ctx, dir, SimplifyFollowUp(res.ForkID, opts))
+	again, err := run(ctx, dir, SimplifyFollowUp(res.ForkID, opts, ask))
 	out.noteSession(again.ForkID)
 	if err != nil {
 		return out, err

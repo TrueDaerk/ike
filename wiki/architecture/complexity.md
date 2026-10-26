@@ -2104,12 +2104,25 @@ reads the first ```` ```diff ```` / ```` ```patch ```` fence, else a bare
 `--- a/… / +++ b/…` block, into file sections of `agenttrace.DiffHunk`s
 (`@@` starts a hunk; ` `, `-`, `+` rows; a blank line is an empty context
 row; `\ No newline`, `diff` and `index` lines are skipped; the header counts
-are informational). An answer without a hunk gets exactly one follow-up in
-the same session — `agentask.SimplifyFollowUp`, `FollowUp` resuming the
-run's session id with `NoDiffFollowUp` (*Your answer contained no unified
-diff. Answer with the diff now.*); a second diff-less answer is final.
-`RunSimplify` takes the runner as a parameter (`agentask.Runner`), which is
-the seam the tests fake.
+are informational for the apply). The parser also flags a diff that **leaves
+lines out** (#3050, `AnswerDiff.Elided`): a row that is a placeholder for
+lines — `...`, `…`, `[...]` alone or after a comment opener, or `...`
+followed by a space or parenthesis (`... (whole kind switch, lines 494–639,
+moved verbatim into helpers below)`; a spread like `...rest` is code) — or
+a hunk clearly shorter than its `@@` header counts (fewer before or after
+rows by at least ten lines and more than a tenth, since models miscount
+small hunks freely). A long function tempts the model into exactly that, and such a
+diff can never match the buffer. Every diff-asking instruction therefore ends
+with `agentask.DiffInFull` (*Write every line of the diff in full … never
+shorten it with "...", "[...]" or an "unchanged" note*). An answer without a
+hunk, or with an elided diff, gets exactly one follow-up in the same session
+— `agentask.SimplifyFollowUp`, `FollowUp` resuming the run's session id with
+`NoDiffFollowUp` (*Your answer contained no unified diff. Answer with the
+diff now.*) or `ElidedDiffFollowUp` (*Your diff left lines out … Answer with
+the complete diff now, every line written in full.*); a second diff-less or
+elided answer is final — the elided one goes on to the apply, which misses
+and says why (below). `RunSimplify` takes the runner as a parameter
+(`agentask.Runner`), which is the seam the tests fake.
 
 **Apply (#3009, `complexity.agent_apply`, default on).** The agent stays
 tool-less; IKE applies its diff, so the change lands as **one undoable edit
@@ -2124,8 +2137,10 @@ several — refuses the apply. `agenttrace.Apply` is the agent-trace revert's sp
 forward (`spliceHunks`, shared with `Revert`, agent-trace.md "Revert agent
 change"): each hunk's before lines (context and removed) must occur exactly
 once and are replaced by its after lines, last hunk first; a miss returns a
-`*agenttrace.HunkError` naming the hunk (`hunk 2 of 3`) and nothing is
-applied. The check runs first against the buffer, or the disk when the file
+`*agenttrace.HunkError` naming the hunk (`hunk 2 of 3`) with
+`agenttrace.ErrNoMatch` (*the diff's lines do not occur in the file — it does
+not match the buffer*; the revert's `ErrConflict`, *it was edited since*,
+described the wrong direction, #3050) and nothing is applied. The check runs first against the buffer, or the disk when the file
 is not open; only then the scratch (below) opens, the function's file opens
 after it — so it is the tab in front and the editor sits on the function's
 header — and the edit is made last through `applyBufferRestore`, the local
@@ -2143,7 +2158,11 @@ the excess taken under the file's thresholds. The Complexity window follows
 through its normal buffer-change path. A hunk that does not match opens the
 scratch in front with `complexity: the agent's diff does not apply cleanly
 (hunk 2 of 3) — opened as <scratch>`, so `git apply --3way` stays the
-fallback; a diff-less answer after the retry opens it with `complexity: the
+fallback; when the diff leaves lines out (#3050) the toast adds `, the diff
+leaves lines out` and the scratch's note names them (*The diff leaves lines
+out — hunk 1 stands a placeholder in for lines ("... (rest unchanged)"), also
+after the follow-up asking for the complete diff — so it cannot match the
+file.*); a diff-less answer after the retry opens it with `complexity: the
 agent answered without a diff — opened as <scratch>`. With
 `complexity.agent_apply` off the answer only opens as the scratch, as
 before #3009.
