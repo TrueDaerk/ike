@@ -464,200 +464,14 @@ func (m Model) statusLine() string {
 	}
 
 	if d := m.drag; d != nil && (d.kind == dragMove || d.kind == dragTab) && d.engaged() {
-		hint := "MOVE " + m.paneLabel(d.srcPane)
-		if d.kind == dragTab {
-			hint = "MOVE " + m.tabDragLabel(d)
-		}
-		if zone, docks := m.dockZoneAt(d.curX, d.curY); docks {
-			hint += " → dock " + dockName(zone)
-		} else if tgt, ok := m.lay.PaneAt(d.curX, d.curY); ok && tgt != d.srcPane {
-			if zone, can := m.dropZoneFor(d, tgt, m.lay.Panes[tgt]); can {
-				hint += " → " + zoneArrow(zone) + " of " + m.paneLabel(tgt)
-			} else {
-				hint += "  (drop on a pane or this pane's edge)"
-			}
-		} else if zone, near := m.selfDropZone(d); near {
-			hint += " → split " + zoneArrow(zone)
-		} else {
-			hint += "  (drop on a pane or this pane's edge)"
-		}
-		return style.Foreground(m.pal().DropTarget).Render(" " + hint)
+		return style.Foreground(m.pal().DropTarget).Render(" " + m.moveDragHint())
 	}
 
 	// A non-editor focus names itself instead of implying editor input (#381):
 	// mirroring the active editor while a terminal owns the keystrokes made it
 	// hard to tell where input goes. The focus resolves to the pane's body
 	// content, so a viewer hosted as the active tab (#1778) names itself too.
-	if inst := m.focusedContent(); inst != nil &&
-		(inst.Kind() != pane.KindEditor || inst.ActiveTerminal() != nil) {
-		left := " "
-		switch {
-		case inst.ActiveTerminal() != nil && inst.ActiveTerminal().Tool() != "":
-			// A tool pane (#741) names its tool, not the shell machinery.
-			left += toolPaneTitle(inst.ActiveTerminal())
-		case inst.ActiveTerminal() != nil:
-			// A terminal pane, or an editor pane whose active tab hosts a
-			// terminal (#573) — either way the keystrokes go to a shell.
-			left += "TERMINAL"
-			t := inst.ActiveTerminal()
-			seg := ""
-			if s := t.ShellPath(); s != "" {
-				seg = filepath.Base(s)
-			}
-			if d := t.Cwd(); d != "" { // live cwd (#770)
-				if seg != "" {
-					seg += " · "
-				}
-				seg += displayDir(d)
-			}
-			if seg != "" {
-				left += " │ " + seg
-			}
-			if !t.Running() {
-				left += " [exited]"
-			}
-		case inst.Kind() == pane.KindMarkdown:
-			left += "PREVIEW │ " + filepath.Base(inst.Preview().Path())
-			// The selected link (#2180) is what enter would follow and y
-			// would copy, so it belongs where the user looks before pressing.
-			if target, ok := inst.Preview().SelectedTarget(); ok {
-				left += " │ → " + target
-			} else if inst.Preview().HasLinks() {
-				left += " │ tab: links"
-			}
-		case inst.Kind() == pane.KindHTMLPreview:
-			// The page's <title> says what the rendering is of (#2740).
-			left += "HTML PREVIEW │ " + filepath.Base(inst.HTMLPreview().Path())
-			if title := inst.HTMLPreview().Title(); title != "" {
-				left += " │ " + title
-			}
-			// Browser mode (#2746): the screenshot's state and zoom level.
-			if st := inst.HTMLPreview().BrowserStatus(); st != "" {
-				left += " │ " + st
-			}
-			// The off-loop render (#2745): in flight, or cut at the budget.
-			if inst.HTMLPreview().Pending() {
-				left += " │ rendering…"
-			} else if inst.HTMLPreview().Truncated() {
-				left += " │ truncated at " + strconv.Itoa(inst.HTMLPreview().RenderBudgetKB()) + " KB"
-			}
-			// The selected link (#2741), as in the markdown preview.
-			if target, ok := inst.HTMLPreview().SelectedTarget(); ok {
-				left += " │ → " + target
-			} else if inst.HTMLPreview().HasLinks() {
-				left += " │ tab: links"
-			}
-		case inst.Kind() == pane.KindMerge:
-			// The remaining-conflict counter (#2258): the caret's place in
-			// the ]n/[n cycle while it stands in a block, the unresolved
-			// count out of the total, and the finish hint once none is left.
-			mg := inst.Merge()
-			left += "MERGE │ " + filepath.Base(mg.Path())
-			if n := mg.Unresolved(); n > 0 {
-				if idx, _ := mg.ConflictIndex(); idx > 0 {
-					left += " │ conflict " + strconv.Itoa(idx) + "/" + strconv.Itoa(n)
-				}
-				left += " │ " + strconv.Itoa(n) + "/" + strconv.Itoa(mg.Total()) + " unresolved"
-			} else {
-				left += " │ ✓ all resolved — vcs.mergeApply to finish"
-			}
-		case inst.Kind() == pane.KindDiff:
-			l, r := inst.Diff().SideLabels() // what each side is (#2494)
-			left += "DIFF │ " + l + " ⇄ " + r
-			if inst.Diff().IgnoreWhitespace() {
-				// The ignore-whitespace toggle (#2170) is state the reader has
-				// to see: it decides which changes are in the list at all.
-				left += " │ -w"
-			}
-			if n := inst.Diff().HunkCount(); n > 0 {
-				hunk := "–"
-				if c := inst.Diff().CurrentHunk(); c >= 0 {
-					hunk = strconv.Itoa(c + 1)
-				}
-				left += " │ hunk " + hunk + "/" + strconv.Itoa(n)
-			}
-		case inst.Kind() == pane.KindHex:
-			// The byte cursor's offset, dec and hex (#2420) — the pane
-			// footer repeats it, but the status row is where offsets live.
-			hv := inst.Hex()
-			left += "HEX │ " + filepath.Base(hv.Path()) +
-				" │ " + strconv.FormatInt(hv.Cursor(), 10) +
-				" (0x" + strconv.FormatInt(hv.Cursor(), 16) + ")"
-		case inst.Kind() == pane.KindNotebook:
-			// The cell cursor's position (#2425) — the notebook counterpart
-			// of the editor's line:column.
-			nv := inst.Notebook()
-			left += "NOTEBOOK │ " + filepath.Base(nv.Path()) +
-				" │ cell " + strconv.Itoa(nv.Cursor()+1) + "/" + strconv.Itoa(len(nv.Cells()))
-			if l := nv.Lang(); l != "" {
-				left += " │ " + l
-			}
-		case inst.Kind() == pane.KindDebug:
-			left += "DEBUG"
-		case inst.Kind() == pane.KindProblems:
-			left += "PROBLEMS"
-		case inst.Kind() == pane.KindDeps:
-			left += "DEPENDENCIES"
-		case inst.Kind() == pane.KindTime:
-			left += "TIME"
-		case inst.Kind() == pane.KindUsage:
-			left += "USAGE"
-		case inst.Kind() == pane.KindAgentTrace:
-			left += "AGENT TRACE"
-		case inst.Kind() == pane.KindComplexity:
-			left += "COMPLEXITY"
-		case inst.Kind() == pane.KindTests:
-			left += "TESTS"
-		case inst.Kind() == pane.KindIssues:
-			left += "ISSUES"
-		case inst.Kind() == pane.KindDOM:
-			left += "DOM"
-			if p := inst.DOM().Path(); p != "" {
-				left += " │ " + filepath.Base(p)
-			}
-		case inst.Kind() == pane.KindBreakpoints:
-			left += "BREAKPOINTS"
-		case inst.Kind() == pane.KindDoctor:
-			left += "XDEBUG DOCTOR"
-		case inst.Kind() == pane.KindHTTP:
-			left += "HTTP │ " + inst.HTTP().Title()
-		case inst.Kind() == pane.KindVCS:
-			left += "VCS"
-			if snap := m.vcs.snap; snap != nil && snap.Branch != "" {
-				left += " │ ⎇ " + snap.Branch
-			}
-		case inst.Kind() == pane.KindStructure:
-			left += "STRUCTURE"
-		case inst.Kind() == pane.KindUsages:
-			left += "USAGES"
-		case inst.Kind() == pane.KindLSPDoctor:
-			left += "LSP DOCTOR"
-		case inst.Kind() == pane.KindRemote:
-			left += "SFTP │ " + inst.Remote().Alias()
-		default:
-			left += "EXPLORER"
-		}
-		if s := m.host.Status(); s != "" {
-			left += " │ " + s
-		}
-		if s := m.notifSegment(); s != "" {
-			left += " │ " + s
-		}
-		// A running simplify agent (#3009) is started from the Complexity
-		// window, so its clock must show while that pane has the focus.
-		if s := m.complexityAgentSegment(); s != "" {
-			left += " │ " + s
-		}
-		// The popup activity indicator (#2309) is layer state, not an editor
-		// detail: it stays visible while a terminal or tool pane is focused.
-		if s := m.popupTermSegment(); s != "" {
-			left += " │ " + s
-		}
-		// The forge unread badge (#2086) is persistent state, not an editor
-		// detail: it stays visible while a terminal or tool pane is focused.
-		if s := m.forgeBadgeSegment(); s != "" {
-			left += " │ " + s
-		}
+	if left, ok := m.focusedStatusLeft(); ok {
 		return style.Render(left)
 	}
 
@@ -669,6 +483,255 @@ func (m Model) statusLine() string {
 		return m.tintComplexitySegment(badged)
 	}
 	return m.tintComplexitySegment(style.Render(line))
+}
+
+// dropHintFallback is appended while a move drag hovers nothing droppable.
+const dropHintFallback = "  (drop on a pane or this pane's edge)"
+
+// moveDragHint is the status text while a pane or tab move drag is engaged.
+func (m Model) moveDragHint() string {
+	d := m.drag
+	hint := "MOVE " + m.paneLabel(d.srcPane)
+	if d.kind == dragTab {
+		hint = "MOVE " + m.tabDragLabel(d)
+	}
+	if zone, docks := m.dockZoneAt(d.curX, d.curY); docks {
+		return hint + " → dock " + dockName(zone)
+	}
+	if tgt, ok := m.lay.PaneAt(d.curX, d.curY); ok && tgt != d.srcPane {
+		if zone, can := m.dropZoneFor(d, tgt, m.lay.Panes[tgt]); can {
+			return hint + " → " + zoneArrow(zone) + " of " + m.paneLabel(tgt)
+		}
+		return hint + dropHintFallback
+	}
+	if zone, near := m.selfDropZone(d); near {
+		return hint + " → split " + zoneArrow(zone)
+	}
+	return hint + dropHintFallback
+}
+
+// focusedStatusLeft is the status text for a non-editor focus; ok is false
+// when the focus is a plain editor. The trailing segments (host status,
+// notifications, simplify agent clock #3009, popup activity #2309, forge
+// unread badge #2086) are persistent state, so they show on every pane kind.
+func (m Model) focusedStatusLeft() (string, bool) {
+	inst := m.focusedContent()
+	if inst == nil || (inst.Kind() == pane.KindEditor && inst.ActiveTerminal() == nil) {
+		return "", false
+	}
+	left := " " + m.focusedKindLabel()
+	for _, s := range []string{
+		m.host.Status(),
+		m.notifSegment(),
+		m.complexityAgentSegment(),
+		m.popupTermSegment(),
+		m.forgeBadgeSegment(),
+	} {
+		if s != "" {
+			left += " │ " + s
+		}
+	}
+	return left, true
+}
+
+// focusedKindLabel names the focused content: its tool, shell or viewer.
+func (m Model) focusedKindLabel() string {
+	inst := m.focusedContent()
+	if t := inst.ActiveTerminal(); t != nil {
+		if t.Tool() != "" {
+			// A tool pane (#741) names its tool, not the shell machinery.
+			return toolPaneTitle(t)
+		}
+		return m.terminalStatus()
+	}
+	switch inst.Kind() {
+	case pane.KindMarkdown:
+		return m.markdownStatus()
+	case pane.KindHTMLPreview:
+		return m.htmlPreviewStatus()
+	case pane.KindMerge:
+		return m.mergeStatus()
+	case pane.KindDiff:
+		return m.diffStatus()
+	case pane.KindHex:
+		return m.hexStatus()
+	case pane.KindNotebook:
+		return m.notebookStatus()
+	case pane.KindDOM:
+		return m.domStatus()
+	case pane.KindVCS:
+		return m.vcsStatus()
+	case pane.KindHTTP:
+		return "HTTP │ " + inst.HTTP().Title()
+	case pane.KindRemote:
+		return "SFTP │ " + inst.Remote().Alias()
+	case pane.KindDebug:
+		return "DEBUG"
+	case pane.KindProblems:
+		return "PROBLEMS"
+	case pane.KindDeps:
+		return "DEPENDENCIES"
+	case pane.KindTime:
+		return "TIME"
+	case pane.KindUsage:
+		return "USAGE"
+	case pane.KindAgentTrace:
+		return "AGENT TRACE"
+	case pane.KindComplexity:
+		return "COMPLEXITY"
+	case pane.KindTests:
+		return "TESTS"
+	case pane.KindIssues:
+		return "ISSUES"
+	case pane.KindBreakpoints:
+		return "BREAKPOINTS"
+	case pane.KindDoctor:
+		return "XDEBUG DOCTOR"
+	case pane.KindStructure:
+		return "STRUCTURE"
+	case pane.KindUsages:
+		return "USAGES"
+	case pane.KindLSPDoctor:
+		return "LSP DOCTOR"
+	default:
+		return "EXPLORER"
+	}
+}
+
+// terminalStatus covers a terminal pane, or an editor pane whose active tab
+// hosts a terminal (#573) — either way the keystrokes go to a shell.
+func (m Model) terminalStatus() string {
+	t := m.focusedContent().ActiveTerminal()
+	seg := ""
+	if s := t.ShellPath(); s != "" {
+		seg = filepath.Base(s)
+	}
+	if d := t.Cwd(); d != "" { // live cwd (#770)
+		if seg != "" {
+			seg += " · "
+		}
+		seg += displayDir(d)
+	}
+	out := "TERMINAL"
+	if seg != "" {
+		out += " │ " + seg
+	}
+	if !t.Running() {
+		out += " [exited]"
+	}
+	return out
+}
+
+// selectedLinkSegment is the selected link (#2180, #2741): what enter would
+// follow and y would copy, so it belongs where the user looks before pressing.
+func selectedLinkSegment(target string, ok, hasLinks bool) string {
+	if ok {
+		return " │ → " + target
+	}
+	if hasLinks {
+		return " │ tab: links"
+	}
+	return ""
+}
+
+func (m Model) markdownStatus() string {
+	pv := m.focusedContent().Preview()
+	target, ok := pv.SelectedTarget()
+	return "PREVIEW │ " + filepath.Base(pv.Path()) + selectedLinkSegment(target, ok, pv.HasLinks())
+}
+
+func (m Model) htmlPreviewStatus() string {
+	hp := m.focusedContent().HTMLPreview()
+	// The page's <title> says what the rendering is of (#2740).
+	out := "HTML PREVIEW │ " + filepath.Base(hp.Path())
+	if title := hp.Title(); title != "" {
+		out += " │ " + title
+	}
+	// Browser mode (#2746): the screenshot's state and zoom level.
+	if st := hp.BrowserStatus(); st != "" {
+		out += " │ " + st
+	}
+	// The off-loop render (#2745): in flight, or cut at the budget.
+	if hp.Pending() {
+		out += " │ rendering…"
+	} else if hp.Truncated() {
+		out += " │ truncated at " + strconv.Itoa(hp.RenderBudgetKB()) + " KB"
+	}
+	// The selected link (#2741), as in the markdown preview.
+	target, ok := hp.SelectedTarget()
+	return out + selectedLinkSegment(target, ok, hp.HasLinks())
+}
+
+// mergeStatus is the remaining-conflict counter (#2258): the caret's place in
+// the ]n/[n cycle while it stands in a block, the unresolved count out of the
+// total, and the finish hint once none is left.
+func (m Model) mergeStatus() string {
+	mg := m.focusedContent().Merge()
+	out := "MERGE │ " + filepath.Base(mg.Path())
+	n := mg.Unresolved()
+	if n == 0 {
+		return out + " │ ✓ all resolved — vcs.mergeApply to finish"
+	}
+	if idx, _ := mg.ConflictIndex(); idx > 0 {
+		out += " │ conflict " + strconv.Itoa(idx) + "/" + strconv.Itoa(n)
+	}
+	return out + " │ " + strconv.Itoa(n) + "/" + strconv.Itoa(mg.Total()) + " unresolved"
+}
+
+func (m Model) diffStatus() string {
+	dv := m.focusedContent().Diff()
+	l, r := dv.SideLabels() // what each side is (#2494)
+	out := "DIFF │ " + l + " ⇄ " + r
+	if dv.IgnoreWhitespace() {
+		// The ignore-whitespace toggle (#2170) is state the reader has
+		// to see: it decides which changes are in the list at all.
+		out += " │ -w"
+	}
+	if n := dv.HunkCount(); n > 0 {
+		hunk := "–"
+		if c := dv.CurrentHunk(); c >= 0 {
+			hunk = strconv.Itoa(c + 1)
+		}
+		out += " │ hunk " + hunk + "/" + strconv.Itoa(n)
+	}
+	return out
+}
+
+// hexStatus shows the byte cursor's offset, dec and hex (#2420) — the pane
+// footer repeats it, but the status row is where offsets live.
+func (m Model) hexStatus() string {
+	hv := m.focusedContent().Hex()
+	return "HEX │ " + filepath.Base(hv.Path()) +
+		" │ " + strconv.FormatInt(hv.Cursor(), 10) +
+		" (0x" + strconv.FormatInt(hv.Cursor(), 16) + ")"
+}
+
+// notebookStatus shows the cell cursor's position (#2425) — the notebook
+// counterpart of the editor's line:column.
+func (m Model) notebookStatus() string {
+	nv := m.focusedContent().Notebook()
+	out := "NOTEBOOK │ " + filepath.Base(nv.Path()) +
+		" │ cell " + strconv.Itoa(nv.Cursor()+1) + "/" + strconv.Itoa(len(nv.Cells()))
+	if l := nv.Lang(); l != "" {
+		out += " │ " + l
+	}
+	return out
+}
+
+func (m Model) domStatus() string {
+	out := "DOM"
+	if p := m.focusedContent().DOM().Path(); p != "" {
+		out += " │ " + filepath.Base(p)
+	}
+	return out
+}
+
+func (m Model) vcsStatus() string {
+	out := "VCS"
+	if snap := m.vcs.snap; snap != nil && snap.Branch != "" {
+		out += " │ ⎇ " + snap.Branch
+	}
+	return out
 }
 
 // badgeMode re-renders the mode segment of an already-styled status line as a
