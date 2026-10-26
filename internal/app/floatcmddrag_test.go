@@ -127,3 +127,75 @@ func TestFloatPanelPlainDragStillSelects(t *testing.T) {
 		t.Fatal("a plain drag must not move the panel")
 	}
 }
+
+// popupWithRef prints a reference to an existing file into the popup
+// terminal's session (#3039) and returns the screen cell of the reference
+// plus its path.
+func popupWithRef(t *testing.T) (Model, int, int, string) {
+	t.Helper()
+	m := openTestPopupWith(t, sized(t, 400, 60))
+	dir, err := os.MkdirTemp("/tmp", "ike3039-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	path := filepath.Join(dir, "main.go")
+	if err := os.WriteFile(path, []byte("package x\n\nfunc y() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ref := path + ":3:6"
+	term := m.popup.inst.ActiveTerminal()
+	term.InjectOutput([]byte("\r\n" + ref + "\r\n"))
+	px, py, _, _ := m.popupTermRect()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		for y, line := range strings.Split(ansi.Strip(term.View()), "\n") {
+			if x := strings.Index(line, ref); x >= 0 {
+				return m, px + paneContentX + x + 2, py + paneContentY + y, path
+			}
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("reference %q never rendered in the popup", ref)
+	return m, 0, 0, ""
+}
+
+func TestPopupCmdDragMovesBox(t *testing.T) {
+	m, x, y, path := popupWithRef(t)
+	x0, y0, _, _ := m.popupTermRect()
+	m = step(m, cmdPress(x, y))
+	if m.floatMove == nil || m.floatMove.target != nil || !m.floatMove.armed {
+		t.Fatal("a cmd+press in the popup content must arm the box move drag")
+	}
+	m = step(m, motion(x-4, y-2))
+	m = step(m, release(x-4, y-2))
+	if m.floatMove != nil {
+		t.Fatal("the release must end the move drag")
+	}
+	if px, py, _, _ := m.popupTermRect(); px != x0-4 || py != y0-2 {
+		t.Fatalf("the popup must follow the drag: want %d,%d got %d,%d", x0-4, y0-2, px, py)
+	}
+	if m.editorForPath(path) != nil {
+		t.Fatal("a cmd+drag must not open the reference under the press")
+	}
+	if m.popup.inst.ActiveTerminal().HasSelection() {
+		t.Fatal("a cmd+drag must not start a selection")
+	}
+}
+
+func TestPopupCmdClickWithoutMotionOpensReference(t *testing.T) {
+	m, x, y, path := popupWithRef(t)
+	x0, y0, _, _ := m.popupTermRect()
+	m = step(m, cmdPress(x, y))
+	m = step(m, release(x, y))
+	ed := m.editorForPath(path)
+	if ed == nil {
+		t.Fatal("cmd+click without motion must open the reference")
+	}
+	if line, col := ed.CursorPos(); line != 2 || col != 5 {
+		t.Fatalf("cursor = %d:%d, want 2:5 (0-based)", line, col)
+	}
+	if px, py, _, _ := m.popupTermRect(); px != x0 || py != y0 {
+		t.Fatal("a click must not move the popup")
+	}
+}

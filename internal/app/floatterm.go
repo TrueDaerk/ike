@@ -55,9 +55,11 @@ type floatMoveDrag struct {
 	// armed marks a cmd+press inside a panel's content (#3035): the press
 	// alone cannot tell a link click from a move, so the first real motion
 	// engages the move and a release without motion opens the file
-	// reference at linkX/linkY (content-local) instead.
+	// reference at linkX/linkY (content-local) instead. linkInst is the
+	// pressed tab host — the panel's, or the popup box side's (#3039).
 	armed        bool
 	linkX, linkY int
+	linkInst     *pane.Instance
 }
 
 // floatTermSeq mints unique host keys for torn-out panels. Package-level like
@@ -624,7 +626,7 @@ func (m Model) floatTermMouse(f *floatTerm, msg mouseEvent) (tea.Model, tea.Cmd,
 			// press, motion moved the panel. A maximized panel cannot move,
 			// so it keeps the immediate link open.
 			if f.restore == nil {
-				m.floatMove = &floatMoveDrag{target: f, lastX: msg.X, lastY: msg.Y, armed: true, linkX: lx, linkY: ly}
+				m.floatMove = &floatMoveDrag{target: f, lastX: msg.X, lastY: msg.Y, armed: true, linkX: lx, linkY: ly, linkInst: f.inst}
 				return m, nil, true
 			}
 			if p, line, col, ok := term.LinkAt(lx, ly); ok {
@@ -653,10 +655,10 @@ func (m Model) floatTermMouse(f *floatTerm, msg mouseEvent) (tea.Model, tea.Cmd,
 // the gesture was a cmd+click, so the file reference under the press opens
 // exactly as before; without one the click stays inert.
 func (m Model) floatMoveLinkOpen(d *floatMoveDrag) (tea.Model, tea.Cmd) {
-	if d.target == nil || d.target.inst == nil {
+	if d.linkInst == nil {
 		return m, nil
 	}
-	term := d.target.inst.ActiveTerminal()
+	term := d.linkInst.ActiveTerminal()
 	if term == nil {
 		return m, nil
 	}
