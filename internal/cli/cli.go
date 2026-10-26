@@ -303,155 +303,238 @@ func parseComplexity(args []string) (ComplexityArgs, error) {
 	var ca ComplexityArgs
 	for i := 0; i < len(args); i++ {
 		a := args[i]
-		name, val, hasVal := strings.Cut(a, "=")
-		switch {
-		case a == "-h" || a == "--help":
-			ca.Help = true
-		case a == "--json":
-			ca.JSON = true
-		case a == "--md":
-			ca.MD = true
-		case a == "--no-tests":
-			ca.NoTests = true
-		case a == "--sites":
-			ca.Sites = true
-		case a == "--no-baseline":
-			ca.NoBaseline = true
-		case a == "--write-baseline":
-			ca.WriteBaseline = true
-		case a == "--pins":
-			ca.Pins = true
-		case a == "--show-hidden":
-			ca.ShowHidden = true
-		case name == "--baseline":
-			ca.Baseline = true
-			if hasVal {
-				if strings.TrimSpace(val) == "" {
-					return ComplexityArgs{}, fmt.Errorf("--baseline= needs a path")
-				}
-				ca.BaselinePath = val
-			}
-		case name == "--churn":
-			ca.Churn = true
-			if hasVal {
-				n, ok := parseNum(val)
-				if !ok || n > ChurnDaysMax {
-					return ComplexityArgs{}, fmt.Errorf("--churn: %q is not a number of days (1–%d)", val, ChurnDaysMax)
-				}
-				ca.ChurnDays = n
-			}
-		case name == "--trend":
-			ca.Trend = true
-			if hasVal {
-				n, ok := parseNum(val)
-				if !ok || n > TrendCommitsMax {
-					return ComplexityArgs{}, fmt.Errorf("--trend: %q is not a number of commits (1–%d)", val, TrendCommitsMax)
-				}
-				ca.TrendCommits = n
-			}
-		case name == "--diff":
-			ca.Diff = true
-			if hasVal {
-				if strings.TrimSpace(val) == "" {
-					return ComplexityArgs{}, fmt.Errorf("--diff= needs a revision")
-				}
-				ca.Rev = val
-			}
-		case name == "--by":
-			if !hasVal {
-				if i+1 >= len(args) {
-					return ComplexityArgs{}, fmt.Errorf("--by needs class or file")
-				}
-				i++
-				val = args[i]
-			}
-			if val != "class" && val != "file" {
-				return ComplexityArgs{}, fmt.Errorf("--by: %q is not class or file", val)
-			}
-			ca.By = val
-		case name == "--brief":
-			ca.Brief = "file"
-			if hasVal {
-				if val != "class" && val != "file" {
-					return ComplexityArgs{}, fmt.Errorf("--brief: %q is not class or file", val)
-				}
-				ca.Brief = val
-			}
-		case name == "--width":
-			if !hasVal {
-				if i+1 >= len(args) {
-					return ComplexityArgs{}, fmt.Errorf("--width needs a number")
-				}
-				i++
-				val = args[i]
-			}
-			n, ok := parseNum(val)
-			if val == "0" {
-				n, ok = 0, true
-			}
-			if !ok || n > 0 && n < WidthMin {
-				return ComplexityArgs{}, fmt.Errorf("--width: %q is not 0 (unlimited) or at least %d columns", val, WidthMin)
-			}
-			ca.Width, ca.WidthSet = n, true
-		case name == "--min" || name == "--ccn" || name == "--cog" || name == "--cmt":
-			if !hasVal {
-				if i+1 >= len(args) {
-					return ComplexityArgs{}, fmt.Errorf("%s needs a number", name)
-				}
-				i++
-				val = args[i]
-			}
-			n, ok := parseNum(val)
-			if !ok {
-				return ComplexityArgs{}, fmt.Errorf("%s: %q is not a positive number", name, val)
-			}
-			switch name {
-			case "--min":
-				ca.Min = n
-			case "--ccn":
-				ca.CCN = n
-			case "--cmt":
-				if n > 100 {
-					return ComplexityArgs{}, fmt.Errorf("--cmt: %d is not a percentage (1–100)", n)
-				}
-				ca.Cmt = n
-			default:
-				ca.Cog = n
-			}
-		case strings.HasPrefix(a, "-") && a != "-":
-			return ComplexityArgs{}, fmt.Errorf("unknown flag %q", a)
-		default:
-			ca.Paths = append(ca.Paths, a)
+		if field, ok := complexityBoolFlags[a]; ok {
+			*field(&ca) = true
+			continue
 		}
+		f := &flagArg{args: args, i: i}
+		f.name, f.val, f.hasVal = strings.Cut(a, "=")
+		if parse, ok := complexityValueFlags[f.name]; ok {
+			if err := parse(&ca, f); err != nil {
+				return ComplexityArgs{}, err
+			}
+			i = f.i
+			continue
+		}
+		if strings.HasPrefix(a, "-") && a != "-" {
+			return ComplexityArgs{}, fmt.Errorf("unknown flag %q", a)
+		}
+		ca.Paths = append(ca.Paths, a)
 	}
-	if ca.MD && ca.JSON {
-		return ComplexityArgs{}, ErrMarkdownWithJSON
-	}
-	switch {
-	case ca.Brief != "" && ca.By != "":
-		return ComplexityArgs{}, ErrBriefWithBy
-	case ca.Brief != "" && ca.Diff:
-		return ComplexityArgs{}, ErrBriefWithDiff
-	}
-	if ca.By == "class" && ca.Diff {
-		return ComplexityArgs{}, ErrByWithDiff
-	}
-	if ca.Churn && ca.Diff {
-		return ComplexityArgs{}, ErrChurnWithDiff
-	}
-	switch {
-	case ca.Baseline && ca.NoBaseline:
-		return ComplexityArgs{}, ErrBaselineWithNoBaseline
-	case ca.WriteBaseline && ca.Diff:
-		return ComplexityArgs{}, ErrWriteBaselineWithDiff
-	case ca.WriteBaseline && ca.NoBaseline:
-		return ComplexityArgs{}, ErrWriteBaselineWithNoBaseline
-	case ca.Pins && (ca.Diff || ca.By != "" || ca.Brief != ""):
-		return ComplexityArgs{}, ErrPinsWithDiff
-	case ca.Trend && (ca.Diff || ca.By != "" || ca.Brief != ""):
-		return ComplexityArgs{}, ErrTrendWithDiff
+	if err := validateComplexityArgs(ca); err != nil {
+		return ComplexityArgs{}, err
 	}
 	return ca, nil
+}
+
+// complexityBoolFlags maps each plain switch to the field it turns on.
+var complexityBoolFlags = map[string]func(*ComplexityArgs) *bool{
+	"-h":               func(c *ComplexityArgs) *bool { return &c.Help },
+	"--help":           func(c *ComplexityArgs) *bool { return &c.Help },
+	"--json":           func(c *ComplexityArgs) *bool { return &c.JSON },
+	"--md":             func(c *ComplexityArgs) *bool { return &c.MD },
+	"--no-tests":       func(c *ComplexityArgs) *bool { return &c.NoTests },
+	"--sites":          func(c *ComplexityArgs) *bool { return &c.Sites },
+	"--no-baseline":    func(c *ComplexityArgs) *bool { return &c.NoBaseline },
+	"--write-baseline": func(c *ComplexityArgs) *bool { return &c.WriteBaseline },
+	"--pins":           func(c *ComplexityArgs) *bool { return &c.Pins },
+	"--show-hidden":    func(c *ComplexityArgs) *bool { return &c.ShowHidden },
+}
+
+// flagArg is one flag under parse: its name, optional =value and a cursor into args.
+type flagArg struct {
+	args   []string
+	i      int
+	name   string
+	val    string
+	hasVal bool
+}
+
+// value returns the =value, or consumes the next argument; what names the
+// expected value in the "needs" error.
+func (f *flagArg) value(what string) (string, error) {
+	if f.hasVal {
+		return f.val, nil
+	}
+	if f.i+1 >= len(f.args) {
+		return "", fmt.Errorf("%s needs %s", f.name, what)
+	}
+	f.i++
+	return f.args[f.i], nil
+}
+
+// count parses the =value as a number of 1..limit.
+func (f *flagArg) count(limit int, unit string) (int, error) {
+	n, ok := parseNum(f.val)
+	if !ok || n > limit {
+		return 0, fmt.Errorf("%s: %q is not a number of %s (1–%d)", f.name, f.val, unit, limit)
+	}
+	return n, nil
+}
+
+func parseBaselineFlag(ca *ComplexityArgs, f *flagArg) error {
+	ca.Baseline = true
+	if !f.hasVal {
+		return nil
+	}
+	if strings.TrimSpace(f.val) == "" {
+		return fmt.Errorf("--baseline= needs a path")
+	}
+	ca.BaselinePath = f.val
+	return nil
+}
+
+func parseChurnFlag(ca *ComplexityArgs, f *flagArg) error {
+	ca.Churn = true
+	if !f.hasVal {
+		return nil
+	}
+	n, err := f.count(ChurnDaysMax, "days")
+	if err != nil {
+		return err
+	}
+	ca.ChurnDays = n
+	return nil
+}
+
+func parseTrendFlag(ca *ComplexityArgs, f *flagArg) error {
+	ca.Trend = true
+	if !f.hasVal {
+		return nil
+	}
+	n, err := f.count(TrendCommitsMax, "commits")
+	if err != nil {
+		return err
+	}
+	ca.TrendCommits = n
+	return nil
+}
+
+func parseDiffFlag(ca *ComplexityArgs, f *flagArg) error {
+	ca.Diff = true
+	if !f.hasVal {
+		return nil
+	}
+	if strings.TrimSpace(f.val) == "" {
+		return fmt.Errorf("--diff= needs a revision")
+	}
+	ca.Rev = f.val
+	return nil
+}
+
+// classOrFile validates the value of --by / --brief.
+func classOrFile(name, val string) error {
+	if val != "class" && val != "file" {
+		return fmt.Errorf("%s: %q is not class or file", name, val)
+	}
+	return nil
+}
+
+func parseByFlag(ca *ComplexityArgs, f *flagArg) error {
+	val, err := f.value("class or file")
+	if err != nil {
+		return err
+	}
+	if err := classOrFile(f.name, val); err != nil {
+		return err
+	}
+	ca.By = val
+	return nil
+}
+
+func parseBriefFlag(ca *ComplexityArgs, f *flagArg) error {
+	ca.Brief = "file"
+	if !f.hasVal {
+		return nil
+	}
+	if err := classOrFile(f.name, f.val); err != nil {
+		return err
+	}
+	ca.Brief = f.val
+	return nil
+}
+
+func parseWidthFlag(ca *ComplexityArgs, f *flagArg) error {
+	val, err := f.value("a number")
+	if err != nil {
+		return err
+	}
+	n, ok := parseNum(val)
+	if val == "0" {
+		n, ok = 0, true
+	}
+	if !ok || n > 0 && n < WidthMin {
+		return fmt.Errorf("--width: %q is not 0 (unlimited) or at least %d columns", val, WidthMin)
+	}
+	ca.Width, ca.WidthSet = n, true
+	return nil
+}
+
+func parseNumberFlag(ca *ComplexityArgs, f *flagArg) error {
+	val, err := f.value("a number")
+	if err != nil {
+		return err
+	}
+	n, ok := parseNum(val)
+	if !ok {
+		return fmt.Errorf("%s: %q is not a positive number", f.name, val)
+	}
+	switch f.name {
+	case "--min":
+		ca.Min = n
+	case "--ccn":
+		ca.CCN = n
+	case "--cmt":
+		if n > 100 {
+			return fmt.Errorf("--cmt: %d is not a percentage (1–100)", n)
+		}
+		ca.Cmt = n
+	default:
+		ca.Cog = n
+	}
+	return nil
+}
+
+// complexityValueFlags maps each flag that takes (or may take) a value to its parser.
+var complexityValueFlags = map[string]func(*ComplexityArgs, *flagArg) error{
+	"--baseline": parseBaselineFlag,
+	"--churn":    parseChurnFlag,
+	"--trend":    parseTrendFlag,
+	"--diff":     parseDiffFlag,
+	"--by":       parseByFlag,
+	"--brief":    parseBriefFlag,
+	"--width":    parseWidthFlag,
+	"--min":      parseNumberFlag,
+	"--ccn":      parseNumberFlag,
+	"--cog":      parseNumberFlag,
+	"--cmt":      parseNumberFlag,
+}
+
+// validateComplexityArgs rejects flag combinations that cannot work together;
+// the first matching rule wins.
+func validateComplexityArgs(ca ComplexityArgs) error {
+	narrowsView := ca.Diff || ca.By != "" || ca.Brief != ""
+	rules := []struct {
+		bad bool
+		err error
+	}{
+		{ca.MD && ca.JSON, ErrMarkdownWithJSON},
+		{ca.Brief != "" && ca.By != "", ErrBriefWithBy},
+		{ca.Brief != "" && ca.Diff, ErrBriefWithDiff},
+		{ca.By == "class" && ca.Diff, ErrByWithDiff},
+		{ca.Churn && ca.Diff, ErrChurnWithDiff},
+		{ca.Baseline && ca.NoBaseline, ErrBaselineWithNoBaseline},
+		{ca.WriteBaseline && ca.Diff, ErrWriteBaselineWithDiff},
+		{ca.WriteBaseline && ca.NoBaseline, ErrWriteBaselineWithNoBaseline},
+		{ca.Pins && narrowsView, ErrPinsWithDiff},
+		{ca.Trend && narrowsView, ErrTrendWithDiff},
+	}
+	for _, r := range rules {
+		if r.bad {
+			return r.err
+		}
+	}
+	return nil
 }
 
 // parseNum parses a strictly positive decimal of plain digits — no sign, no
