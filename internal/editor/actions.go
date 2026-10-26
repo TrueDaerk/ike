@@ -641,9 +641,7 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 	case "redo_chrono":
 		m.redoChrono(1)
 	case "undo_tree":
-		if m.insert.active {
-			m.commitInsert()
-		}
+		m.commitInsertIfActive()
 		return m, func() tea.Msg { return OpenUndoTreeMsg{} }
 	case "copy":
 		cmd := m.clipboardCopy()
@@ -707,14 +705,10 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 	case "follow_filter":
 		// Live filter over the tailed stream (#2255, logfilter.go): opens the
 		// "|" line, narrowing the view as the pattern is typed.
-		if m.insert.active {
-			m.commitInsert()
-		}
+		m.commitInsertIfActive()
 		m.beginFollowFilter(false)
 	case "follow_highlight":
-		if m.insert.active {
-			m.commitInsert()
-		}
+		m.commitInsertIfActive()
 		m.beginFollowFilter(true)
 	case "follow_filter_clear":
 		m.clearFollowFilter()
@@ -772,19 +766,13 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 			m.startLabelJump()
 		}
 	case "find":
-		if m.insert.active {
-			m.commitInsert()
-		}
+		m.commitInsertIfActive()
 		m.beginSearch(search.Forward, m.searchPrefill()) // #2063, #2826
 	case "replace":
-		if m.insert.active {
-			m.commitInsert()
-		}
+		m.commitInsertIfActive()
 		m.beginReplacePanel()
 	case "duplicate_line":
-		if m.insert.active {
-			m.commitInsert()
-		}
+		m.commitInsertIfActive()
 		m.duplicateLine()
 	case "complete_statement":
 		cmd := m.completeStatement()
@@ -810,9 +798,7 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 	case "increment", "decrement":
 		// ctrl+a / ctrl+x as commands (#1658): one step, since a palette or
 		// keymap invocation carries no vim count.
-		if m.insert.active {
-			m.commitInsert()
-		}
+		m.commitInsertIfActive()
 		delta := int64(1)
 		if action == "decrement" {
 			delta = -1
@@ -820,9 +806,7 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.adjustNumber(delta)
 		m.scroll()
 	case "toggle_value":
-		if m.insert.active {
-			m.commitInsert()
-		}
+		m.commitInsertIfActive()
 		m.toggleValue()
 		m.scroll()
 	// The case family as commands (#2418, caseops.go): the JetBrains-flavoured
@@ -871,59 +855,41 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 	case "explain_conceal":
 		// Explain the concealed/masked value at the caret (#1998); the
 		// popover's own keys then reveal or reclassify it.
-		if m.insert.active {
-			m.commitInsert()
-		}
+		m.commitInsertIfActive()
 		return m, m.explainConceal()
 	case "next_diagnostic", "prev_diagnostic":
-		if m.insert.active {
-			m.commitInsert()
-		}
+		m.commitInsertIfActive()
 		cmd := m.diagnosticJump(action == "next_diagnostic")
 		return m, cmd
 	case "next_hunk", "prev_hunk":
 		// Git hunk navigation (#1170), the ]c/[c motion as a command.
-		if m.insert.active {
-			m.commitInsert()
-		}
+		m.commitInsertIfActive()
 		return m, m.hunkJump(action == "next_hunk")
 	// Merge-conflict resolution (#1149): per-block accepts (each one undo
 	// unit) and wrap-around navigation over the detected blocks.
 	case "merge_accept_ours", "merge_accept_theirs", "merge_accept_both":
-		if m.insert.active {
-			m.commitInsert()
-		}
+		m.commitInsertIfActive()
 		cmd := m.acceptConflict(action != "merge_accept_theirs", action != "merge_accept_ours")
 		m.scroll()
 		return m, cmd
 	case "merge_keep_manual":
 		// Keep the hand-merged block (#2258): only the marker lines go.
-		if m.insert.active {
-			m.commitInsert()
-		}
+		m.commitInsertIfActive()
 		cmd := m.keepManualConflict()
 		m.scroll()
 		return m, cmd
 	case "merge_next_conflict", "merge_prev_conflict":
-		if m.insert.active {
-			m.commitInsert()
-		}
+		m.commitInsertIfActive()
 		cmd := m.conflictJump(action == "merge_next_conflict")
 		return m, cmd
 	case "caret_add_next":
-		if m.insert.active {
-			m.commitInsert()
-		}
+		m.commitInsertIfActive()
 		m.caretAddNext()
 	case "caret_add_all":
-		if m.insert.active {
-			m.commitInsert()
-		}
+		m.commitInsertIfActive()
 		m.caretAddAll()
 	case "caret_add_above", "caret_add_below":
-		if m.insert.active {
-			m.commitInsert()
-		}
+		m.commitInsertIfActive()
 		dir := 1
 		if action == "caret_add_above" {
 			dir = -1
@@ -933,17 +899,13 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		// Syntax-aware extend selection (#1912, selrange.go): the returned
 		// command is the LSP selection-range request or its Tree-sitter
 		// fallback; repeats grow the ladder synchronously.
-		if m.insert.active {
-			m.commitInsert()
-		}
+		m.commitInsertIfActive()
 		cmd := m.extendSelection()
 		m.scroll()
 		return m, cmd
 	case "selection_shrink":
 		// The matching shrink walks the applied ladder back down (#1912).
-		if m.insert.active {
-			m.commitInsert()
-		}
+		m.commitInsertIfActive()
 		m.shrinkSelection()
 	case "fold_toggle":
 		m.foldToggle()
@@ -980,6 +942,13 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 	}
 	m.scroll()
 	return m, nil
+}
+
+// commitInsertIfActive ends a running insert session so the action sees a committed buffer.
+func (m *Model) commitInsertIfActive() {
+	if m.insert.active {
+		m.commitInsert()
+	}
 }
 
 // clipboardCopy yanks the visual selection — or the current line when nothing
