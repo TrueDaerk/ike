@@ -1547,16 +1547,19 @@ least 50 tokens`, `every duplicate involves a test file — t shows them`).
 Grouping, the tree, the breakdown, the marks, the baseline, the pins, the
 function diff, the hidden set and the base prompt do nothing here
 (`dupKeyPress` swallows their keys): a row is a clone group, not a
-function. The multi-file apply (#3046) is the epic's next step.
+function.
 
-**Extract with the agent (#3045).** `a` on a group row (or one of its
-occurrences) whose occurrences all lie in **one file** hands the group to
-the simplify agent ([below](#agent-2964)) instead of a function:
-`dupAgentRequest` builds a `complexitypanel.AskAgentMsg` with `Dup` (every
-occurrence of the group, the test-file hiding aside), `Tokens`, `Line` /
-`EndLine` spanning the first to the last occurrence and `Name` `2
-duplicates of lines 5–7` (the first copy). The root model reads the file
-once (the open buffer, else the disk) and builds `agentask.ExtractPrompt`
+**Extract with the agent (#3045, #3046).** `a` on a group row (or one of
+its occurrences) hands the group to the simplify agent
+([below](#agent-2964)) instead of a function: `dupAgentRequest` builds a
+`complexitypanel.AskAgentMsg` with `Dup` (every occurrence of the group,
+the test-file hiding aside), `Tokens`, `Path` the first occurrence's file,
+`Line` / `EndLine` spanning that file's occurrences and `Name` `2
+duplicates of lines 5–7` (the first copy; a group spanning several files:
+`3 duplicates of a.go:5–7 across 2 files`). `AskAgentMsg.Paths()` lists the
+files the run may change — `Path`, then every other occurrence's file. The
+root model reads each file once (the open buffer, else the disk) and builds
+`agentask.ExtractPrompt`
 (`internal/agentask/extract.go`): the ask marker, `File: <path> (<lang>)`,
 `Duplicate code: N occurrences of the same T tokens`, each occurrence fenced
 under `Occurrence i, lines a–b:`, the whole file for context when it fits
@@ -1568,9 +1571,24 @@ status segment reads `[agent: extract 2 duplicates of lines 5–7 m:ss]`,
 the running group's location ends in `⟳`, the footer adds `a extract`, the
 scratch is headed `# Extract …` with the occurrences' ranges, and the
 applied notification names the group instead of re-measuring a function.
-A group spanning several files is refused — the footer note (and
-`complexity.askAgent` from the palette, a notification) reads `this clone
-group spans 2 files — a extracts duplicates within one file only`.
+
+A group spanning **several files** (#3046) gets the multi-file prompt
+(`Extract.Files`): `Files: a.go, b.go (<lang>)`, `… T tokens in K files`,
+each occurrence under `Occurrence i, <path> lines a–b:`, every whole file
+(`The whole file <path>, for context:`) while their texts fit
+`MaxSimplifySource` together, then `ExtractFilesInstruction` — the helper
+goes into one of the listed files, only those files may change, one
+`--- a/<path>` / `+++ b/<path>` section per changed file. Its diff is
+applied to every changed buffer **all-or-nothing**
+([Apply](#agent-2964)): a section for a file outside the group refuses
+(`also changes c.go, which holds no occurrence of the clone group`), a
+miss in any file changes no buffer (`does not apply cleanly (hunk 1 of 1
+in b.go)`) and opens the scratch in front. On success every changed file
+is open with one unsaved edit (`u` in each buffer reverts its part), the
+request's own file in front; the scratch lists `Occurrences: a.go:5–7,
+b.go:12–14`, the notification `… across 2 files into a shared helper —
+changed a.go, b.go`. Only a group of fewer than two occurrences is refused
+(`DuplicateAgentRefusal`).
 
 **Setting.** `complexity.duplicates_min_tokens` (Int, 1–10000, default 50,
 Settings ▸ Complexity, `config.Complexity.DuplicatesMinTokens`) is the
@@ -2097,9 +2115,12 @@ the seam the tests fake.
 tool-less; IKE applies its diff, so the change lands as **one undoable edit
 in the open buffer, dirty and unsaved** — reviewed in the editor with the
 gutter diff, reverted with `u`, no file written behind the user's back and
-no git state touched. `cxAgentHunks` keeps the sections naming no file or a
-path that is a suffix of the function's file; a section for another file
-refuses the apply. `agenttrace.Apply` is the agent-trace revert's splice run
+no git state touched. `cxAgentFileHunks` sorts the sections onto the
+request's files (`AskAgentMsg.Paths()`: the function's file, or a clone
+group's files, #3046): a section belongs to the file it names or whose
+suffix it names, a section naming no file to the only file; a section for
+another file — or, with several files, one naming no file or matching
+several — refuses the apply. `agenttrace.Apply` is the agent-trace revert's splice run
 forward (`spliceHunks`, shared with `Revert`, agent-trace.md "Revert agent
 change"): each hunk's before lines (context and removed) must occur exactly
 once and are replaced by its after lines, last hunk first; a miss returns a
@@ -2110,7 +2131,11 @@ after it — so it is the tab in front and the editor sits on the function's
 header — and the edit is made last through `applyBufferRestore`, the local
 history's one-change restore. That order matters: a tab switch *after* the
 edit would hand the dirty buffer to `editor.auto_save = "focus"`, and the
-apply never saves. A cmd off the loop re-measures the new text
+apply never saves. With several files (#3046) the same steps run per file
+and stay all-or-nothing: every file is checked before anything opens, the
+changed files open with the request's own file last (in front), every new
+text is computed before the first `applyBufferRestore`, so a miss in any
+file leaves every buffer as it was. A cmd off the loop re-measures the new text
 (`cxMeasureText`, the function found again by name nearest its old header)
 and `cxAgentAppliedMsg` notifies `complexity: applied the agent's diff to
 <fn> (−n excess) — CCN a → b, cognitive c → d; u reverts, save writes it`,

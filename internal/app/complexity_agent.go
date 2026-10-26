@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -54,8 +55,15 @@ import (
 // prompt (agentask.ExtractPrompt: every occurrence with its line range and
 // the whole file) asking for one diff that introduces a shared helper and
 // replaces every occurrence; the apply, the scratch fallback, cancel and
-// the notifications are the simplify run's, minus the re-measure. A group
-// spanning several files is refused with a notification.
+// the notifications are the simplify run's, minus the re-measure.
+//
+// A group spanning several files (#3046) carries every occurrence with its
+// file and every file in the prompt (agentask.ExtractFilesInstruction) and
+// its diff may touch only the group's files: a section for any other file
+// refuses the apply. The apply is all-or-nothing — every file's hunks are
+// checked before anything opens and every new text computed before any
+// buffer changes — and leaves one undoable, unsaved edit per changed buffer,
+// the request's own file in front.
 
 // ComplexityAskAgentMsg runs complexity.askAgent (#2964), a in the pane.
 type ComplexityAskAgentMsg struct{}
@@ -111,6 +119,8 @@ type cxAgentAppliedMsg struct {
 	after *complexity.Function // nil when the function is not found again
 	model string
 	log   string
+	// files are the changed files, project-relative (#3046).
+	files []string
 }
 
 // complexityAskAgent is complexity.askAgent from the palette: the pane's
@@ -348,8 +358,10 @@ func (m Model) complexitySourceText(path string) (string, error) {
 }
 
 // complexityAgentPrompt builds the run's prompt: the simplify prompt of a
-// function row, the extract prompt of a same-file clone group (#3045) —
-// every occurrence's lines and the whole file, read once.
+// function row, the extract prompt of a clone group (#3045) — every
+// occurrence's lines and the whole file, each file read once; a group
+// spanning several files (#3046) names each occurrence's file and carries
+// every file.
 func (m Model) complexityAgentPrompt(req complexitypanel.AskAgentMsg) (string, error) {
 	if req.Dup == nil {
 		source, err := m.complexityFunctionSource(req)
@@ -358,18 +370,26 @@ func (m Model) complexityAgentPrompt(req complexitypanel.AskAgentMsg) (string, e
 		}
 		return agentask.SimplifyPrompt(complexitySimplify(req, displayPath(req.Path), source)), nil
 	}
-	text, err := m.complexitySourceText(req.Path)
-	if err != nil {
-		return "", err
-	}
-	lines := strings.Split(text, "\n")
-	e := agentask.Extract{Path: displayPath(req.Path), Lang: req.Lang, Tokens: req.Tokens, File: text}
-	for _, o := range req.Dup {
-		src, err := sourceLines(req.Path, lines, o.Line, o.EndLine)
+	paths := req.Paths()
+	e := agentask.Extract{Path: displayPath(req.Path), Lang: req.Lang, Tokens: req.Tokens}
+	lines := make(map[string][]string, len(paths))
+	for _, p := range paths {
+		text, err := m.complexitySourceText(p)
 		if err != nil {
 			return "", err
 		}
-		e.Occurrences = append(e.Occurrences, agentask.ExtractOccurrence{Line: o.Line, EndLine: o.EndLine, Source: src})
+		lines[p] = strings.Split(text, "\n")
+		e.Files = append(e.Files, agentask.ExtractFile{Path: displayPath(p), Text: text})
+	}
+	for _, o := range req.Dup {
+		src, err := sourceLines(o.Path, lines[o.Path], o.Line, o.EndLine)
+		if err != nil {
+			return "", err
+		}
+		e.Occurrences = append(e.Occurrences, agentask.ExtractOccurrence{Path: displayPath(o.Path), Line: o.Line, EndLine: o.EndLine, Source: src})
+	}
+	if len(e.Files) == 1 {
+		e.File, e.Files = e.Files[0].Text, nil // the same-file prompt (#3045)
 	}
 	return agentask.ExtractPrompt(e), nil
 }
@@ -443,65 +463,130 @@ func complexityAgentApply() bool {
 	return c == nil || c.Complexity.AgentApply
 }
 
-// applyComplexityAgentDiff applies the answer's diff to the function's
-// buffer: every hunk's before lines must occur exactly once, the result is
-// one undoable edit through the local-history restore path. A miss applies
-// nothing and opens the scratch in front.
+// applyComplexityAgentDiff applies the answer's diff to the buffers of the
+// files it changes — the function's file, or the clone group's files
+// (#3046): every hunk's before lines must occur exactly once, each buffer's
+// result is one undoable edit through the local-history restore path. The
+// apply is all-or-nothing: every file is checked before anything opens and
+// every new text computed before any buffer changes, so a miss in any file
+// applies nothing and opens the scratch in front.
 func (m Model) applyComplexityAgentDiff(msg cxAgentDoneMsg, run *cxAgentRun, sc cxAgentScratch) (tea.Model, tea.Cmd) {
-	path := msg.req.Path
-	hunks, why := cxAgentHunks(path, msg.res.Diff)
+	edits, why := cxAgentFileHunks(msg.req.Paths(), msg.res.Diff)
 	if why != "" {
 		m.recordComplexityAgent("not_applied", run, msg.res.Retried)
 		sc.note = "The agent's diff " + why + "; nothing was applied."
 		return m.openComplexityAgentScratch(sc, host.Warn, "the agent's diff "+why+" — opened as ")
 	}
-	// Check against the buffer (or the disk when the file is not open)
+	multi := len(msg.req.Paths()) > 1
+	// Check against the buffers (or the disk when a file is not open)
 	// before anything opens: a miss leaves the editor as it is.
-	now, err := m.complexityFileText(path)
-	if err == nil {
-		_, err = agenttrace.Apply(hunks, now)
+	for _, e := range edits {
+		now, err := m.complexityFileText(e.path)
+		if err == nil {
+			_, err = agenttrace.Apply(e.hunks, now)
+		}
+		if err != nil {
+			return m.complexityAgentNotApplied(sc, run, msg.res.Retried, cxMissFile(e.path, multi), err)
+		}
 	}
-	if err != nil {
-		return m.complexityAgentNotApplied(sc, run, msg.res.Retried, err)
-	}
-	// The explanation opens first and the function's file after it, so the
-	// file is the tab in front and the scratch waits behind it. The edit
-	// comes last: a tab switch after it would hand the dirty buffer to
-	// editor.auto_save = "focus", and the apply never saves.
+	// The explanation opens first and the changed files after it, the
+	// request's own file last, so it is the tab in front and the scratch
+	// waits behind them. The edits come last: a tab switch after one would
+	// hand the dirty buffer to editor.auto_save = "focus", and the apply
+	// never saves.
 	var cmds []tea.Cmd
-	sc.note = "Applied to the buffer of " + displayPath(path) + " as one edit — u reverts it, save writes it."
+	sc.note = cxAppliedNote(edits)
 	if scratchPath, err := scratch.CreateWithContent("md", []byte(sc.body())); err == nil {
 		tm, cmd := m.openPathAt(scratchPath, 0, 0)
 		m = asAppModel(tm, m)
 		cmds = append(cmds, cmd)
 	}
-	tm, cmd := m.openPathAt(path, msg.req.Line, 0)
-	m = asAppModel(tm, m)
-	cmds = append(cmds, cmd)
-	ed := m.editorForPath(path)
-	if ed == nil {
-		err = errors.New("could not open " + baseName(path))
-	} else {
-		var text string
-		if text, err = agenttrace.Apply(hunks, ed.Text()); err == nil {
-			now = text
-		}
+	for _, e := range cxOpenOrder(edits, msg.req.Path) {
+		tm, cmd := m.openPathAt(e.path, cxOpenLine(msg.req, e.path), 0)
+		m = asAppModel(tm, m)
+		cmds = append(cmds, cmd)
 	}
-	if err != nil {
-		tm, cmd := m.complexityAgentNotApplied(sc, run, msg.res.Retried, err)
-		return tm, tea.Batch(append(cmds, cmd)...)
+	texts := make([]string, len(edits))
+	for i, e := range edits {
+		var err error
+		if ed := m.editorForPath(e.path); ed == nil {
+			err = errors.New("could not open " + baseName(e.path))
+		} else {
+			texts[i], err = agenttrace.Apply(e.hunks, ed.Text())
+		}
+		if err != nil {
+			tm, cmd := m.complexityAgentNotApplied(sc, run, msg.res.Retried, cxMissFile(e.path, multi), err)
+			return tm, tea.Batch(append(cmds, cmd)...)
+		}
 	}
 	m.recordComplexityAgent("applied", run, msg.res.Retried)
-	restoreCmd, _ := m.applyBufferRestore(path, now)
-	cmds = append(cmds, restoreCmd)
+	files := make([]string, len(edits))
+	for i, e := range edits {
+		restoreCmd, _ := m.applyBufferRestore(e.path, texts[i])
+		cmds = append(cmds, restoreCmd)
+		files[i] = displayPath(e.path)
+	}
 	req, model, log := msg.req, run.model, sc.log
+	path, now := edits[0].path, texts[0]
 	cmds = append(cmds, func() tea.Msg {
 		if req.Dup != nil {
-			return cxAgentAppliedMsg{req: req, model: model, log: log} // no function to re-measure (#3045)
+			return cxAgentAppliedMsg{req: req, model: model, log: log, files: files} // no function to re-measure (#3045)
 		}
-		return cxAgentAppliedMsg{req: req, after: cxFindMeasured(cxMeasureText(path, now), req), model: model, log: log}
+		return cxAgentAppliedMsg{req: req, after: cxFindMeasured(cxMeasureText(path, now), req), model: model, log: log, files: files}
 	})
 	return m, tea.Batch(cmds...)
+}
+
+// cxMissFile names the file of a miss in a multi-file apply; "" otherwise.
+func cxMissFile(path string, multi bool) string {
+	if !multi {
+		return ""
+	}
+	return displayPath(path)
+}
+
+// cxAppliedNote is the scratch's note on an applied diff.
+func cxAppliedNote(edits []cxFileHunks) string {
+	if len(edits) == 1 {
+		return "Applied to the buffer of " + displayPath(edits[0].path) + " as one edit — u reverts it, save writes it."
+	}
+	names := make([]string, len(edits))
+	for i, e := range edits {
+		names[i] = displayPath(e.path)
+	}
+	return "Applied to the buffers of " + strings.Join(names, ", ") + " as one edit each — u in each buffer reverts it, save writes it."
+}
+
+// cxOpenOrder is the order the changed files open in: the request's own
+// file last, so it ends in front; else the diff's first file.
+func cxOpenOrder(edits []cxFileHunks, front string) []cxFileHunks {
+	last := 0
+	for i, e := range edits {
+		if e.path == front {
+			last = i
+		}
+	}
+	out := make([]cxFileHunks, 0, len(edits))
+	for i, e := range edits {
+		if i != last {
+			out = append(out, e)
+		}
+	}
+	return append(out, edits[last])
+}
+
+// cxOpenLine is the line a changed file opens at: the request's line in
+// its own file, a clone group's first occurrence in another one.
+func cxOpenLine(req complexitypanel.AskAgentMsg, path string) int {
+	if path == req.Path {
+		return req.Line
+	}
+	for _, o := range req.Dup {
+		if o.Path == path {
+			return o.Line
+		}
+	}
+	return 0
 }
 
 // complexityFileText is path's content now: its open buffer, else the disk.
@@ -517,15 +602,21 @@ func (m Model) complexityFileText(path string) (string, error) {
 }
 
 // complexityAgentNotApplied reports a diff that did not apply — the hunk
-// that missed, when one did — and opens the scratch in front.
-func (m Model) complexityAgentNotApplied(sc cxAgentScratch, run *cxAgentRun, retried bool, err error) (tea.Model, tea.Cmd) {
+// that missed, when one did, and in a multi-file apply (#3046) its file —
+// and opens the scratch in front.
+func (m Model) complexityAgentNotApplied(sc cxAgentScratch, run *cxAgentRun, retried bool, file string, err error) (tea.Model, tea.Cmd) {
 	m.recordComplexityAgent("not_applied", run, retried)
 	what := err.Error()
 	var he *agenttrace.HunkError
 	if errors.As(err, &he) {
 		what = "hunk " + strconv.Itoa(he.Index+1) + " of " + strconv.Itoa(he.Total)
 	}
-	sc.note = "The agent's diff does not apply cleanly to the buffer (" + err.Error() + "); nothing was applied. Save it as a patch and try `git apply --3way`."
+	buffer := "the buffer"
+	if file != "" {
+		what += " in " + file
+		buffer = "the buffer of " + file
+	}
+	sc.note = "The agent's diff does not apply cleanly to " + buffer + " (" + err.Error() + "); nothing was applied. Save it as a patch and try `git apply --3way`."
 	return m.openComplexityAgentScratch(sc, host.Warn, "the agent's diff does not apply cleanly ("+what+") — opened as ")
 }
 
@@ -541,10 +632,16 @@ func asAppModel(tm tea.Model, fallback Model) Model {
 // metrics before → after and the excess delta under its thresholds.
 func (m *Model) handleComplexityAgentApplied(msg cxAgentAppliedMsg) {
 	text := "complexity: applied the agent's diff to " + msg.req.Name
-	if msg.req.Dup != nil {
+	revert := "; u reverts, save writes it"
+	switch fn := msg.after; {
+	case msg.req.Dup != nil && len(msg.files) > 1:
+		// #3046: one edit in each changed file.
+		text = "complexity: applied the agent's diff extracting the " + msg.req.Name + " into a shared helper — changed " + strings.Join(msg.files, ", ")
+		revert = "; u in each buffer reverts, save writes it"
+	case msg.req.Dup != nil:
 		// #3045: a clone group has no function to re-measure.
 		text = "complexity: applied the agent's diff extracting the " + msg.req.Name + " of " + displayPath(msg.req.Path) + " into a shared helper"
-	} else if fn := msg.after; fn != nil {
+	case fn != nil:
 		th := complexity.Thresholds{}
 		if c := config.Get(); c != nil {
 			th = m.complexityThresholdsFor(c.Complexity, msg.req.Path)
@@ -552,10 +649,10 @@ func (m *Model) handleComplexityAgentApplied(msg cxAgentAppliedMsg) {
 		text += " (" + excessDelta(th.Excess(*fn)-th.Excess(msg.req.Fn)) + " excess) — CCN " +
 			strconv.Itoa(msg.req.CCN) + " → " + strconv.Itoa(fn.CCN) + ", cognitive " +
 			strconv.Itoa(msg.req.Cognitive) + " → " + strconv.Itoa(fn.Cognitive)
-	} else {
+	default:
 		text += " — the function is not found under its name any more, so nothing was re-measured"
 	}
-	text += "; u reverts, save writes it" + cxRunFooter(msg.model, msg.log)
+	text += revert + cxRunFooter(msg.model, msg.log)
 	m.host.Notify(host.Info, text)
 }
 
@@ -586,23 +683,55 @@ func cxFindMeasured(fns []complexity.Function, req complexitypanel.AskAgentMsg) 
 	return best
 }
 
-// cxAgentHunks picks the hunks that belong to path: a section naming no
-// file, or one whose path is a suffix of path. A section for another file
-// refuses the apply — IKE only edits the function's own buffer.
-func cxAgentHunks(path string, d agentask.AnswerDiff) ([]agenttrace.DiffHunk, string) {
-	slash := filepath.ToSlash(path)
-	var hunks []agenttrace.DiffHunk
+// cxFileHunks is one file's share of an answer diff.
+type cxFileHunks struct {
+	path  string
+	hunks []agenttrace.DiffHunk
+}
+
+// cxAgentFileHunks sorts the diff's hunks onto paths — the files the run
+// may change: the function's file, or a clone group's files (#3046) — in
+// the order the diff first names them. A section belongs to the path it
+// names, or whose suffix it names; a section naming no file belongs to the
+// only path. A section for any other file refuses the apply, as does one
+// naming no file or matching several while there are several paths.
+func cxAgentFileHunks(paths []string, d agentask.AnswerDiff) ([]cxFileHunks, string) {
+	var out []cxFileHunks
+	n := 0
 	for _, f := range d.Files {
-		p := strings.TrimPrefix(filepath.ToSlash(f.Path), "./")
-		if p != "" && p != slash && !strings.HasSuffix(slash, "/"+p) {
-			return nil, "also changes " + f.Path
+		if len(f.Hunks) == 0 {
+			continue
 		}
-		hunks = append(hunks, f.Hunks...)
+		p := strings.TrimPrefix(filepath.ToSlash(f.Path), "./")
+		var match []string
+		for _, path := range paths {
+			slash := filepath.ToSlash(path)
+			if p == "" || p == slash || strings.HasSuffix(slash, "/"+p) {
+				match = append(match, path)
+			}
+		}
+		switch {
+		case len(match) == 0 && len(paths) > 1:
+			return nil, "also changes " + f.Path + ", which holds no occurrence of the clone group"
+		case len(match) == 0:
+			return nil, "also changes " + f.Path
+		case len(match) > 1 && p == "":
+			return nil, "has a section naming no file"
+		case len(match) > 1:
+			return nil, "names " + f.Path + ", which matches several of the clone group's files"
+		}
+		n += len(f.Hunks)
+		i := slices.IndexFunc(out, func(e cxFileHunks) bool { return e.path == match[0] })
+		if i < 0 {
+			out = append(out, cxFileHunks{path: match[0]})
+			i = len(out) - 1
+		}
+		out[i].hunks = append(out[i].hunks, f.Hunks...)
 	}
-	if len(hunks) == 0 {
+	if n == 0 {
 		return nil, "holds no hunk"
 	}
-	return hunks, ""
+	return out, ""
 }
 
 // openComplexityAgentScratch writes the scratch, notifies prefix + its
@@ -677,11 +806,21 @@ func (s cxAgentScratch) body() string {
 	if s.req.Dup != nil {
 		// #3045: the clone group's occurrences instead of a function's metrics.
 		sb.WriteString("# Extract " + s.req.Name + "\n\n")
+		multi := len(s.req.Paths()) > 1 // #3046: each location names its file
 		locs := make([]string, 0, len(s.req.Dup))
 		for _, o := range s.req.Dup {
-			locs = append(locs, strconv.Itoa(o.Line+1)+"–"+strconv.Itoa(o.EndLine+1))
+			loc := strconv.Itoa(o.Line+1) + "–" + strconv.Itoa(o.EndLine+1)
+			if multi {
+				loc = displayPath(o.Path) + ":" + loc
+			}
+			locs = append(locs, loc)
 		}
-		sb.WriteString(displayPath(s.req.Path) + ": lines " + strings.Join(locs, ", ") + " — " + strconv.Itoa(s.req.Tokens) + " tokens each\n\n")
+		if multi {
+			sb.WriteString("Occurrences: " + strings.Join(locs, ", "))
+		} else {
+			sb.WriteString(displayPath(s.req.Path) + ": lines " + strings.Join(locs, ", "))
+		}
+		sb.WriteString(" — " + strconv.Itoa(s.req.Tokens) + " tokens each\n\n")
 	} else {
 		sb.WriteString("# Simplify " + s.req.Name + "\n\n")
 		sb.WriteString(displayPath(s.req.Path) + ":" + strconv.Itoa(s.req.Line+1) + " — CCN " + strconv.Itoa(s.req.CCN) + ", cognitive " + strconv.Itoa(s.req.Cognitive) + "\n\n")

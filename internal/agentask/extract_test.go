@@ -53,3 +53,33 @@ func TestExtractPromptCarriesFileWhenItFits(t *testing.T) {
 		t.Fatal("a file over the cap must be left out")
 	}
 }
+
+func TestExtractPromptMultiFile(t *testing.T) {
+	e := Extract{
+		Lang: "go", Tokens: 60,
+		Occurrences: []ExtractOccurrence{
+			{Path: "a.go", Line: 4, EndLine: 6, Source: "\tfor i := range a {\n\t}"},
+			{Path: "b/b.go", Line: 14, EndLine: 16, Source: "\tfor j := range b {\n\t}"},
+		},
+		Files: []ExtractFile{{Path: "a.go", Text: "package p\n"}, {Path: "b/b.go", Text: strings.Repeat("x\n", MaxSimplifySource)}},
+	}
+	got := ExtractPrompt(e)
+	for _, part := range []string{
+		"Files: a.go, b/b.go (go)\n",
+		"Duplicate code: 2 occurrences of the same 60 tokens in 2 files\n",
+		"Occurrence 1, a.go lines 5–7:\n```go\n\tfor i := range a {\n\t}\n```\n",
+		"Occurrence 2, b/b.go lines 15–17:\n",
+		"The whole file a.go, for context:\n```go\npackage p\n```\n",
+		"\n" + ExtractFilesInstruction,
+	} {
+		if !strings.Contains(got, part) {
+			t.Errorf("prompt lacks %q:\n%s", part, got)
+		}
+	}
+	if strings.Contains(got, "The whole file b/b.go") || strings.Contains(got, ExtractInstruction) {
+		t.Fatal("a file over the remaining budget must be left out, and the same-file instruction must not appear")
+	}
+	if !agenttrace.IsAskPrompt(got) {
+		t.Fatal("the prompt must open with the ask marker")
+	}
+}

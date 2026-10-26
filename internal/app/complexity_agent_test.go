@@ -484,12 +484,41 @@ func TestComplexityAgentTickRearmsWhileRunning(t *testing.T) {
 
 func TestCxAgentHunksRefusesOtherFile(t *testing.T) {
 	d, _ := agentask.ParseAnswerDiff("```diff\n--- a/a.go\n+++ b/a.go\n@@\n-x\n+y\n--- a/b.go\n+++ b/b.go\n@@\n-x\n+y\n```")
-	if _, why := cxAgentHunks("/p/a.go", d); !strings.Contains(why, "b.go") {
+	if _, why := cxAgentFileHunks([]string{"/p/a.go"}, d); why != "also changes b.go" {
 		t.Fatalf("why = %q", why)
 	}
 	d, _ = agentask.ParseAnswerDiff("```diff\n--- a/internal/a.go\n+++ b/internal/a.go\n@@\n-x\n+y\n```")
-	if hunks, why := cxAgentHunks("/p/internal/a.go", d); why != "" || len(hunks) != 1 {
-		t.Fatalf("hunks=%v why=%q", hunks, why)
+	if edits, why := cxAgentFileHunks([]string{"/p/internal/a.go"}, d); why != "" || len(edits) != 1 || len(edits[0].hunks) != 1 {
+		t.Fatalf("edits=%v why=%q", edits, why)
+	}
+	// A section naming no file belongs to the only path.
+	d, _ = agentask.ParseAnswerDiff("```diff\n@@\n-x\n+y\n```")
+	if edits, why := cxAgentFileHunks([]string{"/p/a.go"}, d); why != "" || len(edits) != 1 || edits[0].path != "/p/a.go" {
+		t.Fatalf("edits=%v why=%q", edits, why)
+	}
+}
+
+// TestCxAgentFileHunksSortsMultiFileDiff covers #3046's routing: sections
+// land on the group's files in diff order (repeated sections merged); a
+// foreign file, an unnamed section and an ambiguous suffix refuse.
+func TestCxAgentFileHunksSortsMultiFileDiff(t *testing.T) {
+	paths := []string{"/p/x/a.go", "/p/y/b.go"}
+	d, _ := agentask.ParseAnswerDiff("```diff\n--- a/y/b.go\n+++ b/y/b.go\n@@\n-x\n+y\n--- a/x/a.go\n+++ b/x/a.go\n@@\n-x\n+y\n--- a/y/b.go\n+++ b/y/b.go\n@@\n-z\n+w\n```")
+	edits, why := cxAgentFileHunks(paths, d)
+	if why != "" || len(edits) != 2 || edits[0].path != "/p/y/b.go" || len(edits[0].hunks) != 2 || edits[1].path != "/p/x/a.go" {
+		t.Fatalf("edits=%+v why=%q", edits, why)
+	}
+	d, _ = agentask.ParseAnswerDiff("```diff\n--- a/x/a.go\n+++ b/x/a.go\n@@\n-x\n+y\n--- a/z/c.go\n+++ b/z/c.go\n@@\n-x\n+y\n```")
+	if _, why := cxAgentFileHunks(paths, d); why != "also changes z/c.go, which holds no occurrence of the clone group" {
+		t.Fatalf("why = %q", why)
+	}
+	d, _ = agentask.ParseAnswerDiff("```diff\n@@\n-x\n+y\n```")
+	if _, why := cxAgentFileHunks(paths, d); why != "has a section naming no file" {
+		t.Fatalf("why = %q", why)
+	}
+	d, _ = agentask.ParseAnswerDiff("```diff\n--- a/a.go\n+++ b/a.go\n@@\n-x\n+y\n```")
+	if _, why := cxAgentFileHunks([]string{"/p/x/a.go", "/p/y/a.go"}, d); !strings.Contains(why, "matches several") {
+		t.Fatalf("why = %q", why)
 	}
 }
 

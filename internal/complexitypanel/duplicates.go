@@ -14,6 +14,7 @@ package complexitypanel
 // clone group, not a function.
 
 import (
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -491,7 +492,7 @@ func (m *Model) dupFooter() string {
 		hints = strings.Replace(hints, "enter expand", "enter open", 1)
 	}
 	if _, ok := m.AskAgent(); ok {
-		hints += " · a extract" // #3045: same-file groups only
+		hints += " · a extract" // #3045, #3046
 		if m.selectedAgentRunning() {
 			hints += " · esc cancel agent"
 		}
@@ -509,8 +510,9 @@ func (m *Model) dupFooter() string {
 
 // dupAgentRequest is the agent request of a Duplicates row (#3045): its
 // group's occurrences — every one, the test-file hiding aside — to be
-// extracted into one shared helper. A group spanning several files is
-// refused with the reason; multi-file extraction is not supported yet.
+// extracted into one shared helper. Path is the first occurrence's file and
+// Line / EndLine span that file's occurrences; a group spanning several
+// files (#3046) names its first location and the file count.
 func dupAgentRequest(r Row) (AskAgentMsg, string) {
 	occs := r.Dup.Group.Occurrences
 	if len(occs) < 2 {
@@ -518,17 +520,18 @@ func dupAgentRequest(r Row) (AskAgentMsg, string) {
 	}
 	path := occs[0].Path
 	line, end := occs[0].Line, occs[0].EndLine
+	files := map[string]bool{path: true}
 	for _, o := range occs[1:] {
-		if o.Path != path {
-			files := map[string]bool{}
-			for _, o := range occs {
-				files[o.Path] = true
-			}
-			return AskAgentMsg{}, "this clone group spans " + itoa(len(files)) + " files — a extracts duplicates within one file only"
+		files[o.Path] = true
+		if o.Path == path {
+			line, end = min(line, o.Line), max(end, o.EndLine)
 		}
-		line, end = min(line, o.Line), max(end, o.EndLine)
 	}
-	name := itoa(len(occs)) + " duplicates of lines " + itoa(occs[0].Line+1) + "–" + itoa(occs[0].EndLine+1)
+	first := itoa(occs[0].Line+1) + "–" + itoa(occs[0].EndLine+1)
+	name := itoa(len(occs)) + " duplicates of lines " + first
+	if len(files) > 1 {
+		name = itoa(len(occs)) + " duplicates of " + filepath.Base(path) + ":" + first + " across " + itoa(len(files)) + " files"
+	}
 	return AskAgentMsg{
 		Path: path, Line: line, EndLine: end, Name: name, Lang: r.Dup.Group.Lang,
 		Dup: append([]complexity.Occurrence(nil), occs...), Tokens: r.Dup.Group.Tokens,
@@ -536,7 +539,7 @@ func dupAgentRequest(r Row) (AskAgentMsg, string) {
 }
 
 // DuplicateAgentRefusal is why `a` refuses the selected Duplicates row —
-// a group spanning several files — and "" otherwise (#3045).
+// a group of fewer than two occurrences — and "" otherwise (#3045).
 func (m *Model) DuplicateAgentRefusal() string {
 	r, ok := m.Selected()
 	if !ok || r.Dup == nil {
@@ -546,9 +549,10 @@ func (m *Model) DuplicateAgentRefusal() string {
 	return why
 }
 
-// askDuplicateAgent is the Duplicates tab's `a`: a same-file group (or one
-// of its occurrences) asks the root model to have the agent extract it, a
-// multi-file group says why not in the note line.
+// askDuplicateAgent is the Duplicates tab's `a`: a group (or one of its
+// occurrences) asks the root model to have the agent extract it — within
+// one file (#3045) or across several (#3046); a refused one says why in the
+// note line.
 func (m *Model) askDuplicateAgent() tea.Cmd {
 	r, ok := m.Selected()
 	if !ok || r.Dup == nil {
