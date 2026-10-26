@@ -557,7 +557,7 @@ short version:
   `FileDeletedMsg` / `FileMovedMsg`, so open tabs close or re-point exactly
   like a tree delete/rename. Scratch deletes are permanent (the store has no
   trash), which is also why the section has no multi-select delete.
-- **`a` delegates to `scratch.new`**: the store owns naming and templates, so
+- **`n` delegates to `scratch.new`**: the store owns naming and templates, so
   the explorer's new-file affordance opens the language picker.
 - **Scrolls like the tree** (#1965): the cursor pulls the section's window
   along, and the wheel over the section scrolls the section — over the tree it

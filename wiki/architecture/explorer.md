@@ -164,7 +164,7 @@ extensions and filenames the language plugins register; a drift test in
 
 `/` with the tree focused opens a JetBrains-style type-to-select search. Bare
 typing cannot activate it — the tree already spends its single letters on
-file ops (`a`/`A`/`d`/`R`/`r`/`c`/`C`/`o`/`.`) — so `/` is the dedicated,
+file ops (`n`/`N`/`d`/`R`/`r`/`c`/`C`/`o`/`.`) — so `/` is the dedicated,
 vim-idiomatic activation key (registered as `explorer.search`, rebindable;
 the raw `/` in `Update` stays the zero-config fallback, and a palette
 invocation moves focus to the tree first like the file-op prompts).
@@ -519,8 +519,8 @@ these are defaults.
 | `explorer.refresh` | `r` | invalidate + re-scan the selected subtree (`RefreshMsg`) |
 | `explorer.collapseAll` | `c` | fold the tree back to the root (`CollapseAllMsg`) |
 | `explorer.reveal` | `alt+f1` (global) | reveal the open file: expand collapsed ancestors, select and scroll to its row (`RevealMsg`, #1042) |
-| `explorer.newFile` | `a` | prompt for a name, create a file seeded with its [language template](./languages.md#file-templates-170), empty otherwise (`NewFileMsg`) |
-| `explorer.newFolder` | `A` | prompt for a name, create a directory (`NewDirMsg`) |
+| `explorer.newFile` | `n` | prompt for a name, create a file seeded with its [language template](./languages.md#file-templates-170), empty otherwise (`NewFileMsg`) |
+| `explorer.newFolder` | `N` | prompt for a name, create a directory (`NewDirMsg`) |
 | `explorer.delete` | `d` | delete the selected entry — or the whole multi-select (#1044, #2166) — after one confirmation listing every target (`DeleteMsg`) |
 | `explorer.rename` | `R` | prompt (prefilled with the current name) to rename the selected entry (`RenameMsg`) |
 | `explorer.move` | `m` | prompt for a target directory and move the selection there (`MoveSelectionMsg`, #2166) |
@@ -875,8 +875,8 @@ the fileops prompt machinery — the same anchored boxes (#1884) — but their
 accepts call `scratch.Delete` / `scratch.Rename` (injectable via
 `SetScratchOps` for tests) instead of the trash, then emit the standard
 `FileDeletedMsg` / `FileMovedMsg` so the app closes or re-points tabs exactly
-like a tree operation. `a` emits `ScratchNewMsg`, which the app routes to the
-`scratch.new` language picker; `A` (new folder) is a no-op — the store is
+like a tree operation. `n` emits `ScratchNewMsg`, which the app routes to the
+`scratch.new` language picker; `N` (new folder) is a no-op — the store is
 flat. Rows sort by name (default) or `modified` newest-first, render with the
 tree's highlight recipes (Selection/SelectionMuted/Panel, open-file underline,
 suffix tint) plus a right-aligned **last-opened** age (#1965) — `ui.ShortAge`
