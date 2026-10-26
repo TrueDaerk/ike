@@ -2110,8 +2110,8 @@ lines — `...`, `…`, `[...]` alone or after a comment opener, or `...`
 followed by a space or parenthesis (`... (whole kind switch, lines 494–639,
 moved verbatim into helpers below)`; a spread like `...rest` is code) — or
 a hunk clearly shorter than its `@@` header counts (fewer before or after
-rows by more than a tenth and at least three lines, since models miscount by
-one or two). A long function tempts the model into exactly that, and such a
+rows by at least ten lines and more than a tenth, since models miscount
+small hunks freely). A long function tempts the model into exactly that, and such a
 diff can never match the buffer. Every diff-asking instruction therefore ends
 with `agentask.DiffInFull` (*Write every line of the diff in full … never
 shorten it with "...", "[...]" or an "unchanged" note*). An answer without a

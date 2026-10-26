@@ -174,8 +174,8 @@ func parseUnified(lines []string) AnswerDiff {
 
 // hunkElision says what hunk number n leaves out, "" when nothing: a row
 // whose text is a placeholder for lines (hasElisionMarker), or — models
-// miscount by a line or two, so only clearly — before or after rows fewer
-// than the header counts by more than a tenth and at least three lines.
+// miscount small hunks freely, so only clearly — before or after rows fewer
+// than the header counts by at least ten lines and more than a tenth.
 func hunkElision(h agenttrace.DiffHunk, n int) string {
 	hunk := "hunk " + strconv.Itoa(n)
 	for _, l := range h.Lines {
@@ -206,7 +206,7 @@ func hunkElision(h agenttrace.DiffHunk, n int) string {
 // short reports got rows clearly fewer than the want a header counts.
 func short(got, want int) bool {
 	missing := want - got
-	return missing >= 3 && missing*10 > want
+	return missing >= 10 && missing*10 > want
 }
 
 // hasElisionMarker reports a row's text that stands in for left-out lines:

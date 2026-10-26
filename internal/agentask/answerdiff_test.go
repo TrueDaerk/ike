@@ -161,6 +161,8 @@ func TestParseAnswerDiffElided(t *testing.T) {
 		{"placeholder ellipsis bracket", "```diff\n@@\n a\n \t[…]\n-b\n+c\n```", "hunk 1 stands a placeholder in for lines (\"[…]\")"},
 		{"spread is code", "```diff\n@@ -1,2 +1,2 @@\n ...rest,\n-b\n+c\n```", ""},
 		{"miscount by one", "```diff\n@@ -1,4 +1,4 @@\n a\n-b\n+c\n x\n```", ""},
+		{"small hunk miscounted", "```diff\n@@ -3,4 +3,4 @@\n-\tif a > 0 {\n+\tif a > 0 { // simpler\n```", ""},
+		{"short by nine", "```diff\n@@ -1,11 +1,11 @@\n a\n-b\n+c\n```", ""},
 		{"short before", "```diff\n@@ -453,220 +453,236 @@\n a\n b\n-c\n+d\n e\n```", "hunk 1 holds 4 of the 220 before lines its header counts"},
 		{"short after", "```diff\n@@ -1,3 +1,40 @@\n a\n-b\n+c\n e\n```", "hunk 1 holds 3 of the 40 after lines its header counts"},
 		{"second hunk", "```diff\n@@ -1,2 +1,2 @@\n a\n-b\n+c\n@@ -9,30 +9,30 @@\n x\n-y\n+z\n```", "hunk 2 holds 2 of the 30 before lines its header counts"},
