@@ -70,8 +70,8 @@ func (corePlugin) Capabilities() plugin.Capabilities {
 			keymap("r", "explorer.refresh", RefreshMsg{}),
 			keymap("c", "explorer.collapseAll", CollapseAllMsg{}),
 			keymap("C", "explorer.expandAll", ExpandAllMsg{}),
-			keymap("a", "explorer.newFile", NewFileMsg{}),
-			keymap("A", "explorer.newFolder", NewDirMsg{}),
+			keymap("n", "explorer.newFile", NewFileMsg{}),
+			keymap("N", "explorer.newFolder", NewDirMsg{}),
 			keymap("d", "explorer.delete", DeleteMsg{}),
 			keymap("R", "explorer.rename", RenameMsg{}),
 			// Bulk operations over the multi-select (#2166); with nothing
