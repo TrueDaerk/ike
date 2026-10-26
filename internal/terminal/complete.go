@@ -255,7 +255,7 @@ func (m *Model) insertCommonPrefix() bool {
 		if hasDanglingEscape(word) {
 			m.sess.SendKey(vt.KeyPressEvent{Code: vt.KeyBackspace})
 		}
-		m.sess.SendText(escapeShellWord(strings.TrimPrefix(prefix, uword)))
+		m.sess.SendText(escapeShellRest(strings.TrimPrefix(prefix, uword), uword == ""))
 		return true
 	}
 	for range []rune(word) {
@@ -468,7 +468,7 @@ func (m *Model) acceptCompletion() {
 		if rest != "" && hasDanglingEscape(word) {
 			m.sess.SendKey(vt.KeyPressEvent{Code: vt.KeyBackspace})
 		}
-		m.sess.SendText(escapeShellWord(rest) + tail)
+		m.sess.SendText(escapeShellRest(rest, uword == "") + tail)
 	case hasFoldPrefix(item.text, uword):
 		// Case-correcting accept (#968): erase the word as it is on the line
 		// now, not the snapshot's length.
@@ -488,12 +488,26 @@ const shellSpecials = " \t'\"\\$`&|;()<>*?[]~#!{}"
 // inserted completion lands on the command line as a single word (#1539):
 // accepting `My Documents/` types `My\ Documents/`, one argument, the way
 // the shell's own tab completion would.
+//
+// A leading "~" (bare or `~/…`) stays unescaped so the shell still expands it
+// to the home directory (#3033); a "~" anywhere else is escaped.
 func escapeShellWord(s string) string {
+	return escapeShellRest(s, true)
+}
+
+// escapeShellRest escapes s as the remainder of a word already on the line;
+// atStart reports whether s begins the word, which keeps a leading "~"
+// unescaped (#3033).
+func escapeShellRest(s string, atStart bool) string {
 	if !strings.ContainsAny(s, shellSpecials) {
 		return s
 	}
 	var b strings.Builder
-	for _, r := range s {
+	for i, r := range s {
+		if r == '~' && i == 0 && atStart {
+			b.WriteRune(r)
+			continue
+		}
 		if strings.ContainsRune(shellSpecials, r) {
 			b.WriteByte('\\')
 		}
