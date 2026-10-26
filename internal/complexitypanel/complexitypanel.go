@@ -65,13 +65,16 @@ const (
 	// TabTrend lists the project's sums at each of the last N commits
 	// (#2962, trend.go).
 	TabTrend
+	// TabDuplicates lists the project's clone groups (#3044,
+	// duplicates.go).
+	TabDuplicates
 )
 
 // tabNames labels the tabs in display order.
-var tabNames = []string{"Project", "File", "Changes", "Trend"}
+var tabNames = []string{"Project", "File", "Changes", "Trend", "Duplicates"}
 
 // enabledTabs are the tabs the keyboard and the mouse can reach.
-var enabledTabs = []Tab{TabProject, TabFile, TabChanges, TabTrend}
+var enabledTabs = []Tab{TabProject, TabFile, TabChanges, TabTrend, TabDuplicates}
 
 // Column is one grid column; the order is the display order.
 type Column int
@@ -128,13 +131,22 @@ const (
 	ColCogDelta
 	ColExcessDelta
 	ColOverDelta
+	// The Duplicates tab's columns (#3044, duplicates.go): a clone group's
+	// score (tokens × occurrences), tokens, lines, occurrence and file
+	// counts; the location reuses ColFile.
+	ColScore
+	ColTokens
+	ColLines
+	ColOccur
+	ColDupFiles
 )
 
 // columnLabels are the column headers in Column order.
 var columnLabels = []string{"file", "function", "line", "ccn", "cog", "nloc", "params", "depth", "change", "cmt%",
 	"class", "funcs", "ccn avg", "ccn max", "cog avg", "cog max", "over", "excess", "commits", "hot",
 	"changed", "added", "removed", "since pin",
-	"commit", "date", "subject", "Σccn (Δ)", "Σcog (Δ)", "excess (Δ)", "over (Δ)"}
+	"commit", "date", "subject", "Σccn (Δ)", "Σcog (Δ)", "excess (Δ)", "over (Δ)",
+	"score", "tokens", "lines", "occurrences", "files"}
 
 // numeric reports whether a column sorts as a number (descending by
 // default) rather than as text.
@@ -147,7 +159,7 @@ func (c Column) numeric() bool {
 }
 
 // lastColumn is the highest Column value.
-const lastColumn = ColOverDelta
+const lastColumn = ColDupFiles
 
 // The per-tab column layouts, in display order: the File tab hides the
 // file column, the Changes tab leads with the section and drops params /
@@ -271,17 +283,24 @@ type Row struct {
 	// Hidden marks a function the hidden set drops (#3031, hidden.go);
 	// such a row is listed only under hidden:yes.
 	Hidden bool
+	// Dup is set on a Duplicates tab row (#3044, duplicates.go): a clone
+	// group, or one of its occurrences (Dup.Occ set, Parent its group row);
+	// every function field is zero.
+	Dup *DupRow
 }
 
 // child reports whether r is a child row of an expanded function — a site
 // row or a candidate row — which the totals, the caret mark, the CSV
 // export and the group rows skip.
-func (r Row) child() bool { return r.Site != nil || r.Cand != nil }
+func (r Row) child() bool { return r.Site != nil || r.Cand != nil || r.occurrence() }
 
 // value is the row's sort key on column c: a number for the metric
 // columns, the text for file / function. On the Changes tab the metric
 // columns sort by the absolute delta, so min: reads |Δ| there.
 func (r Row) value(c Column) (float64, string) {
+	if r.Dup != nil {
+		return r.dupValue(c) // #3044
+	}
 	if r.Trend != nil {
 		return r.trendValue(c)
 	}
@@ -366,6 +385,9 @@ func abs(n int) int {
 // cell renders the row's text for column c: the plain metric on the
 // Project / File tabs, "before→after (Δ)" on the Changes tab.
 func (r Row) cell(c Column) string {
+	if r.Dup != nil {
+		return r.dupCell(c) // #3044
+	}
 	if r.Trend != nil {
 		return r.trendCell(c)
 	}
@@ -494,6 +516,11 @@ type Model struct {
 
 	// The Trend tab (#2962, trend.go): its data.
 	trend Trend
+
+	// The Duplicates tab (#3044, duplicates.go): its data and the keys of
+	// the expanded groups.
+	dup     Duplicates
+	dupOpen map[string]bool
 
 	// The grouping level of the Project and File tabs (#2937, group.go).
 	projectGroup complexity.Level
@@ -698,6 +725,8 @@ func (m *Model) layout() []Column {
 		return changesLayout
 	case TabTrend:
 		return trendLayout
+	case TabDuplicates:
+		return dupLayout // #3044
 	}
 	l := m.churnLayout(projectLayout, projectChurnLayout)
 	if m.pinSection {
@@ -816,8 +845,8 @@ func (m *Model) Refresh() {
 	all := m.markHidden(m.markTests(m.markPins(m.population())))
 	var sum complexity.Summer
 	for _, r := range all {
-		if r.Change == complexity.Removed || r.Gone || r.Trend != nil {
-			continue // the Changes summary is the head side's; a Trend row is no function
+		if r.Change == complexity.Removed || r.Gone || r.Trend != nil || r.Dup != nil {
+			continue // the Changes summary is the head side's; a Trend or Duplicates row is no function
 		}
 		sum.Add(r.Fn, m.th(r.Path))
 	}
@@ -855,6 +884,7 @@ func (m *Model) Refresh() {
 	m.sortRows()
 	m.markHot()
 	m.spliceSites()
+	m.spliceDuplicates() // #3044
 	m.markCaret()
 	if m.treeActive() {
 		m.buildTree() // keeps its own expansion and selection
@@ -898,6 +928,8 @@ func (m *Model) population() []Row {
 		out = m.changesRows()
 	case TabTrend:
 		out = m.trendRows()
+	case TabDuplicates:
+		out = m.dupRows() // #3044
 	}
 	return out
 }
@@ -908,8 +940,8 @@ func (m *Model) markTests(rows []Row) []Row {
 	out := rows[:0]
 	test := map[string]bool{}
 	for _, r := range rows {
-		if r.Trend != nil {
-			out = append(out, r) // a commit row (#2962) is no file
+		if r.Trend != nil || r.Dup != nil {
+			out = append(out, r) // a commit row (#2962) is no file; a clone row (#3044) hid its own
 			continue
 		}
 		t, ok := test[r.Path]
@@ -947,6 +979,9 @@ func (m *Model) matches(q filterexpr.Query, r Row) bool {
 	}
 	if r.Trend != nil {
 		return m.trendMatches(q, r) // #2962
+	}
+	if r.Dup != nil {
+		return m.dupMatches(q, r) // #3044
 	}
 	class := r.Fn.Class
 	if r.Group != nil {
@@ -1087,6 +1122,9 @@ func (m *Model) sortRows() {
 		}
 		if a.Trend != nil && b.Trend != nil {
 			return a.Trend.Index > b.Trend.Index // ties newest first (#2962)
+		}
+		if a.Dup != nil && b.Dup != nil {
+			return a.Dup.Index < b.Dup.Index // ties by rank (#3044)
 		}
 		return a.Fn.Line < b.Fn.Line
 	})
@@ -1265,6 +1303,11 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 			return cmd // #2962
 		}
 	}
+	if m.tab == TabDuplicates {
+		if cmd, handled := m.dupKeyPress(msg.String()); handled {
+			return cmd // #3044
+		}
+	}
 	switch msg.String() {
 	case "/":
 		m.filter.Focus()
@@ -1331,6 +1374,13 @@ func (m *Model) open() tea.Cmd {
 	if !ok {
 		return nil
 	}
+	if r.Dup != nil { // #3044: a group row expands, an occurrence opens
+		if r.occurrence() {
+			return m.openOccurrence(r)
+		}
+		m.ToggleDuplicate()
+		return nil
+	}
 	if r.Cand != nil {
 		return m.openCandidate(r)
 	}
@@ -1363,6 +1413,9 @@ func (m *Model) copyRow() tea.Cmd {
 // row carries both sides: "changed ccn=3→5 (+2) cog=1→1 (0)"; a group row
 // its aggregate (groupCopyText).
 func CopyText(r Row) string {
+	if r.Dup != nil {
+		return dupCopyText(r) // #3044
+	}
 	if r.Trend != nil {
 		return trendCopyText(r)
 	}
@@ -1404,6 +1457,9 @@ func (m *Model) CSV() string {
 	}
 	if m.tab == TabTrend {
 		return m.trendCSV() // #2962
+	}
+	if m.tab == TabDuplicates {
+		return m.dupCSV() // #3044
 	}
 	if m.tab == TabChanges {
 		if m.Grouping() == complexity.ByFile {
@@ -1525,6 +1581,9 @@ func (m *Model) totalsText() string {
 	if m.tab == TabTrend {
 		return m.trendTotals() // #2962
 	}
+	if m.tab == TabDuplicates {
+		return m.dupTotals() // #3044
+	}
 	s := m.summary
 	// The index state leads, so a narrow pane still shows it.
 	var parts []string
@@ -1587,6 +1646,9 @@ func (m *Model) emptyText() string {
 	}
 	if m.tab == TabTrend {
 		return m.trendEmpty() // #2962
+	}
+	if m.tab == TabDuplicates {
+		return m.dupEmpty() // #3044
 	}
 	switch {
 	case m.hasView && m.stats.Unavailable:
@@ -1692,6 +1754,9 @@ func (m *Model) footer() string {
 	}
 	if m.tab == TabTrend {
 		return lipgloss.NewStyle().Faint(true).Render(m.clip(" " + count + m.trendFooter())) // #2962
+	}
+	if m.tab == TabDuplicates {
+		return lipgloss.NewStyle().Faint(true).Render(m.clip(" " + count + m.dupFooter())) // #3044
 	}
 	hints := " · tab view · s sort · S reverse · enter open · e csv · E md · y copy · r rescan · / filter"
 	switch {

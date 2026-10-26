@@ -77,6 +77,9 @@ func (o Options) equal(p Options) bool {
 type View struct {
 	Gen   int
 	Files map[string][]Function
+	// Tokens are the files' normalized token streams (#3044, tokens.go),
+	// keyed like Files; Duplicates reads them.
+	Tokens map[string]Tokens
 }
 
 // Paths lists the snapshot's files, sorted.
@@ -133,7 +136,7 @@ type Index struct {
 	root    string
 	opts    Options
 	started bool
-	project *langindex.Index[[]Function] // nil while disabled
+	project *langindex.Index[fileEntry] // nil while disabled
 	// gen is the notification generation (View.Gen): it moves once per
 	// settle window in which the walk's content changed, and on every
 	// drop or rebuild.
@@ -153,18 +156,18 @@ type Index struct {
 	pending bool
 
 	onScan  func(Stats)
-	scanned *langindex.Index[[]Function]
+	scanned *langindex.Index[fileEntry]
 
 	// cacheFile is where the walk persists (CacheFile(root), #2967);
 	// corrupt names the walk whose seed load found it damaged.
 	cacheFile string
-	corrupt   *langindex.Index[[]Function]
+	corrupt   *langindex.Index[fileEntry]
 }
 
 // viewKey identifies the content a snapshot was built from.
 type viewKey struct {
 	projGen uint64
-	project *langindex.Index[[]Function]
+	project *langindex.Index[fileEntry]
 }
 
 // NewIndex returns the index over the project at root ("" indexes nothing)
@@ -258,17 +261,17 @@ func (x *Index) Rebuild() bool {
 // newProject builds the walk for opts. The walk persists through the cache
 // (#2967) once it finishes and seeds itself from it unless seeded is false
 // (a rebuild, a changed exclude list). The caller holds x.mu.
-func (x *Index) newProject(opts Options, seeded bool) *langindex.Index[[]Function] {
+func (x *Index) newProject(opts Options, seeded bool) *langindex.Index[fileEntry] {
 	limits := langindex.Limits{MaxFileSize: indexMaxFileSize, MaxFiles: indexMaxFiles}
 	root := x.root
 	exclude := append([]string(nil), opts.Exclude...)
 	langOf := func(path string) string { return classify(root, exclude, path) }
 	p := langindex.New(root, limits, langOf, extractFile)
-	persist := langindex.Persist[[]Function]{
+	persist := langindex.Persist[fileEntry]{
 		Saved: func(string) { x.persist(p) },
 	}
 	if seeded {
-		persist.Load = func(string) map[string]langindex.Seeded[[]Function] {
+		persist.Load = func(string) map[string]langindex.Seeded[fileEntry] {
 			seed, corrupt := loadCache(x.cacheFile, root)
 			if corrupt {
 				x.mu.Lock()
@@ -287,7 +290,7 @@ func (x *Index) newProject(opts Options, seeded bool) *langindex.Index[[]Functio
 // persist writes walk p to the cache when p is still the index's walk — a
 // walk a rebuild or a setting already replaced is stale. It runs on the scan
 // goroutine; a failed write only costs the next session its warm start.
-func (x *Index) persist(p *langindex.Index[[]Function]) {
+func (x *Index) persist(p *langindex.Index[fileEntry]) {
 	x.mu.Lock()
 	ok := x.opts.Enabled && x.project == p
 	x.mu.Unlock()
@@ -339,10 +342,17 @@ func Excluded(root string, exclude []string, path string) bool {
 	return false
 }
 
+// fileEntry is the walk's per-file value: the measured units and the
+// normalized token stream the duplicate detector reads (#3044).
+type fileEntry struct {
+	Functions []Function
+	Tokens    Tokens
+}
+
 // extractFile is the walk's extractor: it measures the file as the language
-// its path names. A file the engine cannot measure (no tree) contributes
-// nothing and is not indexed.
-func extractFile(path, _ string, text string, only func(string) bool) map[string][]Function {
+// its path names and tokenizes it from the same parse. A file the engine
+// cannot measure (no tree) contributes nothing and is not indexed.
+func extractFile(path, _ string, text string, only func(string) bool) map[string]fileEntry {
 	if !only(indexLang) {
 		return nil
 	}
@@ -350,14 +360,14 @@ func extractFile(path, _ string, text string, only func(string) bool) map[string
 	if !ok || l.Complexity == nil {
 		return nil
 	}
-	fns, err := Measure(l.ID, strings.Split(text, "\n"))
+	fns, toks, err := MeasureTokens(l.ID, strings.Split(text, "\n"))
 	if err != nil {
 		return nil
 	}
 	if fns == nil {
 		fns = []Function{}
 	}
-	return map[string][]Function{indexLang: fns}
+	return map[string]fileEntry{indexLang: {Functions: fns, Tokens: toks}}
 }
 
 // Available reports whether the build can parse at least one language with a
@@ -408,7 +418,7 @@ func (x *Index) Snapshot() View {
 	x.mu.Lock()
 	p := x.project
 	if p == nil {
-		v := View{Gen: x.gen, Files: map[string][]Function{}}
+		v := View{Gen: x.gen, Files: map[string][]Function{}, Tokens: map[string]Tokens{}}
 		x.mu.Unlock()
 		return v
 	}
@@ -421,11 +431,13 @@ func (x *Index) Snapshot() View {
 	}
 	x.mu.Unlock()
 	files := map[string][]Function{}
-	p.Each([]string{indexLang}, func(path string, fns []Function) {
-		files[path] = fns
+	tokens := map[string]Tokens{}
+	p.Each([]string{indexLang}, func(path string, e fileEntry) {
+		files[path] = e.Functions
+		tokens[path] = e.Tokens
 	})
 	x.mu.Lock()
-	v := View{Gen: x.gen, Files: files}
+	v := View{Gen: x.gen, Files: files, Tokens: tokens}
 	if x.project == p {
 		x.view, x.viewKey = &v, key
 	}

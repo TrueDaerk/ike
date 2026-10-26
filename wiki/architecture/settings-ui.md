@@ -376,7 +376,7 @@ any entry whose key the typed schema does not expose (no dead keys).
   All apply live: off drops the index, on rewalks, a changed list rebuilds,
   a changed threshold repaints the open window. `complexity.problems` (Bool, default on, #2920) feeds over-threshold
   functions into the Problems window; off clears those rows. `complexity.status_segment` (Bool, default off,
-  #2921) shows the `Δcx` status segment live. `complexity.churn_days` (Int,
+  #2921) shows the `Δcx` status segment live. `complexity.duplicates_min_tokens` (Int, 1-10000, default 50, #3044) is the smallest clone the Duplicates tab reports. `complexity.churn_days` (Int,
   1-3650, default 90, #2957) is the hotspot window of the `commits` / `hot`
   columns; a change re-fetches the churn live. `complexity.trend_commits`
   (Int, 1-500, default 30, #2962) is the Trend tab's window; a change

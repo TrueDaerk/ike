@@ -110,6 +110,8 @@ func TestComplexityTrendBookkeeping(t *testing.T) {
 	if !tr.Ready || tr.Computing || tr.Err != "" || len(tr.Points) != 2 || tr.Window != 30 {
 		t.Fatalf("after result: %+v", tr)
 	}
+	out, _ = m.Update(tea.WindowSizeMsg{Width: 160, Height: 40}) // the five-tab bar leaves the header room
+	m = out.(Model)
 	p := m.complexityPanel()
 	if rows := p.Rows(); len(rows) != 2 || rows[0].Trend.Point.Short != "bbb2222" {
 		t.Fatalf("rows = %+v", rows)

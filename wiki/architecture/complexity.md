@@ -465,8 +465,9 @@ macOS.
 **Tabs.** `Project` lists every function of the index snapshot, `File` the
 focused editor's file, `Changes` the diff against a base revision (#2918,
 [below](#changes-vs-head-2918)), `Trend` the project's sums at each of the
-last N commits (#2962, [below](#trend-2962)); `tab` / `shift+tab` and a click on the
-header's tab bar switch. The pane is a pure consumer: the app seeds it with
+last N commits (#2962, [below](#trend-2962)), `Duplicates` the project's
+clone groups (#3044, [below](#duplicates-3044)); `tab` / `shift+tab` and a
+click on the header's tab bar switch. The pane is a pure consumer: the app seeds it with
 `Index.Snapshot()` and `Index.Stats()` when it opens or is restored from a
 layout (`wireToolWindow`), re-reads the snapshot on every
 `ComplexityChangedMsg`, and on every settled Update pass tells it the
@@ -1409,6 +1410,153 @@ squash merge and a merge commit both read as one point, and a commit only
 reachable through a side branch never appears.
 
 
+## Duplicates (#3044)
+
+The fifth tab, **Duplicates**, is the first step of epic 0560 (#3043):
+duplicated code — the same logic copied into several places, exactly
+what an extraction into a shared helper fixes — found project-wide on the
+parse the index already makes, kept current by the index, shown as clone
+groups ranked by size × occurrences. The detector is
+`internal/complexity/tokens.go` + `duplicates.go`, the index half
+`index.go` / `persist.go`, the app half `internal/app/complexity_duplicates.go`,
+the rendering `internal/complexitypanel/duplicates.go`. It finds **type-1
+and type-2 clones**: exact copies, and copies with renamed identifiers or
+changed literals. Near-miss clones with inserted or deleted statements
+(type-3) and semantic clones (type-4) are out of scope, as are
+cross-language copies.
+
+**Token stream.** `MeasureTokens(langID, lines)` is `Measure` plus, from
+the same `highlight.SyntaxTree` snapshot, the file's normalized token
+stream: every named node of the measured units in pre-order (the snapshot
+keeps the grammar's named nodes and the infix operator, so the stream
+encodes the tree's shape, not just its leaves), one 32-bit FNV hash per
+node of its normalized spelling:
+
+- an **identifier** leaf — `identifier` and the grammars' `*_identifier`
+  variants, `name`, `*_name` — becomes one placeholder whatever its text,
+  so renamed locals, parameters, fields and types still match; **except**
+  the name of what is *called or accessed* (an identifier directly under a
+  `call_expression`, `selector_expression`, `member_expression`,
+  `attribute`, `*_call_expression`, `command_name`), which keeps its text.
+  Two blocks calling different functions do the same thing only by
+  accident, and anonymizing callees drowned this repository's real clones
+  in table rows that merely share a shape (1 930 → 1 092 non-test groups at
+  50 tokens);
+- a **literal** leaf — a kind containing `literal`, `string`, `number`,
+  `integer`, `float`, `escape`, `fragment`, `content`, `rune`, `char`,
+  `heredoc` — becomes one placeholder per node kind: a changed constant or
+  message matches, a string swapped for a number does not;
+- a **comment** (any kind containing `comment`) is dropped with its
+  subtree;
+- every other node hashes its kind plus, for an inner node, its operator
+  (`a + b` ≠ `a && b`), and for a leaf of another kind its text too
+  (`break_statement`, `primitive_type`, `true`).
+
+Only the **measured units** contribute: tokens outside every function
+(package clauses, imports, top-level tables, struct types) are dropped,
+and the stream is cut into one **segment per top-level unit** (a closure
+is part of its enclosing unit's segment), so a clone never spans two
+functions — the fix (#3045) extracts a helper from inside one.
+`complexity.Tokens{Lang, Hash []uint32, Line []int32, Seg []int32}` is the
+result, ~1.1 tokens per source token (IKE: 4.0 M tokens for 35 500
+functions).
+
+**Index.** The walk's per-file value is `fileEntry{Functions, Tokens}`:
+one parse yields both, a saved or watcher-changed file is re-tokenized
+alone through the same worker, and `View` carries `Tokens
+map[string]Tokens` beside `Files`. The streams persist with the index
+(`cacheRecord.Tokens`, `SpecVersion` 2): `Tokens.GobEncode` packs the
+hashes as raw little-endian words and the lines and segment starts as
+varint deltas, a fifth of gob's default struct encoding — the IKE cache
+grew from ~9 MB to 25 MB — so a warm start has every stream without
+parsing and the first detection of a session needs no walk.
+
+**Detection.** `View.Duplicates(minTokens)` (`Duplicates(files, k)`) is a
+pure pass over the streams, per language:
+
+1. every window of `k` consecutive tokens inside one segment is
+   fingerprinted with a polynomial rolling hash (base 1 000 003 mod 2⁶⁴);
+   the (hash, position) pairs are sorted so equal windows form runs;
+2. a run of two or more windows is a **seed**. A seed whose members all
+   have the same left-neighbour window, and whose left run holds exactly
+   the same members, is skipped — the run one token to the left grows into
+   the same group. Members overlapping an earlier member of the same
+   segment are dropped, so a periodic block (a table of similar rows)
+   never matches itself; members are verified token by token against the
+   first, never trusted to the hash;
+3. the seed **grows** left and right while every member's next token
+   agrees and no member reaches a segment edge or runs into another member
+   — the maximal range of that member set;
+4. groups with the same occurrences collapse (key: paths + first lines +
+   length); a group whose **every occurrence lies inside an occurrence of a
+   longer group** is nested and dropped (the repeated rows of a copied
+   table, the inner block of a copied function). A group with one
+   occurrence outside every longer group's stays: it is a clone in its own
+   right, so a 60-token triple overlapping a 100-token pair survives.
+
+The result is `[]CloneGroup{Lang, Tokens, Occurrences []Occurrence{Path,
+Line, EndLine, Start, End}}` sorted by `Score()` = tokens × occurrences,
+then tokens, then first occurrence; `Lines()` is the longest occurrence's
+line count, `Files()` the distinct paths, `Key()` the identity across
+detections. On IKE (3 373 files, 35 513 functions, 4.03 M tokens) a
+detection at 50 tokens takes **~0.45 s** on the dev machine and yields
+10 362 groups (1 092 outside test files); 30 tokens 0.74 s / 42 700
+groups, 100 tokens 0.25 s / 1 251 groups. The cold walk with tokenizing
+takes 5.7 s for the whole repository (it was ~5 s without).
+
+**App half.** `complexity_duplicates.go` mirrors the Trend tab's pull
+model: every `ComplexityChangedMsg` bumps `cxDup.seen` and marks the result
+stale; once per settled Update pass, while the Complexity window is open
+(any tab — the groups are the window's, not the tab's) and the result is
+stale or was found with another `complexity.duplicates_min_tokens`, one
+detection runs over `Index.Snapshot()` in a `safego` goroutine
+(`app.complexityDuplicates.detect`), a command delivers
+`complexityDuplicatesMsg{started, minTokens, groups, ms}`, and
+`applyComplexityDuplicates` hands the pane `complexitypanel.Duplicates{
+Groups, MinTokens, Computing, Ready}`. A generation landing mid-detection
+leaves the result stale, so the same settled pass launches the next run;
+a running detection is never doubled. A closed window costs nothing —
+opening it (or restoring it from a layout, `seedComplexityDuplicates`)
+runs the detector once over the snapshot already held. One
+`complexity.duplicates` telemetry op per landed detection (`ms`, `groups`,
+`min`).
+
+**Pane.** `TabDuplicates` lists one row per group behind an expansion mark
+(`▸ internal/app/app.go:11–41`, the first occurrence's location) with
+`score`, `tokens`, `lines`, `occurrences` and `files` columns, sorted by
+score descending by default (`fitSort`). `enter` or `space` on a group row
+expands it in place into one indented row per occurrence (`path:first–last`,
+its own line count); several groups can be open at once (`dupOpen`, keyed
+by `CloneGroup.Key`, so a new detection keeps the expansion); `enter` on an
+occurrence sends `OpenLocationMsg{Path, Line, EndLine}` — the extraction
+candidates' path (#2948), so the occurrence opens with its lines selected;
+`space` on an occurrence collapses its parent. `t` drops the occurrences in
+test files (`complexity.IsTestFile`) and the groups that fall below two;
+`Row.Test` marks a group whose every occurrence is a test file. The filter
+row's `file:` matches any occurrence's path, `lang:` the group's language,
+`test:` the mark, `min:` / `max:` bound the sort column, bare words match
+the locations; the function-level keys (`fn:`, `kind:`, `class:`, `depth:`,
+`params:`, `nloc:`, `baseline:`, `pinned:`, `hidden:`) match nothing.
+`y` copies `dup 120 tokens × 2: a.go:11–41, b.go:6–36` (an occurrence:
+`a.go:11–41 (dup 120 tokens × 2)`), `e` exports one CSV row per occurrence
+(`group, score, tokens, lines, occurrences, files, path, line, end_line`),
+`E` the Markdown table of the group rows. The header reads `3 groups · 7
+occurrences · ≥ 50 tokens` (`detecting…` while the detector runs); the
+empty text names the state (`detecting duplicates…`, `no duplicate of at
+least 50 tokens`, `every duplicate involves a test file — t shows them`).
+Grouping, the tree, the breakdown, the marks, the baseline, the pins, the
+function diff, the agent, the hidden set and the base prompt do nothing
+here (`dupKeyPress` swallows their keys): a row is a clone group, not a
+function. The agent key on a group (#3045) and the multi-file apply
+(#3046) are the epic's next steps.
+
+**Setting.** `complexity.duplicates_min_tokens` (Int, 1–10000, default 50,
+Settings ▸ Complexity, `config.Complexity.DuplicatesMinTokens`) is the
+smallest clone reported, in normalized tokens — about 8–10 lines at 50.
+`config.Validate` falls back to 50 outside the range with a diagnostic;
+the form rejects non-numeric input and clamps. A change re-runs the open
+window's detection on the next settled pass.
+
 ## Problems feed (#2920)
 
 `internal/app/complexity_problems.go` publishes every over-threshold
@@ -2036,9 +2184,18 @@ scope), validated in the form and by `config.Validate`:
 | `complexity.baseline` | `true` | Apply `.ike/complexity-baseline.json` (#2958): accepted functions leave the over counts, Problems and the warning colour; off ignores the file everywhere. |
 | `complexity.agent_verdict` | `false` | Diff the working tree against `HEAD` on the agent's `Stop` hook event and post the verdict into the Agent Trace window (#2964); off runs nothing. |
 | `complexity.agent_apply` | `true` | Apply the simplify agent's diff (`a`) to the function's open buffer as one undoable edit and report the metrics before → after (#3009); off only opens the answer as a scratch. |
+| `complexity.duplicates_min_tokens` | `50` | Smallest clone the Duplicates tab reports, in normalized tokens (1-10000, #3044): exact copies and copies with renamed identifiers / changed literals, within and across files of one language. |
 
 ## Limitations
 
+- **Duplicates are type-1 / type-2 only** (#3044): a copy with an inserted
+  or deleted statement breaks into the matching pieces (or below the
+  threshold, into nothing), semantically equal code written differently is
+  never found, and copies across languages are not compared. Only code
+  inside measured functions takes part — duplicated top-level tables and
+  type declarations do not — and a clone never spans two functions. The
+  normalization keeps callee and member names, so two blocks that differ
+  only in which function they call are not clones.
 - **The trend follows the first parent only.** A commit reachable only
   through a merged side branch is never a point; a merge and a squash merge
   both read as one. The trend measures every file of the tree, so `t`

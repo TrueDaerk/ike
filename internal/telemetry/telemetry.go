@@ -272,6 +272,11 @@ const (
 	// rest came from the per-blob cache). The phase is "error" when the
 	// repository could not be read. No path travels.
 	OpComplexityTrend = "complexity.trend"
+	// One finished duplicate detection (0560, #3044): the Duplicates tab of
+	// the Complexity window ran the clone detector over the index snapshot.
+	// "ms" is the detection's duration, "groups" how many clone groups it
+	// found and "min" the clone size in tokens. No path travels.
+	OpComplexityDuplicates = "complexity.duplicates"
 	// One finished simplify-agent run of the Complexity window's `a` (#3009).
 	// "outcome" is "applied" (the diff landed in the buffer), "not_applied"
 	// (a hunk did not match, or the diff named another file), "no_diff" (no

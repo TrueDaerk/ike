@@ -14,7 +14,9 @@ the warning thresholds `ccn_warn` / `cognitive_warn` (15 by default) and
 per-language `overrides` of those thresholds (see
 [Different thresholds per path or language](#different-thresholds-per-path-or-language)),
 the hotspot window `churn_days` (90 by default), the trend window
-`trend_commits` (30 by default, see [The Trend tab](#the-trend-tab)) and the `baseline` switch
+`trend_commits` (30 by default, see [The Trend tab](#the-trend-tab)), the duplicate
+clone size `duplicates_min_tokens` (50 by default, see [The Duplicates
+tab](#the-duplicates-tab)) and the `baseline` switch
 (on by default) that applies the project's accepted-debt file (see
 [Accepted debt: the baseline](#accepted-debt-the-baseline)).
 
@@ -527,6 +529,69 @@ is new. Outside a git repository the tab says so.
 **Trend window** (`complexity.trend_commits`, Settings ▸ Complexity, 1–500,
 default 30) sets how many commits the tab and `ike complexity --trend`
 measure by default; a change recomputes the open tab.
+
+
+## The Duplicates tab
+
+The fifth tab answers "what did we copy and paste?": it lists the blocks
+of code that occur more than once in the project — exact copies, and
+copies where only names or constants differ — so the same logic living in
+three places can become one helper. Detection runs on the parse the index
+already has, in the background, and follows every save; the header reads
+`12 groups · 31 occurrences · ≥ 50 tokens` (`detecting…` while it runs):
+
+```
+ file                                   score ▼  tokens  lines  occurrences  files
+ ▸ internal/theme/builtins.go:68–156    12888    537     89     24           1
+ ▾ internal/app/open.go:120–161         1760     880     42     2            2
+     internal/app/open.go:120–161                        42
+     internal/app/reopen.go:44–85                        42
+ ▸ web/index.php:1–10                   110      55      10     2            1
+```
+
+Each group row is one duplicated block: where its first copy sits, its
+**score** (tokens × occurrences — the ranking, so a long block copied
+twice and a short one copied ten times both float up), its size in
+**tokens** and **lines**, how many **occurrences** it has and how many
+**files** they span.
+
+- `enter` or `space` on a group row expands it into its occurrences
+  (`path:first–last` lines); several groups can be open at once. `enter`
+  on an occurrence opens the file with those lines selected; `space` on
+  an occurrence folds its group again. A double click does the same as
+  `enter`.
+- `s` cycles the sort column, `S` reverses: by `occurrences` the most-copied
+  block comes first, by `tokens` the longest.
+- `t` hides the test files: their occurrences leave the groups, and a
+  group left with a single copy leaves the list — table-driven tests are
+  where most copies live, so this is usually the first key to press.
+- The filter row's `file:` matches any occurrence (`file:internal/app`,
+  `-file:_test`), `lang:` the language (`lang:php`), `test:no` drops the
+  groups that live only in test files, `min:` / `max:` bound the sort
+  column (`min:200` on `score`), and a bare word matches the locations.
+- `e` exports one CSV row per occurrence (`group, score, tokens, lines,
+  occurrences, files, path, line, end_line`), `E` a Markdown table of the
+  groups, `y` copies the row as `dup 880 tokens × 2: internal/app/open.go:120–161,
+  internal/app/reopen.go:44–85`.
+- `r` rescans the project (the detection follows).
+
+What counts as a copy: the code's **structure and operators** must match
+token for token, while **variable, parameter, field and type names** and
+**constants** (numbers, strings) may differ — a block that calls another
+function, or reads another field, is not a copy of its neighbour, and
+comments never matter. Only code inside functions takes part, and a copy
+never spans two functions. A copy with an inserted or removed statement is
+found as the matching pieces on either side (or, below the threshold, not
+at all).
+
+**Duplicate clone size** (`complexity.duplicates_min_tokens`, Settings ▸
+Complexity, 1–10000, default 50) is the smallest block reported, in
+normalized tokens — roughly 8–10 lines of Go at 50. Lower it to find
+smaller copies (and more noise), raise it to see only the big ones; the
+open window re-runs the detection at once. Grouping, the breakdown, the
+baseline, the pins and the agent do not apply on this tab — a row is a
+copied block, not a function — and the footer says so. Handing a group to
+the agent for extraction is the next step of this stream.
 
 
 ## Command line

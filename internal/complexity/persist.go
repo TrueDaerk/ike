@@ -35,7 +35,7 @@ import (
 // measured under other rules must not seed a new session.
 // TestCacheVersionTracksFormat fails when the shape moves without a bump;
 // a rule change has no shape, so remember the bump by hand.
-const SpecVersion = 1
+const SpecVersion = 2
 
 // cacheName is the cache file's name inside the per-project state directory.
 const cacheName = "complexity-index.gob"
@@ -62,17 +62,18 @@ type cacheHeader struct {
 	Files   int
 }
 
-// cacheRecord is one file's measurement.
+// cacheRecord is one file's measurement and its token stream (#3044).
 type cacheRecord struct {
 	Path      string
 	Stamp     langindex.Stamp
 	Functions []Function
+	Tokens    Tokens
 }
 
 // loadCache reads the seed for root from file. A missing, foreign or
 // outdated cache yields nil quietly — the walk runs cold; a damaged one
 // yields nil with corrupt set.
-func loadCache(file, root string) (seed map[string]langindex.Seeded[[]Function], corrupt bool) {
+func loadCache(file, root string) (seed map[string]langindex.Seeded[fileEntry], corrupt bool) {
 	if file == "" {
 		return nil, false
 	}
@@ -89,7 +90,7 @@ func loadCache(file, root string) (seed map[string]langindex.Seeded[[]Function],
 	if h.Version != SpecVersion || h.Root != root {
 		return nil, false
 	}
-	seed = make(map[string]langindex.Seeded[[]Function], h.Files)
+	seed = make(map[string]langindex.Seeded[fileEntry], h.Files)
 	for i := 0; i < h.Files; i++ {
 		var r cacheRecord
 		if err := dec.Decode(&r); err != nil {
@@ -98,7 +99,7 @@ func loadCache(file, root string) (seed map[string]langindex.Seeded[[]Function],
 		if r.Functions == nil {
 			r.Functions = []Function{}
 		}
-		seed[r.Path] = langindex.Seeded[[]Function]{Stamp: r.Stamp, Value: r.Functions}
+		seed[r.Path] = langindex.Seeded[fileEntry]{Stamp: r.Stamp, Value: fileEntry{Functions: r.Functions, Tokens: r.Tokens}}
 	}
 	return seed, false
 }
@@ -107,13 +108,13 @@ func loadCache(file, root string) (seed map[string]langindex.Seeded[[]Function],
 // temporary sibling renamed into place, so a crash mid-write leaves the old
 // cache (or none), never a torn one. A walk without a single measured file
 // writes nothing (and drops a cache left over).
-func saveCache(file, root string, p *langindex.Index[[]Function]) error {
+func saveCache(file, root string, p *langindex.Index[fileEntry]) error {
 	if file == "" || p == nil {
 		return nil
 	}
 	var recs []cacheRecord
-	p.EachStamped(indexLang, func(path string, st langindex.Stamp, fns []Function) {
-		recs = append(recs, cacheRecord{Path: path, Stamp: st, Functions: fns})
+	p.EachStamped(indexLang, func(path string, st langindex.Stamp, e fileEntry) {
+		recs = append(recs, cacheRecord{Path: path, Stamp: st, Functions: e.Functions, Tokens: e.Tokens})
 	})
 	if len(recs) == 0 {
 		_ = os.Remove(file)

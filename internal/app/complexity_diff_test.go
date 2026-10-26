@@ -129,6 +129,8 @@ func TestComplexityDiffBaseSwitchAndRejectedRef(t *testing.T) {
 	if cmd != nil || m.cxDiff.tickArmed || m.cxDiff.key != m.currentCxDiffKey() {
 		t.Fatal("a rejected ref must not re-arm")
 	}
+	out, _ = m.Update(tea.WindowSizeMsg{Width: 160, Height: 40}) // the five-tab bar leaves the header room
+	m = out.(Model)
 	if v := m.complexityPanel().View(); !strings.Contains(v, "unknown revision: main") {
 		t.Fatalf("the pane must show the git error:\n%s", v)
 	}

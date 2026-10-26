@@ -80,6 +80,9 @@ func (m *Model) fitSort() {
 		if m.tab == TabTrend {
 			m.sortCol = ColCommit // newest first (#2962)
 		}
+		if m.tab == TabDuplicates {
+			m.sortCol = ColScore // tokens × occurrences (#3044)
+		}
 	}
 }
 
@@ -238,6 +241,8 @@ func (r Row) aggregate() bool { return r.Group != nil || r.FileChange != nil }
 // class group's class, a file group's or a Changes file row's path.
 func (r Row) label() string {
 	switch {
+	case r.Dup != nil:
+		return r.dupLabel()
 	case r.Trend != nil:
 		return r.trendLabel()
 	case r.FileChange != nil:
@@ -252,6 +257,9 @@ func (r Row) label() string {
 
 // key identifies a row across refreshes, so the cursor stays on it.
 func (r Row) key() string {
+	if r.Dup != nil {
+		return r.dupKey()
+	}
 	if r.Trend != nil {
 		return r.trendKey()
 	}

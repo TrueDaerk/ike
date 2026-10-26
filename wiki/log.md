@@ -1,5 +1,21 @@
 # Log
 
+## 2026-10-26 (Complexity: duplicate code detection, Duplicates tab, #3044)
+
+- [Code Complexity](/architecture/complexity.md): the index tokenizes every
+  measured unit on the parse it already makes (identifiers and literals
+  normalized to placeholders, callee and member names kept, comments
+  dropped) and persists the streams with the cache (SpecVersion 2, packed
+  encoding); `View.Duplicates(minTokens)` finds type-1 / type-2 clone
+  groups per language with a rolling hash, maximal extension and nested
+  collapse (~0.45 s over IKE). The Complexity window's fifth tab
+  **Duplicates** lists the groups by tokens × occurrences, expands them into
+  occurrences and opens one with its lines selected; test hiding and the
+  filter apply. New setting `complexity.duplicates_min_tokens` (default 50),
+  new `complexity.duplicates` telemetry op.
+- [Usage telemetry](/architecture/usage-telemetry.md): the `complexity.duplicates`
+  op.
+
 ## 2026-10-25 (Complexity: hide functions / files, help sheet, #3031)
 
 - [Code Complexity](/architecture/complexity.md): a **hidden set** next to

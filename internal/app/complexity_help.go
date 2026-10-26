@@ -31,7 +31,7 @@ type complexityHelpKey struct {
 // complexityListHelpKeys documents the list — the Project and File tabs,
 // grouped or not, and the tree view.
 var complexityListHelpKeys = []complexityHelpKey{
-	{Key: "tab / l / →  ·  shift+tab / h / ←", Title: "Next / previous tab: Project, File, Changes, Trend (a click on the tab bar too)"},
+	{Key: "tab / l / →  ·  shift+tab / h / ←", Title: "Next / previous tab: Project, File, Changes, Trend, Duplicates (a click on the tab bar too)"},
 	{Key: "j / k · ↑ / ↓ · pgup / pgdn · home / end · g / G", Title: "Move the cursor; the mouse wheel scrolls"},
 	{Key: "enter · double click", Title: "Open the function's file at its header (a group: its first unit; a site: its line; in the tree: open a function, fold / unfold a node)"},
 	{Key: "s", Title: "Cycle the sort column (a click on a column header sorts by it, again reverses)"},
@@ -72,6 +72,16 @@ var complexityChangesHelpKeys = []complexityHelpKey{
 	{Key: "x", Command: "complexity.hide", Title: "Hide the selected changed or added function (its working-tree side); on a file row hide the file"},
 }
 
+// complexityDuplicatesHelpKeys documents the Duplicates tab's own keys
+// (#3044); the list keys above apply there as well, the function-level ones
+// do nothing.
+var complexityDuplicatesHelpKeys = []complexityHelpKey{
+	{Key: "enter · space · double click", Title: "On a group row: expand / collapse it into its occurrences (several may be open); space on an occurrence folds its group"},
+	{Key: "enter · double click", Title: "On an occurrence: open the file with the duplicated lines selected"},
+	{Key: "t", Command: "complexity.toggleTests", Title: "Hide the occurrences in test files; a group left with one copy leaves the list"},
+	{Key: "y", Title: "Copy the group as one line: dup 120 tokens × 2: a.go:11–41, b.go:6–36"},
+}
+
 // complexityAgentHelpKeys documents the simplify agent's keys.
 var complexityAgentHelpKeys = []complexityHelpKey{
 	{Key: "a", Title: "Ask the coding agent to simplify the selected function (function rows only); the answer opens as a scratch and, with complexity.agent_apply, as an undoable edit"},
@@ -91,6 +101,7 @@ func (m Model) complexityHelpGroups() []help.Group {
 		m.complexityHelpGroup("Complexity — filter row", "complexity.help.filter.", complexityFilterHelpKeys),
 		m.complexityFilterVocabulary(),
 		m.complexityHelpGroup("Complexity — Changes tab", "complexity.help.changes.", complexityChangesHelpKeys),
+		m.complexityHelpGroup("Complexity — Duplicates tab", "complexity.help.duplicates.", complexityDuplicatesHelpKeys),
 		m.complexityHelpGroup("Complexity — agent", "complexity.help.agent.", complexityAgentHelpKeys),
 	}
 	// The shared find chord focuses the filter row like "/" does; it is

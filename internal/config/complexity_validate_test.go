@@ -73,3 +73,26 @@ func TestValidateComplexityTrendCommits(t *testing.T) {
 		}
 	}
 }
+
+// The duplicate clone size (#3044) defaults to 50 tokens and falls back to
+// it outside 1–10000.
+func TestValidateComplexityDuplicatesMinTokens(t *testing.T) {
+	if c := defaults(); c.Complexity.DuplicatesMinTokens != 50 {
+		t.Errorf("default clone size = %d, want 50", c.Complexity.DuplicatesMinTokens)
+	}
+	for _, bad := range []int{0, -5, 10001} {
+		c := defaults()
+		c.Complexity.DuplicatesMinTokens = bad
+		diags := validate(c)
+		if c.Complexity.DuplicatesMinTokens != 50 || len(diagsFor(diags, "complexity.duplicates_min_tokens")) != 1 {
+			t.Errorf("clone size %d validated to %d (%v), want the 50 fallback reported once", bad, c.Complexity.DuplicatesMinTokens, diags)
+		}
+	}
+	for _, ok := range []int{1, 50, 200, 10000} {
+		c := defaults()
+		c.Complexity.DuplicatesMinTokens = ok
+		if diags := validate(c); len(diagsFor(diags, "complexity.duplicates_min_tokens")) != 0 || c.Complexity.DuplicatesMinTokens != ok {
+			t.Errorf("%d is a valid clone size: %d, %v", ok, c.Complexity.DuplicatesMinTokens, diags)
+		}
+	}
+}

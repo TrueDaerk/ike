@@ -351,6 +351,9 @@ type Model struct {
 	// cxTrend is the Trend tab's state (0551, #2962): the walk's key, its
 	// cache and the last result, shared by pointer like cxDiff.
 	cxTrend *complexityTrendState
+	// cxDup is the Duplicates tab's state (0560, #3044): the last detection
+	// and whether the index moved since, shared by pointer like cxDiff.
+	cxDup *complexityDuplicatesState
 	// cxBase is the accepted-debt baseline (0551, #2958), shared by
 	// pointer like cxDiff; cxBaseDialog marks the "accept all"
 	// confirmation dialog open in the shell.
@@ -1751,6 +1754,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		cxDiff:          &complexityDiffState{},
 		cxChurn:         &complexityChurnState{},
 		cxTrend:         &complexityTrendState{},
+		cxDup:           newComplexityDuplicatesState(),
 		cxBase:          newComplexityBaselineState(root),
 		cxPins:          newComplexityPinsState(root),
 		cxHints:         &complexityHintState{sent: map[string]cxHintKey{}, pending: map[string]cxHintKey{}, show: map[string]cxShowSites{}, measured: map[string]complexityHintMeasuredMsg{}},
@@ -4708,6 +4712,11 @@ func (m Model) updateUnguarded(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Its Trend tab pulls the last-N-commits walk the same way (#2962):
 	// one walk per VCS snapshot generation while the tab is on screen.
 	if sync := mm.complexityTrendSyncCmd(); sync != nil {
+		cmd = tea.Batch(cmd, sync)
+	}
+	// Its Duplicates tab pulls the clone detection the same way (#3044):
+	// one run per stale index generation while the window is open.
+	if sync := mm.complexityDuplicatesSyncCmd(); sync != nil {
 		cmd = tea.Batch(cmd, sync)
 	}
 	// Inline complexity hints follow every open document here (#2919): a
@@ -8648,7 +8657,8 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// republishes its rows (#2920); the status segment of a later step
 		// will too. The Changes tab keys on the generation (#2918).
 		m.noteComplexityGen(msg.Gen)
-		m.applyComplexitySession() // the session Δ's base, once (#2959)
+		m.noteComplexityDuplicatesGen() // the Duplicates tab's result is stale (#3044)
+		m.applyComplexitySession()      // the session Δ's base, once (#2959)
 		m.refreshComplexityPanel()
 		m.reportComplexityBaseline() // a malformed baseline, once (#2958)
 		m.feedComplexityProblems(config.Get().Complexity)
@@ -8677,6 +8687,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case complexityTrendTickMsg:
 		// The walk is running (#2962): relay its progress to the pane.
 		return m, m.complexityTrendProgress(msg)
+
+	case complexityDuplicatesMsg:
+		// The Duplicates tab's detection landed (#3044).
+		m.applyComplexityDuplicates(msg)
+		return m, nil
 
 	case complexitypanel.TrendBaseMsg:
 		// enter on a Trend row (#2962): the Changes tab against that commit.
