@@ -48,6 +48,14 @@ import (
 // run and the scratch header name the model and the session log. The
 // sessions the run leaves behind are excluded from trace discovery like an
 // ask fork.
+//
+// On the Duplicates tab (#3045, Roadmap 0560) `a` on a clone group whose
+// occurrences all lie in one file runs the same path with the extract
+// prompt (agentask.ExtractPrompt: every occurrence with its line range and
+// the whole file) asking for one diff that introduces a shared helper and
+// replaces every occurrence; the apply, the scratch fallback, cancel and
+// the notifications are the simplify run's, minus the re-measure. A group
+// spanning several files is refused with a notification.
 
 // ComplexityAskAgentMsg runs complexity.askAgent (#2964), a in the pane.
 type ComplexityAskAgentMsg struct{}
@@ -112,6 +120,10 @@ func (m *Model) complexityAskAgent() tea.Cmd {
 		if req, ok := p.AskAgent(); ok {
 			return m.startComplexityAgent(req)
 		}
+		if why := p.DuplicateAgentRefusal(); why != "" {
+			m.host.Notify(host.Info, "complexity: "+why) // #3045
+			return nil
+		}
 	}
 	m.host.Notify(host.Info, "complexity: select a function row to ask the agent about it")
 	return nil
@@ -127,12 +139,11 @@ func (m *Model) startComplexityAgent(req complexitypanel.AskAgentMsg) tea.Cmd {
 		m.host.Notify(host.Info, "complexity: the agent is still working on "+req.Name+" — "+cancelAgentHint)
 		return nil
 	}
-	source, err := m.complexityFunctionSource(req)
+	prompt, err := m.complexityAgentPrompt(req)
 	if err != nil {
 		m.host.Notify(host.Error, "complexity: "+err.Error())
 		return nil
 	}
-	prompt := agentask.SimplifyPrompt(complexitySimplify(req, displayPath(req.Path), source))
 	opts := askOptions()
 	dir := projectRoot()
 	ctx, cancel := context.WithCancel(context.Background())
@@ -140,7 +151,7 @@ func (m *Model) startComplexityAgent(req complexitypanel.AskAgentMsg) tea.Cmd {
 	id := m.cxAgent.seq
 	m.cxAgent.running[key] = &cxAgentRun{id: id, cancel: cancel, req: req, model: opts.Model, started: m.clock()}
 	m.syncComplexityAgentMarks()
-	m.host.Notify(host.Info, "complexity: asking "+opts.Model+" to simplify "+req.Name+"…")
+	m.host.Notify(host.Info, "complexity: asking "+opts.Model+" to "+req.Task()+"…")
 	run := cxAgentRunner
 	return tea.Batch(func() tea.Msg {
 		res, err := agentask.RunSimplify(ctx, run, dir, opts, prompt)
@@ -259,7 +270,7 @@ func (m Model) complexityAgentSegment() string {
 		return ""
 	}
 	run := m.cxAgent.running[keys[0]]
-	s := "[agent: simplify " + run.req.Name + " " + agentElapsed(m.clock().Sub(run.started))
+	s := "[agent: " + run.req.Task() + " " + agentElapsed(m.clock().Sub(run.started))
 	if len(keys) > 1 {
 		s += " +" + strconv.Itoa(len(keys)-1)
 	}
@@ -316,20 +327,58 @@ func bestCandidate(cands []complexity.Candidate) complexity.Candidate {
 // complexityFunctionSource is the function's text: the lines Line..EndLine
 // of the open buffer when the file is open, else of the file on disk.
 func (m Model) complexityFunctionSource(req complexitypanel.AskAgentMsg) (string, error) {
-	var text string
-	if ed := m.editorForPath(req.Path); ed != nil && ed.HasFile() {
-		text = ed.Text()
-	} else {
-		data, err := os.ReadFile(req.Path)
+	text, err := m.complexitySourceText(req.Path)
+	if err != nil {
+		return "", err
+	}
+	return sourceLines(req.Path, strings.Split(text, "\n"), req.Line, req.EndLine)
+}
+
+// complexitySourceText is path's text for a prompt: the open buffer when
+// the file is open, else the disk.
+func (m Model) complexitySourceText(path string) (string, error) {
+	if ed := m.editorForPath(path); ed != nil && ed.HasFile() {
+		return ed.Text(), nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// complexityAgentPrompt builds the run's prompt: the simplify prompt of a
+// function row, the extract prompt of a same-file clone group (#3045) —
+// every occurrence's lines and the whole file, read once.
+func (m Model) complexityAgentPrompt(req complexitypanel.AskAgentMsg) (string, error) {
+	if req.Dup == nil {
+		source, err := m.complexityFunctionSource(req)
 		if err != nil {
 			return "", err
 		}
-		text = string(data)
+		return agentask.SimplifyPrompt(complexitySimplify(req, displayPath(req.Path), source)), nil
+	}
+	text, err := m.complexitySourceText(req.Path)
+	if err != nil {
+		return "", err
 	}
 	lines := strings.Split(text, "\n")
-	from, to := req.Line, req.EndLine
+	e := agentask.Extract{Path: displayPath(req.Path), Lang: req.Lang, Tokens: req.Tokens, File: text}
+	for _, o := range req.Dup {
+		src, err := sourceLines(req.Path, lines, o.Line, o.EndLine)
+		if err != nil {
+			return "", err
+		}
+		e.Occurrences = append(e.Occurrences, agentask.ExtractOccurrence{Line: o.Line, EndLine: o.EndLine, Source: src})
+	}
+	return agentask.ExtractPrompt(e), nil
+}
+
+// sourceLines joins lines from..to of path's text, clamping the end; a
+// start past the text asks for a rescan.
+func sourceLines(path string, lines []string, from, to int) (string, error) {
 	if from < 0 || from >= len(lines) {
-		return "", errors.New(filepath.Base(req.Path) + " no longer holds line " + strconv.Itoa(req.Line+1) + "; rescan the project")
+		return "", errors.New(filepath.Base(path) + " no longer holds line " + strconv.Itoa(from+1) + "; rescan the project")
 	}
 	if to < from {
 		to = from
@@ -447,6 +496,9 @@ func (m Model) applyComplexityAgentDiff(msg cxAgentDoneMsg, run *cxAgentRun, sc 
 	cmds = append(cmds, restoreCmd)
 	req, model, log := msg.req, run.model, sc.log
 	cmds = append(cmds, func() tea.Msg {
+		if req.Dup != nil {
+			return cxAgentAppliedMsg{req: req, model: model, log: log} // no function to re-measure (#3045)
+		}
 		return cxAgentAppliedMsg{req: req, after: cxFindMeasured(cxMeasureText(path, now), req), model: model, log: log}
 	})
 	return m, tea.Batch(cmds...)
@@ -489,7 +541,10 @@ func asAppModel(tm tea.Model, fallback Model) Model {
 // metrics before → after and the excess delta under its thresholds.
 func (m *Model) handleComplexityAgentApplied(msg cxAgentAppliedMsg) {
 	text := "complexity: applied the agent's diff to " + msg.req.Name
-	if fn := msg.after; fn != nil {
+	if msg.req.Dup != nil {
+		// #3045: a clone group has no function to re-measure.
+		text = "complexity: applied the agent's diff extracting the " + msg.req.Name + " of " + displayPath(msg.req.Path) + " into a shared helper"
+	} else if fn := msg.after; fn != nil {
 		th := complexity.Thresholds{}
 		if c := config.Get(); c != nil {
 			th = m.complexityThresholdsFor(c.Complexity, msg.req.Path)
@@ -619,8 +674,18 @@ type cxAgentScratch struct {
 
 func (s cxAgentScratch) body() string {
 	var sb strings.Builder
-	sb.WriteString("# Simplify " + s.req.Name + "\n\n")
-	sb.WriteString(displayPath(s.req.Path) + ":" + strconv.Itoa(s.req.Line+1) + " — CCN " + strconv.Itoa(s.req.CCN) + ", cognitive " + strconv.Itoa(s.req.Cognitive) + "\n\n")
+	if s.req.Dup != nil {
+		// #3045: the clone group's occurrences instead of a function's metrics.
+		sb.WriteString("# Extract " + s.req.Name + "\n\n")
+		locs := make([]string, 0, len(s.req.Dup))
+		for _, o := range s.req.Dup {
+			locs = append(locs, strconv.Itoa(o.Line+1)+"–"+strconv.Itoa(o.EndLine+1))
+		}
+		sb.WriteString(displayPath(s.req.Path) + ": lines " + strings.Join(locs, ", ") + " — " + strconv.Itoa(s.req.Tokens) + " tokens each\n\n")
+	} else {
+		sb.WriteString("# Simplify " + s.req.Name + "\n\n")
+		sb.WriteString(displayPath(s.req.Path) + ":" + strconv.Itoa(s.req.Line+1) + " — CCN " + strconv.Itoa(s.req.CCN) + ", cognitive " + strconv.Itoa(s.req.Cognitive) + "\n\n")
+	}
 	sb.WriteString("Model: " + s.model)
 	if s.log != "" {
 		sb.WriteString(" · session log: " + s.log)

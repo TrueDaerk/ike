@@ -2,7 +2,7 @@
 type: concept
 title: Code Complexity
 description: The code-complexity engine (Roadmap 0550, #2913), cyclomatic (McCabe) and cognitive (Sonar) complexity, NLOC, parameters, nesting depth and comment density (#2934) per function, measured on the Tree-sitter parse through each language's ComplexitySpec; the rules, the walker, the per-language golden fixtures cross-checked against lizard, gocyclo, gocognit and complexipy, the summary with its per-class and per-file groups (#2937), the project index (#2916) that measures every supported file in the background, persists it across sessions (#2967, a stamped complexity-index.gob in the state store), keeps it current from saves and watcher events, and hands consumers immutable snapshots, the Complexity tool window (#2917) and its Changes tab (#2918) diffing the working tree's functions against a base revision with a verdict, the Problems feed (#2920) publishing over-threshold functions under the complexity source, the hotspot columns (#2957) multiplying complexity by the commits per file from one git log, the accepted-debt baseline (#2958, a committed .ike/complexity-baseline.json that turns every surface into a ratchet flagging only new and worsened functions), the optimisation-session pins (#2959, functions pinned with their metrics in the state store's complexity-pins.json, a Pinned section with a since-pin delta and a session Δexcess in the header), and the headless `ike complexity` CLI (#2922) printing the table of the project or of named files and directories (#2936), per function or summed per class or file (#2937), or the diff against a revision as text or JSON for CI and agents, also as a complexity-only build of the ike binary (#2939, build tag ike_complexity_only, make install-complexity) that links no IDE; configured by the [complexity] section (Settings > Complexity) with a complexity.scan telemetry op.
-resource: internal/complexity, internal/complexitypanel, internal/app/complexity_agent.go, internal/agentask/simplify.go, internal/agentask/answerdiff.go, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_churn.go, internal/app/complexity_baseline.go, internal/app/complexity_pins.go, internal/vcs/vcscore/churn.go, internal/app/complexity_problems.go, internal/app/complexity_segment.go, internal/complexitycli, cmd/ike/complexityonly.go
+resource: internal/complexity, internal/complexitypanel, internal/app/complexity_agent.go, internal/agentask/simplify.go, internal/agentask/extract.go, internal/agentask/answerdiff.go, internal/app/complexityindex.go, internal/app/complexity_diff.go, internal/app/complexity_churn.go, internal/app/complexity_baseline.go, internal/app/complexity_pins.go, internal/vcs/vcscore/churn.go, internal/app/complexity_problems.go, internal/app/complexity_segment.go, internal/complexitycli, cmd/ike/complexityonly.go
 tags: [architecture, complexity, metrics, tree-sitter, languages, cyclomatic, cognitive, index, settings, telemetry, vcs, diff, problems, cli, baseline, pins]
 timestamp: 2026-10-16T12:00:00Z
 ---
@@ -1545,10 +1545,32 @@ occurrences · ≥ 50 tokens` (`detecting…` while the detector runs); the
 empty text names the state (`detecting duplicates…`, `no duplicate of at
 least 50 tokens`, `every duplicate involves a test file — t shows them`).
 Grouping, the tree, the breakdown, the marks, the baseline, the pins, the
-function diff, the agent, the hidden set and the base prompt do nothing
-here (`dupKeyPress` swallows their keys): a row is a clone group, not a
-function. The agent key on a group (#3045) and the multi-file apply
-(#3046) are the epic's next steps.
+function diff, the hidden set and the base prompt do nothing here
+(`dupKeyPress` swallows their keys): a row is a clone group, not a
+function. The multi-file apply (#3046) is the epic's next step.
+
+**Extract with the agent (#3045).** `a` on a group row (or one of its
+occurrences) whose occurrences all lie in **one file** hands the group to
+the simplify agent ([below](#agent-2964)) instead of a function:
+`dupAgentRequest` builds a `complexitypanel.AskAgentMsg` with `Dup` (every
+occurrence of the group, the test-file hiding aside), `Tokens`, `Line` /
+`EndLine` spanning the first to the last occurrence and `Name` `2
+duplicates of lines 5–7` (the first copy). The root model reads the file
+once (the open buffer, else the disk) and builds `agentask.ExtractPrompt`
+(`internal/agentask/extract.go`): the ask marker, `File: <path> (<lang>)`,
+`Duplicate code: N occurrences of the same T tokens`, each occurrence fenced
+under `Occurrence i, lines a–b:`, the whole file for context when it fits
+`MaxSimplifySource`, then `ExtractInstruction` — one unified diff that adds
+a shared helper and replaces every occurrence. The run, the no-diff
+follow-up, `complexity.agent_apply`, the not-applied scratch, cancel (`esc`
+on the group row, `A`) and the notifications are the simplify run's; the
+status segment reads `[agent: extract 2 duplicates of lines 5–7 m:ss]`,
+the running group's location ends in `⟳`, the footer adds `a extract`, the
+scratch is headed `# Extract …` with the occurrences' ranges, and the
+applied notification names the group instead of re-measuring a function.
+A group spanning several files is refused — the footer note (and
+`complexity.askAgent` from the palette, a notification) reads `this clone
+group spans 2 files — a extracts duplicates within one file only`.
 
 **Setting.** `complexity.duplicates_min_tokens` (Int, 1–10000, default 50,
 Settings ▸ Complexity, `config.Complexity.DuplicatesMinTokens`) is the

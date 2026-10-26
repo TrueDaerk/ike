@@ -448,7 +448,8 @@ func (m *Model) dupEmpty() string {
 // space expand or collapse a group row, enter on an occurrence opens it
 // with its lines selected; the function-level keys (grouping, the
 // breakdown, the marks, the baseline, the pins, the function diff, the
-// agent, the hidden set, the base prompt, the tree) do nothing here.
+// hidden set, the base prompt, the tree) do nothing here; `a` asks the
+// agent to extract a same-file group (#3045).
 func (m *Model) dupKeyPress(k string) (tea.Cmd, bool) {
 	switch k {
 	case "enter":
@@ -464,7 +465,9 @@ func (m *Model) dupKeyPress(k string) (tea.Cmd, bool) {
 	case "space":
 		m.ToggleDuplicate()
 		return nil, true
-	case "b", "v", "D", "m", "i", "p", "d", "R", "a", "x", "X", "H":
+	case "a":
+		return m.askDuplicateAgent(), true // #3045
+	case "b", "v", "D", "m", "i", "p", "d", "R", "x", "X", "H":
 		return nil, true
 	}
 	return nil, false
@@ -480,9 +483,18 @@ func (m *Model) openOccurrence(r Row) tea.Cmd {
 
 // dupFooter is the Duplicates tab's hint line.
 func (m *Model) dupFooter() string {
+	if m.note != "" {
+		return " · " + m.note // a refused `a` (#3045)
+	}
 	hints := " · tab view · s sort · S reverse · enter expand · e csv · E md · y copy · r rescan · / filter"
 	if r, ok := m.Selected(); ok && r.occurrence() {
 		hints = strings.Replace(hints, "enter expand", "enter open", 1)
+	}
+	if _, ok := m.AskAgent(); ok {
+		hints += " · a extract" // #3045: same-file groups only
+		if m.selectedAgentRunning() {
+			hints += " · esc cancel agent"
+		}
 	}
 	if m.hideTests {
 		hints += " · t tests: hidden"
@@ -493,4 +505,59 @@ func (m *Model) dupFooter() string {
 		hints += " · min " + itoa(m.dup.MinTokens) + " tokens"
 	}
 	return hints
+}
+
+// dupAgentRequest is the agent request of a Duplicates row (#3045): its
+// group's occurrences — every one, the test-file hiding aside — to be
+// extracted into one shared helper. A group spanning several files is
+// refused with the reason; multi-file extraction is not supported yet.
+func dupAgentRequest(r Row) (AskAgentMsg, string) {
+	occs := r.Dup.Group.Occurrences
+	if len(occs) < 2 {
+		return AskAgentMsg{}, "a extracts a clone group with at least two occurrences"
+	}
+	path := occs[0].Path
+	line, end := occs[0].Line, occs[0].EndLine
+	for _, o := range occs[1:] {
+		if o.Path != path {
+			files := map[string]bool{}
+			for _, o := range occs {
+				files[o.Path] = true
+			}
+			return AskAgentMsg{}, "this clone group spans " + itoa(len(files)) + " files — a extracts duplicates within one file only"
+		}
+		line, end = min(line, o.Line), max(end, o.EndLine)
+	}
+	name := itoa(len(occs)) + " duplicates of lines " + itoa(occs[0].Line+1) + "–" + itoa(occs[0].EndLine+1)
+	return AskAgentMsg{
+		Path: path, Line: line, EndLine: end, Name: name, Lang: r.Dup.Group.Lang,
+		Dup: append([]complexity.Occurrence(nil), occs...), Tokens: r.Dup.Group.Tokens,
+	}, ""
+}
+
+// DuplicateAgentRefusal is why `a` refuses the selected Duplicates row —
+// a group spanning several files — and "" otherwise (#3045).
+func (m *Model) DuplicateAgentRefusal() string {
+	r, ok := m.Selected()
+	if !ok || r.Dup == nil {
+		return ""
+	}
+	_, why := dupAgentRequest(r)
+	return why
+}
+
+// askDuplicateAgent is the Duplicates tab's `a`: a same-file group (or one
+// of its occurrences) asks the root model to have the agent extract it, a
+// multi-file group says why not in the note line.
+func (m *Model) askDuplicateAgent() tea.Cmd {
+	r, ok := m.Selected()
+	if !ok || r.Dup == nil {
+		return nil
+	}
+	req, why := dupAgentRequest(r)
+	if why != "" {
+		m.note = why
+		return nil
+	}
+	return func() tea.Msg { return req }
 }
