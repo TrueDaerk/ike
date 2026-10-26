@@ -7,6 +7,7 @@ package complexitypanel
 // the function's row carries agentMark, and esc on it cancels the run.
 
 import (
+	"slices"
 	"strconv"
 
 	tea "charm.land/bubbletea/v2"
@@ -28,12 +29,25 @@ type AskAgentMsg struct {
 	Lang      string
 	Fn        complexity.Function
 	// Dup is set on a request from the Duplicates tab (#3045): the
-	// occurrences of a clone group that all lie in Path, which the agent
-	// extracts into one shared helper. Fn is then empty, Name labels the
-	// group, Line / EndLine span its first to its last occurrence and
+	// occurrences of a clone group, which the agent extracts into one
+	// shared helper — within Path, or across several files (#3046, Paths).
+	// Fn is then empty, Name labels the group, Path is the first
+	// occurrence's file, Line / EndLine span its occurrences there and
 	// Tokens is the clone's length.
 	Dup    []complexity.Occurrence
 	Tokens int
+}
+
+// Paths lists the files the request may change: Path, then (#3046) every
+// other file holding one of Dup's occurrences, in occurrence order.
+func (a AskAgentMsg) Paths() []string {
+	paths := []string{a.Path}
+	for _, o := range a.Dup {
+		if !slices.Contains(paths, o.Path) {
+			paths = append(paths, o.Path)
+		}
+	}
+	return paths
 }
 
 // Task names the run in the status segment and the notifications:

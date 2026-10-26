@@ -289,7 +289,7 @@ func TestDuplicatesStateTexts(t *testing.T) {
 
 func TestDuplicatesSwallowsFunctionKeys(t *testing.T) {
 	m := dupPanel(t)
-	for _, k := range []string{"b", "v", "D", "m", "i", "p", "d", "R", "a", "x", "X", "H"} {
+	for _, k := range []string{"b", "v", "D", "m", "i", "p", "d", "R", "x", "X", "H"} {
 		if cmd := m.Update(key(k)); cmd != nil {
 			t.Fatalf("%q must do nothing on the Duplicates tab", k)
 		}
@@ -305,32 +305,41 @@ func TestDuplicatesSwallowsFunctionKeys(t *testing.T) {
 	var _ tea.Cmd
 }
 
-func TestDuplicatesAskAgentSameFileOnly(t *testing.T) {
+func TestDuplicatesAskAgent(t *testing.T) {
 	m := dupPanel(t)
-	// Row 0 spans two files: `a` refuses and says why in the footer.
-	if cmd := m.Update(key("a")); cmd != nil {
-		t.Fatal("a multi-file group must not ask the agent")
-	}
-	if why := m.DuplicateAgentRefusal(); why != "this clone group spans 2 files — a extracts duplicates within one file only" {
+	// Row 0 spans two files (#3046): `a` names every occurrence and both
+	// files, the span covering the first file's occurrences only.
+	if why := m.DuplicateAgentRefusal(); why != "" {
 		t.Fatalf("refusal = %q", why)
 	}
-	if _, ok := m.AskAgent(); ok {
-		t.Fatal("AskAgent must refuse a multi-file group")
-	}
-	if !strings.Contains(m.dupFooter(), "spans 2 files") {
-		t.Errorf("footer = %q", m.dupFooter())
-	}
-	// Row 2 (the PHP pair) lies in one file: `a` names every occurrence.
-	m.Update(key("j"))
-	m.Update(key("j"))
-	if strings.Contains(m.dupFooter(), "spans") || !strings.Contains(m.dupFooter(), "a extract") {
+	if !strings.Contains(m.dupFooter(), "a extract") {
 		t.Errorf("footer = %q", m.dupFooter())
 	}
 	cmd := m.Update(key("a"))
 	if cmd == nil {
-		t.Fatal("a same-file group must ask the agent")
+		t.Fatal("a multi-file group must ask the agent")
 	}
 	req, ok := cmd().(AskAgentMsg)
+	if !ok || req.Path != "/proj/internal/app/app.go" || req.Line != 10 || req.EndLine != 40 || req.Tokens != 120 || len(req.Dup) != 2 {
+		t.Fatalf("request = %+v", req)
+	}
+	if req.Name != "2 duplicates of app.go:11–41 across 2 files" {
+		t.Fatalf("name = %q", req.Name)
+	}
+	if p := req.Paths(); len(p) != 2 || p[0] != "/proj/internal/app/app.go" || p[1] != "/proj/internal/ui/list.go" {
+		t.Fatalf("paths = %v", p)
+	}
+	// Row 2 (the PHP pair) lies in one file: `a` names every occurrence.
+	m.Update(key("j"))
+	m.Update(key("j"))
+	if !strings.Contains(m.dupFooter(), "a extract") {
+		t.Errorf("footer = %q", m.dupFooter())
+	}
+	cmd = m.Update(key("a"))
+	if cmd == nil {
+		t.Fatal("a same-file group must ask the agent")
+	}
+	req, ok = cmd().(AskAgentMsg)
 	if !ok || req.Path != "/proj/web/index.php" || req.Line != 0 || req.EndLine != 21 || req.Lang != "php" || req.Tokens != 55 || len(req.Dup) != 2 {
 		t.Fatalf("request = %+v", req)
 	}

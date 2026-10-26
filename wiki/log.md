@@ -1,5 +1,15 @@
 # Log
 
+## 2026-10-26 (Complexity: extract duplicates across files with the agent, #3046)
+
+- [Code Complexity](/architecture/complexity.md): `a` on a Duplicates-tab
+  group spanning several files now runs the agent too — the extract prompt
+  names each occurrence's file and carries every file
+  (`agentask.ExtractFilesInstruction`); the diff may touch only the group's
+  files and is applied to every changed buffer all-or-nothing (a miss in any
+  file changes none), one unsaved, undoable edit per buffer. Closes epic
+  0560 (#3043).
+
 ## 2026-10-26 (Complexity: extract same-file duplicates with the agent, #3045)
 
 - [Code Complexity](/architecture/complexity.md): `a` on a Duplicates-tab
