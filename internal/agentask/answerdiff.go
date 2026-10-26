@@ -13,12 +13,18 @@ import (
 // the text. Inside the diff, "@@" lines start hunks; ' ', '-' and '+' lines
 // are its rows, a blank line counts as an empty context row (models drop
 // the leading space), "\ No newline" notes and git's "diff" / "index" lines
-// are skipped. The hunk header's counts are informational only — the apply
-// matches the before lines by content.
+// are skipped. The hunk header's counts are informational for the apply —
+// it matches the before lines by content — but they, and "..." placeholder
+// rows, expose a diff that leaves lines out (#3050): Elided names the first
+// such hunk, and RunSimplify asks once more for the complete diff.
 
 // AnswerDiff is the diff an answer carries, one entry per file section.
 type AnswerDiff struct {
 	Files []FileDiff
+	// Elided says what the diff leaves out ("" when nothing): a row that
+	// is a "..." placeholder standing in for lines, or a hunk clearly
+	// shorter than its header counts (see hunkElision).
+	Elided string
 }
 
 // FileDiff is one file's section: Path is the "+++" side with a leading
@@ -116,6 +122,9 @@ func parseUnified(lines []string) AnswerDiff {
 	flush := func() {
 		if hunk != nil && file != nil && len(hunk.Lines) > 0 {
 			file.Hunks = append(file.Hunks, *hunk)
+			if d.Elided == "" {
+				d.Elided = hunkElision(*hunk, d.Hunks())
+			}
 		}
 		hunk = nil
 	}
@@ -161,6 +170,63 @@ func parseUnified(lines []string) AnswerDiff {
 	}
 	d.Files = out
 	return d
+}
+
+// hunkElision says what hunk number n leaves out, "" when nothing: a row
+// whose text is a placeholder for lines (hasElisionMarker), or — models
+// miscount by a line or two, so only clearly — before or after rows fewer
+// than the header counts by more than a tenth and at least three lines.
+func hunkElision(h agenttrace.DiffHunk, n int) string {
+	hunk := "hunk " + strconv.Itoa(n)
+	for _, l := range h.Lines {
+		if hasElisionMarker(l[1:]) {
+			return hunk + " stands a placeholder in for lines (" + strconv.Quote(strings.TrimSpace(l[1:])) + ")"
+		}
+	}
+	before, after := 0, 0
+	for _, l := range h.Lines {
+		switch l[0] {
+		case ' ':
+			before, after = before+1, after+1
+		case '-':
+			before++
+		case '+':
+			after++
+		}
+	}
+	if short(before, h.OldLines) {
+		return hunk + " holds " + strconv.Itoa(before) + " of the " + strconv.Itoa(h.OldLines) + " before lines its header counts"
+	}
+	if short(after, h.NewLines) {
+		return hunk + " holds " + strconv.Itoa(after) + " of the " + strconv.Itoa(h.NewLines) + " after lines its header counts"
+	}
+	return ""
+}
+
+// short reports got rows clearly fewer than the want a header counts.
+func short(got, want int) bool {
+	missing := want - got
+	return missing >= 3 && missing*10 > want
+}
+
+// hasElisionMarker reports a row's text that stands in for left-out lines:
+// after an optional comment opener, "..." / "…" / "[...]" alone, or "..."
+// followed by a space or a parenthesis ("... (unchanged)", "... rest of
+// the switch"). A spread like "...rest" is code, not a marker.
+func hasElisionMarker(text string) bool {
+	t := strings.TrimSpace(text)
+	for _, c := range []string{"//", "#", "/*", "--", "*"} {
+		if strings.HasPrefix(t, c) {
+			t = strings.TrimSpace(t[len(c):])
+			break
+		}
+	}
+	t = strings.ReplaceAll(t, "…", "...")
+	switch t {
+	case "...", "[...]", "(...)":
+		return true
+	}
+	return strings.HasPrefix(t, "... ") || strings.HasPrefix(t, "...(") || strings.HasPrefix(t, "[...] ")
 }
 
 // diffPath is a "+++" header's path: the timestamp after a tab and git's

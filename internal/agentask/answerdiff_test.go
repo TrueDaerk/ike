@@ -144,3 +144,57 @@ func TestRunSimplifyFailureSkipsRetry(t *testing.T) {
 		t.Fatalf("err=%v runs=%d", err, len(f.argvs))
 	}
 }
+
+// TestParseAnswerDiffElided pins the elision check (#3050): a placeholder
+// row or a hunk clearly shorter than its header counts names the hunk, a
+// complete diff, a spread literal and a header miscounted by a line or two
+// do not.
+func TestParseAnswerDiffElided(t *testing.T) {
+	cases := []struct {
+		name, diff, want string
+	}{
+		{"complete", "```diff\n@@ -1,2 +1,2 @@\n a\n-b\n+c\n```", ""},
+		{"no counts", "```diff\n@@\n-a\n+b\n```", ""},
+		{"placeholder paren", "```diff\n@@ -1,3 +1,3 @@\n a\n-\t\t... (whole kind switch, lines 494–639, moved verbatim into helpers below)\n+c\n```", "hunk 1 stands a placeholder in for lines (\"... (whole kind switch, lines 494–639, moved verbatim into helpers below)\")"},
+		{"placeholder alone", "```diff\n@@\n a\n ...\n-b\n+c\n```", "hunk 1 stands a placeholder in for lines (\"...\")"},
+		{"placeholder comment", "```diff\n@@\n a\n // ... unchanged ...\n-b\n+c\n```", "hunk 1 stands a placeholder in for lines (\"// ... unchanged ...\")"},
+		{"placeholder ellipsis bracket", "```diff\n@@\n a\n \t[…]\n-b\n+c\n```", "hunk 1 stands a placeholder in for lines (\"[…]\")"},
+		{"spread is code", "```diff\n@@ -1,2 +1,2 @@\n ...rest,\n-b\n+c\n```", ""},
+		{"miscount by one", "```diff\n@@ -1,4 +1,4 @@\n a\n-b\n+c\n x\n```", ""},
+		{"short before", "```diff\n@@ -453,220 +453,236 @@\n a\n b\n-c\n+d\n e\n```", "hunk 1 holds 4 of the 220 before lines its header counts"},
+		{"short after", "```diff\n@@ -1,3 +1,40 @@\n a\n-b\n+c\n e\n```", "hunk 1 holds 3 of the 40 after lines its header counts"},
+		{"second hunk", "```diff\n@@ -1,2 +1,2 @@\n a\n-b\n+c\n@@ -9,30 +9,30 @@\n x\n-y\n+z\n```", "hunk 2 holds 2 of the 30 before lines its header counts"},
+	}
+	for _, c := range cases {
+		d, ok := ParseAnswerDiff(c.diff)
+		if !ok {
+			t.Errorf("%s: no diff parsed", c.name)
+			continue
+		}
+		if d.Elided != c.want {
+			t.Errorf("%s: Elided = %q, want %q", c.name, d.Elided, c.want)
+		}
+	}
+}
+
+const elidedDiff = "```diff\n@@ -1,50 +1,50 @@\n a\n ... (rest unchanged)\n-b\n+c\n```\nWhy."
+
+func TestRunSimplifyRetriesOnceOnElidedDiff(t *testing.T) {
+	f := &fakeRunner{answers: []Result{{Answer: elidedDiff, ForkID: "s1"}, {Answer: withDiff, ForkID: "s1"}}}
+	res, err := RunSimplify(context.Background(), f.run, "/p", Options{}, "PROMPT")
+	if err != nil || !res.HasDiff || res.Diff.Elided != "" || !res.Retried || len(f.argvs) != 2 || res.Answer != withDiff {
+		t.Fatalf("res = %+v err=%v runs=%d", res, err, len(f.argvs))
+	}
+	follow := f.argvs[1]
+	if sessionOf(follow) != "s1" || !strings.HasSuffix(follow[len(follow)-1], ElidedDiffFollowUp) {
+		t.Errorf("follow-up = %q", follow)
+	}
+}
+
+func TestRunSimplifyKeepsSecondElidedDiff(t *testing.T) {
+	f := &fakeRunner{answers: []Result{{Answer: elidedDiff, ForkID: "s1"}, {Answer: elidedDiff, ForkID: "s1"}, {Answer: withDiff}}}
+	res, err := RunSimplify(context.Background(), f.run, "/p", Options{}, "PROMPT")
+	if err != nil || !res.HasDiff || res.Diff.Elided == "" || !res.Retried || len(f.argvs) != 2 {
+		t.Fatalf("res = %+v err=%v runs=%d", res, err, len(f.argvs))
+	}
+}

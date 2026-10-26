@@ -27,7 +27,8 @@ const ExtractInstruction = "The occurrences above are copies of the same code (i
 	"keep public signatures; keep tests green. " +
 	"You have no tools and cannot read files; the source is in the fenced blocks above. " +
 	"Answer with a single unified diff against the file first, in a ```diff fence, adding the helper and replacing every occurrence; " +
-	"copy each hunk's context lines verbatim from the source above. Then one paragraph on what you changed and why."
+	"copy each hunk's context lines verbatim from the source above. Then one paragraph on what you changed and why. " +
+	DiffInFull
 
 // ExtractFilesInstruction ends the prompt of a group spanning several
 // files (#3046): the helper goes into one of them and no other file may
@@ -37,7 +38,8 @@ const ExtractFilesInstruction = "The occurrences above are copies of the same co
 	"keep public signatures; keep tests green. Change only the files listed above. " +
 	"You have no tools and cannot read files; the source is in the fenced blocks above. " +
 	"Answer with a single unified diff first, in a ```diff fence, with one \"--- a/<path>\" / \"+++ b/<path>\" section per changed file, the paths exactly as listed above, " +
-	"adding the helper and replacing every occurrence; copy each hunk's context lines verbatim from the source above. Then one paragraph on what you changed and why."
+	"adding the helper and replacing every occurrence; copy each hunk's context lines verbatim from the source above. Then one paragraph on what you changed and why. " +
+	DiffInFull
 
 // Extract describes the clone group an extract prompt is about. Lines are
 // 0-based like complexity.Occurrence's; the prompt prints them 1-based.

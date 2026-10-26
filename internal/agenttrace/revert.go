@@ -24,6 +24,11 @@ var ErrCreated = errors.New("the change created the file — there is no previou
 // ErrConflict means the file no longer holds the change's content.
 var ErrConflict = errors.New("the file no longer contains the change — it was edited since")
 
+// ErrNoMatch is the forward apply's miss (#3050): the hunk's before lines
+// do not occur in the file — the diff was written against other text, or
+// leaves lines out — which is not the revert's "edited since".
+var ErrNoMatch = errors.New("the diff's lines do not occur in the file — it does not match the buffer")
+
 // ErrAmbiguous means the change's content occurs more than once in the file.
 var ErrAmbiguous = errors.New("the change's content occurs more than once in the file — cannot tell which to revert")
 
@@ -78,7 +83,8 @@ func Revert(d ChangeDiff, now string) (string, error) {
 var ErrApplied = errors.New("the file already holds the change")
 
 // HunkError is a hunk that did not apply: Index is 0-based, Total the
-// hunk count, Err the reason (ErrConflict, ErrAmbiguous, ErrApplied).
+// hunk count, Err the reason (ErrConflict on a revert, ErrNoMatch on an
+// apply, ErrAmbiguous, ErrApplied).
 type HunkError struct {
 	Index, Total int
 	Err          error
@@ -94,7 +100,8 @@ func (e *HunkError) Unwrap() error { return e.Err }
 // agent's diff: each hunk's before lines (context and removed) must occur
 // exactly once in now and are replaced by its after lines (context and
 // added). Any hunk that does not match fails the whole apply with a
-// *HunkError naming it; nothing is applied then.
+// *HunkError naming it (ErrNoMatch when its lines are not there); nothing
+// is applied then.
 func Apply(hunks []DiffHunk, now string) (string, error) {
 	if len(hunks) == 0 {
 		return "", ErrNoSnapshot
@@ -104,10 +111,14 @@ func Apply(hunks []DiffHunk, now string) (string, error) {
 
 // spliceHunks replaces, for every hunk, one side by the other in text:
 // forward finds the before lines and puts the after lines, backward (the
-// revert) the other way round. A miss whose replacement is already present
-// reports ErrApplied.
+// revert) the other way round. A miss is ErrConflict on a revert, ErrNoMatch
+// forward; a miss whose replacement is already present reports ErrApplied.
 func spliceHunks(text string, hunks []DiffHunk, forward bool) (string, error) {
 	lines := strings.Split(text, "\n")
+	miss := ErrConflict
+	if forward {
+		miss = ErrNoMatch
+	}
 	// Last hunk first: an earlier hunk's replacement never shifts the
 	// positions a later one was found at.
 	for i := len(hunks) - 1; i >= 0; i-- {
@@ -121,12 +132,15 @@ func spliceHunks(text string, hunks []DiffHunk, forward bool) (string, error) {
 		if len(from) == 0 {
 			// A pure insertion / deletion without context: nothing marks
 			// where the lines go.
-			return fail(ErrConflict)
+			return fail(miss)
 		}
 		at, err := findBlock(lines, from)
-		if err == ErrConflict && len(to) > 0 {
-			if _, again := findBlock(lines, to); again == nil {
-				err = ErrApplied
+		if err == ErrConflict {
+			err = miss
+			if len(to) > 0 {
+				if _, again := findBlock(lines, to); again == nil {
+					err = ErrApplied
+				}
 			}
 		}
 		if err != nil {

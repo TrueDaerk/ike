@@ -486,7 +486,7 @@ func (m Model) applyComplexityAgentDiff(msg cxAgentDoneMsg, run *cxAgentRun, sc 
 			_, err = agenttrace.Apply(e.hunks, now)
 		}
 		if err != nil {
-			return m.complexityAgentNotApplied(sc, run, msg.res.Retried, cxMissFile(e.path, multi), err)
+			return m.complexityAgentNotApplied(sc, run, msg.res, cxMissFile(e.path, multi), err)
 		}
 	}
 	// The explanation opens first and the changed files after it, the
@@ -515,7 +515,7 @@ func (m Model) applyComplexityAgentDiff(msg cxAgentDoneMsg, run *cxAgentRun, sc 
 			texts[i], err = agenttrace.Apply(e.hunks, ed.Text())
 		}
 		if err != nil {
-			tm, cmd := m.complexityAgentNotApplied(sc, run, msg.res.Retried, cxMissFile(e.path, multi), err)
+			tm, cmd := m.complexityAgentNotApplied(sc, run, msg.res, cxMissFile(e.path, multi), err)
 			return tm, tea.Batch(append(cmds, cmd)...)
 		}
 	}
@@ -603,9 +603,11 @@ func (m Model) complexityFileText(path string) (string, error) {
 
 // complexityAgentNotApplied reports a diff that did not apply — the hunk
 // that missed, when one did, and in a multi-file apply (#3046) its file —
-// and opens the scratch in front.
-func (m Model) complexityAgentNotApplied(sc cxAgentScratch, run *cxAgentRun, retried bool, file string, err error) (tea.Model, tea.Cmd) {
-	m.recordComplexityAgent("not_applied", run, retried)
+// and opens the scratch in front. A diff that leaves lines out (#3050,
+// res.Diff.Elided, also after the follow-up asking for the complete one)
+// says so in the scratch's note: that, not an edited file, is why it misses.
+func (m Model) complexityAgentNotApplied(sc cxAgentScratch, run *cxAgentRun, res agentask.SimplifyResult, file string, err error) (tea.Model, tea.Cmd) {
+	m.recordComplexityAgent("not_applied", run, res.Retried)
 	what := err.Error()
 	var he *agenttrace.HunkError
 	if errors.As(err, &he) {
@@ -616,7 +618,16 @@ func (m Model) complexityAgentNotApplied(sc cxAgentScratch, run *cxAgentRun, ret
 		what += " in " + file
 		buffer = "the buffer of " + file
 	}
-	sc.note = "The agent's diff does not apply cleanly to " + buffer + " (" + err.Error() + "); nothing was applied. Save it as a patch and try `git apply --3way`."
+	sc.note = "The agent's diff does not apply cleanly to " + buffer + " (" + err.Error() + "); nothing was applied."
+	if res.Diff.Elided != "" {
+		sc.note += " The diff leaves lines out — " + res.Diff.Elided
+		if res.Retried {
+			sc.note += ", also after the follow-up asking for the complete diff"
+		}
+		sc.note += " — so it cannot match the file."
+		what += ", the diff leaves lines out"
+	}
+	sc.note += " Save it as a patch and try `git apply --3way`."
 	return m.openComplexityAgentScratch(sc, host.Warn, "the agent's diff does not apply cleanly ("+what+") — opened as ")
 }
 
