@@ -247,7 +247,9 @@ func TestComplexityExportMarkdownScratch(t *testing.T) {
 	if m.complexityPanel() == nil || cmd == nil {
 		t.Fatal("the palette export must open the panel and run 'E'")
 	}
-	msg, ok := cmd().(complexitypanel.ExportMarkdownMsg)
+	// Opening the pane also launches the Duplicates detection (#3044), so
+	// the export may travel inside a batch.
+	msg, ok := exportMarkdownOf(cmd())
 	if !ok || msg.Label != "Project" || !strings.Contains(msg.Markdown, "| file | function |") {
 		t.Fatalf("E yields %+v", msg)
 	}
@@ -287,4 +289,23 @@ func cxNotices(m Model) string {
 		out = append(out, h.text)
 	}
 	return strings.Join(out, "\n")
+}
+
+// exportMarkdownOf finds the ExportMarkdownMsg in msg or in the batch it
+// is.
+func exportMarkdownOf(msg tea.Msg) (complexitypanel.ExportMarkdownMsg, bool) {
+	switch v := msg.(type) {
+	case complexitypanel.ExportMarkdownMsg:
+		return v, true
+	case tea.BatchMsg:
+		for _, c := range v {
+			if c == nil {
+				continue
+			}
+			if got, ok := exportMarkdownOf(c()); ok {
+				return got, true
+			}
+		}
+	}
+	return complexitypanel.ExportMarkdownMsg{}, false
 }

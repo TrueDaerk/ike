@@ -757,6 +757,11 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "complexity.trend_commits", Message: fmt.Sprintf("window %d out of range (1–500 commits), using 30", n)})
 		c.Complexity.TrendCommits = 30
 	}
+	// The duplicate clone size (#3044): at least one token, at most 10000.
+	if n := c.Complexity.DuplicatesMinTokens; n < 1 || n > 10000 {
+		diags = append(diags, Diagnostic{Field: "complexity.duplicates_min_tokens", Message: fmt.Sprintf("clone size %d out of range (1–10000 tokens), using 50", n)})
+		c.Complexity.DuplicatesMinTokens = 50
+	}
 	// The response viewer's highlight cap (#2353): a limit below 1 KiB would
 	// silently turn highlighting off, one past 64 MiB defeats the cap's
 	// purpose — both fall back to the default rather than either extreme.

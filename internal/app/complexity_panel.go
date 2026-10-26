@@ -211,6 +211,7 @@ func (m *Model) seedComplexityPanel(p *complexitypanel.Model) {
 	m.seedComplexityChanges(p)
 	m.seedComplexityChurn(p)
 	m.seedComplexityTrend(p)
+	m.seedComplexityDuplicates(p) // #3044
 }
 
 // refreshComplexityPanel re-reads the snapshot into an open panel: the

@@ -333,6 +333,12 @@ counts by the version's interval before comparing sessions.
     per-blob cache, so a re-walk after one commit reads a handful). The
     phase is `ok`, or `error` when git failed. The walk is user-triggered
     (the tab on screen, `r`), so it is ordinary usage. No path travels.
+  - `complexity.duplicates` (0560, #3044) - one finished detection of the
+    [Duplicates tab](complexity.md#duplicates-3044): the clone detector ran
+    over the index snapshot. `ms` is the detection's duration, `groups` how
+    many clone groups it found and `min` the clone size in tokens. It runs
+    only while the Complexity window is open, so it is ordinary usage. No
+    path travels.
   - `palette.pick` (#2551) — a palette row was activated, the counterpart of
     `palette.dismiss`. `mode` is the mode's prefix rune, `query_len` the number
     of runes typed — **never the query itself** — `rank` the **0-based index**

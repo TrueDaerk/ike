@@ -40,7 +40,7 @@ func TestComplexityPageEntries(t *testing.T) {
 	if p.Description == "" {
 		t.Fatal("the Complexity page needs a description")
 	}
-	want := []string{"complexity.enabled", "complexity.exclude", "complexity.ccn_warn", "complexity.cognitive_warn", "complexity.comment_density_warn", "complexity.overrides", "complexity.problems", "complexity.status_segment", "complexity.churn_days", "complexity.trend_commits", "complexity.baseline", "complexity.agent_verdict", "complexity.agent_apply"}
+	want := []string{"complexity.enabled", "complexity.exclude", "complexity.ccn_warn", "complexity.cognitive_warn", "complexity.comment_density_warn", "complexity.overrides", "complexity.problems", "complexity.status_segment", "complexity.churn_days", "complexity.trend_commits", "complexity.baseline", "complexity.agent_verdict", "complexity.agent_apply", "complexity.duplicates_min_tokens"}
 	if len(p.Entries) != len(want) {
 		t.Fatalf("Complexity page has %d entries, want %d: %+v", len(p.Entries), len(want), p.Entries)
 	}
@@ -352,5 +352,51 @@ func TestComplexityAgentApplyToggles(t *testing.T) {
 	commit(t, m)
 	if !config.Get().Complexity.AgentApply {
 		t.Fatal("agent_apply did not toggle back on")
+	}
+}
+
+// TestComplexityDuplicatesMinTokens covers the duplicate clone size (#3044)
+// on the Complexity page: non-numeric input is rejected in the form, an
+// out-of-range value clamps, a sane value persists and shows in the list.
+func TestComplexityDuplicatesMinTokens(t *testing.T) {
+	restoreConfig(t)
+	e := complexityEntry(t, "complexity.duplicates_min_tokens")
+	if e.Type != Int || e.Min != 1 || e.Max != 10000 {
+		t.Fatalf("duplicates_min_tokens = %+v, want an Int bounded 1..10000", e)
+	}
+	if got := config.Get().Complexity.DuplicatesMinTokens; got != 50 {
+		t.Fatalf("duplicates_min_tokens must default to 50, got %d", got)
+	}
+	m := New([]Page{{Title: "Complexity", Entries: []Entry{e}}}, testOpts(t))
+	m.SetSize(100, 24)
+	m.Open()
+	m.Update(key("tab"))
+	if view := m.View(); !strings.Contains(view, "Duplicate clone size") || !strings.Contains(view, "50") {
+		t.Fatalf("the entry list must show the setting and its value:\n%s", view)
+	}
+	m.Update(key("enter"))
+	ed, ok := m.editor.(*intEditor)
+	if !ok {
+		t.Fatalf("editor = %T, want *intEditor", m.editor)
+	}
+	ed.tf.Set("fifty")
+	if cmd := m.Update(key("enter")); cmd != nil || ed.err == "" {
+		t.Fatalf("an invalid clone size must not write (err=%q)", ed.err)
+	}
+	ed.tf.Set("0")
+	m.Update(key("enter"))
+	commit(t, m)
+	if got := config.Get().Complexity.DuplicatesMinTokens; got != 1 {
+		t.Fatalf("duplicates_min_tokens = %d, want clamped 1", got)
+	}
+	m.Update(key("enter"))
+	m.editor.(*intEditor).tf.Set("120")
+	m.Update(key("enter"))
+	commit(t, m)
+	if got := config.Get().Complexity.DuplicatesMinTokens; got != 120 {
+		t.Fatalf("duplicates_min_tokens = %d, want 120", got)
+	}
+	if view := m.View(); !strings.Contains(view, "120") {
+		t.Fatalf("the entry list must show the new value:\n%s", view)
 	}
 }

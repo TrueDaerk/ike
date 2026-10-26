@@ -554,6 +554,9 @@ type Complexity struct {
 	// `a`) to the open buffer as one undoable edit; off only opens the
 	// answer as a scratch.
 	AgentApply bool `toml:"agent_apply"`
+	// DuplicatesMinTokens (#3044) is the smallest clone the Duplicates tab
+	// reports, in normalized tokens (1–10000, default 50).
+	DuplicatesMinTokens int `toml:"duplicates_min_tokens"`
 }
 
 // Debug holds debugger behaviour (0360). PHP carries the web/request listen

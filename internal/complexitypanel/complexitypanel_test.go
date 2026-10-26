@@ -94,8 +94,9 @@ func TestProjectTabSortsByCCNDescending(t *testing.T) {
 	if s.Functions != 5 || s.CCNMax != 25 || s.CogMax != 30 || s.OverThreshold != 3 {
 		t.Fatalf("summary = %+v", s)
 	}
+	m.SetSize(190, 12) // the five-tab bar leaves the totals room
 	v := m.View()
-	for _, want := range []string{"Complexity", "Project", "File", "Changes", "5 fns", "max 25", "3 over", "excess 29", "gen 3", "ccn ▼", "5/5 rows"} {
+	for _, want := range []string{"Complexity", "Project", "File", "Changes", "Duplicates", "5 fns", "max 25", "3 over", "excess 29", "gen 3", "ccn ▼", "5/5 rows"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("view missing %q:\n%s", want, v)
 		}
@@ -206,7 +207,8 @@ func TestFileTabFollowsCaret(t *testing.T) {
 	if got := names(m.Rows()); strings.Join(got, ",") != "Page::show" || m.CaretRow() != 0 {
 		t.Fatalf("switched rows = %v caret=%d", got, m.CaretRow())
 	}
-	// tab moves on to Changes (#2918) and Trend (#2962), then wraps to Project.
+	// tab moves on to Changes (#2918), Trend (#2962) and Duplicates (#3044),
+	// then wraps to Project.
 	m.Update(key("tab"))
 	if m.Tab() != TabChanges {
 		t.Fatalf("tab after File = %v, want Changes", m.Tab())
@@ -216,12 +218,16 @@ func TestFileTabFollowsCaret(t *testing.T) {
 		t.Fatalf("tab after Changes = %v, want Trend", m.Tab())
 	}
 	m.Update(key("tab"))
+	if m.Tab() != TabDuplicates {
+		t.Fatalf("tab after Trend = %v, want Duplicates", m.Tab())
+	}
+	m.Update(key("tab"))
 	if m.Tab() != TabProject {
 		t.Fatalf("tab after wrap = %v, want Project", m.Tab())
 	}
 	m.Update(key("shift+tab"))
-	if m.Tab() != TabTrend {
-		t.Fatalf("shift+tab = %v, want Trend", m.Tab())
+	if m.Tab() != TabDuplicates {
+		t.Fatalf("shift+tab = %v, want Duplicates", m.Tab())
 	}
 }
 

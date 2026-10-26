@@ -43,7 +43,7 @@ func nextSession(t *testing.T, dir string, opts Options) *Index {
 func dumpView(v View) string {
 	var rows []string
 	for p, fns := range v.Files {
-		rows = append(rows, fmt.Sprintf("%s %+v", p, fns))
+		rows = append(rows, fmt.Sprintf("%s %+v %+v", p, fns, v.Tokens[p]))
 	}
 	sort.Strings(rows)
 	return strings.Join(rows, "\n")
@@ -194,13 +194,13 @@ const cacheShape = "cacheHeader{Version:int Root:string Files:int} " +
 	"CommentLines:int CommentDensity:float64 " +
 	"Sites:[]Site{Line:int Col:int EndLine:int Kind:string CCN:int Cognitive:int Nesting:int Level:int} " +
 	"Candidates:[]Candidate{Line:int EndLine:int Kind:string CogSaving:int NewCCN:int NewCog:int RestCCN:int RestCog:int} " +
-	"Baseline:int}}"
+	"Baseline:int} Tokens:Tokens{Lang:string Hash:[]uint32 Line:[]int32 Seg:[]int32}}"
 
 // TestCacheVersionTracksFormat fails when the persisted shape moves: bump
 // SpecVersion and update cacheShape together.
 func TestCacheVersionTracksFormat(t *testing.T) {
 	got := cacheTypeShape(reflect.TypeOf(cacheHeader{})) + " " + cacheTypeShape(reflect.TypeOf(cacheRecord{}))
-	if got != cacheShape || SpecVersion != 1 {
+	if got != cacheShape || SpecVersion != 2 {
 		t.Fatalf("the cache format changed — bump SpecVersion (now %d) and update cacheShape:\n%s", SpecVersion, got)
 	}
 }
