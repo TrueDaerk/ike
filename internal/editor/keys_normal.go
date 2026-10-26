@@ -29,219 +29,12 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	}
 
 	// Secondary-key states resolve before anything else.
-	switch m.wait {
-	case awaitG:
-		m.wait = awaitNone
-		return m.resolveAfterG(s, r, hasRune)
-	case awaitBracketF, awaitBracketB:
-		// ]c / [c: git hunk navigation (#1170); ]n / [n: merge-conflict
-		// navigation (#2258, vim-unimpaired's conflict motion). Any other
-		// continuation is dropped, like the other pending states.
-		forward := m.wait == awaitBracketF
-		m.wait = awaitNone
-		switch s {
-		case "c":
-			return m, m.hunkJump(forward)
-		case "n":
-			return m, m.conflictJump(forward)
-		}
-		return m, nil
-	case awaitZ:
-		m.wait = awaitNone
-		return m.resolveAfterZ(s)
-	case awaitZBig:
-		// ZZ / ZQ (#1193): save-and-close / close-without-saving, mirroring
-		// ":x" and ":q!"; any other continuation cancels.
-		m.wait = awaitNone
-		switch s {
-		case "Z":
-			c, ok := m.saveGuarded(m.path, true)
-			if c != nil {
-				return m, c // conflict: prompt first, keep the pane open
-			}
-			if !ok {
-				return m, nil // write failed: stay open
-			}
-			return m, func() tea.Msg { return CloseMsg{} }
-		case "Q":
-			return m, func() tea.Msg { return CloseMsg{Force: true} }
-		}
-		return m, nil
-	case awaitFind:
-		m.wait = awaitNone
-		if hasRune {
-			m.lastFind = motion.Find{Kind: m.findCmd, Char: r}
-			m.applyFind(m.lastFind)
-		}
-		m.pending.Reset()
-		return m, nil
-	case awaitReplace:
-		m.wait = awaitNone
-		if hasRune {
-			m.replaceChar(r, m.pending.EffectiveCount())
-		}
-		m.pending.Reset()
-		return m, nil
-	case awaitObject:
-		m.wait = awaitNone
-		if hasRune {
-			around := m.around
-			m.armCaseRedo(func(op, reg rune) func(*Model) {
-				return func(mm *Model) { mm.replayCaseObject(op, reg, r, around) }
-			})
-			m.applyTextObject(r)
-			m.opRedo = nil
-		}
-		m.pending.Reset()
-		return m, nil
-	case awaitRecordReg:
-		// q's register name (#58): only a-z starts a recording, anything else
-		// cancels — the two pending keys (q + name) were never recorded, so
-		// nothing needs dropping.
-		m.wait = awaitNone
-		if hasRune && macroRegister(r) {
-			m.startRecording(r)
-		}
-		m.pending.Reset()
-		return m, nil
-	case awaitMark:
-		// m's mark name (#1151): a-z is a local mark, A-Z a global one;
-		// anything else cancels.
-		m.wait = awaitNone
-		if hasRune {
-			m.setMark(r)
-		}
-		m.pending.Reset()
-		return m, nil
-	case awaitMarkLine, awaitMarkExact:
-		// ' / backtick jump target (#1151): ' lands on the line's first
-		// non-blank, backtick on the exact position. Global marks resolve
-		// app-side (cross-file), so the jump may return a command.
-		exact := m.wait == awaitMarkExact
-		m.wait = awaitNone
-		m.pending.Reset()
-		if hasRune {
-			return m, m.jumpMark(r, exact)
-		}
-		return m, nil
-	case awaitSurrMotion:
-		// ys's span (#1475): a motion, i/a introducing a text object, or a
-		// second s for the whole line; anything else cancels.
-		m.wait = awaitNone
-		if s == "i" || s == "a" {
-			m.around = s == "a"
-			m.wait = awaitSurrObject
-			return m, nil
-		}
-		if s == "s" {
-			m.surrResolve = func(mm *Model, pos buffer.Position) (operator.Target, bool) {
-				return operator.LineTarget(pos.Line, pos.Line), true
-			}
-			m.wait = awaitSurrAdd
-			return m, nil
-		}
-		count := m.pending.EffectiveCount()
-		if _, ok := m.resolveMotion(s, r, count); ok {
-			sk, rk := s, r
-			m.surrResolve = func(mm *Model, pos buffer.Position) (operator.Target, bool) {
-				return mm.caretTarget(sk, rk, count, pos)
-			}
-			m.wait = awaitSurrAdd
-			return m, nil
-		}
-		m.pending.Reset()
-		return m, nil
-	case awaitSurrObject:
-		m.wait = awaitNone
-		if hasRune {
-			rk, around := r, m.around
-			m.surrResolve = func(mm *Model, pos buffer.Position) (operator.Target, bool) {
-				savedCur, savedAround := mm.cursor, mm.around
-				mm.cursor, mm.around = pos, around
-				res := mm.resolveTextObject(rk)
-				mm.cursor, mm.around = savedCur, savedAround
-				if !res.OK {
-					return operator.Target{}, false
-				}
-				return objectTarget(res), true
-			}
-			m.wait = awaitSurrAdd
-			return m, nil
-		}
-		m.pending.Reset()
-		return m, nil
-	case awaitSurrAdd:
-		m.wait = awaitNone
-		if hasRune && m.surrResolve != nil {
-			m.surroundAdd(m.surrResolve, r)
-		}
-		m.surrResolve = nil
-		m.pending.Reset()
-		return m, nil
-	case awaitSurrDelete:
-		m.wait = awaitNone
-		if hasRune {
-			m.surroundDelete(r)
-		}
-		m.pending.Reset()
-		return m, nil
-	case awaitSurrChange:
-		m.wait = awaitNone
-		if hasRune {
-			m.surrOld = r
-			m.wait = awaitSurrChangeNew
-		} else {
-			m.pending.Reset()
-		}
-		return m, nil
-	case awaitSurrChangeNew:
-		m.wait = awaitNone
-		if hasRune {
-			m.surroundChange(m.surrOld, r)
-		}
-		m.pending.Reset()
-		return m, nil
-	case awaitLabel:
-		// Label jump (#787): the key routes through the leap session — target
-		// characters first, then a label key; esc (no rune) cancels.
-		m.wait = awaitNone
-		return m.labelJumpKey(r, hasRune)
-	case awaitPlayReg:
-		// @'s register name (#58): @@ repeats the last replay; the count typed
-		// before @ (5@a) is still pending here.
-		m.wait = awaitNone
-		count := m.pending.EffectiveCount()
-		m.pending.Reset()
-		if hasRune {
-			if r == '@' {
-				r = m.lastMacro
-			}
-			if macroRegister(r) {
-				return m.playMacro(r, count)
-			}
-		}
-		return m, nil
+	if nm, cmd, ok := m.resolveWait(s, r, hasRune); ok {
+		return nm, cmd
 	}
 
-	// Register selection: `"` then a name.
-	if m.pending.AwaitingRegister() {
-		if hasRune {
-			m.pending.SetRegister(r)
-		}
-		return m, nil
-	}
-	if s == `"` {
-		m.pending.BeginRegister()
-		return m, nil
-	}
-
-	// Counts: 1-9 always; 0 only continues an existing count (else it is a motion).
-	if hasRune && r >= '1' && r <= '9' {
-		m.pending.PushDigit(int(r - '0'))
-		return m, nil
-	}
-	if s == "0" && m.pending.Count > 0 {
-		m.pending.PushDigit(0)
+	// Register selection and counts.
+	if m.consumePrefixKey(s, r, hasRune) {
 		return m, nil
 	}
 
@@ -259,92 +52,36 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 	}
 
 	// Operators: a doubled operator (dd/cc/yy) is linewise on count lines.
-	if op, ok := operatorKey(s); ok {
-		if m.pending.Operator == op {
-			m.applyLinewiseOperator(op, count)
-			m.pending.Reset()
-			return m, nil
-		}
-		if m.pending.Operator == 0 {
-			m.pending.SetOperator(op)
-			return m, nil
-		}
+	if m.startOperator(s, count) {
+		return m, nil
 	}
 
-	// Surround intro (#1475): "s" after a pending y/d/c starts a vim-surround
-	// operation (ys{motion}{pair} / ds{pair} / cs{old}{new}) instead of
-	// cancelling the operator.
-	if m.pending.HasOperator() && s == "s" {
-		switch m.pending.Operator {
-		case 'y':
-			m.wait = awaitSurrMotion
-			return m, nil
-		case 'd':
-			m.wait = awaitSurrDelete
-			return m, nil
-		case 'c':
-			m.wait = awaitSurrChange
-			return m, nil
-		}
-	}
-
-	// Text-object intro (i/a) while an operator is pending.
-	if m.pending.HasOperator() && (s == "i" || s == "a") {
-		m.around = s == "a"
-		m.wait = awaitObject
+	// Surround intro (#1475) / text-object intro (i/a) while an operator is
+	// pending.
+	if m.operatorIntro(s) {
 		return m, nil
 	}
 
 	// Shift+arrows start a charwise selection: enter visual mode anchored at the
 	// cursor and apply the plain arrow motion (updateVisual extends it further).
-	if plain, ok := shiftSelectKey(s); ok && !m.pending.HasOperator() {
-		m.enterVisual(Visual)
-		m.shiftSelect = true
-		if res, ok := m.resolveMotion(plain, 0, count); ok {
-			m.applyMotionOrOperator(res, count)
-		}
+	if m.startShiftSelect(s, count) {
 		return m, nil
 	}
 
 	// Motions (also serve as operator targets). With carets active, an
 	// operator fans out per caret and a bare motion moves every caret (#145).
-	if res, ok := m.resolveMotion(s, r, count); ok {
-		if m.hasCarets() && m.pending.HasOperator() {
-			m.fanOperatorMotion(s, r, count)
-			m.pending.Reset()
-			return m, nil
-		}
-		if !m.pending.HasOperator() {
-			m.fanMotionSecondaries(s, r, count, false)
-		}
-		m.armCaseRedo(func(op, reg rune) func(*Model) {
-			return func(mm *Model) { mm.replayCaseMotion(op, reg, s, r, count) }
-		})
-		m.applyMotionOrOperator(res, count)
-		m.opRedo = nil
+	if m.motionKey(s, r, count) {
 		return m, nil
 	}
 
 	// Find motions need a target char next.
-	if fk, ok := findKey(s); ok {
-		m.findCmd = fk
-		m.wait = awaitFind
-		return m, nil
-	}
-	if s == ";" && m.lastFind.Valid() {
-		m.applyFind(m.lastFind.Repeat())
-		m.pending.Reset()
-		return m, nil
-	}
-	if s == "," && m.lastFind.Valid() {
-		m.applyFind(m.lastFind.Reverse())
-		m.pending.Reset()
+	if m.findKeyStep(s) {
 		return m, nil
 	}
 
 	// The case/reflow operators double with their own bare key (guu, gUU,
 	// g~~, gqq) — the second key is not an operator key itself (#1193).
-	if m.pending.HasOperator() && caseOperator(m.pending.Operator) && len(s) == 1 && rune(s[0]) == m.pending.Operator {
+	if m.doublesCaseOperator(s) {
 		m.applyLinewiseOperator(m.pending.Operator, count)
 		m.pending.Reset()
 		return m, nil
@@ -364,6 +101,337 @@ func (m Model) updateNormal(key tea.KeyPressMsg) (Model, tea.Cmd) {
 		return m, nil
 	}
 	return m.normalCommand(s, r, count)
+}
+
+// resolveWait routes a key to the pending secondary-key state (g, z, find, surround, ...).
+// The bool reports whether m.wait named such a state; if not, the key is a fresh one.
+func (m Model) resolveWait(s string, r rune, hasRune bool) (Model, tea.Cmd, bool) {
+	var cmd tea.Cmd
+	switch m.wait {
+	case awaitG:
+		m.wait = awaitNone
+		m, cmd = m.resolveAfterG(s, r, hasRune)
+	case awaitBracketF, awaitBracketB:
+		// ]c / [c: git hunk navigation (#1170); ]n / [n: merge-conflict
+		// navigation (#2258, vim-unimpaired's conflict motion). Any other
+		// continuation is dropped, like the other pending states.
+		forward := m.wait == awaitBracketF
+		m.wait = awaitNone
+		cmd = m.bracketJump(s, forward)
+	case awaitZ:
+		m.wait = awaitNone
+		m, cmd = m.resolveAfterZ(s)
+	case awaitZBig:
+		// ZZ / ZQ (#1193): save-and-close / close-without-saving, mirroring
+		// ":x" and ":q!"; any other continuation cancels.
+		m.wait = awaitNone
+		cmd = m.zzKey(s)
+	case awaitFind:
+		m.endWait(hasRune, func() {
+			m.lastFind = motion.Find{Kind: m.findCmd, Char: r}
+			m.applyFind(m.lastFind)
+		})
+	case awaitReplace:
+		m.endWait(hasRune, func() { m.replaceChar(r, m.pending.EffectiveCount()) })
+	case awaitObject:
+		m.endWait(hasRune, func() {
+			around := m.around
+			m.armCaseRedo(func(op, reg rune) func(*Model) {
+				return func(mm *Model) { mm.replayCaseObject(op, reg, r, around) }
+			})
+			m.applyTextObject(r)
+			m.opRedo = nil
+		})
+	case awaitRecordReg:
+		// q's register name (#58): only a-z starts a recording, anything else
+		// cancels — the two pending keys (q + name) were never recorded, so
+		// nothing needs dropping.
+		m.endWait(hasRune && macroRegister(r), func() { m.startRecording(r) })
+	case awaitMark:
+		// m's mark name (#1151): a-z is a local mark, A-Z a global one;
+		// anything else cancels.
+		m.endWait(hasRune, func() { m.setMark(r) })
+	case awaitMarkLine, awaitMarkExact:
+		// ' / backtick jump target (#1151): ' lands on the line's first
+		// non-blank, backtick on the exact position. Global marks resolve
+		// app-side (cross-file), so the jump may return a command.
+		exact := m.wait == awaitMarkExact
+		m.wait = awaitNone
+		m.pending.Reset()
+		if hasRune {
+			cmd = m.jumpMark(r, exact)
+		}
+	case awaitSurrMotion:
+		m.surrMotionKey(s, r)
+	case awaitSurrObject:
+		m.surrObjectKey(r, hasRune)
+	case awaitSurrAdd:
+		ready := hasRune && m.surrResolve != nil
+		m.endWait(ready, func() { m.surroundAdd(m.surrResolve, r) })
+		m.surrResolve = nil
+	case awaitSurrDelete:
+		m.endWait(hasRune, func() { m.surroundDelete(r) })
+	case awaitSurrChange:
+		m.wait = awaitNone
+		if hasRune {
+			m.surrOld = r
+			m.wait = awaitSurrChangeNew
+		} else {
+			m.pending.Reset()
+		}
+	case awaitSurrChangeNew:
+		m.endWait(hasRune, func() { m.surroundChange(m.surrOld, r) })
+	case awaitLabel:
+		// Label jump (#787): the key routes through the leap session — target
+		// characters first, then a label key; esc (no rune) cancels.
+		m.wait = awaitNone
+		m, cmd = m.labelJumpKey(r, hasRune)
+	case awaitPlayReg:
+		// @'s register name (#58): @@ repeats the last replay; the count typed
+		// before @ (5@a) is still pending here.
+		m.wait = awaitNone
+		m, cmd = m.playRegKey(r, hasRune)
+	default:
+		return m, nil, false
+	}
+	return m, cmd, true
+}
+
+// endWait closes a one-key wait state: it runs fn when the key qualifies (ok),
+// then drops the pending operator/count.
+func (m *Model) endWait(ok bool, fn func()) {
+	m.wait = awaitNone
+	if ok {
+		fn()
+	}
+	m.pending.Reset()
+}
+
+// bracketJump resolves the key after ]/[: c is a git hunk, n a merge conflict.
+func (m *Model) bracketJump(s string, forward bool) tea.Cmd {
+	switch s {
+	case "c":
+		return m.hunkJump(forward)
+	case "n":
+		return m.conflictJump(forward)
+	}
+	return nil
+}
+
+// zzKey resolves the key after Z: Z saves and closes, Q closes without saving.
+func (m *Model) zzKey(s string) tea.Cmd {
+	switch s {
+	case "Z":
+		return m.saveAndClose()
+	case "Q":
+		return func() tea.Msg { return CloseMsg{Force: true} }
+	}
+	return nil
+}
+
+// saveAndClose backs ZZ: a save conflict prompts first and a failed write
+// keeps the pane open.
+func (m *Model) saveAndClose() tea.Cmd {
+	c, ok := m.saveGuarded(m.path, true)
+	if c != nil {
+		return c // conflict: prompt first, keep the pane open
+	}
+	if !ok {
+		return nil // write failed: stay open
+	}
+	return func() tea.Msg { return CloseMsg{} }
+}
+
+// surrMotionKey resolves ys's span (#1475): a motion, i/a introducing a text
+// object, or a second s for the whole line; anything else cancels.
+func (m *Model) surrMotionKey(s string, r rune) {
+	m.wait = awaitNone
+	switch {
+	case s == "i" || s == "a":
+		m.around = s == "a"
+		m.wait = awaitSurrObject
+	case s == "s":
+		m.surrResolve = func(mm *Model, pos buffer.Position) (operator.Target, bool) {
+			return operator.LineTarget(pos.Line, pos.Line), true
+		}
+		m.wait = awaitSurrAdd
+	default:
+		count := m.pending.EffectiveCount()
+		if _, ok := m.resolveMotion(s, r, count); !ok {
+			m.pending.Reset()
+			return
+		}
+		m.surrResolve = func(mm *Model, pos buffer.Position) (operator.Target, bool) {
+			return mm.caretTarget(s, r, count, pos)
+		}
+		m.wait = awaitSurrAdd
+	}
+}
+
+// surrObjectKey resolves the text-object key after ys{i,a}; no rune cancels.
+func (m *Model) surrObjectKey(r rune, hasRune bool) {
+	m.wait = awaitNone
+	if !hasRune {
+		m.pending.Reset()
+		return
+	}
+	around := m.around
+	m.surrResolve = func(mm *Model, pos buffer.Position) (operator.Target, bool) {
+		savedCur, savedAround := mm.cursor, mm.around
+		mm.cursor, mm.around = pos, around
+		res := mm.resolveTextObject(r)
+		mm.cursor, mm.around = savedCur, savedAround
+		if !res.OK {
+			return operator.Target{}, false
+		}
+		return objectTarget(res), true
+	}
+	m.wait = awaitSurrAdd
+}
+
+// playRegKey resolves @'s register name (#58): @@ repeats the last replay; the
+// count typed before @ (5@a) is still pending here.
+func (m Model) playRegKey(r rune, hasRune bool) (Model, tea.Cmd) {
+	count := m.pending.EffectiveCount()
+	m.pending.Reset()
+	if !hasRune {
+		return m, nil
+	}
+	if r == '@' {
+		r = m.lastMacro
+	}
+	if macroRegister(r) {
+		return m.playMacro(r, count)
+	}
+	return m, nil
+}
+
+// consumePrefixKey handles register selection (`"` then a name) and counts: 1-9 always, 0 only continues an existing count.
+func (m *Model) consumePrefixKey(s string, r rune, hasRune bool) bool {
+	switch {
+	case m.pending.AwaitingRegister():
+		if hasRune {
+			m.pending.SetRegister(r)
+		}
+	case s == `"`:
+		m.pending.BeginRegister()
+	case hasRune && r >= '1' && r <= '9':
+		m.pending.PushDigit(int(r - '0'))
+	case s == "0" && m.pending.Count > 0:
+		m.pending.PushDigit(0)
+	default:
+		return false
+	}
+	return true
+}
+
+// startOperator handles operator keys: a doubled operator is linewise, a first
+// one becomes pending. It reports whether the key was consumed.
+func (m *Model) startOperator(s string, count int) bool {
+	op, ok := operatorKey(s)
+	if !ok {
+		return false
+	}
+	switch m.pending.Operator {
+	case op:
+		m.applyLinewiseOperator(op, count)
+		m.pending.Reset()
+		return true
+	case 0:
+		m.pending.SetOperator(op)
+		return true
+	}
+	return false
+}
+
+// operatorIntro handles the keys that follow a pending operator. "s" after a
+// pending y/d/c starts a vim-surround operation (#1475,
+// ys{motion}{pair} / ds{pair} / cs{old}{new}); i/a introduces a text object.
+func (m *Model) operatorIntro(s string) bool {
+	if !m.pending.HasOperator() {
+		return false
+	}
+	switch {
+	case s == "s":
+		switch m.pending.Operator {
+		case 'y':
+			m.wait = awaitSurrMotion
+			return true
+		case 'd':
+			m.wait = awaitSurrDelete
+			return true
+		case 'c':
+			m.wait = awaitSurrChange
+			return true
+		}
+	case s == "i" || s == "a":
+		m.around = s == "a"
+		m.wait = awaitObject
+		return true
+	}
+	return false
+}
+
+// startShiftSelect turns shift+arrows into a charwise visual selection.
+func (m *Model) startShiftSelect(s string, count int) bool {
+	plain, ok := shiftSelectKey(s)
+	if !ok || m.pending.HasOperator() {
+		return false
+	}
+	m.enterVisual(Visual)
+	m.shiftSelect = true
+	if res, ok := m.resolveMotion(plain, 0, count); ok {
+		m.applyMotionOrOperator(res, count)
+	}
+	return true
+}
+
+// motionKey applies a motion key, fanning out per caret when carets are active.
+// It reports whether the key was a motion.
+func (m *Model) motionKey(s string, r rune, count int) bool {
+	res, ok := m.resolveMotion(s, r, count)
+	if !ok {
+		return false
+	}
+	if m.hasCarets() && m.pending.HasOperator() {
+		m.fanOperatorMotion(s, r, count)
+		m.pending.Reset()
+		return true
+	}
+	if !m.pending.HasOperator() {
+		m.fanMotionSecondaries(s, r, count, false)
+	}
+	m.armCaseRedo(func(op, reg rune) func(*Model) {
+		return func(mm *Model) { mm.replayCaseMotion(op, reg, s, r, count) }
+	})
+	m.applyMotionOrOperator(res, count)
+	m.opRedo = nil
+	return true
+}
+
+// findKeyStep handles f/F/t/T (await a target char) and the ; / , repeats.
+func (m *Model) findKeyStep(s string) bool {
+	if fk, ok := findKey(s); ok {
+		m.findCmd = fk
+		m.wait = awaitFind
+		return true
+	}
+	switch {
+	case s == ";" && m.lastFind.Valid():
+		m.applyFind(m.lastFind.Repeat())
+	case s == "," && m.lastFind.Valid():
+		m.applyFind(m.lastFind.Reverse())
+	default:
+		return false
+	}
+	m.pending.Reset()
+	return true
+}
+
+// doublesCaseOperator reports whether s is the bare key that doubles a pending
+// case/reflow operator (guu, gUU, g~~, gqq).
+func (m *Model) doublesCaseOperator(s string) bool {
+	return m.pending.HasOperator() && caseOperator(m.pending.Operator) && len(s) == 1 && rune(s[0]) == m.pending.Operator
 }
 
 // applyMotionOrOperator either moves the cursor or, when an operator is pending,
