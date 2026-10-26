@@ -62,6 +62,12 @@ type floatMoveDrag struct {
 	linkInst     *pane.Instance
 }
 
+// moveDragMods arm the anywhere-in-content move drag of a floating panel or
+// the popup box (#3035). alt is the one that works (#3041): the SGR mouse
+// protocol carries only shift/alt/ctrl, so cmd never reaches a mouse event
+// from a real terminal and stays only for one that might report it.
+const moveDragMods = tea.ModAlt | tea.ModSuper | tea.ModMeta
+
 // floatTermSeq mints unique host keys for torn-out panels. Package-level like
 // popupSessSeq: keys must stay unique across the models a session builds.
 var floatTermSeq int
@@ -620,11 +626,11 @@ func (m Model) floatTermMouse(f *floatTerm, msg mouseEvent) (tea.Model, tea.Cmd,
 			}
 			return m, nil, true
 		}
-		if msg.Mod&(tea.ModSuper|tea.ModMeta) != 0 {
-			// cmd+press anywhere in the content arms a move drag (#3035);
-			// the release decides: no motion opens the link under the
-			// press, motion moved the panel. A maximized panel cannot move,
-			// so it keeps the immediate link open.
+		if msg.Mod&moveDragMods != 0 {
+			// alt/cmd+press anywhere in the content arms a move drag
+			// (#3035, #3041); the release decides: no motion opens the link
+			// under the press, motion moved the panel. A maximized panel
+			// cannot move, so it keeps the immediate link open.
 			if f.restore == nil {
 				m.floatMove = &floatMoveDrag{target: f, lastX: msg.X, lastY: msg.Y, armed: true, linkX: lx, linkY: ly, linkInst: f.inst}
 				return m, nil, true
