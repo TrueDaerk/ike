@@ -985,50 +985,7 @@ func validate(c *Config) []Diagnostic {
 	// (BuiltinAssignTools) and not a [[tools.custom]] name — only warns: the
 	// entry is inert, and dropping it would rewrite the list on the next
 	// settings-UI edit (#1946).
-	if len(c.Tools.Layout.Template) > 0 {
-		tpl, err := layout.ParseTemplate(c.Tools.Layout.Template)
-		if err != nil {
-			diags = append(diags, Diagnostic{Field: "tools.layout.template", Message: fmt.Sprintf("%v; slot placement disabled", err)})
-			c.Tools.Layout.Template = nil
-		} else {
-			known := map[string]bool{}
-			for _, id := range BuiltinAssignTools() {
-				known[id] = true
-			}
-			for _, e := range c.Tools.Custom {
-				known[e.Name] = true
-			}
-			assigned := map[string]bool{}
-			kept := c.Tools.Layout.Assign[:0]
-			for _, a := range c.Tools.Layout.Assign {
-				slot, tool, cut := strings.Cut(a, "=")
-				slot, tool = strings.TrimSpace(slot), strings.TrimSpace(tool)
-				switch {
-				case cut && tool == "scratch":
-					// The scratch tool pane became the explorer's Scratches
-					// section (#1963): a leftover slot assignment is dropped
-					// silently, like the other migrated legacy values.
-				case !cut || slot == "" || tool == "":
-					diags = append(diags, Diagnostic{Field: "tools.layout.assign", Message: fmt.Sprintf("entry %q is not \"SLOT=tool\", dropping it", a)})
-				case slot == layout.EditorSlot:
-					diags = append(diags, Diagnostic{Field: "tools.layout.assign", Message: fmt.Sprintf("slot %q is the editor region, dropping the assignment of %q", slot, tool)})
-				case !tpl.HasSlot(slot):
-					diags = append(diags, Diagnostic{Field: "tools.layout.assign", Message: fmt.Sprintf("unknown slot %q (template defines %s), dropping the assignment of %q", slot, strings.Join(tpl.SlotNames(), " "), tool)})
-				case assigned[tool]:
-					diags = append(diags, Diagnostic{Field: "tools.layout.assign", Message: fmt.Sprintf("tool %q is already assigned to a slot, dropping the duplicate", tool)})
-				default:
-					if !known[tool] {
-						diags = append(diags, Diagnostic{Field: "tools.layout.assign", Message: fmt.Sprintf("unknown tool %q (built-in ids: %s; or a [[tools.custom]] name)", tool, strings.Join(BuiltinAssignTools(), " "))})
-					}
-					assigned[tool] = true
-					kept = append(kept, slot+"="+tool)
-				}
-			}
-			c.Tools.Layout.Assign = kept
-		}
-	} else if len(c.Tools.Layout.Assign) > 0 {
-		diags = append(diags, Diagnostic{Field: "tools.layout.assign", Message: "assignments have no effect without tools.layout.template"})
-	}
+	diags = append(diags, validateToolsLayout(c)...)
 
 	switch c.Completion.CaseSensitivity {
 	case "none", "first_letter", "all":
@@ -1119,6 +1076,57 @@ func validate(c *Config) []Diagnostic {
 		if e.Validate != nil {
 			diags = append(diags, e.Validate(c)...)
 		}
+	}
+	return diags
+}
+
+// validateToolsLayout checks tools.layout.template and normalizes
+// tools.layout.assign against it; see the slot template note in validate.
+func validateToolsLayout(c *Config) []Diagnostic {
+	var diags []Diagnostic
+	if len(c.Tools.Layout.Template) > 0 {
+		tpl, err := layout.ParseTemplate(c.Tools.Layout.Template)
+		if err != nil {
+			diags = append(diags, Diagnostic{Field: "tools.layout.template", Message: fmt.Sprintf("%v; slot placement disabled", err)})
+			c.Tools.Layout.Template = nil
+			return diags
+		}
+		known := map[string]bool{}
+		for _, id := range BuiltinAssignTools() {
+			known[id] = true
+		}
+		for _, e := range c.Tools.Custom {
+			known[e.Name] = true
+		}
+		assigned := map[string]bool{}
+		kept := c.Tools.Layout.Assign[:0]
+		for _, a := range c.Tools.Layout.Assign {
+			slot, tool, cut := strings.Cut(a, "=")
+			slot, tool = strings.TrimSpace(slot), strings.TrimSpace(tool)
+			switch {
+			case cut && tool == "scratch":
+				// The scratch tool pane became the explorer's Scratches
+				// section (#1963): a leftover slot assignment is dropped
+				// silently, like the other migrated legacy values.
+			case !cut || slot == "" || tool == "":
+				diags = append(diags, Diagnostic{Field: "tools.layout.assign", Message: fmt.Sprintf("entry %q is not \"SLOT=tool\", dropping it", a)})
+			case slot == layout.EditorSlot:
+				diags = append(diags, Diagnostic{Field: "tools.layout.assign", Message: fmt.Sprintf("slot %q is the editor region, dropping the assignment of %q", slot, tool)})
+			case !tpl.HasSlot(slot):
+				diags = append(diags, Diagnostic{Field: "tools.layout.assign", Message: fmt.Sprintf("unknown slot %q (template defines %s), dropping the assignment of %q", slot, strings.Join(tpl.SlotNames(), " "), tool)})
+			case assigned[tool]:
+				diags = append(diags, Diagnostic{Field: "tools.layout.assign", Message: fmt.Sprintf("tool %q is already assigned to a slot, dropping the duplicate", tool)})
+			default:
+				if !known[tool] {
+					diags = append(diags, Diagnostic{Field: "tools.layout.assign", Message: fmt.Sprintf("unknown tool %q (built-in ids: %s; or a [[tools.custom]] name)", tool, strings.Join(BuiltinAssignTools(), " "))})
+				}
+				assigned[tool] = true
+				kept = append(kept, slot+"="+tool)
+			}
+		}
+		c.Tools.Layout.Assign = kept
+	} else if len(c.Tools.Layout.Assign) > 0 {
+		diags = append(diags, Diagnostic{Field: "tools.layout.assign", Message: "assignments have no effect without tools.layout.template"})
 	}
 	return diags
 }
