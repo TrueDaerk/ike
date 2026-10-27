@@ -41,6 +41,9 @@ func init() {
 		DropIns:     dropIns,
 		LineComment: "#",
 		Spans:       systemdSpans,
+		// Values are styled as strings, yet their table entries complete
+		// (#3064).
+		CompletionCode: completionCode,
 	})
 }
 

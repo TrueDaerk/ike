@@ -1,5 +1,17 @@
 # Log
 
+## 2026-10-27 (systemd completion: sections, directives, values, specifiers, #3064)
+
+- [Completion Engine](/architecture/completion.md): new optional
+  `complete.PositionExclusiveSource` (per-request exclusive claim) and
+  `lang.Language.CompletionCode` (a string-styled position the language's
+  source answers reads as code). The systemd source completes sections per
+  unit type, the enclosing section's directives (inserting `Name=`), enum /
+  boolean / signal values, common targets and `%` specifiers, and claims
+  those positions against buffer words.
+- [Languages](/architecture/languages.md): systemd entry points at the
+  completion source.
+
 ## 2026-10-26 (Complexity: extract duplicates across files with the agent, #3046)
 
 - [Code Complexity](/architecture/complexity.md): `a` on a Duplicates-tab

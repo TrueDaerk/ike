@@ -51,6 +51,22 @@ func TestCompletionContextAt(t *testing.T) {
 	}
 }
 
+// TestCompletionCodeOverridesStringCapture (#3064): a language's
+// CompletionCode turns a string-captured position it answers into code, but
+// never a comment, and leaves the positions it declines to the capture.
+func TestCompletionCodeOverridesStringCapture(t *testing.T) {
+	l := Language{CompletionCode: func(line string, col int) bool { return line[:col] == "Restart=on" }}
+	if got := CompletionContextAt(l, "string", "Restart=on", 10); got != CtxCode {
+		t.Fatalf("claimed string position = %q, want code", got)
+	}
+	if got := CompletionContextAt(l, "string", "Description=x", 13); got != CtxString {
+		t.Fatalf("declined string position = %q, want string", got)
+	}
+	if got := CompletionContextAt(l, "comment", "Restart=on", 10); got != CtxComment {
+		t.Fatalf("comment capture = %q, want comment", got)
+	}
+}
+
 // TestCompletionContextNoLanguageData: a language without DeclKeywords and
 // ImportLine (or no language at all) only ever reports what the capture says.
 func TestCompletionContextNoLanguageData(t *testing.T) {

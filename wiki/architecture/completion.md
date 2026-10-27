@@ -166,6 +166,27 @@ unfinished query rather than by a parse of it. Nothing is dispatched while
 typing; the cache is the whole input (see
 [HTTP Client](/architecture/http-client.md)).
 
+**Position-exclusive sources (#3064).** A source that owns only *some*
+positions of its files implements the per-request form
+
+```go
+type PositionExclusiveSource interface{ ExclusiveAt(req Request) bool }
+```
+
+The engine asks it after resolving the effective language, just before the
+fan-out; while any source claims the position, only claiming sources run. The
+systemd source (`plugins/languages/systemd/complete.go`) claims the positions
+its directive table answers — a `[` header (sections valid for the file's unit
+type, a drop-in taking its directory's type), a key (the enclosing section's
+directives, described, inserting `Name=`), an enumerated / boolean / signal
+value, a dependency or install target list (`WantedBy=`, `After=`, … offer
+`multi-user.target`, `network-online.target`, …), a `%` specifier with its
+meaning — so buffer words never drown the table; an `ExecStart=` command line
+or a `Description=` stays free text where the word index answers. It claims
+`[`, `=`, `%` and space as trigger characters, and its language declares
+`lang.Language.CompletionCode` (see Completion context below) so the string
+styling of a value does not shut the auto-popup.
+
 ## Buffer identity and language (#2048)
 
 A `Request` carries three names, not one:
@@ -624,7 +645,11 @@ no cgo and never parses the line:
   the opening quote, a blank inside the comment. Not the capture at the
   cursor: the highlight index lags one parse behind the keystroke, so the
   just-typed rune is never inside a span yet. Without a grammar there is no
-  capture and the position reads as code.
+  capture and the position reads as code. A language whose own source
+  completes inside what it styles as a string declares
+  **`CompletionCode(line, col) bool`** (#3064): a claimed position is code
+  despite a `string…` capture (a comment still wins). systemd claims its
+  table value positions and `%` specifiers.
 - *declaration position*: the identifier-delimited word left of the current
   word on the same line, separated by whitespace, is one of the language's
   **`DeclKeywords`** (case-insensitive): `func type var const package` for Go,
@@ -666,7 +691,8 @@ the server request in a comment and honours every other context.
 Implement `Source`, register it on the app's engine (`completeEngine` in
 `internal/app`) at build time. A source that owns a language's files
 end-to-end should also implement `ExclusiveSource` (see above), or the generic
-indexes will merge their identifiers into its popup; one that needs a
+indexes will merge their identifiers into its popup — one owning only some
+positions implements `PositionExclusiveSource` instead; one that needs a
 punctuation trigger implements `TriggerSource`; one with something to say
 inside a comment or a string literal implements `ContextSource` (#2654),
 without which it runs in code and declaration positions only. All Phase-2

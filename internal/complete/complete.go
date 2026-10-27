@@ -139,6 +139,17 @@ type ExclusiveSource interface {
 	Exclusive(path string) bool
 }
 
+// PositionExclusiveSource is an optional Source extension (#3064): the
+// per-position form of ExclusiveSource for a language source that owns only
+// some positions of its files. A systemd section header, directive name or
+// enumerated value has a table answer that buffer words would only drown,
+// while an `ExecStart=` command line is free text where the word index is the
+// best help there is. While a source claims the request position, the engine
+// dispatches only claiming sources for it.
+type PositionExclusiveSource interface {
+	ExclusiveAt(req Request) bool
+}
+
 // ContextSource is an optional Source extension (#2654): a source with
 // something to say outside code positions declares the contexts it answers
 // in. Without it a source runs in code and declaration positions only —
@@ -434,6 +445,21 @@ func exclusiveFor(name string, sources []Source) []Source {
 	return claimed
 }
 
+// exclusiveAt narrows sources to the ones claiming req's position (#3064);
+// with no claim the full set runs.
+func exclusiveAt(req Request, sources []Source) []Source {
+	var claimed []Source
+	for _, s := range sources {
+		if x, ok := s.(PositionExclusiveSource); ok && x.ExclusiveAt(req) {
+			claimed = append(claimed, s)
+		}
+	}
+	if len(claimed) == 0 {
+		return sources
+	}
+	return claimed
+}
+
 // dispatch cancels the previous dispatch and runs the given sources
 // concurrently. Each result is a tagged batch (an empty batch clears the
 // source's contribution from a merged popup); the batches that land within
@@ -468,7 +494,7 @@ func (e *Engine) dispatch(req Request, sources []Source) {
 		if ctx.Err() != nil {
 			return
 		}
-		e.fanOut(ctx, req, sources)
+		e.fanOut(ctx, req, exclusiveAt(req, sources))
 	})
 }
 
