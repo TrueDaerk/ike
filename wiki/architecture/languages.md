@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-10-27T12:00:00Z
+timestamp: 2026-10-27T18:00:00Z
 ---
 
 # Language Registry
@@ -169,6 +169,19 @@ measuring through `complexity.SourceLines`. The Jinja spans are painted on top
 of the inner spans (see [highlighting](./highlighting.md#jinja-templates-3059)).
 A name with no inner extension (`motd.j2`) resolves to no language, but still
 gets the Jinja layer: `highlight.Supported` is true for every Jinja template.
+
+**Diagnostics on Jinja tags (#3060).** The inner language's server attaches
+as usual — `*.yml.j2` resolves to YAML and so starts yaml-language-server —
+but it parses the raw text, tags included. The LSP bridge therefore passes
+every converted publish for a Jinja template through
+`ilsp.DropJinjaDiagnostics`: a diagnostic whose range overlaps a Jinja block
+(`jinja.Template.Overlaps`, same tokenizer as the mask; a zero-width range
+counts when its point lies inside a block) is dropped, the rest are kept.
+The filter runs before the bridge's no-change check, so the Problems view
+and the gutter receive the same filtered set. Built-in lints
+(`highlight.Lint`) run on the masked text, and a note still touching a block
+— two `{{ key }}=…` dotenv lines mask to the same placeholder key — is
+dropped the same way.
 
 ### Rotation suffix fallback (#1745)
 

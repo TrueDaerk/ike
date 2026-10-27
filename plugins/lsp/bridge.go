@@ -2047,7 +2047,10 @@ func (b *bridge) onDiagnostics(path string, p protocol.PublishDiagnosticsParams,
 	}
 	// Convert here (on the server read-loop goroutine, off the UI thread), then
 	// coalesce the delivery so a publish storm folds into one batched message.
-	msg := ilsp.DiagnosticsMsg{Path: path, Diagnostics: ilsp.ConvertDiagnostics(p, lines, enc)}
+	// A Jinja template drops what the server reported on its tags (#3060),
+	// before the no-change check, so Problems and the gutter share one set.
+	diags := ilsp.DropJinjaDiagnostics(path, lines, ilsp.ConvertDiagnostics(p, lines, enc))
+	msg := ilsp.DiagnosticsMsg{Path: path, Diagnostics: diags}
 	b.mu.Lock()
 	// No-change republishes stop here (#2402): equal to the last delivered set
 	// — including "still empty" for a path never delivered — means the app has

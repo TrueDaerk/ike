@@ -10,6 +10,8 @@ import (
 
 	"ike/internal/editor/buffer"
 	"ike/internal/highlight"
+	"ike/internal/jinja"
+	"ike/internal/lang"
 	"ike/internal/lsp/protocol"
 	"ike/internal/lspdoctor"
 )
@@ -841,6 +843,31 @@ func ConvertDiagnostics(p protocol.PublishDiagnosticsParams, lines []string, enc
 			Code:     diagnosticCode(d.Code),
 			Related:  convertRelated(p.URI, d.RelatedInformation, lines, enc),
 		})
+	}
+	return out
+}
+
+// DropJinjaDiagnostics filters a converted diagnostic set for a Jinja
+// template (#3060, lang.IsJinjaTemplate): the server attached through the
+// inner language (yaml-language-server for *.yml.j2) parses the raw text, so
+// whatever it reports on or across a Jinja block is noise and is dropped;
+// diagnostics clear of every block are kept. lines is the published
+// document's text, scanned with the same tokenizer the highlighter masks
+// with. Any other path returns diags as is.
+func DropJinjaDiagnostics(path string, lines []string, diags []Diagnostic) []Diagnostic {
+	if len(diags) == 0 || len(lines) == 0 || !lang.IsJinjaTemplate(path) {
+		return diags
+	}
+	tpl := jinja.Scan(lines)
+	if len(tpl.Blocks) == 0 {
+		return diags
+	}
+	out := diags[:0:0]
+	for _, d := range diags {
+		r := d.Range
+		if !tpl.Overlaps(r.Start.Line, r.Start.Col, r.End.Line, r.End.Col) {
+			out = append(out, d)
+		}
 	}
 	return out
 }
