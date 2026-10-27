@@ -57,7 +57,8 @@ func (c CompletionContext) AsksServer() bool {
 // capture is the highlight capture covering the character before the
 // current word (the syntax highlighter's answer, "" without a grammar):
 // a `comment…` capture makes the context CtxComment, a `string…` capture
-// CtxString. Without either, an import line (ImportLine) is CtxImport, and
+// CtxString — unless the language's CompletionCode claims the position
+// (#3064), which makes it code. Without either, an import line (ImportLine) is CtxImport, and
 // a DeclKeyword as the identifier-delimited word left of the current word
 // makes it CtxDecl — `func na` is a declaration, `func(x` is a parameter
 // list and `f(a, b` an argument list, since a bracket or comma, not
@@ -66,6 +67,8 @@ func CompletionContextAt(l Language, capture, line string, col int) CompletionCo
 	switch {
 	case strings.HasPrefix(capture, "comment"):
 		return CtxComment
+	case l.CompletionCode != nil && l.CompletionCode(line, col):
+		return CtxCode
 	case strings.HasPrefix(capture, "string"):
 		return CtxString
 	}

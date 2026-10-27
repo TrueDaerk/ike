@@ -222,6 +222,35 @@ func TestExclusiveSourceSilencesTheRest(t *testing.T) {
 	}
 }
 
+// positionFake claims the positions on line 0 only.
+type positionFake struct{ fakeSource }
+
+func (p positionFake) ExclusiveAt(req Request) bool { return req.Line == 0 }
+
+// TestPositionExclusiveSourceSilencesTheRest guards #3064: a source claiming
+// a request position keeps the other sources out of that popup, and every
+// other position keeps the full merged popup.
+func TestPositionExclusiveSourceSilencesTheRest(t *testing.T) {
+	e, ch := newTestEngine()
+	e.Register(fakeSource{name: "words", prio: ilsp.PriorityWords})
+	e.Register(positionFake{fakeSource{name: "table", prio: ilsp.PrioritySymbols}})
+
+	e.Emit(host.EditorEvent{Kind: host.EditorCompletionTrigger, Path: "/u.service", Line: 0, Col: 2, Char: "a"})
+	if got := collect(t, ch, 1); got[0].Source != "table" {
+		t.Fatalf("batch source = %q, want table", got[0].Source)
+	}
+	select {
+	case m := <-ch:
+		t.Fatalf("a claimed position must not dispatch %q", m.Source)
+	case <-time.After(150 * time.Millisecond):
+	}
+
+	e.Emit(trigger("a")) // line 1: unclaimed
+	if len(collect(t, ch, 2)) != 2 {
+		t.Fatal("unclaimed positions must still dispatch every source")
+	}
+}
+
 // TestDispatchBurstRunsOnePass (#2770): dispatches queue behind the text
 // pass, and a dispatch superseded while it waited never runs — a keystroke
 // burst that lands while a pass is in flight fans out once, for the last

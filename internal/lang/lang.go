@@ -269,6 +269,15 @@ type Language struct {
 	// line while the bridge still asks the server. Nil means no line is an
 	// import line.
 	ImportLine *regexp.Regexp
+
+	// CompletionCode reports the positions where the language's own
+	// completion source has a table to offer (#3064) although the highlight
+	// capture there reads as a string: a systemd value is styled as a
+	// string, yet `Restart=` values, unit names and `%` specifiers complete
+	// in it. A true answer classifies the position as code (comments still
+	// win), so the auto-popup opens and the local engine dispatches. Nil —
+	// the normal case — leaves the classification to the capture.
+	CompletionCode func(line string, col int) bool
 }
 
 // Note is one Go-computed diagnostic (#1623): the half-open rune-column range

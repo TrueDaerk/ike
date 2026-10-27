@@ -1000,7 +1000,9 @@ drop-in directories above). Its spans read the plugin's directive table
 (`directives.go`: section → directive → value kind, enum values, one-line
 description, valid unit types; the shared exec/kill/resource-control groups
 joined into the sections that take them) — the same table completion (#3064)
-and lint (#3065) read. Sections style as `type`, known directives (and `X-`
+and lint (#3065) read. Completion (`complete.go`) offers sections, directives,
+values and `%` specifiers from it and claims those positions against the
+buffer-word sources (see `/architecture/completion.md`). Sections style as `type`, known directives (and `X-`
 extensions) as `attribute`, unknown ones — a typo, or a directive in the wrong
 section — as `variable`; values as `string`, a whole boolean value
 (`yes/no/true/false/on/off/1/0`) as `boolean`, `%` specifiers (`%n`, `%i`,
