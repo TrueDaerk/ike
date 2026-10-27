@@ -15258,8 +15258,15 @@ func (m Model) render() string {
 	if box, x, y, ok := m.moveGhost(); ok {
 		base = overlay.Place(base, box, x, y, m.width, m.height)
 	}
-	base = m.compositeLSPPopups(base)
-	base = m.compositePlayCompletion(base)
+	// The editor's own popups (hover, completion, signature, peek, …) follow
+	// the keyboard (#3072): while the popup terminal layer owns it they sit
+	// under the layer, while the layer is blurred (#2309) the editor owns the
+	// keyboard and its popups composite after the layer instead, see below.
+	editorPopupsOnTop := m.popupLayerVisible() && m.popup.blurred
+	if !editorPopupsOnTop {
+		base = m.compositeLSPPopups(base)
+		base = m.compositePlayCompletion(base)
+	}
 	base = m.compositeWhichKey(base)
 	if text, bx, by, _, ok := m.largeFileBanner(); ok {
 		// Persistent large-file notice (#1124): an overlay over the focused
@@ -15290,6 +15297,10 @@ func (m Model) render() string {
 		for _, f := range above {
 			base = overlay.Place(base, m.renderFloatTerm(f), f.x, f.y, m.width, m.height)
 		}
+	}
+	if editorPopupsOnTop {
+		base = m.compositeLSPPopups(base)
+		base = m.compositePlayCompletion(base)
 	}
 	result := base
 	switch {
