@@ -16,7 +16,7 @@ import (
 // one only warns.
 func TestEnvMsgRegistersInterpreter(t *testing.T) {
 	dir := t.TempDir()
-	t.Chdir(dir)
+	chdir(t, dir)
 	t.Setenv("IKE_CONFIG_DIR", "")
 	m := switchModel(t)
 

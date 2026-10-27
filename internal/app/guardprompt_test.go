@@ -66,7 +66,7 @@ func TestCloseGuardEnterSaves(t *testing.T) {
 	if err := os.WriteFile(file, []byte("one\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(dir)
+	chdir(t, dir)
 	m := switchModel(t)
 	m = openDirty(t, m, file)
 	m.guardedCloseFocused()
@@ -100,7 +100,7 @@ func TestQuitGuardEnterSavesThenQuits(t *testing.T) {
 	if err := os.WriteFile(file, []byte("one\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(dir)
+	chdir(t, dir)
 	m := switchModel(t)
 	m = openDirty(t, m, file)
 	out, _ := m.guardedQuit()
@@ -126,7 +126,7 @@ func TestQuitGuardEnterSavesThenQuits(t *testing.T) {
 // offers no save option, so enter takes the plain quit.
 func TestQuitGuardEnterQuitsWhenNothingToSave(t *testing.T) {
 	dir := t.TempDir()
-	t.Chdir(dir)
+	chdir(t, dir)
 	m := switchModel(t)
 	m.openQuitPrompt(nil, []string{"run build"})
 	if !m.closePromptOpen() {
@@ -157,7 +157,7 @@ func TestSwitchGuardEnterSaves(t *testing.T) {
 	if err := os.WriteFile(file, []byte("one\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(a)
+	chdir(t, a)
 	m := switchModel(t)
 	m = openDirty(t, m, file)
 	out, _ := m.Update(project.UnsavedChangesMsg{Root: b})

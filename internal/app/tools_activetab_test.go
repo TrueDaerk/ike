@@ -82,7 +82,7 @@ func activeToolTab(inst *pane.Instance) string {
 // tab on restore instead of leaving the last restored tool active.
 func TestActiveToolTabRestoresFromLayout(t *testing.T) {
 	conf, dir := t.TempDir(), t.TempDir()
-	t.Chdir(dir)
+	chdir(t, dir)
 	toolLayout(t, conf, paneIdentity{Kind: "editor", Tools: []string{"alpha", "beta"}, ActiveTool: 1})
 
 	m := fixedDirApp(t, conf)
@@ -102,7 +102,7 @@ func TestActiveToolTabRestoresFromLayout(t *testing.T) {
 func TestActiveToolTabRoundTripsThroughSave(t *testing.T) {
 	conf, dir := t.TempDir(), t.TempDir()
 	file := writeTemp(t, dir, "a.txt", "aaa\n")
-	t.Chdir(dir)
+	chdir(t, dir)
 	toolLayout(t, conf, paneIdentity{Kind: "editor", Tabs: []string{file},
 		Tools: []string{"alpha", "beta"}, ActiveTool: 0})
 
@@ -139,7 +139,7 @@ func TestActiveToolTabRoundTripsThroughSave(t *testing.T) {
 // instead of pointing at nothing.
 func TestActiveToolTabFallbackWhenToolMissing(t *testing.T) {
 	conf, dir := t.TempDir(), t.TempDir()
-	t.Chdir(dir)
+	chdir(t, dir)
 	toolLayout(t, conf, paneIdentity{Kind: "editor", Tools: []string{"alpha", "gone"}, ActiveTool: 2})
 
 	m := fixedDirApp(t, conf)

@@ -33,7 +33,7 @@ func silentTimeout(t *testing.T, m Model) Model {
 // held back (notified=false, suppressed=session) rather than omitting it.
 func TestLSPWarmupNoticeOncePerSession(t *testing.T) {
 	a, b := t.TempDir(), t.TempDir()
-	t.Chdir(a)
+	chdir(t, a)
 	m := warmupNoticeModel(t, 15000)
 	for _, root := range []string{b, a, b, a, b} {
 		tm, _ := m.performSwitch(root)
@@ -64,7 +64,7 @@ func TestLSPWarmupNoticeOncePerSession(t *testing.T) {
 	}
 
 	// A new ike session starts with a clean slate: B warns once again.
-	t.Chdir(b)
+	chdir(t, b)
 	fresh := silentTimeout(t, armSilentWait(warmupNoticeModel(t, 15000)))
 	if n := countNotices(fresh); n != 1 {
 		t.Errorf("a restarted session must warn again once, got %d notices", n)
@@ -74,7 +74,7 @@ func TestLSPWarmupNoticeOncePerSession(t *testing.T) {
 // TestLSPWarmupNoticeMutedRoot: a root in lsp.warmup_notice_muted_roots never
 // warns, and the quiet phase records why (notified=false, suppressed=muted).
 func TestLSPWarmupNoticeMutedRoot(t *testing.T) {
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	m := warmupNoticeModel(t, 15000)
 	c := *config.Get()
 	c.LSP.WarmupNoticeMutedRoots = []string{m.projectRootTag() + "/"}
@@ -94,7 +94,7 @@ func TestLSPWarmupNoticeMutedRoot(t *testing.T) {
 // project", and running it persists the active root into the setting, so the
 // next session stays quiet for it.
 func TestLSPWarmupNoticeMuteAction(t *testing.T) {
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	m := warmupNoticeModel(t, 15000)
 	out := silentTimeout(t, armSilentWait(m))
 	e := warmupNotice(out)

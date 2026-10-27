@@ -99,7 +99,7 @@ func traitDiagApp(t *testing.T) (Model, string, string) {
 	t.Helper()
 	proj := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
-	t.Chdir(proj)
+	chdir(t, proj)
 	write := func(name, text string) string {
 		p := filepath.Join(proj, name)
 		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {

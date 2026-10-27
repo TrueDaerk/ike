@@ -111,7 +111,7 @@ func TestSwitchProjectReRoots(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Chdir(src)
+	chdir(t, src)
 	m := switchModel(t)
 
 	out, cmd := m.Update(project.SwitchProjectMsg{Root: dst})
@@ -133,7 +133,7 @@ func TestSwitchProjectReRoots(t *testing.T) {
 // TestSwitchSameRootIsNoop: switching to the current root does not rebuild.
 func TestSwitchSameRootIsNoop(t *testing.T) {
 	dir := t.TempDir()
-	t.Chdir(dir)
+	chdir(t, dir)
 	m := switchModel(t)
 
 	out, _ := m.Update(project.SwitchProjectMsg{Root: cwd(t)})
@@ -147,7 +147,7 @@ func TestSwitchSameRootIsNoop(t *testing.T) {
 // lands as an error toast.
 func TestSwitchFailedSurfacesError(t *testing.T) {
 	dir := t.TempDir()
-	t.Chdir(dir)
+	chdir(t, dir)
 	m := switchModel(t)
 	before := cwd(t)
 
@@ -181,7 +181,7 @@ func TestSwitchWithDirtyBufferIsSeamless(t *testing.T) {
 	if err := os.WriteFile(file, []byte("one\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(src)
+	chdir(t, src)
 	m := switchModel(t)
 	m = openDirty(t, m, file)
 
@@ -239,7 +239,7 @@ func TestSwitchRoundTripResumesWorkspaceLive(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Chdir(src)
+	chdir(t, src)
 	m := switchModel(t)
 	out, _ := m.Update(TerminalNewMsg{})
 	m = out.(Model)
@@ -295,7 +295,7 @@ func TestSwitchRoundTripKeepsRecentFiles(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Chdir(src)
+	chdir(t, src)
 	m := switchModel(t)
 	m.recent.Touch("a.go")
 	m.recent.Touch("b.go")
@@ -332,7 +332,7 @@ func TestSwitchNewTerminalSpawnsInNewRoot(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Chdir(src)
+	chdir(t, src)
 	m := switchModel(t)
 
 	out, _ := m.Update(project.SwitchProjectMsg{Root: dst})
@@ -360,7 +360,7 @@ func TestResumeNewTerminalSpawnsInResumedRoot(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Chdir(src)
+	chdir(t, src)
 	m := switchModel(t)
 	out, _ := m.Update(TerminalNewMsg{})
 	m = out.(Model)
@@ -401,7 +401,7 @@ func TestSwitchReAnchorsConfigLayer(t *testing.T) {
 		[]byte("[palette]\nmax_results = 3\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(src)
+	chdir(t, src)
 	m := switchModel(t)
 	out, _ := m.Update(project.SwitchProjectMsg{Root: dst})
 	m = out.(Model)
@@ -432,7 +432,7 @@ func evictFixture(t *testing.T) (a, b, c string) {
 // least-recently-used idle background workspace drops silently.
 func TestWorkspaceCapEvictsIdleLRU(t *testing.T) {
 	a, b, c := evictFixture(t)
-	t.Chdir(a)
+	chdir(t, a)
 	m := switchModel(t)
 	out, _ := m.Update(project.SwitchProjectMsg{Root: b})
 	m = out.(Model)
@@ -456,7 +456,7 @@ func TestWorkspaceCapKeepsBusyWorkspace(t *testing.T) {
 	if err := os.WriteFile(file, []byte("one\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(a)
+	chdir(t, a)
 	m := switchModel(t)
 	m = openDirty(t, m, file)
 	out, _ := m.Update(project.SwitchProjectMsg{Root: b})
@@ -486,7 +486,7 @@ func TestCloseWorkspaceFromList(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Chdir(a)
+	chdir(t, a)
 	m := switchModel(t)
 	out, _ := m.Update(project.SwitchProjectMsg{Root: b})
 	m = out.(Model)
@@ -560,7 +560,7 @@ func busyCloseFixture(t *testing.T) (m Model, aRoot, dirtyPath string) {
 	if err := os.WriteFile(dirtyPath, []byte("one\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(a)
+	chdir(t, a)
 	m = switchModel(t)
 	tm, _ := m.openPath(dirtyPath, false)
 	m = tm.(Model)
@@ -662,7 +662,7 @@ func TestSwitchBackReconcilesParkedBuffers(t *testing.T) {
 	if err := os.WriteFile(file, []byte("original\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(src)
+	chdir(t, src)
 	invalidateCwd()
 	t.Cleanup(invalidateCwd)
 	m := switchModel(t)
@@ -740,7 +740,7 @@ func TestSwitchBackResyncsExplorer(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(src, "seed.txt"), []byte("x\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(src)
+	chdir(t, src)
 	m := switchModel(t)
 	// Load the explorer tree so the parked workspace holds a stale snapshot.
 	for _, sd := range scanResults(t, m.explorer().Init()) {

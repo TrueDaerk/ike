@@ -101,7 +101,7 @@ func TestIgnoreRuleEditRefiltersLive(t *testing.T) {
 // the rule to the project settings file and the reload suppresses it (#1259).
 func TestIgnoreDiagnosticMsgPersistsProjectRule(t *testing.T) {
 	dir := t.TempDir()
-	t.Chdir(dir)
+	chdir(t, dir)
 	m := problemsApp(t)
 	orig := config.Get()
 	t.Cleanup(func() { config.Set(orig) })

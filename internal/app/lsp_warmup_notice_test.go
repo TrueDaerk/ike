@@ -41,7 +41,7 @@ func warmupNotice(m Model) *histEntry {
 // threshold passes without a publish records exactly one notification naming
 // the language, and that notification offers lsp.restart as a follow-up.
 func TestLSPWarmupNoticeFires(t *testing.T) {
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	m := warmupNoticeModel(t, 15000)
 	m.switchLSPWait = &switchLSPWait{start: time.Now(), lang: "go"}
 
@@ -116,7 +116,7 @@ func contains(ids []string, want string) bool {
 // TestLSPWarmupNoticePublishBeforeThreshold: a publish disarms the wait, so the
 // notice timer that fires afterwards finds nothing to report.
 func TestLSPWarmupNoticePublishBeforeThreshold(t *testing.T) {
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	m := warmupNoticeModel(t, 15000)
 	m.switchLSPWait = &switchLSPWait{start: time.Now(), lang: "go"}
 	armed := m.switchLSPWait
@@ -132,7 +132,7 @@ func TestLSPWarmupNoticePublishBeforeThreshold(t *testing.T) {
 // TestLSPWarmupNoticeNoServerDocs: a switch that opens no server-language
 // document never arms a wait, so it neither schedules nor raises a notice.
 func TestLSPWarmupNoticeNoServerDocs(t *testing.T) {
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	m := warmupNoticeModel(t, 15000)
 
 	tm, _ := m.performSwitch(t.TempDir())
@@ -150,7 +150,7 @@ func TestLSPWarmupNoticeNoServerDocs(t *testing.T) {
 // TestLSPWarmupNoticeSuperseded: the next switch replaces the armed wait, so
 // the previous switch's pending notice timer is recognised as stale and drops.
 func TestLSPWarmupNoticeSuperseded(t *testing.T) {
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	m := warmupNoticeModel(t, 15000)
 	m.switchLSPWait = &switchLSPWait{start: time.Now(), lang: "go"}
 	stale := m.switchLSPWait
@@ -165,7 +165,7 @@ func TestLSPWarmupNoticeSuperseded(t *testing.T) {
 
 // TestLSPWarmupNoticeDisabled: 0 turns the notice off — no timer is scheduled.
 func TestLSPWarmupNoticeDisabled(t *testing.T) {
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	warmupNoticeModel(t, 0)
 	if cmd := armSwitchLSPNotice(&switchLSPWait{start: time.Now()}); cmd != nil {
 		t.Error("lsp.warmup_notice_ms = 0 must schedule no notice timer")
@@ -182,7 +182,7 @@ func TestLSPWarmupNoticeDisabled(t *testing.T) {
 // TestLSPWarmupNoticeOffWithoutLSP: with the whole subsystem switched off no
 // server is meant to answer, so the notice schedules nothing.
 func TestLSPWarmupNoticeOffWithoutLSP(t *testing.T) {
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	warmupNoticeModel(t, 15000)
 	old := config.Get()
 	c := *old
@@ -196,7 +196,7 @@ func TestLSPWarmupNoticeOffWithoutLSP(t *testing.T) {
 // TestLSPWarmupNoticeUnnamedLanguage: a wait armed without a language name
 // still produces a readable sentence rather than a hole in the text.
 func TestLSPWarmupNoticeUnnamedLanguage(t *testing.T) {
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	m := warmupNoticeModel(t, 15000)
 	m.switchLSPWait = &switchLSPWait{start: time.Now()}
 
@@ -211,7 +211,7 @@ func TestLSPWarmupNoticeUnnamedLanguage(t *testing.T) {
 // are listed in the center and the matching digit runs the command, closing
 // the center. A digit past the last action stays the shell's.
 func TestNotifCenterRunsAction(t *testing.T) {
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	m := warmupNoticeModel(t, 15000)
 	m.switchLSPWait = &switchLSPWait{start: time.Now(), lang: "go"}
 	out, _ := m.Update(switchLSPNoticeMsg{wait: m.switchLSPWait})

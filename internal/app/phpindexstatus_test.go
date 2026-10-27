@@ -33,7 +33,7 @@ func phpOpsModel(t *testing.T) Model {
 	t.Helper()
 	proj := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
-	t.Chdir(proj)
+	chdir(t, proj)
 	writePHPFixture(t, proj)
 
 	cfg, _ := config.Load(config.Options{})

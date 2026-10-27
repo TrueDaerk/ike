@@ -54,7 +54,7 @@ func TestPHPIndexBuiltAndToggledLive(t *testing.T) {
 	proj := t.TempDir()
 	state := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", state)
-	t.Chdir(proj)
+	chdir(t, proj)
 	writePHPFixture(t, proj)
 
 	cfg, _ := config.Load(config.Options{})

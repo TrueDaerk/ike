@@ -61,7 +61,7 @@ func TestStructureDispatchesOnceAcrossFocusSaveAndSwitch(t *testing.T) {
 	if err := os.WriteFile(file, []byte("l0\nl1\nl2\nl3\nl4\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(rootA)
+	chdir(t, rootA)
 
 	calls := 0
 	m := symbolDispatchModel(t, &calls)
@@ -134,7 +134,7 @@ func TestStructureDispatchesOnceAcrossFocusSaveAndSwitch(t *testing.T) {
 // never reaches the command, so it records no internal telemetry event either.
 func TestStructureBurstCollapsesRepeatDispatch(t *testing.T) {
 	root, files := navProject(t)
-	t.Chdir(root)
+	chdir(t, root)
 	calls := 0
 	m := symbolDispatchModel(t, &calls)
 	tm, _ := m.openPath(files[0], false)
@@ -179,7 +179,7 @@ func TestStructureCacheParksWithWorkspace(t *testing.T) {
 	if err := os.WriteFile(file, []byte("l0\nl1\nl2\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(rootA)
+	chdir(t, rootA)
 
 	calls := 0
 	m := symbolDispatchModel(t, &calls)

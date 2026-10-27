@@ -28,7 +28,7 @@ func closeCurrentFixture(t *testing.T) (m Model, aRoot, bRoot, dirtyPath string)
 	if err := os.WriteFile(dirtyPath, []byte("one\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(a)
+	chdir(t, a)
 	m = switchModel(t)
 	tm, _ := m.openPath(dirtyPath, false)
 	m = tm.(Model)
@@ -58,7 +58,7 @@ func TestCloseProjectResumesMRUBackground(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Chdir(a)
+	chdir(t, a)
 	m := switchModel(t)
 	out, _ := m.Update(project.SwitchProjectMsg{Root: b})
 	m = out.(Model)
@@ -87,7 +87,7 @@ func TestCloseProjectResumesMRUBackground(t *testing.T) {
 // project.close quits the IDE (clean state: no guard).
 func TestCloseProjectLastQuits(t *testing.T) {
 	dir := t.TempDir()
-	t.Chdir(dir)
+	chdir(t, dir)
 	m := switchModel(t)
 
 	out, cmd := m.Update(project.CloseProjectMsg{})
@@ -110,7 +110,7 @@ func TestCloseProjectLastDirtyOpensQuitGuard(t *testing.T) {
 	if err := os.WriteFile(file, []byte("one\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(dir)
+	chdir(t, dir)
 	m := switchModel(t)
 	m = openDirty(t, m, file)
 
@@ -192,7 +192,7 @@ func TestCloseProjectChordEscapesTerminal(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Chdir(a)
+	chdir(t, a)
 	m := dismissOnboarding(sizedWith(t, registry.Global(), 100, 40))
 	out, _ := m.Update(project.SwitchProjectMsg{Root: b})
 	m = dismissOnboarding(out.(Model))

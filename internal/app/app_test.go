@@ -692,7 +692,7 @@ func TestSessionPersistsAndRestores(t *testing.T) {
 	proj := t.TempDir()
 	state := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", state)
-	t.Chdir(proj)
+	chdir(t, proj)
 
 	sub := filepath.Join(proj, "pkg")
 	if err := os.MkdirAll(sub, 0o755); err != nil {
@@ -741,7 +741,7 @@ func TestSessionPersistsAndRestores(t *testing.T) {
 func TestSessionRestoresViewportFraming(t *testing.T) {
 	proj := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
-	t.Chdir(proj)
+	chdir(t, proj)
 
 	var b strings.Builder
 	for i := 0; i < 60; i++ {
@@ -1174,7 +1174,7 @@ func TestSearchEverywherePrimesSymbolHook(t *testing.T) {
 // which makes workspaces look busy and eviction prompt).
 func TestDefaultPanesAreNotUserConfigured(t *testing.T) {
 	t.Setenv("IKE_CONFIG_DIR", "") // the project-switch tests' setup
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	m := NewWith(registry.New(), host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m = out.(Model)

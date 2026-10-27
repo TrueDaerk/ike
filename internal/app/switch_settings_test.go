@@ -42,7 +42,7 @@ func TestSwitchAppliesAndDropsProjectOverrides(t *testing.T) {
 		}
 	}
 	writeProjectSettings(t, with, "[editor]\ntab_width = 13\n")
-	t.Chdir(src)
+	chdir(t, src)
 	m := switchModel(t)
 
 	out, _ := m.Update(project.SwitchProjectMsg{Root: with})
@@ -72,7 +72,7 @@ func TestExternalSettingsEditReloadsConfig(t *testing.T) {
 	restore := config.Get()
 	t.Cleanup(func() { config.Set(restore) })
 	root := t.TempDir()
-	t.Chdir(root)
+	chdir(t, root)
 	m := switchModel(t)
 	m.cfgOpts = config.Discover(".")
 

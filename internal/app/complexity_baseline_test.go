@@ -32,7 +32,7 @@ func baselineApp(t *testing.T) (Model, string) {
 		proj = r
 	}
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
-	t.Chdir(proj)
+	chdir(t, proj)
 	writeComplexityFixture(t, proj)
 	cfg, _ := config.Load(config.Options{})
 	cfg.Complexity.CCNWarn = 2
@@ -95,7 +95,7 @@ func TestComplexityBaselineAppliesToProblemsAndPanel(t *testing.T) {
 	}
 	// A baseline written before the model exists applies from the start.
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
-	t.Chdir(proj)
+	chdir(t, proj)
 	writeComplexityFixture(t, proj)
 	path := writeBaselineFile(t, proj, 2, 1)
 	cfg, _ := config.Load(config.Options{})

@@ -1,0 +1,55 @@
+# Go toolchain plus a build cache that actually refreshes (#3054).
+#
+# actions/setup-go's own cache is keyed on go.sum alone and saved only on a
+# miss, so the build cache it restores is the one from the first run after the
+# last dependency change — every later run recompiles everything that has
+# changed since, CGo grammars included, and `go vet` took up to 150 s. This
+# action restores the newest cache saved for the same OS and job
+# (restore-keys prefix match) and the workflow saves a fresh one on every push
+# to main (see the "Save the Go caches" step in test.yml), so a PR compiles
+# only what it changed against main.
+name: Set up Go with a refreshing build cache
+description: Install Go from go.mod and restore the module and build caches saved by the last run on main.
+inputs:
+  name:
+    description: Cache name, one per job kind (vet, bulk, wasm, app, windows) — the jobs compile different sets of packages.
+    required: true
+outputs:
+  cache-key:
+    description: The primary key this run would save under.
+    value: ${{ steps.key.outputs.key }}
+  cache-paths:
+    description: The directories to save, newline separated.
+    value: ${{ steps.paths.outputs.paths }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v5
+      with:
+        go-version-file: go.mod
+        cache: false
+
+    - name: Locate the Go caches
+      id: paths
+      shell: bash
+      run: |
+        {
+          echo "paths<<EOF"
+          go env GOMODCACHE
+          go env GOCACHE
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Compute the cache key
+      id: key
+      shell: bash
+      run: echo "key=go-${{ runner.os }}-${{ runner.arch }}-${{ inputs.name }}-${{ hashFiles('go.sum') }}-${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+    - name: Restore the Go caches
+      uses: actions/cache/restore@v4
+      with:
+        path: ${{ steps.paths.outputs.paths }}
+        key: ${{ steps.key.outputs.key }}
+        restore-keys: |
+          go-${{ runner.os }}-${{ runner.arch }}-${{ inputs.name }}-${{ hashFiles('go.sum') }}-
+          go-${{ runner.os }}-${{ runner.arch }}-${{ inputs.name }}-

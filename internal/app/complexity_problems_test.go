@@ -115,7 +115,7 @@ func TestComplexityProblemsFeedWiring(t *testing.T) {
 		proj = r
 	}
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
-	t.Chdir(proj)
+	chdir(t, proj)
 	writeComplexityFixture(t, proj)
 	// A comment-heavy unit (#2934): 2 code lines, 3 comment lines (60 %),
 	// CCN 1 — only the comment-density threshold can flag it.

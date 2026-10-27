@@ -178,7 +178,7 @@ func runUntilReload(t *testing.T, cmd tea.Cmd) tea.Msg {
 func TestStaleSessionThemeIgnored(t *testing.T) {
 	state := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", state)
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	if err := os.WriteFile(filepath.Join(state, "session.json"), []byte(`{"theme":"nord"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +198,7 @@ func TestToggleWritesGlobalShowHidden(t *testing.T) {
 	proj := t.TempDir()
 	state := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", state)
-	t.Chdir(proj)
+	chdir(t, proj)
 
 	cfg, _ := config.Load(config.Options{})
 	m := NewWith(registry.New(), host.FromConfig(cfg))
@@ -244,7 +244,7 @@ func TestToggleWritesGlobalShowHidden(t *testing.T) {
 
 	// A different project started afterwards follows the preference.
 	other := t.TempDir()
-	t.Chdir(other)
+	chdir(t, other)
 	cfg2, _ := config.Load(config.Discover(other))
 	m2 := NewWith(registry.New(), host.FromConfig(cfg2))
 	if !m2.explorer().ShowingHidden() {
@@ -261,7 +261,7 @@ func TestReloadAppliesShowHiddenLive(t *testing.T) {
 	proj := t.TempDir()
 	state := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", state)
-	t.Chdir(proj)
+	chdir(t, proj)
 
 	cfg, _ := config.Load(config.Options{})
 	m := NewWith(registry.New(), host.FromConfig(cfg))
@@ -293,7 +293,7 @@ func TestToggleWriteFailureKeepsSessionToggle(t *testing.T) {
 	proj := t.TempDir()
 	state := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", state)
-	t.Chdir(proj)
+	chdir(t, proj)
 
 	cfg, _ := config.Load(config.Options{})
 	m := NewWith(registry.New(), host.FromConfig(cfg))
@@ -340,7 +340,7 @@ func TestToggleWriteFailureKeepsSessionToggle(t *testing.T) {
 func TestReloadAppliesShowHiddenToParkedWorkspaces(t *testing.T) {
 	state := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", state)
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 
 	cfg, _ := config.Load(config.Options{})
 	m := NewWith(registry.New(), host.FromConfig(cfg))

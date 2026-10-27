@@ -26,7 +26,7 @@ func twoRoots(t *testing.T) (a, b string) {
 			t.Fatal(err)
 		}
 	}
-	t.Chdir(a)
+	chdir(t, a)
 	return a, b
 }
 

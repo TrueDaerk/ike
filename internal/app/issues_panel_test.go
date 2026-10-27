@@ -86,7 +86,7 @@ func TestIssuesStartWorkRequestRunsFlow(t *testing.T) {
 	// Run from a non-repo directory: the command must resolve to a
 	// StartWorkDoneMsg carrying git's error — never touch the real checkout,
 	// never panic or hang.
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	_, cmd := m.Update(ghissues.StartWorkRequestMsg{Number: 7})
 	if cmd == nil {
 		t.Fatal("the start-work request must dispatch the forge command")

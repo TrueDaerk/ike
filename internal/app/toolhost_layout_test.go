@@ -15,7 +15,7 @@ import (
 
 func TestToolsKindRoundTripsThroughLayout(t *testing.T) {
 	conf, dir := t.TempDir(), t.TempDir()
-	t.Chdir(dir)
+	chdir(t, dir)
 	toolLayout(t, conf, paneIdentity{Kind: "tools", Tools: []string{"alpha", "beta"}})
 
 	m := fixedDirApp(t, conf)
@@ -43,7 +43,7 @@ func TestToolsKindRoundTripsThroughLayout(t *testing.T) {
 
 func TestLegacyEditorToolsLayoutLoadsAndMigrates(t *testing.T) {
 	conf, dir := t.TempDir(), t.TempDir()
-	t.Chdir(dir)
+	chdir(t, dir)
 	// A pre-#1989 file: the tool-tab host saved as a plain editor identity.
 	toolLayout(t, conf, paneIdentity{Kind: "editor", Tools: []string{"alpha", "beta"}})
 

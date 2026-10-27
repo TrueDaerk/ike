@@ -45,7 +45,7 @@ func twoCleanProjects(t *testing.T) (m Model, a, b string) {
 			t.Fatal(err)
 		}
 	}
-	t.Chdir(a)
+	chdir(t, a)
 	m = switchModel(t)
 	out, _ := m.Update(project.SwitchProjectMsg{Root: b})
 	m = out.(Model)
@@ -74,7 +74,7 @@ func netDirtyFixture(t *testing.T) (m Model, aRoot, bRoot, dirtyPath string) {
 	if err := os.WriteFile(dirtyPath, []byte("one\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(a)
+	chdir(t, a)
 	m = dismissOnboarding(switchModel(t))
 	m = openDirty(t, m, dirtyPath)
 	if ed := m.activeEditor(); ed == nil || !ed.Dirty() {
@@ -235,7 +235,7 @@ func TestNetCloseLastProjectNeverQuits(t *testing.T) {
 	if err := os.WriteFile(file, []byte("one\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(dir)
+	chdir(t, dir)
 	m := dismissOnboarding(switchModel(t))
 	m = openDirty(t, m, file)
 	if ed := m.activeEditor(); ed == nil || !ed.Dirty() {
@@ -277,7 +277,7 @@ func TestNetCloseLastProjectNeverQuits(t *testing.T) {
 // last, idle project reopens it fresh rather than quitting the IDE.
 func TestNetCloseIdleLastProjectNeverQuits(t *testing.T) {
 	dir := t.TempDir()
-	t.Chdir(dir)
+	chdir(t, dir)
 	m := dismissOnboarding(switchModel(t))
 	before := m.ws.Active()
 	m, r := netClose(t, m, netlink.CloseRequest{})

@@ -14,6 +14,11 @@ func startNarrowSh(t *testing.T, c *collector) *Session {
 		t.Fatal(err)
 	}
 	t.Cleanup(s.Close)
+	// Type nothing before the shell is at its prompt: keys sent earlier are
+	// echoed by the kernel at column 0 and the prompt then lands on the same
+	// row, which joins the echo, the prompt and the first output row into one
+	// logical line — the line-wise drag tests then select all of it (#3006).
+	waitPrompt(t, s)
 	return s
 }
 

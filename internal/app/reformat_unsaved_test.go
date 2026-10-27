@@ -28,7 +28,7 @@ func unsavedReformatApp(t *testing.T, langID, content string) (Model, string, ch
 	ensureLang(lang.Language{ID: "markdown", Extensions: []string{"md", "markdown"}})
 	m := typedBuffer(t, langID, content)
 	root := t.TempDir()
-	t.Chdir(root)
+	chdir(t, root)
 	root, _ = os.Getwd() // symlink-resolved, as reformat sees it
 	msgs := make(chan tea.Msg, 16)
 	m.host.SetSender(func(msg tea.Msg) { msgs <- msg })
@@ -198,7 +198,7 @@ func TestPrettierOfferForUnsavedBuffer(t *testing.T) {
 		t.Fatalf("the buffer must be treated as prettylang, got %q", got)
 	}
 	m.host.SetSender(func(msg tea.Msg) { f.msgs <- msg })
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	f.m = m
 
 	_ = f.update(format.FileRequestMsg{})

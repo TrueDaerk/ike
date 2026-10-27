@@ -220,7 +220,7 @@ func TestAllFindCrossProjectOpenKeepsResults(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Chdir(cur)
+	chdir(t, cur)
 	m := switchModel(t)
 	m.allResults.SetSize(m.width, m.height)
 	m.allResults.Begin("needle", []allfind.Project{

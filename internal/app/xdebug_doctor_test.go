@@ -149,7 +149,7 @@ func TestDoctorListenToggleMarksStopped(t *testing.T) {
 	c.Debug.PHP.Port = port
 	config.Set(c)
 
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	m := sized(t, 100, 40)
 	out, _ := m.Update(DebugListenMsg{})
 	m = out.(Model)
