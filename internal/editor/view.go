@@ -986,35 +986,16 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	// Caret column stripe (#1659): the rune range this line contributes to the
 	// table column the caret sits in, tinted below every other overlay.
 	svStart, svEnd, hasSVCol := m.svColumnRange(line)
-	svTint := color.Color(nil)
-	if hasSVCol {
-		svTint = m.svColumnTint()
-	}
+	svTint := m.svTintFor(hasSVCol)
 	selStart, selEnd, hasSel := m.selectionOnLine(line, len(runes))
 	isCursorLine := line == m.cursor.Line && m.focused
-	// Merge-conflict tint (#1149): the line's role in a conflict block, and
-	// the section background precomputed once per span. The role rides the
-	// line cache safely — blocks change only with the document version, whose
-	// every bump travels through Update and so through renderEpoch.
-	confRole := m.conflictRoleOf(line)
-	var confBG color.Color
-	switch confRole {
-	case conflictOurs:
-		confBG = theme.Mix(m.theme().VCSAdded, m.theme().Surface, conflictTintFrac)
-	case conflictTheirs:
-		confBG = theme.Mix(m.theme().VCSModified, m.theme().Surface, conflictTintFrac)
-	}
 	// Secondary carets (#145) render dimmer than the primary cell.
 	caretStyle := cursorStyle.Faint(true)
 
 	// Search-match highlighting (#255): all matches of the active query get a
 	// background; the span the cursor sits on (the current match) is also
 	// underlined so it stands apart from the rest.
-	var matchSpans []search.Span
-	if q, ok := m.searchHLQuery(); ok {
-		// Only the rendered window of a very long line is scanned (#2734).
-		matchSpans = q.LineMatchesIn(m.buf, line, dlo, dhi)
-	}
+	matchSpans := m.lineSearchSpans(line, dlo, dhi)
 	matchStyle := lipgloss.NewStyle().Background(m.theme().SelectionMuted)
 	// The current match takes an accent-tinted background on top of the
 	// underline (#2145) so it stays findable among the other highlights.
@@ -1039,21 +1020,14 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	// search match, and its label characters draw over the buffer text above
 	// every other decoration — a label must stay readable to be typable.
 	leapActive := m.leap != nil && len(m.leap.query) > 0
-	var leapLabelStyle, leapMatchStyle lipgloss.Style
-	if leapActive {
-		leapLabelStyle = lipgloss.NewStyle().Foreground(m.theme().Surface).Background(m.theme().Accent).Bold(true)
-		leapMatchStyle = lipgloss.NewStyle().Background(m.theme().SelectionMuted)
-	}
+	leapLabelStyle, leapMatchStyle := m.leapStyles(leapActive)
 
 	// Inlay hints (#171): virtual text injected before the cell it anchors at,
 	// dimmed and italic so it never reads as buffer content. Hints scrolled off
 	// the left edge are skipped up front. Code lenses (#1912) ride the same
 	// machinery as one synthetic trailing hint per line, emitted by the
 	// end-of-line flush after the last buffer cell.
-	hints := m.lineInlayHints(line)
-	if lens, ok := m.lineLensHint(line); ok {
-		hints = append(append([]ilsp.InlayHint(nil), hints...), lens)
-	}
+	hints := m.lineHintsWithLens(line)
 	hi := firstHintFrom(hints, left)
 	hintStyle := lipgloss.NewStyle().Foreground(m.theme().InlayHint).Italic(true)
 
@@ -1078,10 +1052,7 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	// zero-width rune reaching the terminal raw outside a grapheme cluster
 	// would desync the column-to-cell mapping like a raw control byte (#1469).
 	invisStyle := lipgloss.NewStyle().Foreground(m.theme().Warning)
-	var sgrSpans []sgrSpan
-	if hasCtrlRune(runes) {
-		sgrSpans = parseSGRSpans(runes)
-	}
+	sgrSpans := sgrSpansFor(runes)
 	rulerBG := m.theme().Ruler
 	// Cell layout (#2526, cells.go): the display width of every column —
 	// wide glyphs take two cells, the columns a grapheme cluster absorbs take
@@ -1105,6 +1076,10 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 		cursor: cursorStyle, caret: caretStyle, leapLabel: leapLabelStyle,
 		leapMatch: leapMatchStyle, sel: selStyle, curMatch: curMatchStyle,
 		match: matchStyle, filter: filterStyle,
+	}
+	baseCtx := baseCellCtx{
+		sgrSpans: sgrSpans, ctrl: ctrlStyle, hasSVCol: hasSVCol, svStart: svStart, svEnd: svEnd,
+		svTint: svTint, rulerBG: rulerBG,
 	}
 
 	var b strings.Builder
@@ -1218,41 +1193,8 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 		}, &overlays); ok {
 			b.WriteString(s)
 		} else {
-			st, styled := m.styleAt(line, col)
-			if overlay != nil {
-				// Whitespace glyphs / indent guides (#64) replace the syntax
-				// colour; cursor/selection/search already won above.
-				st, styled = *overlay, true
-			}
-			st, styled = applySGRSpan(sgrSpans, col, st, styled, overlay != nil, ctrlStyle)
-			if hasSVCol && col >= svStart && col < svEnd {
-				// Caret column stripe (#1659): the lowest background layer —
-				// ruler, conflict and occurrence tints all paint over it;
-				// cursor/selection/search already won above.
-				st = st.Background(svTint)
-				styled = true
-			}
-			if m.onRuler(abs) {
-				// Ruler tint (#64): a background stripe under everything the
-				// higher-priority overlays didn't claim.
-				st = st.Background(rulerBG)
-				styled = true
-			}
-			switch confRole {
-			// Conflict styling (#1149): section backgrounds slot under the
-			// syntax colour like occurrences; marker lines render dim and
-			// bold, the diff3 base section dim. Cursor/selection/search won
-			// above, diagnostics still compose on top.
-			case conflictOurs, conflictTheirs:
-				st = st.Background(confBG)
-				styled = true
-			case conflictBase:
-				st = st.Faint(true)
-				styled = true
-			case conflictMarker:
-				st = st.Faint(true).Bold(true)
-				styled = true
-			}
+			st, styled := m.baseCellStyle(line, col, abs, overlay, &baseCtx)
+			st, styled = m.conflictCellStyle(line, st, styled)
 			st, styled = m.markCellStyle(line, col, st, styled)
 			for _, id := range ids {
 				// Identifier colors (#1626): the hash-keyed rainbow color
@@ -1276,11 +1218,7 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 				}
 			}
 			st, styled = m.finishCellStyle(line, col, st, styled)
-			if styled {
-				b.WriteString(st.Render(cell))
-			} else {
-				b.WriteString(cell)
-			}
+			b.WriteString(renderStyledCell(st, styled, cell))
 		}
 		if inLink {
 			b.WriteString(ansi.ResetHyperlink())
@@ -1298,6 +1236,117 @@ func (m Model) renderSpanUncached(line, from, to, width int, cursorStyle, selSty
 	// stand-ins, sv alignment, double-width runes — is counted once.
 	over := disp >= width && (col < len(runes) || hi < len(hints))
 	return b.String(), over
+}
+
+// leapStyles returns the label and match styles of the label-jump overlay
+// (#787); both stay zero while no jump is active.
+func (m Model) leapStyles(active bool) (label, match lipgloss.Style) {
+	if !active {
+		return label, match
+	}
+	label = lipgloss.NewStyle().Foreground(m.theme().Surface).Background(m.theme().Accent).Bold(true)
+	match = lipgloss.NewStyle().Background(m.theme().SelectionMuted)
+	return label, match
+}
+
+// lineHintsWithLens returns the line's inlay hints plus its code lens (#1912)
+// as one synthetic trailing hint. The hint slice is copied before appending so
+// the cached one is never mutated.
+func (m Model) lineHintsWithLens(line int) []ilsp.InlayHint {
+	hints := m.lineInlayHints(line)
+	if lens, ok := m.lineLensHint(line); ok {
+		hints = append(append([]ilsp.InlayHint(nil), hints...), lens)
+	}
+	return hints
+}
+
+// lineSearchSpans returns the active query's matches on the line. Only the
+// rendered window [dlo, dhi) of a very long line is scanned (#2734).
+func (m Model) lineSearchSpans(line, dlo, dhi int) []search.Span {
+	q, ok := m.searchHLQuery()
+	if !ok {
+		return nil
+	}
+	return q.LineMatchesIn(m.buf, line, dlo, dhi)
+}
+
+// sgrSpansFor parses the SGR sequences of a line holding control runes (#1469).
+func sgrSpansFor(runes []rune) []sgrSpan {
+	if !hasCtrlRune(runes) {
+		return nil
+	}
+	return parseSGRSpans(runes)
+}
+
+// svTintFor returns the caret column stripe tint (#1659), nil without a column.
+func (m Model) svTintFor(has bool) color.Color {
+	if !has {
+		return nil
+	}
+	return m.svColumnTint()
+}
+
+// conflictCellStyle applies the merge-conflict styling (#1149): section
+// backgrounds slot under the syntax colour like occurrences; marker lines
+// render dim and bold, the diff3 base section dim. The role rides the line
+// cache safely — blocks change only with the document version.
+func (m Model) conflictCellStyle(line int, st lipgloss.Style, styled bool) (lipgloss.Style, bool) {
+	switch m.conflictRoleOf(line) {
+	case conflictOurs:
+		return st.Background(theme.Mix(m.theme().VCSAdded, m.theme().Surface, conflictTintFrac)), true
+	case conflictTheirs:
+		return st.Background(theme.Mix(m.theme().VCSModified, m.theme().Surface, conflictTintFrac)), true
+	case conflictBase:
+		return st.Faint(true), true
+	case conflictMarker:
+		return st.Faint(true).Bold(true), true
+	}
+	return st, styled
+}
+
+// baseCellCtx bundles the per-span inputs baseCellStyle reads for every cell.
+type baseCellCtx struct {
+	sgrSpans []sgrSpan
+	ctrl     lipgloss.Style
+	hasSVCol bool
+	svStart  int
+	svEnd    int
+	svTint   color.Color
+	rulerBG  color.Color
+}
+
+// baseCellStyle resolves the syntax, whitespace-glyph, SGR, caret-column and
+// ruler layers of a cell that no higher-priority overlay claimed.
+func (m Model) baseCellStyle(line, col, abs int, overlay *lipgloss.Style, bc *baseCellCtx) (lipgloss.Style, bool) {
+	st, styled := m.styleAt(line, col)
+	if overlay != nil {
+		// Whitespace glyphs / indent guides (#64) replace the syntax
+		// colour; cursor/selection/search already won above.
+		st, styled = *overlay, true
+	}
+	st, styled = applySGRSpan(bc.sgrSpans, col, st, styled, overlay != nil, bc.ctrl)
+	if bc.hasSVCol && col >= bc.svStart && col < bc.svEnd {
+		// Caret column stripe (#1659): the lowest background layer —
+		// ruler, conflict and occurrence tints all paint over it;
+		// cursor/selection/search already won above.
+		st = st.Background(bc.svTint)
+		styled = true
+	}
+	if m.onRuler(abs) {
+		// Ruler tint (#64): a background stripe under everything the
+		// higher-priority overlays didn't claim.
+		st = st.Background(bc.rulerBG)
+		styled = true
+	}
+	return st, styled
+}
+
+// renderStyledCell renders cell through st when any layer styled it.
+func renderStyledCell(st lipgloss.Style, styled bool, cell string) string {
+	if styled {
+		return st.Render(cell)
+	}
+	return cell
 }
 
 // leapCellAt reports the label-jump state of one cell (#787): the label rune
