@@ -257,6 +257,120 @@ func ValidateBranchIssuePattern(pattern string) string {
 	return ""
 }
 
+// validatePaneSlots checks layout.pane_slots (#2592): pane numbers pinned to
+// tool windows and, since #2601, to [[tools.custom]] tools by name. A broken
+// entry is dropped rather than failing the load — the rest of the table still
+// describes usable chords — but every drop is reported, because a silently
+// ignored assignment reads as a broken chord. A renamed or deleted custom
+// tool therefore surfaces as the ordinary "unknown tool" drop.
+func validatePaneSlots(c *Config) []Diagnostic {
+	if len(c.Layout.PaneSlots) == 0 {
+		return nil
+	}
+	var diags []Diagnostic
+	custom := c.Tools.CustomNames()
+	slots, probs := ParsePaneSlots(c.Layout.PaneSlots, custom...)
+	for _, msg := range probs {
+		diags = append(diags, Diagnostic{Field: "layout.pane_slots", Message: msg + ", dropping it"})
+	}
+	kept := make([]string, 0, len(slots))
+	for _, s := range slots {
+		// A custom tool named like a built-in window loses the id: the
+		// entry reserves the window, and the tool has no way to claim a
+		// number at all. Silence there would read as a chord that opens
+		// the wrong thing.
+		if slices.Contains(custom, s.Tool) && slices.Contains(PaneSlotTools(), s.Tool) {
+			diags = append(diags, Diagnostic{Field: "layout.pane_slots", Message: fmt.Sprintf(
+				"tool %q is a built-in window; pane %d reserves the window, not the [[tools.custom]] entry of the same name — rename the tool to give it a pane number",
+				s.Tool, s.Number)})
+		}
+		kept = append(kept, fmt.Sprintf("%s=%d", s.Tool, s.Number))
+	}
+	c.Layout.PaneSlots = kept
+	return diags
+}
+
+// validateScratch migrates the pre-#1963 scratch pane keys and checks the
+// Scratches section settings.
+//
+// The #1932 scratch tool pane became the explorer's Scratches section
+// (#1963). Old configs still carry [scratch] panel / panel_height; both
+// migrate silently, like new_terminal: panel_height seeds section_height
+// (minus the pane's ~3 chrome rows — the old default 8 lands on the new
+// default 5) unless section_height was set explicitly, and panel is
+// dropped — the section replaces the pane and shows by default.
+func validateScratch(c *Config) []Diagnostic {
+	var diags []Diagnostic
+	if c.Scratch.PanelHeight != 0 {
+		if c.Scratch.SectionHeight == defaults().Scratch.SectionHeight {
+			h := c.Scratch.PanelHeight - 3
+			if h < 2 {
+				h = 2
+			}
+			if h > 30 {
+				h = 30
+			}
+			c.Scratch.SectionHeight = h
+		}
+		c.Scratch.PanelHeight = 0
+	}
+	c.Scratch.Panel = false
+	if c.Scratch.SectionHeight < 1 {
+		diags = append(diags, Diagnostic{Field: "scratch.section_height", Message: fmt.Sprintf("height %d out of range, using 5", c.Scratch.SectionHeight)})
+		c.Scratch.SectionHeight = 5
+	}
+	if c.Scratch.SectionHeight > 30 {
+		diags = append(diags, Diagnostic{Field: "scratch.section_height", Message: fmt.Sprintf("height %d out of range, using 30", c.Scratch.SectionHeight)})
+		c.Scratch.SectionHeight = 30
+	}
+	switch c.Scratch.Sort {
+	case "name", "modified":
+	default:
+		diags = append(diags, Diagnostic{Field: "scratch.sort", Message: fmt.Sprintf("unknown sort %q, using \"name\"", c.Scratch.Sort)})
+		c.Scratch.Sort = "name"
+	}
+	return diags
+}
+
+// validateCustomTools checks the per-entry [[tools.custom]] keys.
+func validateCustomTools(c *Config) []Diagnostic {
+	var diags []Diagnostic
+	for i := range c.Tools.Custom {
+		t := &c.Tools.Custom[i]
+		// placement (#1889) names the tool's home dock edge; anything else
+		// (including pre-#1588 legacy values) degrades to the adaptive
+		// auxZone heuristic with a warning.
+		switch t.Placement {
+		case "", "left", "right", "top", "bottom":
+		default:
+			diags = append(diags, Diagnostic{Field: "tools.custom.placement", Message: fmt.Sprintf("unknown placement %q for tool %q, using the adaptive default", t.Placement, t.Name)})
+			t.Placement = ""
+		}
+	}
+	for i := range c.Tools.Custom {
+		t := &c.Tools.Custom[i]
+		// A global tool (#1890) is one shared instance for the whole
+		// process — concurrent instances (multiple, #835) contradict that;
+		// global wins.
+		if t.Global && t.Multiple {
+			diags = append(diags, Diagnostic{Field: "tools.custom.multiple", Message: fmt.Sprintf("tool %q: global and multiple are mutually exclusive, ignoring multiple", t.Name)})
+			t.Multiple = false
+		}
+	}
+	for i := range c.Tools.Custom {
+		t := &c.Tools.Custom[i]
+		// guard = false (#2704) exempts a tool from the close/quit guard — a
+		// global tool (#1890) is already exempt because closing a project
+		// detaches it instead of killing it, so the key has nothing left to
+		// say there.
+		if t.Global && !t.GuardsClose() {
+			diags = append(diags, Diagnostic{Field: "tools.custom.guard", Message: fmt.Sprintf("tool %q: guard has no effect for a global tool, ignoring it", t.Name)})
+			t.Guard = nil
+		}
+	}
+	return diags
+}
+
 // validate clamps c in place against the baseline rules and returns one
 // diagnostic per correction. Extension validators run after the built-in checks.
 func validate(c *Config) []Diagnostic {
@@ -636,67 +750,8 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "layout.pane_numbers", Message: fmt.Sprintf("unknown mode %q, using \"on\"", c.Layout.PaneNumbers)})
 		c.Layout.PaneNumbers = "on"
 	}
-	// layout.pane_slots (#2592) pins pane numbers to tool windows and, since
-	// #2601, to [[tools.custom]] tools by name. A broken entry is dropped
-	// rather than failing the load — the rest of the table still describes
-	// usable chords — but every drop is reported, because a silently ignored
-	// assignment reads as a broken chord. A renamed or deleted custom tool
-	// therefore surfaces as the ordinary "unknown tool" drop.
-	if len(c.Layout.PaneSlots) > 0 {
-		custom := c.Tools.CustomNames()
-		slots, probs := ParsePaneSlots(c.Layout.PaneSlots, custom...)
-		for _, msg := range probs {
-			diags = append(diags, Diagnostic{Field: "layout.pane_slots", Message: msg + ", dropping it"})
-		}
-		kept := make([]string, 0, len(slots))
-		for _, s := range slots {
-			// A custom tool named like a built-in window loses the id: the
-			// entry reserves the window, and the tool has no way to claim a
-			// number at all. Silence there would read as a chord that opens
-			// the wrong thing.
-			if slices.Contains(custom, s.Tool) && slices.Contains(PaneSlotTools(), s.Tool) {
-				diags = append(diags, Diagnostic{Field: "layout.pane_slots", Message: fmt.Sprintf(
-					"tool %q is a built-in window; pane %d reserves the window, not the [[tools.custom]] entry of the same name — rename the tool to give it a pane number",
-					s.Tool, s.Number)})
-			}
-			kept = append(kept, fmt.Sprintf("%s=%d", s.Tool, s.Number))
-		}
-		c.Layout.PaneSlots = kept
-	}
-	// The #1932 scratch tool pane became the explorer's Scratches section
-	// (#1963). Old configs still carry [scratch] panel / panel_height; both
-	// migrate silently, like new_terminal: panel_height seeds section_height
-	// (minus the pane's ~3 chrome rows — the old default 8 lands on the new
-	// default 5) unless section_height was set explicitly, and panel is
-	// dropped — the section replaces the pane and shows by default.
-	if c.Scratch.PanelHeight != 0 {
-		if c.Scratch.SectionHeight == defaults().Scratch.SectionHeight {
-			h := c.Scratch.PanelHeight - 3
-			if h < 2 {
-				h = 2
-			}
-			if h > 30 {
-				h = 30
-			}
-			c.Scratch.SectionHeight = h
-		}
-		c.Scratch.PanelHeight = 0
-	}
-	c.Scratch.Panel = false
-	if c.Scratch.SectionHeight < 1 {
-		diags = append(diags, Diagnostic{Field: "scratch.section_height", Message: fmt.Sprintf("height %d out of range, using 5", c.Scratch.SectionHeight)})
-		c.Scratch.SectionHeight = 5
-	}
-	if c.Scratch.SectionHeight > 30 {
-		diags = append(diags, Diagnostic{Field: "scratch.section_height", Message: fmt.Sprintf("height %d out of range, using 30", c.Scratch.SectionHeight)})
-		c.Scratch.SectionHeight = 30
-	}
-	switch c.Scratch.Sort {
-	case "name", "modified":
-	default:
-		diags = append(diags, Diagnostic{Field: "scratch.sort", Message: fmt.Sprintf("unknown sort %q, using \"name\"", c.Scratch.Sort)})
-		c.Scratch.Sort = "name"
-	}
+	diags = append(diags, validatePaneSlots(c)...)
+	diags = append(diags, validateScratch(c)...)
 	// Response-diff header filter (#2247): the entries are header names, so
 	// they normalize to lower case and lose their duplicates here — the
 	// matcher then only compares, and a config written in any casing behaves
@@ -917,34 +972,7 @@ func validate(c *Config) []Diagnostic {
 		diags = append(diags, Diagnostic{Field: "remote.max_fetch_mb", Message: fmt.Sprintf("cap %d out of range, using 4096", c.Remote.MaxFetchMB)})
 		c.Remote.MaxFetchMB = 4096
 	}
-	// [[tools.custom]] placement (#1889) names the tool's home dock edge;
-	// anything else (including pre-#1588 legacy values) degrades to the
-	// adaptive auxZone heuristic with a warning.
-	for i := range c.Tools.Custom {
-		switch c.Tools.Custom[i].Placement {
-		case "", "left", "right", "top", "bottom":
-		default:
-			diags = append(diags, Diagnostic{Field: "tools.custom.placement", Message: fmt.Sprintf("unknown placement %q for tool %q, using the adaptive default", c.Tools.Custom[i].Placement, c.Tools.Custom[i].Name)})
-			c.Tools.Custom[i].Placement = ""
-		}
-	}
-	// A global tool (#1890) is one shared instance for the whole process —
-	// concurrent instances (multiple, #835) contradict that; global wins.
-	for i := range c.Tools.Custom {
-		if c.Tools.Custom[i].Global && c.Tools.Custom[i].Multiple {
-			diags = append(diags, Diagnostic{Field: "tools.custom.multiple", Message: fmt.Sprintf("tool %q: global and multiple are mutually exclusive, ignoring multiple", c.Tools.Custom[i].Name)})
-			c.Tools.Custom[i].Multiple = false
-		}
-	}
-	// guard = false (#2704) exempts a tool from the close/quit guard — a global
-	// tool (#1890) is already exempt because closing a project detaches it
-	// instead of killing it, so the key has nothing left to say there.
-	for i := range c.Tools.Custom {
-		if c.Tools.Custom[i].Global && !c.Tools.Custom[i].GuardsClose() {
-			diags = append(diags, Diagnostic{Field: "tools.custom.guard", Message: fmt.Sprintf("tool %q: guard has no effect for a global tool, ignoring it", c.Tools.Custom[i].Name)})
-			c.Tools.Custom[i].Guard = nil
-		}
-	}
+	diags = append(diags, validateCustomTools(c)...)
 
 	// [[elasticsearch.endpoints]] entries (#1927) need a unique non-empty name
 	// and a parseable http(s) URL with a host — an entry the console could
