@@ -68,7 +68,7 @@ func TestScratchLangRowsOfferDialects(t *testing.T) {
 // alias the language does not actually register would create a row whose
 // extension nothing resolves, so it is dropped.
 func TestScratchLangRowsIgnoreUnregisteredAlias(t *testing.T) {
-	lang.Register(lang.Language{ID: "aliastest", Extensions: []string{"alt"}})
+	registerTestLang(t, lang.Language{ID: "aliastest", Extensions: []string{"alt"}})
 	scratchAliasExts["aliastest"] = []scratchLangRow{{Title: "Aliastest Dialect", Ext: "nope"}}
 	t.Cleanup(func() { delete(scratchAliasExts, "aliastest") })
 

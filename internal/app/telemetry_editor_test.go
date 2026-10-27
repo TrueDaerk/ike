@@ -68,7 +68,7 @@ func TestTelemetryEditorOwnedChordNotUnbound(t *testing.T) {
 // (The unbound events that motivated #2313 were recorded by a pre-#2303 build,
 // which logged editor-owned chords as unbound even when they worked.)
 func TestWordChordsLanguageScopedEditor(t *testing.T) {
-	bufferLangLangs() // registers the http language, so a.http classifies
+	bufferLangLangs(t) // registers the http language, so a.http classifies
 	chords := []struct {
 		name string
 		msg  tea.KeyPressMsg

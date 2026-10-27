@@ -43,7 +43,7 @@ func lastRunCfg() *run.Config {
 func testRunModel(t *testing.T) (Model, string) {
 	t.Helper()
 	if testStoreRoot != "" {
-		os.Setenv("IKE_CONFIG_DIR", filepath.Join(testStoreRoot, "runtests-"+t.Name()))
+		os.Setenv("IKE_CONFIG_DIR", testStoreDir(t, "runtests"))
 	}
 	path := filepath.Join(t.TempDir(), "x_test.atst")
 	content := "func TestOne(t T) {\n}\nhelper\nfunc TestTwo(t T) {\n}\n"
@@ -128,7 +128,7 @@ func TestRunTestRerun(t *testing.T) {
 // notifies instead of running.
 func TestRunTestAtCursorNoTest(t *testing.T) {
 	if testStoreRoot != "" {
-		os.Setenv("IKE_CONFIG_DIR", filepath.Join(testStoreRoot, "runtests-none"))
+		os.Setenv("IKE_CONFIG_DIR", testStoreDir(t, "runtests-none"))
 	}
 	path := filepath.Join(t.TempDir(), "y_test.atst")
 	if err := os.WriteFile(path, []byte("helper\nfunc TestLate(t T) {\n}\n"), 0o644); err != nil {

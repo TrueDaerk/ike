@@ -19,12 +19,11 @@ func onboardLang(t *testing.T, id string) {
 	t.Helper()
 	onboardingAutoOpen = true
 	t.Cleanup(func() { onboardingAutoOpen = false })
-	lang.Register(lang.Language{ID: id, Extensions: []string{id}, Server: &lang.ServerSpec{
+	registerTestLang(t, lang.Language{ID: id, Extensions: []string{id}, Server: &lang.ServerSpec{
 		Language: id,
 		Command:  "definitely-missing-" + id + "-server",
 		Install:  []string{"true"},
 	}})
-	t.Cleanup(func() { lang.Register(lang.Language{ID: id}) })
 }
 
 // onboardSeed builds a sized app on a fresh (empty) config dir — a first start.

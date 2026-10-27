@@ -60,7 +60,8 @@ func registerPHPListenStub() {
 	}
 	l.Server = nil
 	l.Toolchain = phpListenStub{}
-	lang.Register(l)
+	lang.Register( // process-wide fixture: applied in init(), re-applied by xdebug_doctor_test
+		l)
 }
 
 // TestDebugListenToggle guards #823: debug.listen starts the persistent

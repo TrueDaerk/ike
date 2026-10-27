@@ -36,7 +36,7 @@ const vpathExt = ".ike1853"
 // particular grammar.
 func registerVPathLang(t *testing.T) {
 	t.Helper()
-	lang.Register(lang.Language{
+	registerTestLang(t, lang.Language{
 		ID:         "vpath-test",
 		Extensions: []string{"ike1853"},
 		Spans: func(lines []string) []lang.Span {

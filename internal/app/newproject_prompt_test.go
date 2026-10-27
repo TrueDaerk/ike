@@ -34,7 +34,7 @@ func (s *wizardScaffolder) ScaffoldProject(root, option string) error {
 // languages may precede it in the sorted list.
 func openNewProject(t *testing.T, m Model, sc *wizardScaffolder) Model {
 	t.Helper()
-	lang.Register(lang.Language{ID: "wizlang", Toolchain: sc})
+	registerTestLang(t, lang.Language{ID: "wizlang", Toolchain: sc})
 	tm, cmd := m.Update(project.OpenNewProjectMsg{})
 	m = drainCmd(tm.(Model), cmd)
 	if !m.newProjectPromptOpen() {
@@ -53,7 +53,7 @@ func openNewProject(t *testing.T, m Model, sc *wizardScaffolder) Model {
 // TestNewProjectCommandOpensWizard drives the real command path (palette /
 // menu → registry → host dispatch).
 func TestNewProjectCommandOpensWizard(t *testing.T) {
-	lang.Register(lang.Language{ID: "wizlang", Toolchain: &wizardScaffolder{
+	registerTestLang(t, lang.Language{ID: "wizlang", Toolchain: &wizardScaffolder{
 		opts: []lang.ProjectOption{{ID: "basic", Label: "Basic", Available: true}},
 	}})
 	m := newSized()

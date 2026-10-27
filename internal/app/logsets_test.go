@@ -59,7 +59,7 @@ func writeGzLog(t *testing.T, dir, name, body string) string {
 // plugin does in a real build (blank-imported in cmd/ike).
 func registerLogLanguage(t *testing.T) {
 	t.Helper()
-	lang.Register(lang.Language{ID: "log", Extensions: []string{"log"}})
+	registerTestLang(t, lang.Language{ID: "log", Extensions: []string{"log"}})
 }
 
 // mergedEditor opens the rotation set behind path through the command and

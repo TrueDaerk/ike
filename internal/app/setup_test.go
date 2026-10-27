@@ -35,8 +35,8 @@ func (s toolchainStub) Interpreter(string) (string, bool)    { return s.path, s.
 
 func toolchainLang(t *testing.T, id, path string) {
 	t.Helper()
-	lang.Register(lang.Language{ID: id, Extensions: []string{id}, Toolchain: toolchainStub{path: path}})
-	t.Cleanup(func() { lang.Register(lang.Language{ID: id}) })
+	registerTestLang(t, lang.Language{ID: id, Extensions: []string{id}, Toolchain: toolchainStub{path: path}})
+	t.Cleanup(func() { registerTestLang(t, lang.Language{ID: id}) })
 }
 
 func TestTourFinishOpensThemePicker(t *testing.T) {

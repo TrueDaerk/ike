@@ -494,8 +494,9 @@ func (venvDetector) Interpreter(root string) (string, bool) {
 // the toolchain from every other language: the registry is global, so stubs
 // other tests registered would leak into effectiveMappings. Tests that need
 // a toolchain register their own at their start.
-func registerEnvTestPython() {
-	lang.Register(lang.Language{
+func registerEnvTestPython(t *testing.T) {
+	t.Helper()
+	registerTestLang(t, lang.Language{
 		ID:        "python",
 		Server:    &lang.ServerSpec{Language: "python", Command: "x"},
 		Toolchain: venvDetector{},
@@ -503,7 +504,7 @@ func registerEnvTestPython() {
 	for _, l := range lang.All() {
 		if l.ID != "python" && l.Toolchain != nil {
 			l.Toolchain = nil
-			lang.Register(l)
+			lang.Register(l) // restored by registerTestLang's snapshot above
 		}
 	}
 }
@@ -521,7 +522,7 @@ func TestTerminalEnvFromSettings(t *testing.T) {
 		dir = wd
 	}
 	t.Setenv("IKE_CONFIG_DIR", "")
-	registerEnvTestPython()
+	registerEnvTestPython(t)
 
 	// No explicit setting and no detected project env: untouched, no shims.
 	base, _ := config.Load(config.Options{})
@@ -587,7 +588,7 @@ func TestTerminalEnvDetectedVenv(t *testing.T) {
 		dir = wd
 	}
 	t.Setenv("IKE_CONFIG_DIR", "")
-	registerEnvTestPython()
+	registerEnvTestPython(t)
 
 	venvBin := filepath.Join(dir, ".venv", "bin")
 	if err := os.MkdirAll(venvBin, 0o755); err != nil {
