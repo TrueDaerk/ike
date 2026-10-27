@@ -491,7 +491,7 @@ func cxMeasureText(path, text string) []complexity.Function {
 	if !ok || l.Complexity == nil {
 		return nil
 	}
-	fns, err := complexity.Measure(l.ID, strings.Split(text, "\n"))
+	fns, err := complexity.Measure(l.ID, complexity.SourceLines(path, text))
 	if err != nil {
 		return nil
 	}

@@ -9,6 +9,7 @@ package highlight
 import (
 	"strings"
 
+	"ike/internal/jinja"
 	"ike/internal/lang"
 )
 
@@ -22,8 +23,12 @@ func Lang(path string) string {
 
 // Supported reports whether a path has a language that can produce spans — a
 // Tree-sitter grammar or a Go span producer (#1585) — so the editor only
-// schedules a parse when it will produce spans.
+// schedules a parse when it will produce spans. A Jinja template (#3059)
+// always does: its Jinja layer needs no inner language.
 func Supported(path string) bool {
+	if lang.IsJinjaTemplate(path) {
+		return true
+	}
 	l, ok := lang.ByPath(path)
 	return ok && (l.Grammar != nil || l.Spans != nil || l.Lint != nil || l.Folds != nil)
 }
@@ -56,7 +61,30 @@ func Highlight(path string, lines []string) []Span {
 // whose kinds the language registers as ScopeNodes / FoldNodes, in pre-order.
 // A language without FoldNodes falls back to its ScopeNodes, so every language
 // with sticky scopes is foldable; both nil means the feature is simply inert.
+//
+// A Jinja template (#3059, lang.IsJinjaTemplate) parses its inner language
+// over the masked text — every Jinja block blanked out at the same offsets,
+// so a {% if %} line cannot break the inner parse — and gets the Jinja spans
+// on top, with or without an inner language (motd.j2 is Jinja over plain
+// text).
 func HighlightScoped(path string, lines []string) ([]Span, []Scope, []Fold) {
+	if !lang.IsJinjaTemplate(path) {
+		return highlightInner(path, lines)
+	}
+	tpl := jinja.Scan(lines)
+	spans, scopes, folds := highlightInner(path, tpl.Mask(lines))
+	if js := tpl.Spans(); len(js) > 0 {
+		// Prepended like every Go-produced layer: CaptureAt is
+		// first-covering-wins, so the Jinja tokens win over whatever the
+		// inner grammar made of the placeholder.
+		spans = append(langSpans(js), spans...)
+	}
+	return spans, scopes, folds
+}
+
+// highlightInner is HighlightScoped for the language path names, without the
+// Jinja layer.
+func highlightInner(path string, lines []string) ([]Span, []Scope, []Fold) {
 	l, ok := lang.ByPath(path)
 	if !ok || (l.Grammar == nil && l.Spans == nil && l.Folds == nil) {
 		return nil, nil, nil

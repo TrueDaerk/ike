@@ -399,7 +399,7 @@ func measureText(path, text string) []Function {
 	if !ok || l.Complexity == nil {
 		return nil
 	}
-	fns, err := Measure(l.ID, strings.Split(text, "\n"))
+	fns, err := Measure(l.ID, SourceLines(path, text))
 	if err != nil {
 		return nil
 	}

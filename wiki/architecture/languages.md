@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-10-14T11:00:00Z
+timestamp: 2026-10-27T12:00:00Z
 ---
 
 # Language Registry
@@ -137,6 +137,26 @@ base name (`Dockerfile.j2`) keeps the last word, chained suffixes strip one
 by one, and a name with no inner extension (`motd.j2`) stays plain text. A
 language claiming a template suffix outright still wins, because the direct
 extension lookup runs first.
+
+**Jinja layer (#3059).** The Jinja suffixes (`.j2`, `.jinja`, `.jinja2`, not
+the Go-template ones) also mark the file as a Jinja template:
+`lang.IsJinjaTemplate(path)` holds for them unless a language claims the
+suffix outright, with or without an inner language. For such a file the
+pure-Go tokenizer in `internal/jinja` finds every `{{ … }}`, `{% … %}` and
+`{# … #}` block (whitespace control `{%-`/`-%}`/`{{-`/`-}}`/`+%}` included;
+the body of `{% raw %}…{% endraw %}` stays inner-language text; an
+unterminated tag runs to the end of the file) and **masks** it before the
+inner language parses: statement and comment tags become blanks, expressions
+a run of `x`, each rune replaced by a filler of the same byte length, so byte
+offsets and line/rune-column positions are unchanged and a `{% if %}` line
+inside a YAML mapping no longer breaks the YAML parse. Every consumer of the
+inner parse on a path masks: `highlight.HighlightScoped` (spans, sticky
+scopes, folds, Go span producers, rainbow brackets), the tree walks
+`SelectionRangesAt` / `ExpressionEndingAt` / `SyntaxChainAt`, and complexity
+measuring through `complexity.SourceLines`. The Jinja spans are painted on top
+of the inner spans (see [highlighting](./highlighting.md#jinja-templates-3059)).
+A name with no inner extension (`motd.j2`) resolves to no language, but still
+gets the Jinja layer: `highlight.Supported` is true for every Jinja template.
 
 ### Rotation suffix fallback (#1745)
 

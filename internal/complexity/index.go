@@ -360,7 +360,7 @@ func extractFile(path, _ string, text string, only func(string) bool) map[string
 	if !ok || l.Complexity == nil {
 		return nil
 	}
-	fns, toks, err := MeasureTokens(l.ID, strings.Split(text, "\n"))
+	fns, toks, err := MeasureTokens(l.ID, SourceLines(path, text))
 	if err != nil {
 		return nil
 	}
