@@ -94,17 +94,20 @@ func TestSlowSourceSendsOnItsOwn(t *testing.T) {
 // before the delay.
 func TestIdentifierDelayCollapsesBurst(t *testing.T) {
 	e, msgs := rawEngine()
-	e.Delay = func() time.Duration { return 60 * time.Millisecond }
+	// The delay is generous and the burst is tight: a hosted CI runner can
+	// stall a goroutine for tens of milliseconds, and with a 60 ms delay and
+	// 10 ms pauses the timer fired between two runes of the "burst".
+	e.Delay = func() time.Duration { return 400 * time.Millisecond }
 	e.Register(fakeSource{name: "words", prio: ilsp.PriorityWords})
 	for i, ch := range []string{"a", "b", "c"} {
 		e.Emit(host.EditorEvent{Kind: host.EditorCompletionTrigger, Path: "/f.go", Line: 1, Col: 2 + i, Char: ch})
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(time.Millisecond)
 	}
 	if got := msgs(); len(got) != 0 {
 		t.Fatalf("a burst inside the delay must not dispatch, got %+v", got)
 	}
 	waitFor(t, func() bool { return len(msgs()) >= 1 })
-	time.Sleep(80 * time.Millisecond) // nothing else may trail in
+	time.Sleep(100 * time.Millisecond) // nothing else may trail in
 	got := msgs()
 	if len(got) != 1 {
 		t.Fatalf("messages = %d, want exactly one dispatch for the burst", len(got))

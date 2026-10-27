@@ -281,6 +281,9 @@ func TestHistoryCapturesNewestFirstAndCaps(t *testing.T) {
 // TestMinSeverityFiltersToastsNotHistory guards notifications.min_severity:
 // below-floor notifications are history-only, at/above-floor still toast.
 func TestMinSeverityFiltersToastsNotHistory(t *testing.T) {
+	// A fresh store: NewWith on the previous test's IKE_CONFIG_DIR would load
+	// whatever that test persisted over this config (#3054).
+	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.New(), host.MapConfig{"notifications.min_severity": "warn"})
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m = tm.(Model)
@@ -488,7 +491,7 @@ func TestHistorySurvivesProjectSwitch(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Chdir(src)
+	chdir(t, src)
 	invalidateCwd()
 	// performSwitch invalidates the cwd cache on chdir, but t.Chdir's cleanup
 	// restore does not — drop the cache so later tests read their true cwd.

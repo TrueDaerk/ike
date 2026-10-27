@@ -290,6 +290,22 @@ func TestNotifyCoalescedReplacesQueuedFrame(t *testing.T) {
 	if err := conn.Notify("stall", nil); err != nil {
 		t.Fatal(err)
 	}
+	// Wait until the writer has taken the stall frame out of sendBuf: from
+	// here on it is blocked inside writeFrame and everything enqueued below
+	// stays queued where the test can inspect it. Without this wait, a late
+	// writer wake-up could drain the coalesced frames too and leave sendBuf
+	// empty (observed on hosted CI runners).
+	stallTaken := func() bool {
+		conn.sendMu.Lock()
+		defer conn.sendMu.Unlock()
+		return len(conn.sendBuf) == 0
+	}
+	for deadline := time.Now().Add(2 * time.Second); !stallTaken(); {
+		if time.Now().After(deadline) {
+			t.Fatal("writer never picked up the stall frame")
+		}
+		time.Sleep(time.Millisecond)
+	}
 	for i := 0; i < 100; i++ {
 		if err := conn.NotifyCoalesced("didChange:a", "textDocument/didChange", map[string]any{"n": i}); err != nil {
 			t.Fatalf("NotifyCoalesced %d err = %v", i, err)
@@ -310,9 +326,9 @@ func TestNotifyCoalescedReplacesQueuedFrame(t *testing.T) {
 			time.Sleep(5 * time.Millisecond)
 		}
 	}
-	// At most: the stall frame may still be in sendBuf or already handed to the
-	// writer, so the queue holds 2 or 3 frames — never ~101.
-	if n := waitQueue(func(n int) bool { return n <= 3 }); n > 3 {
+	// The stall frame is with the writer, so the queue holds exactly the two
+	// keys — never ~101.
+	if n := waitQueue(func(n int) bool { return n <= 2 }); n > 2 {
 		t.Fatalf("queue holds %d frames, coalescing must keep it at the key count", n)
 	}
 	conn.sendMu.Lock()
