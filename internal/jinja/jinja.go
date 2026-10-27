@@ -13,6 +13,7 @@
 package jinja
 
 import (
+	"sort"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -224,10 +225,29 @@ func (t *Template) comment(start int) Block {
 // the block. Only braces count: an unclosed "(" while typing must not run the
 // block to the end of the text.
 func (t *Template) tag(start int, kind Kind) Block {
-	src := t.src
-	b := Block{Kind: kind, Start: start, End: len(src)}
-	i := start + openerLen(src, start)
+	b := Block{Kind: kind, Start: start, End: len(t.src)}
+	i := start + openerLen(t.src, start)
 	t.emit(start, i, Delimiter)
+	if end, ok := t.body(i, kind, true); ok {
+		b.End, b.Closed = end, true
+	}
+	return b
+}
+
+// ExpressionTokens tokenizes text as the body of a {{ … }} block without
+// delimiters (#3061): an Ansible `when:` value is a bare Jinja expression.
+// Token offsets are bytes of text.
+func ExpressionTokens(text string) []Token {
+	t := &Template{src: text}
+	t.body(0, Expression, false)
+	return t.Tokens
+}
+
+// body emits the tokens of a block body from i. With closers it stops after
+// the block's closer and returns its end; without, or when the closer never
+// comes, it runs to the end of the text and reports false.
+func (t *Template) body(i int, kind Kind, closers bool) (int, bool) {
+	src := t.src
 	depth := 0
 	first := kind == Statement // the next name is the statement's keyword
 	prev := Class(-1)          // class of the previous significant token
@@ -238,11 +258,10 @@ func (t *Template) tag(start int, kind Kind) Block {
 			i += size
 			continue
 		}
-		if depth == 0 {
+		if closers && depth == 0 {
 			if n := closerAt(src, i, kind); n > 0 {
 				t.emit(i, i+n, Delimiter)
-				b.End, b.Closed = i+n, true
-				return b
+				return i + n, true
 			}
 		}
 		end, class := i+size, Class(-1)
@@ -276,7 +295,7 @@ func (t *Template) tag(start int, kind Kind) Block {
 		}
 		i = end
 	}
-	return b
+	return len(src), false
 }
 
 // classifyName classifies the name ending at end inside a block of kind.
@@ -476,11 +495,32 @@ var (
 // Spans returns the tokens as highlight spans in rune columns, one span per
 // line a token covers.
 func (t *Template) Spans() []lang.Span {
-	if len(t.Tokens) == 0 {
+	return t.spans(t.Tokens)
+}
+
+// BlockSpans returns the spans of the tokens inside block b (#3061): an
+// Ansible YAML file keeps the blocks of its scalar values and drops the ones
+// in its comments.
+func (t *Template) BlockSpans(b Block) []lang.Span {
+	lo := sort.Search(len(t.Tokens), func(i int) bool { return t.Tokens[i].Start >= b.Start })
+	hi := lo
+	for hi < len(t.Tokens) && t.Tokens[hi].Start < b.End {
+		hi++
+	}
+	return t.spans(t.Tokens[lo:hi])
+}
+
+// Position returns the 0-based line and rune column of byte offset off.
+func (t *Template) Position(off int) (int, int) { return t.position(off) }
+
+// spans converts tokens to highlight spans in rune columns, one span per
+// line a token covers.
+func (t *Template) spans(toks []Token) []lang.Span {
+	if len(toks) == 0 {
 		return nil
 	}
-	out := make([]lang.Span, 0, len(t.Tokens))
-	for _, tok := range t.Tokens {
+	out := make([]lang.Span, 0, len(toks))
+	for _, tok := range toks {
 		capture := tok.Class.Capture()
 		line, col := t.position(tok.Start)
 		for off := tok.Start; off < tok.End; {

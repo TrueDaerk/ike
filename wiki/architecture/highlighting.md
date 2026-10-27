@@ -252,7 +252,14 @@ after `is` and called names, `constant.builtin` for `true`/`false`/`none`,
 `punctuation.delimiter`, and `comment` for a whole `{# #}` block. Closers count
 only outside strings and at brace depth 0, so `{{ "}}" }}` and a dict literal
 stay one block. A template without an inner language (`motd.j2`) gets the
-Jinja layer alone; a file without a Jinja suffix is never scanned.
+Jinja layer alone; a file without a Jinja suffix is never scanned here.
+
+Ansible YAML files (#3061) reuse the same tokenizer from the language's Go
+span producer instead: their Jinja sits in valid YAML scalars, so nothing is
+masked, and only the tokens are painted — the blanks between them keep the
+YAML string capture. Bare-expression keys (`when:` and friends) tokenize
+their whole value (see
+[languages](./languages.md#context-sniffers-897)).
 
 ## CGo isolation
 

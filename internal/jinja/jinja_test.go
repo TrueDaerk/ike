@@ -274,3 +274,44 @@ func FuzzScan(f *testing.F) {
 		}
 	})
 }
+
+// TestExpressionTokens (#3061): a bare expression tokenizes like the body of
+// {{ }}, and a "}}" in it closes nothing.
+func TestExpressionTokens(t *testing.T) {
+	text := "x is not defined and y }}"
+	var got []tok
+	for _, k := range ExpressionTokens(text) {
+		got = append(got, tok{text[k.Start:k.End], k.Class})
+	}
+	want := []tok{
+		{"x", Variable}, {"is", Keyword}, {"not", Keyword}, {"defined", Filter},
+		{"and", Keyword}, {"y", Variable}, {"}", Bracket}, {"}", Bracket},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("token %d = %v, want %v", i, got[i], want[i])
+		}
+	}
+}
+
+// TestBlockSpans (#3061): BlockSpans keeps only the tokens of one block.
+func TestBlockSpans(t *testing.T) {
+	tpl := Scan([]string{"a {{ b }}", "{# c #} {% d %}"})
+	if len(tpl.Blocks) != 3 {
+		t.Fatalf("blocks = %d, want 3", len(tpl.Blocks))
+	}
+	got := tpl.BlockSpans(tpl.Blocks[1])
+	want := lang.Span{Line: 1, StartCol: 0, EndCol: 7, Capture: "comment"}
+	if len(got) != 1 || got[0] != want {
+		t.Errorf("BlockSpans(comment) = %v, want [%v]", got, want)
+	}
+	if n := len(tpl.BlockSpans(tpl.Blocks[2])); n != 3 {
+		t.Errorf("BlockSpans(statement) = %d spans, want 3", n)
+	}
+	if line, col := tpl.Position(tpl.Blocks[2].Start); line != 1 || col != 8 {
+		t.Errorf("Position = %d:%d, want 1:8", line, col)
+	}
+}

@@ -1,5 +1,14 @@
 # Log
 
+## 2026-10-27 (Jinja expressions in Ansible YAML values, #3061)
+
+- [Languages](/architecture/languages.md): the `ansible` language's `Spans`
+  hook paints the Jinja layer over its YAML values — closed blocks outside
+  comments, plus the bare expressions of `when:` / `changed_when:` /
+  `failed_when:` / `until:` (`jinja.ExpressionTokens`). Plain yaml unaffected.
+- [Highlighting](/architecture/highlighting.md): Ansible reuses the Jinja
+  tokenizer without masking. Closes epic 0570 (#3058).
+
 ## 2026-10-27 (systemd lint: unknown/misplaced directives, invalid values, #3065)
 
 - [Languages](/architecture/languages.md): the systemd language registers a
