@@ -2,7 +2,7 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.9.0.schema.json
 
 PackageIdentifier: TrueDaerk.Ike
-PackageVersion: 0.7.0
+PackageVersion: 0.7.26
 InstallerType: zip
 NestedInstallerType: portable
 NestedInstallerFiles:
@@ -12,13 +12,13 @@ MinimumOSVersion: 10.0.17763.0
 Dependencies:
   PackageDependencies:
     - PackageIdentifier: wez.wezterm
-ReleaseDate: 2026-10-15
+ReleaseDate: 2026-10-27
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/TrueDaerk/ike/releases/download/v0.7.0/ike_0.7.0_windows_amd64.zip
-    InstallerSha256: 5940B1149D3E8FADD9D7BA78B620590C6E6DB65E9006FA1D06BC9C762390DDB2
+    InstallerUrl: https://github.com/TrueDaerk/ike/releases/download/v0.7.26/ike_0.7.26_windows_amd64.zip
+    InstallerSha256: 3BF20D91848A106A1CB104EEA192F89FE3BB9373B8316B0C398B6B303B8602AB
   - Architecture: arm64
-    InstallerUrl: https://github.com/TrueDaerk/ike/releases/download/v0.7.0/ike_0.7.0_windows_arm64.zip
-    InstallerSha256: FAE239305C6B3864714E2DD7A5E08DA412BE9E72423D71269941CCCFDCD25E65
+    InstallerUrl: https://github.com/TrueDaerk/ike/releases/download/v0.7.26/ike_0.7.26_windows_arm64.zip
+    InstallerSha256: BFC2E959BD663C721F68CD4373215763E271715C318289A69E281D388936DEB5
 ManifestType: installer
 ManifestVersion: 1.9.0

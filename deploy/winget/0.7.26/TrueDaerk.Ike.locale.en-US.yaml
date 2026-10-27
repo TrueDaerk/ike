@@ -2,7 +2,7 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.9.0.schema.json
 
 PackageIdentifier: TrueDaerk.Ike
-PackageVersion: 0.7.0
+PackageVersion: 0.7.26
 PackageLocale: en-US
 Publisher: TrueDaerk
 PublisherUrl: https://github.com/TrueDaerk
@@ -23,6 +23,6 @@ Tags:
   - terminal
   - tui
   - vim
-ReleaseNotesUrl: https://github.com/TrueDaerk/ike/releases/tag/v0.7.0
+ReleaseNotesUrl: https://github.com/TrueDaerk/ike/releases/tag/v0.7.26
 ManifestType: defaultLocale
 ManifestVersion: 1.9.0
