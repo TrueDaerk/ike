@@ -1002,7 +1002,16 @@ description, valid unit types; the shared exec/kill/resource-control groups
 joined into the sections that take them) — the same table completion (#3064)
 and lint (#3065) read. Completion (`complete.go`) offers sections, directives,
 values and `%` specifiers from it and claims those positions against the
-buffer-word sources (see `/architecture/completion.md`). Sections style as `type`, known directives (and `X-`
+buffer-word sources (see `/architecture/completion.md`). Its linter
+(`lint.go`, #3065) warns about a section the file's unit type does not take
+(`[Service]` in a `.timer`, also in a drop-in or behind a template suffix) or
+the table does not know, an unknown directive in a known section (with a
+"did you mean" for a close match by edit distance), a known directive in the
+wrong section (naming the sections it belongs in) and a value outside the
+enum of an enumerated or boolean directive (every `parse_boolean` spelling,
+`file:`/`fd:name` forms and numeric fallbacks pass); `X-` names, empty
+assignments, values with `%` specifiers or `$` variables, continued values
+and lines before the first header are exempt. Sections style as `type`, known directives (and `X-`
 extensions) as `attribute`, unknown ones — a typo, or a directive in the wrong
 section — as `variable`; values as `string`, a whole boolean value
 (`yes/no/true/false/on/off/1/0`) as `boolean`, `%` specifiers (`%n`, `%i`,
@@ -1050,7 +1059,8 @@ produced ranges to the parse's folds (and `highlight.Supported` accepts a
 language with only `Folds`), so the editor's fold machinery needs no new
 plumbing.
 
-The third Go-computed seam is `Lint func(lines []string) []lang.Note` (#1623):
+The third Go-computed seam is `Lint func(path string, lines []string)
+[]lang.Note` (#1623; the path since #3065, so systemd can read the unit type):
 mistakes a language server would report, for languages that have none. A
 `Note` is a rune-column range on a line plus an LSP severity (`lang.NoteError`
 … `lang.NoteHint`) and a message. `highlight.Lint(path, lines)` runs it, the
@@ -1064,7 +1074,10 @@ tint and inline underline that server diagnostics use
 The dotenv duplicate-key check (`plugins/languages/env/lint.go`) is its first
 user: a key assigned twice is silently reduced to one assignment by every
 loader — in practice the last — so every earlier occurrence is flagged as a
-warning naming the line that wins.
+warning naming the line that wins. The systemd linter (#3065, above) is the
+second. A line-scoped pass over a huge file lints one line at a time, so a
+linter flags nothing only the surrounding lines could settle — systemd skips
+every directive before the first header.
 
 ### Shebang fallback (#893)
 

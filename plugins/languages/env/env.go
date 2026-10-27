@@ -30,7 +30,7 @@ func init() {
 		Spans: envSpans,
 		// Duplicate keys (#1623): the earlier assignment loses silently in
 		// most loaders, so it is marked. See lint.go.
-		Lint:        envLint,
+		Lint:        func(_ string, lines []string) []lang.Note { return envLint(lines) },
 		LineComment: "#",
 	})
 }
