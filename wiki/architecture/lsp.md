@@ -4,7 +4,7 @@ title: LSP & Language Intelligence
 description: The Language Server Protocol client — JSON-RPC over a server's stdio, a manager mapping (language, workspace root) to one server, editor-driven text sync, and diagnostics/completion/hover/signature-help/go-to-definition/find-references/document-highlight/inlay-hints/call-hierarchy/formatting/rename/code-actions/code-lenses/folding-ranges/semantic-tokens/selection-ranges/willRenameFiles rendered back into the editor.
 resource: internal/lsp
 tags: [architecture, lsp, language-server, jsonrpc, diagnostics, completion, hover, definition, plugins]
-timestamp: 2026-09-28T14:00:00Z
+timestamp: 2026-10-27T18:00:00Z
 ---
 
 # LSP & Language Intelligence
@@ -364,7 +364,10 @@ any message exists (#2402) — except the first publish after a `didOpen`
 `deliverDiags` marker before the didOpen goes out, because the model
 listening may have been rebuilt with an empty Problems store (a project
 switch) and the suppression would otherwise starve it — and the switch op's
-warm-up telemetry phase — forever. In the app every
+warm-up telemetry phase — forever. A Jinja template's converted set drops
+the diagnostics overlapping a Jinja block before that check
+(`ilsp.DropJinjaDiagnostics`, #3060, see
+[languages](./languages.md#template-suffix-fallback-1595)). In the app every
 published set first passes the **diagnostic ignore filter** (#1259,
 `internal/app/diag_ignore.go`): the raw set is cached per path, the
 `lsp.diagnostics_ignore` rules (`internal/lsp/ignore.go` — `source=`/`code=`

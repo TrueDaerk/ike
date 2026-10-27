@@ -521,3 +521,53 @@ func MaskPath(path string, lines []string) []string {
 	}
 	return Scan(lines).Mask(lines)
 }
+
+// Overlaps reports whether the editor range from (startLine, startCol) to
+// (endLine, endCol) — rune columns, end exclusive — touches any block
+// (#3060): the test that drops a language server's diagnostic on a Jinja tag
+// it saw as broken inner-language text. An empty range counts when its point
+// lies inside a block.
+func (t *Template) Overlaps(startLine, startCol, endLine, endCol int) bool {
+	if len(t.Blocks) == 0 {
+		return false
+	}
+	start := t.offset(startLine, startCol)
+	end := t.offset(endLine, endCol)
+	if end < start {
+		start, end = end, start
+	}
+	if end == start {
+		end++ // a point covers its own byte
+	}
+	for _, b := range t.Blocks {
+		if b.Start >= end {
+			break // blocks are in source order: the rest lie further on
+		}
+		if start < b.End {
+			return true
+		}
+	}
+	return false
+}
+
+// offset converts a 0-based line and rune column to a byte offset of the
+// text, clamped to it: a line past the end maps to the end, a column past
+// the line's end to the line break.
+func (t *Template) offset(line, col int) int {
+	if line < 0 {
+		return 0
+	}
+	if line >= len(t.starts) {
+		return len(t.src)
+	}
+	off := t.starts[line]
+	lineEnd := len(t.src)
+	if line+1 < len(t.starts) {
+		lineEnd = t.starts[line+1] - 1
+	}
+	for n := 0; n < col && off < lineEnd; n++ {
+		_, size := utf8.DecodeRuneInString(t.src[off:])
+		off += size
+	}
+	return off
+}

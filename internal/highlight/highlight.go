@@ -37,12 +37,30 @@ func Supported(path string) bool {
 // its notes; nil when the path has no language or the language registers no
 // Lint. It rides the same schedule as the parse — the editor calls both in one
 // command — so a linted language needs no separate pipeline.
+//
+// A Jinja template (#3060) lints the masked text HighlightScoped parses, so a
+// tag raises no note of the inner language; a note still touching a block —
+// two {{ key }}=… lines mask to the same placeholder key — is dropped too.
 func Lint(path string, lines []string) []lang.Note {
 	l, ok := lang.ByPath(path)
 	if !ok || l.Lint == nil {
 		return nil
 	}
-	return l.Lint(lines)
+	if !lang.IsJinjaTemplate(path) {
+		return l.Lint(lines)
+	}
+	tpl := jinja.Scan(lines)
+	notes := l.Lint(tpl.Mask(lines))
+	if len(tpl.Blocks) == 0 {
+		return notes
+	}
+	kept := notes[:0]
+	for _, n := range notes {
+		if !tpl.Overlaps(n.Line, n.StartCol, n.Line, n.EndCol) {
+			kept = append(kept, n)
+		}
+	}
+	return kept
 }
 
 // Highlight parses lines with the grammar for path and returns the spans,
