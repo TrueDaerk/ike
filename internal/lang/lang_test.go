@@ -197,3 +197,33 @@ func TestRotationSuffixFallback(t *testing.T) {
 		t.Errorf("ByPath(y.rsf.1) = %+v, %v, want rsfowner", l, ok)
 	}
 }
+
+// TestSnapshotRestoresEveryIndex (#3056): a fixture registered after the
+// snapshot — new id, an extension taken from a built-in, a filename, an
+// interpreter, a sniffed path — is gone after restore, and the built-in's
+// extension resolves to the built-in again.
+func TestSnapshotRestoresEveryIndex(t *testing.T) {
+	Register(Language{ID: "snapbase", Extensions: []string{"snapx"}})
+	restore := Snapshot()
+	Register(Language{ID: "snapfix", Extensions: []string{"snapx", "snapy"}, Filenames: []string{"Snapfile"}, Interpreters: []string{"snapsh"}})
+	AssociatePath("/tmp/snap/file", "snapfix")
+	if l, _ := ByExt("snapx"); l.ID != "snapfix" {
+		t.Fatalf("fixture must own snapx before restore, got %q", l.ID)
+	}
+	restore()
+	if _, ok := ByID("snapfix"); ok {
+		t.Fatal("fixture id must be gone after restore")
+	}
+	if l, ok := ByExt("snapx"); !ok || l.ID != "snapbase" {
+		t.Fatalf("snapx must resolve to the built-in again, got %q %v", l.ID, ok)
+	}
+	if _, ok := ByExt("snapy"); ok {
+		t.Fatal("the fixture's extension must be gone")
+	}
+	if l, ok := ByPath("/tmp/snap/file"); ok && l.ID == "snapfix" {
+		t.Fatal("the sniffed path association must be gone")
+	}
+	if l, ok := ByPath("/x/Snapfile"); ok && l.ID == "snapfix" {
+		t.Fatal("the fixture's filename must be gone")
+	}
+}

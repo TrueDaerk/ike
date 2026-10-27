@@ -301,7 +301,7 @@ func TestYQPlaygroundAtPathSeedsTheYQPath(t *testing.T) {
 	noDebounce(t)
 	// The path seed reads the buffer's language id; internal/app does not pull
 	// in the shipped language plugins, so a bare test-only entry stands in.
-	lang.Register(lang.Language{ID: "yaml", Extensions: []string{"yqseed"}})
+	registerTestLang(t, lang.Language{ID: "yaml", Extensions: []string{"yqseed"}})
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "seed.yqseed")
 	if err := os.WriteFile(path, []byte("spec:\n  my-key: ike\n"), 0o644); err != nil {

@@ -104,7 +104,7 @@ func TestOpenGzipFileReadOnly(t *testing.T) {
 		t.Fatalf("editorTitle = %q, want a read-only marker", got)
 	}
 	// Language resolves from "app.log", not from the archive's ".gz".
-	lang.Register(lang.Language{ID: "log-gz-test", Extensions: []string{"log"}})
+	registerTestLang(t, lang.Language{ID: "log-gz-test", Extensions: []string{"log"}})
 	l, ok := lang.ByPath(ed.Path())
 	if !ok || l.ID != "log-gz-test" {
 		t.Fatalf("language for %q = %v/%v", ed.Path(), l.ID, ok)

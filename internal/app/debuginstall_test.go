@@ -52,7 +52,7 @@ func init() {
 func dbgInstallModel(t *testing.T) (Model, run.Config, string) {
 	t.Helper()
 	if testStoreRoot != "" {
-		os.Setenv("IKE_CONFIG_DIR", filepath.Join(testStoreRoot, "dbginstall-"+t.Name()))
+		os.Setenv("IKE_CONFIG_DIR", testStoreDir(t, "dbginstall"))
 	}
 	dbgMarker = filepath.Join(t.TempDir(), "runtime-installed")
 	path := filepath.Join(t.TempDir(), "prog.dbgfake")

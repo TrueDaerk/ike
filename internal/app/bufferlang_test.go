@@ -13,9 +13,10 @@ import (
 // pick from — id and extension only, deliberately not the language plugins
 // (whose ServerSpec would open the missing-server prompt in every test model,
 // like intentionModel's json registration).
-func bufferLangLangs() {
-	lang.Register(lang.Language{ID: "markdown", Extensions: []string{"md"}})
-	lang.Register(lang.Language{ID: "http", Extensions: []string{"http"}})
+func bufferLangLangs(t *testing.T) {
+	t.Helper()
+	registerTestLang(t, lang.Language{ID: "markdown", Extensions: []string{"md"}})
+	registerTestLang(t, lang.Language{ID: "http", Extensions: []string{"http"}})
 }
 
 // offeredTitles returns the intention popup's row titles for the model's
@@ -64,7 +65,7 @@ func TestBufferLangIntentionHiddenWithFile(t *testing.T) {
 // TestBufferLangIntentionNamesCurrentType: once a type is chosen the entry
 // says which — the popup is where the buffer's type is both read and changed.
 func TestBufferLangIntentionNamesCurrentType(t *testing.T) {
-	bufferLangLangs()
+	bufferLangLangs(t)
 	m := filelessModel(t, "# Title", 0, 0)
 	out, _ := m.Update(SetBufferLangMsg{ID: "markdown"})
 	m = out.(Model)
@@ -77,7 +78,7 @@ func TestBufferLangIntentionNamesCurrentType(t *testing.T) {
 // effects: the buffer resolves as the language, and the status line says so
 // — the "type is recognizable and changeable" acceptance criterion.
 func TestSetBufferLangAppliesAndShowsInStatusLine(t *testing.T) {
-	bufferLangLangs()
+	bufferLangLangs(t)
 	m := filelessModel(t, "# Title", 0, 0)
 	out, _ := m.Update(SetBufferLangMsg{ID: "markdown"})
 	m = out.(Model)
@@ -120,7 +121,7 @@ func TestBufferLangPickerRefusesBufferWithFile(t *testing.T) {
 // TestBufferLangPickerOpensLocked: from a file-less buffer the command opens
 // the picker locked to its mode, listing plain text plus the languages.
 func TestBufferLangPickerOpensLocked(t *testing.T) {
-	bufferLangLangs()
+	bufferLangLangs(t)
 	m := filelessModel(t, "", 0, 0)
 	out, _ := m.Update(ShowBufferLangMsg{})
 	m = out.(Model)
@@ -146,7 +147,7 @@ func TestBufferLangPickerOpensLocked(t *testing.T) {
 // criterion: a pasted request block in a file-less buffer offers "Run
 // Request" once the buffer is treated as HTTP — and does not before.
 func TestBufferLangEnablesHTTPIntentions(t *testing.T) {
-	bufferLangLangs()
+	bufferLangLangs(t)
 	m := filelessModel(t, "### thing\nGET https://example.com/things\n", 1, 0)
 	if titles := offeredTitles(t, m); hasTitle(titles, "Run Request") {
 		t.Fatalf("a typeless buffer must not offer the HTTP actions, got %v", titles)
@@ -170,7 +171,7 @@ func TestBufferLangEnablesHTTPIntentions(t *testing.T) {
 // file-less buffer's result, which left a chosen language unhighlighted no
 // matter how well it resolved.
 func TestFilelessParseReachesItsBuffer(t *testing.T) {
-	bufferLangLangs()
+	bufferLangLangs(t)
 	m := filelessModel(t, "# Title", 0, 0)
 	out, _ := m.Update(SetBufferLangMsg{ID: "markdown"})
 	m = out.(Model)

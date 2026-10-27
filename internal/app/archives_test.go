@@ -456,7 +456,7 @@ func TestOpenArchiveGzipEntryDecompressed(t *testing.T) {
 	if title, ok := archiveEntryTitle(vpath); !ok || title != "app.log (backup.tar)" {
 		t.Fatalf("title = %q/%v", title, ok)
 	}
-	lang.Register(lang.Language{ID: "log-archive-test", Extensions: []string{"log"}})
+	registerTestLang(t, lang.Language{ID: "log-archive-test", Extensions: []string{"log"}})
 	if l, ok := lang.ByPath(ed.Path()); !ok || l.ID != "log-archive-test" {
 		t.Fatalf("language for %q = %v/%v", ed.Path(), l.ID, ok)
 	}

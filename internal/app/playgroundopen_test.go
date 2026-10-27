@@ -30,7 +30,7 @@ func dispatchExt(t *testing.T, langID string) string {
 		return l.Extensions[0]
 	}
 	ext := "disp" + langID
-	lang.Register(lang.Language{ID: langID, Extensions: []string{ext}})
+	registerTestLang(t, lang.Language{ID: langID, Extensions: []string{ext}})
 	return ext
 }
 

@@ -163,7 +163,7 @@ func (p langScopedPlugin) Capabilities() plugin.Capabilities {
 // language; any other editor still runs the chord's global binding.
 func TestLangScopedBindingResolvesPerBuffer(t *testing.T) {
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
-	lang.Register(lang.Language{ID: "lstest", Extensions: []string{"lstest"}})
+	registerTestLang(t, lang.Language{ID: "lstest", Extensions: []string{"lstest"}})
 	var fired []string
 	reg := registry.New()
 	reg.Add(langScopedPlugin{fired: &fired})

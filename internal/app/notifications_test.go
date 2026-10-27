@@ -119,7 +119,7 @@ func TestServerStatusRouting(t *testing.T) {
 // follows the focused buffer's language — a plain-text buffer shows no server
 // text, a buffer of the reporting language shows its current state.
 func TestStatusLineScopesServerSegmentToBuffer(t *testing.T) {
-	lang.Register(lang.Language{ID: "statest", Extensions: []string{"stt"}, Server: &lang.ServerSpec{Language: "statest", Command: "x"}})
+	registerTestLang(t, lang.Language{ID: "statest", Extensions: []string{"stt"}, Server: &lang.ServerSpec{Language: "statest", Command: "x"}})
 	m := newSized()
 	tm, _ := m.Update(ilsp.ServerStatusMsg{Lang: "statest", Text: "statest language server ready", Kind: ilsp.ServerState})
 	m = tm.(Model)
@@ -156,7 +156,7 @@ func TestStatusLineScopesServerSegmentToBuffer(t *testing.T) {
 // failure naming the manual restart command — reach the status line's server
 // segment, and the give-up toast points at that command.
 func TestStatusLineShowsRestartAndFailedState(t *testing.T) {
-	lang.Register(lang.Language{ID: "rsttest", Extensions: []string{"rst2148"}, Server: &lang.ServerSpec{Language: "rsttest", Command: "x"}})
+	registerTestLang(t, lang.Language{ID: "rsttest", Extensions: []string{"rst2148"}, Server: &lang.ServerSpec{Language: "rsttest", Command: "x"}})
 	m := newSized()
 	dir := t.TempDir()
 	code := filepath.Join(dir, "main.rst2148")

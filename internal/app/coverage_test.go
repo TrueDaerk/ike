@@ -33,7 +33,7 @@ func coverageApp(t *testing.T) Model {
 // marks for path — the seam-neutrality proof doubling as a fixture.
 func registerCovLang(t *testing.T, path string) {
 	t.Helper()
-	lang.Register(lang.Language{ID: "covapp", Extensions: []string{"cvt"}, Test: &lang.TestSpec{
+	registerTestLang(t, lang.Language{ID: "covapp", Extensions: []string{"cvt"}, Test: &lang.TestSpec{
 		FilePattern: `_test\.cvt$`,
 		Pattern:     `^func (?P<name>Test\w+)`,
 		Kinds:       map[string][]string{"": {"covtool", "test"}},

@@ -35,7 +35,7 @@ func init() {
 func runModel(t *testing.T, placement string) Model {
 	t.Helper()
 	if testStoreRoot != "" {
-		os.Setenv("IKE_CONFIG_DIR", filepath.Join(testStoreRoot, "run-"+t.Name()+"-"+placement))
+		os.Setenv("IKE_CONFIG_DIR", testStoreDir(t, "run", placement))
 	}
 	path := filepath.Join(t.TempDir(), "prog.rfake")
 	if err := os.WriteFile(path, []byte("x\n"), 0o644); err != nil {
@@ -268,7 +268,7 @@ func TestRunToolFollowsSlotAssignment(t *testing.T) {
 // TestRunUnknownFileType is a friendly no-op.
 func TestRunUnknownFileType(t *testing.T) {
 	if testStoreRoot != "" {
-		os.Setenv("IKE_CONFIG_DIR", filepath.Join(testStoreRoot, "run-unknown"))
+		os.Setenv("IKE_CONFIG_DIR", testStoreDir(t, "run-unknown"))
 	}
 	path := filepath.Join(t.TempDir(), "prog.unknowable")
 	if err := os.WriteFile(path, []byte("x\n"), 0o644); err != nil {
@@ -289,7 +289,7 @@ func TestRunUnknownFileType(t *testing.T) {
 // TestRerunWithoutHistory is a friendly no-op too.
 func TestRerunWithoutHistory(t *testing.T) {
 	if testStoreRoot != "" {
-		os.Setenv("IKE_CONFIG_DIR", filepath.Join(testStoreRoot, "rerun-empty"))
+		os.Setenv("IKE_CONFIG_DIR", testStoreDir(t, "rerun-empty"))
 	}
 	m := NewWith(registry.New(), host.MapConfig{})
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})

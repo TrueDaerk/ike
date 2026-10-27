@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -174,5 +175,21 @@ func TestInstallWithoutRecipeWarnsManually(t *testing.T) {
 	}
 	if got := b.runInstall("norecipe", "", false); got != nil {
 		t.Fatalf("the automatic path without a recipe must stay silent, got %#v", got)
+	}
+}
+
+// TestNoInstallsStubsNewInstallers (#3054): after NoInstalls, a fresh
+// installer's runner fails without executing anything, so a model built in
+// another package's tests never shells out to go, npm or brew.
+func TestNoInstallsStubsNewInstallers(t *testing.T) {
+	old := installs
+	t.Cleanup(func() { installs = old })
+	NoInstalls()
+	out, err := newInstaller().run("sh", "-c", "echo ran > "+filepath.Join(t.TempDir(), "ran"))
+	if err == nil {
+		t.Fatal("the stubbed runner must fail")
+	}
+	if len(out) != 0 {
+		t.Fatalf("the stubbed runner must not run the recipe, got output %q", out)
 	}
 }

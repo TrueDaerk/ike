@@ -59,7 +59,7 @@ func TestStatusLineToolchainSegment(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	lang.Register(lang.Language{ID: "segtc", Extensions: []string{"stc"}, Toolchain: segToolchain{path: interp}})
+	registerTestLang(t, lang.Language{ID: "segtc", Extensions: []string{"stc"}, Toolchain: segToolchain{path: interp}})
 
 	m := newSized()
 	code := filepath.Join(dir, "main.stc")
@@ -91,7 +91,7 @@ func TestStatusLineToolchainSegment(t *testing.T) {
 // caret's column shows with the header name from the first row, and the slot
 // stays hidden for ordinary files.
 func TestStatusLineSVColumnSegment(t *testing.T) {
-	lang.Register(lang.Language{ID: "csv", Extensions: []string{"csv"}})
+	registerTestLang(t, lang.Language{ID: "csv", Extensions: []string{"csv"}})
 	dir := t.TempDir()
 	data := filepath.Join(dir, "data.csv")
 	if err := os.WriteFile(data, []byte("name,qty\napple,3\n"), 0o644); err != nil {
@@ -121,7 +121,7 @@ func TestStatusLineSVColumnSegment(t *testing.T) {
 // TestStatusLineDocPathSegment guards the JSON/YAML path segment (#1660): the
 // caret's path shows in a YAML buffer and the slot stays hidden elsewhere.
 func TestStatusLineDocPathSegment(t *testing.T) {
-	lang.Register(lang.Language{ID: "yaml", Extensions: []string{"yaml", "yml"}})
+	registerTestLang(t, lang.Language{ID: "yaml", Extensions: []string{"yaml", "yml"}})
 	dir := t.TempDir()
 	doc := filepath.Join(dir, "deploy.yaml")
 	body := "spec:\n  containers:\n    - name: web\n"
@@ -346,7 +346,7 @@ func modeSGR(m Model, md editor.Mode) string {
 // visual selection over a log buffer reports the elapsed time between its
 // first and last timestamped line, and the segment is hidden without one.
 func TestStatusLineLogSpanSegment(t *testing.T) {
-	lang.Register(lang.Language{ID: "log", Extensions: []string{"log"}, Spans: logline.Spans})
+	registerTestLang(t, lang.Language{ID: "log", Extensions: []string{"log"}, Spans: logline.Spans})
 	path := filepath.Join(t.TempDir(), "app.log")
 	content := "10:11:10 INFO request start\n\tat Foo.bar(Foo.java:42)\n10:13:40 INFO response sent\n"
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {

@@ -198,7 +198,7 @@ func TestNoParserKeepsRunTerminalPath(t *testing.T) {
 	m := testsApp(t)
 	// The runtst-style language without ParseOutput: launchTestRun must
 	// decline so launchRun falls through to the terminal path.
-	lang.Register(lang.Language{
+	registerTestLang(t, lang.Language{
 		ID:         "fkraw",
 		Extensions: []string{"fr"},
 		Test: &lang.TestSpec{

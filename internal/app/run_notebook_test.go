@@ -64,7 +64,7 @@ func hasToast(m Model, want string) bool {
 // the test notebook open and focused in its viewer.
 func notebookRunApp(t *testing.T, script string) (Model, string) {
 	t.Helper()
-	lang.Register(lang.Language{ID: "python", Extensions: []string{"py"}, Toolchain: nbTestToolchain{}})
+	registerTestLang(t, lang.Language{ID: "python", Extensions: []string{"py"}, Toolchain: nbTestToolchain{}})
 	interp := filepath.Join(t.TempDir(), "python")
 	if err := os.WriteFile(interp, []byte("#!/bin/sh\n"+script+"\n"), 0o755); err != nil {
 		t.Fatal(err)

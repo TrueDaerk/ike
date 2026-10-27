@@ -2,6 +2,7 @@ package lsp
 
 import (
 	"cmp"
+	"errors"
 	"os"
 	"os/exec"
 	"strings"
@@ -36,6 +37,27 @@ func execInstall(name string, args ...string) ([]byte, error) {
 	return exec.Command(name, args...).CombinedOutput()
 }
 
+// installs is the runner every new installer starts with. Production runs the
+// recipe; NoInstalls swaps it for a stub.
+var installs installRunner = execInstall
+
+// NoInstalls makes every install recipe fail at once without running anything,
+// for test processes that build real models over this plugin (internal/app
+// calls it from TestMain). Without it, a test that opens a .go file on a
+// machine without gopls — every CI runner — kicks the automatic install for
+// real: `go install golang.org/x/tools/gopls@latest` downloads some 350 MB
+// and compiles for minutes in the background of the suite, writes a module
+// cache into the test HOME that RemoveAll cannot clear (read-only files), and
+// delivers its result into whichever model happens to be live (#3054). The
+// same goes for the npm/brew recipes of the other languages. Installers
+// created before the call keep their runner; the plugin's own tests stub
+// b.inst.run directly.
+func NoInstalls() {
+	installs = func(name string, args ...string) ([]byte, error) {
+		return nil, errors.New("language server installs are disabled in this test process")
+	}
+}
+
 // installer serialises install attempts per language.
 type installer struct {
 	mu       sync.Mutex
@@ -48,7 +70,7 @@ type installer struct {
 }
 
 func newInstaller() *installer {
-	return &installer{inflight: map[string]bool{}, failed: map[string]bool{}, run: execInstall, resolve: transport.Resolve}
+	return &installer{inflight: map[string]bool{}, failed: map[string]bool{}, run: installs, resolve: transport.Resolve}
 }
 
 // begin reserves an install slot for lang. It refuses while an install is

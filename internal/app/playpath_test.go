@@ -117,7 +117,7 @@ func TestPlayAppendPathAtRoot(t *testing.T) {
 func TestPlayAppendPathYQ(t *testing.T) {
 	// The path scan reads the result buffer's language id; internal/app does
 	// not pull in the shipped language plugins, so a bare entry stands in.
-	lang.Register(lang.Language{ID: "yaml", Extensions: []string{"yaml", "yml"}})
+	registerTestLang(t, lang.Language{ID: "yaml", Extensions: []string{"yaml", "yml"}})
 	m := openYQ(t, yqApp(t, "spec:\n  containers:\n    - name: web\n      my-port: 80\n"))
 	m = setProgram(m, ".spec")
 	putResultCursor(t, m, "my-port")

@@ -12,6 +12,7 @@
 package lang
 
 import (
+	"maps"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -406,6 +407,30 @@ func Register(l Language) {
 	}
 	for _, i := range l.Interpreters {
 		interpIx[i] = l.ID
+	}
+}
+
+// Snapshot copies the registry and returns the function that puts the copy
+// back. It is for tests that register languages (fixtures, overrides of a
+// built-in) and must leave the process as they found it: Register has no
+// inverse, and a re-registered built-in does not evict the extensions the
+// fixture claimed, so without it the registry drifts for every test that runs
+// later in the same process (#3056).
+//
+//	t.Cleanup(lang.Snapshot())
+//	lang.Register(fixture)
+func Snapshot() (restore func()) {
+	mu.RLock()
+	ids := maps.Clone(byID)
+	exts := maps.Clone(extIdx)
+	names := maps.Clone(nameIx)
+	interps := maps.Clone(interpIx)
+	paths := maps.Clone(pathIx)
+	mu.RUnlock()
+	return func() {
+		mu.Lock()
+		defer mu.Unlock()
+		byID, extIdx, nameIx, interpIx, pathIx = ids, exts, names, interps, paths
 	}
 }
 
