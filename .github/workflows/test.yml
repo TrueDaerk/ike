@@ -1,23 +1,39 @@
-# The full test suite (#2997): `go vet ./...` and `go test ./...` on every PR
-# and every push to main, with a hard 5-minute test timeout so a red suite or
-# a package that has grown slow fails the PR instead of the next developer's
-# afternoon. The budget: the whole run under 2 minutes on a ~10-core
-# developer machine, no package over 60 s (CONTRIBUTING.md, "Building and
-# testing"). The job runs on macOS and on Linux (#3000): the suite is written
-# against the macOS default keymap and pins it (keymap.GOOS = "darwin" in the
-# keymap, settings, tour and app test mains), and the pty tests drive bash
-# where /bin/sh is dash, so both platforms run the same tests. macOS minutes
-# are free for a public repository; the two jobs run independently
-# (fail-fast off) so one platform's failure still shows the other's result.
+# The full test suite (#2997, #3054): `go vet ./...` and `go test ./...` on
+# every PR and every push to main, under 4 minutes wall clock, on macOS and
+# Linux (#3000). The suite is written against the macOS default keymap and
+# pins it (keymap.GOOS = "darwin" in the keymap, settings, tour and app test
+# mains), and the pty tests drive bash where /bin/sh is dash, so both
+# platforms run the same tests. macOS minutes are free for a public repository.
 #
-# The hosted runners have three (macOS) or four (Linux) cores and are three
-# to four times slower than a developer machine: with every package in flight
-# at once, internal/app (3000 sequential tests, many of them spawning shells)
-# was starved past the timeout while the wasm packages compiled, and
-# pty-backed tests in other packages missed their spawn bounds. So the suite
-# runs in three steps — the bulk of the packages two at a time, the wasm
-# packages, then internal/app alone with the machine to itself — each under
-# its own 5-minute bound.
+# Why several jobs instead of one: the hosted runners have three (macOS) or
+# four (Linux) cores and are three to four times slower than a developer
+# machine. Run as one job, vet + the bulk of the packages + wasm +
+# internal/app took 5–10 minutes in sequence, and internal/app (2900
+# sequential tests, many spawning shells) alone ran 100–270 s and into its
+# 5-minute timeout when the runner was slow (#3054). So the work is spread
+# over runners that start together — the wall clock is the slowest job, not
+# the sum:
+#
+#   vet         go vet ./...                              (Linux only; vet is platform-neutral)
+#   bulk        every package but wasm and internal/app  (per OS)
+#   wasm        internal/wasm/...: builds c-shared guests (per OS)
+#   app         internal/app in three shards             (per OS × shard)
+#   windows     the ConPTY tests                         (see below)
+#
+# The app shards split the package's tests by position in `go test -list`
+# order (scripts/ci/shard.sh), so a shard runs a stable third of them and
+# finishes in well under a minute of test time. Every test must therefore
+# leave the process as it found it (cwd, env, package-level seams) — the
+# order-dependence a shard exposes is a bug in the test, not in the shard.
+#
+# Caching: .github/actions/setup-go restores the newest Go build and module
+# caches saved for the same OS and job kind, and the jobs save a fresh one on
+# every push to main, so a PR compiles only what it changed. (setup-go's own
+# cache is keyed on go.sum alone and saved once; every run then recompiled
+# everything changed since, CGo grammars included.)
+#
+# Every test step keeps its own 5-minute bound: a hung test fails the step
+# instead of eating the job's timeout.
 name: Test
 
 on:
@@ -28,40 +44,101 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  CGO_ENABLED: "1"
+
 jobs:
-  test:
+  vet:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-go
+        id: go
+        with:
+          name: vet
+      - name: Vet
+        run: go vet ./...
+      - name: Save the Go caches
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.go.outputs.cache-paths }}
+          key: ${{ steps.go.outputs.cache-key }}
+
+  bulk:
+    name: bulk (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
         os: [macos-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
+      - uses: ./.github/actions/setup-go
+        id: go
         with:
-          go-version-file: go.mod
-          cache: true
-
-      - name: Vet
-        run: go vet ./...
-
+          name: bulk
       - name: Test (every package but wasm and internal/app)
-        env:
-          CGO_ENABLED: "1"
-        run: go test $(go list ./... | grep -v '^ike/internal/app$' | grep -v '^ike/internal/wasm') -p 2 -timeout 5m
+        run: go test $(go list ./... | grep -v '^ike/internal/app$' | grep -v '^ike/internal/wasm') -timeout 5m
+      - name: Save the Go caches
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.go.outputs.cache-paths }}
+          key: ${{ steps.go.outputs.cache-key }}
 
+  wasm:
+    name: wasm (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-go
+        id: go
+        with:
+          name: wasm
       - name: Test wasm
-        if: ${{ !cancelled() }}
-        env:
-          CGO_ENABLED: "1"
         run: go test ./internal/wasm/... -timeout 5m
+      - name: Save the Go caches
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.go.outputs.cache-paths }}
+          key: ${{ steps.go.outputs.cache-key }}
 
+  app:
+    name: app (${{ matrix.os }}, shard ${{ matrix.shard }}/3)
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        shard: [1, 2, 3]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-go
+        id: go
+        with:
+          name: app
       - name: Test internal/app
-        if: ${{ !cancelled() }}
-        env:
-          CGO_ENABLED: "1"
-        run: go test ./internal/app -timeout 5m
+        run: go test ./internal/app -run "$(scripts/ci/shard.sh ./internal/app ${{ matrix.shard }} 3)" -timeout 5m
+      - name: Save the Go caches
+        if: github.ref == 'refs/heads/main' && matrix.shard == 1
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.go.outputs.cache-paths }}
+          key: ${{ steps.go.outputs.cache-key }}
 
   # The ConPTY session (#3005) is the one piece of the terminal the unix jobs
   # cannot exercise, so a Windows job runs the terminal package's ConPTY
@@ -71,23 +148,24 @@ jobs:
   # release build needs would cost minutes here for nothing.
   windows:
     runs-on: windows-latest
+    timeout-minutes: 10
+    env:
+      CGO_ENABLED: "0"
     steps:
       - name: Disable CRLF conversion
         run: git config --global core.autocrlf false
-
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-go@v5
+      - uses: ./.github/actions/setup-go
+        id: go
         with:
-          go-version-file: go.mod
-          cache: true
-
+          name: windows
       - name: Vet internal/terminal
-        env:
-          CGO_ENABLED: "0"
         run: go vet ./internal/terminal
-
       - name: Test ConPTY
-        env:
-          CGO_ENABLED: "0"
         run: go test ./internal/terminal -run 'ConPTY|ShellOrder|ShellOverride|EnvironmentBlock' -v -timeout 5m
+      - name: Save the Go caches
+        if: github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ steps.go.outputs.cache-paths }}
+          key: ${{ steps.go.outputs.cache-key }}
