@@ -28,7 +28,7 @@ func peekFixture(t *testing.T, names ...string) []string {
 		}
 		roots = append(roots, d)
 	}
-	t.Chdir(roots[0])
+	chdir(t, roots[0])
 	return roots
 }
 

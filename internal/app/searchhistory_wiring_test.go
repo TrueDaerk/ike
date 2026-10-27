@@ -52,7 +52,7 @@ func TestSearchHistoryWiredAcrossOpenAndSwitch(t *testing.T) {
 			}
 		}
 	}
-	t.Chdir(src)
+	chdir(t, src)
 	m := switchModel(t)
 
 	tm, _ := m.openPath(filepath.Join(src, "a.txt"), false)

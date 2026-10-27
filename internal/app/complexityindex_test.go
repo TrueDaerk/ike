@@ -71,7 +71,7 @@ func TestComplexityIndexBuiltWalkedAndToggledLive(t *testing.T) {
 	}
 	state := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", state)
-	t.Chdir(proj)
+	chdir(t, proj)
 	writeComplexityFixture(t, proj)
 
 	cfg, _ := config.Load(config.Options{})

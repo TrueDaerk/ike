@@ -23,7 +23,7 @@ func switchFixture(t *testing.T) (src, dst, file string) {
 	if err := os.WriteFile(file, []byte("one\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(src)
+	chdir(t, src)
 	return src, dst, file
 }
 

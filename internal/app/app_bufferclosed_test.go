@@ -121,7 +121,7 @@ func TestBufferStaysOpenInParkedWorkspace(t *testing.T) {
 	shared := writeFiles(t, base, "shared.txt")[0]
 
 	reg, got := bufferClosedRecorder()
-	t.Chdir(pa)
+	chdir(t, pa)
 	t.Setenv("IKE_CONFIG_DIR", "")
 	m := NewWith(reg, host.MapConfig{})
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})

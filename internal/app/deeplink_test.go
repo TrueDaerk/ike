@@ -58,7 +58,7 @@ func deepLinkFixture(t *testing.T) (cur, dst, file string) {
 	if err := os.WriteFile(file, []byte("hello\nworld\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(cur)
+	chdir(t, cur)
 	return cur, dst, file
 }
 

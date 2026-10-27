@@ -57,7 +57,7 @@ func openURLPrompt(t *testing.T, url string) Model {
 func TestOpenAPIImportURLValidatesThenImports(t *testing.T) {
 	srv := specURLServer(t, "/v3/api-docs")
 	dir := t.TempDir()
-	t.Chdir(dir)
+	chdir(t, dir)
 	invalidateCwd()
 	t.Cleanup(invalidateCwd)
 

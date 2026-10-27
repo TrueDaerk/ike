@@ -174,7 +174,7 @@ func TestGroupSearchCrossProjectOpen(t *testing.T) {
 	if err := os.WriteFile(hit, []byte("x\nneedle\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(api)
+	chdir(t, api)
 	m := switchModel(t)
 	m.allResults.SetSize(m.width, m.height)
 	m.allResults.BeginGroup("needle", []allfind.Project{

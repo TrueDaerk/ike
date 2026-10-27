@@ -185,7 +185,7 @@ func TestHTTPOpenBodyFileOpensTheSpool(t *testing.T) {
 // changed.
 func TestHTTPSpooledBodySurvivesTheHistoryRoundTrip(t *testing.T) {
 	work := t.TempDir()
-	t.Chdir(work)
+	chdir(t, work)
 	t.Setenv("IKE_CONFIG_DIR", ".ike") // relative on purpose — the production shape
 	m := httpApp(t)
 	t.Setenv("IKE_CONFIG_DIR", ".ike") // httpApp overrode it with an absolute dir
@@ -199,7 +199,7 @@ func TestHTTPSpooledBodySurvivesTheHistoryRoundTrip(t *testing.T) {
 
 	// The viewer now shows the store's history entry; the entry's body file
 	// must open from anywhere, so chdir away before asking.
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	freshPath := m.httpPanel().BodyFilePath()
 	if freshPath == "" || !filepath.IsAbs(freshPath) {
 		t.Fatalf("fresh body file path = %q, want absolute", freshPath)
@@ -215,9 +215,9 @@ func TestHTTPSpooledBodySurvivesTheHistoryRoundTrip(t *testing.T) {
 	// restart or a project switch would — from the project directory, where
 	// the relative store root resolves. The *path* it hands out must then
 	// open from anywhere.
-	t.Chdir(work)
+	chdir(t, work)
 	m.loadStoredHTTPResponse("/p/req.http", "one")
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	restoredPath := m.httpPanel().BodyFilePath()
 	if restoredPath == "" || !filepath.IsAbs(restoredPath) {
 		t.Fatalf("restored body file path = %q, want absolute", restoredPath)

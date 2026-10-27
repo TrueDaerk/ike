@@ -97,7 +97,7 @@ func TestSwitchMRUPicksNthEntry(t *testing.T) {
 		}
 		dirs = append(dirs, d)
 	}
-	t.Chdir(dirs[0])
+	chdir(t, dirs[0])
 	m := switchModel(t)
 	seedHistory(t, cwd(t), dirs[1], dirs[2], dirs[3])
 
@@ -138,7 +138,7 @@ func TestRecentProjectsColumnHasNoMRUDigits(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Chdir(here)
+	chdir(t, here)
 	m := sized(t, 120, 40)
 	seedHistory(t, cwd(t), alpha, beta)
 

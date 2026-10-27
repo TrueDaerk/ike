@@ -28,6 +28,7 @@ func init() {
 			return
 		}
 		if err := os.Chdir(testPkgDir); err == nil {
+			invalidateCwd()
 			fmt.Fprintf(os.Stderr, "cwd guard: the working directory was gone, restored %s\n", testPkgDir)
 		}
 	}

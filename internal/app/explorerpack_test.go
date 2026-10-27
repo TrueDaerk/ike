@@ -21,7 +21,7 @@ import (
 // the initial scan applied and the first-start dialog dismissed.
 func packTestModel(t *testing.T, root string) Model {
 	t.Helper()
-	t.Chdir(root)
+	chdir(t, root)
 	invalidateCwd()
 	t.Cleanup(invalidateCwd)
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())

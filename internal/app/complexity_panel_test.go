@@ -84,7 +84,7 @@ func complexityApp(t *testing.T) (Model, string) {
 	if err := os.WriteFile(src, body, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(root)
+	chdir(t, root)
 	m, _ := timeApp(t)
 	idx := m.ComplexityIndex()
 	if idx == nil || !idx.Available() {

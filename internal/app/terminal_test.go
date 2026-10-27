@@ -346,7 +346,7 @@ func TestTerminalSwitchRoundTripNoDuplicates(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Chdir(src)
+	chdir(t, src)
 	m := switchModel(t)
 	out, _ := m.Update(TerminalNewMsg{})
 	m = out.(Model)
@@ -514,7 +514,7 @@ func registerEnvTestPython() {
 // project env leaves the environment untouched.
 func TestTerminalEnvFromSettings(t *testing.T) {
 	dir := t.TempDir()
-	t.Chdir(dir)
+	chdir(t, dir)
 	// Resolve symlinks (macOS /var -> /private/var): paths detected via the
 	// working directory must compare equal.
 	if wd, err := os.Getwd(); err == nil {
@@ -580,7 +580,7 @@ func TestTerminalEnvFromSettings(t *testing.T) {
 // gone; the JetBrains behavior is the project interpreter being active.
 func TestTerminalEnvDetectedVenv(t *testing.T) {
 	dir := t.TempDir()
-	t.Chdir(dir)
+	chdir(t, dir)
 	// Resolve symlinks (macOS /var -> /private/var): paths detected via the
 	// working directory must compare equal.
 	if wd, err := os.Getwd(); err == nil {

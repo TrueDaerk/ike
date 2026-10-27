@@ -111,14 +111,7 @@ func TestSearchEverywhereOpensInFindPanel(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "alpha.go"), []byte("package alpha\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Chdir(dir); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chdir(cwd) })
+	chdir(t, dir)
 
 	m := findPanelApp(t)
 	m.palette.SetSize(120, 40)

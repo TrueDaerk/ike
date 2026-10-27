@@ -81,9 +81,7 @@ func TestHeadDiffRestoresBothSides(t *testing.T) {
 	os.WriteFile(path, []byte("v2\n"), 0o644)
 
 	// The restore path resolves the repo from the working directory.
-	old, _ := os.Getwd()
-	os.Chdir(dir)
-	t.Cleanup(func() { os.Chdir(old) })
+	chdir(t, dir)
 
 	m := NewWith(registry.New(), host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})

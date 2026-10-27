@@ -176,7 +176,7 @@ func TestPaletteFileOpFocusesExplorer(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			root, file := projectDir(t)
-			t.Chdir(root)
+			chdir(t, root)
 			m := newSized()
 			tm, _ := m.openPath(file, false)
 			m = tm.(Model)
@@ -200,7 +200,7 @@ func TestPaletteFileOpFocusesExplorer(t *testing.T) {
 // the file on enter) and never leak into the editor buffer as vim commands.
 func TestPaletteNewFileTypesIntoPromptNotEditor(t *testing.T) {
 	root, file := projectDir(t)
-	t.Chdir(root)
+	chdir(t, root)
 	m := newSized()
 	tm, _ := m.openPath(file, false)
 	m = tm.(Model)
@@ -231,7 +231,7 @@ func TestPaletteNewFileTypesIntoPromptNotEditor(t *testing.T) {
 // focused instead of rendering into a pane that is not in the layout.
 func TestPaletteFileOpShowsHiddenExplorer(t *testing.T) {
 	root, file := projectDir(t)
-	t.Chdir(root)
+	chdir(t, root)
 	m := newSized()
 	tm, _ := m.openPath(file, false)
 	m = tm.(Model)

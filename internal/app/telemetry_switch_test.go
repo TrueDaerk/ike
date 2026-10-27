@@ -30,7 +30,7 @@ func opsOf(evs []telemetry.Event, id string) []telemetry.Event {
 // brackets itself with a start/ok op pair carrying a non-negative ms and the
 // structural detail fields the export needs to explain a slow switch.
 func TestTelemetryProjectSwitchOp(t *testing.T) {
-	t.Chdir(t.TempDir()) // performSwitch chdirs into the target; restore after
+	chdir(t, t.TempDir()) // performSwitch chdirs into the target; restore after
 	m := telemetryModel(t, host.MapConfig{})
 	m.usage.Command("before.switch", telemetry.SourceInternal) // open the session file
 
@@ -88,7 +88,7 @@ func TestTelemetryProjectSwitchOp(t *testing.T) {
 // visit in the export.
 func TestTelemetryProjectSwitchOpReportsParked(t *testing.T) {
 	first := t.TempDir()
-	t.Chdir(first)
+	chdir(t, first)
 	m := telemetryModel(t, host.MapConfig{})
 	m.usage.Command("before.switch", telemetry.SourceInternal)
 
@@ -120,7 +120,7 @@ func lspPhasesOf(t *testing.T, m Model) []telemetry.Event {
 // lands as its own phase on the same op id, so "the switch was instant but the
 // editor stayed diagnostic-blind" is visible in the export.
 func TestTelemetryProjectSwitchLSPPhase(t *testing.T) {
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	m := telemetryModel(t, host.MapConfig{})
 	m.usage.Command("before.switch", telemetry.SourceInternal)
 	// Armed like a switch into a project with server-language documents does —
@@ -151,7 +151,7 @@ func TestTelemetryProjectSwitchLSPPhase(t *testing.T) {
 // closes is resolved by the quiet timer — but only the timer belonging to the
 // armed wait; a stale one from an earlier switch is ignored.
 func TestTelemetryProjectSwitchLSPQuietFallback(t *testing.T) {
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	m := telemetryModel(t, host.MapConfig{})
 	m.usage.Command("before.switch", telemetry.SourceInternal)
 	m.switchLSPWait = &switchLSPWait{start: time.Now()}
@@ -177,7 +177,7 @@ func TestTelemetryProjectSwitchLSPQuietFallback(t *testing.T) {
 // the previous switch's warm-up is still unresolved closes that wait as
 // superseded, so the earlier op stays phase-complete in the export.
 func TestTelemetryProjectSwitchLSPSuperseded(t *testing.T) {
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	m := telemetryModel(t, host.MapConfig{})
 	m.usage.Command("before.switch", telemetry.SourceInternal)
 	m.switchLSPWait = &switchLSPWait{start: time.Now()}
@@ -197,7 +197,7 @@ func TestTelemetryProjectSwitchLSPSuperseded(t *testing.T) {
 // the switch it runs through, so the teardown can be priced separately.
 func TestTelemetryProjectCloseOp(t *testing.T) {
 	first := t.TempDir()
-	t.Chdir(first)
+	chdir(t, first)
 	m := telemetryModel(t, host.MapConfig{})
 	m.usage.Command("before.switch", telemetry.SourceInternal)
 

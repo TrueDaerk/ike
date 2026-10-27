@@ -62,7 +62,7 @@ func TestOpenSecondFileAppendsTab(t *testing.T) {
 func TestOpenSameFileDifferentSpellingReusesTab(t *testing.T) {
 	dir := t.TempDir()
 	abs := writeTemp(t, dir, "a.txt", "aaa\n")
-	t.Chdir(dir)
+	chdir(t, dir)
 	m := openApp(t, abs, "a.txt")
 
 	inst := m.activeWS().Panes.FocusedInstance()

@@ -322,7 +322,7 @@ var sep = string(filepath.Separator)
 // sees it (macOS resolves the temp directory's symlink).
 func extractProjectRoot(t *testing.T, root string) string {
 	t.Helper()
-	t.Chdir(root)
+	chdir(t, root)
 	invalidateCwd()
 	seen, err := cachedGetwd()
 	if err != nil {
@@ -330,7 +330,7 @@ func extractProjectRoot(t *testing.T, root string) string {
 	}
 	// Move the process away again: the cache keeps pointing at the root, so
 	// completion that reached for os.Getwd() would look in the wrong place.
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	t.Cleanup(invalidateCwd)
 	return seen
 }

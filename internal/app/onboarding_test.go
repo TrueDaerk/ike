@@ -121,7 +121,7 @@ func TestOnboardingRespectsAutoInstallOff(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(proj, ".ike", "settings.toml"), []byte("[lsp]\nauto_install = false\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(proj)
+	chdir(t, proj)
 	m := onboardSeed(t)
 	if m.onboardingOpen() {
 		t.Fatal("lsp.auto_install=false must suppress the dialog")

@@ -42,7 +42,7 @@ func TestRecentProjectsColumnPutsGroupMembersFirst(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	t.Chdir(here)
+	chdir(t, here)
 	m := sized(t, 120, 40)
 	// The group spans the project we stand in and beta, the *older* of the
 	// two recent projects — so a passing order cannot be the plain MRU one.
@@ -74,7 +74,7 @@ func TestSwitchMRUFollowsGroupOrder(t *testing.T) {
 		}
 		dirs = append(dirs, d)
 	}
-	t.Chdir(dirs[0])
+	chdir(t, dirs[0])
 	m := switchModel(t)
 	seedActiveGroup(t, "web", cwd(t), dirs[2])
 	// MRU without the group: other, member. With it, member leads.

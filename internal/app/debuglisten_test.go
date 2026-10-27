@@ -107,7 +107,7 @@ func TestDebugMapPromptWritesMapping(t *testing.T) {
 	c := &config.Config{}
 	c.Debug.PHP.Port = port
 	config.Set(c)
-	t.Chdir(t.TempDir()) // project-scope writes land in a temp .ike
+	chdir(t, t.TempDir()) // project-scope writes land in a temp .ike
 
 	m := sized(t, 100, 40)
 	out, _ := m.Update(DebugListenMsg{})
@@ -155,7 +155,7 @@ func TestDebugMapPromptWritesMapping(t *testing.T) {
 // connection is surfaced, and a burst of them (one page load can open many)
 // notifies on the first and then every tenth — the console keeps all of them.
 func TestDebugDropNotifiesThrottled(t *testing.T) {
-	t.Chdir(t.TempDir())
+	chdir(t, t.TempDir())
 	m := sized(t, 100, 40)
 	out, _ := m.Update(DebugListenMsg{})
 	m = out.(Model)

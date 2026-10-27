@@ -17,7 +17,7 @@ import (
 // would otherwise swallow the scripted keys these tests press.
 func copyTestModel(t *testing.T, root, file string) Model {
 	t.Helper()
-	t.Chdir(root)
+	chdir(t, root)
 	invalidateCwd()
 	t.Cleanup(invalidateCwd)
 	m := newSized()

@@ -178,7 +178,7 @@ func TestHTTPViewerSnapshotsAsToolAndReslotsOnApply(t *testing.T) {
 // that tab, wired and under its singleton key.
 func TestHTTPContentTabRestoresAsTab(t *testing.T) {
 	conf, dir := t.TempDir(), t.TempDir()
-	t.Chdir(dir)
+	chdir(t, dir)
 	tree := &layout.Split{Orient: layout.Horizontal, Ratio: 0.3,
 		A: &layout.Leaf{Pane: pane.ExplorerKey}, B: &layout.Leaf{Pane: "editor"}}
 	encoded, err := layout.Encode(tree)
