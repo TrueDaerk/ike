@@ -31,6 +31,7 @@ var detectionOnlyLanguages = []lang.Language{
 	{ID: "ndjson", Extensions: []string{"ndjson", "jsonl"}},
 	{ID: "psv", Extensions: []string{"psv"}},
 	{ID: "sql", Extensions: []string{"sql"}},
+	{ID: "systemd", Extensions: []string{"service", "socket", "timer", "path", "mount", "automount", "swap", "target", "slice", "scope", "device"}, DropIns: []lang.DropIn{{DirSuffix: ".service.d", Ext: "conf"}, {DirSuffix: ".socket.d", Ext: "conf"}, {DirSuffix: ".timer.d", Ext: "conf"}, {DirSuffix: ".path.d", Ext: "conf"}, {DirSuffix: ".mount.d", Ext: "conf"}, {DirSuffix: ".automount.d", Ext: "conf"}, {DirSuffix: ".swap.d", Ext: "conf"}, {DirSuffix: ".target.d", Ext: "conf"}, {DirSuffix: ".slice.d", Ext: "conf"}, {DirSuffix: ".scope.d", Ext: "conf"}, {DirSuffix: ".device.d", Ext: "conf"}}},
 	{ID: "toml", Extensions: []string{"toml"}},
 	{ID: "tsv", Extensions: []string{"tsv"}},
 	{ID: "xml", Extensions: []string{"xml", "xsd", "xsl", "xslt", "svg", "plist", "wsdl", "csproj", "vbproj", "fsproj", "props", "targets"}},

@@ -143,6 +143,7 @@ var unmeasuredLanguages = map[string]string{
 	"ndjson":          reasonNoFunctions,
 	"psv":             reasonNoFunctions,
 	"sql":             reasonNoFunctions, // statements; stored routines are a dialect niche
+	"systemd":         reasonNoFunctions,
 	"toml":            reasonNoFunctions,
 	"tsv":             reasonNoFunctions,
 	"xml":             reasonNoFunctions,

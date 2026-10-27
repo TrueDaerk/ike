@@ -27,6 +27,13 @@ import (
 // build, where highlight.NewGrammar returns nil).
 type Grammar any
 
+// DropIn is one drop-in directory shape (#3063): files with extension Ext
+// (no dot) inside a directory whose name ends in DirSuffix (e.g. ".service.d").
+type DropIn struct {
+	DirSuffix string
+	Ext       string
+}
+
 // Language is one registered language: how to recognise its files, plus the
 // optional capabilities attached to it. Any of Grammar / Server / Toolchain may be
 // nil; a Language with all three nil is legal but inert.
@@ -52,6 +59,13 @@ type Language struct {
 	// fallback when a file has no extension and no known base name. See
 	// ForShebang in shebang.go.
 	Interpreters []string
+
+	// DropIns lists the drop-in directories whose files belong to this
+	// language even though their extension names another (#3063): a file
+	// with extension Ext whose parent directory name ends in DirSuffix, e.g.
+	// systemd's `foo.service.d/override.conf`. Resolved by ByPath ahead of
+	// the extension index, so `*.conf` elsewhere stays ini.
+	DropIns []DropIn
 
 	// Comment syntax for toggling (Roadmap 0120). LineComment is the marker
 	// placed before a line ("//", "#"); BlockComment is the open/close pair
@@ -390,6 +404,7 @@ var (
 	nameIx   = map[string]string{} // exact base name -> language id
 	interpIx = map[string]string{} // shebang interpreter base name -> language id (#893)
 	pathIx   = map[string]string{} // exact full path -> language id, from content sniffing (#893)
+	dropIns  = map[DropIn]string{} // drop-in dir suffix + extension -> language id (#3063)
 )
 
 // Register records a language. Re-registering the same ID replaces the prior
@@ -407,6 +422,9 @@ func Register(l Language) {
 	}
 	for _, i := range l.Interpreters {
 		interpIx[i] = l.ID
+	}
+	for _, d := range l.DropIns {
+		dropIns[DropIn{DirSuffix: d.DirSuffix, Ext: strings.ToLower(strings.TrimPrefix(d.Ext, "."))}] = l.ID
 	}
 }
 
@@ -426,11 +444,12 @@ func Snapshot() (restore func()) {
 	names := maps.Clone(nameIx)
 	interps := maps.Clone(interpIx)
 	paths := maps.Clone(pathIx)
+	drops := maps.Clone(dropIns)
 	mu.RUnlock()
 	return func() {
 		mu.Lock()
 		defer mu.Unlock()
-		byID, extIdx, nameIx, interpIx, pathIx = ids, exts, names, interps, paths
+		byID, extIdx, nameIx, interpIx, pathIx, dropIns = ids, exts, names, interps, paths, drops
 	}
 }
 
@@ -552,8 +571,13 @@ func ByPath(path string) (Language, bool) {
 		mu.RUnlock()
 		return l, true
 	}
-	mu.RUnlock()
 	ext := filepath.Ext(path)
+	if id, ok := dropInID(path, ext); ok {
+		l := byID[id]
+		mu.RUnlock()
+		return l, true
+	}
+	mu.RUnlock()
 	if l, ok := ByExt(ext); ok {
 		return l, true
 	}
@@ -567,6 +591,25 @@ func ByPath(path string) (Language, bool) {
 		}
 	}
 	return Language{}, false
+}
+
+// dropInID resolves path through the drop-in index (#3063): its extension
+// plus the suffix of its parent directory name. The longest matching suffix
+// wins, so the result does not depend on map order. Caller holds mu.
+func dropInID(path, ext string) (string, bool) {
+	if len(dropIns) == 0 || ext == "" {
+		return "", false
+	}
+	ext = strings.ToLower(strings.TrimPrefix(ext, "."))
+	dir := filepath.Base(filepath.Dir(path))
+	best, id := -1, ""
+	for d, did := range dropIns {
+		if d.Ext == ext && len(dir) > len(d.DirSuffix) && strings.HasSuffix(dir, d.DirSuffix) &&
+			(len(d.DirSuffix) > best || len(d.DirSuffix) == best && did < id) {
+			best, id = len(d.DirSuffix), did
+		}
+	}
+	return id, best >= 0
 }
 
 // Comments returns the comment syntax for path's language. ok is false when no
