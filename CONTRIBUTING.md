@@ -115,7 +115,10 @@ clock. A test must leave the process as it found it (working directory,
 environment, package-level seams): a shard runs a different third of the
 package than the full run does, and an order-dependent test fails there first.
 In `internal/app`, change directory through `chdir(t, dir)`, never `t.Chdir`
-— the cwd cache (`cwdcache.go`) would otherwise outlive the test. To run a
+— the cwd cache (`cwdcache.go`) would otherwise outlive the test — and no test
+installs a language server: `TestMain` disables the install recipes
+(`lsp.NoInstalls()`), so a missing gopls never turns into a background
+`go install` during the suite. To run a
 shard locally:
 
 ```sh

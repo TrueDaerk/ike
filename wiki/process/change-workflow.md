@@ -4,7 +4,7 @@ title: Change Workflow
 description: The lifecycle of every change — issue first, issue branch, version bump, PR, merge, branch cleanup, plus the settings-UI, default-keybind, shared-building-block and span-family-ledger obligations.
 tags: [process, git, release]
 resource: internal/version/version.go
-timestamp: 2026-10-27T06:00:00Z
+timestamp: 2026-10-27T07:30:00Z
 ---
 
 # Change Workflow
@@ -150,6 +150,11 @@ consequences for tests:
   `internal/app`, change directory through `chdir(t, dir)` (never `t.Chdir`:
   the cwd cache in `cwdcache.go` would outlive the test; a sweep test enforces
   it) and give a model built with `NewWith` its own `IKE_CONFIG_DIR`.
+- **No test installs a tool.** The app `TestMain` calls `lsp.NoInstalls()`
+  (`plugins/lsp`): opening a `.go` file where gopls is missing — every CI
+  runner — would otherwise run `go install …gopls@latest` in the background
+  of the whole suite, as would the npm/brew recipes of the other languages
+  (#3056). A test of the install path stubs the installer's runner.
 - **A hosted runner stalls a goroutine for tens of milliseconds.** A test that
   reasons about real time leaves that much slack: a 60 ms debounce probed with
   10 ms pauses fired between two keystrokes of a "burst" on CI.
