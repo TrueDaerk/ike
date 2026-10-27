@@ -187,6 +187,33 @@ func TestIsJinjaTemplate(t *testing.T) {
 	}
 }
 
+// TestDropIns (#3063): a file in a drop-in directory resolves to the
+// directory's language ahead of its extension; the longest suffix wins; a
+// bare suffix directory, another extension or another directory does not
+// match; Snapshot restores the drop-in index.
+func TestDropIns(t *testing.T) {
+	t.Cleanup(Snapshot())
+	Register(Language{ID: "dicfg", Extensions: []string{"dicfg"}})
+	Register(Language{ID: "diunit", DropIns: []DropIn{{DirSuffix: ".diu.d", Ext: ".DICFG"}}})
+	Register(Language{ID: "dilong", DropIns: []DropIn{{DirSuffix: ".x.diu.d", Ext: "dicfg"}}})
+	for path, want := range map[string]string{
+		"/etc/foo.diu.d/override.dicfg": "diunit",
+		"foo.diu.d/A.DICFG":             "diunit",
+		"foo.x.diu.d/a.dicfg":           "dilong",
+		".diu.d/a.dicfg":                "dicfg",
+		"foo.diu.d.bak/a.dicfg":         "dicfg",
+		"foo.diu.d/sub/a.dicfg":         "dicfg",
+		"a.dicfg":                       "dicfg",
+	} {
+		if l, ok := ByPath(path); !ok || l.ID != want {
+			t.Errorf("ByPath(%q) = %q, %v; want %s", path, l.ID, ok, want)
+		}
+	}
+	if _, ok := ByPath("foo.diu.d/a.txt"); ok {
+		t.Error("another extension must not match the drop-in")
+	}
+}
+
 // TestRotationSuffixFallback: a logrotate-style suffix (#1745) falls back to
 // the inner extension — app.log.2026-08-01 resolves as the .log language —
 // while base names, chained suffixes and suffix-less names behave sensibly.

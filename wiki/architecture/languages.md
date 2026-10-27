@@ -25,6 +25,7 @@ type Language struct {
     ID         string       // "python"
     Extensions []string     // ["py", "pyi"]
     Filenames  []string     // optional exact base names ("Dockerfile")
+    DropIns    []DropIn     // drop-in dirs (#3063): {DirSuffix: ".service.d", Ext: "conf"}
     Grammar    Grammar      // opaque highlight token, or nil
     Server     *ServerSpec  // LSP launch config, or nil
     ServerLanguage string   // delegate documents to this language's server (#1063); "" = own Server
@@ -47,7 +48,7 @@ type Language struct {
 }
 func Register(l Language)
 func ByID(id string) (Language, bool)
-func ByPath(path string) (Language, bool)   // user association, sniffed path association, exact base name, extension, then template-suffix (#1595) / rotation-suffix (#1745) fallback
+func ByPath(path string) (Language, bool)   // user association, sniffed path association, exact base name, drop-in directory (#3063), extension, then template-suffix (#1595) / rotation-suffix (#1745) fallback
 func ByAssociation(path string) (Language, bool) // user-configured [files.associations] match (#1365)
 func ForShebang(firstLine string) (Language, bool) // interpreter on the #! line (#893)
 func AssociatePath(path, id string)         // record a content-sniffed language for one path
@@ -125,6 +126,17 @@ matches (fail soft: built-in detection, else plain text);
 `InvalidAssociations` lists such entries and the root model toasts them as
 config warnings on load/reload. The **File Associations** settings page
 (`internal/settings/associations_page.go`) edits the map at user scope.
+
+### Drop-in directories (#3063)
+
+Some files are typed by the directory they live in, not by their own name:
+systemd's `foo.service.d/override.conf` is a unit-file fragment, while any
+other `*.conf` is ini. A language claims such files with `DropIns` — a
+parent-directory name suffix plus an extension. `ByPath` consults the drop-in
+index after the exact base names and **before** the extension index, so the
+directory wins over the extension; the directory needs a name in front of the
+suffix (`.service.d/x.conf` is ini), and when two suffixes match the longest
+wins.
 
 ### Template suffix fallback (#1595)
 
@@ -401,7 +413,7 @@ audit parses a per-language probe with the registered grammar and requires the
 named function at the expected CCN — or carries a row in `unmeasuredLanguages`
 with a reason from the named set: `reasonNoFunctions` (data, markup,
 configuration, logs, patches, manifests: json, ndjson, yaml, toml, xml,
-markdown, markdown_inline, dockerfile, make, http, ini, dotenv, crontab, diff,
+markdown, markdown_inline, dockerfile, make, http, ini, dotenv, crontab, systemd, diff,
 log, ansible, csv/tsv/psv, sql, html, css, go.mod/go.work/go.sum),
 `reasonNoGrammar` (a language with functions but no Tree-sitter grammar — none
 today; a row with it fails once a grammar is registered) or `reasonSpecGap(issue)`
@@ -960,14 +972,29 @@ comments as Go-computed spans, with no grammar and no server. The log
 language (`plugins/languages/log`, #1621) too: severity, timestamp, rainbow
 thread/logger and ANSI-escape spans, all computed in `internal/logline` (see
 `/architecture/editor.md`, log-file rendering). The crontab language
-(`plugins/languages/crontab`, #1624) is the newest: `*.cron`, `*.crontab` and
+(`plugins/languages/crontab`, #1624) follows: `*.cron`, `*.crontab` and
 the `crontab` base names, styling `#` comments, `NAME=value` environment
 assignments, the five schedule fields and the command, and carrying the
 schedule hints of `internal/cronhint` (see `/architecture/editor.md`, cron
 schedule hints) — which the `yaml`, `json` and `toml` producers share for the
 `cron:` values and quoted expressions in their own buffers, and — since
 #2345 — the `go`, `python`, `php` and `typescript` producers for the quoted
-schedules scheduler libraries take. The number hints
+schedules scheduler libraries take. The systemd language
+(`plugins/languages/systemd`, #3063) is the newest: the unit-file extensions
+(`service`, `socket`, `timer`, `path`, `mount`, `automount`, `swap`, `target`,
+`slice`, `scope`, `device`) plus their drop-ins (`<name>.<type>.d/*.conf`, see
+drop-in directories above). Its spans read the plugin's directive table
+(`directives.go`: section → directive → value kind, enum values, one-line
+description, valid unit types; the shared exec/kill/resource-control groups
+joined into the sections that take them) — the same table completion (#3064)
+and lint (#3065) read. Sections style as `type`, known directives (and `X-`
+extensions) as `attribute`, unknown ones — a typo, or a directive in the wrong
+section — as `variable`; values as `string`, a whole boolean value
+(`yes/no/true/false/on/off/1/0`) as `boolean`, `%` specifiers (`%n`, `%i`,
+`%h`, `%%`, …) as `constant.builtin`, the trailing `\` of a continued line as
+`escape`, and full `#`/`;` lines as comments — also inside a continuation,
+which systemd skips. Secret masks, number and network hints come from the
+ini-family producers. The number hints
 of `internal/numhint` (#1627) ride the same seam in every value position
 (#1684) — `json`, `yaml`, `toml`, `ini` and `dotenv` append them per buffer,
 `.http` per collected value range (query parameters, folded query lines,

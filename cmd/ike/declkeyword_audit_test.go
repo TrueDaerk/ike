@@ -65,6 +65,7 @@ var noDeclKeywords = map[string]string{
 	"ndjson":          reasonNoDeclKeyword,
 	"psv":             reasonNoDeclarations,
 	"sql":             reasonAmbiguousKeyword,
+	"systemd":         reasonNoDeclKeyword,
 	"toml":            reasonNoDeclKeyword,
 	"tsv":             reasonNoDeclarations,
 	"xml":             reasonNoDeclKeyword,

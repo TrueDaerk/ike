@@ -57,6 +57,7 @@ import (
 	_ "ike/plugins/languages/python"
 	_ "ike/plugins/languages/shell"
 	_ "ike/plugins/languages/sql"
+	_ "ike/plugins/languages/systemd"
 	_ "ike/plugins/languages/toml"
 	_ "ike/plugins/languages/web"
 	_ "ike/plugins/languages/xml"

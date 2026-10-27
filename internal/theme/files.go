@@ -70,8 +70,10 @@ var fileGroups = map[string][]string{
 	"http":   {"http", "rest"},
 	"csv":    {"csv", "tsv", "psv"},
 	// dotenv (#1619) joins the config family: same tint as ini/toml.
+	// systemd unit files (#3063) are ini-shaped config: same tint.
 	"ini": {"ini", "conf", "env", ".env", ".env.local", ".env.example", ".env.sample",
-		".env.template", ".env.development", ".env.production", ".env.test", ".env.staging"},
+		".env.template", ".env.development", ".env.production", ".env.test", ".env.staging",
+		"service", "socket", "timer", "path", "mount", "automount", "swap", "target", "slice", "scope", "device"},
 	"log":  {"log"},
 	"diff": {"diff", "patch"},
 }
