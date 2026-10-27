@@ -213,6 +213,17 @@ resolves to the `ansible` id (sharing yaml's grammar) and gets
 `@ansible/ansible-language-server` instead of plain yaml-language-server;
 everything else stays `yaml`.
 
+**Jinja in Ansible values (#3061).** A file the `ansible` id claims gets the
+Jinja layer of templates on its scalar values through its `Spans` hook
+(`plugins/languages/ansible/jinja.go`, yaml's spans first, so a secret mask
+still wins), without masking — the values are valid YAML. Every closed
+`{{ }}`/`{% %}`/`{# #}` block outside a YAML comment paints (an unterminated
+opener paints nothing and the scan resumes on the next line), and the values
+of `when:`, `changed_when:`, `failed_when:` and `until:` tokenize as bare
+expressions (`jinja.ExpressionTokens`): inline, quoted or plain, the items of
+a list below the key, or the lines of a block scalar. Plain `yaml` files are
+never scanned. See [highlighting](./highlighting.md#jinja-templates-3059).
+
 **Inventory navigation & completion (#922).** The server resolves modules but
 not inventory hosts/groups, so IKE indexes them itself
 (`plugins/languages/ansible/inventory.go`): INI inventories (`inventory/`,

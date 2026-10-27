@@ -49,8 +49,12 @@ func init() {
 			},
 		},
 		// Ansible playbooks are YAML: the same span hook applies, and the
-		// `mode:` permission hints (#1656) are worth most exactly here.
-		Spans:       yaml.Spans,
+		// `mode:` permission hints (#1656) are worth most exactly here. The
+		// Jinja in the values paints on top (#3061), after the YAML hook so
+		// a secret mask still wins.
+		Spans: func(lines []string) []lang.Span {
+			return append(yaml.Spans(lines), jinjaSpans(lines)...)
+		},
 		LineComment: "#",
 		IndentAfter: yaml.IndentAfter,
 		ScopeNodes:  yaml.ScopeNodes,
