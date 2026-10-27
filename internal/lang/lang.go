@@ -502,6 +502,25 @@ var templateSuffixes = map[string]bool{
 	"tmpl": true, "tpl": true, "gotmpl": true,
 }
 
+// jinjaSuffixes are the templateSuffixes whose template language is Jinja
+// (#3059): files carrying one get the Jinja layer (internal/jinja) — its
+// blocks masked before the inner parse and its own spans painted on top.
+var jinjaSuffixes = map[string]bool{"j2": true, "jinja": true, "jinja2": true}
+
+// IsJinjaTemplate reports whether path is a Jinja template (#3059): its last
+// extension is a Jinja suffix (.j2, .jinja, .jinja2, any case) that no
+// language claims outright — the same last-word rule ByPath follows. It holds
+// with or without an inner language: motd.j2 is a Jinja template over plain
+// text.
+func IsJinjaTemplate(path string) bool {
+	ext := filepath.Ext(path)
+	if !jinjaSuffixes[strings.ToLower(strings.TrimPrefix(ext, "."))] {
+		return false
+	}
+	_, claimed := ByExt(ext)
+	return !claimed
+}
+
 // rotationSuffix matches the trailing extension logrotate (and friends) tack
 // onto a rotated file: a plain sequence number ("1", "2", ...) or a date stamp
 // ("2026-08-01", "20260801"). When every direct lookup fails and the path

@@ -44,7 +44,10 @@ language fails the build until its row is filled in.
 
 `Measure(langID, lines)` parses the buffer with the language's grammar
 (`highlight.SyntaxTree`), walks the snapshot with the language's
-`lang.ComplexitySpec` and returns one record per **unit** in source order:
+`lang.ComplexitySpec` and returns one record per **unit** in source order.
+Every caller measuring a file splits its text with `SourceLines(path, text)`,
+which masks the Jinja blocks of a template (`job.py.j2`, #3059) at the same
+offsets, so the inner language parses cleanly and lines stay exact:
 
 ```go
 type Function struct {

@@ -166,6 +166,27 @@ func TestTemplateSuffixFallback(t *testing.T) {
 	}
 }
 
+// TestIsJinjaTemplate (#3059): the Jinja suffixes mark a template with or
+// without an inner language; Go-template suffixes, other names and a
+// language claiming the suffix outright do not.
+func TestIsJinjaTemplate(t *testing.T) {
+	t.Cleanup(Snapshot())
+	for _, p := range []string{"environment.yml.j2", ".env.j2", "motd.j2", "a/b.JINJA", "c.ini.jinja2"} {
+		if !IsJinjaTemplate(p) {
+			t.Errorf("IsJinjaTemplate(%q) = false", p)
+		}
+	}
+	for _, p := range []string{"environment.yml", "x.tmpl", "x.yml.tpl", "x.gotmpl", "j2", "x.j2.yml", ""} {
+		if IsJinjaTemplate(p) {
+			t.Errorf("IsJinjaTemplate(%q) = true", p)
+		}
+	}
+	Register(Language{ID: "jinjaowner", Extensions: []string{"jinja"}})
+	if IsJinjaTemplate("x.jinja") {
+		t.Error("a language claiming .jinja outright must keep the last word")
+	}
+}
+
 // TestRotationSuffixFallback: a logrotate-style suffix (#1745) falls back to
 // the inner extension — app.log.2026-08-01 resolves as the .log language —
 // while base names, chained suffixes and suffix-less names behave sensibly.

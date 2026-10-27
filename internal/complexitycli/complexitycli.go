@@ -580,7 +580,7 @@ func measureFile(path, text string) ([]complexity.Function, bool) {
 	if !ok || l.Complexity == nil {
 		return nil, false
 	}
-	fns, err := complexity.Measure(l.ID, strings.Split(text, "\n"))
+	fns, err := complexity.Measure(l.ID, complexity.SourceLines(path, text))
 	if err != nil {
 		return nil, false
 	}

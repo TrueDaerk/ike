@@ -4,7 +4,7 @@ title: Syntax Highlighting
 description: The Tree-sitter lexical highlighting layer — per-language grammars parsed off the event loop into capture spans, cached by document version, resolved to theme colours, and applied per cell in the editor's renderLine; plus the pure-Go bracket-pair tracker behind rainbow brackets, unmatched-bracket errors and depth-coloured indent guides.
 resource: internal/highlight
 tags: [architecture, highlighting, tree-sitter, syntax, editor, theme, cgo, brackets]
-timestamp: 2026-10-14T11:00:00Z
+timestamp: 2026-10-27T12:00:00Z
 ---
 
 # Syntax Highlighting
@@ -231,6 +231,28 @@ arrives together; unknown tags leave the host styling. Markdown is the first
 user: its block grammar injects the separate `markdown_inline` grammar into
 every `(inline)` node (headings, paragraphs), fenced code into the fence's
 language, and YAML/TOML front matter into those grammars.
+
+## Jinja templates (#3059)
+
+A Jinja template (`.j2`, `.jinja`, `.jinja2` — `lang.IsJinjaTemplate`, see
+[languages](./languages.md#template-suffix-fallback-1595)) highlights in two
+layers without a Jinja grammar. `HighlightScoped` scans the text with the
+pure-Go tokenizer in `internal/jinja`, runs the whole inner pipeline
+(`highlightInner`: the inner grammar, injections, rainbow brackets, Go span
+producers) over the **masked** text — every Jinja block replaced by
+same-length blanks (statements, comments) or an `x` run (expressions), raw
+block bodies kept — and prepends the Jinja spans, so first-span-wins paints
+them over whatever the inner grammar made of the placeholder. The Jinja layer
+uses existing capture names only: `punctuation.special` for the delimiters,
+`keyword` for statement names (the first name of a `{% %}`, custom tags
+included) and keyword operators (`and`, `in`, `is`, `as`, `with`, …),
+`variable`, `property` after `.`, `function` for filters after `|`, tests
+after `is` and called names, `constant.builtin` for `true`/`false`/`none`,
+`string`, `number`, `operator`, `punctuation.bracket`,
+`punctuation.delimiter`, and `comment` for a whole `{# #}` block. Closers count
+only outside strings and at brace depth 0, so `{{ "}}" }}` and a dict literal
+stay one block. A template without an inner language (`motd.j2`) gets the
+Jinja layer alone; a file without a Jinja suffix is never scanned.
 
 ## CGo isolation
 

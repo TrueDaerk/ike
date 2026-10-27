@@ -8,6 +8,7 @@ import (
 
 	ts "github.com/tree-sitter/go-tree-sitter"
 
+	"ike/internal/jinja"
 	"ike/internal/lang"
 	"ike/internal/structval"
 )
@@ -198,6 +199,7 @@ func SelectionRangesAt(path string, lines []string, line, col int) []NodeRange {
 	if !ok || l.Grammar == nil {
 		return nil
 	}
+	lines = jinja.MaskPath(path, lines) // a template parses masked (#3059)
 	gi, ok := l.Grammar.(*grammarImpl)
 	if !ok {
 		return nil
@@ -266,6 +268,7 @@ func ExpressionEndingAt(path string, lines []string, line, col int, kinds []stri
 	if !ok || l.Grammar == nil {
 		return NodeRange{}, false
 	}
+	lines = jinja.MaskPath(path, lines) // a template parses masked (#3059)
 	gi, ok := l.Grammar.(*grammarImpl)
 	if !ok {
 		return NodeRange{}, false
@@ -347,6 +350,7 @@ func SyntaxChainAt(path string, lines []string, line, col int) []structval.Node 
 	if !ok || l.Grammar == nil {
 		return nil
 	}
+	lines = jinja.MaskPath(path, lines) // a template parses masked (#3059)
 	gi, ok := l.Grammar.(*grammarImpl)
 	if !ok {
 		return nil

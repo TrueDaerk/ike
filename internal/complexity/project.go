@@ -3,10 +3,12 @@ package complexity
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 
 	"ike/internal/complete/langindex"
 	"ike/internal/highlight"
+	"ike/internal/jinja"
 	"ike/internal/lang"
 )
 
@@ -77,6 +79,14 @@ func ReadSource(path string) (string, bool) {
 		return "", false
 	}
 	return string(data), true
+}
+
+// SourceLines splits text into the lines Measure parses as the language of
+// path: a Jinja template (#3059) has its Jinja blocks masked at the same
+// offsets, so a {% for %} tag cannot break the inner parse and the measured
+// lines and columns still point into the real text.
+func SourceLines(path, text string) []string {
+	return jinja.MaskPath(path, strings.Split(text, "\n"))
 }
 
 var (
