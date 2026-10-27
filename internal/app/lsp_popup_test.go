@@ -69,3 +69,30 @@ func TestLSPPopupsCarryRoundedFrame(t *testing.T) {
 		}
 	}
 }
+
+// TestLSPHoverDrawsAboveBlurredPopupTerminal (#3072): with the popup terminal
+// open but blurred the editor owns the keyboard, so its hover popup must draw
+// on top of the layer, not under it. A focused layer keeps covering it.
+func TestLSPHoverDrawsAboveBlurredPopupTerminal(t *testing.T) {
+	dir := t.TempDir()
+	p := writeTemp(t, dir, "a.txt", strings.Repeat("aaa\n", 30))
+	m := openApp(t, p)
+	m = openTestPopupWith(t, m)
+	_, py, _, ph := m.popupTermRect()
+	// Anchor the hover inside the popup box: the caret on the row above the
+	// box's vertical middle, so the one-row-below placement lands within it.
+	line := py + ph/2 - m.contentYOff(m.activeWS().Panes.Focused()) - 1
+	m.activeEditor().SetCursor(line, 0)
+	const marker = "HOVER-MARKER-3072"
+	m = dispatch(t, m, ilsp.HoverMsg{Path: p, Contents: marker})
+	if !m.activeEditor().HoverOpen() {
+		t.Fatal("setup: hover popup should be open")
+	}
+	if strings.Contains(ansi.Strip(m.render()), marker) {
+		t.Fatal("a focused popup terminal must cover the editor's hover")
+	}
+	m.blurPopupLayer()
+	if !strings.Contains(ansi.Strip(m.render()), marker) {
+		t.Fatal("a blurred popup terminal must not cover the editor's hover")
+	}
+}

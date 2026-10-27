@@ -457,7 +457,11 @@ toggled by `terminal.popup` (default `cmd+alt+t`; `terminal.new` moved to
   open, click into the editor, copy, `cmd+alt+t`, paste. Everything over a
   blurred layer's boxes still belongs to the layer (wheel pages scrollback);
   everything outside belongs to the panes. Blur state parks and switches with
-  the layer.
+  the layer. The editor's own popups follow the keyboard too (#3072): while the
+  layer is focused `render` composites them (`compositeLSPPopups`, the
+  playground completion) before the layer so the layer covers them; while it
+  is blurred they composite after the layer and draw on top — the intention
+  picker (`alt+enter`) is a palette and always draws above the layer.
 - **Activity indicator** (#2309): output landing in a popup-layer shell while
   the layer is **hidden** arms `Model.popupUnseen`; the status bar's
   `popupterm` segment then shows `popup ●` (unseen output), `popup ⚙` (a
