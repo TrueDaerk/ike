@@ -4,7 +4,7 @@ title: Change Workflow
 description: The lifecycle of every change — issue first, issue branch, version bump, PR, merge, branch cleanup, plus the settings-UI, default-keybind, shared-building-block and span-family-ledger obligations.
 tags: [process, git, release]
 resource: internal/version/version.go
-timestamp: 2026-10-14T14:00:00Z
+timestamp: 2026-10-27T06:00:00Z
 ---
 
 # Change Workflow
@@ -128,11 +128,31 @@ never guessed), plus a golden fixture under `internal/complexity/testdata/<lang>
 ## The test suite stays fast and green (#2997)
 
 `go test ./...` is the gate: the `Test` workflow (`.github/workflows/test.yml`)
-runs `go vet ./...` and `go test ./... -timeout 5m` on every PR and every push
-to `main`. The budget is the whole run **under 2 minutes** on a ~10-core
-developer machine with a warm build cache, **no package over 60 s**, and
-nothing excluded from the default run. A red suite or a package that has grown
-slow fails the PR, not the next developer's afternoon.
+runs `go vet ./...` and `go test ./...` on every PR and every push to `main`.
+The budget is the whole run **under 2 minutes** on a ~10-core developer
+machine with a warm build cache, **no package over 60 s**, nothing excluded
+from the default run, and the workflow **under 4 minutes** wall clock (#3054).
+A red suite or a package that has grown slow fails the PR, not the next
+developer's afternoon.
+
+The workflow spreads the suite over jobs that start together — vet, the bulk
+of the packages, the wasm packages, and `internal/app` in three shards per OS
+(`scripts/ci/shard.sh` splits a package's tests by position in `go test -list`
+order) — and restores the Go build cache saved by the last push to `main`
+(`.github/actions/setup-go`), so a PR compiles only what it changed. Two
+consequences for tests:
+
+- **A test leaves the process as it found it.** A shard runs a different third
+  of `internal/app` than the full run does, so a test that depends on an
+  earlier one's leftover — a changed working directory, an environment
+  variable, a persisted store under the previous test's `IKE_CONFIG_DIR`, a
+  package-level seam — passes locally and fails in one shard. In
+  `internal/app`, change directory through `chdir(t, dir)` (never `t.Chdir`:
+  the cwd cache in `cwdcache.go` would outlive the test; a sweep test enforces
+  it) and give a model built with `NewWith` its own `IKE_CONFIG_DIR`.
+- **A hosted runner stalls a goroutine for tens of milliseconds.** A test that
+  reasons about real time leaves that much slack: a 60 ms debounce probed with
+  10 ms pauses fired between two keystrokes of a "burst" on CI.
 
 What keeps the budget, and what a new test must follow:
 

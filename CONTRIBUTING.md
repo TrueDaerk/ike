@@ -104,9 +104,23 @@ make version         # build, then print what `ike --version` reports
 machine with a warm build cache (measured: 85 s for the whole run, of which
 `internal/app`, the largest package, is about 65 s alone and 80 s inside the
 parallel run — the one package still over the 60 s per-package budget).
-CI (`.github/workflows/test.yml`) runs `go vet ./...` and
-`go test ./... -timeout 5m` on every PR and push to `main`, on **macOS and
-Linux**, so a red suite or a package that has grown slow fails the PR.
+CI (`.github/workflows/test.yml`) runs `go vet ./...` and `go test ./...` on
+every PR and push to `main`, on **macOS and Linux**, so a red suite or a
+package that has grown slow fails the PR. The hosted runners are three to four
+times slower than a developer machine, so the suite is spread over jobs that
+start together — vet, the bulk of the packages, wasm, and `internal/app` in
+three shards (`scripts/ci/shard.sh` splits the package's tests by position in
+`go test -list` order) — and the whole run stays **under 4 minutes** wall
+clock. A test must leave the process as it found it (working directory,
+environment, package-level seams): a shard runs a different third of the
+package than the full run does, and an order-dependent test fails there first.
+In `internal/app`, change directory through `chdir(t, dir)`, never `t.Chdir`
+— the cwd cache (`cwdcache.go`) would otherwise outlive the test. To run a
+shard locally:
+
+```sh
+go test ./internal/app -run "$(scripts/ci/shard.sh ./internal/app 2 3)"
+```
 
 The suite is written against the macOS default keymap and pins it: the
 `keymap`, `settings`, `tour` and `app` test packages set `keymap.GOOS =
