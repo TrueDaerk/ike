@@ -26,6 +26,7 @@ import (
 	"ike/internal/pane"
 	"ike/internal/plugin"
 	"ike/internal/registry"
+	lspplugin "ike/plugins/lsp"
 )
 
 // TestMain redirects the layout/session store, user-config discovery AND the
@@ -56,6 +57,10 @@ func TestMain(m *testing.M) {
 	// Nor does a test model walk the package directory for TODO tags and
 	// complexity on Init (#2997); withProjectWalks opts a test back in.
 	initProjectWalks = false
+	// No test installs a language server for real (#3054): opening a .go file
+	// where gopls is missing would otherwise run `go install …gopls@latest` in
+	// the background of the whole suite.
+	lspplugin.NoInstalls()
 	// The per-buffer debounce wakes (backup, idle autosave, .http vars) arm
 	// on every keystroke into a dirty buffer since #2541, and drainCmd runs a
 	// key's commands synchronously: a real tea.Tick would sleep its 2s
@@ -364,6 +369,19 @@ func TestRunCommand(t *testing.T) {
 }
 
 var testStoreSeq atomic.Int64
+
+// testStoreDir returns a fresh state directory under the temp store for a
+// model a test builds by hand: the test name keeps it readable, the sequence
+// number keeps it unique — a directory keyed on the name alone made a repeated
+// run (-count=2) load what the first pass persisted (#3056).
+func testStoreDir(t *testing.T, prefix string, extra ...string) string {
+	t.Helper()
+	name := prefix + "-" + t.Name()
+	for _, e := range extra {
+		name += "-" + e
+	}
+	return filepath.Join(testStoreRoot, name+"-"+strconv.FormatInt(testStoreSeq.Add(1), 10))
+}
 
 // newSized builds a freshly isolated, sized model: each call rotates the state
 // store to an empty directory so persisted layouts/sessions never couple tests.
