@@ -121,7 +121,20 @@ func continued(lines []string, li int) bool {
 // unitType is the unit type a path holds: its own extension for a unit file,
 // the drop-in directory's for `foo.service.d/override.conf`, "" when neither
 // names a unit type (every section is offered then).
+// A template suffix (`foo.service.j2`, `foo.service.in`) is looked through
+// once.
 func unitType(path string) string {
+	if typ := ownUnitType(path); typ != "" {
+		return typ
+	}
+	if ext := filepath.Ext(path); ext != "" {
+		return ownUnitType(strings.TrimSuffix(path, ext))
+	}
+	return ""
+}
+
+// ownUnitType is unitType without the template-suffix fallback.
+func ownUnitType(path string) string {
 	ext := strings.TrimPrefix(filepath.Ext(path), ".")
 	if slices.Contains(UnitTypes, ext) {
 		return ext

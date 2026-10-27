@@ -47,10 +47,10 @@ func Lint(path string, lines []string) []lang.Note {
 		return nil
 	}
 	if !lang.IsJinjaTemplate(path) {
-		return l.Lint(lines)
+		return l.Lint(path, lines)
 	}
 	tpl := jinja.Scan(lines)
-	notes := l.Lint(tpl.Mask(lines))
+	notes := l.Lint(path, tpl.Mask(lines))
 	if len(tpl.Blocks) == 0 {
 		return notes
 	}

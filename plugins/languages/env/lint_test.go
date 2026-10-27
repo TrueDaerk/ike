@@ -82,7 +82,7 @@ func TestLintRegistered(t *testing.T) {
 	if !ok || l.Lint == nil {
 		t.Fatal("the dotenv language must register a Lint")
 	}
-	if notes := l.Lint([]string{"A=1", "A=2"}); len(notes) != 1 {
+	if notes := l.Lint("/p/.env", []string{"A=1", "A=2"}); len(notes) != 1 {
 		t.Errorf("registered Lint returned %d notes, want 1", len(notes))
 	}
 }

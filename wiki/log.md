@@ -1,5 +1,14 @@
 # Log
 
+## 2026-10-27 (systemd lint: unknown/misplaced directives, invalid values, #3065)
+
+- [Languages](/architecture/languages.md): the systemd language registers a
+  `Lint` — sections invalid for the unit type or unknown, unknown directives
+  with a "did you mean", directives in the wrong section, values outside an
+  enum or boolean; `X-` names, empty assignments, `%`/`$` values and
+  continuations exempt. `lang.Language.Lint` now receives the buffer's path.
+  Closes epic 0580 (#3062).
+
 ## 2026-10-27 (systemd completion: sections, directives, values, specifiers, #3064)
 
 - [Completion Engine](/architecture/completion.md): new optional

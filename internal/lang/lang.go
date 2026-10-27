@@ -222,8 +222,11 @@ type Language struct {
 	// an earlier `KEY=` silently loses to a later one in most loaders, which
 	// is invisible without a mark. It rides the highlight pass like Spans, so
 	// it must be cheap; nil — the normal case — means the language has no
-	// linter. See Note.
-	Lint func(lines []string) []Note
+	// linter. path is the buffer's language path — systemd (#3065) reads the
+	// unit type from it. A line-scoped pass over a huge file lints one line
+	// at a time, so a linter must not flag what only the surrounding lines
+	// would settle. See Note.
+	Lint func(path string, lines []string) []Note
 
 	// DepManifests optionally names the dependency manifest base names this
 	// language owns (#2419) — go.mod, package.json, composer.json,
