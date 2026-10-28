@@ -287,6 +287,7 @@ bring their own.
 | Toggle yq Playground Round-Trip Output | `playground.yqRoundTrip` | `ctrl+alt+shift+y` | — | everywhere |
 | Re-render Preview Diagrams | `preview.rerenderDiagrams` | — | — | everywhere |
 | Problems | `problems.toggle` | `cmd+8` | — | everywhere |
+| Close Project from Recent List | `project.closeFromList` | `cmd+shift+w` | — | everywhere |
 | Find in All Projects | `project.findInAllProjects` | `cmd+alt+shift+f` | — | everywhere |
 | Show All-Projects Search Results | `project.findInAllProjectsResults` | `cmd+alt+shift+r` | — | everywhere |
 | Find in Project Group… | `project.findInGroup` | `cmd+alt+shift+d` | — | everywhere |
@@ -298,6 +299,7 @@ bring their own.
 | Previous Project in Group | `project.group.prev` | `cmd+alt+left-bracket` | — | everywhere |
 | Save Open Projects as Group… | `project.group.saveOpen` | — | — | everywhere |
 | Warm Project Group | `project.group.warm` | — | — | everywhere |
+| Remove Project from Recent List | `project.removeFromList` | `cmd+delete` | — | everywhere |
 | Replace in Path | `project.replaceInPath` | `cmd+shift+r` | — | everywhere |
 | Switch to Recent Project 1 | `project.switchMRU1` | `ctrl+alt+1` | — | everywhere |
 | Switch to Recent Project 2 | `project.switchMRU2` | `ctrl+alt+2` | — | everywhere |

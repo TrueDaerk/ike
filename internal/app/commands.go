@@ -1067,6 +1067,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("scratch.panel", "Scratch Files", ScratchSectionFocusMsg{}),
 			appCommand("usages.toggle", "Usages", UsagesToggleMsg{}),
 			appCommand(findPanelCommand, "Open Results in Find Window", OpenInFindPanelMsg{}),
+			appCommand(recentCloseCommand, "Close Project from Recent List", RecentCloseRowMsg{}),
+			appCommand(recentRemoveCommand, "Remove Project from Recent List", RecentRemoveRowMsg{}),
 			appCommand("tests.toggle", "Test Results", TestsToggleMsg{}),
 			appCommand("issues.toggle", "GitHub Issues", IssuesToggleMsg{}),
 			appCommand("issues.openCurrentBranch", "Open Current Branch Issue", IssuesOpenCurrentBranchMsg{}),

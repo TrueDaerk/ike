@@ -35,7 +35,11 @@ const findPanelCommand = "find.openInPanel"
 // while the palette overlay owns the keyboard. Every other binding stays out:
 // the overlay is a text field, and swallowing arbitrary chords there would
 // eat query editing.
-var paletteOverlayCommands = map[string]bool{findPanelCommand: true}
+var paletteOverlayCommands = map[string]bool{
+	findPanelCommand:    true,
+	recentCloseCommand:  true,
+	recentRemoveCommand: true,
+}
 
 // paletteBindingCmd resolves one key press against the Palette-context
 // bindings while the overlay is up (#2055). The overlay branch of the key
@@ -54,6 +58,14 @@ func (m *Model) paletteBindingCmd(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	b, found := table.Lookup(keymap.Chord{Steps: []keymap.Key{k}}, keymap.Palette)
 	if !found || !paletteOverlayCommands[b.Command] {
 		return nil, false
+	}
+	if recentRowCommands[b.Command] {
+		// The row actions (#3083) only own their chords on a project row of
+		// the recent-files dialog; anywhere else the key reaches the palette
+		// (aux action, query editing) as before.
+		if _, ok := m.recentProjectRow(); !ok {
+			return nil, false
+		}
 	}
 	c, okc := m.reg.Command(b.Command)
 	if !okc {

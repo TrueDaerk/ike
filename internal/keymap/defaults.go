@@ -901,6 +901,19 @@ var jetbrainsRows = []row{
 	// chord delivered everywhere (both fold together off macOS).
 	{"cmd+enter", "find.openInPanel", "Open results in Find window", Palette, "Find panel (#2055)"},
 	{"ctrl+enter", "find.openInPanel", "Open results in Find window", Palette, "Find panel (#2055)"},
+	// Recent-projects row actions (#3083): with a project row of the
+	// recent-files dialog (cmd+e) focused, close an open project without
+	// switching into it, or forget a closed one. Palette-scoped: the close
+	// takes the macOS delete chord plus the Global project.close chord
+	// (cmd+shift+w) while the list is up; off macOS the cmd chords fold onto
+	// their ctrl twins. On any other row the chords keep their palette
+	// meaning (row aux action, query word deletion).
+	{"cmd+backspace", "project.closeFromList", "Close project from recent list", Palette, "Projects (#3083)"},
+	{"ctrl+backspace", "project.closeFromList", "Close project from recent list", Palette, "Projects (#3083)"},
+	{"cmd+shift+w", "project.closeFromList", "Close project from recent list", Palette, "Projects (#3083)"},
+	{"ctrl+shift+w", "project.closeFromList", "Close project from recent list", Palette, "Projects (#3083)"},
+	{"cmd+delete", "project.removeFromList", "Remove project from recent list", Palette, "Projects (#3083)"},
+	{"ctrl+delete", "project.removeFromList", "Remove project from recent list", Palette, "Projects (#3083)"},
 	// JetBrains' run-context-configuration chord from the Windows scheme
 	// (ctrl+shift+f10); the macOS ctrl+shift+r would collide with
 	// project.replaceInPath's cmd+shift+r once folded onto Ctrl off macOS.

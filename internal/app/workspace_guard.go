@@ -12,6 +12,7 @@ import (
 	"ike/internal/host"
 	"ike/internal/pane"
 	"ike/internal/project"
+	"ike/internal/telemetry"
 	"ike/internal/terminal"
 	"ike/internal/ui"
 	"ike/internal/workspace"
@@ -271,13 +272,22 @@ func (m *Model) openWsClosePrompt(root string, act wsActivity) {
 // finishWorkspaceClose drops and tears the background workspace down and
 // refreshes the palette (the ● badge disappears in place). The returned cmd
 // carries the workspace-closed hooks' async work (#825).
+//
+// It is timed as a project.close op like the close-current path (#3083): the
+// parked workspace's session and layout were persisted when it was parked, so
+// the teardown is all that is left, and telemetry sees a close from the list
+// the same way it sees one from inside the project.
 func (m *Model) finishWorkspaceClose(root string) tea.Cmd {
+	endOp := m.usage.OpTimer(telemetry.OpProjectClose)
 	w := m.ws.Drop(root)
 	// Guard-exempt tools (#2704) died with the workspace without a prompt; the
 	// notice names them.
 	exempt := collectActivity(w)
 	cmd := m.closeWorkspace(w)
-	m.palette.Refresh()
+	endOp("ok", nil)
+	// In place (#3083): the cursor stays on the closed row, which keeps its
+	// place in the list and only loses its ● badge.
+	m.palette.RefreshRows()
 	m.host.Notify(host.Info, "closed background workspace "+project.CompactPath(root))
 	m.notifyExemptTools(exempt)
 	return cmd

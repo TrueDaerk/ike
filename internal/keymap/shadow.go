@@ -52,6 +52,12 @@ var intentionalDefaultShadows = map[string]string{
 	// shift+f6 is JetBrains' context-aware refactor-rename (0082 sheet 13):
 	// symbol rename with an editor focused, file rename everywhere else.
 	shadowKey("shift+f6", "lsp.rename", "file.rename"): "context-aware refactor-rename",
+	// While the Recent Files dialog is up the Global close chord closes the
+	// focused recent project instead of the active one (#3083); the app only
+	// lets the palette row action claim it on a project row, and the overlay
+	// owns the keyboard anyway, so project.close was unreachable there.
+	shadowKey("cmd+shift+w", "project.closeFromList", "project.close"):  "recent-list close over close-current",
+	shadowKey("ctrl+shift+w", "project.closeFromList", "project.close"): "recent-list close over close-current",
 	// cmd+n opens a new floating panel inside the popup terminal layer
 	// (#3076); the app routes the terminal-scoped row from the popup layer
 	// only, and a new file stays cmd+n everywhere else.

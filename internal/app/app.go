@@ -8142,25 +8142,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleCloseProject()
 
 	case project.CloseWorkspaceMsg:
-		// Close-from-list (#820): unload the background workspace without
-		// switching — sessions terminated, memory freed; the history entry
-		// stays. The active workspace cannot be closed this way, and a busy
-		// one goes through the #821 confirm guard.
-		if m.activeWS() != nil && m.activeWS().Root == msg.Path {
-			m.host.Notify(host.Info, "cannot close the active project from the list")
-			return m, nil
-		}
-		w := m.ws.Peek(msg.Path)
-		if w == nil {
-			return m, nil // already gone (evicted meanwhile)
-		}
-		if act := collectActivity(w); act.busy() {
-			m.palette.Close() // the guard prompt owns the keyboard next
-			m.openWsClosePrompt(msg.Path, act)
-			return m, nil
-		}
-		// Idle: palette stays open, badge disappears.
-		return m, m.finishWorkspaceClose(msg.Path)
+		return m.closeWorkspaceFromList(msg.Path)
+
+	case RecentCloseRowMsg:
+		// project.closeFromList (#3083): close the focused recent project.
+		return m.handleRecentRowClose()
+
+	case RecentRemoveRowMsg:
+		// project.removeFromList (#3083): forget the focused recent project.
+		return m.handleRecentRowRemove()
 
 	case project.RemoveFromHistoryMsg:
 		// Prune-from-list (#842): the aux action of an unloaded recent

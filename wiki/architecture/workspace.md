@@ -184,7 +184,12 @@ a click on the `⏏` zone, emits `project.CloseWorkspaceMsg`, which tears the ba
 down (`teardownWorkspace`) without switching — the palette stays open and
 refreshes, the badge disappears, the history entry remains. The active
 project refuses the action with an info toast. Manual close is the explicit
-counterpart to LRU eviction.
+counterpart to LRU eviction. Since #3083 the close is timed as a
+`project.close` telemetry op like the close-current path (the session and
+layout were persisted when the workspace was parked), the refresh keeps the
+cursor on the closed row (`RefreshRows`), and the Recent Projects column adds
+dedicated close / remove chords — see
+[Command Palette](/architecture/command-palette.md#recent-projects-column-778).
 
 ## Busy-close & quit guards (#821)
 
