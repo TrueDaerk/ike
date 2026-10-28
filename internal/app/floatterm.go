@@ -673,3 +673,56 @@ func (m Model) floatMoveLinkOpen(d *floatMoveDrag) (tea.Model, tea.Cmd) {
 	}
 	return m, nil
 }
+
+// floatCascadeDX / floatCascadeDY offset a new floating panel (#3076) from the
+// surface it was opened from, so a stack of panels cascades instead of
+// covering each other exactly.
+const (
+	floatCascadeDX = 2
+	floatCascadeDY = 1
+)
+
+// newFloatTermPanel opens a fresh shell straight in a new floating panel
+// (#3076, terminal.newFloatPanel — cmd+n inside the popup layer): the shell
+// starts where a new popup tab's would (popupShellDir), the panel takes the
+// default popup-box size a torn-out panel falls back to, and it cascades
+// from the keyboard-owning surface (panel or box side) when the layer has
+// the keys — at the popup box's own default spot otherwise (palette with no
+// popup open). Ownership follows the tear-out default (project-owned, ○).
+// The layer shows if hidden, and the new panel opens on top with the keys.
+func (m *Model) newFloatTermPanel() {
+	w, h := m.floatPanelDefaultSize()
+	w, h = min(w, m.width), min(h, m.height)
+	var x, y int
+	cascaded := false
+	if m.popupLayerFocused() {
+		if bx, by, _, _, ok := m.popupBoxRectFor(m.popupFocused()); ok {
+			x, y, cascaded = bx+floatCascadeDX, by+floatCascadeDY, true
+		}
+	}
+	if !cascaded {
+		dx, dy := m.popupTermPos()
+		x, y = ui.FloatOrigin(m.width, m.height, w, h, dx, dy)
+	}
+	floatTermSeq++
+	inst := pane.NewDetachedTerminalHost(fmt.Sprintf("float%d", floatTermSeq), m.newPopupShell(), m.host.Config(), m.pal())
+	f := &floatTerm{inst: inst, w: w, h: h}
+	f.x = ui.ClampDelta(x, 0, 0, max(m.width-w, 0))
+	f.y = ui.ClampDelta(y, 0, 0, max(m.height-h, 0))
+	m.floatTerms = append(m.floatTerms, f)
+	if !m.popupLayerFocused() {
+		m.popup.open = true
+		m.popup.blurred = false
+		m.popupUnseen = false
+	}
+	m.applyPopupSize()
+	m.setFloatFocus(f)
+}
+
+// floatPanelDefaultSize is the popup box's free-floating size — what
+// popupSize resolves with the box neither maximized (#2899) nor pinned
+// (#2406), whose geometries are the screen's, not a panel's.
+func (m Model) floatPanelDefaultSize() (w, h int) {
+	m.popup.maximized, m.popup.pinned = false, false
+	return m.popupSize()
+}

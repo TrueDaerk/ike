@@ -391,6 +391,11 @@ type TerminalPopupMsg struct{}
 // terminal.popup.pin.
 type TerminalPopupPinMsg struct{}
 
+// TerminalNewFloatPanelMsg opens a fresh shell in a new floating terminal
+// panel (#3076) without the cmd+t + tear-out drag detour. Dispatched by
+// terminal.newFloatPanel.
+type TerminalNewFloatPanelMsg struct{}
+
 // TerminalClearMsg clears the focused (else first) terminal's scrollback and
 // repaints its screen (#97). Dispatched by terminal.clear.
 type TerminalClearMsg struct{}
@@ -960,6 +965,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("terminal.toggle", "Toggle Terminal", TerminalToggleMsg{}),
 			withAliases(appCommand("terminal.popup", "Popup Terminal", TerminalPopupMsg{}), "terminal", "shell"),
 			appCommand("terminal.popup.pin", "Pin Popup Terminal", TerminalPopupPinMsg{}),
+			appCommand("terminal.newFloatPanel", "Terminal: New Floating Panel", TerminalNewFloatPanelMsg{}),
 			appCommand("terminal.clear", "Clear Terminal", TerminalClearMsg{}),
 			appCommand("terminal.sendSelection", "Send Selection to Terminal", TerminalSendSelectionMsg{}),
 			appCommand("terminal.sendSelectionRun", "Send Selection to Terminal and Run", TerminalSendSelectionMsg{Run: true}),

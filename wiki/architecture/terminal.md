@@ -411,7 +411,8 @@ toggled by `terminal.popup` (default `cmd+alt+t`; `terminal.new` moved to
   pane one: the toggle chord (resolved via the live binding table) hides from
   inside — and refocuses a blurred layer (#2309), or moves the keyboard while
   pinned (#2406) — the pin chord pins/unpins from inside on the same terms,
-  `cmd+t` opens a sibling popup tab, `cmd+d` splits the popup
+  `cmd+t` opens a sibling popup tab, `cmd+n` a new floating panel (#3076,
+  the `terminal.newFloatPanel` binding), `cmd+d` splits the popup
   (#1427), `cmd+shift+i` toggles input broadcast (#1427), `ctrl+tab` and the
   `editor.tab.next/prev` chords cycle the focused side's tabs, `cmd+w` closes
   the active tab through the busy guard (`termClosePopup` targets the shared
@@ -512,6 +513,24 @@ pane layout:
   *pane layout* is deliberately out of scope — the layer stays independent of
   the split tree; the way back into a pane is the existing route (move the
   tab into the popup box, or keep using it as a panel).
+
+**New floating panel** (#3076, `terminal.newFloatPanel`, palette "Terminal:
+New Floating Panel", Tools menu): skips the `cmd+t` + drag detour —
+`newFloatTermPanel` spawns a **fresh shell** (`newPopupShell`, so the start
+directory is the one a new popup tab gets, `terminal.popup_cwd`) in a new
+`floatTerm` at the popup box's free-floating default size
+(`floatPanelDefaultSize`: `popupSize` ignoring maximize/pin), cascaded
+`+2/+1` cells from the keyboard-owning surface (`popupBoxRectFor` of
+`popupFocused` — a panel or a box split side) and clamped on screen. From the
+palette with the layer hidden or unfocused it opens at the popup box's own
+spot (centered plus the persisted `popupterm:pos` offset) and shows the layer.
+The panel is project-owned (`○`, the tear-out default), lands on top and
+takes the keyboard. Its default chord is `cmd+n` in the `terminal` context
+(macOS only — off macOS the Cmd→Ctrl fold would steal readline's `ctrl+n`),
+an allowlisted shadow of the Global `explorer.newFile`: `popupReservedKey`
+runs it while the layer owns the keys, `terminalContextChord` skips it
+(`popupLayerTerminalCommands`) so a focused pane terminal keeps forwarding
+`cmd+n` to its shell, and every other pane still creates a file.
 
 **Z-order and focus** follow the #1237 stack rules, panel-list flavored
 (`floatTerms`, bottom→top): the focused panel — `floatFocus`, falling back to

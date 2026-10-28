@@ -210,6 +210,7 @@ var reachableAlternatives = map[string]string{
 	"terminal.new":                     "palette",
 	"terminal.popup":                   "palette",
 	"terminal.popup.pin":               "palette",
+	"terminal.newFloatPanel":           "palette / Tools menu",
 	"terminal.sendSelection":           "palette / editor context menu",
 	"terminal.sendSelectionRun":        "palette / editor context menu",
 	"terminal.rerunLast":               "palette",

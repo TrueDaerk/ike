@@ -1804,6 +1804,7 @@ JetBrains is:
 | `snippets.insert` | `cmd+j` | fragile | `palette / trigger+tab` | live via palette / trigger+tab |
 | `structure.toggle` | `cmd+3` | fragile | `palette` | live via palette |
 | `terminal.new` | `cmd+alt+shift+t` | fragile | `palette` | live via palette |
+| `terminal.newFloatPanel` | `cmd+n` | fragile | `palette / Tools menu` | live via palette / Tools menu |
 | `terminal.newTab` | `ctrl+t` | delivered | `—` | live |
 | `terminal.popup` | `cmd+alt+t` | fragile | `palette` | live via palette |
 | `terminal.popup.pin` | `cmd+alt+shift+k` | fragile | `palette` | live via palette |
