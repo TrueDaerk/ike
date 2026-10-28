@@ -149,7 +149,20 @@ step through hunks — unless a search is open, when they step its matches
 instead (see below); `w` toggles
 ignore-whitespace on the open diff (see below); `enter`
 dispatches `diff.JumpMsg` and the root model opens the right-hand file with
-the cursor on the hunk's first line. The view is read-only; hunk-level "take
+the cursor on the hunk's first line.
+
+**Jump to Source** (`diff.openSource`, #3081 — JetBrains' F4 in a diff
+viewer): `f4`, plus `cmd+down` on macOS (a darwin-only row — off macOS the
+Cmd→Ctrl fold would land it on `ctrl+down`), opens the right-hand file in an
+editor and focuses it, through `openPathAt` so navigation history records the
+jump. `Model.SourceTarget` picks the line: the hunk a step placed, else the
+first hunk not entirely above the viewport anchor (the one the anchor sits
+in, or the next one below), else — past the last hunk — the last one; its
+first right-side line (a pure removal lands on the line before it), or line
+1 for a diff without hunks. In review mode the right side is the current
+file's working tree. A diff whose right side has no backing file (unsaved
+texts, local history, clipboard) — or whose file no longer exists on disk —
+toasts and keeps focus. The view is read-only; hunk-level "take
 left/right" staging is a later increment for #28. The status line shows
 `DIFF │ left ⇄ right │ -w │ hunk i/n` (the `-w` segment only while whitespace
 is ignored, the sides being the side labels below) and the pane's title band

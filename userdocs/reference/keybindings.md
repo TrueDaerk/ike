@@ -343,6 +343,8 @@ Active when a diff pane has focus.
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|
 | Copy diff selection or hunk | `cmd+c` | `ctrl+c` | `diff.copy` |
+| Jump to source (diff) | `cmd+down` | — | `diff.openSource` |
+| Jump to source (diff) | `f4` | `f4` | `diff.openSource` |
 | New empty editor tab | `ctrl+t` | `ctrl+t` | `editor.tab.new` |
 | Next change (diff) | `f7` | `f7` | `diff.nextChange` |
 | Next file (diff review) | `cmd+f7` | `ctrl+f7` | `diff.nextFile` |

@@ -99,6 +99,11 @@ var jetbrainsRows = []row{
 	// n/N remain the vim-flavored equivalents inside the pane.
 	{"f7", "diff.nextChange", "Next change (diff)", Diff, "Diff (0340)"},
 	{"shift+f7", "diff.prevChange", "Previous change (diff)", Diff, "Diff (0340)"},
+	// JetBrains' Jump to Source in the diff viewer (#3081): telemetry saw f4
+	// pressed unbound there. The Diff row outranks the Editor's f4
+	// (lsp.definition) while a diff has focus; the cmd+down alias is a
+	// darwinRows entry below.
+	{"f4", "diff.openSource", "Jump to source (diff)", Diff, "Diff (#3081)"},
 	// Review changes (#2848): whole-file steps are the f7 pair with the
 	// platform modifier — cmd+f7 / cmd+shift+f7 on macOS (ctrl+f7 is a
 	// system shortcut there, like ctrl+f8 above), ctrl+f7 / ctrl+shift+f7
@@ -1114,6 +1119,11 @@ var darwinRows = []row{
 	// jumps own everywhere else (keys_normal.go).
 	{"cmd+up", "editor.docStart", "Go to document start", Editor, "Editor (#2699)"},
 	{"cmd+down", "editor.docEnd", "Go to document end", Editor, "Editor (#2699)"},
+	// The JetBrains macOS alias of the diff's Jump to Source (#3081). macOS
+	// only for the same fold reason: off macOS it would land on ctrl+down,
+	// the paragraph jump of the diff's edit-mode editor; f4 is the
+	// cross-platform chord.
+	{"cmd+down", "diff.openSource", "Jump to source (diff)", Diff, "Diff (#3081)"},
 	// The HTML preview's primary chord (#2740), cmd+alt+m's neighbour for
 	// the markdown preview. macOS only — the Cmd→Ctrl fold would land it on
 	// ctrl+alt+h, lsp.callHierarchy's chord; cmd+alt+shift+h above is the

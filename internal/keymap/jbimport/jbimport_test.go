@@ -128,12 +128,13 @@ func TestPlanMacOSFixture(t *testing.T) {
 	}
 	// Unbind lists the replaced defaults: editor.write keeps cmd+s (imported)
 	// but loses ctrl+s — in the editor only, the hex viewer's ctrl+s (#2876)
-	// stays; lsp.definition keeps cmd+b but loses f4.
+	// stays; lsp.definition keeps cmd+b but loses f4 — in the editor only,
+	// the diff viewer's f4 (diff.openSource, #3081) stays.
 	unbound := map[string]bool{}
 	for _, c := range res.Unbind {
 		unbound[c] = true
 	}
-	for _, wantGone := range []string{"editor.ctrl+s", "f4", "cmd+shift+s"} {
+	for _, wantGone := range []string{"editor.ctrl+s", "editor.f4", "cmd+shift+s"} {
 		if !unbound[wantGone] {
 			t.Fatalf("Unbind missing %q: %v", wantGone, res.Unbind)
 		}
@@ -213,6 +214,11 @@ func TestApplyEndToEnd(t *testing.T) {
 	byChord := map[string]string{}
 	hexChords := map[string]string{}
 	for _, b := range table.Bindings() {
+		if b.Command == "diff.openSource" {
+			// The diff viewer's own f4 (#3081) is not an editor default the
+			// import replaces.
+			continue
+		}
 		if b.Context == keymap.Hex {
 			hexChords[b.Chord.String()] = b.Command
 			continue
