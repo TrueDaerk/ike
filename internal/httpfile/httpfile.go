@@ -15,6 +15,7 @@
 package httpfile
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -519,7 +520,7 @@ func substitute(s string, env, user func(string) (string, bool)) (string, error)
 			names = append(names, nm)
 		}
 		sort.Strings(names)
-		return s, fmt.Errorf("unresolved placeholders: %s", strings.Join(names, ", "))
+		return s, &UnresolvedError{Names: names}
 	}
 	return out, nil
 }
@@ -536,11 +537,15 @@ func (r *Request) Resolve(lookup func(string) (string, bool)) (*Request, error) 
 func (r *Request) ResolveVars(vars *Vars) (*Request, error) {
 	out := *r
 	out.Headers = make([]Header, len(r.Headers))
-	var errs []string
+	var errs, names []string
 	sub := func(s string) string {
 		v, err := SubstituteVars(s, vars)
 		if err != nil {
 			errs = append(errs, err.Error())
+			var u *UnresolvedError
+			if errors.As(err, &u) {
+				names = append(names, u.Names...)
+			}
 			return s
 		}
 		return v
@@ -552,7 +557,10 @@ func (r *Request) ResolveVars(vars *Vars) (*Request, error) {
 	}
 	out.Body = sub(r.Body)
 	if len(errs) > 0 {
-		return nil, fmt.Errorf("request %s: %s", r.Key(), strings.Join(dedup(errs), "; "))
+		return nil, &resolveError{
+			msg:        fmt.Sprintf("request %s: %s", r.Key(), strings.Join(dedup(errs), "; ")),
+			unresolved: &UnresolvedError{Names: dedup(names)},
+		}
 	}
 	// A GRAPHQL block becomes its wire form here (#2423), after substitution:
 	// the envelope must carry the *resolved* query and variables, and every

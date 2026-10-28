@@ -241,12 +241,12 @@ func loadBodyFile(file string, substitute bool, opts Options, vars *httpfile.Var
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("body file %s: %v", file, err)
+		return nil, fmt.Errorf("body file %s: %w", file, err)
 	}
 	if substitute {
 		text, err := httpfile.SubstituteVars(string(data), vars)
 		if err != nil {
-			return nil, fmt.Errorf("body file %s: %v", file, err)
+			return nil, fmt.Errorf("body file %s: %w", file, err)
 		}
 		data = []byte(text)
 	}
@@ -285,13 +285,13 @@ func prepare(ctx context.Context, req *httpfile.Request, opts Options) (*prepare
 
 	target, err := url.Parse(resolved.Target)
 	if err != nil {
-		return nil, fmt.Errorf("request %s: invalid target %q: %v", req.Key(), resolved.Target, err)
+		return nil, fmt.Errorf("request %s: invalid target %q: %w", req.Key(), resolved.Target, err)
 	}
 	if target.Scheme == "" {
 		target.Scheme = "http"
 	}
 	if target.Host == "" {
-		return nil, fmt.Errorf("request %s: target %q has no host", req.Key(), resolved.Target)
+		return nil, fmt.Errorf("request %s: %w", req.Key(), &url.Error{Op: "parse", URL: resolved.Target, Err: errors.New("target has no host")})
 	}
 
 	var warnings []string
@@ -310,7 +310,7 @@ func prepare(ctx context.Context, req *httpfile.Request, opts Options) (*prepare
 
 	body, err := requestBody(resolved, opts, vars)
 	if err != nil {
-		return nil, fmt.Errorf("request %s: %v", req.Key(), err)
+		return nil, fmt.Errorf("request %s: %w", req.Key(), err)
 	}
 	httpReq, err := http.NewRequestWithContext(ctx, resolved.Method, target.String(), bytes.NewReader(body))
 	if err != nil {

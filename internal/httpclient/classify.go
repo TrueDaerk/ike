@@ -5,8 +5,12 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"io/fs"
 	"net"
+	"net/url"
 	"syscall"
+
+	"ike/internal/httpfile"
 )
 
 // ClassifyError reduces a dispatch failure to a small closed vocabulary for
@@ -16,6 +20,21 @@ import (
 func ClassifyError(err error) string {
 	if err == nil {
 		return ""
+	}
+
+	// Local failures first (#3086): they fail in milliseconds, before the
+	// wire, and used to land in `other`.
+	var unresolved *httpfile.UnresolvedError
+	if errors.As(err, &unresolved) {
+		return "placeholder"
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) && urlErr.Op == "parse" {
+		return "url"
+	}
+	var pathErr *fs.PathError
+	if errors.As(err, &pathErr) {
+		return "file"
 	}
 
 	var timedOut *TimeoutError

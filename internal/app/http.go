@@ -716,6 +716,11 @@ func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) tea.Cmd {
 			// both ways out of it.
 			return m.showHTTPTimeout(msg.Request, timedOut)
 		}
+		if text := httpclient.ErrorMessage(msg.Err); text != "" {
+			// A local failure (#3086) — unresolved placeholder, bad URL,
+			// unreadable body file — reads as one human line, not a Go error.
+			return m.showHTTPFailure(msg.Request, text)
+		}
 		m.host.Notify(host.Error, "http: "+msg.Err.Error())
 		return nil
 	}
@@ -814,7 +819,12 @@ func suggestedHTTPTimeout(limit time.Duration) string {
 // (#2630) and, for a pane nobody can see, into the notification channel — the
 // same two routes an ordinary answer takes.
 func (m *Model) showHTTPTimeout(request string, err *httpclient.TimeoutError) tea.Cmd {
-	text := httpTimeoutText(err)
+	return m.showHTTPFailure(request, httpTimeoutText(err))
+}
+
+// showHTTPFailure puts a failed request's one-line explanation into the
+// response pane (opening it when needed) and the notification log.
+func (m *Model) showHTTPFailure(request, text string) tea.Cmd {
 	if m.httpPanel() == nil {
 		m.openHTTPPanel()
 	}

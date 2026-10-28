@@ -186,7 +186,11 @@ import (
 // "silent_known" — every open document's server already ended a warm-up of
 // this project quiet, so no wait (no fallback timer, no notice) was armed.
 // Below v19 such a switch read "quiet" after the full two-minute fallback.
-const SchemaVersion = 19
+//
+// v20 (#3086): the "http.flight" "reason" vocabulary gains "placeholder"
+// (an unresolved placeholder), "url" (the final URL failed to parse) and
+// "file" (a body file could not be read); below v20 those landed in "other".
+const SchemaVersion = 20
 
 // defaultFlushInterval is how often the writer goroutine flushes the
 // bufio.Writer on its own, independent of buffer fill or explicit Flush
