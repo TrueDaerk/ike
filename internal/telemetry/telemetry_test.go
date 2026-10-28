@@ -813,17 +813,17 @@ func TestPalettePickClampsNegatives(t *testing.T) {
 }
 
 // The version analysis scripts branch on (#2885, #2967, the code-actions
-// "anchored" flag, the "silent_known" lsp skip).
-func TestSchemaVersionIsNineteen(t *testing.T) {
-	if SchemaVersion != 19 {
-		t.Fatalf("SchemaVersion = %d, want 19", SchemaVersion)
+// "anchored" flag, the "silent_known" lsp skip, the local http.flight reasons).
+func TestSchemaVersionIsTwenty(t *testing.T) {
+	if SchemaVersion != 20 {
+		t.Fatalf("SchemaVersion = %d, want 20", SchemaVersion)
 	}
 	dir := t.TempDir()
 	r := New(dir, nil)
 	r.Command("editor.save", SourceKeybind)
 	r.Close()
-	if evs := readSession(t, dir); len(evs) != 1 || evs[0].V != 19 {
-		t.Fatalf("events must be stamped v19, got %v", evs)
+	if evs := readSession(t, dir); len(evs) != 1 || evs[0].V != 20 {
+		t.Fatalf("events must be stamped v20, got %v", evs)
 	}
 }
 

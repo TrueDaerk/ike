@@ -973,6 +973,19 @@ seconds into a thirty-second budget still reads as "canceled" (#1272).
 `TimeoutError` unwraps to `context.DeadlineExceeded`, so a caller testing for
 the sentinel keeps working.
 
+**Local failures** (#3086) — the ones that fail in milliseconds before the
+wire — take the same `SetFailure` path with a one-line message from
+`httpclient.ErrorMessage` instead of the raw Go error:
+
+| Reason (`ClassifyError`) | Cause | Pane message |
+|---|---|---|
+| `placeholder` | `httpfile.UnresolvedError` from substitution (URL, headers, body, `<@` file) | `Unresolved placeholder ${TOKEN} — define it in the environment file` |
+| `url` | `*url.Error` with `Op == "parse"` (also a target without host) | `Invalid URL "…" — <parse error>` |
+| `file` | `*fs.PathError` reading a `< file` body | `Cannot read file <path> — <cause>` |
+
+Dispatch wraps these with `%w` so the types survive; telemetry records only
+the reason, never the placeholder name or path.
+
 **Streams are unaffected** (#1776): once a response is recognised as a stream
 the overall deadline is dropped for `StreamIdleTimeout`, so a healthy
 long-lived SSE/NDJSON connection is never cut off by the request timeout.

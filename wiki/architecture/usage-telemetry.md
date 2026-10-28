@@ -63,6 +63,7 @@ currently 16); readers must tolerate unknown fields and filter on `v`.
 | 17 | #2967 | The `complexity.scan` op gains `cached` — how many of the walk's `files` were taken from the persisted [complexity index cache](complexity.md#project-index-2916) instead of being measured — and `cache` = `corrupt` when the cache the walk tried to seed from was damaged (it is ignored and rewritten; the field is omitted otherwise). A warm start reads `cached` equal to `files`; a cold walk, a rebuild and a changed `complexity.exclude` read `0`. Structural only — a count and a marker, never a path. Absence below v17 means every file was measured. |
 | 18 | #3013 | The `palette.pick` and `palette.dismiss` events of the code-actions mode (`"!"`) gain `anchored` — `true` when the box sat at its caret or Problems-row anchor, `false` when no on-screen anchor existed and the picker opened centered instead (a caret scrolled out of view, a stale pane rect, a box that would leave the terminal). A flag, never a position. Omitted for every other mode; below v18 it means "not recorded". |
 | 19 | #3080 | The `project.switch` op's `lsp` phase gains the `skipped` value `silent_known`: every open document's server already ended a warm-up of this project `quiet`, so the switch armed no wait — no two-minute fallback timer, no silent-server notice — and closed the phase in the same pass as the `ok` ([project-switching](project-switching.md)). Below v19 the same switch read `quiet` after the full fallback. A project with several servers still waits for the ones not known silent, so a mixed switch reads like any v18 one. |
+| 20 | #3086 | The `http.flight` `reason` vocabulary gains three local failure classes: `placeholder` (a `${NAME}` / `{{$env NAME}}` / `{{name}}` placeholder in the URL, headers or body had no value), `url` (the final URL failed to parse or has no host) and `file` (a `< file` body could not be read). These fail in milliseconds before the wire and below v20 all read `other`. Structural only: the placeholder name or file path never leaves the process (the response pane shows them). |
 
 An export spanning versions therefore needs three guards: filter v1 `command`
 events on `data.source != "internal"`, treat a missing `ok`/`ms` on v4 as
@@ -174,7 +175,7 @@ counts by the version's interval before comparing sessions.
       fact: a `ttfb_ms` near the total is the server's wait, a large
       `dns_ms` the resolver's. An `error` or `canceled` end — v11 (#2631) —
       also carries `reason`, one of `timeout`, `dns`, `refused`, `tls`,
-      `reset`, `canceled`, `other` (`httpclient.ClassifyError`), so a fast
+      `reset`, `canceled`, `placeholder`, `url`, `file` (the last three since v20, #3086), `other` (`httpclient.ClassifyError`), so a fast
       failure is distinguishable from a hung deadline without ever recording
       the underlying error text. An end that followed redirects — v15
       (#2716) — adds `redirects`, the hop count, which is what makes the
