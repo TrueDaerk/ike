@@ -531,9 +531,9 @@ type Model struct {
 	// hideTests drops the test files from every tab ('t', #2950).
 	hideTests bool
 
-	// expanded is the expandKey of the function row whose sites are shown
-	// ('space', #2946, sites.go); "" when none is.
-	expanded string
+	// expanded holds the expandKey of every function row whose sites are
+	// shown ('space', #2946; 'shift+space', #3082, sites.go).
+	expanded map[string]bool
 
 	// The hotspot columns (#2957, churn.go): commits per project-relative
 	// path in the last churnDays days, nil outside git (the columns hide);
@@ -1330,10 +1330,16 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.ToggleHistogram()
 	case "space":
 		m.ToggleSites()
+	case "shift+space":
+		m.ToggleAllSites() // #3082
+	case "B":
+		return func() tea.Msg { return GroupPickMsg{} } // #3082: the root model opens the picker
 	case "m":
 		return m.showSites()
 	case "i":
 		return m.toggleBaseline()
+	case "I":
+		return func() tea.Msg { return BaselineMarkedMsg{} } // #3082: the root model asks first
 	case "x":
 		return m.toggleHide() // #3031
 	case "X":

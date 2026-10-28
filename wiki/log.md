@@ -1,5 +1,14 @@
 # Log
 
+## 2026-10-28 (Complexity window: bulk sites, grouping picker, accept listed, #3082)
+
+- [Complexity](/architecture/complexity.md): `shift+space`
+  (`complexity.sitesAll`) expands / collapses the sites of every visible
+  row; `B` (`complexity.groupPick`) picks none / class / file / tree view
+  from a locked palette picker; `I` (`complexity.baselineMarked`) accepts or
+  drops every listed function in one baseline write after a confirmation
+  naming the count. The expansion is now a set of functions.
+
 ## 2026-10-28 (jq playground: cmd+l focuses the query line, #3084)
 
 - [jq Playground](/architecture/jq-playground.md): `playground.focusQuery`

@@ -160,3 +160,61 @@ func (m *Model) baselineTotals() string {
 	}
 	return strconv.Itoa(m.summary.Accepted) + " accepted"
 }
+
+// BaselineMarkedMsg asks the root model to confirm and apply BaselineMarked
+// ('I', #3082).
+type BaselineMarkedMsg struct{}
+
+// BaselineMarked builds complexity.baselineMarked's message (#3082, 'I'):
+// one toggle over every function the visible rows stand for — the current
+// filter result (the pane has no multi-select), a group row by its
+// members; site and candidate rows add nothing, their parent is listed
+// itself. Like a group's 'i' it records every over-threshold function not
+// yet accepted, or, when all of them already are, drops them all. The
+// Changes, Trend and Duplicates tabs and a list without an over-threshold
+// or accepted function yield nothing.
+func (m *Model) BaselineMarked() (BaselineToggleMsg, bool) {
+	if m.tab != TabProject && m.tab != TabFile {
+		return BaselineToggleMsg{}, false
+	}
+	seen := map[baselineItemKey]bool{}
+	var pending, accepted []BaselineItem
+	add := func(r Row) {
+		it := r.item()
+		k := baselineItemKey{Rel: it.Rel, Name: it.Fn.Name, Ordinal: it.Ordinal}
+		if r.Gone || r.Hidden || seen[k] {
+			return
+		}
+		seen[k] = true // a pinned function is listed twice
+		switch {
+		case r.accepted():
+			accepted = append(accepted, it)
+		case m.th(r.Path).Over(r.Fn):
+			pending = append(pending, it)
+		}
+	}
+	for _, r := range m.rows {
+		switch {
+		case r.child():
+		case r.Group != nil:
+			for _, mem := range r.Members {
+				add(mem)
+			}
+		default:
+			add(r)
+		}
+	}
+	switch {
+	case len(pending) > 0:
+		return BaselineToggleMsg{Items: pending}, true
+	case len(accepted) > 0:
+		return BaselineToggleMsg{Items: accepted, Remove: true}, true
+	}
+	return BaselineToggleMsg{}, false
+}
+
+// baselineItemKey identifies a BaselineItem the way the baseline keys it.
+type baselineItemKey struct {
+	Rel, Name string
+	Ordinal   int
+}
