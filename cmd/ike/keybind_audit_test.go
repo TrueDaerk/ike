@@ -229,6 +229,9 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	// doorways there (#3000).
 	{"editor.scrollCaretCenter", reasonPlatformChord},
 	{"editor.tab.closeOthers", reasonPlatformChord}, // cmd+alt+w on macOS (#2538)
+	// cmd+n in the popup layer on macOS (#3076); off macOS it would fold onto
+	// readline's ctrl+n, so the palette and the Tools menu are the doorways.
+	{"terminal.newFloatPanel", reasonPlatformChord},
 	// #2538's remaining batch closes: the tab context menu and the File menu
 	// are where they are discovered, and cmd+w's neighbourhood has room for
 	// exactly one of them (Close Others took it).
