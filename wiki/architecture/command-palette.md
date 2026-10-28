@@ -4,7 +4,7 @@ title: Command Palette
 description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked and frecency-boosted with a "did you mean" fallback over aliases, keybind labels and menu paths, "@" finds files with the hump matcher, ranked by tier, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself; a pick of a bound command toasts its chord, a third pick of an unbound one offers a key.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-10-21T12:00:00Z
+timestamp: 2026-10-28T12:00:00Z
 ---
 
 # Command Palette
@@ -316,12 +316,25 @@ whose name one typed can never be pushed below a hit that borrowed a directory
 segment:
 
 1. the **basename**, with or without its extension, equals the query
-   (case-insensitively)
+   (case-insensitively, and ignoring separators since #3079 — `filemode` is
+   `file_mode.go`)
 2. the basename **starts with** the query (`Result.Prefix`, under the case rule)
 3. a hump match **inside the basename**
 4. a hump match **inside one directory segment** (#2887), scored on that
    segment alone — the deepest segment that matches, the best score among them
 5. a hump match over the **whole relative path** (what makes `@app/app` work)
+
+A query with a **`/`** names a directory and a file (#3079, `matchDirName`):
+it is split at its last `/`, the name part is graded against the basename
+exactly like a bare name query and takes tiers 1–3 (no basename or segment can
+hold a `/`, so those tiers are free for it), and the directory part must
+hump-match the trailing directory segments, deepest start first, scored on
+those segments alone. `app/recents` is therefore tier 1 for
+`internal/app/recents.go`, tier 2 for `recents_test.go`, tier 3 for
+`recent_sel.go`; the directory part spelled whole (`app` for `internal/app/`,
+not `a/apps/`) adds one word-boundary bonus (`dirSpelledBonus`). A query that
+fails the split — `app/` alone, or a name part that matches no basename —
+stays in tier 5.
 
 Within one tier the blend of three signals — fuzzy score, **frecency** (#2155)
 and the **most-used** counter (#1419) — applies unchanged, and the blend order
@@ -350,6 +363,35 @@ above a hit stitched together across segments. What is left to order equal
 rows is the **tie-break**: after frecency and usage, the **shorter path
 first, then alphabetical** — a deterministic order one can read (`view.go`
 before `qualifier_conformance_test.go`), never the walk order.
+
+**Scoring a name one typed whole (#3079).** The fuzzy scorer pays a rune that
+starts a word (16) twice what one continuing the run earns (8), so its optimal
+alignment *splits* the query wherever the next word begins with the right
+letter: `app/recents` preferred the `s` of `recent_sel.go` to the one
+completing `recents.go`, and with every candidate in tier 5 the file whose name
+one typed in full sat at rank 10 of 31 — the telemetry had 10–12 character
+queries with the pick at rank 12–44 of 15–49, the list inverted. Three rules
+keep a longer query from ranking its file lower than a prefix of it did
+(`TestFileModeLongerQueryNeverRanksLower`):
+
+- **Prefix matches score contiguously.** Within tier 2 every candidate starts
+  with the query, so the match is re-scored on the prefix alone; all score
+  alike and frecency, usage and the shorter path decide (`tools.go` before
+  `toolhost_layout_test.go` for `tool`). The highlight shows the prefix.
+- **Every extra run of a name match costs `fragmentPenalty` (9)** — one more
+  than the boundary-over-consecutive difference — so a split is worth less
+  than the contiguous run. It matters where name grades share a tier — the
+  path tier below, where `apprecents` now lists `recents_test.go` (the name
+  as a prefix) above `recent_sel.go` (the name split at `sel`).
+- **Tier 5 re-scores at the best implicit split** (`splitDirName`): a whole-path
+  match of a query typed without the `/` (`filterbarfilt`) is scored as the
+  directory part plus the name part, the way `matchDirName` scores one typed
+  with it, so `filterbar.go` is not out-scored by `filterbar_test.go`'s `_test`
+  boundary. Only the score changes — the file stays in tier 5, where the
+  frecency boost still lifts a file one works on over a cluster of near-equal
+  path matches (#2636). Concatenations are deliberately *not* promoted above
+  the directory-segment tier: `ghissues` keeps listing `internal/ghissues/`
+  above `gh/issues.go` (#2887).
 
 **Fallback (#2686).** When *nothing* hump-matches — a typo, or a query whose
 letters merely occur somewhere — the whole list falls back to the permissive
