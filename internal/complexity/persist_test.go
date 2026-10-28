@@ -165,6 +165,65 @@ func TestCacheRebuildAndExcludeChangeWalkCold(t *testing.T) {
 	}
 }
 
+// TestRescanIsIncremental pins #3085: Rescan re-walks from the current
+// measurements — an unchanged tree measures nothing, a touched file is the
+// only one measured, a deleted one drops out — and still writes the cache.
+func TestRescanIsIncremental(t *testing.T) {
+	x, dir := persistedIndex(t)
+	files := x.Stats().Files
+	if !x.Rescan() {
+		t.Fatal("rescan refused")
+	}
+	waitScan(t, x)
+	if s := x.Stats(); s.Files != files || s.Cached != files {
+		t.Fatalf("rescan of an unchanged tree = %+v, want all %d files cached", s, files)
+	}
+	touched := filepath.Join(dir, "py", "b.py")
+	if err := os.WriteFile(touched, []byte("def b(x):\n    return 0\n\ndef b2():\n    pass\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	gone := filepath.Join(dir, "js", "e.js")
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	if !x.Rescan() {
+		t.Fatal("rescan refused")
+	}
+	waitScan(t, x)
+	if s := x.Stats(); s.Files != files-1 || s.Cached != files-2 {
+		t.Fatalf("rescan = %+v, want %d files, %d of them cached", s, files-1, files-2)
+	}
+	v := x.Snapshot()
+	if _, ok := v.Files[gone]; ok {
+		t.Fatal("a deleted file came back from the seed")
+	}
+	if fns := v.Files[touched]; len(fns) != 2 {
+		t.Fatalf("touched file = %+v, want its two new functions", fns)
+	}
+	if seed, _ := loadCache(filepath.Join(dir, ".ike", cacheName), dir); len(seed) != files-1 {
+		t.Fatalf("the rescan must rewrite the cache: %d records, want %d", len(seed), files-1)
+	}
+	x.Reconfigure(Options{Enabled: false})
+	if x.Rescan() {
+		t.Fatal("a disabled index must refuse the rescan")
+	}
+}
+
+// TestReconfigureIgnoresRespelledExclude: a reload that only re-spells the
+// exclude list (spaces, blank entries) is no change, so no cold walk (#3085).
+func TestReconfigureIgnoresRespelledExclude(t *testing.T) {
+	a := Options{Enabled: true, Exclude: []string{"vendor/**", "*.sh"}}
+	if !a.equal(Options{Enabled: true, Exclude: []string{" vendor/**", "", "*.sh "}}) {
+		t.Fatal("a re-spelled exclude list must compare equal")
+	}
+	if a.equal(Options{Enabled: true, Exclude: []string{"vendor/**"}}) {
+		t.Fatal("a shorter exclude list must differ")
+	}
+	if !(Options{Enabled: true}).equal(Options{Enabled: true, Exclude: []string{}}) {
+		t.Fatal("nil and empty exclude lists must compare equal")
+	}
+}
+
 func TestCacheFileFollowsConfigDir(t *testing.T) {
 	t.Setenv("IKE_CONFIG_DIR", "")
 	if got, want := CacheFile("/p"), filepath.Join("/p", ".ike", cacheName); got != want {

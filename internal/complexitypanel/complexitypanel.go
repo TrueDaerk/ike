@@ -25,8 +25,8 @@
 // The pane is a pure consumer: the root model hands it the index's immutable
 // View via Set on open and on every generation change, and tells it where
 // the caret is via Follow. Enter / a double click asks the root model to
-// open the function's file (OpenLocationMsg), 'r' to rebuild the index
-// (RefreshMsg), 'e' to write the current tab as a CSV scratch (ExportMsg) and
+// open the function's file (OpenLocationMsg), 'r' to rescan the index
+// (RefreshMsg, incremental since #3085), 'e' to write the current tab as a CSV scratch (ExportMsg) and
 // 'E' as a Markdown one (ExportMarkdownMsg, #2963, markdown.go),
 // 'y' to copy the row (CopyMsg). Nothing here touches the filesystem.
 package complexitypanel
@@ -189,7 +189,8 @@ type OpenLocationMsg struct {
 	EndLine int
 }
 
-// RefreshMsg asks the root model to rebuild the index ('r').
+// RefreshMsg asks the root model to rescan the index incrementally ('r',
+// #3085: only files changed on disk are measured again).
 type RefreshMsg struct{}
 
 // ExportMsg asks the root model to write the current tab to a CSV scratch

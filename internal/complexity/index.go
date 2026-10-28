@@ -57,17 +57,36 @@ type Options struct {
 	Exclude []string
 }
 
-// equal reports whether o and p configure the same walk.
+// equal reports whether o and p configure the same walk. The exclude lists
+// compare the way Excluded reads them — trimmed, blanks dropped — so a
+// config reload that only re-spells the list does not rebuild the index
+// cold (#3085).
 func (o Options) equal(p Options) bool {
-	if o.Enabled != p.Enabled || len(o.Exclude) != len(p.Exclude) {
+	if o.Enabled != p.Enabled {
 		return false
 	}
-	for i := range o.Exclude {
-		if o.Exclude[i] != p.Exclude[i] {
+	a, b := effectiveGlobs(o.Exclude), effectiveGlobs(p.Exclude)
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
 			return false
 		}
 	}
 	return true
+}
+
+// effectiveGlobs is the exclude list as Excluded matches it: trimmed, blank
+// patterns dropped.
+func effectiveGlobs(globs []string) []string {
+	var out []string
+	for _, g := range globs {
+		if g = strings.TrimSpace(g); g != "" {
+			out = append(out, g)
+		}
+	}
+	return out
 }
 
 // View is an immutable snapshot of the index: Gen is the notification
@@ -256,6 +275,49 @@ func (x *Index) Rebuild() bool {
 	x.pending = true
 	x.ensureLocked()
 	return true
+}
+
+// Rescan re-walks the project incrementally (#3085): the pane's 'r' — the
+// "rescan" of every tab and the Trend tab's "recompute". Unlike Rebuild it
+// keeps the cache: the fresh walk is seeded from the current one's
+// measurements when that walk finished (the persisted cache otherwise), so
+// only a file whose size or mtime moved — or one the walk had not seen — is
+// measured again, and a deleted one drops out. It reports false when there
+// is nothing to rescan (disabled, or no syntax tree at all).
+func (x *Index) Rescan() bool {
+	if !x.Available() {
+		return false
+	}
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	if !x.opts.Enabled {
+		return false
+	}
+	prev := x.project
+	x.project = x.newProject(x.opts, true)
+	if prev != nil && prev.Done(indexLang) {
+		x.project.SetPersist(x.seededFrom(x.project, prev))
+	}
+	x.view = nil
+	x.pending = true
+	x.ensureLocked()
+	return true
+}
+
+// seededFrom is p's persist seam seeding from the finished walk prev (#3085)
+// instead of the cache file: prev already folds in every re-measure since
+// the cache was written. p still persists once it finishes.
+func (x *Index) seededFrom(p, prev *langindex.Index[fileEntry]) langindex.Persist[fileEntry] {
+	return langindex.Persist[fileEntry]{
+		Load: func(string) map[string]langindex.Seeded[fileEntry] {
+			seed := map[string]langindex.Seeded[fileEntry]{}
+			prev.EachStamped(indexLang, func(path string, st langindex.Stamp, e fileEntry) {
+				seed[path] = langindex.Seeded[fileEntry]{Stamp: st, Value: e}
+			})
+			return seed
+		},
+		Saved: func(string) { x.persist(p) },
+	}
 }
 
 // newProject builds the walk for opts. The walk persists through the cache

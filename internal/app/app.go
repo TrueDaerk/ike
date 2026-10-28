@@ -8776,9 +8776,13 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// project complexity index.
 		return m, m.toggleComplexityPanel()
 
-	case ComplexityRefreshMsg, complexitypanel.RefreshMsg:
-		// complexity.refresh (#2917), also 'r' in the pane: rebuild the index.
+	case ComplexityRefreshMsg:
+		// complexity.refresh (#2917): the explicit cold rebuild of the index.
 		return m, m.rebuildComplexityIndex()
+
+	case complexitypanel.RefreshMsg:
+		// 'r' in the pane: an incremental rescan from the cache (#3085).
+		return m, m.rescanComplexityIndex()
 
 	case ComplexityExportMsg:
 		// complexity.export (#2917): the pane's 'e' from the palette.
