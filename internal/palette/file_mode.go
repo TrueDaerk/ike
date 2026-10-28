@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"ike/internal/cli"
 	"ike/internal/config"
@@ -340,6 +341,12 @@ const (
 // Matching the whole path last keeps "@app/app" finding internal/app/app.go,
 // the path separator counting as a word boundary like any other separator
 // (fuzzy.isBoundary).
+//
+// A query with a '/' names a directory and a file (#3079) and is graded by its
+// name part before anything else (matchDirName) — no basename or segment can
+// hold the '/', so those tiers are free for it. A whole-path match that ends
+// in the basename keeps its path tier but is re-scored the same way, at its
+// best implicit split (splitDirName).
 func matchFile(query, p string, mode fuzzy.Case) (fileTier, fuzzy.Result, bool) {
 	segs := strings.Split(p, "/")
 	// Rune offset of every segment in p, so a match scored on a segment alone
@@ -355,8 +362,14 @@ func matchFile(query, p string, mode fuzzy.Case) (fileTier, fuzzy.Result, bool) 
 		return r
 	}
 	base := segs[len(segs)-1]
-	if r, ok := fuzzy.MatchHumpsCase(query, base, mode); ok {
-		return basenameTier(query, base, r), shift(r, offs[len(segs)-1]), true
+	slash := strings.LastIndex(query, "/")
+	if slash >= 0 {
+		if tier, r, ok := matchDirName(query[:slash], query[slash+1:], segs, offs, mode, true); ok {
+			return tier, r, true
+		}
+	}
+	if tier, r, ok := matchBase(query, base, mode); ok {
+		return tier, shift(r, offs[len(segs)-1]), true
 	}
 	best, bestOff, found := fuzzy.Result{}, 0, false
 	for i := len(segs) - 2; i >= 0; i-- {
@@ -369,16 +382,156 @@ func matchFile(query, p string, mode fuzzy.Case) (fileTier, fuzzy.Result, bool) 
 		return tierFileSegment, shift(best, bestOff), true
 	}
 	if r, ok := fuzzy.MatchHumpsCase(query, p, mode); ok {
+		if slash < 0 {
+			if sr, ok := splitDirName(query, segs, offs, mode); ok {
+				return tierFilePath, sr, true
+			}
+		}
 		return tierFilePath, r, true
 	}
 	return tierFileFallback, fuzzy.Result{}, false
 }
 
+// dirSpelledBonus is the score a directory-and-name match (#3079) earns when
+// its directory part spells the file's trailing directories whole: "app/tools"
+// names internal/app/tools.go more exactly than lib/apps/tools.go, which the
+// hump matcher accepts just as readily ("app" is a prefix of "apps"). One
+// word-boundary bonus — enough to order equal name matches, and tiers never
+// mix anyway.
+const dirSpelledBonus = 16
+
+// matchDirName grades a query split into a directory part dq and a name part
+// nq — "app/tools", "palette/file_mode.go" split at the '/' (#3079). Scored
+// over the whole path, such a query lost to its own file: the scorer rewards a
+// word boundary more than a consecutive rune, so "app/tools" preferred the s
+// at the start of "slots" in tool_slots.go to the one completing tools.go —
+// with every candidate in the path tier, the file whose name one typed in
+// full sat below the ones that merely shared its first letters. Here the name
+// part is graded against the basename exactly like a bare name query
+// (matchBase: equal, prefix, hump) and the directory part must hump-match the
+// trailing directory segments, deepest start first, scored on those segments
+// alone so depth costs nothing (the #2887 rule). The score is the sum of both
+// parts, plus dirSpelledBonus when the directory part spells those segments
+// whole. Positions index the path; with slash set the typed '/' is
+// highlighted on the separator before the basename.
+func matchDirName(dq, nq string, segs []string, offs []int, mode fuzzy.Case, slash bool) (fileTier, fuzzy.Result, bool) {
+	last := len(segs) - 1
+	if dq == "" || nq == "" || last == 0 {
+		return 0, fuzzy.Result{}, false
+	}
+	tier, nr, ok := matchBase(nq, segs[last], mode)
+	if !ok {
+		return 0, fuzzy.Result{}, false
+	}
+	for first := last - 1; first >= 0; first-- {
+		dir := strings.Join(segs[first:last], "/")
+		dr, ok := fuzzy.MatchHumpsCase(dq, dir, mode)
+		if !ok {
+			continue
+		}
+		score := dr.Score + nr.Score
+		if alnumFold(dq) == alnumFold(dir) {
+			score += dirSpelledBonus
+		}
+		positions := make([]int, 0, len(dr.Positions)+1+len(nr.Positions))
+		for _, i := range dr.Positions {
+			positions = append(positions, i+offs[first])
+		}
+		if slash {
+			positions = append(positions, offs[last]-1)
+		}
+		for _, i := range nr.Positions {
+			positions = append(positions, i+offs[last])
+		}
+		return tier, fuzzy.Result{Score: score, Positions: positions, Prefix: nr.Prefix}, true
+	}
+	return 0, fuzzy.Result{}, false
+}
+
+// splitDirName re-scores a path-tier match typed without the '/' (#3079) —
+// "filterbarfilt" for internal/filterbar/filterbar.go — the way matchDirName
+// scores one typed with it. Every split into a non-empty directory part and
+// name part is tried and the best grade wins: the lowest name tier, then the
+// highest score. Only the score is kept; the file stays in the path tier, where
+// frecency still lifts a file one works on over a cluster of near-equal
+// matches (#2636). Scored over the whole path, "filterbarfilt" put its t on
+// the "_test" boundary and listed filterbar_test.go above filterbar.go, so
+// typing one letter more could sink the file one was spelling.
+func splitDirName(query string, segs []string, offs []int, mode fuzzy.Case) (fuzzy.Result, bool) {
+	q := []rune(query)
+	var (
+		best     fuzzy.Result
+		bestTier fileTier
+		found    bool
+	)
+	for k := 1; k < len(q); k++ {
+		tier, r, ok := matchDirName(string(q[:k]), string(q[k:]), segs, offs, mode, false)
+		if !ok {
+			continue
+		}
+		if !found || tier < bestTier || (tier == bestTier && r.Score > best.Score) {
+			best, bestTier, found = r, tier, true
+		}
+	}
+	return best, found
+}
+
+// alnumFold lowercases s and drops every rune that is not a letter or digit,
+// the form in which a typed name counts as spelled whole.
+func alnumFold(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			b.WriteRune(unicode.ToLower(r))
+		}
+	}
+	return b.String()
+}
+
+// fragmentPenalty is what matchBase charges a name match for every run of
+// matched runes after the first (#3079). The scorer pays a rune that starts a
+// word 16 and one that continues the run 8, so splitting the query across words
+// out-scored typing one word whole: "recents" scored higher on recent_sel.go
+// (the s on "sel") than as the prefix of recents_test.go. Nine — the
+// difference plus one — makes a split worth less than the contiguous run.
+const fragmentPenalty = 9
+
+// matchBase hump-matches query against a basename and grades it
+// (basenameTier). The scorer rewards a word boundary more than a consecutive
+// rune, which inverted the ranking of names one typed in full (#3079): its
+// optimal alignment of "tool" in toolhost_layout_test.go put the l on "layout"
+// and out-scored tools.go, whose prefix is the same four letters. So a prefix
+// match is re-scored on the prefix alone — within the prefix tier every
+// candidate starts with the query, only the contiguous alignment says
+// anything, and it scores them alike, leaving the order to frecency, usage and
+// the shorter path (the highlight then shows the prefix, which is what the tier
+// is about) — and any other match pays fragmentPenalty per extra run.
+func matchBase(query, base string, mode fuzzy.Case) (fileTier, fuzzy.Result, bool) {
+	r, ok := fuzzy.MatchHumpsCase(query, base, mode)
+	if !ok {
+		return 0, fuzzy.Result{}, false
+	}
+	tier := basenameTier(query, base, r)
+	if tier == tierFilePrefix {
+		head := string([]rune(base)[:len([]rune(query))])
+		if pr, ok := fuzzy.MatchHumpsCase(query, head, mode); ok {
+			r = pr
+		}
+	}
+	for i := 1; i < len(r.Positions); i++ {
+		if r.Positions[i] != r.Positions[i-1]+1 {
+			r.Score -= fragmentPenalty
+		}
+	}
+	return tier, r, true
+}
+
 // basenameTier grades an accepted basename match: equality (with or without
-// the extension) beats a prefix, which beats any other hump match. Equality is
-// case-insensitive whatever the case rule — one who types a whole file name
-// means that file — while the prefix verdict is the matcher's own
-// (Result.Prefix), so it follows completion.case_sensitivity.
+// the extension, and ignoring separators) beats a prefix, which beats any
+// other hump match. Equality is case-insensitive whatever the case rule — one
+// who types a whole file name means that file — while the prefix verdict is
+// the matcher's own (Result.Prefix), so it follows completion.case_sensitivity.
 func basenameTier(query, base string, r fuzzy.Result) fileTier {
 	if query != "" {
 		stem := base
@@ -386,6 +539,10 @@ func basenameTier(query, base string, r fuzzy.Result) fileTier {
 			stem = base[:i]
 		}
 		if strings.EqualFold(base, query) || strings.EqualFold(stem, query) {
+			return tierFileExact
+		}
+		// Spelled whole, separators aside (#3079): "filemode" is file_mode.go.
+		if q := alnumFold(query); q != "" && (q == alnumFold(base) || q == alnumFold(stem)) {
 			return tierFileExact
 		}
 	}
