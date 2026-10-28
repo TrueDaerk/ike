@@ -708,6 +708,22 @@ running. The query fuzzy-filters both columns at once, unless it starts with
 `p:` — then it filters the projects alone (#2399, above). Anchored palettes
 and search everywhere never show the column.
 
+**Row actions without a switch (#3083).** On a focused project row the
+column owns two Palette-scoped commands (`internal/app/recent_project_actions.go`):
+`project.closeFromList` — `cmd+backspace` / `ctrl+backspace`, plus the Global
+close chord `cmd+shift+w` / `ctrl+shift+w` while the dialog is up — closes an
+open (`●`) project through the close-from-list path (#820/#821: busy
+workspaces get the guard prompt over a closed palette, idle ones close in
+place) and never switches; the row stays listed, unmarked, with the cursor on
+it. On a closed row it only says the project is not open.
+`project.removeFromList` — `cmd+delete` / `ctrl+delete` — forgets a closed
+project's history entry and is **refused for an open one** ("… is open —
+close it first"). The active project is never a row of the column, so
+closing it stays `project.close`'s job, which resumes the most recently used
+parked project. Off a project row (file rows, every other palette mode) the
+chords fall through to the palette unchanged — the row aux action and query
+word deletion. The dialog hint names the close chord next to `shift+del`.
+
 **The column has its own scroll window (#2041).** `sideTop` is to the column
 what `top` is to the main list: `scrollSideToSelected` keeps the selection
 inside `sideVisibleRows() = visibleRows() - 1` rows (the column spends one

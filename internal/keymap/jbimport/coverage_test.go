@@ -24,6 +24,8 @@ var noCounterpart = map[string]string{
 	"explorer.redo":                    "project-view redo rides $Redo in JetBrains, already mapped to editor.redo",
 	"file.rename":                      "RenameElement covers symbol and file renames, mapped to lsp.rename",
 	"find.openInPanel":                 "JetBrains' Open in Find Window is a popup-local chord, not a keymap action",
+	"project.closeFromList":            "Recent Projects popup row action, not a JetBrains keymap action",
+	"project.removeFromList":           "Recent Projects popup row action, not a JetBrains keymap action",
 	"project.findInAllProjects":        "IKE-only concept (#2394): JetBrains searches one project at a time, no cross-project keymap action",
 	"project.findInAllProjectsResults": "IKE-only concept (#2394): re-opening a cross-project result set has no JetBrains equivalent",
 	"project.findInGroup":              "IKE-only concept (#2575): JetBrains has no named project sets to restrict a search to",

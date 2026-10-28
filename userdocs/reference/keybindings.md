@@ -360,8 +360,14 @@ Active while the command palette is open.
 
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|
+| Close project from recent list | `cmd+backspace` | `ctrl+backspace` | `project.closeFromList` |
+| Close project from recent list | `cmd+shift+w` | `ctrl+shift+w` | `project.closeFromList` |
+| Close project from recent list | `ctrl+backspace` | `ctrl+backspace` | `project.closeFromList` |
+| Close project from recent list | `ctrl+shift+w` | `ctrl+shift+w` | `project.closeFromList` |
 | Open results in Find window | `cmd+enter` | `ctrl+enter` | `find.openInPanel` |
 | Open results in Find window | `ctrl+enter` | `ctrl+enter` | `find.openInPanel` |
+| Remove project from recent list | `cmd+delete` | `ctrl+delete` | `project.removeFromList` |
+| Remove project from recent list | `ctrl+delete` | `ctrl+delete` | `project.removeFromList` |
 
 ## Terminal
 

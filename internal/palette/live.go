@@ -96,3 +96,24 @@ func clampIndex(i, n int) int {
 	}
 	return i
 }
+
+// LockedPrefix reports the prefix rune of the mode an open palette is locked
+// to (#3083) — how the root model tells the recent-files dialog's row actions
+// apart from the same chords in every other mode. False for a closed or
+// unlocked palette.
+func (p *Palette) LockedPrefix() (rune, bool) {
+	if !p.open || p.locked == nil {
+		return 0, false
+	}
+	return p.locked.Prefix(), true
+}
+
+// FocusedItem exposes the row the keyboard focus is on (#3083): the side
+// column's selection while it holds the focus, else the main list's. False
+// for a closed palette or an empty list.
+func (p *Palette) FocusedItem() (Item, bool) {
+	if !p.open {
+		return Item{}, false
+	}
+	return p.focusedItem()
+}

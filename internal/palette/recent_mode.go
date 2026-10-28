@@ -203,7 +203,7 @@ func (r *RecentMode) Hint(query string) string {
 	if _, only := projectsOnly(query); only {
 		return "projects only — backspace the \"" + ProjectsOnlyPrefix + "\" for files"
 	}
-	return "tab: switch column · " + ProjectsOnlyPrefix + " projects only · shift+del: forget"
+	return "tab: switch column · " + ProjectsOnlyPrefix + " projects only · shift+del: forget · cmd+backspace: close project"
 }
 
 // SideTitle implements SideMode.

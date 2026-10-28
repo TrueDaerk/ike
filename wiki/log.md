@@ -1,5 +1,15 @@
 # Log
 
+## 2026-10-28 (Recent Projects column: close / remove without switching, #3083)
+
+- [Command Palette](/architecture/command-palette.md): on a project row of
+  the Recent Files dialog `project.closeFromList` (`cmd+backspace` /
+  `ctrl+backspace`, and `cmd+shift+w` while the dialog is up) closes an open
+  `●` project without switching; `project.removeFromList` (`cmd+delete` /
+  `ctrl+delete`) forgets a closed one and refuses an open one.
+- [Workspace](/architecture/workspace.md): close-from-list is timed as a
+  `project.close` op and keeps the cursor on the closed row.
+
 ## 2026-10-28 (Complexity window: bulk sites, grouping picker, accept listed, #3082)
 
 - [Complexity](/architecture/complexity.md): `shift+space`
