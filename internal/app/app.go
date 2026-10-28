@@ -359,6 +359,11 @@ type Model struct {
 	// confirmation dialog open in the shell.
 	cxBase       *complexityBaselineState
 	cxBaseDialog bool
+	// cxBaseMarked is the pending toggle of complexity.baselineMarked
+	// (#3082) while the dialog asks for it; nil for the "accept all" one.
+	cxBaseMarked *complexitypanel.BaselineToggleMsg
+	// cxGroupPick is the Complexity grouping picker's palette mode (#3082).
+	cxGroupPick *complexityGroupMode
 	// cxPins is the optimisation-session pin list (0551, #2959), loaded
 	// lazily and shared by pointer like cxBase.
 	cxPins *complexityPinsState
@@ -1689,6 +1694,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	runConfigs := newRunConfigsMode()                        // run/debug configurations picker (#1914)
 	tasksPicker := newTasksMode()                            // discovered-tasks picker (#1915)
 	tabPicker := newTabPickerMode()                          // per-pane MRU tab picker (#2151)
+	cxGroupPick := &complexityGroupMode{}                    // Complexity grouping picker (#3082)
 	snippetPicker := newSnippetPickerMode()                  // live-template picker (#2694)
 	sshPicker := newSSHMode()                                // ssh_config host picker (#1938)
 	remotePicker := newRemoteMode()                          // SFTP browse host picker (#1997)
@@ -1791,7 +1797,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		shell:           ui.New(shellConfig(cfg)),
 		vcs:             vcsSt,
 		forgePoll:       forgeSt,
-		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, recentLocsPicker, vcsSt, cmdUsage, fileUsage, cmdFrec, fileFrec, projFrec, pick, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, tabPicker, snippetPicker, sshPicker, remotePicker, playFilters, playCheat, playExport, projGit),
+		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, recentLocsPicker, vcsSt, cmdUsage, fileUsage, cmdFrec, fileFrec, projFrec, pick, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, tabPicker, cxGroupPick, snippetPicker, sshPicker, remotePicker, playFilters, playCheat, playExport, projGit),
 		projGit:         projGit,
 		layoutsPicker:   layoutsPicker,
 		httpRequests:    httpRequests,
@@ -1800,6 +1806,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		runConfigs:      runConfigs,
 		tasks:           tasksPicker,
 		tabPicker:       tabPicker,
+		cxGroupPick:     cxGroupPick,
 		snippetPicker:   snippetPicker,
 		ssh:             sshPicker,
 		remote:          remotePicker,
@@ -3428,7 +3435,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, recentLocs *recentLocationsMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, cmdFrec, fileFrec, projFrec *frecency.Store, pick *recentPick, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, tabs *tabPickerMode, snippetPick *snippetPickerMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode, playCheat *playCheatMode, playExport *playExportMode, projGit *project.GitCache) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, recentLocs *recentLocationsMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, cmdFrec, fileFrec, projFrec *frecency.Store, pick *recentPick, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, tabs *tabPickerMode, cxGroup *complexityGroupMode, snippetPick *snippetPickerMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode, playCheat *playCheatMode, playExport *playExportMode, projGit *project.GitCache) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -3541,7 +3548,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, projPeek, groups, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, recentLocs, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, tabs, snippetPick, ssh, remoteHosts, playFilters, playCheat, playExport, bufLang, openAs, prettierOfferMode{})
+	return palette.New(pcfg, cmd, file, dir, proj, projPeek, groups, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, recentLocs, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, tabs, snippetPick, ssh, remoteHosts, playFilters, playCheat, playExport, bufLang, openAs, cxGroup, prettierOfferMode{})
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -8815,6 +8822,27 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// complexity.sites (#2946), space in the pane: expand / collapse the
 		// selected function into its complexity sites.
 		m.toggleComplexitySites()
+		return m, nil
+
+	case ComplexitySitesAllMsg:
+		// complexity.sitesAll (#3082), shift+space: every visible row.
+		m.toggleAllComplexitySites()
+		return m, nil
+
+	case ComplexityGroupPickMsg, complexitypanel.GroupPickMsg:
+		// complexity.groupPick (#3082), B: the grouping picker.
+		m.openComplexityGroupPicker()
+		return m, nil
+
+	case ComplexityGroupPickedMsg:
+		// A picked grouping mode (#3082): applied and persisted like b.
+		m.pickComplexityGroup(msg)
+		return m, nil
+
+	case ComplexityBaselineMarkedMsg, complexitypanel.BaselineMarkedMsg:
+		// complexity.baselineMarked (#3082), I: the filter result in one
+		// baseline write, behind a confirmation.
+		m.openComplexityBaselineMarkedDialog()
 		return m, nil
 
 	case ComplexityBaselineMsg:

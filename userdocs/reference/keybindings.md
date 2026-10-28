@@ -452,12 +452,15 @@ Active when the Complexity tool window has focus.
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|
 | Accept / drop in the complexity baseline | `i` | `i` | `complexity.baseline` |
+| Accept / drop listed functions in the baseline | `shift+i` | `shift+i` | `complexity.baselineMarked` |
 | Cancel the complexity agent | `shift+a` | `shift+a` | `complexity.cancelAgent` |
 | Cycle complexity grouping (none/class/file) | `b` | `b` | `complexity.group` |
+| Expand / collapse all complexity sites | `shift+space` | `shift+space` | `complexity.sitesAll` |
 | Expand / collapse complexity sites | `space` | `space` | `complexity.sites` |
 | Hide / un-hide function or file in Complexity | `x` | `x` | `complexity.hide` |
 | Hide the row's file in Complexity | `shift+x` | `shift+x` | `complexity.hideFile` |
 | Mark complexity sites in the editor | `m` | `m` | `complexity.showSites` |
+| Pick complexity grouping | `shift+b` | `shift+b` | `complexity.groupPick` |
 | Show / leave hidden complexity functions | `shift+h` | `shift+h` | `complexity.showHidden` |
 | Toggle complexity distribution row | `shift+d` | `shift+d` | `complexity.histogram` |
 | Toggle complexity test files | `t` | `t` | `complexity.toggleTests` |

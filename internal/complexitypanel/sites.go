@@ -5,11 +5,13 @@ package complexitypanel
 // in place into one indented child row per complexity.Site — the kind and
 // its `+3 (nesting 2)` cost in the function column, the line, the CCN and
 // the cognitive increment — sorted by cognitive cost descending, then
-// line. One function is expanded at a time; the expansion is remembered
-// by file and function name, so a snapshot refresh that still holds the
-// function rebuilds its rows. On the Changes tab the after side's sites
-// are shown (a removed function has none in the working tree). The
-// function's extraction candidates follow the sites (#2948, candidates.go).
+// line. One function is expanded at a time — `shift+space`
+// (complexity.sitesAll, #3082) expands or collapses every visible one at
+// once; the expansion is remembered by file and function name, so a
+// snapshot refresh that still holds the function rebuilds its rows. On
+// the Changes tab the after side's sites are shown (a removed function
+// has none in the working tree). The function's extraction candidates
+// follow the sites (#2948, candidates.go).
 
 import (
 	"sort"
@@ -24,9 +26,11 @@ import (
 const siteIndent = "  "
 
 // ToggleSites expands the selected function row into its sites, or
-// collapses it when it is the expanded one; on a site row it collapses the
-// parent. It reports false when the selection has nothing to expand: no
-// row, a group row, a removed function, or a function without sites.
+// collapses it when it is expanded; on a site row it collapses the parent.
+// Expanding replaces a single earlier expansion (one function at a time)
+// but joins a bulk one ('shift+space', ToggleAllSites). It reports false
+// when the selection has nothing to expand: no row, a group row, a removed
+// function, or a function without sites.
 func (m *Model) ToggleSites() bool {
 	if m.treeActive() {
 		return m.toggleTreeSites() // #2954
@@ -39,7 +43,7 @@ func (m *Model) ToggleSites() bool {
 		if r.Parent >= 0 && r.Parent < len(m.rows) {
 			m.cursor = r.Parent
 		}
-		m.expanded = ""
+		delete(m.expanded, r.expandKey())
 		m.Refresh()
 		return true
 	}
@@ -47,26 +51,72 @@ func (m *Model) ToggleSites() bool {
 		return false
 	}
 	key := r.expandKey()
-	if m.expanded == key {
-		m.expanded = ""
+	if m.expanded[key] {
+		delete(m.expanded, key)
 		m.Refresh()
 		return true
 	}
 	if len(r.Fn.Sites) == 0 {
 		return false
 	}
-	m.expanded = key
+	if len(m.expanded) <= 1 {
+		m.expanded = map[string]bool{}
+	}
+	m.expanded[key] = true
 	m.Refresh()
 	return true
 }
 
-// Expanded reports the function row currently expanded, false when none.
-func (m *Model) Expanded() (Row, bool) {
-	if m.expanded == "" {
-		return Row{}, false
+// ToggleAllSites is complexity.sitesAll ('shift+space', #3082): when any
+// visible function row is expanded it collapses every visible one, else it
+// expands every visible function row that has sites. Rows the filter hides
+// keep their state. It reports false when the tab shows no expandable row
+// (a grouped tab, the tree, Trend, Duplicates, no function with sites).
+func (m *Model) ToggleAllSites() bool {
+	if m.treeActive() || m.Grouping() != complexity.ByNone {
+		return false
 	}
+	var keys []string
+	anyOpen := false
 	for _, r := range m.rows {
-		if !r.child() && r.expandKey() == m.expanded {
+		if !r.expandable() {
+			continue
+		}
+		k := r.expandKey()
+		keys = append(keys, k)
+		anyOpen = anyOpen || m.expanded[k]
+	}
+	if len(keys) == 0 {
+		return false
+	}
+	if r, ok := m.Selected(); ok && r.child() && r.Parent >= 0 && r.Parent < len(m.rows) {
+		m.cursor = r.Parent // the site row under the cursor may vanish
+	}
+	if m.expanded == nil {
+		m.expanded = map[string]bool{}
+	}
+	for _, k := range keys {
+		if anyOpen {
+			delete(m.expanded, k)
+		} else {
+			m.expanded[k] = true
+		}
+	}
+	m.Refresh()
+	return true
+}
+
+// expandable reports a function row space could expand: a unit of its own
+// with sites, not removed, not a Trend / Duplicates / gone-pin row.
+func (r Row) expandable() bool {
+	return !r.child() && !r.aggregate() && r.Dup == nil && r.Trend == nil && !r.Gone &&
+		r.Change != complexity.Removed && len(r.Fn.Sites) > 0
+}
+
+// Expanded reports the first expanded function row, false when none.
+func (m *Model) Expanded() (Row, bool) {
+	for _, r := range m.rows {
+		if !r.child() && m.expanded[r.expandKey()] {
 			return r, true
 		}
 	}
@@ -79,25 +129,33 @@ func (r Row) expandKey() string {
 	return r.Path + "\x00" + r.Fn.Name + "\x00" + strconv.Itoa(int(r.Change))
 }
 
-// spliceSites inserts the expanded function's site rows right below it,
+// spliceSites inserts every expanded function's site rows right below it,
 // after the filter and the sort have placed the function rows, so the
 // children stay glued under their parent whatever the sort. A grouped tab
 // has no function rows and nothing to expand.
 func (m *Model) spliceSites() {
-	if m.expanded == "" || m.Grouping() != complexity.ByNone || m.treeActive() {
+	if len(m.expanded) == 0 || m.Grouping() != complexity.ByNone || m.treeActive() {
 		return
 	}
+	var rows []Row
 	for i, r := range m.rows {
-		if r.child() || r.expandKey() != m.expanded || len(r.Fn.Sites) == 0 {
+		if r.child() || !m.expanded[r.expandKey()] || len(r.Fn.Sites) == 0 {
+			if rows != nil {
+				rows = append(rows, r)
+			}
 			continue
 		}
-		kids := append(siteRows(r, i), candidateRows(r, i)...)
-		rows := make([]Row, 0, len(m.rows)+len(kids))
-		rows = append(rows, m.rows[:i+1]...)
-		rows = append(rows, kids...)
-		rows = append(rows, m.rows[i+1:]...)
+		if rows == nil {
+			rows = make([]Row, 0, len(m.rows)+len(r.Fn.Sites))
+			rows = append(rows, m.rows[:i]...)
+		}
+		parent := len(rows)
+		rows = append(rows, r)
+		rows = append(rows, siteRows(r, parent)...)
+		rows = append(rows, candidateRows(r, parent)...)
+	}
+	if rows != nil {
 		m.rows = rows
-		return
 	}
 }
 

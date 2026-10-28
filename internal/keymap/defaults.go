@@ -793,6 +793,9 @@ var jetbrainsRows = []row{
 	// --by) next to the pane's other single-letter actions (s sort, e
 	// export, r rescan); a letter typed into the filter row stays text.
 	{"b", "complexity.group", "Cycle complexity grouping (none/class/file)", Complexity, "Complexity grouping (#2937)"},
+	// …and B jumps straight to a grouping (none / class / file / tree view)
+	// through a picker instead of cycling (#3082).
+	{"B", "complexity.groupPick", "Pick complexity grouping", Complexity, "Complexity grouping picker (#3082)"},
 	// …and t hides / shows the test files on every tab (#2950).
 	{"t", "complexity.toggleTests", "Toggle complexity test files", Complexity, "Complexity test files (#2950)"},
 	// …and D ("distribution") shows / hides the histogram row under the
@@ -804,6 +807,8 @@ var jetbrainsRows = []row{
 	// …and space expands the selected function into its complexity sites
 	// (#2946): the breakdown of where every CCN / cognitive point comes from.
 	{"space", "complexity.sites", "Expand / collapse complexity sites", Complexity, "Complexity sites (#2946)"},
+	// …and shift+space does it for every visible row at once (#3082).
+	{"shift+space", "complexity.sitesAll", "Expand / collapse all complexity sites", Complexity, "Complexity sites (#3082)"},
 	// …and m ("marks") paints the selected function's sites in the editor
 	// once, whatever editor.marks.complexity_sites says (#2947).
 	{"m", "complexity.showSites", "Mark complexity sites in the editor", Complexity, "Complexity site marks (#2947)"},
@@ -811,6 +816,9 @@ var jetbrainsRows = []row{
 	// function or group into the accepted-debt baseline, or drops it
 	// (#2958); the bulk accept is palette-only.
 	{"i", "complexity.baseline", "Accept / drop in the complexity baseline", Complexity, "Complexity baseline (#2958)"},
+	// …and I does it for every function the filter lists, after a
+	// confirmation naming the count (#3082).
+	{"I", "complexity.baselineMarked", "Accept / drop listed functions in the baseline", Complexity, "Complexity baseline (#3082)"},
 	// …and A cancels the simplify agent's run (#3009) — the shifted twin of
 	// the pane's own 'a' that starts it; esc on the running row does the same.
 	{"A", "complexity.cancelAgent", "Cancel the complexity agent", Complexity, "Complexity agent (#3009)"},

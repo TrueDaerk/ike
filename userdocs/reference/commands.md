@@ -51,12 +51,14 @@ bring their own.
 | Complexity: Accept / Drop Selected in Baseline | `complexity.baseline` | `i` | — | everywhere |
 | Complexity: Accept All Over Threshold | `complexity.baselineAll` | — | — | everywhere |
 | Complexity: Accept / Drop Function at Caret in Baseline | `complexity.baselineAtCaret` | — | — | everywhere |
+| Complexity: Accept / Drop Listed Functions in Baseline | `complexity.baselineMarked` | `shift+i` | — | everywhere |
 | Complexity: Show Breakdown of Function at Caret | `complexity.breakdownAtCaret` | — | — | everywhere |
 | Complexity: Cancel Agent | `complexity.cancelAgent` | `shift+a` | — | everywhere |
 | Complexity: Export Current Tab as CSV | `complexity.export` | — | — | everywhere |
 | Complexity: Export Current Tab as Markdown | `complexity.exportMarkdown` | — | — | everywhere |
 | Complexity: Diff Selected Function (Base vs Working Tree) | `complexity.functionDiff` | — | — | everywhere |
 | Complexity: Cycle Grouping (None / Class / File) | `complexity.group` | `b` | — | everywhere |
+| Complexity: Group By… | `complexity.groupPick` | `shift+b` | — | everywhere |
 | Complexity: Hide / Un-hide Selected Function or File | `complexity.hide` | `x` | — | everywhere |
 | Complexity: Hide Selected Row's File | `complexity.hideFile` | `shift+x` | — | everywhere |
 | Complexity: Toggle Distribution (Histogram) | `complexity.histogram` | `shift+d` | — | everywhere |
@@ -67,6 +69,7 @@ bring their own.
 | Complexity: Show / Leave Hidden Functions | `complexity.showHidden` | `shift+h` | — | everywhere |
 | Complexity: Mark Sites in Editor | `complexity.showSites` | `m` | — | everywhere |
 | Complexity: Expand / Collapse Sites | `complexity.sites` | `space` | — | everywhere |
+| Complexity: Expand / Collapse Sites of All Visible Rows | `complexity.sitesAll` | `shift+space` | — | everywhere |
 | Complexity | `complexity.toggle` | `cmd+alt+shift+x` | — | everywhere |
 | Complexity: Toggle Test Files | `complexity.toggleTests` | `t` | — | everywhere |
 | Complexity: Toggle Tree / Grid View | `complexity.view` | `v` | — | everywhere |

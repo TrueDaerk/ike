@@ -685,6 +685,18 @@ A letter typed into the open filter row stays text: the app routes a
 printable, unmodified key to a focused one-line input before the keymap
 layer.
 
+**Grouping picker (#3082).** `B` — `complexity.groupPick`, bound to `B`
+in the `complexity` context, "Complexity: Group By…" in the palette —
+jumps straight to a mode instead of cycling: the app fills a locked
+palette mode (`complexityGroupMode`, prefix `¶`, the `tabPickerMode`
+pattern) from `GroupChoices()` — the tab's levels in cycle order (`none`,
+`class`, `file`; File tab `none` / `class`, Changes `none` / `file`) plus
+`tree view` on the Project tab, the current one badged `●` — and the pick
+(`ComplexityGroupPickedMsg`) runs `PickGroup`: a level leaves the tree and
+sets the tab's level, the tree choice turns the tree on; the layout is
+saved at once like `b`. A tab that does not group says so. The pane's own
+`B` emits `GroupPickMsg` for the same handler.
+
 **Editor marks (#2947).** `m` on a function row (or a site row: its
 parent) emits `ShowSitesMsg{Path, Line}` — the one-shot site marks in the
 editor, see [Editor surface](#editor-surface-2919); the footer names it as
@@ -702,10 +714,19 @@ columns blank. The children are sorted by cognitive cost descending, then
 line, and are spliced under their parent *after* the filter and the sort
 have placed the function rows (`Refresh` → `sortRows` → `spliceSites`), so
 they stay glued to it whatever the sort column; a filter that drops the
-parent drops them. One function is expanded at a time; `space` on the
+parent drops them. `space` expands one function at a time (it replaces a
+single earlier expansion); `space` on the
 parent or on one of its site rows collapses it (the cursor returns to the
 parent); a row with nothing to expand (a group row, a removed function, a
-function without sites) leaves the list alone and the command says so. The
+function without sites) leaves the list alone and the command says so.
+`shift+space` — `complexity.sitesAll` (#3082), "Complexity: Expand /
+Collapse Sites of All Visible Rows" — is `ToggleAllSites`: when any
+visible function row is expanded it collapses every visible one, else it
+expands every visible function row with sites; rows the filter hides keep
+their state, and after a bulk expansion `space` adds to the set instead of
+replacing it. The model keeps a set of `expandKey`s (`Model.expanded`) and
+`spliceSites` inserts every expanded function's children in one pass. A
+grouped tab or the tree has nothing to expand and the command says so. The
 expansion is remembered by file, function name and Changes section
 (`Row.expandKey`), not by line, so a snapshot refresh — the index
 re-measured a file, the base revision changed — rebuilds the rows with the
@@ -941,6 +962,21 @@ the thresholds and a group without an over-threshold member yield nothing
 state's baseline (created from the current thresholds when there is none),
 saves the file (`saveComplexityBaseline`: a failed write keeps the
 in-memory change and reports the error) and re-applies.
+
+**Accept listed (#3082).** `I` — `complexity.baselineMarked`, bound to `I`
+in the `complexity` context, "Complexity: Accept / Drop Listed Functions in
+Baseline" in the palette — is `BaselineMarked`: one `BaselineToggleMsg`
+over every function the visible rows stand for, i.e. the current filter
+result (the pane has no multi-select marks; a group row counts its members,
+site / candidate / gone-pin / hidden rows nothing, a pinned function once).
+Like a group's `i` it records every over-threshold function not yet
+accepted, or drops them all when every one already is; only the Project
+and File tabs take it. The app holds the message (`Model.cxBaseMarked`)
+and raises the same confirmation dialog as *Accept all*, naming the count
+(`Record 3 functions the list shows …`, `[enter/y] accept 3`); confirming
+applies it through `handleComplexityBaselineToggle` — one baseline change
+and one file write for all of them. The pane's own `I` emits
+`BaselineMarkedMsg` for the same handler.
 
 **Accept all.** `complexity.baselineAll` ("Complexity: Accept All Over
 Threshold", keybind-less — `reasonOccasional` in the ledger) counts the

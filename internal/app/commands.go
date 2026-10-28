@@ -1030,10 +1030,12 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("complexity.export", "Complexity: Export Current Tab as CSV", ComplexityExportMsg{}),
 			withAliases(appCommand("complexity.exportMarkdown", "Complexity: Export Current Tab as Markdown", ComplexityExportMarkdownMsg{}), "md", "pull request", "pr comment"),
 			withAliases(appCommand("complexity.group", "Complexity: Cycle Grouping (None / Class / File)", ComplexityGroupMsg{}), "aggregate", "per class", "per file"),
+			withAliases(appCommand("complexity.groupPick", "Complexity: Group By…", ComplexityGroupPickMsg{}), "pick grouping", "group by", "tree view"),
 			withAliases(appCommand("complexity.toggleTests", "Complexity: Toggle Test Files", ComplexityToggleTestsMsg{}), "hide tests", "show tests"),
 			withAliases(appCommand("complexity.histogram", "Complexity: Toggle Distribution (Histogram)", ComplexityHistogramMsg{}), "percentiles", "distribution", "buckets"),
 			withAliases(appCommand("complexity.view", "Complexity: Toggle Tree / Grid View", ComplexityViewMsg{}), "directory tree", "per directory", "drill down"),
 			withAliases(appCommand("complexity.sites", "Complexity: Expand / Collapse Sites", ComplexitySitesMsg{}), "breakdown", "why complex", "per site"),
+			withAliases(appCommand("complexity.sitesAll", "Complexity: Expand / Collapse Sites of All Visible Rows", ComplexitySitesAllMsg{}), "expand all", "collapse all", "all sites"),
 			withAliases(appCommand("complexity.showSites", "Complexity: Mark Sites in Editor", ComplexityShowSitesMsg{}), "sonar", "site marks", "show increments"),
 			withAliases(appCommand("complexity.functionDiff", "Complexity: Diff Selected Function (Base vs Working Tree)", ComplexityFunctionDiffMsg{}), "function diff", "what changed", "compare function"),
 			// The simplify agent (#2964): a in the pane.
@@ -1042,6 +1044,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			// The accepted-debt baseline (#2958): i in the pane toggles one
 			// function or group, the bulk accept asks first.
 			withAliases(appCommand("complexity.baseline", "Complexity: Accept / Drop Selected in Baseline", ComplexityBaselineMsg{}), "accept debt", "ignore complexity", "baseline"),
+			withAliases(appCommand("complexity.baselineMarked", "Complexity: Accept / Drop Listed Functions in Baseline", ComplexityBaselineMarkedMsg{}), "accept filtered", "accept listed", "bulk baseline"),
 			// Optimisation-session pins (#2959): p in the pane.
 			withAliases(appCommand("complexity.pin", "Complexity: Pin / Unpin Selected Function", ComplexityPinMsg{}), "pin function", "track function", "since pin"),
 			// The hidden set (#3031): x hides the selected function (or a

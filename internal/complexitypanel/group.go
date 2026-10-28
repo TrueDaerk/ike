@@ -71,6 +71,88 @@ func (m *Model) CycleGroup() bool {
 	return true
 }
 
+// GroupPickMsg asks the root model to open the grouping picker ('B',
+// #3082): the pane cannot host the palette itself.
+type GroupPickMsg struct{}
+
+// GroupChoice is one row of the grouping picker (complexity.groupPick,
+// #3082): a level, or the Project tab's directory tree (Tree set, Level
+// none). Current marks what the tab shows now.
+type GroupChoice struct {
+	Label   string
+	Level   complexity.Level
+	Tree    bool
+	Current bool
+}
+
+// GroupChoices lists what the selected tab can show, in cycle order — the
+// Project tab adds the tree view after its levels; nil on a tab that does
+// not group.
+func (m *Model) GroupChoices() []GroupChoice {
+	var cycle []complexity.Level
+	switch m.tab {
+	case TabProject:
+		cycle = groupCycleProjectTab
+	case TabFile:
+		cycle = groupCycleFileTab
+	case TabChanges:
+		cycle = groupCycleChanges
+	default:
+		return nil
+	}
+	tree := m.treeActive()
+	out := make([]GroupChoice, 0, len(cycle)+1)
+	for _, l := range cycle {
+		out = append(out, GroupChoice{Label: groupChoiceLabel(l), Level: l, Current: !tree && l == m.Grouping()})
+	}
+	if m.tab == TabProject {
+		out = append(out, GroupChoice{Label: "tree view", Tree: true, Current: tree})
+	}
+	return out
+}
+
+// groupChoiceLabel names a level in the picker: "none", "class", "file".
+func groupChoiceLabel(l complexity.Level) string {
+	if l == complexity.ByNone {
+		return "none"
+	}
+	return l.String()
+}
+
+// PickGroup applies one GroupChoice to the selected tab and reports whether
+// the tab takes it: a level leaves the tree view and sets the level, the
+// tree choice turns the tree on (the grid's level is kept for later).
+func (m *Model) PickGroup(c GroupChoice) bool {
+	ok := false
+	for _, have := range m.GroupChoices() {
+		ok = ok || (have.Tree == c.Tree && have.Level == c.Level)
+	}
+	if !ok {
+		return false
+	}
+	if c.Tree {
+		if !m.treeView {
+			m.ToggleTreeView()
+		}
+		return true
+	}
+	if m.tab == TabProject {
+		m.treeView = false
+	}
+	switch m.tab {
+	case TabProject:
+		m.projectGroup = c.Level
+	case TabFile:
+		m.fileGroup = c.Level
+	case TabChanges:
+		m.changesGroup = c.Level
+	}
+	m.cursor, m.top = 0, 0
+	m.fitSort()
+	m.Refresh()
+	return true
+}
+
 // fitSort resets a sort column the selected layout does not show to CCN
 // descending — a group layout has no line / params / depth column, a
 // function layout no group column.

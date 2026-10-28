@@ -285,11 +285,18 @@ func (m Model) complexityBaselineDialogBody(n int) string {
 }
 
 // updateComplexityBaselineDialog consumes every key while the dialog is
-// open: enter / y writes the baseline, esc / n cancels.
+// open: enter / y writes the baseline — the pending baselineMarked toggle
+// (#3082) when one is held, else every over-threshold function — esc / n
+// cancels.
 func (m Model) updateComplexityBaselineDialog(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "enter", "y":
+		marked := m.cxBaseMarked
 		m.closeComplexityBaselineDialog()
+		if marked != nil {
+			m.handleComplexityBaselineToggle(*marked)
+			break
+		}
 		m.acceptAllComplexityBaseline()
 	case "esc", "n", "q":
 		m.closeComplexityBaselineDialog()
@@ -299,7 +306,7 @@ func (m Model) updateComplexityBaselineDialog(msg tea.KeyPressMsg) (tea.Model, t
 
 // closeComplexityBaselineDialog dismisses the dialog.
 func (m *Model) closeComplexityBaselineDialog() {
-	m.cxBaseDialog = false
+	m.cxBaseDialog, m.cxBaseMarked = false, nil
 	m.shell.Close()
 }
 

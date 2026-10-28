@@ -216,8 +216,8 @@ func TestTrendEnterCopyExportAndIdleKeys(t *testing.T) {
 			t.Errorf("%q yields a command on the Trend tab", k)
 		}
 	}
-	if m.Grouping() != complexity.ByNone || m.treeView || m.Prompting() || m.expanded != "" {
-		t.Errorf("a Trend key changed state: group %v tree %v prompt %v expanded %q", m.Grouping(), m.treeView, m.Prompting(), m.expanded)
+	if m.Grouping() != complexity.ByNone || m.treeView || m.Prompting() || len(m.expanded) != 0 {
+		t.Errorf("a Trend key changed state: group %v tree %v prompt %v expanded %v", m.Grouping(), m.treeView, m.Prompting(), m.expanded)
 	}
 	// 'r' asks for a recompute like the other tabs.
 	if cmd := m.Update(key("r")); cmd == nil {
