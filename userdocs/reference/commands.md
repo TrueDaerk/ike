@@ -104,6 +104,7 @@ bring their own.
 | Diff Two Files… | `diff.files` | — | — | everywhere |
 | Next Change (Diff) | `diff.nextChange` | `f7` | — | everywhere |
 | Next File (Diff Review) | `diff.nextFile` | `cmd+f7` | — | `diff` pane |
+| Diff: Jump to Source | `diff.openSource` | `f4` | — | `diff` pane |
 | Previous Change (Diff) | `diff.prevChange` | `shift+f7` | — | everywhere |
 | Previous File (Diff Review) | `diff.prevFile` | `cmd+shift+f7` | — | `diff` pane |
 | Review Changes Against HEAD | `diff.reviewChanges` | `cmd+alt+shift+m` | — | everywhere |

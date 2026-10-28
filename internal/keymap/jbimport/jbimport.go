@@ -247,6 +247,7 @@ var actionMap = map[string]string{
 	// Diff viewer.
 	"NextDiff":     "diff.nextChange",
 	"PreviousDiff": "diff.prevChange",
+	"EditSource":   "diff.openSource",
 
 	// VCS. Workflow actions (CheckinProject, Vcs.UpdateProject, Git.Branches)
 	// have no IKE command since #750 — git workflow is delegated to custom

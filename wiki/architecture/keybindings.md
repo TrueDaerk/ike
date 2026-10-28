@@ -1590,6 +1590,7 @@ JetBrains is:
 | `diff.copy` | `cmd+c` | fragile | `diff pane "y" / palette` | live via diff pane "y" / palette |
 | `diff.nextChange` | `f7` | delivered | `—` | live |
 | `diff.nextFile` | `cmd+f7` | fragile | `diff pane "f" picker / palette` | live via diff pane "f" picker / palette |
+| `diff.openSource` | `f4` | delivered | `—` | live |
 | `diff.prevChange` | `shift+f7` | delivered | `—` | live |
 | `diff.prevFile` | `cmd+shift+f7` | fragile | `ctrl+shift+f7` | live via ctrl+shift+f7 |
 | `diff.reviewChanges` | `cmd+alt+shift+m` | fragile | `VCS panel r / palette` | live via VCS panel r / palette |

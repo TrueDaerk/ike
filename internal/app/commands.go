@@ -578,6 +578,11 @@ type TogglePlaygroundQueryViewMsg struct{}
 // DiffStepMsg steps the focused diff pane's current hunk (0340, #495).
 type DiffStepMsg struct{ Delta int }
 
+// DiffOpenSourceMsg runs diff.openSource (f4 / cmd+down, #3081 — JetBrains'
+// Jump to Source): open the focused diff's right-hand file in the editor on
+// the current hunk's first line.
+type DiffOpenSourceMsg struct{}
+
 // DiffCopyMsg runs diff.copy (cmd+c in the diff viewer, #2628): the mouse
 // selection when there is one, else the current hunk as a unified patch. The
 // pane already handled the chord locally, so the keymap layer logged it
@@ -1069,6 +1074,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("diff.nextChange", "Next Change (Diff)", DiffStepMsg{Delta: 1}),
 			appCommand("diff.prevChange", "Previous Change (Diff)", DiffStepMsg{Delta: -1}),
 			paneCommand("diff.copy", "Diff: Copy Selection or Hunk", "diff", DiffCopyMsg{}),
+			withAliases(paneCommand("diff.openSource", "Diff: Jump to Source", "diff", DiffOpenSourceMsg{}), "open file at change", "edit source"),
 			withAliases(appCommand("diff.reviewChanges", "Review Changes Against HEAD", ReviewChangesMsg{}), "review all", "working tree diff"),
 			paneCommand("diff.nextFile", "Next File (Diff Review)", "diff", DiffFileStepMsg{Delta: 1}),
 			paneCommand("diff.prevFile", "Previous File (Diff Review)", "diff", DiffFileStepMsg{Delta: -1}),

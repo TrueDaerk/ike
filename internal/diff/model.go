@@ -919,6 +919,54 @@ func (m *Model) jump() tea.Cmd {
 	if i < 0 {
 		i = 0
 	}
+	path, line := m.rightPath, m.hunkRightLine(i)
+	return func() tea.Msg { return JumpMsg{Path: path, Line: line} }
+}
+
+// SourceTarget is diff.openSource's landing (#3081, JetBrains' Jump to
+// Source): the right-hand file and the 1-based line the current hunk starts
+// on there. The hunk is the one the diff cursor is in — the hunk a step
+// placed, else the one covering the viewport anchor — or else the nearest
+// following one; past the last hunk it is the last. A diff without hunks
+// lands on line 1. ok is false when the right side has no backing file
+// (unsaved texts, local history, the clipboard).
+func (m Model) SourceTarget() (path string, line int, ok bool) {
+	if m.rightPath == "" {
+		return "", 0, false
+	}
+	i := m.sourceHunk()
+	if i < 0 {
+		return m.rightPath, 1 + m.lineOffR, true
+	}
+	return m.rightPath, m.hunkRightLine(i), true
+}
+
+// sourceHunk picks SourceTarget's hunk; -1 when the diff has none.
+func (m Model) sourceHunk() int {
+	n := len(m.res.Hunks)
+	if n == 0 {
+		return -1
+	}
+	if m.curStepped && m.cur >= 0 && m.cur < n {
+		return m.cur
+	}
+	if len(m.rowStarts) == 0 {
+		return clamp(m.cur, 0, n-1)
+	}
+	anchor := m.anchorLine()
+	for i := range m.res.Hunks {
+		// The first hunk not entirely above the anchor: the one the anchor
+		// sits in, or the next one below it.
+		if _, e := m.hunkSpan(i); anchor <= e {
+			return i
+		}
+	}
+	return n - 1
+}
+
+// hunkRightLine is the 1-based right-side line hunk i starts on, shifted by
+// the right line offset (SetLineOffsets).
+func (m Model) hunkRightLine(i int) int {
 	h := m.res.Hunks[i]
 	line := 0
 	for _, row := range m.res.Rows[h.Start:h.End] {
@@ -937,9 +985,7 @@ func (m *Model) jump() tea.Cmd {
 			line = 1
 		}
 	}
-	path := m.rightPath
-	line += m.lineOffR
-	return func() tea.Msg { return JumpMsg{Path: path, Line: line} }
+	return line + m.lineOffR
 }
 
 // pageStep is one page-scroll increment: just under a viewport of lines.

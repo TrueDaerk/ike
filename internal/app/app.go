@@ -7274,6 +7274,26 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case DiffOpenSourceMsg:
+		// diff.openSource (f4 / cmd+down, #3081): JetBrains' Jump to Source
+		// — the right-hand file (in review mode the current file's working
+		// tree) opens at the current hunk through the open-at-line funnel,
+		// so navigation history records the jump.
+		inst := m.focusedContent()
+		if inst == nil || inst.Kind() != pane.KindDiff {
+			return m, nil
+		}
+		path, line, ok := inst.Diff().SourceTarget()
+		if !ok {
+			m.host.Notify(host.Info, "diff: no source file — this side is not backed by a file")
+			return m, nil
+		}
+		if _, err := os.Stat(path); err != nil {
+			m.host.Notify(host.Info, "diff: "+filepath.Base(path)+" does not exist on disk")
+			return m, nil
+		}
+		return m.openPathAt(path, line-1, 0)
+
 	case DiffFileStepMsg:
 		// diff.nextFile / diff.prevFile (#2848): whole-file steps of the
 		// focused review pane; a single-file diff has no list to step.
