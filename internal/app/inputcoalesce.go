@@ -3,6 +3,7 @@ package app
 import (
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -35,6 +36,23 @@ const coalesceInterval = 16 * time.Millisecond
 // coalesceCeiling caps the adaptive back-off so scrolling never drops below ~15
 // fps even when a frame is very expensive.
 const coalesceCeiling = 66 * time.Millisecond
+
+// termIdleInterval is the flush floor for a batch that holds terminal output
+// alone (#3078): ~10 frames per second. A spinner or a log stream in a
+// visible terminal kept the loop composing at the mouse cadence — ~20 full
+// frames a second for hours in the #3078 telemetry, with nobody at the
+// keyboard. Nobody reads a terminal faster than that; a batch that also
+// carries a wheel notch or a motion step, or any input within
+// attendedWindow, flushes at the normal cadence so a keystroke's echo never
+// waits behind this floor.
+const termIdleInterval = 100 * time.Millisecond
+
+// attendedWindow is how long after the last key, click or mouse event the
+// coalescer still treats the session as attended: terminal-only batches
+// inside it keep the normal cadence, so the echo of a keystroke into a busy
+// shell, or a scroll that stopped a moment ago, repaints without the
+// unattended back-off (#3078).
+const attendedWindow = 2 * time.Second
 
 // renderBudgetDivisor is the target share of wall-time spent rendering coalesced
 // input: the next batch waits renderCost × this factor, so rendering stays around
@@ -76,7 +94,9 @@ type coalescedInputMsg struct {
 // interval, so N busy TUI panes would otherwise trigger N×125 full Update +
 // render passes per second and starve input handling. Absorbing them here
 // bounds terminal-driven repaints to the same adaptive flush cadence as
-// mouse bursts (~60fps floor, backing off with render cost).
+// mouse bursts (~60fps floor, backing off with render cost) — and, for
+// terminal output arriving with nobody at the keyboard, to the ~10fps
+// unattended floor (#3078, see arm).
 type MouseCoalescer struct {
 	mu         sync.Mutex
 	send       func(tea.Msg)
@@ -85,6 +105,15 @@ type MouseCoalescer struct {
 	haveMotion bool
 	termKeys   map[string]bool
 	armed      bool
+	// timer is the pending flush timer while one is scheduled and has not
+	// fired; idle marks it as armed at the unattended terminal cadence
+	// (#3078), so user input can pull it forward to the normal one.
+	timer *time.Timer
+	idle  bool
+	// lastInput is the unix-nano stamp of the last key, click or mouse event
+	// the filter saw; terminal-only batches back off only once it is older
+	// than attendedWindow. Written on the event loop, read by the flush timer.
+	lastInput atomic.Int64
 }
 
 // NewMouseCoalescer returns a coalescer with no sender yet; wire the program's
@@ -111,11 +140,19 @@ func (c *MouseCoalescer) Filter(_ tea.Model, msg tea.Msg) tea.Msg {
 	noteInput(msg)
 	switch m := msg.(type) {
 	case tea.MouseWheelMsg:
+		c.noteUserInput()
 		c.absorb(func() { c.wheels = append(c.wheels, m) })
 		return nil
 	case tea.MouseMotionMsg:
+		c.noteUserInput()
 		c.absorb(func() { c.motion, c.haveMotion = m, true })
 		return nil
+	case tea.KeyPressMsg, tea.MouseClickMsg, tea.MouseReleaseMsg, tea.PasteMsg:
+		// Passed through untouched, but noted: the user is attending, so a
+		// terminal-only batch pending at the unattended cadence (#3078) is
+		// pulled forward — the shell's echo of this key must not wait.
+		c.noteUserInput()
+		return msg
 	case terminal.OutputMsg:
 		c.absorb(func() {
 			if c.termKeys == nil {
@@ -140,6 +177,42 @@ func noteInput(msg tea.Msg) {
 	}
 }
 
+// noteUserInput stamps the attended clock and pulls a flush pending at the
+// unattended terminal cadence (#3078) forward to the normal one. Stop
+// reporting false means the timer already fired: that flush is running (or
+// about to) and re-arms for itself, so nothing is rescheduled here — the
+// single-flush invariant of absorb/flush holds.
+func (c *MouseCoalescer) noteUserInput() {
+	c.lastInput.Store(time.Now().UnixNano())
+	c.mu.Lock()
+	if c.idle && c.timer != nil && c.timer.Stop() {
+		c.idle = false
+		c.timer = time.AfterFunc(nextInterval(), c.flush)
+	}
+	c.mu.Unlock()
+}
+
+// attended reports whether user input arrived within attendedWindow.
+func (c *MouseCoalescer) attended() bool {
+	return time.Since(time.Unix(0, c.lastInput.Load())) < attendedWindow
+}
+
+// arm schedules the next flush for the accumulator's content, under the lock:
+// the adaptive cadence (nextInterval) for anything carrying mouse events or
+// following recent input, the unattended floor (termIdleInterval) for
+// terminal output alone (#3078).
+func (c *MouseCoalescer) arm() {
+	d := nextInterval()
+	c.idle = false
+	if len(c.wheels) == 0 && !c.haveMotion && len(c.termKeys) > 0 && !c.attended() {
+		c.idle = true
+		if d < termIdleInterval {
+			d = termIdleInterval
+		}
+	}
+	c.timer = time.AfterFunc(d, c.flush)
+}
+
 // absorb records an event under the lock and arms the flush timer if one is not
 // already in flight. `armed` stays true for the entire lifetime of a flush —
 // including its (possibly blocking) send — so only ever ONE flush goroutine
@@ -149,7 +222,7 @@ func (c *MouseCoalescer) absorb(record func()) {
 	record()
 	if !c.armed && c.send != nil {
 		c.armed = true
-		time.AfterFunc(nextInterval(), c.flush)
+		c.arm()
 	}
 	c.mu.Unlock()
 }
@@ -172,6 +245,7 @@ func (c *MouseCoalescer) absorb(record func()) {
 // an ever-growing backlog.
 func (c *MouseCoalescer) flush() {
 	c.mu.Lock()
+	c.timer, c.idle = nil, false // fired: nothing pending to pull forward
 	wheels := c.wheels
 	c.wheels = nil
 	var motion *tea.MouseMotionMsg
@@ -201,7 +275,7 @@ func (c *MouseCoalescer) flush() {
 	// was never cleared, so no absorb could have spawned a second flush meanwhile.
 	c.mu.Lock()
 	if len(c.wheels) > 0 || c.haveMotion || len(c.termKeys) > 0 {
-		time.AfterFunc(nextInterval(), c.flush)
+		c.arm()
 	} else {
 		c.armed = false
 	}
@@ -412,10 +486,18 @@ func (m Model) applyCoalescedInput(msg coalescedInputMsg) (tea.Model, tea.Cmd) {
 	}
 	// Terminal repaints (#803): the grids already hold the new content — only
 	// the per-session hooks (completion popup recompute, the popup activity
-	// indicator) run here; returning repaints once for the whole batch.
+	// indicator) run here; returning repaints once for the whole batch. A
+	// batch of terminal output alone whose every session is hidden moved
+	// nothing on screen: the previous frame is exact (#3078).
 	if mm, ok := tm.(Model); ok {
+		changed := false
 		for _, key := range msg.termKeys {
-			mm.noteTerminalOutput(key)
+			if mm.noteTerminalOutput(key) {
+				changed = true
+			}
+		}
+		if len(msg.termKeys) > 0 && !changed && len(msg.wheels) == 0 && msg.motion == nil {
+			mm.markFrameReusable()
 		}
 		tm = mm
 	}

@@ -88,17 +88,29 @@ func setTermHidden(t *terminal.Model, hidden bool) {
 // popup-layer shell arms the statusbar activity indicator; the next show
 // clears it. A visible layer — focused or blurred — has the output on screen
 // already.
-func (m *Model) noteTerminalOutput(key string) {
+//
+// It reports whether the output moved anything on screen (#3078): a parked
+// session — hidden behind a closed popup layer, an inactive tab, a zoom, or
+// a backgrounded workspace — draws nowhere, so its grid change is invisible
+// and only the first arming of the activity indicator alters the frame. The
+// callers reuse the previous frame when no session of the batch reports a
+// change; the grid keeps its state and the un-park's owed repaint (a live
+// OutputMsg, reported as changed) composes the fresh one on reveal.
+func (m *Model) noteTerminalOutput(key string) (changed bool) {
 	t := m.terminalModelForSession(key)
 	if t == nil {
-		return
+		return false
 	}
 	t.OnOutput()
 	if !m.popupLayerVisible() {
 		if _, _, pt := m.popupTabForSession(key); pt != nil {
-			m.popupUnseen = true
+			if !m.popupUnseen {
+				m.popupUnseen = true
+				changed = true
+			}
 		}
 	}
+	return changed || !t.Parked()
 }
 
 // syncPreviewBound publishes whether any markdown or HTML preview pane is

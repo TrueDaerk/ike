@@ -7391,8 +7391,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case terminal.OutputMsg:
 		// The grid changed; returning repaints. In a running program the msg
 		// is folded by the input coalescer (#803) and lands through
-		// coalescedInputMsg instead; both paths share noteTerminalOutput.
-		m.noteTerminalOutput(msg.Key)
+		// coalescedInputMsg instead; both paths share noteTerminalOutput. A
+		// hidden session's output draws nowhere: the frame is exact (#3078).
+		if !m.noteTerminalOutput(msg.Key) {
+			m.markFrameReusable()
+		}
 		return m, nil
 
 	case terminal.CopiedMsg:
