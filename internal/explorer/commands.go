@@ -73,6 +73,10 @@ func (corePlugin) Capabilities() plugin.Capabilities {
 			keymap("n", "explorer.newFile", NewFileMsg{}),
 			keymap("N", "explorer.newFolder", NewDirMsg{}),
 			keymap("d", "explorer.delete", DeleteMsg{}),
+			// JetBrains project-view delete aliases (#3087).
+			keymap("cmd+backspace", "explorer.delete", DeleteMsg{}),
+			keymap("ctrl+backspace", "explorer.delete", DeleteMsg{}),
+			keymap("delete", "explorer.delete", DeleteMsg{}),
 			keymap("R", "explorer.rename", RenameMsg{}),
 			// Bulk operations over the multi-select (#2166); with nothing
 			// marked they act on the cursor entry, like every other file op.
