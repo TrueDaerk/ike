@@ -47,7 +47,7 @@ func complexityOptionsFrom(cfg host.Config) complexity.Options {
 	}
 	if v, ok := cfg.Get("complexity.exclude"); ok {
 		var globs []string
-		for _, p := range strings.Split(v, ",") {
+		for _, p := range splitGlobList(v) {
 			if p = strings.TrimSpace(p); p != "" {
 				globs = append(globs, p)
 			}
@@ -55,6 +55,32 @@ func complexityOptionsFrom(cfg host.Config) complexity.Options {
 		def.Exclude = globs
 	}
 	return def
+}
+
+// splitGlobList splits a flat comma-joined glob list at the commas outside
+// a {a,b} alternation (#3085): `**/*.{js,ts}` stays one glob, so the list
+// read at construction equals the typed one a config reload hands
+// Reconfigure — a mismatch there would rebuild the index cold on the first
+// reload of an unrelated setting.
+func splitGlobList(v string) []string {
+	var out []string
+	depth, start := 0, 0
+	for i, r := range v {
+		switch r {
+		case '{':
+			depth++
+		case '}':
+			if depth > 0 {
+				depth--
+			}
+		case ',':
+			if depth == 0 {
+				out = append(out, v[start:i])
+				start = i + 1
+			}
+		}
+	}
+	return append(out, v[start:])
 }
 
 // complexityOptions maps the typed [complexity] section to the index's

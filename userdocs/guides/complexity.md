@@ -573,7 +573,7 @@ twice and a short one copied ten times both float up), its size in
   occurrences, files, path, line, end_line`), `E` a Markdown table of the
   groups, `y` copies the row as `dup 880 tokens × 2: internal/app/open.go:120–161,
   internal/app/reopen.go:44–85`.
-- `r` rescans the project (the detection follows).
+- `r` rescans the project (the detection follows); only files changed on disk are measured again.
 
 What counts as a copy: the code's **structure and operators** must match
 token for token, while **variable, parameter, field and type names** and

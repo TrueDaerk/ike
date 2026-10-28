@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/complexity"
 	"ike/internal/complexitypanel"
 	"ike/internal/config"
 	"ike/internal/host"
@@ -25,8 +26,8 @@ import (
 // ComplexityToggleMsg runs complexity.toggle.
 type ComplexityToggleMsg struct{}
 
-// ComplexityRefreshMsg runs complexity.refresh: rebuild the index (the
-// pane's 'r').
+// ComplexityRefreshMsg runs complexity.refresh: the explicit cold rebuild
+// of the index (the pane's 'r' rescans incrementally, #3085).
 type ComplexityRefreshMsg struct{}
 
 // ComplexityExportMsg runs complexity.export: the pane's 'e' from the
@@ -240,16 +241,30 @@ func (m *Model) syncComplexityPanel() {
 	p.Follow(canonicalPath(ed.Path()), line)
 }
 
-// rebuildComplexityIndex drops the walk and starts a fresh one ('r' /
-// complexity.refresh); the panel shows the scanning state until the
-// settled generation change re-reads it.
+// rebuildComplexityIndex drops the walk and starts a cold one
+// (complexity.refresh): every file is measured again, the persisted cache
+// ignored. The panel shows the scanning state until the settled generation
+// change re-reads it.
 func (m *Model) rebuildComplexityIndex() tea.Cmd {
+	return m.rewalkComplexityIndex((*complexity.Index).Rebuild)
+}
+
+// rescanComplexityIndex is the pane's 'r' -- every tab's "rescan" and the
+// Trend tab's "recompute" (#3085): a fresh walk seeded from the current
+// measurements, so only files changed on disk are measured again.
+func (m *Model) rescanComplexityIndex() tea.Cmd {
+	return m.rewalkComplexityIndex((*complexity.Index).Rescan)
+}
+
+// rewalkComplexityIndex re-runs the derived walks and starts walk on the
+// index, reporting why when there is nothing to walk.
+func (m *Model) rewalkComplexityIndex(walk func(*complexity.Index) bool) tea.Cmd {
 	m.rearmComplexityRange() // a ranged Changes diff re-runs too (#2961)
 	m.rearmComplexityTrend() // and the Trend tab walks afresh (#2962)
 	if m.complexityIndex == nil {
 		return nil
 	}
-	if !m.complexityIndex.Rebuild() {
+	if !walk(m.complexityIndex) {
 		if m.complexityIndex.Stats().Unavailable {
 			m.host.Notify(host.Warn, "complexity: no syntax tree in this build, nothing to scan")
 		} else {

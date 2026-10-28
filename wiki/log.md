@@ -1,5 +1,14 @@
 # Log
 
+## 2026-10-28 (Complexity index: window actions rescan from the cache, #3085)
+
+- [Complexity](/architecture/complexity.md): the pane's `r` (every tab's
+  rescan, the Trend tab's recompute) is now `Index.Rescan`, a walk seeded
+  from the current measurements that measures only changed files;
+  `complexity.refresh` stays the cold `Rebuild`. A reload with
+  `[complexity]` unchanged no longer rebuilds cold on a `{a,b}` exclude glob
+  or a re-spelled list. New section: what invalidates the cache.
+
 ## 2026-10-28 (Recent Projects column: close / remove without switching, #3083)
 
 - [Command Palette](/architecture/command-palette.md): on a project row of

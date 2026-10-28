@@ -53,7 +53,7 @@ var complexityListHelpKeys = []complexityHelpKey{
 	{Key: "e", Title: "Export the current tab as a CSV scratch file"},
 	{Key: "E", Title: "Export the current tab as a Markdown scratch file (pull-request ready)"},
 	{Key: "y", Title: "Copy the selected row as one line: path:line: name ccn=.. cog=.."},
-	{Key: "r", Title: "Rescan the project (rebuild the index)"},
+	{Key: "r", Title: "Rescan the project (changed files only)"},
 	{Key: "/", Title: "Focus the filter row"},
 }
 

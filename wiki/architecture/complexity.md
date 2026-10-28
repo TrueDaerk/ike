@@ -400,10 +400,35 @@ walk it failed to seed.
 like the TODO index) kicks it off in the background. `Reconfigure(opts)`
 applies a reloaded `[complexity]` section live: the master switch off drops
 the walk and the snapshot, on rebuilds it (seeded from the cache), a changed
-exclude list rewalks cold, unchanged options are a no-op. `Rebuild` is the
-escape hatch for a tree that changed without watcher events — or a cache
-gone wrong: it ignores the seed and replaces the cache once it finishes. A
-project switch builds a new model and therefore a new index.
+exclude list rewalks cold, unchanged options are a no-op — the exclude
+lists compare as `Excluded` reads them (trimmed, blanks dropped), and the
+app's flat startup read splits `complexity.exclude` only at commas outside a
+`{a,b}` alternation (`splitGlobList`), so a reload of an unrelated setting
+never looks like an exclude change (#3085). `Rescan` (the pane's `r`, #3085)
+re-walks incrementally: the fresh walk is seeded from the finished current
+walk's measurements and stamps (which already fold in every save and
+watcher re-measure; the cache file when no walk finished yet), so only a
+file whose size or mtime moved is measured, a deleted one drops out, and the
+cache is rewritten — it also catches a tree that changed without watcher
+events. `Rebuild` (the palette's `complexity.refresh`) is the explicit cold
+escape hatch for a cache gone wrong: it ignores the seed and replaces the
+cache once it finishes. A project switch builds a new model and therefore a
+new index.
+
+**What invalidates the cache (#3085).** A walk is measured cold only when
+there is no usable seed: the first session (no `complexity-index.gob`), a
+cache of another `SpecVersion` or root, a damaged cache, a changed
+`complexity.exclude` (`Reconfigure`), or an explicit rebuild
+(`complexity.refresh`). Per file, a changed size or mtime re-measures that
+file alone. Nothing the Complexity window does touches it: accepting or
+dropping a baseline entry (the baseline is a separate file; `Baseline` is
+stamped on the snapshot, never persisted), grouping, the breakdown, pins,
+hiding, opening or closing the window, the Trend tab (its walks run over git
+revisions, outside the index) and a config reload with `[complexity]`
+unchanged start no walk at all, and `r` after any of them reports
+`cached == files` (`TestComplexityScansAfterWindowActionsComeFromCache`).
+Before #3085 `r` — the Trend tab's "recompute" included — called `Rebuild`,
+so every press logged a cold `complexity.scan` (`cached: 0`).
 
 **Freshness.** `InvalidateFile(path)` re-measures one file through the
 walk's worker, off the Update goroutine: the app calls it from the buffer
@@ -759,9 +784,10 @@ new fn ccn 9 cog 11 · rest ccn 12 cog 14`. Triggering the
 **Actions.** `enter` / a double click sends `OpenLocationMsg{Path, Line,
 EndLine}` (`EndLine` set by a candidate row only) and the app opens the
 file through `openPathAt`, so the caret lands on the function header and
-`nav.back` returns. `r` (and the palette's
-`complexity.refresh`) rebuilds the index (`Index.Rebuild`; a disabled index
-or a build without a syntax tree is reported instead). `e` (and
+`nav.back` returns. `r` rescans the project incrementally from the cache
+(`Index.Rescan`, #3085: only files changed on disk are measured); the
+palette's `complexity.refresh` rebuilds it cold (`Index.Rebuild`). Either
+way a disabled index or a build without a syntax tree is reported instead. `e` (and
 `complexity.export`) writes the current tab as a CSV scratch
 (`ExportMsg{Label, CSV}`: header `file,function,kind,line,ccn,cognitive,nloc,params,depth,comment_lines,cmt_pct`,
 one row per visible function, the file column on every tab) and opens it.
