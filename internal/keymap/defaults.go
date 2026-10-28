@@ -509,6 +509,12 @@ var jetbrainsRows = []row{
 	// every context, has a legacy encoding (ESC + FS, the C0 byte ctrl+\
 	// already produces) and reads as the split it makes — the vertical bar
 	// between the source and its result, leaning.
+	// cmd+l is the browser's "go to the address bar" (#3084). Global like
+	// the rest of the playground's commands (the playground resolves in
+	// Global scope) while editor.goToLine keeps cmd+l in the Editor scope.
+	// Off macOS it folds to ctrl+l, which the query line and result buffer
+	// keep for the filter picker / clear-output, ahead of the resolver.
+	{"cmd+l", "playground.focusQuery", "Focus playground query line", Global, "jq/yq playground (#3084)"},
 	{"ctrl+alt+\\", "playground.splitResult", "Split playground result into a pane", Global, "jq/yq playground (#2797)"},
 	// The yq round-trip output (#2798), Global like its siblings. Every
 	// ctrl+alt letter is claimed and ctrl+alt+] is project.group.next's

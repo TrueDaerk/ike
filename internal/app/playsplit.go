@@ -311,3 +311,25 @@ func prunePlayResultLeaves(root layout.Node, reg *pane.Registry) layout.Node {
 	}
 	return pruned
 }
+
+// FocusPlayQueryMsg is playground.focusQuery (#3084): the browser's "go to
+// the address bar" — the keyboard to the query line with the whole program
+// selected, so typing replaces it.
+type FocusPlayQueryMsg struct{}
+
+// focusPlayQuery moves the keyboard to the query line from wherever it is in
+// the playground (result buffer, table, strip, variables line, detached result
+// pane) and arms the field's select-all, caret at the end. Already on the
+// query line it just selects all again. esc while the selection is still
+// armed undoes the jump (see updatePlayKey).
+func (m *Model) focusPlayQuery() {
+	s := m.play
+	if s == nil {
+		return
+	}
+	origin := &playFocusOrigin{fromBuf: s.bufFocus && !s.varsFocus}
+	m.playFocusQuery()
+	if s.program.SelectAll() {
+		s.focusQueryFrom = origin
+	}
+}

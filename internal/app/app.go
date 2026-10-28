@@ -7951,6 +7951,11 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.togglePlayStructure()
 		return m, nil
 
+	case FocusPlayQueryMsg:
+		// playground.focusQuery (cmd+l, #3084): the query line, all selected.
+		m.focusPlayQuery()
+		return m, nil
+
 	case TogglePlayVarsMsg:
 		// playground.variables (ctrl+alt+b, #2786): show / focus / hide the
 		// variables line under the query.

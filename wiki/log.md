@@ -1,5 +1,11 @@
 # Log
 
+## 2026-10-28 (jq playground: cmd+l focuses the query line, #3084)
+
+- [jq Playground](/architecture/jq-playground.md): `playground.focusQuery`
+  (`cmd+l`, Global, playground-gated) puts the keyboard on the query line with
+  the program selected; `esc` undoes the jump while the selection is armed.
+
 ## 2026-10-28 (LSP: remember a silent server per project, #3080)
 
 - [Project Switching](/architecture/project-switching.md): a `quiet` warm-up

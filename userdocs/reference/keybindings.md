@@ -72,6 +72,7 @@ Active everywhere, unless a focused pane binds the same chord more specifically.
 | Focus pane 7 | `ctrl+7` | — | `pane.focus7` |
 | Focus pane 8 | `ctrl+8` | — | `pane.focus8` |
 | Focus pane 9 | `ctrl+9` | — | `pane.focus9` |
+| Focus playground query line | `cmd+l` | `ctrl+l` | `playground.focusQuery` |
 | Full query view | `ctrl+alt+e` | `ctrl+alt+e` | `json.jqQueryView` |
 | Generate test data | `cmd+alt+shift+n` | `ctrl+alt+shift+n` | `scratch.generate` |
 | Go to file | `cmd+shift+o` | `ctrl+shift+o` | `project.goToFile` |
