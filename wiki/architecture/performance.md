@@ -4,7 +4,7 @@ title: Performance & Diagnostics
 description: Idle-behavior rules (who may wake the render loop, and how often), the render budget and the always-on per-message-type pass accounting, the per-keystroke fan-out budget while typing (#2541), the in-app performance HUD, startup/project-open phase instrumentation and the async open path, the always-on update-loop stall watchdog, the heartbeat freeze dump (#2627), the opt-in update-loop trace log, the freeze-triage procedure, the selection-overlay rule for drag latency (#2495), and the opt-in runtime diagnostics hooks (IKE_PPROF endpoint, SIGUSR1 dumps).
 resource: internal/perfhud
 tags: [architecture, performance, pprof, idle, diagnostics, hud, watchdog, startup, freeze, render-budget]
-timestamp: 2026-10-19T12:00:00Z
+timestamp: 2026-10-28T12:00:00Z
 ---
 
 # Performance & Diagnostics
@@ -213,6 +213,37 @@ stamped every read's time. The header now shows the last read that
 frame reusable when nothing they touch would draw differently, so an idle
 pane counts `view/reuse` for its poll and renders only on new events, a
 follow change or the stale flip.
+
+**Terminal output is a wake without a frame when its session is hidden,
+and a ~10 fps wake when it is not** (#3078, telemetry 0.7.27): 70 minutes
+of heartbeats reported ~1185 composed frames a minute attributed to
+`app.coalescedInputMsg` with no key or mouse event in most of them — a
+spinner or a log stream in a terminal child, repainted at the coalescer's
+mouse cadence (~60 fps floor, backing off with render cost). Two rules
+now bound it, both in `internal/app/inputcoalesce.go` and
+`termvisibility.go`:
+
+- *Hidden sessions never render.* `noteTerminalOutput` reports whether the
+  output moved anything on screen: a parked session (the closed popup
+  layer, an inactive tab, a pane behind a zoom or zen mode, a backgrounded
+  workspace) draws nowhere, so the coalesced batch and the raw `OutputMsg`
+  path both mark the frame reusable when no session of the batch is
+  visible — only the first arming of the popup's activity indicator (a
+  statusbar change) still composes. The grid keeps ingesting; the un-park's
+  owed repaint is a live `OutputMsg` and renders the fresh frame on reveal.
+  Guard: zero renders attributed to `app.coalescedInputMsg` while hidden,
+  read off `diag.RenderTriggers` (`termoutput_render_test.go`).
+- *Unattended output flushes at ~10 fps.* A coalescer batch that holds
+  terminal output alone — no wheel notch, no motion step — and arrives more
+  than `attendedWindow` (2 s) after the last key, click or mouse event is
+  armed at `termIdleInterval` (100 ms) instead of `nextInterval`. Any user
+  input restores the normal cadence at once: the filter stamps the attended
+  clock on every key, click, release, paste, wheel and motion, and pulls a
+  flush pending at the unattended cadence forward to `nextInterval`, so a
+  keystroke's echo into a busy shell never waits behind the back-off. A
+  visible busy terminal with nobody at the keyboard thus composes ≤ 10
+  frames a second; with the pointer or keyboard in use it keeps the mouse
+  cadence (`inputcoalesce_test.go`).
 
 ## The render budget & the idle pass count (#2402)
 

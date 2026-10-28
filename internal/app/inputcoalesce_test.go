@@ -233,3 +233,87 @@ func TestFlushWithoutSenderIsSafe(t *testing.T) {
 	}
 	c.flush() // no sender: must be a no-op, not a panic
 }
+
+// flushLatency absorbs terminal output for the given session keys and
+// measures how long the coalescer takes to flush it.
+func flushLatency(t *testing.T, c *MouseCoalescer, snapshot func() []tea.Msg, keys ...string) time.Duration {
+	t.Helper()
+	start := time.Now()
+	for _, key := range keys {
+		c.Filter(nil, terminal.OutputMsg{Key: key})
+	}
+	waitForFlush(t, snapshot)
+	return time.Since(start)
+}
+
+// TestTerminalOnlyBatchBacksOffWhenUnattended verifies the unattended cadence
+// (#3078): a batch holding terminal output alone, with no user input in the
+// attended window, flushes no sooner than termIdleInterval (~10 fps) instead
+// of the ~60 fps mouse floor.
+func TestTerminalOnlyBatchBacksOffWhenUnattended(t *testing.T) {
+	defer renderNanos.Store(0)
+	renderNanos.Store(0) // cheap frames: the mouse floor would be 16ms
+	c := NewMouseCoalescer()
+	send, snapshot := collectSender()
+	c.SetSender(send)
+	if got := flushLatency(t, c, snapshot, "terminal", "terminal:2"); got < termIdleInterval-10*time.Millisecond {
+		t.Fatalf("unattended terminal output flushed after %v, want ≥ %v", got, termIdleInterval)
+	}
+}
+
+// TestRecentInputKeepsTerminalOutputAtTheNormalCadence verifies that terminal
+// output following a key (its echo, typically) flushes at the mouse cadence:
+// the back-off applies only once the attended window has passed (#3078).
+func TestRecentInputKeepsTerminalOutputAtTheNormalCadence(t *testing.T) {
+	defer renderNanos.Store(0)
+	renderNanos.Store(0)
+	c := NewMouseCoalescer()
+	send, snapshot := collectSender()
+	c.SetSender(send)
+	if got := c.Filter(nil, tea.KeyPressMsg{Code: 'a'}); got == nil {
+		t.Fatal("a key press must pass through")
+	}
+	if got := flushLatency(t, c, snapshot, "terminal"); got >= termIdleInterval-10*time.Millisecond {
+		t.Fatalf("terminal output right after a key flushed after %v, want the normal cadence (< %v)", got, termIdleInterval)
+	}
+}
+
+// TestUserInputPullsAnUnattendedFlushForward verifies that a key or a mouse
+// event arriving while a terminal-only batch waits at the unattended cadence
+// reschedules that flush to the normal cadence at once (#3078): the key is
+// handled immediately by the loop, and the shell's echo does not wait out
+// the back-off behind it.
+func TestUserInputPullsAnUnattendedFlushForward(t *testing.T) {
+	defer renderNanos.Store(0)
+	renderNanos.Store(0)
+	for _, tc := range []struct {
+		name  string
+		input tea.Msg
+	}{
+		{"key", tea.KeyPressMsg{Code: 'a'}},
+		{"wheel", tea.MouseWheelMsg{X: 1, Y: 1, Button: tea.MouseWheelDown}},
+		{"click", tea.MouseClickMsg{X: 1, Y: 1, Button: tea.MouseLeft}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := NewMouseCoalescer()
+			send, snapshot := collectSender()
+			c.SetSender(send)
+			start := time.Now()
+			c.Filter(nil, terminal.OutputMsg{Key: "terminal"})
+			c.mu.Lock()
+			idle := c.idle
+			c.mu.Unlock()
+			if !idle {
+				t.Fatal("test setup: the terminal-only batch arms at the unattended cadence")
+			}
+			c.Filter(nil, tc.input)
+			batch := waitForFlush(t, snapshot)
+			if got := time.Since(start); got >= termIdleInterval-10*time.Millisecond {
+				t.Fatalf("flush after %s took %v, want pulled forward below %v", tc.name, got, termIdleInterval)
+			}
+			if len(batch.termKeys) != 1 || batch.termKeys[0] != "terminal" {
+				t.Fatalf("pulled-forward batch = %+v, want the terminal key", batch)
+			}
+		})
+	}
+}

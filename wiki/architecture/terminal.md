@@ -125,7 +125,21 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
   #2540 that indicator arms through the coalesced path a running program
   actually takes), folds every later burst, and delivers the one owed repaint
   when it is shown again. A spinner in a hidden tab used to cost the loop
-  ~270 passes a minute; it now costs one.
+  ~270 passes a minute; it now costs one — and that one composes no frame
+  (#3078): `noteTerminalOutput` reports a parked session's output as
+  invisible, so the coalesced batch and the raw `OutputMsg` path mark the
+  previous frame reusable unless the popup's activity indicator just armed.
+  The reveal's owed repaint is a live `OutputMsg` and renders the grid as it
+  stands, so the shown terminal is never stale.
+- **Unattended output flushes at ~10 fps** (#3078): the input coalescer arms
+  a batch holding terminal output alone — no wheel or motion — at
+  `termIdleInterval` (100 ms) once the last key, click or mouse event is
+  older than `attendedWindow` (2 s), instead of the ~60 fps mouse floor. A
+  visible spinner or log stream with nobody at the keyboard therefore costs
+  at most ten frames a second. Any user input restores the normal cadence
+  immediately and pulls a pending unattended flush forward, so a keystroke's
+  echo into a busy shell is not delayed by the back-off. See
+  [performance](performance.md#the-idle-model-2540).
 - **Width reflow** (#935): any width change on the primary screen rewraps the
   whole history — scrollback and screen — at the new width, as if the terminal
   had always been that size (iTerm2/kitty behaviour): shrink rewraps overlong
