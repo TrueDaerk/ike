@@ -521,7 +521,7 @@ these are defaults.
 | `explorer.reveal` | `alt+f1` (global) | reveal the open file: expand collapsed ancestors, select and scroll to its row (`RevealMsg`, #1042) |
 | `explorer.newFile` | `n` | prompt for a name, create a file seeded with its [language template](./languages.md#file-templates-170), empty otherwise (`NewFileMsg`) |
 | `explorer.newFolder` | `N` | prompt for a name, create a directory (`NewDirMsg`) |
-| `explorer.delete` | `d` | delete the selected entry — or the whole multi-select (#1044, #2166) — after one confirmation listing every target (`DeleteMsg`) |
+| `explorer.delete` | `d` / `cmd+backspace` / `ctrl+backspace` / `delete` (#3087) | delete the selected entry — or the whole multi-select (#1044, #2166) — after one confirmation listing every target (`DeleteMsg`) |
 | `explorer.rename` | `R` | prompt (prefilled with the current name) to rename the selected entry (`RenameMsg`) |
 | `explorer.move` | `m` | prompt for a target directory and move the selection there (`MoveSelectionMsg`, #2166) |
 | `explorer.copy` | `y` | prompt for a target directory and copy the selection there (`CopySelectionMsg`, #2166) |
