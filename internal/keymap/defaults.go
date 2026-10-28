@@ -1071,6 +1071,16 @@ var multiRows = []multiRow{
 // logical Cmd has no useful folded form elsewhere, because platform.go's
 // Cmd→Ctrl fold would land them on a chord another default already owns.
 var darwinRows = []row{
+	// New floating panel (#3076): cmd+n -- "new window" in iTerm and every
+	// macOS app -- opens a fresh shell in a detached floating panel while the
+	// popup layer (box or panel) owns the keyboard. Terminal-scoped so it
+	// shadows the Global explorer.newFile only there: the app routes it from
+	// the popup layer alone (popupLayerTerminalCommands), a focused pane
+	// terminal keeps forwarding the chord, and every other pane still runs
+	// explorer.newFile. macOS only: the Cmd->Ctrl fold would land it on
+	// ctrl+n, readline's next-history, which the popup's shells need; off
+	// macOS the palette and the Tools menu open a panel.
+	{"cmd+n", "terminal.newFloatPanel", "New floating terminal panel", Terminal, "Terminal (#3076)"},
 	// IntelliJ's classic macOS Back/Forward chords (#2361): the bracket chords
 	// above need option-combos on a German QWERTZ layout, so these aliases keep
 	// navigation reachable there. They are free of macOS system shortcuts

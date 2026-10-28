@@ -4057,6 +4057,14 @@ var terminalShellEssential = map[string]bool{
 	"ctrl+z": true,
 }
 
+// popupLayerTerminalCommands are terminal-context commands that only the popup
+// layer (popupReservedKey) acts on: a focused pane terminal leaves their
+// chords with the shell, as it did before the binding existed. cmd+n opens a
+// floating panel inside the layer (#3076) but is no panel act anywhere else.
+var popupLayerTerminalCommands = map[string]bool{
+	"terminal.newFloatPanel": true,
+}
+
 // terminalContextChord resolves a single-step chord against the live binding
 // table looking for a terminal-scoped binding (#1794): per-context defaults
 // (ctrl+t → terminal.newTab) and user overrides under
@@ -4084,7 +4092,7 @@ func (m *Model) terminalContextChord(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		return false, nil
 	}
 	b, found := table.Lookup(chord, keymap.Terminal)
-	if !found || b.Context != keymap.Terminal {
+	if !found || b.Context != keymap.Terminal || popupLayerTerminalCommands[b.Command] {
 		return false, nil
 	}
 	if c, okc := m.reg.Command(b.Command); okc {
@@ -7337,6 +7345,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// terminal.popup.pin: pin the popup beside the editor (#2406) — or
 		// unpin it, which hides it again.
 		m.togglePopupPin()
+		return m, nil
+
+	case TerminalNewFloatPanelMsg:
+		// terminal.newFloatPanel (#3076): a new shell in a new detached
+		// floating panel, cascaded from the layer's keyboard owner.
+		m.newFloatTermPanel()
 		return m, nil
 
 	case TerminalSendSelectionMsg:

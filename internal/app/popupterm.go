@@ -897,6 +897,11 @@ func (m Model) popupReservedKey(keys string) (bool, tea.Model, tea.Cmd) {
 			// owns the keyboard: a sibling popup tab, like the reserved cmd+t.
 			m.newPopupTerminalTab()
 			return true, m, nil
+		case "terminal.newFloatPanel":
+			// cmd+n (#3076): a new shell in a new floating panel, cascaded
+			// from the focused box or panel.
+			m.newFloatTermPanel()
+			return true, m, nil
 		}
 	}
 	switch keys {

@@ -354,6 +354,7 @@ bring their own.
 | Structure | `structure.toggle` | `cmd+3` | — | everywhere |
 | Clear Terminal | `terminal.clear` | — | — | everywhere |
 | New Terminal | `terminal.new` | `cmd+alt+shift+t` | — | everywhere |
+| Terminal: New Floating Panel | `terminal.newFloatPanel` | `cmd+n` | — | everywhere |
 | New Terminal Tab | `terminal.newTab` | `ctrl+t` | — | everywhere |
 | Popup Terminal | `terminal.popup` | `cmd+alt+t` | — | everywhere |
 | Pin Popup Terminal | `terminal.popup.pin` | `cmd+alt+shift+k` | — | everywhere |

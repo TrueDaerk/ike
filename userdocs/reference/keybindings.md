@@ -366,6 +366,7 @@ Active when a terminal pane — or an editor tab holding a terminal — has focu
 
 | Action | macOS | Linux / Windows | Command |
 |---|---|---|---|
+| New floating terminal panel | `cmd+n` | — | `terminal.newFloatPanel` |
 | New terminal tab | `ctrl+t` | `ctrl+t` | `terminal.newTab` |
 
 ## HTTP response pane

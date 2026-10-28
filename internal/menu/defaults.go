@@ -158,6 +158,7 @@ func Defaults() []Menu {
 			{Title: "Pin Popup Terminal", Command: "terminal.popup.pin"},
 			{Title: "New Terminal", Command: "terminal.new"},
 			{Title: "New Terminal Tab", Command: "terminal.newTab"},
+			{Title: "New Floating Terminal Panel", Command: "terminal.newFloatPanel"},
 			{Title: "SSH Host…", Command: "terminal.ssh"},
 			{Title: "Browse SSH Host (SFTP)…", Command: "remote.browse"},
 			{Title: "Regex Tester…", Command: "tools.regexTester"},
