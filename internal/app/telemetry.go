@@ -272,6 +272,10 @@ type switchLSPWait struct {
 	// root is the project root switched into (#2886): the key the
 	// silent-server notice is deduplicated and muted by.
 	root string
+	// servers lists the ids of the servers the wait is for (#3080) — the
+	// open documents' servers minus the ones already known to stay silent.
+	// A quiet end marks every one of them silent for root.
+	servers []string
 	// notified records that the silent-server notice already went out, so the
 	// quiet fallback can say whether the user was told (#2629).
 	notified bool
@@ -308,7 +312,8 @@ func (m *Model) noteSwitchLSPReady() {
 // no publish measurement exists: "no_server_docs" (the model came up with no
 // open document of a server language), "quiet" (armed, but no publish within
 // switchLSPQuietTimeout — no server configured/running, or nothing to say),
-// "superseded" (the next switch started first) or "quit" (the session ended
+// "silent_known" (every open document's server already ended a warm-up of
+// this project quiet, so no wait was armed, #3080), "superseded" (the next switch started first) or "quit" (the session ended
 // first). ms still counts from the switch's start, so even a skipped phase
 // prices how long the model sat publish-less.
 func (m *Model) noteSwitchLSPSkipped(reason string) {

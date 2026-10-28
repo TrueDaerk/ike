@@ -1170,6 +1170,7 @@ type Model struct {
 	projClock     *projectClock        // foreground time in the current project, for project.leave (#2408); per-project, not carried across a switch
 	switchLSPWait *switchLSPWait       // LSP warm-up timer of the project just switched into (#2403); nil once reported
 	lspNoticed    map[string]bool      // project roots the silent-server notice already fired for this session (#2886); session state, rides across project switches
+	lspSilent     *lspSilentState      // known-silent servers of the active project (#3080), a cache of lsp-silent.json
 	pendUnbound   *unboundKey          // unbound chord awaiting the focused editor's verdict (#2303)
 	fileFrec      *frecency.Store      // file-open frecency ranking in the "@" finder (#2155)
 	projFrec      *frecency.Store      // project-switch frecency, user-scoped: the Recent Projects column (#2399)
@@ -1757,6 +1758,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		cxDup:           newComplexityDuplicatesState(),
 		cxBase:          newComplexityBaselineState(root),
 		cxPins:          newComplexityPinsState(root),
+		lspSilent:       &lspSilentState{},
 		cxHints:         &complexityHintState{sent: map[string]cxHintKey{}, pending: map[string]cxHintKey{}, show: map[string]cxShowSites{}, measured: map[string]complexityHintMeasuredMsg{}},
 		ws:              wsMgr,
 		recentEditor:    edKey,
@@ -5624,6 +5626,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Async interpreter version probes land in the toolchain page's cache.
 		return m, m.settings.Deliver(msg)
 
+	case settings.LSPSilentResetMsg:
+		// A server's silent flag was reset on the Language Servers page
+		// (#3080): the page shows the outcome, and the app's cached copy of
+		// the project's markers is re-read on next use.
+		if m.lspSilent != nil {
+			m.lspSilent.loaded = false
+		}
+		return m, m.settings.Deliver(msg)
+
 	case settings.PackagesMsg, settings.OutdatedMsg, settings.PkgActionMsg:
 		// Package listing (#569 — previously unrouted), available upgrades
 		// and finished package actions (#571) land in the toolchain page.
@@ -7137,6 +7148,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// verifies fixes against the previous run's failure classes.
 		return m, m.runLSPDoctor()
 
+	case LSPForgetSilentMsg:
+		// Forget the active project's known-silent servers (#3080).
+		return m, m.forgetSilent()
+
 	case LSPMuteWarmupNoticeMsg:
 		// The silent-server notice's opt-out (#2886): persist the active
 		// root into lsp.warmup_notice_muted_roots.
@@ -8641,6 +8656,7 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd := m.applyDiagnostics(msg.Path, msg.Diagnostics)
 		m.refreshProblemsPanel()
 		// First publish after a project switch closes the warm-up span (#2403).
+		m.noteLSPPublish(msg.Path) // a known-silent server spoke after all (#3080)
 		m.noteSwitchLSPReady()
 		return m, cmd
 
@@ -8658,6 +8674,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.refreshProblemsPanel()
 		m.noteSwitchLSPReady() // warm-up span, as above (#2403)
+		for _, d := range msg.Items {
+			m.noteLSPPublish(d.Path)
+		}
 		return m, tea.Batch(cmds...)
 
 	case PHPIndexChangedMsg:
@@ -9391,6 +9410,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// against a stale timer outliving its switch — a newer switch armed a
 		// different wait.
 		if m.switchLSPWait == msg.wait {
+			// The servers it waited for never spoke: remember them, so the
+			// next switch into this project does not wait again (#3080).
+			m.markSwitchSilent(msg.wait)
 			m.noteSwitchLSPSkipped("quiet")
 		}
 		return m, nil

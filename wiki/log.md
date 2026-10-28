@@ -1,5 +1,17 @@
 # Log
 
+## 2026-10-28 (LSP: remember a silent server per project, #3080)
+
+- [Project Switching](/architecture/project-switching.md): a `quiet` warm-up
+  marks its servers known-silent per project and server id
+  (`lsp-silent.json`); later switches skip the wait for them
+  (`skipped: silent_known`, no timer, no notice). A publish,
+  `lsp.forgetSilent` or `x` (Remove silent flag) on the Settings → Language
+  Servers row clears it.
+- [Usage Telemetry](/architecture/usage-telemetry.md): schema v19, new
+  `skipped` value `silent_known`.
+- [LSP](/architecture/lsp.md): pointer to the known-silent flag.
+
 ## 2026-10-27 (Jinja expressions in Ansible YAML values, #3061)
 
 - [Languages](/architecture/languages.md): the `ansible` language's `Spans`
