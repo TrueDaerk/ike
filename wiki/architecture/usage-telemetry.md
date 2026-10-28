@@ -62,6 +62,7 @@ currently 16); readers must tolerate unknown fields and filter on `v`.
 | 16 | #2885 | The `php.trait.index_scan` op gains `cached` — how many of the walk's `files` were taken from the persisted [PHP index cache](php-trait-index.md#persistence-across-sessions-2885) instead of being parsed. A warm start reads `cached` equal to `files` with a small `ms`; a cold walk, a `php.traitIndex.rebuild` and a session with `php.index.cache` off read `0`. Structural only — a count, never a path. Absence below v16 means "no cache existed": every file was parsed. |
 | 17 | #2967 | The `complexity.scan` op gains `cached` — how many of the walk's `files` were taken from the persisted [complexity index cache](complexity.md#project-index-2916) instead of being measured — and `cache` = `corrupt` when the cache the walk tried to seed from was damaged (it is ignored and rewritten; the field is omitted otherwise). A warm start reads `cached` equal to `files`; a cold walk, a rebuild and a changed `complexity.exclude` read `0`. Structural only — a count and a marker, never a path. Absence below v17 means every file was measured. |
 | 18 | #3013 | The `palette.pick` and `palette.dismiss` events of the code-actions mode (`"!"`) gain `anchored` — `true` when the box sat at its caret or Problems-row anchor, `false` when no on-screen anchor existed and the picker opened centered instead (a caret scrolled out of view, a stale pane rect, a box that would leave the terminal). A flag, never a position. Omitted for every other mode; below v18 it means "not recorded". |
+| 19 | #3080 | The `project.switch` op's `lsp` phase gains the `skipped` value `silent_known`: every open document's server already ended a warm-up of this project `quiet`, so the switch armed no wait — no two-minute fallback timer, no silent-server notice — and closed the phase in the same pass as the `ok` ([project-switching](project-switching.md)). Below v19 the same switch read `quiet` after the full fallback. A project with several servers still waits for the ones not known silent, so a mixed switch reads like any v18 one. |
 
 An export spanning versions therefore needs three guards: filter v1 `command`
 events on `data.source != "internal"`, treat a missing `ok`/`ms` on v4 as
@@ -211,7 +212,9 @@ counts by the version's interval before comparing sessions.
       in this session) or `muted` (the root is in
       `lsp.warmup_notice_muted_roots`); the field is absent when the
       threshold never passed or the notice is off, see
-      [project-switching](project-switching.md)), `superseded` (the next
+      [project-switching](project-switching.md)), `silent_known` (v19, #3080 — every open
+      document's server already ended a warm-up of this project `quiet`, so
+      no wait was armed; emitted in the same pass as the `ok`), `superseded` (the next
       switch started before the wait resolved) or `quit` (the session ended
       first). A resumed parked workspace answers fast by design: the manager
       reuses its live server and the bridge delivers the first

@@ -48,6 +48,9 @@ type LSPPage struct {
 	invalid string
 
 	listH int // list-window height of the last render (mouse hit-testing, #674)
+
+	silent silentCache // known-silent servers of the project (#3080)
+	notice string      // outcome of the last silent-flag reset, shown in the footer
 }
 
 // NewLSPPage builds the page. The closures may be nil (no restart wiring).
@@ -77,6 +80,9 @@ func (p *LSPPage) Capturing() bool { return false }
 func (p *LSPPage) Receive(msg tea.Msg) {
 	if s, ok := msg.(ilsp.ServerStatusMsg); ok && s.Lang != "" {
 		p.status[s.Lang] = lspStatus{text: s.Text, kind: s.Kind}
+	}
+	if r, ok := msg.(LSPSilentResetMsg); ok {
+		p.receiveSilentReset(r)
 	}
 }
 
@@ -180,6 +186,10 @@ func (p *LSPPage) rowStatus(id string) (label, detail string) {
 		// auto-install (#131) covers the first attempt, i retries manually.
 		return "missing", last.text + " — press i to install"
 	}
+	if p.isSilent(id) {
+		// Known-silent in this project (#3080): the warm-up no longer waits.
+		return "silent", "known silent in this project: no publish during a switch warm-up, so switches no longer wait for it — x resets the flag"
+	}
 	if p.isRunning(id) {
 		return "ready", ""
 	}
@@ -194,6 +204,7 @@ func (p *LSPPage) rowStatus(id string) (label, detail string) {
 
 // Update implements PageModel.
 func (p *LSPPage) Update(key tea.KeyPressMsg) tea.Cmd {
+	p.notice = "" // a reset's outcome shows until the next key
 	l, hasRow := p.current()
 	if listNav(key.String(), &p.sel, len(p.servers()), p.navPageSize()) {
 		return nil
@@ -218,6 +229,11 @@ func (p *LSPPage) Update(key tea.KeyPressMsg) tea.Cmd {
 	case "i":
 		if hasRow && p.install != nil {
 			return p.install(l.ID)
+		}
+	case "x":
+		// Reset the selected server's known-silent flag (#3080).
+		if hasRow {
+			return p.resetSilent(l.ID)
 		}
 	case "ctrl+r":
 		if p.restartAll != nil {
@@ -311,9 +327,18 @@ func (p *LSPPage) View(w, h int) string {
 	// width (#553), so moving the selection never shifts the rows.
 	var footer []string
 	if l, ok := p.current(); ok {
-		_, detail := p.rowStatus(l.ID)
+		label, detail := p.rowStatus(l.ID)
+		style := lipgloss.NewStyle().Foreground(pal.Error)
+		if label == "silent" {
+			style = lipgloss.NewStyle().Foreground(pal.Info)
+		}
+		if p.notice != "" && detail == "" {
+			// The last silent-flag reset's outcome (#3080), until another
+			// row has something to say.
+			detail, style = p.notice, lipgloss.NewStyle().Foreground(pal.Info)
+		}
 		footer = wrapFooter([]footerLine{
-			{text: " " + strings.TrimLeft(detail, " "), style: lipgloss.NewStyle().Foreground(pal.Error)},
+			{text: " " + strings.TrimLeft(detail, " "), style: style},
 		}, w, 2)
 	}
 	p.listH = h - len(head) - len(footer)
@@ -377,7 +402,7 @@ func (p *LSPPage) renderRow(l lang.Language, selected bool) string {
 // KeyHelp implements KeyHelper (#887).
 // Actions lists the page's verbs for the action bar and the "?" overlay.
 func (p *LSPPage) Actions() []Action {
-	_, hasRow := p.current()
+	l, hasRow := p.current()
 	row := func() bool { return hasRow }
 	return []Action{
 		{Key: "enter", Verb: "Edit", Hint: "command, args and options overrides", Enabled: row},
@@ -386,6 +411,7 @@ func (p *LSPPage) Actions() []Action {
 		{Key: "R", Verb: "Restart", Hint: "the selected server", Enabled: row},
 		{Key: "ctrl+r", Verb: "Restart all"},
 		{Key: "r", Verb: "Reset", Hint: "the selected server's overrides", Enabled: row},
+		{Key: "x", Verb: "Remove silent flag", Hint: "reset it: the next switch waits for the selected server again", Enabled: func() bool { return hasRow && p.isSilent(l.ID) }},
 	}
 }
 

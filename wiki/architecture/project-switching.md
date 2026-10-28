@@ -596,6 +596,37 @@ second timer speaks up first:
   `notified: "false"` and `suppressed: "session"` / `"muted"`; the field
   stays absent when the threshold never passed.
 
+**Known-silent servers (#3080).** The once-per-session rule silences the
+*notice*, but the wait itself still ran its full two minutes on every switch
+into a project whose server never publishes, and every session re-diagnosed
+the same silence. So a `quiet` end now **persists** what it learned:
+
+- Every server the wait was for (`switchLSPWait.servers`, the server ids of the
+  open documents — a language riding another language's server, like
+  `ServerLanguage`, shares that server's id) is marked silent for the project
+  in the state store: `lsp-silent.json` (`ilsp.SilentStore`,
+  `internal/lsp/silent.go`) under `IKE_CONFIG_DIR`, else `<root>/.ike/`,
+  keyed by the cleaned project root and the server id. With
+  `lsp.enabled = false` nothing is recorded — no server was meant to answer.
+- The next switch into the project (this session or a later one) **does not
+  wait for those servers**: `newSwitchLSPWait` drops them from the wait, so
+  only the project's other servers arm the fallback and the notice. When
+  nothing is left, `armSwitchLSPWait` closes the `lsp` phase on the spot as
+  `skipped: "silent_known"` — no timer, no toast.
+- The marker clears itself when the server **does publish** after all (an
+  upgrade, a config fix): every `DiagnosticsMsg` / `DiagnosticsBatchMsg`
+  maps its path to its server id and drops a matching marker
+  (`noteLSPPublish`, `internal/app/lsp_silent.go`; a project without markers
+  costs one map check per publish). By hand, `lsp.forgetSilent` (palette:
+  *LSP: Forget Silent Language Servers for This Project*, no default chord —
+  a rare reset) forgets every marker of the active project, and the server's
+  row in **Settings → Language Servers** reads `silent` with an explanation
+  in the footer; `x` (*Remove silent flag* — the panel-wide `x` verb; `r`
+  already resets the row's overrides) clears that one server's marker and
+  says so (an unflagged row is rejected with a notice instead). Every
+  write is a fresh read-modify-write of the file, so the app and the
+  settings page never resurrect each other's removals.
+
 **Settings scope (0380, #795).** The config reload inside `performSwitch`
 runs after the chdir, so the incoming project's `.ike/settings.toml` layer
 applies and the outgoing project's overrides drop in the same step — theme,

@@ -1224,7 +1224,12 @@ toggles `code_lens`, `folding`, `semantic_tokens`, `selection_range` and
 `warmup_notice_ms` and `warmup_notice_muted_roots` (the post-switch
 silent-server notice and the project roots it is muted for, #2629/#2886 — see
 [project-switching](./project-switching.md)), and a per-language `servers`
-table.
+table. A server whose post-switch warm-up ended quiet is remembered per
+project and server id in the state store (`lsp-silent.json`, #3080), so later
+switches stop waiting for it (`skipped: silent_known`); its first publish,
+`lsp.forgetSilent` or `x` on its Settings → Language Servers row (status
+`silent`) clears the flag — see
+[project-switching § known-silent servers](./project-switching.md).
 Defaults ship for `go`, `php`, `python`; a user overrides any field in their
 `settings.toml`. `[lsp.servers.<id>] enabled = false` switches one language's
 server off while the subsystem stays on (#130; honored by `resolveSpec`). The

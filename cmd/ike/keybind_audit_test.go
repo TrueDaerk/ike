@@ -254,6 +254,7 @@ var unboundFamilies = []struct{ prefix, reason string }{
 	{"lsp.codeLens", reasonIntention},             //
 	{"lsp.doctor", reasonOccasional},              //
 	{"lsp.muteWarmupNotice", reasonOccasional},    // #2886: the silent-server notice's follow-up
+	{"lsp.forgetSilent", reasonOccasional},        // #3080: rare reset, also on the Language Servers settings page
 	{"lsp.installMissing", reasonOccasional},      //
 	{"lsp.restart", reasonOccasional},             //
 	{"lsp.showLog", reasonOccasional},             //

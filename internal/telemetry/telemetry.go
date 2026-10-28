@@ -181,7 +181,12 @@ import (
 // Problems-row anchor, "false" when no on-screen anchor existed and the
 // picker opened centered instead. Absent for every other mode, and below v18
 // it means "not recorded".
-const SchemaVersion = 18
+//
+// v19 (#3080): the "project.switch" op's "lsp" phase gains the skipped value
+// "silent_known" — every open document's server already ended a warm-up of
+// this project quiet, so no wait (no fallback timer, no notice) was armed.
+// Below v19 such a switch read "quiet" after the full two-minute fallback.
+const SchemaVersion = 19
 
 // defaultFlushInterval is how often the writer goroutine flushes the
 // bufio.Writer on its own, independent of buffer fill or explicit Flush

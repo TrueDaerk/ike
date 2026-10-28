@@ -11,7 +11,6 @@ import (
 	"ike/internal/editor"
 	"ike/internal/explorer"
 	"ike/internal/host"
-	"ike/internal/lang"
 	"ike/internal/pane"
 	"ike/internal/project"
 	"ike/internal/telemetry"
@@ -599,24 +598,17 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 	// phase on the same op id (telemetry.go). Every ok is followed by exactly
 	// one such phase (#2492): a model with no server-language document open
 	// reports skipped=no_server_docs on the spot, an armed wait that never
-	// sees a publish is closed by the quiet fallback timer.
-	serverLang, hasServerDocs := sized.switchServerDocLang()
-	sized.switchLSPWait = &switchLSPWait{start: switchStart, lang: serverLang, root: sized.projectRootTag()}
+	// sees a publish is closed by the quiet fallback timer. Servers already
+	// known to stay silent in this project (#3080) are not waited for at all
+	// — no fallback timer, no notice — and when nothing else is left the
+	// phase reports skipped=silent_known on the spot.
+	knownSilent := sized.newSwitchLSPWait(switchStart, sized.switchServerDocs())
 	endOp("ok", map[string]string{
 		"parked": strconv.FormatBool(parked),
 		"panes":  strconv.Itoa(len(sized.activeWS().Panes.Keys())),
 		"lsp":    "-1",
 	})
-	var lspQuietCmd, lspNoticeCmd tea.Cmd
-	if hasServerDocs {
-		lspQuietCmd = armSwitchLSPQuiet(sized.switchLSPWait)
-		// A server that never publishes leaves the editor diagnostic-blind
-		// without saying so (#2629): the notice timer speaks up long before
-		// the two-minute telemetry fallback closes the wait.
-		lspNoticeCmd = armSwitchLSPNotice(sized.switchLSPWait)
-	} else {
-		sized.noteSwitchLSPSkipped("no_server_docs")
-	}
+	lspWaitCmd := sized.armSwitchLSPWait(knownSilent)
 	return sized, tea.Batch(
 		fresh.Init(),
 		sizeCmd,
@@ -627,35 +619,10 @@ func (m Model) performSwitchOpts(root string, opts switchOpts) (tea.Model, tea.C
 		playResume,
 		resync,
 		idleCmd,
-		lspQuietCmd,
-		lspNoticeCmd,
+		lspWaitCmd,
 		recordCmd,
 		func() tea.Msg { return project.SwitchedMsg{Root: root} },
 	)
-}
-
-// switchServerDocLang reports whether any open editor document of the freshly
-// built model belongs to a language with a server (#2492) — the same walk
-// Init's EventFileOpened announcement does — and names the first such language
-// (#2629), which is what the silent-server notice puts in its text. When none
-// does, no didOpen will ever fire and no publish can close the warm-up wait,
-// so the switch reports the "lsp" phase as skipped instead of arming it.
-func (m *Model) switchServerDocLang() (string, bool) {
-	for _, key := range m.activeWS().Panes.Keys() {
-		inst := m.activeWS().Panes.Get(key)
-		if inst == nil || inst.Kind() != pane.KindEditor {
-			continue
-		}
-		for _, ed := range inst.Editors() {
-			if !ed.HasFile() {
-				continue
-			}
-			if l, ok := lang.ByPath(ed.Path()); ok && l.HasServer() {
-				return l.ID, true
-			}
-		}
-	}
-	return "", false
 }
 
 // reconcileEditors sends every editor tab a ReconcileMsg (#1515): the

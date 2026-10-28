@@ -961,6 +961,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			paneCommand("issues.prevTab", "Issues: Previous Tab", "issues", IssuesTabMsg{Delta: -1}),
 			paneCommand("lsp.doctor.copy", "LSP Doctor: Copy Report", "lspdoctor", LSPDoctorCopyMsg{}),
 			appCommand("lsp.muteWarmupNotice", "Don't Warn About a Silent Language Server for This Project", LSPMuteWarmupNoticeMsg{}),
+			appCommand("lsp.forgetSilent", "LSP: Forget Silent Language Servers for This Project", LSPForgetSilentMsg{}),
 			paneCommand("http.search", "Search in HTTP Response", "http", HTTPSearchMsg{}),
 			appCommand("terminal.toggle", "Toggle Terminal", TerminalToggleMsg{}),
 			withAliases(appCommand("terminal.popup", "Popup Terminal", TerminalPopupMsg{}), "terminal", "shell"),
