@@ -387,7 +387,14 @@ type playState struct {
 	// and painting it in the same green as "copied the result" would read as
 	// if something had happened.
 	statusWarn bool
+	// focusQueryFrom is armed by playground.focusQuery (#3084) while its
+	// select-all is still pending: esc then drops the selection and hands
+	// the keyboard back to where it came from (fromBuf) instead of closing.
+	focusQueryFrom *playFocusOrigin
 }
+
+// playFocusOrigin is where playground.focusQuery took the keyboard from.
+type playFocusOrigin struct{ fromBuf bool }
 
 // setBufFocus moves the keyboard between the query line and the result
 // buffer, keeping the substitute editor's focus flag (cursor cell) in step.
@@ -1665,8 +1672,19 @@ func (m Model) updatePlaygroundKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m, cmd
 		}
 	}
+	origin := s.focusQueryFrom
+	s.focusQueryFrom = nil
 	switch msg.String() {
 	case "esc":
+		// playground.focusQuery's select-all still armed (#3084): esc undoes
+		// the jump — selection dropped, keyboard back where it was.
+		if origin != nil && s.program.Selected() {
+			s.program.Deselect()
+			if origin.fromBuf {
+				m.playFocusResult()
+			}
+			return m, nil
+		}
 		// Stepping through the stages (#2785) is left first: esc goes back
 		// to the full program before it closes the mode.
 		if cmd, ok := m.leavePlayStepping(); ok {

@@ -873,6 +873,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			langCommand(appCommand("playground.variables", "Toggle Playground Variables Line", TogglePlayVarsMsg{}), playgroundLangs()),
 			// The detached result pane (#2797): the result beside the source,
 			// or back under the query header.
+			// The browser's address-bar habit (#3084): the query line, all selected.
+			langCommand(appCommand("playground.focusQuery", "Playground: Focus Query Line", FocusPlayQueryMsg{}), playgroundLangs()),
 			langCommand(appCommand("playground.splitResult", "Playground: Split Result into a Pane", SplitPlayResultMsg{}), playgroundLangs()),
 			langCommand(appCommand("log.openRotatedSet", "Open Rotated Log Set (Merged Timeline)", OpenMergedLogMsg{}), []string{"log"}),
 			appCommand("terminal.new", "New Terminal", TerminalNewMsg{}),

@@ -272,6 +272,7 @@ bring their own.
 | Playground: Chain Result as Input | `playground.chainResult` | `ctrl+alt+shift+down` | — | everywhere |
 | Check Saved Playground Filters | `playground.checkFilters` | `ctrl+alt+a` | — | everywhere |
 | Export Playground Result… | `playground.export` | `ctrl+alt+v` | — | everywhere |
+| Playground: Focus Query Line | `playground.focusQuery` | `cmd+l` | — | everywhere |
 | Open Playground for This File | `playground.open` | `cmd+shift+j` | — | everywhere |
 | Playground: Split Result into a Pane | `playground.splitResult` | `ctrl+alt+\` | — | everywhere |
 | Playground: Step to Next Pipeline Stage | `playground.stageNext` | `ctrl+alt+shift+right` | — | everywhere |

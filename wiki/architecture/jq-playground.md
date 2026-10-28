@@ -1665,6 +1665,7 @@ above win):
 | `ctrl+alt+b` | show / focus / hide the [variables line](#variables-2786) (`playground.variables`); on the line `enter` runs and `esc` returns here |
 | `ctrl+alt+shift+↓` / `↑` | [chain](#chaining-results-2795) the result as the next input / go back one level (`playground.chainResult` / `playground.chainBack`) |
 | `ctrl+alt+\` | split the result into [a pane of its own](#the-detached-result-pane-2797) beside the source, or re-attach it (`playground.splitResult`); `tab` then crosses the panes |
+| `cmd+l` | focus the query line from anywhere in the playground (result, table, strip, variables line, detached result pane) with the whole program selected, so typing replaces it — the browser's address bar (`playground.focusQuery`, #3084); `esc` while the selection is still armed drops it and returns to where the keyboard was. On the query line it just selects all again. In the hosting editor `cmd+l` stays `editor.goToLine`; off macOS the fold lands on `ctrl+l`, which the playground keeps for the filter picker / clear-output |
 | `esc` | close (recording the program in the history) |
 | `esc esc` | close **and** open the command palette (#2237) |
 | `f1` | the cheatsheet, opened on the playground's own context (#2237) |

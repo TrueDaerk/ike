@@ -90,6 +90,11 @@ var intentionalDefaultShadows = map[string]string{
 	// The table view (#2794) the same way: lsp.format's cmd+alt+l folds onto
 	// ctrl+alt+l in the Editor context off macOS.
 	shadowKey("ctrl+alt+l", "lsp.format", "playground.tableView"): "linux Cmd-fold: reformat over the playground-only table view",
+	// The playground's query-line jump (#3084): cmd+l (ctrl+l off macOS) is
+	// editor.goToLine in the Editor context and stays so; the playground
+	// resolves Global only, so the browser address-bar habit fires there.
+	shadowKey("cmd+l", "editor.goToLine", "playground.focusQuery"):  "editor keeps go-to-line; the playground-only query focus resolves Global",
+	shadowKey("ctrl+l", "editor.goToLine", "playground.focusQuery"): "linux Cmd-fold: go-to-line over the playground-only query focus",
 	// The shared find chord (#2409): search.open is the Global fallback that
 	// opens whatever the focused pane calls its search, and with an editor
 	// focused the editor's own find deliberately wins — the editor *is* the
