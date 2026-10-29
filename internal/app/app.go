@@ -15359,11 +15359,6 @@ func (m Model) render() string {
 		// pane's first content row — geometry stays untouched.
 		base = overlay.Place(base, text, bx, by, m.width, m.height)
 	}
-	if m.ctxMenu.IsOpen() {
-		// The right-click context menu (#1020) floats at its clamped anchor.
-		x, y := m.ctxMenu.Pos()
-		base = overlay.Place(base, m.ctxMenu.View(), x, y, m.width, m.height)
-	}
 	if m.popupLayerVisible() && !m.settings.IsOpen() {
 		// The popup terminal layer (#1398) floats above the workspace but
 		// below the exclusive overlays: a palette or the settings panel opened
@@ -15387,6 +15382,13 @@ func (m Model) render() string {
 	if editorPopupsOnTop {
 		base = m.compositeLSPPopups(base)
 		base = m.compositePlayCompletion(base)
+	}
+	if m.ctxMenu.IsOpen() {
+		// The right-click context menu (#1020) floats at its clamped anchor,
+		// above the popup terminal layer (#3098) to match its mouse precedence
+		// as the topmost transient popup, but below the exclusive overlays.
+		x, y := m.ctxMenu.Pos()
+		base = overlay.Place(base, m.ctxMenu.View(), x, y, m.width, m.height)
 	}
 	result := base
 	switch {

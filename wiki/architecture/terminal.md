@@ -574,7 +574,10 @@ everything `popupFocused` routes; the resize chords (#774) and the border
 drag (#933, corner-anchored 1:1 math) size the focused panel. Box-only
 affairs (`cmd+d` split, `cmd+shift+i` broadcast) no-op while a panel holds
 the keys — the focus keys are the exception: they cross the whole layer
-(#1806).
+(#1806). The right-click **context menu** (#1020) composites above the whole
+layer — box and panels, blurred or not — matching its mouse precedence as the
+topmost transient popup, but still below the exclusive overlays (palette, key
+doctor, …) (#3098).
 
 **alt+drag move** (#3035, #3041): besides the title-row move, a panel moves
 when grabbed **anywhere in its content** with alt held (`moveDragMods`; cmd —
