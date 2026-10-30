@@ -11962,37 +11962,43 @@ func (m Model) splitView(zone layout.Zone) (tea.Model, tea.Cmd) {
 // tool-tab host, #1989); with no such pane the designated layout's editor
 // slot anchors the split, and only as a last resort the focused leaf does.
 func (m *Model) spawnEditor() string {
-	target := m.fileEditorKey()
-	zone, ratio := m.splitZone, 0.0
-	if target == "" {
+	anchor := editorAnchor{target: m.fileEditorKey(), zone: m.splitZone}
+	if anchor.target == "" {
 		// No live pane edits files: a tool-tab host must not attract the
-		// split (#1989) — the designated layout's editor slot decides the
-		// position instead, so the recreated editor lands in its original
-		// layout area.
-		target, zone, ratio = m.editorSlotAnchor()
+		// split (#1989) — the reference layout's editor slot decides the
+		// position instead (#3109: the pane standing in the slot's place, or
+		// the sibling subtree at the slot's own split level), so the
+		// recreated editor lands in its original layout area.
+		anchor = m.editorSlotAnchor()
 	}
-	if target == "" {
-		target = m.activeWS().Panes.Focused()
+	if anchor.empty() {
+		anchor.target = m.activeWS().Panes.Focused()
 	}
 	newKey := m.activeWS().Panes.AddEditor()
 	m.installEmitter(newKey)
-	if m.activeWS().Tree == nil || target == "" {
+	if m.activeWS().Tree == nil || anchor.empty() {
 		// Pre-layout: no tree to split yet; the default tree will adopt the key on
 		// first layout only if it is the canonical first editor. Otherwise leave the
 		// instance registered and let layout() build around it.
 		return newKey
 	}
-	tree, ok := layout.SplitLeaf(m.activeWS().Tree, target, newKey, zone)
+	var tree layout.Node
+	var ok bool
+	if anchor.node != nil {
+		tree, ok = layout.SplitNode(m.activeWS().Tree, anchor.node, newKey, anchor.zone)
+	} else {
+		tree, ok = layout.SplitLeaf(m.activeWS().Tree, anchor.target, newKey, anchor.zone)
+	}
 	if !ok {
 		// Target not in the tree (e.g. focused leaf already gone): drop the spare.
 		m.activeWS().Panes.Close(newKey)
 		return m.activeWS().Panes.Focused()
 	}
-	if ratio > 0 && ratio < 1 {
+	if anchor.ratio > 0 && anchor.ratio < 1 {
 		// The saved layout's split share carries over, so the recreated
 		// editor slot keeps its original proportions instead of an even split.
 		if sp := parentSplit(tree, newKey); sp != nil {
-			sp.Ratio = ratio
+			sp.Ratio = anchor.ratio
 		}
 	}
 	m.activeWS().Tree = tree

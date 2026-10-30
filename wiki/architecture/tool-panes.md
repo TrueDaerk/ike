@@ -4,7 +4,7 @@ title: Custom TUI Tool Panes
 description: "#741 — user-configured TUI programs (lazygit, htop, k9s) as first-class panes: [[tools.custom]] config entries become tool.<name> palette commands with toggle-focus semantics, configurable home positions (#1889 JetBrains-style docking, docking into the layout's own tool region when the workspace edge is no slot, #2191), named slot templates pinning runtime tool opens to exact layout positions (#1897; #1946 adds `terminal`/`run`/`debug` as assignable targets; since #2042 saved layouts win over the template on apply), global process-wide instances shared across workspaces (#1890) whose panes follow project switches grouped at their configured positions (#1903, #2042) and return to the pane the project's saved layout recorded (#2141), tool chrome (not terminal chrome), exit keeps the pane open with restart/close footer actions (#810), layout restore, IKE_THEME_* env for theme following, the per-tool close-guard opt-out `guard = false` (#2704), and the built-in Run tool that owns run output (#1905)."
 resource: internal/app/tools.go
 tags: [architecture, tools, terminal, panes, lazygit]
-timestamp: 2026-09-25T23:00:00Z
+timestamp: 2026-10-30T12:00:00Z
 ---
 
 # Custom TUI Tool Panes (#741)
@@ -116,7 +116,8 @@ dashes: "My Tool" → `tool.my-tool`); like any command it is bindable and
 palette-reachable.
 
 Invoking mirrors `terminal.toggle`: no pane → spawn at the configured home
-position (#1889, below) or, without one, split off the active editor at the
+position (#1889, below) or, without one, split off the flexible-region anchor
+(the active editor, else the pane standing in the editor slot, #3109) at the
 adaptive placement (`Model.auxZone`, #1588 — below by default, to the right
 when the host is wider than 120 cells and wider than tall); pane exists
 unfocused → focus it (remembering where focus was); focused → return focus.
@@ -129,6 +130,41 @@ still decide where the pane lands. Since every custom tool pane is a terminal
 pane, the number is claimed by tool *name*, and a custom tool named like a
 built-in window loses the id to the window. See
 [pane layout](./pane-layout.md).
+
+## Where a tool opens — precedence (#3109)
+
+Every tool-pane open — a `[[tools.custom]]` entry, the built-in Run tool,
+the debug area and the singleton tool windows (`Model.openToolPane`) —
+resolves its place in this order:
+
+1. **Slot template** (#1897, below) — an `assign`ed slot pins the pane to the
+   template position; nothing else is consulted.
+2. **Remembered Run home** (#2191) — for the Run tool only, the position a
+   drag recorded.
+3. **Configured home position** (#1889, below) — a tool's explicit
+   `placement` edge, with an editor live also the Run tool's
+   `run.placement` edge (`in_pane` needs an editor pane and otherwise falls
+   through).
+4. **The flexible-region anchor** (`Model.flexAnchorKey`,
+   `internal/app/editor_anchor.go`) — the adaptive split (`auxZone`) hangs
+   off the **active editor**; with none, off a live flexible-region pane
+   (the MRU viewer, #2507); with none of those, off the **pane standing in
+   the reference layout's editor slot** (`slotOccupant`: a tool window such
+   as Issues or a tool host occupying the editor area while no editor is
+   open — see [Pane Layout](/architecture/pane-layout.md) § "Where a spawned
+   editor lands").
+5. **The focused leaf** — the last resort when nothing stands for the
+   flexible region.
+
+**No live editor (#3109).** Before #3109 the fallback after the editor was
+the focused pane, so with the editor closed and the focus in the bottom tool
+strip, Run and Debug opened beside the HTTP response pane while the Issues
+window kept the whole editor area. Now the flexible-region anchor comes
+first: the Run tool's *default* edge home (`run.placement = bottom`, which
+docks relative to the editor's tool strip) **yields** to the flexible region
+while no editor is live, so run output appears where the user is looking.
+A `[[tools.custom]]` entry's explicit `placement` and every slot assignment
+still win — a configured home says otherwise by definition.
 
 ## Home positions (#1889)
 
@@ -376,7 +412,10 @@ What differs from a configured tool:
 - **Home position from `run.placement`** — instead of the entry's `placement`
   field, the setting names the edge (`bottom` default, `left`, `right`,
   `top`) or `in_pane` for a terminal tab in the focused editor pane. A slot
-  assignment still wins.
+  assignment still wins. With **no editor live** the edge home yields to the
+  flexible region (#3109, § "Where a tool opens"): run output splits the pane
+  standing in the editor slot instead of docking beside the bottom-strip tool
+  the focus sits in.
 - **Placement is state, once the user moves it (#2191)** — for a configured
   tool the placement is pure intent: a moved tool returns to its home on the
   next open. Run output reappears on every run, so a Run pane the user

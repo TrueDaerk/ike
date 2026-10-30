@@ -1092,54 +1092,6 @@ func (m *Model) spawnShellPane() string {
 	return m.activeWS().Panes.AddTerminal(terminal.Shell(shell), ".", terminalEnv(), m.host.Send)
 }
 
-// editorSlotAnchor picks where a fresh editor pane splits in when no live
-// pane edits files (#1989): a tool-tab host must not attract the split, so
-// the designated default layout is consulted for its editor slot and the new
-// editor splits off the nearest layout neighbour with a live counterpart —
-// with all editors closed, opening a file recreates the editor in its
-// original layout slot. Without a usable default layout the built-in
-// explorer+editor arrangement anchors at the explorer; target "" leaves the
-// caller its focused-pane fallback. ratio is the anchor split's saved share
-// (0 keeps the even split).
-func (m *Model) editorSlotAnchor() (target string, zone layout.Zone, ratio float64) {
-	if tree, ids, ok := defaultLayoutSnapshot(); ok {
-		if target, zone, ratio, ok := m.anchorFromLayout(tree, ids); ok {
-			return target, zone, ratio
-		}
-	}
-	if m.liveLeaf(pane.ExplorerKey) {
-		r := 0.0
-		if m.width > 0 {
-			r = float64(explorerWidth) / float64(m.width)
-		}
-		return pane.ExplorerKey, layout.ZoneRight, r
-	}
-	return "", m.splitZone, 0
-}
-
-// anchorFromLayout resolves the saved layout's editor slot to a live split
-// anchor: the path from the slot up to the root is walked inside-out, and the
-// first sibling subtree holding a leaf with a live counterpart wins. The zone
-// puts the new editor on the side of the anchor the slot occupied; the ratio
-// is that split's saved share.
-func (m *Model) anchorFromLayout(tree layout.Node, ids map[string]paneIdentity) (string, layout.Zone, float64, bool) {
-	slot := editorSlotLeaf(tree, ids)
-	if slot == "" {
-		return "", 0, 0, false
-	}
-	// layout.Hops walks the path innermost first and names the side each
-	// sibling occupies relative to the slot; the new editor goes on the
-	// opposite side — where the slot itself sat.
-	for _, h := range layout.Hops(tree, slot) {
-		for _, key := range layout.Leaves(h.Sibling) {
-			if live := m.liveCounterpart(ids[key]); live != "" {
-				return live, layout.Opposite(h.Zone), h.Ratio, true
-			}
-		}
-	}
-	return "", 0, 0, false
-}
-
 // editorSlotLeaf returns the saved layout's designated editor slot: the first
 // editor-kind leaf in walk order. A leaf carrying tool tabs only counts when
 // no plain editor slot exists — a legacy snapshot wrote a pure tool host as

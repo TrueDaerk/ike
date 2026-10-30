@@ -4,7 +4,7 @@ title: Pane Layout & Drag
 description: Pure split-tree layout model driven by mouse drag — pane-edge resize and title-bar move/swap — plus a sticky keyboard resize mode (#2150) stepping the same dividers with hjkl/arrows, plus numbered pane chrome with focus-by-number chords (#2407), with per-project geometry persisted in a dedicated state store and named user-scoped saved layouts that are the whole truth on apply (#2042), tools and multi-tool tab hosts included; slot templates (#1897) only govern runtime tool opens; the flexible region (the editor area) carries a focus MRU that document opens target (#2507).
 resource: internal/layout/tree.go
 tags: [architecture, layout, panes, mouse, drag, resize, split, close, keyboard, focus, numbers, persistence, bubbletea]
-timestamp: 2026-09-04T12:00:00Z
+timestamp: 2026-10-30T12:00:00Z
 ---
 
 # Pane Layout & Drag
@@ -110,7 +110,11 @@ mouse reporting via `tea.WithMouseCellMotion` in `cmd/ike`; the root model's
   strip already subdivided across the dock axis still yields the leaf on
   zone's side, where `EdgeLeaf` would report the slot free. The tool-region
   placement (#2191) and the saved-layout editor anchor (`anchorFromLayout`,
-  #1989) both ride these.
+  #1989) both ride these. `internal/layout/subtree.go` (#3109) adds the
+  subtree counterparts: `CommonAncestor(root, panes)` names the smallest
+  subtree holding a set of leaves, `SplitNode(root, at, newPane, zone)` wraps
+  a whole subtree in a fresh split (the subtree twin of `SplitLeaf`), and
+  `Bounds` / `Overlap` answer geometry questions about subtrees and cells.
 - **Release** during a move resolves the drop target and `DropZone`
   (left/right/top/bottom of the target pane), then `layout.Move` re-parents the
   dragged leaf — swapping order or re-orienting the split. v1 only relocates the
@@ -292,19 +296,45 @@ discard)`: a background result reaches the pane that asked for it, dedicated or
 tab-nested, and an unroutable one is `Discard()`ed rather than dropped, so the
 database handle or connection it carries is released.
 
-**Where a spawned editor lands (#1989).** `spawnEditor` anchors at the pane
-`fileEditorKey` resolves — never at a pane whose tabs are all tool sessions (a
-**tool-tab host**, `toolTabHost`): that pane is the layout's tools area, not
-an editor slot. When *no* live pane edits files (last editor closed, only
-explorer/terminals/tool hosts remain), the **designated default layout**
-decides the position (`editorSlotAnchor`): its first real editor slot is
-located, the path to the root is walked inside-out, and the first layout
-sibling with a live counterpart (matched by identity kind — singletons by
-fixed key, tools by name, tool hosts by shape) becomes the split anchor, on
-the side the slot occupied and with the saved split share — so with all
-editors closed, opening a file recreates the editor in its original layout
-slot. Without a usable default layout the built-in explorer+editor
-arrangement anchors at the explorer; the focused leaf stays the last resort.
+**Where a spawned editor lands (#1989, #3109).** `spawnEditor` anchors at
+the pane `fileEditorKey` resolves — never at a pane whose tabs are all tool
+sessions (a **tool-tab host**, `toolTabHost`): that pane is the layout's
+tools area, not an editor slot. When *no* live pane edits files (last editor
+closed, only explorer/terminals/tool windows remain), the **reference
+layout** — the designated default layout, else the built-in explorer+editor
+arrangement — decides the position (`editorSlotAnchor`,
+`internal/app/editor_anchor.go`): its first real editor slot is the flexible
+region, and the live tree is matched against it **by geometry** (both trees
+laid out over the current body rectangle), in this order:
+
+1. **A live occupant of the slot** (`slotOccupant`) — a leaf no other saved
+   leaf accounts for (not the live counterpart of a non-slot identity, never
+   the explorer) whose cell lies at least half inside the slot's rectangle:
+   a tool window such as Issues, a tool-tab host, a viewer. The editor
+   splits *that* pane: a flexible-region occupant (a viewer) shares evenly
+   along the configured split orientation; a tool window keeps
+   `toolDockShare` (0.3) on its adaptive side (below, or right of a wide
+   cell) and the editor takes the rest.
+2. **The hop-level split** (`hopLevelAnchor`) — the slot's ancestor path is
+   walked inside-out (`layout.Hops`); for the first sibling whose leaves
+   have live counterparts (matched by identity kind — singletons by fixed
+   key, tools by name, tool hosts by shape) the live subtree those
+   counterparts span (`layout.CommonAncestor`) is wrapped in a new split
+   (`layout.SplitNode`) on the slot's side. The sibling keeps the **cell
+   extent the layout gave it** along the split axis, so the editor regains
+   the slot's share of the row/column — never a share of one neighbour's own
+   cell, which is how (#3109) the explorer shrank to a one-column strip. A
+   sibling with no room left (its live subtree is no bigger than its saved
+   cell) yields to the next hop.
+3. **Without geometry** (pre-layout) the first live counterpart leaf anchors
+   with the saved split share, the original #1989 rule.
+
+With all editors closed, opening a file thus recreates the editor in its
+original layout slot, over whatever stands there. Without any usable anchor
+the explorer anchors; the focused leaf stays the last resort. The same
+occupant lookup names the **flexible-region anchor** tool-pane opens target
+while no editor is live (`flexAnchorKey`; see
+[Tool Panes](/architecture/tool-panes.md) § "Where a tool opens").
 
 The root model exposes these as binding-agnostic ops (`SplitFocused(zone)`,
 `CloseFocused`, `FocusDir(dir)`, plus tab focus-cycle), so Roadmap 0080 binds
