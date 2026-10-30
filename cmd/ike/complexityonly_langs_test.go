@@ -83,6 +83,9 @@ func renderComplexityOnlyLangs() ([]byte, error) {
 		if len(names) > 0 {
 			fmt.Fprintf(&b, ", Filenames: %s", goStrings(names))
 		}
+		if len(l.NamePrefixes) > 0 {
+			fmt.Fprintf(&b, ", NamePrefixes: %s", goStrings(l.NamePrefixes))
+		}
 		if len(l.DropIns) > 0 {
 			b.WriteString(", DropIns: []lang.DropIn{")
 			for i, d := range l.DropIns {

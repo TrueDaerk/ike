@@ -41,9 +41,18 @@ type Language struct {
 	ID         string   // stable id, e.g. "python"
 	Extensions []string // file extensions without dot, e.g. []string{"py", "pyi"}
 	Filenames  []string // optional exact base names, e.g. []string{"Dockerfile"}
-	Grammar    Grammar  // highlighting grammar, or nil
-	Server     *ServerSpec
-	Toolchain  Toolchain
+
+	// NamePrefixes lists base-name prefixes that select this language when
+	// every other lookup fails (#3100), matched case-insensitively and only
+	// for a longer name: dotenv's ".env." claims .env.stats and .env.ci
+	// without a fixed list. ByPath consults them after the extension index
+	// and the template/rotation suffix fallbacks, so .env.json stays JSON and
+	// .env.json.j2 too; see ByPath.
+	NamePrefixes []string
+
+	Grammar   Grammar // highlighting grammar, or nil
+	Server    *ServerSpec
+	Toolchain Toolchain
 
 	// ServerLanguage names the language whose LSP server handles this
 	// language's documents (#1063): e.g. the "go.mod" language delegates to
@@ -417,6 +426,7 @@ var (
 	interpIx = map[string]string{} // shebang interpreter base name -> language id (#893)
 	pathIx   = map[string]string{} // exact full path -> language id, from content sniffing (#893)
 	dropIns  = map[DropIn]string{} // drop-in dir suffix + extension -> language id (#3063)
+	prefixIx = map[string]string{} // lower-case base-name prefix -> language id (#3100)
 )
 
 // Register records a language. Re-registering the same ID replaces the prior
@@ -438,6 +448,9 @@ func Register(l Language) {
 	for _, d := range l.DropIns {
 		dropIns[DropIn{DirSuffix: d.DirSuffix, Ext: strings.ToLower(strings.TrimPrefix(d.Ext, "."))}] = l.ID
 	}
+	for _, p := range l.NamePrefixes {
+		prefixIx[strings.ToLower(p)] = l.ID
+	}
 }
 
 // Snapshot copies the registry and returns the function that puts the copy
@@ -457,11 +470,12 @@ func Snapshot() (restore func()) {
 	interps := maps.Clone(interpIx)
 	paths := maps.Clone(pathIx)
 	drops := maps.Clone(dropIns)
+	prefixes := maps.Clone(prefixIx)
 	mu.RUnlock()
 	return func() {
 		mu.Lock()
 		defer mu.Unlock()
-		byID, extIdx, nameIx, interpIx, pathIx, dropIns = ids, exts, names, interps, paths, drops
+		byID, extIdx, nameIx, interpIx, pathIx, dropIns, prefixIx = ids, exts, names, interps, paths, drops, prefixes
 	}
 }
 
@@ -566,7 +580,10 @@ var rotationSuffix = regexp.MustCompile(`^(?:\d+|\d{4}-\d{2}-\d{2}|\d{8})$`)
 // the extension. A path whose extension is a known template suffix (#1595) or
 // a rotation suffix (#1745, e.g. logrotate's ".1" or ".2026-08-01") resolves
 // as the name with that suffix stripped — the inner extension keeps the last
-// word, so a language claiming such a suffix outright still wins.
+// word, so a language claiming such a suffix outright still wins. Only when
+// all of that fails does a base-name prefix (#3100, dotenv's ".env.") decide:
+// .env.json stays JSON, .env.stats is dotenv, and .env.stats.j2 reaches the
+// prefix through the stripped .env.stats.
 func ByPath(path string) (Language, bool) {
 	if l, ok := ByAssociation(path); ok {
 		return l, true
@@ -602,7 +619,27 @@ func ByPath(path string) (Language, bool) {
 			return ByPath(stripped)
 		}
 	}
-	return Language{}, false
+	return byNamePrefix(base)
+}
+
+// byNamePrefix resolves base through the base-name prefix index (#3100),
+// case-insensitively; the name must be longer than the prefix. The longest
+// matching prefix wins, so the result does not depend on map order.
+func byNamePrefix(base string) (Language, bool) {
+	lower := strings.ToLower(base)
+	mu.RLock()
+	defer mu.RUnlock()
+	best, id := -1, ""
+	for p, pid := range prefixIx {
+		if len(lower) > len(p) && strings.HasPrefix(lower, p) &&
+			(len(p) > best || len(p) == best && pid < id) {
+			best, id = len(p), pid
+		}
+	}
+	if best < 0 {
+		return Language{}, false
+	}
+	return byID[id], true
 }
 
 // dropInID resolves path through the drop-in index (#3063): its extension

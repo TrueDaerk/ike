@@ -27,7 +27,11 @@ func init() {
 			".env", ".env.local", ".env.example", ".env.sample", ".env.template",
 			".env.development", ".env.production", ".env.test", ".env.staging",
 		},
-		Spans: envSpans,
+		// Every other dotted variant (#3100): .env.stats, .env.prod.local,
+		// .env.ci — and, through the template-suffix fallback, .env.stats.j2.
+		// Consulted last, so .env.json stays JSON.
+		NamePrefixes: []string{".env."},
+		Spans:        envSpans,
 		// Duplicate keys (#1623): the earlier assignment loses silently in
 		// most loaders, so it is marked. See lint.go.
 		Lint:        func(_ string, lines []string) []lang.Note { return envLint(lines) },
