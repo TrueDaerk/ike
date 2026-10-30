@@ -203,10 +203,10 @@ func (m *Model) newToolTab(sp toolSpawn) terminal.Model {
 // materialized; nothing is spawned when it does not.
 func (m *Model) placeTool(sp toolSpawn, placement string) bool {
 	ws := m.activeWS()
-	target := m.activeEditorKey()
-	if target == "" {
-		target = ws.Panes.Focused()
-	}
+	// The adaptive split hangs off the flexible-region anchor (#3109): the
+	// active editor, else the pane standing in the editor slot, else the
+	// focused leaf.
+	target := m.toolAnchorKey()
 	if target == "" || ws.Tree == nil {
 		return false
 	}

@@ -131,16 +131,14 @@ func fixedZone(z layout.Zone) func(string) layout.Zone {
 	return func(string) layout.Zone { return z }
 }
 
-// openToolPane splits the active editor (fallback: the focused leaf) with a
-// singleton tool window: add mints the pane, zone picks the placement for the
-// chosen target, and after seeds the fresh pane before it takes focus. It
-// reports whether the pane made it into the layout — a failed split closes the
-// pane again and leaves the tree untouched.
+// openToolPane splits the flexible-region anchor (the active editor, else
+// the pane standing in the editor slot, #3109; fallback: the focused leaf)
+// with a singleton tool window: add mints the pane, zone picks the placement
+// for the chosen target, and after seeds the fresh pane before it takes
+// focus. It reports whether the pane made it into the layout — a failed
+// split closes the pane again and leaves the tree untouched.
 func (m *Model) openToolPane(add func() string, zone func(target string) layout.Zone, after func(key string)) bool {
-	target := m.activeEditorKey()
-	if target == "" {
-		target = m.activeWS().Panes.Focused()
-	}
+	target := m.toolAnchorKey()
 	if target == "" || m.activeWS().Tree == nil {
 		return false
 	}

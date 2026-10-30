@@ -879,10 +879,9 @@ func (m *Model) openDebugPanel() {
 		m.ensureDebugConsole()
 		return
 	}
-	target := m.activeEditorKey()
-	if target == "" {
-		target = m.activeWS().Panes.Focused()
-	}
+	// The flexible-region anchor (#3109): the active editor, else the pane
+	// standing in the editor slot, else the focused leaf.
+	target := m.toolAnchorKey()
 	if target == "" || m.activeWS().Tree == nil {
 		return
 	}

@@ -395,6 +395,13 @@ func (m *Model) openRunTool(cfg *run.Config, argv []string, dir string, env []st
 			}
 			placement = "" // no editor pane: fall back to the adaptive split
 		}
+		// With no editor open, the edge home docks run output beside
+		// whatever tool strip the focus sits in; the flexible region — the
+		// pane standing in the editor slot — is where the user watches a
+		// run, so the dock yields to the adaptive split there (#3109).
+		if m.noLiveEditorFlexAnchor() != "" {
+			placement = ""
+		}
 	}
 	return m.placeTool(sp, placement)
 }
