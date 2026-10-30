@@ -162,6 +162,14 @@ templated name reaches it through the stripped name (`.env.stats.j2` →
 complexity-only table (`cmd/ike/complexityonly_langs.go`) carries the
 prefixes along with the extensions and names.
 
+**Key colour (#3103).** The dotenv key (`pairSpans`), ini keys and crontab
+assignments emit the `property` capture (`export` stays `keyword`, `=` is
+`punctuation`). Every built-in theme gives `property` a colour distinct from
+plain text, `variable` (Jinja placeholders in `.env.j2`) and `string` —
+default `cyan`, nord `#8fbcbb` — guarded by
+`TestBuiltinPropertyColourDistinct` in `internal/theme`. The same capture
+colours Tree-sitter `@property` keys in JSON/YAML/TOML.
+
 **What can shadow a template's inner language.** Only the two rules ahead of
 the static lookups: a user `[files.associations]` entry whose glob matches the
 template (e.g. `"*.j2" = "…"` or a `templates/**` pattern) wins outright, and
