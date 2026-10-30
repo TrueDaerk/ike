@@ -253,6 +253,10 @@ after `is` and called names, `constant.builtin` for `true`/`false`/`none`,
 only outside strings and at brace depth 0, so `{{ "}}" }}` and a dict literal
 stay one block. A template without an inner language (`motd.j2`) gets the
 Jinja layer alone; a file without a Jinja suffix is never scanned here.
+Between the two layers, every secret mask (`secret.value`, #1623) of the inner
+pass that overlaps a Jinja block is dropped (#3101): a placeholder value is
+not a credential, and the mask would conceal the Jinja tokens (see
+[languages](./languages.md)).
 
 Ansible YAML files (#3061) reuse the same tokenizer from the language's Go
 span producer instead: their Jinja sits in valid YAML scalars, so nothing is
