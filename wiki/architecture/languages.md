@@ -988,7 +988,14 @@ secret-suspect keys (#1623, see `/architecture/editor.md`, secret masking):
 key text alone — `*_SECRET`, `PASSWORD`, `*_TOKEN`, `*_KEY`, `CREDENTIALS`,
 `DSN`, … with `PUBLIC_KEY`, `API_KEY_ID`, `TOKEN_URL` and friends cleared
 again — and the producer emits the value as a stand-in span carrying
-`secret.Mask`. Since #1813 the JSON languages
+`secret.Mask`. A Jinja dotenv template (`.env.j2`, `app.env.j2`) is the
+exception (#3101): `HighlightScoped` drops every `secret.value` span the inner
+pass produced that overlaps a Jinja block (`jinja.Template.Overlaps`), so
+`DB_PASSWORD={{ vault_db_password }}` shows the Jinja tokens instead of `••••`
+— the value is a placeholder naming a variable, not a credential. A value
+mixing a literal and a block (`PASSWORD=abc{{ x }}`) unmasks whole, since the
+file is a template rather than a credential store; a literal value on another
+line still masks, and plain dotenv files mask exactly as before. Since #1813 the JSON languages
 (`plugins/languages/json/mask.go`) are a second producer of that same span:
 in `"password": "…"` the string's content masks and the quotes stay, decided by
 the key directly in front of the value and by no other. Since #1811 the Python producer

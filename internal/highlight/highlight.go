@@ -11,6 +11,7 @@ import (
 
 	"ike/internal/jinja"
 	"ike/internal/lang"
+	"ike/internal/secret"
 )
 
 // Lang returns the language id for a path, or "" when no language matches.
@@ -84,13 +85,18 @@ func Highlight(path string, lines []string) []Span {
 // over the masked text — every Jinja block blanked out at the same offsets,
 // so a {% if %} line cannot break the inner parse — and gets the Jinja spans
 // on top, with or without an inner language (motd.j2 is Jinja over plain
-// text).
+// text). A secret mask (#1623) touching a block is dropped (#3101): the
+// value of `DB_PASSWORD={{ vault_db_password }}` is a placeholder naming a
+// variable, not a credential, and the mask would hide the Jinja tokens. A
+// value mixing a literal and a block (`PASSWORD=abc{{ x }}`) unmasks whole —
+// the file is a template, not a credential store.
 func HighlightScoped(path string, lines []string) ([]Span, []Scope, []Fold) {
 	if !lang.IsJinjaTemplate(path) {
 		return highlightInner(path, lines)
 	}
 	tpl := jinja.Scan(lines)
 	spans, scopes, folds := highlightInner(path, tpl.Mask(lines))
+	spans = dropJinjaSecrets(tpl, spans)
 	if js := tpl.Spans(); len(js) > 0 {
 		// Prepended like every Go-produced layer: CaptureAt is
 		// first-covering-wins, so the Jinja tokens win over whatever the
@@ -98,6 +104,22 @@ func HighlightScoped(path string, lines []string) ([]Span, []Scope, []Fold) {
 		spans = append(langSpans(js), spans...)
 	}
 	return spans, scopes, folds
+}
+
+// dropJinjaSecrets filters the secret-mask spans (secret.Capture) that
+// overlap a Jinja block out of the inner pass's spans (#3101).
+func dropJinjaSecrets(tpl *jinja.Template, spans []Span) []Span {
+	if len(tpl.Blocks) == 0 {
+		return spans
+	}
+	out := spans[:0]
+	for _, s := range spans {
+		if s.Capture == secret.Capture && tpl.Overlaps(s.Line, s.StartCol, s.Line, s.EndCol) {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 // highlightInner is HighlightScoped for the language path names, without the
