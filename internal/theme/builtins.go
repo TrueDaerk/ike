@@ -125,7 +125,7 @@ func defaultTheme() Theme {
 			"constant.builtin": "orange",
 			"variable":         "white",
 			"variable.builtin": "red",
-			"property":         "white",
+			"property":         "cyan",
 			"label":            "magenta",
 			"attribute":        "yellow",
 			"punctuation":      "gray",
@@ -315,7 +315,7 @@ func nord() Theme {
 			"constant.builtin": "#d18a74",
 			"variable":         "#d8dee9",
 			"variable.builtin": "#cf8990",
-			"property":         "#d8dee9",
+			"property":         "#8fbcbb",
 			"label":            "#81a1c1",
 			"attribute":        "#ebcb8b",
 			"punctuation":      "#eceff4",
@@ -1311,7 +1311,7 @@ func dracula() Theme {
 			"constant.builtin": "#bd93f9",
 			"variable":         "#f8f8f2",
 			"variable.builtin": "#bd93f9", // this/self purple
-			"property":         "#f8f8f2",
+			"property":         "#8be9fd",
 			"label":            "#ff79c6",
 			"attribute":        "#ffb86c", // orange: distinct from function green (#2727)
 			"punctuation":      "#f8f8f2",
@@ -2497,7 +2497,7 @@ func monokaiPro() Theme {
 			"constant.builtin": "#ab9df2",
 			"variable":         "#fcfcfa",
 			"variable.builtin": "#fc9867", // self/this orange
-			"property":         "#fcfcfa",
+			"property":         "#78dce8",
 			"label":            "#ff6188",
 			"attribute":        "#78dce8",
 			"punctuation":      "#939293",
@@ -2597,7 +2597,7 @@ func zenburn() Theme {
 			"constant.builtin": "#dca3a3",
 			"variable":         "#dfaf8f",
 			"variable.builtin": "#de92c6", // lightened for contrast from #dc8cc3
-			"property":         "#dcdccc",
+			"property":         "#e0cf9f",
 			"label":            "#f0dfaf",
 			"attribute":        "#e0cf9f",
 			"punctuation":      "#9f9f8f",
@@ -2705,7 +2705,7 @@ func highContrastDark() Theme {
 			"constant.builtin": "#ffab40",
 			"variable":         "#ffffff",
 			"variable.builtin": "#ff8a80",
-			"property":         "#ffffff",
+			"property":         "#00e5ff",
 			"label":            "#ff79c6",
 			"attribute":        "#ffd54f",
 			"punctuation":      "#e0e0e0", // no dim class
@@ -2804,7 +2804,7 @@ func highContrastLight() Theme {
 			"constant.builtin": "#7a3600",
 			"variable":         "#000000",
 			"variable.builtin": "#96000e",
-			"property":         "#000000",
+			"property":         "#005252",
 			"label":            "#8b1a6b",
 			"attribute":        "#6b4a00",
 			"punctuation":      "#333333", // no dim class
