@@ -1,5 +1,14 @@
 # Log
 
+## 2026-10-30 (Explorer: cmd+backspace resolves and deletes without a prompt, #3107)
+
+- [Keybindings](/architecture/keybindings.md): pane-scoped plugin keymaps
+  are matched as parsed, platform-normalised chords, not raw strings — a
+  `cmd+…` declaration now fires for the `super+` / `meta+` press.
+- [Explorer](/architecture/explorer.md): `cmd+backspace` / `ctrl+backspace`
+  trash the selection without the confirmation; `d` and `delete` still ask.
+- [Plugins](/architecture/plugins.md): `ResolveKey` compares parsed chords.
+
 ## 2026-10-28 (Complexity index: window actions rescan from the cache, #3085)
 
 - [Complexity](/architecture/complexity.md): the pane's `r` (every tab's

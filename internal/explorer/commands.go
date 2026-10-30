@@ -73,9 +73,11 @@ func (corePlugin) Capabilities() plugin.Capabilities {
 			keymap("n", "explorer.newFile", NewFileMsg{}),
 			keymap("N", "explorer.newFolder", NewDirMsg{}),
 			keymap("d", "explorer.delete", DeleteMsg{}),
-			// JetBrains project-view delete aliases (#3087).
-			keymap("cmd+backspace", "explorer.delete", DeleteMsg{}),
-			keymap("ctrl+backspace", "explorer.delete", DeleteMsg{}),
+			// JetBrains project-view delete aliases (#3087). The two
+			// backspace chords are deliberate, so they trash without the
+			// confirmation (#3107); delete keeps it like d.
+			keymap("cmd+backspace", "explorer.delete", DeleteMsg{Now: true}),
+			keymap("ctrl+backspace", "explorer.delete", DeleteMsg{Now: true}),
 			keymap("delete", "explorer.delete", DeleteMsg{}),
 			keymap("R", "explorer.rename", RenameMsg{}),
 			// Bulk operations over the multi-select (#2166); with nothing

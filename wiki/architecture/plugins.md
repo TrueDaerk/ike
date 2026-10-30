@@ -147,6 +147,9 @@ an empty key never coalesces.
   into the editor. `EventFileOpened` hooks fire either way.
 - **Keys** resolve against `ResolveKey(keys, focusContext)` before the core
   switch; a plugin binding only pre-empts a core key when it out-prioritises it.
+  `Keys` is compared as a parsed, platform-normalised chord (`keymap.ParseKey`
+  + `NormalizeKey`), so `cmd+x` matches a `super+x` / `meta+x` press on macOS
+  and `ctrl+x` elsewhere (#3107).
 - **Commands** run via `Model.RunCommand(id)` — the seam the command palette
   (roadmap 0070) drives.
 

@@ -350,6 +350,19 @@ func (m *Model) promptDelete() {
 	}
 }
 
+// acceptDeletePrompt accepts the confirmation promptDelete just opened, as if
+// the user had answered yes (#3107) — the same trash / scratch-store delete,
+// undo step and announcements. The caller only runs it when promptDelete
+// actually opened a prompt, so the root row and an empty selection stay no-ops.
+func (m *Model) acceptDeletePrompt() tea.Cmd {
+	p := m.prompt
+	if p == nil || p.kind != promptConfirm || p.accept == nil {
+		return nil
+	}
+	m.prompt = nil
+	return p.accept(m, "")
+}
+
 // cursorPath is the path of the row under the cursor, or "" when there are no
 // rows — the anchor source for prompts that act on the selection (#1884).
 func (m Model) cursorPath() string {
