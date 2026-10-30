@@ -39,8 +39,11 @@ type NewFileMsg struct{}
 type NewDirMsg struct{}
 
 // DeleteMsg asks to delete the selected entry, after confirmation
-// (explorer.delete).
-type DeleteMsg struct{}
+// (explorer.delete). Now skips the prompt and trashes the selection straight
+// away, exactly as accepting it would (#3107): only the deliberate
+// cmd+backspace / ctrl+backspace chords set it; d, delete and the palette
+// entry keep confirming.
+type DeleteMsg struct{ Now bool }
 
 // RenameMsg prompts for a new name for the selected entry
 // (explorer.rename).

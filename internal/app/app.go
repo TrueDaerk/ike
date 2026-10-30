@@ -10506,6 +10506,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		if k, ok := m.reg.ResolveKey(keys, m.focusContext()); ok {
 			if k.Priority > plugin.CorePriority || !m.isCoreKey(keys) {
+				// A pane-scoped plugin keymap claimed the press, so the
+				// unbound verdict resolveKeymap held back is moot (#3107).
+				m.pendUnbound = nil
 				cmd := k.Action(m.host)
 				// A binding that aliases a registered command emits the
 				// command-executed signal like every other dispatch (#679).

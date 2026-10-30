@@ -521,7 +521,7 @@ these are defaults.
 | `explorer.reveal` | `alt+f1` (global) | reveal the open file: expand collapsed ancestors, select and scroll to its row (`RevealMsg`, #1042) |
 | `explorer.newFile` | `n` | prompt for a name, create a file seeded with its [language template](./languages.md#file-templates-170), empty otherwise (`NewFileMsg`) |
 | `explorer.newFolder` | `N` | prompt for a name, create a directory (`NewDirMsg`) |
-| `explorer.delete` | `d` / `cmd+backspace` / `ctrl+backspace` / `delete` (#3087) | delete the selected entry — or the whole multi-select (#1044, #2166) — after one confirmation listing every target (`DeleteMsg`) |
+| `explorer.delete` | `d` / `cmd+backspace` / `ctrl+backspace` / `delete` (#3087) | delete the selected entry — or the whole multi-select (#1044, #2166) — after one confirmation listing every target (`DeleteMsg`); `cmd+backspace` / `ctrl+backspace` skip the confirmation and trash at once (`DeleteMsg{Now: true}`, #3107) |
 | `explorer.rename` | `R` | prompt (prefilled with the current name) to rename the selected entry (`RenameMsg`) |
 | `explorer.move` | `m` | prompt for a target directory and move the selection there (`MoveSelectionMsg`, #2166) |
 | `explorer.copy` | `y` | prompt for a target directory and copy the selection there (`CopySelectionMsg`, #2166) |
@@ -710,7 +710,10 @@ editor's history):
 - **Undo of a rename or move** relocates the entry back; redo re-applies it.
 
 Because every direction is recoverable, undo and redo apply **instantly** — no
-confirmation prompt (only `explorer.delete` still confirms). Rename
+confirmation prompt (only `explorer.delete` still confirms — via `d`, `delete`,
+the palette and the context menu; the deliberate `cmd+backspace` /
+`ctrl+backspace` chords accept that same prompt immediately, so the trash /
+scratch-store delete, undo step and announcements are identical, #3107). Rename
 (`promptRename` / `renameEntry`) and move (`moveEntry`, #175) share one core,
 `relocateEntry`: a single `os.Rename` from the old to the new path, guarded
 against name collisions and against moving a folder into itself, recorded as

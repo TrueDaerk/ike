@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"ike/internal/intention"
+	"ike/internal/keymap"
 	"ike/internal/plugin"
 	"ike/internal/settings"
 	"ike/internal/theme"
@@ -232,13 +233,39 @@ func (r *Registry) Binding(cmdID string) (string, bool) {
 
 // ResolveKey returns the winning binding for keys in the given pane context, if
 // any. The highest-priority scope-matching binding wins.
+//
+// Keys are compared as parsed chords, not raw strings (#3107): both sides go
+// through keymap.ParseKey + keymap.NormalizeKey(keymap.GOOS), the model the
+// keymap table uses. A binding declared "cmd+backspace" therefore matches the
+// press bubbletea spells "super+backspace" or "meta+backspace" on macOS, and
+// "ctrl+backspace" elsewhere. A string either side cannot parse still matches
+// verbatim.
 func (r *Registry) ResolveKey(keys, ctxID string) (OwnedKeymap, bool) {
+	press, pressOK := parseChordKey(keys)
 	for _, k := range r.Keymaps() {
-		if k.Keys == keys && k.Scope.Matches(ctxID) {
+		if !k.Scope.Matches(ctxID) {
+			continue
+		}
+		if k.Keys == keys {
 			return k, true
+		}
+		if pressOK {
+			if bound, ok := parseChordKey(k.Keys); ok && bound == press {
+				return k, true
+			}
 		}
 	}
 	return OwnedKeymap{}, false
+}
+
+// parseChordKey parses a single-step key string into its platform-normalised
+// keymap.Key, the form ResolveKey compares.
+func parseChordKey(s string) (keymap.Key, bool) {
+	k, err := keymap.ParseKey(strings.TrimSpace(s))
+	if err != nil {
+		return keymap.Key{}, false
+	}
+	return keymap.NormalizeKey(k, keymap.GOOS), true
 }
 
 // Panes returns enabled panes, ordered by id. Duplicate ids are dropped.

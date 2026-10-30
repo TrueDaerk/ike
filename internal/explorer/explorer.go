@@ -829,7 +829,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 		m.promptNewEntry(true)
 		return m, nil
 	case DeleteMsg:
+		before := m.prompt
 		m.promptDelete()
+		if msg.Now && m.prompt != before {
+			return m, m.acceptDeletePrompt()
+		}
 		return m, nil
 	case ToggleMarkMsg:
 		m.clearSel()

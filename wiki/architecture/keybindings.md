@@ -372,6 +372,18 @@ former Roadmap 0085, spec in git history, for the v1→v2 key-model change:
   resolves as an exact binding, or — as a bare prefix — stays pending with
   the popup open (#1482). A mouse click while a chord is pending resets the
   resolver and closes the popup; the click then acts normally.
+- A key the table leaves alone then tries the **pane-scoped plugin keymaps**
+  (`registry.ResolveKey`, e.g. the explorer's single-letter keys and its
+  delete aliases). They are not fed into the `BindingTable` — that keeps the
+  plugin-vs-core priority rule (`k.Priority > plugin.CorePriority ||
+  !isCoreKey`) unchanged — but their `Keys` strings are **matched as parsed
+  chords, not raw strings** (#3107): both the declaration and the press go
+  through `ParseKey` + `NormalizeKey(GOOS)`. A keymap declared
+  `cmd+backspace` therefore fires for the `super+backspace` (Kitty) and
+  `meta+backspace` (legacy) spellings bubbletea reports on macOS and for
+  `ctrl+backspace` elsewhere; a string that does not parse still matches
+  verbatim. A press claimed here drops the held-back unbound verdict, so it
+  never lands in telemetry as `unbound`.
 
 ## Terminal-context bindings (#1794)
 
