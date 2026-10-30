@@ -166,6 +166,47 @@ func TestTemplateSuffixFallback(t *testing.T) {
 	}
 }
 
+// TestNamePrefixes (#3100): a base-name prefix claims every name it starts
+// (any case), with or without a template suffix, but only after the exact
+// names, the extension index and the suffix fallbacks — the last word still
+// wins, so .env.json stays JSON (and .env.json.j2 too).
+func TestNamePrefixes(t *testing.T) {
+	t.Cleanup(Snapshot())
+	Register(Language{
+		ID:           "dotenv",
+		Extensions:   []string{"env"},
+		Filenames:    []string{".env", ".env.local"},
+		NamePrefixes: []string{".env."},
+	})
+	Register(Language{ID: "json", Extensions: []string{"json"}})
+	for path, want := range map[string]string{
+		".env.stats":                      "dotenv",
+		".env.stats.j2":                   "dotenv",
+		".env.prod.local":                 "dotenv",
+		".env.ci.jinja":                   "dotenv",
+		".ENV.Stats":                      "dotenv",
+		"roles/x/templates/.env.stats.j2": "dotenv",
+		"roles/x/templates/.env.j2":       "dotenv",
+		".env.stats.1":                    "dotenv",
+		".env":                            "dotenv",
+		".env.local":                      "dotenv",
+		"app.env":                         "dotenv",
+		"app.env.j2":                      "dotenv",
+		".env.json":                       "json", // extension index first
+		".env.json.j2":                    "json", // template fallback first
+	} {
+		if l, ok := ByPath(path); !ok || l.ID != want {
+			t.Errorf("ByPath(%q) = %q, %v, want %q", path, l.ID, ok, want)
+		}
+	}
+	// The name must be longer than the prefix, and start with it.
+	for _, path := range []string{".env.", "x.env.stats", "env.stats", ".environment"} {
+		if l, ok := ByPath(path); ok {
+			t.Errorf("ByPath(%q) = %q, want no language", path, l.ID)
+		}
+	}
+}
+
 // TestIsJinjaTemplate (#3059): the Jinja suffixes mark a template with or
 // without an inner language; Go-template suffixes, other names and a
 // language claiming the suffix outright do not.

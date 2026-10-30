@@ -25,6 +25,7 @@ type Language struct {
     ID         string       // "python"
     Extensions []string     // ["py", "pyi"]
     Filenames  []string     // optional exact base names ("Dockerfile")
+    NamePrefixes []string   // base-name prefixes, tried last (#3100): [".env."]
     DropIns    []DropIn     // drop-in dirs (#3063): {DirSuffix: ".service.d", Ext: "conf"}
     Grammar    Grammar      // opaque highlight token, or nil
     Server     *ServerSpec  // LSP launch config, or nil
@@ -48,7 +49,7 @@ type Language struct {
 }
 func Register(l Language)
 func ByID(id string) (Language, bool)
-func ByPath(path string) (Language, bool)   // user association, sniffed path association, exact base name, drop-in directory (#3063), extension, then template-suffix (#1595) / rotation-suffix (#1745) fallback
+func ByPath(path string) (Language, bool)   // user association, sniffed path association, exact base name, drop-in directory (#3063), extension, then template-suffix (#1595) / rotation-suffix (#1745) fallback, then base-name prefix (#3100)
 func ByAssociation(path string) (Language, bool) // user-configured [files.associations] match (#1365)
 func ForShebang(firstLine string) (Language, bool) // interpreter on the #! line (#893)
 func AssociatePath(path, id string)         // record a content-sniffed language for one path
@@ -149,6 +150,25 @@ base name (`Dockerfile.j2`) keeps the last word, chained suffixes strip one
 by one, and a name with no inner extension (`motd.j2`) stays plain text. A
 language claiming a template suffix outright still wins, because the direct
 extension lookup runs first.
+
+**Base-name prefixes (#3100).** `Language.NamePrefixes` claims every base
+name that starts with a prefix (case-insensitive, the name longer than the
+prefix) — dotenv's `.env.` covers `.env.stats`, `.env.prod.local`, `.env.ci`
+without a fixed `Filenames` list. It is the **last** rule `ByPath` tries:
+after the exact names, the extension index and both suffix fallbacks, so the
+last word still wins — `.env.json` stays JSON, `.env.json.j2` too — and a
+templated name reaches it through the stripped name (`.env.stats.j2` →
+`.env.stats` → dotenv). The longest matching prefix wins. The generated
+complexity-only table (`cmd/ike/complexityonly_langs.go`) carries the
+prefixes along with the extensions and names.
+
+**What can shadow a template's inner language.** Only the two rules ahead of
+the static lookups: a user `[files.associations]` entry whose glob matches the
+template (e.g. `"*.j2" = "…"` or a `templates/**` pattern) wins outright, and
+a context-sniffer hit recorded via `AssociatePath` does too. The Ansible
+sniffer claims only `.yml`/`.yaml`, so a `roles/<r>/templates/.env.j2`
+resolves to dotenv through the suffix fallback; the shebang sniff runs only
+when `ByPath` finds nothing.
 
 **Jinja layer (#3059).** The Jinja suffixes (`.j2`, `.jinja`, `.jinja2`, not
 the Go-template ones) also mark the file as a Jinja template:
@@ -960,7 +980,8 @@ and `.http` query parameters, through its `Value` context — and
 of every JSON Web Token for the `.http` and dotenv producers (see
 `/architecture/editor.md`, JWT decoding). The dotenv language
 (`plugins/languages/env`, #1619) is another grammar-free one: `.env` and its
-dotted variants (`.env.local`, `.env.production`, …) plus `*.env`, styling
+dotted variants (`.env.local`, `.env.production`, … and, through the
+`.env.` name prefix, any `.env.<word>`, #3100) plus `*.env`, styling
 `export KEY=value` pairs and `#` comments. It also masks the values of
 secret-suspect keys (#1623, see `/architecture/editor.md`, secret masking):
 `internal/secret.Suspect` answers "does this key name a credential" from the

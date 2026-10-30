@@ -84,6 +84,11 @@ func TestComplexityOnlyLanguages(t *testing.T) {
 				t.Errorf("%s resolves to %q, want %q", n, l.ID, d.ID)
 			}
 		}
+		for _, p := range d.NamePrefixes {
+			if l, ok := lang.ByPath(p + "probe"); !ok || l.ID != d.ID {
+				t.Errorf("%sprobe resolves to %q, want %q", p, l.ID, d.ID)
+			}
+		}
 	}
 }
 

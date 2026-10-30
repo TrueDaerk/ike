@@ -16,7 +16,7 @@ var detectionOnlyLanguages = []lang.Language{
 	{ID: "csv", Extensions: []string{"csv"}},
 	{ID: "diff", Extensions: []string{"diff", "patch"}},
 	{ID: "dockerfile", Extensions: []string{"dockerfile"}, Filenames: []string{"Dockerfile", "Containerfile"}},
-	{ID: "dotenv", Extensions: []string{"env"}, Filenames: []string{".env", ".env.local", ".env.example", ".env.sample", ".env.template", ".env.development", ".env.production", ".env.test", ".env.staging"}},
+	{ID: "dotenv", Extensions: []string{"env"}, Filenames: []string{".env", ".env.local", ".env.example", ".env.sample", ".env.template", ".env.development", ".env.production", ".env.test", ".env.staging"}, NamePrefixes: []string{".env."}},
 	{ID: "go.mod", Filenames: []string{"go.mod"}},
 	{ID: "go.sum", Filenames: []string{"go.sum"}},
 	{ID: "go.work", Filenames: []string{"go.work"}},
