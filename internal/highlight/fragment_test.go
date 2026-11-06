@@ -235,3 +235,19 @@ func TestGuessFragmentHTML(t *testing.T) {
 		t.Error("guessFragment(html) accepted plain text")
 	}
 }
+
+// TestRegionFragmentsUseStandInText: a region's Text becomes the fragment's
+// lines, sliced by the region's columns like host text.
+func TestRegionFragmentsUseStandInText(t *testing.T) {
+	lines := []string{"head", `x = """a`, `b""" y`}
+	frags := regionFragments([]lang.Region{{
+		Lang: "json", StartLine: 1, StartCol: 4, EndLine: 2, EndCol: 4,
+		Text: []string{`x = "  "`, `      y`},
+	}}, lines)
+	if len(frags) != 1 {
+		t.Fatalf("fragments = %+v", frags)
+	}
+	if got := frags[0].Lines; len(got) != 2 || got[0] != `"  "` || got[1] != "    " {
+		t.Errorf("lines = %q, want the stand-in sliced to the region", got)
+	}
+}

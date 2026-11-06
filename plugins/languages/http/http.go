@@ -35,5 +35,7 @@ func init() {
 		// to its separator lines. The body's own structure folds too — those
 		// ranges come from the embedded language's grammar via the region seam.
 		FoldNodes: []string{"section"},
+		// An unterminated """ literal in a JSON body; see triplequote.go.
+		Lint: httpLint,
 	})
 }

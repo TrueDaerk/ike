@@ -94,7 +94,10 @@ func maskSpans(f *httpfile.File, lines []string) []lang.Span {
 	// .json file. A body language with no mask producer contributes nothing.
 	// This is view-only, like every other mask: the runner, the snapshot and
 	// the curl export read the source text.
-	return append(out, lang.RegionMasks(lines, regionsFor(f, lines))...)
+	// A """…""" literal's mask lands on its stand-in string and is stretched
+	// over the literal's real content (triplequote.go).
+	regions := regionsFor(f, lines)
+	return append(out, expandLiteralMasks(lang.RegionMasks(lines, regions), jsonBodyLiterals(regions, lines), lines)...)
 }
 
 // hasPlaceholder reports whether a value carries a "{{name}}" or "${name}"

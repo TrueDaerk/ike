@@ -55,3 +55,27 @@ func TestRegionMasksClampsAndShifts(t *testing.T) {
 		t.Errorf("masks = %+v, want none for a region outside the buffer", got)
 	}
 }
+
+// TestRegionMasksReadStandInText: a region's Text replaces the host lines the
+// embedded producer sees; a Text of the wrong length is ignored.
+func TestRegionMasksReadStandInText(t *testing.T) {
+	t.Cleanup(Snapshot())
+	Register(Language{ID: "seesecret", Masks: func(lines []string) []Span {
+		var out []Span
+		for i, line := range lines {
+			if line == "secret" {
+				out = append(out, Span{Line: i, StartCol: 0, EndCol: 6})
+			}
+		}
+		return out
+	}})
+	lines := []string{"host", "zzzzzz", "secret"}
+	got := RegionMasks(lines, []Region{{Lang: "seesecret", StartLine: 1, EndLine: 2, Text: []string{"secret", "zzzzzz"}}})
+	if len(got) != 1 || got[0].Line != 1 {
+		t.Errorf("masks = %+v, want one on host line 1 from the stand-in", got)
+	}
+	got = RegionMasks(lines, []Region{{Lang: "seesecret", StartLine: 1, EndLine: 2, Text: []string{"secret"}}})
+	if len(got) != 1 || got[0].Line != 2 {
+		t.Errorf("masks = %+v, want the host text when the stand-in does not fit", got)
+	}
+}

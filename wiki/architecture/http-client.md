@@ -4,7 +4,7 @@ title: HTTP Client (.http files)
 description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, WEBSOCKET session blocks with ===-separated initial messages, a live frame transcript and an interactive send line in the response pane, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, GraphQL errors lifted out of a 200 answer into a red block above the body, and @assert directives checked against every response with a pass/fail block above the body, a run in the Test Results window and a failure notice, the followed redirect chain with per-hop DNS, connected address and TLS facts as a foldable block under the status line, plus a configurable request timeout with a per-request @timeout directive, a visible elapsed/limit countdown while a request is out and an explicit timed-out result.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-09-23T00:00:00Z
+timestamp: 2026-11-06T00:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -109,6 +109,43 @@ Authorization: Bearer {{$env TOKEN}}
   boundary is sent unchanged — rewriting it could only do harm. The parser
   itself keeps a multipart body inline (it is multi-line, so the whole-body
   directive never fires); all part handling lives at dispatch.
+- **Triple-quoted strings in JSON bodies** (#3113): in a body whose
+  `Content-Type` resolves to JSON, a `"""…"""` literal (the Elasticsearch /
+  Kibana console spelling) is a multi-line string:
+
+  ```
+  POST /abc
+  Content-Type: application/json
+
+  {
+    "property": """my multi-
+                   line property"""
+  }
+  ```
+
+  The file keeps the triple quotes; `Request.ResolveVars` turns each literal
+  into an ordinary JSON string before substitution
+  (`httpfile.ExpandTripleQuotes`), so dispatch, the as-sent snapshot and both
+  editor- and response-side curl/httpie exports carry the converted body
+  (`"my multi-\nline property"`). Rules: the column of the first non-blank
+  character after the opening quotes — or, when only whitespace follows
+  them, on the first non-blank line below — is the left margin, and every
+  following line loses leading whitespace up to it (a line starting further
+  left loses only its own; a tab counts as one column). A line break right
+  after the opening quotes (optionally after whitespace) and trailing
+  whitespace plus the line break before the closing quotes are dropped. The
+  content is literal — backslashes are not escapes — and is JSON-escaped on
+  the way out, `{{placeholders}}` left intact for substitution. A run of more
+  than three closing quotes closes with its last three. Scope is JSON bodies
+  only: other body languages, GRAPHQL (which has its own block strings) and
+  WEBSOCKET blocks keep `"""` as plain text. In the editor the literal reads
+  as a string on all its lines, raises no JSON diagnostics (the JSON
+  language sees a same-shaped stand-in text, see
+  [embedded regions](/architecture/languages.md#embedded-regions-1303)), an
+  unterminated `"""` is one error at the opening quotes (the `http`
+  language's `Lint`), a literal under a secret-suspect key masks like any
+  string value, and Reformat Selection keeps every literal byte-verbatim
+  (see [Format](/architecture/format.md)).
 - **Comments:** lines starting with `#` or `//` outside a body. Inside a
   body nothing is stripped.
 - **Variable definitions** (#1867): `@name = value` lines before a request

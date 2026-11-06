@@ -213,7 +213,10 @@ func querySpans(lines []string) []lang.Span {
 	// timestamp over the same digits gives way before anything is emitted.
 	out = append(out, numhint.Allowed(stamps, hints)...)
 	taken := standIns(out)
-	return append(out, numhint.Except(numhint.HintSpans(hints), taken)...)
+	out = append(out, numhint.Except(numhint.HintSpans(hints), taken)...)
+	// """…""" literals in JSON bodies read as strings on every line
+	// (triplequote.go); last, so everything above keeps its cells.
+	return append(out, literalStringSpans(jsonBodyLiterals(regionsFor(f, lines), lines), lines)...)
 }
 
 // placeholderSpans finds every "{{name}}" placeholder in the buffer and

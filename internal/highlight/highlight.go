@@ -151,14 +151,20 @@ func highlightInner(path string, lines []string) ([]Span, []Scope, []Fold) {
 	// first-covering-wins, and grammars capture the same tokens as
 	// punctuation — but after the Go-produced spans below, so a language that
 	// styles a cell itself (a csv column) keeps its colour.
-	if b := bracketSpans(l, lines, spans); len(b) > 0 {
+	var goSpans []Span
+	if l.Spans != nil {
+		goSpans = langSpans(l.Spans(lines))
+	}
+	// A Go-produced string span hides its brackets too: it marks text the
+	// grammar cannot see as a string.
+	if b := bracketSpans(l, lines, append(goStrings(goSpans), spans...)); len(b) > 0 {
 		spans = append(b, spans...)
 	}
-	if l.Spans != nil {
+	if len(goSpans) > 0 {
 		// Go-produced spans (#1585) are prepended so they win over the
 		// grammar's coarser captures (the whole url node is one @string) —
 		// the same trick overlayFragments uses for injected fragments.
-		spans = append(langSpans(l.Spans(lines)), spans...)
+		spans = append(goSpans, spans...)
 	}
 	// Go-produced folds (#1630) serve grammar-less structure — a unified
 	// diff's hunks fold at their @@ headers. The producer emits pre-order,
@@ -169,6 +175,17 @@ func highlightInner(path string, lines []string) ([]Span, []Scope, []Fold) {
 		}
 	}
 	return spans, scopes, folds
+}
+
+// goStrings returns the spans of in captured exactly as "string".
+func goStrings(in []Span) []Span {
+	var out []Span
+	for _, s := range in {
+		if s.Capture == "string" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // langSpans converts registry-level Go spans (#1585) to highlight spans.

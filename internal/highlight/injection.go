@@ -194,7 +194,7 @@ func offsetFolds(folds []Fold, f Fragment) []Fold {
 // offsetSpans shifts fragment-local spans into host coordinates: lines shift by
 // the fragment's start line, and columns on the fragment's first line shift by
 // its start column (later fragment lines start at host column 0, since
-// Fragment.Lines is exactly the host text in the fragment's range).
+// Fragment.Lines has the host text's shape in the fragment's range).
 func offsetSpans(spans []Span, f Fragment) []Span {
 	out := spans[:0]
 	for _, s := range spans {

@@ -555,7 +555,11 @@ func (r *Request) ResolveVars(vars *Vars) (*Request, error) {
 	for i, h := range r.Headers {
 		out.Headers[i] = Header{Name: h.Name, Value: sub(h.Value)}
 	}
-	out.Body = sub(r.Body)
+	body := r.Body
+	if r.isJSONBody() {
+		body = ExpandTripleQuotes(body)
+	}
+	out.Body = sub(body)
 	if len(errs) > 0 {
 		return nil, &resolveError{
 			msg:        fmt.Sprintf("request %s: %s", r.Key(), strings.Join(dedup(errs), "; ")),

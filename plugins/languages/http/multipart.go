@@ -3,8 +3,9 @@ package langhttp
 // multipart.go styles a multipart/form-data request body (#2135): the
 // boundary delimiter lines and each part's own header block. A part's body is
 // arbitrary — text, JSON, a binary file's bytes — so it stays plain, the same
-// first pass bodyLanguages takes with everything it cannot confidently guess.
-// This does not fit the bodyLanguages region model (regions.go): the body is
+// pass httpfile.BodyLanguageTag takes with everything it cannot confidently
+// guess.
+// This does not fit the body-language region model (regions.go): the body is
 // not one language throughout, it is structure (delimiters, per-part headers)
 // around opaque parts, so it is a Go-produced span producer instead, in the
 // same family as captureSpans and variableDefinitionSpans (spans.go).
