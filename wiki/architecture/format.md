@@ -340,8 +340,14 @@ would reject (malformed request lines, invalid headers) and shapes whose fold
 would not round-trip byte-identically (a bare trailing `?`, empty `&&`
 fragments, comments interleaved with query continuations) stay untouched, and
 a reparse guard aborts the whole reformat if the output would parse to
-different requests than the input. Whole-file only (no range support);
-registered at the built-in tier, `[format.http] builtin = false` disables it.
+different requests than the input. Range formatting (Reformat Selection,
+`plugins/languages/http/formatrange.go`) widens the selection to whole units:
+a selection entirely inside one request body formats only that body (same
+body handling as the whole-file pass), any other selection reformats every
+request block (the lines between `###` separators) it touches in full; lines
+outside those units and the separators stay byte-identical, and the reparse
+guard checks the full resulting buffer. Registered at the built-in tier,
+`[format.http] builtin = false` disables it.
 
 ## Format-on-save
 
