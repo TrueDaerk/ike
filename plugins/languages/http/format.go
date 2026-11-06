@@ -42,6 +42,17 @@ func init() {
 			}
 			return format.TextResult(out), nil
 		},
+		FormatRange: func(ctx context.Context, req format.Request, start, end format.Pos) (format.Result, error) {
+			last := end.Line
+			if end.Col == 0 && last > start.Line {
+				last-- // end-exclusive line-wise selections stop before this line
+			}
+			out, err := formatRangeHTTP(strings.Join(req.Lines, "\n"), start.Line, last, indentFor(req.Options))
+			if err != nil {
+				return format.Result{}, err
+			}
+			return format.TextResult(out), nil
+		},
 	})
 }
 
@@ -182,7 +193,13 @@ func formatBlock(lines []string, indent string) []string {
 		return append(out, rest...)
 	}
 	out = append(out, "")
-	return append(out, rest[first:]...)
+	return append(out, formatBody(rest[first:])...)
+}
+
+// formatBody formats one request body, from its first content line to the
+// end of the block. Body content is kept verbatim.
+func formatBody(lines []string) []string {
+	return append([]string{}, lines...)
 }
 
 // splitRequestLine splits a request line into its parts exactly like the

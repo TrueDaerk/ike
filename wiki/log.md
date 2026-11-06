@@ -1,5 +1,12 @@
 # Log
 
+## 2026-11-06 (.http formatter: Reformat Selection, #3111)
+
+- [Format](/architecture/format.md): the built-in `.http` formatter is
+  range-capable. A selection inside one request body formats only that body;
+  any other selection reformats each `###` block it touches in full. Lines
+  outside those units and the separators stay byte-identical.
+
 ## 2026-10-30 (Explorer: cmd+backspace resolves and deletes without a prompt, #3107)
 
 - [Keybindings](/architecture/keybindings.md): pane-scoped plugin keymaps
