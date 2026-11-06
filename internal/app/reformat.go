@@ -149,6 +149,10 @@ func (m *Model) runReformat(prov format.Provider, req format.Request, bufferKey 
 			ctx, cancel := context.WithTimeout(context.Background(), reformatTimeout)
 			res, err := run(ctx)
 			cancel()
+			if msg, ok := format.AsNotice(err); ok {
+				h.Send(ilsp.ServerStatusMsg{Text: "reformat (" + name + "): " + msg, Kind: ilsp.ServerEventInfo})
+				return
+			}
 			if err != nil {
 				h.Send(ilsp.ServerStatusMsg{Text: "reformat (" + name + ") failed: " + err.Error(), Kind: ilsp.ServerEventError})
 				return

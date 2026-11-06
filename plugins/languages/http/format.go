@@ -47,7 +47,7 @@ func init() {
 			if end.Col == 0 && last > start.Line {
 				last-- // end-exclusive line-wise selections stop before this line
 			}
-			out, err := formatRangeHTTP(strings.Join(req.Lines, "\n"), start.Line, last, indentFor(req.Options))
+			out, err := formatRangeHTTP(strings.Join(req.Lines, "\n"), start.Line, last, indentFor(req.Options), registryBodyFormatter(ctx, req))
 			if err != nil {
 				return format.Result{}, err
 			}
@@ -87,7 +87,7 @@ func formatHTTP(src, indent string) (string, error) {
 		start = i + 1
 	}
 	formatted := strings.Join(out, "\n")
-	if !requestsEqual(src, formatted) {
+	if !requestsEqual(src, formatted, -1) {
 		// The guard should be unreachable; failing loudly beats silently
 		// rewriting a request into something else.
 		return "", errors.New("reformat aborted: output would change the parsed requests")
@@ -288,8 +288,9 @@ func formatHeaderLine(line string) string {
 }
 
 // requestsEqual reports whether two sources parse to the same requests — the
-// formatter's semantic no-change guard.
-func requestsEqual(a, b string) bool {
+// formatter's semantic no-change guard. The body of the request at index
+// bodyFree may differ; -1 compares every body.
+func requestsEqual(a, b string, bodyFree int) bool {
 	fa, fb := httpfile.Parse(a), httpfile.Parse(b)
 	if len(fa.Requests) != len(fb.Requests) || len(fa.Errors) != len(fb.Errors) ||
 		len(fa.Vars) != len(fb.Vars) {
@@ -305,7 +306,7 @@ func requestsEqual(a, b string) bool {
 	for i, ra := range fa.Requests {
 		rb := fb.Requests[i]
 		if ra.Method != rb.Method || ra.Target != rb.Target || ra.Proto != rb.Proto ||
-			ra.Body != rb.Body || ra.BodyFile != rb.BodyFile ||
+			(i != bodyFree && ra.Body != rb.Body) || ra.BodyFile != rb.BodyFile ||
 			ra.BodyFileSubstitute != rb.BodyFileSubstitute ||
 			len(ra.Headers) != len(rb.Headers) {
 			return false
