@@ -76,6 +76,29 @@ func TestReformatFileRunsProviderAndApplies(t *testing.T) {
 	}
 }
 
+// TestReformatProviderNoticeIsInfo: a provider Notice surfaces as an info
+// toast naming the reason, with no edits.
+func TestReformatProviderNoticeIsInfo(t *testing.T) {
+	m, _, msgs := reformatApp(t, "notes.sql", "select 1\n")
+	format.Register(format.Provider{
+		Name: "picky", Tier: format.TierBuiltin,
+		Format: func(ctx context.Context, req format.Request) (format.Result, error) {
+			return format.Result{}, format.Notice("nothing to format")
+		},
+	})
+
+	_, cmd := m.Update(format.FileRequestMsg{})
+	if cmd == nil {
+		t.Fatal("provider resolves, command expected")
+	}
+	_ = cmd()
+
+	status := awaitMsg(t, msgs, func(msg tea.Msg) bool { _, ok := msg.(ilsp.ServerStatusMsg); return ok }).(ilsp.ServerStatusMsg)
+	if status.Kind != ilsp.ServerEventInfo || status.Text != "reformat (picky): nothing to format" {
+		t.Fatalf("notice must surface as an info toast, got %#v", status)
+	}
+}
+
 // TestReformatProviderErrorLeavesBufferUntouched: a failing provider reports
 // an error toast and changes nothing (#1401 — failure is never destructive).
 func TestReformatProviderErrorLeavesBufferUntouched(t *testing.T) {

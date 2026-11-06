@@ -32,7 +32,7 @@ var rangeSrc = strings.Join([]string{
 
 func fmtRange(t *testing.T, src string, start, end int) string {
 	t.Helper()
-	out, err := formatRangeHTTP(src, start, end, "    ")
+	out, err := formatRangeHTTP(src, start, end, "    ", nil)
 	if err != nil {
 		t.Fatalf("formatRangeHTTP: %v", err)
 	}
@@ -122,7 +122,9 @@ func TestFormatRangeProvider(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if res.Text == nil || *res.Text != rangeSrc {
+	// body-only, so only the body changes: the stub JSON formatter re-indents it
+	want := strings.Replace(rangeSrc, `  "a":   1`, `    "a": 1`, 1)
+	if res.Text == nil || *res.Text != want {
 		t.Fatalf("got %v", res.Text)
 	}
 }

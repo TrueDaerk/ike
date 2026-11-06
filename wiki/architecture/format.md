@@ -342,11 +342,22 @@ fragments, comments interleaved with query continuations) stay untouched, and
 a reparse guard aborts the whole reformat if the output would parse to
 different requests than the input. Range formatting (Reformat Selection,
 `plugins/languages/http/formatrange.go`) widens the selection to whole units:
-a selection entirely inside one request body formats only that body (same
-body handling as the whole-file pass), any other selection reformats every
-request block (the lines between `###` separators) it touches in full; lines
-outside those units and the separators stay byte-identical, and the reparse
-guard checks the full resulting buffer. Registered at the built-in tier,
+a selection entirely inside one request body formats that request's **whole
+body** by its `Content-Type`, any other selection reformats every request
+block (the lines between `###` separators) it touches in full, bodies kept
+verbatim as in the whole-file pass; lines outside those units and the
+separators stay byte-identical, and the reparse guard checks the full
+resulting buffer (only the formatted body may differ). The body language comes
+from `bodyLanguage` (the same media-type mapping body highlighting uses), and
+its formatter is resolved through the registry with `ResolveBuffer` as an
+unsaved buffer on a synthetic `<root>/body.<ext>` path — so prettier/biome,
+the built-in XML formatter or a `[format.<lang>]` override serve it with the
+editor's indent options. A missing or unmapped `Content-Type`, a multipart,
+GraphQL or external-file (`< ./file`) body, or no formatter for the body
+language leaves the file unchanged with an info notice (`format.Notice`,
+shown as `reformat (built-in): <reason>`); a body the formatter rejects
+(e.g. JSON with `{{placeholders}}`) leaves it unchanged with the formatter's
+error. Registered at the built-in tier,
 `[format.http] builtin = false` disables it.
 
 ## Format-on-save
