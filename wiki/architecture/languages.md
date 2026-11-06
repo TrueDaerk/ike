@@ -4,7 +4,7 @@ title: Language Registry
 description: The neutral lang registry that bundles a language's file extensions, Tree-sitter grammar, LSP server spec, and toolchain detector — populated by per-language plugins so adding a language is a new package, not an engine edit.
 resource: internal/lang
 tags: [architecture, languages, registry, highlighting, lsp, plugins, toolchain]
-timestamp: 2026-10-27T18:00:00Z
+timestamp: 2026-11-06T00:00:00Z
 ---
 
 # Language Registry
@@ -952,7 +952,15 @@ injection query and clamps or drops ranges outside the buffer, so a detector
 may report optimistically. `lang.RegionAt(langID, lines, line)` answers the
 same question for one line — the editor uses it to indent an embedded body by
 the embedded language. The detector runs on every highlight pass, so it must
-stay cheap. Second user: YAML's CI `run:` detector (#1625,
+stay cheap. A region may carry `Text`, a stand-in for its host lines with the
+same line count and the same rune count per line: the embedded language's
+parse, its LSP fragment document and `lang.RegionMasks` read it instead of the
+host text, while positions still map 1:1. The `.http` detector uses it for a
+JSON body's `"""…"""` literals (#3113), which the JSON grammar cannot parse:
+each becomes an ordinary JSON string on its first line with the rest blanked
+(`plugins/languages/http/triplequote.go`), and the host's `Spans` paint the
+literal as a string — Go-produced `string` spans also hide their brackets
+from the rainbow-bracket scanner. Second user: YAML's CI `run:` detector (#1625,
 `plugins/languages/yaml/regions.go`) — the gate (a `steps:` line somewhere in
 the buffer) is a buffer-level decision no injection query can express.
 

@@ -1,5 +1,18 @@
 # Log
 
+## 2026-11-06 (.http: triple-quoted strings in JSON bodies, #3113)
+
+- [HTTP Client](/architecture/http-client.md): `"""…"""` literals in JSON
+  bodies are sent as ordinary JSON strings (margin dedent, leading/trailing
+  line-break trim, literal backslashes), in dispatch and the curl/httpie
+  exports; the editor highlights them as strings, raises no JSON diagnostics,
+  flags an unterminated one and masks them under secret keys.
+- [Languages](/architecture/languages.md): `lang.Region.Text` gives an
+  embedded region a same-shaped stand-in text; Go-produced `string` spans hide
+  brackets from the rainbow scanner.
+- [Format](/architecture/format.md): Reformat Selection keeps a JSON body's
+  `"""` literals byte-verbatim.
+
 ## 2026-11-06 (.http formatter: Reformat Selection, #3111)
 
 - [Format](/architecture/format.md): the built-in `.http` formatter is

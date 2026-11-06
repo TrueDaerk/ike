@@ -10,8 +10,10 @@ import (
 
 // registerFake makes a language id resolvable without linking its grammar, so
 // the mapping tests do not depend on which language plugins a build links.
+// The registry is restored when the test ends.
 func registerFake(t *testing.T, id string, exts ...string) {
 	t.Helper()
+	t.Cleanup(lang.Snapshot())
 	lang.Register(lang.Language{ID: id, Extensions: exts})
 }
 

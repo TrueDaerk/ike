@@ -143,8 +143,18 @@ func formatBodyRange(src string, lines []string, sp blockSpan, fmtBody bodyForma
 		return "", err
 	}
 	first, last := r.BodyStart-1, r.BodyEnd-1
-	out, err := fmtBody(langID, strings.Join(lines[first:last+1], "\n"))
+	body := lines[first : last+1]
+	var literals map[string]string
+	if langID == "json" {
+		if body, literals, err = maskLiterals(body); err != nil {
+			return "", err
+		}
+	}
+	out, err := fmtBody(langID, strings.Join(body, "\n"))
 	if err != nil {
+		return "", err
+	}
+	if out, err = restoreLiterals(out, literals); err != nil {
 		return "", err
 	}
 	out = strings.TrimRight(strings.ReplaceAll(out, "\r\n", "\n"), "\n")
@@ -156,6 +166,53 @@ func formatBodyRange(src string, lines []string, sp blockSpan, fmtBody bodyForma
 		return "", errors.New("reformat aborted: output would change the parsed requests")
 	}
 	return formatted, nil
+}
+
+// maskLiterals replaces every """…""" literal of a JSON body with a unique
+// single-line JSON string the formatter keeps intact, returning the masked
+// lines and each placeholder's original literal text.
+func maskLiterals(body []string) ([]string, map[string]string, error) {
+	lits := httpfile.TripleQuoteLiterals(body)
+	if len(lits) == 0 {
+		return body, nil, nil
+	}
+	text := strings.Join(body, "\n")
+	offsets := make([]int, len(body))
+	for i := 1; i < len(body); i++ {
+		offsets[i] = offsets[i-1] + len(body[i-1]) + 1
+	}
+	stem := "ike-triple-quote-literal"
+	for n := 0; strings.Contains(text, stem); n++ {
+		stem = fmt.Sprintf("ike-triple-quote-literal-%d", n)
+	}
+	literals := map[string]string{}
+	var b strings.Builder
+	prev := 0
+	for i, lit := range lits {
+		if !lit.Terminated {
+			return nil, nil, fmt.Errorf(`body has an unterminated """ string on line %d`, lit.StartLine+1)
+		}
+		start, end := offsets[lit.StartLine]+lit.StartCol, offsets[lit.EndLine]+lit.EndCol
+		ph := fmt.Sprintf(`"%s-%d"`, stem, i)
+		literals[ph] = text[start:end]
+		b.WriteString(text[prev:start])
+		b.WriteString(ph)
+		prev = end
+	}
+	b.WriteString(text[prev:])
+	return strings.Split(b.String(), "\n"), literals, nil
+}
+
+// restoreLiterals puts each literal back in place of its placeholder; every
+// placeholder must survive the formatter exactly once.
+func restoreLiterals(out string, literals map[string]string) (string, error) {
+	for ph, lit := range literals {
+		if strings.Count(out, ph) != 1 {
+			return "", errors.New(`reformat aborted: the formatter changed a """ string`)
+		}
+		out = strings.Replace(out, ph, lit, 1)
+	}
+	return out, nil
 }
 
 // requestInBlock returns the request whose request line lies in sp.

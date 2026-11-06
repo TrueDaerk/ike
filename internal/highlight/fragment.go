@@ -9,8 +9,9 @@ import (
 // Fragment is an embedded-language region detected inside a host buffer (an SQL
 // string in Python, CSS in HTML, …). Coordinates are editor rune coordinates:
 // the fragment covers [StartLine:StartCol, EndLine:EndCol) of the host buffer,
-// and Lines is exactly the host text in that range, so host↔fragment position
-// mapping is a pure offset shift (no text transformation).
+// and Lines is the host text in that range — or a region's same-shaped
+// stand-in (lang.Region.Text) — so host↔fragment position mapping is a pure
+// offset shift.
 type Fragment struct {
 	Lang      string // language id of the embedded fragment, e.g. "sql"
 	StartLine int
@@ -82,7 +83,7 @@ func regionFragments(regions []lang.Region, lines []string) []Fragment {
 			continue
 		}
 		frag := Fragment{Lang: r.Lang, StartLine: r.StartLine, StartCol: r.StartCol, EndLine: end, EndCol: r.EndCol}
-		frag.Lines = append([]string{}, lines[r.StartLine:end+1]...)
+		frag.Lines = append([]string{}, r.Source(lines, end)...)
 		if len(frag.Lines) > 0 {
 			first := frag.Lines[0]
 			if r.StartCol > 0 && r.StartCol <= len(first) {

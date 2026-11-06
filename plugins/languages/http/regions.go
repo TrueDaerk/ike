@@ -15,34 +15,6 @@ import (
 // buffer and reports each body's line range plus the language its media type
 // resolves to.
 
-// bodyLanguages maps a media type's structured suffix or subtype to a language
-// tag, resolved against the registry as an id first and then as a file
-// extension (so "js" finds whichever language owns JavaScript files). An
-// unmapped type — or one whose tag resolves to nothing in this build — leaves
-// the body with the host's own styling rather than guessing wrong.
-//
-// "application/x-www-form-urlencoded" and "multipart/form-data" (#2135) are
-// deliberately absent: neither is a language a grammar could own. The former
-// gets the same key=value&… span treatment as a request-target query string
-// (spans.go, since #1585); the latter gets its boundary lines and per-part
-// headers styled by multipartSpans (multipart.go) instead of a whole-body
-// region.
-var bodyLanguages = map[string]string{
-	"json":       "json",
-	"ndjson":     "ndjson",
-	"xml":        "xml",
-	"html":       "html",
-	"xhtml":      "html",
-	"css":        "css",
-	"javascript": "js",
-	"ecmascript": "js",
-	"yaml":       "yaml",
-	"toml":       "toml",
-	"markdown":   "markdown",
-	"sql":        "sql",
-	"graphql":    "graphql",
-}
-
 // resolveTag maps a tag to a registered language id: id first, then file
 // extension — the same order highlight.HighlightFenced uses.
 func resolveTag(tag string) (string, bool) {
@@ -55,30 +27,16 @@ func resolveTag(tag string) (string, bool) {
 	return "", false
 }
 
-// bodyLanguage resolves a Content-Type header value to a language id. It
-// handles parameters ("; charset=utf-8"), vendor trees
-// ("application/vnd.api+json") and the "+suffix" form, which is why the
-// suffix is consulted before the bare subtype.
+// bodyLanguage resolves a Content-Type header value to a registered language
+// id via httpfile.BodyLanguageTag. An unmapped type — or one whose tag
+// resolves to nothing in this build — leaves the body with the host's own
+// styling rather than guessing wrong. Form-encoded and multipart bodies have
+// no language: the former gets the key=value&… span treatment of a query
+// string (spans.go), the latter its boundary and part-header styling
+// (multipart.go).
 func bodyLanguage(contentType string) (string, bool) {
-	media, _, _ := strings.Cut(contentType, ";")
-	media = strings.ToLower(strings.TrimSpace(media))
-	_, subtype, ok := strings.Cut(media, "/")
+	tag, ok := httpfile.BodyLanguageTag(contentType)
 	if !ok {
-		return "", false
-	}
-	if _, suffix, hasSuffix := strings.Cut(subtype, "+"); hasSuffix {
-		if tag, known := bodyLanguages[suffix]; known {
-			return resolveTag(tag)
-		}
-	}
-	// "x-" prefixed subtypes are the same thing under an older name
-	// ("application/x-yaml").
-	subtype = strings.TrimPrefix(subtype, "x-")
-	if _, _, hasSuffix := strings.Cut(subtype, "+"); hasSuffix {
-		subtype, _, _ = strings.Cut(subtype, "+")
-	}
-	tag, known := bodyLanguages[subtype]
-	if !known {
 		return "", false
 	}
 	return resolveTag(tag)
@@ -125,7 +83,15 @@ func regionsFor(f *httpfile.File, lines []string) []lang.Region {
 		if start < 0 || end < start || end >= len(lines) {
 			continue
 		}
-		out = append(out, lang.Region{Lang: id, StartLine: start, EndLine: end, EndCol: len(lines[end])})
+		reg := lang.Region{Lang: id, StartLine: start, EndLine: end, EndCol: len(lines[end])}
+		if id == "json" {
+			// """…""" literals (triplequote.go) reach the JSON language as
+			// ordinary strings.
+			if lits := literalsIn(lines, start, end); len(lits) > 0 {
+				reg.Text = literalStandIn(lines, start, end, lits)
+			}
+		}
+		out = append(out, reg)
 	}
 	return out
 }

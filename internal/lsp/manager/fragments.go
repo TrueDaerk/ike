@@ -629,7 +629,7 @@ func fragContains(fr highlight.Fragment, pos buffer.Position) bool {
 }
 
 // hostToFrag maps a host-buffer position into fragment-document coordinates.
-// Fragment content is exactly the host text of its range, so the mapping is a
+// Fragment content has the host text's shape in its range, so the mapping is a
 // pure offset shift: only the first fragment line has a column offset.
 func hostToFrag(fr highlight.Fragment, pos buffer.Position) buffer.Position {
 	if pos.Line == fr.StartLine {

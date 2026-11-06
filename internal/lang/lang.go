@@ -345,6 +345,21 @@ type Region struct {
 	StartCol  int
 	EndLine   int
 	EndCol    int
+	// Text optionally stands in for the host lines StartLine..EndLine when
+	// the embedded language reads the region (parse, LSP document, masks):
+	// one entry per line, each with the same rune count as the host line, so
+	// positions still map 1:1. Nil means the host text itself. A Text of the
+	// wrong length is ignored.
+	Text []string
+}
+
+// Source returns the lines the embedded language reads for lines
+// StartLine..end (inclusive): r.Text when it fits, the host lines otherwise.
+func (r Region) Source(lines []string, end int) []string {
+	if n := end - r.StartLine + 1; r.Text != nil && len(r.Text) >= n && len(r.Text) == r.EndLine-r.StartLine+1 {
+		return r.Text[:n]
+	}
+	return lines[r.StartLine : end+1]
 }
 
 // RegionMasks returns the secret-mask spans the embedded languages of regions
@@ -373,7 +388,7 @@ func RegionMasks(lines []string, regions []Region) []Span {
 		if end < r.StartLine {
 			continue
 		}
-		sub := append([]string{}, lines[r.StartLine:end+1]...)
+		sub := append([]string{}, r.Source(lines, end)...)
 		// A region may start or end mid-line; the producer sees only the
 		// region's own text, and the first line's columns shift back below.
 		if r.StartCol > 0 {

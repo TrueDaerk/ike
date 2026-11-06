@@ -4,7 +4,7 @@ title: Formatter Registry
 description: The neutral reformat layer — providers (config override, external command, LSP, built-in) registered per language, one resolution chain behind lsp.format/lsp.formatRange and format-on-save, edits applied as one undo unit.
 resource: internal/format
 tags: [architecture, format, reformat, registry, lsp, plugins]
-timestamp: 2026-10-21T00:00:00Z
+timestamp: 2026-11-06T00:00:00Z
 ---
 
 # Formatter Registry
@@ -357,7 +357,11 @@ GraphQL or external-file (`< ./file`) body, or no formatter for the body
 language leaves the file unchanged with an info notice (`format.Notice`,
 shown as `reformat (built-in): <reason>`); a body the formatter rejects
 (e.g. JSON with `{{placeholders}}`) leaves it unchanged with the formatter's
-error. Registered at the built-in tier,
+error. A JSON body's `"""…"""` literals (#3113, see
+[HTTP Client](/architecture/http-client.md)) are swapped for unique
+single-line placeholder strings before the formatter runs and put back
+byte-verbatim afterwards; a placeholder the formatter dropped or duplicated,
+or an unterminated `"""`, aborts with an error. Registered at the built-in tier,
 `[format.http] builtin = false` disables it.
 
 ## Format-on-save
