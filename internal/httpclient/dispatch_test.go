@@ -224,8 +224,8 @@ func TestDispatchInvalidTarget(t *testing.T) {
 	}
 	req2 := parseOne(t, "GET /just-a-path\n")
 	_, err = Dispatch(context.Background(), req2, noConfig)
-	if err == nil || !strings.Contains(err.Error(), "no host") {
-		t.Fatalf("want no-host error, got %v", err)
+	if err == nil || !strings.Contains(err.Error(), "needs a @host variable or Host header") {
+		t.Fatalf("want missing-host error, got %v", err)
 	}
 }
 

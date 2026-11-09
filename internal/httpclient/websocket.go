@@ -173,6 +173,9 @@ func DispatchWS(ctx context.Context, req *httpfile.Request, opts Options, cb WSC
 	if err != nil {
 		return nil, err
 	}
+	if resolved.Target, err = httpfile.AbsoluteTarget(req, resolved, vars); err != nil {
+		return nil, err
+	}
 	messages := []httpfile.WSMessage(nil)
 	if resolved.WebSocket != nil {
 		messages = resolved.WebSocket.Messages

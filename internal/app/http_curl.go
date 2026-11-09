@@ -266,6 +266,10 @@ func (m *Model) copyHTTPRequestAs(format string, export func(*httpfile.Request) 
 		m.host.Notify(host.Error, notice)
 		return nil
 	}
+	if resolved.Target, err = httpfile.AbsoluteTarget(req, resolved, vars); err != nil {
+		m.host.Notify(host.Error, format+": "+err.Error())
+		return nil
+	}
 	// An external body is relative to the .http file (#1305) while the
 	// exported command resolves its path against the working directory, so
 	// the command carries the path from the file's directory.

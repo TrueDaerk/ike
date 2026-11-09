@@ -162,6 +162,32 @@ func TestPlaceholderRequestHighlighted(t *testing.T) {
 	}
 }
 
+func TestRelativeTargetHighlighted(t *testing.T) {
+	lines := []string{
+		"@host=http://my-host.com",
+		"",
+		"### Request A",
+		"GET /do/stuff?s=a",
+		"Content-Type: application/json",
+	}
+	ix := highlight.NewIndex(highlight.Highlight("req.http", lines))
+	if got := ix.CaptureAt(3, 0); got != "function" {
+		t.Errorf("method: got capture %q, want function", got)
+	}
+	if got := ix.CaptureAt(3, 5); got != "label" {
+		t.Errorf("path: got capture %q, want label", got)
+	}
+	if got := ix.CaptureAt(3, 13); got != "punctuation" {
+		t.Errorf("query separator: got capture %q, want punctuation", got)
+	}
+	if got := ix.CaptureAt(3, 14); got != "property" {
+		t.Errorf("query key: got capture %q, want property", got)
+	}
+	if got := ix.CaptureAt(4, 0); got != "constant" {
+		t.Errorf("header name: got capture %q, want constant", got)
+	}
+}
+
 // TestFoldedQueryHighlighting: indented "?"/"&" continuation lines (#1269)
 // are part of the request target — since #1585 they carry the query-param
 // captures (separators as punctuation, keys as property), not a broken
