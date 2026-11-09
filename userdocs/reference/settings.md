@@ -484,6 +484,35 @@ advertises formatting.
 | Slow flight highlight | `http.slow_threshold_ms` | integer (0–600000) | `2000` | user | Milliseconds past which a finished dispatch counts as slow in the response pane: its header then shows the duration and the timing phase that took the longest (dns, connect, tls, ttfb or transfer) in the warning slot, and the off-screen completion notice names that phase too. 0 turns the highlight off. Independent of the slow response notice above, which decides whether a notice is sent at all |
 | Request timeout | `http.timeout_ms` | integer (1000–600000) | `30000` | user | Milliseconds one dispatch may run before it is given up on: past this the request ends with an explicit "timed out after N s" in the response pane instead of hanging until you cancel it, and the pane header counts the wait down against this limit while the request is out. It is the default only — a single request overrides it with a "# @timeout 5s" directive in its .http block, and a .curlrc "max-time" wins over the setting too. A recognised stream (SSE/NDJSON) sheds the deadline once its headers are in and ends on idleness instead, so a long-lived connection is not cut off |
 
+### HTTP Variables
+
+The **HTTP Variables** page manages the global `.http` variables, persisted as
+the `[[http.variables]]` table array in the user or the project settings file:
+
+| Key | Action |
+| --- | --- |
+| `a` | add a variable: `name`, `value` |
+| `enter` | edit the selected variable (it stays in its scope) |
+| `d` | delete the selected variable (confirms) |
+| `s` | the scope new variables are added to: user ↔ project |
+
+`{{name}}` in any `.http` file resolves to a global variable when nothing more
+specific defines it. Order, highest first: captured response values, the file's
+`@name=value` lines, the selected `http-client.env.json` environment, the process
+environment, project variables, user variables. Unlike other lists the two scopes
+do not replace each other; a project variable overrides a user variable of the
+same name. Values may contain `{{other}}` placeholders. Names follow the `@name`
+rule (letters, digits, `_`, `.`, `-`, starting with a letter or `_`); the form
+rejects other names and duplicates within one scope. Values whose name the
+secret-masking key patterns classify as secrets are masked in the list.
+
+```toml
+[[http.variables]]
+name = "apiBase"
+value = "https://{{domain}}/api"
+```
+
+
 ### Remote Browsing
 
 | Setting | Key | Type | Default | Scope | Description |

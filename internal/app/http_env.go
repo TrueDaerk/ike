@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/config"
 	"ike/internal/fuzzy"
 	"ike/internal/host"
 	"ike/internal/httpfile"
@@ -119,12 +120,14 @@ func (m Model) httpEnvName(dir string, envs *httpfile.Environments) string {
 
 // httpVars builds the variable chain of one dispatch (#1867): the parsed
 // file's `@name=value` definitions over the selected environment's variables,
-// with the process environment closing the chain inside httpclient. A
+// then the process environment (filled in inside httpclient), then the global
+// variables of the project and user settings. A
 // malformed environment file is an error, not a silent miss — sending a
 // request with unresolved variables because of a JSON typo would be worse
 // than not sending it.
 func (m Model) httpVars(source string, f *httpfile.File) (vars *httpfile.Vars, hint string, err error) {
 	vars = &httpfile.Vars{File: f.VarMap(), Captured: m.httpCaptured(source, f)}
+	vars.Project, vars.User = config.Get().HTTP.HTTPVariableMaps()
 	dir := filepath.Dir(source)
 	envs, err := httpfile.LoadEnvironments(dir)
 	if err != nil {

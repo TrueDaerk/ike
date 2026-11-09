@@ -1,7 +1,7 @@
 ---
 type: concept
 title: HTTP Client (.http files)
-description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, relative request targets resolved against the host variable or Host header, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, WEBSOCKET session blocks with ===-separated initial messages, a live frame transcript and an interactive send line in the response pane, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, GraphQL errors lifted out of a 200 answer into a red block above the body, and @assert directives checked against every response with a pass/fail block above the body, a run in the Test Results window and a failure notice, the followed redirect chain with per-hop DNS, connected address and TLS facts as a foldable block under the status line, plus a configurable request timeout with a per-request @timeout directive, a visible elapsed/limit countdown while a request is out and an explicit timed-out result.
+description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, relative request targets resolved against the host variable or Host header, environment, user-defined and global (settings) variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, WEBSOCKET session blocks with ===-separated initial messages, a live frame transcript and an interactive send line in the response pane, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, GraphQL errors lifted out of a 200 answer into a red block above the body, and @assert directives checked against every response with a pass/fail block above the body, a run in the Test Results window and a failure notice, the followed redirect chain with per-hop DNS, connected address and TLS facts as a foldable block under the status line, plus a configurable request timeout with a per-request @timeout directive, a visible elapsed/limit countdown while a request is out and an explicit timed-out result.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
 timestamp: 2026-11-09T00:00:00Z
@@ -250,7 +250,8 @@ full chain below (`Resolve`/`Substitute` are them with a single lookup).
 
 ### User-defined variables (#1867)
 
-Two sources, the JetBrains / VS Code REST Client convention:
+Two sources per file, the JetBrains / VS Code REST Client convention, plus
+the IDE-wide global variables:
 
 - **In-file definitions**: `@name = value` lines *before* a request line —
   the file header the convention puts them in, or right above the request.
@@ -281,6 +282,25 @@ Two sources, the JetBrains / VS Code REST Client convention:
     "prod": { "host": "https://example.com" }
   }
   ```
+- **Global variables**: name/value pairs defined once in the settings — the
+  **HTTP Variables** page (`internal/settings/httpvars_page.go`), persisted as
+  `[[http.variables]]` tables — and available to every `.http` file. There are
+  two scopes: **user** (the user settings file, all projects) and **project**
+  (the project's `.ike/settings.toml`). Unlike every other TOML list the two
+  layers do not replace each other: `config.Load` pulls the list out of each
+  layer before the merge and tags every entry with its scope
+  (`config.HTTPVariable.Scope`, `internal/config/httpvars.go`). Names follow
+  the `@name` rule (`[A-Za-z_][A-Za-z0-9_.-]*`); the loader drops an invalid
+  name or a duplicate within one scope with a diagnostic, and the settings
+  form rejects both outright with the same message
+  (`config.HTTPVariableNameError`). Values may hold placeholders and expand
+  like file variables.
+
+  ```toml
+  [[http.variables]]
+  name = "apiBase"
+  value = "https://{{domain}}/api"
+  ```
 
 **Precedence** for `{{name}}`, highest first (`httpfile.Vars`):
 
@@ -288,14 +308,22 @@ Two sources, the JetBrains / VS Code REST Client convention:
 2. the `.http` file's own `@name=value` definitions
 3. the selected environment (private file merged over the public one)
 4. the process environment
+5. project global variables (`Vars.Project`)
+6. user global variables (`Vars.User`)
 
 A captured value wins because it is the freshest thing in the chain: it came
 out of a response of this very file, and an `@token = paste-me-here` line is
 exactly the stand-in it supersedes. The in-file definition wins over an
 environment because it sits in front of the author, right above the request;
 an environment is the shared default it overrides. Falling through to the
-process environment last means `{{HOME}}` works and no `.http` file has to
-repeat what is already exported.
+process environment means `{{HOME}}` works and no `.http` file has to
+repeat what is already exported. The global variables close the chain as
+defaults: a personal token or a default host is defined once, and anything
+more specific — the file, an environment file, an exported variable —
+overrides it. A project variable wins over a user variable of the same name.
+`internal/app/http_env.go` (`httpVars`) fills both global rungs from the live
+config, so every dispatch path — send, curl export, GraphQL — sees them, and
+an edit on the settings page applies to the next request without a restart.
 
 **Choosing the environment**: `http.selectEnvironment` ("Select HTTP
 Environment", palette) lists the environments of the focused `.http` file's
@@ -315,15 +343,17 @@ verbatim, so a switched environment cannot change what is repeated.
 
 **Reading the chain the other way round** (#2158): `Vars.Definitions()` lists
 the names the chain defines — each once, sorted, tagged with the rung that
-wins it (`httpfile.OriginResponse` / `OriginFile` / `OriginEnv`) and carrying
-that rung's unsubstituted value — and `Vars.Defines(name)` answers "is this
+wins it (`httpfile.OriginResponse` / `OriginFile` / `OriginEnv` /
+`OriginProject` / `OriginUser`) and carrying that rung's unsubstituted value — and `Vars.Defines(name)` answers "is this
 reference known" for the whole chain, the process environment included. The two
 are what completion is built from and what the unknown-variable warning asks
 (see [completion](#editor-ux-1250) and
 [unknown variables](#unknown-variables-are-warned-about-2158)). The process
 environment is enumerable by neither: `Defines` consults it, `Definitions`
 leaves it out, since offering its hundreds of names would drown the handful
-that belong to the file. `httpfile.References(src)` is the mirror of both — the
+that belong to the file. The one exception is a global variable's name the
+process environment defines too: it is listed tagged `OriginProcess` with the
+process value, since that is what resolves. `httpfile.References(src)` is the mirror of both — the
 `{{name}}` occurrences of a source with their line and column spans.
 
 ### Capturing values from a response (#1993)
@@ -1509,6 +1539,8 @@ Sec-WebSocket-Protocol: chat
     | `env <name>` | the *active* environment of a sibling `http-client.env.json`, private file merged over the public one — the environment is named because it is the one thing that changes under the author's feet |
     | `response` | a value an earlier response of this file was captured from (#1993), read back from `.ike/http/*.json` |
     | `capture` | a name a `# @capture` directive declares but no response has produced yet — the promise a chain's polling request is written against before the chain has ever run |
+    | `global project` / `global user` | a global variable of the settings' **HTTP Variables** page (`[[http.variables]]`), project or user scope |
+    | `process env` | a global variable's name the process environment defines too — it wins, so its value is the one shown |
 
     The active environment is the persisted selection `http.selectEnvironment`
     writes to `.ike/httpenv.json`, or the file's only environment when there is
@@ -1516,8 +1548,9 @@ Sec-WebSocket-Protocol: chat
     has no business importing `internal/app` for one project-local file, so
     `envselect.go` and `captured.go` read the two stores directly, mirroring the
     read-only-store pattern every other subsystem under `internal/` already
-    follows for its own `IKE_CONFIG_DIR`-scoped files. The process-environment
-    rung is deliberately absent: it holds hundreds of names that have nothing to
+    follows for its own `IKE_CONFIG_DIR`-scoped files; the global variables come
+    from the live config (`config.Get().HTTP`). The process-environment
+    rung is otherwise absent: it holds hundreds of names that have nothing to
     do with the file. Accepting an item inserts the closing `}}` too, so the
     edit leaves one closed placeholder rather than two — unless the buffer
     already carries them right after the caret, which is what auto-closing

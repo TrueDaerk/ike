@@ -29,6 +29,7 @@ func Load(opts Options) (*Config, []Diagnostic) {
 
 	var diags []Diagnostic
 	merged := map[string]any{}
+	var userVars, projectVars []HTTPVariable
 	for _, path := range opts.layerPaths() {
 		raw, err := decodeFile(path)
 		if err != nil {
@@ -36,6 +37,21 @@ func Load(opts Options) (*Config, []Diagnostic) {
 			continue
 		}
 		if raw != nil {
+			// Global .http variables keep both layers instead of replacing.
+			scope := UserScope
+			if path == layerPath(opts, ProjectScope) {
+				scope = ProjectScope
+			}
+			vars, varDiags := takeHTTPVariables(raw, scope)
+			for i := range varDiags {
+				varDiags[i].Source = path
+			}
+			diags = append(diags, varDiags...)
+			if scope == ProjectScope {
+				projectVars = vars
+			} else {
+				userVars = vars
+			}
 			mergeMaps(merged, raw)
 		}
 	}
@@ -47,6 +63,9 @@ func Load(opts Options) (*Config, []Diagnostic) {
 		diags = append(diags, Diagnostic{Field: "(merge)", Message: err.Error()})
 		c = defaults()
 		applyExtensionDefaults(c)
+	}
+	if vars := append(projectVars, userVars...); len(vars) > 0 {
+		c.HTTP.Variables = vars
 	}
 	// Unknown keys are ignored with a warning (0380, #793): a typo in a
 	// settings file must be visible, not silently inert.

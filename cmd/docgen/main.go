@@ -117,6 +117,31 @@ var customPageProse = map[string]string{
 		"\n" +
 		"Like every TOML list the endpoint list replaces across layers: a\n" +
 		"project-scope `[[elasticsearch.endpoints]]` table hides the user-scope one.\n",
+	"HTTP Variables": "The **HTTP Variables** page manages the global `.http` variables, persisted as\n" +
+		"the `[[http.variables]]` table array in the user or the project settings file:\n" +
+		"\n" +
+		"| Key | Action |\n" +
+		"| --- | --- |\n" +
+		"| `a` | add a variable: `name`, `value` |\n" +
+		"| `enter` | edit the selected variable (it stays in its scope) |\n" +
+		"| `d` | delete the selected variable (confirms) |\n" +
+		"| `s` | the scope new variables are added to: user ↔ project |\n" +
+		"\n" +
+		"`{{name}}` in any `.http` file resolves to a global variable when nothing more\n" +
+		"specific defines it. Order, highest first: captured response values, the file's\n" +
+		"`@name=value` lines, the selected `http-client.env.json` environment, the process\n" +
+		"environment, project variables, user variables. Unlike other lists the two scopes\n" +
+		"do not replace each other; a project variable overrides a user variable of the\n" +
+		"same name. Values may contain `{{other}}` placeholders. Names follow the `@name`\n" +
+		"rule (letters, digits, `_`, `.`, `-`, starting with a letter or `_`); the form\n" +
+		"rejects other names and duplicates within one scope. Values whose name the\n" +
+		"secret-masking key patterns classify as secrets are masked in the list.\n" +
+		"\n" +
+		"```toml\n" +
+		"[[http.variables]]\n" +
+		"name = \"apiBase\"\n" +
+		"value = \"https://{{domain}}/api\"\n" +
+		"```\n",
 	"Formatters": "The **Formatters** page lists each language's reformat command, the config\n" +
 		"layer supplying it and whether the binary is installed — and it edits them:\n" +
 		"\n" +

@@ -2,12 +2,14 @@ package langhttp
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
 
 	"ike/internal/complete"
+	"ike/internal/config"
 	"ike/internal/fuzzy"
 	"ike/internal/host"
 	"ike/internal/httpfile"
@@ -423,11 +425,14 @@ func bodyFileItems(bufPath, before string) []ilsp.CompletionItem {
 //   - "capture"  — a name a `# @capture` directive declares but no response
 //     has produced yet: the promise the polling request of a chain is
 //     written against before the chain has ever run
+//   - "global project" / "global user" — the global variables of the IDE
+//     settings ([[http.variables]]), or "process env" for one of their names
+//     the process environment answers first
 //
 // Each item says which of them it came from, because the same name may live
 // in several and the origin is what tells "the environment has it" from "the
-// last run produced it". The process-environment rung is deliberately absent:
-// it holds hundreds of names that have nothing to do with the file.
+// last run produced it". The process environment is otherwise absent: it
+// holds hundreds of names that have nothing to do with the file.
 //
 // The insert text closes the braces the user has not typed yet (closeBraces), so
 // accepting an item leaves one closed placeholder rather than two separate
@@ -435,7 +440,8 @@ func bodyFileItems(bufPath, before string) []ilsp.CompletionItem {
 // put a "}}" past the cursor.
 func placeholderItems(path string, lines []string, typed string, closeBraces bool) []ilsp.CompletionItem {
 	f := httpfile.Parse(strings.Join(lines, "\n"))
-	vars := &httpfile.Vars{Captured: capturedVars(path, f), File: f.VarMap()}
+	vars := &httpfile.Vars{Captured: capturedVars(path, f), File: f.VarMap(), Lookup: os.LookupEnv}
+	vars.Project, vars.User = config.Get().HTTP.HTTPVariableMaps()
 	envName := ""
 	if envs, err := httpfile.LoadEnvironments(filepath.Dir(path)); err == nil {
 		envName = activeEnvironment(filepath.Dir(path), envs)
