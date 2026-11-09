@@ -675,6 +675,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 		// so docgen's settings reference documents it too.
 		SettingsPages: []settings.Page{
 			{Title: "Elasticsearch", Custom: settings.NewESPage(config.Discover("."))},
+			{Title: "HTTP Variables", Custom: settings.NewHTTPVarsPage(config.Discover("."))},
 		},
 		// The built-in intention catalog (#2020): caret-dependent doorways
 		// into the commands above, merged into alt+enter's popup.

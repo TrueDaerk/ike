@@ -225,14 +225,25 @@ type StatusLine struct {
 // turns the highlight off. TimeoutMs (#2630) is the overall deadline of one
 // dispatch in milliseconds — how long a request may run before it is given
 // up on. It is the default only: a request's own `# @timeout 5s` directive
-// wins over it, and so does a `.curlrc` `max-time`.
+// wins over it, and so does a `.curlrc` `max-time`. Variables are the global
+// .http variables of both scopes (httpvars.go): project entries first, then
+// user entries, each tagged with the layer it was read from.
 type HTTP struct {
-	DiffIgnoreHeaders []string `toml:"diff_ignore_headers"`
-	DiffAfterRerun    bool     `toml:"diff_after_rerun"`
-	HighlightLimitKB  int      `toml:"highlight_limit_kb"`
-	NotifySlowMs      int      `toml:"notify_slow_ms"`
-	SlowThresholdMs   int      `toml:"slow_threshold_ms"`
-	TimeoutMs         int      `toml:"timeout_ms"`
+	DiffIgnoreHeaders []string       `toml:"diff_ignore_headers"`
+	DiffAfterRerun    bool           `toml:"diff_after_rerun"`
+	HighlightLimitKB  int            `toml:"highlight_limit_kb"`
+	NotifySlowMs      int            `toml:"notify_slow_ms"`
+	SlowThresholdMs   int            `toml:"slow_threshold_ms"`
+	TimeoutMs         int            `toml:"timeout_ms"`
+	Variables         []HTTPVariable `toml:"variables"`
+}
+
+// HTTPVariable is one global .http variable. Scope is the layer the entry was
+// read from; it is not written to the file, the file it lives in is its scope.
+type HTTPVariable struct {
+	Name  string `toml:"name"`
+	Value string `toml:"value"`
+	Scope Scope  `toml:"-"`
 }
 
 // Forge holds the code-forge settings (#2085, #2086). PollIntervalSeconds is

@@ -16,7 +16,8 @@ func lookupEnv(name string) (string, bool) {
 
 // variables builds the resolution chain of one dispatch (#1867): the caller's
 // user variables (in-file `@name=value` definitions and the selected
-// http-client.env.json environment) closed by the process environment. The
+// http-client.env.json environment), then the process environment, then the
+// caller's global variables (project over user). The
 // caller's Vars is copied rather than filled in place, so an Options value
 // reused for several dispatches is never mutated.
 func variables(opts Options) *httpfile.Vars {

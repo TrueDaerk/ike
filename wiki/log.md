@@ -1,5 +1,15 @@
 # Log
 
+## 2026-11-09 (.http: global variables in the settings, #3119)
+
+- [HTTP Client](/architecture/http-client.md): global `.http` variables
+  (`[[http.variables]]`, user and project scope) close the `{{name}}` chain
+  below the process environment, project over user; completion labels them
+  `global project` / `global user`.
+- [Settings UI](/architecture/settings-ui.md): new **HTTP Variables** page
+  with an add/edit/delete form, per-scope duplicate and name checks, and
+  masked secret values.
+
 ## 2026-11-06 (.http: triple-quoted strings in JSON bodies, #3113)
 
 - [HTTP Client](/architecture/http-client.md): `"""…"""` literals in JSON

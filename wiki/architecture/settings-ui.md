@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-10-14T12:00:00Z
+timestamp: 2026-11-09T00:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -123,7 +123,7 @@ box capped at ~110×32 cells above the workspace, laid out as the
   project write) and a project override removed with `r` falls straight
   back to the user/global value on the reload. Custom pages keep their own
   keys (the panel's selector only applies to schema rows; a custom page
-  that has a layer of its own — Formatters, Elasticsearch — binds `s` to
+  that has a layer of its own — Formatters, Elasticsearch, HTTP Variables — binds `s` to
   it, and no page binds `s` to anything else).
 - **Filter.** `/` — or the shared find chord `cmd+f` / `ctrl+f` (#2409),
   answered by the panel itself because it owns the keyboard ahead of the
@@ -349,6 +349,20 @@ any entry whose key the typed schema does not expose (no dead keys).
   off value, since `0` would mean "no deadline" — the hang it exists to bound.
   A request's own `# @timeout 5s` directive and a `.curlrc max-time` override
   it. See [HTTP client](./http-client.md).
+- **HTTP Variables** — a custom add·edit·delete page
+  (`httpvars_page.go` / `httpvars_form.go`, registered next to Elasticsearch
+  in `internal/app/commands.go`) over `[[http.variables]]`, the global `.http`
+  variables. User and project rows are listed together, project first since
+  they win, each with its scope; a user row a project row of the same name
+  overrides is marked "overridden by project". `a` adds to the scope `s`
+  selects, `enter` edits a row in its own scope, `d` deletes after a confirm;
+  each write replaces the whole list of that scope (an emptied scope removes
+  the key). The form rejects a name that breaks the `@name` rule or repeats a
+  name of the same scope, with the message the config loader would log
+  (`config.HTTPVariableNameError`). With `editor.secret_masking` on, a value
+  whose name the secret-masking key patterns classify as a secret
+  (`secret.Suspect`, so `editor.secret_masking_keys` applies) renders as the
+  editor's mask in the list and as bullets in the form.
 - **Ansible Vault** (#2293) — `ansible.vault_password_file`, the `Path` entry
   (existence-checked in the form) naming the file whose first line decrypts
   `$ANSIBLE_VAULT;` files for transparent editing: user scope is the global
@@ -1265,7 +1279,7 @@ the open editors, so nothing here needs a restart.
 ## Page & form helpers (0500, #2466)
 
 The add·edit·delete pages — associations, PHP debug mappings, Elasticsearch
-endpoints, tools — and their sub-panel forms had each written the same three
+endpoints, HTTP variables, tools — and their sub-panel forms had each written the same three
 shapes by hand. `internal/settings/pagehelp.go` holds them once.
 
 - **`fieldNav`** is the focused-field cursor every form declared as its own

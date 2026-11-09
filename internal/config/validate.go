@@ -973,6 +973,7 @@ func validate(c *Config) []Diagnostic {
 		c.Remote.MaxFetchMB = 4096
 	}
 	diags = append(diags, validateCustomTools(c)...)
+	diags = append(diags, validateHTTPVariables(c)...)
 
 	// [[elasticsearch.endpoints]] entries (#1927) need a unique non-empty name
 	// and a parseable http(s) URL with a host — an entry the console could

@@ -12,7 +12,7 @@ import (
 var customPageTitles = []string{
 	"Syntax Colors", "File Associations", ProjectGroupsPageTitle, "Keymap", "Tools", "PHP Debug Mappings",
 	"Toolchain", "Plugins", "Marketplace", "Language Servers", "Formatters",
-	"Elasticsearch",
+	"Elasticsearch", "HTTP Variables",
 }
 
 // TestEveryPageHasAGroup: no page may fall into "Other" — a new page is placed

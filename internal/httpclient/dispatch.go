@@ -173,8 +173,9 @@ type Options struct {
 	Lookup func(string) (string, bool)
 	// Vars carries the user-defined variables of the request (#1867): the
 	// .http file's own `@name=value` definitions and the selected
-	// http-client.env.json environment. Its Lookup field is filled from
-	// Options.Lookup, so a caller only sets the two maps. nil means "no user
+	// http-client.env.json environment, plus the project and user global
+	// variables below the process environment. Its Lookup field is filled
+	// from Options.Lookup, so a caller only sets the maps. nil means "no user
 	// variables" — every `{{name}}` then falls through to the environment.
 	Vars *httpfile.Vars
 	// NetrcPath overrides the .netrc location ("" = $NETRC / $HOME/.netrc).

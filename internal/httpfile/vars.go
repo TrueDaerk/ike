@@ -24,17 +24,23 @@ import (
 //  3. Env — the selected environment of http-client.env.json, with
 //     http-client.private.env.json merged over it
 //  4. Lookup — the process environment (typically os.LookupEnv)
+//  5. Project — the project-scope global variables of the IDE settings
+//  6. User — the user-scope global variables of the IDE settings
 //
 // A captured value wins because it is the freshest thing in the chain: it was
 // produced by a response of this very file, and an `@token = paste-me-here`
 // definition is the stand-in it is meant to supersede. The in-file definition
 // wins over an environment because it sits in front of the author, right
-// above the request; an environment is the shared default it overrides.
+// above the request; an environment is the shared default it overrides. The
+// global variables are defaults of the whole IDE: anything more specific —
+// the file, an environment file, the process environment — wins over them.
 type Vars struct {
 	Captured map[string]string
 	File     map[string]string
 	Env      map[string]string
 	Lookup   func(string) (string, bool)
+	Project  map[string]string
+	User     map[string]string
 }
 
 // EnvValue resolves the {{$env NAME}} / ${NAME} forms: the process
@@ -47,7 +53,8 @@ func (v *Vars) EnvValue(name string) (string, bool) {
 	return v.Lookup(name)
 }
 
-// raw returns a user-defined variable's unsubstituted value.
+// raw returns the unsubstituted value of a variable defined above the
+// process environment.
 func (v *Vars) raw(name string) (string, bool) {
 	if v == nil {
 		return "", false
@@ -62,6 +69,19 @@ func (v *Vars) raw(name string) (string, bool) {
 	return value, ok
 }
 
+// global returns the unsubstituted value of a global variable, the project
+// scope over the user scope.
+func (v *Vars) global(name string) (string, bool) {
+	if v == nil {
+		return "", false
+	}
+	if value, ok := v.Project[name]; ok {
+		return value, true
+	}
+	value, ok := v.User[name]
+	return value, ok
+}
+
 // value resolves a {{name}} placeholder. A definition may itself hold
 // placeholders (`@api={{host}}/api`), so the value is substituted in turn;
 // seen carries the names currently being expanded, so a cycle
@@ -70,7 +90,12 @@ func (v *Vars) raw(name string) (string, bool) {
 func (v *Vars) value(name string, seen map[string]bool) (string, bool) {
 	raw, ok := v.raw(name)
 	if !ok {
-		return v.EnvValue(name) // fall through to the process environment
+		if value, ok := v.EnvValue(name); ok {
+			return value, true
+		}
+		if raw, ok = v.global(name); !ok {
+			return "", false
+		}
 	}
 	if !strings.Contains(raw, "{{") && !strings.Contains(raw, "${") {
 		return raw, true
@@ -97,6 +122,11 @@ const (
 	OriginResponse = "response" // captured out of an earlier response (#1993)
 	OriginFile     = "file"     // an `@name=value` definition of the .http file
 	OriginEnv      = "env"      // the selected environment file
+	// OriginProcess marks a global variable's name the process environment
+	// answers instead.
+	OriginProcess = "process env"
+	OriginProject = "global project" // a project-scope global variable
+	OriginUser    = "global user"    // a user-scope global variable
 )
 
 // Definition is one defined variable: its name, its unsubstituted value and
@@ -112,7 +142,8 @@ type Definition struct {
 // the list a completion popup is built from. The process environment closing
 // the chain (Lookup) is deliberately not enumerated: it holds hundreds of
 // names that have nothing to do with the file, so offering them would drown
-// the handful that do.
+// the handful that do; only a global variable's name it shadows is listed,
+// tagged OriginProcess with the process value, since that is what resolves.
 func (v *Vars) Definitions() []Definition {
 	if v == nil {
 		return nil
@@ -124,16 +155,25 @@ func (v *Vars) Definitions() []Definition {
 		{v.Captured, OriginResponse},
 		{v.File, OriginFile},
 		{v.Env, OriginEnv},
+		{v.Project, OriginProject},
+		{v.User, OriginUser},
 	}
-	out := make([]Definition, 0, len(v.Captured)+len(v.File)+len(v.Env))
+	out := make([]Definition, 0, len(v.Captured)+len(v.File)+len(v.Env)+len(v.Project)+len(v.User))
 	seen := make(map[string]bool, cap(out))
 	for _, rung := range rungs {
+		global := rung.origin == OriginProject || rung.origin == OriginUser
 		for name, value := range rung.vars {
 			if seen[name] {
 				continue // a higher rung already won the name
 			}
 			seen[name] = true
-			out = append(out, Definition{Name: name, Value: value, Origin: rung.origin})
+			origin := rung.origin
+			if global {
+				if env, ok := v.EnvValue(name); ok {
+					value, origin = env, OriginProcess
+				}
+			}
+			out = append(out, Definition{Name: name, Value: value, Origin: origin})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
@@ -152,6 +192,9 @@ func (v *Vars) Defines(name string) bool {
 	if _, ok := v.raw(name); ok {
 		return true
 	}
-	_, ok := v.EnvValue(name)
+	if _, ok := v.EnvValue(name); ok {
+		return true
+	}
+	_, ok := v.global(name)
 	return ok
 }
