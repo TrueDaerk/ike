@@ -85,6 +85,10 @@ func (m *Model) graphqlRequestAtCursor(command string) (*httpfile.Request, bool)
 		m.host.Notify(host.Error, notice)
 		return nil, false
 	}
+	if resolved.Target, err = httpfile.AbsoluteTarget(req, resolved, vars); err != nil {
+		m.host.Notify(host.Error, command+": "+err.Error())
+		return nil, false
+	}
 	return resolved, true
 }
 

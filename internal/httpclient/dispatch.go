@@ -282,6 +282,9 @@ func prepare(ctx context.Context, req *httpfile.Request, opts Options) (*prepare
 	if err != nil {
 		return nil, err
 	}
+	if resolved.Target, err = httpfile.AbsoluteTarget(req, resolved, vars); err != nil {
+		return nil, err
+	}
 
 	target, err := url.Parse(resolved.Target)
 	if err != nil {

@@ -1,10 +1,10 @@
 ---
 type: concept
 title: HTTP Client (.http files)
-description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, WEBSOCKET session blocks with ===-separated initial messages, a live frame transcript and an interactive send line in the response pane, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, GraphQL errors lifted out of a 200 answer into a red block above the body, and @assert directives checked against every response with a pass/fail block above the body, a run in the Test Results window and a failure notice, the followed redirect chain with per-hop DNS, connected address and TLS facts as a foldable block under the status line, plus a configurable request timeout with a per-request @timeout directive, a visible elapsed/limit countdown while a request is out and an explicit timed-out result.
+description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, relative request targets resolved against the host variable or Host header, environment and user-defined variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, WEBSOCKET session blocks with ===-separated initial messages, a live frame transcript and an interactive send line in the response pane, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, GraphQL errors lifted out of a 200 answer into a red block above the body, and @assert directives checked against every response with a pass/fail block above the body, a run in the Test Results window and a failure notice, the followed redirect chain with per-hop DNS, connected address and TLS facts as a foldable block under the status line, plus a configurable request timeout with a per-request @timeout directive, a visible elapsed/limit countdown while a request is out and an explicit timed-out result.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-11-06T00:00:00Z
+timestamp: 2026-11-09T00:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -52,6 +52,31 @@ Authorization: Bearer {{$env TOKEN}}
 
 - **Request line:** `METHOD request-target [HTTP-version]`; the version is
   optional and defaults to `HTTP/1.1`. The method must be an RFC 9110 token.
+- **Relative targets:** a target starting with `/` (`GET /do/stuff`) is
+  resolved against the `host` variable at dispatch time, the JetBrains
+  convention:
+
+  ```
+  @host=http://my-host.com
+
+  ### Request A
+  GET /do/stuff
+  ```
+
+  sends `GET http://my-host.com/do/stuff`. `host` resolves through the normal
+  [variable chain](#user-defined-variables-1867) — captured value, in-file
+  `@host`, the selected environment, the process environment — nested
+  placeholders included, so a per-environment host needs nothing extra. When
+  no `host` variable resolves, the request's `Host:` header is the prefix
+  instead. Either value gets `http://` when it carries no scheme, and a
+  trailing `/` is dropped so the join never doubles the slash
+  (`@host=http://x.com/` + `/api` → `http://x.com/api`). With neither, the
+  dispatch fails with `relative target "/do/stuff" needs a @host variable or
+  Host header`. Absolute targets, protocol-relative `//host/…` targets and
+  targets opening with a placeholder (`{{base}}/x`) are left alone. The join
+  (`httpfile.AbsoluteTarget`) runs right after variable resolution, so the
+  as-sent snapshot, the redirect chain, re-send, the curl/httpie exports and
+  `WEBSOCKET` blocks (`@host=ws://…`) all see the absolute URL.
 - **Folded query lines** (#1269): a long query may be wrapped onto indented
   continuation lines starting with `?` or `&`, the JetBrains spelling:
 
@@ -236,6 +261,10 @@ Two sources, the JetBrains / VS Code REST Client convention:
   them. A value may itself hold placeholders (`@api = {{host}}/api`), which
   are expanded in turn; a cycle leaves the variable unresolved rather than
   recursing.
+- **`host` is special for relative targets**: a request line whose target
+  starts with `/` is prefixed with the resolved `host` value (any rung of the
+  chain below), falling back to the request's `Host:` header — see
+  [relative targets](#file-format).
 - **Environment files** next to the `.http` file: `http-client.env.json`
   holds named environments, each a flat object of variables, and
   `http-client.private.env.json` holds the secrets that must not be
