@@ -227,10 +227,13 @@ type StatusLine struct {
 // up on. It is the default only: a request's own `# @timeout 5s` directive
 // wins over it, and so does a `.curlrc` `max-time`. Variables are the global
 // .http variables of both scopes (httpvars.go): project entries first, then
-// user entries, each tagged with the layer it was read from.
+// user entries, each tagged with the layer it was read from. CaptureHints
+// (#3120) shows the value each `# @capture` directive currently resolves to as
+// an inline hint at the end of its line.
 type HTTP struct {
 	DiffIgnoreHeaders []string       `toml:"diff_ignore_headers"`
 	DiffAfterRerun    bool           `toml:"diff_after_rerun"`
+	CaptureHints      bool           `toml:"capture_hints"`
 	HighlightLimitKB  int            `toml:"highlight_limit_kb"`
 	NotifySlowMs      int            `toml:"notify_slow_ms"`
 	SlowThresholdMs   int            `toml:"slow_threshold_ms"`

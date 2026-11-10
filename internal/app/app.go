@@ -10710,6 +10710,8 @@ func (m Model) openPathMode(path string, newPane, forceEditor bool) (tea.Model, 
 				if cmd := m.coverageMarksCmd(path); cmd != nil {
 					cmds = append(cmds, cmd)
 				}
+				// Captured-value hints from the stored history (#3120).
+				m.refreshHTTPCaptureHints(path)
 			}
 		}
 	}
@@ -10748,6 +10750,7 @@ func (m *Model) wireLoadedDoc(path string) tea.Cmd {
 	if cmd := m.coverageMarksCmd(path); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
+	m.refreshHTTPCaptureHints(path) // #3120
 	// A preview opened against the placeholder (an HTML tab in Preview
 	// view, #2766) renders the real text now.
 	cmds = append(cmds, m.syncPreviewsFor(path, nil)...)
@@ -11052,6 +11055,7 @@ func (m *Model) drainLazyLoads() tea.Cmd {
 			if cmd := m.coverageMarksCmd(path); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
+			m.refreshHTTPCaptureHints(path) // #3120
 		}
 		cmds = append(cmds, m.fireHooks(plugin.EventFileOpened, path)...)
 	}

@@ -241,6 +241,9 @@ func (m *Model) reloadConfig(cfg *config.Config) {
 	// [network] edits apply live too (#2519): enabling starts the endpoint,
 	// disabling stops it, a new port or bind address restarts it.
 	m.reconfigureNetwork(cfg)
+	// http.capture_hints (#3120) shows or clears the captured-value hints of
+	// the open request files.
+	m.refreshAllHTTPCaptureHints()
 	// Rebuild the key resolver so keymap.bindings.* edits (the settings keymap
 	// page, #93) re-resolve live, like every other config change.
 	m.keys = buildKeymap(hcfg, m.bindings)

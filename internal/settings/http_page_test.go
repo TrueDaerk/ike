@@ -26,6 +26,12 @@ func TestHTTPClientPageEntries(t *testing.T) {
 	if e, ok := byKey["http.diff_after_rerun"]; !ok || e.Type != Bool {
 		t.Errorf("http.diff_after_rerun entry = %+v", e)
 	}
+	// The captured-value hints (#3120) are a plain on/off toggle.
+	if e, ok := byKey["http.capture_hints"]; !ok || e.Type != Bool || e.Scope != config.UserScope {
+		t.Errorf("http.capture_hints entry = %+v", e)
+	} else if !strings.Contains(e.Description, "@capture") {
+		t.Errorf("http.capture_hints description must name the directive: %q", e.Description)
+	}
 	e, ok := byKey["http.diff_ignore_headers"]
 	if !ok || e.Type != List {
 		t.Fatalf("http.diff_ignore_headers entry = %+v", e)
@@ -82,6 +88,46 @@ func TestHTTPClientPageEntries(t *testing.T) {
 		if !strings.Contains(s.Description, want) {
 			t.Errorf("the description must mention %q: %q", want, s.Description)
 		}
+	}
+}
+
+// TestHTTPCaptureHintsRoundTrip (#3120): the captured-value hint toggle
+// ships on, persists through the panel, reloads and renders its value.
+func TestHTTPCaptureHintsRoundTrip(t *testing.T) {
+	restoreConfig(t)
+	if config.Defaults()["http.capture_hints"] != "true" {
+		t.Fatalf("the shipped default must be on, got %q", config.Defaults()["http.capture_hints"])
+	}
+	var e Entry
+	for _, p := range BasePages([]string{"default"}, nil, nil) {
+		for _, pe := range p.Entries {
+			if pe.Key == "http.capture_hints" && p.Title == "HTTP Client" {
+				e = pe
+			}
+		}
+	}
+	if e.Key == "" {
+		t.Fatal("http.capture_hints must live on the HTTP Client page")
+	}
+	m := New([]Page{{Title: "HTTP Client", Entries: []Entry{e}}}, testOpts(t))
+	m.SetSize(140, 24)
+	m.Open()
+
+	m.writeValue(e, false)
+	commit(t, m)
+	if config.Get().HTTP.CaptureHints {
+		t.Fatal("persisted http.capture_hints must be false")
+	}
+	if got := m.value("http.capture_hints"); got != "false" {
+		t.Fatalf("panel value = %q, want false", got)
+	}
+	if v := m.View(); !strings.Contains(v, " off") {
+		t.Fatalf("the entry row must render the value:\n%s", v)
+	}
+	m.writeValue(e, true)
+	commit(t, m)
+	if !config.Get().HTTP.CaptureHints {
+		t.Fatal("re-enabling must persist true")
 	}
 }
 

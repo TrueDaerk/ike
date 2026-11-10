@@ -330,7 +330,9 @@ any entry whose key the typed schema does not expose (no dead keys).
   disagree. See [diff viewer](./diff-viewer.md).
 - **HTTP Client** (#2247) — `http.diff_after_rerun`, whether re-running (or
   re-sending) a stored request opens the previous-vs-new response diff by
-  itself, and `http.diff_ignore_headers`, the volatile response headers every
+  itself, `http.capture_hints` (#3120), whether each `# @capture` line shows
+  its captured value as a trailing hint (default on), and
+  `http.diff_ignore_headers`, the volatile response headers every
   diff leaves out (`date`, request/trace ids, timing fields; a trailing `*`
   matches a family). The header list carries `Entry.ValidateEntry`: a value
   that is not a header name — or a lone `*`, which would hide every header — is
