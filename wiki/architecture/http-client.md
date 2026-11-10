@@ -1,7 +1,7 @@
 ---
 type: concept
 title: HTTP Client (.http files)
-description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, relative request targets resolved against the host variable or Host header, environment, user-defined and global (settings) variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, WEBSOCKET session blocks with ===-separated initial messages, a live frame transcript and an interactive send line in the response pane, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, GraphQL errors lifted out of a 200 answer into a red block above the body, and @assert directives checked against every response with a pass/fail block above the body, a run in the Test Results window and a failure notice, the followed redirect chain with per-hop DNS, connected address and TLS facts as a foldable block under the status line, plus a configurable request timeout with a per-request @timeout directive, per-request @no-curlrc / @no-netrc opt-outs of the local client configuration, a per-request @no-log opt-out of the on-disk response history, a per-request @retry directive (count, fixed pause, conditions) with an attempt indicator and a folded earlier-attempts block, a visible elapsed/limit countdown while a request is out and an explicit timed-out result.
+description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, relative request targets resolved against the host variable or Host header, environment, user-defined and global (settings) variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, WEBSOCKET session blocks with ===-separated initial messages, a live frame transcript and an interactive send line in the response pane, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, GraphQL errors lifted out of a 200 answer into a red block above the body, and @assert directives checked against every response with a pass/fail block above the body, a run in the Test Results window and a failure notice, the followed redirect chain with per-hop DNS, connected address and TLS facts as a foldable block under the status line, plus a configurable request timeout with a per-request @timeout directive, per-request @no-curlrc / @no-netrc opt-outs of the local client configuration, a per-request @no-log opt-out of the on-disk response history, a per-request @retry directive (count, fixed pause, conditions) with an attempt indicator and a folded earlier-attempts block, per-request @stream (spool from the first byte, head shown while the body arrives) and @max-body (cap the read, keep the partial body, truncated marker) directives, a visible elapsed/limit countdown while a request is out and an explicit timed-out result.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
 timestamp: 2026-11-10T00:00:00Z
@@ -206,6 +206,11 @@ Authorization: Bearer {{$env TOKEN}}
   request again when an attempt fails — up to the count of retries, with a
   fixed pause in between, on the named conditions — see
   [retrying a request](#retrying-a-request-3116).
+- **Body directives** (#3117): `# @stream` spools *that* request's body from
+  the first byte and shows the head while the rest still arrives;
+  `# @max-body 5mb` stops reading the body at that size, keeps what was read
+  and marks the response **truncated** — see
+  [body directives](#body-directives-stream-and-max-body-3117).
 - **Configuration opt-outs** (#3114): `# @no-curlrc` dispatches *that*
   request as if no `.curlrc` existed (no proxy, `insecure`, headers,
   user-agent, `user`, `location`, `max-time` or `connect-timeout` from it —
@@ -1225,6 +1230,66 @@ block and retries again. The curl and httpie exports ignore the directive:
 curl's `--retry` conditions differ, so an export with retries would not be
 reproducible 1:1. `WEBSOCKET` blocks ignore it too.
 
+### Body directives: `@stream` and `@max-body` (#3117)
+
+Two directives shape how *one* request's response body is read. Like
+`@timeout` they are `#`, `##` or `//` comment lines in the block (never
+`###`), apply to that block only — the next `###` block reads its body with
+the defaults again — and are recognised by the parser
+(`internal/httpfile/bodylimit.go`), which sets `Request.Stream` and
+`Request.MaxBody`.
+
+```http
+### export everything
+# @stream
+# @max-body 50mb
+GET https://example.com/export
+```
+
+- **`# @stream`** (no value) — the body is **spooled from the first byte**
+  whatever its size (`bodySink.force`): `Response.SpoolPath` is set even for
+  a 10 KiB body, and `Response.Body` still holds the head. The request takes
+  the [streaming path](#streaming-responses-1776) whatever its Content-Type,
+  so the pane opens with status and headers as soon as they arrive and shows
+  the **head** — the first `SpoolThreshold` bytes, never more (the live view
+  holds its rows in memory, which is what spooling avoids) — while the rest
+  is still being received. The finalizing response replaces the live view
+  with the composed one (pretty-printing, folds, size and elapsed facts) once
+  the body is complete. The live view shows complete lines, so a head that
+  is one long line (minified JSON) appears with the final response. Being
+  on the streaming path, the overall deadline
+  covers connect and headers and the idle watchdog takes over for the body.
+  `# @stream x` is a parse error on that line and drops the block.
+- **`# @max-body 5mb`** — reading **stops after that many bytes**. The value
+  is a size with unit `b`, `kb`, `mb`, `gb` (case-insensitive, 1024-based,
+  fractions allowed: `1.5mb`) or a bare byte count (`ParseByteSize`); zero,
+  negative or unparsable values are a parse error that drops the block, like
+  a bad `@timeout`. The limit **replaces** `MaxBodyBytes` for the request, in
+  both directions. What was read is kept and shown; `Response.Truncated` is
+  set, the warning row names the directive (`response body cut at @max-body
+  1kb — showing the first 1024 bytes`), the status row carries
+  `· truncated`, and the read stops one byte past the limit so the deferred
+  `Body.Close` of the unfinished body **closes the connection** instead of
+  draining it. A spooled body's spool file stops growing at the limit.
+
+The last of repeated `@max-body` lines wins. A truncated body is still handed
+to `# @capture` and `# @assert` — they evaluate on the bytes read (`body
+contains` looks no further than the cut), and the pass/fail block carries a
+`(body truncated at N bytes — evaluated on what was read)` line. The raw-body
+file save and the jq handoff read `FullBody()` / `BodyReader()`, i.e. the
+truncated bytes. The history records the flag (`Entry.Truncated`), so a
+browsed entry shows `· truncated` on its status row and in the
+`⧗ history 2/5 (…) · truncated` marker.
+
+Both directives ride on the as-sent snapshot (`RequestSnapshot.Stream` /
+`MaxBody`), so a verbatim re-send reads the body the same way. The curl and
+httpie exports ignore both: curl has no limit that keeps the partial body
+(`--max-filesize` refuses the transfer instead), and `@stream` changes only
+how ike shows the body. The editor paints `@stream` / `@max-body` as keywords
+and the size as a number (`plugins/languages/http/bodylimit.go`; a rejected
+size stays in the comment colour), and `# @` completion offers both
+(`@stream` without a trailing space, since it takes no value).
+
 ### Where the time went (`timing.go`, #2404)
 
 A total duration answers *"was it slow?"* but never *"slow where?"* — 2 s
@@ -1399,8 +1464,12 @@ highlighter's Content-Type → language mapping
 - `Response.BodySize` is the total received size (`BodyBytes()` answers it for
   old responses too, where `len(Body)` is the whole story).
 - `MaxBodyBytes` still caps the total at 10 MiB, with the same truncation
-  warning. Both the collect path and the streaming path share the sink, so the
-  two cannot drift.
+  warning. Both the collect path and the streaming path share the sink
+  (`prepared.newSink`), so the two cannot drift.
+- Per request, the [body directives](#body-directives-stream-and-max-body-3117)
+  (#3117) adjust the sink: `# @stream` spools from the first byte regardless
+  of `SpoolThreshold`, and `# @max-body` replaces `MaxBodyBytes` as the cap —
+  the spool file then stops growing at that limit.
 
 Everything that genuinely needs all the bytes asks for them explicitly, so the
 full copy lives for one operation rather than for the session:
@@ -1482,7 +1551,11 @@ For a recognized stream:
   timeout or a mid-flight transport break returns the partial `Response`
   with a warning saying why the body ends there — never an error — so what
   arrived stays visible and reaches the history. `MaxBodyBytes` still caps
-  the body: the stream stops at 10 MiB with the usual truncation warning.
+  the body: the stream stops at 10 MiB with the usual truncation warning (or
+  at the request's `# @max-body`, #3117).
+- A `# @stream` request (#3117) takes this path whatever its Content-Type;
+  for a body that is not a recognized stream only the head (the first
+  `SpoolThreshold` bytes) is handed to `OnChunk`.
 
 ## WebSocket sessions (`internal/httpclient/websocket.go`, #2422)
 

@@ -68,7 +68,9 @@ type Response struct {
 	// together; 0 on a response built before the field existed, where
 	// len(Body) is the answer (see BodyBytes).
 	BodySize int
-	// Truncated is set when the body exceeded MaxBodyBytes and was cut.
+	// Truncated is set when the body exceeded its cap — MaxBodyBytes, or the
+	// request's `# @max-body` (#3117) — and was cut: Body/SpoolPath hold the
+	// bytes read up to the cap, and the connection was closed there.
 	Truncated bool
 	// Duration is the wall-clock time of the exchange.
 	Duration time.Duration
@@ -145,6 +147,12 @@ type RequestSnapshot struct {
 	// stays out of the on-disk response history, and so does a re-send of it.
 	// Never serialized in practice — a no-log snapshot is never written.
 	NoLog bool `json:"noLog,omitempty"`
+	// Stream and MaxBody record the request's `# @stream` and `# @max-body`
+	// directives (#3117), so a re-send reads the body the same way — spooled
+	// from the first byte, cut at the same limit. Neither has a curl
+	// equivalent that keeps the partial body, so the exports ignore both.
+	Stream  bool  `json:"stream,omitempty"`
+	MaxBody int64 `json:"maxBody,omitempty"`
 }
 
 // Clone returns a deep copy, so a snapshot handed to the UI (and back into a
@@ -153,7 +161,8 @@ func (s *RequestSnapshot) Clone() *RequestSnapshot {
 	if s == nil {
 		return nil
 	}
-	c := &RequestSnapshot{Method: s.Method, URL: s.URL, Headers: s.Headers.Clone(), NoCurlrc: s.NoCurlrc, NoLog: s.NoLog}
+	c := &RequestSnapshot{Method: s.Method, URL: s.URL, Headers: s.Headers.Clone(), NoCurlrc: s.NoCurlrc, NoLog: s.NoLog,
+		Stream: s.Stream, MaxBody: s.MaxBody}
 	if s.Body != nil {
 		c.Body = append([]byte(nil), s.Body...)
 	}
@@ -293,6 +302,29 @@ type prepared struct {
 	retryOn func(int) bool
 }
 
+// newSink returns the body sink of one exchange (#2157), shaped by the
+// request's body directives (#3117): `# @stream` spools from the first byte,
+// `# @max-body` replaces MaxBodyBytes as the cap — in both directions, since
+// the directive is the request's own explicit word on how much it wants.
+func (p *prepared) newSink(contentType string) *bodySink {
+	limit := MaxBodyBytes
+	var snap RequestSnapshot
+	if p.snapshot != nil {
+		snap = *p.snapshot
+	}
+	if snap.MaxBody > 0 {
+		limit = int(min(snap.MaxBody, int64(maxInt)))
+	}
+	s := newBodySink(SpoolThreshold, limit, BodyFileExt(contentType))
+	s.force = snap.Stream
+	s.directive = snap.MaxBody > 0
+	return s
+}
+
+// maxInt bounds a directive's limit on the platform's int (and leaves room
+// for the one byte past it the read asks for to detect the overflow).
+const maxInt = int(^uint(0)>>1) - 1
+
 // prepare resolves placeholders in req, applies local configuration and
 // builds the http.Request plus the configured client.
 func prepare(ctx context.Context, req *httpfile.Request, opts Options) (*prepared, error) {
@@ -349,13 +381,17 @@ func prepare(ctx context.Context, req *httpfile.Request, opts Options) (*prepare
 		now = time.Now
 	}
 	rec := newRedirectRecorder(followRedirects(cfg))
+	snap := snapshotOf(httpReq, body, resolved.NoCurlrc, resolved.NoLog)
+	// The body directives (#3117) ride on the snapshot: it is what both the
+	// read below and a later re-send consult.
+	snap.Stream, snap.MaxBody = req.Stream, req.MaxBody
 	return &prepared{
 		httpReq:   httpReq,
 		client:    buildClient(cfg, opts, resolved.Timeout, rec),
 		timeout:   effectiveTimeout(cfg, opts, resolved.Timeout),
 		warnings:  warnings,
 		now:       now,
-		snapshot:  snapshotOf(httpReq, body, resolved.NoCurlrc, resolved.NoLog),
+		snapshot:  snap,
 		redirects: rec,
 	}, nil
 }
@@ -504,9 +540,12 @@ func (p *prepared) traced(tr *timingTrace) *http.Request {
 func (p *prepared) collectBody(key string, httpResp *http.Response, start time.Time, tr *timingTrace) (*Response, error) {
 	// The body goes through a bodySink (#2157): the head stays in memory, a
 	// body past SpoolThreshold streams on to a spool file, and MaxBodyBytes
-	// still bounds the whole thing.
-	sink := newBodySink(SpoolThreshold, MaxBodyBytes, BodyFileExt(httpResp.Header.Get("Content-Type")))
-	_, readErr := io.Copy(sink, io.LimitReader(httpResp.Body, MaxBodyBytes+1))
+	// (or the request's `# @max-body`, #3117) still bounds the whole thing.
+	// Reading stops one byte past the cap: the sink notices the overflow, and
+	// the deferred Body.Close of an unfinished body closes the connection
+	// rather than draining the rest of it.
+	sink := p.newSink(httpResp.Header.Get("Content-Type"))
+	_, readErr := io.Copy(sink, io.LimitReader(httpResp.Body, int64(sink.max)+1))
 	end := p.now()
 	elapsed := end.Sub(start)
 	if readErr != nil {
@@ -657,7 +696,13 @@ func (p *prepared) run(ctx context.Context, key string, opts Options, cb StreamC
 	// collected even when it announces a stream: it is not the answer, and
 	// its headers must not open the live view.
 	retried := p.retryOn != nil && p.retryOn(httpResp.StatusCode)
-	if retried || !IsStreamContentType(httpResp.Header.Get("Content-Type")) {
+	// A `# @stream` request (#3117) takes the stream path whatever its
+	// Content-Type, so the head reaches the pane while the rest still
+	// arrives; only the head is handed out live (headOnly below), since the
+	// body is not a log to follow but a document whose remainder is spooled.
+	nativeStream := IsStreamContentType(httpResp.Header.Get("Content-Type"))
+	forced := p.snapshot != nil && p.snapshot.Stream
+	if retried || (!nativeStream && !forced) {
 		// Collect mode — the overall deadline stays armed, the behavior is
 		// Dispatch's to the letter, the deadline's own failure included.
 		resp, err := p.collectBody(key, httpResp, start, tr)
@@ -683,7 +728,12 @@ func (p *prepared) run(ctx context.Context, key string, opts Options, cb StreamC
 	watchdog := time.AfterFunc(idle, func() { idledOut.Store(true); cancel() })
 	defer watchdog.Stop()
 
-	sink := newBodySink(SpoolThreshold, MaxBodyBytes, BodyFileExt(httpResp.Header.Get("Content-Type")))
+	sink := p.newSink(httpResp.Header.Get("Content-Type"))
+	// headOnly caps what the live view receives for a forced stream (#3117):
+	// the head the final response will show, never the spooled remainder —
+	// the view holds its rows in memory, which is what spooling avoids.
+	headOnly := !nativeStream
+	shown := 0
 	var readErr error
 	buf := make([]byte, 32<<10)
 	for {
@@ -693,9 +743,14 @@ func (p *prepared) run(ctx context.Context, key string, opts Options, cb StreamC
 			// The sink keeps what fits (#2157) and reports how much that was;
 			// the live view only ever sees bytes that were actually kept.
 			kept := sink.add(buf[:n])
-			if kept > 0 && cb.OnChunk != nil {
-				cb.OnChunk(append([]byte(nil), buf[:kept]...))
+			live := kept
+			if headOnly {
+				live = max(0, min(kept, SpoolThreshold-shown))
 			}
+			if live > 0 && cb.OnChunk != nil {
+				cb.OnChunk(append([]byte(nil), buf[:live]...))
+			}
+			shown += live
 			if sink.truncated {
 				break
 			}

@@ -1,5 +1,19 @@
 # Log
 
+## 2026-11-10 (.http: `@stream` / `@max-body` directives, #3117)
+
+- [HTTP Client](/architecture/http-client.md): `# @stream` spools one
+  request's body from the first byte and shows the head in the pane while
+  the rest still arrives (streaming path whatever the Content-Type, head-only
+  live view); `# @max-body 5mb` stops reading at that size (`b`/`kb`/`mb`/`gb`,
+  1024-based, or a byte count), keeps the partial body, closes the
+  connection and marks the response `· truncated` on the status row, in the
+  history marker and in the assertion block. Captures, assertions, the raw
+  save and jq see the bytes read; the cap also bounds the spool file and
+  replaces the 10 MiB default for that request. Per block, recorded on the
+  snapshot for re-sends, a bad value drops the block; highlighted and
+  completed in the editor; exports ignore both.
+
 ## 2026-11-10 (.http: `@retry` directive, #3116)
 
 - [HTTP Client](/architecture/http-client.md): `# @retry 3 2s on 5xx,timeout`

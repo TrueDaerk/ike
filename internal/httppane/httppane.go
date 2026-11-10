@@ -673,6 +673,10 @@ func (m *Model) recompose(resp *httpclient.Response) {
 		// and "200 OK" on the third try is worth knowing at a glance.
 		status += "   · " + label
 	}
+	if resp.Truncated {
+		// A cut body (#3117): what follows is not all the server had to say.
+		status += "   · " + TruncatedMarker
+	}
 	m.rows = append(m.rows, row{kind: kindStatus, text: status})
 	if rows := attemptRows(resp.Attempts); len(rows) > 0 {
 		// The earlier attempts sit right under the status line (#3116), ahead
@@ -728,6 +732,10 @@ func (m *Model) recompose(resp *httpclient.Response) {
 		// shape: one row per directive, its outcome glyph first, the reason
 		// of a failure after the directive text.
 		m.rows = append(m.rows, m.assertRows()...)
+		if resp.Truncated {
+			// The verdicts were reached on a cut body (#3117).
+			m.rows = append(m.rows, row{kind: kindWarn, text: truncatedNote(resp)})
+		}
 		m.rows = append(m.rows, row{kind: kindBlank})
 	}
 
@@ -1733,6 +1741,11 @@ func (m *Model) historyMarker() string {
 	s := fmt.Sprintf("⧗ history %d/%d", m.histIdx+1, len(m.hist))
 	if at := m.hist[m.histIdx].At; !at.IsZero() {
 		s += " (" + formatHistoryTime(at, time.Now()) + ")"
+	}
+	if r := m.hist[m.histIdx].Resp; r != nil && r.Truncated {
+		// The stored flag (#3117): an older answer that was cut says so in
+		// the history position too, not only on its status row.
+		s += " · " + TruncatedMarker
 	}
 	return s
 }

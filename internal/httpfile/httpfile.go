@@ -82,6 +82,14 @@ type Request struct {
 	// as failed. nil when the block carries none — the request goes out once.
 	// See retry.go.
 	Retry *Retry
+	// Stream is set by the block's `# @stream` directive (#3117): the body is
+	// spooled from the first byte whatever its size, and the response pane
+	// shows the head while the rest is still arriving. See bodylimit.go.
+	Stream bool
+	// MaxBody is the byte limit of the block's `# @max-body 5mb` directive
+	// (#3117), 0 when it carries none: reading the body stops there, the
+	// response is marked truncated and the connection is closed.
+	MaxBody int64
 	// NoCurlrc is set by the block's `# @no-curlrc` directive (#3114): the
 	// request is dispatched as if no `.curlrc` existed — no proxy, insecure,
 	// headers, user, redirect or timeout options from it. `.netrc` stays in
@@ -256,6 +264,10 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 	var assertions []Assertion
 	var timeout Timeout
 	var retry *Retry
+	// The body directives (#3117) follow @timeout's rules too: the last
+	// @max-body wins, and a bad value (or a value after @stream) drops the block.
+	stream := false
+	var maxBody int64
 	// badDirective drops the whole block (#2630): a mistyped deadline must not
 	// leave the request runnable under the default one, which is exactly the
 	// silent 30 s wait the directive was written to avoid. The error above
@@ -321,6 +333,22 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 				return
 			}
 			retry = &r
+		}
+		if err, ok := StreamDirective(lines[idx]); ok {
+			if err != nil {
+				f.Errors = append(f.Errors, &ParseError{Line: idx + 1, Msg: err.Error()})
+				badDirective = true
+				return
+			}
+			stream = true
+		}
+		if n, _, err, ok := MaxBodyDirective(lines[idx]); ok {
+			if err != nil {
+				f.Errors = append(f.Errors, &ParseError{Line: idx + 1, Msg: err.Error()})
+				badDirective = true
+				return
+			}
+			maxBody = n
 		}
 	}
 
@@ -457,6 +485,7 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 	}
 	req.Timeout = timeout.Duration
 	req.Retry = retry
+	req.Stream, req.MaxBody = stream, maxBody
 	req.NoCurlrc, req.NoNetrc = noCurlrc, noNetrc
 	req.NoLog = noLog
 	f.Requests = append(f.Requests, req)
