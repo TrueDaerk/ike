@@ -1,5 +1,17 @@
 # Log
 
+## 2026-11-10 (.http: `@retry` directive, #3116)
+
+- [HTTP Client](/architecture/http-client.md): `# @retry 3 2s on 5xx,timeout`
+  tries one request again on the named failures (default
+  `error,timeout,5xx`), with a fixed pause, the deadline per attempt and a
+  cancel ending the series. The pane shows the final attempt with
+  `· attempt 3/4` on the status line and a folded block of the earlier
+  attempts' outcomes; the countdown restarts per attempt. Captures,
+  assertions, the re-run diff and the history use the final attempt. A bad
+  count, pause or condition is a parse error that drops the block;
+  highlighted and completed in the editor; exports ignore it.
+
 ## 2026-11-10 (.http: captured value hints, #3120)
 
 - [HTTP Client](/architecture/http-client.md): each working `# @capture` line

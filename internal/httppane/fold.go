@@ -41,16 +41,28 @@ func (m *Model) setFolds(folds []highlight.Fold, bodyStart int) {
 	// pass that replaces the body's: it was composed before the highlight was
 	// even scheduled, and its collapse state — the default for a long chain,
 	// or whatever the user has toggled it to since — carries over.
-	chainCollapsed := false
+	// The earlier-attempts block of a `# @retry` series (#3116) follows the
+	// same rule.
+	var keep []highlight.Fold
+	if m.attemptOK {
+		keep = append(keep, m.attemptFold)
+	}
 	if m.chainOK {
-		_, chainCollapsed = m.folded[m.chainFold.HeaderLine]
+		keep = append(keep, m.chainFold)
+	}
+	collapsed := map[int]bool{}
+	for _, f := range keep {
+		_, collapsed[f.HeaderLine] = m.folded[f.HeaderLine]
 	}
 	m.folds = nil
 	m.folded = nil
-	if m.chainOK {
-		m.folds = append(m.folds, m.chainFold)
-		if chainCollapsed {
-			m.folded = map[int]int{m.chainFold.HeaderLine: m.chainFold.EndLine}
+	for _, f := range keep {
+		m.folds = append(m.folds, f)
+		if collapsed[f.HeaderLine] {
+			if m.folded == nil {
+				m.folded = map[int]int{}
+			}
+			m.folded[f.HeaderLine] = f.EndLine
 		}
 	}
 	for _, f := range folds {

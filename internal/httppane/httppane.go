@@ -53,6 +53,10 @@ const (
 	// foldable block between the status line and the timing line, one step per
 	// hop with the connection facts underneath. See redirects.go.
 	kindRedirects
+	// kindAttempts is a row of the earlier-attempts block of a `# @retry`
+	// series (#3116): one outcome per attempt before the shown one, folded
+	// like the redirect chain. See attempts.go.
+	kindAttempts
 )
 
 // row is one pre-composed display line.
@@ -125,6 +129,10 @@ type Model struct {
 	chainFold highlight.Fold
 	chainOK   bool
 	chainOff  bool
+	// The earlier-attempts block of a `# @retry` series (#3116), see
+	// attempts.go: its own fold, kept apart from folds like the chain's.
+	attemptFold highlight.Fold
+	attemptOK   bool
 	// top is a *display* index into visible, not a row index: a collapsed
 	// fold's body rows are not scrolled through.
 	top int
@@ -167,6 +175,9 @@ type Model struct {
 	// elapsed-only wording; with a limit the header reads "waiting 12 s /
 	// 30 s", so the wait has a visible end.
 	pendingLimit time.Duration
+	// pendingAttempt is the in-flight `# @retry` attempt (#3116) — "attempt
+	// 2/4" — and "" for a first attempt or a request without the directive.
+	pendingAttempt string
 	// failure is the explanation of a dispatch that never produced a response
 	// (#2630), the timeout above all: the pane says so where the answer would
 	// have been instead of leaving the previous response standing as if it
@@ -428,6 +439,7 @@ func (m *Model) StartStream(request, proto, status string, headers http.Header) 
 	m.hlPending = nil
 	m.folds, m.folded, m.visible = nil, nil, nil
 	m.chainFold, m.chainOK, m.chainOff = highlight.Fold{}, false, false
+	m.attemptFold, m.attemptOK = highlight.Fold{}, false
 	m.gqlErrors = nil // the previous response's, and a stream is never GraphQL
 	m.asserts = nil   // evaluated once the stream ends, shown by Set
 	m.streaming = true
@@ -576,7 +588,7 @@ func (m *Model) SetCancelChord(chord string) { m.cancelChord = chord }
 
 // ClearPending drops the in-flight marker (response, error or cancel).
 func (m *Model) ClearPending() {
-	m.pending, m.pendingSince, m.pendingLimit = "", time.Time{}, 0
+	m.pending, m.pendingSince, m.pendingLimit, m.pendingAttempt = "", time.Time{}, 0, ""
 }
 
 // Pending reports the in-flight request, "" when none (tests).
@@ -615,6 +627,7 @@ func (m *Model) recompose(resp *httpclient.Response) {
 	m.hlPending = nil
 	m.folds, m.folded, m.visible = nil, nil, nil
 	m.chainFold, m.chainOK, m.chainOff = highlight.Fold{}, false, false
+	m.attemptFold, m.attemptOK = highlight.Fold{}, false
 	m.gqlErrors = nil
 	m.asserts = nil
 	m.failure = "" // a response (or an empty pane) replaces the last failure
@@ -655,7 +668,20 @@ func (m *Model) recompose(resp *httpclient.Response) {
 		// marker says so, or its absence from .ike/http/ would be a surprise.
 		status += "   · " + NotLoggedMarker
 	}
+	if label := resp.AttemptLabel(); label != "" {
+		// A `# @retry` series (#3116): the shown answer is its final attempt,
+		// and "200 OK" on the third try is worth knowing at a glance.
+		status += "   · " + label
+	}
 	m.rows = append(m.rows, row{kind: kindStatus, text: status})
+	if rows := attemptRows(resp.Attempts); len(rows) > 0 {
+		// The earlier attempts sit right under the status line (#3116), ahead
+		// of the redirect chain: they happened before the exchange the chain
+		// and the timing line describe.
+		header := len(m.rows)
+		m.rows = append(m.rows, rows...)
+		m.setAttempts(header, len(m.rows)-1, len(resp.Attempts))
+	}
 	if chain := redirectRows(resp.Redirects, resp.FinalURL, m.width); len(chain) > 0 {
 		// The chain sits between the status line and the timing line (#2716):
 		// the timing line is the *sum* over the whole chain, and the block
@@ -886,8 +912,9 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		// and closes a foldable row everywhere else. The block is the pane's
 		// only foldable row above the body, so "on the row" is the fold rule
 		// of fold.go: the fold at the top of the view.
-		if m.chainTargeted() {
-			row := m.chainRow()
+		// The earlier-attempts block of a `# @retry` series (#3116) folds the
+		// same way.
+		if row, ok := m.headFoldTargeted(); ok {
 			m.ToggleFold(row)
 			if d := m.displayOf(row); d < m.top {
 				m.top = d
@@ -1077,6 +1104,10 @@ func (m *Model) copyKeyCmd() tea.Cmd {
 		// whole block, folded or not, so pasting a chain into a ticket needs
 		// no unfold and no drag.
 		return copyCmd(m.ChainText(), "redirect chain")
+	}
+	if m.attemptsTargeted() {
+		// The earlier-attempts block (#3116) copies whole the same way.
+		return copyCmd(m.AttemptsText(), "retry attempts")
 	}
 	return copyCmd(m.BodyText(), "response body")
 }
@@ -1390,7 +1421,7 @@ func (m *Model) headerSegs(pal *theme.Palette) []headerSeg {
 		// An in-flight dispatch (#1272): the rows below are the *previous*
 		// response until the new one lands.
 		segs = append(segs, headerSeg{
-			text:  fmt.Sprintf("   ⟳ running %s (%s)", m.pending, m.waitedFor()),
+			text:  fmt.Sprintf("   ⟳ running %s (%s)", m.pending, m.pendingAttemptPrefix()+m.waitedFor()),
 			style: lipgloss.NewStyle().Foreground(pal.Warning)})
 	}
 	if m.failure != "" {
@@ -1925,6 +1956,9 @@ func (m *Model) baseStyle(pal *theme.Palette, i, from, to int) styleFn {
 	case kindRedirects:
 		st := lipgloss.NewStyle().Foreground(pal.Secondary)
 		return func(int) (lipgloss.Style, string) { return st, "redirects" }
+	case kindAttempts:
+		st := lipgloss.NewStyle().Foreground(pal.Secondary)
+		return func(int) (lipgloss.Style, string) { return st, "attempts" }
 	case kindHeader:
 		if m.chainOff && strings.HasPrefix(r.text, "Location: ") {
 			// The redirect was declined (#2716), so the Location header *is*

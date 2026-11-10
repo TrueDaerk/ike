@@ -77,6 +77,11 @@ type Request struct {
 	// the one endpoint that is known to take a minute needs no global
 	// loosening. See timeout.go.
 	Timeout time.Duration
+	// Retry is the block's `# @retry` directive (#3116): how often a failed
+	// attempt is tried again, the pause in between and which outcomes count
+	// as failed. nil when the block carries none — the request goes out once.
+	// See retry.go.
+	Retry *Retry
 	// NoCurlrc is set by the block's `# @no-curlrc` directive (#3114): the
 	// request is dispatched as if no `.curlrc` existed — no proxy, insecure,
 	// headers, user, redirect or timeout options from it. `.netrc` stays in
@@ -250,6 +255,7 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 	var captures []Capture
 	var assertions []Assertion
 	var timeout Timeout
+	var retry *Retry
 	// badDirective drops the whole block (#2630): a mistyped deadline must not
 	// leave the request runnable under the default one, which is exactly the
 	// silent 30 s wait the directive was written to avoid. The error above
@@ -304,6 +310,17 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 				return
 			}
 			timeout = t
+		}
+		// The retry directive (#3116) follows @timeout's rules: the last one
+		// wins, and one that does not parse drops the block — a request meant
+		// to survive a flapping service must not quietly go out once.
+		if r, ok := retryAt(lines[idx], idx); ok {
+			if r.Err != nil {
+				f.Errors = append(f.Errors, &ParseError{Line: r.Line, Msg: r.Err.Error()})
+				badDirective = true
+				return
+			}
+			retry = &r
 		}
 	}
 
@@ -439,6 +456,7 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 		return
 	}
 	req.Timeout = timeout.Duration
+	req.Retry = retry
 	req.NoCurlrc, req.NoNetrc = noCurlrc, noNetrc
 	req.NoLog = noLog
 	f.Requests = append(f.Requests, req)

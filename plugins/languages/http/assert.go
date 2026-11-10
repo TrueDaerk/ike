@@ -96,7 +96,7 @@ var assertSpecRE = regexp.MustCompile(`^[ \t]*(?:##?|//)[ \t]*@assert(?:[ \t]+(.
 var directiveKeywords = []string{
 	httpfile.AssertKeyword, "@capture",
 	"@" + httpfile.NoCurlrcDirective, "@" + httpfile.NoNetrcDirective,
-	"@" + httpfile.NoLogDirective,
+	"@" + httpfile.NoLogDirective, httpfile.RetryKeyword,
 }
 
 // valuelessDirectives are the markers that take no value (#3114, #3115):
