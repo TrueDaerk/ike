@@ -68,3 +68,21 @@ func TestOpenKeymapOn(t *testing.T) {
 		t.Fatal("without a keymap page the open must report false")
 	}
 }
+
+// TestOpenPage (#3122): the panel opens on the titled page with the form
+// column focused; an unknown title reports false and leaves it closed.
+func TestOpenPage(t *testing.T) {
+	restoreConfig(t)
+	opts := testOpts(t)
+	m := New(append(BasePages([]string{"default"}, nil, nil), Page{Title: HTTPVarsPageTitle, Custom: NewHTTPVarsPage(opts)}), opts)
+	m.SetSize(100, 30)
+	if m.OpenPage("No Such Page") || m.IsOpen() {
+		t.Fatal("an unknown title must report false and keep the panel closed")
+	}
+	if !m.OpenPage(HTTPVarsPageTitle) {
+		t.Fatal("the HTTP Variables page must be found")
+	}
+	if !m.IsOpen() || m.PageTitle() != HTTPVarsPageTitle || m.focus != formColumn {
+		t.Fatalf("panel must open on the page's form column: open=%v page=%q focus=%v", m.IsOpen(), m.PageTitle(), m.focus)
+	}
+}

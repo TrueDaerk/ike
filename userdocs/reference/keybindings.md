@@ -364,6 +364,8 @@ Active while the command palette is open.
 | Close project from recent list | `cmd+shift+w` | `ctrl+shift+w` | `project.closeFromList` |
 | Close project from recent list | `ctrl+backspace` | `ctrl+backspace` | `project.closeFromList` |
 | Close project from recent list | `ctrl+shift+w` | `ctrl+shift+w` | `project.closeFromList` |
+| Copy HTTP variable value | `cmd+c` | `ctrl+c` | `http.copyVariable` |
+| Copy HTTP variable value | `ctrl+c` | `ctrl+c` | `http.copyVariable` |
 | Open results in Find window | `cmd+enter` | `ctrl+enter` | `find.openInPanel` |
 | Open results in Find window | `ctrl+enter` | `ctrl+enter` | `find.openInPanel` |
 | Remove project from recent list | `cmd+delete` | `ctrl+delete` | `project.removeFromList` |

@@ -401,6 +401,55 @@ as `⏎`, empty as `(empty)`, masked as `••••` under a secret-suspect na
 `httpfile.References(src)` is the mirror of both — the
 `{{name}}` occurrences of a source with their line and column spans.
 
+### The HTTP Variables palette (#3122)
+
+`http.variables` ("HTTP Variables"; `ctrl+alt+f9` in an `.http` buffer —
+scoped `editor[http]`, the alt sibling of the `http.run` / `http.showResponse`
+F9 chords — and the command palette) answers "what does `{{name}}` hold right
+now, and why" without reading `.ike/http/*.json`. It opens the palette locked
+to a mode (`internal/app/http_varpalette.go`, prefix `¬`) listing every name
+`Vars.Definitions()` returns for the focused buffer, one row per name, sorted:
+
+```
+apiBase   file · {{domain}}/api → https://dev.example.com/api
+host      env dev · https://dev.example.com
+region    global project · eu
+token     response · ••••  ← POST /login (### auth) · 2m ago
+```
+
+- **Columns**: the name, the winning origin in completion's words
+  (`response`, `file`, `env <name>`, `process env`, `global project`,
+  `global user`), the value — written and, when it holds placeholders,
+  `→` the expanded one (`⚠ unresolved` when it does not resolve) — and for a
+  captured value the request whose response produced it (request line plus
+  `### name`) and the response's age. Values fold onto one row and are cut at
+  60 runes; a `secret.Suspect` name shows `••••` while `editor.secret_masking`
+  is on, like the editor and the settings page draw it.
+- **Built on open**, not live: the chain is assembled exactly like a dispatch
+  (`Model.httpVars` closed by `os.LookupEnv`), the captures come with their
+  producing entry from `httphistory.CapturedFrom` (`CapturedIn` keeping
+  provenance, same newest-wins rule). Only the winning value per name is
+  listed — shadowed rungs are not. A broken environment file lists the rest
+  and warns. From a buffer that is not `.http` the command only says
+  "focus an .http file first"; a file without variables opens an empty list.
+- **Filter**: the query fuzzy-matches the name, or matches the origin or the
+  *shown* value as a substring — a masked secret cannot be found by typing it.
+- **Enter** goes to the origin: a file variable moves the caret to its (last)
+  `@name =` line; a capture shows the stored responses of its request in the
+  response pane, browsed to the very entry that captured it
+  (`httppane.ShowHistoryEntry`) even when a later capture-less run is newer;
+  an environment value opens the env file that supplies it — the private file
+  when it overrides the key — at the key's line (`httpfile.EnvKeySource`, a
+  JSON token walk); a global variable opens the settings panel on the HTTP
+  Variables page (`settings.OpenPage`); a process-environment value only
+  notes "defined by the process environment".
+- **Copy**: `http.copyVariable` (`ctrl+c`, and `cmd+c` on macOS — Palette
+  context, claimed only while this mode is up, so the chord passes through in
+  every other palette) puts the focused row's **unmasked** value on the
+  clipboard through the app's copy seam (`copyToClipboard`, clipboard history
+  included): the expanded value when it resolves, the written one otherwise.
+  The palette stays open; the footer line documents both keys.
+
 ### Capturing values from a response (#1993)
 
 A `.http` file often describes a *chain*: start an async operation, then poll

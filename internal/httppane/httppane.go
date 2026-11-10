@@ -1283,6 +1283,11 @@ func (m *Model) rowMatchFn(rowIx, from, to int) func(col int) int {
 	}
 }
 
+// ShowHistoryEntry switches the viewer to history entry i (0 = newest) — the
+// HTTP Variables palette (#3122) lands on the response that produced a
+// captured value, which need not be the newest one. Out-of-range is a no-op.
+func (m *Model) ShowHistoryEntry(i int) { m.showHistory(i) }
+
 // showHistory switches the viewer to history entry i, clamped to the range.
 // With keep-scroll enabled for the request (#1493) the viewport offsets
 // survive the switch, clamped to the new response's extents.

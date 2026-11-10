@@ -16,6 +16,10 @@ import (
 // secret-masking key patterns classify as secrets render as the editor's
 // mask.
 
+// HTTPVarsPageTitle is the page's rail title; the HTTP Variables palette
+// (#3122) opens the panel on it for a global variable.
+const HTTPVarsPageTitle = "HTTP Variables"
+
 // httpVarFieldCount is the number of form fields: name, value.
 const httpVarFieldCount = 2
 

@@ -269,6 +269,9 @@ var reachableAlternatives = map[string]string{
 	"coverage.toggle":       "palette",
 	"lsp.diagnosticInfo":    "palette",
 	"http.run":              "palette",
+	// #3122: the HTTP Variables palette sits on ctrl+alt+f9 (alt is the
+	// fragile class); the command palette is the escape.
+	"http.variables": "palette",
 	// #2726: Complete Current Statement sits on JetBrains' cmd+shift+enter
 	// with a ctrl twin; modified enter is a C0 key, so both are fragile
 	// without the Kitty protocol and the palette is the escape.

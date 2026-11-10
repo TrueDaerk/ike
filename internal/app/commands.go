@@ -675,7 +675,7 @@ func (appCommands) Capabilities() plugin.Capabilities {
 		// so docgen's settings reference documents it too.
 		SettingsPages: []settings.Page{
 			{Title: "Elasticsearch", Custom: settings.NewESPage(config.Discover("."))},
-			{Title: "HTTP Variables", Custom: settings.NewHTTPVarsPage(config.Discover("."))},
+			{Title: settings.HTTPVarsPageTitle, Custom: settings.NewHTTPVarsPage(config.Discover("."))},
 		},
 		// The built-in intention catalog (#2020): caret-dependent doorways
 		// into the commands above, merged into alt+enter's popup.
@@ -909,6 +909,8 @@ func (appCommands) Capabilities() plugin.Capabilities {
 			appCommand("http.diffResponses", "Compare Stored HTTP Responses", HTTPDiffResponsesMsg{}),
 			appCommand("http.diffPreviousRun", "Diff HTTP Response Against Previous Run", HTTPDiffPreviousRunMsg{}),
 			appCommand("http.selectEnvironment", "Select HTTP Environment", HTTPSelectEnvMsg{}),
+			appCommand(httpVariablesCommand, "HTTP Variables", HTTPVariablesMsg{}),
+			appCommand(httpCopyVariableCommand, "Copy HTTP Variable Value", HTTPCopyVariableMsg{}),
 			appCommand("http.importOpenAPI", "Import OpenAPI Spec…", ImportOpenAPIMsg{}),
 			appCommand("http.importCurl", "Import curl Command…", ImportCurlMsg{}),
 			appCommand("http.copyAsCurl", "Copy HTTP Request as curl", HTTPCopyAsCurlMsg{}),

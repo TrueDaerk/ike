@@ -714,6 +714,11 @@ var jetbrainsRows = []row{
 	// Statement below. ctrl+shift+f9 stays editor-wide as before.
 	{"cmd+shift+enter", "http.showResponse", "Show stored HTTP response", WithLang(Editor, "http"), "HTTP client (0450)"},
 	{"ctrl+shift+f9", "http.showResponse", "Show stored HTTP response", Editor, "HTTP client (0450)"},
+	// http.variables (#3122): the HTTP Variables palette, the alt sibling of
+	// the http.run / http.showResponse F9 family above. Scoped to .http
+	// buffers like the stored-response chord; modified F-keys deliver
+	// everywhere (CSI parameter encoding).
+	{"ctrl+alt+f9", "http.variables", "HTTP variables", WithLang(Editor, "http"), "HTTP client (0450)"},
 	// Complete Current Statement (#2726): JetBrains' cmd+shift+enter, with
 	// the ctrl twin as the everywhere-deliverable secondary like the other
 	// cmd/ctrl pairs above (both are fragile without the Kitty protocol —
@@ -914,6 +919,13 @@ var jetbrainsRows = []row{
 	{"ctrl+shift+w", "project.closeFromList", "Close project from recent list", Palette, "Projects (#3083)"},
 	{"cmd+delete", "project.removeFromList", "Remove project from recent list", Palette, "Projects (#3083)"},
 	{"ctrl+delete", "project.removeFromList", "Remove project from recent list", Palette, "Projects (#3083)"},
+	// HTTP Variables palette copy (#3122): with the palette's HTTP Variables
+	// list up, the copy chord puts the focused variable's unmasked value on
+	// the clipboard; anywhere else in the palette the key passes through.
+	// ctrl+c is the chord delivered everywhere (the response pane's copy key
+	// too), cmd+c the macOS one; both fold together off macOS.
+	{"cmd+c", "http.copyVariable", "Copy HTTP variable value", Palette, "HTTP client (#3122)"},
+	{"ctrl+c", "http.copyVariable", "Copy HTTP variable value", Palette, "HTTP client (#3122)"},
 	// JetBrains' run-context-configuration chord from the Windows scheme
 	// (ctrl+shift+f10); the macOS ctrl+shift+r would collide with
 	// project.replaceInPath's cmd+shift+r once folded onto Ctrl off macOS.

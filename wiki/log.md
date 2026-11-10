@@ -1,5 +1,18 @@
 # Log
 
+## 2026-11-10 (.http: HTTP Variables palette, #3122)
+
+- [HTTP Client](/architecture/http-client.md): `http.variables`
+  (`ctrl+alt+f9` in an `.http` buffer) lists every variable the chain defines
+  for the file — winning origin, value (written `→` expanded when it holds
+  placeholders, masked under a secret-suspect name) and, for a capture, the
+  producing request and the response's age. Enter goes to the origin (the
+  `@name =` line, the capturing response in the pane, the env file's key,
+  the HTTP Variables settings page); `http.copyVariable` (`ctrl+c` / `cmd+c`
+  while the palette is up) copies the unmasked value.
+- [Keybindings](/architecture/keybindings.md): matrix rows for the two new
+  commands (plus the #3083 recent-list rows the table had missed).
+
 ## 2026-11-10 (.http: `@stream` / `@max-body` directives, #3117)
 
 - [HTTP Client](/architecture/http-client.md): `# @stream` spools one

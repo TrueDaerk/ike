@@ -141,6 +141,28 @@ func (m *Model) OpenKeymapOn(commandID string) bool {
 	return false
 }
 
+// OpenPage opens the panel on the page titled title with its form column
+// focused — the HTTP Variables palette's jump to a global variable (#3122).
+// It reports false, leaving the panel closed, when no page carries the title.
+func (m *Model) OpenPage(title string) bool {
+	for i, page := range m.pages {
+		if page.Title == title {
+			m.Open()
+			m.cat, m.focus = i, formColumn
+			return true
+		}
+	}
+	return false
+}
+
+// PageTitle is the title of the page the panel shows.
+func (m *Model) PageTitle() string {
+	if m.cat < 0 || m.cat >= len(m.pages) {
+		return ""
+	}
+	return m.pages[m.cat].Title
+}
+
 // Capturing implements PageModel: while a rebind capture (or its conflict
 // confirmation) or the filter input (#531) is active the page needs every key
 // verbatim — filter text may contain the page's own action letters (u/r/j/k).

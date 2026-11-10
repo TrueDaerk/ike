@@ -182,6 +182,7 @@ bring their own.
 | Copy HTTP Response Selection or Body | `http.copyResponse` | `cmd+c` | — | everywhere |
 | Copy Shown HTTP Request as curl | `http.copyShownAsCurl` | — | — | everywhere |
 | Copy Shown HTTP Request as httpie | `http.copyShownAsHttpie` | — | — | everywhere |
+| Copy HTTP Variable Value | `http.copyVariable` | `cmd+c` | — | everywhere |
 | Diff HTTP Response Against Previous Run | `http.diffPreviousRun` | `cmd+shift+d` | — | everywhere |
 | Compare Stored HTTP Responses | `http.diffResponses` | — | — | everywhere |
 | Introspect GraphQL Schema | `http.graphqlIntrospect` | — | — | everywhere |
@@ -201,6 +202,7 @@ bring their own.
 | Select HTTP Environment | `http.selectEnvironment` | — | — | everywhere |
 | Show Stored HTTP Response | `http.showResponse` | `ctrl+shift+f9` | — | everywhere |
 | Toggle Raw / Pretty HTTP Response Body | `http.toggleRawBody` | — | — | everywhere |
+| HTTP Variables | `http.variables` | `ctrl+alt+f9` | — | everywhere |
 | Issues: Copy Issue Reference | `issues.copy` | `cmd+c` | — | `issues` pane |
 | Issues: Next Tab | `issues.nextTab` | `right` | — | `issues` pane |
 | Open Current Branch Issue | `issues.openCurrentBranch` | `cmd+alt+i` | — | everywhere |
