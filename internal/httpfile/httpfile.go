@@ -86,6 +86,10 @@ type Request struct {
 	// request is dispatched without `.netrc` credentials; `.curlrc` stays in
 	// effect.
 	NoNetrc bool
+	// NoLog is set by the block's `# @no-log` directive (#3115): the exchange
+	// is shown and kept for the session, but never written to the on-disk
+	// response history. See nolog.go.
+	NoLog bool
 	// GraphQL is the split of a `GRAPHQL <url>` block's body (#2423) — query,
 	// variables, operation name and their line ranges. nil for every other
 	// method, so `req.GraphQL != nil` is the test for "this is a GraphQL
@@ -256,7 +260,19 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 	// three), so a request meant to go out without credentials never goes out
 	// with them.
 	noCurlrc, noNetrc := false, false
+	// `# @no-log` (#3115) follows the same rules: a stray value drops the block,
+	// so a response meant to stay off disk is never written there by a typo.
+	noLog := false
 	noteCapture := func(idx int) {
+		if err, ok := NoLogDirectiveAt(lines[idx]); ok {
+			if err != nil {
+				f.Errors = append(f.Errors, &ParseError{Line: idx + 1, Msg: err.Error()})
+				badDirective = true
+				return
+			}
+			noLog = true
+			return
+		}
 		if name, err, ok := ConfigSkipDirective(lines[idx]); ok {
 			if err != nil {
 				f.Errors = append(f.Errors, &ParseError{Line: idx + 1, Msg: err.Error()})
@@ -424,6 +440,7 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 	}
 	req.Timeout = timeout.Duration
 	req.NoCurlrc, req.NoNetrc = noCurlrc, noNetrc
+	req.NoLog = noLog
 	f.Requests = append(f.Requests, req)
 }
 

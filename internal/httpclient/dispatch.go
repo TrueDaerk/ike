@@ -135,6 +135,10 @@ type RequestSnapshot struct {
 	// re-send reaches the host the same way (no .curlrc proxy, TLS or timeout
 	// options) and the curl export says `-q`.
 	NoCurlrc bool `json:"noCurlrc,omitempty"`
+	// NoLog records the request's `# @no-log` directive (#3115): the exchange
+	// stays out of the on-disk response history, and so does a re-send of it.
+	// Never serialized in practice — a no-log snapshot is never written.
+	NoLog bool `json:"noLog,omitempty"`
 }
 
 // Clone returns a deep copy, so a snapshot handed to the UI (and back into a
@@ -143,7 +147,7 @@ func (s *RequestSnapshot) Clone() *RequestSnapshot {
 	if s == nil {
 		return nil
 	}
-	c := &RequestSnapshot{Method: s.Method, URL: s.URL, Headers: s.Headers.Clone(), NoCurlrc: s.NoCurlrc}
+	c := &RequestSnapshot{Method: s.Method, URL: s.URL, Headers: s.Headers.Clone(), NoCurlrc: s.NoCurlrc, NoLog: s.NoLog}
 	if s.Body != nil {
 		c.Body = append([]byte(nil), s.Body...)
 	}
@@ -341,16 +345,17 @@ func prepare(ctx context.Context, req *httpfile.Request, opts Options) (*prepare
 		timeout:   effectiveTimeout(cfg, opts, resolved.Timeout),
 		warnings:  warnings,
 		now:       now,
-		snapshot:  snapshotOf(httpReq, body, resolved.NoCurlrc),
+		snapshot:  snapshotOf(httpReq, body, resolved.NoCurlrc, resolved.NoLog),
 		redirects: rec,
 	}, nil
 }
 
 // snapshotOf captures the fully prepared request (#1832). It runs after every
 // header source has had its say, so what it holds is what the server sees.
-func snapshotOf(httpReq *http.Request, body []byte, noCurlrc bool) *RequestSnapshot {
+func snapshotOf(httpReq *http.Request, body []byte, noCurlrc, noLog bool) *RequestSnapshot {
 	snap := &RequestSnapshot{
 		NoCurlrc: noCurlrc,
+		NoLog:    noLog,
 		Method:   httpReq.Method,
 		URL:      httpReq.URL.String(),
 		Headers:  httpReq.Header.Clone(),

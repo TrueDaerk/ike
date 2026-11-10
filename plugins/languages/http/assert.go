@@ -96,13 +96,15 @@ var assertSpecRE = regexp.MustCompile(`^[ \t]*(?:##?|//)[ \t]*@assert(?:[ \t]+(.
 var directiveKeywords = []string{
 	httpfile.AssertKeyword, "@capture",
 	"@" + httpfile.NoCurlrcDirective, "@" + httpfile.NoNetrcDirective,
+	"@" + httpfile.NoLogDirective,
 }
 
-// valuelessDirectives are the markers that take no value (#3114): completing
-// one inserts no trailing space, since anything typed after it is an error.
+// valuelessDirectives are the markers that take no value (#3114, #3115):
+// completing one inserts no trailing space, since anything typed after it is an error.
 var valuelessDirectives = map[string]bool{
 	"@" + httpfile.NoCurlrcDirective: true,
 	"@" + httpfile.NoNetrcDirective:  true,
+	"@" + httpfile.NoLogDirective:    true,
 }
 
 // directiveItems completes the parts of a directive line (#2546), given the

@@ -73,6 +73,7 @@ import (
 	"ike/internal/histories"
 	"ike/internal/host"
 	"ike/internal/htmlpreview"
+	"ike/internal/httphistory"
 	"ike/internal/httppane"
 	"ike/internal/idcolor"
 	"ike/internal/jqplay"
@@ -642,6 +643,10 @@ type Model struct {
 	// request (#1992); the response pane's "D" fills and opens it to pick the
 	// second side of the diff.
 	httpEntries *httpEntriesMode
+	// httpSession holds the exchanges of `# @no-log` requests (#3115): kept
+	// for the session — pane browsing, re-run diff, captures — but never written
+	// to the on-disk history. Read through httpHistoryEntries.
+	httpSession *httphistory.Session
 	// httpEnvs is the palette mode listing the environments of an
 	// http-client.env.json (#1867); httpEnv persists the chosen one per
 	// directory.
@@ -1802,6 +1807,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		layoutsPicker:   layoutsPicker,
 		httpRequests:    httpRequests,
 		httpEntries:     httpEntries,
+		httpSession:     httphistory.NewSession(),
 		httpEnvs:        httpEnvs,
 		runConfigs:      runConfigs,
 		tasks:           tasksPicker,

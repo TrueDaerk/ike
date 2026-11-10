@@ -159,7 +159,7 @@ func (m Model) httpCaptured(source string, f *httpfile.File) map[string]string {
 	if len(keys) == 0 {
 		return nil
 	}
-	return httphistory.New(httpHistoryDir()).Captured(source, keys)
+	return httphistory.CapturedIn(keys, func(key string) []httphistory.Entry { return m.httpHistoryEntries(source, key) })
 }
 
 // httpEnvMode is the palette Mode listing the environments of one directory.
