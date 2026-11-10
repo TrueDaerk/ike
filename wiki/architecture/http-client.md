@@ -353,7 +353,11 @@ environment is enumerable by neither: `Defines` consults it, `Definitions`
 leaves it out, since offering its hundreds of names would drown the handful
 that belong to the file. The one exception is a global variable's name the
 process environment defines too: it is listed tagged `OriginProcess` with the
-process value, since that is what resolves. `httpfile.References(src)` is the mirror of both — the
+process value, since that is what resolves. Completion shows the value after the origin
+(`file · https://dev.example.com`, #3121): cut to 40 runes plus `…`, line breaks
+as `⏎`, empty as `(empty)`, masked as `••••` under a secret-suspect name
+(`secret.Suspect`), and shown as written when it still holds placeholders.
+`httpfile.References(src)` is the mirror of both — the
 `{{name}}` occurrences of a source with their line and column spans.
 
 ### Capturing values from a response (#1993)

@@ -59,8 +59,8 @@ func TestCompletePlaceholderCapturedResponseVar(t *testing.T) {
 	if !has(items, "task") {
 		t.Fatalf("want the captured task offered, got %v", labels(items))
 	}
-	if got := detailFor(items, "task"); got != httpfile.OriginResponse {
-		t.Errorf("detail = %q, want %q", got, httpfile.OriginResponse)
+	if got := detailFor(items, "task"); got != httpfile.OriginResponse+" · node-1:42" {
+		t.Errorf("detail = %q", got)
 	}
 	if got := insertFor(items, "task"); got != "task}}" {
 		t.Errorf("insert text = %q, want %q", got, "task}}")
@@ -98,9 +98,9 @@ func TestCompletePlaceholderOriginsPerSource(t *testing.T) {
 
 	items := completeAtIn(t, dir, src)
 	want := map[string]string{
-		"filevar": httpfile.OriginFile,
-		"envvar":  httpfile.OriginEnv + " dev",
-		"respvar": httpfile.OriginResponse,
+		"filevar": httpfile.OriginFile + " · 1",
+		"envvar":  httpfile.OriginEnv + " dev · https://dev.example.com",
+		"respvar": httpfile.OriginResponse + " · 7",
 	}
 	for name, detail := range want {
 		if got := detailFor(items, name); got != detail {
