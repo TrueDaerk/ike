@@ -650,6 +650,11 @@ func (m *Model) recompose(resp *httpclient.Response) {
 		// assertions passed" says the run needs no eyeballing at all.
 		status += fmt.Sprintf("   %s %s", assertGlyph(resp.AssertionsFailed() == 0), resp.AssertionSummary())
 	}
+	if resp.Request != nil && resp.Request.NoLog {
+		// A `# @no-log` exchange (#3115) is kept for the session only; the
+		// marker says so, or its absence from .ike/http/ would be a surprise.
+		status += "   · " + NotLoggedMarker
+	}
 	m.rows = append(m.rows, row{kind: kindStatus, text: status})
 	if chain := redirectRows(resp.Redirects, resp.FinalURL, m.width); len(chain) > 0 {
 		// The chain sits between the status line and the timing line (#2716):

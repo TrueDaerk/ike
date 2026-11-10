@@ -65,7 +65,7 @@ func querySpans(lines []string) []lang.Span {
 	// duration as a number (timeout.go).
 	out = append(out, timeoutSpans(lines)...)
 	// The `.curlrc` / `.netrc` opt-outs (#3114): the marker as a keyword
-	// (configskip.go).
+	// (configskip.go), and `# @no-log` (#3115) with them.
 	out = append(out, configSkipSpans(lines)...)
 	// JWTs (#1619) are scanned over the whole buffer, not per request region:
 	// they show up in an Authorization header, in a body, in a @token variable

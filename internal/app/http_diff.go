@@ -126,7 +126,7 @@ func (m *Model) openHTTPResponseDiff() {
 		return
 	}
 	shown, _ := p.HistoryIndex()
-	entries := httphistory.New(httpHistoryDir()).List(source, key)
+	entries := m.httpHistoryEntries(source, key)
 	if len(entries) < 2 {
 		m.host.Notify(host.Info, "http: only one stored response for "+key+" — nothing to compare it with")
 		return
@@ -158,7 +158,7 @@ func (m *Model) openHTTPPreviousRunDiff() {
 		return
 	}
 	shown, _ := p.HistoryIndex()
-	entries := httphistory.New(httpHistoryDir()).List(source, key)
+	entries := m.httpHistoryEntries(source, key)
 	if shown < 0 || shown >= len(entries) {
 		shown = 0
 	}
@@ -177,7 +177,7 @@ func (m *Model) openHTTPPreviousRunDiff() {
 // direction of every other diff in the IDE — with both sides normalized by
 // internal/httpdiff. The pane is read-only: neither side is a file.
 func (m *Model) diffHTTPEntries(msg DiffHTTPEntriesMsg) {
-	entries := httphistory.New(httpHistoryDir()).List(msg.Source, msg.Request)
+	entries := m.httpHistoryEntries(msg.Source, msg.Request)
 	a, b := msg.Shown, msg.Other
 	if !validHTTPEntryPair(entries, a, b) {
 		// The history was pruned or rewritten between opening the picker and

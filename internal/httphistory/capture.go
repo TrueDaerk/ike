@@ -16,13 +16,21 @@ package httphistory
 // re-send, which repeats a snapshot rather than a parsed request) contribute
 // nothing and never shadow a value.
 func (s *Store) Captured(source string, keys []string) map[string]string {
+	return CapturedIn(keys, func(key string) []Entry { return s.List(source, key) })
+}
+
+// CapturedIn is Captured over any history reader (#3115): list returns the
+// newest-first entries of one request key — the Store's, or the Store's
+// merged with a Session's, so a value captured by a `# @no-log` exchange is
+// available for the rest of the session.
+func CapturedIn(keys []string, list func(key string) []Entry) map[string]string {
 	type stamped struct {
 		value string
 		at    int64
 	}
 	newest := map[string]stamped{}
 	for _, key := range keys {
-		for _, e := range s.List(source, key) {
+		for _, e := range list(key) {
 			at := e.Time.UnixNano()
 			for name, value := range e.Captured {
 				if prev, ok := newest[name]; ok && prev.at >= at {

@@ -1,7 +1,7 @@
 ---
 type: concept
 title: HTTP Client (.http files)
-description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, relative request targets resolved against the host variable or Host header, environment, user-defined and global (settings) variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, WEBSOCKET session blocks with ===-separated initial messages, a live frame transcript and an interactive send line in the response pane, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, GraphQL errors lifted out of a 200 answer into a red block above the body, and @assert directives checked against every response with a pass/fail block above the body, a run in the Test Results window and a failure notice, the followed redirect chain with per-hop DNS, connected address and TLS facts as a foldable block under the status line, plus a configurable request timeout with a per-request @timeout directive, per-request @no-curlrc / @no-netrc opt-outs of the local client configuration, a visible elapsed/limit countdown while a request is out and an explicit timed-out result.
+description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, relative request targets resolved against the host variable or Host header, environment, user-defined and global (settings) variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, WEBSOCKET session blocks with ===-separated initial messages, a live frame transcript and an interactive send line in the response pane, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, GraphQL errors lifted out of a 200 answer into a red block above the body, and @assert directives checked against every response with a pass/fail block above the body, a run in the Test Results window and a failure notice, the followed redirect chain with per-hop DNS, connected address and TLS facts as a foldable block under the status line, plus a configurable request timeout with a per-request @timeout directive, per-request @no-curlrc / @no-netrc opt-outs of the local client configuration, a per-request @no-log opt-out of the on-disk response history, a visible elapsed/limit countdown while a request is out and an explicit timed-out result.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
 timestamp: 2026-11-10T00:00:00Z
@@ -221,6 +221,19 @@ Authorization: Bearer {{$env TOKEN}}
   `curl -q` (curl only honours `-q` as the first argument); `@no-netrc` needs
   nothing there, since the export never emits `--netrc`. The httpie export
   emits no config flags and is unaffected.
+- **History opt-out** (#3115): `# @no-log` keeps *that* request's exchanges
+  out of the on-disk [response history](#response-history-1251), for answers
+  that carry tokens, personal data or dumps. The response still shows in the
+  pane — its status line gains a `· not logged` marker — and is still kept
+  for the session in an in-memory ring, so `h`/`l` browsing, the re-run's
+  previous-vs-new diff and its `# @capture` values work as usual until the IDE
+  exits. Same rules as the opt-outs above: no value (`# @no-log something`
+  is a parse error on that line and drops the block), per block, `#`, `##`
+  or `//` (`### @no-log` is a separator). The parser sets `Request.NoLog`;
+  dispatch records it on the as-sent snapshot (`RequestSnapshot.NoLog`), so a
+  re-send of such an exchange stays off disk too. The editor paints the
+  marker as a keyword and `# @` completion offers it (without a trailing
+  space).
 - **GraphQL blocks** (#2423): a request line spelled `GRAPHQL <url>` takes the
   query as its body and an optional JSON `variables` object after a blank line,
   and sends the `POST` envelope for both — see
@@ -2288,6 +2301,16 @@ shape: its file is a per-process temp file, so `Append` copies it into
 `.ike/http/bodies/` and records the name relative to the store; pruning
 deletes the dropped entries' body files, so `bodies/` follows the same
 five-entry ring.
+
+A `# @no-log` exchange (#3115) is never appended to that store: the app puts
+it into an `httphistory.Session` instead — the same five-entry ring per
+source + key, in memory only (a spooled body keeps its dispatcher temp file,
+which lives exactly as long). Every reader of "the earlier runs of this
+request" — the pane's list, the response diffs and the `# @capture` lookup
+(`httphistory.CapturedIn`) — reads `Model.httpHistoryEntries`, the store's
+list merged newest-first with the session's (`httphistory.Merge`), so an
+index into it names the same entry everywhere. The stored-requests picker
+(`r`) lists what is on disk only.
 
 After each dispatch the app appends the response and hands the stored list
 to the viewer: `h`/`l` or `←`/`→` (#1471) browse older/newer responses of the

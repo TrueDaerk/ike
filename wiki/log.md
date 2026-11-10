@@ -1,5 +1,14 @@
 # Log
 
+## 2026-11-10 (.http: `@no-log` directive, #3115)
+
+- [HTTP Client](/architecture/http-client.md): `# @no-log` keeps one
+  request's exchanges out of the on-disk response history; the pane marks
+  them `not logged` and an in-memory session ring keeps them for browsing,
+  the re-run diff and captures. Per block, no value (a value is a parse
+  error on the line), recorded on the snapshot so a re-send stays unlogged,
+  highlighted and completed in the editor.
+
 ## 2026-11-10 (.http: `@no-curlrc` / `@no-netrc` directives, #3114)
 
 - [HTTP Client](/architecture/http-client.md): `# @no-curlrc` dispatches one

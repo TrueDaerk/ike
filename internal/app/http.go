@@ -209,6 +209,30 @@ func httpHistoryDir() string {
 	return filepath.Join(base, "http")
 }
 
+// httpNoLog reports whether a finished exchange came from a `# @no-log`
+// request (#3115) — or a re-send of one, since the flag rides on the
+// request snapshot.
+func httpNoLog(resp *httpclient.Response) bool {
+	return resp != nil && resp.Request != nil && resp.Request.NoLog
+}
+
+// httpSessionStore returns the in-memory history of `# @no-log` exchanges
+// (#3115), creating it for a model built without one.
+func (m *Model) httpSessionStore() *httphistory.Session {
+	if m.httpSession == nil {
+		m.httpSession = httphistory.NewSession()
+	}
+	return m.httpSession
+}
+
+// httpHistoryEntries is every earlier response of one request, newest first:
+// the on-disk history merged with the session's `# @no-log` exchanges
+// (#3115). The pane's h/l browsing, the response diffs and the capture lookup
+// all read this one list, so an index into it means the same entry for each.
+func (m Model) httpHistoryEntries(source, key string) []httphistory.Entry {
+	return httphistory.Merge(httphistory.New(httpHistoryDir()).List(source, key), m.httpSession.List(source, key))
+}
+
 // isHTTPPath reports whether path is a request file the HTTP client runs.
 func isHTTPPath(path string) bool {
 	ext := strings.ToLower(filepath.Ext(path))
@@ -760,9 +784,16 @@ func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) tea.Cmd {
 	if msg.Source != "" {
 		// Persist under .ike/http/ and hand the stored predecessors to the
 		// viewer for h/l browsing (#1251); best effort like local history.
-		store := httphistory.New(httpHistoryDir())
-		store.Append(msg.Source, msg.Request, httphistory.FromResponse(msg.Resp, time.Now()))
-		entries := store.List(msg.Source, msg.Request)
+		entry := httphistory.FromResponse(msg.Resp, time.Now())
+		if httpNoLog(msg.Resp) {
+			// A `# @no-log` exchange (#3115) stays off disk; the session
+			// keeps it, so the re-run diff, h/l browsing and its captures
+			// work exactly as for a logged one until the IDE exits.
+			m.httpSessionStore().Append(msg.Source, msg.Request, entry)
+		} else {
+			httphistory.New(httpHistoryDir()).Append(msg.Source, msg.Request, entry)
+		}
+		entries := m.httpHistoryEntries(msg.Source, msg.Request)
 		stored = len(entries)
 		items := make([]httppane.HistoryItem, 0, len(entries))
 		for _, e := range entries {
@@ -1056,7 +1087,7 @@ func (m *Model) showStoredHTTPResponse() tea.Cmd {
 // pane-local request picker (#1829), which differ only in how they name the
 // request.
 func (m *Model) loadStoredHTTPResponse(source, key string) tea.Cmd {
-	entries := httphistory.New(httpHistoryDir()).List(source, key)
+	entries := m.httpHistoryEntries(source, key)
 	if len(entries) == 0 {
 		m.host.Notify(host.Info, "http: no stored responses for "+key+" — dispatch it once with http.run")
 		return nil

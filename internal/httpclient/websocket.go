@@ -186,6 +186,7 @@ func DispatchWS(ctx context.Context, req *httpfile.Request, opts Options, cb WSC
 		Headers:  http.Header{},
 		Body:     []byte(httpfile.JoinWebSocketBody(messages)),
 		NoCurlrc: resolved.NoCurlrc,
+		NoLog:    resolved.NoLog,
 	}
 	for _, h := range resolved.Headers {
 		snap.Headers.Add(h.Name, h.Value)
