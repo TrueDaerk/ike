@@ -64,6 +64,9 @@ func querySpans(lines []string) []lang.Span {
 	// Timeout directives (#2630) the same way: the marker as a keyword, the
 	// duration as a number (timeout.go).
 	out = append(out, timeoutSpans(lines)...)
+	// Retry directives (#3116): marker and `on` as keywords, count and delay
+	// as numbers, the condition words as constants (retry.go).
+	out = append(out, retrySpans(lines)...)
 	// The `.curlrc` / `.netrc` opt-outs (#3114): the marker as a keyword
 	// (configskip.go), and `# @no-log` (#3115) with them.
 	out = append(out, configSkipSpans(lines)...)

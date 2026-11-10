@@ -5984,6 +5984,12 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.appendHTTPStream(msg)
 		return m, nextHTTPEvent(msg.events)
 
+	case HTTPRetryAttemptMsg:
+		// A `# @retry` series sent its next attempt (#3116): the countdown
+		// restarts, and the dispatch's event channel keeps being pumped.
+		m.beginHTTPAttempt(msg)
+		return m, nextHTTPEvent(msg.events)
+
 	case HTTPWSSessionMsg:
 		// A websocket session opened (#2422): its handle lands on the flight
 		// entry so the pane's input line can send through it.

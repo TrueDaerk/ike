@@ -61,7 +61,12 @@ type Entry struct {
 	Redirects    []httpclient.Hop `json:"-"`
 	FinalURL     string           `json:"-"`
 	RedirectsOff bool             `json:"-"`
-	Warnings     []string         `json:"warnings,omitempty"`
+	// Attempts and MaxAttempts are the earlier attempts of a `# @retry` series
+	// (#3116) and its limit, so a browsed entry shows the same "attempt 3/4"
+	// indicator and attempt block the fresh answer did.
+	Attempts    []httpclient.Attempt `json:"-"`
+	MaxAttempts int                  `json:"-"`
+	Warnings    []string             `json:"warnings,omitempty"`
 	// Captured holds the values this response's `# @capture` directives took
 	// out of it (#1993). They are stored with the entry rather than kept in
 	// memory, so a captured value lives exactly as long as the response it
@@ -99,6 +104,8 @@ type wireEntry struct {
 	Redirects    []httpclient.Hop          `json:"redirects,omitempty"`    // followed chain (#2716)
 	FinalURL     string                    `json:"finalUrl,omitempty"`     // the URL the answer came from (#2716)
 	RedirectsOff bool                      `json:"redirectsOff,omitempty"` // a 3xx left unfollowed (#2716)
+	Attempts     []httpclient.Attempt      `json:"attempts,omitempty"`     // earlier @retry attempts (#3116)
+	MaxAttempts  int                       `json:"maxAttempts,omitempty"`  // the @retry series limit (#3116)
 	Warnings     []string                  `json:"warnings,omitempty"`
 	Captured     map[string]string         `json:"captured,omitempty"`   // capture directives (#1993)
 	Assertions   []httpclient.AssertResult `json:"assertions,omitempty"` // assertion outcomes (#2546)
@@ -163,6 +170,7 @@ func (e Entry) MarshalJSON() ([]byte, error) {
 		Time: e.Time, Status: e.Status, StatusCode: e.StatusCode, Proto: e.Proto,
 		Headers: e.Headers, Truncated: e.Truncated, Duration: e.Duration, Timing: e.Timing,
 		Redirects: e.Redirects, FinalURL: e.FinalURL, RedirectsOff: e.RedirectsOff,
+		Attempts: e.Attempts, MaxAttempts: e.MaxAttempts,
 		Warnings: e.Warnings, Captured: e.Captured, Assertions: e.Assertions, Request: toWire(e.Request),
 		BodyFile: e.BodyFile, BodySize: e.BodySize,
 	}
@@ -188,6 +196,7 @@ func (e *Entry) UnmarshalJSON(data []byte) error {
 		Time: w.Time, Status: w.Status, StatusCode: w.StatusCode, Proto: w.Proto,
 		Headers: w.Headers, Truncated: w.Truncated, Duration: w.Duration, Timing: w.Timing,
 		Redirects: w.Redirects, FinalURL: w.FinalURL, RedirectsOff: w.RedirectsOff,
+		Attempts: w.Attempts, MaxAttempts: w.MaxAttempts,
 		Warnings: w.Warnings, Captured: w.Captured, Assertions: w.Assertions, Request: fromWire(w.Request),
 		BodyFile: w.BodyFile, BodySize: w.BodySize,
 	}
@@ -241,6 +250,8 @@ func (e Entry) Response(requestKey string) *httpclient.Response {
 		Redirects:    e.Redirects,
 		FinalURL:     e.FinalURL,
 		RedirectsOff: e.RedirectsOff,
+		Attempts:     e.Attempts,
+		MaxAttempts:  e.MaxAttempts,
 		RequestKey:   requestKey,
 		Warnings:     e.Warnings,
 		Assertions:   e.Assertions,
@@ -265,6 +276,8 @@ func FromResponse(resp *httpclient.Response, at time.Time) Entry {
 		Redirects:    resp.Redirects,
 		FinalURL:     resp.FinalURL,
 		RedirectsOff: resp.RedirectsOff,
+		Attempts:     resp.Attempts,
+		MaxAttempts:  resp.MaxAttempts,
 		Warnings:     resp.Warnings,
 		Captured:     resp.CapturedValues(),
 		Assertions:   resp.Assertions,

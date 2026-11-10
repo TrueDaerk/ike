@@ -1,7 +1,7 @@
 ---
 type: concept
 title: HTTP Client (.http files)
-description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, relative request targets resolved against the host variable or Host header, environment, user-defined and global (settings) variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, WEBSOCKET session blocks with ===-separated initial messages, a live frame transcript and an interactive send line in the response pane, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, GraphQL errors lifted out of a 200 answer into a red block above the body, and @assert directives checked against every response with a pass/fail block above the body, a run in the Test Results window and a failure notice, the followed redirect chain with per-hop DNS, connected address and TLS facts as a foldable block under the status line, plus a configurable request timeout with a per-request @timeout directive, per-request @no-curlrc / @no-netrc opt-outs of the local client configuration, a per-request @no-log opt-out of the on-disk response history, a visible elapsed/limit countdown while a request is out and an explicit timed-out result.
+description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, relative request targets resolved against the host variable or Host header, environment, user-defined and global (settings) variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, WEBSOCKET session blocks with ===-separated initial messages, a live frame transcript and an interactive send line in the response pane, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, GraphQL errors lifted out of a 200 answer into a red block above the body, and @assert directives checked against every response with a pass/fail block above the body, a run in the Test Results window and a failure notice, the followed redirect chain with per-hop DNS, connected address and TLS facts as a foldable block under the status line, plus a configurable request timeout with a per-request @timeout directive, per-request @no-curlrc / @no-netrc opt-outs of the local client configuration, a per-request @no-log opt-out of the on-disk response history, a per-request @retry directive (count, fixed pause, conditions) with an attempt indicator and a folded earlier-attempts block, a visible elapsed/limit countdown while a request is out and an explicit timed-out result.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
 timestamp: 2026-11-10T00:00:00Z
@@ -202,6 +202,10 @@ Authorization: Bearer {{$env TOKEN}}
   request block sets *that* request's overall deadline, overriding both the
   `http.timeout_ms` setting and a `.curlrc` `max-time` — see
   [the request timeout](#the-request-timeout-2630).
+- **Retry directive** (#3116): `# @retry 3 2s on 5xx,timeout` tries *that*
+  request again when an attempt fails — up to the count of retries, with a
+  fixed pause in between, on the named conditions — see
+  [retrying a request](#retrying-a-request-3116).
 - **Configuration opt-outs** (#3114): `# @no-curlrc` dispatches *that*
   request as if no `.curlrc` existed (no proxy, `insecure`, headers,
   user-agent, `user`, `location`, `max-time` or `connect-timeout` from it —
@@ -1140,6 +1144,86 @@ the reason, never the placeholder name or path.
 **Streams are unaffected** (#1776): once a response is recognised as a stream
 the overall deadline is dropped for `StreamIdleTimeout`, so a healthy
 long-lived SSE/NDJSON connection is never cut off by the request timeout.
+
+### Retrying a request (#3116)
+
+A request used to go out exactly once: a flapping service, a cold start or a
+rate limit meant re-running it by hand. The `# @retry` directive sits next to
+`@timeout` and follows its rules — `#`, `##` or `//` (never `###`, which is a
+separator), anywhere a comment is allowed before the body, the last one in a
+block wins:
+
+```
+# @retry 3                 -> up to 3 retries, no pause, default conditions
+# @retry 3 2s              -> up to 3 retries, a fixed 2 s pause between attempts
+# @retry 3 on 503,timeout  -> up to 3 retries, only on these conditions
+# @retry 3 2s on 5xx,error -> pause and conditions combined
+```
+
+- **Count** — a positive number of *retries*: `@retry 3` allows four
+  attempts. `0`, a negative or a non-number is a parse error.
+- **Pause** — a Go duration (`2s`, `500ms`) or bare seconds, the spellings
+  `@timeout` accepts; fixed, no backoff, `0` allowed. No `Retry-After`
+  handling: the pause is always the directive's.
+- **Conditions** after `on`, comma separated, case-insensitive: a status code
+  (`503`), a status class (`5xx`, `4xx`), `timeout` (the attempt hit its
+  deadline) and `error` (no response at all — refused connection, DNS, TLS,
+  reset). Without `on` the default is `error,timeout,5xx`: never a 4xx, which
+  the server answers the same way the next time.
+
+A part that does not parse (an unknown condition word included) is a parse
+error on the directive's line and **drops the block**, like a bad `@timeout`:
+a request meant to survive a flapping service must not quietly go out once.
+The parser (`httpfile/retry.go`, `RetryDirective` — the function the
+highlighter reads too) sets `Request.Retry`.
+
+**Dispatch** (`httpclient/retry.go`, `withRetries`) wraps the exchange of
+`Dispatch` and `DispatchStream`: each attempt gets a fresh body
+(`prepared.rewind`, from `GetBody`) and a fresh redirect recorder pass. The
+deadline applies **per attempt** — the series may take count × timeout plus
+the pauses — and the in-flight countdown restarts with each attempt (below).
+An attempt whose status will be retried is collected even when it announces
+a stream, so its headers never open the live view. A cancel (`x` in the
+pane, `http.cancel`) ends the series at once, during an attempt or during a
+pause, with no further attempt.
+
+**The result** is the final attempt's `Response`; `Response.Attempts` holds one
+`Attempt` (status or error, elapsed time) per earlier attempt and
+`MaxAttempts` the series' limit, which `AttemptLabel` spells `attempt 3/4`.
+Captures, assertions and the re-run diff operate on that final response only.
+A series whose last attempt fails without a response returns a `RetryError`
+that wraps the attempt's error (a `TimeoutError` stays one for `errors.As`)
+and ends its message with `(attempt 4/4)`. The history entry stores the
+final attempt plus `attempts` / `maxAttempts`, so a browsed entry renders the
+same indicator and block.
+
+**In the pane** the status line gains `· attempt 3/4`, and a block right under
+it — ahead of the redirect chain, since those attempts happened first — lists
+the earlier ones:
+
+```
+HTTP/1.1 200 OK   (41ms)   · attempt 3/4
+2 earlier attempts
+↻ #1  503 Service Unavailable  (12ms)
+↻ #2  error: connection refused  (1ms)
+```
+
+It folds like the redirect chain (`httppane/attempts.go`): collapsed up front
+past three attempts, `enter` toggles it, `y` copies it whole. While a retried
+request is out, each further attempt is announced through
+`StreamCallbacks.OnAttempt` → `HTTPRetryAttemptMsg`; the app stamps
+`httpFlightEntry.attemptSince` and the header reads
+`⟳ running create (attempt 2/4 · waiting 1.2s / 30 s)` — the statusline
+segment keeps the series' total elapsed time.
+
+The editor paints the marker and `on` as keywords, the count and pause as
+numbers and the condition words as constants (`plugins/languages/http/retry.go`;
+a rejected part stays in the comment colour); `# @` completion offers
+`@retry`. A verbatim re-send (`ctrl+r`) repeats one exchange — the snapshot
+carries no directive, as with `@timeout` — while a re-run (`R`) re-reads the
+block and retries again. The curl and httpie exports ignore the directive:
+curl's `--retry` conditions differ, so an export with retries would not be
+reproducible 1:1. `WEBSOCKET` blocks ignore it too.
 
 ### Where the time went (`timing.go`, #2404)
 

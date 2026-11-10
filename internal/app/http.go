@@ -518,6 +518,12 @@ func (m *Model) dispatchHTTPLimit(source, key, label string, ws bool, limit time
 							Status: status, Proto: proto, Headers: headers, events: events}
 					},
 					OnChunk: coal.add,
+					// A `# @retry` series (#3116) announces each further
+					// attempt, so the countdown restarts with it.
+					OnAttempt: func(n, max int) {
+						events <- HTTPRetryAttemptMsg{Source: source, Request: key,
+							N: n, Max: max, events: events}
+					},
 				},
 				// The open session's handle (#2422) travels the event channel
 				// like every other stream fact, so the update loop stores it
@@ -738,7 +744,7 @@ func (m *Model) fillHTTPPanel(msg HTTPResponseMsg) tea.Cmd {
 			// user guessing — and re-sending the same request, waiting the
 			// same thirty seconds — so the pane says what happened and names
 			// both ways out of it.
-			return m.showHTTPTimeout(msg.Request, timedOut)
+			return m.showHTTPTimeout(msg.Request, timedOut, msg.Err)
 		}
 		if text := httpclient.ErrorMessage(msg.Err); text != "" {
 			// A local failure (#3086) — unresolved placeholder, bad URL,
@@ -848,9 +854,11 @@ func suggestedHTTPTimeout(limit time.Duration) string {
 
 // showHTTPTimeout puts the explicit timeout message into the response pane
 // (#2630) and, for a pane nobody can see, into the notification channel — the
-// same two routes an ordinary answer takes.
-func (m *Model) showHTTPTimeout(request string, err *httpclient.TimeoutError) tea.Cmd {
-	return m.showHTTPFailure(request, httpTimeoutText(err))
+// same two routes an ordinary answer takes. wrapped is the dispatch error the
+// timeout came out of: the last attempt of a `# @retry` series (#3116) says
+// which one it was — "timed out" after four tries is a different finding.
+func (m *Model) showHTTPTimeout(request string, err *httpclient.TimeoutError, wrapped error) tea.Cmd {
+	return m.showHTTPFailure(request, httpTimeoutText(err)+httpAttemptSuffix(wrapped))
 }
 
 // showHTTPFailure puts a failed request's one-line explanation into the
@@ -1149,6 +1157,12 @@ type httpFlightEntry struct {
 	// response pane's "waiting 12 s / 30 s" header; 0 leaves the header at
 	// the elapsed time alone.
 	limit time.Duration
+	// attempt/maxAttempts name the running attempt of a `# @retry` series
+	// (#3116) from the second attempt on, and attemptSince is when it went
+	// out — the pane's countdown restarts there, since the deadline applies
+	// per attempt. Zero for a first attempt.
+	attempt, maxAttempts int
+	attemptSince         time.Time
 	// ws marks a websocket session (#2422): the flight-end event carries
 	// kind=ws plus the frame count, and the pane unlocks its input line.
 	ws bool
@@ -1399,8 +1413,9 @@ func (m *Model) markHTTPPending() {
 	// shows up on the next dispatch.
 	p.SetCancelChord(m.httpCancelChord())
 	for _, e := range m.httpFlight {
-		p.SetPending(e.request, e.started)
+		p.SetPending(e.request, e.waitingSince())
 		p.SetPendingLimit(e.limit)
+		p.SetPendingAttempt(e.attempt, e.maxAttempts)
 		return
 	}
 	p.ClearPending()

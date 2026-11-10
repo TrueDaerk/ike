@@ -110,6 +110,12 @@ type Response struct {
 	// and received together; 0 for every plain HTTP exchange. The flight-end
 	// telemetry event carries it.
 	Frames int
+	// Attempts are the earlier attempts of a `# @retry` series (#3116), one
+	// outcome each, oldest first; the Response itself is the final attempt.
+	// MaxAttempts is the series' limit (retries + 1), 0 for a dispatch
+	// without the directive. AttemptLabel spells the pair as "attempt 3/4".
+	Attempts    []Attempt
+	MaxAttempts int
 	// Request is the request exactly as it went out (#1832); nil for a
 	// response restored from a history file written before the capture
 	// existed, which is what makes re-send unavailable there.
@@ -281,6 +287,10 @@ type prepared struct {
 	// (#2716); it belongs to the prepared request because the policy is part
 	// of the client built for it.
 	redirects *redirectRecorder
+	// retryOn is the status predicate of a `# @retry` series (#3116) for the
+	// attempt about to run — nil when there is none or this is the last
+	// attempt. run consults it before committing to stream mode.
+	retryOn func(int) bool
 }
 
 // prepare resolves placeholders in req, applies local configuration and
@@ -425,13 +435,36 @@ func Dispatch(ctx context.Context, req *httpfile.Request, opts Options) (*Respon
 	if err != nil {
 		return nil, err
 	}
-	resp, err := p.collect(req.Key())
+	// A `# @retry` directive (#3116) repeats the exchange on the failures it
+	// names; captures and assertions run once, on the final attempt.
+	resp, err := withRetries(ctx, req.Retry, nil, func(func(int) bool) (*Response, error) {
+		if err := p.rewind(); err != nil {
+			return nil, err
+		}
+		return p.collect(req.Key())
+	})
 	if err != nil {
 		return nil, err
 	}
 	applyCaptures(resp, req)
 	applyAssertions(resp, req)
 	return resp, nil
+}
+
+// rewind gives the prepared request a fresh body before an attempt (#3116):
+// the previous attempt consumed the reader. The body is held in memory
+// (bytes.Reader), so GetBody is always there; a request without one has
+// nothing to rewind.
+func (p *prepared) rewind() error {
+	if p.httpReq.GetBody == nil {
+		return nil
+	}
+	body, err := p.httpReq.GetBody()
+	if err != nil {
+		return err
+	}
+	p.httpReq.Body = body
+	return nil
 }
 
 // collect executes the prepared request and reads the whole body — the
@@ -453,7 +486,7 @@ func (p *prepared) collect(key string) (*Response, error) {
 		if te := asTimeout(p.httpReq.Context(), key, p.timeout, err); te != nil {
 			return nil, te
 		}
-		return nil, fmt.Errorf("request %s: %v", key, err)
+		return nil, fmt.Errorf("request %s: %w", key, err)
 	}
 	defer httpResp.Body.Close()
 	p.redirects.finish(httpResp)
@@ -526,6 +559,10 @@ type StreamCallbacks struct {
 	OnHeaders func(status string, statusCode int, proto string, headers http.Header)
 	// OnChunk fires per received body chunk; the slice is the callback's own.
 	OnChunk func(chunk []byte)
+	// OnAttempt fires when attempt n of max of a `# @retry` series (#3116)
+	// goes out, from the second on — after the pause — so the host can
+	// restart its countdown, which runs per attempt like the deadline.
+	OnAttempt func(n, max int)
 }
 
 // DispatchStream executes req like Dispatch, but recognizes streaming
@@ -542,7 +579,16 @@ func DispatchStream(ctx context.Context, req *httpfile.Request, opts Options, cb
 	if err != nil {
 		return nil, err
 	}
-	resp, err := p.run(ctx, req.Key(), opts, cb)
+	// A `# @retry` directive (#3116) repeats the exchange on the failures it
+	// names. retryOn keeps an attempt whose status will be retried out of
+	// stream mode: its headers must not reach the live view as the answer.
+	resp, err := withRetries(ctx, req.Retry, cb.OnAttempt, func(retryOn func(int) bool) (*Response, error) {
+		if err := p.rewind(); err != nil {
+			return nil, err
+		}
+		p.retryOn = retryOn
+		return p.run(ctx, req.Key(), opts, cb)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -574,7 +620,12 @@ func (p *prepared) run(ctx context.Context, key string, opts Options, cb StreamC
 	// The client's own Timeout would cover the whole exchange including the
 	// body read; deadlines are managed here instead so a recognized stream
 	// can shed the overall limit once the headers are in.
-	overall := p.client.Timeout
+	// p.timeout rather than the client's own field: the field is zeroed here,
+	// and a retried attempt (#3116) runs through this path again.
+	overall := p.timeout
+	if overall <= 0 {
+		overall = p.client.Timeout
+	}
 	p.client.Timeout = 0
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -596,13 +647,17 @@ func (p *prepared) run(ctx context.Context, key string, opts Options, cb StreamC
 		if te := asTimeout(ctx, key, overall, err); te != nil {
 			return nil, te
 		}
-		return nil, fmt.Errorf("request %s: %v", key, err)
+		return nil, fmt.Errorf("request %s: %w", key, err)
 	}
 	defer httpResp.Body.Close()
 	p.redirects.finish(httpResp)
 	warnings := p.warnings
 
-	if !IsStreamContentType(httpResp.Header.Get("Content-Type")) {
+	// An attempt whose status a `# @retry` directive retries (#3116) is
+	// collected even when it announces a stream: it is not the answer, and
+	// its headers must not open the live view.
+	retried := p.retryOn != nil && p.retryOn(httpResp.StatusCode)
+	if retried || !IsStreamContentType(httpResp.Header.Get("Content-Type")) {
 		// Collect mode — the overall deadline stays armed, the behavior is
 		// Dispatch's to the letter, the deadline's own failure included.
 		resp, err := p.collectBody(key, httpResp, start, tr)
