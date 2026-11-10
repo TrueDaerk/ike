@@ -33,7 +33,7 @@ func (s *RequestSnapshot) Curl() string {
 	if s == nil {
 		return ""
 	}
-	req := &httpfile.Request{Method: s.Method, Target: s.URL, Headers: curlHeaders(s.Headers)}
+	req := &httpfile.Request{Method: s.Method, Target: s.URL, Headers: curlHeaders(s.Headers), NoCurlrc: s.NoCurlrc}
 	if binaryBody(s.Body) {
 		cmd := httpfile.ExportCurl(req) + " --data-binary @-"
 		return "base64 -d <<'IKE_BODY' | " + cmd + "\n" +

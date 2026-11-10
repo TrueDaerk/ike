@@ -1,5 +1,14 @@
 # Log
 
+## 2026-11-10 (.http: `@no-curlrc` / `@no-netrc` directives, #3114)
+
+- [HTTP Client](/architecture/http-client.md): `# @no-curlrc` dispatches one
+  request as if no `.curlrc` existed (its `netrc-file` path included);
+  `# @no-netrc` sends it without `.netrc` credentials. Per block, no value
+  (a value is a parse error on the line), recorded on the snapshot for
+  re-send, highlighted and completed in the editor; the curl export of a
+  `@no-curlrc` request starts with `curl -q`.
+
 ## 2026-11-10 (.http: value in `{{` completion detail, #3121)
 
 - [HTTP Client](/architecture/http-client.md): variable completion appends the

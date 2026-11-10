@@ -181,10 +181,11 @@ func DispatchWS(ctx context.Context, req *httpfile.Request, opts Options, cb WSC
 		messages = resolved.WebSocket.Messages
 	}
 	snap := &RequestSnapshot{
-		Method:  httpfile.WebSocketMethod,
-		URL:     resolved.Target,
-		Headers: http.Header{},
-		Body:    []byte(httpfile.JoinWebSocketBody(messages)),
+		Method:   httpfile.WebSocketMethod,
+		URL:      resolved.Target,
+		Headers:  http.Header{},
+		Body:     []byte(httpfile.JoinWebSocketBody(messages)),
+		NoCurlrc: resolved.NoCurlrc,
 	}
 	for _, h := range resolved.Headers {
 		snap.Headers.Add(h.Name, h.Value)
@@ -227,14 +228,7 @@ func dispatchWS(ctx context.Context, key, target string, resolved *httpfile.Requ
 	if opts.Timeout > 0 {
 		timeout = opts.Timeout
 	}
-	cfg := &curlConfig{}
-	if !opts.DisableConfig {
-		path := opts.CurlrcPath
-		if path == "" {
-			path = curlrcPath()
-		}
-		cfg = parseCurlrc(path)
-	}
+	cfg := loadCurlrc(opts, snap.NoCurlrc)
 	dialer := &websocket.Dialer{
 		Proxy:            http.ProxyFromEnvironment,
 		HandshakeTimeout: timeout,

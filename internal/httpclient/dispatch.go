@@ -131,6 +131,10 @@ type RequestSnapshot struct {
 	URL     string      `json:"url"`
 	Headers http.Header `json:"headers,omitempty"`
 	Body    []byte      `json:"body,omitempty"`
+	// NoCurlrc records the request's `# @no-curlrc` directive (#3114), so a
+	// re-send reaches the host the same way (no .curlrc proxy, TLS or timeout
+	// options) and the curl export says `-q`.
+	NoCurlrc bool `json:"noCurlrc,omitempty"`
 }
 
 // Clone returns a deep copy, so a snapshot handed to the UI (and back into a
@@ -139,7 +143,7 @@ func (s *RequestSnapshot) Clone() *RequestSnapshot {
 	if s == nil {
 		return nil
 	}
-	c := &RequestSnapshot{Method: s.Method, URL: s.URL, Headers: s.Headers.Clone()}
+	c := &RequestSnapshot{Method: s.Method, URL: s.URL, Headers: s.Headers.Clone(), NoCurlrc: s.NoCurlrc}
 	if s.Body != nil {
 		c.Body = append([]byte(nil), s.Body...)
 	}
@@ -302,15 +306,8 @@ func prepare(ctx context.Context, req *httpfile.Request, opts Options) (*prepare
 	if w := graphQLWarning(resolved); w != "" {
 		warnings = append(warnings, w)
 	}
-	cfg := &curlConfig{}
-	if !opts.DisableConfig {
-		path := opts.CurlrcPath
-		if path == "" {
-			path = curlrcPath()
-		}
-		cfg = parseCurlrc(path)
-		warnings = append(warnings, cfg.Warnings...)
-	}
+	cfg := loadCurlrc(opts, resolved.NoCurlrc)
+	warnings = append(warnings, cfg.Warnings...)
 
 	body, err := requestBody(resolved, opts, vars)
 	if err != nil {
@@ -329,7 +326,7 @@ func prepare(ctx context.Context, req *httpfile.Request, opts Options) (*prepare
 	}
 
 	applyCurlConfig(httpReq, resolved, cfg)
-	if err := applyNetrc(httpReq, cfg, opts); err != nil {
+	if err := applyNetrc(httpReq, cfg, opts, resolved.NoNetrc); err != nil {
 		return nil, err
 	}
 
@@ -344,18 +341,19 @@ func prepare(ctx context.Context, req *httpfile.Request, opts Options) (*prepare
 		timeout:   effectiveTimeout(cfg, opts, resolved.Timeout),
 		warnings:  warnings,
 		now:       now,
-		snapshot:  snapshotOf(httpReq, body),
+		snapshot:  snapshotOf(httpReq, body, resolved.NoCurlrc),
 		redirects: rec,
 	}, nil
 }
 
 // snapshotOf captures the fully prepared request (#1832). It runs after every
 // header source has had its say, so what it holds is what the server sees.
-func snapshotOf(httpReq *http.Request, body []byte) *RequestSnapshot {
+func snapshotOf(httpReq *http.Request, body []byte, noCurlrc bool) *RequestSnapshot {
 	snap := &RequestSnapshot{
-		Method:  httpReq.Method,
-		URL:     httpReq.URL.String(),
-		Headers: httpReq.Header.Clone(),
+		NoCurlrc: noCurlrc,
+		Method:   httpReq.Method,
+		URL:      httpReq.URL.String(),
+		Headers:  httpReq.Header.Clone(),
 	}
 	if snap.Headers == nil {
 		snap.Headers = http.Header{}
@@ -397,14 +395,7 @@ func prepareSnapshot(ctx context.Context, key string, snap *RequestSnapshot, opt
 		}
 	}
 
-	cfg := &curlConfig{}
-	if !opts.DisableConfig {
-		path := opts.CurlrcPath
-		if path == "" {
-			path = curlrcPath()
-		}
-		cfg = parseCurlrc(path)
-	}
+	cfg := loadCurlrc(opts, snap.NoCurlrc)
 	now := opts.Now
 	if now == nil {
 		now = time.Now
@@ -690,6 +681,23 @@ func (p *prepared) run(ctx context.Context, key string, opts Options, cb StreamC
 	}, nil
 }
 
+// loadCurlrc reads the .curlrc that applies to one exchange. It answers the
+// empty configuration when config detection is off globally or when skip —
+// the request's `# @no-curlrc` directive (#3114) — opts this request out; the
+// shared Options are never touched, so the next request reads it again. An
+// empty configuration also drops a `netrc-file` path, so applyNetrc falls back
+// to the default $NETRC / $HOME/.netrc lookup under `@no-curlrc`.
+func loadCurlrc(opts Options, skip bool) *curlConfig {
+	if opts.DisableConfig || skip {
+		return &curlConfig{}
+	}
+	path := opts.CurlrcPath
+	if path == "" {
+		path = curlrcPath()
+	}
+	return parseCurlrc(path)
+}
+
 // applyCurlConfig maps detected .curlrc options onto the request; explicit
 // request values win.
 func applyCurlConfig(httpReq *http.Request, resolved *httpfile.Request, cfg *curlConfig) {
@@ -719,9 +727,10 @@ func applyCurlConfig(httpReq *http.Request, resolved *httpfile.Request, cfg *cur
 // applyNetrc adds basic-auth credentials from .netrc when the request (and
 // .curlrc) set no Authorization header. opts.NetrcPath takes precedence over
 // a "netrc-file" path from .curlrc, which in turn takes precedence over the
-// default $NETRC / $HOME/.netrc lookup.
-func applyNetrc(httpReq *http.Request, cfg *curlConfig, opts Options) error {
-	if opts.DisableConfig || httpReq.Header.Get("Authorization") != "" {
+// default $NETRC / $HOME/.netrc lookup. skip is the request's `# @no-netrc`
+// directive (#3114): no lookup at all for this one exchange.
+func applyNetrc(httpReq *http.Request, cfg *curlConfig, opts Options, skip bool) error {
+	if opts.DisableConfig || skip || httpReq.Header.Get("Authorization") != "" {
 		return nil
 	}
 	path := opts.NetrcPath
