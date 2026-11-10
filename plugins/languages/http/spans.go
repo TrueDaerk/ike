@@ -67,6 +67,9 @@ func querySpans(lines []string) []lang.Span {
 	// Retry directives (#3116): marker and `on` as keywords, count and delay
 	// as numbers, the condition words as constants (retry.go).
 	out = append(out, retrySpans(lines)...)
+	// The body directives (#3117): `@stream` and `@max-body` as keywords,
+	// the size as a number (bodylimit.go).
+	out = append(out, bodyLimitSpans(lines)...)
 	// The `.curlrc` / `.netrc` opt-outs (#3114): the marker as a keyword
 	// (configskip.go), and `# @no-log` (#3115) with them.
 	out = append(out, configSkipSpans(lines)...)

@@ -33,6 +33,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"ike/internal/httpfile"
 )
 
 const (
@@ -128,6 +130,14 @@ type bodySink struct {
 	total int
 
 	truncated bool
+	// force spools from the first byte (#3117, `# @stream`): the spool file
+	// is created with the first chunk whatever the body's size, so it holds
+	// the whole body while the head still stays in memory.
+	force bool
+	// directive is set when max came from the request's `# @max-body`
+	// directive (#3117) rather than MaxBodyBytes — the truncation warning
+	// names the directive then, since the user asked for the cut.
+	directive bool
 	// spoolErr records why spooling stopped (a full disk, a read-only temp
 	// dir). The bytes that did not fit are dropped like a truncation — the
 	// exchange itself succeeded and is worth showing.
@@ -218,7 +228,7 @@ func (s *bodySink) add(p []byte) int {
 		n := min(inMem, len(p))
 		s.head = append(s.head, p[:n]...)
 	}
-	if s.total+len(p) > s.threshold {
+	if s.force || s.total+len(p) > s.threshold {
 		s.spill(p)
 	}
 	s.total += len(p)
@@ -294,7 +304,11 @@ func (s *bodySink) warnings() []string {
 	if s.spoolErr != nil {
 		out = append(out, fmt.Sprintf("response body could not be spooled to disk (%v) — showing the first %d bytes", s.spoolErr, len(s.head)))
 	}
-	if s.truncated {
+	switch {
+	case s.truncated && s.directive:
+		out = append(out, fmt.Sprintf("response body cut at @max-body %s — showing the first %d bytes",
+			httpfile.FormatByteSize(int64(s.max)), s.max))
+	case s.truncated:
 		out = append(out, fmt.Sprintf("response body exceeded %d bytes and was truncated", s.max))
 	}
 	return out

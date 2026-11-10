@@ -97,6 +97,7 @@ var directiveKeywords = []string{
 	httpfile.AssertKeyword, "@capture",
 	"@" + httpfile.NoCurlrcDirective, "@" + httpfile.NoNetrcDirective,
 	"@" + httpfile.NoLogDirective, httpfile.RetryKeyword,
+	httpfile.StreamKeyword, httpfile.MaxBodyKeyword,
 }
 
 // valuelessDirectives are the markers that take no value (#3114, #3115):
@@ -105,6 +106,7 @@ var valuelessDirectives = map[string]bool{
 	"@" + httpfile.NoCurlrcDirective: true,
 	"@" + httpfile.NoNetrcDirective:  true,
 	"@" + httpfile.NoLogDirective:    true,
+	httpfile.StreamKeyword:           true, // #3117
 }
 
 // directiveItems completes the parts of a directive line (#2546), given the
