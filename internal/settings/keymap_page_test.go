@@ -388,18 +388,31 @@ func TestKeymapPageImportsJetBrainsXML(t *testing.T) {
 		t.Fatalf("importNote = %q", k.importNote)
 	}
 	// The effective table now binds cmd+b to lsp.definition at the user layer
-	// and the replaced f4 default is gone.
-	var found bool
+	// and the replaced f4 → lsp.definition default is gone.
+	//
+	// Import semantics (#3104): an imported action replaces the defaults of
+	// the command it maps to, not every binding sharing the old chord.
+	// Context-scoped defaults of unrelated commands on the same chord (the
+	// diff-context f4 → diff.openSource from #3081) stay bound.
+	var found, diffF4 bool
 	for _, b := range k.table().Bindings() {
 		switch b.Chord.String() {
 		case "cmd+b":
 			found = b.Command == "lsp.definition" && b.Layer == keymap.LayerUser
 		case "f4":
-			t.Fatalf("f4 default must be unbound after import: %+v", b)
+			if b.Command == "lsp.definition" {
+				t.Fatalf("f4 → lsp.definition default must be unbound after import: %+v", b)
+			}
+			if b.Command == "diff.openSource" && b.Context == "diff" {
+				diffF4 = true
+			}
 		}
 	}
 	if !found {
 		t.Fatal("cmd+b → lsp.definition override missing after import")
+	}
+	if !diffF4 {
+		t.Fatal("diff-context f4 → diff.openSource must survive an import of an unrelated command")
 	}
 	// The write landed in the user settings file.
 	raw, err := os.ReadFile(opts.UserPath)
