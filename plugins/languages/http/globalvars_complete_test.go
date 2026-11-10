@@ -29,9 +29,9 @@ func TestCompletePlaceholderGlobalVars(t *testing.T) {
 	)
 	items := completeAt(t, "@apiHost=file\nGET {{api|\n")
 	for label, want := range map[string]string{
-		"apiBase":  "global project",
-		"apiToken": "global user",
-		"apiHost":  "file",
+		"apiBase":  "global project · https://p.test",
+		"apiToken": "global user · ••••",
+		"apiHost":  "file · file",
 	} {
 		if got := detailFor(items, label); got != want {
 			t.Errorf("%s detail = %q, want %q (items %v)", label, got, want, labels(items))

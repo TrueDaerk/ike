@@ -1,5 +1,11 @@
 # Log
 
+## 2026-11-10 (.http: value in `{{` completion detail, #3121)
+
+- [HTTP Client](/architecture/http-client.md): variable completion appends the
+  resolved value to the origin (`file · https://dev.example.com`), truncated,
+  newline-flattened and masked under secret-suspect names.
+
 ## 2026-11-09 (.http: global variables in the settings, #3119)
 
 - [HTTP Client](/architecture/http-client.md): global `.http` variables

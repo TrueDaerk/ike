@@ -16,6 +16,7 @@ import (
 	"ike/internal/lang"
 	ilsp "ike/internal/lsp"
 	"ike/internal/pathcomplete"
+	"ike/internal/secret"
 )
 
 // complete.go contributes completion inside .http request files (#1268,
@@ -471,7 +472,7 @@ func placeholderItems(path string, lines []string, typed string, closeBraces boo
 			// about a variable set that changes under the author's feet.
 			detail += " " + envName
 		}
-		add(d.Name, detail)
+		add(d.Name, detail+" · "+detailValue(d.Name, d.Value))
 	}
 	for _, name := range f.CaptureNames() {
 		// Only reached for the names no response captured yet — a captured
@@ -479,6 +480,26 @@ func placeholderItems(path string, lines []string, typed string, closeBraces boo
 		add(name, "capture")
 	}
 	return items
+}
+
+// maxDetailValue is the rune budget of the value shown in a completion detail.
+const maxDetailValue = 40
+
+// detailValue renders a variable's value for the completion popup: masked under
+// a secret-suspect name (unless it still holds placeholders, shown as written),
+// line breaks as ⏎, empty as (empty), cut to maxDetailValue runes.
+func detailValue(name, value string) string {
+	if value == "" {
+		return "(empty)"
+	}
+	if secret.Suspect(name) && !hasPlaceholder(value) {
+		return secret.Mask
+	}
+	value = strings.NewReplacer("\r\n", "⏎", "\n", "⏎", "\r", "⏎").Replace(value)
+	if r := []rune(value); len(r) > maxDetailValue {
+		return string(r[:maxDetailValue]) + "…"
+	}
+	return value
 }
 
 // methods are the RFC 9110 request methods plus PATCH.
