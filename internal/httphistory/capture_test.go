@@ -92,3 +92,29 @@ func TestStoreCapturedPrunedWithTheResponse(t *testing.T) {
 		t.Errorf("captured %v, want the pruned value gone", got)
 	}
 }
+
+// TestCapturedFromKeepsProvenance (#3122): every winning value names the
+// request key and the entry that produced it, under the same newest-wins rule
+// as Captured.
+func TestCapturedFromKeepsProvenance(t *testing.T) {
+	s := New(t.TempDir())
+	old := time.Now().Add(-time.Hour)
+	now := time.Now()
+	s.Append("api.http", "login", Entry{Time: old, Status: "200 OK", Captured: map[string]string{"token": "old", "user": "u1"}})
+	s.Append("api.http", "refresh", Entry{Time: now, Status: "201 Created", Captured: map[string]string{"token": "new"}})
+	// A newer entry that captured nothing never shadows the value.
+	s.Append("api.http", "login", Entry{Time: now.Add(time.Minute), Status: "500"})
+	got := CapturedFrom([]string{"login", "refresh"}, func(key string) []Entry { return s.List("api.http", key) })
+	if len(got) != 2 {
+		t.Fatalf("got %+v", got)
+	}
+	if c := got["token"]; c.Value != "new" || c.Key != "refresh" || c.Entry.Status != "201 Created" || !c.Entry.Time.Equal(now) {
+		t.Errorf("token = %+v", c)
+	}
+	if c := got["user"]; c.Value != "u1" || c.Key != "login" || !c.Entry.Time.Equal(old) {
+		t.Errorf("user = %+v", c)
+	}
+	if CapturedFrom([]string{"none"}, func(string) []Entry { return nil }) != nil {
+		t.Error("nothing captured must yield nil")
+	}
+}

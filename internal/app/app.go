@@ -652,6 +652,9 @@ type Model struct {
 	// directory.
 	httpEnvs *httpEnvMode
 	httpEnv  *httpEnvStore
+	// httpVarsPick is the HTTP Variables palette mode (#3122): every
+	// variable the chain defines for the active .http file, filled on open.
+	httpVarsPick *httpVarsMode
 	// httpDiags holds the diagnostics of an .http file per producing owner
 	// (#2158, http_diag.go): failed captures and unknown variables publish
 	// through one merged set, since applyDiagnostics replaces a path's whole
@@ -1696,6 +1699,7 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 	httpRequests := newHTTPRequestsMode()                    // stored HTTP responses picker (#1829)
 	httpEntries := newHTTPEntriesMode()                      // stored-response diff picker (#1992)
 	httpEnvs := newHTTPEnvMode()                             // http-client.env.json picker (#1867)
+	httpVarsPick := newHTTPVarsMode()                        // HTTP Variables palette (#3122)
 	runConfigs := newRunConfigsMode()                        // run/debug configurations picker (#1914)
 	tasksPicker := newTasksMode()                            // discovered-tasks picker (#1915)
 	tabPicker := newTabPickerMode()                          // per-pane MRU tab picker (#2151)
@@ -1802,13 +1806,14 @@ func buildModel(reg *registry.Registry, cfg host.Config, h *host.Host, mgr *work
 		shell:           ui.New(shellConfig(cfg)),
 		vcs:             vcsSt,
 		forgePoll:       forgeSt,
-		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, recentLocsPicker, vcsSt, cmdUsage, fileUsage, cmdFrec, fileFrec, projFrec, pick, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, runConfigs, tasksPicker, tabPicker, cxGroupPick, snippetPicker, sshPicker, remotePicker, playFilters, playCheat, playExport, projGit),
+		palette:         buildPalette(reg, cfg, refs, actions, bindings, recent, symbols, pasteHist, bookmarksPicker, recentLocsPicker, vcsSt, cmdUsage, fileUsage, cmdFrec, fileFrec, projFrec, pick, wsMgr, layoutsPicker, httpRequests, httpEntries, httpEnvs, httpVarsPick, runConfigs, tasksPicker, tabPicker, cxGroupPick, snippetPicker, sshPicker, remotePicker, playFilters, playCheat, playExport, projGit),
 		projGit:         projGit,
 		layoutsPicker:   layoutsPicker,
 		httpRequests:    httpRequests,
 		httpEntries:     httpEntries,
 		httpSession:     httphistory.NewSession(),
 		httpEnvs:        httpEnvs,
+		httpVarsPick:    httpVarsPick,
 		runConfigs:      runConfigs,
 		tasks:           tasksPicker,
 		tabPicker:       tabPicker,
@@ -3441,7 +3446,7 @@ func buildKeymap(cfg host.Config, bindings *keymap.LiveBindings) *keymap.Resolve
 
 // buildPalette wires the command palette: a ":" command mode reading the registry
 // and an "@" file finder, tuned by the optional palette.* config keys.
-func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, recentLocs *recentLocationsMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, cmdFrec, fileFrec, projFrec *frecency.Store, pick *recentPick, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, runConfigs *runConfigsMode, tasks *tasksMode, tabs *tabPickerMode, cxGroup *complexityGroupMode, snippetPick *snippetPickerMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode, playCheat *playCheatMode, playExport *playExportMode, projGit *project.GitCache) *palette.Palette {
+func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actions *actionsMode, bindings *keymap.LiveBindings, recent *recentFiles, symbols *symbolMode, pasteHist *pasteHistMode, bookmarks *bookmarksMode, recentLocs *recentLocationsMode, vcsSt *vcsState, usage, fileUsage *palette.Usage, cmdFrec, fileFrec, projFrec *frecency.Store, pick *recentPick, wsMgr *workspace.Manager, layouts *layoutsMode, httpRequests *httpRequestsMode, httpEntries *httpEntriesMode, httpEnvs *httpEnvMode, httpVarsPick *httpVarsMode, runConfigs *runConfigsMode, tasks *tasksMode, tabs *tabPickerMode, cxGroup *complexityGroupMode, snippetPick *snippetPickerMode, ssh *sshMode, remoteHosts *remoteMode, playFilters *playFiltersMode, playCheat *playCheatMode, playExport *playExportMode, projGit *project.GitCache) *palette.Palette {
 	pcfg := palette.Config{
 		MaxResults:    paletteMaxResults(cfg),
 		DefaultPrefix: paletteDefaultPrefix(cfg),
@@ -3554,7 +3559,7 @@ func buildPalette(reg *registry.Registry, cfg host.Config, refs *refsMode, actio
 	all.SetRecents(mru)
 	reverts := newRevertsMode(func() (string, []vcs.RevertSnapshot) { return vcsSt.revertsPath, vcsSt.reverts })
 	openPath := palette.NewOpenPathMode()
-	return palette.New(pcfg, cmd, file, dir, proj, projPeek, groups, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, recentLocs, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, runConfigs, tasks, tabs, snippetPick, ssh, remoteHosts, playFilters, playCheat, playExport, bufLang, openAs, cxGroup, prettierOfferMode{})
+	return palette.New(pcfg, cmd, file, dir, proj, projPeek, groups, refs, actions, mru, all, symbols, classes, scr, scrNew, pasteHist, bookmarks, recentLocs, reverts, openPath, layouts, httpRequests, httpEntries, httpEnvs, httpVarsPick, runConfigs, tasks, tabs, snippetPick, ssh, remoteHosts, playFilters, playCheat, playExport, bufLang, openAs, cxGroup, prettierOfferMode{})
 }
 
 // paletteMaxResults reads palette.max_results (rows shown), 0 if unset/invalid.
@@ -6222,6 +6227,23 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// variables right away (#2158).
 		cmd := m.selectHTTPEnv(msg)
 		return m, cmd
+
+	case HTTPVariablesMsg:
+		// http.variables (#3122): list every variable of the active .http
+		// file with its value, winning origin and producing response.
+		m.openHTTPVarsPalette()
+		return m, nil
+
+	case HTTPVarJumpMsg:
+		// A row of that palette was chosen (#3122): go to where its value
+		// comes from.
+		return m.jumpToHTTPVar(msg)
+
+	case HTTPCopyVariableMsg:
+		// http.copyVariable (cmd+c / ctrl+c in the HTTP Variables palette,
+		// #3122): the focused row's unmasked value to the clipboard.
+		m.copyFocusedHTTPVar()
+		return m, nil
 
 	case ShowStoredHTTPResponseMsg:
 		// A picker row was chosen (#1829): same loading path as

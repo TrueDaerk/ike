@@ -1698,11 +1698,13 @@ JetBrains is:
 | `html.view.toggle` | `cmd+alt+shift+v` | fragile | `the tab's [Source] [Preview] buttons / palette / tab context menu` | live via the tab's [Source] [Preview] buttons / palette / tab context menu |
 | `http.cancel` | `cmd+.` | fragile | `ctrl+.` | live via ctrl+. |
 | `http.copyResponse` | `cmd+c` | fragile | `response pane "y" / palette` | live via response pane "y" / palette |
+| `http.copyVariable` | `cmd+c` | fragile | `ctrl+c` | live via ctrl+c |
 | `http.diffPreviousRun` | `cmd+shift+d` | fragile | `palette` | live via palette |
 | `http.resend` | `ctrl+r` | delivered | `—` | live |
 | `http.run` | `ctrl+f9` | fragile | `palette` | live via palette |
 | `http.search` | `cmd+f` | fragile | `ctrl+f` | live via ctrl+f |
 | `http.showResponse` | `cmd+shift+enter` | fragile | `ctrl+shift+f9` | live via ctrl+shift+f9 |
+| `http.variables` | `ctrl+alt+f9` | fragile | `palette` | live via palette |
 | `issues.copy` | `cmd+c` | fragile | `issues pane "y" / palette` | live via issues pane "y" / palette |
 | `issues.nextTab` | `right` | delivered | `—` | live |
 | `issues.openCurrentBranch` | `cmd+alt+i` | fragile | `palette / click the status line's branch-issue segment` | live via palette / click the status line's branch-issue segment |
@@ -1788,6 +1790,7 @@ JetBrains is:
 | `playground.yqRoundTrip` | `ctrl+alt+shift+y` | fragile | `palette / info-row chip click` | live via palette / info-row chip click |
 | `problems.toggle` | `cmd+8` | fragile | `palette` | live via palette |
 | `project.close` | `cmd+shift+w` | fragile | `palette / File menu` | live via palette / File menu |
+| `project.closeFromList` | `cmd+shift+w` | fragile | `ctrl+backspace` | live via ctrl+backspace |
 | `project.findInAllProjects` | `cmd+alt+shift+f` | fragile | `palette` | live via palette |
 | `project.findInAllProjectsResults` | `cmd+alt+shift+r` | fragile | `palette` | live via palette |
 | `project.findInGroup` | `cmd+alt+shift+d` | fragile | `palette` | live via palette |
@@ -1799,6 +1802,7 @@ JetBrains is:
 | `project.group.open` | `cmd+alt+shift+g` | fragile | `palette / File menu` | live via palette / File menu |
 | `project.group.prev` | `cmd+alt+left-bracket` | fragile | `palette` | live via palette |
 | `project.peek.return` | `cmd+shift+b` | fragile | `palette` | live via palette |
+| `project.removeFromList` | `cmd+delete` | fragile | `ctrl+delete` | live via ctrl+delete |
 | `project.replaceInPath` | `cmd+shift+r` | fragile | `palette` | live via palette |
 | `project.switch` | `cmd+shift+p` | fragile | `palette` | live via palette |
 | `project.switchLast` | `cmd+shift+e` | fragile | `palette` | live via palette |

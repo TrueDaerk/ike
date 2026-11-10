@@ -149,3 +149,42 @@ func TestEnvironmentVarsResolve(t *testing.T) {
 		t.Errorf("target: %q", r.Target)
 	}
 }
+
+// TestEnvKeySource (#3122): the key's line in the file that supplies it — the
+// private file when it defines the key for the environment, the public one
+// otherwise; a same-named key of another environment, a key nested inside a
+// value or a key name used as a value is never matched.
+func TestEnvKeySource(t *testing.T) {
+	dir := writeEnvFiles(t, map[string]string{
+		EnvFileName: "{\n" +
+			"  \"prod\": {\n" +
+			"    \"host\": \"https://example.com\",\n" +
+			"    \"note\": \"host\"\n" +
+			"  },\n" +
+			"  \"dev\": {\n" +
+			"    \"list\": [1, {\"host\": 2}],\n" +
+			"    \"host\": \"https://dev.example.com\",\n" +
+			"    \"token\": \"public\"\n" +
+			"  }\n" +
+			"}\n",
+		PrivateEnvFileName: "{\n  \"dev\": {\n    \"token\": \"s3cret\"\n  }\n}\n",
+	})
+	cases := []struct {
+		env, key string
+		file     string
+		line     int
+		ok       bool
+	}{
+		{"dev", "host", EnvFileName, 8, true},
+		{"prod", "host", EnvFileName, 3, true},
+		{"dev", "token", PrivateEnvFileName, 3, true},
+		{"prod", "token", "", 0, false},
+		{"stage", "host", "", 0, false},
+	}
+	for _, c := range cases {
+		path, line, ok := EnvKeySource(dir, c.env, c.key)
+		if ok != c.ok || line != c.line || (c.ok && filepath.Base(path) != c.file) {
+			t.Errorf("%s.%s = %q:%d %v, want %s:%d %v", c.env, c.key, path, line, ok, c.file, c.line, c.ok)
+		}
+	}
+}

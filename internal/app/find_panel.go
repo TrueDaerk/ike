@@ -39,6 +39,9 @@ var paletteOverlayCommands = map[string]bool{
 	findPanelCommand:    true,
 	recentCloseCommand:  true,
 	recentRemoveCommand: true,
+	// http.copyVariable (#3122) only owns its chord inside the HTTP
+	// Variables palette (gated in paletteBindingCmd).
+	httpCopyVariableCommand: true,
 }
 
 // paletteBindingCmd resolves one key press against the Palette-context
@@ -66,6 +69,11 @@ func (m *Model) paletteBindingCmd(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		if _, ok := m.recentProjectRow(); !ok {
 			return nil, false
 		}
+	}
+	if b.Command == httpCopyVariableCommand && !m.httpVarsPaletteOpen() {
+		// Anywhere but the HTTP Variables palette the copy chord keeps its
+		// palette meaning (none today), so it is not swallowed there.
+		return nil, false
 	}
 	c, okc := m.reg.Command(b.Command)
 	if !okc {

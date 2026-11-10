@@ -24,28 +24,44 @@ func (s *Store) Captured(source string, keys []string) map[string]string {
 // merged with a Session's, so a value captured by a `# @no-log` exchange is
 // available for the rest of the session.
 func CapturedIn(keys []string, list func(key string) []Entry) map[string]string {
-	type stamped struct {
-		value string
-		at    int64
+	from := CapturedFrom(keys, list)
+	if len(from) == 0 {
+		return nil
 	}
-	newest := map[string]stamped{}
+	out := make(map[string]string, len(from))
+	for name, c := range from {
+		out[name] = c.Value
+	}
+	return out
+}
+
+// CapturedValue is one captured variable together with the stored response
+// that produced it (#3122): the request key the entry is stored under and the
+// entry itself, so a caller can name the request, age the value and show the
+// very response it came from.
+type CapturedValue struct {
+	Value string
+	Key   string
+	Entry Entry
+}
+
+// CapturedFrom is CapturedIn keeping the provenance of each value: the same
+// newest-entry-wins rule, but every name maps to the entry (and its request
+// key) that captured the winning value.
+func CapturedFrom(keys []string, list func(key string) []Entry) map[string]CapturedValue {
+	newest := map[string]CapturedValue{}
 	for _, key := range keys {
 		for _, e := range list(key) {
-			at := e.Time.UnixNano()
 			for name, value := range e.Captured {
-				if prev, ok := newest[name]; ok && prev.at >= at {
+				if prev, ok := newest[name]; ok && !e.Time.After(prev.Entry.Time) {
 					continue
 				}
-				newest[name] = stamped{value: value, at: at}
+				newest[name] = CapturedValue{Value: value, Key: key, Entry: e}
 			}
 		}
 	}
 	if len(newest) == 0 {
 		return nil
 	}
-	out := make(map[string]string, len(newest))
-	for name, v := range newest {
-		out[name] = v.value
-	}
-	return out
+	return newest
 }

@@ -155,3 +155,105 @@ func envValueString(v any) string {
 		return string(b)
 	}
 }
+
+// EnvKeySource locates where the selected environment's value of key comes
+// from (#3122): the file that supplies it — http-client.private.env.json when
+// it defines the key for env, since its values win, else http-client.env.json
+// — and the 1-based line of the key inside it. ok is false when neither file
+// defines the key for that environment (or neither parses).
+func EnvKeySource(dir, env, key string) (path string, line int, ok bool) {
+	for _, name := range []string{PrivateEnvFileName, EnvFileName} {
+		p := filepath.Join(dir, name)
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		if l, found := envKeyLine(data, env, key); found {
+			return p, l, true
+		}
+	}
+	return "", 0, false
+}
+
+// envKeyLine finds the 1-based line of key inside the env object of an
+// environment file's JSON. It walks the token stream rather than searching
+// the text, so a same-named key of another environment, or the key's name
+// appearing inside a value, is never mistaken for it.
+func envKeyLine(data []byte, env, key string) (int, bool) {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	if t, err := dec.Token(); err != nil || t != json.Delim('{') {
+		return 0, false
+	}
+	for dec.More() {
+		t, err := dec.Token()
+		if err != nil {
+			return 0, false
+		}
+		if name, _ := t.(string); name != env {
+			if skipJSONValue(dec) != nil {
+				return 0, false
+			}
+			continue
+		}
+		t, err = dec.Token()
+		if err != nil {
+			return 0, false
+		}
+		if t != json.Delim('{') {
+			// Not an object, so no variables here.
+			if d, ok := t.(json.Delim); ok && d == '[' && skipJSONRest(dec, 1) != nil {
+				return 0, false
+			}
+			continue
+		}
+		for dec.More() {
+			t, err := dec.Token()
+			if err != nil {
+				return 0, false
+			}
+			if k, _ := t.(string); k == key {
+				// InputOffset sits right behind the key's closing quote.
+				off := int(dec.InputOffset())
+				return bytes.Count(data[:off], []byte("\n")) + 1, true
+			}
+			if skipJSONValue(dec) != nil {
+				return 0, false
+			}
+		}
+		if _, err := dec.Token(); err != nil { // the env object's '}'
+			return 0, false
+		}
+	}
+	return 0, false
+}
+
+// skipJSONValue consumes one complete value from dec.
+func skipJSONValue(dec *json.Decoder) error {
+	t, err := dec.Token()
+	if err != nil {
+		return err
+	}
+	if d, ok := t.(json.Delim); ok && (d == '{' || d == '[') {
+		return skipJSONRest(dec, 1)
+	}
+	return nil
+}
+
+// skipJSONRest consumes tokens until depth open containers are closed.
+func skipJSONRest(dec *json.Decoder, depth int) error {
+	for depth > 0 {
+		t, err := dec.Token()
+		if err != nil {
+			return err
+		}
+		if d, ok := t.(json.Delim); ok {
+			switch d {
+			case '{', '[':
+				depth++
+			case '}', ']':
+				depth--
+			}
+		}
+	}
+	return nil
+}

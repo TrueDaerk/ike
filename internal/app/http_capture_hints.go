@@ -1,8 +1,6 @@
 package app
 
 import (
-	"strings"
-
 	"ike/internal/config"
 	"ike/internal/httpfile"
 	"ike/internal/pane"
@@ -39,12 +37,7 @@ func captureHintValue(name, value string) string {
 	if secret.Suspect(name) {
 		return secret.Mask
 	}
-	value = strings.ReplaceAll(value, "\r\n", "⏎")
-	value = strings.NewReplacer("\n", "⏎", "\r", "⏎", "\t", " ").Replace(value)
-	if r := []rune(value); len(r) > captureHintMax {
-		value = string(r[:captureHintMax]) + "…"
-	}
-	return value
+	return foldHintValue(value, captureHintMax)
 }
 
 // httpCaptureNotes maps the 0-based line of every capture directive of f that
