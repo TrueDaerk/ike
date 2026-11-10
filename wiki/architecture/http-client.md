@@ -1,10 +1,10 @@
 ---
 type: concept
 title: HTTP Client (.http files)
-description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, relative request targets resolved against the host variable or Host header, environment, user-defined and global (settings) variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, WEBSOCKET session blocks with ===-separated initial messages, a live frame transcript and an interactive send line in the response pane, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, GraphQL errors lifted out of a 200 answer into a red block above the body, and @assert directives checked against every response with a pass/fail block above the body, a run in the Test Results window and a failure notice, the followed redirect chain with per-hop DNS, connected address and TLS facts as a foldable block under the status line, plus a configurable request timeout with a per-request @timeout directive, a visible elapsed/limit countdown while a request is out and an explicit timed-out result.
+description: Built-in HTTP client driven by plain-text .http files — RFC 9112 request blocks separated by ###, relative request targets resolved against the host variable or Host header, environment, user-defined and global (settings) variables with origin-labelled completion and unknown-variable warnings, values captured out of responses for request chaining, OpenAPI 3.x import, curl command import/export, GRAPHQL blocks with a variables section, schema introspection and schema-aware query completion, WEBSOCKET session blocks with ===-separated initial messages, a live frame transcript and an interactive send line in the response pane, dispatch with .curlrc/.netrc detection, reusable response viewer with per-request history, pretty/raw JSON toggle with folding, one-key jq handoff, spooled large bodies, curl export and raw-body file save for the shown exchange, one-key re-run of a stored request with an automatic previous-vs-new response diff over noise-filtered headers, a notification when a failed or slow response lands while the response pane is not on screen, GraphQL errors lifted out of a 200 answer into a red block above the body, and @assert directives checked against every response with a pass/fail block above the body, a run in the Test Results window and a failure notice, the followed redirect chain with per-hop DNS, connected address and TLS facts as a foldable block under the status line, plus a configurable request timeout with a per-request @timeout directive, per-request @no-curlrc / @no-netrc opt-outs of the local client configuration, a visible elapsed/limit countdown while a request is out and an explicit timed-out result.
 resource: internal/httpfile
 tags: [architecture, http, tooling]
-timestamp: 2026-11-09T00:00:00Z
+timestamp: 2026-11-10T00:00:00Z
 ---
 
 # HTTP Client (.http files)
@@ -202,6 +202,25 @@ Authorization: Bearer {{$env TOKEN}}
   request block sets *that* request's overall deadline, overriding both the
   `http.timeout_ms` setting and a `.curlrc` `max-time` — see
   [the request timeout](#the-request-timeout-2630).
+- **Configuration opt-outs** (#3114): `# @no-curlrc` dispatches *that*
+  request as if no `.curlrc` existed (no proxy, `insecure`, headers,
+  user-agent, `user`, `location`, `max-time` or `connect-timeout` from it —
+  and no `netrc-file` path, so `.netrc` is looked up at `$NETRC` /
+  `$HOME/.netrc`); `# @no-netrc` dispatches it without `.netrc` credentials.
+  Each leaves the other file in effect, both may stand in one block, and
+  re-stating one is harmless. Neither takes a value: `# @no-curlrc yes` is a
+  parse error on that line and drops the block, like a bad `@timeout`. They
+  are per block — the next `###` block starts without them — and are written
+  as `#`, `##` or `//` comments (`### @no-curlrc` is a separator, not a
+  directive). The parser sets `Request.NoCurlrc` / `Request.NoNetrc`; dispatch
+  gates the two loads for that one exchange without touching the shared
+  `Options` (`loadCurlrc`, `applyNetrc`). The as-sent snapshot records
+  `NoCurlrc`, so a re-send reaches the host the same way. The editor paints
+  the marker as a keyword and `# @` completion offers both markers (without a
+  trailing space). The curl export of a `@no-curlrc` request starts with
+  `curl -q` (curl only honours `-q` as the first argument); `@no-netrc` needs
+  nothing there, since the export never emits `--netrc`. The httpie export
+  emits no config flags and is unaffected.
 - **GraphQL blocks** (#2423): a request line spelled `GRAPHQL <url>` takes the
   query as its body and an optional JSON `variables` object after a blank line,
   and sends the `POST` envelope for both — see
@@ -990,6 +1009,9 @@ hard failure, and **explicit values in the `.http` file always win**:
   `.netrc` lookup path, overriding `$NETRC`/`$HOME/.netrc` but yielding to an
   explicit `Options.NetrcPath`. Other unsupported options are collected as
   response warnings, never errors.
+- A request can opt out of either file with `# @no-curlrc` / `# @no-netrc`
+  (#3114, see the directive list above); `Options.DisableConfig` switches
+  both off for every request.
 
 Defaults: redirects followed (Go's limit of 10), TLS verification on (unless
 `insecure`), a 30 s overall timeout (`http.timeout_ms`, a request's

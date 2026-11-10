@@ -77,6 +77,15 @@ type Request struct {
 	// the one endpoint that is known to take a minute needs no global
 	// loosening. See timeout.go.
 	Timeout time.Duration
+	// NoCurlrc is set by the block's `# @no-curlrc` directive (#3114): the
+	// request is dispatched as if no `.curlrc` existed — no proxy, insecure,
+	// headers, user, redirect or timeout options from it. `.netrc` stays in
+	// effect (at its default location). See configskip.go.
+	NoCurlrc bool
+	// NoNetrc is set by the block's `# @no-netrc` directive (#3114): the
+	// request is dispatched without `.netrc` credentials; `.curlrc` stays in
+	// effect.
+	NoNetrc bool
 	// GraphQL is the split of a `GRAPHQL <url>` block's body (#2423) — query,
 	// variables, operation name and their line ranges. nil for every other
 	// method, so `req.GraphQL != nil` is the test for "this is a GraphQL
@@ -237,12 +246,30 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 	var captures []Capture
 	var assertions []Assertion
 	var timeout Timeout
-	// badTimeout drops the whole block (#2630): a mistyped deadline must not
+	// badDirective drops the whole block (#2630): a mistyped deadline must not
 	// leave the request runnable under the default one, which is exactly the
 	// silent 30 s wait the directive was written to avoid. The error above
 	// names the line, and http.run reports it instead of dispatching.
-	badTimeout := false
+	badDirective := false
+	// The configuration opt-outs (#3114) follow the same rules: a stray value
+	// is reported on its line and drops the block (badDirective covers all
+	// three), so a request meant to go out without credentials never goes out
+	// with them.
+	noCurlrc, noNetrc := false, false
 	noteCapture := func(idx int) {
+		if name, err, ok := ConfigSkipDirective(lines[idx]); ok {
+			if err != nil {
+				f.Errors = append(f.Errors, &ParseError{Line: idx + 1, Msg: err.Error()})
+				badDirective = true
+				return
+			}
+			if name == NoCurlrcDirective {
+				noCurlrc = true
+			} else {
+				noNetrc = true
+			}
+			return
+		}
 		if c, ok := captureAt(lines[idx], idx); ok {
 			captures = append(captures, c)
 		}
@@ -257,7 +284,7 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 		if t, ok := timeoutAt(lines[idx], idx); ok {
 			if t.Err != nil {
 				f.Errors = append(f.Errors, &ParseError{Line: t.Line, Msg: t.Err.Error()})
-				badTimeout = true
+				badDirective = true
 				return
 			}
 			timeout = t
@@ -392,10 +419,11 @@ func parseBlock(f *File, lines []string, start, end int, name string, sep int) {
 
 	req.Captures = captures
 	req.Assertions = assertions
-	if badTimeout {
+	if badDirective {
 		return
 	}
 	req.Timeout = timeout.Duration
+	req.NoCurlrc, req.NoNetrc = noCurlrc, noNetrc
 	f.Requests = append(f.Requests, req)
 }
 

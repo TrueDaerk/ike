@@ -84,15 +84,26 @@ func appendPart(out *[]lang.Span, runes []rune, line, from int, want, capture st
 var numberRE = regexp.MustCompile(`^[+-]?\d+(\.\d+)?$`)
 
 // directiveMarkerRE matches a comment line on which a directive marker is
-// being typed: `# @`, `# @as`, `// @cap`.
-var directiveMarkerRE = regexp.MustCompile(`^[ \t]*(?:##?|//)[ \t]*@([A-Za-z]*)$`)
+// being typed: `# @`, `# @as`, `// @cap`, `# @no-n` (the hyphen belongs to
+// the `@no-curlrc` / `@no-netrc` markers, #3114).
+var directiveMarkerRE = regexp.MustCompile(`^[ \t]*(?:##?|//)[ \t]*@([A-Za-z-]*)$`)
 
 // assertSpecRE matches a comment line holding an `@assert` directive up to
 // the caret, capturing the spec typed so far (possibly empty).
 var assertSpecRE = regexp.MustCompile(`^[ \t]*(?:##?|//)[ \t]*@assert(?:[ \t]+(.*))?$`)
 
 // directiveKeywords are the markers offered on a `# @` line.
-var directiveKeywords = []string{httpfile.AssertKeyword, "@capture"}
+var directiveKeywords = []string{
+	httpfile.AssertKeyword, "@capture",
+	"@" + httpfile.NoCurlrcDirective, "@" + httpfile.NoNetrcDirective,
+}
+
+// valuelessDirectives are the markers that take no value (#3114): completing
+// one inserts no trailing space, since anything typed after it is an error.
+var valuelessDirectives = map[string]bool{
+	"@" + httpfile.NoCurlrcDirective: true,
+	"@" + httpfile.NoNetrcDirective:  true,
+}
 
 // directiveItems completes the parts of a directive line (#2546), given the
 // text before the caret: the marker after `# @`, then — inside an `@assert`
@@ -105,8 +116,12 @@ func directiveItems(before string) []ilsp.CompletionItem {
 			if !matches("@"+m[1], k) {
 				continue
 			}
+			insert := k + " "
+			if valuelessDirectives[k] {
+				insert = k
+			}
 			items = append(items, ilsp.CompletionItem{
-				Label: k, FilterText: k, InsertText: k + " ", Detail: "directive", SortText: k,
+				Label: k, FilterText: k, InsertText: insert, Detail: "directive", SortText: k,
 			})
 		}
 		return items

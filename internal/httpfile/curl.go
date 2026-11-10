@@ -607,8 +607,16 @@ func FormatRequest(r *Request, name string) string {
 // header becomes `-u user:pass`, and an inline multipart body becomes one
 // `-F` per part (with its Content-Type header dropped, since curl generates
 // the boundary itself).
+//
+// A `# @no-curlrc` request (#3114) exports with `-q`, curl's own "do not read
+// .curlrc" flag — which curl only honours as the very first argument. A
+// `# @no-netrc` request needs nothing: the export never asks for `--netrc`.
 func ExportCurl(r *Request) string {
-	args := []string{"curl", shellQuote(r.Target)}
+	args := []string{"curl"}
+	if r.NoCurlrc {
+		args = append(args, "-q")
+	}
+	args = append(args, shellQuote(r.Target))
 	if m := strings.ToUpper(r.Method); m != "" && m != "GET" {
 		args = append(args, "-X", m)
 	}
