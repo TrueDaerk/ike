@@ -1,5 +1,16 @@
 # Log
 
+## 2026-11-10 (.http: captured value hints, #3120)
+
+- [HTTP Client](/architecture/http-client.md): each working `# @capture` line
+  shows the value `{{name}}` currently resolves to as a dimmed trailing hint
+  (newest response wins, restored from the history on reopen), cut to 60
+  runes, `⏎` for line breaks, masked under secret-suspect names; a failed
+  directive keeps its warning and shows none. New editor line-note channel
+  (`editor.SetLineNotes`) carries it.
+- [Settings UI](/architecture/settings-ui.md): `http.capture_hints` (default
+  on) on the HTTP Client page.
+
 ## 2026-11-10 (.http: `@no-log` directive, #3115)
 
 - [HTTP Client](/architecture/http-client.md): `# @no-log` keeps one

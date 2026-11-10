@@ -1250,12 +1250,22 @@ func (m Model) leapStyles(active bool) (label, match lipgloss.Style) {
 }
 
 // lineHintsWithLens returns the line's inlay hints plus its code lens (#1912)
-// as one synthetic trailing hint. The hint slice is copied before appending so
-// the cached one is never mutated.
+// and its app-fed line note (#3120, linenotes.go), each as one synthetic
+// trailing hint. The hint slice is copied before appending so the cached one
+// is never mutated.
 func (m Model) lineHintsWithLens(line int) []ilsp.InlayHint {
 	hints := m.lineInlayHints(line)
-	if lens, ok := m.lineLensHint(line); ok {
-		hints = append(append([]ilsp.InlayHint(nil), hints...), lens)
+	lens, hasLens := m.lineLensHint(line)
+	note, hasNote := m.lineNoteHint(line)
+	if !hasLens && !hasNote {
+		return hints
+	}
+	hints = append([]ilsp.InlayHint(nil), hints...)
+	if hasLens {
+		hints = append(hints, lens)
+	}
+	if hasNote {
+		hints = append(hints, note)
 	}
 	return hints
 }

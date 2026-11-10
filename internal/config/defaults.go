@@ -379,6 +379,9 @@ func defaults() *Config {
 			// The re-run's whole point is the comparison (#2247), so it opens
 			// on its own; off leaves the pane on the new response and "P".
 			DiffAfterRerun: true,
+			// The captured value of each `# @capture` line reads inline
+			// (#3120); otherwise checking it means sending the next request.
+			CaptureHints: true,
 			// The largest body the response viewer syntax-highlights (#2353),
 			// in KiB after pretty-printing. 2 MiB keeps every ordinary API
 			// answer coloured; the pathological cases — multi-megabyte search

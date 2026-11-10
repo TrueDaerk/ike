@@ -721,6 +721,10 @@ type Model struct {
 	// 0-based header line; pushed by the app stamped with the document
 	// version they were measured at. See complexityhints.go.
 	cxHints map[int]ComplexityHint
+	// lineNotes are app-fed trailing line notes (#3120) — the captured value
+	// of an .http `# @capture` line — keyed by the 0-based line and pushed
+	// stamped with a document version like cxHints. See linenotes.go.
+	lineNotes map[int]string
 	// cxSites are the per-site complexity marks (#2947), keyed by the
 	// 0-based line, pushed like cxHints. See complexitysites.go.
 	cxSites map[int]ComplexitySiteMark

@@ -433,6 +433,22 @@ GET https://example.com/_tasks/{{task}}
   where the fix goes. Directives are independent: one broken expression does
   not stop the others. Each dispatch republishes the file's set, so a fixed
   directive stops complaining the moment it works.
+- **Value hints** (#3120, `internal/app/http_capture_hints.go`): a working
+  directive shows the value it currently resolves to as a dimmed trailing hint
+  (`# @capture task = .task  = node-1:42`). The value is what
+  `Model.httpCaptured` reads for `{{name}}` — newest response wins, so both
+  directive lines of a name captured by two requests show the newer value,
+  and the hints come back from the stored history on reopen. Display form:
+  cut to 60 runes plus `…`, line breaks as `⏎`, masked as `secret.Mask` under
+  a `secret.Suspect` name (no reveal). A directive carrying a capture
+  diagnostic gets no hint; one that never ran has no value to show. The app
+  sets them on every view of the file through the editor's line-note channel
+  (`editor.SetLineNotes`, `internal/editor/linenotes.go` — a synthetic
+  trailing inlay hint after the code lens, version-stamped like the
+  complexity hints) wherever the unknown-variable lint runs (after a dispatch
+  stored its entry, after an edit goes quiet, on an environment change), when
+  the buffer opens, and on a config reload. `http.capture_hints` (default on)
+  turns them off.
 - **Lifetime**: captured values are stored **with the response**
   (`httphistory.Entry.Captured`, written into `.ike/http/*.json`), so a value
   lives exactly as long as the response it came from — it comes back when the

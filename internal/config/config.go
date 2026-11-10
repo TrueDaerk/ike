@@ -343,6 +343,7 @@ func (c *Config) Flat() map[string]string {
 	put("scratch.sort", c.Scratch.Sort)
 	put("http.diff_ignore_headers", strings.Join(c.HTTP.DiffIgnoreHeaders, ","))
 	put("http.diff_after_rerun", c.HTTP.DiffAfterRerun)
+	put("http.capture_hints", c.HTTP.CaptureHints)
 	put("http.highlight_limit_kb", c.HTTP.HighlightLimitKB)
 	put("http.notify_slow_ms", c.HTTP.NotifySlowMs)
 	put("http.slow_threshold_ms", c.HTTP.SlowThresholdMs)

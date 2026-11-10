@@ -117,6 +117,20 @@ response still shows**. The reason appears twice: as a warning row above the
 response, and as a warning marker on the directive line itself, so it is where
 you would fix it. Running the request again once it works clears the marker.
 
+A capture that worked shows its value as a dimmed hint at the end of the
+directive line, so you can check it without sending the next request:
+
+```http
+# @capture task = .task                 = node-1:42
+# @capture total = .stats.total         = 7
+```
+
+The hint is the value `{{task}}` would resolve to right now — when two
+requests capture the same name, the newer response wins on both lines. Long
+values are cut to 60 characters, line breaks read as `⏎`, and a name that looks
+like a secret (`token`, `password`, …) shows `••••`. **Captured value hints**
+(`http.capture_hints`) on the **HTTP Client** settings page turns them off.
+
 Captured values are stored with the response, in `.ike/http/`, so they are
 still there when you reopen the project — and they are gone once that response
 falls out of the five kept per request. Re-sending a stored request

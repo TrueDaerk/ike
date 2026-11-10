@@ -92,6 +92,9 @@ func (m *Model) lintHTTPVars(path string) tea.Cmd {
 	if ed == nil {
 		return nil
 	}
+	// The captured-value hints (#3120) move with the same moments: a dispatch
+	// stored a new value, an edit moved a directive line.
+	m.refreshHTTPCaptureHints(path)
 	text := ed.Text()
 	f := httpfile.Parse(text)
 	vars, hint, err := m.httpVars(path, f)
