@@ -88,10 +88,7 @@ func (m *Model) gzipBufferText(c gzfile.Content, path string) (text, notice stri
 // an already open tab for the same archive.
 func (m *Model) showGzipBuffer(path, inner, text, notice string) tea.Cmd {
 	vpath := archiveEntryPath(path, inner)
-	key := m.fileEditorKey()
-	if key == "" {
-		key = m.spawnEditor()
-	}
+	key := m.fileOpenOrSpawn()
 	inst := m.activeWS().Panes.Get(key)
 	if inst == nil {
 		return nil

@@ -282,7 +282,7 @@ targets the editor rather than the focused pane: `openPathInEditor` records
 what `fileEditorKey` resolves, so *every* file the explorer opens — plain or
 viewer-handled — becomes a tab in the last-focused editor pane and never a
 split beside it (#1851). With no editor pane left, one is spawned to host the
-tab. Only the explorer's explicit **open in split** (`o`, `OpenFileMsg{NewPane:
+tab — unless a viewer holds the flexible region (below, #3131). Only the explorer's explicit **open in split** (`o`, `OpenFileMsg{NewPane:
 true}`) still goes through `viewerSplitTarget`.
 
 All of it is **one** helper (#2463): `openViewerPane(kind, id, matches, add)`
@@ -296,8 +296,21 @@ discard)`: a background result reaches the pane that asked for it, dedicated or
 tab-nested, and an unroutable one is `Discard()`ed rather than dropped, so the
 database handle or connection it carries is released.
 
+**A viewer in the flexible region hosts the file (#3131).** A non-split
+file open (explorer enter, palette, go-to-definition, the archive/data/remote
+buffers) resolves its pane with `fileOpenKey` (`internal/app/editor_anchor.go`):
+focused editor → recent editor → any live editor (`fileEditorKey`) → **the
+flexible-region viewer** (`flexFileHostKey`: focused, `recentFlex`, then tree
+order; `fileHostPane` accepts a dedicated viewer — hex, image, data, archive,
+… — or a tab host holding a viewer content tab, never a terminal-only or
+tool-tab host) converted in place into a tab host (`joinableHost`), so the
+file becomes a tab beside the hex/image/data view → otherwise a spawned
+editor. `spawnEditor` takes the same rung as its split target before the
+editor-slot fallback, so the explorer's `o` splits beside the viewer, and the
+explorer never loses width to a file open.
+
 **Where a spawned editor lands (#1989, #3109).** `spawnEditor` anchors at
-the pane `fileEditorKey` resolves — never at a pane whose tabs are all tool
+the pane `fileEditorKey` resolves (else the flexible-region viewer, #3131) — never at a pane whose tabs are all tool
 sessions (a **tool-tab host**, `toolTabHost`): that pane is the layout's
 tools area, not an editor slot. When *no* live pane edits files (last editor
 closed, only explorer/terminals/tool windows remain), the **reference

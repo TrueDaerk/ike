@@ -89,10 +89,7 @@ func (m Model) initESPanes() []tea.Cmd {
 // highlighting and folding.
 func (m *Model) showESJSON(msg espane.ShowJSONMsg) tea.Cmd {
 	vpath := archiveEntryPath(msg.Endpoint, msg.Name+".json")
-	key := m.fileEditorKey()
-	if key == "" {
-		key = m.spawnEditor()
-	}
+	key := m.fileOpenOrSpawn()
 	inst := m.activeWS().Panes.Get(key)
 	if inst == nil {
 		return nil

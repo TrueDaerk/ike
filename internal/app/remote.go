@@ -214,10 +214,7 @@ func (m *Model) remoteFetched(msg remoteFetchedMsg) tea.Cmd {
 // virtual path — the archive-entry recipe: tab dedupe, the empty-scratch-tab
 // fill, reparse for highlighting.
 func (m *Model) showRemoteBuffer(vpath, text string) tea.Cmd {
-	key := m.fileEditorKey()
-	if key == "" {
-		key = m.spawnEditor()
-	}
+	key := m.fileOpenOrSpawn()
 	inst := m.activeWS().Panes.Get(key)
 	if inst == nil {
 		return nil

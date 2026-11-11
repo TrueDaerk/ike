@@ -208,10 +208,7 @@ func (m *Model) installMergedLog(msg mergedLogMsg) tea.Cmd {
 // the archive-preview tab policy (#156): an empty scratch tab is filled in
 // place, anything else gets a tab of its own.
 func (m *Model) showMergedLogBuffer(vpath, text, src string, off int64, term bool) tea.Cmd {
-	key := m.fileEditorKey()
-	if key == "" {
-		key = m.spawnEditor()
-	}
+	key := m.fileOpenOrSpawn()
 	inst := m.activeWS().Panes.Get(key)
 	if inst == nil {
 		return nil
