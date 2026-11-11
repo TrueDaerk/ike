@@ -44,6 +44,8 @@ var noCounterpart = map[string]string{
 	"http.copyResponse":                "IKE-only concept (#2315): JetBrains' $Copy is the editor copy, already mapped to editor.copy",
 	"http.search":                      "IKE-only concept (#2400): the response viewer's in-pane search is a pane key, not a JetBrains keymap action",
 	"http.cancel":                      "IKE-only concept (#2404): JetBrains stops a request from the run tool's button, no keymap action",
+	"http.variables":                   "IKE-only concept (#3122): JetBrains has no palette listing HTTP file variables",
+	"http.copyVariable":                "IKE-only concept (#3122): copying a variable value from the variables palette has no JetBrains keymap action",
 	"debug.copy":                       "IKE-only concept (#2400): JetBrains' debugger copies from its own context menu, no keymap action",
 	"issues.copy":                      "IKE-only concept (#2400): the issues window has no JetBrains counterpart",
 	"issues.openCurrentBranch":         "IKE-only concept (#2544): JetBrains' task management opens a task, not the issue behind the checked-out branch",
