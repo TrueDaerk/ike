@@ -127,10 +127,7 @@ func (m *Model) openArchiveEntry(archivePath, entry string) tea.Cmd {
 		return nil
 	}
 	vpath := archiveEntryPath(archivePath, entry)
-	key := m.fileEditorKey()
-	if key == "" {
-		key = m.spawnEditor()
-	}
+	key := m.fileOpenOrSpawn()
 	inst := m.activeWS().Panes.Get(key)
 	if inst == nil {
 		return nil

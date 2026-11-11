@@ -131,8 +131,10 @@ through `openPath`; it now lands the file in the focused pane's tab list via
   resolved by `fileEditorKey` — like `activeEditorKey`, but a pane only
   qualifies while it actually edits files (an empty editor or ≥1 editor tab).
   A terminal-only tab host (a `cmd+t`-converted terminal pane, #983) and
-  dedicated terminal/tool panes are skipped; with no qualifying pane a fresh
-  editor pane spawns.
+  dedicated terminal/tool panes are skipped; with no qualifying pane a viewer
+  holding the flexible region (hex, image, data, …) takes the file as a tab
+  (`fileOpenKey`, #3131, see [Pane Layout & Drag](/architecture/pane-layout.md)), and only without
+  one a fresh editor pane spawns.
 
 Shared documents (#142) are reused verbatim: `loadOrShare` scans all tabs of all
 panes, so one file open in two tabs — same pane or different panes — aliases one

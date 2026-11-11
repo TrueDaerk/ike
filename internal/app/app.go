@@ -10630,10 +10630,7 @@ func (m Model) openPathFocused(path string) (tea.Model, tea.Cmd) {
 // last-focused editor rather than a split beside it. With no editor pane to
 // host the tab, one is spawned first, matching the plain-file fallback.
 func (m Model) openPathInEditor(path string) (tea.Model, tea.Cmd) {
-	m.viewerTabHost = m.fileEditorKey()
-	if m.viewerTabHost == "" {
-		m.viewerTabHost = m.spawnEditor()
-	}
+	m.viewerTabHost = m.fileOpenOrSpawn() // a flexible-region viewer hosts it too (#3131)
 	return m.openPathWith(path, false)
 }
 
@@ -10678,6 +10675,12 @@ func (m Model) openPathMode(path string, newPane, forceEditor bool) (tea.Model, 
 			if k := m.editorWithFile(path); k != "" {
 				key = k
 			}
+		}
+		if key == "" && !newPane {
+			// No editor, but a viewer holds the flexible region: the file
+			// becomes a tab beside it instead of a split carved out of the
+			// explorer column (#3131).
+			key = m.fileOpenKey()
 		}
 		// NewPane with an empty active editor reuses it instead of splitting —
 		// otherwise the blank pane is stranded beside the new one, the exact
@@ -12001,6 +12004,11 @@ func (m Model) splitView(zone layout.Zone) (tea.Model, tea.Cmd) {
 // slot anchors the split, and only as a last resort the focused leaf does.
 func (m *Model) spawnEditor() string {
 	anchor := editorAnchor{target: m.fileEditorKey(), zone: m.splitZone}
+	if anchor.target == "" {
+		// A viewer holding the flexible region anchors the split (#3131):
+		// the new editor lands beside it, never inside the explorer column.
+		anchor.target = m.flexFileHostKey()
+	}
 	if anchor.target == "" {
 		// No live pane edits files: a tool-tab host must not attract the
 		// split (#1989) — the reference layout's editor slot decides the

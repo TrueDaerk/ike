@@ -85,10 +85,7 @@ func (m Model) initDataPanes() []tea.Cmd {
 // never be written back.
 func (m *Model) showTableSchema(msg dataview.ShowSchemaMsg) tea.Cmd {
 	vpath := archiveEntryPath(msg.Path, msg.Table+".sql")
-	key := m.fileEditorKey()
-	if key == "" {
-		key = m.spawnEditor()
-	}
+	key := m.fileOpenOrSpawn()
 	inst := m.activeWS().Panes.Get(key)
 	if inst == nil {
 		return nil

@@ -1,5 +1,16 @@
 # Log
 
+## 2026-11-11 (Layout: file open beside a flexible-region viewer, #3131)
+
+- [Pane Layout & Drag](/architecture/pane-layout.md): with no text editor
+  live but a viewer (hex, image, data, archive, …) holding the flexible
+  region, a non-split file open lands as a tab in that viewer's pane
+  (`fileOpenKey` / `flexFileHostKey`) instead of an editor carved out of the
+  explorer's column; `spawnEditor` anchors on the same pane, so the
+  explorer's `o` splits beside the viewer.
+- [Editor tabs](/architecture/editor-tabs.md): the #998 target rule names the
+  new rung.
+
 ## 2026-11-10 (.http: HTTP Variables palette, #3122)
 
 - [HTTP Client](/architecture/http-client.md): `http.variables`

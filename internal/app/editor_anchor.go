@@ -262,3 +262,64 @@ func (m *Model) noLiveEditorFlexAnchor() string {
 	}
 	return m.flexAnchorKey()
 }
+
+// flexFileHostKey names the flexible-region pane a file open lands in as a
+// tab when no live pane edits files (#3131): a viewer standing in the
+// editor area alone (hex, image, data, archive, …) or a tab host whose tabs
+// are viewer content. Order mirrors fileEditorKey — the focused pane, the
+// flexible region's MRU, then tree order. A terminal-only host (#998), a
+// tool-tab host (#1989) and the tool windows never qualify; "" leaves the
+// caller the editor-slot fallback (#3109).
+func (m Model) flexFileHostKey() string {
+	if fileHostPane(m.activeWS().Panes.FocusedInstance()) {
+		return m.activeWS().Panes.Focused()
+	}
+	if m.recentFlex != "" && m.liveLeaf(m.recentFlex) && fileHostPane(m.activeWS().Panes.Get(m.recentFlex)) {
+		return m.recentFlex
+	}
+	for _, key := range m.leafOrder() {
+		if fileHostPane(m.activeWS().Panes.Get(key)) {
+			return key
+		}
+	}
+	return ""
+}
+
+// fileHostPane reports whether a pane without editor tabs may still take a
+// file tab (#3131): a dedicated viewer, or an editor-kind tab host holding
+// at least one viewer content tab. Terminal-only hosts stay terminal hosts.
+func fileHostPane(inst *pane.Instance) bool {
+	if !flexPane(inst) {
+		return false
+	}
+	if pane.KindViewer(inst.Kind()) {
+		return true
+	}
+	for i := 0; i < inst.TabCount(); i++ {
+		if c := inst.TabContent(i); c != nil && pane.KindViewer(c.Kind()) {
+			return true
+		}
+	}
+	return false
+}
+
+// fileOpenKey is the pane a non-split file open lands in: the editor
+// fileEditorKey resolves, else the flexible-region viewer (#3131) converted
+// in place into a tab host, else "" — the caller then spawns an editor.
+func (m *Model) fileOpenKey() string {
+	if key := m.fileEditorKey(); key != "" {
+		return key
+	}
+	if key := m.flexFileHostKey(); key != "" && m.joinableHost(key) {
+		return key
+	}
+	return ""
+}
+
+// fileOpenOrSpawn is fileOpenKey with the spawnEditor fallback.
+func (m *Model) fileOpenOrSpawn() string {
+	if key := m.fileOpenKey(); key != "" {
+		return key
+	}
+	return m.spawnEditor()
+}
