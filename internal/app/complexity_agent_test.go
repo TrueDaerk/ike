@@ -198,13 +198,8 @@ func TestComplexityAskAgentRunsFreshSessionAndAppliesDiff(t *testing.T) {
 			t.Errorf("toasts lack %q: %v", part, toastTexts(m))
 		}
 	}
-	// The explanation waits in a scratch behind the file, header first.
-	body := newestAgentScratch(t)
-	for _, part := range []string{"# Simplify render\n", "Model: sonnet · session log: ", "fresh-1.jsonl", "> Applied to the buffer", "Extracted the loop into a helper.\n\n```diff\n--- a/a.go\n+++ b/a.go\n@@ -3,4 +3,4 @@\n-\tif a > 0 {\n+\tif a > 0 { // simpler\n```\n\nThat keeps the signature."} {
-		if !strings.Contains(body, part) {
-			t.Errorf("scratch lacks %q:\n%s", part, body)
-		}
-	}
+	// A successful apply writes no scratch and opens no tab for one (#3137).
+	cxAssertNoScratch(t, m)
 	// u reverts the whole diff in one step.
 	m = drainKey(m, tea.KeyPressMsg{Code: 'u', Text: "u"})
 	if got := m.activeEditor().Text(); strings.Contains(got, "simpler") {
@@ -239,6 +234,32 @@ func findCxMsg[T any](cmd tea.Cmd) *T {
 		}
 	}
 	return nil
+}
+
+// cxAssertNoScratch fails when a scratch file exists or a tab of the
+// focused pane shows one: a successful apply leaves neither (#3137).
+func cxAssertNoScratch(t *testing.T, m Model) {
+	t.Helper()
+	paths, err := scratch.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(paths) != 0 {
+		t.Errorf("a successful apply must write no scratch: %v", paths)
+	}
+	dir, err := scratch.Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	inst := m.tabPane()
+	if inst == nil {
+		t.Fatal("no tab pane")
+	}
+	for i := 0; i < inst.TabCount(); i++ {
+		if p := inst.TabPath(i); p != "" && (strings.HasPrefix(canonicalPath(p), canonicalPath(dir)) || filepath.Ext(p) == ".md") {
+			t.Errorf("a successful apply must open no scratch tab: %s", p)
+		}
+	}
 }
 
 // newestAgentScratch is the text of the newest simplify scratch.
@@ -318,8 +339,12 @@ func TestComplexityAgentHunkMismatchAppliesNothing(t *testing.T) {
 	if ed := m.activeEditor(); ed == nil || filepath.Ext(ed.Path()) != ".md" {
 		t.Fatal("the scratch must open in front")
 	}
-	if body := newestAgentScratch(t); !strings.Contains(body, "does not apply cleanly") || !strings.Contains(body, "git apply --3way") {
-		t.Errorf("scratch = %s", body)
+	// The scratch keeps its header: function, metrics, model, session log.
+	body := newestAgentScratch(t)
+	for _, part := range []string{"# Simplify render\n", ":3 — CCN 3, cognitive 3\n", "Model: ", "s1.jsonl", "does not apply cleanly", "git apply --3way", "```diff\n@@ -3 +3 @@"} {
+		if !strings.Contains(body, part) {
+			t.Errorf("scratch lacks %q:\n%s", part, body)
+		}
 	}
 }
 
@@ -389,6 +414,7 @@ func TestComplexityAgentRetryFindsDiff(t *testing.T) {
 	if ed := m.editorForPath(file); f.runs != 2 || ed == nil || !strings.Contains(ed.Text(), "return a // done") {
 		t.Fatalf("the follow-up's diff must apply (runs %d)", f.runs)
 	}
+	cxAssertNoScratch(t, m)
 }
 
 func TestComplexityAgentApplyOffOpensScratchOnly(t *testing.T) {

@@ -1,5 +1,14 @@
 # Log
 
+## 2026-11-12 (Complexity agent: no scratch on a successful apply, #3137)
+
+- [Complexity](/architecture/complexity.md): the simplify / extract agent
+  (`a`) writes its explanation scratch only when the answer is not applied
+  (no diff, a refused or mismatching diff, `complexity.agent_apply` off) and
+  opens it in front; a successful apply opens no scratch tab and leaves no
+  `scratch*.md` behind — the before → after notification and its session log
+  are the record.
+
 ## 2026-11-12 (Tests: condition-based waiting in `internal/terminal`, #3136)
 
 - [Change Workflow](/process/change-workflow.md): new "No fixed sleeps in

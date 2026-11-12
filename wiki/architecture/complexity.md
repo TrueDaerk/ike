@@ -2206,9 +2206,8 @@ once and are replaced by its after lines, last hunk first; a miss returns a
 `agenttrace.ErrNoMatch` (*the diff's lines do not occur in the file — it does
 not match the buffer*; the revert's `ErrConflict`, *it was edited since*,
 described the wrong direction, #3050) and nothing is applied. The check runs first against the buffer, or the disk when the file
-is not open; only then the scratch (below) opens, the function's file opens
-after it — so it is the tab in front and the editor sits on the function's
-header — and the edit is made last through `applyBufferRestore`, the local
+is not open; only then the function's file opens — the tab in front, the
+editor on the function's header — and the edit is made last through `applyBufferRestore`, the local
 history's one-change restore. That order matters: a tab switch *after* the
 edit would hand the dirty buffer to `editor.auto_save = "focus"`, and the
 apply never saves. With several files (#3046) the same steps run per file
@@ -2235,10 +2234,14 @@ before #3009.
 **The scratch.** A `.md` scratch (`cxAgentScratch.body`): a heading naming
 the function, its location and metrics, `Model: … · session log: …`, a
 quoted line saying what happened to the diff, then the answer with a bare
-unified diff fenced as ```` ```diff ```` (`fenceDiff`). It opens in a
-background tab behind the function's file after a successful apply (the
-documented choice over putting the explanation into the notification), in
-front otherwise.
+unified diff fenced as ```` ```diff ```` (`fenceDiff`). It is written only
+when the answer is **not** applied — no diff after the follow-up, a diff that
+does not parse or touches a file outside the request, a hunk that does not
+match, or `complexity.agent_apply` off — and then opens in front. A
+successful apply writes no scratch and opens no tab for it (#3137): the
+before → after notification is the feedback and the session log it names
+holds the full answer, so a series of simplifications leaves no scratch files
+behind.
 
 **Progress and cancel (#3009).** A run is a `cxAgentRun` in
 `cxAgent.running` (keyed `complexitypanel.AgentKey`: path + name + header
