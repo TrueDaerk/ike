@@ -72,6 +72,7 @@ func parityResults(t *testing.T) *allfind.Results {
 // TestFindInPathAndAllProjectsKeyParity: the same keys select the same match
 // and open it, on both surfaces.
 func TestFindInPathAndAllProjectsKeyParity(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name string
 		keys []string
@@ -133,6 +134,7 @@ func TestFindInPathAndAllProjectsKeyParity(t *testing.T) {
 // TestFindInPathAndAllProjectsCloseParity: esc closes both overlays and both
 // keep their results for the retained-cursor commands.
 func TestFindInPathAndAllProjectsCloseParity(t *testing.T) {
+	t.Parallel()
 	f := parityFinder(t)
 	f.Update(parityKey("esc"))
 	if f.IsOpen() {
@@ -155,6 +157,7 @@ func TestFindInPathAndAllProjectsCloseParity(t *testing.T) {
 // TestAllProjectsOpenClosesLikeFindInPath: both surfaces hand the keyboard
 // back when a match is opened.
 func TestAllProjectsOpenClosesLikeFindInPath(t *testing.T) {
+	t.Parallel()
 	f := parityFinder(t)
 	f.Update(parityKey("enter"))
 	if f.IsOpen() {

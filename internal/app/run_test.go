@@ -48,6 +48,7 @@ func runModel(t *testing.T, placement string) Model {
 // terminal tab in the focused editor pane, labelled after the config, and the
 // default configuration is persisted.
 func TestRunFileInPane(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := runModel(t, "in_pane")
 	tm, _ := m.Update(RunFileMsg{})
@@ -75,6 +76,7 @@ func TestRunFileInPane(t *testing.T) {
 // TestRunFileBottomDock verifies the default placement (#1905): the Run tool
 // opens as a dedicated pane docked at the bottom workspace edge.
 func TestRunFileBottomDock(t *testing.T) {
+	t.Parallel()
 	m := runModel(t, "bottom")
 	tm, _ := m.Update(RunFileMsg{})
 	m = tm.(Model)
@@ -104,6 +106,7 @@ func TestRunFileBottomDock(t *testing.T) {
 // TestRunFileLegacyNewTerminalPlacement covers the migration (#1905): a config
 // still saying new_terminal keeps placing runs at the bottom edge.
 func TestRunFileLegacyNewTerminalPlacement(t *testing.T) {
+	t.Parallel()
 	m := runModel(t, "new_terminal")
 	tm, _ := m.Update(RunFileMsg{})
 	m = tm.(Model)
@@ -119,6 +122,7 @@ func TestRunFileLegacyNewTerminalPlacement(t *testing.T) {
 // TestRunReusesRunTool verifies the rerun semantics (#1905): the second run
 // replaces the Run tool's session in place — same pane, no second one.
 func TestRunReusesRunTool(t *testing.T) {
+	t.Parallel()
 	m := runModel(t, "bottom")
 	tm, _ := m.Update(RunFileMsg{})
 	m = tm.(Model)
@@ -142,6 +146,7 @@ func TestRunReusesRunTool(t *testing.T) {
 // TestRunReusesRunToolTab is TestRunReusesRunTool for the in_pane placement:
 // the rerun lands in the existing Run tab, not in a second one.
 func TestRunReusesRunToolTab(t *testing.T) {
+	t.Parallel()
 	m := runModel(t, "in_pane")
 	tm, _ := m.Update(RunFileMsg{})
 	m = tm.(Model)
@@ -160,6 +165,7 @@ func TestRunReusesRunToolTab(t *testing.T) {
 // and a plain terminal pane open, a run leaves both alone and opens its own
 // Run tool instead of dropping its output into one of them.
 func TestRunNeverHijacksOpenPanes(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	withTools(t, sleepTool("watcher"))
 	m := runModel(t, "bottom")
 	tm, _ := m.Update(ToolOpenMsg{Name: "watcher"})
@@ -203,6 +209,7 @@ func TestRunNeverHijacksOpenPanes(t *testing.T) {
 // Run tool: the pane survives the program's exit showing the restart/close
 // dialog, and closes like any pane.
 func TestRunToolExitOverlayAndClose(t *testing.T) {
+	t.Parallel()
 	m := runModel(t, "bottom")
 	tm, _ := m.Update(RunFileMsg{})
 	m = tm.(Model)
@@ -231,6 +238,7 @@ func TestRunToolExitOverlayAndClose(t *testing.T) {
 // tool's pane is recorded as session state, so a restart drops its leaf
 // instead of re-running the program.
 func TestRunToolIsSessionState(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := runModel(t, "bottom")
 	tm, _ := m.Update(RunFileMsg{})
@@ -250,6 +258,7 @@ func TestRunToolIsSessionState(t *testing.T) {
 // TestRunToolFollowsSlotAssignment verifies the Run tool participates in slot
 // placement (#1897) like every other tool: the assignment beats run.placement.
 func TestRunToolFollowsSlotAssignment(t *testing.T) {
+	// serial: withToolLayout: config.Set (process-wide configuration)
 	withToolLayout(t, []string{"EEZ", "EEZ"}, []string{"Z=run"})
 	m := runModel(t, "in_pane")
 	tm, _ := m.Update(RunFileMsg{})
@@ -266,6 +275,7 @@ func TestRunToolFollowsSlotAssignment(t *testing.T) {
 
 // TestRunUnknownFileType is a friendly no-op.
 func TestRunUnknownFileType(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "prog.unknowable")
 	if err := os.WriteFile(path, []byte("x\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -284,6 +294,7 @@ func TestRunUnknownFileType(t *testing.T) {
 
 // TestRerunWithoutHistory is a friendly no-op too.
 func TestRerunWithoutHistory(t *testing.T) {
+	t.Parallel()
 	m := NewWith(registry.New(), host.MapConfig{})
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m = tm.(Model)
@@ -299,6 +310,7 @@ func TestRerunWithoutHistory(t *testing.T) {
 // project's toolchain (venv, [lang.<id>] interpreter) and its relative paths
 // apply exactly like for a file inside the repository.
 func TestRunScratchFromProjectRoot(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	m = dispatch(t, m, NewScratchMsg{Ext: "rfake"})

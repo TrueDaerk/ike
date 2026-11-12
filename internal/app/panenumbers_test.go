@@ -67,6 +67,7 @@ func splitOrderApp(t *testing.T) Model {
 // TestPaneNumberOrderIsReadingOrder: the numbers run left-to-right,
 // top-to-bottom over the computed rectangles, across nested splits.
 func TestPaneNumberOrderIsReadingOrder(t *testing.T) {
+	t.Parallel()
 	m := splitOrderApp(t)
 	order := m.paneNumberOrder()
 	if len(order) != 4 {
@@ -89,6 +90,7 @@ func TestPaneNumberOrderIsReadingOrder(t *testing.T) {
 // TestPaneNumbersFollowLayoutChanges: closing a pane renumbers the survivors
 // on the spot — the numbering is derived from the live layout, never cached.
 func TestPaneNumbersFollowLayoutChanges(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := splitOrderApp(t)
 	before := m.paneNumberOrder()
@@ -118,6 +120,7 @@ func TestPaneNumbersFollowLayoutChanges(t *testing.T) {
 // title bar as the inverted pill (#2496) matching its focus state, and the
 // badge disappears with layout.pane_numbers = off.
 func TestPaneNumberBadgeInChrome(t *testing.T) {
+	t.Parallel()
 	m := splitOrderApp(t)
 	for i, key := range m.paneNumberOrder() {
 		box := m.renderPane(key, m.lay.Panes[key])
@@ -154,6 +157,7 @@ func TestPaneNumberBadgeInChrome(t *testing.T) {
 // gets no extra one, so both kinds of title sit the same distance from the
 // badge.
 func TestPaneNumberBadgeGap(t *testing.T) {
+	t.Parallel()
 	m := splitOrderApp(t)
 	pal := m.pal()
 	badge := paneNumberBadge(" 1 ", true, pal)
@@ -176,6 +180,7 @@ func TestPaneNumberBadgeGap(t *testing.T) {
 // slots, the others the muted pair, and both differ from the border colour the
 // badge used to borrow — the dim digit was the bug (#2496).
 func TestPaneNumberBadgeIsInverted(t *testing.T) {
+	t.Parallel()
 	m := splitOrderApp(t)
 	pal := m.pal()
 	if got := paneNumberBadge(" 1 ", true, pal); !strings.Contains(got, ansiOf(pal.PaneBadge)) {
@@ -200,6 +205,7 @@ func ansiOf(c color.Color) string {
 // hidden until a pane switch raises the which-pane hint, and the hint's own
 // timer message takes them down again.
 func TestPaneNumbersFocusOnlyFollowsTheHint(t *testing.T) {
+	t.Parallel()
 	m := numberedApp(t, host.MapConfig{"layout.pane_numbers": "focus-only", "layout.pane_slots": ""})
 	m.SplitFocused(layout.ZoneRight)
 	m.layout()
@@ -228,6 +234,7 @@ func TestPaneNumbersFocusOnlyFollowsTheHint(t *testing.T) {
 // TestPaneFocusIndexFocusesThatPane: pane.focus<n>'s message focuses the pane
 // carrying that number, and an out-of-range number leaves focus alone.
 func TestPaneFocusIndexFocusesThatPane(t *testing.T) {
+	t.Parallel()
 	m := splitOrderApp(t)
 	order := m.paneNumberOrder()
 	for i, want := range order {
@@ -249,6 +256,7 @@ func TestPaneFocusIndexFocusesThatPane(t *testing.T) {
 // must resolve through the keymap layer to pane.focus<n>. macOS only — off
 // macOS the Cmd→Ctrl fold owns these chords, and the prompt is the doorway.
 func TestPaneFocusChordFocusesThatPane(t *testing.T) {
+	t.Parallel()
 	if keymap.GOOS != "darwin" {
 		t.Skip("ctrl+digit pane focus ships on macOS only (#2407)")
 	}
@@ -272,6 +280,7 @@ func TestPaneFocusChordFocusesThatPane(t *testing.T) {
 // TestPaneFocusByIndexPrompt: the palette flavour opens a shell prompt and
 // focuses the typed number on enter.
 func TestPaneFocusByIndexPrompt(t *testing.T) {
+	t.Parallel()
 	m := splitOrderApp(t)
 	order := m.paneNumberOrder()
 	tm, _ := m.Update(PaneFocusByIndexMsg{})
@@ -295,6 +304,7 @@ func TestPaneFocusByIndexPrompt(t *testing.T) {
 // pane-number pill leaves of the title row, so a click must be resolved
 // against the same origin — a cell inside the pill is not tab 0 (#2496).
 func TestTabBarHitStartsAfterTheBadge(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	m := openApp(t, writeTemp(t, dir, "a.txt", "a\n"), writeTemp(t, dir, "b.txt", "b\n"))
 	m.layout()
@@ -339,6 +349,7 @@ func slotApp(t *testing.T, slots string) Model {
 // VCS window is 3 whether zero, one or three editors are open, and the editors
 // start at 4 — the number after the highest reserved one.
 func TestReservedNumbersIgnoreTheEditorCount(t *testing.T) {
+	t.Parallel()
 	m := slotApp(t, "vcs=3")
 	vcs := focusToolWindow(t, &m, toolWindowKinds()["vcs"])
 	editor := m.activeEditorKey()
@@ -390,6 +401,7 @@ func TestReservedNumbersIgnoreTheEditorCount(t *testing.T) {
 // every other number exactly where it was — the reserved number becomes a gap
 // rather than shifting the panes below it up.
 func TestReservedNumberGapStaysWhenTheToolCloses(t *testing.T) {
+	t.Parallel()
 	m := slotApp(t, "vcs=3,problems=4")
 	vcs := focusToolWindow(t, &m, toolWindowKinds()["vcs"])
 	problems := focusToolWindow(t, &m, toolWindowKinds()["problems"])
@@ -419,6 +431,7 @@ func TestReservedNumberGapStaysWhenTheToolCloses(t *testing.T) {
 // is not open opens it through the tool's own toggle route and focuses it —
 // the number addresses the tool, not merely a pane that happens to exist.
 func TestReservedChordOpensAClosedTool(t *testing.T) {
+	t.Parallel()
 	m := slotApp(t, "problems=3")
 	if m.activeWS().Panes.Has(pane.ProblemsKey) {
 		t.Fatal("precondition: the Problems window should start closed")
@@ -448,6 +461,7 @@ func TestReservedChordOpensAClosedTool(t *testing.T) {
 // TestExplorerIsAlwaysPaneOne: 1 belongs to the explorer whatever the table
 // says, and the chord brings a hidden explorer back rather than dying.
 func TestExplorerIsAlwaysPaneOne(t *testing.T) {
+	t.Parallel()
 	m := slotApp(t, "vcs=3")
 	if got := m.paneNumberOf(pane.ExplorerKey); got != 1 {
 		t.Fatalf("explorer numbered %d, want 1", got)
@@ -478,6 +492,7 @@ func TestExplorerIsAlwaysPaneOne(t *testing.T) {
 // takes a flowing number after the reserved ones, in reading order, exactly
 // like a document pane.
 func TestUnassignedToolIsNumberedLikeAnEditor(t *testing.T) {
+	t.Parallel()
 	m := slotApp(t, "vcs=3")
 	problems := focusToolWindow(t, &m, toolWindowKinds()["problems"])
 	n := m.paneNumberOf(problems)
@@ -505,6 +520,7 @@ func TestUnassignedToolIsNumberedLikeAnEditor(t *testing.T) {
 // toggle command of their own (the debug area, the HTTP viewer) keep their
 // gap — the chord says so instead of silently doing nothing (#275).
 func TestReservedNumberWithoutAnOpenerNotifies(t *testing.T) {
+	t.Parallel()
 	m := numberedApp(t, host.MapConfig{
 		"layout.pane_slots": "debug=3",
 		// drainKey runs the toast's expiry tick inline; keep it short.
@@ -527,6 +543,7 @@ func TestReservedNumberWithoutAnOpenerNotifies(t *testing.T) {
 // TestUnassignedNumberNotifies: a number no pane carries and no tool reserves
 // is the pre-existing no-op with a notification.
 func TestUnassignedNumberNotifies(t *testing.T) {
+	t.Parallel()
 	m := numberedApp(t, host.MapConfig{
 		"layout.pane_slots":             "vcs=3",
 		"notifications.timeout_seconds": "1",
@@ -560,6 +577,7 @@ func notifiedAbout(m Model, text string) bool {
 // TestReservedNumbersFollowTheBadge: the badge a tool draws is its reserved
 // number, and pane.focusByIndex resolves the same table the chords do.
 func TestReservedNumbersFollowTheBadge(t *testing.T) {
+	t.Parallel()
 	m := slotApp(t, "vcs=3")
 	vcs := focusToolWindow(t, &m, toolWindowKinds()["vcs"])
 	if got := m.paneNumberBadgeText(vcs); got != " 3 " {
@@ -583,6 +601,7 @@ func TestReservedNumbersFollowTheBadge(t *testing.T) {
 // definition may name an id the form rejects. Only the debug area and the HTTP
 // viewer may lack an opener — they have no toggle command of their own.
 func TestPaneSlotDefsCoverEveryConfigurableTool(t *testing.T) {
+	t.Parallel()
 	defs := map[string]paneSlotDef{}
 	for _, d := range paneSlotDefs {
 		defs[d.id] = d

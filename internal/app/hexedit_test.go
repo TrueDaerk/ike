@@ -88,6 +88,7 @@ func hexEditTitle(m Model) string {
 // dispatch, the title shows the dirty marker, ctrl+s writes just the changed
 // byte in place, clears the marker and stamps the watcher.
 func TestHexEditSaveInPlace(t *testing.T) {
+	t.Parallel()
 	for _, asTab := range []bool{false, true} {
 		name := "pane"
 		if asTab {
@@ -136,6 +137,7 @@ func TestHexEditSaveInPlace(t *testing.T) {
 // TestHexEditClosePrompts: closing a dirty hex viewer opens the unsaved-
 // changes guard; d discards, s saves — both then close.
 func TestHexEditClosePrompts(t *testing.T) {
+	t.Parallel()
 	for _, asTab := range []bool{false, true} {
 		for _, answer := range []rune{'d', 's'} {
 			name := "pane/" + string(answer)
@@ -173,6 +175,7 @@ func TestHexEditClosePrompts(t *testing.T) {
 
 // TestHexEditCleanCloseNoPrompt: an unedited hex viewer closes at once.
 func TestHexEditCleanCloseNoPrompt(t *testing.T) {
+	t.Parallel()
 	m, _ := hexEditOpen(t, false)
 	m.guardedCloseFocused()
 	if m.closePromptOpen() {
@@ -186,6 +189,7 @@ func TestHexEditCleanCloseNoPrompt(t *testing.T) {
 // TestHexEditQuitGuardListsAndSaves: a dirty hex viewer counts as unsaved
 // work for the quit guard, and the save-all path writes it.
 func TestHexEditQuitGuardListsAndSaves(t *testing.T) {
+	t.Parallel()
 	m, path := hexEditOpen(t, false)
 	m = hexEditType(m, "00")
 	dirty, _ := m.quitActivity()
@@ -207,6 +211,7 @@ func TestHexEditQuitGuardListsAndSaves(t *testing.T) {
 // the hex viewer through the app's keymap dispatch rather than being taken
 // by a global binding.
 func TestHexEditKeysReachPane(t *testing.T) {
+	t.Parallel()
 	m, _ := hexEditOpen(t, false)
 	hv := m.focusedContent().Hex()
 	m = hexEditType(m, "ff")
@@ -238,6 +243,7 @@ func TestHexEditKeysReachPane(t *testing.T) {
 // TestHexEditUndoRedoChords: the editor's undo / redo chords (#2888) reach
 // the hex viewer — ctrl+z and cmd+z undo, ctrl+shift+z and cmd+shift+z redo.
 func TestHexEditUndoRedoChords(t *testing.T) {
+	t.Parallel()
 	for _, mod := range []tea.KeyMod{tea.ModCtrl, tea.ModSuper} {
 		m, _ := hexEditOpen(t, false)
 		m = hexEditType(m, "6b")

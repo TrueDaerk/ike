@@ -42,6 +42,7 @@ func unboundChords(t *testing.T, m Model) []string {
 // concerned — it must not be logged as a missing keybind. alt+delete (the
 // macOS word kill) was the top "unbound" chord in the telemetry before this.
 func TestTelemetryEditorOwnedChordNotUnbound(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	for _, mode := range []string{"normal", "insert"} {
 		t.Run(mode, func(t *testing.T) {
@@ -69,6 +70,7 @@ func TestTelemetryEditorOwnedChordNotUnbound(t *testing.T) {
 // (The unbound events that motivated #2313 were recorded by a pre-#2303 build,
 // which logged editor-owned chords as unbound even when they worked.)
 func TestWordChordsLanguageScopedEditor(t *testing.T) {
+	// serial: telemetryModel: waits on the wall clock (load-sensitive)
 	withStore(t)
 	bufferLangLangs(t) // registers the http language, so a.http classifies
 	chords := []struct {
@@ -117,6 +119,7 @@ func TestWordChordsLanguageScopedEditor(t *testing.T) {
 // signal alive: a chord neither the keymap nor the editor wants is still
 // reported, even with an editor focused.
 func TestTelemetryUnboundChordInEditorStillRecorded(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := telemetryEditorModel(t)
 	// ctrl+alt+0 is bound to nothing in any preset and means nothing to the
@@ -142,6 +145,7 @@ func TestTelemetryUnboundChordInEditorStillRecorded(t *testing.T) {
 // table binds it there in every language scope, and this is the one way the
 // resolver can produce that.
 func TestTelemetryUnboundNamesDroppedDefault(t *testing.T) {
+	// serial: telemetryModel: waits on the wall clock (load-sensitive)
 	withStore(t)
 	m := telemetryModel(t, host.MapConfig{"keymap.bindings.alt+shift+up": ""})
 	path := filepath.Join(t.TempDir(), "a.json")
@@ -187,6 +191,7 @@ func TestTelemetryUnboundNamesDroppedDefault(t *testing.T) {
 // telemetry's editor[json] names. (The test registry carries no editor
 // commands, so the lookup is asserted on the table rather than via dispatch.)
 func TestEditorDefaultResolvesInLanguageScope(t *testing.T) {
+	// serial: telemetryModel: waits on the wall clock (load-sensitive)
 	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	path := filepath.Join(t.TempDir(), "a.json")

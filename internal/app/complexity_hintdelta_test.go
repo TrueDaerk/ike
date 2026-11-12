@@ -21,6 +21,7 @@ import (
 )
 
 func TestComplexityHintsDeltaBuilder(t *testing.T) {
+	t.Parallel()
 	base := []complexity.Function{
 		{Name: "f", Line: 1, CCN: 20, Cognitive: 31},
 		{Name: "g", Line: 9, CCN: 14, Cognitive: 31},
@@ -81,6 +82,7 @@ func cxDeltaLand(m Model, path string, base, head []complexity.Function) Model {
 // snapshot and the dirty one from the measurement it already holds — and
 // the measure counter shows no additional Measure call.
 func TestComplexityHintsDeltaRepaintsWithoutMeasuring(t *testing.T) {
+	// serial: sets package variable cxHintMeasure
 	var calls atomic.Int32
 	orig := cxHintMeasure
 	cxHintMeasure = func(path, text string) []complexity.Function {
@@ -154,6 +156,7 @@ func TestComplexityHintsDeltaRepaintsWithoutMeasuring(t *testing.T) {
 // segment off, an open editor of a measurable file the snapshot lists as
 // modified arms the diff; a clean one does not, nor hints off.
 func TestComplexityDiffWantedByModifiedEditor(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	m, src := cxOpenSource(t)
 	cxSegmentConfig(t, false, true)
 	if m.complexityPanel() != nil {

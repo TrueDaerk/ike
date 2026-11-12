@@ -50,6 +50,7 @@ func ageStructBurst(m *Model) { m.structLastAt = time.Now().Add(-2 * structBurst
 // needs. Nothing in the sequence changes the buffer, so nothing else may reach
 // the language server.
 func TestStructureDispatchesOnceAcrossFocusSaveAndSwitch(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := projectTempDir(t)
 	rootA, rootB := filepath.Join(base, "a"), filepath.Join(base, "b")
 	for _, d := range []string{rootA, rootB} {
@@ -133,6 +134,7 @@ func TestStructureDispatchesOnceAcrossFocusSaveAndSwitch(t *testing.T) {
 // same (path, version) inside the burst window cost one request — the second
 // never reaches the command, so it records no internal telemetry event either.
 func TestStructureBurstCollapsesRepeatDispatch(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	root, files := navProject(t)
 	chdir(t, root)
 	calls := 0
@@ -168,6 +170,7 @@ func TestStructureBurstCollapsesRepeatDispatch(t *testing.T) {
 // documentSymbol cache in its Aux, and resuming installs it back on the
 // rebuilt model.
 func TestStructureCacheParksWithWorkspace(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	rootA, rootB := filepath.Join(base, "a"), filepath.Join(base, "b")
 	for _, d := range []string{rootA, rootB} {

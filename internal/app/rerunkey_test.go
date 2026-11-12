@@ -26,6 +26,7 @@ import (
 // stored request goes out again — the file may have changed meanwhile, the
 // re-send repeats the bytes that produced the shown response.
 func TestCtrlRResendsInHTTPResponsePane(t *testing.T) {
+	t.Parallel()
 	var mu sync.Mutex
 	var paths []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -94,6 +95,7 @@ func TestCtrlRResendsInHTTPResponsePane(t *testing.T) {
 // the file, so members added to a re-packed archive appear without closing the
 // pane.
 func TestCtrlRReloadsArchiveListing(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	dir := t.TempDir()
 	p := filepath.Join(dir, "src.tar")
@@ -134,6 +136,7 @@ func TestCtrlRReloadsArchiveListing(t *testing.T) {
 // TestArchiveReloadWithoutArchiveFocusExplains: the palette entry needs an
 // archive viewer; without one it says so instead of doing nothing.
 func TestArchiveReloadWithoutArchiveFocusExplains(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	out, _ := m.Update(ArchiveReloadMsg{})
 	m = out.(Model)

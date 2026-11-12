@@ -31,6 +31,7 @@ func minifiedJSON(size int) string {
 // the status line badges formatting off and Reformat File is refused instead
 // of running the formatter on the Update loop.
 func TestReformatGatedByLongLine(t *testing.T) {
+	// serial: largefile.Reset (process-wide state of package largefile)
 	largefile.Reset()
 	t.Cleanup(largefile.Reset)
 	src := minifiedJSON(1_000_000)

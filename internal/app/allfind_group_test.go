@@ -24,6 +24,7 @@ import (
 
 // TestFindInGroupCommandRegistered: the command exists and carries its chords.
 func TestFindInGroupCommandRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	cmd, ok := m.reg.Command("project.findInGroup")
 	if !ok {
@@ -54,6 +55,7 @@ func TestFindInGroupCommandRegistered(t *testing.T) {
 // TestFindInGroupWithoutGroupNotifies: without an active group the command
 // opens nothing and says so.
 func TestFindInGroupWithoutGroupNotifies(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	tm, _ := m.Update(OpenFindInProjectGroupMsg{})
 	m = tm.(Model)
@@ -68,6 +70,7 @@ func TestFindInGroupWithoutGroupNotifies(t *testing.T) {
 // TestGroupFindProjectsMapsMembers: group order, names from the history where
 // known, every member checked, a vanished root marked missing.
 func TestGroupFindProjectsMapsMembers(t *testing.T) {
+	t.Parallel()
 	g := project.Group{Name: "web", Roots: []string{"/api", "/ui", "/gone"}}
 	entries := []project.Entry{{Path: "/api", Name: "api-service"}}
 	stat := func(path string) (os.FileInfo, error) {
@@ -99,6 +102,7 @@ func TestGroupFindProjectsMapsMembers(t *testing.T) {
 // TestFindInGroupOpensOverMembers: with a group active the form opens over its
 // members only, titled with the group.
 func TestFindInGroupOpensOverMembers(t *testing.T) {
+	// serial: peekFixture: t.Chdir (process working directory)
 	roots := peekFixture(t, "api", "ui")
 	storeGroup(t, "web", roots)
 	m := switchModel(t)
@@ -123,6 +127,7 @@ func TestFindInGroupOpensOverMembers(t *testing.T) {
 // shared query/toggle/glob state but never writes the all-projects root
 // selection — project.find_all.excluded_roots stays as the user left it.
 func TestGroupSearchLeavesExcludedRootsAlone(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "a.go"), []byte("needle\n"), 0o644); err != nil {
@@ -164,6 +169,7 @@ func TestGroupSearchLeavesExcludedRootsAlone(t *testing.T) {
 // in ui rides the very same pending-open path as the all-projects search — the
 // switch runs, the parked open lands on the line, the result set survives.
 func TestGroupSearchCrossProjectOpen(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	api, ui := filepath.Join(base, "api"), filepath.Join(base, "ui")
 	for _, d := range []string{api, ui} {

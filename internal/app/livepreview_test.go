@@ -36,6 +36,7 @@ func previewApp(t *testing.T) Model {
 // palette through the live pane registry, so an already-open buffer re-colors
 // its syntax spans without being reopened.
 func TestPreviewTickRethemesOpenBuffers(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := previewApp(t)
 	before := m.activeWS().Panes.Palette()
@@ -66,6 +67,7 @@ func TestPreviewTickRethemesOpenBuffers(t *testing.T) {
 // TestPreviewTickRoutesToThePanel guards #2181: the debounce deadline reaches
 // the settings panel, which decides whether it still applies.
 func TestPreviewTickRoutesToThePanel(t *testing.T) {
+	t.Parallel()
 	m := previewApp(t)
 	// No browse is in flight, so an orphaned deadline is dropped silently
 	// rather than re-theming anything.

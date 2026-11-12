@@ -58,6 +58,7 @@ func feedSymbols(m Model, path string, syms []ilsp.SymbolNode) Model {
 }
 
 func TestSymbolChainDerivation(t *testing.T) {
+	t.Parallel()
 	tree := []ilsp.SymbolNode{
 		{Name: "A", Line: 0, EndLine: 4, Children: []ilsp.SymbolNode{
 			{Name: "a1", Line: 1, EndLine: 2},
@@ -88,6 +89,7 @@ func TestSymbolChainDerivation(t *testing.T) {
 }
 
 func TestCrumbTruncationKeepsDeepestSegments(t *testing.T) {
+	t.Parallel()
 	labels := []string{"file.go", "Alpha", "Beta"}
 	// Wide enough: everything visible from the first segment.
 	if lo := crumbWindow(labels, 80); lo != 0 {
@@ -112,6 +114,7 @@ func TestCrumbTruncationKeepsDeepestSegments(t *testing.T) {
 }
 
 func TestCrumbHitZones(t *testing.T) {
+	t.Parallel()
 	labels := []string{"ab", "cd"} // "ab ▸ cd": ab=0..1, sep=2..4, cd=5..6
 	cases := []struct {
 		x, want int
@@ -134,6 +137,7 @@ func TestCrumbHitZones(t *testing.T) {
 }
 
 func TestBreadcrumbRowAppearsWithSymbolData(t *testing.T) {
+	t.Parallel()
 	m, _, key, path := crumbModel(t)
 	inst := m.activeWS().Panes.Get(key)
 	if rows := m.breadcrumbRows(inst); rows != 0 {
@@ -152,6 +156,7 @@ func TestBreadcrumbRowAppearsWithSymbolData(t *testing.T) {
 }
 
 func TestBreadcrumbRowHiddenBetweenSymbols(t *testing.T) {
+	t.Parallel()
 	m, _, _, path := crumbModel(t)
 	m = feedSymbols(m, path, crumbTree()) // cursor still on line 0, outside Outer
 	view := ansi.Strip(m.render())
@@ -161,6 +166,7 @@ func TestBreadcrumbRowHiddenBetweenSymbols(t *testing.T) {
 }
 
 func TestBreadcrumbClickJumpsToSymbol(t *testing.T) {
+	t.Parallel()
 	m, r, _, path := crumbModel(t)
 	m.activeEditor().JumpTo(3, 0)
 	m = feedSymbols(m, path, crumbTree())
@@ -180,6 +186,7 @@ func TestBreadcrumbClickJumpsToSymbol(t *testing.T) {
 }
 
 func TestBreadcrumbClickRecordsNavHistory(t *testing.T) {
+	t.Parallel()
 	m, r, _, path := crumbModel(t)
 	m.activeEditor().JumpTo(3, 0)
 	m = feedSymbols(m, path, crumbTree())
@@ -196,6 +203,7 @@ func TestBreadcrumbClickRecordsNavHistory(t *testing.T) {
 // same buffer line must be reachable by mouse with the row hidden and shown —
 // the content-local translation shifts by exactly the row the layout reserved.
 func TestBreadcrumbGeometryContentClick(t *testing.T) {
+	t.Parallel()
 	m, r, _, path := crumbModel(t)
 	// Row hidden: content row 2 is buffer line 3 (1-based).
 	m = step(m, tea.MouseClickMsg{X: r.X + paneContentX + 8, Y: r.Y + paneContentY + 2, Button: tea.MouseLeft})
@@ -217,6 +225,7 @@ func TestBreadcrumbGeometryContentClick(t *testing.T) {
 }
 
 func TestBreadcrumbConfigToggleLive(t *testing.T) {
+	// serial: withStore: t.Setenv
 	cfg := host.MapConfig{}
 	withStore(t)
 	m := NewWith(registry.New(), cfg)

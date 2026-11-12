@@ -38,6 +38,7 @@ func stopEvent(cwd string) deeplink.Event {
 }
 
 func TestComplexityVerdictOffRunsNothing(t *testing.T) {
+	// serial: verdictConfig: config.Set (process-wide configuration)
 	m := sized(t, 100, 30)
 	verdictConfig(t, false)
 	if m.complexityVerdictCmd(stopEvent(t.TempDir())) != nil {
@@ -60,6 +61,7 @@ func TestComplexityVerdictOffRunsNothing(t *testing.T) {
 }
 
 func TestComplexityVerdictDiffsSessionRepoAndToasts(t *testing.T) {
+	// serial: verdictConfig: config.Set (process-wide configuration)
 	dir := gitRepo(t)
 	m := sized(t, 100, 30)
 	verdictConfig(t, true)
@@ -92,6 +94,7 @@ func TestComplexityVerdictDiffsSessionRepoAndToasts(t *testing.T) {
 }
 
 func TestComplexityVerdictPostsRowIntoTracePane(t *testing.T) {
+	// serial: traceApp: t.Setenv
 	withStore(t)
 	m, dir := traceApp(t)
 	if m.onboardingOpen() {
@@ -154,6 +157,7 @@ func TestComplexityVerdictPostsRowIntoTracePane(t *testing.T) {
 }
 
 func TestComplexityVerdictText(t *testing.T) {
+	t.Parallel()
 	d := func(baseEx, headEx, baseCog, headCog int) complexity.Diff {
 		var out complexity.Diff
 		out.Base.Excess, out.Head.Excess = baseEx, headEx

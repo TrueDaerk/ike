@@ -41,6 +41,7 @@ func projectSnapshots(t *testing.T, root string) []backup.Snapshot {
 // workspace), and coming back must not offer to "recover" the file that is
 // already open and dirty.
 func TestSwitchBackNoStaleRecoveryPromptDirty(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	src, dst := twoProjects(t)
 	file := filepath.Join(src, "work.txt")
@@ -72,6 +73,7 @@ func TestSwitchBackNoStaleRecoveryPromptDirty(t *testing.T) {
 // TestSwitchBackNoStaleRecoveryPromptClean: a buffer saved before the switch
 // leaves nothing behind at all — no snapshot, no prompt.
 func TestSwitchBackNoStaleRecoveryPromptClean(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	withStore(t)
 	src, dst := twoProjects(t)
 	file := filepath.Join(src, "clean.txt")
@@ -97,6 +99,7 @@ func TestSwitchBackNoStaleRecoveryPromptClean(t *testing.T) {
 // process's snapshots only — entering a project whose previous session died
 // with unsaved edits still offers to restore them.
 func TestSwitchIntoCrashedProjectStillPrompts(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	withStore(t)
 	_, dst := twoProjects(t)
 	crashed := filepath.Join(dst, "lost.txt")
@@ -126,6 +129,7 @@ func TestSwitchIntoCrashedProjectStillPrompts(t *testing.T) {
 // the snapshots of the active *and* the parked project, each from its own
 // state directory — so the next launch of either project starts clean.
 func TestCleanQuitAfterSwitchClearsBothProjects(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	withStore(t)
 	src, dst := twoProjects(t)
 	a := filepath.Join(src, "a.txt")
@@ -159,6 +163,7 @@ func TestCleanQuitAfterSwitchClearsBothProjects(t *testing.T) {
 // flow end to end: edit, switch away, come back, and the only thing on screen
 // is the resumed buffer — not a modal asking about it.
 func TestSwitchBackAfterDiscardingEditsPromptsNothing(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	withStore(t)
 	src, dst := twoProjects(t)
 	file := filepath.Join(src, "loop.txt")

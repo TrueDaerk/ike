@@ -28,6 +28,7 @@ func chain(t *testing.T, m Model, cmd tea.Cmd) Model {
 // TestDiffEditMode guards #496: 'e' on a worktree-backed diff mounts a live
 // editor as the right column, edits re-diff live, ctrl+e returns to browsing.
 func TestDiffEditMode(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "f.txt")
 	os.WriteFile(path, []byte("one\ntwo\nthree\n"), 0o644)
@@ -78,6 +79,7 @@ func TestDiffEditMode(t *testing.T) {
 // TestDiffEditModeReadOnlyForRevisions guards revision-backed diffs (e.g. a
 // restored revision pane, #508): 'e' hints and mounts nothing.
 func TestDiffEditModeReadOnlyForRevisions(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	m.vcs.snap = &vcs.Snapshot{Root: "/r", Branch: "main"}

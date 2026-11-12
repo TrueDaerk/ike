@@ -99,6 +99,7 @@ func funcDiffViewer(m Model, key string) (*pane.Instance, bool) {
 }
 
 func TestComplexityFunctionDiffChangedRow(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, root, d := funcDiffApp(t)
 	mod := filepath.Join(root, "mod.go")
@@ -190,6 +191,7 @@ func TestComplexityFunctionDiffChangedRow(t *testing.T) {
 }
 
 func TestComplexityFunctionDiffAddedRowAndOffsets(t *testing.T) {
+	// serial: funcDiffApp: t.Setenv
 	m, root, d := funcDiffApp(t)
 	fresh := filepath.Join(root, "fresh.go")
 	f := d.Files[fresh].Added[0]
@@ -209,6 +211,7 @@ func TestComplexityFunctionDiffAddedRowAndOffsets(t *testing.T) {
 }
 
 func TestComplexityFunctionDiffRanged(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	dir := gitRepo(t)
 	root, err := vcs.DetectRoot(dir)
@@ -263,6 +266,7 @@ func TestComplexityFunctionDiffRanged(t *testing.T) {
 }
 
 func TestComplexityFunctionDiffNeedsABase(t *testing.T) {
+	// serial: changesApp: t.Setenv
 	m := changesApp(t)
 	if cmd := m.openComplexityFunctionDiff(complexitypanel.FunctionDiffMsg{Path: "/r/a.go", Name: "f"}); cmd != nil {
 		t.Fatal("without a computed base nothing must run")

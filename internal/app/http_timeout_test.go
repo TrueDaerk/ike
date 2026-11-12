@@ -80,6 +80,7 @@ func awaitHTTPResponse(t *testing.T, cmd tea.Cmd) HTTPResponseMsg {
 // in the response pane — not a generic transport error, and not the previous
 // response left standing.
 func TestHTTPTimeoutShowsExplicitMessageInPane(t *testing.T) {
+	// serial: measures the wall clock (load-sensitive)
 	srv := hangingHTTPServer(t)
 	m := httpTimeoutApp(t, 1000)
 
@@ -117,6 +118,7 @@ func TestHTTPTimeoutShowsExplicitMessageInPane(t *testing.T) {
 // The directive bounds one request without touching the setting: a generous
 // http.timeout_ms and a tight `# @timeout` still fail fast.
 func TestHTTPTimeoutDirectiveBeatsTheSetting(t *testing.T) {
+	// serial: measures the wall clock (load-sensitive)
 	srv := hangingHTTPServer(t)
 	m := httpTimeoutApp(t, 600000)
 
@@ -140,6 +142,7 @@ func TestHTTPTimeoutDirectiveBeatsTheSetting(t *testing.T) {
 // The flight's deadline reaches the pane, so the in-flight header can count
 // the wait against it.
 func TestHTTPFlightCarriesItsLimitToThePane(t *testing.T) {
+	// serial: httpTimeoutApp: config.Set (process-wide configuration)
 	m := httpTimeoutApp(t, 30000)
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
 	m = out.(Model)
@@ -163,6 +166,7 @@ func TestHTTPFlightCarriesItsLimitToThePane(t *testing.T) {
 // httpFlightLimit reads the directive first and the setting otherwise — the
 // two sources the header can know about.
 func TestHTTPFlightLimitPrefersTheDirective(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	old := config.Get()
 	t.Cleanup(func() { config.Set(old) })
 	c := *old

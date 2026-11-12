@@ -42,6 +42,7 @@ func seedHTTPHistory(t *testing.T, source, key string, n int) {
 // TestHTTPPanePickRequestKeyRoutes: "r" in the focused viewer asks the host
 // for the request picker (#1829) — the pane cannot reach the history store.
 func TestHTTPPanePickRequestKeyRoutes(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseMsg{Source: "/p/req.http", Request: "one", Resp: sampleResponse("one")})
 	m = out.(Model)
@@ -61,6 +62,7 @@ func TestHTTPPanePickRequestKeyRoutes(t *testing.T) {
 // requests of the pane's .http file that have stored responses, and choosing
 // one loads its history like http.showResponse does (#1829).
 func TestHTTPRequestPickerListsStoredRequests(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := httpApp(t)
 	path := httpPickerFile(t)
@@ -115,6 +117,7 @@ func TestHTTPRequestPickerListsStoredRequests(t *testing.T) {
 // TestHTTPRequestPickerEmptyStore: a file whose requests were never
 // dispatched explains itself instead of opening an empty palette (#1829).
 func TestHTTPRequestPickerEmptyStore(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := httpApp(t)
 	path := httpPickerFile(t)
@@ -142,6 +145,7 @@ func TestHTTPRequestPickerEmptyStore(t *testing.T) {
 // falls back to the focused .http file — stored history survives restarts
 // (#1251), so the pane being empty is no dead end (#1829).
 func TestHTTPRequestPickerWithoutPaneUsesEditor(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := httpApp(t)
 	path := httpPickerFile(t)
@@ -172,6 +176,7 @@ func TestHTTPRequestPickerWithoutPaneUsesEditor(t *testing.T) {
 // TestHTTPRequestPickerReadsUnsavedBuffer: request blocks added but not saved
 // yet still enumerate — the picker reads the open buffer, not the disk file.
 func TestHTTPRequestPickerReadsUnsavedBuffer(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := httpApp(t)
 	path := filepath.Join(t.TempDir(), "req.http")
@@ -199,6 +204,7 @@ func TestHTTPRequestPickerReadsUnsavedBuffer(t *testing.T) {
 // TestHTTPPickRequestKeyInHelp: the new action is listed in the pane-local
 // help (#1829) — it belongs to no registry command.
 func TestHTTPPickRequestKeyInHelp(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
 	m = out.(Model)

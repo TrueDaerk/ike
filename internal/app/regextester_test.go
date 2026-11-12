@@ -27,6 +27,7 @@ func openTester(t *testing.T, m Model) Model {
 // TestRegexTesterEvaluatesLive: typing a pattern re-evaluates against the
 // test text, and the view shows the match count and the group values.
 func TestRegexTesterEvaluatesLive(t *testing.T) {
+	t.Parallel()
 	m := openTester(t, newSized())
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
 	m = typeInto(m, "a1 b2")
@@ -54,6 +55,7 @@ func TestRegexTesterEvaluatesLive(t *testing.T) {
 
 // TestRegexTesterNamedGroups: a named group is listed with its name.
 func TestRegexTesterNamedGroups(t *testing.T) {
+	t.Parallel()
 	m := openTester(t, newSized())
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
 	m = typeInto(m, "main.go:42")
@@ -72,6 +74,7 @@ func TestRegexTesterNamedGroups(t *testing.T) {
 // TestRegexTesterInvalidPattern: a broken pattern shows the compile error
 // inline and leaves the dialog usable.
 func TestRegexTesterInvalidPattern(t *testing.T) {
+	t.Parallel()
 	m := openTester(t, newSized())
 	m = typeInto(m, "(unclosed")
 
@@ -96,6 +99,7 @@ func TestRegexTesterInvalidPattern(t *testing.T) {
 // TestRegexTesterPrefillsSelection: an open visual selection becomes the test
 // text, so the pattern can be tried against the lines at hand.
 func TestRegexTesterPrefillsSelection(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	path := writeTempFile(t, "log.txt", "keep\nsecret\n")
 	tm, _ := m.openPath(path, false)
@@ -116,6 +120,7 @@ func TestRegexTesterPrefillsSelection(t *testing.T) {
 // TestRegexTesterMultiLineTextAndHighlight: enter splits the test area into
 // lines, and the spans cover the matches on both of them.
 func TestRegexTesterMultiLineTextAndHighlight(t *testing.T) {
+	t.Parallel()
 	m := openTester(t, newSized())
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
 	m = typeInto(m, "foo")
@@ -140,6 +145,7 @@ func TestRegexTesterMultiLineTextAndHighlight(t *testing.T) {
 // TestRegexTesterCopyAndHistory: ctrl+o cycles the quote format, ctrl+y
 // copies the pattern in it, and closing records the pattern for the session.
 func TestRegexTesterCopyAndHistory(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	var copied string
 	orig := clipboardWrite
 	clipboardWrite = func(text string) { copied = text }
@@ -176,6 +182,7 @@ func TestRegexTesterCopyAndHistory(t *testing.T) {
 // handler returns a command instead of matching inline, so a big paste cannot
 // stall the UI — and the result still lands.
 func TestRegexTesterLargeTextEvaluatesOffLoop(t *testing.T) {
+	t.Parallel()
 	m := openTester(t, newSized())
 	big := strings.Repeat("needle haystack\n", regextest.AsyncThreshold/8)
 	m.regexTester.focus = regexFocusText

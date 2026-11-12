@@ -36,6 +36,7 @@ func splitJQ(t *testing.T, body, program string) Model {
 // into a sibling pane to the right of the source, which keeps the query
 // header pinned over its own document.
 func TestPlaygroundSplitResultDetaches(t *testing.T) {
+	t.Parallel()
 	m := splitJQ(t, `{"foo":[1,2,3]}`, ".foo[]")
 	s := m.play
 	ws := m.activeWS()
@@ -104,6 +105,7 @@ func TestPlaygroundSplitResultDetaches(t *testing.T) {
 // result pane, tab from there the source pane again — and a plain pane focus
 // move into the result pane is the same as a tab into the result.
 func TestPlaygroundSplitFocusRoundTrip(t *testing.T) {
+	t.Parallel()
 	m := splitJQ(t, `{"foo":[1,2,3]}`, ".foo[]")
 	s := m.play
 	ws := m.activeWS()
@@ -160,6 +162,7 @@ func TestPlaygroundSplitFocusRoundTrip(t *testing.T) {
 // TestPlaygroundSplitToggleReattaches: the command is a toggle — the second
 // run puts the result back under the header and removes the pane.
 func TestPlaygroundSplitToggleReattaches(t *testing.T) {
+	t.Parallel()
 	m := splitJQ(t, `{"foo":[1,2,3]}`, ".foo[]")
 	s := m.play
 	key := s.resultKey
@@ -193,6 +196,7 @@ func TestPlaygroundSplitToggleReattaches(t *testing.T) {
 // pane's own close (pane.close) re-attaches the result inline; the
 // playground stays open.
 func TestPlaygroundSplitClosePaneReattaches(t *testing.T) {
+	t.Parallel()
 	m := splitJQ(t, `{"foo":[1,2,3]}`, ".foo[]")
 	s := m.play
 	key := s.resultKey
@@ -220,6 +224,7 @@ func TestPlaygroundSplitClosePaneReattaches(t *testing.T) {
 // TestPlaygroundSplitCloseRemovesPane: esc closes the playground and takes
 // the result pane with it — from either pane.
 func TestPlaygroundSplitCloseRemovesPane(t *testing.T) {
+	t.Parallel()
 	for _, fromResult := range []bool{false, true} {
 		m := splitJQ(t, `{"foo":[1,2,3]}`, ".foo[]")
 		s := m.play
@@ -244,6 +249,7 @@ func TestPlaygroundSplitCloseRemovesPane(t *testing.T) {
 // TestPlaygroundSplitSourceCloseRemovesPane: the mode dies with its source
 // pane (#1980), and so does the detached result pane.
 func TestPlaygroundSplitSourceCloseRemovesPane(t *testing.T) {
+	t.Parallel()
 	m := splitJQ(t, `{"foo":[1,2,3]}`, ".foo[]")
 	s := m.play
 	key := s.resultKey
@@ -263,6 +269,7 @@ func TestPlaygroundSplitSourceCloseRemovesPane(t *testing.T) {
 // buffer and takes the keyboard; the source pane's header returns it to the
 // query line, and the rows under the header are the document's.
 func TestPlaygroundSplitMouse(t *testing.T) {
+	t.Parallel()
 	m := splitJQ(t, `{"foo":[1,2,3]}`, "range(60)")
 	s := m.play
 	ws := m.activeWS()
@@ -321,6 +328,7 @@ func TestPlaygroundSplitMouse(t *testing.T) {
 // result in its own pane — the find round trip crosses panes, copy, the
 // table view and chaining act on the same state.
 func TestPlaygroundSplitResultActions(t *testing.T) {
+	t.Parallel()
 	m := splitJQ(t, `[{"a":1,"b":"x"},{"a":2,"b":"y"}]`, ".[]")
 	s := m.play
 	ws := m.activeWS()
@@ -375,6 +383,7 @@ func TestPlaygroundSplitResultActions(t *testing.T) {
 // saved layout and a named layout snapshot leave its leaf out while the live
 // tree keeps it.
 func TestPlaygroundSplitNotPersisted(t *testing.T) {
+	t.Parallel()
 	m := splitJQ(t, `{"foo":[1,2,3]}`, ".foo[]")
 	s := m.play
 	ws := m.activeWS()
@@ -400,6 +409,7 @@ func TestPlaygroundSplitNotPersisted(t *testing.T) {
 // TestPlaygroundSplitWithoutPlayground: the command without a playground is
 // a notification, not a pane.
 func TestPlaygroundSplitWithoutPlayground(t *testing.T) {
+	t.Parallel()
 	m := playApp(t, `{"foo":1}`)
 	before := len(m.activeWS().Panes.Keys())
 	tm, cmd := m.Update(SplitPlayResultMsg{})
@@ -412,6 +422,7 @@ func TestPlaygroundSplitWithoutPlayground(t *testing.T) {
 // TestPlaygroundSplitSurvivesProjectSwitch: the detached layout parks with
 // the workspace and comes back on resume — pane, key and rendering.
 func TestPlaygroundSplitSurvivesProjectSwitch(t *testing.T) {
+	// serial: switchTo: waits on the wall clock (load-sensitive)
 	m, b := playSwitchModel(t, `{"foo":[1,2,3]}`, ".foo[]")
 	a := cwd(t)
 	tm, cmd := m.Update(SplitPlayResultMsg{})

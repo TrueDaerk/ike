@@ -48,6 +48,7 @@ func termTabDragApp(t *testing.T) (Model, string, string, string) {
 // TestTerminalTabCenterDropMovesToOtherPane: releasing a terminal tab drag in
 // another editor's center moves the live session into that pane's tab list.
 func TestTerminalTabCenterDropMovesToOtherPane(t *testing.T) {
+	t.Parallel()
 	m, src, dst, sess := termTabDragApp(t)
 	defer func() { closeTerms(m) }()
 
@@ -78,6 +79,7 @@ func TestTerminalTabCenterDropMovesToOtherPane(t *testing.T) {
 // TestTerminalTabEdgeDropSplitsOwnPane: an edge-zone release on another pane
 // splits the terminal tab off as its own terminal pane next to it.
 func TestTerminalTabEdgeDropSplitsOwnPane(t *testing.T) {
+	t.Parallel()
 	m, src, dst, sess := termTabDragApp(t)
 	defer func() { closeTerms(m) }()
 	leavesBefore := len(m.lay.Panes)
@@ -108,6 +110,7 @@ func TestTerminalTabEdgeDropSplitsOwnPane(t *testing.T) {
 // TestTerminalTabSelfEdgeSplit: a drop on the source pane's own edge splits
 // the terminal off right there, mirroring the file-tab self-edge rule.
 func TestTerminalTabSelfEdgeSplit(t *testing.T) {
+	t.Parallel()
 	m, src, _, sess := termTabDragApp(t)
 	defer func() { closeTerms(m) }()
 
@@ -132,6 +135,7 @@ func TestTerminalTabSelfEdgeSplit(t *testing.T) {
 // its original session key under a fresh pane key; the shell's exit must
 // still close the pane (terminalPaneForSession routing).
 func TestExitedSessionClosesSplitTerminalPane(t *testing.T) {
+	t.Parallel()
 	m, _, dst, sess := termTabDragApp(t)
 	defer func() { closeTerms(m) }()
 

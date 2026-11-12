@@ -79,6 +79,7 @@ func waitForEvaluates(t *testing.T, sa *stubAdapter, n int) []json.RawMessage {
 // TestWatchLifecyclePersists: add, edit and remove through the panel's
 // messages mutate the per-project store and hit the disk each time (#2174).
 func TestWatchLifecyclePersists(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, _, _ := debugModel(t)
 
@@ -126,6 +127,7 @@ func TestWatchLifecyclePersists(t *testing.T) {
 // TestWatchesReEvaluateOnStop: every stop re-runs the whole list against the
 // stopped frame with the DAP "watch" context (#1914/#2174).
 func TestWatchesReEvaluateOnStop(t *testing.T) {
+	// serial: waitForEvaluates: waits on the wall clock (load-sensitive)
 	m, sa, path := debugModel(t)
 	tm, _ := m.Update(debugpanel.AddWatchMsg{Expr: "x"})
 	m = tm.(Model)
@@ -165,6 +167,7 @@ func TestWatchesReEvaluateOnStop(t *testing.T) {
 // TestWatchResultsRenderAndSurviveErrors: a failing expression shows its
 // error in place of a value and never hides the others (#2174).
 func TestWatchResultsRenderAndSurviveErrors(t *testing.T) {
+	t.Parallel()
 	m, _, path := debugModel(t)
 	tm, _ := m.Update(debugpanel.AddWatchMsg{Expr: "ok"})
 	m = tm.(Model)
@@ -195,6 +198,7 @@ func TestWatchResultsRenderAndSurviveErrors(t *testing.T) {
 
 // TestWatchResultsFromAStaleSessionAreDropped guards the #1523 rule.
 func TestWatchResultsFromAStaleSessionAreDropped(t *testing.T) {
+	t.Parallel()
 	m, _, path := debugModel(t)
 	tm, _ := m.Update(debugpanel.AddWatchMsg{Expr: "x"})
 	m = tm.(Model)
@@ -215,6 +219,7 @@ func TestWatchResultsFromAStaleSessionAreDropped(t *testing.T) {
 // without evaluate: the watches section says so, the feature disables itself,
 // no request storm and no error spam (#2174).
 func TestEvaluateCapabilityGate(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	m, sa, path := debugModel(t)
 	sa.mu.Lock()
 	sa.evalRefuse = "unsupported request: evaluate"
@@ -277,6 +282,7 @@ func TestEvaluateCapabilityGate(t *testing.T) {
 // TestEvaluateCommandGatedWithoutCapability: the popup command refuses with a
 // clear message instead of opening a prompt for a request that cannot work.
 func TestEvaluateCommandGatedWithoutCapability(t *testing.T) {
+	t.Parallel()
 	m, sa, path := debugModel(t)
 	sa.mu.Lock()
 	sa.evalRefuse = "unsupported request: evaluate"
@@ -299,6 +305,7 @@ func TestEvaluateCommandGatedWithoutCapability(t *testing.T) {
 // TestEvaluateNeedsPausedSession: without a session, or while the debuggee
 // runs, the command explains itself instead of failing silently.
 func TestEvaluateNeedsPausedSession(t *testing.T) {
+	t.Parallel()
 	m, _, _ := debugModel(t)
 	m.dbg = nil
 	tm, _ := m.Update(DebugEvaluateMsg{})
@@ -322,6 +329,7 @@ func TestEvaluateNeedsPausedSession(t *testing.T) {
 // TestEvaluateSelectionSendsRequest: a visual selection evaluates straight
 // away, without the prompt, on the paused frame.
 func TestEvaluateSelectionSendsRequest(t *testing.T) {
+	// serial: waitForEvaluates: waits on the wall clock (load-sensitive)
 	m, sa, path := debugModel(t)
 	m = pausedAt(t, m, path, 1)
 	m = drainKey(m, tea.KeyPressMsg{Code: 'v', Text: "v"})
@@ -363,6 +371,7 @@ func TestEvaluateSelectionSendsRequest(t *testing.T) {
 // TestEvaluatePromptWithoutSelection: with nothing selected the prompt opens,
 // and enter sends the typed expression.
 func TestEvaluatePromptWithoutSelection(t *testing.T) {
+	// serial: waitForEvaluates: waits on the wall clock (load-sensitive)
 	m, sa, path := debugModel(t)
 	m = pausedAt(t, m, path, 1)
 
@@ -394,6 +403,7 @@ func TestEvaluatePromptWithoutSelection(t *testing.T) {
 
 // TestEvaluatePromptEscapes: esc closes the prompt without a request.
 func TestEvaluatePromptEscapes(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	m, sa, path := debugModel(t)
 	m = pausedAt(t, m, path, 1)
 	tm, _ := m.Update(DebugEvaluateMsg{})
@@ -413,6 +423,7 @@ func TestEvaluatePromptEscapes(t *testing.T) {
 // expanding a structured result runs a variables request whose rows land in
 // the popup.
 func TestEvaluateResultOpensPopupAndExpands(t *testing.T) {
+	// serial: waitForCommand: waits on the wall clock (load-sensitive)
 	m, sa, path := debugModel(t)
 	sa.mu.Lock()
 	sa.varsBody = map[string]any{"variables": []map[string]any{
@@ -453,6 +464,7 @@ func TestEvaluateResultOpensPopupAndExpands(t *testing.T) {
 // TestEvaluateErrorNotifiesWithoutPopup: a bad expression is a notice, not a
 // popup — and never disables the feature.
 func TestEvaluateErrorNotifiesWithoutPopup(t *testing.T) {
+	t.Parallel()
 	m, _, path := debugModel(t)
 	m = pausedAt(t, m, path, 1)
 	tm, _ := m.Update(debugEvalMsg{
@@ -475,6 +487,7 @@ func TestEvaluateErrorNotifiesWithoutPopup(t *testing.T) {
 // TestEvaluatePopupClosesOnResume: the result describes the frame just left,
 // so continuing (which clears the paused marker) closes it too.
 func TestEvaluatePopupClosesOnResume(t *testing.T) {
+	t.Parallel()
 	m, _, path := debugModel(t)
 	m = pausedAt(t, m, path, 1)
 	tm, _ := m.Update(debugEvalMsg{

@@ -62,6 +62,7 @@ func assertFocusVisible(t *testing.T, m Model, label string) {
 // (parked resume), and across a fresh re-restore after the workspace was
 // dropped.
 func TestRestoreHiddenExplorerFocusesEditor(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	withStore(t)
 	a, b := twoRoots(t)
 	writeLayout2491(t, a, []string{"editor", "terminal"}, map[string]paneIdentity{
@@ -100,6 +101,7 @@ func TestRestoreHiddenExplorerFocusesEditor(t *testing.T) {
 // leaf in walk order is not an editor, focus still lands on the first
 // editor-kind leaf rather than the terminal.
 func TestRestoreHiddenExplorerPrefersEditorOverFirstLeaf(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	withStore(t)
 	a, _ := twoRoots(t)
 	writeLayout2491(t, a, []string{"terminal", "editor"}, map[string]paneIdentity{
@@ -117,6 +119,7 @@ func TestRestoreHiddenExplorerPrefersEditorOverFirstLeaf(t *testing.T) {
 // the explorer keeps the long-standing behavior — the tree gets the first
 // focus, and a saved session's active file may then re-focus its editor.
 func TestRestoreVisibleExplorerKeepsExplorerFocus(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	withStore(t)
 	a, _ := twoRoots(t)
 	writeLayout2491(t, a, []string{pane.ExplorerKey, "editor", "terminal"}, map[string]paneIdentity{

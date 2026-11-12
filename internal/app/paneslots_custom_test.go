@@ -47,6 +47,7 @@ func openCustomTool(t *testing.T, m *Model, name string) string {
 // numbers each answer their own chord. They share pane.KindTerminal, so a
 // kind-only claim would give both numbers to whichever opened first.
 func TestReservedNumbersTellCustomToolsApart(t *testing.T) {
+	// serial: customSlotApp: config.Set (process-wide configuration)
 	m := customSlotApp(t, "lazygit=6,k9s=7", "lazygit", "k9s")
 	lazygit := openCustomTool(t, &m, "lazygit")
 	k9s := openCustomTool(t, &m, "k9s")
@@ -78,6 +79,7 @@ func TestReservedNumbersTellCustomToolsApart(t *testing.T) {
 // a pane that happens to exist — the chord spawns it through tool.<name> and
 // focuses it, and pressing it again goes there rather than toggling it away.
 func TestReservedChordOpensAClosedCustomTool(t *testing.T) {
+	// serial: customSlotApp: config.Set (process-wide configuration)
 	m := customSlotApp(t, "lazygit=6", "lazygit")
 	if m.toolPane("lazygit") != nil {
 		t.Fatal("precondition: the tool should start closed")
@@ -108,6 +110,7 @@ func TestReservedChordOpensAClosedCustomTool(t *testing.T) {
 // own command does, so the configured placement (#1889) still decides where
 // the pane lands.
 func TestCustomToolHonoursItsHomePosition(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	prev := config.Get()
 	c := *prev
 	entry := sleepTool("lazygit")
@@ -143,6 +146,7 @@ func TestCustomToolHonoursItsHomePosition(t *testing.T) {
 // [[tools.custom]] entry defines reserves nothing — the config layer dropped
 // the entry — so the chord is the ordinary notified no-op (#275).
 func TestUnconfiguredCustomToolNumberNotifies(t *testing.T) {
+	// serial: customSlotApp: config.Set (process-wide configuration)
 	m := customSlotApp(t, "gone=6", "lazygit")
 	if _, ok := m.paneSlotTable()[6]; ok {
 		t.Fatal("a vanished tool must reserve no number")
@@ -162,6 +166,7 @@ func TestUnconfiguredCustomToolNumberNotifies(t *testing.T) {
 // window does not take the entry — the window does, and the tool keeps no
 // number at all.
 func TestBuiltinWinsAPaneSlotNameCollision(t *testing.T) {
+	// serial: customSlotApp: config.Set (process-wide configuration)
 	m := customSlotApp(t, "vcs=3", "vcs")
 	def, ok := m.paneSlotTable()[3]
 	if !ok {

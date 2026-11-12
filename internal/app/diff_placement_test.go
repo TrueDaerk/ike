@@ -63,6 +63,7 @@ func twoEditorApp(t *testing.T) (Model, string, string) {
 // TestDiffOpensInFocusedEditorPane: the diff becomes a tab of the pane that
 // has the keyboard; the other editor pane is untouched and no leaf is added.
 func TestDiffOpensInFocusedEditorPane(t *testing.T) {
+	t.Parallel()
 	left, right := diffPair(t)
 	m, other, focused := twoEditorApp(t)
 	before := len(layout.Leaves(m.activeWS().Tree))
@@ -86,6 +87,7 @@ func TestDiffOpensInFocusedEditorPane(t *testing.T) {
 // TestDiffFromToolWindowUsesRecentFlexPane: with a tool window focused the
 // diff lands in the most recently focused editor pane, never in the tool.
 func TestDiffFromToolWindowUsesRecentFlexPane(t *testing.T) {
+	t.Parallel()
 	left, right := diffPair(t)
 	m, _, editorKey := twoEditorApp(t)
 	toolKey := m.activeWS().Panes.AddProblems()
@@ -116,6 +118,7 @@ func TestDiffFromToolWindowUsesRecentFlexPane(t *testing.T) {
 // flexible region, not just the editor kinds — a viewer pane the user worked
 // in last wins over an older editor pane once a tool window takes the keys.
 func TestDiffMRUPrefersLastFlexPaneOverLastEditor(t *testing.T) {
+	t.Parallel()
 	left, right := diffPair(t)
 	m, _, editorKey := twoEditorApp(t)
 
@@ -153,6 +156,7 @@ func TestDiffMRUPrefersLastFlexPaneOverLastEditor(t *testing.T) {
 // TestDiffWithoutFlexPaneFallsBackToSplit: a layout made of the explorer and a
 // tool window has no flexible pane, so placement degrades to the old split.
 func TestDiffWithoutFlexPaneFallsBackToSplit(t *testing.T) {
+	t.Parallel()
 	left, right := diffPair(t)
 	m := newSized()
 	editorKey := m.activeEditorKey()
@@ -184,6 +188,7 @@ func TestDiffWithoutFlexPaneFallsBackToSplit(t *testing.T) {
 // since #2507 — a second diff from another pane opens its own tab there and
 // leaves the first pane's diff alone.
 func TestDiffRetargetsOnlyTheTargetPane(t *testing.T) {
+	t.Parallel()
 	left, right := diffPair(t)
 	other := filepath.Join(t.TempDir(), "o.txt")
 	if err := os.WriteFile(other, []byte("c\n"), 0o644); err != nil {
@@ -222,6 +227,7 @@ func TestDiffRetargetsOnlyTheTargetPane(t *testing.T) {
 // TestDiffPlacementSplitKeepsOldBehaviour: diff.placement = "split" restores
 // the workspace-wide single slot and the split-beside-the-editor placement.
 func TestDiffPlacementSplitKeepsOldBehaviour(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	left, right := diffPair(t)
 	m := NewWith(registry.New(), host.MapConfig{"diff.placement": "split"})
@@ -260,6 +266,7 @@ func TestDiffPlacementSplitKeepsOldBehaviour(t *testing.T) {
 // TestDiffPlacementEveryEntryPoint: every diff-open goes through the shared
 // helper, so each lands as a tab of the focused editor pane without splitting.
 func TestDiffPlacementEveryEntryPoint(t *testing.T) {
+	t.Parallel()
 	left, right := diffPair(t)
 	cases := map[string]func(m *Model){
 		"diff.files":   func(m *Model) { m.openDiffPane(left, right) },
@@ -294,6 +301,7 @@ func TestDiffPlacementEveryEntryPoint(t *testing.T) {
 // TestFlexPaneClassification: the flexible region is the editor area — the
 // explorer, the tool windows and a terminal pane are never diff targets.
 func TestFlexPaneClassification(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	reg := m.activeWS().Panes
 	cases := []struct {

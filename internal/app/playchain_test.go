@@ -37,6 +37,7 @@ const chainDoc = `{"data":{"items":[{"ok":true,"n":1},{"ok":false,"n":2},{"ok":t
 // TestPlayChainAndBackRestoreEverything is the issue's acceptance case:
 // chain, run, chain again, back twice → the original snapshot and program.
 func TestPlayChainAndBackRestoreEverything(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, dismissOnboarding(playApp(t, chainDoc)))
 	m = setProgram(m, ".data.items")
 	m.play.program.Cur = 3
@@ -99,6 +100,7 @@ func TestPlayChainAndBackRestoreEverything(t *testing.T) {
 // TestPlayChainRecordsHistory: every chained program goes into the history,
 // and only the root program is remembered as the file's last one.
 func TestPlayChainRecordsHistory(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, dismissOnboarding(playApp(t, chainDoc)))
 	m = setProgram(m, ".data.items")
 	m = chainPlay(m)
@@ -126,6 +128,7 @@ func TestPlayChainRecordsHistory(t *testing.T) {
 // TestPlayChainBreadcrumbTruncatesFromTheLeft: on a narrow row the trail
 // keeps its newest level and loses its oldest.
 func TestPlayChainBreadcrumbTruncatesFromTheLeft(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, dismissOnboarding(playApp(t, chainDoc)))
 	m = setProgram(m, ".data.items")
 	m = chainPlay(m)
@@ -153,6 +156,7 @@ func TestPlayChainBreadcrumbTruncatesFromTheLeft(t *testing.T) {
 // TestPlayChainYQ: the yq playground chains its values the same way, and the
 // chained level's result is YAML again.
 func TestPlayChainYQ(t *testing.T) {
+	t.Parallel()
 	m := openYQ(t, yqApp(t, "items:\n  - name: a\n  - name: b\n"))
 	m = setProgram(m, ".items")
 	m = chainPlay(m)
@@ -172,6 +176,7 @@ func TestPlayChainYQ(t *testing.T) {
 // TestPlayChainXMQRefused: the xmq playground's outputs are text, so the
 // chain is refused with a notice and nothing changes.
 func TestPlayChainXMQRefused(t *testing.T) {
+	// serial: fakeXMQOnPath: t.Setenv
 	fakeXMQOnPath(t)
 	m := openXMQ(t, xmqApp(t, "xml", "<root/>\n"))
 	m = setProgram(m, "to-json")
@@ -187,6 +192,7 @@ func TestPlayChainXMQRefused(t *testing.T) {
 // TestPlayChainRefusesAStaleResult: an error on the row means the buffer is
 // not the program's output, so there is nothing honest to chain.
 func TestPlayChainRefusesAStaleResult(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, dismissOnboarding(playApp(t, chainDoc)))
 	m = setProgram(m, ".data.items")
 	m = setProgram(m, ".data.items | error")
@@ -204,6 +210,7 @@ func TestPlayChainRefusesAStaleResult(t *testing.T) {
 // TestPlayChainPausesFollowing: a change of the followed file does not reach
 // a chained level; the pop to the root re-reads it.
 func TestPlayChainPausesFollowing(t *testing.T) {
+	t.Parallel()
 	m, path := playWatchApp(t, `{"foo":{"a":1}}`)
 	m = dismissOnboarding(m)
 	m = setProgram(m, ".foo")
@@ -227,6 +234,7 @@ func TestPlayChainPausesFollowing(t *testing.T) {
 // TestPlayChainSurvivesProjectSwitch: the chain parks and resumes with the
 // playground (#2535).
 func TestPlayChainSurvivesProjectSwitch(t *testing.T) {
+	// serial: switchTo: waits on the wall clock (load-sensitive)
 	m, b := playSwitchModel(t, chainDoc, ".data.items")
 	a := cwd(t)
 	m = chainPlay(m)
@@ -250,6 +258,7 @@ func TestPlayChainSurvivesProjectSwitch(t *testing.T) {
 // TestPlayChainDefaultChords: ctrl+alt+shift+↓ chains and ctrl+alt+shift+↑
 // goes back, from the query line and from the result buffer.
 func TestPlayChainDefaultChords(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, dismissOnboarding(playApp(t, chainDoc)))
 	m = setProgram(m, ".data.items")
 	down := tea.KeyPressMsg{Code: tea.KeyDown, Mod: tea.ModCtrl | tea.ModAlt | tea.ModShift}

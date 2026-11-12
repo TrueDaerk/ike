@@ -118,6 +118,7 @@ func activeGroupMsgs(msgs []tea.Msg) []project.ActiveGroupMsg {
 // history records (one per hop), no per-hop toast, the landing toast, and
 // the marker written and read back.
 func TestGroupOpenWarmsAllMembersAndLandsOnFirst(t *testing.T) {
+	// serial: storeGroup: t.Setenv
 	withStore(t)
 	roots := peekFixture(t, "origin", "api", "ui", "www")
 	storeGroup(t, "web", roots[1:])
@@ -163,6 +164,7 @@ func TestGroupOpenWarmsAllMembersAndLandsOnFirst(t *testing.T) {
 // TestGroupOpenSkipsMissingMember: a root that is gone is reported once and
 // the group opens with what exists.
 func TestGroupOpenSkipsMissingMember(t *testing.T) {
+	// serial: peekFixture: t.Chdir (process working directory)
 	roots := peekFixture(t, "origin", "api", "ui")
 	gone := filepath.Join(filepath.Dir(roots[1]), "gone")
 	if err := os.MkdirAll(gone, 0o755); err != nil {
@@ -199,6 +201,7 @@ func TestGroupOpenSkipsMissingMember(t *testing.T) {
 // directory) but cannot be entered fails its hop; the chain skips it with
 // one notification and still lands on member 1.
 func TestGroupOpenContinuesAfterChdirFailure(t *testing.T) {
+	// serial: storeGroup: t.Setenv
 	if os.Geteuid() == 0 {
 		t.Skip("root can enter any directory")
 	}
@@ -237,6 +240,7 @@ func TestGroupOpenContinuesAfterChdirFailure(t *testing.T) {
 // TestGroupOpenReopenRewarmsAndLandsOnFirst: opening the group one is already
 // in re-warms the members that are no longer parked and lands on member 1.
 func TestGroupOpenReopenRewarmsAndLandsOnFirst(t *testing.T) {
+	// serial: peekFixture: t.Chdir (process working directory)
 	roots := peekFixture(t, "origin", "api", "ui")
 	storeGroup(t, "web", roots[1:])
 	m := switchModel(t)
@@ -266,6 +270,7 @@ func TestGroupOpenReopenRewarmsAndLandsOnFirst(t *testing.T) {
 // TestGroupOpenSingleMemberAlreadyActive: a group whose only member is the
 // current root is a friendly no-op for the landing — no switch, marker set.
 func TestGroupOpenSingleMemberAlreadyActive(t *testing.T) {
+	// serial: peekFixture: t.Chdir (process working directory)
 	roots := peekFixture(t, "api")
 	storeGroup(t, "solo", roots)
 	m := switchModel(t)
@@ -286,6 +291,7 @@ func TestGroupOpenSingleMemberAlreadyActive(t *testing.T) {
 // TestGroupOpenFromPeekEscalates: the first hop is a normal switch away from
 // the peek, so the peeked root enters the history and the marker clears.
 func TestGroupOpenFromPeekEscalates(t *testing.T) {
+	// serial: enterPeek: waits on the wall clock (load-sensitive)
 	roots := peekFixture(t, "origin", "peeked", "api", "ui")
 	storeGroup(t, "web", roots[2:])
 	m := switchModel(t)
@@ -315,6 +321,7 @@ func TestGroupOpenFromPeekEscalates(t *testing.T) {
 // TestGroupOpenReplacesActiveGroup: opening another group replaces the
 // marker; the previous group's workspaces stay parked.
 func TestGroupOpenReplacesActiveGroup(t *testing.T) {
+	// serial: peekFixture: t.Chdir (process working directory)
 	roots := peekFixture(t, "origin", "api", "ui", "cli")
 	storeGroup(t, "web", roots[1:3])
 	storeGroup(t, "tools", roots[3:])
@@ -335,6 +342,7 @@ func TestGroupOpenReplacesActiveGroup(t *testing.T) {
 // TestGroupMarkerCarriesAcrossSwitch: a plain switch after the open keeps the
 // marker (only group.close clears it) and the segment names the new root.
 func TestGroupMarkerCarriesAcrossSwitch(t *testing.T) {
+	// serial: storeGroup: t.Setenv
 	roots := peekFixture(t, "origin", "api", "ui")
 	storeGroup(t, "web", roots[1:])
 	m := switchModel(t)
@@ -353,6 +361,7 @@ func TestGroupMarkerCarriesAcrossSwitch(t *testing.T) {
 // TestGroupMarkerSeedsFromConfigAtStart: a fresh model reads the persisted
 // marker (main.go reconciles it against the root first).
 func TestGroupMarkerSeedsFromConfigAtStart(t *testing.T) {
+	// serial: project.SetActiveGroup (process-wide state of package project)
 	roots := peekFixture(t, "api", "ui")
 	storeGroup(t, "web", roots)
 	if err := project.SetActiveGroup(config.Discover("."), "web"); err != nil {
@@ -379,6 +388,7 @@ func TestGroupMarkerSeedsFromConfigAtStart(t *testing.T) {
 // hops that park the members must not evict them — the chain protects the
 // group before the marker is persisted; a parked non-member goes first.
 func TestGroupOpenDoesNotEvictMembers(t *testing.T) {
+	// serial: storeGroup: t.Setenv
 	roots := peekFixture(t, "origin", "other", "api", "ui", "www")
 	storeGroup(t, "web", roots[2:])
 	opts := config.Discover(".")
@@ -411,6 +421,7 @@ func TestGroupOpenDoesNotEvictMembers(t *testing.T) {
 // TestGroupOpenUnknownAndEmpty: an unknown name and a group with no member on
 // disk only notify.
 func TestGroupOpenUnknownAndEmpty(t *testing.T) {
+	// serial: storeGroup: t.Setenv
 	roots := peekFixture(t, "origin", "api")
 	storeGroup(t, "web", roots[1:])
 	if err := os.RemoveAll(roots[1]); err != nil {
@@ -435,6 +446,7 @@ func TestGroupOpenUnknownAndEmpty(t *testing.T) {
 // TestGroupPickerOpensLocked verifies the project.group.open wiring: the
 // dispatched OpenGroupPickerMsg opens the palette locked to the group mode.
 func TestGroupPickerOpensLocked(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	out, _ := m.Update(project.OpenGroupPickerMsg{})
 	m = out.(Model)
@@ -446,6 +458,7 @@ func TestGroupPickerOpensLocked(t *testing.T) {
 // TestGroupOpenCommandRegistered: the command exists with its title, the
 // File menu lists it and the terminal allowlist keeps its chord reachable.
 func TestGroupOpenCommandRegistered(t *testing.T) {
+	t.Parallel()
 	reg := registry.New()
 	reg.Add(appCommands{})
 	c, ok := reg.Command("project.group.open")
@@ -462,6 +475,7 @@ func TestGroupOpenCommandRegistered(t *testing.T) {
 
 // TestGroupStatusSegment covers the slot's three states and its drop rank.
 func TestGroupStatusSegment(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if got := m.groupSegment(); got != "" {
 		t.Errorf("hidden without a group, got %q", got)

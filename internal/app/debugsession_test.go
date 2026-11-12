@@ -252,6 +252,7 @@ func waitForReverseResp(t *testing.T, sa *stubAdapter, seq int) reverseResp {
 // TestDebugStopJumpsAndMarks verifies a stopped message records the frames,
 // navigates to the top frame and sets the paused marker.
 func TestDebugStopJumpsAndMarks(t *testing.T) {
+	t.Parallel()
 	m, _, path := debugModel(t)
 	frames := []dap.StackFrame{
 		{ID: 1, Name: "inner", Source: dap.Source{Path: path}, Line: 3, Column: 1},
@@ -277,6 +278,7 @@ func TestDebugStopJumpsAndMarks(t *testing.T) {
 // TestDebugStepSendsRequestAndClearsPause verifies F8 semantics: only while
 // paused, the marker clears and the adapter sees the step request.
 func TestDebugStepSendsRequestAndClearsPause(t *testing.T) {
+	// serial: waitForCommand: waits on the wall clock (load-sensitive)
 	m, sa, path := debugModel(t)
 	frames := []dap.StackFrame{{ID: 1, Name: "f", Source: dap.Source{Path: path}, Line: 2}}
 	tm, _ := m.Update(debugStoppedMsg{threadID: 1, frames: frames})
@@ -303,6 +305,7 @@ func TestDebugStepSendsRequestAndClearsPause(t *testing.T) {
 
 // TestDebugStepWithoutSession is a friendly no-op.
 func TestDebugStepWithoutSession(t *testing.T) {
+	t.Parallel()
 	m := NewWith(registry.New(), host.MapConfig{})
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m = tm.(Model)
@@ -314,6 +317,7 @@ func TestDebugStepWithoutSession(t *testing.T) {
 
 // TestDebugEndedCleansUp verifies termination clears the session and marker.
 func TestDebugEndedCleansUp(t *testing.T) {
+	// serial: waitViewContains: waits on the wall clock (load-sensitive)
 	m, _, path := debugModel(t)
 	frames := []dap.StackFrame{{ID: 1, Name: "f", Source: dap.Source{Path: path}, Line: 2}}
 	tm, _ := m.Update(debugStoppedMsg{threadID: 1, frames: frames})
@@ -361,6 +365,7 @@ func waitViewContains(t *testing.T, term *terminal.Model, want string) {
 
 // TestDebugStopCommand verifies debug.stop disconnects and clears state.
 func TestDebugStopCommand(t *testing.T) {
+	// serial: waitForCommand: waits on the wall clock (load-sensitive)
 	m, sa, _ := debugModel(t)
 	tm, _ := m.Update(DebugStopMsg{})
 	m = tm.(Model)
@@ -374,6 +379,7 @@ func TestDebugStopCommand(t *testing.T) {
 // stop opens the bottom panel fed with the frames, and activating an outer
 // frame re-scopes variables (adapter sees scopes) and navigates the editor.
 func TestDebugPanelOpensAndFrameSelection(t *testing.T) {
+	// serial: waitForCommand: waits on the wall clock (load-sensitive)
 	m, sa, path := debugModel(t)
 	frames := []dap.StackFrame{
 		{ID: 1, Name: "inner", Source: dap.Source{Path: path}, Line: 3, Column: 1},
@@ -425,6 +431,7 @@ func TestDebugPanelOpensAndFrameSelection(t *testing.T) {
 // TestRunInTerminalRefusedWithoutSession verifies the dbg==nil bail-out still
 // answers the reverse request — a silent return would hang the adapter (#638).
 func TestRunInTerminalRefusedWithoutSession(t *testing.T) {
+	// serial: waitForReverseResp: waits on the wall clock (load-sensitive)
 	m, sa, _ := debugModel(t)
 	sess := m.dbg.sess
 	m.dbg = nil
@@ -442,6 +449,7 @@ func TestRunInTerminalRefusedWithoutSession(t *testing.T) {
 // TestRunInTerminalRefusedWithoutCommand verifies the empty-argv bail-out
 // answers with an error instead of hanging the adapter (#638).
 func TestRunInTerminalRefusedWithoutCommand(t *testing.T) {
+	// serial: waitForReverseResp: waits on the wall clock (load-sensitive)
 	m, sa, _ := debugModel(t)
 	tm, _ := m.Update(debugRunInTerminalMsg{seq: 43, sess: m.dbg.sess})
 	_ = tm
@@ -455,6 +463,7 @@ func TestRunInTerminalRefusedWithoutCommand(t *testing.T) {
 // spawn refuses the request and installs no PTY — the pipe-fed debuggee
 // terminal keeps showing DAP output instead (#638, #1370).
 func TestRunInTerminalSpawnFailureLeavesNoTerminal(t *testing.T) {
+	// serial: waitForReverseResp: waits on the wall clock (load-sensitive)
 	m, sa, _ := debugModel(t)
 	tm, _ := m.Update(debugRunInTerminalMsg{seq: 44, sess: m.dbg.sess,
 		args: dap.RunInTerminalArgs{Args: []string{"/nonexistent-ike-binary-638"}}})
@@ -474,6 +483,7 @@ func TestRunInTerminalSpawnFailureLeavesNoTerminal(t *testing.T) {
 // runInTerminal replaces the exited terminal in place, the area survives
 // session end for review, and closing the pane ends the session.
 func TestRunInTerminalUsesTerminalPane(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	m, sa, _ := debugModel(t)
 	before := len(layout.Leaves(m.activeWS().Tree))
 	argv := []string{"/bin/sh", "-c", "exit 0"}
@@ -557,6 +567,7 @@ func waitNotRunning(t *testing.T, term *terminal.Model) {
 // TestEnvMapToSliceSkipsNulls verifies null env values (unset per DAP) are
 // tolerated and skipped (#638).
 func TestEnvMapToSliceSkipsNulls(t *testing.T) {
+	t.Parallel()
 	v := "1"
 	got := envMapToSlice(map[string]*string{"A": &v, "B": nil})
 	if len(got) != 1 || got[0] != "A=1" {
@@ -570,6 +581,7 @@ func TestEnvMapToSliceSkipsNulls(t *testing.T) {
 // TestDebugEventCoalescerPassThrough (#1557): non-output events deliver
 // individually and immediately; buffered output flushes ahead of them.
 func TestDebugEventCoalescerPassThrough(t *testing.T) {
+	t.Parallel()
 	var mu sync.Mutex
 	var got []tea.Msg
 	c := &debugEventCoalescer{send: func(m tea.Msg) { mu.Lock(); got = append(got, m); mu.Unlock() }}
@@ -591,6 +603,7 @@ func TestDebugEventCoalescerPassThrough(t *testing.T) {
 // TestDebugEventCoalescerBatchesOutput (#1557/#2176): output events buffer —
 // parked or not — and arrive as one debugEventBatchMsg per quiet window.
 func TestDebugEventCoalescerBatchesOutput(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	var mu sync.Mutex
 	var got []tea.Msg
 	c := &debugEventCoalescer{send: func(m tea.Msg) { mu.Lock(); got = append(got, m); mu.Unlock() }}
@@ -627,6 +640,7 @@ func TestDebugEventCoalescerBatchesOutput(t *testing.T) {
 // TestDebugEventCoalescerStateFlushesFirst (#1557): a state event while parked
 // flushes buffered output ahead of itself, and un-parking flushes too.
 func TestDebugEventCoalescerStateFlushesFirst(t *testing.T) {
+	t.Parallel()
 	var mu sync.Mutex
 	var got []tea.Msg
 	c := &debugEventCoalescer{send: func(m tea.Msg) { mu.Lock(); got = append(got, m); mu.Unlock() }}

@@ -40,6 +40,7 @@ func remainingSnapshots(t *testing.T) int {
 }
 
 func TestRecoveryPromptShownAtStartup(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	withStore(t)
 	var file string
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
@@ -57,6 +58,7 @@ func TestRecoveryPromptShownAtStartup(t *testing.T) {
 }
 
 func TestRecoveryNoPromptWhenClean(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {})
 	if m.recoveryOpen() {
 		t.Fatal("no snapshots ⇒ no prompt")
@@ -64,6 +66,7 @@ func TestRecoveryNoPromptWhenClean(t *testing.T) {
 }
 
 func TestRecoveryRestoreOpensDirtyBuffer(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	withStore(t)
 	var file string
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
@@ -95,6 +98,7 @@ func TestRecoveryRestoreOpensDirtyBuffer(t *testing.T) {
 }
 
 func TestRecoveryDiscardRemovesSnapshot(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		a := filepath.Join(dir, "a.txt")
 		b := filepath.Join(dir, "b.txt")
@@ -117,6 +121,7 @@ func TestRecoveryDiscardRemovesSnapshot(t *testing.T) {
 }
 
 func TestRecoverySkipKeepsSnapshot(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		f := filepath.Join(dir, "keep.txt")
@@ -133,6 +138,7 @@ func TestRecoverySkipKeepsSnapshot(t *testing.T) {
 }
 
 func TestRecoveryEscSkipsAll(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		for _, n := range []string{"a.txt", "b.txt"} {
 			f := filepath.Join(dir, n)
@@ -162,6 +168,7 @@ func markedRow(t *testing.T, view string) string {
 }
 
 func TestRecoveryCursorMoveShowsInView(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	// #409: the shell used to serve a cached body, so j moved the cursor state
 	// but the prompt looked frozen. The very next View must show the move.
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
@@ -188,6 +195,7 @@ func TestRecoveryCursorMoveShowsInView(t *testing.T) {
 }
 
 func TestRecoveryDropItemShowsInView(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	// Removing the highlighted item must disappear from the very next View.
 	var first string
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
@@ -205,6 +213,7 @@ func TestRecoveryDropItemShowsInView(t *testing.T) {
 }
 
 func TestRecoveryBaseChangedWarning(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		f := filepath.Join(dir, "moved.txt")
@@ -218,6 +227,7 @@ func TestRecoveryBaseChangedWarning(t *testing.T) {
 }
 
 func TestRecoveryUntitledRestoresUnsavedBuffer(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		_ = svc.Snapshot(backup.Doc{Key: "untitled:1", Path: "", Text: "scratch notes"})

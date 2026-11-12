@@ -48,6 +48,7 @@ func cmdClickModel(t *testing.T) (Model, layout.Rect, *bool) {
 // moves the cursor to the clicked cell and dispatches lsp.definition — the
 // same action F4 runs.
 func TestCmdClickRunsGotoDefinition(t *testing.T) {
+	t.Parallel()
 	for _, mod := range []tea.KeyMod{tea.ModSuper, tea.ModMeta} {
 		m, r, ran := cmdClickModel(t)
 		x := r.X + paneContentX + 10 // inside the first content line, past the gutter
@@ -62,6 +63,7 @@ func TestCmdClickRunsGotoDefinition(t *testing.T) {
 // TestPlainClickDoesNotGotoDefinition: an unmodified click only moves the
 // cursor.
 func TestPlainClickDoesNotGotoDefinition(t *testing.T) {
+	t.Parallel()
 	m, r, ran := cmdClickModel(t)
 	m = step(m, tea.MouseClickMsg{X: r.X + paneContentX + 10, Y: r.Y + paneContentY, Button: tea.MouseLeft})
 	if *ran {

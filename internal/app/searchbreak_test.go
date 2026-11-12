@@ -32,6 +32,7 @@ func openedEditor(t *testing.T, content string) Model {
 }
 
 func TestAltEnterReachesTheSearchLine(t *testing.T) {
+	t.Parallel()
 	m := openedEditor(t, "foo\nbar\n")
 	m = drainKey(m, tea.KeyPressMsg{Code: '/', Text: "/"})
 	if ed := m.activeEditor(); ed == nil || !ed.FindFieldOpen() {
@@ -55,6 +56,7 @@ func TestAltEnterReachesTheSearchLine(t *testing.T) {
 }
 
 func TestAltEnterStaysTheIntentionChordOtherwise(t *testing.T) {
+	t.Parallel()
 	// With no find/replace field open the chord belongs to the keymap layer as
 	// before; the claim must not swallow it in ordinary normal mode.
 	m := openedEditor(t, "foo\n")

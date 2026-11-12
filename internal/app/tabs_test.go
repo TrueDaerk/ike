@@ -39,6 +39,7 @@ func openApp(t *testing.T, paths ...string) Model {
 }
 
 func TestOpenSecondFileAppendsTab(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
@@ -60,6 +61,7 @@ func TestOpenSecondFileAppendsTab(t *testing.T) {
 // absolute paths while palette modes open root-relative ones — both spellings
 // of one file must land on the same tab, not a duplicate buffer.
 func TestOpenSameFileDifferentSpellingReusesTab(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	dir := t.TempDir()
 	abs := writeTemp(t, dir, "a.txt", "aaa\n")
 	chdir(t, dir)
@@ -75,6 +77,7 @@ func TestOpenSameFileDifferentSpellingReusesTab(t *testing.T) {
 }
 
 func TestOpenExistingFileActivatesTab(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
@@ -91,6 +94,7 @@ func TestOpenExistingFileActivatesTab(t *testing.T) {
 }
 
 func TestOpenInNewPaneKeepsSplitBehavior(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
@@ -114,6 +118,7 @@ func TestOpenInNewPaneKeepsSplitBehavior(t *testing.T) {
 }
 
 func TestSyncReachesBackgroundTab(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\ntwo\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
@@ -149,6 +154,7 @@ func TestSyncReachesBackgroundTab(t *testing.T) {
 }
 
 func TestCloseTabKeepsPaneAndActivatesNeighbour(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
@@ -174,6 +180,7 @@ func TestCloseTabKeepsPaneAndActivatesNeighbour(t *testing.T) {
 }
 
 func TestCloseTabViaKeymap(t *testing.T) {
+	// serial: sets keymap.GOOS
 	oldGOOS := keymap.GOOS
 	keymap.GOOS = "darwin"
 	defer func() { keymap.GOOS = oldGOOS }()
@@ -193,6 +200,7 @@ func TestCloseTabViaKeymap(t *testing.T) {
 }
 
 func TestExternallyDeletedFileClosesItsTab(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
@@ -238,6 +246,7 @@ func isQuit(cmd tea.Cmd) bool {
 // TestQuitGuardPromptsOnDirty guards #287: q/ctrl+c with unsaved changes must
 // prompt instead of dropping the edits; esc cancels and keeps everything.
 func TestQuitGuardPromptsOnDirty(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	m := openApp(t, a)
@@ -259,6 +268,7 @@ func TestQuitGuardPromptsOnDirty(t *testing.T) {
 
 // TestQuitGuardSaveQuits: s writes every dirty buffer, then quits.
 func TestQuitGuardSaveQuits(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	m := openApp(t, a)
@@ -279,6 +289,7 @@ func TestQuitGuardSaveQuits(t *testing.T) {
 
 // TestQuitGuardCleanQuitsImmediately: nothing dirty → the old direct quit.
 func TestQuitGuardCleanQuitsImmediately(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	m := openApp(t, a)
@@ -290,6 +301,7 @@ func TestQuitGuardCleanQuitsImmediately(t *testing.T) {
 }
 
 func TestCloseGuardPromptsOnDirtyTab(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
@@ -317,6 +329,7 @@ func TestCloseGuardPromptsOnDirtyTab(t *testing.T) {
 }
 
 func TestCloseGuardDiscardCloses(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
@@ -339,6 +352,7 @@ func TestCloseGuardDiscardCloses(t *testing.T) {
 }
 
 func TestCloseGuardSaveCloses(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
@@ -358,6 +372,7 @@ func TestCloseGuardSaveCloses(t *testing.T) {
 }
 
 func TestCloseGuardSaveFailureKeepsTab(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
@@ -378,6 +393,7 @@ func TestCloseGuardSaveFailureKeepsTab(t *testing.T) {
 }
 
 func TestCloseGuardForceSkipsPrompt(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")

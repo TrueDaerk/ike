@@ -54,6 +54,7 @@ func selectInHTTPPane(t *testing.T, m Model) (Model, *httppane.Model) {
 // first — on a platform without a Cmd key that left the pane no copy chord at
 // all, and pressing it quit the IDE over a live selection.
 func TestHTTPPaneCtrlCCopiesInsteadOfQuitting(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
 	m, p := selectInHTTPPane(t, out.(Model))
@@ -95,6 +96,7 @@ func TestHTTPPaneCtrlCCopiesInsteadOfQuitting(t *testing.T) {
 // refactor that moved the reservation behind routeKey would silently recreate
 // #2051 here.
 func TestTerminalCopyChordWhileSearching(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	var copied string
 	orig := clipboardWrite
 	clipboardWrite = func(text string) { copied = text }
@@ -134,6 +136,7 @@ func TestTerminalCopyChordWhileSearching(t *testing.T) {
 // buffer stays on screen when the focus returns to the query line, so the
 // copy chord must reach it there too instead of dying in the query input.
 func TestPlaygroundCopyChordFromQueryLine(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"foo":[1,2,3]}`))
 	m = setProgram(m, ".foo[]")
 	clip := &playTestClip{}
@@ -172,6 +175,7 @@ func TestPlaygroundCopyChordFromQueryLine(t *testing.T) {
 // TestPlaygroundCopyChordWithoutSelectionLeavesQueryLine: without a selection
 // the chord falls through to the query line exactly as before.
 func TestPlaygroundCopyChordWithoutSelectionLeavesQueryLine(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"foo":[1,2,3]}`))
 	m = setProgram(m, ".foo[]")
 	clip := &playTestClip{}

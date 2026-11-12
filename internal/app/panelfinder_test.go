@@ -22,6 +22,7 @@ func pfAt(m Model) Model {
 }
 
 func TestAtInToolPanelOpensAnchoredFinder(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"agenttrace", "complexity", "problems", "structure", "tests", "usage"} {
 		t.Run(name, func(t *testing.T) {
 			m := sized(t, 120, 40)
@@ -43,6 +44,7 @@ func TestAtInToolPanelOpensAnchoredFinder(t *testing.T) {
 }
 
 func TestPanelFinderPickOpensTabInPanelPane(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"agenttrace", "complexity"} {
 		t.Run(name, func(t *testing.T) {
 			m := sized(t, 120, 40)
@@ -81,6 +83,7 @@ func TestPanelFinderPickOpensTabInPanelPane(t *testing.T) {
 }
 
 func TestPanelFinderDismissForgetsPanel(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 120, 40)
 	focusToolWindow(t, &m, toolWindowKinds()["complexity"])
 	m = pfAt(m)
@@ -92,6 +95,7 @@ func TestPanelFinderDismissForgetsPanel(t *testing.T) {
 }
 
 func TestAtInOpenPanelInputIsText(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 120, 40)
 	focusToolWindow(t, &m, toolWindowKinds()["complexity"])
 	out, _ := m.Update(tea.KeyPressMsg{Code: '/', Text: "/"})
@@ -109,6 +113,7 @@ func TestAtInOpenPanelInputIsText(t *testing.T) {
 }
 
 func TestAtInPanelWithOwnInputsDoesNotOpenFinder(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"vcs", "issues", "http", "dom", "debug"} {
 		t.Run(name, func(t *testing.T) {
 			m := sized(t, 120, 40)
@@ -122,6 +127,7 @@ func TestAtInPanelWithOwnInputsDoesNotOpenFinder(t *testing.T) {
 }
 
 func TestAtInEditorInsertModeIsText(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	m.cycleFocus() // focus the editor in normal mode
 	out, _ := m.Update(tea.KeyPressMsg{Code: 'i', Text: "i"})

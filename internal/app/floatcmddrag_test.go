@@ -54,6 +54,7 @@ func altPress(x, y int) tea.MouseMsg {
 }
 
 func TestFloatPanelCmdDragMovesPanel(t *testing.T) {
+	// serial: floatPanelWithRef: waits on the wall clock (load-sensitive)
 	m, f, x, y, path := floatPanelWithRef(t)
 	x0, y0 := f.x, f.y
 	m = step(m, altPress(x, y))
@@ -78,6 +79,7 @@ func TestFloatPanelCmdDragMovesPanel(t *testing.T) {
 }
 
 func TestFloatPanelCmdDragClampsToScreen(t *testing.T) {
+	// serial: floatPanelWithRef: waits on the wall clock (load-sensitive)
 	m, f, x, y, _ := floatPanelWithRef(t)
 	m = step(m, altPress(x, y))
 	m = step(m, motion(x+10_000, y+10_000))
@@ -88,6 +90,7 @@ func TestFloatPanelCmdDragClampsToScreen(t *testing.T) {
 }
 
 func TestFloatPanelCmdClickWithoutMotionOpensReference(t *testing.T) {
+	// serial: floatPanelWithRef: waits on the wall clock (load-sensitive)
 	for _, mod := range []tea.KeyMod{tea.ModAlt, tea.ModSuper, tea.ModMeta} {
 		m, f, x, y, path := floatPanelWithRef(t)
 		x0, y0 := f.x, f.y
@@ -112,6 +115,7 @@ func TestFloatPanelCmdClickWithoutMotionOpensReference(t *testing.T) {
 }
 
 func TestFloatPanelPlainDragStillSelects(t *testing.T) {
+	// serial: floatPanelWithRef: waits on the wall clock (load-sensitive)
 	m, f, x, y, _ := floatPanelWithRef(t)
 	x0, y0 := f.x, f.y
 	m = step(m, press(x, y))
@@ -161,6 +165,7 @@ func popupWithRef(t *testing.T) (Model, int, int, string) {
 }
 
 func TestPopupCmdDragMovesBox(t *testing.T) {
+	// serial: popupWithRef: waits on the wall clock (load-sensitive)
 	m, x, y, path := popupWithRef(t)
 	x0, y0, _, _ := m.popupTermRect()
 	m = step(m, altPress(x, y))
@@ -184,6 +189,7 @@ func TestPopupCmdDragMovesBox(t *testing.T) {
 }
 
 func TestPopupCmdClickWithoutMotionOpensReference(t *testing.T) {
+	// serial: popupWithRef: waits on the wall clock (load-sensitive)
 	m, x, y, path := popupWithRef(t)
 	x0, y0, _, _ := m.popupTermRect()
 	m = step(m, altPress(x, y))

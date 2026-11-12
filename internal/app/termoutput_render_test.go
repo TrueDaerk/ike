@@ -32,6 +32,7 @@ func viewedPass(t *testing.T, m Model) Model {
 }
 
 func TestHiddenTerminalTabOutputNeverRenders(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	m := dismissOnboarding(sized(t, 100, 40))
 	inst := m.activeWS().Panes.Get(m.activeEditorKey())
 	if inst == nil {
@@ -84,6 +85,7 @@ func TestHiddenTerminalTabOutputNeverRenders(t *testing.T) {
 }
 
 func TestHiddenPopupOutputRendersTheIndicatorOnce(t *testing.T) {
+	// serial: coalescedRenders: diag.RenderTriggers (process-wide counters)
 	m := dismissOnboarding(openTestPopup(t))
 	shell := pipeTab(t, m, m.popup.inst, "hid-popup")
 	m = settlePass(t, m)
@@ -127,6 +129,7 @@ func TestHiddenPopupOutputRendersTheIndicatorOnce(t *testing.T) {
 }
 
 func TestVisibleTerminalOutputStillRenders(t *testing.T) {
+	// serial: pass: diag.MessageCounts (process-wide counters)
 	m := dismissOnboarding(sized(t, 100, 40))
 	inst := m.activeWS().Panes.Get(m.activeEditorKey())
 	if inst == nil {

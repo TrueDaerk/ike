@@ -82,6 +82,7 @@ func mergedEditor(t *testing.T, m Model, path string) (Model, *editor.Model) {
 // chronological order, gz decompressed, each region named by its separator,
 // in a read-only buffer that resolves as a log.
 func TestOpenRotatedSetMergesEveryMember(t *testing.T) {
+	// serial: registerLogLanguage: lang.Register (process-wide language registry)
 	registerLogLanguage(t)
 	m := newSized()
 	path := logSetDir(t)
@@ -138,6 +139,7 @@ func TestOpenRotatedSetMergesEveryMember(t *testing.T) {
 // TestOpenRotatedSetFromARotatedMember: the command works from any member —
 // opening app.log.1 and merging yields the same timeline.
 func TestOpenRotatedSetFromARotatedMember(t *testing.T) {
+	// serial: registerLogLanguage: lang.Register (process-wide language registry)
 	registerLogLanguage(t)
 	m := newSized()
 	live := logSetDir(t)
@@ -155,6 +157,7 @@ func TestOpenRotatedSetFromARotatedMember(t *testing.T) {
 // TestOpenRotatedSetWithoutSiblingsSaysSo: no set, no second view of the same
 // content.
 func TestOpenRotatedSetWithoutSiblingsSaysSo(t *testing.T) {
+	// serial: registerLogLanguage: lang.Register (process-wide language registry)
 	registerLogLanguage(t)
 	m := newSized()
 	path := writeLog(t, t.TempDir(), "lonely.log", "one line\n")
@@ -174,6 +177,7 @@ func TestOpenRotatedSetWithoutSiblingsSaysSo(t *testing.T) {
 // TestOpenRotatedLogOffersTheTimeline: opening a log that belongs to a set
 // says so once — the discoverability half of the feature.
 func TestOpenRotatedLogOffersTheTimeline(t *testing.T) {
+	// serial: registerLogLanguage: lang.Register (process-wide language registry)
 	registerLogLanguage(t)
 	m := newSized()
 	path := logSetDir(t)
@@ -195,6 +199,7 @@ func TestOpenRotatedLogOffersTheTimeline(t *testing.T) {
 // TestOpenPlainLogOffersNothing: a log with no rotated siblings, and a rotated
 // non-log file, stay quiet.
 func TestOpenPlainLogOffersNothing(t *testing.T) {
+	// serial: registerLogLanguage: lang.Register (process-wide language registry)
 	registerLogLanguage(t)
 	dir := t.TempDir()
 	writeLog(t, dir, "data.csv", "a,b\n")
@@ -213,6 +218,7 @@ func TestOpenPlainLogOffersNothing(t *testing.T) {
 // rotation re-merges the set — the old content moving into its own region,
 // the new file's lines continuing at the end.
 func TestMergedTimelineFollowSurvivesARotation(t *testing.T) {
+	// serial: registerLogLanguage: lang.Register (process-wide language registry)
 	registerLogLanguage(t)
 	m := newSized()
 	path := logSetDir(t)
@@ -277,6 +283,7 @@ func TestMergedTimelineFollowSurvivesARotation(t *testing.T) {
 // TestMergedTimelineRespectsTheLargeFileCap: the merge is bounded by the
 // large-file thresholds, and what a cap costs is the oldest end.
 func TestMergedTimelineRespectsTheLargeFileCap(t *testing.T) {
+	// serial: registerLogLanguage: lang.Register (process-wide language registry)
 	withStore(t)
 	registerLogLanguage(t)
 	dir := t.TempDir()

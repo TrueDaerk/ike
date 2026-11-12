@@ -39,6 +39,7 @@ func findRow(t *testing.T, ext string) scratchLangRow {
 // reachable although it shares the "typescript" language, the primary row
 // survives, rows stay sorted and no extension is offered twice.
 func TestScratchLangRowsOfferDialects(t *testing.T) {
+	t.Parallel()
 	if got := findRow(t, "js"); got.Title != "JavaScript" || got.CmdID != "scratch.new.typescript.js" {
 		t.Fatalf("javascript row = %+v, want the JavaScript title and its own command", got)
 	}
@@ -68,6 +69,7 @@ func TestScratchLangRowsOfferDialects(t *testing.T) {
 // alias the language does not actually register would create a row whose
 // extension nothing resolves, so it is dropped.
 func TestScratchLangRowsIgnoreUnregisteredAlias(t *testing.T) {
+	// serial: sets package variable scratchAliasExts
 	registerTestLang(t, lang.Language{ID: "aliastest", Extensions: []string{"alt"}})
 	scratchAliasExts["aliastest"] = []scratchLangRow{{Title: "Aliastest Dialect", Ext: "nope"}}
 	t.Cleanup(func() { delete(scratchAliasExts, "aliastest") })
@@ -82,6 +84,7 @@ func TestScratchLangRowsIgnoreUnregisteredAlias(t *testing.T) {
 // TestScratchRowTitleNamesDialect covers the metadata column: a .js path reads
 // as JavaScript, not as the language id that owns the extension.
 func TestScratchRowTitleNamesDialect(t *testing.T) {
+	t.Parallel()
 	for path, want := range map[string]string{
 		"/tmp/scratch-1.js":  "JavaScript",
 		"/tmp/scratch-1.TS":  "Typescript",
@@ -97,6 +100,7 @@ func TestScratchRowTitleNamesDialect(t *testing.T) {
 // picker lists JavaScript, its command is registered, and the row is found by
 // the language name as well as by its extension.
 func TestScratchNewOffersJavaScript(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	if _, ok := m.reg.Command("scratch.new.typescript.js"); !ok {
@@ -138,6 +142,7 @@ func TestScratchNewOffersJavaScript(t *testing.T) {
 // the JavaScript row is found by ".js", choosing it renames the scratch and
 // the list names it JavaScript.
 func TestScratchManagerSwitchesToJavaScript(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	paths := smSeed(t, "txt")

@@ -15,6 +15,7 @@ import (
 // recency, with the tab shown right now moved to the end — the preselected
 // first row is the tab to flip back to.
 func TestTabPickerEntriesAreMRUOrdered(t *testing.T) {
+	// serial: withTabLimit: config.Set (process-wide configuration)
 	dir := t.TempDir()
 	withTabLimit(t, 0) // no eviction: all four tabs stay open
 	a := writeTemp(t, dir, "a.txt", "a\n")
@@ -49,6 +50,7 @@ func TestTabPickerEntriesAreMRUOrdered(t *testing.T) {
 // TestTabPickerModeSpeedSearchFilters: typing narrows the rows by fuzzy match
 // over the tab label while the MRU order of the survivors is kept.
 func TestTabPickerModeSpeedSearchFilters(t *testing.T) {
+	t.Parallel()
 	mode := newTabPickerMode()
 	mode.entries = []tabPickerEntry{
 		{label: "server.go", detail: "cmd/server.go", pane: "editor1", index: 2},
@@ -81,6 +83,7 @@ func TestTabPickerModeSpeedSearchFilters(t *testing.T) {
 // active one, and a stale index (the tab closed while the palette was open)
 // is ignored instead of activating a neighbour.
 func TestTabPickerActivatesPickedTab(t *testing.T) {
+	// serial: withTabLimit: config.Set (process-wide configuration)
 	dir := t.TempDir()
 	withTabLimit(t, 0)
 	a := writeTemp(t, dir, "a.txt", "a\n")
@@ -109,6 +112,7 @@ func TestTabPickerActivatesPickedTab(t *testing.T) {
 // to the tab mode with the pane's tabs loaded; a single-tab pane has nothing
 // to switch to and does not open it.
 func TestTabPickerOpensLockedPalette(t *testing.T) {
+	// serial: withTabLimit: config.Set (process-wide configuration)
 	dir := t.TempDir()
 	withTabLimit(t, 0)
 	a := writeTemp(t, dir, "a.txt", "a\n")

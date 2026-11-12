@@ -27,6 +27,7 @@ func rangeLogFixture() vcs.RangeLogMsg {
 // TestHistoryPickerFlow guards #1430: list opens, j moves, enter expands to
 // the patch view, esc steps back to the list, esc again closes.
 func TestHistoryPickerFlow(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := sizedWith(t, registry.New(), 100, 40)
 	m.openHistoryPicker(rangeLogFixture())
@@ -70,6 +71,7 @@ func TestHistoryPickerFlow(t *testing.T) {
 // a LATER model copy (the root model is a value model — a closure bound only
 // at open time renders the open-time selection forever).
 func TestHistoryPickerRenderFollowsSelection(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := sizedWith(t, registry.New(), 100, 40)
 	m.openHistoryPicker(rangeLogFixture())
@@ -85,6 +87,7 @@ func TestHistoryPickerRenderFollowsSelection(t *testing.T) {
 // TestHistoryPickerEmptyAndError guards #1430: errors and empty results toast
 // instead of opening the picker.
 func TestHistoryPickerEmptyAndError(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := sizedWith(t, registry.New(), 100, 40)
 	m.openHistoryPicker(vcs.RangeLogMsg{Path: "f.go", StartLine: 1, EndLine: 1})
@@ -96,6 +99,7 @@ func TestHistoryPickerEmptyAndError(t *testing.T) {
 // TestHistoryForSelectionNoRepo guards #1430: outside a git repository the
 // command toasts instead of running git.
 func TestHistoryForSelectionNoRepo(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := sizedWith(t, registry.New(), 100, 40)
 	m.vcs.snap = nil

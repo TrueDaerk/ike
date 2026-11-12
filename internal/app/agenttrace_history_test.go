@@ -84,6 +84,7 @@ func traceNotices(m Model) string {
 }
 
 func TestAgentTraceHistoryRecordsLiveSession(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	withStore(t)
 	m, dir := traceApp(t)
 	target := filepath.Join(t.TempDir(), "main.go")
@@ -172,6 +173,7 @@ func traceHooked(t *testing.T) (Model, string, string, string) {
 }
 
 func TestAgentTraceClearStartsSecondRecordAndPickerSwitches(t *testing.T) {
+	// serial: traceHooked: t.Setenv
 	withStore(t)
 	m, key, dir, target := traceHooked(t)
 	st := traceStore()
@@ -258,6 +260,7 @@ func TestAgentTraceClearStartsSecondRecordAndPickerSwitches(t *testing.T) {
 }
 
 func TestAgentTraceAskOnStoredSessionNeedsTranscript(t *testing.T) {
+	// serial: traceHooked: t.Setenv
 	withStore(t)
 	m, key, dir, target := traceHooked(t)
 	path2 := filepath.Join(dir, "sess-2.jsonl")
@@ -298,6 +301,7 @@ func TestAgentTraceAskOnStoredSessionNeedsTranscript(t *testing.T) {
 }
 
 func TestAgentTraceImportCommand(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	withStore(t)
 	m, dir := traceApp(t)
 	target := filepath.Join(t.TempDir(), "main.go")

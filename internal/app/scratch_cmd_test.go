@@ -18,6 +18,7 @@ func init() {
 }
 
 func TestScratchCommandsRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	for _, id := range []string{"scratch.new", "scratch.new.text", "scratch.new.sctest"} {
 		if _, ok := m.reg.Command(id); !ok {
@@ -27,6 +28,7 @@ func TestScratchCommandsRegistered(t *testing.T) {
 }
 
 func TestNewScratchCreatesAndFocusesBuffer(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 
@@ -55,6 +57,7 @@ func TestNewScratchCreatesAndFocusesBuffer(t *testing.T) {
 }
 
 func TestScratchListOpensLockedPalette(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if _, ok := m.reg.Command("scratch.list"); !ok {
 		t.Fatal("scratch.list must be registered")
@@ -69,6 +72,7 @@ func TestScratchListOpensLockedPalette(t *testing.T) {
 // behind cmd+shift+n and the File menu — asks for the language instead of
 // silently creating a .txt file.
 func TestNewScratchOpensLanguagePicker(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m = dispatch(t, m, ShowNewScratchMsg{})
 	if !m.palette.IsOpen() {
@@ -107,6 +111,7 @@ func TestNewScratchOpensLanguagePicker(t *testing.T) {
 // scratch's first content line (or the empty placeholder) as title and the
 // resolved language as the Detail chip.
 func TestScratchEntriesTitleAndLang(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 
 	seeded, err := scratch.Create("sct")
@@ -138,6 +143,7 @@ func TestScratchEntriesTitleAndLang(t *testing.T) {
 }
 
 func TestLangTitle(t *testing.T) {
+	t.Parallel()
 	for id, want := range map[string]string{"go": "GO", "php": "PHP", "python": "Python"} {
 		if got := langTitle(id); got != want {
 			t.Errorf("langTitle(%q) = %q, want %q", id, got, want)

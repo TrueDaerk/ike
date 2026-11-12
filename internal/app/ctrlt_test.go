@@ -18,6 +18,7 @@ var ctrlT = tea.KeyPressMsg{Code: 't', Mod: tea.ModCtrl}
 // forwarding — the dedicated pane converts into a tab host (#983) with the
 // fresh session focused, exactly like the reserved cmd+t.
 func TestCtrlTTerminalContextNewTab(t *testing.T) {
+	t.Parallel()
 	m := sizedWith(t, registry.Global(), 100, 40)
 	out, _ := m.Update(TerminalNewMsg{})
 	m = out.(Model)
@@ -51,6 +52,7 @@ func TestCtrlTTerminalContextNewTab(t *testing.T) {
 // fresh empty editor tab joins the pane; a second ctrl+t reuses the empty tab
 // (#641) instead of stacking blanks.
 func TestCtrlTEditorContextNewEmptyTab(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := sizedWith(t, registry.Global(), 100, 40)
 	key := m.activeEditorKey()
@@ -91,6 +93,7 @@ func TestCtrlTEditorContextNewEmptyTab(t *testing.T) {
 // strokes — ctrl+c stays with the PTY even when bound, while a harmless chord
 // like ctrl+y intercepts and fires.
 func TestTerminalContextChordRespectsShellEssentials(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	reg := registry.New()
 	reg.Add(kbPlugin{})

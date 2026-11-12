@@ -91,6 +91,7 @@ func runToCursorModel(t *testing.T) (Model, *stubAdapter, string) {
 // cursor line reaches the adapter as an extra breakpoint, the debuggee
 // resumes, and the stop that follows retires the temporary line again.
 func TestRunToCursorSetsTempBreakpointAndContinues(t *testing.T) {
+	// serial: waitForBPLines: waits on the wall clock (load-sensitive)
 	m, sa, path := runToCursorModel(t)
 	ed := m.editorForPath(canonicalPath(path))
 	if ed == nil {
@@ -129,6 +130,7 @@ func TestRunToCursorSetsTempBreakpointAndContinues(t *testing.T) {
 // breakpoint on the target line means no temporary one is needed, and the
 // cleanup must never remove the user's.
 func TestRunToCursorKeepsExistingBreakpoint(t *testing.T) {
+	// serial: waitForBPLines: waits on the wall clock (load-sensitive)
 	m, sa, path := runToCursorModel(t)
 	key := bpKey(path)
 	m.bpts.Toggle(key, 2)
@@ -154,6 +156,7 @@ func TestRunToCursorKeepsExistingBreakpoint(t *testing.T) {
 // TestRunToCursorStopBeforeHit covers the abandoned run: the session ends
 // before the temporary breakpoint is reached, and nothing is left behind.
 func TestRunToCursorStopBeforeHit(t *testing.T) {
+	// serial: waitForCommand: waits on the wall clock (load-sensitive)
 	m, sa, path := runToCursorModel(t)
 	ed := m.editorForPath(canonicalPath(path))
 	ed.SetCursor(2, 0)
@@ -177,6 +180,7 @@ func TestRunToCursorStopBeforeHit(t *testing.T) {
 // TestRunToCursorNeedsPausedSession keeps the refusals friendly: no session,
 // or a running debuggee, changes nothing.
 func TestRunToCursorNeedsPausedSession(t *testing.T) {
+	t.Parallel()
 	m := NewWith(registry.New(), host.MapConfig{})
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m = tm.(Model)
@@ -200,6 +204,7 @@ func TestRunToCursorNeedsPausedSession(t *testing.T) {
 // TestRunToLinePromptRunsToTypedLine covers debug.runToLine: the prompt takes
 // a 1-based line number and runs the same mechanism.
 func TestRunToLinePromptRunsToTypedLine(t *testing.T) {
+	// serial: waitForBPLines: waits on the wall clock (load-sensitive)
 	m, sa, path := runToCursorModel(t)
 	tm, _ := m.Update(DebugRunToLineMsg{})
 	m = tm.(Model)
@@ -227,6 +232,7 @@ func TestRunToLinePromptRunsToTypedLine(t *testing.T) {
 
 // TestRunToLinePromptRejectsGarbage keeps a mistyped line harmless.
 func TestRunToLinePromptRejectsGarbage(t *testing.T) {
+	t.Parallel()
 	m, _, _ := runToCursorModel(t)
 	tm, _ := m.Update(DebugRunToLineMsg{})
 	m = tm.(Model)
@@ -248,6 +254,7 @@ func TestRunToLinePromptRejectsGarbage(t *testing.T) {
 // temporary line joins the file's enabled specs in line order, and only its
 // own file's.
 func TestSessionSpecsMergesTemporaryBreakpoint(t *testing.T) {
+	t.Parallel()
 	m, _, path := runToCursorModel(t)
 	key := bpKey(path)
 	m.bpts.Toggle(key, 0)
@@ -265,6 +272,7 @@ func TestSessionSpecsMergesTemporaryBreakpoint(t *testing.T) {
 // inline values: an xdebug frame's locals arrive sigil-first ("$name") and
 // must annotate the frame's file, focused on the frame's own line.
 func TestInlineValuesRenderForPHPFrame(t *testing.T) {
+	t.Parallel()
 	m, _, _ := runToCursorModel(t)
 	php := filepath.Join(t.TempDir(), "prog.php")
 	if err := os.WriteFile(php, []byte("<?php\n$s = \"hi\";\necho $s;\n"), 0o644); err != nil {

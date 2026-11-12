@@ -16,6 +16,7 @@ import (
 // window shares (#2463): the remembered pane when it is still part of the
 // layout, otherwise the active editor, otherwise the explorer.
 func TestPanelReturnTargetFallbackChain(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := problemsApp(t)
 	editorKey := m.activeEditorKey()
@@ -54,6 +55,7 @@ func TestPanelReturnTargetFallbackChain(t *testing.T) {
 // TestSetPanelReturnLazyMap: the return-focus map is created on demand, so a
 // Model that never opened a tool window carries none.
 func TestSetPanelReturnLazyMap(t *testing.T) {
+	t.Parallel()
 	var m Model
 	if m.panelReturnFocus != nil {
 		t.Fatal("a fresh Model must not allocate the return-focus map")
@@ -67,6 +69,7 @@ func TestSetPanelReturnLazyMap(t *testing.T) {
 // TestTogglePanelStateMachine drives the three branches over a fake pane key:
 // open (running the opener once), focus, and return-focus.
 func TestTogglePanelStateMachine(t *testing.T) {
+	t.Parallel()
 	m := problemsApp(t)
 	before := m.activeWS().Panes.Focused()
 	opens := 0
@@ -93,6 +96,7 @@ func TestTogglePanelStateMachine(t *testing.T) {
 // TestTogglePanelWithFocusHook: the focus branch runs the hook, the open and
 // return-focus branches do not.
 func TestTogglePanelWithFocusHook(t *testing.T) {
+	t.Parallel()
 	m := problemsApp(t)
 	hooks := 0
 	hook := func() tea.Cmd { hooks++; return nil }
@@ -115,6 +119,7 @@ func TestTogglePanelWithFocusHook(t *testing.T) {
 // TestShowPanelNeverTogglesOff: showPanel reveals the window and keeps it
 // focused, where togglePanel would hand focus back.
 func TestShowPanelNeverTogglesOff(t *testing.T) {
+	t.Parallel()
 	m := problemsApp(t)
 	open := func() tea.Cmd { m.openProblemsPanel(); return nil }
 	m.showPanel(pane.ProblemsKey, open)
@@ -127,6 +132,7 @@ func TestShowPanelNeverTogglesOff(t *testing.T) {
 // TestEnsurePanelOpensOnceAndKeepsFocus: ensurePanel adds the window when it
 // is missing and leaves an existing one alone, focus included.
 func TestEnsurePanelOpensOnceAndKeepsFocus(t *testing.T) {
+	t.Parallel()
 	m := problemsApp(t)
 	opens := 0
 	open := func() tea.Cmd { opens++; m.openProblemsPanel(); return nil }
@@ -150,6 +156,7 @@ func TestEnsurePanelOpensOnceAndKeepsFocus(t *testing.T) {
 // armed timer at a time, nothing armed without pending marks, and the tick
 // carries the model generation it was armed in.
 func TestArmTickGenerationGuard(t *testing.T) {
+	// serial: sets package variable debounceTick
 	// This test is about the real timer's payload: put tea.Tick back in
 	// place of the inert test seam (app_test.go's TestMain, #2541).
 	debounceTick = tea.Tick
@@ -187,6 +194,7 @@ func TestArmTickGenerationGuard(t *testing.T) {
 // TestWriteDirtyTabsWalksBackgroundTabs guards the shared save-everything walk
 // (#2463): every dirty buffer produces one action, clean ones none.
 func TestWriteDirtyTabsWalksBackgroundTabs(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := problemsApp(t)
 	if cmds := m.writeDirtyTabs("write_raw"); len(cmds) != 0 {

@@ -20,6 +20,7 @@ import (
 func plainShell(m Model) string { return ansiSeq.ReplaceAllString(m.shell.View(), "") }
 
 func TestRecoveryDialogShowsDiffPreview(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		f := filepath.Join(dir, "work.txt")
 		_ = os.WriteFile(f, []byte("keep\nold line\n"), 0o644)
@@ -35,6 +36,7 @@ func TestRecoveryDialogShowsDiffPreview(t *testing.T) {
 }
 
 func TestRecoveryDiffFollowsSelection(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		for _, n := range []string{"a.txt", "b.txt"} {
 			f := filepath.Join(dir, n)
@@ -53,6 +55,7 @@ func TestRecoveryDiffFollowsSelection(t *testing.T) {
 }
 
 func TestRecoveryDiffEmptyWhenSnapshotMatchesDisk(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		f := filepath.Join(dir, "same.txt")
@@ -65,6 +68,7 @@ func TestRecoveryDiffEmptyWhenSnapshotMatchesDisk(t *testing.T) {
 }
 
 func TestRecoveryDiffMissingBaseFile(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		f := filepath.Join(dir, "gone.txt")
@@ -80,6 +84,7 @@ func TestRecoveryDiffMissingBaseFile(t *testing.T) {
 }
 
 func TestRecoveryRestoreIsUndoable(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	withStore(t)
 	var file string
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
@@ -102,6 +107,7 @@ func TestRecoveryRestoreIsUndoable(t *testing.T) {
 }
 
 func TestRecoveryRestoreAll(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		for _, n := range []string{"a.txt", "b.txt"} {
@@ -129,6 +135,7 @@ func TestRecoveryRestoreAll(t *testing.T) {
 }
 
 func TestRecoveryDiscardAll(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		for _, n := range []string{"a.txt", "b.txt"} {
 			f := filepath.Join(dir, n)
@@ -149,6 +156,7 @@ func TestRecoveryDiscardAll(t *testing.T) {
 }
 
 func TestRecoveryEscDefersEveryUndecidedFile(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	withStore(t)
 	// esc is a deferral, not a silent discard: every snapshot the user has not
 	// answered survives to the next launch (#2160).
@@ -170,6 +178,7 @@ func TestRecoveryEscDefersEveryUndecidedFile(t *testing.T) {
 }
 
 func TestRecoveryDialogCompositedIntoRootView(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	withStore(t)
 	// The shell is content-sized and the compositor drops a box that does not
 	// fit the terminal — an over-wide key legend made the whole dialog vanish

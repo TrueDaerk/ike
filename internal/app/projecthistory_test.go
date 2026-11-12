@@ -75,6 +75,7 @@ func projectHistoryBody(t *testing.T, m Model) string {
 // the timeline mixes every file's snapshots into one newest-first list under a
 // day heading.
 func TestProjectHistoryListsAcrossFilesNewestFirst(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, a, b := projectHistorySeed(t)
 	if len(m.ph.view) != 4 {
@@ -101,6 +102,7 @@ func TestProjectHistoryListsAcrossFilesNewestFirst(t *testing.T) {
 // TestProjectHistoryGroupsByDay: rows fall under Today / Yesterday / dated
 // headings, in that order, with each heading rendered once.
 func TestProjectHistoryGroupsByDay(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, _, _ := projectHistorySeed(t)
 	now := time.Date(2026, 8, 24, 12, 0, 0, 0, time.Local)
@@ -131,6 +133,7 @@ func TestProjectHistoryGroupsByDay(t *testing.T) {
 // TestProjectHistoryFilterNarrowsByPath: typing filters the rows by path
 // substring, esc clears the filter before it closes the panel.
 func TestProjectHistoryFilterNarrowsByPath(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, _, b := projectHistorySeed(t)
 	for _, k := range []string{"b", ".", "t"} {
@@ -167,6 +170,7 @@ func TestProjectHistoryFilterNarrowsByPath(t *testing.T) {
 // on ctrl+l, saying how much is reachable — an unbounded render of thousands
 // of rows is what the cap exists to avoid.
 func TestProjectHistoryLazyLoadsPages(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, _, _ := projectHistorySeed(t)
 	now := time.Now()
@@ -203,6 +207,7 @@ func TestProjectHistoryLazyLoadsPages(t *testing.T) {
 // the rendered window with the cursor (and reveals the next page on the way),
 // so the selection is never rendered off the panel.
 func TestProjectHistoryWindowFollowsSelection(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, _, _ := projectHistorySeed(t)
 	now := time.Now()
@@ -241,6 +246,7 @@ func TestProjectHistoryWindowFollowsSelection(t *testing.T) {
 // enter lands in the per-file panel at the picked snapshot — with the file
 // opened, so the panel's restore works from there.
 func TestProjectHistoryHandoffOpensPerFilePanel(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, a, _ := projectHistorySeed(t)
 	// Row 3 is a.txt's older snapshot ("a1"), and nothing is open yet.
@@ -287,6 +293,7 @@ func TestProjectHistoryHandoffOpensPerFilePanel(t *testing.T) {
 // TestProjectHistoryClickRow: a click selects a row, a second click on it
 // hands off, and the day headings are inert (#2275).
 func TestProjectHistoryClickRow(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, _, _ := projectHistorySeed(t)
 	lines := strings.Split(projectHistoryBody(t, m), "\n")
@@ -323,6 +330,7 @@ func TestProjectHistoryClickRow(t *testing.T) {
 // TestProjectHistoryNeedsSnapshots: an empty store notifies instead of opening
 // an empty list, like the per-file panel.
 func TestProjectHistoryNeedsSnapshots(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m.openProjectHistory()
 	if m.projectHistoryOpen() {

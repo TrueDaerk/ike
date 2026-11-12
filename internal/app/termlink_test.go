@@ -62,6 +62,7 @@ func termRefRow(t *testing.T, m Model, key, ref string) (row, col int) {
 // file:line reference opens the file at that position through openPathAt;
 // a plain click on the same cell only anchors a selection.
 func TestTerminalCmdClickOpensReference(t *testing.T) {
+	// serial: termRefRow: waits on the wall clock (load-sensitive)
 	m, key := openWideTerminal(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.go")
@@ -101,6 +102,7 @@ func TestTerminalCmdClickOpensReference(t *testing.T) {
 // TestTerminalCmdClickMissingFileInert: without an existing file the
 // cmd+click neither opens anything nor anchors a selection.
 func TestTerminalCmdClickMissingFileInert(t *testing.T) {
+	// serial: termRefRow: waits on the wall clock (load-sensitive)
 	m, key := openWideTerminal(t)
 	ref := "/nowhere/ghost.go:3"
 	row, col := termRefRow(t, m, key, ref)
@@ -121,6 +123,7 @@ func TestTerminalCmdClickMissingFileInert(t *testing.T) {
 // file:line through the same openPathAt funnel cmd+click uses — no mouse
 // involved.
 func TestTerminalLinkHintsKeyboardFlow(t *testing.T) {
+	// serial: termRefRow: waits on the wall clock (load-sensitive)
 	m, key := openWideTerminal(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.go")
@@ -158,6 +161,7 @@ func TestTerminalLinkHintsKeyboardFlow(t *testing.T) {
 // TestTerminalLinkHintsEscapeStaysInTerminal: esc leaves hint mode without
 // opening anything, and never reaches the shell as input.
 func TestTerminalLinkHintsEscapeStaysInTerminal(t *testing.T) {
+	// serial: termRefRow: waits on the wall clock (load-sensitive)
 	m, key := openWideTerminal(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.go")
@@ -180,6 +184,7 @@ func TestTerminalLinkHintsEscapeStaysInTerminal(t *testing.T) {
 // TestTerminalLinkHintsInertWithoutReferences: with nothing to label the
 // chord is not reserved — it stays available to the shell.
 func TestTerminalLinkHintsInertWithoutReferences(t *testing.T) {
+	// serial: termRefRow: waits on the wall clock (load-sensitive)
 	m, key := openWideTerminal(t)
 	termRefRow(t, m, key, "nothing to see here")
 	handled, _, _ := m.terminalReservedKey("cmd+shift+l")

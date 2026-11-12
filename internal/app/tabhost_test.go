@@ -36,6 +36,7 @@ func closeAllSessions(m Model) {
 // host — the shell stays as the first tab, the tool session joins beside it,
 // the vacated tool pane closes, and the chrome shows the tool glyph.
 func TestToolPaneDropOnTerminalCenterStacksSessions(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	withTools(t, sleepTool("watcher"))
 	m := sized(t, 100, 40)
@@ -91,6 +92,7 @@ func TestToolPaneDropOnTerminalCenterStacksSessions(t *testing.T) {
 // tool pane's center — the pane converts, the file opens beside the running
 // tool session.
 func TestFileTabDropOnToolCenterMerges(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	// withTools after tabApp: New() inside reloads the config and would wipe
 	// an earlier injected entry.
 	m, paths := tabApp(t)
@@ -122,6 +124,7 @@ func TestFileTabDropOnToolCenterMerges(t *testing.T) {
 // TestExplorerStaysEdgeOnlyTarget (#836): panes without tab capability keep
 // the plain relocate/edge zones — no center merge on the explorer.
 func TestExplorerStaysEdgeOnlyTarget(t *testing.T) {
+	t.Parallel()
 	m, _ := tabApp(t)
 	x, y := barCell(t, m, 1)
 	m = step(m, press(x, y))
@@ -137,6 +140,7 @@ func TestExplorerStaysEdgeOnlyTarget(t *testing.T) {
 // editor identity carrying its tool tabs; a fresh model under the same store
 // restores the slot with the tool restarted (and no placeholder editor tab).
 func TestTabHostPersistsToolTabAndRestores(t *testing.T) {
+	// serial: t.Setenv
 	withTools(t, sleepTool("watcher"))
 	store := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", store)

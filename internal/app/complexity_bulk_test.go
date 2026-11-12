@@ -15,6 +15,7 @@ import (
 // grouping picker, I and complexity.baselineMarked behind its dialog.
 
 func TestComplexitySitesAllCommandAndKey(t *testing.T) {
+	// serial: timeApp: t.Setenv
 	m, _ := timeApp(t)
 	m = dismissOnboarding(m)
 	out, _ := m.Update(ComplexityToggleMsg{})
@@ -45,6 +46,7 @@ func TestComplexitySitesAllCommandAndKey(t *testing.T) {
 }
 
 func TestComplexityGroupPickerCommandAndKey(t *testing.T) {
+	// serial: timeApp: t.Setenv
 	m, _ := timeApp(t)
 	m = dismissOnboarding(m)
 	out, _ := m.Update(ComplexityToggleMsg{})
@@ -87,6 +89,7 @@ func TestComplexityGroupPickerCommandAndKey(t *testing.T) {
 }
 
 func TestComplexityBaselineMarkedDialog(t *testing.T) {
+	// serial: baselineApp: t.Setenv
 	m, proj := baselineApp(t)
 	path := complexity.BaselinePath(proj)
 	m = baselineGen(t, m)

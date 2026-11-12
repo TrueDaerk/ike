@@ -32,6 +32,7 @@ func leafToolCounts(m Model) (tools map[string]int, editors int) {
 }
 
 func TestApplyLayoutRestoresTwoToolSlots(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	withTools(t, sleepTool("alpha"), sleepTool("beta"))
 	m := sized(t, 120, 40)
@@ -69,6 +70,7 @@ func TestApplyLayoutRestoresTwoToolSlots(t *testing.T) {
 }
 
 func TestSnapshotToolTabHostAsToolSlot(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	withTools(t, sleepTool("alpha"), sleepTool("beta"))
 	m := sized(t, 120, 40)
@@ -116,6 +118,7 @@ func TestSnapshotToolTabHostAsToolSlot(t *testing.T) {
 // surplus plain shell as a tab (converting the tool into a tab host) — the
 // shell keeps its own pane in the implicit flexible region.
 func TestApplyLayoutNeverGraftsShellIntoToolPane(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	withTools(t, sleepTool("alpha"))
 	m := sized(t, 120, 40)
@@ -172,6 +175,7 @@ func cleanupLeafTerminals(t *testing.T, m Model) {
 // into the layout's dedicated "tool" slot — one instance, same session — not
 // restart there while the live one grafts into the flexible region.
 func TestRestoreDefaultLayoutAdoptsTabHostedTool(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	withTools(t, sleepTool("alpha"))
 	m := sized(t, 120, 40)
@@ -213,6 +217,7 @@ func TestRestoreDefaultLayoutAdoptsTabHostedTool(t *testing.T) {
 // tool moves out into the layout's dedicated slot instead of duplicating; the
 // remaining tab keeps its session in the leftover host.
 func TestApplyLayoutExtractsToolFromMultiToolHost(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	withTools(t,
 		config.ToolEntry{Name: "alpha", Command: "sleep", Args: []string{"60"}, Placement: "bottom"},
@@ -265,6 +270,7 @@ func TestApplyLayoutExtractsToolFromMultiToolHost(t *testing.T) {
 // layout hosts the tool as a tab ("tools" pane) while it is live as a
 // dedicated pane; the session moves into the host instead of restarting.
 func TestApplyLayoutAdoptsDedicatedPaneIntoToolsHost(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	withTools(t, sleepTool("alpha"))
 	m := sized(t, 120, 40)
@@ -312,6 +318,7 @@ func encodeTree(t *testing.T, tree layout.Node) []byte {
 }
 
 func TestApplyLayoutRestartsToolTabsInFreshEditor(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	withTools(t, sleepTool("watcher"))
 	m := sized(t, 120, 40) // explorer + one editor

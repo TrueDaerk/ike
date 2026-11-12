@@ -69,6 +69,7 @@ func httpNotice(m Model) string {
 // itself with method, status and duration — and lands in the history the
 // notifications.history command shows.
 func TestHTTPNotifiesFailureWhilePaneHidden(t *testing.T) {
+	// serial: httpNotifyApp: config.Set (process-wide configuration)
 	m := httpNotifyApp(t, 3000)
 	if m.httpResponseVisible() {
 		t.Fatal("no viewer exists yet, so nothing is visible")
@@ -88,6 +89,7 @@ func TestHTTPNotifiesFailureWhilePaneHidden(t *testing.T) {
 // The same failure with the pane on screen says nothing: the status row it
 // just filled already carries status and duration.
 func TestHTTPQuietWhilePaneVisible(t *testing.T) {
+	// serial: httpNotifyApp: config.Set (process-wide configuration)
 	m := httpNotifyApp(t, 3000)
 	// The first response opens the viewer, which is then a visible leaf.
 	m = landHTTPResponse(t, m, "GET /things", sampleResponse("one"))
@@ -103,6 +105,7 @@ func TestHTTPQuietWhilePaneVisible(t *testing.T) {
 
 // A 2xx past the threshold notifies the same way; one below it does not.
 func TestHTTPNotifiesSlowSuccess(t *testing.T) {
+	// serial: httpNotifyApp: config.Set (process-wide configuration)
 	m := httpNotifyApp(t, 3000)
 	m = landHTTPResponse(t, m, "POST /search", httpNotifyResponse("slow", 200, "200 OK", 4500*time.Millisecond))
 	notice := httpNotice(m)
@@ -122,6 +125,7 @@ func TestHTTPNotifiesSlowSuccess(t *testing.T) {
 // The threshold's off value silences the slow branch, and only that branch —
 // a failure still reports.
 func TestHTTPNotifySlowOff(t *testing.T) {
+	// serial: httpNotifyApp: config.Set (process-wide configuration)
 	m := httpNotifyApp(t, 0)
 	m = landHTTPResponse(t, m, "GET /slow", httpNotifyResponse("slow", 200, "200 OK", 30*time.Second))
 	if notice := httpNotice(m); notice != "" {
@@ -139,6 +143,7 @@ func TestHTTPNotifySlowOff(t *testing.T) {
 // went into, so the toast alone says whether the server or the network sat
 // on the answer.
 func TestHTTPNoticeNamesDominantPhase(t *testing.T) {
+	// serial: httpNotifyApp: config.Set (process-wide configuration)
 	m := httpNotifyApp(t, 3000)
 	resp := httpNotifyResponse("slow", 200, "200 OK", 14100*time.Millisecond)
 	resp.Timing = &httpclient.Timing{DNS: 2 * time.Millisecond, Connect: 11 * time.Millisecond,
@@ -175,6 +180,7 @@ func TestHTTPNoticeNamesDominantPhase(t *testing.T) {
 // The highlight threshold's off value drops the phase from the notice; the
 // notice itself still follows http.notify_slow_ms.
 func TestHTTPNoticePhaseOff(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	old := config.Get()
 	t.Cleanup(func() { config.Set(old) })
 	c := *old
@@ -194,6 +200,7 @@ func TestHTTPNoticePhaseOff(t *testing.T) {
 // A canceled dispatch reports the abort, not a failure — the user asked for
 // it, and its partial answer is not news.
 func TestHTTPNoCompletionNoticeForCancel(t *testing.T) {
+	// serial: httpNotifyApp: config.Set (process-wide configuration)
 	m := httpNotifyApp(t, 1)
 	m.httpFlight = map[string]*httpFlightEntry{
 		httpFlightKey("", "x"): {label: "GET /x", request: "x", started: time.Now(),
@@ -214,6 +221,7 @@ func TestHTTPNoCompletionNoticeForCancel(t *testing.T) {
 // A transport error keeps its own error notice and adds no completion notice:
 // there is no status or duration to report.
 func TestHTTPNoCompletionNoticeForTransportError(t *testing.T) {
+	// serial: httpNotifyApp: config.Set (process-wide configuration)
 	m := httpNotifyApp(t, 1)
 	out, _ := m.Update(HTTPResponseMsg{Request: "x", Err: context.DeadlineExceeded})
 	m = out.(Model)
@@ -226,6 +234,7 @@ func TestHTTPNoCompletionNoticeForTransportError(t *testing.T) {
 // out of the layout: the response still fills it and the user still sees
 // nothing, so the notice fires.
 func TestHTTPNotifiesWhileViewerHidden(t *testing.T) {
+	// serial: httpNotifyApp: config.Set (process-wide configuration)
 	m := httpNotifyApp(t, 3000)
 	m = landHTTPResponse(t, m, "GET /things", sampleResponse("one"))
 	if !m.httpResponseVisible() {

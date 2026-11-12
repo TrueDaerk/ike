@@ -25,6 +25,7 @@ func chdir(t *testing.T, dir string) {
 // TestChdirRestoresTheCwdCache: after a test that used chdir, the cache
 // reports the restored directory, not the one the test visited.
 func TestChdirRestoresTheCwdCache(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	before, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -53,6 +54,7 @@ func TestChdirRestoresTheCwdCache(t *testing.T) {
 // TestNoRawChdirInTests is the sweep guard: every directory change in this
 // package's tests goes through chdir, so the cwd cache never outlives a test.
 func TestNoRawChdirInTests(t *testing.T) {
+	t.Parallel()
 	files, err := filepath.Glob("*_test.go")
 	if err != nil {
 		t.Fatal(err)

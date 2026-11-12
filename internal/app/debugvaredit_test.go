@@ -29,6 +29,7 @@ func stopAt(t *testing.T, m Model, path string) Model {
 // a committed edit reaches the adapter as a setVariable request, followed by
 // the refresh fetch of the containing reference.
 func TestSetVarMsgSendsSetVariableRequest(t *testing.T) {
+	// serial: waitForCommand: waits on the wall clock (load-sensitive)
 	m, sa, path := debugModel(t)
 	m = stopAt(t, m, path)
 	tm, _ := m.Update(debugpanel.SetVarMsg{Ref: 100, Name: "x", Value: "99"})
@@ -41,6 +42,7 @@ func TestSetVarMsgSendsSetVariableRequest(t *testing.T) {
 // commit while the debuggee runs never reaches the adapter and surfaces an
 // Info notice instead.
 func TestSetVarRefusedWhenNotPaused(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	m, sa, _ := debugModel(t)
 	if m.dbg.paused {
 		t.Fatal("precondition: session must not be paused")
@@ -71,6 +73,7 @@ func TestSetVarRefusedWhenNotPaused(t *testing.T) {
 // pre-exists (restored from a saved layout before any session) still receives
 // the SetEditable gate when a session's first stop attaches to it.
 func TestRestoredPanelBecomesEditable(t *testing.T) {
+	t.Parallel()
 	m, _, path := debugModel(t)
 	// Simulate the restored layout: the panel exists before the session runs.
 	dbg := m.dbg
@@ -95,6 +98,7 @@ func TestRestoredPanelBecomesEditable(t *testing.T) {
 // as stale context, but nothing stale is activatable or editable while the
 // debuggee runs.
 func TestContinuedEventGatesPanel(t *testing.T) {
+	t.Parallel()
 	m, _, path := debugModel(t)
 	m = stopAt(t, m, path)
 	if _, ok := m.debugPanel().SelectedFrame(); !ok {
@@ -121,6 +125,7 @@ func TestContinuedEventGatesPanel(t *testing.T) {
 // cancels an inline variable edit is consumed by the panel and must not count
 // toward the double-esc palette shortcut.
 func TestDebugEditEscDoesNotArmPalette(t *testing.T) {
+	t.Parallel()
 	m, _, path := debugModel(t)
 	m.dbg.paused = true
 	m = stopAt(t, m, path)

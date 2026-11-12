@@ -75,6 +75,7 @@ func rawStrings(cmd tea.Cmd) string {
 }
 
 func TestOpenImageRoutesToPreview(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	path := writeTestPNG(t)
 	tm, cmd := m.Update(OpenImageMsg{Path: path})
@@ -107,6 +108,7 @@ func TestOpenImageRoutesToPreview(t *testing.T) {
 }
 
 func TestOpenPathRoutesImagesToHandler(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	path := writeTestPNG(t)
 	_, cmd := m.openPath(path, false)
@@ -133,6 +135,7 @@ func TestOpenPathRoutesImagesToHandler(t *testing.T) {
 }
 
 func TestKittySupportTransmitsAndCloseDeletes(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	path := writeTestPNG(t)
 	tm, _ := m.Update(OpenImageMsg{Path: path})
@@ -180,6 +183,7 @@ func itoa(n int) string {
 }
 
 func TestSniffImage(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		head []byte
 		want bool
@@ -203,6 +207,7 @@ func TestSniffImage(t *testing.T) {
 // state, so nothing stays resident in the host terminal's graphics memory and
 // the resume's reconcile pass transmits again.
 func TestReleaseWorkspaceImagesDeletesAndResets(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	path := writeTestPNG(t)
 	tm, _ := m.Update(OpenImageMsg{Path: path})

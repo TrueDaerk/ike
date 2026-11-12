@@ -41,6 +41,7 @@ func typeExt(m Model, s string) Model {
 // optional, and every refusal names its reason instead of correcting the
 // input silently.
 func TestNormalizeScratchExt(t *testing.T) {
+	t.Parallel()
 	for _, in := range []string{"tf", ".tf"} {
 		got, err := normalizeScratchExt(in)
 		if err != nil || got != "tf" {
@@ -84,6 +85,7 @@ func TestNormalizeScratchExt(t *testing.T) {
 // when it is needed — and it carries the prompt message, not a creator
 // command.
 func TestScratchNewOffersCustomRow(t *testing.T) {
+	t.Parallel()
 	for _, query := range []string{"", "custom", "zzqq"} {
 		items := scratchNewMode{}.Results(query, palette.Context{})
 		var found bool
@@ -119,6 +121,7 @@ func TestScratchNewOffersCustomRow(t *testing.T) {
 // TestScratchNewCustomExtCreates covers the scratch.new flow: typing "tf"
 // creates a .tf scratch and opens it.
 func TestScratchNewCustomExtCreates(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	m = openCustomExt(t, m)
@@ -141,6 +144,7 @@ func TestScratchNewCustomExtCreates(t *testing.T) {
 // list: typing an extension that has a row of its own produces the very same
 // scratch the row does.
 func TestScratchNewCustomExtIsNoSpecialCase(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	m = openCustomExt(t, m)
@@ -164,6 +168,7 @@ func TestScratchNewCustomExtIsNoSpecialCase(t *testing.T) {
 // TestScratchNewCustomExtRejects covers the refusals: the prompt stays open
 // with a message and creates nothing.
 func TestScratchNewCustomExtRejects(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
 	m := newSized()
@@ -187,6 +192,7 @@ func TestScratchNewCustomExtRejects(t *testing.T) {
 // TestScratchNewCustomExtEscReturnsToPicker covers the way back: esc leaves
 // the prompt for the language list it was opened from, not for the editor.
 func TestScratchNewCustomExtEscReturnsToPicker(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m = openCustomExt(t, m)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -203,6 +209,7 @@ func TestScratchNewCustomExtEscReturnsToPicker(t *testing.T) {
 // Custom… row opens a prompt, and the typed extension re-languages the scratch
 // through the same store call the rows use.
 func TestScratchManagerCustomExtRenames(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	paths := smSeed(t, "txt")
@@ -249,6 +256,7 @@ func TestScratchManagerCustomExtRenames(t *testing.T) {
 // TestScratchManagerCustomExtRejects covers the manager's validation: the
 // prompt keeps the step with a message and the scratch keeps its name.
 func TestScratchManagerCustomExtRejects(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	paths := smSeed(t, "txt")
@@ -281,6 +289,7 @@ func TestScratchManagerCustomExtRejects(t *testing.T) {
 // TestScratchManagerCustomExtEscGoesBack covers the step walk: esc from the
 // prompt lands in the language list, not outside the dialog.
 func TestScratchManagerCustomExtEscGoesBack(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	paths := smSeed(t, "txt")

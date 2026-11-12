@@ -45,6 +45,7 @@ func diffViewerOf(m Model) *pane.Instance {
 // two-step "@" pick, the two OpenFileMsg picks are intercepted instead of
 // opening editors, and the second pick splits in a focused diff pane.
 func TestDiffFilesPickFlow(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	left := writeTempFile(t, "left.txt", "a\nold\nc\n")
 	right := writeTempFile(t, "right.txt", "a\nnew\nc\n")
@@ -87,6 +88,7 @@ func TestDiffFilesPickFlow(t *testing.T) {
 // TestDiffPickDismissDisarms guards the escape hatch: dismissing the picker
 // mid-flow disarms the pick state so a later "@" open is a plain file open.
 func TestDiffPickDismissDisarms(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	tm, _ := m.Update(DiffFilesMsg{})
 	m = tm.(Model)
@@ -103,6 +105,7 @@ func TestDiffPickDismissDisarms(t *testing.T) {
 // TestDiffJumpOpensEditorAtLine guards enter-on-hunk: the dispatched JumpMsg
 // opens the right-hand file with the cursor on the hunk line.
 func TestDiffJumpOpensEditorAtLine(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	path := writeTempFile(t, "target.txt", "a\nb\nc\nd\n")
 	tm, _ := m.Update(diff.JumpMsg{Path: path, Line: 3})

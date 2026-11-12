@@ -36,6 +36,7 @@ func todoApp(t *testing.T) (Model, string) {
 }
 
 func TestTodoCommandRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if _, ok := m.reg.Command("todo.list"); !ok {
 		t.Fatal("todo.list must be a registry command")
@@ -43,6 +44,7 @@ func TestTodoCommandRegistered(t *testing.T) {
 }
 
 func TestTodoOverlayRendersStreamedResults(t *testing.T) {
+	t.Parallel()
 	m, _ := todoApp(t)
 	frame := m.render()
 	// The title renders styled per rune; assert on the filter row and the
@@ -53,6 +55,7 @@ func TestTodoOverlayRendersStreamedResults(t *testing.T) {
 }
 
 func TestTodoEnterOpensFileAtTag(t *testing.T) {
+	t.Parallel()
 	m, path := todoApp(t)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.todo.IsOpen() {
@@ -69,6 +72,7 @@ func TestTodoEnterOpensFileAtTag(t *testing.T) {
 }
 
 func TestTodoStatusSegmentCountsTags(t *testing.T) {
+	t.Parallel()
 	m, _ := todoApp(t)
 	if got := m.todoSegment(); got != "1 TODO" {
 		t.Fatalf("status segment = %q, want \"1 TODO\"", got)
@@ -76,6 +80,7 @@ func TestTodoStatusSegmentCountsTags(t *testing.T) {
 }
 
 func TestTodoSaveRescansFile(t *testing.T) {
+	t.Parallel()
 	m, _ := todoApp(t)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape}) // close, keep index
 	// A saved file must live under the project root (the working directory) to
@@ -103,6 +108,7 @@ func TestTodoSaveRescansFile(t *testing.T) {
 }
 
 func TestTodoKeysSwallowedFromPanes(t *testing.T) {
+	t.Parallel()
 	m, _ := todoApp(t)
 	m = drainKey(m, tea.KeyPressMsg{Code: 'j', Text: "j"})
 	if !m.todo.IsOpen() {

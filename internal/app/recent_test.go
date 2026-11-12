@@ -11,6 +11,7 @@ import (
 )
 
 func TestRecentFilesTouchMovesToFrontAndDedupes(t *testing.T) {
+	t.Parallel()
 	r := &recentFiles{}
 	r.Touch("a.go")
 	r.Touch("b.go")
@@ -22,6 +23,7 @@ func TestRecentFilesTouchMovesToFrontAndDedupes(t *testing.T) {
 }
 
 func TestRecentFilesTouchIgnoresEmptyAndCaps(t *testing.T) {
+	t.Parallel()
 	r := &recentFiles{}
 	r.Touch("")
 	if len(r.List()) != 0 {
@@ -40,6 +42,7 @@ func TestRecentFilesTouchIgnoresEmptyAndCaps(t *testing.T) {
 }
 
 func TestRecentFilesSetDedupesAndCaps(t *testing.T) {
+	t.Parallel()
 	r := &recentFiles{}
 	in := []RecentEntry{{Path: "a.go"}, {Path: ""}, {Path: "b.go"}, {Path: "./a.go"}}
 	for i := 0; i < maxRecentFiles+10; i++ {
@@ -58,6 +61,7 @@ func TestRecentFilesSetDedupesAndCaps(t *testing.T) {
 // TestRecentFilesRemove (#1113): Remove drops the entry by cleaned path and
 // keeps the rest in order; unknown paths are a no-op.
 func TestRecentFilesRemove(t *testing.T) {
+	t.Parallel()
 	r := &recentFiles{}
 	r.Touch("a.go")
 	r.Touch("b.go")
@@ -74,6 +78,7 @@ func TestRecentFilesRemove(t *testing.T) {
 
 // TestRecentFilesTouchStampsTime (#1113): every touch records when it happened.
 func TestRecentFilesTouchStampsTime(t *testing.T) {
+	t.Parallel()
 	t0 := time.Date(2026, 7, 24, 10, 0, 0, 0, time.UTC)
 	now := t0
 	r := &recentFiles{now: func() time.Time { return now }}
@@ -96,6 +101,7 @@ func TestRecentFilesTouchStampsTime(t *testing.T) {
 }
 
 func TestSessionRoundTripsRecentFiles(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	ts := time.Date(2026, 7, 24, 9, 30, 0, 0, time.UTC)
 	saveSession(sessionState{RecentFiles: recentFileList{
@@ -121,6 +127,7 @@ func TestSessionRoundTripsRecentFiles(t *testing.T) {
 // stores recent_files as a bare string array; it must still load, with zero
 // timestamps.
 func TestSessionLoadsLegacyRecentFilesShape(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
 	legacy := `{"explorer":{"show_hidden":false},"recent_files":["x.go","y.go"]}`
@@ -142,6 +149,7 @@ func TestSessionLoadsLegacyRecentFilesShape(t *testing.T) {
 // TestRemoveRecentFileMsgRemovesAndPersists (#1113): the palette's aux action
 // drops the entry from the MRU store and persists the session immediately.
 func TestRemoveRecentFileMsgRemovesAndPersists(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := sized(t, 100, 40)
 	m.recent.Touch("a.go")
@@ -161,6 +169,7 @@ func TestRemoveRecentFileMsgRemovesAndPersists(t *testing.T) {
 // TestSessionSaveRestoreCycleKeepsMRU (#1112): the regression the bug report
 // asks for — a full save/load/Set cycle keeps the MRU across "sessions".
 func TestSessionSaveRestoreCycleKeepsMRU(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	r := &recentFiles{}
 	r.Touch("a.go")

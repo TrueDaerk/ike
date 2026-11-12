@@ -31,6 +31,7 @@ func openDirtyKey(t *testing.T, m Model, path string) (Model, string) {
 }
 
 func TestBackupDisabledPurgesAtStartup(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		_ = os.WriteFile(filepath.Join(dir, "settings.toml"), []byte("[backup]\nenable = false\n"), 0o644)
@@ -47,6 +48,7 @@ func TestBackupDisabledPurgesAtStartup(t *testing.T) {
 }
 
 func TestBackupPromptCloseRunsAgeGC(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		old := backup.NewAs(backup.Dir(dir), backupClock(time.Now().Add(-8*24*time.Hour)), deadSession)
@@ -73,6 +75,7 @@ func TestBackupPromptCloseRunsAgeGC(t *testing.T) {
 }
 
 func TestBackupChangeSeamMarksAndSnapshotsDirtyBuffer(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {})
 	file := filepath.Join(os.Getenv("IKE_CONFIG_DIR"), "work.txt")
@@ -104,6 +107,7 @@ func TestBackupChangeSeamMarksAndSnapshotsDirtyBuffer(t *testing.T) {
 }
 
 func TestBackupSaveRemovesSnapshot(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {})
 	file := filepath.Join(os.Getenv("IKE_CONFIG_DIR"), "work.txt")
@@ -134,6 +138,7 @@ func TestBackupSaveRemovesSnapshot(t *testing.T) {
 }
 
 func TestBackupCloseWithDiscardRemovesSnapshot(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {})
 	file := filepath.Join(os.Getenv("IKE_CONFIG_DIR"), "work.txt")
@@ -152,6 +157,7 @@ func TestBackupCloseWithDiscardRemovesSnapshot(t *testing.T) {
 }
 
 func TestBackupCleanQuitRemovesOpenBuffersOnly(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	withStore(t)
 	var foreign string
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
@@ -184,6 +190,7 @@ func TestBackupCleanQuitRemovesOpenBuffersOnly(t *testing.T) {
 }
 
 func TestBackupDisableViaReloadPurges(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
 	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {})
 	file := filepath.Join(os.Getenv("IKE_CONFIG_DIR"), "work.txt")

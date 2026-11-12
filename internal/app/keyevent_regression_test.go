@@ -14,6 +14,7 @@ import (
 // repeat/release anyway, so the flag must stay off. Basic disambiguation (the
 // default) is all the keymap layer needs.
 func TestViewDoesNotRequestEventTypes(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	v := m.View()
 	if v.KeyboardEnhancements.ReportEventTypes {
@@ -25,6 +26,7 @@ func TestViewDoesNotRequestEventTypes(t *testing.T) {
 // only KeyPressMsg drives Update, so even if a stray release arrives it is a
 // no-op rather than a second action.
 func TestKeyReleaseIgnored(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	before := m.render()
 	tm, cmd := m.Update(tea.KeyReleaseMsg{Code: 'j'})

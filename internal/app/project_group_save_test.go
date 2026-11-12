@@ -95,6 +95,7 @@ func openSetFixture(t *testing.T) (Model, []string) {
 // prompt lists the active workspace first and the parked ones most-recent
 // first, enter writes the group, and the group is active right away.
 func TestSaveOpenGroupComposesRootSetAndActivates(t *testing.T) {
+	// serial: driveGroupSave: waits on the wall clock (load-sensitive)
 	m, roots := openSetFixture(t)
 	forgetGroup(t, "web")
 
@@ -144,6 +145,7 @@ func TestSaveOpenGroupComposesRootSetAndActivates(t *testing.T) {
 // TestSaveOpenGroupExcludesPeek: a peeked workspace (#2136) is not part of the
 // set — the peek's origin, which is parked, still is.
 func TestSaveOpenGroupExcludesPeek(t *testing.T) {
+	// serial: switchAutoSaveOff: t.Setenv
 	roots := peekFixture(t, "origin", "api")
 	switchAutoSaveOff(t)
 	m := dismissOnboarding(switchModel(t))
@@ -162,6 +164,7 @@ func TestSaveOpenGroupExcludesPeek(t *testing.T) {
 // TestSaveOpenGroupWithoutBackgroundSavesOneMember: with nothing parked the
 // command still writes a one-member seed.
 func TestSaveOpenGroupWithoutBackgroundSavesOneMember(t *testing.T) {
+	// serial: driveGroupSave: waits on the wall clock (load-sensitive)
 	roots := peekFixture(t, "solo")
 	switchAutoSaveOff(t)
 	m := dismissOnboarding(switchModel(t))
@@ -187,6 +190,7 @@ func TestSaveOpenGroupWithoutBackgroundSavesOneMember(t *testing.T) {
 // TestSaveOpenGroupRejectsInvalidName: an empty name (and a name carrying a
 // path separator) keeps the prompt open with the reason attached.
 func TestSaveOpenGroupRejectsInvalidName(t *testing.T) {
+	// serial: openSetFixture: t.Chdir (process working directory)
 	m, _ := openSetFixture(t)
 
 	m = openSaveGroupPrompt(t, m)
@@ -213,6 +217,7 @@ func TestSaveOpenGroupRejectsInvalidName(t *testing.T) {
 // TestSaveOpenGroupReplaceConfirmation: an existing name asks first — n goes
 // back to editing, y replaces the stored roots in place.
 func TestSaveOpenGroupReplaceConfirmation(t *testing.T) {
+	// serial: driveGroupSave: waits on the wall clock (load-sensitive)
 	m, roots := openSetFixture(t)
 	storeGroup(t, "web", []string{roots[3]})
 

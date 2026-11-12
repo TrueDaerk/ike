@@ -14,6 +14,7 @@ import (
 // editor slot instead of splitting next to the tools pane.
 
 func TestToolsKindRoundTripsThroughLayout(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	conf, dir := t.TempDir(), t.TempDir()
 	chdir(t, dir)
 	toolLayout(t, conf, paneIdentity{Kind: "tools", Tools: []string{"alpha", "beta"}})
@@ -42,6 +43,7 @@ func TestToolsKindRoundTripsThroughLayout(t *testing.T) {
 }
 
 func TestLegacyEditorToolsLayoutLoadsAndMigrates(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	conf, dir := t.TempDir(), t.TempDir()
 	chdir(t, dir)
 	// A pre-#1989 file: the tool-tab host saved as a plain editor identity.
@@ -93,6 +95,7 @@ func repro1989Layout(t *testing.T) {
 // editor closed, opening a file must recreate the editor in the layout's
 // editor slot — next to the explorer — never next to the tool-tab pane.
 func TestOpenFileRecreatesEditorAtLayoutSlot(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	withTools(t, sleepTool("alpha"), sleepTool("beta"), sleepTool("gamma"))
 	m := sized(t, 120, 40)
@@ -137,6 +140,7 @@ func TestOpenFileRecreatesEditorAtLayoutSlot(t *testing.T) {
 }
 
 func TestSnapshotMultiToolHostAsToolsKind(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	withTools(t, sleepTool("alpha"), sleepTool("beta"))
 	m := sized(t, 120, 40)

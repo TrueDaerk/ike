@@ -27,6 +27,7 @@ func focusQuery(m Model) Model {
 // the keyboard all selected; esc undoes the jump instead of closing, and a
 // second jump's selection is replaced by typing.
 func TestPlayFocusQueryFromResult(t *testing.T) {
+	t.Parallel()
 	m := focusQueryPlay(t)
 	m = pressKey(m, tea.KeyTab)
 	if !m.play.bufFocus {
@@ -50,6 +51,7 @@ func TestPlayFocusQueryFromResult(t *testing.T) {
 // TestPlayFocusQueryFromQueryLineIdempotent: on the query line the command
 // just selects all, again and again.
 func TestPlayFocusQueryFromQueryLineIdempotent(t *testing.T) {
+	t.Parallel()
 	m := focusQueryPlay(t)
 	for i := 0; i < 2; i++ {
 		m = focusQuery(m)
@@ -66,6 +68,7 @@ func TestPlayFocusQueryFromQueryLineIdempotent(t *testing.T) {
 // TestPlayFocusQueryFromVarsLine: the variables line hands the keyboard over
 // too, and stays shown.
 func TestPlayFocusQueryFromVarsLine(t *testing.T) {
+	t.Parallel()
 	m := focusQueryPlay(t)
 	m = toggleVars(m)
 	if !m.play.varsFocus {
@@ -81,6 +84,7 @@ func TestPlayFocusQueryFromVarsLine(t *testing.T) {
 // buffer (macOS; off macOS the fold lands on ctrl+l, which the playground
 // keeps for clear-output / the filter picker).
 func TestPlayFocusQueryDefaultChord(t *testing.T) {
+	t.Parallel()
 	if runtime.GOOS != "darwin" {
 		t.Skip("cmd+l is a macOS chord")
 	}

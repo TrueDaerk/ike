@@ -96,6 +96,7 @@ func writeGzNamed(t *testing.T, dir, name, inner string, body []byte) string {
 // schedules the parse and the result lands in the entry's own buffer, keyed by
 // the virtual path.
 func TestArchiveEntryBufferIsHighlighted(t *testing.T) {
+	// serial: registerVPathLang: lang.Register (process-wide language registry)
 	registerVPathLang(t)
 	m := newSized()
 	p := writeTestArchive(t, "src.tar.gz", map[string]string{"cmd/main" + vpathExt: vpathBody})
@@ -110,6 +111,7 @@ func TestArchiveEntryBufferIsHighlighted(t *testing.T) {
 // fresh tab when the editor already holds a file, which is the ordinary case —
 // the parse must be scheduled for that tab, not for whatever was active.
 func TestArchiveEntryBufferIsHighlightedBesideOpenTabs(t *testing.T) {
+	// serial: registerVPathLang: lang.Register (process-wide language registry)
 	registerVPathLang(t)
 	m := newSized()
 	dir := t.TempDir()
@@ -130,6 +132,7 @@ func TestArchiveEntryBufferIsHighlightedBesideOpenTabs(t *testing.T) {
 // TestGzipBufferIsHighlighted: the gz viewer's buffer is highlighted from the
 // inner file name the same way.
 func TestGzipBufferIsHighlighted(t *testing.T) {
+	// serial: registerVPathLang: lang.Register (process-wide language registry)
 	registerVPathLang(t)
 	m := newSized()
 	p := writeGzFile(t, "payload"+vpathExt+".gz", []byte(vpathBody))
@@ -146,6 +149,7 @@ func TestGzipBufferIsHighlighted(t *testing.T) {
 // schedule a parse of its own, so without one here the preview stays plain for
 // the rest of the session.
 func TestGzipBufferKeepsHighlightingAfterRefresh(t *testing.T) {
+	// serial: registerVPathLang: lang.Register (process-wide language registry)
 	registerVPathLang(t)
 	m := newSized()
 	dir := t.TempDir()
@@ -169,6 +173,7 @@ func TestGzipBufferKeepsHighlightingAfterRefresh(t *testing.T) {
 // about what it holds, so the gzip header's original-name field is the only
 // thing that can give the buffer a language.
 func TestGzipHeaderNamesTheContentWhenTheFileNameCannot(t *testing.T) {
+	// serial: registerVPathLang: lang.Register (process-wide language registry)
 	registerVPathLang(t)
 	m := newSized()
 	p := writeGzNamed(t, t.TempDir(), "dump.gz", "payload"+vpathExt, []byte(vpathBody))
@@ -182,6 +187,7 @@ func TestGzipHeaderNamesTheContentWhenTheFileNameCannot(t *testing.T) {
 // TestVirtualPathBufferWithoutALanguageStaysPlain: an entry whose name carries
 // no known extension is shown as plain text — no spans, no crash.
 func TestVirtualPathBufferWithoutALanguageStaysPlain(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeTestArchive(t, "src.tar", map[string]string{"NOTICE": vpathBody})
 
@@ -202,6 +208,7 @@ func TestVirtualPathBufferWithoutALanguageStaysPlain(t *testing.T) {
 // path must never be announced — the buffers are highlighted by Tree-sitter
 // alone, LSP support for them is explicitly out of scope.
 func TestVirtualPathBuffersNeverReachTheLSP(t *testing.T) {
+	// serial: registerVPathLang: lang.Register (process-wide language registry)
 	registerVPathLang(t)
 	var opened []string
 	reg := registry.New()

@@ -54,6 +54,7 @@ func pressOpenInFindPanel(t *testing.T, m Model) Model {
 // transient find-usages popup: the chord tips its hits into the persistent
 // panel, closes the overlay, and an entry still navigates.
 func TestUsagesPopupOpensInFindPanel(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := findPanelApp(t)
 	dir := t.TempDir()
@@ -107,6 +108,7 @@ func TestUsagesPopupOpensInFindPanel(t *testing.T) {
 // search-everywhere overlay: file hits become panel entries under a
 // query-named heading, command hits (no location) are dropped.
 func TestSearchEverywhereOpensInFindPanel(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "alpha.go"), []byte("package alpha\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -142,6 +144,7 @@ func TestSearchEverywhereOpensInFindPanel(t *testing.T) {
 // (the command palette) keeps the overlay open — the chord must not close a
 // list it cannot move.
 func TestOpenInFindPanelIgnoresLocationlessLists(t *testing.T) {
+	t.Parallel()
 	m := findPanelApp(t)
 	m.palette.SetSize(120, 40)
 	m.palette.OpenLocked(palette.Context{Root: "."}, ':')
@@ -158,6 +161,7 @@ func TestOpenInFindPanelIgnoresLocationlessLists(t *testing.T) {
 // TestOpenInFindPanelIsDiscoverable: the binding must be visible in the
 // keybinding overview, not only in the default table.
 func TestOpenInFindPanelIsDiscoverable(t *testing.T) {
+	t.Parallel()
 	m := findPanelApp(t)
 	if _, ok := m.reg.Command(findPanelCommand); !ok {
 		t.Fatal("the command must be registered, or the binding is inert")
@@ -186,6 +190,7 @@ func TestOpenInFindPanelIsDiscoverable(t *testing.T) {
 // TestPanelRefsKeepsLocationRowsOnly guards the row conversion: definition,
 // peek and file rows carry a target, command rows do not.
 func TestPanelRefsKeepsLocationRowsOnly(t *testing.T) {
+	t.Parallel()
 	refs := panelRefs([]palette.Item{
 		{Title: "run", Msg: palette.RunCommandMsg{ID: "editor.write"}},
 		{Title: "a.go:3", Detail: "var x", Msg: ilsp.DefinitionMsg{Path: "/a.go", Line: 2, Col: 4}},

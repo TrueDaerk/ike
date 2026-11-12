@@ -40,6 +40,7 @@ func tabPaths(inst *pane.Instance) []string {
 }
 
 func TestTabLimitEvictsLeastRecentlyUsed(t *testing.T) {
+	// serial: withTabLimit: config.Set (process-wide configuration)
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "a\n")
 	b := writeTemp(t, dir, "b.txt", "b\n")
@@ -65,6 +66,7 @@ func TestTabLimitEvictsLeastRecentlyUsed(t *testing.T) {
 }
 
 func TestTabLimitEvictionIsLRUNotFIFO(t *testing.T) {
+	// serial: withTabLimit: config.Set (process-wide configuration)
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "a\n")
 	b := writeTemp(t, dir, "b.txt", "b\n")
@@ -96,6 +98,7 @@ func TestTabLimitEvictionIsLRUNotFIFO(t *testing.T) {
 }
 
 func TestTabLimitNeverEvictsDirtyTabs(t *testing.T) {
+	// serial: withTabLimit: config.Set (process-wide configuration)
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "a\n")
 	b := writeTemp(t, dir, "b.txt", "b\n")
@@ -141,6 +144,7 @@ func TestTabLimitNeverEvictsDirtyTabs(t *testing.T) {
 }
 
 func TestTabLimitZeroDisables(t *testing.T) {
+	// serial: withTabLimit: config.Set (process-wide configuration)
 	dir := t.TempDir()
 	var paths []string
 	for _, n := range []string{"a", "b", "c", "d", "e", "f", "g"} {
@@ -155,6 +159,7 @@ func TestTabLimitZeroDisables(t *testing.T) {
 }
 
 func TestTabLimitExceededWhenAllDirty(t *testing.T) {
+	// serial: withTabLimit: config.Set (process-wide configuration)
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "a\n")
 	b := writeTemp(t, dir, "b.txt", "b\n")
@@ -178,6 +183,7 @@ func TestTabLimitExceededWhenAllDirty(t *testing.T) {
 }
 
 func TestTabLimitEvictedTabReopens(t *testing.T) {
+	// serial: withTabLimit: config.Set (process-wide configuration)
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "a\n")
 	b := writeTemp(t, dir, "b.txt", "b\n")
@@ -207,6 +213,7 @@ func openApp2(t *testing.T, m Model, paths ...string) Model {
 // (and the undo history persists) instead of the evicted tab silently losing
 // both.
 func TestTabLimitEvictionDropsBackup(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "a\n")

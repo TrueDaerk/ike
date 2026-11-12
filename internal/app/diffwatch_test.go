@@ -44,6 +44,7 @@ func focusedDiff(t *testing.T, m Model) *pane.Instance {
 // TestDiffReloadsOnWatchEvent guards #2506: an external change to either side
 // of an open file diff re-reads that side and re-diffs in place.
 func TestDiffReloadsOnWatchEvent(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, left, right := openFileDiff(t, "a\nb\nc\n", "a\nb\nc\n")
 	if got := focusedDiff(t, m).Diff().HunkCount(); got != 0 {
@@ -73,6 +74,7 @@ func TestDiffReloadsOnWatchEvent(t *testing.T) {
 // TestDiffReloadKeepsScrollAndHunk guards the "no reload jolt" half of #2506:
 // the reader keeps their place across an external change.
 func TestDiffReloadKeepsScrollAndHunk(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	var l, r strings.Builder
 	for i := 0; i < 200; i++ {
@@ -103,6 +105,7 @@ func TestDiffReloadKeepsScrollAndHunk(t *testing.T) {
 // side plus a footer notice — no error dialog — and writing it again brings
 // the content back.
 func TestDiffRemovedSideShowsNotice(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, left, _ := openFileDiff(t, "one\ntwo\n", "one\ntwo\n")
 	if err := os.Remove(left); err != nil {
@@ -135,6 +138,7 @@ func TestDiffRemovedSideShowsNotice(t *testing.T) {
 // TestDiffSnapshotsDoNotReload guards the scope of #2506: a HEAD diff keeps
 // its snapshot semantics when the working-tree file changes under it.
 func TestDiffSnapshotsDoNotReload(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "r.txt")
@@ -165,6 +169,7 @@ func TestDiffSnapshotsDoNotReload(t *testing.T) {
 // open file diff holds a per-path watch for both its sides, retargeting swaps
 // them, and closing the pane releases them.
 func TestDiffWatchRegistersAndDropsPaths(t *testing.T) {
+	t.Parallel()
 	m, left, right := openFileDiff(t, "a\n", "b\n")
 	other := filepath.Join(filepath.Dir(left), "o.txt")
 	if err := os.WriteFile(other, []byte("c\n"), 0o644); err != nil {

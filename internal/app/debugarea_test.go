@@ -19,6 +19,7 @@ import (
 // terminal to the pane seams (ActiveTerminal) while the variables view keeps
 // the panel's own routing.
 func TestDebugAreaComposition(t *testing.T) {
+	t.Parallel()
 	m, _, path := debugModel(t)
 	before := len(layout.Leaves(m.activeWS().Tree))
 	frames := []dap.StackFrame{{ID: 1, Name: "f", Source: dap.Source{Path: path}, Line: 2, Column: 1}}
@@ -45,6 +46,7 @@ func TestDebugAreaComposition(t *testing.T) {
 // in its scrollback across Variables↔Console switches — the terminal model
 // moves nowhere (#2190).
 func TestDebugAreaScrollbackSurvivesViewSwitch(t *testing.T) {
+	// serial: waitViewContains: waits on the wall clock (load-sensitive)
 	m, _, path := debugModel(t)
 	frames := []dap.StackFrame{{ID: 1, Name: "f", Source: dap.Source{Path: path}, Line: 2, Column: 1}}
 	tm, _ := m.Update(debugStoppedMsg{threadID: 1, frames: frames})
@@ -69,6 +71,7 @@ func TestDebugAreaScrollbackSurvivesViewSwitch(t *testing.T) {
 // TestDebugAreaReusedAcrossSessions: a second session's stop reuses the
 // still-open area instead of opening another pane.
 func TestDebugAreaReusedAcrossSessions(t *testing.T) {
+	t.Parallel()
 	m, _, path := debugModel(t)
 	frames := []dap.StackFrame{{ID: 1, Name: "f", Source: dap.Source{Path: path}, Line: 2, Column: 1}}
 	tm, _ := m.Update(debugStoppedMsg{threadID: 1, frames: frames})
@@ -99,6 +102,7 @@ func TestDebugAreaReusedAcrossSessions(t *testing.T) {
 // TestDebugSessionEndCloseTidiesLayout: debug.session_end = "close" removes
 // the area when the session ends; the default keeps it (covered above).
 func TestDebugSessionEndCloseTidiesLayout(t *testing.T) {
+	t.Parallel()
 	m, _, path := debugModelWith(t, host.MapConfig{"debug.session_end": "close"})
 	frames := []dap.StackFrame{{ID: 1, Name: "f", Source: dap.Source{Path: path}, Line: 2, Column: 1}}
 	tm, _ := m.Update(debugStoppedMsg{threadID: 1, frames: frames})
@@ -121,6 +125,7 @@ func TestDebugSessionEndCloseTidiesLayout(t *testing.T) {
 // TestDebugSessionEndCloseOnStop: the explicit debug.stop honours the close
 // setting too.
 func TestDebugSessionEndCloseOnStop(t *testing.T) {
+	t.Parallel()
 	m, _, path := debugModelWith(t, host.MapConfig{"debug.session_end": "close"})
 	frames := []dap.StackFrame{{ID: 1, Name: "f", Source: dap.Source{Path: path}, Line: 2, Column: 1}}
 	tm, _ := m.Update(debugStoppedMsg{threadID: 1, frames: frames})
@@ -136,6 +141,7 @@ func TestDebugSessionEndCloseOnStop(t *testing.T) {
 // area's view and focuses it — the keyboard route that works even while a PTY
 // debuggee eats raw keys (#2190).
 func TestDebugConsoleCommandTogglesView(t *testing.T) {
+	t.Parallel()
 	m, _, path := debugModel(t)
 	frames := []dap.StackFrame{{ID: 1, Name: "f", Source: dap.Source{Path: path}, Line: 2, Column: 1}}
 	tm, _ := m.Update(debugStoppedMsg{threadID: 1, frames: frames})

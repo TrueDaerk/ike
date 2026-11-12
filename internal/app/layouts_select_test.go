@@ -34,6 +34,7 @@ func flexSnapshot(t *testing.T) persistedLayout {
 }
 
 func TestSaveLayoutOpensSelectionThenPrompt(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := sized(t, 100, 40)
 	m = step(m, SaveLayoutPromptMsg{})
@@ -65,6 +66,7 @@ func TestSaveLayoutOpensSelectionThenPrompt(t *testing.T) {
 }
 
 func TestSaveLayoutSelectionTogglesAndGuardsEmpty(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := sized(t, 100, 40) // explorer + editor
 	m = step(m, SaveLayoutPromptMsg{})
@@ -114,6 +116,7 @@ func TestSaveLayoutSelectionTogglesAndGuardsEmpty(t *testing.T) {
 }
 
 func TestSaveLayoutSelectionEscCancels(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := sized(t, 100, 40)
 	m = step(m, SaveLayoutPromptMsg{})
@@ -127,6 +130,7 @@ func TestSaveLayoutSelectionEscCancels(t *testing.T) {
 }
 
 func TestLayoutSelectClickTogglesPane(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := sized(t, 100, 40)
 	m = step(m, SaveLayoutPromptMsg{})
@@ -159,6 +163,7 @@ func TestLayoutSelectClickTogglesPane(t *testing.T) {
 }
 
 func TestLayoutSelectBodyMarksSelectionAndFillsWidth(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := sized(t, 100, 40)
 	m = step(m, SaveLayoutPromptMsg{})
@@ -180,6 +185,7 @@ func TestLayoutSelectBodyMarksSelectionAndFillsWidth(t *testing.T) {
 }
 
 func TestLayoutSelectLabelUsesToolName(t *testing.T) {
+	t.Parallel()
 	m, termKey := openTestTerminal(t)
 	if got := m.layoutSelectLabel(termKey); got != "TERMINAL" {
 		t.Fatalf("plain shell must label TERMINAL, got %q", got)
@@ -193,6 +199,7 @@ func TestLayoutSelectLabelUsesToolName(t *testing.T) {
 }
 
 func TestSnapshotLayoutSelectedKeepsFlexAtLargestRegion(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	// explorer | (editor / editor:N) — deselect both editors: their column
 	// collapses into one flex leaf beside the explorer.
@@ -218,6 +225,7 @@ func TestSnapshotLayoutSelectedKeepsFlexAtLargestRegion(t *testing.T) {
 }
 
 func TestApplyFlexLayoutSpreadsUnsavedPanes(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	dir := t.TempDir()
 	pa := filepath.Join(dir, "a.txt")
@@ -262,6 +270,7 @@ func TestApplyFlexLayoutSpreadsUnsavedPanes(t *testing.T) {
 }
 
 func TestApplyFlexLayoutWithNothingLeftOverAddsScratch(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := sized(t, 100, 40) // explorer + one empty editor
 	// A flex layout pinning only the explorer: the sole editor is unconsumed
@@ -284,6 +293,7 @@ func TestApplyFlexLayoutWithNothingLeftOverAddsScratch(t *testing.T) {
 }
 
 func TestRestoreFlexDefaultLayoutAtStartup(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	saveUserLayouts(savedLayouts{Layouts: map[string]persistedLayout{"flex": flexSnapshot(t)}, Default: "flex"})
 	m := New() // fresh project: the flex default materializes

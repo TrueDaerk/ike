@@ -32,6 +32,7 @@ func writeProjectSettings(t *testing.T, root, content string) string {
 // applies its .ike/settings.toml over the global layer; switching on to a
 // project without one drops the override again.
 func TestSwitchAppliesAndDropsProjectOverrides(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	restore := config.Get()
 	t.Cleanup(func() { config.Set(restore) })
 	base := t.TempDir()
@@ -69,6 +70,7 @@ func TestSwitchAppliesAndDropsProjectOverrides(t *testing.T) {
 // re-runs the reload pipeline, applying the edited project settings without
 // restart.
 func TestExternalSettingsEditReloadsConfig(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	restore := config.Get()
 	t.Cleanup(func() { config.Set(restore) })
 	root := t.TempDir()

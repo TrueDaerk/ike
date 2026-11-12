@@ -30,6 +30,7 @@ var ctrlG = tea.KeyPressMsg{Code: 'g', Mod: tea.ModCtrl}
 // Model.Update, the way the terminal delivers it: past the overlay chain, the
 // modal dispatch and the playground's own routing.
 func TestPlayCheatsheetOpensThroughTheWholeKeyPath(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"users":[{"name":"ada"}]}`))
 	m = setProgram(m, ".users")
 	m.onboarding = nil // the first-start dialog would own the keyboard
@@ -51,6 +52,7 @@ func TestPlayCheatsheetOpensThroughTheWholeKeyPath(t *testing.T) {
 // acceptance case: one key from the open playground, and closing it again
 // costs neither the query, the result nor the history.
 func TestPlayCheatsheetOpensAndLeavesThePlaygroundIntact(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"foo":[{"bar":1},{"bar":4}]}`))
 	m = setProgram(m, ".foo[] | select(.bar > 3)")
 	m.play.hist.Add(".foo")
@@ -82,6 +84,7 @@ func TestPlayCheatsheetOpensAndLeavesThePlaygroundIntact(t *testing.T) {
 // is gone from under it, and the half-typed program and its caret survive the
 // trip.
 func TestPlayCheatsheetOpensWhileWritingAQuery(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"users":[{"name":"ada","age":36}]}`))
 	m = setProgram(m, ".us")
 	m.refreshPlayCompletion("", true)
@@ -109,6 +112,7 @@ func TestPlayCheatsheetOpensWhileWritingAQuery(t *testing.T) {
 // the delivered fallback for a terminal that eats ctrl+g, and it was worth
 // nothing if the playground's modal routing swallowed the command message.
 func TestPlayCheatsheetOpensFromThePaletteWhileFocused(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"users":[{"name":"ada"}]}`))
 	m = setProgram(m, ".users | ")
 	m.play.program.Cur = len(".users | ")
@@ -135,6 +139,7 @@ func TestPlayCheatsheetOpensFromThePaletteWhileFocused(t *testing.T) {
 // cuts at the widths a playground is actually opened at — so the one key that
 // answers "I cannot write this query" was never on screen.
 func TestPlayCheatsheetHintIsOnTheQueryRow(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	// 100 cells is a playground pane beside an explorer on a normal terminal
 	// — the width the report came from, and the width the hint used to be cut
@@ -150,6 +155,7 @@ func TestPlayCheatsheetHintIsOnTheQueryRow(t *testing.T) {
 // TestPlayCheatsheetOpensFromTheResultBuffer: looking the language up must
 // not require tabbing back to the query line first.
 func TestPlayCheatsheetOpensFromTheResultBuffer(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	m.play.setBufFocus(true)
 	tm, cmd := m.updatePlayground(ctrlG)
@@ -169,6 +175,7 @@ func cheatItems(m Model, d jqplay.Dialect, query string) []palette.Item {
 // TestPlayCheatsheetListsEverySection: the sheet is the syntax, the everyday
 // programs and the whole builtin list, generated from the engine's own.
 func TestPlayCheatsheetListsEverySection(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	items := cheatItems(m, jqplay.DialectJQ, "")
 	counts := map[string]int{}
@@ -189,6 +196,7 @@ func TestPlayCheatsheetListsEverySection(t *testing.T) {
 // sheet's first row states what enter does with the row under it, so nobody
 // has to guess whether a builtin replaces the program or lands at the caret.
 func TestPlayCheatsheetSaysHowToApplyARow(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	items := cheatItems(m, jqplay.DialectJQ, "")
 	if len(items) < 2 || items[0].Badge != "guide" {
@@ -225,6 +233,7 @@ func TestPlayCheatsheetSaysHowToApplyARow(t *testing.T) {
 // document the reader never saw, which made `.users[]` a field out of nowhere.
 // The second row lists it, and its rows are the document itself.
 func TestPlayCheatsheetShowsTheSampleDocument(t *testing.T) {
+	t.Parallel()
 	for _, d := range []jqplay.Dialect{jqplay.DialectJQ, jqplay.DialectYQ, jqplay.DialectXMQ} {
 		m := newSized()
 		items := cheatItems(m, d, "")
@@ -275,6 +284,7 @@ func TestPlayCheatsheetShowsTheSampleDocument(t *testing.T) {
 // does not stand between the reader and the language on a cold open — a yq
 // sample is twenty rows of pure noise there.
 func TestPlayCheatsheetSampleRowsSitAtTheEnd(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	items := cheatItems(m, jqplay.DialectYQ, "")
 	var firstSample, lastOther int
@@ -302,6 +312,7 @@ func TestPlayCheatsheetSampleRowsSitAtTheEnd(t *testing.T) {
 // what it prints, a builtin row the shape it is called in — the whole point of
 // #2482's content half is that the sheet stops listing existence alone.
 func TestPlayCheatsheetShowsExampleOutputAndBuiltinUsage(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	var example, builtin palette.Item
 	for _, it := range cheatItems(m, jqplay.DialectJQ, "map one field out of every element") {
@@ -333,6 +344,7 @@ func TestPlayCheatsheetShowsExampleOutputAndBuiltinUsage(t *testing.T) {
 // TestPlayCheatsheetSearchesTitleAndProgram: the sheet is browsed by what one
 // wants to do, and still found by the function name one half-remembers.
 func TestPlayCheatsheetSearchesTitleAndProgram(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	byTitle := cheatItems(m, jqplay.DialectJQ, "group by a field")
 	if len(byTitle) == 0 {
@@ -357,6 +369,7 @@ func TestPlayCheatsheetSearchesTitleAndProgram(t *testing.T) {
 // TestPlayCheatsheetFollowsTheDialect: a yq session is never shown the jq
 // document rules, and the placeholder names the live dialect.
 func TestPlayCheatsheetFollowsTheDialect(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m.playCheat.dialect = jqplay.DialectYQ
 	m.playCheat.Refresh()
@@ -381,6 +394,7 @@ func TestPlayCheatsheetFollowsTheDialect(t *testing.T) {
 // whole program, so it replaces the query line — and the program it replaced
 // is in the history, one `↑` away.
 func TestPlayCheatsheetInsertReplacesAndKeepsTheOldProgram(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"users":[{"name":"ada","age":36}]}`))
 	m = setProgram(m, ".users")
 
@@ -406,6 +420,7 @@ func TestPlayCheatsheetInsertReplacesAndKeepsTheOldProgram(t *testing.T) {
 // TestPlayCheatsheetInsertsABuiltinAtTheCaret: a function name is half a
 // program, so it lands where the caret is instead of replacing the line.
 func TestPlayCheatsheetInsertsABuiltinAtTheCaret(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"users":[{"name":"ada"}]}`))
 	m = setProgram(m, ".users | ")
 	m.play.program.Cur = len(".users | ")
@@ -424,6 +439,7 @@ func TestPlayCheatsheetInsertsABuiltinAtTheCaret(t *testing.T) {
 // palette with nothing open, but it never opens a playground over an
 // unrelated buffer just to run an example written against another document.
 func TestPlayCheatsheetInsertNeedsThePlayground(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	tm, cmd := m.Update(InsertCheatMsg{Program: ".users[]"})
 	m = drainCmd(asModel(tm), cmd)
@@ -435,6 +451,7 @@ func TestPlayCheatsheetInsertNeedsThePlayground(t *testing.T) {
 // TestPlayCheatsheetInsertRefusesTheOtherDialect: a yq sheet's row has no
 // business rewriting an open jq playground's query line.
 func TestPlayCheatsheetInsertRefusesTheOtherDialect(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = setProgram(m, ".a")
 	tm, cmd := m.Update(InsertCheatMsg{Dialect: jqplay.DialectYQ, Program: ".users[]"})
@@ -447,6 +464,7 @@ func TestPlayCheatsheetInsertRefusesTheOtherDialect(t *testing.T) {
 // TestPlayCheatsheetIsInTheKeyboardSheet: the language sheet has to be
 // findable from the keyboard one, or nobody learns it exists (#2237).
 func TestPlayCheatsheetIsInTheKeyboardSheet(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	var found int
 	for _, g := range m.playgroundHelpGroups() {

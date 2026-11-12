@@ -33,6 +33,7 @@ func playTabApp(t *testing.T) (Model, string, string) {
 // TestPlaygroundKeepsTabBar is the issue's acceptance case: with two tabs open
 // the title row renders the tab bar, not the playground title.
 func TestPlaygroundKeepsTabBar(t *testing.T) {
+	t.Parallel()
 	m, _, _ := playTabApp(t)
 	inst := m.activeWS().Panes.FocusedInstance()
 	if !m.playInlineActive(m.activeWS().Panes.Focused()) {
@@ -55,6 +56,7 @@ func TestPlaygroundKeepsTabBar(t *testing.T) {
 // TestPlaygroundSingleTabKeepsTitle: with one tab and always_show off there is
 // no bar to make room for, so the playground title renders as before.
 func TestPlaygroundSingleTabKeepsTitle(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"name":"ike"}`))
 	inst := m.activeWS().Panes.FocusedInstance()
 	if m.paneTabBarShown(inst) {
@@ -72,6 +74,7 @@ func TestPlaygroundSingleTabKeepsTitle(t *testing.T) {
 // hit-testable while the playground runs, and a click reaches the same tab
 // switch the keyboard already reached.
 func TestPlaygroundTabBarClickSwitchesTab(t *testing.T) {
+	t.Parallel()
 	m, notes, _ := playTabApp(t)
 	key := m.activeWS().Panes.Focused()
 	inst := m.activeWS().Panes.FocusedInstance()

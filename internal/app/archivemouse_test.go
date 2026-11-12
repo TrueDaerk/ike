@@ -33,6 +33,7 @@ func archiveApp(t *testing.T, n int) (Model, string, int, int, string) {
 // TestArchiveWheelScrolls: the wheel over the archive pane scrolls its entry
 // list and clamps at the top.
 func TestArchiveWheelScrolls(t *testing.T) {
+	t.Parallel()
 	m, key, x, y, _ := archiveApp(t, 40)
 	av := m.activeWS().Panes.Get(key).Archive()
 	if av.Top() != 0 {
@@ -63,6 +64,7 @@ func TestArchiveWheelScrolls(t *testing.T) {
 // TestArchiveClickSelectsRow: a left click focuses the pane and selects the
 // row under the pointer.
 func TestArchiveClickSelectsRow(t *testing.T) {
+	t.Parallel()
 	m, key, x, y, _ := archiveApp(t, 0)
 	// rows: cmd, cmd/main.go — y+0 header, y+1 filter row (#2409), rows
 	// start at y+2.
@@ -79,6 +81,7 @@ func TestArchiveClickSelectsRow(t *testing.T) {
 // TestArchiveDoubleClickOpensEntry: two quick clicks on a file row open it
 // read-only, the same end state enter produces.
 func TestArchiveDoubleClickOpensEntry(t *testing.T) {
+	t.Parallel()
 	m, key, x, y, p := archiveApp(t, 0)
 	_ = key
 	out, _ := m.Update(tea.MouseClickMsg{X: x + 10, Y: y + 3, Button: tea.MouseLeft})
@@ -110,6 +113,7 @@ func TestArchiveDoubleClickOpensEntry(t *testing.T) {
 // TestArchiveFoldGlyphClickToggles: a single click on a directory's fold
 // glyph collapses it.
 func TestArchiveFoldGlyphClickToggles(t *testing.T) {
+	t.Parallel()
 	m, key, x, y, _ := archiveApp(t, 0)
 	av := m.activeWS().Panes.Get(key).Archive()
 	if av.Rows() != 2 {
@@ -125,6 +129,7 @@ func TestArchiveFoldGlyphClickToggles(t *testing.T) {
 // page keys move the cursor and enter opens the selected file read-only —
 // the end-to-end keyboard path (#1852).
 func TestArchiveKeyboardNavigationAndOpen(t *testing.T) {
+	t.Parallel()
 	m, key, _, _, p := archiveApp(t, 40)
 	if m.activeWS().Panes.Focused() != key {
 		t.Fatalf("the archive pane must open focused, got %q", m.activeWS().Panes.Focused())

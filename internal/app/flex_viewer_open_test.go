@@ -52,6 +52,7 @@ var flexViewers = []struct {
 // file opens it as a tab in the flexible region's viewer pane; the leaf
 // count and the explorer's width stay as they were.
 func TestExplorerOpenLandsBesideFlexViewer(t *testing.T) {
+	t.Parallel()
 	for _, tc := range flexViewers {
 		t.Run(tc.name, func(t *testing.T) {
 			m, viewerKey := flexViewerOnly(t, tc.file(t), tc.kind)
@@ -79,6 +80,7 @@ func TestExplorerOpenLandsBesideFlexViewer(t *testing.T) {
 // splitting, but beside the flexible region's viewer — the explorer column
 // keeps its width.
 func TestExplorerSplitOpenBesideFlexViewer(t *testing.T) {
+	t.Parallel()
 	m, viewerKey := flexViewerOnly(t, writeTestBinary(t, "blob.bin"), pane.KindHex)
 	explW := m.lay.Panes[pane.ExplorerKey].W
 	path := writeTempFile(t, "notes.txt", "hello\n")
@@ -104,6 +106,7 @@ func TestExplorerSplitOpenBesideFlexViewer(t *testing.T) {
 // TestFlexFileHostSkipsNonViewers (#3131): with only the explorer left there
 // is no flexible-region host, so the editor-slot fallback (#3109) decides.
 func TestFlexFileHostSkipsNonViewers(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	for _, key := range m.leafOrder() {
 		if key != pane.ExplorerKey {

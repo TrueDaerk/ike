@@ -33,6 +33,7 @@ func builtinTheme(t *testing.T, name string) theme.Theme {
 // is a different palette slot, and none of them is a raw/hard-coded colour —
 // they all trace back to the active theme.
 func TestPlayDialectBadgeUsesDistinctThemeHues(t *testing.T) {
+	t.Parallel()
 	pal := theme.DefaultPalette()
 	cases := []struct {
 		dialect jqplay.Dialect
@@ -60,6 +61,7 @@ func TestPlayDialectBadgeUsesDistinctThemeHues(t *testing.T) {
 // stays legible against its background in both a dark and a light built-in
 // theme, so the chip is not only a dark-theme affordance.
 func TestPlayDialectBadgeReadableInLightAndDark(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"github-dark", "github-light"} {
 		th := builtinTheme(t, name)
 		pal := theme.NewPalette(th)
@@ -76,6 +78,7 @@ func TestPlayDialectBadgeReadableInLightAndDark(t *testing.T) {
 // TestJQPlaygroundBadgeInQueryLineAndInfoRow: the jq badge renders in both
 // the query-line prefix and the tab-bar mode label, coloured with pal.Warning.
 func TestJQPlaygroundBadgeInQueryLineAndInfoRow(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	pal := m.pal()
 	badge := ansiOf(pal.Warning)
@@ -88,6 +91,7 @@ func TestJQPlaygroundBadgeInQueryLineAndInfoRow(t *testing.T) {
 // TestYQPlaygroundBadgeInQueryLineAndInfoRow: the yq badge is coloured with
 // pal.Info, distinct from jq's.
 func TestYQPlaygroundBadgeInQueryLineAndInfoRow(t *testing.T) {
+	t.Parallel()
 	m := openYQ(t, yqApp(t, "a: 1\n"))
 	pal := m.pal()
 	badge := ansiOf(pal.Info)
@@ -100,6 +104,7 @@ func TestYQPlaygroundBadgeInQueryLineAndInfoRow(t *testing.T) {
 // TestXMQPlaygroundBadgeInQueryLineAndInfoRow: the xmq badge is coloured with
 // pal.Success, distinct from jq's and yq's.
 func TestXMQPlaygroundBadgeInQueryLineAndInfoRow(t *testing.T) {
+	// serial: fakeXMQOnPath: t.Setenv
 	fakeXMQOnPath(t)
 	m := openXMQ(t, xmqApp(t, "xml", "<r/>\n"))
 	pal := m.pal()

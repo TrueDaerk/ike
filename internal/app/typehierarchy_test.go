@@ -10,6 +10,7 @@ import (
 )
 
 func TestTypeHierarchyMsgRouting(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 
 	fetched := 0
@@ -41,6 +42,7 @@ func TestTypeHierarchyMsgRouting(t *testing.T) {
 }
 
 func TestTypeHierarchyItemsMsgApplied(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 
 	var gotReq int

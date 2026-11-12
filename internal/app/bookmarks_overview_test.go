@@ -25,6 +25,7 @@ func typeRune(t *testing.T, m Model, r rune) Model {
 // TestBookmarkOverviewListsGroupedRows: every bookmark shows under its file
 // with the bookmarked line's text and its description.
 func TestBookmarkOverviewListsGroupedRows(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "alpha\nbeta\ngamma\n")
 	b := writeTemp(t, dir, "b.txt", "delta\nepsilon\n")
@@ -51,6 +52,7 @@ func TestBookmarkOverviewListsGroupedRows(t *testing.T) {
 // TestBookmarkOverviewEmptyStoreStaysClosed: with no bookmarks the command
 // only explains itself.
 func TestBookmarkOverviewEmptyStoreStaysClosed(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "alpha\n")
 	m := openApp(t, a)
@@ -65,6 +67,7 @@ func TestBookmarkOverviewEmptyStoreStaysClosed(t *testing.T) {
 // matching rows — path, preview and description all count — and esc clears
 // the query before it closes the overview.
 func TestBookmarkOverviewSpeedSearchFilters(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "alpha\nbeta\n")
 	b := writeTemp(t, dir, "b.txt", "delta\nepsilon\n")
@@ -100,6 +103,7 @@ func TestBookmarkOverviewSpeedSearchFilters(t *testing.T) {
 // TestBookmarkOverviewEnterJumps: enter opens the selected bookmark's file at
 // its line through the standard open funnel and closes the overview.
 func TestBookmarkOverviewEnterJumps(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "alpha\n")
 	b := writeTemp(t, dir, "b.txt", "delta\nepsilon\nzeta\n")
@@ -122,6 +126,7 @@ func TestBookmarkOverviewEnterJumps(t *testing.T) {
 // TestBookmarkOverviewDeleteRemoves: the delete key drops the selected
 // bookmark from the store and from the list, and persists.
 func TestBookmarkOverviewDeleteRemoves(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "alpha\nbeta\n")
@@ -155,6 +160,7 @@ func TestBookmarkOverviewDeleteRemoves(t *testing.T) {
 // selected bookmark — not on the cursor line — and saving lands back in the
 // overview with the new description on the row.
 func TestBookmarkOverviewEditsDescription(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "alpha\n")
 	b := writeTemp(t, dir, "b.txt", "delta\nepsilon\n")
@@ -186,6 +192,7 @@ func TestBookmarkOverviewEditsDescription(t *testing.T) {
 // TestBookmarkOverviewEditCancelReturns: esc in the prompt opened from the
 // overview leaves the description untouched and reopens the list.
 func TestBookmarkOverviewEditCancelReturns(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "alpha\n")
 	m := openApp(t, a)
@@ -209,6 +216,7 @@ func TestBookmarkOverviewEditCancelReturns(t *testing.T) {
 // unbookmarked line places the bookmark together with its description — the
 // "describe while placing" flavour.
 func TestBookmarkAnnotateCreatesDescribedBookmark(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "alpha\nbeta\n")
@@ -232,6 +240,7 @@ func TestBookmarkAnnotateCreatesDescribedBookmark(t *testing.T) {
 // TestBookmarkOverviewCommandRegistered: the overview is reachable from the
 // palette.
 func TestBookmarkOverviewCommandRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if _, ok := m.reg.Command("bookmark.overview"); !ok {
 		t.Fatal("bookmark.overview must be registered")

@@ -46,6 +46,7 @@ func setBackgroundLSPTimeout(t *testing.T, raw string) {
 // and unparsable select the default, off/false/0 and non-positive durations
 // disable, valid durations apply.
 func TestBackgroundLSPTimeoutParsing(t *testing.T) {
+	// serial: setBackgroundLSPTimeout: config.Set (process-wide configuration)
 	cases := []struct {
 		raw  string
 		want time.Duration
@@ -72,6 +73,7 @@ func TestBackgroundLSPTimeoutParsing(t *testing.T) {
 // resumed workspace and one re-parked since the timer was armed are skipped,
 // as is everything when the shutdown is disabled.
 func TestHandleWorkspaceIdle(t *testing.T) {
+	// serial: setBackgroundLSPTimeout: config.Set (process-wide configuration)
 	var fired []string
 	reg := registry.New()
 	reg.Add(idleHookPlugin{roots: &fired})
@@ -124,6 +126,7 @@ func TestHandleWorkspaceIdle(t *testing.T) {
 // TestArmWorkspaceIdle pins the arming guard: no timer without a root or with
 // the shutdown disabled, a timer otherwise.
 func TestArmWorkspaceIdle(t *testing.T) {
+	// serial: setBackgroundLSPTimeout: config.Set (process-wide configuration)
 	setBackgroundLSPTimeout(t, "1m")
 	if armWorkspaceIdle("") != nil {
 		t.Fatal("rootless park must not arm a timer")
@@ -140,6 +143,7 @@ func TestArmWorkspaceIdle(t *testing.T) {
 // TestParkStampsParkedAt guards the workspace-side seam (#1521): Park stamps
 // the park time, Resume clears it.
 func TestParkStampsParkedAt(t *testing.T) {
+	t.Parallel()
 	mgr := workspace.NewManager(workspace.New("/tmp/a", nil))
 	mgr.Park()
 	w := mgr.Peek("/tmp/a")

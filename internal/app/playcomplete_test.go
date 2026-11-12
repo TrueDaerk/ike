@@ -39,6 +39,7 @@ func playCompLabels(m Model) []string {
 // TestJQCompletionOpensOnDotAndFilters is the issue's acceptance case: `.`
 // offers the input's top-level keys, and typing narrows the list in place.
 func TestJQCompletionOpensOnDotAndFilters(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"name":"ike","nation":"x","other":1}`))
 	m.play.program.Clear()
 	m = typeInto(m, ".")
@@ -60,6 +61,7 @@ func TestJQCompletionOpensOnDotAndFilters(t *testing.T) {
 // closes the popup and re-evaluates — and does not record-and-run, which is
 // what enter means only once the popup is gone.
 func TestJQCompletionAccept(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"name":"ike","nation":"x"}`))
 	m.play.program.Clear()
 	m = typeInto(m, ".nam")
@@ -84,6 +86,7 @@ func TestJQCompletionAccept(t *testing.T) {
 // TestJQCompletionTabAccepts: a plain tab accepts like in the editor; only
 // with the popup closed does tab move the keyboard into the result buffer.
 func TestJQCompletionTabAccepts(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"name":"ike"}`))
 	m.play.program.Clear()
 	m = typeInto(m, ".na")
@@ -103,6 +106,7 @@ func TestJQCompletionTabAccepts(t *testing.T) {
 // TestJQCompletionDismiss: esc closes only the popup; the playground and the
 // program on the query line stand.
 func TestJQCompletionDismiss(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"name":"ike"}`))
 	m.play.program.Clear()
 	m = typeInto(m, ".na")
@@ -122,6 +126,7 @@ func TestJQCompletionDismiss(t *testing.T) {
 // TestJQCompletionNavigation: the arrows and ctrl+n/ctrl+p step the selection
 // (wrapping), shadowing the history walk while the popup shows.
 func TestJQCompletionNavigation(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"alpha":1,"beta":2}`))
 	m = runJQProgram(m, ".alpha") // a history entry ↑ would otherwise restore
 	m.play.program.Clear()
@@ -148,6 +153,7 @@ func TestJQCompletionNavigation(t *testing.T) {
 // TestJQCompletionNestedThroughArrays: the acceptance path `.items[].` offers
 // the keys of the array's element objects.
 func TestJQCompletionNestedThroughArrays(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"items":[{"id":7},{"id":8,"name":"x"}]}`))
 	m.play.program.Clear()
 	m = typeInto(m, ".items[].")
@@ -159,6 +165,7 @@ func TestJQCompletionNestedThroughArrays(t *testing.T) {
 // TestJQCompletionQuotedKeyAccept: a key that is no identifier is inserted
 // quoted, and the resulting program evaluates.
 func TestJQCompletionQuotedKeyAccept(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"a b":42}`))
 	m.play.program.Clear()
 	m = typeInto(m, ".")
@@ -174,6 +181,7 @@ func TestJQCompletionQuotedKeyAccept(t *testing.T) {
 // TestJQCompletionBuiltins: an identifier partial completes the jq builtins,
 // and the popup renders the selected builtin's doc line.
 func TestJQCompletionBuiltins(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	m.play.program.Clear()
 	m = typeInto(m, "sel")
@@ -199,6 +207,7 @@ func TestJQCompletionBuiltins(t *testing.T) {
 // TestJQCompletionManualRequest: ctrl+space opens the popup without a typed
 // trigger — the full builtin list on an empty line.
 func TestJQCompletionManualRequest(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	m.play.program.Clear()
 	if m.play.comp != nil {
@@ -213,6 +222,7 @@ func TestJQCompletionManualRequest(t *testing.T) {
 // TestJQCompletionRenders: the popup is composited over the pane below the
 // query line, with the editor completion popup's accept hint.
 func TestJQCompletionRenders(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"name":"ike","nation":"x"}`))
 	m.play.program.Clear()
 	m = typeInto(m, ".na")
@@ -233,6 +243,7 @@ func TestJQCompletionRenders(t *testing.T) {
 // the result buffer after a dismiss, or walking the history — never leaves a
 // stale popup behind.
 func TestJQCompletionClosesOnFocusAndHistory(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"name":"ike"}`))
 	m = runJQProgram(m, ".name")
 	m.play.program.Clear()
@@ -262,6 +273,7 @@ func TestJQCompletionClosesOnFocusAndHistory(t *testing.T) {
 // it, not under the first row — the list has to point at the text it replaces
 // wherever in the pipeline that is.
 func TestJQCompletionAnchorsOnTheCaretsRow(t *testing.T) {
+	t.Parallel()
 	m, _ := playMultiLineApp(t)
 	r, ok := m.lay.Panes[m.play.paneKey]
 	if !ok {
@@ -302,6 +314,7 @@ func TestJQCompletionAnchorsOnTheCaretsRow(t *testing.T) {
 // the fixture uses an .xml path because an .html file opens in its rendered
 // preview, where the query line does not take keys.
 func TestXMQCompletionHTMLPath(t *testing.T) {
+	// serial: fakeXMQOnPath: t.Setenv
 	fakeXMQOnPath(t)
 	m := openXMQ(t, dismissOnboarding(xmqApp(t, "xml", "<!DOCTYPE html>\n<html><head></head><body class=\"x\" id=\"b\"><main></main><div></div></body></html>\n")))
 	m.play.program.Clear()
@@ -327,6 +340,7 @@ func TestXMQCompletionHTMLPath(t *testing.T) {
 // TestXMQCompletionXMLPath: the same walk over an XML buffer, filtering as
 // the step name is typed.
 func TestXMQCompletionXMLPath(t *testing.T) {
+	// serial: fakeXMQOnPath: t.Setenv
 	fakeXMQOnPath(t)
 	m := openXMQ(t, dismissOnboarding(xmqApp(t, "xml", "<root><meta page=\"1\"/><items><item id=\"3\"/></items></root>\n")))
 	m.play.program.Clear()
@@ -348,6 +362,7 @@ func TestXMQCompletionXMLPath(t *testing.T) {
 // TestXMQCompletionSilentOutsidePaths: a space or slash outside a path
 // argument opens nothing; ctrl+space still forces the popup open.
 func TestXMQCompletionSilentOutsidePaths(t *testing.T) {
+	// serial: fakeXMQOnPath: t.Setenv
 	fakeXMQOnPath(t)
 	m := openXMQ(t, dismissOnboarding(xmqApp(t, "xml", "<root><item/></root>\n")))
 	m.play.program.Clear()

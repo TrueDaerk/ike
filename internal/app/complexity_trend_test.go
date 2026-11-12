@@ -32,6 +32,7 @@ func trendApp(t *testing.T) Model {
 }
 
 func TestComplexityTrendBookkeeping(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := trendApp(t)
 	// No snapshot: the tab says so and nothing is scheduled.
@@ -209,6 +210,7 @@ func trendGitRepo(t *testing.T) string {
 }
 
 func TestRunComplexityTrendRealRepo(t *testing.T) {
+	// serial: trendApp: t.Setenv
 	dir := trendGitRepo(t)
 	cache := complexity.NewTrendCache()
 	job := complexity.TrendJob{RepoRoot: dir, Root: dir, Cache: cache, Res: complexity.Uniform(complexity.Thresholds{CCN: 2, Cog: 2})}

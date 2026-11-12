@@ -15,6 +15,7 @@ import (
 // writes [lang.python] interpreter to the project config and toasts; a failed
 // one only warns.
 func TestEnvMsgRegistersInterpreter(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	chdir(t, dir)
 	t.Setenv("IKE_CONFIG_DIR", "")

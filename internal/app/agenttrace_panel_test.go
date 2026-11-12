@@ -105,6 +105,7 @@ func traceToTop(p *tracepanel.Model) {
 }
 
 func TestAgentTraceToggleLifecycle(t *testing.T) {
+	// serial: traceApp: t.Setenv
 	m, _ := traceApp(t)
 	before := m.activeWS().Panes.Focused()
 
@@ -131,6 +132,7 @@ func TestAgentTraceToggleLifecycle(t *testing.T) {
 }
 
 func TestAgentTraceReadsTranscriptAndOpensFile(t *testing.T) {
+	// serial: traceApp: t.Setenv
 	m, dir := traceApp(t)
 	target := filepath.Join(t.TempDir(), "main.go")
 	if err := os.WriteFile(target, []byte("a\nb\nc\nd\n"), 0o644); err != nil {
@@ -181,6 +183,7 @@ func TestAgentTraceReadsTranscriptAndOpensFile(t *testing.T) {
 }
 
 func TestAgentTraceLiveAppendKeepsSelection(t *testing.T) {
+	// serial: traceApp: t.Setenv
 	m, dir := traceApp(t)
 	target := filepath.Join(t.TempDir(), "x.go")
 	path := filepath.Join(dir, "sess-2.jsonl")
@@ -240,6 +243,7 @@ func TestAgentTraceLiveAppendKeepsSelection(t *testing.T) {
 }
 
 func TestAgentTraceEmptyStateAndActions(t *testing.T) {
+	// serial: traceApp: t.Setenv
 	m, _ := traceApp(t)
 	m = openTrace(t, m)
 	p := m.agentTracePanel()
@@ -270,6 +274,7 @@ func TestAgentTraceEmptyStateAndActions(t *testing.T) {
 }
 
 func TestAgentTraceFollowsTheAgentToolPane(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, key := openWatcher(t)
 	cwd := m.toolPane("watcher").Terminal().Cwd()
@@ -308,6 +313,7 @@ func TestAgentTraceFollowsTheAgentToolPane(t *testing.T) {
 // the pane shows the session, and through the pending jump a read applies.
 // An entry the feed could not attribute stays unlinked.
 func TestAgentTraceChangeFeedLinkBothWays(t *testing.T) {
+	// serial: traceApp: t.Setenv
 	m, dir := traceApp(t)
 	if m.onboardingOpen() {
 		m = m.closeOnboarding().(Model)

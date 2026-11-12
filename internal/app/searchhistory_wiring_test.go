@@ -40,6 +40,7 @@ func assertEditorsShareHistories(t *testing.T, m Model, when string) {
 }
 
 func TestSearchHistoryWiredAcrossOpenAndSwitch(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
 	for _, d := range []string{src, dst} {

@@ -15,6 +15,7 @@ import (
 // TestSSHModeResults verifies the picker rows: the alias is the title, the
 // config's target the detail, and activating a row carries the alias.
 func TestSSHModeResults(t *testing.T) {
+	t.Parallel()
 	mode := newSSHMode()
 	mode.entries = []sshconf.Host{
 		{Alias: "build01", HostName: "build01.example.com", User: "ci", Port: "2222"},
@@ -45,6 +46,7 @@ func TestSSHModeResults(t *testing.T) {
 // TestSSHModePlaceholderHint verifies the empty-picker hint: nothing to list
 // explains where hosts come from instead of showing a bare prompt.
 func TestSSHModePlaceholderHint(t *testing.T) {
+	t.Parallel()
 	mode := newSSHMode()
 	if got := mode.Placeholder(); !strings.Contains(got, "ssh/config") || !strings.Contains(got, "terminal.ssh_hosts") {
 		t.Fatalf("empty placeholder = %q, want the hint", got)
@@ -58,6 +60,7 @@ func TestSSHModePlaceholderHint(t *testing.T) {
 // TestSSHArgvAndLabel verifies the command assembly: the alias reaches ssh as
 // one verbatim argument, and the chrome label names the host.
 func TestSSHArgvAndLabel(t *testing.T) {
+	t.Parallel()
 	argv := sshArgv("build01")
 	if len(argv) != 2 || argv[0] != "ssh" || argv[1] != "build01" {
 		t.Fatalf("argv = %v, want [ssh build01]", argv)
@@ -71,6 +74,7 @@ func TestSSHArgvAndLabel(t *testing.T) {
 // first, then the terminal.ssh_hosts extras, duplicates folded into the
 // ssh-config entry that carries the detail.
 func TestSSHHostsMergesConfigAndSetting(t *testing.T) {
+	// serial: t.Setenv
 	m := NewWith(registry.New(), host.MapConfig{"terminal.ssh_hosts": "monitor, build01 , ,"})
 	home := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(home, ".ssh"), 0o700); err != nil {
@@ -97,6 +101,7 @@ func TestSSHHostsMergesConfigAndSetting(t *testing.T) {
 // TestSSHHostsWithoutConfig verifies the degraded path: no ssh config at all
 // leaves the extras (here: none), never an error.
 func TestSSHHostsWithoutConfig(t *testing.T) {
+	// serial: t.Setenv
 	m := NewWith(registry.New(), host.MapConfig{})
 	t.Setenv("HOME", t.TempDir())
 	if hosts := m.sshHosts(); len(hosts) != 0 {
@@ -107,6 +112,7 @@ func TestSSHHostsWithoutConfig(t *testing.T) {
 // TestOpenSSHTerminalIgnoresEmptyHost verifies that an empty pick spawns
 // nothing.
 func TestOpenSSHTerminalIgnoresEmptyHost(t *testing.T) {
+	t.Parallel()
 	m := NewWith(registry.New(), host.MapConfig{})
 	before := len(m.activeWS().Panes.Keys())
 	tm, _ := m.Update(SSHHostPickedMsg{})

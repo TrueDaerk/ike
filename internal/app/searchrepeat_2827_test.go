@@ -68,6 +68,7 @@ func commitWith(t *testing.T, m Model, path, opener, pattern string) Model {
 // file A are all repeated by the real cmd+g chord in file B, in the commit's
 // own direction like n; a miss toasts and stays put.
 func TestMatchStepChordRepeatsEveryCommitKind(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		opener   string
 		wantLine int // 1-based line cmd+g lands on from the top of B
@@ -111,6 +112,7 @@ func TestMatchStepChordRepeatsEveryCommitKind(t *testing.T) {
 // editor is vim's backward search, not the help overlay (the root "?" help
 // shortcut used to swallow it, so a "?" commit never reached cmd+g).
 func TestQuestionMarkInEditorStartsBackwardSearch(t *testing.T) {
+	t.Parallel()
 	m := dismissOnboarding(newSized())
 	a := tempFileWith(t, "a.txt", "foo\n")
 	m = openInEditor(m, a)
@@ -132,6 +134,7 @@ func TestQuestionMarkInEditorStartsBackwardSearch(t *testing.T) {
 // TestMatchStepChordInInsertMode: the chord fires in insert mode too (#2622)
 // and repeats the last query there.
 func TestMatchStepChordInInsertMode(t *testing.T) {
+	t.Parallel()
 	m := dismissOnboarding(newSized())
 	a := tempFileWith(t, "a.txt", "foo one\n")
 	b := tempFileWith(t, "b.txt", "x\nfoo b1\n")
@@ -146,6 +149,7 @@ func TestMatchStepChordInInsertMode(t *testing.T) {
 
 // TestMatchStepChordInSplitPane: file B in a fresh split repeats the query.
 func TestMatchStepChordInSplitPane(t *testing.T) {
+	t.Parallel()
 	m := dismissOnboarding(newSized())
 	a := tempFileWith(t, "a.txt", "foo one\n")
 	b := tempFileWith(t, "b.txt", "x\nfoo b1\n")
@@ -171,6 +175,7 @@ func TestMatchStepChordInSplitPane(t *testing.T) {
 // or through an all-projects hit leaves cmd+g on the in-file query. Only a
 // find-in-path search the user runs takes it over.
 func TestPickerOpensDoNotStealMatchStep(t *testing.T) {
+	t.Parallel()
 	cwd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -233,6 +238,7 @@ func TestPickerOpensDoNotStealMatchStep(t *testing.T) {
 // types is a new search and takes cmd+g over from the in-file query; its
 // stale generations do not.
 func TestFindInPathTypedSearchReclaimsMatchStep(t *testing.T) {
+	t.Parallel()
 	m := dismissOnboarding(newSized())
 	a := tempFileWith(t, "a.txt", "foo one\n")
 	m = commitWith(t, m, a, "/", "foo")
@@ -258,6 +264,7 @@ func TestFindInPathTypedSearchReclaimsMatchStep(t *testing.T) {
 // The model carries the global registry (switchModel's is empty), so the
 // chord resolves through the keymap like in the app.
 func TestMatchStepChordAfterProjectRoundTrip(t *testing.T) {
+	// serial: t.Setenv
 	p1, p2 := twoProjects(t)
 	t.Setenv("IKE_CONFIG_DIR", "")
 	tm, _ := NewWith(registry.Global(), host.MapConfig{"project.auto_save_on_switch": "false"}).

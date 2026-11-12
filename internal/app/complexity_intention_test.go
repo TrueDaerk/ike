@@ -42,6 +42,7 @@ func cxIntentionTitles(m Model) []string {
 }
 
 func TestComplexityIntentionItems(t *testing.T) {
+	// serial: baselineReload: config.Set (process-wide configuration)
 	withStore(t)
 	m, _ := cxIntentionApp(t, 2) // the header of A
 	got := strings.Join(cxIntentionTitles(m), "\n")
@@ -80,6 +81,7 @@ func TestComplexityIntentionItems(t *testing.T) {
 }
 
 func TestComplexityIntentionCommands(t *testing.T) {
+	// serial: cxIntentionApp: t.Setenv
 	m, proj := cxIntentionApp(t, 4)
 	out, _ := m.Update(ComplexityOpenAtCaretMsg{})
 	m = out.(Model)
@@ -138,6 +140,7 @@ func TestComplexityIntentionCommands(t *testing.T) {
 }
 
 func TestComplexityIntentionOutsideFunctionNotifies(t *testing.T) {
+	// serial: cxIntentionApp: t.Setenv
 	m, _ := cxIntentionApp(t, 0)
 	out, _ := m.Update(ComplexityPinAtCaretMsg{})
 	m = out.(Model)

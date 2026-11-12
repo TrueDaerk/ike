@@ -52,6 +52,7 @@ func contentCell(r layout.Rect, gw, line, col int) (x, y int) {
 }
 
 func TestMouseHoverIdleArmsOncePerCell(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, r, gw := hoverIdleModel(t)
 	x, y := contentCell(r, gw, 0, 2)
@@ -80,6 +81,7 @@ func TestMouseHoverIdleArmsOncePerCell(t *testing.T) {
 }
 
 func TestMouseHoverIdleCancelsOnKeyAndPress(t *testing.T) {
+	t.Parallel()
 	m, r, gw := hoverIdleModel(t)
 	x, y := contentCell(r, gw, 0, 2)
 
@@ -97,6 +99,7 @@ func TestMouseHoverIdleCancelsOnKeyAndPress(t *testing.T) {
 }
 
 func TestMouseHoverIdleIgnoresGutterAndOtherPanes(t *testing.T) {
+	t.Parallel()
 	m, r, _ := hoverIdleModel(t)
 	// The gutter is not a hover target.
 	m = step(m, motion(r.X+paneContentX, r.Y+paneContentY))
@@ -118,6 +121,7 @@ type recorder struct{ evs []host.EditorEvent }
 func (r *recorder) Emit(ev host.EditorEvent) { r.evs = append(r.evs, ev) }
 
 func TestMouseHoverFireOpensDiagnosticPopupAndRequestsPosition(t *testing.T) {
+	t.Parallel()
 	m, r, gw := hoverIdleModel(t)
 	ed := m.activeEditor()
 	// A diagnostic covering (0,2), published like the LSP bridge would.
@@ -163,6 +167,7 @@ func TestMouseHoverFireOpensDiagnosticPopupAndRequestsPosition(t *testing.T) {
 }
 
 func TestMouseHoverTickBeforeDeadlineRearms(t *testing.T) {
+	t.Parallel()
 	m, r, gw := hoverIdleModel(t)
 	x, y := contentCell(r, gw, 0, 2)
 	m = step(m, motion(x, y))
@@ -176,6 +181,7 @@ func TestMouseHoverTickBeforeDeadlineRearms(t *testing.T) {
 }
 
 func TestMouseHoverMotionOffCellDismissesPopup(t *testing.T) {
+	t.Parallel()
 	m, r, gw := hoverIdleModel(t)
 	ed := m.activeEditor()
 	m = step(m, ilsp.DiagnosticsMsg{Path: ed.Path(), Diagnostics: []ilsp.Diagnostic{{

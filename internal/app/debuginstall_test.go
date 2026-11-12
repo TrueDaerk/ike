@@ -72,6 +72,7 @@ func dbgInstallModel(t *testing.T) (Model, run.Config, string) {
 // a missing runtime defers the launch to the installer, and the install
 // result message retries and starts the session.
 func TestDebugPreflightInstallsAndRetries(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	m, cfg, root := dbgInstallModel(t)
 	tm, _ := m.Update(DebugStartMsg{})
 	m = tm.(Model)
@@ -104,6 +105,7 @@ func TestDebugPreflightInstallsAndRetries(t *testing.T) {
 // launching guard, and the deferred post-install retry must not start a
 // session when its result arrives.
 func TestDebugStopCancelsInFlightLaunch(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	m, cfg, root := dbgInstallModel(t)
 	tm, _ := m.Update(DebugStartMsg{})
 	m = tm.(Model)
@@ -149,6 +151,7 @@ func TestDebugStopCancelsInFlightLaunch(t *testing.T) {
 // TestDebugPreflightNoInstallLoop: still missing after an install surfaces
 // an error instead of reinstalling.
 func TestDebugPreflightNoInstallLoop(t *testing.T) {
+	// serial: dbgInstallModel: sets package variable dbgMarker
 	m, cfg, root := dbgInstallModel(t)
 	// Do NOT create the marker: the retry sees the runtime still missing.
 	tm, _ := m.Update(debugInstallResultMsg{cfg: cfg, root: root})
@@ -161,6 +164,7 @@ func TestDebugPreflightNoInstallLoop(t *testing.T) {
 // TestRunAdapterInstallFallsThrough tries candidates in order and keeps the
 // failure tail.
 func TestRunAdapterInstallFallsThrough(t *testing.T) {
+	t.Parallel()
 	if err := runAdapterInstall([][]string{{"/usr/bin/false"}, {"/usr/bin/true"}}); err != nil {
 		t.Fatalf("a later succeeding candidate must win: %v", err)
 	}

@@ -19,6 +19,7 @@ import (
 // An id that is neither is a silently-dead binding; an id that is both means
 // the ledger went stale when the command landed.
 func TestNoSilentlyDeadDefaultBindings(t *testing.T) {
+	t.Parallel()
 	reg := registry.Global()
 	for _, b := range keymap.Defaults(keymap.PresetJetBrains) {
 		_, registered := reg.Command(b.Command)

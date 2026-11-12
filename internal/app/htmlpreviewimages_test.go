@@ -31,6 +31,7 @@ func openHTMLPreviewWithImage(t *testing.T) (Model, string) {
 }
 
 func TestHTMLPreviewInlineImagesReconcile(t *testing.T) {
+	t.Parallel()
 	m, key := openHTMLPreviewWithImage(t)
 	hv := m.activeWS().Panes.Get(key).HTMLPreview()
 	if !hv.ImagesEnabled() {
@@ -93,6 +94,7 @@ func TestHTMLPreviewInlineImagesReconcile(t *testing.T) {
 // TestHTMLPreviewImagesSettingOff: preview.html_images off keeps the
 // placeholder and places nothing, even on a supporting terminal.
 func TestHTMLPreviewImagesSettingOff(t *testing.T) {
+	t.Parallel()
 	m, key := openHTMLPreviewWithImage(t)
 	ok := true
 	m.kittyGfx = &ok

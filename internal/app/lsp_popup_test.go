@@ -18,6 +18,7 @@ import (
 // (split, narrow) pane and asserts the framed box crosses the pane border via
 // the shift-left rule while every rendered row stays inside the terminal.
 func TestLSPPopupOverflowsPaneButNotTerminal(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	p := writeTemp(t, dir, "a.txt", "aaa\n")
 	m := openApp(t, p)
@@ -58,6 +59,7 @@ func TestLSPPopupOverflowsPaneButNotTerminal(t *testing.T) {
 // TestLSPPopupsCarryRoundedFrame asserts the popup views themselves ship the
 // rounded overlay frame (#316).
 func TestLSPPopupsCarryRoundedFrame(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	p := writeTemp(t, dir, "a.txt", "aaa\n")
 	m := openApp(t, p)
@@ -74,6 +76,7 @@ func TestLSPPopupsCarryRoundedFrame(t *testing.T) {
 // open but blurred the editor owns the keyboard, so its hover popup must draw
 // on top of the layer, not under it. A focused layer keeps covering it.
 func TestLSPHoverDrawsAboveBlurredPopupTerminal(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	p := writeTemp(t, dir, "a.txt", strings.Repeat("aaa\n", 30))
 	m := openApp(t, p)

@@ -17,6 +17,7 @@ func symbolHit(name, path string) ilsp.SymbolHit {
 // stdlib/dependency symbols the server returned first and scored higher on
 // pure fuzzy terms.
 func TestSymbolResultsProjectExactMatchFirst(t *testing.T) {
+	t.Parallel()
 	cwd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -54,6 +55,7 @@ func TestSymbolResultsProjectExactMatchFirst(t *testing.T) {
 
 // Non-project symbols stay reachable — ranked below, not dropped.
 func TestSymbolResultsKeepsNonProjectHits(t *testing.T) {
+	t.Parallel()
 	s := &symbolMode{}
 	q := "senddir"
 	s.lastSent = q
@@ -67,6 +69,7 @@ func TestSymbolResultsKeepsNonProjectHits(t *testing.T) {
 }
 
 func TestInsideProject(t *testing.T) {
+	t.Parallel()
 	cwd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -89,6 +92,7 @@ func TestInsideProject(t *testing.T) {
 // line several times yields several hits on the same (name, path, line) —
 // only one row survives; distinct lines and names never collapse.
 func TestSetHitsDeduplicatesIdenticalRows(t *testing.T) {
+	t.Parallel()
 	s := &symbolMode{}
 	q := "dup"
 	s.lastSent = q

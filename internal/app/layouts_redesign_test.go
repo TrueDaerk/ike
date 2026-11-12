@@ -74,6 +74,7 @@ func totalToolSessions(m Model) int {
 // saved tool list it matches — never by blind queue order, which would swap
 // the two tool areas when registry order and slot order diverge.
 func TestApplyLayoutMatchesToolHostsByComposition(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	withTools(t, sleepTool("alpha"), sleepTool("beta"), sleepTool("gamma"), sleepTool("delta"))
 	m := sized(t, 120, 40)
@@ -113,6 +114,7 @@ func TestApplyLayoutMatchesToolHostsByComposition(t *testing.T) {
 // with exactly its saved tab set — a tab closed since the save comes back on
 // apply, in the same host pane.
 func TestApplyLayoutRestoresMissingToolTab(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	withTools(t, sleepTool("alpha"), sleepTool("beta"))
 	m := sized(t, 120, 40)
@@ -150,6 +152,7 @@ func TestApplyLayoutRestoresMissingToolTab(t *testing.T) {
 // editor slot — and an apply re-slots the live viewer pane instead of
 // treating it as editor content.
 func TestHTTPViewerSnapshotsAsToolAndReslotsOnApply(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := sized(t, 100, 40)
 	m.openHTTPPanel()
@@ -180,6 +183,7 @@ func TestHTTPViewerSnapshotsAsToolAndReslotsOnApply(t *testing.T) {
 // since every tool window may be hosted as a tab — restores the viewer as
 // that tab, wired and under its singleton key.
 func TestHTTPContentTabRestoresAsTab(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	conf, dir := t.TempDir(), t.TempDir()
 	chdir(t, dir)
 	tree := &layout.Split{Orient: layout.Horizontal, Ratio: 0.3,
@@ -223,6 +227,7 @@ func TestHTTPContentTabRestoresAsTab(t *testing.T) {
 // configured position arrive in the next project grouped as tabs of one pane
 // instead of scattering as separate splits over the editor area.
 func TestSwitchAttachGroupsUnplacedGlobalTools(t *testing.T) {
+	// serial: globalToolModelWith: t.Setenv
 	_, b := twoRoots(t)
 	m := globalToolModelWith(t, `
 [[tools.custom]]
@@ -262,6 +267,7 @@ global = true
 // placement land in one tabbed pane at that dock on switch-in — "all bottom
 // right" stays one bottom strip instead of subdividing per tool.
 func TestSwitchAttachJoinsHomeDockOccupant(t *testing.T) {
+	// serial: globalToolModelWith: t.Setenv
 	_, b := twoRoots(t)
 	m := globalToolModelWith(t, `
 [[tools.custom]]

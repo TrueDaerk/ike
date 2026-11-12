@@ -53,6 +53,7 @@ func answerCloseGuard(t *testing.T, m Model, k tea.KeyPressMsg) Model {
 }
 
 func TestBatchCloseCommandsRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	for _, id := range []string{
 		"editor.tab.closeOthers", "editor.tab.closeLeft", "editor.tab.closeRight",
@@ -67,6 +68,7 @@ func TestBatchCloseCommandsRegistered(t *testing.T) {
 // TestCloseTabsLeftRight guards #2538: the side closes drop exactly the tabs
 // before / after the active one and leave it active.
 func TestCloseTabsLeftRight(t *testing.T) {
+	t.Parallel()
 	m, paths := tabApp5(t)
 	inst := m.activeWS().Panes.FocusedInstance()
 	m = dispatch(t, m, TabCloseSideMsg{Delta: -1})
@@ -88,6 +90,7 @@ func TestCloseTabsLeftRight(t *testing.T) {
 // TestCloseTabsSideIgnoresPinned guards #2538 against #1172: a pinned tab on
 // the closing side stays open and is reported.
 func TestCloseTabsSideIgnoresPinned(t *testing.T) {
+	t.Parallel()
 	m, paths := tabApp5(t)
 	inst := m.activeWS().Panes.FocusedInstance()
 	m = dispatch(t, m, TabSelectMsg{Index: 0})
@@ -105,6 +108,7 @@ func TestCloseTabsSideIgnoresPinned(t *testing.T) {
 // TestCloseUnmodifiedTabs guards #2538: every clean tab goes — the active one
 // included — and only the edited buffers stay.
 func TestCloseUnmodifiedTabs(t *testing.T) {
+	t.Parallel()
 	m, paths := tabApp5(t)
 	inst := m.activeWS().Panes.FocusedInstance()
 	inst.TabEditor(1).RestoreText("edited\n")
@@ -128,6 +132,7 @@ func TestCloseUnmodifiedTabs(t *testing.T) {
 // TestCloseAllTabsClosesThePane guards #2538: with nothing left to show, the
 // pane closes with its last tab — the way cmd+w on a single-tab pane behaves.
 func TestCloseAllTabsClosesThePane(t *testing.T) {
+	t.Parallel()
 	m, _ := tabApp5(t)
 	key := m.activeWS().Panes.Focused()
 	// A second editor pane, so the tab pane is not the workspace's last leaf.
@@ -146,6 +151,7 @@ func TestCloseAllTabsClosesThePane(t *testing.T) {
 // TestCloseAllTabsKeepsPinned guards #2538 against #1172: a pinned tab holds
 // the pane open, and Close All takes everything else.
 func TestCloseAllTabsKeepsPinned(t *testing.T) {
+	t.Parallel()
 	m, paths := tabApp5(t)
 	inst := m.activeWS().Panes.FocusedInstance()
 	key := m.activeWS().Panes.Focused()
@@ -164,6 +170,7 @@ func TestCloseAllTabsKeepsPinned(t *testing.T) {
 // whole batch — "s" writes every dirty victim and then closes them all,
 // instead of prompting once per file.
 func TestBatchCloseSavesEveryDirtyTabOnce(t *testing.T) {
+	t.Parallel()
 	m, paths := tabApp5(t)
 	inst := m.activeWS().Panes.FocusedInstance()
 	inst.TabEditor(0).RestoreText("left edit\n")
@@ -190,6 +197,7 @@ func TestBatchCloseSavesEveryDirtyTabOnce(t *testing.T) {
 // TestBatchCloseSurfaces guards #2538's discoverability: the tab context menu
 // and the File menu both offer every batch close.
 func TestBatchCloseSurfaces(t *testing.T) {
+	t.Parallel()
 	want := []string{
 		"editor.tab.closeOthers", "editor.tab.closeLeft", "editor.tab.closeRight",
 		"editor.tab.closeUnmodified", "editor.tab.closeAll",
@@ -223,6 +231,7 @@ func TestBatchCloseSurfaces(t *testing.T) {
 // TestCloseOthersDefaultChord guards #2538's keybind: cmd+alt+w reaches
 // editor.tab.closeOthers on macOS, where the Cmd modifier is delivered.
 func TestCloseOthersDefaultChord(t *testing.T) {
+	t.Parallel()
 	found := false
 	for _, b := range keymap.DefaultsFor(keymap.PresetJetBrains, "darwin") {
 		if b.Command == "editor.tab.closeOthers" && b.Chord.String() == "cmd+alt+w" {

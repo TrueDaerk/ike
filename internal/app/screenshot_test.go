@@ -74,6 +74,7 @@ func screenshotResult(t *testing.T, cmd tea.Cmd) screenshotDoneMsg {
 // TestScreenshotCommandsRegistered guards #2001: both exports must be registry
 // commands, or neither the palette nor the View menu can reach them.
 func TestScreenshotCommandsRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	for _, id := range []string{"view.exportScreenshot", "view.exportWindowScreenshot"} {
 		if _, ok := m.reg.Command(id); !ok {
@@ -86,6 +87,7 @@ func TestScreenshotCommandsRegistered(t *testing.T) {
 // capture paints the composed frame cropped to the focused pane's rectangle,
 // and that crop carries the pane's on-screen content.
 func TestScreenshotPaneRegionIsFocusedPane(t *testing.T) {
+	// serial: captureOptions: sets package variable screenshotRender
 	m := screenshotModel(t, t.TempDir())
 	frame, opt := captureOptions(t, m, false)
 
@@ -113,6 +115,7 @@ func TestScreenshotPaneRegionIsFocusedPane(t *testing.T) {
 // TestScreenshotWindowRegionIsWholeFrame guards the window variant: it crops
 // to nothing, so tool panes and the status line are in the shot.
 func TestScreenshotWindowRegionIsWholeFrame(t *testing.T) {
+	// serial: captureOptions: sets package variable screenshotRender
 	m := screenshotModel(t, t.TempDir())
 	_, opt := captureOptions(t, m, true)
 
@@ -129,6 +132,7 @@ func TestScreenshotWindowRegionIsWholeFrame(t *testing.T) {
 // lands in the configured directory at the region's pixel size, and the path
 // reaches the clipboard and a notification.
 func TestScreenshotWritesPNGAndCopiesPath(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	var copied string
 	orig := clipboardWrite
 	clipboardWrite = func(s string) { copied = s }
@@ -179,6 +183,7 @@ func TestScreenshotWritesPNGAndCopiesPath(t *testing.T) {
 
 // TestScreenshotFailureNotifies keeps a broken render from being silent.
 func TestScreenshotFailureNotifies(t *testing.T) {
+	t.Parallel()
 	m := screenshotModel(t, t.TempDir())
 	tm, _ := m.Update(screenshotDoneMsg{Err: os.ErrPermission})
 	m = tm.(Model)
@@ -190,6 +195,7 @@ func TestScreenshotFailureNotifies(t *testing.T) {
 // TestScreenshotPathNaming pins the file name: kind plus a sortable timestamp,
 // with a counter when a shot of the same kind was taken in the same second.
 func TestScreenshotPathNaming(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	at := time.Date(2026, 8, 20, 19, 30, 5, 0, time.UTC)
 	first := screenshotPath(dir, "pane", at)
@@ -211,6 +217,7 @@ func TestScreenshotPathNaming(t *testing.T) {
 // back to ~/.ike/screenshots, "~" expands, and a relative path resolves
 // against the project directory.
 func TestScreenshotDirResolution(t *testing.T) {
+	// serial: t.Setenv
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)

@@ -54,6 +54,7 @@ func assertJQPathOffered(t *testing.T, m Model) {
 // TestAltEnterOpensIntentionsInJSONBuffer: the default keymap, the real
 // keypress, the popup with the jq-path intention.
 func TestAltEnterOpensIntentionsInJSONBuffer(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	m := intentionModel(t, "x.json", `{"name": "value"}`, 0, 11)
 	assertJQPathOffered(t, pressAltEnterForIntentions(t, m))
 }
@@ -64,6 +65,7 @@ func TestAltEnterOpensIntentionsInJSONBuffer(t *testing.T) {
 // = "" — which unbound the editor's lsp.codeAction too, so alt+enter did
 // nothing in any buffer.
 func TestAltEnterSurvivesExplorerRebind(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	withStore(t)
 	m := intentionModel(t, "x.json", `{"name": "value"}`, 0, 11)
 	orig := config.Get()

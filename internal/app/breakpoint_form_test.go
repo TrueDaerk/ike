@@ -37,6 +37,7 @@ func formModel(t *testing.T, caps map[string]any) (Model, *stubAdapter, string) 
 // TestBreakpointFormEditsPersistsAndSyncs walks the three fields, applies
 // them, and checks the store, the disk and the live session all see it.
 func TestBreakpointFormEditsPersistsAndSyncs(t *testing.T) {
+	// serial: formModel: sets package variable debugStubCaps
 	withStore(t)
 	m, sa, path := formModel(t, allRefinementCaps)
 	m = typeInto(m, "i > 3")
@@ -82,6 +83,7 @@ func TestBreakpointFormEditsPersistsAndSyncs(t *testing.T) {
 // TestBreakpointFormRejectsInvalidHitCount keeps the form open with the
 // reason and the focus on the offending field (#2245).
 func TestBreakpointFormRejectsInvalidHitCount(t *testing.T) {
+	// serial: formModel: sets package variable debugStubCaps
 	m, _, path := formModel(t, allRefinementCaps)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab}) // onto the hit count
 	m = typeInto(m, "lots")
@@ -104,6 +106,7 @@ func TestBreakpointFormRejectsInvalidHitCount(t *testing.T) {
 // TestBreakpointFormRejectsBlankCondition is the empty-but-enabled case: a
 // condition of spaces would reach the adapter and fail the breakpoint.
 func TestBreakpointFormRejectsBlankCondition(t *testing.T) {
+	// serial: formModel: sets package variable debugStubCaps
 	m, _, _ := formModel(t, allRefinementCaps)
 	m = typeInto(m, "   ")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -116,6 +119,7 @@ func TestBreakpointFormRejectsBlankCondition(t *testing.T) {
 // did not advertise, says so, skips them on tab — and still saves the ones it
 // supports, with the session intact (#2245).
 func TestBreakpointFormGatesUnsupportedFields(t *testing.T) {
+	// serial: waitForCommand: waits on the wall clock (load-sensitive)
 	// The stub advertises only conditional breakpoints.
 	m, sa, path := formModel(t, map[string]any{"supportsConditionalBreakpoints": true})
 
@@ -157,6 +161,7 @@ func TestBreakpointFormGatesUnsupportedFields(t *testing.T) {
 // TestBreakpointFormAllFieldsDisabled keeps a capability-less adapter's form
 // read-only and harmless: the stored values stay visible and untouched.
 func TestBreakpointFormAllFieldsDisabled(t *testing.T) {
+	// serial: debugCaps: sets package variable debugStubCaps
 	debugCaps(t, nil)
 	m, _, path := debugModel(t)
 	m.bpts.Toggle(bpKey(path), 1)
@@ -185,6 +190,7 @@ func TestBreakpointFormAllFieldsDisabled(t *testing.T) {
 
 // TestBreakpointPropertiesWithoutBreakpoint refuses the chord on a bare line.
 func TestBreakpointPropertiesWithoutBreakpoint(t *testing.T) {
+	// serial: debugCaps: sets package variable debugStubCaps
 	debugCaps(t, allRefinementCaps)
 	m, _, _ := debugModel(t)
 	clearNotices(&m)
@@ -201,6 +207,7 @@ func TestBreakpointPropertiesWithoutBreakpoint(t *testing.T) {
 // TestBreakpointPropertiesAtCursorOpensForm is the gutter chord on a line
 // that does carry a breakpoint (#2245).
 func TestBreakpointPropertiesAtCursorOpensForm(t *testing.T) {
+	// serial: debugCaps: sets package variable debugStubCaps
 	debugCaps(t, allRefinementCaps)
 	m, _, path := debugModel(t)
 	m.bpts.Toggle(bpKey(path), 0) // the cursor sits on line 0 after opening
@@ -214,6 +221,7 @@ func TestBreakpointPropertiesAtCursorOpensForm(t *testing.T) {
 // TestStrippedRefinementNoticeOnSessionStart warns once when the store holds
 // refinements the adapter cannot honour, and still sends the breakpoints.
 func TestStrippedRefinementNoticeOnSessionStart(t *testing.T) {
+	// serial: debugCaps: sets package variable debugStubCaps
 	debugCaps(t, nil) // an adapter advertising none of the three
 	m, sa, path := debugModel(t)
 	m.bpts.Toggle(bpKey(path), 1)
@@ -245,6 +253,7 @@ func TestStrippedRefinementNoticeOnSessionStart(t *testing.T) {
 // TestNoStrippedNoticeWhenSupported keeps the session-start quiet for an
 // adapter that honours everything.
 func TestNoStrippedNoticeWhenSupported(t *testing.T) {
+	// serial: debugCaps: sets package variable debugStubCaps
 	debugCaps(t, allRefinementCaps)
 	m, sa, path := debugModel(t)
 	m.bpts.Toggle(bpKey(path), 1)
@@ -263,6 +272,7 @@ func TestNoStrippedNoticeWhenSupported(t *testing.T) {
 // adapter logs through an output event and never stops, so the session keeps
 // running and the transcript carries the message (#2245).
 func TestLogpointOutputDoesNotPause(t *testing.T) {
+	// serial: debugCaps: sets package variable debugStubCaps
 	debugCaps(t, allRefinementCaps)
 	m, _, path := debugModel(t)
 	m.bpts.Toggle(bpKey(path), 1)

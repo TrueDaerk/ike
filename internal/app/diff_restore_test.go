@@ -19,6 +19,7 @@ import (
 // restores intact — the validation pass used to reject the "diff" identity
 // and silently drop the whole layout back to the default.
 func TestDiffLayoutRestores(t *testing.T) {
+	// serial: t.Setenv
 	store := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", store)
 	dir := t.TempDir()
@@ -60,6 +61,7 @@ func TestDiffLayoutRestores(t *testing.T) {
 // survives a restart with the HEAD blob re-read via git instead of an empty
 // left side.
 func TestHeadDiffRestoresBothSides(t *testing.T) {
+	// serial: t.Setenv
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not installed")
 	}

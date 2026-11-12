@@ -64,6 +64,7 @@ func waitComplexity(t *testing.T, x *complexity.Index, what string, cond func(v 
 // master switch off drops the snapshot and on rebuilds it, and the exclude
 // list applies on reload.
 func TestComplexityIndexBuiltWalkedAndToggledLive(t *testing.T) {
+	// serial: t.Setenv
 	withProjectWalks(t)
 	proj := t.TempDir()
 	if r, err := filepath.EvalSymlinks(proj); err == nil {
@@ -160,6 +161,7 @@ func TestComplexityIndexBuiltWalkedAndToggledLive(t *testing.T) {
 // built from carries the [complexity] keys as strings; a malformed value
 // keeps the default and the list is comma-separated.
 func TestComplexityOptionsFromHostConfig(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	old := config.Get()
 	t.Cleanup(func() { config.Set(old) })
 	c, _ := config.Load(config.Options{})
@@ -189,6 +191,7 @@ func TestComplexityOptionsFromHostConfig(t *testing.T) {
 // counts and duration only (plus cache=corrupt for a damaged cache, #2967);
 // a build without a tree reports the error phase.
 func TestComplexityScanRecorder(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	r := telemetry.New(dir, nil)
 	rec := complexityScanRecorder(r)

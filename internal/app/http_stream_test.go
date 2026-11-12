@@ -16,6 +16,7 @@ import (
 // stops returning nextHTTPEvent) fails this test by leaving the producer
 // goroutine stuck.
 func TestHTTPStreamPumpDrainsProducer(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	m := httpApp(t)
 	events := make(chan tea.Msg, 4) // far smaller than the chunk count: backpressure is real
 	done := make(chan struct{})
@@ -53,6 +54,7 @@ func TestHTTPStreamPumpDrainsProducer(t *testing.T) {
 // TestHTTPChunkCoalescerBatchesPerWindow (#2176): chunks inside one quiet
 // window fold into a single emitted buffer instead of one message per chunk.
 func TestHTTPChunkCoalescerBatchesPerWindow(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	var mu sync.Mutex
 	var got [][]byte
 	c := &httpChunkCoalescer{emit: func(b []byte) { mu.Lock(); got = append(got, b); mu.Unlock() }}
@@ -90,6 +92,7 @@ func TestHTTPChunkCoalescerBatchesPerWindow(t *testing.T) {
 // dispatch goroutine sends next — and a late add or timer emits nothing, so
 // no send can land after the events channel closes.
 func TestHTTPChunkCoalescerFinishFlushesTailAndStops(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	var mu sync.Mutex
 	var got [][]byte
 	c := &httpChunkCoalescer{emit: func(b []byte) { mu.Lock(); got = append(got, b); mu.Unlock() }}

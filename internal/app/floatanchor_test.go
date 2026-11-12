@@ -109,6 +109,7 @@ func dragFloat(t *testing.T, m Model, kind string, sx, sy, dx, dy int) Model {
 }
 
 func TestFloatResizeDragAnchorsOppositeEdge(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name           string
 		sx, sy, dx, dy int
@@ -159,6 +160,7 @@ func TestFloatResizeDragAnchorsOppositeEdge(t *testing.T) {
 // The grabbed edge stops at the screen edge: dragging the top edge far past
 // row 0 grows the box only up to the top row, and the bottom stays put.
 func TestFloatResizeDragStopsAtScreenEdge(t *testing.T) {
+	t.Parallel()
 	for _, k := range anchorKinds {
 		t.Run(k.kind, func(t *testing.T) {
 			m := k.open(t)
@@ -175,6 +177,7 @@ func TestFloatResizeDragStopsAtScreenEdge(t *testing.T) {
 // The frame composites the box where the hit-tests resolve it: after a
 // top-edge drag the box's top border row is drawn on the new top row.
 func TestFloatResizeDragRendersAtAnchoredRect(t *testing.T) {
+	t.Parallel()
 	m := step(dismissOnboarding(sized(t, 120, 40)), OpenSettingsMsg{})
 	m = dragFloat(t, m, "settings", 0, -1, 0, -2)
 	x, y, w, _ := m.settingsRect()
@@ -188,6 +191,7 @@ func TestFloatResizeDragRendersAtAnchoredRect(t *testing.T) {
 // to the store on disk, and the reopened window comes back where and as large
 // as the user left it.
 func TestFloatResizeDragPersistsSizeAndOffset(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := step(dismissOnboarding(sized(t, 120, 40)), OpenSettingsMsg{})
 	m = dragFloat(t, m, "settings", -1, -1, -3, -2)
@@ -213,6 +217,7 @@ func TestFloatResizeDragPersistsSizeAndOffset(t *testing.T) {
 // The shell layers persist per content title; the popup box mirrors its
 // offset into the user-scoped fallback store like the move drag (#1714).
 func TestFloatResizeDragPersistsShellAndPopupOffsets(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := openAnchorShell(t)
 	m = dragFloat(t, m, "shell", 0, 1, 0, 3)
@@ -236,6 +241,7 @@ func TestFloatResizeDragPersistsShellAndPopupOffsets(t *testing.T) {
 // bottom-right corner, with an offset far past the screen, stays fully on
 // screen — before and after the terminal shrinks.
 func TestFloatOffsetReclampsOnTerminalResize(t *testing.T) {
+	t.Parallel()
 	for _, k := range anchorKinds {
 		t.Run(k.kind, func(t *testing.T) {
 			m := k.open(t)

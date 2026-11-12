@@ -31,6 +31,7 @@ func selectionApp(t *testing.T, name, body string) Model {
 }
 
 func TestScratchFromSelectionCommandsRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	for _, id := range []string{scratchFromSelectionCommandID, scratchPromoteCommandID} {
 		if _, ok := m.reg.Command(id); !ok {
@@ -43,6 +44,7 @@ func TestScratchFromSelectionCommandsRegistered(t *testing.T) {
 // in a .py file yields a .py scratch holding exactly the selected text, opened
 // and focused, with no language picker in between.
 func TestNewScratchFromSelectionInheritsExtension(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := selectionApp(t, "source.py", "needle one\ntwo\n")
 	if sel := m.activeSelectionText(); sel != "needle" {
@@ -77,6 +79,7 @@ func TestNewScratchFromSelectionInheritsExtension(t *testing.T) {
 // the store takes any extension, so a selection out of a file whose suffix has
 // no picker row still produces a scratch of that suffix.
 func TestNewScratchFromSelectionKeepsUnknownExtension(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := selectionApp(t, "source.zzq", "needle one\n")
 
@@ -89,6 +92,7 @@ func TestNewScratchFromSelectionKeepsUnknownExtension(t *testing.T) {
 // TestNewScratchFromSelectionWithoutSelectionRefuses is the empty-scratch
 // guard: without a selection the command reports it and creates nothing.
 func TestNewScratchFromSelectionWithoutSelectionRefuses(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := selectionApp(t, "source.py", "needle one\n")
 	// Leave visual mode again, so nothing is selected.
@@ -115,6 +119,7 @@ func TestNewScratchFromSelectionWithoutSelectionRefuses(t *testing.T) {
 // source carries no extension at all (an untitled buffer, a Dockerfile): the
 // scratch is plain text rather than nothing.
 func TestNewScratchFromSelectionFallsBackToPlainText(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := selectionApp(t, "Dockerfile", "needle one\n")
 
@@ -128,6 +133,7 @@ func TestNewScratchFromSelectionFallsBackToPlainText(t *testing.T) {
 // carried content is written instead of the language template, and an empty
 // one leaves the existing behaviour untouched.
 func TestNewScratchMsgContentSeedsFile(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 

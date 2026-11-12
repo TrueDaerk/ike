@@ -85,6 +85,7 @@ func focusToolWindow(t *testing.T, m *Model, tw toolWindowKind) string {
 // TestPaneFocusChordFromEveryToolWindow (#2493): the chord reaches the numbered
 // pane from every tool window, terminal included.
 func TestPaneFocusChordFromEveryToolWindow(t *testing.T) {
+	t.Parallel()
 	for name, tw := range toolWindowKinds() {
 		t.Run(name, func(t *testing.T) {
 			m := toolWindowApp(t, 1)
@@ -132,6 +133,7 @@ func TestPaneFocusChordFromEveryToolWindow(t *testing.T) {
 // down — the layer blurs (#2309) and stays on screen, exactly like clicking
 // into the pane below it.
 func TestPaneFocusChordFromPopupTerminal(t *testing.T) {
+	t.Parallel()
 	m := openTestPopupWith(t, toolWindowApp(t, 1))
 	if !m.popupLayerFocused() {
 		t.Fatal("precondition: the popup layer should own the keyboard")
@@ -157,6 +159,7 @@ func TestPaneFocusChordFromPopupTerminal(t *testing.T) {
 // is exercised by it. The scan runs well past the last kind, so a kind appended
 // to internal/pane is caught without editing a bound here.
 func TestToolWindowKindsAreComplete(t *testing.T) {
+	t.Parallel()
 	covered := map[pane.Kind]bool{
 		// The explorer is the chord's *target* in the table rather than a case
 		// of its own; the terminal has its hand-built case there.
@@ -184,6 +187,7 @@ func TestToolWindowKindsAreComplete(t *testing.T) {
 // a pane that is not open says so from a tool window too, rather than dying
 // silently because a tool holds the keyboard.
 func TestPaneFocusChordOutOfRangeFromToolWindow(t *testing.T) {
+	t.Parallel()
 	m := numberedApp(t, host.MapConfig{
 		"keymap.bindings.ctrl+y": "pane.focus" + strconv.Itoa(paneNumberMax),
 		// drainKey runs the toast's expiry tick inline, so the assertion reads

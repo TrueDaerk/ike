@@ -57,6 +57,7 @@ func walkToEnd(m Model) Model {
 // until the pages are exhausted, and `G` reaches the true end with the
 // exact count.
 func TestPlayPagesFirstPageThenEnd(t *testing.T) {
+	t.Parallel()
 	m := pagedPlay(t, ".[] | .i")
 	s := m.play
 	if n := len(s.result.Outputs); n != jqplay.PageOutputs {
@@ -100,6 +101,7 @@ func TestPlayPagesFirstPageThenEnd(t *testing.T) {
 // TestPlayPagesScrollPullsAhead: an ordinary scroll pulls the next page
 // before the reader reaches the edge — one page, not the whole stream.
 func TestPlayPagesScrollPullsAhead(t *testing.T) {
+	t.Parallel()
 	m := pagedPlay(t, ".[] | .i")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
 	s := m.play
@@ -126,6 +128,7 @@ func TestPlayPagesScrollPullsAhead(t *testing.T) {
 // are installed when it lands, a fold in it collapses, and the search finds
 // a value that was not loaded when the first page came.
 func TestPlayPagesFoldsAndSearchCoverAppendedPages(t *testing.T) {
+	t.Parallel()
 	m := pagedPlay(t, ".[] | {v: .i, a: [.i, 1]}")
 	s := m.play
 	firstFolds := len(s.folds)
@@ -165,6 +168,7 @@ func TestPlayPagesFoldsAndSearchCoverAppendedPages(t *testing.T) {
 // test's goroutine still winding down, so a snapshot taken while one of
 // those exits made a live producer look like no goroutine at all.
 func TestPlayPagesProgramChangeStopsProducer(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, bigJSONArray(5000)))
 	m = setProgram(m, ".[0]")
 	m = setProgram(m, ".[] | .i")
@@ -213,6 +217,7 @@ func requireProducerGone(t *testing.T, p *jqplay.Producer) {
 // TestPlayPagesCapReportsStoppedAt: the enlarged total budget still ends
 // in the cap message once every page is in, and the count is the budget.
 func TestPlayPagesCapReportsStoppedAt(t *testing.T) {
+	t.Parallel()
 	m := playNoOnboarding(openJQ(t, playApp(t, "null")))
 	m = setProgram(m, "range(infinite)")
 	s := m.play
@@ -234,6 +239,7 @@ func TestPlayPagesCapReportsStoppedAt(t *testing.T) {
 // TestPlayPagesErrorAfterPages: a runtime error on a later page keeps the
 // loaded values and puts the error on the info row, like a failed run.
 func TestPlayPagesErrorAfterPages(t *testing.T) {
+	t.Parallel()
 	m := playNoOnboarding(openJQ(t, playApp(t, bigJSONArray(300)+"\n"+`{"i":"x"}`)))
 	m = setProgram(m, ".[]? | .i + 1")
 	s := m.play
@@ -251,6 +257,7 @@ func TestPlayPagesErrorAfterPages(t *testing.T) {
 // re-runs on resume (its producer was bound to the old model's run) rather
 // than resuming a stream that is gone.
 func TestPlayPagesParkRerunsOnResume(t *testing.T) {
+	t.Parallel()
 	m := pagedPlay(t, ".[] | .i")
 	s := m.parkPlayground()
 	if s.producer != nil || !s.pending {
@@ -267,6 +274,7 @@ func TestPlayPagesParkRerunsOnResume(t *testing.T) {
 // TestPlayPagesClearStopsProducer: ctrl+l in the result drops the pages
 // still pending with the output it clears.
 func TestPlayPagesClearStopsProducer(t *testing.T) {
+	t.Parallel()
 	m := pagedPlay(t, ".[] | .i")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
 	m = drainKey(m, tea.KeyPressMsg{Code: 'l', Mod: tea.ModCtrl})
@@ -279,6 +287,7 @@ func TestPlayPagesClearStopsProducer(t *testing.T) {
 // the first page and the cost of appending one page, over `.[]` on 5,000
 // objects (run with -v to read them).
 func TestPlayPagesTiming(t *testing.T) {
+	// serial: measures the wall clock (load-sensitive)
 	m := playNoOnboarding(openJQ(t, playApp(t, bigJSONArray(5000))))
 	m.play.program.Set(".[]")
 	start := time.Now()

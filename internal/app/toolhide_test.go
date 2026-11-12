@@ -20,6 +20,7 @@ func leafSet(m Model) map[string]bool {
 }
 
 func TestHideToolWindowsToggleRestoresExactly(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, termKey := openTestTerminal(t) // editor + explorer + terminal
 	if !m.explorerVisible() {
@@ -58,6 +59,7 @@ func TestHideToolWindowsToggleRestoresExactly(t *testing.T) {
 }
 
 func TestHideToolWindowsNoToolsIsNoop(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	// Hide the explorer first so only editors remain.
 	m.hideExplorer()
@@ -68,6 +70,7 @@ func TestHideToolWindowsNoToolsIsNoop(t *testing.T) {
 }
 
 func TestHideToolWindowsManualReopenWhileHidden(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, termKey := openTestTerminal(t)
 	m = step(m, HideToolWindowsMsg{})
@@ -94,6 +97,7 @@ func TestHideToolWindowsManualReopenWhileHidden(t *testing.T) {
 }
 
 func TestHideToolWindowsToolClosedWhileHidden(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, termKey := openTestTerminal(t)
 	m = step(m, HideToolWindowsMsg{})
@@ -111,6 +115,7 @@ func TestHideToolWindowsToolClosedWhileHidden(t *testing.T) {
 }
 
 func TestHideToolWindowsEditorSplitChangedWhileHidden(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, termKey := openTestTerminal(t)
 	m = step(m, HideToolWindowsMsg{})
@@ -126,6 +131,7 @@ func TestHideToolWindowsEditorSplitChangedWhileHidden(t *testing.T) {
 }
 
 func TestHideAllToolsCommandRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if _, ok := m.reg.Command("window.hideAllTools"); !ok {
 		t.Fatal("window.hideAllTools must be registered")

@@ -38,6 +38,7 @@ func openSearchLine(t *testing.T, m Model) Model {
 }
 
 func TestMatchStepStepsOpenEditorSearchLine(t *testing.T) {
+	t.Parallel()
 	m := openSearchLine(t, newSized())
 	if line, _ := m.activeEditor().Cursor(); line != 2 {
 		t.Fatalf("preview cursor on line %d, want 2 (1-based)", line)
@@ -71,6 +72,7 @@ func TestMatchStepStepsOpenEditorSearchLine(t *testing.T) {
 // The open line wins over the chord's older meaning: a search committed
 // earlier must not be the one that steps.
 func TestMatchStepPrefersOpenSearchLineOverCommitted(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "prev.txt")
 	if err := os.WriteFile(path, []byte("bar\nbar\nbar\n"), 0o644); err != nil {

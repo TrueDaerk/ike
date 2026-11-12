@@ -37,6 +37,7 @@ func openAll(t *testing.T, m Model, paths ...string) Model {
 }
 
 func TestPerTabCursorAndScrollRoundTrip(t *testing.T) {
+	// serial: fixedDirApp: t.Setenv
 	withStore(t)
 	conf, dir := t.TempDir(), t.TempDir()
 	a := writeTemp(t, dir, "a.txt", numberedLines(60))
@@ -91,6 +92,7 @@ func TestPerTabCursorAndScrollRoundTrip(t *testing.T) {
 }
 
 func TestInactiveRestoredTabsLoadLazily(t *testing.T) {
+	// serial: fixedDirApp: t.Setenv
 	withStore(t)
 	conf, dir := t.TempDir(), t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
@@ -133,6 +135,7 @@ func TestInactiveRestoredTabsLoadLazily(t *testing.T) {
 // wiring an explicit open gives — highlighting, marks, hooks — and the record
 // is consumed there rather than piling up.
 func TestLazyLoadIsWiredLikeAnOpen(t *testing.T) {
+	// serial: fixedDirApp: t.Setenv
 	withStore(t)
 	conf, dir := t.TempDir(), t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
@@ -163,6 +166,7 @@ func TestLazyLoadIsWiredLikeAnOpen(t *testing.T) {
 // restore makes possible: quitting without ever activating a restored tab
 // must persist it — path, position in the strip, and caret — unchanged.
 func TestDeferredTabSurvivesAnUntouchedRestart(t *testing.T) {
+	// serial: fixedDirApp: t.Setenv
 	withStore(t)
 	conf, dir := t.TempDir(), t.TempDir()
 	a := writeTemp(t, dir, "a.txt", numberedLines(60))
@@ -195,6 +199,7 @@ func TestDeferredTabSurvivesAnUntouchedRestart(t *testing.T) {
 }
 
 func TestMissingRestoredFilesNotifyOnce(t *testing.T) {
+	// serial: fixedDirApp: t.Setenv
 	withStore(t)
 	conf, dir := t.TempDir(), t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
@@ -238,6 +243,7 @@ func TestMissingRestoredFilesNotifyOnce(t *testing.T) {
 // falls back to an empty scratch slot instead of showing stale content, and
 // the neighbouring tabs keep working.
 func TestMissingDeferredFileLeavesTheStripIntact(t *testing.T) {
+	// serial: fixedDirApp: t.Setenv
 	withStore(t)
 	conf, dir := t.TempDir(), t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
@@ -267,6 +273,7 @@ func TestMissingDeferredFileLeavesTheStripIntact(t *testing.T) {
 // deferred tab already holds must land on that tab — the strip is the
 // document's slot whether or not its bytes are in memory yet.
 func TestDeferredTabActivatesInsteadOfDuplicating(t *testing.T) {
+	// serial: fixedDirApp: t.Setenv
 	conf, dir := t.TempDir(), t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
@@ -294,6 +301,7 @@ func TestDeferredTabActivatesInsteadOfDuplicating(t *testing.T) {
 // TestPaneViewsSnapshotKeepsEveryTab checks the session payload itself: one
 // entry per document tab of every pane, deferred ones included.
 func TestPaneViewsSnapshotKeepsEveryTab(t *testing.T) {
+	// serial: fixedDirApp: t.Setenv
 	conf, dir := t.TempDir(), t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")

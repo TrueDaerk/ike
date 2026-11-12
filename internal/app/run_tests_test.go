@@ -60,6 +60,7 @@ func testRunModel(t *testing.T) (Model, string) {
 // command runs exactly that test in the run-terminal placement and registers
 // it as the rerun-last target.
 func TestRunTestAtCursor(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, _ := testRunModel(t)
 	tm, _ := m.Update(RunTestAtCursorMsg{})
@@ -81,6 +82,7 @@ func TestRunTestAtCursor(t *testing.T) {
 // TestRunTestAtCursorNearest: with the cursor below TestTwo, the nearest
 // preceding declaration wins.
 func TestRunTestAtCursorNearest(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, _ := testRunModel(t)
 	// Move the caret to the last line (G) inside the focused editor.
@@ -95,6 +97,7 @@ func TestRunTestAtCursorNearest(t *testing.T) {
 
 // TestRunTestsInFile runs the file scope and registers it for rerun.
 func TestRunTestsInFile(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, _ := testRunModel(t)
 	tm, _ := m.Update(RunTestsInFileMsg{})
@@ -111,6 +114,7 @@ func TestRunTestsInFile(t *testing.T) {
 // TestRunTestRerun: run.rerun after a test run repeats the test (reusing the
 // finished terminal, no extra tab).
 func TestRunTestRerun(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, _ := testRunModel(t)
 	tm, _ := m.Update(RunTestAtCursorMsg{})
@@ -128,6 +132,7 @@ func TestRunTestRerun(t *testing.T) {
 // TestRunTestAtCursorNoTest: a file without a marker at or above the cursor
 // notifies instead of running.
 func TestRunTestAtCursorNoTest(t *testing.T) {
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "y_test.atst")
 	if err := os.WriteFile(path, []byte("helper\nfunc TestLate(t T) {\n}\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -159,6 +164,7 @@ func editorRectOf(t *testing.T, m Model) layout.Rect {
 // toggling the breakpoint — on every line, including test-marker lines — and
 // ctrl/cmd+click on a marker line runs that test instead.
 func TestGutterClickDecision(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, path := testRunModel(t)
 	r := editorRectOf(t, m)

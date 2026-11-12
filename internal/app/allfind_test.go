@@ -28,6 +28,7 @@ func allFindApp(t *testing.T) Model {
 }
 
 func TestFindInAllProjectsCommandsRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	for _, id := range []string{"project.findInAllProjects", "project.findInAllProjectsResults"} {
 		if _, ok := m.reg.Command(id); !ok {
@@ -39,6 +40,7 @@ func TestFindInAllProjectsCommandsRegistered(t *testing.T) {
 // TestAllFindProjectsMapsHistory covers the history-to-project-list mapping:
 // order kept, exclusion seeded, missing roots marked.
 func TestAllFindProjectsMapsHistory(t *testing.T) {
+	t.Parallel()
 	entries := []project.Entry{
 		{Path: "/live", Name: "live", LastOpened: time.Now()},
 		{Path: "/gone", Name: "gone"},
@@ -65,6 +67,7 @@ func TestAllFindProjectsMapsHistory(t *testing.T) {
 // confirm: the form closes (editor regains the keyboard), the scan starts
 // with a fresh generation, and the state persists to the user layer.
 func TestAllFindConfirmStartsBackgroundScanAndPersists(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "a.go"), []byte("needle\n"), 0o644); err != nil {
@@ -122,6 +125,7 @@ func readUserFindAll(t *testing.T) (fa struct {
 // progress segment is gone, esc closes it and the show-results command brings
 // the retained set back.
 func TestAllFindResultsPaneOpensOnCompletion(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m.allResults.Begin("needle", []allfind.Project{{Root: "/a", Name: "alpha"}})
 	m.allFindGen = m.allSearch.Gen()
@@ -165,6 +169,7 @@ func TestAllFindResultsPaneOpensOnCompletion(t *testing.T) {
 // nothing never opens the overlay (#2413) — it toasts, and the show-results
 // command still brings the empty result up.
 func TestAllFindEmptyScanDoesNotStealKeyboard(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m.allResults.Begin("nothing", []allfind.Project{{Root: "/a", Name: "alpha"}})
 	m.allFindGen = m.allSearch.Gen()
@@ -184,6 +189,7 @@ func TestAllFindEmptyScanDoesNotStealKeyboard(t *testing.T) {
 // the most recent one, cmd+g steps its hits without the overlay — the
 // find-in-path contract, one project boundary wider (#2413).
 func TestAllFindMatchStepWalksResults(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	cwd, _ := os.Getwd()
 	m.allResults.Begin("needle", []allfind.Project{{Root: cwd, Name: "app"}})
@@ -207,6 +213,7 @@ func TestAllFindMatchStepWalksResults(t *testing.T) {
 // in another project switches, opens the file — and the result set survives
 // the model rebuild, so the next hit is one cmd+g away.
 func TestAllFindCrossProjectOpenKeepsResults(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	cur, dst := filepath.Join(base, "cur"), filepath.Join(base, "dst")
 	for _, d := range []string{cur, dst} {
@@ -276,6 +283,7 @@ func TestAllFindCrossProjectOpenKeepsResults(t *testing.T) {
 // TestAllFindStaleGenerationsDrop guards the rerun-cancels-previous contract
 // at the routing layer.
 func TestAllFindStaleGenerationsDrop(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m.allResults.Begin("q", []allfind.Project{{Root: "/a", Name: "alpha"}})
 	m.allFindGen = 7
@@ -296,6 +304,7 @@ func TestAllFindStaleGenerationsDrop(t *testing.T) {
 // TestAllFindEnterInCurrentProjectOpens routes a match in the current project
 // straight to the editor, no switch.
 func TestAllFindEnterInCurrentProjectOpens(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	cwd, _ := os.Getwd() // tests run in internal/app — allfind.go is right here
 	path := filepath.Join(cwd, "allfind.go")
@@ -312,6 +321,7 @@ func TestAllFindEnterInCurrentProjectOpens(t *testing.T) {
 // TestAllFindEnterInOtherProjectArmsSwitch parks the open and starts the
 // validated switch; the SwitchedMsg handler finishes it.
 func TestAllFindEnterInOtherProjectArmsSwitch(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	other := t.TempDir()
 	tm, cmd := m.Update(allfind.OpenMatchMsg{Root: other, Path: filepath.Join(other, "x.go"), Line: 1, Col: 0})
@@ -334,6 +344,7 @@ func TestAllFindEnterInOtherProjectArmsSwitch(t *testing.T) {
 // confirm and closes the overlay in the same step — the key funnel only
 // routes to the form while IsOpen, so the editor has the keyboard back.
 func TestAllFindFormConfirmClosesOverlay(t *testing.T) {
+	t.Parallel()
 	m := allFindApp(t)
 	m.allFind.Open(allfind.State{Query: "q"}, []allfind.Project{{Root: t.TempDir(), Name: "r"}}, "")
 	tm, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})

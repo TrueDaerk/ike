@@ -77,6 +77,7 @@ func pressCancelChord(t *testing.T, m Model) Model {
 // aborts the running dispatch. Before #2404 the only cancel gesture lived in
 // the response pane, which is not where a slow request is usually watched.
 func TestHTTPCancelChordAbortsFromEditor(t *testing.T) {
+	t.Parallel()
 	release := make(chan struct{})
 	defer close(release)
 	srv := slowServer(t, release)
@@ -103,6 +104,7 @@ func TestHTTPCancelChordAbortsFromEditor(t *testing.T) {
 // focused, where "x" already did — the two gestures are alternatives, not a
 // split of the action across panes.
 func TestHTTPCancelChordFromResponsePane(t *testing.T) {
+	t.Parallel()
 	release := make(chan struct{})
 	defer close(release)
 	srv := slowServer(t, release)
@@ -129,6 +131,7 @@ func TestHTTPCancelChordFromResponsePane(t *testing.T) {
 // command must resolve to a chord, and to a delivered one — the pane hint
 // names it, so a chord this terminal swallows would be advice that fails.
 func TestHTTPCancelChordIsBound(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	chord := m.httpCancelChord()
 	if chord == "" {
@@ -142,6 +145,7 @@ func TestHTTPCancelChordIsBound(t *testing.T) {
 // TestHTTPPaneLearnsCancelChord: the pane is told the chord whenever the
 // flight state changes, so its hint names the user's own binding.
 func TestHTTPPaneLearnsCancelChord(t *testing.T) {
+	t.Parallel()
 	release := make(chan struct{})
 	defer close(release)
 	srv := slowServer(t, release)
@@ -171,6 +175,7 @@ func TestHTTPPaneLearnsCancelChord(t *testing.T) {
 // time rather than only that it was slow — and still nothing about the
 // request itself.
 func TestTelemetryHTTPFlightCarriesTiming(t *testing.T) {
+	// serial: telemetryModel: waits on the wall clock (load-sensitive)
 	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	send := func(ctx context.Context, source, key string, cb httpclient.WSCallbacks) (*httpclient.Response, error) {
@@ -208,6 +213,7 @@ func TestTelemetryHTTPFlightCarriesTiming(t *testing.T) {
 // no breakdown fields at all, rather than six zeros that would read as a
 // suspiciously instant exchange.
 func TestTelemetryHTTPFlightWithoutTiming(t *testing.T) {
+	// serial: telemetryModel: waits on the wall clock (load-sensitive)
 	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	send := func(ctx context.Context, source, key string, cb httpclient.WSCallbacks) (*httpclient.Response, error) {

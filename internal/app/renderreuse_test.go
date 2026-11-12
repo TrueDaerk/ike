@@ -61,6 +61,7 @@ func editorBodyCell(t *testing.T, m Model, dx, dy int) (int, int) {
 }
 
 func TestMotionOverNothingReusesFrame(t *testing.T) {
+	// serial: pass: diag.MessageCounts (process-wide counters)
 	m := dismissOnboarding(sized(t, 100, 40))
 	m.View() // the first frame, as the loop has composed one before any input
 	renders := 0
@@ -84,6 +85,7 @@ func TestMotionOverNothingReusesFrame(t *testing.T) {
 }
 
 func TestMotionRendersOnExplorerHoverTransition(t *testing.T) {
+	// serial: pass: diag.MessageCounts (process-wide counters)
 	m := dismissOnboarding(sized(t, 100, 40))
 	m.View()
 	r := m.lay.Panes[pane.ExplorerKey]
@@ -115,6 +117,7 @@ func TestMotionRendersOnExplorerHoverTransition(t *testing.T) {
 }
 
 func TestMotionRendersOnEditorHoverPopupTransition(t *testing.T) {
+	// serial: pass: diag.MessageCounts (process-wide counters)
 	m, r, gw := hoverIdleModel(t)
 	m = dismissOnboarding(m)
 	ed := m.activeEditor()
@@ -155,6 +158,7 @@ func TestMotionRendersOnEditorHoverPopupTransition(t *testing.T) {
 }
 
 func TestMotionDuringDragsStillRenders(t *testing.T) {
+	// serial: pass: diag.MessageCounts (process-wide counters)
 	// A divider drag: every step re-lays out.
 	m := dismissOnboarding(sized(t, 100, 40))
 	m.View()
@@ -178,6 +182,7 @@ func TestMotionDuringDragsStillRenders(t *testing.T) {
 }
 
 func TestBurstWithWheelOrTerminalRepaintRenders(t *testing.T) {
+	// serial: pass: diag.MessageCounts (process-wide counters)
 	m := dismissOnboarding(sized(t, 100, 40))
 	m.View()
 	x, y := editorBodyCell(t, m, 0, 0)
@@ -195,6 +200,7 @@ func TestBurstWithWheelOrTerminalRepaintRenders(t *testing.T) {
 }
 
 func TestReuseVerdictNeverOutlivesItsPass(t *testing.T) {
+	// serial: pass: diag.MessageCounts (process-wide counters)
 	m := dismissOnboarding(sized(t, 100, 40))
 	m.View()
 	x, y := editorBodyCell(t, m, 0, 0)

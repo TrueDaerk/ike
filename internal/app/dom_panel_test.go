@@ -71,6 +71,7 @@ func domDeliver(t *testing.T, m Model, cmd tea.Cmd) Model {
 }
 
 func TestDOMToggleStateMachine(t *testing.T) {
+	t.Parallel()
 	m, _ := domSeed(t)
 	editorKey := m.activeEditorKey()
 	if !m.activeWS().Panes.Has(pane.DOMKey) {
@@ -99,6 +100,7 @@ func TestDOMToggleStateMachine(t *testing.T) {
 }
 
 func TestDOMParseDeliveryAndFollow(t *testing.T) {
+	t.Parallel()
 	m, htmlPath := domSeed(t)
 	sp := m.domPanel()
 	if sp == nil || sp.Path() != htmlPath || len(sp.Rows()) != 8 {
@@ -126,6 +128,7 @@ func TestDOMParseDeliveryAndFollow(t *testing.T) {
 }
 
 func TestDOMEditRetriggersParse(t *testing.T) {
+	t.Parallel()
 	m, _ := domSeed(t)
 	tm, _ := m.Update(DOMToggleMsg{}) // focus the editor
 	m = tm.(Model)
@@ -145,6 +148,7 @@ func TestDOMEditRetriggersParse(t *testing.T) {
 }
 
 func TestDOMSelectorHighlightsSyncToEditors(t *testing.T) {
+	t.Parallel()
 	m, htmlPath := domSeed(t)
 	// Type "/li" into the focused pane: each key runs a settled pass which
 	// routes the match ranges to the editors.
@@ -164,6 +168,7 @@ func TestDOMSelectorHighlightsSyncToEditors(t *testing.T) {
 }
 
 func TestDOMNavigateThroughFunnel(t *testing.T) {
+	t.Parallel()
 	m, htmlPath := domSeed(t)
 	tm, _ := m.Update(domview.NavigateMsg{Path: htmlPath, Line: 2, Col: 4})
 	m = tm.(Model)
@@ -175,6 +180,7 @@ func TestDOMNavigateThroughFunnel(t *testing.T) {
 }
 
 func TestDOMNonHTMLBufferShowsNotice(t *testing.T) {
+	t.Parallel()
 	htmlPath, goFile := domProject(t)
 	m := newSized()
 	tm, _ := m.openPath(goFile, false)
@@ -201,6 +207,7 @@ func TestDOMNonHTMLBufferShowsNotice(t *testing.T) {
 }
 
 func TestDOMPanePersists(t *testing.T) {
+	// serial: t.Setenv
 	store := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", store)
 
@@ -225,6 +232,7 @@ func TestDOMPanePersists(t *testing.T) {
 }
 
 func TestIsHTMLPath(t *testing.T) {
+	t.Parallel()
 	for _, p := range []string{"a.html", "B.HTM", "c.xhtml"} {
 		if !isHTMLPath(p) {
 			t.Fatalf("%q should count as HTML", p)

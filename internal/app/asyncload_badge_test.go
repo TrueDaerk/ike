@@ -30,6 +30,7 @@ func asyncFixture(t *testing.T) string {
 // `loading…`, the open hands back the read command, and routing its LoadMsg
 // fills the buffer and clears the badge.
 func TestAsyncOpenShowsLoadingBadgeThenLands(t *testing.T) {
+	// serial: largefile.Reset (process-wide state of package largefile)
 	withStore(t)
 	largefile.Reset()
 	t.Cleanup(largefile.Reset)
@@ -72,6 +73,7 @@ func TestAsyncOpenShowsLoadingBadgeThenLands(t *testing.T) {
 // TestAsyncOpenCloseCancelsLoad: closing the tab before the read lands
 // cancels it — the command yields nil, and nothing is installed anywhere.
 func TestAsyncOpenCloseCancelsLoad(t *testing.T) {
+	// serial: largefile.Reset (process-wide state of package largefile)
 	withStore(t)
 	largefile.Reset()
 	t.Cleanup(largefile.Reset)

@@ -24,6 +24,7 @@ func setActiveGroupConfig(t *testing.T, maxWS int, name string, roots []string) 
 }
 
 func TestMaxWorkspacesGrowsToTheActiveGroup(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	members := []string{"/a", "/b", "/c", "/d"}
 	setActiveGroupConfig(t, 2, "web", members)
 	if got := maxWorkspaces(); got != len(members) {
@@ -49,6 +50,7 @@ func TestMaxWorkspacesGrowsToTheActiveGroup(t *testing.T) {
 }
 
 func TestEvictionOrderPrefersNonMembers(t *testing.T) {
+	// serial: setActiveGroupConfig: config.Set (process-wide configuration)
 	setActiveGroupConfig(t, 3, "web", []string{"/m1", "/m2"})
 
 	// Background is LRU-first; the two members sit at the front of it.
@@ -66,6 +68,7 @@ func TestEvictionOrderPrefersNonMembers(t *testing.T) {
 }
 
 func TestEvictionOrderUnchangedWithoutAGroup(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	prev := config.Get()
 	t.Cleanup(func() { config.Set(prev) })
 	config.Set(&config.Config{})

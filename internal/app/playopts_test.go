@@ -39,6 +39,7 @@ func playInfoLineText(m Model, width int) string {
 // TestPlayToggleRaw is the acceptance case: -r shows `alice`, off shows the
 // quoted form again; the raw result is named `.txt`.
 func TestPlayToggleRaw(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"name":"alice"}`))
 	m = setProgram(m, ".name")
 	if got := m.play.result.Text(); got != `"alice"` {
@@ -63,6 +64,7 @@ func TestPlayToggleRaw(t *testing.T) {
 // TestPlayToggleCompactAndSlurp: -c puts each output on one line with no
 // folds; -s runs a JSONL input as one array.
 func TestPlayToggleCompactAndSlurp(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, "{\"a\":{\"b\":1}}\n{\"a\":{\"b\":2}}\n"))
 	m = setProgram(m, ".")
 	if len(m.play.folds) == 0 {
@@ -85,6 +87,7 @@ func TestPlayToggleCompactAndSlurp(t *testing.T) {
 // TestPlayToggleChords: the default ctrl+alt+q / c / s reach the commands from
 // the query line through the playground's Global fallback.
 func TestPlayToggleChords(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"name":"alice"}`))
 	if m.onboardingOpen() {
 		m = m.closeOnboarding().(Model)
@@ -111,6 +114,7 @@ func TestPlayToggleChords(t *testing.T) {
 // TestPlayChipsRenderAndClick: the chips lead the info row, a click on one
 // toggles it, and a click beside them does not.
 func TestPlayChipsRenderAndClick(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"name":"alice"}`))
 	m = setProgram(m, ".name")
 	if row := playInfoRowPlain(m); !strings.HasPrefix(row, "-r -c -s Input:") {
@@ -151,6 +155,7 @@ func TestPlayChipsRenderAndClick(t *testing.T) {
 // TestPlayChipsHiddenForXMQ: xmq has no toggles — no chips, and the command
 // leaves the options alone.
 func TestPlayChipsHiddenForXMQ(t *testing.T) {
+	// serial: fakeXMQOnPath: t.Setenv
 	fakeXMQOnPath(t)
 	m := openXMQ(t, xmqApp(t, "xml", "<r/>\n"))
 	if row := playInfoRowPlain(m); strings.Contains(row, "-r -c -s") {
@@ -165,6 +170,7 @@ func TestPlayChipsHiddenForXMQ(t *testing.T) {
 // TestPlayTogglesCopyAndScratch: copy and open-as-scratch write the toggled
 // form, the raw one into a `.txt` scratch.
 func TestPlayTogglesCopyAndScratch(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	withStore(t)
 	m := openJQ(t, playApp(t, `{"tags":["a","b"]}`))
 	m = setProgram(m, ".tags[]")
@@ -193,6 +199,7 @@ func TestPlayTogglesCopyAndScratch(t *testing.T) {
 // restores the last program together with the toggles it ran with, in the
 // session and from the persisted store.
 func TestPlayTogglesRememberedWithLastProgram(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"name":"alice"}`))
 	m = setProgram(m, ".name")
 	m = toggleOpt(m, PlayOptRaw)
@@ -227,6 +234,7 @@ const rtManifestApp = "# api deployment\nkind: Deployment # the kind\nmetadata:\
 // plain serializer drops them. The chip follows the three flags on the yq
 // info row, and the status line names the new state.
 func TestYQRoundTripToggle(t *testing.T) {
+	t.Parallel()
 	m := openYQ(t, yqApp(t, rtManifestApp))
 	m = setProgram(m, ".spec.replicas = 3")
 	if got := m.play.result.Text(); strings.Contains(got, "#") || strings.Contains(got, "&tpl") {
@@ -258,6 +266,7 @@ func TestYQRoundTripToggle(t *testing.T) {
 // TestYQRoundTripFallbackNote: a reshaping program renders plainly and the
 // info row says why; the result is the plain form, never a crash.
 func TestYQRoundTripFallbackNote(t *testing.T) {
+	t.Parallel()
 	m := openYQ(t, yqApp(t, rtManifestApp))
 	m = toggleOpt(m, PlayOptRoundTrip)
 	m.play.status = "" // the toggle's status line, cleared by the next keystroke
@@ -290,6 +299,7 @@ func TestYQRoundTripFallbackNote(t *testing.T) {
 // default ctrl+alt+shift+y reaches the command from the query line, and the
 // chip beside it still toggles its own flag.
 func TestYQRoundTripChipClickAndChord(t *testing.T) {
+	t.Parallel()
 	m := openYQ(t, yqApp(t, rtManifestApp))
 	if m.onboardingOpen() {
 		m = m.closeOnboarding().(Model)
@@ -322,6 +332,7 @@ func TestYQRoundTripChipClickAndChord(t *testing.T) {
 // TestRoundTripIsYQOnly: the jq playground shows no rt chip and the command
 // leaves its options alone.
 func TestRoundTripIsYQOnly(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"name":"alice"}`))
 	m = setProgram(m, ".name")
 	if row := playInfoRowPlain(m); !strings.HasPrefix(row, "-r -c -s Input:") {
@@ -337,6 +348,7 @@ func TestRoundTripIsYQOnly(t *testing.T) {
 // the toggle with the last program within the session; the persisted flags
 // do not carry it.
 func TestYQRoundTripRememberedPerSession(t *testing.T) {
+	t.Parallel()
 	m := openYQ(t, yqApp(t, rtManifestApp))
 	m = setProgram(m, ".spec.replicas = 3")
 	m = toggleOpt(m, PlayOptRoundTrip)

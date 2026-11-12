@@ -16,6 +16,7 @@ import (
 // the CSV export.
 
 func TestUsageToggleLifecycle(t *testing.T) {
+	// serial: timeApp: t.Setenv
 	m, _ := timeApp(t)
 	before := m.activeWS().Panes.Focused()
 
@@ -39,6 +40,7 @@ func TestUsageToggleLifecycle(t *testing.T) {
 }
 
 func TestUsageReadFillsPanelFromTheSharedReport(t *testing.T) {
+	// serial: timeApp: t.Setenv
 	m, cfgDir := timeApp(t)
 	wd, err := os.Getwd()
 	if err != nil {
@@ -73,6 +75,7 @@ func TestUsageReadFillsPanelFromTheSharedReport(t *testing.T) {
 }
 
 func TestUsageExportWritesCSVScratch(t *testing.T) {
+	// serial: timeApp: t.Setenv
 	m, _ := timeApp(t)
 	out, _ := m.Update(usagepanel.ExportMsg{Label: "Keys · Today", CSV: "tab,period\nKeys,Today\n"})
 	m = out.(Model)

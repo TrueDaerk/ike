@@ -13,6 +13,7 @@ import (
 // events — the change feed records each file and an open clean buffer's
 // pre-change content is captured inline before routing reloads it.
 func TestWatchBatchRoutesEveryEvent(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := filepath.Join(dir, "a.txt")
 	b := filepath.Join(dir, "b.txt")
@@ -55,6 +56,7 @@ func TestWatchBatchRoutesEveryEvent(t *testing.T) {
 // command reads the local-history snapshot and lands it via
 // changeFeedCapturedMsg.
 func TestWatchBatchDefersSnapshotCapture(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")

@@ -18,6 +18,7 @@ import (
 // TestBookmarkToggleCommandPersists: bookmark.toggle marks the cursor line,
 // a second toggle clears it, and the state reaches disk.
 func TestBookmarkToggleCommandPersists(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\ntwo\nthree\n")
@@ -45,6 +46,7 @@ func TestBookmarkToggleCommandPersists(t *testing.T) {
 // TestBookmarkGutterShowsMnemonic: the editor's gutter draws the mnemonic
 // digit for a numbered bookmark and the flag for an anonymous one.
 func TestBookmarkGutterShowsMnemonic(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\ntwo\nthree\n")
 	m := openApp(t, a)
@@ -65,6 +67,7 @@ func TestBookmarkGutterShowsMnemonic(t *testing.T) {
 // mnemonic to the cursor line; pressing the same digit there again drops the
 // bookmark (JetBrains' toggle-with-mnemonic).
 func TestBookmarkMnemonicPromptAssignsAndRemoves(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\ntwo\n")
 	m := openApp(t, a)
@@ -94,6 +97,7 @@ func TestBookmarkMnemonicPromptAssignsAndRemoves(t *testing.T) {
 // TestBookmarkMnemonicPromptEscapes: esc leaves the store untouched, and a
 // non-digit key keeps the prompt open.
 func TestBookmarkMnemonicPromptEscapes(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\n")
 	m := openApp(t, a)
@@ -112,6 +116,7 @@ func TestBookmarkMnemonicPromptEscapes(t *testing.T) {
 // TestBookmarkJumpMnemonicOpensFile: bookmark.jumpMnemonic's digit navigates
 // to the bookmark's file and line through the standard open funnel.
 func TestBookmarkJumpMnemonicOpensFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\n")
 	b := writeTemp(t, dir, "b.txt", "zero\none\ntwo\n")
@@ -132,6 +137,7 @@ func TestBookmarkJumpMnemonicOpensFile(t *testing.T) {
 // TestBookmarkNotePromptAnnotates: the note prompt stores the typed text and
 // prefills it on the next open.
 func TestBookmarkNotePromptAnnotates(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\ntwo\n")
 	m := openApp(t, a)
@@ -166,6 +172,7 @@ func TestBookmarkNotePromptAnnotates(t *testing.T) {
 // TestBookmarkStepWrapsAcrossFiles: next/previous walk the project's
 // bookmarks in path/line order and wrap at both ends.
 func TestBookmarkStepWrapsAcrossFiles(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\ntwo\nthree\n")
 	b := writeTemp(t, dir, "b.txt", "one\ntwo\n")
@@ -199,6 +206,7 @@ func TestBookmarkStepWrapsAcrossFiles(t *testing.T) {
 // TestBookmarksPickerListsProjectBookmarks: a mnemonic bookmark shows its
 // digit and note, and its aux action removes it from the store.
 func TestBookmarksPickerListsProjectBookmarks(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\ntwo\n")
 	m := openApp(t, a)
@@ -235,6 +243,7 @@ func TestBookmarksPickerListsProjectBookmarks(t *testing.T) {
 // TestBookmarksFollowRename: an explorer rename re-keys the store instead of
 // leaving the bookmark on the old path.
 func TestBookmarksFollowRename(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\n")
 	renamed := writeTemp(t, dir, "renamed.txt", "one\n")
@@ -250,6 +259,7 @@ func TestBookmarksFollowRename(t *testing.T) {
 // TestBookmarkEditShiftFollowsInsertion: typing above a bookmark moves it
 // down with its line, through the editor's adjuster hook.
 func TestBookmarkEditShiftFollowsInsertion(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\ntwo\nthree\n")
 	m := openApp(t, a)
@@ -268,6 +278,7 @@ func TestBookmarkEditShiftFollowsInsertion(t *testing.T) {
 // TestBookmarkCommandsRegistered: the whole command family reaches the
 // registry (palette and menu entries resolve through it).
 func TestBookmarkCommandsRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	for _, id := range []string{
 		"bookmark.toggle", "bookmark.toggleMnemonic", "bookmark.jumpMnemonic",

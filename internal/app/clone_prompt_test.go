@@ -42,6 +42,7 @@ func openClone(t *testing.T, m Model) Model {
 // TestClonePromptDerivesNameFromURL guards the type-URL-and-enter path: the
 // directory name follows the URL until it is edited by hand.
 func TestClonePromptDerivesNameFromURL(t *testing.T) {
+	// serial: cloneProjectsDir: config.Set (process-wide configuration)
 	base := newSized()
 	cloneProjectsDir(t)
 	m := openClone(t, base)
@@ -68,6 +69,7 @@ func TestClonePromptDerivesNameFromURL(t *testing.T) {
 // focused URL field inserts at the cursor and re-derives the name exactly
 // like typing does.
 func TestClonePromptPasteIntoURLField(t *testing.T) {
+	// serial: cloneProjectsDir: config.Set (process-wide configuration)
 	base := newSized()
 	cloneProjectsDir(t)
 	m := openClone(t, base)
@@ -86,6 +88,7 @@ func TestClonePromptPasteIntoURLField(t *testing.T) {
 // TestClonePromptPasteIntoNameField: a paste into the name field lands at the
 // cursor and stops the URL-follows derivation, same as typing there.
 func TestClonePromptPasteIntoNameField(t *testing.T) {
+	// serial: cloneProjectsDir: config.Set (process-wide configuration)
 	base := newSized()
 	cloneProjectsDir(t)
 	m := openClone(t, base)
@@ -113,6 +116,7 @@ func TestClonePromptPasteIntoNameField(t *testing.T) {
 // support) routes the system clipboard into the focused field the same way
 // (#1273 pattern, #1873).
 func TestClonePromptCmdVPastesFromClipboard(t *testing.T) {
+	// serial: sets package variable clipboardRead
 	restore := clipboardRead
 	clipboardRead = func() string { return "https://example.com/org/repo.git" }
 	t.Cleanup(func() { clipboardRead = restore })
@@ -134,6 +138,7 @@ func TestClonePromptCmdVPastesFromClipboard(t *testing.T) {
 // longer looks like writing into both fields at once. Once hand-edited, the
 // field renders like any other real input.
 func TestCloneNameGhostUntilEdited(t *testing.T) {
+	// serial: cloneProjectsDir: config.Set (process-wide configuration)
 	base := newSized()
 	cloneProjectsDir(t)
 	m := openClone(t, base)
@@ -162,6 +167,7 @@ func TestCloneNameGhostUntilEdited(t *testing.T) {
 
 // TestClonePromptRejectsBadInput keeps validation failures in the dialog.
 func TestClonePromptRejectsBadInput(t *testing.T) {
+	// serial: cloneProjectsDir: config.Set (process-wide configuration)
 	base := newSized()
 	cloneProjectsDir(t)
 	m := openClone(t, base)
@@ -196,6 +202,7 @@ func TestClonePromptRejectsBadInput(t *testing.T) {
 // TestCloneEndToEndOpensTheClone drives a real clone of a local repository
 // through the dialog and checks that the finished clone re-roots the IDE.
 func TestCloneEndToEndOpensTheClone(t *testing.T) {
+	// serial: cloneProjectsDir: config.Set (process-wide configuration)
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not installed")
 	}
@@ -259,6 +266,7 @@ func hasSwitchTo(cmd tea.Cmd, root string) bool {
 
 // TestCloneFailureStaysInDialog keeps a failed clone editable.
 func TestCloneFailureStaysInDialog(t *testing.T) {
+	// serial: cloneProjectsDir: config.Set (process-wide configuration)
 	base := newSized()
 	cloneProjectsDir(t)
 	m := openClone(t, base)
@@ -309,6 +317,7 @@ func initTestRepo(t *testing.T) string {
 // TestCloneCommandOpensDialog drives the real command path (palette / menu →
 // registry → host dispatch), not just the msg the dialog listens for.
 func TestCloneCommandOpensDialog(t *testing.T) {
+	// serial: cloneProjectsDir: config.Set (process-wide configuration)
 	base := newSized()
 	cloneProjectsDir(t)
 	m := drainCmd(base, base.RunCommand("project.clone"))
@@ -320,6 +329,7 @@ func TestCloneCommandOpensDialog(t *testing.T) {
 // TestCloneDialogRenders guards that the open dialog is actually painted (the
 // shell content, not just the model flag).
 func TestCloneDialogRenders(t *testing.T) {
+	// serial: cloneProjectsDir: config.Set (process-wide configuration)
 	base := newSized()
 	cloneProjectsDir(t)
 	m := openClone(t, base)
@@ -333,6 +343,7 @@ func TestCloneDialogRenders(t *testing.T) {
 // wider than the terminal, so a long URL must scroll inside its field instead
 // of growing the line.
 func TestCloneDialogSurvivesLongURL(t *testing.T) {
+	// serial: cloneProjectsDir: config.Set (process-wide configuration)
 	base := newSized()
 	cloneProjectsDir(t)
 	m := openClone(t, base)

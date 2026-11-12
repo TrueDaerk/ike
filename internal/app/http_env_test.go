@@ -33,6 +33,7 @@ func httpVarFile(t *testing.T, src string, siblings map[string]string) string {
 // TestHTTPRunResolvesFileVariables: the acceptance case — `@host=…` plus
 // `GET {{host}}/path` dispatches with the substituted URL (#1867).
 func TestHTTPRunResolvesFileVariables(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(r.URL.Path + " " + r.Header.Get("X-Token")))
 	}))
@@ -61,6 +62,7 @@ func TestHTTPRunResolvesFileVariables(t *testing.T) {
 // names exactly one environment needs no choice — it is simply used, with the
 // private file overriding same-named values (#1867).
 func TestHTTPRunResolvesSingleEnvironment(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(r.URL.Path + " " + r.Header.Get("X-Token")))
 	}))
@@ -89,6 +91,7 @@ func TestHTTPRunResolvesSingleEnvironment(t *testing.T) {
 // lists them, the choice persists per directory, and the next dispatch
 // resolves against it — in-file definitions still winning (#1867).
 func TestHTTPEnvPickerSelectsEnvironment(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(r.URL.Path))
@@ -152,6 +155,7 @@ func TestHTTPEnvPickerSelectsEnvironment(t *testing.T) {
 // opened once, cmd+e (palette.recentFiles) silently opened the HTTP
 // environment picker instead of Recent Files.
 func TestRecentFilesSurvivesHTTPEnvPrefix(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := httpApp(t)
 	path := httpVarFile(t, "GET {{host}}\n", map[string]string{
@@ -183,6 +187,7 @@ func TestRecentFilesSurvivesHTTPEnvPrefix(t *testing.T) {
 // TestHTTPEnvPickerClearsSelection: the "(no environment)" row appears only
 // once something is selected, and picking it drops the selection again.
 func TestHTTPEnvPickerClearsSelection(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	path := httpVarFile(t, "GET {{host}}/x\n", map[string]string{
 		httpfile.EnvFileName: `{"dev": {"host": "http://a"}, "prod": {"host": "http://b"}}`,
@@ -218,6 +223,7 @@ func TestHTTPEnvPickerClearsSelection(t *testing.T) {
 // TestHTTPEnvPickerWithoutEnvFile: a file with no environment file explains
 // itself instead of opening an empty palette (#1867).
 func TestHTTPEnvPickerWithoutEnvFile(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	path := httpVarFile(t, "@host=http://a\n\nGET {{host}}/x\n", nil)
 	out, _ := m.Update(explorer.OpenFileMsg{Path: path})
@@ -234,6 +240,7 @@ func TestHTTPEnvPickerWithoutEnvFile(t *testing.T) {
 // dispatch with a message naming the file — sending a request with unresolved
 // variables because of a JSON typo would be worse (#1867).
 func TestHTTPRunRejectsMalformedEnvFile(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	path := httpVarFile(t, "GET {{host}}/x\n", map[string]string{
 		httpfile.EnvFileName: `{"dev": {`,

@@ -13,6 +13,7 @@ import (
 // own, and the prompt's round trip from cmd+l to a moved caret.
 
 func TestParseGoToLineTargets(t *testing.T) {
+	t.Parallel()
 	// Ten lines (0..9), caret on line 4 (1-based: 5).
 	const count, cur = 10, 4
 	cases := []struct {
@@ -45,6 +46,7 @@ func TestParseGoToLineTargets(t *testing.T) {
 }
 
 func TestParseGoToLineRejectsNonNumeric(t *testing.T) {
+	t.Parallel()
 	for _, in := range []string{"abc", "4x", "7:zz", "7:", ":7", "+", "1.5", "--2"} {
 		if _, _, err := parseGoToLine(in, 4, 10); err == nil {
 			t.Errorf("%q should be rejected", in)
@@ -103,6 +105,7 @@ func caretAt(t *testing.T, m Model, line, col int) {
 }
 
 func TestGoToLineAbsoluteAndColumn(t *testing.T) {
+	t.Parallel()
 	m, _ := goToLineModel(t)
 	m = typeGoToLine(t, m, "7")
 	if m.goToLinePromptOpen() {
@@ -117,6 +120,7 @@ func TestGoToLineAbsoluteAndColumn(t *testing.T) {
 }
 
 func TestGoToLineRelativeAndClamped(t *testing.T) {
+	t.Parallel()
 	m, _ := goToLineModel(t)
 	m = typeGoToLine(t, m, "5")
 	caretAt(t, m, 5, 1)
@@ -136,6 +140,7 @@ func TestGoToLineRelativeAndClamped(t *testing.T) {
 }
 
 func TestGoToLineRejectionKeepsPromptOpen(t *testing.T) {
+	t.Parallel()
 	m, _ := goToLineModel(t)
 	m = typeGoToLine(t, m, "abc")
 	if !m.goToLinePromptOpen() {
@@ -152,6 +157,7 @@ func TestGoToLineRejectionKeepsPromptOpen(t *testing.T) {
 }
 
 func TestGoToLineEscapeCancels(t *testing.T) {
+	t.Parallel()
 	m, _ := goToLineModel(t)
 	for _, r := range "9" {
 		tm, _ := m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
@@ -167,6 +173,7 @@ func TestGoToLineEscapeCancels(t *testing.T) {
 
 // The jump is a navigation departure: nav.back returns to the pre-jump caret.
 func TestGoToLineRecordsNavHistory(t *testing.T) {
+	t.Parallel()
 	m, path := goToLineModel(t)
 	m = typeGoToLine(t, m, "8")
 	caretAt(t, m, 8, 1)

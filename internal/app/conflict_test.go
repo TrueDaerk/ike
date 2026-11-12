@@ -50,6 +50,7 @@ func staleApp(t *testing.T) (Model, string) {
 }
 
 func TestExternalChangeShowsStaleIndicators(t *testing.T) {
+	t.Parallel()
 	m, _ := staleApp(t)
 	ed := m.activeEditor()
 	if ed == nil || !ed.Stale() {
@@ -64,6 +65,7 @@ func TestExternalChangeShowsStaleIndicators(t *testing.T) {
 }
 
 func TestStaleSaveOpensConflictPrompt(t *testing.T) {
+	t.Parallel()
 	m, path := staleApp(t)
 	tm, _ := m.Update(editor.ConflictMsg{Path: path})
 	m = tm.(Model)
@@ -76,6 +78,7 @@ func TestStaleSaveOpensConflictPrompt(t *testing.T) {
 }
 
 func TestConflictKeepMineWritesAndStampsEpoch(t *testing.T) {
+	t.Parallel()
 	m, path := staleApp(t)
 	tm, _ := m.Update(editor.ConflictMsg{Path: path})
 	m = tm.(Model)
@@ -96,6 +99,7 @@ func TestConflictKeepMineWritesAndStampsEpoch(t *testing.T) {
 }
 
 func TestConflictReloadDiscardsEdits(t *testing.T) {
+	t.Parallel()
 	m, path := staleApp(t)
 	tm, _ := m.Update(editor.ConflictMsg{Path: path})
 	m = tm.(Model)
@@ -113,6 +117,7 @@ func TestConflictReloadDiscardsEdits(t *testing.T) {
 }
 
 func TestConflictCancelKeepsBufferMarked(t *testing.T) {
+	t.Parallel()
 	m, path := staleApp(t)
 	tm, _ := m.Update(editor.ConflictMsg{Path: path})
 	m = tm.(Model)
@@ -131,6 +136,7 @@ func TestConflictCancelKeepsBufferMarked(t *testing.T) {
 }
 
 func TestConflictPromptSwallowsOtherKeys(t *testing.T) {
+	t.Parallel()
 	m, path := staleApp(t)
 	tm, _ := m.Update(editor.ConflictMsg{Path: path})
 	m = tm.(Model)

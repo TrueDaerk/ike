@@ -19,6 +19,7 @@ import (
 )
 
 func TestDataSortAndExportAreRegisteredAndPaneScoped(t *testing.T) {
+	t.Parallel()
 	for _, id := range []string{"data.sortColumn", "data.export"} {
 		cmd, ok := registry.Global().Command(id)
 		if !ok {
@@ -36,6 +37,7 @@ func TestDataSortAndExportAreRegisteredAndPaneScoped(t *testing.T) {
 }
 
 func TestDataSortCommandSortsTheFocusedGrid(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m = openData(t, m, writeTestDB(t, "app.db"))
 	inst := m.focusedContent()
@@ -53,6 +55,7 @@ func TestDataSortCommandSortsTheFocusedGrid(t *testing.T) {
 }
 
 func TestDataExportCommandWritesTheFile(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m = openData(t, m, writeTestDB(t, "app.db"))
 	inst := m.focusedContent()

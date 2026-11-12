@@ -30,6 +30,7 @@ func typeAt(m Model, line int, text string) Model {
 }
 
 func TestEditRingRecordsBufferChanges(t *testing.T) {
+	t.Parallel()
 	root, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
@@ -47,6 +48,7 @@ func TestEditRingRecordsBufferChanges(t *testing.T) {
 }
 
 func TestNavLastEditWalksBack(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	_, files := navProject(t)
 	m := newSized()
@@ -73,6 +75,7 @@ func TestNavLastEditWalksBack(t *testing.T) {
 }
 
 func TestNavLastEditEmptyToasts(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	_, files := navProject(t)
 	m := newSized()
@@ -85,6 +88,7 @@ func TestNavLastEditEmptyToasts(t *testing.T) {
 }
 
 func TestRecentLocationsListsEditsThenJumps(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
@@ -125,6 +129,7 @@ func TestRecentLocationsListsEditsThenJumps(t *testing.T) {
 }
 
 func TestRecentLocationsDedupesEditAndJump(t *testing.T) {
+	t.Parallel()
 	var mode recentLocationsMode
 	edits := []nav.Location{{Position: nav.Position{Path: "/p/a.go", Line: 4}, Root: "/p"}}
 	jumps := []nav.Position{{Path: "/p/a.go", Line: 4, Col: 3}, {Path: "/p/b.go", Line: 1}}
@@ -141,6 +146,7 @@ func TestRecentLocationsDedupesEditAndJump(t *testing.T) {
 }
 
 func TestRecentLocationsEmptyToasts(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	tm, _ := m.Update(ShowRecentLocationsMsg{})
@@ -151,6 +157,7 @@ func TestRecentLocationsEmptyToasts(t *testing.T) {
 }
 
 func TestRecentLocationForeignRootParksSwitch(t *testing.T) {
+	t.Parallel()
 	other := t.TempDir()
 	m := newSized()
 	tm, cmd := m.Update(RecentLocationJumpMsg{Root: other, Path: other + "/x.go", Line: 3, Col: 1})
@@ -165,6 +172,7 @@ func TestRecentLocationForeignRootParksSwitch(t *testing.T) {
 }
 
 func TestRecentLocationCommandsRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	for _, id := range []string{"nav.lastEdit", "nav.recentLocations"} {
 		if _, ok := m.reg.Command(id); !ok {

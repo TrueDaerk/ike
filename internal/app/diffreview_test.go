@@ -114,6 +114,7 @@ func reviewPaths(inst *pane.Instance) []string {
 }
 
 func TestReviewChangesOrdersFilesAndComparesAgainstHEAD(t *testing.T) {
+	t.Parallel()
 	m, dir, inst := reviewApp(t)
 	d := inst.Diff()
 	if got := strings.Join(reviewPaths(inst), " "); got != "a.txt b.txt bin.dat(binary) c.txt z.txt" {
@@ -153,6 +154,7 @@ func TestReviewChangesOrdersFilesAndComparesAgainstHEAD(t *testing.T) {
 }
 
 func TestReviewHunkStepsCrossFilesAndSkipBinary(t *testing.T) {
+	t.Parallel()
 	m, _, inst := reviewApp(t)
 	// a.txt has one hunk: F7 crosses into b.txt.
 	out, cmd := m.Update(DiffStepMsg{Delta: 1})
@@ -204,6 +206,7 @@ func TestReviewHunkStepsCrossFilesAndSkipBinary(t *testing.T) {
 }
 
 func TestReviewRefreshDropsCleanFileAndKeepsPosition(t *testing.T) {
+	t.Parallel()
 	m, dir, inst := reviewApp(t)
 	out, cmd := m.Update(DiffFileStepMsg{Delta: 1})
 	m = drainCmd(out.(Model), cmd)
@@ -249,6 +252,7 @@ func TestReviewRefreshDropsCleanFileAndKeepsPosition(t *testing.T) {
 }
 
 func TestReviewWorkingTreeEditReloadsInPlace(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, dir, inst := reviewApp(t)
 	d := inst.Diff()
@@ -269,6 +273,7 @@ func TestReviewWorkingTreeEditReloadsInPlace(t *testing.T) {
 }
 
 func TestReviewEntryPointsFromThePanel(t *testing.T) {
+	t.Parallel()
 	dir := reviewRepo(t)
 	m := newSized()
 	m = reviewSnapshot(t, m, dir)
@@ -305,6 +310,7 @@ func TestReviewEntryPointsFromThePanel(t *testing.T) {
 }
 
 func TestReviewChangesOnCleanTreeNotifies(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	git := exec.Command("git", "init", "-q")
 	git.Dir = dir

@@ -24,6 +24,7 @@ func guardBody(m Model) string { return m.shell.Content().Render(80) }
 // TestGuardLineHintsEnterOnPrimary (#1356): only the primary option advertises
 // the enter alias, and the descriptions stay aligned across both shapes.
 func TestGuardLineHintsEnterOnPrimary(t *testing.T) {
+	t.Parallel()
 	primary := guardLine("s", "save all", true)
 	other := guardLine("d", "discard", false)
 	cancel := guardCancel("cancel")
@@ -47,6 +48,7 @@ func TestGuardLineHintsEnterOnPrimary(t *testing.T) {
 // TestGuardAnswerMapsEnterToPrimary (#1356): enter resolves to the primary
 // option, every other key answers for itself.
 func TestGuardAnswerMapsEnterToPrimary(t *testing.T) {
+	t.Parallel()
 	if got := guardAnswer(enterKey, "s"); got != "s" {
 		t.Errorf("enter must answer the primary option, got %q", got)
 	}
@@ -61,6 +63,7 @@ func TestGuardAnswerMapsEnterToPrimary(t *testing.T) {
 // TestCloseGuardEnterSaves (#1356): enter takes the close guard's primary
 // option — save, then close.
 func TestCloseGuardEnterSaves(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	dir := t.TempDir()
 	file := filepath.Join(dir, "f.txt")
 	if err := os.WriteFile(file, []byte("one\n"), 0o644); err != nil {
@@ -95,6 +98,7 @@ func TestCloseGuardEnterSaves(t *testing.T) {
 // TestQuitGuardEnterSavesThenQuits (#1356): with dirty buffers the quit guard's
 // primary option is "save all, then quit".
 func TestQuitGuardEnterSavesThenQuits(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	dir := t.TempDir()
 	file := filepath.Join(dir, "f.txt")
 	if err := os.WriteFile(file, []byte("one\n"), 0o644); err != nil {
@@ -125,6 +129,7 @@ func TestQuitGuardEnterSavesThenQuits(t *testing.T) {
 // TestQuitGuardEnterQuitsWhenNothingToSave (#1356): a running-only quit prompt
 // offers no save option, so enter takes the plain quit.
 func TestQuitGuardEnterQuitsWhenNothingToSave(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	dir := t.TempDir()
 	chdir(t, dir)
 	m := switchModel(t)
@@ -146,6 +151,7 @@ func TestQuitGuardEnterQuitsWhenNothingToSave(t *testing.T) {
 // TestSwitchGuardEnterSaves (#1356): the switch guard's primary option is
 // "save all, then switch".
 func TestSwitchGuardEnterSaves(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	a, b := filepath.Join(base, "a"), filepath.Join(base, "b")
 	for _, d := range []string{a, b} {
@@ -185,6 +191,7 @@ func TestSwitchGuardEnterSaves(t *testing.T) {
 // TestWsCloseGuardEnterSaves (#1356): the close-from-list guard saves the
 // background workspace's buffers on enter, then closes it.
 func TestWsCloseGuardEnterSaves(t *testing.T) {
+	// serial: busyCloseFixture: t.Chdir (process working directory)
 	m, root, path := busyCloseFixture(t)
 	out, _ := m.Update(project.CloseWorkspaceMsg{Path: root})
 	m = out.(Model)
@@ -212,6 +219,7 @@ func TestWsCloseGuardEnterSaves(t *testing.T) {
 // TestProjectCloseGuardEnterSaves (#1356): the close-current guard saves on
 // enter, then closes and resumes the parked project.
 func TestProjectCloseGuardEnterSaves(t *testing.T) {
+	// serial: closeCurrentFixture: t.Chdir (process working directory)
 	m, _, bRoot, dirtyPath := closeCurrentFixture(t)
 	out, _ := m.Update(project.CloseProjectMsg{})
 	m = out.(Model)

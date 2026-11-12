@@ -26,6 +26,7 @@ import (
 // to a Cmd — the Update pass itself lays nothing out — and the settled pass
 // dispatches it.
 func TestHTMLPreviewRendersOffLoop(t *testing.T) {
+	t.Parallel()
 	m, path := openHTMLFile(t, "<h1>Deferred</h1>\n")
 	out, cmd := m.Update(HTMLPreviewMsg{})
 	m = out.(Model)
@@ -48,6 +49,7 @@ func TestHTMLPreviewRendersOffLoop(t *testing.T) {
 // generation routes to the pane and is dropped there; the HUD books every
 // delivered render against the pane's own "render" row.
 func TestHTMLPreviewStaleRenderDroppedAndAccounted(t *testing.T) {
+	// serial: hudOff: perfhud.Reset (process-wide state of package perfhud)
 	hudOff(t)
 	m, path := openHTMLFile(t, "<p>current</p>\n")
 	m = stepHTML(m, HTMLPreviewMsg{})
@@ -75,6 +77,7 @@ func TestHTMLPreviewStaleRenderDroppedAndAccounted(t *testing.T) {
 // previewed buffer cancels the preview's render in flight and keeps the
 // page it shows.
 func TestHTMLPreviewSourceCloseCancelsRender(t *testing.T) {
+	t.Parallel()
 	m, path := openHTMLFile(t, "<p>shown page</p>\n")
 	m = stepHTML(m, HTMLPreviewMsg{})
 	key := htmlPreviewKeyFor(m, path)
@@ -104,6 +107,7 @@ func TestHTMLPreviewSourceCloseCancelsRender(t *testing.T) {
 // rendering on the loop, and the off-loop render stops at the 2048 KB
 // default budget with the truncation line.
 func TestHTMLPreviewLargePageTruncated(t *testing.T) {
+	// serial: measures the wall clock (load-sensitive)
 	var b strings.Builder
 	b.WriteString("<html><body>\n")
 	for i := 0; b.Len() < 5<<20; i++ {

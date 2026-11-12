@@ -55,6 +55,7 @@ func collected(wps ...weak.Pointer[workspace.Workspace]) bool {
 // dropped Workspace must be garbage — nothing in the app (recent list, hooks,
 // caches, goroutines) may keep it reachable.
 func TestCloseWorkspaceReleasesWorkspace(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	withStore(t)
 	_, b := twoProjects(t)
 	m := switchModel(t)
@@ -87,6 +88,7 @@ func TestCloseWorkspaceReleasesWorkspace(t *testing.T) {
 // workspace (discard) ends its terminal session — the PTY goroutines join in
 // Session.Close — and the workspace becomes collectable.
 func TestCloseWorkspaceStopsTerminal(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	_, b := twoProjects(t)
 	m := dismissOnboarding(switchModel(t))
 	out, _ := m.Update(TerminalNewMsg{})
@@ -143,6 +145,7 @@ type sessionLike interface {
 // workspace down fires EventWorkspaceClosed with the workspace root, so
 // subscribers (the LSP bridge) can release per-root state.
 func TestCloseWorkspaceFiresWorkspaceClosedHook(t *testing.T) {
+	// serial: t.Setenv
 	_, b := twoProjects(t)
 	var got []string
 	reg := registry.New()

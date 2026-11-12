@@ -41,6 +41,7 @@ func waitIdle(t *testing.T, term *terminal.Model) {
 func termText(term *terminal.Model) string { return ansi.Strip(term.View()) }
 
 func TestPopupScopeGlobalSurvivesProjectSwitch(t *testing.T) {
+	// serial: globalScopeConfig: t.Setenv
 	_, b := twoRoots(t)
 	m := openTestPopupWith(t, switchModel(t))
 	inst, sess := m.popup.inst, m.popup.inst.ActiveTerminal().SessionKey()
@@ -71,6 +72,7 @@ func TestPopupScopeGlobalSurvivesProjectSwitch(t *testing.T) {
 // TestPopupScopeGlobalCdsIdleShell: the carried shell is asked to cd into the
 // new project root when it sits idle at its prompt.
 func TestPopupScopeGlobalCdsIdleShell(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	_, b := twoRoots(t)
 	m := openTestPopupWith(t, switchModel(t))
 	term := m.popup.inst.ActiveTerminal()
@@ -92,6 +94,7 @@ func TestPopupScopeGlobalCdsIdleShell(t *testing.T) {
 // TestPopupScopeGlobalKeepsBusyShell: a shell with a foreground job owns its
 // stdin, so the cd line is withheld — it would land in the job, not the shell.
 func TestPopupScopeGlobalKeepsBusyShell(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	_, b := twoRoots(t)
 	m := openTestPopupWith(t, switchModel(t))
 	term := m.popup.inst.ActiveTerminal()
@@ -118,6 +121,7 @@ func TestPopupScopeGlobalKeepsBusyShell(t *testing.T) {
 // TestPopupScopeProjectStillParks: the default scope is untouched by #2406 —
 // the popup parks with its project and the new one starts empty (#1407).
 func TestPopupScopeProjectStillParks(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	_, b := twoRoots(t)
 	m := openTestPopupWith(t, switchModel(t))
 	userConfig(t, "[terminal]\npopup_scope = \"project\"\n\n[project]\nauto_save_on_switch = false\n")

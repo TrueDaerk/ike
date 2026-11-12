@@ -84,6 +84,7 @@ func quickFixOffer(picked *int) ilsp.CodeActionsMsg {
 // called with exactly the marked diagnostic's path and range — no editor was
 // opened, no caret moved.
 func TestProblemsQuickFixKeyRequestsTheMarkedRow(t *testing.T) {
+	t.Parallel()
 	m, got := quickFixApp(t)
 
 	// Down onto the diagnostic under the file header, then the fix key.
@@ -120,6 +121,7 @@ func TestProblemsQuickFixKeyRequestsTheMarkedRow(t *testing.T) {
 // Editor-scoped, so in the Problems context the key must fall through to the
 // pane instead of being swallowed.
 func TestProblemsQuickFixAltEnterReachesThePane(t *testing.T) {
+	t.Parallel()
 	m, _ := quickFixApp(t)
 	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	m = out.(Model)
@@ -137,6 +139,7 @@ func TestProblemsQuickFixAltEnterReachesThePane(t *testing.T) {
 // TestProblemsQuickFixOfferOpensAnchored: a non-empty offer lists the actions
 // in the picker, anchored in the pane rather than centered.
 func TestProblemsQuickFixOfferOpensAnchored(t *testing.T) {
+	t.Parallel()
 	m, _ := quickFixApp(t)
 	picked := -1
 
@@ -164,6 +167,7 @@ func TestProblemsQuickFixOfferOpensAnchored(t *testing.T) {
 // bridge's Apply for the original offer index, which is where the shared
 // WorkspaceEdit path (undoable in the buffer) takes over.
 func TestProblemsQuickFixApplyRunsTheContinuation(t *testing.T) {
+	t.Parallel()
 	m, _ := quickFixApp(t)
 	picked := -1
 
@@ -180,6 +184,7 @@ func TestProblemsQuickFixApplyRunsTheContinuation(t *testing.T) {
 // TestProblemsQuickFixEmptyOfferReportsNoFixes is the no-action criterion: an
 // empty answer leaves the picker shut and says so out loud.
 func TestProblemsQuickFixEmptyOfferReportsNoFixes(t *testing.T) {
+	t.Parallel()
 	m, _ := quickFixApp(t)
 
 	out, _ := m.Update(ilsp.CodeActionsMsg{Path: "/proj/a.go", QuickFix: true})
@@ -195,6 +200,7 @@ func TestProblemsQuickFixEmptyOfferReportsNoFixes(t *testing.T) {
 // TestProblemsQuickFixWithoutPaneSaysSo: the command is reachable from the
 // palette too, where the pane may simply not be open.
 func TestProblemsQuickFixWithoutPaneSaysSo(t *testing.T) {
+	t.Parallel()
 	m := problemsApp(t) // the pane was never opened
 	var got ilsp.QuickFixRequest
 
@@ -215,6 +221,7 @@ func TestProblemsQuickFixWithoutPaneSaysSo(t *testing.T) {
 // the diagnostic disappears on the publish the applied edit triggers — no
 // bespoke refresh path.
 func TestProblemsQuickFixRefreshesAfterTheFix(t *testing.T) {
+	t.Parallel()
 	m, _ := quickFixApp(t)
 	if p := m.problemsPanel(); p == nil || p.Rows() != 2 {
 		t.Fatalf("setup: rows = %v", p)
@@ -234,6 +241,7 @@ func TestProblemsQuickFixRefreshesAfterTheFix(t *testing.T) {
 // reaches the buffer through the shared FormatEditsMsg route, which applies it
 // as one history change — so a single "u" in the editor takes it back.
 func TestProblemsQuickFixEditIsUndoable(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	dir := t.TempDir()
 	file := filepath.Join(dir, "main.go")

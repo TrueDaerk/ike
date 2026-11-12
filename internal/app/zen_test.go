@@ -14,6 +14,7 @@ import (
 // zen_test.go covers view.zenMode (#359): maximize + chrome-free rendering.
 
 func TestZenHidesChromeAndRestores(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
@@ -53,6 +54,7 @@ func TestZenHidesChromeAndRestores(t *testing.T) {
 }
 
 func TestZenKeepsPriorManualZoom(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	m := openApp(t, a)
@@ -69,6 +71,7 @@ func TestZenKeepsPriorManualZoom(t *testing.T) {
 }
 
 func TestZenDropsOnTreeMutation(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	m := openApp(t, a)
@@ -83,6 +86,7 @@ func TestZenDropsOnTreeMutation(t *testing.T) {
 }
 
 func TestZenCommandRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if _, ok := m.reg.Command("view.zenMode"); !ok {
 		t.Fatal("view.zenMode must be registered")
@@ -92,6 +96,7 @@ func TestZenCommandRegistered(t *testing.T) {
 // Zen works for any focused pane kind (#934), not only editors.
 
 func TestZenOnTerminalPane(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, key := openTestTerminal(t)
 	m = dispatch(t, m, ZenModeMsg{})
@@ -122,6 +127,7 @@ func lastLine(s string) string {
 }
 
 func TestZenOnToolPane(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m.setFocus(pane.ExplorerKey)
 	m.layout()
@@ -139,6 +145,7 @@ func TestZenOnToolPane(t *testing.T) {
 }
 
 func TestZenOnTerminalDropsOnTreeMutation(t *testing.T) {
+	t.Parallel()
 	m, _ := openTestTerminal(t)
 	m = dispatch(t, m, ZenModeMsg{})
 	m = dispatch(t, m, SplitFocusedMsg{Zone: layout.ZoneRight})
@@ -155,6 +162,7 @@ func TestZenOnTerminalDropsOnTreeMutation(t *testing.T) {
 // on and — crucially — back off while the terminal keeps focus (no stuck
 // chrome-hidden state).
 func TestZenChordFromTerminal(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := sizedWith(t, registry.Global(), 100, 40)
 	out, _ := m.Update(TerminalNewMsg{})
@@ -177,6 +185,7 @@ func TestZenChordFromTerminal(t *testing.T) {
 // Same chord with a tool pane focused (#934): routed through the regular
 // keymap path, not the terminal allowlist.
 func TestZenChordFromToolPane(t *testing.T) {
+	t.Parallel()
 	m := sizedWith(t, registry.Global(), 100, 40)
 	m.setFocus(pane.ExplorerKey)
 	m.layout()

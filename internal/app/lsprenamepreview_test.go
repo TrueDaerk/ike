@@ -53,6 +53,7 @@ func openRenamePreview(t *testing.T) (Model, *int) {
 }
 
 func TestLSPRenamePreviewListsFilesAndDiff(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, _ := openRenamePreview(t)
 	body := ansi.Strip(m.lspRenamePreviewBody(80)) // unstyled: intra-line diff highlights (#2847)
@@ -79,6 +80,7 @@ func TestLSPRenamePreviewListsFilesAndDiff(t *testing.T) {
 }
 
 func TestLSPRenamePreviewSelectionFollowsCursor(t *testing.T) {
+	t.Parallel()
 	m, _ := openRenamePreview(t)
 	out, _ := m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
 	m = out.(Model)
@@ -95,6 +97,7 @@ func TestLSPRenamePreviewSelectionFollowsCursor(t *testing.T) {
 }
 
 func TestLSPRenamePreviewConfirmApplies(t *testing.T) {
+	t.Parallel()
 	m, applied := openRenamePreview(t)
 	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = out.(Model)
@@ -107,6 +110,7 @@ func TestLSPRenamePreviewConfirmApplies(t *testing.T) {
 }
 
 func TestLSPRenamePreviewCancelAppliesNothing(t *testing.T) {
+	t.Parallel()
 	m, applied := openRenamePreview(t)
 	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = out.(Model)
@@ -119,6 +123,7 @@ func TestLSPRenamePreviewCancelAppliesNothing(t *testing.T) {
 }
 
 func TestLSPRenamePreviewSwallowsKeys(t *testing.T) {
+	t.Parallel()
 	m, applied := openRenamePreview(t)
 	out, cmd := m.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
 	m = out.(Model)
@@ -130,6 +135,7 @@ func TestLSPRenamePreviewSwallowsKeys(t *testing.T) {
 // TestLSPRenamePreviewIgnoresEmptyPayload guards the dialog against a message
 // with nothing to show — it must not open on an empty file list.
 func TestLSPRenamePreviewIgnoresEmptyPayload(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	out, _ := m.Update(ilsp.RenamePreviewMsg{NewName: "x", Apply: func() tea.Cmd { return nil }})
 	m = out.(Model)

@@ -74,6 +74,7 @@ func step(m Model, msg tea.Msg) Model {
 }
 
 func TestMouseClickFocusesExplorer(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	m.cycleFocus() // move focus to the editor
 	if m.activeWS().Panes.FocusedInstance().Kind() != pane.KindEditor {
@@ -88,6 +89,7 @@ func TestMouseClickFocusesExplorer(t *testing.T) {
 }
 
 func TestMouseHoverHighlightsExplorerRow(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	r := m.lay.Panes[ctxExplorer]
 	// move (no button) over the second content row.
@@ -105,6 +107,7 @@ func TestMouseHoverHighlightsExplorerRow(t *testing.T) {
 }
 
 func TestOpenFileMarksActiveInExplorer(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	abs, err := filepath.Abs("app.go") // a real, visible root-level file (cwd is this pkg)
 	if err != nil {
@@ -118,6 +121,7 @@ func TestOpenFileMarksActiveInExplorer(t *testing.T) {
 }
 
 func TestDragResizeWidensExplorer(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	before := m.lay.Panes[ctxExplorer].W
 	divX := m.lay.Dividers[0].Rect.X
@@ -134,6 +138,7 @@ func TestDragResizeWidensExplorer(t *testing.T) {
 }
 
 func TestDragResizeClampsMinimum(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	divX := m.lay.Dividers[0].Rect.X
 	m = step(m, press(divX, 5))
@@ -145,6 +150,7 @@ func TestDragResizeClampsMinimum(t *testing.T) {
 }
 
 func TestDragMoveSwapsPanes(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	// press explorer title bar (top row), release on right half of editor.
 	m = step(m, press(2, m.lay.Panes[ctxExplorer].Y))
@@ -160,6 +166,7 @@ func TestDragMoveSwapsPanes(t *testing.T) {
 }
 
 func TestMoveDragShowsFeedback(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	m = step(m, press(2, m.lay.Panes[ctxExplorer].Y)) // grab explorer title
 	edRect := m.lay.Panes[ctxEditor]
@@ -177,6 +184,7 @@ func TestMoveDragShowsFeedback(t *testing.T) {
 }
 
 func TestMoveDragShowsGhostBox(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	m = step(m, press(2, m.lay.Panes[ctxExplorer].Y))
 	edRect := m.lay.Panes[ctxEditor]
@@ -208,6 +216,7 @@ func TestMoveDragShowsGhostBox(t *testing.T) {
 }
 
 func TestDragPersistsAndRestores(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
 	m := NewWith(registry.New(), host.MapConfig{})
@@ -232,6 +241,7 @@ func TestDragPersistsAndRestores(t *testing.T) {
 }
 
 func TestStaleLayoutFallsBackToDefault(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
 	// A saved layout referencing a pane that no longer exists must be ignored.
@@ -254,6 +264,7 @@ func TestStaleLayoutFallsBackToDefault(t *testing.T) {
 }
 
 func TestMouseIgnoredWhenShellOpen(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	// open help shell
 	m = step(m, tea.KeyPressMsg{Text: "?", Code: '?'})
@@ -272,6 +283,7 @@ func TestMouseIgnoredWhenShellOpen(t *testing.T) {
 }
 
 func TestActiveFollowsFocusedEditor(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	a, err := filepath.Abs("app.go")
 	if err != nil {
@@ -302,6 +314,7 @@ func TestActiveFollowsFocusedEditor(t *testing.T) {
 // band without leaving it is a click — it focuses the pane and must not spawn
 // a split (the title band doubles as the top edgeZone).
 func TestTitleClickDoesNotSplit(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	before := len(m.lay.Panes)
 	edRect := m.lay.Panes[ctxEditor]
@@ -324,6 +337,7 @@ func TestTitleClickDoesNotSplit(t *testing.T) {
 // TestTitleDragOutOfBandStillSplits: dragging from the title band to the
 // source pane's bottom edge keeps spawning the self-split.
 func TestTitleDragOutOfBandStillSplits(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	before := len(m.lay.Panes)
 	edRect := m.lay.Panes[ctxEditor]
@@ -339,6 +353,7 @@ func TestTitleDragOutOfBandStillSplits(t *testing.T) {
 // travel must not flash the move overlay (#559) — no status hint, no source
 // marker, no ghost — and a release in place changes nothing.
 func TestTitleClickShowsNoMoveFeedback(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	before := len(m.lay.Panes)
 	x, y := 2, m.lay.Panes[ctxExplorer].Y
@@ -365,6 +380,7 @@ func TestTitleClickShowsNoMoveFeedback(t *testing.T) {
 // TestTitleDragBelowThresholdIsClick: travel of fewer columns than the engage
 // threshold on the same row stays a click (#559).
 func TestTitleDragBelowThresholdIsClick(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	before := len(m.lay.Panes)
 	x, y := 2, m.lay.Panes[ctxExplorer].Y
@@ -382,6 +398,7 @@ func TestTitleDragBelowThresholdIsClick(t *testing.T) {
 // TestTitleDragPastThresholdEngages: one row of vertical travel — or the column
 // threshold sideways — engages the move and its feedback (#559).
 func TestTitleDragPastThresholdEngages(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	x, y := 2, m.lay.Panes[ctxExplorer].Y
 	m = step(m, press(x, y))
@@ -400,6 +417,7 @@ func TestTitleDragPastThresholdEngages(t *testing.T) {
 // TestDragDockToOuterEdge guards #811: releasing a whole-pane drag on the
 // workspace's outermost strip docks the pane full-span against that edge.
 func TestDragDockToOuterEdge(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	body := m.bodyRect()
 
@@ -439,6 +457,7 @@ func TestDragDockToOuterEdge(t *testing.T) {
 // TestDragDockShowsFullSpanPreview: hovering the outer strip previews the
 // full-span target (ghost + status hint) before release.
 func TestDragDockShowsFullSpanPreview(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	body := m.bodyRect()
 	m = step(m, press(2, m.lay.Panes[ctxExplorer].Y))
@@ -461,6 +480,7 @@ func TestDragDockShowsFullSpanPreview(t *testing.T) {
 // back/forward buttons resolve through the keymap to nav.back/nav.forward,
 // regardless of the hovered pane; other buttons keep their pane routing.
 func TestMouseNavButtonsDispatchHistory(t *testing.T) {
+	t.Parallel()
 	m := sizedWith(t, registry.Global(), 100, 40)
 	out, cmd := m.Update(tea.MouseClickMsg{X: 5, Y: 5, Button: tea.MouseBackward})
 	m = out.(Model)

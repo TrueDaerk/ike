@@ -23,6 +23,7 @@ func tmpFile(t *testing.T, name, content string) string {
 // not add a file tab there — it lands in a real editor pane and focuses it,
 // the terminal host stays untouched.
 func TestFileOpenSkipsTerminalTabHost(t *testing.T) {
+	t.Parallel()
 	m, key := openTestTerminal(t)
 	handled, out, _ := m.terminalReservedKey("cmd+t")
 	if !handled {
@@ -54,6 +55,7 @@ func TestFileOpenSkipsTerminalTabHost(t *testing.T) {
 // project root opens as a fully functional editor tab; a missing path fails
 // with an error toast instead of silently doing nothing.
 func TestOpenPathOutsideWorkspace(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	outside := tmpFile(t, "outside.txt", "external\n")
 
@@ -75,6 +77,7 @@ func TestOpenPathOutsideWorkspace(t *testing.T) {
 // TestFileOpenSkipsDedicatedTerminal: with a dedicated terminal pane focused,
 // a file open lands in an editor pane and the terminal pane survives as-is.
 func TestFileOpenSkipsDedicatedTerminal(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, key := openTestTerminal(t)
 	path := tmpFile(t, "b.txt", "world\n")
@@ -94,6 +97,7 @@ func TestFileOpenSkipsDedicatedTerminal(t *testing.T) {
 // TestOpenPathAtFramesJumpNearTop guards #996: openPathAt — the funnel every
 // navigation jump uses — lands the target line 3 rows below the top edge.
 func TestOpenPathAtFramesJumpNearTop(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	path := tmpFile(t, "big.txt", strings.Repeat("x\n", 300))
 	out, _ := m.openPathAt(path, 150, 0)
@@ -112,6 +116,7 @@ func TestOpenPathAtFramesJumpNearTop(t *testing.T) {
 // TestOpenPathAtVisibleTargetKeepsViewport guards #1373: a same-file jump to a
 // line already comfortably visible moves only the cursor.
 func TestOpenPathAtVisibleTargetKeepsViewport(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	path := tmpFile(t, "big.txt", strings.Repeat("x\n", 300))
 	out, _ := m.openPathAt(path, 150, 0)

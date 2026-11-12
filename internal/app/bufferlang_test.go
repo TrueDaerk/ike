@@ -44,6 +44,7 @@ func hasTitle(titles []string, want string) bool {
 // TestBufferLangIntentionOfferedInFilelessBuffer guards the first acceptance
 // criterion of #2033: alt+enter in a buffer with no file offers the pick.
 func TestBufferLangIntentionOfferedInFilelessBuffer(t *testing.T) {
+	t.Parallel()
 	m := filelessModel(t, "some pasted text", 0, 0)
 	if titles := offeredTitles(t, m); !hasTitle(titles, "Treat Buffer as…") {
 		t.Fatalf("the buffer-language intention is missing from %v", titles)
@@ -54,6 +55,7 @@ func TestBufferLangIntentionOfferedInFilelessBuffer(t *testing.T) {
 // buffer with a file is classified by its name, so the pick is not offered
 // there — no override, not even as an escape hatch.
 func TestBufferLangIntentionHiddenWithFile(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	m := intentionModel(t, "x.json", `{"name": "value"}`, 0, 11)
 	for _, title := range offeredTitles(t, m) {
 		if title == "Treat Buffer as…" {
@@ -65,6 +67,7 @@ func TestBufferLangIntentionHiddenWithFile(t *testing.T) {
 // TestBufferLangIntentionNamesCurrentType: once a type is chosen the entry
 // says which — the popup is where the buffer's type is both read and changed.
 func TestBufferLangIntentionNamesCurrentType(t *testing.T) {
+	// serial: bufferLangLangs: lang.Register (process-wide language registry)
 	bufferLangLangs(t)
 	m := filelessModel(t, "# Title", 0, 0)
 	out, _ := m.Update(SetBufferLangMsg{ID: "markdown"})
@@ -78,6 +81,7 @@ func TestBufferLangIntentionNamesCurrentType(t *testing.T) {
 // effects: the buffer resolves as the language, and the status line says so
 // — the "type is recognizable and changeable" acceptance criterion.
 func TestSetBufferLangAppliesAndShowsInStatusLine(t *testing.T) {
+	// serial: bufferLangLangs: lang.Register (process-wide language registry)
 	bufferLangLangs(t)
 	m := filelessModel(t, "# Title", 0, 0)
 	out, _ := m.Update(SetBufferLangMsg{ID: "markdown"})
@@ -107,6 +111,7 @@ func TestSetBufferLangAppliesAndShowsInStatusLine(t *testing.T) {
 // TestBufferLangPickerRefusesBufferWithFile: opening the picker where the
 // pick could not apply says why instead of showing a dead list.
 func TestBufferLangPickerRefusesBufferWithFile(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	m := intentionModel(t, "x.json", `{"a": 1}`, 0, 0)
 	out, _ := m.Update(ShowBufferLangMsg{})
 	m = out.(Model)
@@ -121,6 +126,7 @@ func TestBufferLangPickerRefusesBufferWithFile(t *testing.T) {
 // TestBufferLangPickerOpensLocked: from a file-less buffer the command opens
 // the picker locked to its mode, listing plain text plus the languages.
 func TestBufferLangPickerOpensLocked(t *testing.T) {
+	// serial: bufferLangLangs: lang.Register (process-wide language registry)
 	bufferLangLangs(t)
 	m := filelessModel(t, "", 0, 0)
 	out, _ := m.Update(ShowBufferLangMsg{})
@@ -147,6 +153,7 @@ func TestBufferLangPickerOpensLocked(t *testing.T) {
 // criterion: a pasted request block in a file-less buffer offers "Run
 // Request" once the buffer is treated as HTTP — and does not before.
 func TestBufferLangEnablesHTTPIntentions(t *testing.T) {
+	// serial: bufferLangLangs: lang.Register (process-wide language registry)
 	bufferLangLangs(t)
 	m := filelessModel(t, "### thing\nGET https://example.com/things\n", 1, 0)
 	if titles := offeredTitles(t, m); hasTitle(titles, "Run Request") {
@@ -171,6 +178,7 @@ func TestBufferLangEnablesHTTPIntentions(t *testing.T) {
 // file-less buffer's result, which left a chosen language unhighlighted no
 // matter how well it resolved.
 func TestFilelessParseReachesItsBuffer(t *testing.T) {
+	// serial: bufferLangLangs: lang.Register (process-wide language registry)
 	bufferLangLangs(t)
 	m := filelessModel(t, "# Title", 0, 0)
 	out, _ := m.Update(SetBufferLangMsg{ID: "markdown"})

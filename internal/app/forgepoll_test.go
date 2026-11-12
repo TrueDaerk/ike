@@ -26,6 +26,7 @@ func pollApp(t *testing.T, cfg host.Config) Model {
 }
 
 func TestForgePollIntervalFromConfig(t *testing.T) {
+	t.Parallel()
 	if got := forgePollInterval(host.MapConfig{}); got != forge.DefaultPollInterval {
 		t.Errorf("unset = %v, want the %v default", got, forge.DefaultPollInterval)
 	}
@@ -41,6 +42,7 @@ func TestForgePollIntervalFromConfig(t *testing.T) {
 }
 
 func TestStartForgePollOpensTheChain(t *testing.T) {
+	t.Parallel()
 	m := pollApp(t, host.MapConfig{})
 	if m.forgePoller().Armed() {
 		t.Fatal("an ordinary Update pass must not arm the chain — it would never settle")
@@ -66,6 +68,7 @@ func TestStartForgePollOpensTheChain(t *testing.T) {
 // a tea.Tick — blocks the caller for a full interval. The poll rides the
 // StartWatcher lifecycle instead, exactly like the file watcher.
 func TestInitDoesNotArmTheForgePoll(t *testing.T) {
+	t.Parallel()
 	m := pollApp(t, host.MapConfig{})
 	m.Init()
 	if m.forgePoller().Armed() {
@@ -78,6 +81,7 @@ func TestInitDoesNotArmTheForgePoll(t *testing.T) {
 // tick command, so any synchronous command drainer (the `settle` test helper,
 // #1795's data-pane restore) spins forever waiting out poll intervals.
 func TestForgePollUpdateSettlesWithoutAPendingTick(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := pollApp(t, host.MapConfig{})
 	m.StartForgePoll()
@@ -91,6 +95,7 @@ func TestForgePollUpdateSettlesWithoutAPendingTick(t *testing.T) {
 }
 
 func TestForgePollReopensAfterTheSettingIsTurnedBackOn(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := pollApp(t, host.MapConfig{"forge.poll_interval_seconds": "0"})
 	if m.armForgePoll() != nil {
@@ -110,6 +115,7 @@ func TestForgePollReopensAfterTheSettingIsTurnedBackOn(t *testing.T) {
 // hands back a Cmd, so dispatching one takes microseconds however long the
 // forge takes to answer.
 func TestForgePollTickDoesNotBlockUpdate(t *testing.T) {
+	// serial: measures the wall clock (load-sensitive)
 	m := pollApp(t, host.MapConfig{})
 	root := m.forgeRoot()
 
@@ -163,6 +169,7 @@ func TestForgePollTickDoesNotBlockUpdate(t *testing.T) {
 }
 
 func TestForgePollTickForAnotherRootIsDropped(t *testing.T) {
+	t.Parallel()
 	m := pollApp(t, host.MapConfig{})
 	_, cmd := m.Update(forge.PollTickMsg{Root: "/some/other/project"})
 	if cmd != nil {
@@ -174,6 +181,7 @@ func TestForgePollTickForAnotherRootIsDropped(t *testing.T) {
 }
 
 func TestForgePollSeedsSilentlyThenEmitsEvents(t *testing.T) {
+	// serial: collectEvents: waits on the wall clock (load-sensitive)
 	m := pollApp(t, host.MapConfig{})
 	seed := forge.IssuesMsg{Poll: true, Issues: []forge.Issue{{Number: 1, Title: "one"}}}
 	out, cmd := m.Update(seed)
@@ -248,6 +256,7 @@ func runBriefly(cmd tea.Cmd) (tea.Msg, bool) {
 }
 
 func TestForgePollDegradeAndRecoverToastOnce(t *testing.T) {
+	t.Parallel()
 	m := pollApp(t, host.MapConfig{})
 	out, _ := m.Update(forge.IssuesMsg{Poll: true, Issues: []forge.Issue{{Number: 1, Title: "one"}}})
 	m = out.(Model)
@@ -286,6 +295,7 @@ func TestForgePollDegradeAndRecoverToastOnce(t *testing.T) {
 }
 
 func TestForgePollStopsOnSetupProblemAndResumesOnRefresh(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := pollApp(t, host.MapConfig{})
 	out, _ := m.Update(forge.IssuesMsg{Poll: true, Setup: "gh not found"})
@@ -313,6 +323,7 @@ func TestForgePollStopsOnSetupProblemAndResumesOnRefresh(t *testing.T) {
 }
 
 func TestForgePollFeedsTheIssuesPane(t *testing.T) {
+	t.Parallel()
 	m := pollApp(t, host.MapConfig{})
 	out, _ := m.Update(IssuesToggleMsg{})
 	m = out.(Model)
@@ -329,6 +340,7 @@ func TestForgePollFeedsTheIssuesPane(t *testing.T) {
 }
 
 func TestReconfigureForgePollAppliesLive(t *testing.T) {
+	t.Parallel()
 	m := pollApp(t, host.MapConfig{})
 	m.reconfigureForgePoll(host.MapConfig{"forge.poll_interval_seconds": "0"})
 	if m.forgePoller().Enabled() {

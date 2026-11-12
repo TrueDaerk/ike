@@ -26,6 +26,7 @@ func deadBindingsApp(t *testing.T) Model {
 // binding table — the JetBrains default set always has cmd chords, which are
 // at best at risk in a plain terminal.
 func TestDeadBindingsReportOpens(t *testing.T) {
+	t.Parallel()
 	m := deadBindingsApp(t)
 	out, _ := m.Update(KeymapDeadBindingsMsg{})
 	m = out.(Model)
@@ -46,6 +47,7 @@ func TestDeadBindingsReportOpens(t *testing.T) {
 // override at user scope — the new chord binds the command, the old one
 // unbinds — and the reload it triggers re-audits the open report.
 func TestDeadBindingsRebindPersists(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	withStore(t)
 	m := deadBindingsApp(t)
 	out, _ := m.Update(KeymapDeadBindingsMsg{})

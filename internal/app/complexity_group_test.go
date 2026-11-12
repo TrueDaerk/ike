@@ -24,6 +24,7 @@ func cxGroupType(m Model, r rune) Model {
 }
 
 func TestComplexityGroupCommandAndKey(t *testing.T) {
+	// serial: timeApp: t.Setenv
 	m, _ := timeApp(t)
 	m = dismissOnboarding(m)
 	// The command opens a closed panel and cycles its Project tab.
@@ -65,6 +66,7 @@ func TestComplexityGroupCommandAndKey(t *testing.T) {
 // TestComplexityFilterTypesSpace pins #2978: a space typed into the focused
 // filter row is text, not the space-bound complexity.sites command.
 func TestComplexityFilterTypesSpace(t *testing.T) {
+	// serial: timeApp: t.Setenv
 	m, _ := timeApp(t)
 	m = dismissOnboarding(m)
 	out, _ := m.Update(ComplexityToggleMsg{})
@@ -85,6 +87,7 @@ func TestComplexityFilterTypesSpace(t *testing.T) {
 }
 
 func TestComplexityGroupPersists(t *testing.T) {
+	// serial: timeApp: t.Setenv
 	withStore(t)
 	m, _ := timeApp(t)
 	out, _ := m.Update(ComplexityToggleMsg{})

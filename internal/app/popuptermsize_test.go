@@ -21,6 +21,7 @@ func resizePopupChord(t *testing.T, m Model) Model {
 }
 
 func TestPopupSizeDefaultWithoutStoredDelta(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	w, h := m.popupSize()
 	if want := int(float64(m.width) * popupTermWFrac); w != want {
@@ -32,6 +33,7 @@ func TestPopupSizeDefaultWithoutStoredDelta(t *testing.T) {
 }
 
 func TestPopupSizeFallsBackToGlobalDelta(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	dw, dh := m.popupSize()
 	// A project that was never resized inherits the user-scoped delta (#1714).
@@ -43,6 +45,7 @@ func TestPopupSizeFallsBackToGlobalDelta(t *testing.T) {
 }
 
 func TestPopupSizeProjectDeltaWinsOverGlobal(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	dw, dh := m.popupSize()
 	m.winSizesAll.Set(popupTermSizeKey, 10, 4)
@@ -56,6 +59,7 @@ func TestPopupSizeProjectDeltaWinsOverGlobal(t *testing.T) {
 // A zero project delta is still a project delta: having resized back to the
 // default size must not hand the box back to the global fallback.
 func TestPopupSizeZeroProjectDeltaBeatsGlobal(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	dw, dh := m.popupSize()
 	m.winSizesAll.Set(popupTermSizeKey, 10, 4)
@@ -66,6 +70,7 @@ func TestPopupSizeZeroProjectDeltaBeatsGlobal(t *testing.T) {
 }
 
 func TestPopupResizeChordMirrorsIntoGlobalStore(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := openTestPopup(t)
 	m = resizePopupChord(t, m)
@@ -83,6 +88,7 @@ func TestPopupResizeChordMirrorsIntoGlobalStore(t *testing.T) {
 }
 
 func TestPopupResizeDragMirrorsIntoGlobalStore(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := openTestPopup(t)
 	px, py, pw, ph := m.popupTermRect()
@@ -106,6 +112,7 @@ func TestPopupResizeDragMirrorsIntoGlobalStore(t *testing.T) {
 // The first resize in a project that only inherited the global delta continues
 // from the size on screen instead of jumping back to the default.
 func TestPopupResizeContinuesFromInheritedGlobalDelta(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	m.winSizesAll.Set(popupTermSizeKey, 10, 4)
 	w, h := m.popupSize()
@@ -120,6 +127,7 @@ func TestPopupResizeContinuesFromInheritedGlobalDelta(t *testing.T) {
 
 // Every source re-clamps against the floors and the live terminal bounds.
 func TestPopupSizeFloorsApplyToGlobalDelta(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	m.winSizesAll.Set(popupTermSizeKey, -1000, -1000)
 	if w, h := m.popupSize(); w != popupTermMinW || h != popupTermMinH {

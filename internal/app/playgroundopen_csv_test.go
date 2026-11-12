@@ -14,6 +14,7 @@ import (
 // file re-reads it as rows.
 
 func TestPlaygroundOpenCSVOpensJQOverRows(t *testing.T) {
+	// serial: dispatchApp: lang.Register (process-wide language registry)
 	for _, tc := range []struct {
 		lang, body string
 	}{
@@ -44,6 +45,7 @@ func TestPlaygroundOpenCSVOpensJQOverRows(t *testing.T) {
 }
 
 func TestPlaygroundOpenCSVMalformedRowIsInputError(t *testing.T) {
+	// serial: dispatchApp: lang.Register (process-wide language registry)
 	m := openDispatcher(t, dispatchApp(t, "csv", "name,age\nada,36\nlinus\n"))
 	if !m.playOpen() {
 		t.Fatal("a malformed CSV still opens the playground, with the error on its info row")
@@ -54,6 +56,7 @@ func TestPlaygroundOpenCSVMalformedRowIsInputError(t *testing.T) {
 }
 
 func TestPlaygroundOpenCSVResponse(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, ct, body string }{
 		{"csv sniffed semicolon", "text/csv; charset=utf-8", "name;age\nada;36\n"},
 		{"tsv", "text/tab-separated-values", "name\tage\nada\t36\n"},
@@ -72,6 +75,7 @@ func TestPlaygroundOpenCSVResponse(t *testing.T) {
 }
 
 func TestPlaygroundCSVFollowsExternalChange(t *testing.T) {
+	// serial: dispatchApp: lang.Register (process-wide language registry)
 	m := dispatchApp(t, "csv", "name\nada\n")
 	path := m.activeEditor().Path()
 	m = openDispatcher(t, m)
@@ -91,6 +95,7 @@ func TestPlaygroundCSVFollowsExternalChange(t *testing.T) {
 // TestPlaygroundJSONIsNotCSV: the adapter is only for the separator-delimited
 // languages — a JSON buffer keeps the plain JSON parse.
 func TestPlaygroundJSONIsNotCSV(t *testing.T) {
+	// serial: dispatchApp: lang.Register (process-wide language registry)
 	m := openDispatcher(t, dispatchApp(t, "json", `{"a":1}`))
 	if !m.playOpen() || m.play.csv {
 		t.Fatal("a JSON buffer must open jq without the CSV adapter")

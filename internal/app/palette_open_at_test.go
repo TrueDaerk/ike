@@ -17,6 +17,7 @@ import (
 // "path:line[:col]" row — opens the file *and* places the cursor there, in the
 // focused pane like every other palette pick.
 func TestPaletteOpenFileAtLine(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	path := filepath.Join(t.TempDir(), "pasted.go")
 	if err := os.WriteFile(path, []byte("package main\n\nfunc main() {}\n\n// tail\n"), 0o644); err != nil {

@@ -21,6 +21,7 @@ import (
 )
 
 func TestComplexityDiagnosticsBuilder(t *testing.T) {
+	t.Parallel()
 	v := complexity.View{Files: map[string][]complexity.Function{
 		"/p/a.go": {
 			{Name: "low", Line: 2, CCN: 3, Cognitive: 2},
@@ -64,6 +65,7 @@ func TestComplexityDiagnosticsBuilder(t *testing.T) {
 // complexity.comment_density_warn (#2934) is its own warning with Code
 // "comments", beside any CCN / cognitive row; 0 turns it off.
 func TestComplexityDiagnosticsCommentDensity(t *testing.T) {
+	t.Parallel()
 	v := complexity.View{Files: map[string][]complexity.Function{
 		"/p/a.go": {
 			{Name: "foo", Line: 3, CCN: 2, NLOC: 9, CommentLines: 11, CommentDensity: 0.55},
@@ -109,6 +111,7 @@ func complexityRows(s *problems.Store) []string {
 }
 
 func TestComplexityProblemsFeedWiring(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	withProjectWalks(t)
 	proj := t.TempDir()
 	if r, err := filepath.EvalSymlinks(proj); err == nil {
@@ -217,6 +220,7 @@ func TestComplexityProblemsFeedWiring(t *testing.T) {
 // TestComplexityProblemsSourceFilter: the pane's source:complexity filter
 // keeps exactly the feed's rows.
 func TestComplexityProblemsSourceFilter(t *testing.T) {
+	t.Parallel()
 	s := problems.NewStore()
 	s.Set("/p/a.go", []ilsp.Diagnostic{{Severity: 1, Message: "undefined: y", Source: "gopls"}})
 	s.SetTaskSource("complexity", complexityDiagnostics(complexity.View{Files: map[string][]complexity.Function{

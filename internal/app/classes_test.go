@@ -33,6 +33,7 @@ func primed(t *testing.T, q string, hits ...ilsp.SymbolHit) *symbolMode {
 // enum (#1849) — while the symbol seat of search everywhere lists the rest, so
 // nothing appears twice in the composed list.
 func TestClassModeFiltersClassLikeKinds(t *testing.T) {
+	t.Parallel()
 	q := "user"
 	s := primed(t, q,
 		kindHit("User", "/proj/user.go", protocol.SymKindStruct),
@@ -62,6 +63,7 @@ func TestClassModeFiltersClassLikeKinds(t *testing.T) {
 // Every symbol row carries its kind as a badge, so a class is tellable from a
 // function at a glance.
 func TestSymbolRowsCarryKindBadge(t *testing.T) {
+	t.Parallel()
 	q := "user"
 	s := primed(t, q,
 		kindHit("User", "/proj/user.go", protocol.SymKindStruct),
@@ -79,6 +81,7 @@ func TestSymbolRowsCarryKindBadge(t *testing.T) {
 // #377 carries over to the class category: an exact project class outranks a
 // dependency class the server returned first.
 func TestClassModeRanksProjectExactMatchFirst(t *testing.T) {
+	t.Parallel()
 	cwd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -104,6 +107,7 @@ func TestClassModeRanksProjectExactMatchFirst(t *testing.T) {
 // A '/'-scoped query narrows search everywhere to classes alone (#1417), and
 // the scoped list is uncapped.
 func TestSearchAllScopesToClasses(t *testing.T) {
+	t.Parallel()
 	q := "item"
 	var hits []ilsp.SymbolHit
 	for i := 0; i < 12; i++ {
@@ -126,6 +130,7 @@ func TestSearchAllScopesToClasses(t *testing.T) {
 // The per-source cap cannot bury a matching class any more: the class category
 // has its own seats next to the symbol source (#1849).
 func TestSearchAllKeepsClassBesideManySymbols(t *testing.T) {
+	t.Parallel()
 	cwd, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -147,6 +152,7 @@ func TestSearchAllKeepsClassBesideManySymbols(t *testing.T) {
 // Both views share one cache, so a keystroke costs one workspace/symbol
 // request however many of them search everywhere forwards it to.
 func TestSymbolViewsShareOneRequest(t *testing.T) {
+	t.Parallel()
 	s := &symbolMode{}
 	sent := 0
 	s.SetRequest(func(string) tea.Cmd { sent++; return nil })

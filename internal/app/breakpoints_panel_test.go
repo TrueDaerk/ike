@@ -22,6 +22,7 @@ func breakpointsApp(t *testing.T) Model {
 }
 
 func TestBreakpointsToggleLifecycle(t *testing.T) {
+	t.Parallel()
 	m := breakpointsApp(t)
 	before := m.activeWS().Panes.Focused()
 
@@ -48,6 +49,7 @@ func TestBreakpointsToggleLifecycle(t *testing.T) {
 // #1377: a ctrl+f8 toggle in the editor lands in the open list, and a
 // list-side removal clears the store the gutter renders from.
 func TestBreakpointsPanelSyncsWithGutter(t *testing.T) {
+	t.Parallel()
 	m := breakpointsApp(t)
 	dir := t.TempDir()
 	target := filepath.Join(dir, "a.go")
@@ -83,6 +85,7 @@ func TestBreakpointsPanelSyncsWithGutter(t *testing.T) {
 // TestBreakpointsPanelActions covers enable/disable, delete-all and the jump
 // routed through the standard open funnel.
 func TestBreakpointsPanelActions(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := breakpointsApp(t)
 	dir := t.TempDir()
@@ -128,6 +131,7 @@ func TestBreakpointsPanelActions(t *testing.T) {
 }
 
 func TestBreakpointsPanePersists(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := breakpointsApp(t)
 	out, _ := m.Update(BreakpointsToggleMsg{})

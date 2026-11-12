@@ -55,6 +55,7 @@ func openURLPrompt(t *testing.T, url string) Model {
 // the first enter — showing the probed-to URL — and imported by the second,
 // into the working directory.
 func TestOpenAPIImportURLValidatesThenImports(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	srv := specURLServer(t, "/v3/api-docs")
 	dir := t.TempDir()
 	chdir(t, dir)
@@ -135,6 +136,7 @@ func TestOpenAPIImportURLValidatesThenImports(t *testing.T) {
 // TestOpenAPIImportURLFailureTurnsPromptRed (#2009): nothing at the probed
 // paths blocks the confirm, reddens the popup and names the reason.
 func TestOpenAPIImportURLFailureTurnsPromptRed(t *testing.T) {
+	t.Parallel()
 	srv := specURLServer(t, "/nowhere")
 	m := openURLPrompt(t, srv.URL)
 
@@ -178,6 +180,7 @@ func TestOpenAPIImportURLFailureTurnsPromptRed(t *testing.T) {
 // successful check drops what was verified — a confirm always refers to the
 // URL on screen — and clears the red border of a failed one.
 func TestOpenAPIImportURLEditInvalidatesCheck(t *testing.T) {
+	t.Parallel()
 	srv := specURLServer(t, "/openapi.json")
 	m := openURLPrompt(t, srv.URL)
 
@@ -209,6 +212,7 @@ func TestOpenAPIImportURLEditInvalidatesCheck(t *testing.T) {
 // TestOpenAPIImportURLPasteInvalidatesCheck (#2009): pasting a URL over a
 // verified one drops the verification too — a paste is an edit.
 func TestOpenAPIImportURLPasteInvalidatesCheck(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	out, _ := m.Update(ImportOpenAPIMsg{})
 	m = out.(Model)
@@ -224,6 +228,7 @@ func TestOpenAPIImportURLPasteInvalidatesCheck(t *testing.T) {
 // TestOpenAPIImportURLTabDoesNotComplete (#2009): tab is filesystem
 // completion; a URL has nothing to complete against and must be left alone.
 func TestOpenAPIImportURLTabDoesNotComplete(t *testing.T) {
+	t.Parallel()
 	m := openURLPrompt(t, "https://api.example.com/v3")
 	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = out.(Model)
@@ -235,6 +240,7 @@ func TestOpenAPIImportURLTabDoesNotComplete(t *testing.T) {
 // TestOpenAPIImportLocalPathUnchanged (#2009): a path still imports on the
 // very first enter — the URL flow must not slow the file flow down.
 func TestOpenAPIImportLocalPathUnchanged(t *testing.T) {
+	t.Parallel()
 	spec := specFile(t, "mini.yaml")
 	m := openURLPrompt(t, spec)
 

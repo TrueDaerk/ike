@@ -11,6 +11,7 @@ import (
 // TestHexClickMovesCursor: a left click on a byte of an unfocused hex pane
 // focuses it and moves the byte cursor there, activating the clicked column.
 func TestHexClickMovesCursor(t *testing.T) {
+	t.Parallel()
 	m, _ := hexEditOpen(t, false)
 	key := m.activeWS().Panes.Focused()
 	inst := m.activeWS().Panes.Get(key)

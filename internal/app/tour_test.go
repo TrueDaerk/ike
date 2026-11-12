@@ -21,6 +21,7 @@ func tourSeed(t *testing.T) Model {
 func key(s string) tea.KeyPressMsg { return tea.KeyPressMsg{Text: s, Code: rune(s[0])} }
 
 func TestTourOpensAndPages(t *testing.T) {
+	t.Parallel()
 	m := tourSeed(t)
 	if !m.tourOpen() {
 		t.Fatal("ShowWelcomeTourMsg must open the tour")
@@ -52,6 +53,7 @@ func TestTourOpensAndPages(t *testing.T) {
 }
 
 func TestTourEscCloses(t *testing.T) {
+	t.Parallel()
 	m := tourSeed(t)
 	tm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = tm.(Model)
@@ -61,6 +63,7 @@ func TestTourEscCloses(t *testing.T) {
 }
 
 func TestTourFinishOnLastPage(t *testing.T) {
+	t.Parallel()
 	m := tourSeed(t)
 	for i := 0; i < 5; i++ { // 4 advances + 1 finish on page 5
 		tm, _ := m.Update(key("l"))

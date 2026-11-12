@@ -74,6 +74,7 @@ func showStoredDiff(t *testing.T, m Model, id, key string) Model {
 }
 
 func TestTraceDiffOnStoredSession(t *testing.T) {
+	// serial: traceApp: t.Setenv
 	withStore(t)
 	m, dir := traceApp(t)
 	if m.onboardingOpen() {
@@ -153,6 +154,7 @@ func TestTraceDiffOnStoredSession(t *testing.T) {
 // read; the stored session picked from the history still diffs from its
 // record.
 func TestTraceDiffStoredWithoutLiveReader(t *testing.T) {
+	// serial: traceApp: t.Setenv
 	withStore(t)
 	m, _ := traceApp(t)
 	if m.onboardingOpen() {
@@ -180,6 +182,7 @@ func TestTraceDiffStoredWithoutLiveReader(t *testing.T) {
 // strips, and an older record without the mark reads as dropped from its
 // truncated flag.
 func TestTraceRecordMarksDroppedHunks(t *testing.T) {
+	t.Parallel()
 	rec := &agenttrace.Record{ID: "x", Diffs: []agenttrace.RecordDiff{{
 		Key: "e1/f0", Keys: []string{"e1/f0"}, Path: "a.go", Op: "edit", Counted: true, Added: 1,
 		Hunks: []agenttrace.DiffHunk{{Lines: []string{"+" + strings.Repeat("x", agenttrace.MaxRecordBytes)}}},

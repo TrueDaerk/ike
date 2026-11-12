@@ -16,6 +16,7 @@ import (
 // TestPasteMsgInsertsBlockIntoEditor verifies a bracketed paste routes to the
 // focused editor as one block (#603), not per character.
 func TestPasteMsgInsertsBlockIntoEditor(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "x.txt")
 	if err := os.WriteFile(path, []byte("abc\n"), 0o644); err != nil {
@@ -39,6 +40,7 @@ func TestPasteMsgInsertsBlockIntoEditor(t *testing.T) {
 // TestPasteMsgIgnoredWhenOverlayOpen verifies a paste does not leak into the
 // hidden editor while a modal overlay (the palette) owns the keyboard.
 func TestPasteMsgIgnoredWhenOverlayOpen(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "x.txt")
 	if err := os.WriteFile(path, []byte("abc\n"), 0o644); err != nil {
@@ -66,6 +68,7 @@ func TestPasteMsgIgnoredWhenOverlayOpen(t *testing.T) {
 // The search line is editor-internal state, not an overlay, so the app-level
 // router (#1273) cannot see it; the editor routes it itself.
 func TestPasteMsgRoutesIntoEditorSearchLine(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "x.txt")
 	if err := os.WriteFile(path, []byte("abc\n"), 0o644); err != nil {

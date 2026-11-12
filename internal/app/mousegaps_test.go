@@ -100,6 +100,7 @@ func stepDrain(m Model, msg tea.Msg) Model {
 // it, the second loads it — the same end state enter produces. The pane opens
 // on the first index, so the second row is the one to move to.
 func TestESPaneDoubleClickLoadsIndex(t *testing.T) {
+	// serial: esApp: config.Set (process-wide configuration)
 	m, key, x, y := esApp(t, 300)
 	es := m.activeWS().Panes.Get(key).ES()
 	if es.Indices() != 2 {
@@ -128,6 +129,7 @@ func TestESPaneDoubleClickLoadsIndex(t *testing.T) {
 // of falling through the kind switch, as it did before #2259 — the grid half
 // scrolls its loaded page of hits and clamps back at the first one.
 func TestESPaneWheelScrolls(t *testing.T) {
+	// serial: esApp: config.Set (process-wide configuration)
 	m, key, x, y := esApp(t, 300)
 	es := m.activeWS().Panes.Get(key).ES()
 	if es.PageRows() == 0 {
@@ -186,6 +188,7 @@ func mergeApp(t *testing.T) (Model, string, int, int) {
 // the kind fell through the wheel switch and the view could only be scrolled
 // with the keyboard.
 func TestMergeWheelScrollsAllColumns(t *testing.T) {
+	t.Parallel()
 	m, key, x, y := mergeApp(t)
 	mg := m.activeWS().Panes.Get(key).Merge()
 	if top := mg.Editor().ScrollTop(); top != 0 {

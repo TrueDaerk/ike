@@ -10,6 +10,7 @@ import (
 // TestBindingMatrixShape spot-checks the ledger columns. The full-registry
 // final gate lives in cmd/ike (the shipped plugin set).
 func TestBindingMatrixShape(t *testing.T) {
+	// serial: keymap.StubBlockedForTest (process-wide ledger)
 	rows := keymap.StatusMatrix(nil)
 	byCmd := map[string]keymap.MatrixRow{}
 	for _, r := range rows {

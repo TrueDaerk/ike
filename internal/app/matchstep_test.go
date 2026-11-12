@@ -32,6 +32,7 @@ func stepChord(back bool) tea.KeyPressMsg {
 // the chord that steps matches in the editor steps them in the explorer's
 // speed search too, without the field losing focus.
 func TestMatchStepChordStepsTheExplorerSpeedSearch(t *testing.T) {
+	t.Parallel()
 	m := findApp(t)
 	m.setFocus(pane.ExplorerKey)
 	m = drainKey(m, findChord())
@@ -47,6 +48,7 @@ func TestMatchStepChordStepsTheExplorerSpeedSearch(t *testing.T) {
 // TestMatchStepChordStepsAToolWindowFilter: the registry panes get the chord
 // through the Global search.nextMatch command and the pane.Searchable seam.
 func TestMatchStepChordStepsAToolWindowFilter(t *testing.T) {
+	t.Parallel()
 	m := findApp(t)
 	tm, cmd := m.Update(ProblemsToggleMsg{})
 	m = drainCmd(tm.(Model), cmd)
@@ -68,6 +70,7 @@ func TestMatchStepChordStepsAToolWindowFilter(t *testing.T) {
 // TestMatchStepWithNoMatchesNotifies: the chord is a no-op with a short hint
 // rather than a silent one, which reads as a broken binding.
 func TestMatchStepWithNoMatchesNotifies(t *testing.T) {
+	t.Parallel()
 	m := findApp(t)
 	tm, cmd := m.Update(ProblemsToggleMsg{})
 	m = drainCmd(tm.(Model), cmd)
@@ -91,6 +94,7 @@ func TestMatchStepWithNoMatchesNotifies(t *testing.T) {
 // TestMatchStepWithoutAPaneSearchFallsThrough: with no pane search open the
 // chord keeps its find-in-path meaning, so the pane layer must not claim it.
 func TestMatchStepWithoutAPaneSearchFallsThrough(t *testing.T) {
+	t.Parallel()
 	m := findApp(t)
 	m.setFocus(pane.ExplorerKey)
 	if _, handled := m.stepPaneMatch(1); handled {

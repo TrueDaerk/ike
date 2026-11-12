@@ -31,6 +31,7 @@ func twoRoots(t *testing.T) (a, b string) {
 }
 
 func TestPopupParksWithWorkspaceAndResumes(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	withStore(t)
 	_, b := twoRoots(t)
 	m := openTestPopupWith(t, switchModel(t))
@@ -79,6 +80,7 @@ func TestPopupParksWithWorkspaceAndResumes(t *testing.T) {
 }
 
 func TestQuitClosesParkedPopupSessions(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	_, b := twoRoots(t)
 	m := openTestPopupWith(t, switchModel(t))
 	out, _ := m.Update(project.SwitchProjectMsg{Root: b})
@@ -97,6 +99,7 @@ func TestQuitClosesParkedPopupSessions(t *testing.T) {
 }
 
 func TestWorkspaceTeardownEndsPopupSessions(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	_, b := twoRoots(t)
 	m := openTestPopupWith(t, dismissOnboarding(switchModel(t)))
 	out, _ := m.Update(project.SwitchProjectMsg{Root: b})
@@ -127,6 +130,7 @@ func TestWorkspaceTeardownEndsPopupSessions(t *testing.T) {
 }
 
 func TestProjectCloseGuardCountsPopup(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	_, b := twoRoots(t)
 	m := dismissOnboarding(switchModel(t))
 	out, _ := m.Update(project.SwitchProjectMsg{Root: b})

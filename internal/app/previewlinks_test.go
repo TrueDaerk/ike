@@ -49,6 +49,7 @@ func openPreviewIn(t *testing.T, doc string, extra map[string]string) (Model, st
 // TestPreviewRelativeLinkOpensTarget guards #2180's first criterion: enter on
 // a relative link opens that file in the editor.
 func TestPreviewRelativeLinkOpensTarget(t *testing.T) {
+	t.Parallel()
 	m, key, dir := openPreviewIn(t, "# Doc\n\nSee [the notes](notes.md).\n",
 		map[string]string{"notes.md": "# Notes\n\nbody\n"})
 	target := filepath.Join(dir, "notes.md")
@@ -63,6 +64,7 @@ func TestPreviewRelativeLinkOpensTarget(t *testing.T) {
 // TestPreviewLinkKeysFollowSelection guards the whole keyboard path: with the
 // preview focused, tab selects the first link and enter follows it.
 func TestPreviewLinkKeysFollowSelection(t *testing.T) {
+	t.Parallel()
 	m, key, dir := openPreviewIn(t, "# Doc\n\nSee [the notes](notes.md).\n",
 		map[string]string{"notes.md": "# Notes\n"})
 	m.setFocus(key)
@@ -80,6 +82,7 @@ func TestPreviewLinkKeysFollowSelection(t *testing.T) {
 // TestPreviewMissingLinkTargetToasts guards the second half of that criterion:
 // a link to a file that is not there says so instead of failing silently.
 func TestPreviewMissingLinkTargetToasts(t *testing.T) {
+	t.Parallel()
 	m, key, dir := openPreviewIn(t, "# Doc\n\n[gone](nope/missing.md)\n", nil)
 
 	tm, _ := m.Update(preview.LinkMsg{Key: key, Path: filepath.Join(dir, "doc.md"), Target: "nope/missing.md"})
@@ -96,6 +99,7 @@ func TestPreviewMissingLinkTargetToasts(t *testing.T) {
 // URL reaches the platform opener, and only on the explicit key — never as a
 // side effect of rendering.
 func TestPreviewExternalLinkUsesSystemOpener(t *testing.T) {
+	// serial: sets package variable browserOpen
 	var opened string
 	orig := browserOpen
 	browserOpen = func(u string) error { opened = u; return nil }
@@ -115,6 +119,7 @@ func TestPreviewExternalLinkUsesSystemOpener(t *testing.T) {
 // TestPreviewLinkCopyGoesToClipboard guards the copy action: the raw
 // destination lands on the clipboard whatever it points at.
 func TestPreviewLinkCopyGoesToClipboard(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	var copied string
 	orig := clipboardWrite
 	clipboardWrite = func(text string) { copied = text }
@@ -134,6 +139,7 @@ func TestPreviewLinkCopyGoesToClipboard(t *testing.T) {
 // TestPreviewAnchorScrollsPreview guards the in-document case: a "#anchor"
 // link scrolls the preview itself rather than opening anything.
 func TestPreviewAnchorScrollsPreview(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	var b strings.Builder
 	b.WriteString("# Top\n\nJump to [the end](#the-end).\n\n")
@@ -157,6 +163,7 @@ func TestPreviewAnchorScrollsPreview(t *testing.T) {
 
 // TestPreviewUnknownAnchorToasts guards the anchor miss.
 func TestPreviewUnknownAnchorToasts(t *testing.T) {
+	t.Parallel()
 	m, key, dir := openPreviewIn(t, "# Top\n\n[nowhere](#nowhere)\n", nil)
 	tm, _ := m.Update(preview.LinkMsg{Key: key, Path: filepath.Join(dir, "doc.md"), Target: "#nowhere"})
 	m = tm.(Model)
@@ -169,6 +176,7 @@ func TestPreviewUnknownAnchorToasts(t *testing.T) {
 // "other.md#section" link opens the file with the cursor on that heading, the
 // move that re-syncs any preview of it in turn.
 func TestPreviewLinkWithFragmentJumpsToHeading(t *testing.T) {
+	t.Parallel()
 	other := "# Other\n\nintro\n\n## Deep Section\n\nbody\n"
 	m, key, dir := openPreviewIn(t, "# Doc\n\n[deep](other.md#deep-section)\n",
 		map[string]string{"other.md": other})
@@ -187,6 +195,7 @@ func TestPreviewLinkWithFragmentJumpsToHeading(t *testing.T) {
 // TestPreviewLinkFromClosedPaneIsInert guards the late message: a LinkMsg
 // whose preview has since closed must not panic or toast about an anchor.
 func TestPreviewLinkFromClosedPaneIsInert(t *testing.T) {
+	t.Parallel()
 	m, key, dir := openPreviewIn(t, "# Top\n\n[a](#top)\n", nil)
 	m.setFocus(key)
 	m.closeFocused()
@@ -202,6 +211,7 @@ func TestPreviewLinkFromClosedPaneIsInert(t *testing.T) {
 // capability probe fires for it, and once support is known its placements are
 // transmitted and released with the workspace.
 func TestPreviewInlineImagesReconcile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	writeInlinePNG(t, filepath.Join(dir, "logo.png"))
 	doc := "# Doc\n\n![logo](logo.png)\n"
@@ -254,6 +264,7 @@ func TestPreviewInlineImagesReconcile(t *testing.T) {
 // TestPreviewsMintedGuardsReconcile guards the #2187 early-out: a workspace
 // with neither an image pane nor a preview skips the walk entirely.
 func TestPreviewsMintedGuardsReconcile(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if m.activeWS().Panes.PreviewsMinted() {
 		t.Fatal("a fresh workspace has minted no preview")

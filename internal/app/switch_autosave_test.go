@@ -31,6 +31,7 @@ func switchFixture(t *testing.T) (src, dst, file string) {
 // orderly switch writes the departing project's dirty buffers and proceeds
 // without any prompt.
 func TestAutoSaveOnSwitchWritesDirtyBuffer(t *testing.T) {
+	// serial: autoSaveSwitchModel: t.Setenv
 	_, dst, file := switchFixture(t)
 	m := autoSaveSwitchModel(t)
 	m = openDirty(t, m, file)
@@ -54,6 +55,7 @@ func TestAutoSaveOnSwitchWritesDirtyBuffer(t *testing.T) {
 // TestAutoSaveOnSwitchOffParksDirty (#2186): with the setting off the switch
 // behaves as before — the buffer parks unsaved with its workspace.
 func TestAutoSaveOnSwitchOffParksDirty(t *testing.T) {
+	// serial: switchFixture: t.Chdir (process working directory)
 	_, dst, file := switchFixture(t)
 	m := switchModel(t) // auto_save_on_switch = false
 	m = openDirty(t, m, file)
@@ -73,6 +75,7 @@ func TestAutoSaveOnSwitchOffParksDirty(t *testing.T) {
 // switch behind a dialog. It parks dirty with the departing workspace and the
 // switch proceeds; the writable buffers were already saved by the gate.
 func TestAutoSaveOnSwitchUnsaveableParksSilently(t *testing.T) {
+	// serial: autoSaveSwitchModel: t.Setenv
 	_, dst, _ := switchFixture(t)
 	m := autoSaveSwitchModel(t)
 	m = dirtyUntitled(t, m)
@@ -93,6 +96,7 @@ func TestAutoSaveOnSwitchUnsaveableParksSilently(t *testing.T) {
 // and the external change survives; the dirty buffer parks with its
 // workspace.
 func TestAutoSaveSwitchStaleBufferIsNotClobbered(t *testing.T) {
+	// serial: autoSaveSwitchModel: t.Setenv
 	withStore(t)
 	_, dst, file := switchFixture(t)
 	m := autoSaveSwitchModel(t)

@@ -50,6 +50,7 @@ func openYQ(t *testing.T, m Model) Model {
 // TestYQPlaygroundEvaluatesLive is the issue's acceptance case: a query
 // against the YAML buffer at hand, run live, rendered back as YAML.
 func TestYQPlaygroundEvaluatesLive(t *testing.T) {
+	t.Parallel()
 	m := openYQ(t, yqApp(t, "spec:\n  replicas: 3\n  containers:\n    - name: api\n      image: alpine\n    - name: web\n      image: nginx\n"))
 	m = setProgram(m, ".spec.containers[] | .name")
 
@@ -73,6 +74,7 @@ func TestYQPlaygroundEvaluatesLive(t *testing.T) {
 // line must not blank the result either — it runs as `.` until the user types
 // something else.
 func TestYQPlaygroundClearedQueryShowsIdentity(t *testing.T) {
+	t.Parallel()
 	m := openYQ(t, yqApp(t, "spec:\n  replicas: 3\n"))
 	m = setProgram(m, ".")
 	want := m.play.result.Text()
@@ -92,6 +94,7 @@ func TestYQPlaygroundClearedQueryShowsIdentity(t *testing.T) {
 // TestYQPlaygroundRendersYAML: the result buffer holds YAML, not the JSON the
 // engine works in — the whole point of the second dialect.
 func TestYQPlaygroundRendersYAML(t *testing.T) {
+	t.Parallel()
 	m := openYQ(t, yqApp(t, "spec:\n  replicas: 3\n  image: alpine\n"))
 	m = setProgram(m, ".spec")
 	if got := m.play.result.Text(); got != "image: alpine\nreplicas: 3" {
@@ -105,6 +108,7 @@ func TestYQPlaygroundRendersYAML(t *testing.T) {
 // TestYQPlaygroundLabelsItself: the query line and the pane title say yq, so
 // the two playgrounds are never confused for one another on screen.
 func TestYQPlaygroundLabelsItself(t *testing.T) {
+	t.Parallel()
 	m := openYQ(t, yqApp(t, "a: 1\n"))
 	v := ansi.Strip(m.render())
 	if !strings.Contains(v, "> YQ: ") {
@@ -122,6 +126,7 @@ func TestYQPlaygroundLabelsItself(t *testing.T) {
 // member-counting placeholder (#2029), which the indentation scan has to
 // supply where JSON's delimiters do not exist.
 func TestYQPlaygroundResultFolds(t *testing.T) {
+	t.Parallel()
 	m := openYQ(t, yqApp(t, "spec:\n  meta:\n    a: 1\n    b: 2\n"))
 	m = setProgram(m, ".")
 	s := m.play
@@ -140,6 +145,7 @@ func TestYQPlaygroundResultFolds(t *testing.T) {
 // TestYQPlaygroundCopiesResult: ctrl+y puts the whole YAML result on the
 // clipboard, the way it does for jq.
 func TestYQPlaygroundCopiesResult(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	var copied string
 	orig := clipboardWrite
 	clipboardWrite = func(s string) { copied = s }
@@ -157,6 +163,7 @@ func TestYQPlaygroundCopiesResult(t *testing.T) {
 // fresh `.yaml` scratch — the extension is what makes the scratch highlight
 // and re-query as YAML.
 func TestYQPlaygroundOpensResultAsYAMLScratch(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := openYQ(t, yqApp(t, "spec:\n  replicas: 3\n"))
 	m = setProgram(m, ".spec")
@@ -185,6 +192,7 @@ func TestYQPlaygroundOpensResultAsYAMLScratch(t *testing.T) {
 // sentence on the info row naming YAML — never a crash, and never the jq
 // wording.
 func TestYQPlaygroundBrokenInputNamesYAML(t *testing.T) {
+	t.Parallel()
 	m := openYQ(t, yqApp(t, "a: 1\n\tb: 2\n"))
 	if m.play.inputErr == "" {
 		t.Fatal("a tab-indented document must report an input error")
@@ -201,6 +209,7 @@ func TestYQPlaygroundBrokenInputNamesYAML(t *testing.T) {
 // both dialects (#2039) — a yq program *is* a jq program here, and the list is
 // already deliberately shared across buffers.
 func TestYQPlaygroundHistoryIsShared(t *testing.T) {
+	t.Parallel()
 	m := openYQ(t, yqApp(t, "a: 1\n"))
 	m = setProgram(m, ".a")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
@@ -220,6 +229,7 @@ func TestYQPlaygroundHistoryIsShared(t *testing.T) {
 // land apart from jq's: different files, and neither picker lists the other's
 // entries.
 func TestYQFiltersAreASeparateLibrary(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := openYQ(t, yqApp(t, "spec:\n  replicas: 3\n"))
 	m = setProgram(m, ".spec.replicas")
@@ -245,6 +255,7 @@ func TestYQFiltersAreASeparateLibrary(t *testing.T) {
 // the yq library, because the program it inserts has to run against the
 // document the playground is over.
 func TestYQFilterPickerFollowsTheOpenPlayground(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := openYQ(t, yqApp(t, "spec:\n  replicas: 3\n"))
 	m = setProgram(m, ".spec.replicas")
@@ -263,6 +274,7 @@ func TestYQFilterPickerFollowsTheOpenPlayground(t *testing.T) {
 // open starts the yq playground, not the jq one — its program is written for
 // YAML documents.
 func TestYQFilterInsertOpensItsOwnPlayground(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := openYQ(t, yqApp(t, "spec:\n  replicas: 3\n"))
 	m = setProgram(m, ".spec.replicas")
@@ -286,6 +298,7 @@ func TestYQFilterInsertOpensItsOwnPlayground(t *testing.T) {
 // workflow the .http client serves, so it must not outrank the YAML buffer the
 // user asked about.
 func TestYQPlaygroundIgnoresHTTPResponses(t *testing.T) {
+	t.Parallel()
 	m := openYQ(t, yqApp(t, "a: 1\n"))
 	m.closePlayground()
 	src, ok := m.playSource(jqplay.DialectYQ)
@@ -301,6 +314,7 @@ func TestYQPlaygroundIgnoresHTTPResponses(t *testing.T) {
 // document path is what seeds the query line (#1660) — `."my-key"` where jq
 // writes `.["my-key"]`.
 func TestYQPlaygroundAtPathSeedsTheYQPath(t *testing.T) {
+	// serial: registerTestLang: lang.Register (process-wide language registry)
 	// The path seed reads the buffer's language id; internal/app does not pull
 	// in the shipped language plugins, so a bare test-only entry stands in.
 	registerTestLang(t, lang.Language{ID: "yaml", Extensions: []string{"yqseed"}})
@@ -329,6 +343,7 @@ func TestYQPlaygroundAtPathSeedsTheYQPath(t *testing.T) {
 // jq playground did not move: the same command, the same label, the same JSON
 // rendering.
 func TestJQPlaygroundStillOpensOverJSON(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"a":{"b":1}}`))
 	if m.play.dialect != jqplay.DialectJQ {
 		t.Fatalf("json.jqPlayground opened %v", m.play.dialect)

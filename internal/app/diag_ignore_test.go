@@ -57,6 +57,7 @@ func runForReload(t *testing.T, cmd tea.Cmd) config.ConfigReloadedMsg {
 // TestIgnoreRulesFilterPublishes: a matching publish is dropped before the
 // Problems store sees it (#1259).
 func TestIgnoreRulesFilterPublishes(t *testing.T) {
+	// serial: reloadWithIgnore: config.Set (process-wide configuration)
 	withStore(t)
 	m := problemsApp(t)
 	m = reloadWithIgnore(t, m, []string{"source=intelephense code=P1006"})
@@ -75,6 +76,7 @@ func TestIgnoreRulesFilterPublishes(t *testing.T) {
 // TestIgnoreRuleEditRefiltersLive: adding a rule re-filters what is already on
 // screen from the raw cache — no republish needed (#1259).
 func TestIgnoreRuleEditRefiltersLive(t *testing.T) {
+	// serial: reloadWithIgnore: config.Set (process-wide configuration)
 	withStore(t)
 	m := problemsApp(t)
 	// A real type mismatch: no default rule (#1260) matches it.
@@ -102,6 +104,7 @@ func TestIgnoreRuleEditRefiltersLive(t *testing.T) {
 // TestIgnoreDiagnosticMsgPersistsProjectRule: the editor's ignore action writes
 // the rule to the project settings file and the reload suppresses it (#1259).
 func TestIgnoreDiagnosticMsgPersistsProjectRule(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	dir := t.TempDir()
 	chdir(t, dir)
 	m := problemsApp(t)

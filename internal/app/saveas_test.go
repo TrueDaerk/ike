@@ -44,6 +44,7 @@ func dirtyUntitled(t *testing.T, m Model) Model {
 // TestUntitledSavePromptsAndBinds guards #730: saving an untitled buffer
 // prompts for a path; accepting writes the file and binds the tab to it.
 func TestUntitledSavePromptsAndBinds(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m = dirtyUntitled(t, m)
 	key := m.activeEditorKey()
@@ -94,6 +95,7 @@ func TestUntitledSavePromptsAndBinds(t *testing.T) {
 // TestUntitledSaveRefusesExistingFile: the prompt never clobbers an existing
 // file — it shows the error and stays open.
 func TestUntitledSaveRefusesExistingFile(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m = dirtyUntitled(t, m)
 
@@ -131,6 +133,7 @@ func TestUntitledSaveRefusesExistingFile(t *testing.T) {
 // TestUntitledWriteQuitCarriesCloseIntent: ":wq" on an untitled buffer opens
 // the prompt with the close intent armed.
 func TestUntitledWriteQuitCarriesCloseIntent(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m = dirtyUntitled(t, m)
 	tm, cmd := m.Update(editor.ActionMsg{Action: "write_quit"})

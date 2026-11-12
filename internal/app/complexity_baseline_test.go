@@ -88,6 +88,7 @@ func writeBaselineFile(t *testing.T, proj string, ccn, cog int) string {
 }
 
 func TestComplexityBaselineAppliesToProblemsAndPanel(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	withProjectWalks(t)
 	proj := t.TempDir()
 	if r, err := filepath.EvalSymlinks(proj); err == nil {
@@ -179,6 +180,7 @@ func TestComplexityBaselineAppliesToProblemsAndPanel(t *testing.T) {
 }
 
 func TestComplexityBaselineToggleAndAcceptAll(t *testing.T) {
+	// serial: baselineApp: t.Setenv
 	withStore(t)
 	m, proj := baselineApp(t)
 	path := complexity.BaselinePath(proj)

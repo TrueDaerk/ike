@@ -29,6 +29,7 @@ func peekEditor(t *testing.T, m Model) *editor.Model {
 }
 
 func TestPeekDefinitionOpensPopupWithoutNavigating(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
@@ -61,6 +62,7 @@ func TestPeekDefinitionOpensPopupWithoutNavigating(t *testing.T) {
 }
 
 func TestPeekEnterJumpsAndRecordsNavHistory(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
@@ -89,6 +91,7 @@ func TestPeekEnterJumpsAndRecordsNavHistory(t *testing.T) {
 }
 
 func TestPeekUsesLiveBufferForOpenFiles(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[1], false)
@@ -108,6 +111,7 @@ func TestPeekUsesLiveBufferForOpenFiles(t *testing.T) {
 }
 
 func TestPeekUnreadableTargetNotifies(t *testing.T) {
+	t.Parallel()
 	root, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
@@ -124,6 +128,7 @@ func TestPeekUnreadableTargetNotifies(t *testing.T) {
 }
 
 func TestPeekCandidatesPickInsideThePopup(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
@@ -191,6 +196,7 @@ func TestPeekCandidatesPickInsideThePopup(t *testing.T) {
 }
 
 func TestPeekCandidatesEscLeavesEverythingPut(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
@@ -221,6 +227,7 @@ func TestPeekCandidatesEscLeavesEverythingPut(t *testing.T) {
 }
 
 func TestPeekManyCandidatesFallBackToPicker(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
@@ -245,6 +252,7 @@ func TestPeekManyCandidatesFallBackToPicker(t *testing.T) {
 }
 
 func TestPeekCandidatesSkipUnreadableTargets(t *testing.T) {
+	t.Parallel()
 	root, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)

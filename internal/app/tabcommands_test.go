@@ -35,6 +35,7 @@ func dispatch(t *testing.T, m Model, msg tea.Msg) Model {
 }
 
 func TestTabCommandsRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	for _, id := range []string{
 		"editor.tab.next", "editor.tab.prev",
@@ -49,6 +50,7 @@ func TestTabCommandsRegistered(t *testing.T) {
 }
 
 func TestTabNextPrevWrap(t *testing.T) {
+	t.Parallel()
 	m, paths := tabApp(t)
 	inst := m.activeWS().Panes.FocusedInstance()
 
@@ -63,6 +65,7 @@ func TestTabNextPrevWrap(t *testing.T) {
 }
 
 func TestTabSelect(t *testing.T) {
+	t.Parallel()
 	m, paths := tabApp(t)
 	inst := m.activeWS().Panes.FocusedInstance()
 
@@ -77,6 +80,7 @@ func TestTabSelect(t *testing.T) {
 }
 
 func TestTabMoveReorders(t *testing.T) {
+	t.Parallel()
 	m, paths := tabApp(t)
 	inst := m.activeWS().Panes.FocusedInstance()
 
@@ -95,6 +99,7 @@ func TestTabMoveReorders(t *testing.T) {
 }
 
 func TestReopenClosedTabRestoresPathAndCursor(t *testing.T) {
+	t.Parallel()
 	m, paths := tabApp(t)
 	inst := m.activeWS().Panes.FocusedInstance()
 
@@ -116,6 +121,7 @@ func TestReopenClosedTabRestoresPathAndCursor(t *testing.T) {
 }
 
 func TestReopenEmptyRingNotifies(t *testing.T) {
+	t.Parallel()
 	m, _ := tabApp(t)
 	m = dispatch(t, m, TabReopenMsg{}) // nothing closed yet
 	found := false
@@ -130,6 +136,7 @@ func TestReopenEmptyRingNotifies(t *testing.T) {
 }
 
 func TestPaneCloseFeedsReopenRing(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
@@ -146,6 +153,7 @@ func TestPaneCloseFeedsReopenRing(t *testing.T) {
 }
 
 func TestTabKeymapChords(t *testing.T) {
+	t.Parallel()
 	m, paths := tabApp(t)
 	inst := m.activeWS().Panes.FocusedInstance()
 
@@ -162,6 +170,7 @@ func TestTabKeymapChords(t *testing.T) {
 // The alt+arrow tab secondaries were freed for word-wise cursor motion (#303):
 // the chord must fall through the keymap to the editor instead of cycling tabs.
 func TestAltArrowReachesEditorWordMotion(t *testing.T) {
+	t.Parallel()
 	m, paths := tabApp(t)
 	inst := m.activeWS().Panes.FocusedInstance()
 
@@ -177,6 +186,7 @@ func TestAltArrowReachesEditorWordMotion(t *testing.T) {
 }
 
 func TestTabDefaultsConflictFree(t *testing.T) {
+	t.Parallel()
 	for _, goos := range []string{"darwin", "linux"} {
 		// DefaultsFor, not Defaults: the set must match the goos the table is
 		// folded for, or the darwin-only rows (#2361) fold onto linux chords

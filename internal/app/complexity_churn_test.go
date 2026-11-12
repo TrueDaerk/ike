@@ -33,6 +33,7 @@ func churnSettle(t *testing.T, m Model) (Model, tea.Cmd) {
 }
 
 func TestComplexityChurnFetchPerSnapshotGeneration(t *testing.T) {
+	// serial: churnDaysConfig: config.Set (process-wide configuration)
 	churnDaysConfig(t, 90)
 	m, _ := timeApp(t)
 	if m.complexityIndex == nil {

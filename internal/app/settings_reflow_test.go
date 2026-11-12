@@ -11,6 +11,7 @@ import (
 // its three-column grid) from the new window, like every other floating pane.
 
 func TestSettingsPanelReflowsOnWindowResize(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := sized(t, 120, 40)
 	m = step(m, OpenSettingsMsg{})

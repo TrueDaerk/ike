@@ -18,6 +18,7 @@ import (
 // is the buffer's language id, so the help snapshot can include the matching
 // file-type-gated commands and exclude the rest.
 func TestFocusLangReportsEditorBufferLanguage(t *testing.T) {
+	// serial: dispatchApp: lang.Register (process-wide language registry)
 	m := dispatchApp(t, "json", `{"a":1}`)
 	if got := m.focusLang(); got != "json" {
 		t.Fatalf("focusLang = %q, want json", got)
@@ -31,6 +32,7 @@ func TestFocusLangReportsEditorBufferLanguage(t *testing.T) {
 // focusLang is the shown body's language — the response is the document on
 // screen there, so the jq family gates on it, not on some background editor.
 func TestFocusLangReportsHTTPResponseBodyLanguage(t *testing.T) {
+	t.Parallel()
 	m := filledHTTP(t, typedResponse("application/json", `{"ok":true}`))
 	if got := m.focusLang(); got != "json" {
 		t.Fatalf("focusLang over a JSON response = %q, want json", got)
@@ -41,6 +43,7 @@ func TestFocusLangReportsHTTPResponseBodyLanguage(t *testing.T) {
 // context view's Global section (#2483): every curated ID must resolve against
 // the real registry, and the section must hold its ≤ 20 row budget.
 func TestGlobalEssentialsCurationResolves(t *testing.T) {
+	t.Parallel()
 	known := map[string]bool{}
 	for _, c := range registry.Global().Commands() {
 		known[c.ID] = true
@@ -62,6 +65,7 @@ func TestGlobalEssentialsCurationResolves(t *testing.T) {
 // the editor context's own section is legitimately taller than a screen, so
 // there the budget bounds the curated global tail it scrolls to.
 func TestContextViewOneScreenBudget(t *testing.T) {
+	t.Parallel()
 	const width, height = 100, 40
 
 	globalSection := func(body string) []string {

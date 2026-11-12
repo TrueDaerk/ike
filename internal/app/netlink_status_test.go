@@ -32,6 +32,7 @@ func writeGitConfig(t *testing.T, dir, remote string) {
 // git config, keeps it while only the file and cursor move, and re-reads it
 // when the project root changes (a project switch).
 func TestNetStatusHolderRootChange(t *testing.T) {
+	t.Parallel()
 	repo := filepath.Join(t.TempDir(), "ike")
 	writeGitConfig(t, repo, "git@github.com:TrueDaerk/ike.git")
 	plain := filepath.Join(t.TempDir(), "scratch")
@@ -70,6 +71,7 @@ func TestNetStatusHolderRootChange(t *testing.T) {
 // TestNetStatusHolderConcurrent: the getter the server calls on connection
 // goroutines runs while the update loop writes (go test -race).
 func TestNetStatusHolderConcurrent(t *testing.T) {
+	t.Parallel()
 	var h netStatusHolder
 	var wg sync.WaitGroup
 	stop := make(chan struct{})
@@ -102,6 +104,7 @@ func TestNetStatusHolderConcurrent(t *testing.T) {
 // remote, the focused editor's file and cursor — and it follows both a
 // project switch and a cursor move.
 func TestNetLinkStatusOverTheWire(t *testing.T) {
+	// serial: t.Setenv
 	m := switchModel(t)
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	repo := filepath.Join(t.TempDir(), "ike")
@@ -177,6 +180,7 @@ func TestNetLinkStatusOverTheWire(t *testing.T) {
 // forward slashes; anything outside — or no root at all — is no part of the
 // project a link can address.
 func TestNetRelFile(t *testing.T) {
+	t.Parallel()
 	root := filepath.Join("/home", "dev", "ike")
 	for _, tc := range []struct {
 		name, root, path, want string

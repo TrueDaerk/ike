@@ -69,6 +69,7 @@ func toolSetupSeed(t *testing.T) Model {
 }
 
 func TestToolSetupListsOfferedWithInstallState(t *testing.T) {
+	// serial: catalogStub: sets package variable setupCatalog
 	installed, missing := stubEntry("insttool"), stubEntry("misstool")
 	catalogStub(t, []string{"insttool-bin", "fakebrew"}, installed, missing)
 	m := toolSetupSeed(t)
@@ -85,6 +86,7 @@ func TestToolSetupListsOfferedWithInstallState(t *testing.T) {
 }
 
 func TestToolSetupGateAndConfiguredHidden(t *testing.T) {
+	// serial: sets toolcatalog.LookPath
 	gated := stubEntry("gatedtool")
 	gated.Requires = "docker"
 	// The gate is applied by toolcatalog.Offered; the dialog seam uses it
@@ -113,6 +115,7 @@ func TestToolSetupGateAndConfiguredHidden(t *testing.T) {
 }
 
 func TestToolSetupConfirmWritesConfigAndInstalls(t *testing.T) {
+	// serial: sets toolcatalog.RunInstall
 	withStore(t)
 	installed, missing := stubEntry("insttool"), stubEntry("misstool")
 	catalogStub(t, []string{"insttool-bin", "fakebrew"}, installed, missing)
@@ -159,6 +162,7 @@ func TestToolSetupConfirmWritesConfigAndInstalls(t *testing.T) {
 }
 
 func TestToolSetupEscWritesNothing(t *testing.T) {
+	// serial: catalogStub: sets package variable setupCatalog
 	catalogStub(t, nil, stubEntry("skiptool"))
 	m := toolSetupSeed(t)
 	tm, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})

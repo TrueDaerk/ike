@@ -13,6 +13,7 @@ import (
 // TestPlayValueGlyphMap: every value type gets its own gutter glyph (#2789),
 // in both the JSON and the YAML rendering.
 func TestPlayValueGlyphMap(t *testing.T) {
+	t.Parallel()
 	cases := map[string]string{
 		"{\n  \"a\": 1\n}": "{",
 		"[\n  1\n]":        "[",
@@ -39,6 +40,7 @@ func TestPlayValueGlyphMap(t *testing.T) {
 // gutter, the line numbers keep their column, and the info row counts the
 // value under the result cursor as it moves.
 func TestPlayValueSignsJQ(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, dismissOnboarding(playApp(t, `{"items":[{"a":1},2,null]}`)))
 	// Room for the -r/-c/-s chips (#2784) and the whole summary beside them.
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
@@ -73,6 +75,7 @@ func TestPlayValueSignsJQ(t *testing.T) {
 
 // TestPlayValueSignsYQ: the `---` separator belongs to the value above it.
 func TestPlayValueSignsYQ(t *testing.T) {
+	t.Parallel()
 	m := openYQ(t, dismissOnboarding(yqApp(t, "items:\n  - a: 1\n  - 2\n")))
 	m = setProgram(m, ".items[]")
 	if got := m.play.valueStarts; len(got) != 2 || got[0] != 0 || got[1] != 2 {
@@ -85,6 +88,7 @@ func TestPlayValueSignsYQ(t *testing.T) {
 
 // TestPlayValueCounterSingleValue: one value needs no counter.
 func TestPlayValueCounterSingleValue(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, dismissOnboarding(playApp(t, `{"a":1}`)))
 	m = setProgram(m, ".")
 	if c := m.play.playValueCounter(); c != "" {

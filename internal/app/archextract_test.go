@@ -50,6 +50,7 @@ func typeExtractPath(t *testing.T, m Model, dest string) Model {
 // TestArchiveExtractAllWritesMembers: E extracts the whole archive into the
 // typed directory and reports what landed there.
 func TestArchiveExtractAllWritesMembers(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeTestArchive(t, "src.tar", map[string]string{
 		"cmd/main.go": "package main\n",
@@ -82,6 +83,7 @@ func TestArchiveExtractAllWritesMembers(t *testing.T) {
 
 // TestArchiveExtractSingleMember: e on a row extracts exactly that member.
 func TestArchiveExtractSingleMember(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeTestArchive(t, "src.tar", map[string]string{
 		"cmd/main.go": "package main\n",
@@ -101,6 +103,7 @@ func TestArchiveExtractSingleMember(t *testing.T) {
 
 // TestArchiveExtractEscapeCancels: esc closes the prompt and writes nothing.
 func TestArchiveExtractEscapeCancels(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeTestArchive(t, "src.tar", map[string]string{"a.txt": "A\n"})
 	m = startExtract(t, m, archview.ExtractMsg{Archive: p})
@@ -117,6 +120,7 @@ func TestArchiveExtractEscapeCancels(t *testing.T) {
 // TestArchiveExtractOverwritePrompt: an existing target raises the guard, "s"
 // keeps the file on disk and "o" replaces it.
 func TestArchiveExtractOverwritePrompt(t *testing.T) {
+	t.Parallel()
 	p := writeTestArchive(t, "src.tar", map[string]string{"a.txt": "from archive\n", "b.txt": "b\n"})
 	dest := t.TempDir()
 	existing := filepath.Join(dest, "a.txt")
@@ -176,6 +180,7 @@ func TestArchiveExtractOverwritePrompt(t *testing.T) {
 // TestArchiveExtractGuardEnterSkips: enter answers the guard's primary option,
 // which is skipping — confirming a prompt must never be what overwrites files.
 func TestArchiveExtractGuardEnterSkips(t *testing.T) {
+	t.Parallel()
 	p := writeTestArchive(t, "src.tar", map[string]string{"a.txt": "from archive\n"})
 	dest := t.TempDir()
 	existing := filepath.Join(dest, "a.txt")
@@ -198,6 +203,7 @@ func TestArchiveExtractGuardEnterSkips(t *testing.T) {
 // TestArchiveExtractCapMessage: an archive whose members exceed the cap is
 // refused with a message naming both sizes, and nothing is written.
 func TestArchiveExtractCapMessage(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m.archExtractLimit = 100
 	p := writeTestArchive(t, "big.tar", map[string]string{"big.txt": strings.Repeat("x", 4096)})
@@ -228,6 +234,7 @@ func TestArchiveExtractCapMessage(t *testing.T) {
 // TestArchiveExtractSanitizesPaths: a crafted member never escapes the target
 // directory, and the summary says how many entries were skipped.
 func TestArchiveExtractSanitizesPaths(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeTestArchive(t, "evil.tar", map[string]string{
 		"../escape.txt": "evil\n",
@@ -253,6 +260,7 @@ func TestArchiveExtractSanitizesPaths(t *testing.T) {
 // TestDefaultExtractDirStripsArchiveSuffix: the proposal drops the compound
 // suffixes too, so backup.tar.gz proposes ./backup.
 func TestDefaultExtractDirStripsArchiveSuffix(t *testing.T) {
+	t.Parallel()
 	cases := map[string]string{
 		"/tmp/backup.tar.gz":  "/tmp/backup",
 		"/tmp/backup.tar.bz2": "/tmp/backup",
@@ -270,6 +278,7 @@ func TestDefaultExtractDirStripsArchiveSuffix(t *testing.T) {
 // TestArchiveExtractZipWritesMembers: E on a zip runs the same extraction
 // path as on a tar and reports the same summary (#2594).
 func TestArchiveExtractZipWritesMembers(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeTestArchive(t, "src.zip", map[string]string{
 		"cmd/main.go": "package main\n",
@@ -294,6 +303,7 @@ func TestArchiveExtractZipWritesMembers(t *testing.T) {
 
 // TestArchiveExtractZipSingleMember: e on a zip row extracts that member only.
 func TestArchiveExtractZipSingleMember(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeTestArchive(t, "src.zip", map[string]string{
 		"cmd/main.go": "package main\n",
@@ -394,6 +404,7 @@ func pressExtract(t *testing.T, m Model, key tea.KeyPressMsg) Model {
 // directories matching the prefilled proposal straight away, narrows on every
 // keystroke, and never offers a file.
 func TestArchiveExtractPromptListsDirectoriesLive(t *testing.T) {
+	// serial: extractDirTree: t.Chdir (process working directory)
 	_, p := extractDirTree(t)
 	m := startExtract(t, newSized(), archview.ExtractMsg{Archive: p})
 
@@ -417,6 +428,7 @@ func TestArchiveExtractPromptListsDirectoriesLive(t *testing.T) {
 // completes the input to the highlight, with a trailing separator so typing
 // continues inside the directory.
 func TestArchiveExtractPromptSelectAndTab(t *testing.T) {
+	// serial: extractDirTree: t.Chdir (process working directory)
 	_, p := extractDirTree(t)
 	m := startExtract(t, newSized(), archview.ExtractMsg{Archive: p})
 	m = retypeExtract(t, m, "o")
@@ -451,6 +463,7 @@ func TestArchiveExtractPromptSelectAndTab(t *testing.T) {
 // extracts into that directory, resolved against the project root even though
 // the process working directory is elsewhere.
 func TestArchiveExtractPromptEnterOnHighlight(t *testing.T) {
+	// serial: extractDirTree: t.Chdir (process working directory)
 	root, p := extractDirTree(t)
 	m := startExtract(t, newSized(), archview.ExtractMsg{Archive: p})
 	m = retypeExtract(t, m, "o")
@@ -475,6 +488,7 @@ func TestArchiveExtractPromptEnterOnHighlight(t *testing.T) {
 // TestArchiveExtractPromptNewDirectory: a name nothing matches is still a
 // valid answer — the list says so and enter creates the directory.
 func TestArchiveExtractPromptNewDirectory(t *testing.T) {
+	// serial: extractDirTree: t.Chdir (process working directory)
 	root, p := extractDirTree(t)
 	m := startExtract(t, newSized(), archview.ExtractMsg{Archive: p})
 	m = retypeExtract(t, m, "brand-new")
@@ -494,6 +508,7 @@ func TestArchiveExtractPromptNewDirectory(t *testing.T) {
 // TestArchiveExtractPromptClickAcceptsCandidate: a click on a directory row is
 // enter on that highlight.
 func TestArchiveExtractPromptClickAcceptsCandidate(t *testing.T) {
+	// serial: extractDirTree: t.Chdir (process working directory)
 	root, p := extractDirTree(t)
 	m := startExtract(t, newSized(), archview.ExtractMsg{Archive: p})
 	m = retypeExtract(t, m, "oute")

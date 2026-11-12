@@ -69,6 +69,7 @@ func checkCascade(t *testing.T, m Model, f *floatTerm, ax, ay int) {
 }
 
 func TestCmdNInPopupBoxOpensFloatPanel(t *testing.T) {
+	t.Parallel()
 	skipOffDarwin(t)
 	m := openTestPopup(t)
 	bx, by, bw, bh := m.popupTermRect()
@@ -89,6 +90,7 @@ func TestCmdNInPopupBoxOpensFloatPanel(t *testing.T) {
 }
 
 func TestCmdNInFloatPanelOpensSecondPanel(t *testing.T) {
+	t.Parallel()
 	skipOffDarwin(t)
 	m := openTestPopup(t)
 	m = drainKey(m, cmdN)
@@ -104,6 +106,7 @@ func TestCmdNInFloatPanelOpensSecondPanel(t *testing.T) {
 }
 
 func TestCmdNCascadeClampsAtScreenEdge(t *testing.T) {
+	t.Parallel()
 	skipOffDarwin(t)
 	m := openTestPopup(t)
 	m = drainKey(m, cmdN)
@@ -120,6 +123,7 @@ func TestCmdNCascadeClampsAtScreenEdge(t *testing.T) {
 }
 
 func TestNewFloatPanelFromPaletteWithoutPopup(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	m = dispatch(t, m, TerminalNewFloatPanelMsg{})
 	closeFloats(t, m)
@@ -134,6 +138,7 @@ func TestNewFloatPanelFromPaletteWithoutPopup(t *testing.T) {
 }
 
 func TestCmdNInEditorStillCreatesFile(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	skipOffDarwin(t)
 	root, file := projectDir(t)
 	chdir(t, root)
@@ -150,6 +155,7 @@ func TestCmdNInEditorStillCreatesFile(t *testing.T) {
 }
 
 func TestCmdNInPaneTerminalStaysWithShell(t *testing.T) {
+	t.Parallel()
 	skipOffDarwin(t)
 	m := newSized()
 	tm, _ := m.Update(TerminalNewTabMsg{})

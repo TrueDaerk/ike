@@ -120,6 +120,7 @@ func (f *prettierFixture) promptOpen() bool {
 }
 
 func TestPrettierOfferOpensCenteredInEditorPane(t *testing.T) {
+	// serial: newPrettierFixture: config.Set (process-wide configuration)
 	f := newPrettierFixture(t)
 	if cmd := f.update(format.FileRequestMsg{}); cmd != nil {
 		t.Fatal("the prompt must interrupt the reformat, not run it")
@@ -146,6 +147,7 @@ func TestPrettierOfferOpensCenteredInEditorPane(t *testing.T) {
 }
 
 func TestPrettierOfferNotShownWhenChainCovered(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	t.Run("another chain tool installed", func(t *testing.T) {
 		f := newPrettierFixture(t, format.External{Command: filepath.Join(t.TempDir(), "prettier")}, format.External{Command: "sh"})
 		_ = f.update(format.FileRequestMsg{})
@@ -187,6 +189,7 @@ func TestPrettierOfferNotShownWhenChainCovered(t *testing.T) {
 }
 
 func TestPrettierOfferAcceptInstallsAndReformats(t *testing.T) {
+	// serial: newPrettierFixture: config.Set (process-wide configuration)
 	f := newPrettierFixture(t)
 	_ = f.update(format.FileRequestMsg{})
 	f.run(f.update(tea.KeyPressMsg{Code: '1', Text: "1"}))
@@ -202,6 +205,7 @@ func TestPrettierOfferAcceptInstallsAndReformats(t *testing.T) {
 }
 
 func TestPrettierOfferDeclinePersistsAndNeverAsksAgain(t *testing.T) {
+	// serial: newPrettierFixture: config.Set (process-wide configuration)
 	withStore(t)
 	f := newPrettierFixture(t)
 	_ = f.update(format.FileRequestMsg{})
@@ -232,6 +236,7 @@ func TestPrettierOfferDeclinePersistsAndNeverAsksAgain(t *testing.T) {
 }
 
 func TestPrettierOfferWithoutNpm(t *testing.T) {
+	// serial: newPrettierFixture: config.Set (process-wide configuration)
 	f := newPrettierFixture(t)
 	f.npm = false
 	_ = f.update(format.FileRequestMsg{})

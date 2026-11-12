@@ -12,6 +12,7 @@ import (
 // command continued with trailing backslashes flattens to one parseable
 // line, and a non-curl caret line yields nothing.
 func TestCurlCommandAtContinuations(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	m := intentionModel(t, "notes.md",
 		"curl -X POST https://api.example.com/things \\\n  -H 'Content-Type: application/json' \\\n  -d '{\"a\":1}'\nplain text\n", 0, 0)
 	ed := m.activeEditor()
@@ -31,6 +32,7 @@ func TestCurlCommandAtContinuations(t *testing.T) {
 // (#2020): the caret's curl line in an .http buffer becomes a named request
 // block, reusing the #1994 parser.
 func TestInsertCurlAsRequestInHTTPBuffer(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	m := intentionModel(t, "api.http",
 		"### existing\nGET https://example.com/a\n\ncurl -X POST https://api.example.com/things -H 'X-A: 1' -d '{\"a\":1}'\n", 3, 0)
 	out, _ := m.Update(InsertCurlAsRequestMsg{})
@@ -54,6 +56,7 @@ func TestInsertCurlAsRequestInHTTPBuffer(t *testing.T) {
 // TestInsertCurlAsRequestUnsupportedFlagNotice guards the honesty carry-over
 // from #1994: flags the parser drops surface in the toast.
 func TestInsertCurlAsRequestUnsupportedFlagNotice(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	m := intentionModel(t, "api.http", "curl --retry 3 https://example.com/a\n", 0, 0)
 	out, _ := m.Update(InsertCurlAsRequestMsg{})
 	m = out.(Model)
@@ -66,6 +69,7 @@ func TestInsertCurlAsRequestUnsupportedFlagNotice(t *testing.T) {
 // non-.http buffer the block lands in a fresh scratch .http file, which
 // opens focused.
 func TestInsertCurlAsRequestScratch(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	withStore(t)
 	m := intentionModel(t, "notes.md", "curl https://example.com/a\n", 0, 0)
 	out, _ := m.Update(InsertCurlAsRequestMsg{})
@@ -84,6 +88,7 @@ func TestInsertCurlAsRequestScratch(t *testing.T) {
 // recorder, so the conversion takes the scratch route rather than appearing
 // to do nothing.
 func TestInsertCurlAsRequestReadOnlyFallsBackToScratch(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	withStore(t)
 	m := intentionModel(t, "api.http", "curl https://example.com/a\n", 0, 0)
 	source := m.activeEditor().Text()
@@ -103,6 +108,7 @@ func TestInsertCurlAsRequestReadOnlyFallsBackToScratch(t *testing.T) {
 // the caret line brings the condition form into the alt+enter popup, and its
 // condition decides whether the entry adds or edits.
 func TestIntentionContextCarriesTheBreakpointFacts(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	m := intentionModel(t, "prog.php", "<?php\n$a = 1;\n$b = 2;\n", 1, 0)
 	ed := m.activeEditor()
 	key := bpKey(ed.Path())

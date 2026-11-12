@@ -32,6 +32,7 @@ func assertEditorAt(t *testing.T, m Model, path string, line int) {
 // file-backed diff opens the right-hand file on the current hunk's first
 // line and focuses the editor.
 func TestDiffOpenSourceKeyOpensRightFileAtHunk(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	left := filepath.Join(dir, "l.txt")
 	right := filepath.Join(dir, "r.txt")
@@ -51,6 +52,7 @@ func TestDiffOpenSourceKeyOpensRightFileAtHunk(t *testing.T) {
 // TestDiffOpenSourceInReviewOpensCurrentFile guards #3081 in review mode
 // (#2848): the jump opens the review's current working-tree file.
 func TestDiffOpenSourceInReviewOpensCurrentFile(t *testing.T) {
+	t.Parallel()
 	m, dir, _ := reviewApp(t)
 	out, cmd := m.Update(DiffFileStepMsg{Delta: 1})
 	m = drainCmd(out.(Model), cmd)
@@ -65,6 +67,7 @@ func TestDiffOpenSourceInReviewOpensCurrentFile(t *testing.T) {
 // TestDiffOpenSourceWithoutFileNotifies guards #3081's no-file case: a diff
 // of texts with no backing file says so and keeps the diff focused.
 func TestDiffOpenSourceWithoutFileNotifies(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m.openDiffTexts("", "left", "right", "a\n", "b\n", false)
 	key := m.activeWS().Panes.Focused()

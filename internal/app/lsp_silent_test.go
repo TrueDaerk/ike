@@ -50,6 +50,7 @@ func quietSwitch(t *testing.T, m Model, docs ...serverDoc) (Model, bool) {
 }
 
 func TestLSPSilentRememberedAcrossSwitches(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	withStore(t)
 	silentLangs(t)
 	chdir(t, t.TempDir())
@@ -96,6 +97,7 @@ func TestLSPSilentRememberedAcrossSwitches(t *testing.T) {
 // project still warms up and is marked on its own; a language riding a
 // known-silent server's id shares its marker.
 func TestLSPSilentPerServer(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	withStore(t)
 	silentLangs(t)
 	chdir(t, t.TempDir())
@@ -128,6 +130,7 @@ func TestLSPSilentPerServer(t *testing.T) {
 // TestLSPSilentClearedByPublish: a known-silent server that publishes after
 // all loses its marker, so the next switch waits for it again.
 func TestLSPSilentClearedByPublish(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	withStore(t)
 	silentLangs(t)
 	chdir(t, t.TempDir())
@@ -153,6 +156,7 @@ func TestLSPSilentClearedByPublish(t *testing.T) {
 // TestLSPSilentQuietWithLSPOff: with language servers switched off a quiet
 // warm-up is expected, so nothing is remembered.
 func TestLSPSilentQuietWithLSPOff(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	withStore(t)
 	silentLangs(t)
 	chdir(t, t.TempDir())
@@ -168,6 +172,7 @@ func TestLSPSilentQuietWithLSPOff(t *testing.T) {
 // TestLSPForgetSilent: lsp.forgetSilent clears every marker of the project
 // and says which; with none it says so.
 func TestLSPForgetSilent(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	withStore(t)
 	silentLangs(t)
 	chdir(t, t.TempDir())

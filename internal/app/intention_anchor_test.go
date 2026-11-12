@@ -127,6 +127,7 @@ func assertIntentionPopupVisible(t *testing.T, m Model, label string, wantAnchor
 // multi-pane layout with the caret at the top, at the bottom, at the right
 // edge and scrolled out of view, and demands a visible popup each time.
 func TestIntentionPopupVisibleInEveryPane(t *testing.T) {
+	// serial: vaultIntentionModel: t.Setenv
 	var b strings.Builder
 	for i := 0; i < 200; i++ {
 		b.WriteString("key_" + strings.Repeat("x", 150) + ": value\n")
@@ -163,6 +164,7 @@ func TestIntentionPopupVisibleInEveryPane(t *testing.T) {
 // TestIntentionPopupDrawsAboveBlurredPopupTerminal: a popup terminal that is
 // open but blurred (the editor has the keyboard) must not hide the picker.
 func TestIntentionPopupDrawsAboveBlurredPopupTerminal(t *testing.T) {
+	// serial: vaultIntentionModel: t.Setenv
 	m := vaultIntentionModel(t, "secret: plaintext\n")
 	out, _ := m.Update(TerminalPopupMsg{})
 	m = out.(Model)
@@ -183,6 +185,7 @@ func TestIntentionPopupDrawsAboveBlurredPopupTerminal(t *testing.T) {
 // the viewport no on-screen anchor exists, so the picker opens centered,
 // and its telemetry says so.
 func TestIntentionPopupCentersWithoutAnchor(t *testing.T) {
+	// serial: vaultIntentionModel: t.Setenv
 	withStore(t)
 	var b strings.Builder
 	for i := 0; i < 200; i++ {
@@ -215,6 +218,7 @@ func TestIntentionPopupCentersWithoutAnchor(t *testing.T) {
 // TestIntentionPopupAnchoredTelemetry: the ordinary anchored open reports
 // anchored=true on its pick.
 func TestIntentionPopupAnchoredTelemetry(t *testing.T) {
+	// serial: vaultIntentionModel: t.Setenv
 	withStore(t)
 	m := vaultIntentionModel(t, "secret: plaintext\n")
 	m = focusPaneKey(t, m, editorKeys(m)[0])
@@ -235,6 +239,7 @@ func TestIntentionPopupAnchoredTelemetry(t *testing.T) {
 // TestFitPopupAnchorRejectsOffScreen: a box that cannot be flipped or
 // clamped onto a terminal shorter than itself is rejected.
 func TestFitPopupAnchorRejectsOffScreen(t *testing.T) {
+	t.Parallel()
 	m := Model{width: 80, height: 8}
 	if _, _, _, ok := m.fitPopupAnchor(10, 5, 9); ok {
 		t.Fatal("an 8-row terminal cannot hold the budgeted box")
@@ -250,6 +255,7 @@ func TestFitPopupAnchorRejectsOffScreen(t *testing.T) {
 // alt+enter over the plaintext vault.yml, pick "Treat as Vault File", and the
 // file on disk is vault ciphertext.
 func TestIntentionPopupPickEncryptsVaultFile(t *testing.T) {
+	// serial: vaultIntentionModel: t.Setenv
 	withStore(t)
 	m := vaultIntentionModel(t, "secret: plaintext\n")
 	m = focusPaneKey(t, m, editorKeys(m)[0])

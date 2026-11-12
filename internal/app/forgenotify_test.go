@@ -46,6 +46,7 @@ func newDialogSized() Model {
 }
 
 func TestForgeIssueOpenedDefaultsOff(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := feedEvents(newSized(), issueEvent(12, "Fix the thing"))
 	if m.forgeDialogOpen() {
@@ -60,6 +61,7 @@ func TestForgeIssueOpenedDefaultsOff(t *testing.T) {
 }
 
 func TestForgeIssueOpenedRaisesDialog(t *testing.T) {
+	t.Parallel()
 	m := feedEvents(newDialogSized(), issueEvent(12, "Fix the thing"))
 	if !m.forgeDialogOpen() {
 		t.Fatal("an IssueOpened event must raise the dialog")
@@ -76,6 +78,7 @@ func TestForgeIssueOpenedRaisesDialog(t *testing.T) {
 }
 
 func TestForgeEventsCollapseIntoOneDialogWithCount(t *testing.T) {
+	t.Parallel()
 	m := feedEvents(newDialogSized(), issueEvent(1, "one"))
 	m = feedEvents(m, issueEvent(2, "two"), issueEvent(3, "three"))
 	if len(m.forgeQueue) != 3 {
@@ -94,6 +97,7 @@ func TestForgeEventsCollapseIntoOneDialogWithCount(t *testing.T) {
 }
 
 func TestForgeDialogDismissAndDismissAll(t *testing.T) {
+	t.Parallel()
 	m := feedEvents(newDialogSized(), issueEvent(1, "one"), issueEvent(2, "two"))
 	tm, _ := m.updateForgeDialog(tea.KeyPressMsg{Text: "d", Code: 'd'})
 	m = tm.(Model)
@@ -109,6 +113,7 @@ func TestForgeDialogDismissAndDismissAll(t *testing.T) {
 }
 
 func TestForgeDialogEscDismissesLastAndCloses(t *testing.T) {
+	t.Parallel()
 	m := feedEvents(newDialogSized(), issueEvent(7, "solo"))
 	tm, _ := m.updateForgeDialog(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = tm.(Model)
@@ -118,6 +123,7 @@ func TestForgeDialogEscDismissesLastAndCloses(t *testing.T) {
 }
 
 func TestForgeDialogOpenAction(t *testing.T) {
+	t.Parallel()
 	m := feedEvents(newDialogSized(), issueEvent(42, "open me"))
 	tm, _ := m.updateForgeDialog(tea.KeyPressMsg{Code: tea.KeyEnter})
 	m = tm.(Model)
@@ -146,6 +152,7 @@ func TestForgeDialogOpenAction(t *testing.T) {
 }
 
 func TestForgeTypingGuardDefersDialogToBadge(t *testing.T) {
+	t.Parallel()
 	m := newDialogSized()
 	m.lastInputAt = time.Now()
 	m = feedEvents(m, issueEvent(5, "later"))
@@ -167,6 +174,7 @@ func TestForgeTypingGuardDefersDialogToBadge(t *testing.T) {
 }
 
 func TestForgeGuardExpiresAfterTypingWindow(t *testing.T) {
+	t.Parallel()
 	m := newDialogSized()
 	m.lastInputAt = time.Now().Add(-2 * forgeTypingWindow)
 	m = feedEvents(m, issueEvent(8, "now fine"))
@@ -176,6 +184,7 @@ func TestForgeGuardExpiresAfterTypingWindow(t *testing.T) {
 }
 
 func TestForgeBadgeClearsOnIssuesView(t *testing.T) {
+	t.Parallel()
 	m := newDialogSized()
 	m.lastInputAt = time.Now()
 	m = feedEvents(m, issueEvent(9, "deferred"))
@@ -189,6 +198,7 @@ func TestForgeBadgeClearsOnIssuesView(t *testing.T) {
 }
 
 func TestForgeBadgeClearsWhenDialogOpens(t *testing.T) {
+	t.Parallel()
 	m := newDialogSized()
 	m.lastInputAt = time.Now()
 	m = feedEvents(m, issueEvent(10, "deferred"))
@@ -206,6 +216,7 @@ func TestForgeBadgeClearsWhenDialogOpens(t *testing.T) {
 }
 
 func TestForgeStylesPerEventType(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	// pr_merged defaults to a toast: no dialog, no badge, but a toast.
@@ -228,6 +239,7 @@ func TestForgeStylesPerEventType(t *testing.T) {
 }
 
 func TestForgeStyleOffStaysInHistoryOnly(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if s := parseForgeStyle("off"); s != forgeStyleOff {
 		t.Fatalf("parseForgeStyle(off) = %v", s)
@@ -239,6 +251,7 @@ func TestForgeStyleOffStaysInHistoryOnly(t *testing.T) {
 }
 
 func TestForgeEventsLandInHistory(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	before := m.notifUnseen
 	m = feedEvents(m, issueEvent(1, "one"), forge.Event{Kind: forge.PRMerged, Number: 2, Title: "two"})
@@ -254,6 +267,7 @@ func TestForgeEventsLandInHistory(t *testing.T) {
 }
 
 func TestForgeDialogOwnsKeyboard(t *testing.T) {
+	t.Parallel()
 	m := feedEvents(newDialogSized(), issueEvent(1, "one"), issueEvent(2, "two"))
 	// j moves within the queue instead of reaching the editor.
 	tm, _ := m.Update(tea.KeyPressMsg{Text: "j", Code: 'j'})

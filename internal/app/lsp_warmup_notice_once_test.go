@@ -32,6 +32,7 @@ func silentTimeout(t *testing.T, m Model) Model {
 // rides across the switches — and every later quiet phase says the notice was
 // held back (notified=false, suppressed=session) rather than omitting it.
 func TestLSPWarmupNoticeOncePerSession(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	withStore(t)
 	a, b := t.TempDir(), t.TempDir()
 	chdir(t, a)
@@ -75,6 +76,7 @@ func TestLSPWarmupNoticeOncePerSession(t *testing.T) {
 // TestLSPWarmupNoticeMutedRoot: a root in lsp.warmup_notice_muted_roots never
 // warns, and the quiet phase records why (notified=false, suppressed=muted).
 func TestLSPWarmupNoticeMutedRoot(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	withStore(t)
 	chdir(t, t.TempDir())
 	m := warmupNoticeModel(t, 15000)
@@ -96,6 +98,7 @@ func TestLSPWarmupNoticeMutedRoot(t *testing.T) {
 // project", and running it persists the active root into the setting, so the
 // next session stays quiet for it.
 func TestLSPWarmupNoticeMuteAction(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	withStore(t)
 	chdir(t, t.TempDir())
 	m := warmupNoticeModel(t, 15000)

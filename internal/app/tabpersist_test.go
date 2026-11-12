@@ -25,6 +25,7 @@ func fixedDirApp(t *testing.T, dir string) Model {
 }
 
 func TestTabListRoundTripsThroughLayout(t *testing.T) {
+	// serial: fixedDirApp: t.Setenv
 	withStore(t)
 	conf := t.TempDir()
 	dir := t.TempDir()
@@ -61,6 +62,7 @@ func TestTabListRoundTripsThroughLayout(t *testing.T) {
 }
 
 func TestLegacyLayoutRestoresSingleTab(t *testing.T) {
+	// serial: fixedDirApp: t.Setenv
 	withStore(t)
 	conf := t.TempDir()
 	dir := t.TempDir()
@@ -87,6 +89,7 @@ func TestLegacyLayoutRestoresSingleTab(t *testing.T) {
 }
 
 func TestMissingFilesSkippedOnRestore(t *testing.T) {
+	// serial: fixedDirApp: t.Setenv
 	withStore(t)
 	conf := t.TempDir()
 	dir := t.TempDir()
@@ -118,6 +121,7 @@ func TestMissingFilesSkippedOnRestore(t *testing.T) {
 }
 
 func TestAllFilesMissingRestoresScratchPane(t *testing.T) {
+	// serial: fixedDirApp: t.Setenv
 	withStore(t)
 	conf := t.TempDir()
 	dir := t.TempDir()
@@ -141,6 +145,7 @@ func TestAllFilesMissingRestoresScratchPane(t *testing.T) {
 }
 
 func TestSharedDocumentRestoresAcrossTabsAndPanes(t *testing.T) {
+	// serial: fixedDirApp: t.Setenv
 	withStore(t)
 	conf := t.TempDir()
 	dir := t.TempDir()

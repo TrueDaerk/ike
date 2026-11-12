@@ -31,6 +31,7 @@ func openOther(t *testing.T, m Model, body string) Model {
 // pane makes the file visible at once; the playground keeps its query and
 // result but renders nothing.
 func TestPlaygroundHidesWhenPaneShowsAnotherFile(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"foo":[1,2,3]}`))
 	m = setProgram(m, ".foo[0]")
 	key := m.play.paneKey
@@ -67,6 +68,7 @@ func TestPlaygroundHidesWhenPaneShowsAnotherFile(t *testing.T) {
 // tab brings the playground back exactly as it was — no half-rendered state in
 // between.
 func TestPlaygroundReturnsWithSourceTab(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"foo":[1,2,3]}`))
 	m = setProgram(m, ".foo[1]")
 	key := m.play.paneKey
@@ -96,6 +98,7 @@ func TestPlaygroundReturnsWithSourceTab(t *testing.T) {
 // TestPlaygroundClosesWithSourceDocument: closing the queried document's tab
 // leaves no playground pointing at a document that is gone.
 func TestPlaygroundClosesWithSourceDocument(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"foo":[1,2,3]}`))
 	key := m.play.paneKey
 	srcTab := m.activeWS().Panes.Get(key).ActiveTab()
@@ -117,6 +120,7 @@ func TestPlaygroundClosesWithSourceDocument(t *testing.T) {
 // binding must not disturb: moving the focus to another pane leaves the mode
 // mounted *and* rendered, since its pane still shows its document.
 func TestPlaygroundSurvivesFocusChange(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"foo":[1,2,3]}`))
 	key := m.play.paneKey
 	m.SplitFocused(layout.ZoneRight)
@@ -133,6 +137,7 @@ func TestPlaygroundSurvivesFocusChange(t *testing.T) {
 // file document (its source key is `http:<paneKey>`), and the document binding
 // must not hide it.
 func TestHTTPPlaygroundUnaffectedByDocumentBinding(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	resp := sampleResponse("one")
 	resp.Body = []byte(`{"items":[{"id":7},{"id":8}]}`)

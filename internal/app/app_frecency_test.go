@@ -18,6 +18,7 @@ import (
 // the store under the project's state directory, so the '@' finder ranks it
 // higher in the next session too.
 func TestOpenFileBumpsFrecency(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
 	path := filepath.Join(t.TempDir(), "hot.go")
@@ -55,6 +56,7 @@ func TestOpenFileBumpsFrecency(t *testing.T) {
 // IKE_CONFIG_DIR like every other per-project state file, and falls back to the
 // project's own .ike directory.
 func TestFrecencyStorePathRedirects(t *testing.T) {
+	// serial: t.Setenv
 	t.Setenv("IKE_CONFIG_DIR", "/tmp/ike-state")
 	if got, want := fileFrecencyFile(), filepath.Join("/tmp/ike-state", "filefrecency.json"); got != want {
 		t.Fatalf("fileFrecencyFile() = %q, want %q", got, want)

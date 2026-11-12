@@ -19,6 +19,7 @@ func sampleRefs() []ilsp.Reference {
 }
 
 func TestRefsModeItems(t *testing.T) {
+	t.Parallel()
 	r := &refsMode{}
 	r.Set(sampleRefs())
 	items := r.Results("", palette.Context{})
@@ -38,6 +39,7 @@ func TestRefsModeItems(t *testing.T) {
 }
 
 func TestRefsModeFiltersByTitleAndPreview(t *testing.T) {
+	t.Parallel()
 	r := &refsMode{}
 	r.Set(sampleRefs())
 	if items := r.Results("b.go", palette.Context{}); len(items) == 0 || items[0].Title != "/proj/b.go:10" {
@@ -49,6 +51,7 @@ func TestRefsModeFiltersByTitleAndPreview(t *testing.T) {
 }
 
 func TestReferencesMsgRouting(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 
 	// Nothing found: a toast, no palette.

@@ -21,6 +21,7 @@ import (
 // "palette.dismiss" event (#2408 moved it off the pseudo-command #2399 used)
 // carrying the mode and the typed query length.
 func TestRecentDismissRecordsTelemetry(t *testing.T) {
+	// serial: telemetryModel: waits on the wall clock (load-sensitive)
 	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	tm, _ := m.Update(ShowRecentFilesMsg{})
@@ -56,6 +57,7 @@ func TestRecentDismissRecordsTelemetry(t *testing.T) {
 // reports its dismissals, each stamped with its own prefix — the command
 // palette's esc must not be filed as a recent-files one.
 func TestOtherPaletteDismissalsRecordTheirMode(t *testing.T) {
+	// serial: telemetryModel: waits on the wall clock (load-sensitive)
 	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	m.palette.SetSize(100, 40)
@@ -82,6 +84,7 @@ func TestOtherPaletteDismissalsRecordTheirMode(t *testing.T) {
 // restart: it is written on the pick, not on the next session save, because
 // the palette has no model to snapshot the session from.
 func TestRecentPickPersists(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "nested", "recentpick.json")
 
@@ -121,6 +124,7 @@ func TestRecentPickPersists(t *testing.T) {
 // documented default — plain recency since #2532 — and the unknown-value
 // fallback validation applies.
 func TestRecentRankingSetting(t *testing.T) {
+	t.Parallel()
 	if recentRankingFrecency(nil) {
 		t.Fatal("no config must default to plain recency ranking")
 	}
@@ -143,6 +147,7 @@ func TestRecentRankingSetting(t *testing.T) {
 // command still opens the palette locked to the recent-files mode, so the
 // #2399 additions ride on the same open.
 func TestRecentPaletteOpensLocked(t *testing.T) {
+	// serial: telemetryModel: waits on the wall clock (load-sensitive)
 	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	tm, _ := m.Update(ShowRecentFilesMsg{})

@@ -20,6 +20,7 @@ import (
 // wiki/architecture/performance.md.
 
 func TestFollowTickArmsAndSelfStops(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	path := filepath.Join(t.TempDir(), "app.log")
 	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
@@ -57,6 +58,7 @@ func TestFollowTickArmsAndSelfStops(t *testing.T) {
 }
 
 func TestFollowInterval(t *testing.T) {
+	t.Parallel()
 	if got := followInterval(nil); got != 500*time.Millisecond {
 		t.Fatalf("default interval = %v", got)
 	}
@@ -69,6 +71,7 @@ func TestFollowInterval(t *testing.T) {
 // TestFollowFilterBadgeInStatusLine: the follow filter (#2255) shows in the
 // status line right after the FOLLOW badge, so a narrowed pane says so.
 func TestFollowFilterBadgeInStatusLine(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	path := filepath.Join(t.TempDir(), "app.log")
 	if err := os.WriteFile(path, []byte("error one\ninfo two\n"), 0o644); err != nil {

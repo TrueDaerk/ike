@@ -103,6 +103,7 @@ func tdSetSpec(m Model, dsl, rows, seed string) Model {
 // TestGenerateSingleCommand: only scratch.generate remains — the per-format
 // quick commands are gone (#2392).
 func TestGenerateSingleCommand(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if _, ok := m.reg.Command("scratch.generate"); !ok {
 		t.Fatal("scratch.generate must be registered")
@@ -117,6 +118,7 @@ func TestGenerateSingleCommand(t *testing.T) {
 // TestGenerateDialogSingleScreen: opening shows the whole dialog at once —
 // header fields, the spec editor with the default DSL, and the live preview.
 func TestGenerateDialogSingleScreen(t *testing.T) {
+	t.Parallel()
 	m := openGenerate(t, newGenSized())
 	view := plainView(m)
 	for _, want := range []string{
@@ -135,6 +137,7 @@ func TestGenerateDialogSingleScreen(t *testing.T) {
 // TestGeneratePreviewMatchesRender: the preview pane holds exactly what a
 // generation with the same seed renders for the first rows.
 func TestGeneratePreviewMatchesRender(t *testing.T) {
+	t.Parallel()
 	m := openGenerate(t, newGenSized())
 	m = tdSetSpec(m, "id = id()\nname = first_name()", "50", "77")
 	m = drainCmd(m, m.tdGen.dirtyPreview())
@@ -157,6 +160,7 @@ func TestGeneratePreviewMatchesRender(t *testing.T) {
 // TestGeneratePreviewShowsErrors: an invalid spec shows its line-numbered
 // error where the preview would be, live.
 func TestGeneratePreviewShowsErrors(t *testing.T) {
+	t.Parallel()
 	m := openGenerate(t, newGenSized())
 	m = tdSetSpec(m, "id = id()\nbad = wat()", "10", "1")
 	m = drainCmd(m, m.tdGen.dirtyPreview())
@@ -172,6 +176,7 @@ func TestGeneratePreviewShowsErrors(t *testing.T) {
 // TestGenerateEndToEnd drives the dialog to a generated, opened scratch and
 // checks the file is byte-identical to a direct render of the same spec.
 func TestGenerateEndToEnd(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := openGenerate(t, newGenSized())
 	// Cycle the format picker to JSON.
@@ -216,6 +221,7 @@ func TestGenerateEndToEnd(t *testing.T) {
 // TestGenerateInvalidSpecBlocked: ctrl+g on an invalid spec keeps the dialog
 // open with the offending line; fixing the spec generates.
 func TestGenerateInvalidSpecBlocked(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := openGenerate(t, newGenSized())
 	m = tdSetSpec(m, "id = id(\nx = uuid()", "5", "1")
@@ -239,6 +245,7 @@ func TestGenerateInvalidSpecBlocked(t *testing.T) {
 // TestGenerateBadHeaderBlocked: the header knobs validate like the wizard's
 // options step did.
 func TestGenerateBadHeaderBlocked(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ rows, seed, want string }{
 		{"0", "1", "at least 1"},
 		{"lots", "1", "not a number"},
@@ -262,6 +269,7 @@ func TestGenerateBadHeaderBlocked(t *testing.T) {
 // TestGenerateEditorTyping: the editor is a real multi-line text area —
 // typing, enter, backspace joins, cursor movement.
 func TestGenerateEditorTyping(t *testing.T) {
+	t.Parallel()
 	m := openGenerate(t, newGenSized())
 	m = tdSetSpec(m, "id = id()", "5", "1")
 	// Move to the end and add a line.
@@ -287,6 +295,7 @@ func TestGenerateEditorTyping(t *testing.T) {
 // catalog with descriptions; tab accepts and lands inside the parens for a
 // parameterized kind.
 func TestGenerateAutocompleteGenerators(t *testing.T) {
+	t.Parallel()
 	m := openGenerate(t, newGenSized())
 	m = tdSetSpec(m, "", "5", "1")
 	m = tdTypeStr(m, "name = fir")
@@ -341,6 +350,7 @@ func TestGenerateAutocompleteGenerators(t *testing.T) {
 // TestGenerateAutocompleteRefs: "{" offers the fields defined above the
 // cursor, and only those.
 func TestGenerateAutocompleteRefs(t *testing.T) {
+	t.Parallel()
 	m := openGenerate(t, newGenSized())
 	m = tdSetSpec(m, "domain = domain()\ndown = uuid()", "5", "1")
 	m.tdGen.curL, m.tdGen.curC = 1, 0
@@ -365,6 +375,7 @@ func TestGenerateAutocompleteRefs(t *testing.T) {
 // TestGenerateTemplatesBuiltin: cycling the template picker loads a built-in
 // body into the editor.
 func TestGenerateTemplatesBuiltin(t *testing.T) {
+	t.Parallel()
 	m := openGenerate(t, newGenSized())
 	m.tdGen.setFocus(tdFocTemplate)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyRight})
@@ -395,6 +406,7 @@ func TestGenerateTemplatesBuiltin(t *testing.T) {
 // TestGenerateTemplateSaveDelete: ctrl+s saves the spec under a typed name,
 // the template persists, and ctrl+d deletes it again.
 func TestGenerateTemplateSaveDelete(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := openGenerate(t, newGenSized())
 	m = tdSetSpec(m, "thing = uuid()", "5", "1")
@@ -449,6 +461,7 @@ func TestGenerateTemplateSaveDelete(t *testing.T) {
 // TestGenerateMouse drives the dialog by clicks alone: focus a header field,
 // cycle a picker, place the editor cursor, accept a suggestion, generate.
 func TestGenerateMouse(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := openGenerate(t, newGenSized())
 	// Click the Format row: focused; click again: cycles to TSV.
@@ -496,6 +509,7 @@ func TestGenerateMouse(t *testing.T) {
 
 // TestGenerateMouseCancel: [cancel] closes without generating.
 func TestGenerateMouseCancel(t *testing.T) {
+	t.Parallel()
 	m := openGenerate(t, newGenSized())
 	m = tdClick(t, m, tdHitButton, tdBtnCancel)
 	if m.generateScratchOpen() {
@@ -505,6 +519,7 @@ func TestGenerateMouseCancel(t *testing.T) {
 
 // TestGenerateEscSemantics: esc closes the popup first, then the dialog.
 func TestGenerateEscSemantics(t *testing.T) {
+	t.Parallel()
 	m := openGenerate(t, newGenSized())
 	m = tdSetSpec(m, "", "5", "1")
 	m = tdTypeStr(m, "a = uu")
@@ -524,6 +539,7 @@ func TestGenerateEscSemantics(t *testing.T) {
 // TestGenerateSeedRepeatsByteForByte is the determinism criterion seen from
 // the UI: generating twice with the same seed yields two identical scratches.
 func TestGenerateSeedRepeatsByteForByte(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	read := func(m Model) (Model, string) {
 		m = openGenerate(t, m)
@@ -545,6 +561,7 @@ func TestGenerateSeedRepeatsByteForByte(t *testing.T) {
 // TestGenerateRemembersLastSpec: the generated spec is the next dialog's
 // starting point — format, knobs and DSL body.
 func TestGenerateRemembersLastSpec(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := openGenerate(t, newGenSized())
 	m.tdGen.setFocus(tdFocFormat)
@@ -573,6 +590,7 @@ func TestGenerateRemembersLastSpec(t *testing.T) {
 // TestGeneratePasteMultiLine: pasting a whole spec into the editor keeps its
 // lines.
 func TestGeneratePasteMultiLine(t *testing.T) {
+	t.Parallel()
 	m := openGenerate(t, newGenSized())
 	m = tdSetSpec(m, "", "5", "1")
 	if !m.pasteGenerateScratch("id = id()\nname = first_name()") {

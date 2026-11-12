@@ -34,6 +34,7 @@ func terminalDragApp(t *testing.T) (Model, string, string) {
 // in an editor's center adopts the running session as a terminal tab and
 // closes the vacated terminal pane.
 func TestTerminalPaneCenterDropBecomesTab(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, edKey, termKey := terminalDragApp(t)
 	sess := m.activeWS().Panes.Get(termKey).Terminal().SessionKey()
@@ -69,6 +70,7 @@ func TestTerminalPaneCenterDropBecomesTab(t *testing.T) {
 // TestTerminalPaneEdgeDropStillRelocates: an edge-zone release keeps today's
 // whole-pane relocate behavior and leaves the target's tab list untouched.
 func TestTerminalPaneEdgeDropStillRelocates(t *testing.T) {
+	t.Parallel()
 	m, edKey, termKey := terminalDragApp(t)
 	tr := m.lay.Panes[termKey]
 	er := m.lay.Panes[edKey]
@@ -89,6 +91,7 @@ func TestTerminalPaneEdgeDropStillRelocates(t *testing.T) {
 // TestTerminalPaneCenterHoverShowsMerge: hovering an editor's center during a
 // terminal pane drag shows the merge marker like a file-carrying drag (#318).
 func TestTerminalPaneCenterHoverShowsMerge(t *testing.T) {
+	t.Parallel()
 	m, edKey, termKey := terminalDragApp(t)
 	tr := m.lay.Panes[termKey]
 	er := m.lay.Panes[edKey]

@@ -32,6 +32,7 @@ func sleepTool(name string) config.ToolEntry {
 }
 
 func TestToolCommandsFromConfig(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	withTools(t,
 		config.ToolEntry{Name: "lazygit", Command: "lazygit"},
 		config.ToolEntry{Name: "My Tool", Command: "mytool"},
@@ -51,6 +52,7 @@ func TestToolCommandsFromConfig(t *testing.T) {
 }
 
 func TestToolSlug(t *testing.T) {
+	t.Parallel()
 	for in, want := range map[string]string{
 		"lazygit":   "lazygit",
 		"My Tool":   "my-tool",
@@ -65,6 +67,7 @@ func TestToolSlug(t *testing.T) {
 }
 
 func TestToolOpenSpawnsFocusesAndReturns(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	withTools(t, sleepTool("watcher"))
 	m := sized(t, 100, 40)
@@ -111,6 +114,7 @@ func TestToolOpenSpawnsFocusesAndReturns(t *testing.T) {
 // TestToolCommandsMultipleAddsNewInstanceCommand (#835): a multiple = true
 // entry contributes a second tool.<slug>.new command.
 func TestToolCommandsMultipleAddsNewInstanceCommand(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	withTools(t,
 		config.ToolEntry{Name: "claude", Command: "claude", Multiple: true},
 		config.ToolEntry{Name: "htop", Command: "htop"},
@@ -138,6 +142,7 @@ func countToolInstances(m Model, name string) int {
 // the hosting pane and activates the tab instead of spawning a second
 // instance.
 func TestToolToggleFindsTabHostedTool(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	withTools(t, sleepTool("watcher"))
 	m := sized(t, 100, 40)
 	editorKey := m.activeEditorKey()
@@ -190,6 +195,7 @@ func TestToolToggleFindsTabHostedTool(t *testing.T) {
 // true} spawns additional instances; the plain command toggles the most
 // recent one. Without multiple, New is ignored.
 func TestToolMultipleInstances(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	entry := sleepTool("claude")
 	entry.Multiple = true
@@ -231,6 +237,7 @@ func TestToolMultipleInstances(t *testing.T) {
 // TestToolNewIgnoredWithoutMultiple (#835): New on a single-instance tool
 // falls back to the toggle — no second spawn.
 func TestToolNewIgnoredWithoutMultiple(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	withTools(t, sleepTool("htop"))
 	m := sized(t, 100, 40)
 	out, _ := m.Update(ToolOpenMsg{Name: "htop"})
@@ -253,6 +260,7 @@ func TestToolNewIgnoredWithoutMultiple(t *testing.T) {
 }
 
 func TestToolPaneChromeIsNotATerminal(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	withTools(t, sleepTool("statuswatch"))
 	m := sized(t, 100, 40)
 	out, _ := m.Update(ToolOpenMsg{Name: "statuswatch"})
@@ -274,6 +282,7 @@ func TestToolPaneChromeIsNotATerminal(t *testing.T) {
 // TestToolExitKeepsPaneOpen guards #810: a tool pane survives its program's
 // exit, keeping its layout slot, and shows the footer actions.
 func TestToolExitKeepsPaneOpen(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	withTools(t, sleepTool("shortlived"))
 	m := sized(t, 100, 40)
@@ -303,6 +312,7 @@ func TestToolExitKeepsPaneOpen(t *testing.T) {
 // TestToolExitRestartInPlace: r (and the footer click) rerun the command in
 // the same pane; the close click removes it.
 func TestToolExitRestartAndClose(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	withTools(t, sleepTool("shortlived"))
 	m := sized(t, 100, 40)
@@ -353,6 +363,7 @@ func TestToolExitRestartAndClose(t *testing.T) {
 }
 
 func TestToolUnknownNameIsNoop(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	withTools(t)
 	m := sized(t, 100, 40)
 	before := m.activeWS().Panes.Len()
@@ -364,6 +375,7 @@ func TestToolUnknownNameIsNoop(t *testing.T) {
 }
 
 func TestToolIdentityPersistsAndRestores(t *testing.T) {
+	// serial: t.Setenv
 	withStore(t)
 	withTools(t, sleepTool("persisted"))
 	m := sized(t, 100, 40)
@@ -403,6 +415,7 @@ func TestToolIdentityPersistsAndRestores(t *testing.T) {
 }
 
 func TestToolSpawnEnvCarriesTheme(t *testing.T) {
+	t.Parallel()
 	pal := theme.DefaultPalette()
 	env := toolSpawnEnv(pal)
 	var name, bg string
@@ -425,6 +438,7 @@ func TestToolSpawnEnvCarriesTheme(t *testing.T) {
 // terminal.toggle must ignore tool panes (#772): with only a tool pane open
 // it spawns a new regular terminal instead of focusing the tool.
 func TestTerminalToggleIgnoresToolPanes(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	withTools(t, sleepTool("watcher"))
 	m := sized(t, 100, 40)
 
@@ -458,6 +472,7 @@ func TestTerminalToggleIgnoresToolPanes(t *testing.T) {
 // TestQuitPromptsForRunningTool (#821): a running tool pane gates the quit
 // (idle shells never do); d quits anyway, s is inert without dirty buffers.
 func TestQuitPromptsForRunningTool(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	withTools(t, sleepTool("busy"))
 	m := sized(t, 100, 40)
 	out, _ := m.Update(ToolOpenMsg{Name: "busy"})

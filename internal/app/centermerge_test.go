@@ -31,6 +31,7 @@ func splitTabApp(t *testing.T) (Model, [3]string, string, string) {
 // target's center merges every source file into the target's tab list
 // (deduped) and closes the emptied source pane.
 func TestPaneDragCenterMergesTabs(t *testing.T) {
+	t.Parallel()
 	m, paths, src, dst := splitTabApp(t)
 	// Pre-open a.txt in the target too, so the merge has a duplicate to skip.
 	m.openInTab(dst, paths[0])
@@ -63,6 +64,7 @@ func TestPaneDragCenterMergesTabs(t *testing.T) {
 // TestPaneDragEdgeStillRelocates: an editor-to-editor title drag released in
 // an edge zone keeps today's relocate semantics.
 func TestPaneDragEdgeStillRelocates(t *testing.T) {
+	t.Parallel()
 	m, _, src, dst := splitTabApp(t)
 	sr := m.lay.Panes[src]
 	dr := m.lay.Panes[dst]
@@ -81,6 +83,7 @@ func TestPaneDragEdgeStillRelocates(t *testing.T) {
 // splits next to it (#318 aligns editor targets with the #317 edge rule);
 // only the center merges into the tab list.
 func TestTabDragToEditorEdgeSplits(t *testing.T) {
+	t.Parallel()
 	m, paths, src, dst := splitTabApp(t)
 	before := editorLeaves(m)
 
@@ -108,6 +111,7 @@ func TestTabDragToEditorEdgeSplits(t *testing.T) {
 // TestCenterZoneFeedback: hovering the target's center during a move drag
 // shows the merge marker and a full-pane ghost, distinct from the edge zones.
 func TestCenterZoneFeedback(t *testing.T) {
+	t.Parallel()
 	m, _, src, dst := splitTabApp(t)
 	sr := m.lay.Panes[src]
 	dr := m.lay.Panes[dst]

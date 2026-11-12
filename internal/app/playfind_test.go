@@ -60,6 +60,7 @@ func playSearchFor(m Model, pattern string) Model {
 // find chord pressed on the query line opens the search in the result buffer
 // without a preceding tab, and the keyboard is in the result buffer with it.
 func TestPlayFindFromQueryLineSearchesResult(t *testing.T) {
+	t.Parallel()
 	m := playNoOnboarding(openJQ(t, playApp(t, `{"foo":["alpha","beta","gamma"]}`)))
 	m = setProgram(m, ".foo[]")
 	if m.play.bufFocus {
@@ -92,6 +93,7 @@ func TestPlayFindFromQueryLineSearchesResult(t *testing.T) {
 // TestPlayFindFromResultBufferMatchesSlash: in the result buffer the chord
 // does exactly what "/" does there.
 func TestPlayFindFromResultBufferMatchesSlash(t *testing.T) {
+	t.Parallel()
 	body := `{"foo":["alpha","beta","gamma"]}`
 	viaChord := playNoOnboarding(openJQ(t, playApp(t, body)))
 	viaChord = setProgram(viaChord, ".foo[]")
@@ -117,6 +119,7 @@ func TestPlayFindFromResultBufferMatchesSlash(t *testing.T) {
 // search started from the query line — the focus the chord leaves behind is
 // the one those keys belong to.
 func TestPlayFindNextPrevAfterQueryLineStart(t *testing.T) {
+	t.Parallel()
 	m := playNoOnboarding(openJQ(t, playApp(t, `{"foo":["ha","hb","hc"]}`)))
 	m = setProgram(m, ".foo[]")
 	m = playSearchFor(drainKey(m, playFindKey()), "h")
@@ -137,6 +140,7 @@ func TestPlayFindNextPrevAfterQueryLineStart(t *testing.T) {
 // keyboard where the search was started from (#2411) — back on the query line
 // when the chord came from there, in the result buffer when it did not.
 func TestPlayFindFocusAfterClosingSearch(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name    string
 		tab     bool
@@ -168,6 +172,7 @@ func TestPlayFindFocusAfterClosingSearch(t *testing.T) {
 // keyboard back to the query line with program and caret untouched, and the
 // next esc keeps its old meaning of closing the playground.
 func TestPlayFindEscReturnsToQueryLineWithCursor(t *testing.T) {
+	t.Parallel()
 	m := playNoOnboarding(openJQ(t, playApp(t, `{"foo":["alpha","beta","gamma"]}`)))
 	m = setProgram(m, ".foo[]")
 	m.play.program.Cur = 2 // a caret in the middle of the program, not at its end
@@ -203,6 +208,7 @@ func TestPlayFindEscReturnsToQueryLineWithCursor(t *testing.T) {
 // result buffer ("/" or the chord after a tab) is unaffected — esc closes it
 // and leaves the keyboard there, as before #2411.
 func TestPlayFindEscFromResultOwnSearchStays(t *testing.T) {
+	t.Parallel()
 	m := playNoOnboarding(openJQ(t, playApp(t, `{"foo":["alpha","beta"]}`)))
 	m = setProgram(m, ".foo[]")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
@@ -219,6 +225,7 @@ func TestPlayFindEscFromResultOwnSearchStays(t *testing.T) {
 // TestPlayFindTabClearsReturnTrip: tabbing out of the result buffer ends the
 // find round trip, so a later tab back keeps esc's ordinary meaning there.
 func TestPlayFindTabClearsReturnTrip(t *testing.T) {
+	t.Parallel()
 	m := playNoOnboarding(openJQ(t, playApp(t, `{"foo":["alpha","beta"]}`)))
 	m = setProgram(m, ".foo[]")
 	m = playSearchFor(drainKey(m, playFindKey()), "alpha")
@@ -236,6 +243,7 @@ func TestPlayFindTabClearsReturnTrip(t *testing.T) {
 // TestPlayMatchStepChordsStepResultSearch: cmd+g / cmd+shift+g walk the
 // result's matches from the query line, without taking the focus (#2411).
 func TestPlayMatchStepChordsStepResultSearch(t *testing.T) {
+	t.Parallel()
 	m := playNoOnboarding(openJQ(t, playApp(t, `{"foo":["ha","hb","hc"]}`)))
 	m = setProgram(m, ".foo[]")
 	m = playSearchFor(drainKey(m, playFindKey()), "h")
@@ -266,6 +274,7 @@ func TestPlayMatchStepChordsStepResultSearch(t *testing.T) {
 // TestPlayResultRenderClearsHighlight: the matches stay painted until a new
 // query re-renders the result — and not past it.
 func TestPlayResultRenderClearsHighlight(t *testing.T) {
+	t.Parallel()
 	m := playNoOnboarding(openJQ(t, playApp(t, `{"foo":["alpha","beta"]}`)))
 	m = setProgram(m, ".foo[]")
 	m = playSearchFor(drainKey(m, playFindKey()), "alpha")
@@ -282,6 +291,7 @@ func TestPlayResultRenderClearsHighlight(t *testing.T) {
 // TestPlayFindHelpListsChordInBothTables: the new way is in both focus tables
 // of the cheatsheet, resolved from the live binding rather than hard-coded.
 func TestPlayFindHelpListsChordInBothTables(t *testing.T) {
+	t.Parallel()
 	m := playNoOnboarding(openJQ(t, playApp(t, `{"foo":[1]}`)))
 	chord, ok := m.playChordFor("editor.find")
 	if !ok {
@@ -307,6 +317,7 @@ func TestPlayFindHelpListsChordInBothTables(t *testing.T) {
 // TestPlayFindLeavesResultReadOnly: the search prompt's text never reaches the
 // read-only buffer (#1762).
 func TestPlayFindLeavesResultReadOnly(t *testing.T) {
+	t.Parallel()
 	m := playNoOnboarding(openJQ(t, playApp(t, `{"foo":["alpha"]}`)))
 	m = setProgram(m, ".foo[]")
 	before := m.play.resultEd.Text()

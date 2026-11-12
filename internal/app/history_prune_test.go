@@ -12,6 +12,7 @@ import (
 // entry, the config reloads and the open palette re-lists without it.
 
 func TestRemoveFromHistoryEndToEnd(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	withStore(t)
 	restore := config.Get()
 	t.Cleanup(func() { config.Set(restore) })

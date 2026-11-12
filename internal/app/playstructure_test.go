@@ -53,6 +53,7 @@ func clickResult(m Model, x, y int) Model {
 // TestPlayStructureItemsAndWidth: an object result lists its keys, the strip
 // takes its cells off the result editor, and the rendered rows carry them.
 func TestPlayStructureItemsAndWidth(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, bigObject()))
 	m = setProgram(m, ".")
 	width := playResultWidth(m)
@@ -91,6 +92,7 @@ func TestPlayStructureItemsAndWidth(t *testing.T) {
 // and puts the caret on it; a click in the result text beside the strip still
 // lands in the result.
 func TestPlayStructureClickJumps(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, bigObject()))
 	m = setProgram(m, ".")
 	m = structureOn(m)
@@ -129,6 +131,7 @@ func TestPlayStructureClickJumps(t *testing.T) {
 // the keyboard back where it came from; the chord toggles through focus to
 // hidden.
 func TestPlayStructureKeyboard(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, bigObject()))
 	if m.onboardingOpen() {
 		m = m.closeOnboarding().(Model)
@@ -176,6 +179,7 @@ func TestPlayStructureKeyboard(t *testing.T) {
 // TestPlayStructureHides: a scalar result lists nothing and the strip gives
 // the result its whole width; a pane below the threshold hides it too.
 func TestPlayStructureHides(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, bigObject()))
 	m = setProgram(m, ".")
 	m = structureOn(m)
@@ -201,6 +205,7 @@ func TestPlayStructureHides(t *testing.T) {
 
 // TestPlayStructureYQ: the yq dialect lists its mapping's keys the same way.
 func TestPlayStructureYQ(t *testing.T) {
+	t.Parallel()
 	m := openYQ(t, yqApp(t, "kind: Deployment\nspec:\n  replicas: 2\n"))
 	m = setProgram(m, ".")
 	if len(m.play.outline) != 2 || m.play.outline[1].Label != "spec" {

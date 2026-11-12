@@ -35,6 +35,7 @@ func hasKind(m Model, kind pane.Kind) bool {
 // TestBinaryOpensInHexPane: a file with a NUL in its head and no dedicated
 // viewer opens in the hex viewer by default, never as a text buffer.
 func TestBinaryOpensInHexPane(t *testing.T) {
+	t.Parallel()
 	m := hexApp(t, host.MapConfig{})
 	path := writeTestBinary(t, "blob.bin")
 	m = settle(t, m, m.host.Dispatch(palette.OpenFileMsg{Path: path}))
@@ -49,6 +50,7 @@ func TestBinaryOpensInHexPane(t *testing.T) {
 // TestBinaryOpenSettingEditor: files.binary_open = "editor" keeps the
 // pre-#2420 behaviour — a text buffer, with code insight off.
 func TestBinaryOpenSettingEditor(t *testing.T) {
+	t.Parallel()
 	m := hexApp(t, host.MapConfig{"files.binary_open": "editor"})
 	path := writeTestBinary(t, "blob.bin")
 	m = settle(t, m, m.host.Dispatch(palette.OpenFileMsg{Path: path}))
@@ -68,6 +70,7 @@ func TestBinaryOpenSettingEditor(t *testing.T) {
 // TestOpenAsHexForcedIgnoresSetting: the explicit chooser pick opens the hex
 // pane even when the setting prefers the editor.
 func TestOpenAsHexForcedIgnoresSetting(t *testing.T) {
+	t.Parallel()
 	m := hexApp(t, host.MapConfig{"files.binary_open": "editor"})
 	m.openAsPath = writeTestBinary(t, "blob.bin")
 	out, cmd := m.openFileAs(OpenAsMsg{Mode: openAsHex})
@@ -80,6 +83,7 @@ func TestOpenAsHexForcedIgnoresSetting(t *testing.T) {
 // TestOpenAsDataRejectsNonDatabase: an invalid pick notifies and leaves the
 // layout untouched.
 func TestOpenAsDataRejectsNonDatabase(t *testing.T) {
+	t.Parallel()
 	m := hexApp(t, host.MapConfig{})
 	m.openAsPath = writeTestBinary(t, "not-a.db")
 	leaves := len(m.leafOrder())
@@ -99,6 +103,7 @@ func TestOpenAsDataRejectsNonDatabase(t *testing.T) {
 
 // TestOpenAsImageRejectsNonImage: same contract for the image target.
 func TestOpenAsImageRejectsNonImage(t *testing.T) {
+	t.Parallel()
 	m := hexApp(t, host.MapConfig{})
 	m.openAsPath = writeTestBinary(t, "not-a.png")
 	out, cmd := m.openFileAs(OpenAsMsg{Mode: openAsImage})
@@ -114,6 +119,7 @@ func TestOpenAsImageRejectsNonImage(t *testing.T) {
 // TestOpenAsEditorForcesTextBuffer: the Text editor target bypasses every
 // handler — a sniffed binary lands in a buffer with insight off.
 func TestOpenAsEditorForcesTextBuffer(t *testing.T) {
+	t.Parallel()
 	m := hexApp(t, host.MapConfig{})
 	path := writeTestBinary(t, "blob.bin")
 	m.openAsPath = canonicalPath(path)
@@ -134,6 +140,7 @@ func TestOpenAsEditorForcesTextBuffer(t *testing.T) {
 // TestOpenAsChooserRows: the chooser lists every registered handler plus the
 // two always-available targets, and each row dispatches its OpenAsMsg.
 func TestOpenAsChooserRows(t *testing.T) {
+	t.Parallel()
 	items := openAsMode{}.Results("", palette.Context{})
 	want := []string{openAsEditor, openAsHex, openAsImage, openAsArchive, openAsData, openAsMarkdown, openAsNotebook, openAsGzip}
 	if len(items) != len(want) {
@@ -160,6 +167,7 @@ func TestOpenAsChooserRows(t *testing.T) {
 // TestOpenAsPickerNeedsASubject: without a file to act on, the chooser
 // refuses with a notification instead of opening.
 func TestOpenAsPickerNeedsASubject(t *testing.T) {
+	t.Parallel()
 	m := hexApp(t, host.MapConfig{})
 	m.openFileAsPicker()
 	if notes := m.host.DrainNotifications(); len(notes) == 0 || !strings.Contains(notes[0].Text, "open file as") {

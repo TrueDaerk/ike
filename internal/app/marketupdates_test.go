@@ -52,6 +52,7 @@ func emptyCatalog() (market.Index, []string, error) {
 
 // TestMarketUpdateCheckRespectsSetting: auto_check off means no command at all.
 func TestMarketUpdateCheckRespectsSetting(t *testing.T) {
+	// serial: checkModel: t.Setenv
 	m, calls := checkModel(t, false, emptyCatalog)
 	if cmd := m.marketUpdateCheckCmd(); cmd != nil {
 		t.Fatal("check ran with marketplace.auto_check off")
@@ -64,6 +65,7 @@ func TestMarketUpdateCheckRespectsSetting(t *testing.T) {
 // TestMarketUpdateCheckRateLimited: a recent successful check suppresses the
 // next one, and the successful check itself stamps the state file.
 func TestMarketUpdateCheckRateLimited(t *testing.T) {
+	// serial: checkModel: t.Setenv
 	withStore(t)
 	m, calls := checkModel(t, true, emptyCatalog)
 	cmd := m.marketUpdateCheckCmd()
@@ -95,6 +97,7 @@ func TestMarketUpdateCheckRateLimited(t *testing.T) {
 // TestMarketUpdateCheckSilentOnFailure: an unreachable catalog produces no
 // message and leaves the rate limit untouched, so the next start retries.
 func TestMarketUpdateCheckSilentOnFailure(t *testing.T) {
+	// serial: checkModel: t.Setenv
 	withStore(t)
 	m, _ := checkModel(t, true, func() (market.Index, []string, error) {
 		return market.Index{}, nil, errors.New("dial tcp: no route to host")
@@ -114,6 +117,7 @@ func TestMarketUpdateCheckSilentOnFailure(t *testing.T) {
 // TestMarketUpdateCheckFindsUpdates: an installed plugin older than the
 // catalog comes back in the message the app turns into the notification.
 func TestMarketUpdateCheckFindsUpdates(t *testing.T) {
+	// serial: checkModel: t.Setenv
 	withStore(t)
 	m, _ := checkModel(t, true, func() (market.Index, []string, error) {
 		return market.ParseIndex([]byte(`{"version": 1, "plugins": [

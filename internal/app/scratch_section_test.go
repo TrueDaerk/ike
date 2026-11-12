@@ -60,6 +60,7 @@ func sectionRowY(t *testing.T, m Model) int {
 // TestExplorerWheelScrollsScratchSection (#1965): a wheel over the Scratches
 // section scrolls the section, while a wheel over the tree leaves it alone.
 func TestExplorerWheelScrollsScratchSection(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	seedScratches(t, m, 20)
@@ -86,6 +87,7 @@ func TestExplorerWheelScrollsScratchSection(t *testing.T) {
 // TestScratchSectionLastOpenedFromMRU (#1965): opening a scratch stamps the
 // MRU store, and the section's age column reads that time — not the mtime.
 func TestScratchSectionLastOpenedFromMRU(t *testing.T) {
+	// serial: measures the wall clock (load-sensitive)
 	withStore(t)
 	m := newSized()
 	paths := seedScratches(t, m, 1)

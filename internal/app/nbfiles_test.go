@@ -55,6 +55,7 @@ func notebookPane(m Model) *pane.Instance {
 // TestIpynbOpensInNotebookPane: an .ipynb opens as cells, never as a raw JSON
 // buffer.
 func TestIpynbOpensInNotebookPane(t *testing.T) {
+	t.Parallel()
 	m := hexApp(t, host.MapConfig{})
 	path := writeTestNotebook(t, "analysis.ipynb", testNotebook)
 	m = settle(t, m, m.host.Dispatch(palette.OpenFileMsg{Path: path}))
@@ -76,6 +77,7 @@ func TestIpynbOpensInNotebookPane(t *testing.T) {
 // TestOpenNotebookAsTextGivesTheJSON: the chooser's Text editor target still
 // opens the document itself, which is the escape hatch the viewer needs.
 func TestOpenNotebookAsTextGivesTheJSON(t *testing.T) {
+	t.Parallel()
 	m := hexApp(t, host.MapConfig{})
 	path := writeTestNotebook(t, "analysis.ipynb", testNotebook)
 	m.openAsPath = canonicalPath(path)
@@ -92,6 +94,7 @@ func TestOpenNotebookAsTextGivesTheJSON(t *testing.T) {
 // TestOpenAsNotebookRejectsNonNotebooks: an invalid pick notifies and leaves
 // the layout untouched, like every other content-contract target.
 func TestOpenAsNotebookRejectsNonNotebooks(t *testing.T) {
+	t.Parallel()
 	m := hexApp(t, host.MapConfig{})
 	m.openAsPath = writeTestNotebook(t, "plain.json", `{"hello": 1}`)
 	leaves := len(m.leafOrder())
@@ -112,6 +115,7 @@ func TestOpenAsNotebookRejectsNonNotebooks(t *testing.T) {
 // TestOpenAsNotebookForcesAJSONFile: a notebook saved under another extension
 // still opens as cells through the chooser.
 func TestOpenAsNotebookForcesAJSONFile(t *testing.T) {
+	t.Parallel()
 	m := hexApp(t, host.MapConfig{})
 	m.openAsPath = writeTestNotebook(t, "renamed.json", testNotebook)
 	out, cmd := m.openFileAs(OpenAsMsg{Mode: openAsNotebook})
@@ -124,6 +128,7 @@ func TestOpenAsNotebookForcesAJSONFile(t *testing.T) {
 // TestNotebookRerendersOnExternalChange: a kernel rewriting the .ipynb
 // re-renders the pane — no buffer exists that the editor routing would catch.
 func TestNotebookRerendersOnExternalChange(t *testing.T) {
+	t.Parallel()
 	m := hexApp(t, host.MapConfig{})
 	path := writeTestNotebook(t, "analysis.ipynb", testNotebook)
 	m = settle(t, m, m.host.Dispatch(palette.OpenFileMsg{Path: path}))
@@ -148,6 +153,7 @@ func TestNotebookRerendersOnExternalChange(t *testing.T) {
 // TestNotebookCopyAndScratch: the pane's clipboard and scratch requests are
 // carried out by the root model.
 func TestNotebookCopyAndScratch(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := hexApp(t, host.MapConfig{})
 	out, _ := m.Update(nbview.CopyMsg{Text: "print(1)", What: "cell 2 source"})
@@ -182,6 +188,7 @@ func TestNotebookCopyAndScratch(t *testing.T) {
 // TestNotebookSaveImage: the save request writes the bytes and never
 // overwrites an existing file.
 func TestNotebookSaveImage(t *testing.T) {
+	t.Parallel()
 	m := hexApp(t, host.MapConfig{})
 	dir := t.TempDir()
 	target := filepath.Join(dir, "nb-cell1.png")
@@ -205,6 +212,7 @@ func TestNotebookSaveImage(t *testing.T) {
 // TestNotebookPanePersistence: the pane's identity round-trips through the
 // layout snapshot, so a restored session re-reads the notebook.
 func TestNotebookPanePersistence(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := hexApp(t, host.MapConfig{})
 	path := writeTestNotebook(t, "analysis.ipynb", testNotebook)
@@ -235,6 +243,7 @@ func TestNotebookPanePersistence(t *testing.T) {
 // TestNotebookPaneRoutesKeys: a focused notebook pane consumes its own
 // navigation keys and the shared find chord reaches its search line.
 func TestNotebookPaneRoutesKeys(t *testing.T) {
+	t.Parallel()
 	m := hexApp(t, host.MapConfig{})
 	path := writeTestNotebook(t, "analysis.ipynb", testNotebook)
 	m = settle(t, m, m.host.Dispatch(palette.OpenFileMsg{Path: path}))

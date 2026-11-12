@@ -14,6 +14,7 @@ func maximizeOnce(t *testing.T, m Model) Model {
 }
 
 func TestPopupMaximizeTogglesBox(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 120, 40)))
 	m.winSizes.Put(popupTermPosKey, 3, -2)
@@ -49,6 +50,7 @@ func TestPopupMaximizeTogglesBox(t *testing.T) {
 }
 
 func TestPopupMaximizeDroppedOnHide(t *testing.T) {
+	t.Parallel()
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 120, 40)))
 	m.winSizes.Put(popupTermPosKey, 2, 1)
 	m = maximizeOnce(t, m)
@@ -63,6 +65,7 @@ func TestPopupMaximizeDroppedOnHide(t *testing.T) {
 }
 
 func TestPinnedPopupMaximizeRestoresDock(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 120, 40)))
 	out, _ := m.Update(TerminalPopupPinMsg{})
@@ -81,6 +84,7 @@ func TestPinnedPopupMaximizeRestoresDock(t *testing.T) {
 }
 
 func TestFloatPanelMaximizeToggles(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 120, 40)))
 	m.tearOutPopupTab(m.popup.inst, 0, 30, 20)
@@ -119,6 +123,7 @@ func TestFloatPanelMaximizeToggles(t *testing.T) {
 }
 
 func TestMaximizeWithoutPopupZoomsPane(t *testing.T) {
+	t.Parallel()
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 120, 40)))
 	out, _ := m.Update(TerminalPopupMsg{}) // hide
 	m = out.(Model)

@@ -25,6 +25,7 @@ import (
 // first — appending would leave the reclassification shadowed by the reading
 // it was meant to fix.
 func TestApplyConcealRuleReplacesSamePattern(t *testing.T) {
+	t.Parallel()
 	list := []string{"*_bytes=bytes", "max_size=bytes"}
 	next, changed := applyConcealRule(list, "max_size=timestamp-s", "max_size")
 	if !changed {
@@ -49,6 +50,7 @@ func TestApplyConcealRuleReplacesSamePattern(t *testing.T) {
 // into editor.number_hint_units, and the reload installs it — the field is
 // classified by the rule from the next parse on.
 func TestConcealRuleWritesUnitsSetting(t *testing.T) {
+	// serial: numhint.SetFieldUnits (process-wide state of package numhint)
 	m, userPath := concealRuleModel(t)
 	numhint.SetFieldUnits(nil)
 	if u, ok := numhint.FieldUnit("created_at"); ok {
@@ -79,6 +81,7 @@ func TestConcealRuleWritesUnitsSetting(t *testing.T) {
 // editor.secret_masking_keys, and an exempting entry stops the built-in
 // tables from masking the key.
 func TestConcealRuleWritesSecretSetting(t *testing.T) {
+	// serial: secret.SetKeyPatterns (process-wide state of package secret)
 	m, userPath := concealRuleModel(t)
 	secret.SetKeyPatterns(nil)
 	if !secret.Suspect("TOKEN") {

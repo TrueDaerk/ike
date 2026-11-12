@@ -64,6 +64,7 @@ func httpAndProblems(t *testing.T) Model {
 // converts into a tab host, keeping its live model as the first tab under
 // its own key, and the host takes a fresh key.
 func TestToolPaneDropOnHTTPCenterMergesAsTab(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	withTools(t, sleepTool("watcher"))
 	m := dismissOnboarding(sized(t, 140, 50))
 	t.Cleanup(func() { closeAllSessions(m) })
@@ -111,6 +112,7 @@ func TestToolPaneDropOnHTTPCenterMergesAsTab(t *testing.T) {
 // dragged onto a tool window's center merges as a tab of that window, and
 // the reverse direction works the same way.
 func TestHTTPPaneDropOnToolWindowCenterMergesAsTab(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, src, dst string }{
 		{"http onto problems", pane.HTTPKey, pane.ProblemsKey},
 		{"problems onto http", pane.ProblemsKey, pane.HTTPKey},
@@ -147,6 +149,7 @@ func TestHTTPPaneDropOnToolWindowCenterMergesAsTab(t *testing.T) {
 // exception — it offers no center zone to a tool-window drag and never
 // converts, in either direction.
 func TestExplorerNeverMergesAsTab(t *testing.T) {
+	t.Parallel()
 	m := httpAndProblems(t)
 	er := m.lay.Panes[pane.ExplorerKey]
 	d := &dragState{kind: dragMove, srcPane: pane.HTTPKey, curX: er.X + er.W/2, curY: er.Y + er.H/2}
@@ -173,6 +176,7 @@ func TestExplorerNeverMergesAsTab(t *testing.T) {
 // hosted as a tab focuses that tab instead of opening a second instance, and
 // a second toggle hands focus back.
 func TestToggleFocusesHostedToolWindow(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := httpAndProblems(t)
 	m = dragPaneOnto(t, m, pane.ProblemsKey, pane.HTTPKey)
@@ -213,6 +217,7 @@ func TestToggleFocusesHostedToolWindow(t *testing.T) {
 // window's tab onto the host's edge restores a dedicated pane of the
 // original kind under its fixed key, the live model moving with it.
 func TestHostedToolWindowSplitsBackOutIntact(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := httpAndProblems(t)
 	m = dragPaneOnto(t, m, pane.ProblemsKey, pane.HTTPKey)
@@ -245,6 +250,7 @@ func TestHostedToolWindowSplitsBackOutIntact(t *testing.T) {
 // HTTP viewer and the Problems window saves and restores with both as tabs
 // — no dedicated leaf, no duplicate, the app hooks wired.
 func TestHostedToolWindowsPersistAcrossRestore(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := httpAndProblems(t)
 	m = dragPaneOnto(t, m, pane.ProblemsKey, pane.HTTPKey)
@@ -279,6 +285,7 @@ func TestHostedToolWindowsPersistAcrossRestore(t *testing.T) {
 // window both as a dedicated leaf and as a hosted tab restores it once, in
 // the host — the dedicated leaf prunes.
 func TestLayoutNamingWindowTwiceRestoresOnce(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := httpAndProblems(t)
 	m = dragPaneOnto(t, m, pane.ProblemsKey, pane.HTTPKey)
@@ -310,6 +317,7 @@ func TestLayoutNamingWindowTwiceRestoresOnce(t *testing.T) {
 // shapes, never duplicating, and building them fresh in a workspace where
 // they are closed.
 func TestNamedLayoutRoundTripsHostedToolWindows(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := httpAndProblems(t)
 	m = dragPaneOnto(t, m, pane.ProblemsKey, pane.HTTPKey)
@@ -376,6 +384,7 @@ func TestNamedLayoutRoundTripsHostedToolWindows(t *testing.T) {
 // layout with dedicated HTTP and Problems slots applied while both windows
 // are hosted as tabs detaches them into their slots, once each.
 func TestNamedLayoutDedicatedSlotAdoptsHostedWindow(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	split := httpAndProblems(t)
 	snap, ok := snapshotLayout(split.activeWS().Tree, split.activeWS().Panes)

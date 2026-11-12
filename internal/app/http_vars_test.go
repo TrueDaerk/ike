@@ -30,6 +30,7 @@ func warningMessages(m Model, path string) []string {
 // rung of the chain defines it — and a capture directive's own name counts as
 // defined before it ever ran.
 func TestHTTPVarDiagnosticsFlagsOnlyUnknownNames(t *testing.T) {
+	t.Parallel()
 	src := "@host = https://x.test\n" +
 		"### start\n" +
 		"# @capture task = .task\n" +
@@ -61,6 +62,7 @@ func TestHTTPVarDiagnosticsFlagsOnlyUnknownNames(t *testing.T) {
 // TestHTTPVarDiagnosticsFlagsEveryOccurrence: the fix goes wherever the name
 // is written, so each use is marked rather than only the first.
 func TestHTTPVarDiagnosticsFlagsEveryOccurrence(t *testing.T) {
+	t.Parallel()
 	src := "GET {{nope}}/a?x={{nope}}\n"
 	f := httpfile.Parse(src)
 	if diags := httpVarDiagnostics(src, f, &httpfile.Vars{}); len(diags) != 2 {
@@ -71,6 +73,7 @@ func TestHTTPVarDiagnosticsFlagsEveryOccurrence(t *testing.T) {
 // TestHTTPVarsLintMarksTheBuffer: the editor-level path — an open file with a
 // typo'd reference carries a warning, and fixing the definition clears it.
 func TestHTTPVarsLintMarksTheBuffer(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := httpApp(t)
 	path := httpVarFile(t, "@host = https://x.test\nGET {{hsot}}/a\n", nil)
@@ -93,6 +96,7 @@ func TestHTTPVarsLintMarksTheBuffer(t *testing.T) {
 // too — a dispatch resolves `{{HOME}}` from the process environment, so the
 // lint must not call it unknown.
 func TestHTTPVarsLintKnowsTheProcessEnvironment(t *testing.T) {
+	// serial: t.Setenv
 	t.Setenv("IKE_HTTP_VAR_TEST", "https://x.test")
 	m := httpApp(t)
 	path := httpVarFile(t, "GET {{IKE_HTTP_VAR_TEST}}/a\n", nil)
@@ -108,6 +112,7 @@ func TestHTTPVarsLintKnowsTheProcessEnvironment(t *testing.T) {
 // TestHTTPVarsLintRunsAfterTheBufferGoesQuiet: the change seam marks the
 // buffer and the tick lints it — one pass per quiet period, not per keystroke.
 func TestHTTPVarsLintRunsAfterTheBufferGoesQuiet(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	path := httpVarFile(t, "GET {{nope}}/a\n", nil)
 	out, _ := m.Update(explorer.OpenFileMsg{Path: path})
@@ -136,6 +141,7 @@ func TestHTTPVarsLintRunsAfterTheBufferGoesQuiet(t *testing.T) {
 // TestHTTPVarsLintFollowsTheSelectedEnvironment: switching the environment
 // switches the set of known names, and the warnings follow immediately.
 func TestHTTPVarsLintFollowsTheSelectedEnvironment(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	envs := `{"dev": {"host": "https://dev.test"}, "prod": {"other": "1"}}`
 	path := httpVarFile(t, "GET {{host}}/a\n", map[string]string{
@@ -169,6 +175,7 @@ func TestHTTPVarsLintFollowsTheSelectedEnvironment(t *testing.T) {
 // file's diagnostics share the set — a dispatch reporting a failed capture
 // must not erase the unknown-variable warnings, and the other way round.
 func TestHTTPVarsAndCaptureDiagnosticsCoexist(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"other":1}`))

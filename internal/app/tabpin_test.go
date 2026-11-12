@@ -16,6 +16,7 @@ import (
 // label state.
 
 func TestTogglePinRoundTripsThroughLayout(t *testing.T) {
+	// serial: fixedDirApp: t.Setenv
 	withStore(t)
 	conf := t.TempDir()
 	dir := t.TempDir()
@@ -51,6 +52,7 @@ func TestTogglePinRoundTripsThroughLayout(t *testing.T) {
 }
 
 func TestTabLimitEvictionSkipsPinned(t *testing.T) {
+	// serial: withTabLimit: config.Set (process-wide configuration)
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "a\n")
 	b := writeTemp(t, dir, "b.txt", "b\n")
@@ -79,6 +81,7 @@ func TestTabLimitEvictionSkipsPinned(t *testing.T) {
 }
 
 func TestTabLimitAllPinnedExceedsLimit(t *testing.T) {
+	// serial: withTabLimit: config.Set (process-wide configuration)
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "a\n")
 	b := writeTemp(t, dir, "b.txt", "b\n")
@@ -100,6 +103,7 @@ func TestTabLimitAllPinnedExceedsLimit(t *testing.T) {
 }
 
 func TestCloseOthersKeepsPinnedTabs(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "a\n")
 	b := writeTemp(t, dir, "b.txt", "b\n")
@@ -121,6 +125,7 @@ func TestCloseOthersKeepsPinnedTabs(t *testing.T) {
 }
 
 func TestTabLabelsCarryPinPrefix(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "a\n")
 	b := writeTemp(t, dir, "b.txt", "b\n")
@@ -139,6 +144,7 @@ func TestTabLabelsCarryPinPrefix(t *testing.T) {
 }
 
 func TestRenderTabBarPinPrefixKeepsGeometry(t *testing.T) {
+	t.Parallel()
 	pal := theme.DefaultPalette()
 	labels := []string{tabPinPrefix + "a.go", "b.go"}
 	bar := renderTabBar(labels, 0, 60, pal)
@@ -165,6 +171,7 @@ func TestRenderTabBarPinPrefixKeepsGeometry(t *testing.T) {
 }
 
 func TestTabContextItemsPinLabel(t *testing.T) {
+	t.Parallel()
 	find := func(pinned bool) string {
 		for _, it := range tabContextItems(pinned) {
 			if it.Command == "editor.tab.togglePin" {

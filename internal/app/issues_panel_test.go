@@ -24,6 +24,7 @@ func issuesApp(t *testing.T) Model {
 }
 
 func TestIssuesToggleLifecycle(t *testing.T) {
+	t.Parallel()
 	m := issuesApp(t)
 	before := m.activeWS().Panes.Focused()
 
@@ -48,6 +49,7 @@ func TestIssuesToggleLifecycle(t *testing.T) {
 }
 
 func TestIssuesPanePersists(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := issuesApp(t)
 	out, _ := m.Update(IssuesToggleMsg{})
@@ -70,6 +72,7 @@ func TestIssuesPanePersists(t *testing.T) {
 }
 
 func TestIssuesFetchResultFillsPanel(t *testing.T) {
+	t.Parallel()
 	m := issuesApp(t)
 	out, _ := m.Update(IssuesToggleMsg{})
 	m = out.(Model)
@@ -82,6 +85,7 @@ func TestIssuesFetchResultFillsPanel(t *testing.T) {
 }
 
 func TestIssuesStartWorkRequestRunsFlow(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	m := issuesApp(t)
 	// Run from a non-repo directory: the command must resolve to a
 	// StartWorkDoneMsg carrying git's error — never touch the real checkout,

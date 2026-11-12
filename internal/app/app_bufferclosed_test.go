@@ -47,6 +47,7 @@ func writeFiles(t *testing.T, dir string, names ...string) []string {
 // TestCloseTabFiresBufferClosed guards #827: closing an editor tab fires
 // EventBufferClosed with the file path once the view is gone.
 func TestCloseTabFiresBufferClosed(t *testing.T) {
+	t.Parallel()
 	reg, got := bufferClosedRecorder()
 	m := sizedWith(t, reg, 100, 40)
 	paths := writeFiles(t, t.TempDir(), "a.txt", "b.txt")
@@ -73,6 +74,7 @@ func TestCloseTabFiresBufferClosed(t *testing.T) {
 // TestSharedViewsFireBufferClosedOnce guards #827: a file shown by two panes
 // (#142 shared document) fires only when its last view closes.
 func TestSharedViewsFireBufferClosedOnce(t *testing.T) {
+	t.Parallel()
 	reg, got := bufferClosedRecorder()
 	m := sizedWith(t, reg, 120, 40)
 	paths := writeFiles(t, t.TempDir(), "a.txt", "b.txt")
@@ -111,6 +113,7 @@ func TestSharedViewsFireBufferClosedOnce(t *testing.T) {
 // parked background workspace's editor keeps its LSP document — closing the
 // active workspace's view fires nothing.
 func TestBufferStaysOpenInParkedWorkspace(t *testing.T) {
+	// serial: t.Setenv
 	base := t.TempDir()
 	pa, pb := filepath.Join(base, "a"), filepath.Join(base, "b")
 	for _, d := range []string{pa, pb} {

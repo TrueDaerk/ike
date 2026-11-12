@@ -35,6 +35,7 @@ func emphRuns(line string) []string {
 }
 
 func TestMiniDiffEmphasizesChangedPair(t *testing.T) {
+	t.Parallel()
 	pal := theme.DefaultPalette()
 	res := diff.Compute("keep\nfoo := alpha + 1\n", "keep\nfoo := omega + 1\n")
 	lines := renderMiniDiff(pal, res, 80, true)
@@ -58,6 +59,7 @@ func TestMiniDiffEmphasizesChangedPair(t *testing.T) {
 }
 
 func TestMiniDiffPureAddRemoveUnemphasized(t *testing.T) {
+	t.Parallel()
 	pal := theme.DefaultPalette()
 	res := diff.Compute("a\nb\n", "a\nb\nadded line\n")
 	for _, l := range renderMiniDiff(pal, res, 80, true) {
@@ -68,6 +70,7 @@ func TestMiniDiffPureAddRemoveUnemphasized(t *testing.T) {
 }
 
 func TestMiniDiffEmphasisOff(t *testing.T) {
+	// serial: unidiff.SetWordHighlight (process-wide switch)
 	pal := theme.DefaultPalette()
 	res := diff.Compute("x := alpha\n", "x := omega\n")
 	on := renderMiniDiff(pal, res, 80, true)
@@ -96,6 +99,7 @@ func TestMiniDiffEmphasisOff(t *testing.T) {
 }
 
 func TestMiniDiffEmphasisTruncatesBalanced(t *testing.T) {
+	t.Parallel()
 	pal := theme.DefaultPalette()
 	// The changed token stays under the whole-line fallback share (#2849)
 	// thanks to the long unchanged tail, so the pair carries spans.
@@ -122,6 +126,7 @@ func TestMiniDiffEmphasisTruncatesBalanced(t *testing.T) {
 }
 
 func TestMiniDiffEmphasisIgnoreWhitespaceAndTabs(t *testing.T) {
+	t.Parallel()
 	pal := theme.DefaultPalette()
 	res := diff.ComputeWith("\tx = old  value\n", "\tx = new value\n", diff.Options{IgnoreWhitespace: true})
 	lines := renderMiniDiff(pal, res, 80, true)

@@ -40,6 +40,7 @@ func typeKey(r rune) tea.KeyPressMsg {
 // TestPlaygroundSelectAllReplacesQuery: cmd+a selects the whole program, so
 // the next typed rune replaces it instead of appending to it.
 func TestPlaygroundSelectAllReplacesQuery(t *testing.T) {
+	t.Parallel()
 	m := playReady(t, `{"foo":1}`)
 	m.play.program.Set(".foo")
 
@@ -62,6 +63,7 @@ func TestPlaygroundSelectAllReplacesQuery(t *testing.T) {
 // TestPlaygroundSelectAllPaintsTheQuery: the selection is visible — the
 // highlighting steps aside for the reverse-video the next keystroke acts on.
 func TestPlaygroundSelectAllPaintsTheQuery(t *testing.T) {
+	t.Parallel()
 	m := playReady(t, `{"foo":1}`)
 	m.play.program.Set(".foo")
 	plain := m.playQueryRow(80)
@@ -75,6 +77,7 @@ func TestPlaygroundSelectAllPaintsTheQuery(t *testing.T) {
 // what it was before the last edit — a run of typing counts as one edit, so
 // one ctrl+z is not one rune.
 func TestPlaygroundUndoRestoresPreviousQuery(t *testing.T) {
+	t.Parallel()
 	m := playReady(t, `{"foo":1}`)
 	m.play.program.Set(".foo")
 
@@ -93,6 +96,7 @@ func TestPlaygroundUndoRestoresPreviousQuery(t *testing.T) {
 // binds both, and a field the mode owns must not be the one place where only
 // one of them works.
 func TestPlaygroundUndoAlsoOnCmdZ(t *testing.T) {
+	t.Parallel()
 	m := playReady(t, `{"foo":1}`)
 	m.play.program.Set(".foo")
 	m = drainKey(m, typeKey('x'))
@@ -106,6 +110,7 @@ func TestPlaygroundUndoAlsoOnCmdZ(t *testing.T) {
 // as a prefix from the query line — not typed into the program, not recorded
 // unbound — and the continuation completes the Global sequence.
 func TestPlaygroundLeaderChordFromQueryLine(t *testing.T) {
+	t.Parallel()
 	m := playReady(t, `{"foo":1}`)
 	m.play.program.Set(".foo")
 
@@ -140,6 +145,7 @@ func TestPlaygroundLeaderChordFromQueryLine(t *testing.T) {
 // TestPlaygroundLeaderChordFromResultBuffer: the same from the other focus —
 // the continuation is a plain key the read-only buffer would take as a motion.
 func TestPlaygroundLeaderChordFromResultBuffer(t *testing.T) {
+	t.Parallel()
 	m := playReady(t, `{"foo":1}`)
 	m.play.setBufFocus(true)
 
@@ -157,6 +163,7 @@ func TestPlaygroundLeaderChordFromResultBuffer(t *testing.T) {
 // TestPlaygroundLeaderEscCancels: esc ends a held sequence instead of doubling
 // as the playground's own esc, which would close the mode under the user.
 func TestPlaygroundLeaderEscCancels(t *testing.T) {
+	t.Parallel()
 	m := playReady(t, `{"foo":1}`)
 	out, _ := m.Update(tea.KeyPressMsg{Code: 'k', Mod: tea.ModMeta})
 	m = out.(Model)
@@ -176,6 +183,7 @@ func TestPlaygroundLeaderEscCancels(t *testing.T) {
 // the telemetry shows the user falling back to (cmd+alt+t) opens the popup
 // terminal straight from the query line.
 func TestPlaygroundTerminalPopupChordFromQueryLine(t *testing.T) {
+	t.Parallel()
 	m := playReady(t, `{"foo":1}`)
 	m.play.program.Set(".foo")
 	m = drainKey(m, tea.KeyPressMsg{Code: 't', Mod: tea.ModMeta | tea.ModAlt})
@@ -191,6 +199,7 @@ func TestPlaygroundTerminalPopupChordFromQueryLine(t *testing.T) {
 // (#2539's recorder): none of the three chords lands in the usage log as an
 // unbound key any more — each is consumed by something that means it.
 func TestPlaygroundChordsNotRecordedUnbound(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := playReady(t, `{"foo":1}`)
 	m.play.program.Set(".foo")

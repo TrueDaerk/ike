@@ -64,6 +64,7 @@ func specFile(t *testing.T, name string) string {
 // prompt, enter runs the import off-loop, and the finished import opens the
 // generated file with a summary notification.
 func TestOpenAPIImportPromptRunsImport(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	spec := specFile(t, "mini.yaml")
 
@@ -132,6 +133,7 @@ func TestOpenAPIImportPromptRunsImport(t *testing.T) {
 // TestOpenAPIImportPromptCancels (#1939): esc closes the prompt without
 // writing anything.
 func TestOpenAPIImportPromptCancels(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	spec := specFile(t, "mini.yaml")
 
@@ -153,6 +155,7 @@ func TestOpenAPIImportPromptCancels(t *testing.T) {
 // TestOpenAPIImportReportsError (#1939): a document the importer rejects
 // surfaces as an error notification and opens nothing.
 func TestOpenAPIImportReportsError(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "legacy.json")
@@ -177,6 +180,7 @@ func TestOpenAPIImportReportsError(t *testing.T) {
 // TestPasteReachesOpenAPIImportPrompt (#1939): the prompt takes a paste at
 // its cursor like every other single-line prompt (#1873).
 func TestPasteReachesOpenAPIImportPrompt(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	out, _ := m.Update(ImportOpenAPIMsg{})
 	m = out.(Model)

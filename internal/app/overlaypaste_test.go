@@ -32,6 +32,7 @@ func openedFile(t *testing.T, content string) (Model, string) {
 // dropped on the floor by handlePaste's overlay bail, so search-everywhere
 // could not be pasted into at all.
 func TestPasteReachesPaletteQuery(t *testing.T) {
+	t.Parallel()
 	m, _ := openedFile(t, "abc\n")
 	m.openPalette()
 
@@ -45,6 +46,7 @@ func TestPasteReachesPaletteQuery(t *testing.T) {
 
 // TestPasteReachesFinderQuery: the same for the find-in-path overlay.
 func TestPasteReachesFinderQuery(t *testing.T) {
+	t.Parallel()
 	m, _ := openedFile(t, "abc\n")
 	m.finder.SetSize(m.width, m.height)
 	m.finder.Open(t.TempDir())
@@ -63,6 +65,7 @@ func TestPasteReachesFinderQuery(t *testing.T) {
 // TestPasteReachesRenamePrompt: the file-rename prompt is a floating-shell
 // input, and takes a paste at its cursor.
 func TestPasteReachesRenamePrompt(t *testing.T) {
+	t.Parallel()
 	m, _ := openedFile(t, "abc\n")
 	if cmd := m.startRenameFile(); cmd != nil {
 		m = drainCmd(m, cmd)
@@ -84,6 +87,7 @@ func TestPasteReachesRenamePrompt(t *testing.T) {
 // floating-shell input too, and shares the #1273 gap the clone dialog had
 // (#1873).
 func TestPasteReachesSaveAsPrompt(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m = dirtyUntitled(t, m)
 	tm, cmd := m.Update(editor.ActionMsg{Action: "write"})
@@ -103,6 +107,7 @@ func TestPasteReachesSaveAsPrompt(t *testing.T) {
 // TestPasteReachesNewProjectNameStep: the new-project wizard's name step
 // (#1718) takes a paste at its cursor (#1873).
 func TestPasteReachesNewProjectNameStep(t *testing.T) {
+	// serial: cloneProjectsDir: config.Set (process-wide configuration)
 	m := newSized()
 	cloneProjectsDir(t)
 	tm, cmd := m.Update(project.OpenNewProjectMsg{})
@@ -123,6 +128,7 @@ func TestPasteReachesNewProjectNameStep(t *testing.T) {
 // TestPasteReachesLayoutSavePrompt: the save-layout name prompt (#1175)
 // takes a paste at its cursor (#1873).
 func TestPasteReachesLayoutSavePrompt(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := sized(t, 100, 40)
 	m = step(m, SaveLayoutPromptMsg{})
@@ -142,6 +148,7 @@ func TestPasteReachesLayoutSavePrompt(t *testing.T) {
 // TestPasteReachesJBImportPrompt: the JetBrains keymap import prompt (#677)
 // takes a paste at its cursor (#1873).
 func TestPasteReachesJBImportPrompt(t *testing.T) {
+	t.Parallel()
 	m, _ := openedFile(t, "abc\n")
 	tm, _ := m.Update(ImportJetBrainsKeymapMsg{})
 	m = tm.(Model)
@@ -161,6 +168,7 @@ func TestPasteReachesJBImportPrompt(t *testing.T) {
 // TestPasteDroppedForNonInputOverlay: an overlay with no text input swallows
 // the paste — it must not fall through into the editor hidden underneath.
 func TestPasteDroppedForNonInputOverlay(t *testing.T) {
+	t.Parallel()
 	m, _ := openedFile(t, "abc\n")
 	m = drainKey(m, tea.KeyPressMsg{Text: "i", Code: 'i'}) // insert mode
 	m.undoTree.Open(nil)
@@ -180,6 +188,7 @@ func TestPasteDroppedForNonInputOverlay(t *testing.T) {
 // handles, and overlays own the keyboard before the keymap layer runs — so
 // the chord is routed explicitly (#1273).
 func TestCmdVPastesIntoOverlay(t *testing.T) {
+	// serial: sets package variable clipboardRead
 	restore := clipboardRead
 	clipboardRead = func() string { return "from-clipboard" }
 	t.Cleanup(func() { clipboardRead = restore })

@@ -72,6 +72,7 @@ func cxRescan(t *testing.T, m Model, l *scanLog, files int, after string) Model 
 }
 
 func TestComplexityScansAfterWindowActionsComeFromCache(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	withStore(t)
 	m, _ := baselineApp(t) // the cold first walk wrote the cache
 	ix := m.ComplexityIndex()
@@ -134,6 +135,7 @@ func TestComplexityScansAfterWindowActionsComeFromCache(t *testing.T) {
 // alternation survives the flat config read in one piece, so the index
 // built at startup equals the one a reload configures (#3085).
 func TestComplexityOptionsKeepBraceGlobs(t *testing.T) {
+	t.Parallel()
 	opts := complexityOptionsFrom(host.MapConfig{"complexity.exclude": "**/*.{js,ts}, vendor/**,{a,{b,c}}/x"})
 	want := []string{"**/*.{js,ts}", "vendor/**", "{a,{b,c}}/x"}
 	if len(opts.Exclude) != len(want) {

@@ -41,6 +41,7 @@ func pressHTTP(t *testing.T, m Model, k rune) (Model, tea.Cmd) {
 // TestHTTPToggleRawBodyCommand: http.toggleRawBody flips the viewer between
 // pretty-printed and as-received, the palette pendant of "t".
 func TestHTTPToggleRawBodyCommand(t *testing.T) {
+	t.Parallel()
 	m := filledHTTP(t, sampleResponse("one"))
 	if m.httpPanel().Raw() {
 		t.Fatal("the viewer must open pretty-printed")
@@ -71,6 +72,7 @@ func TestHTTPToggleRawBodyCommand(t *testing.T) {
 // TestHTTPJQPlaygroundFromResponse: "q" in the viewer opens the jq playground
 // over the shown body — the acceptance criterion's documented key.
 func TestHTTPJQPlaygroundFromResponse(t *testing.T) {
+	t.Parallel()
 	m := filledHTTP(t, sampleResponse("one"))
 
 	m, cmd := pressHTTP(t, m, 'q')
@@ -100,6 +102,7 @@ func TestHTTPJQPlaygroundFromResponse(t *testing.T) {
 // TestHTTPJQPlaygroundCommand: the palette pendant works from anywhere, even
 // with the focus on an editor.
 func TestHTTPJQPlaygroundCommand(t *testing.T) {
+	t.Parallel()
 	m := filledHTTP(t, sampleResponse("one"))
 	m.setFocus(m.activeEditorKey())
 	m.layout()
@@ -130,6 +133,7 @@ func spooledHTTPResponse(t *testing.T, body string, head int) *httpclient.Respon
 // TestHTTPLargeBodyAffordances: a spooled response shows its head with the
 // two ways on, and "m" grows the view without pulling the whole body in.
 func TestHTTPLargeBodyAffordances(t *testing.T) {
+	t.Parallel()
 	body := `{"items":[` + strings.Repeat(`"row",`, 2000) + `"end"]}`
 	m := filledHTTP(t, spooledHTTPResponse(t, body, 64))
 
@@ -151,6 +155,7 @@ func TestHTTPLargeBodyAffordances(t *testing.T) {
 // TestHTTPOpenBodyFileOpensTheSpool: "o" opens the complete body as an editor
 // tab; the pane names the path, the host opens it.
 func TestHTTPOpenBodyFileOpensTheSpool(t *testing.T) {
+	t.Parallel()
 	body := strings.Repeat("payload\n", 500)
 	resp := spooledHTTPResponse(t, body, 32)
 	m := filledHTTP(t, resp)
@@ -184,6 +189,7 @@ func TestHTTPOpenBodyFileOpensTheSpool(t *testing.T) {
 // fresh state, on the history-restored state, and after the working directory
 // changed.
 func TestHTTPSpooledBodySurvivesTheHistoryRoundTrip(t *testing.T) {
+	// serial: t.Setenv
 	work := t.TempDir()
 	chdir(t, work)
 	t.Setenv("IKE_CONFIG_DIR", ".ike") // relative on purpose — the production shape
@@ -237,6 +243,7 @@ func TestHTTPSpooledBodySurvivesTheHistoryRoundTrip(t *testing.T) {
 // TestHTTPSaveSpooledBodyStreamsTheWholeThing: the raw-body save must write
 // the complete body, not the head the pane happens to hold (#2157).
 func TestHTTPSaveSpooledBodyStreamsTheWholeThing(t *testing.T) {
+	t.Parallel()
 	body := strings.Repeat("chunk", 4000)
 	m := filledHTTP(t, spooledHTTPResponse(t, body, 100))
 
@@ -261,6 +268,7 @@ func TestHTTPSaveSpooledBodyStreamsTheWholeThing(t *testing.T) {
 // TestHTTPJQPlaygroundUsesTheWholeSpooledBody: the playground parses the whole
 // document, not the head on screen.
 func TestHTTPJQPlaygroundUsesTheWholeSpooledBody(t *testing.T) {
+	t.Parallel()
 	body := `{"items":[` + strings.Repeat(`1,`, 3000) + `2]}`
 	m := filledHTTP(t, spooledHTTPResponse(t, body, 40))
 

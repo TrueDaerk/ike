@@ -16,6 +16,7 @@ import (
 )
 
 func TestListPanelCopyMsgsReachTheClipboard(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	cases := []struct {
 		name string
 		msg  tea.Msg

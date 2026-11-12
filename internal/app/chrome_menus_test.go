@@ -23,6 +23,7 @@ func rightPress(m Model, x, y int) Model {
 // press on a tab segment selects that tab before the menu opens, so invoking
 // Close closes the clicked tab — not the one that was active before.
 func TestTabRightClickSelectsAndCloseTargetsClickedTab(t *testing.T) {
+	t.Parallel()
 	m, paths := tabApp(t) // three tabs, third active
 	inst := m.activeWS().Panes.FocusedInstance()
 	x, y := barCell(t, m, 1) // first segment's label
@@ -51,6 +52,7 @@ func TestTabRightClickSelectsAndCloseTargetsClickedTab(t *testing.T) {
 // TestCloseOtherTabs guards editor.tab.closeOthers (#1128): every tab but the
 // active one closes.
 func TestCloseOtherTabs(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if _, ok := m.reg.Command("editor.tab.closeOthers"); !ok {
 		t.Fatal("editor.tab.closeOthers must be a registry command")
@@ -76,6 +78,7 @@ func TestCloseOtherTabs(t *testing.T) {
 // behind the unsaved-changes guard, cancelling keeps every tab open, and one
 // answer settles all of them.
 func TestCloseOtherTabsGuardsDirty(t *testing.T) {
+	t.Parallel()
 	m, paths := tabApp(t) // third active
 	inst := m.activeWS().Panes.FocusedInstance()
 	inst.TabEditor(0).RestoreText("dirty now") // a.txt dirty
@@ -105,6 +108,7 @@ func TestCloseOtherTabsGuardsDirty(t *testing.T) {
 // title band outside the tab segments opens the pane menu, and Close Pane
 // closes the whole pane.
 func TestPaneTitleRightClickOpensPaneMenu(t *testing.T) {
+	t.Parallel()
 	m, _ := tabApp(t)
 	key := m.activeWS().Panes.Focused()
 	r := m.lay.Panes[key]
@@ -125,6 +129,7 @@ func TestPaneTitleRightClickOpensPaneMenu(t *testing.T) {
 // TestPaneMenuSplitRightSplits guards #1128: the pane menu's Split Right
 // entry dispatches pane.splitRight for the pane whose band was clicked.
 func TestPaneMenuSplitRightSplits(t *testing.T) {
+	t.Parallel()
 	m, _ := tabApp(t)
 	key := m.activeWS().Panes.Focused()
 	r := m.lay.Panes[key]
@@ -142,6 +147,7 @@ func TestPaneMenuSplitRightSplits(t *testing.T) {
 // changes opens the close guard with a whole-pane pending close; discarding
 // then closes the pane with all its tabs.
 func TestClosePaneGuardsDirty(t *testing.T) {
+	t.Parallel()
 	m, _ := tabApp(t)
 	key := m.activeWS().Panes.Focused()
 	inst := m.activeWS().Panes.FocusedInstance()
@@ -183,6 +189,7 @@ func closeZoneCell(t *testing.T, m Model, idx int) int {
 // ✕ zone closes that tab without changing the active one; the label cells
 // keep focusing (TestLeftClickFocusesTab).
 func TestTabCloseButtonClickClosesTab(t *testing.T) {
+	t.Parallel()
 	m, paths := tabApp(t) // third active
 	inst := m.activeWS().Panes.FocusedInstance()
 	// First segment " a.txt ✕ ": pad 0, label 1-5, pad 6, ✕ 7.
@@ -205,6 +212,7 @@ func TestTabCloseButtonClickClosesTab(t *testing.T) {
 // TestTabCloseButtonGuardsDirty guards #1128: the ✕ zone of a dirty tab opens
 // the unsaved-changes guard on that tab instead of dropping the edits.
 func TestTabCloseButtonGuardsDirty(t *testing.T) {
+	t.Parallel()
 	m, _ := tabApp(t)
 	inst := m.activeWS().Panes.FocusedInstance()
 	inst.TabEditor(0).RestoreText("dirty now")
@@ -224,6 +232,7 @@ func TestTabCloseButtonGuardsDirty(t *testing.T) {
 // TestComposeStatusSpans guards #1128: the span list mirrors the rendered
 // line — each span's cells hold exactly its segment's text.
 func TestComposeStatusSpans(t *testing.T) {
+	t.Parallel()
 	left := []renderedSeg{{id: "mode", text: "NORMAL"}, {id: "todo", text: "3 TODOs"}}
 	right := []renderedSeg{{id: "cursor", text: "Ln 1, Col 1"}}
 	line, spans := composeStatusSpans(left, right, 80)
@@ -261,6 +270,7 @@ func statusTodoApp(t *testing.T) Model {
 // segment of the status row dispatches todo.list; a press between segments
 // dispatches nothing and never leaks into the panes.
 func TestStatusSegmentClickDispatches(t *testing.T) {
+	t.Parallel()
 	m := statusTodoApp(t)
 	x := -1
 	for i := 0; i < m.width; i++ {
@@ -295,6 +305,7 @@ func TestStatusSegmentClickDispatches(t *testing.T) {
 // TestStatusNotificationsClickDispatches guards #1128: the unseen counter
 // segment dispatches notifications.history.
 func TestStatusNotificationsClickDispatches(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	m := openApp(t, writeTemp(t, dir, "a.txt", "aaa\n"))
 	m.notifUnseen = 2

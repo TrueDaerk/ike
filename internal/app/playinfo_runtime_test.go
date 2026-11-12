@@ -13,6 +13,7 @@ import (
 // TestPlayDurationFormat (#2776): `<1 ms`, whole milliseconds, one decimal of
 // seconds.
 func TestPlayDurationFormat(t *testing.T) {
+	t.Parallel()
 	for d, want := range map[time.Duration]string{
 		0:                       "<1 ms",
 		999 * time.Microsecond:  "<1 ms",
@@ -29,6 +30,7 @@ func TestPlayDurationFormat(t *testing.T) {
 // TestPlayInfoRowShowsRuntimeAndSize (#2776): after a run the summary carries
 // the result size and the wall clock; a slow run paints the time in Warning.
 func TestPlayInfoRowShowsRuntimeAndSize(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = setProgram(m, ".")
 	row := ansi.Strip(m.playInfoRow(240))
@@ -56,6 +58,7 @@ func TestPlayInfoRowShowsRuntimeAndSize(t *testing.T) {
 // key hints; the idle tick of the latest keystroke brings them back, a stale
 // one does not.
 func TestPlayHintsHideWhileTyping(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = setProgram(m, ".")
 	if !strings.Contains(ansi.Strip(m.playInfoRow(300)), playHelpHint) {

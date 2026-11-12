@@ -38,6 +38,7 @@ func stagePlay(t *testing.T) Model {
 // 1 shows the items array, stage 2 the mapped array, stage 3 the sum; the
 // info row counts the stage.
 func TestPlayStageStepsThroughThePipeline(t *testing.T) {
+	t.Parallel()
 	m := stagePlay(t)
 	if got := stageResult(m); got != "6" {
 		t.Fatalf("full program = %q, want the sum", got)
@@ -74,6 +75,7 @@ func TestPlayStageStepsThroughThePipeline(t *testing.T) {
 // TestPlayStageEntersAtTheCaret: entering stepping picks the caret's stage;
 // next from the last stage starts over at the first.
 func TestPlayStageEntersAtTheCaret(t *testing.T) {
+	t.Parallel()
 	m := stagePlay(t)
 	m.play.program.Cur = 10 // inside `map(.x)`
 	if m = stepStage(m, 1); m.play.stage != 2 {
@@ -88,6 +90,7 @@ func TestPlayStageEntersAtTheCaret(t *testing.T) {
 // TestPlayStageTypingRunsTheFullProgram: an edit leaves stepping, and the run
 // it schedules is the full program's.
 func TestPlayStageTypingRunsTheFullProgram(t *testing.T) {
+	t.Parallel()
 	m := stagePlay(t)
 	m = stepStage(m, -1)
 	m = stepStage(m, -1)
@@ -112,6 +115,7 @@ func TestPlayStageTypingRunsTheFullProgram(t *testing.T) {
 // TestPlayStageEscReturnsToFullProgram: esc leaves stepping first — the
 // playground stays open — and a second esc closes it.
 func TestPlayStageEscReturnsToFullProgram(t *testing.T) {
+	t.Parallel()
 	m := stagePlay(t)
 	m = stepStage(m, -1)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -130,6 +134,7 @@ func TestPlayStageEscReturnsToFullProgram(t *testing.T) {
 // TestPlayStageEscFromResultBuffer: the same from the result buffer's resting
 // normal mode.
 func TestPlayStageEscFromResultBuffer(t *testing.T) {
+	t.Parallel()
 	m := stagePlay(t)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
 	m = stepStage(m, -1)
@@ -142,6 +147,7 @@ func TestPlayStageEscFromResultBuffer(t *testing.T) {
 // TestPlayStageChordsReachTheCommand: the default chords run the commands
 // from the query line.
 func TestPlayStageChordsReachTheCommand(t *testing.T) {
+	t.Parallel()
 	m := stagePlay(t)
 	mods := tea.ModCtrl | tea.ModAlt | tea.ModShift
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyLeft, Mod: mods})
@@ -160,6 +166,7 @@ func TestPlayStageChordsReachTheCommand(t *testing.T) {
 // TestPlayStageSingleStageSaysSo: a program without a top-level pipe has
 // nothing to step through — including one whose only pipe is nested.
 func TestPlayStageSingleStageSaysSo(t *testing.T) {
+	t.Parallel()
 	m := stagePlay(t)
 	m = setProgram(m, ".items | map(.x)")
 	m = setProgram(m, "[.items[] | .x]")
@@ -176,6 +183,7 @@ func TestPlayStageSingleStageSaysSo(t *testing.T) {
 // selection background, the dropped tail faint, in the one-row and in the
 // multi-line query view.
 func TestPlayStageHighlightsBothViews(t *testing.T) {
+	t.Parallel()
 	m := stagePlay(t)
 	m = stepStage(m, -1) // stage 2: `map(.x)`, runes [9,16)
 	paint := m.playStructurePainter(m.play.program.Text, jqplay.Tokens(m.play.program.Text), m.playKindStyles())
@@ -217,6 +225,7 @@ func TestPlayStageHighlightsBothViews(t *testing.T) {
 
 // TestPlayStageYQ: the yq dialect steps the same way.
 func TestPlayStageYQ(t *testing.T) {
+	t.Parallel()
 	m := openYQ(t, dismissOnboarding(yqApp(t, "items:\n  - x: 1\n  - x: 2\n")))
 	m = setProgram(m, ".items | map(.x) | add")
 	m = stepStage(m, -1)
@@ -228,6 +237,7 @@ func TestPlayStageYQ(t *testing.T) {
 // TestPlayStageXMQNotifies: xmq has no pipeline — the commands notify and
 // change nothing.
 func TestPlayStageXMQNotifies(t *testing.T) {
+	// serial: fakeXMQOnPath: t.Setenv
 	fakeXMQOnPath(t)
 	m := openXMQ(t, dismissOnboarding(xmqApp(t, "xml", "<r/>\n")))
 	m.play.program.Set("select /r | to-json")

@@ -11,6 +11,7 @@ import (
 // restore, and the auto-unzoom-on-mutation invariant.
 
 func TestMaximizeZoomsAndRestores(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	m := openApp(t, a)
@@ -42,6 +43,7 @@ func TestMaximizeZoomsAndRestores(t *testing.T) {
 }
 
 func TestMaximizeSplitWhileZoomedUnzooms(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	m := openApp(t, a)
@@ -62,6 +64,7 @@ func TestMaximizeSplitWhileZoomedUnzooms(t *testing.T) {
 }
 
 func TestMaximizeExplorerPaneToo(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m.setFocus(pane.ExplorerKey)
 	m.layout()
@@ -75,6 +78,7 @@ func TestMaximizeExplorerPaneToo(t *testing.T) {
 }
 
 func TestMaximizeCommandRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if _, ok := m.reg.Command("pane.maximize"); !ok {
 		t.Fatal("pane.maximize must be registered")

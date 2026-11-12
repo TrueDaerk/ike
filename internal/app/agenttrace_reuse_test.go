@@ -41,6 +41,7 @@ func traceRead(t *testing.T, m Model) traceReadMsg {
 }
 
 func TestAgentTraceIdlePollReusesFrame(t *testing.T) {
+	// serial: idleTrace: t.Setenv
 	m, _ := idleTrace(t)
 	for i := 0; i < 3; i++ {
 		var composed bool
@@ -54,6 +55,7 @@ func TestAgentTraceIdlePollReusesFrame(t *testing.T) {
 }
 
 func TestAgentTraceReadWithChangesRenders(t *testing.T) {
+	// serial: idleTrace: t.Setenv
 	m, path := idleTrace(t)
 	cwd := m.toolPane("watcher").Terminal().Cwd()
 
@@ -71,6 +73,7 @@ func TestAgentTraceReadWithChangesRenders(t *testing.T) {
 }
 
 func TestAgentTraceTickWithNewFollowLabelRenders(t *testing.T) {
+	// serial: idleTrace: t.Setenv
 	m, _ := idleTrace(t)
 	m.agentTracePanel().SetFollowing("someone else (focused)")
 	m.View()
@@ -80,6 +83,7 @@ func TestAgentTraceTickWithNewFollowLabelRenders(t *testing.T) {
 }
 
 func TestAgentTraceLivenessFlipRenders(t *testing.T) {
+	// serial: idleTrace: t.Setenv
 	m, _ := idleTrace(t)
 	p := m.agentTracePanel()
 	// No read landed for a while: the header flips to stale on the tick.
@@ -96,6 +100,7 @@ func TestAgentTraceLivenessFlipRenders(t *testing.T) {
 }
 
 func TestAgentTraceIdleTickWithToastRenders(t *testing.T) {
+	// serial: idleTrace: t.Setenv
 	m, _ := idleTrace(t)
 	m.host.Notify(host.Info, "something happened")
 	if _, composed := pass(t, m, traceTick(m)); !composed {

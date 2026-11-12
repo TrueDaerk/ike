@@ -31,6 +31,7 @@ func changesApp(t *testing.T) Model {
 }
 
 func TestComplexityDiffBookkeepingRunsNoGitInUpdate(t *testing.T) {
+	// serial: changesApp: t.Setenv
 	m := changesApp(t)
 	// No snapshot: the tab says so and nothing is scheduled.
 	m.vcs.snap = nil
@@ -105,6 +106,7 @@ func TestComplexityDiffBookkeepingRunsNoGitInUpdate(t *testing.T) {
 }
 
 func TestComplexityDiffBaseSwitchAndRejectedRef(t *testing.T) {
+	// serial: changesApp: t.Setenv
 	m := changesApp(t)
 	m.vcs.snap = vcs.NewSnapshot("/r", map[string]vcs.FileStatus{"a.go": vcs.StatusModified})
 	m.cxDiff.snapGen = 1
@@ -189,6 +191,7 @@ func gitRepo(t *testing.T) (dir string) {
 }
 
 func TestRunComplexityDiffRealRepo(t *testing.T) {
+	t.Parallel()
 	dir := gitRepo(t)
 	root, err := vcs.DetectRoot(dir)
 	if err != nil {
@@ -302,6 +305,7 @@ func TestRunComplexityDiffRealRepo(t *testing.T) {
 }
 
 func TestRunComplexityDiffProjectSubdirectoryAndExclude(t *testing.T) {
+	t.Parallel()
 	dir := gitRepo(t)
 	root, _ := vcs.DetectRoot(dir)
 	snap, err := vcs.Load(dir)
@@ -328,6 +332,7 @@ func TestRunComplexityDiffProjectSubdirectoryAndExclude(t *testing.T) {
 }
 
 func TestRunComplexityDiffRanged(t *testing.T) {
+	t.Parallel()
 	dir := gitRepo(t)
 	root, err := vcs.DetectRoot(dir)
 	if err != nil {
@@ -380,6 +385,7 @@ func TestRunComplexityDiffRanged(t *testing.T) {
 }
 
 func TestComplexityDiffRangedKeyIgnoresWorkingTree(t *testing.T) {
+	// serial: changesApp: t.Setenv
 	m := changesApp(t)
 	m.vcs.snap = vcs.NewSnapshot("/r", map[string]vcs.FileStatus{"a.go": vcs.StatusModified})
 	m.cxDiff.snapGen = 1

@@ -24,6 +24,7 @@ func openedApp(t *testing.T, content string) (Model, string) {
 }
 
 func TestExternalDeleteClosesCleanEditor(t *testing.T) {
+	t.Parallel()
 	m, path := openedApp(t, "one\n")
 	if err := os.Remove(path); err != nil {
 		t.Fatal(err)
@@ -36,6 +37,7 @@ func TestExternalDeleteClosesCleanEditor(t *testing.T) {
 }
 
 func TestExternalDeleteKeepsDirtyEditorStale(t *testing.T) {
+	t.Parallel()
 	m, path := openedApp(t, "one\n")
 	for _, k := range []tea.KeyPressMsg{
 		{Code: 'i', Text: "i"},
@@ -59,6 +61,7 @@ func TestExternalDeleteKeepsDirtyEditorStale(t *testing.T) {
 }
 
 func TestRemoveWithFilePresentIsAContentChange(t *testing.T) {
+	t.Parallel()
 	// A replace-in-place save (write temp + rename, git checkout) coalesces to
 	// FileRemoved although the path exists again: it must reload, not close.
 	m, path := openedApp(t, "one\n")

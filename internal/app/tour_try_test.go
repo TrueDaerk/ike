@@ -31,6 +31,7 @@ func tourModel(t *testing.T) Model {
 }
 
 func TestTourPassThroughWhileTaskPending(t *testing.T) {
+	t.Parallel()
 	m := tourModel(t)
 	if !m.tour.HasPendingTasks() {
 		t.Fatal("the first page must carry a pending try-it task")
@@ -66,6 +67,7 @@ func TestTourPassThroughWhileTaskPending(t *testing.T) {
 }
 
 func TestTourTicksOnCommandExecuted(t *testing.T) {
+	t.Parallel()
 	m := tourModel(t)
 	out, _ := m.Update(CommandExecutedMsg{ID: "palette.searchEverywhere"})
 	m = out.(Model)
@@ -82,6 +84,7 @@ func TestTourTicksOnCommandExecuted(t *testing.T) {
 }
 
 func TestTourEndToEndKeyTick(t *testing.T) {
+	t.Parallel()
 	// The real chain: a passed-through chord resolves through the keymap,
 	// dispatch emits CommandExecutedMsg (#679), and the tour ticks. The
 	// default model is used so explorer.toggle's cmd+1 binding is live.
@@ -102,6 +105,7 @@ func TestTourEndToEndKeyTick(t *testing.T) {
 }
 
 func TestTourSuspendsAndResumesAroundShellTakeover(t *testing.T) {
+	t.Parallel()
 	// A try-it key may hand the floating shell to other content (f1 help).
 	// The tour is then suspended — keys route to the shell, not the tour —
 	// and it resumes on the page it left once the shell is free.

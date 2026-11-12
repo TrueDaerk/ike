@@ -21,6 +21,7 @@ import (
 // CSV export and the copy.
 
 func TestComplexityToggleLifecycle(t *testing.T) {
+	// serial: timeApp: t.Setenv
 	m, _ := timeApp(t)
 	before := m.activeWS().Panes.Focused()
 
@@ -105,6 +106,7 @@ func complexityApp(t *testing.T) (Model, string) {
 }
 
 func TestComplexityPanelSeedsFollowsAndOpens(t *testing.T) {
+	// serial: complexityApp: waits on the wall clock (load-sensitive)
 	m, src := complexityApp(t)
 	out, _ := m.Update(ComplexityToggleMsg{})
 	m = out.(Model)
@@ -169,6 +171,7 @@ func TestComplexityPanelSeedsFollowsAndOpens(t *testing.T) {
 // linewise visual selection over the range, caret on the header; a
 // line-only message keeps the plain jump.
 func TestComplexityCandidateOpensSelection(t *testing.T) {
+	// serial: complexityApp: waits on the wall clock (load-sensitive)
 	m, src := complexityApp(t)
 	out, _ := m.Update(ComplexityToggleMsg{})
 	m = out.(Model)
@@ -218,6 +221,7 @@ func mustRead(t *testing.T, path string) []byte {
 }
 
 func TestComplexityExportWritesCSVScratch(t *testing.T) {
+	// serial: timeApp: t.Setenv
 	m, _ := timeApp(t)
 	out, _ := m.Update(complexitypanel.ExportMsg{Label: "Project", CSV: "file,function\na.go,f\n"})
 	m = out.(Model)
@@ -241,6 +245,7 @@ func TestComplexityExportWritesCSVScratch(t *testing.T) {
 // TestComplexityExportMarkdownScratch: complexity.exportMarkdown runs the
 // pane's 'E' (#2963), whose message writes a .md scratch and opens it.
 func TestComplexityExportMarkdownScratch(t *testing.T) {
+	// serial: timeApp: t.Setenv
 	m, _ := timeApp(t)
 	out, cmd := m.Update(ComplexityExportMarkdownMsg{})
 	m = out.(Model)
@@ -265,6 +270,7 @@ func TestComplexityExportMarkdownScratch(t *testing.T) {
 }
 
 func TestComplexityCopyAndRefreshMessages(t *testing.T) {
+	// serial: timeApp: t.Setenv
 	m, _ := timeApp(t)
 	out, _ := m.Update(complexitypanel.CopyMsg{Text: "a.go:1: f ccn=2 cog=1"})
 	m = out.(Model)

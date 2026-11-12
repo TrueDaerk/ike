@@ -20,6 +20,7 @@ func overlayBox(m Model, view string) (bx, by, w, h int) {
 }
 
 func TestSettingsMouseResizeRightEdge(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := sized(t, 120, 40)
 	m = step(m, OpenSettingsMsg{})
@@ -50,6 +51,7 @@ func TestSettingsMouseResizeRightEdge(t *testing.T) {
 }
 
 func TestSettingsMouseResizeCorner(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 120, 40)
 	m = step(m, OpenSettingsMsg{})
 	w0, h0 := m.settingsSize()
@@ -71,6 +73,7 @@ func TestSettingsMouseResizeCorner(t *testing.T) {
 }
 
 func TestSettingsInteriorClickDoesNotStartDrag(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 120, 40)
 	m = step(m, OpenSettingsMsg{})
 	bx, by, w, h := overlayBox(m, m.settings.View())
@@ -89,6 +92,7 @@ func TestSettingsInteriorClickDoesNotStartDrag(t *testing.T) {
 }
 
 func TestSettingsMouseResizeClampsToTerminal(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 120, 40)
 	m = step(m, OpenSettingsMsg{})
 	bx, by, w, h := overlayBox(m, m.settings.View())
@@ -100,6 +104,7 @@ func TestSettingsMouseResizeClampsToTerminal(t *testing.T) {
 }
 
 func TestPaletteMouseResizeWidth(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 120, 40)
 	m.palette.Open(palette.Context{ContextID: "editor", Root: "."})
 	v := m.palette.View()
@@ -122,6 +127,7 @@ func TestPaletteMouseResizeWidth(t *testing.T) {
 }
 
 func TestShellMouseResize(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 120, 40)
 	m.shell.SetContent(ui.ModelContent{Heading: "TEST", Body: func() string {
 		return "line one line one line one\nline two\nline three"

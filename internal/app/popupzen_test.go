@@ -19,6 +19,7 @@ func fullBody(m Model) (x, y, w, h int) {
 }
 
 func TestPopupZenTogglesBox(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 120, 40)))
 	m.winSizes.Put(popupTermPosKey, 3, -2)
@@ -59,6 +60,7 @@ func TestPopupZenTogglesBox(t *testing.T) {
 }
 
 func TestPopupZenKeepsPriorMaximize(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 120, 40)))
 	m = maximizeOnce(t, m)
@@ -77,6 +79,7 @@ func TestPopupZenKeepsPriorMaximize(t *testing.T) {
 }
 
 func TestPopupZenMaximizeLeavesZen(t *testing.T) {
+	t.Parallel()
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 120, 40)))
 	x0, y0, w0, h0 := m.popupTermRect()
 	m = zenOnce(t, m)
@@ -90,6 +93,7 @@ func TestPopupZenMaximizeLeavesZen(t *testing.T) {
 }
 
 func TestPopupZenDroppedOnHide(t *testing.T) {
+	t.Parallel()
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 120, 40)))
 	normalBodyH := m.bodyRect().H
 	m = zenOnce(t, m)
@@ -107,6 +111,7 @@ func TestPopupZenDroppedOnHide(t *testing.T) {
 }
 
 func TestFloatPanelZenToggles(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 120, 40)))
 	m.tearOutPopupTab(m.popup.inst, 0, 30, 20)
@@ -141,6 +146,7 @@ func TestFloatPanelZenToggles(t *testing.T) {
 }
 
 func TestPopupZenClosedTargetRestoresChrome(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 120, 40)))
 	m.tearOutPopupTab(m.popup.inst, 0, 30, 20)
@@ -157,6 +163,7 @@ func TestPopupZenClosedTargetRestoresChrome(t *testing.T) {
 }
 
 func TestZenWithoutPopupFocusZoomsPane(t *testing.T) {
+	t.Parallel()
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 120, 40)))
 	out, _ := m.Update(TerminalPopupMsg{}) // hide
 	m = out.(Model)

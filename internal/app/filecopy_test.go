@@ -33,6 +33,7 @@ func copyTestModel(t *testing.T, root, file string) Model {
 // with an editor focused opens the destination prompt prefilled with a "-copy"
 // duplicate next to the source, and enter makes that copy.
 func TestF5OpensCopyPromptPrefilled(t *testing.T) {
+	// serial: copyTestModel: t.Chdir (process working directory)
 	root, file := projectDir(t)
 	m := copyTestModel(t, root, file)
 
@@ -61,6 +62,7 @@ func TestF5OpensCopyPromptPrefilled(t *testing.T) {
 // TestCopyPromptTypedDirectoryCopiesThere: typing another path copies the
 // entry there instead of duplicating it in place.
 func TestCopyPromptTypedDirectoryCopiesThere(t *testing.T) {
+	// serial: copyTestModel: t.Chdir (process working directory)
 	root, file := projectDir(t)
 	m := copyTestModel(t, root, file)
 
@@ -85,6 +87,7 @@ func TestCopyPromptTypedDirectoryCopiesThere(t *testing.T) {
 // overwrite guard, "s" (the primary answer) keeps the file, "o" replaces it.
 // Nothing is ever written before an answer.
 func TestCopyPromptGuardsExistingDestination(t *testing.T) {
+	// serial: copyTestModel: t.Chdir (process working directory)
 	for _, tc := range []struct {
 		name string
 		key  tea.KeyPressMsg
@@ -127,6 +130,7 @@ func TestCopyPromptGuardsExistingDestination(t *testing.T) {
 
 // TestCopyPromptEscCancels: esc in the destination prompt copies nothing.
 func TestCopyPromptEscCancels(t *testing.T) {
+	// serial: copyTestModel: t.Chdir (process working directory)
 	root, file := projectDir(t)
 	m := copyTestModel(t, root, file)
 
@@ -145,6 +149,7 @@ func TestCopyPromptEscCancels(t *testing.T) {
 // "new directory" when nothing matches; for a copy destination the last
 // component is a file name, so the prompt re-words it (#2696).
 func TestCopyPromptHintNamesANewPath(t *testing.T) {
+	// serial: copyTestModel: t.Chdir (process working directory)
 	root, file := projectDir(t)
 	m := copyTestModel(t, root, file)
 
@@ -162,6 +167,7 @@ func TestCopyPromptHintNamesANewPath(t *testing.T) {
 // goes before the extension for a file, at the very end for a directory and
 // for an extension-only name like ".env".
 func TestCopyDestNameKeepsExtension(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		path  string
 		isDir bool

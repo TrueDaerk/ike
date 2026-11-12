@@ -92,6 +92,7 @@ func smClick(t *testing.T, m Model, kind smHitKind, arg int) Model {
 }
 
 func TestScratchManagerCommandRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if _, ok := m.reg.Command(scratchManageCommandID); !ok {
 		t.Fatal("scratch.manage must be registered")
@@ -101,6 +102,7 @@ func TestScratchManagerCommandRegistered(t *testing.T) {
 // TestScratchManagerListsMetadata is the listing criterion: every scratch with
 // its name, language, size and age.
 func TestScratchManagerListsMetadata(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	paths := smSeed(t, "txt", "sct")
@@ -123,6 +125,7 @@ func TestScratchManagerListsMetadata(t *testing.T) {
 // TestScratchManagerSpeedSearchNarrows covers the speed search: typing filters
 // the rows and esc clears the query before it closes the dialog.
 func TestScratchManagerSpeedSearchNarrows(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	smSeed(t, "txt", "sct")
@@ -148,6 +151,7 @@ func TestScratchManagerSpeedSearchNarrows(t *testing.T) {
 // TestScratchManagerOpensSelection covers enter: the scratch lands as the
 // focused buffer and the manager closes.
 func TestScratchManagerOpensSelection(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	paths := smSeed(t, "txt")
@@ -166,6 +170,7 @@ func TestScratchManagerOpensSelection(t *testing.T) {
 // scratch renamed while it is open in an editor keeps the buffer, which
 // re-points at the new path (so the tab title follows it).
 func TestScratchManagerRenameFollowsOpenBuffer(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := dispatch(t, newSized(), NewScratchMsg{Ext: "sct"})
 	old := m.activeWS().Panes.FocusedInstance().Editor().Path()
@@ -208,6 +213,7 @@ func TestScratchManagerRenameFollowsOpenBuffer(t *testing.T) {
 // TestScratchManagerRenameCollisionRejected is the collision criterion: the
 // rename is refused with a message and nothing on disk moves.
 func TestScratchManagerRenameCollisionRejected(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	paths := smSeed(t, "txt", "sct")
@@ -239,6 +245,7 @@ func TestScratchManagerRenameCollisionRejected(t *testing.T) {
 // TestScratchManagerRenameRejectsPathyName covers the store's guard reaching
 // the dialog: a name with a separator is refused, not acted on.
 func TestScratchManagerRenameRejectsPathyName(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	smSeed(t, "txt")
@@ -261,6 +268,7 @@ func TestScratchManagerRenameRejectsPathyName(t *testing.T) {
 // TestScratchManagerDeleteConfirms is the delete criterion: `ctrl+d` asks
 // first, `n` keeps the file and `y` removes it.
 func TestScratchManagerDeleteConfirms(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	paths := smSeed(t, "txt")
@@ -291,6 +299,7 @@ func TestScratchManagerDeleteConfirms(t *testing.T) {
 // TestScratchManagerDeleteClosesOpenBuffer covers the open-buffer half of the
 // delete: the editor showing the removed scratch closes with it.
 func TestScratchManagerDeleteClosesOpenBuffer(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := dispatch(t, newSized(), NewScratchMsg{Ext: "sct"})
 	path := m.activeWS().Panes.FocusedInstance().Editor().Path()
@@ -317,6 +326,7 @@ func TestScratchManagerDeleteClosesOpenBuffer(t *testing.T) {
 // is what re-languages its highlighting — and the row's language column
 // follows too.
 func TestScratchManagerChangesLanguage(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := dispatch(t, newSized(), NewScratchMsg{Ext: "txt"})
 	old := m.activeWS().Panes.FocusedInstance().Editor().Path()
@@ -352,6 +362,7 @@ func TestScratchManagerChangesLanguage(t *testing.T) {
 // TestScratchManagerReachableFromCreateFlow covers the entry point of #2256:
 // the scratch.new language picker offers "open existing".
 func TestScratchManagerReachableFromCreateFlow(t *testing.T) {
+	t.Parallel()
 	items := scratchNewMode{}.Results("", palette.Context{})
 	for _, it := range items {
 		if strings.HasPrefix(it.Title, "Open existing scratch") {
@@ -367,6 +378,7 @@ func TestScratchManagerReachableFromCreateFlow(t *testing.T) {
 // TestScratchManagerClickOpensRow covers the mouse path: a click selects the
 // row, a second one opens it.
 func TestScratchManagerClickOpensRow(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	paths := smSeed(t, "txt", "sct")

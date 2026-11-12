@@ -52,6 +52,7 @@ func tableColumn(m Model, c int) []string {
 // key as ∅, in the result editor's rectangle — the editor keeps its size, and
 // the grid fills exactly its rows below the unchanged header.
 func TestPlayTableShowsGrid(t *testing.T) {
+	t.Parallel()
 	m := playNoOnboarding(openJQ(t, playApp(t, playTableInput)))
 	m = setProgram(m, ".")
 	edW, edH := m.play.resultEd.Width(), m.play.resultEd.Height()
@@ -92,6 +93,7 @@ func TestPlayTableShowsGrid(t *testing.T) {
 
 // TestPlayTableScalars: a list of scalars is one `value` column.
 func TestPlayTableScalars(t *testing.T) {
+	t.Parallel()
 	m := playNoOnboarding(openJQ(t, playApp(t, `[3,1,2]`)))
 	m = setProgram(m, ".")
 	m = tableOn(m)
@@ -103,6 +105,7 @@ func TestPlayTableScalars(t *testing.T) {
 // TestPlayTableRejectsShape: a result that is no list notifies and stays in
 // the text view.
 func TestPlayTableRejectsShape(t *testing.T) {
+	t.Parallel()
 	m := playNoOnboarding(openJQ(t, playApp(t, playTableInput)))
 	m = setProgram(m, ".[0]")
 	m = tableOn(m)
@@ -121,6 +124,7 @@ func TestPlayTableRejectsShape(t *testing.T) {
 // that does not fit falls back to the text with a notice, and the grid comes
 // back with the next one that fits.
 func TestPlayTableFallsBackOnNewResult(t *testing.T) {
+	t.Parallel()
 	m := tablePlay(t)
 	m = setProgram(m, ".[1]")
 	if m.play.table != nil {
@@ -142,6 +146,7 @@ func TestPlayTableFallsBackOnNewResult(t *testing.T) {
 // keeping the cursor on its row; a header click sorts the clicked column; the
 // sort survives a new result that still has the column.
 func TestPlayTableSort(t *testing.T) {
+	t.Parallel()
 	m := tablePlay(t)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
 	m = playKeys(m, "s")
@@ -178,6 +183,7 @@ func TestPlayTableSort(t *testing.T) {
 // TestPlayTableCopy: y (and the copy chord) copy the cursor cell — a string's
 // own text, anything else as JSON — and Y the row as JSON.
 func TestPlayTableCopy(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	copied := ""
 	prev := clipboardWrite
 	clipboardWrite = func(s string) { copied = s }
@@ -212,6 +218,7 @@ func TestPlayTableCopy(t *testing.T) {
 // commits it, n steps on, and esc hands the keyboard back to the query line
 // like the text view's round trip.
 func TestPlayTableSearch(t *testing.T) {
+	t.Parallel()
 	m := tablePlay(t)
 	m = drainKey(m, playFindKey())
 	tb := m.play.table
@@ -258,6 +265,7 @@ func TestPlayTableSearch(t *testing.T) {
 // TestPlayTableFocusRoundTrip: tab moves the keyboard between the query line
 // and the table, and the cursor keys walk the table only while it has it.
 func TestPlayTableFocusRoundTrip(t *testing.T) {
+	t.Parallel()
 	m := tablePlay(t)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
 	if !m.play.playTableFocused() {
@@ -280,6 +288,7 @@ func TestPlayTableFocusRoundTrip(t *testing.T) {
 // TestPlayTableDrillIn: enter on a row appends its index in the result — not
 // its sorted position — like json.jqAppendPath, and hands the keyboard back.
 func TestPlayTableDrillIn(t *testing.T) {
+	t.Parallel()
 	m := tablePlay(t)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
 	m = playKeys(m, "sg") // by id: alice (index 1) on top, the cursor on her
@@ -298,6 +307,7 @@ func TestPlayTableDrillIn(t *testing.T) {
 // TestPlayTableStreamRows: a stream of objects tabulates too, and its rows
 // say why they cannot be drilled into.
 func TestPlayTableStreamRows(t *testing.T) {
+	t.Parallel()
 	m := playNoOnboarding(openJQ(t, playApp(t, playTableInput)))
 	m = setProgram(m, ".[]")
 	m = tableOn(m)
@@ -314,6 +324,7 @@ func TestPlayTableStreamRows(t *testing.T) {
 // TestPlayTableMouse: a click on a data cell moves the cursor there and
 // focuses the table; the wheel scrolls the rows.
 func TestPlayTableMouse(t *testing.T) {
+	t.Parallel()
 	m := tablePlay(t)
 	x := 1 + m.play.table.widths[0] + 2 // the name column
 	m = clickResult(m, x, 3)            // header row 0, data rows from 1
@@ -330,6 +341,7 @@ func TestPlayTableMouse(t *testing.T) {
 // TestPlayTableChord: the default chord reaches the toggle from the query
 // line without typing into it.
 func TestPlayTableChord(t *testing.T) {
+	t.Parallel()
 	m := playNoOnboarding(openJQ(t, playApp(t, playTableInput)))
 	m = setProgram(m, ".")
 	m = drainKey(m, tea.KeyPressMsg{Code: 'l', Mod: tea.ModCtrl | tea.ModAlt})
@@ -344,6 +356,7 @@ func TestPlayTableChord(t *testing.T) {
 // TestPlayTableYQ: the yq dialect shares the view and spells the drill-in in
 // yq.
 func TestPlayTableYQ(t *testing.T) {
+	t.Parallel()
 	m := playNoOnboarding(openYQ(t, yqApp(t, "- name: a\n  n: 2\n- name: b\n  n: 1\n")))
 	m = setProgram(m, ".")
 	m = tableOn(m)

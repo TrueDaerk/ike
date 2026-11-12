@@ -20,6 +20,7 @@ import (
 // and leaves no identity of its own — and a restart restores the panel empty
 // (no console, variables view) in its slot.
 func TestDebugAreaPersistsAndRestoresEmpty(t *testing.T) {
+	// serial: t.Setenv
 	store := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", store)
 
@@ -65,6 +66,7 @@ func TestDebugAreaPersistsAndRestoresEmpty(t *testing.T) {
 // still carries the separate debuggee terminal leaf as "debugTerm"; the
 // restore drops it instead of spawning a shell there.
 func TestLegacyDebugTermLeafPrunesOnRestore(t *testing.T) {
+	// serial: t.Setenv
 	store := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", store)
 

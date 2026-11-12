@@ -14,6 +14,7 @@ import (
 // without the heartbeat, the stall monitor is blind and a frozen loop leaves
 // no dump.
 func TestUpdateAndViewBeatTheWatchdog(t *testing.T) {
+	// serial: diag.LoopPasses (process-wide counters)
 	m := newSized()
 	before := diag.LoopPasses()
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
@@ -31,6 +32,7 @@ func TestUpdateAndViewBeatTheWatchdog(t *testing.T) {
 // ships enabled with a sane threshold; perf.watchdog_seconds = 0 is the
 // opt-out, and validation clamps nonsense.
 func TestWatchdogDefaultOn(t *testing.T) {
+	t.Parallel()
 	cfg, _ := config.Load(config.Options{})
 	if cfg.Perf.WatchdogSeconds <= 0 {
 		t.Fatalf("watchdog must be on by default, got threshold %d", cfg.Perf.WatchdogSeconds)

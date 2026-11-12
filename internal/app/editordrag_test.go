@@ -34,6 +34,7 @@ func editorDragModel(t *testing.T) (Model, layout.Rect, string) {
 // TestEditorDragSelects guards #977: press-drag in an editor pane routes
 // motion events to the editor and produces a charwise visual selection.
 func TestEditorDragSelects(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, r, key := editorDragModel(t)
 	x := r.X + paneContentX

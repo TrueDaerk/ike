@@ -31,6 +31,7 @@ func assertMenuVisible(t *testing.T, m Model) {
 }
 
 func TestContextMenuAbovePopupBox(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	px, py, _, _ := m.popupTermRect()
 	m.ctxMenu.Open(editorContextItems(false), px+2, py+2, m.width, m.height)
@@ -40,6 +41,7 @@ func TestContextMenuAbovePopupBox(t *testing.T) {
 }
 
 func TestContextMenuAboveFloatPanel(t *testing.T) {
+	t.Parallel()
 	m, f := tearOutFirstTab(t, openTestPopup(t))
 	m.ctxMenu.Open(editorContextItems(false), f.x+2, f.y+2, m.width, m.height)
 	assertMenuVisible(t, m)

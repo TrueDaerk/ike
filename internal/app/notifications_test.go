@@ -27,6 +27,7 @@ func notify(m Model, sev host.Severity, text string) (Model, tea.Cmd) {
 }
 
 func TestToastExpiry(t *testing.T) {
+	// serial: takeDeferredTicks: sets package variable deferredTicks
 	withStore(t)
 	m := newSized()
 	takeDeferredTicks()
@@ -45,6 +46,7 @@ func TestToastExpiry(t *testing.T) {
 }
 
 func TestErrorToastPersistsUntilEsc(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	m, _ = notify(m, host.Error, "server crashed")
@@ -61,6 +63,7 @@ func TestErrorToastPersistsUntilEsc(t *testing.T) {
 }
 
 func TestToastStackingNewestOnTopCappedAtThree(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	for _, s := range []string{"one", "two", "three", "four"} {
@@ -85,6 +88,7 @@ func TestToastStackingNewestOnTopCappedAtThree(t *testing.T) {
 // server state is tracked per language (#380), transient events become toasts
 // of the matching severity.
 func TestServerStatusRouting(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	tm, _ := m.Update(ilsp.ServerStatusMsg{Lang: "go", Text: "go language server ready", Kind: ilsp.ServerState})
@@ -123,6 +127,7 @@ func TestServerStatusRouting(t *testing.T) {
 // follows the focused buffer's language — a plain-text buffer shows no server
 // text, a buffer of the reporting language shows its current state.
 func TestStatusLineScopesServerSegmentToBuffer(t *testing.T) {
+	// serial: registerTestLang: lang.Register (process-wide language registry)
 	registerTestLang(t, lang.Language{ID: "statest", Extensions: []string{"stt"}, Server: &lang.ServerSpec{Language: "statest", Command: "x"}})
 	m := newSized()
 	tm, _ := m.Update(ilsp.ServerStatusMsg{Lang: "statest", Text: "statest language server ready", Kind: ilsp.ServerState})
@@ -160,6 +165,7 @@ func TestStatusLineScopesServerSegmentToBuffer(t *testing.T) {
 // failure naming the manual restart command — reach the status line's server
 // segment, and the give-up toast points at that command.
 func TestStatusLineShowsRestartAndFailedState(t *testing.T) {
+	// serial: registerTestLang: lang.Register (process-wide language registry)
 	registerTestLang(t, lang.Language{ID: "rsttest", Extensions: []string{"rst2148"}, Server: &lang.ServerSpec{Language: "rsttest", Command: "x"}})
 	m := newSized()
 	dir := t.TempDir()
@@ -203,6 +209,7 @@ func TestStatusLineShowsRestartAndFailedState(t *testing.T) {
 // persistent host status renders as one more segment, never replacing the
 // mode/cursor segments.
 func TestStatusLineKeepsSegmentsWithHostStatus(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m.setFocus(m.activeEditorKey()) // mode/cursor segments render for a focused editor (#381)
 	m.host.SetStatus("go language server ready")
@@ -219,6 +226,7 @@ func TestStatusLineKeepsSegmentsWithHostStatus(t *testing.T) {
 // reports 'saved N files' as an info toast, and hints 'nothing to save' when
 // no buffer is dirty (0082 review, #275) — a silent chord reads as dead.
 func TestSaveAllNotifiesSavedCount(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	tm, _ := m.Update(SaveAllMsg{})
@@ -253,6 +261,7 @@ func TestSaveAllNotifiesSavedCount(t *testing.T) {
 // confirms via toast (warn on unknown names) and leaves the persistent status
 // segment untouched.
 func TestThemeSelectNotifies(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	tm, _ := m.Update(SelectThemeMsg{Name: "no-such-theme"})
@@ -269,6 +278,7 @@ func TestThemeSelectNotifies(t *testing.T) {
 // notification is recorded newest-first with its severity, capped at
 // historyCap entries.
 func TestHistoryCapturesNewestFirstAndCaps(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	for i := 0; i < historyCap+5; i++ {
 		m, _ = notify(m, host.Info, "n"+strconv.Itoa(i))
@@ -287,6 +297,7 @@ func TestHistoryCapturesNewestFirstAndCaps(t *testing.T) {
 // TestMinSeverityFiltersToastsNotHistory guards notifications.min_severity:
 // below-floor notifications are history-only, at/above-floor still toast.
 func TestMinSeverityFiltersToastsNotHistory(t *testing.T) {
+	// serial: withStore: t.Setenv
 	// A fresh store: NewWith on the previous test's IKE_CONFIG_DIR would load
 	// whatever that test persisted over this config (#3054).
 	withStore(t)
@@ -309,6 +320,7 @@ func TestMinSeverityFiltersToastsNotHistory(t *testing.T) {
 // TestNotificationHistoryCommand guards the notifications.history command: it
 // is registered and opens the floating shell with the recorded entries.
 func TestNotificationHistoryCommand(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m, _ = notify(m, host.Error, "server exploded")
 	if _, ok := m.reg.Command("notifications.history"); !ok {
@@ -327,6 +339,7 @@ func TestNotificationHistoryCommand(t *testing.T) {
 // TestNotifCenterListsNewestFirstWithAgeAndSeverity guards the center's list
 // rendering (#2152): newest entry first, severity glyph, relative age.
 func TestNotifCenterListsNewestFirstWithAgeAndSeverity(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m, _ = notify(m, host.Info, "older one")
 	m, _ = notify(m, host.Error, "newest one")
@@ -359,6 +372,7 @@ func TestNotifCenterListsNewestFirstWithAgeAndSeverity(t *testing.T) {
 // counter counts notifications arriving since the center was last opened, and
 // opening it resets the count.
 func TestNotifCenterUnreadCounter(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	if seg := m.notifSegment(); seg != "" {
@@ -394,6 +408,7 @@ func TestNotifCenterUnreadCounter(t *testing.T) {
 // ring while the center is open, and the view says so; the same key outside
 // the center never reaches it.
 func TestNotifCenterClearAll(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m, _ = notify(m, host.Error, "server exploded")
 	if m.notifCenterOpen() {
@@ -423,6 +438,7 @@ func TestNotifCenterClearAll(t *testing.T) {
 // TestNotifCenterEscClosesAndKeysPassThrough guards that the center consumes
 // only its own key: Esc still closes the shell.
 func TestNotifCenterEscClosesAndKeysPassThrough(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	m, _ = notify(m, host.Info, "saved")
@@ -447,6 +463,7 @@ func TestNotifCenterEscClosesAndKeysPassThrough(t *testing.T) {
 // an editor save flows through the emitter adapter into watcher.MarkSaved, so
 // IKE's own writes never report back as external changes.
 func TestSaveStampsWatcherEpoch(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "w.txt")
@@ -476,6 +493,7 @@ func TestSaveStampsWatcherEpoch(t *testing.T) {
 }
 
 func TestToastNeverCoversStatusLine(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m, _ = notify(m, host.Info, "hello toast")
 	lines := strings.Split(m.render(), "\n")
@@ -492,6 +510,7 @@ func TestToastNeverCoversStatusLine(t *testing.T) {
 // rides across a seamless project switch, entries keep the root they were
 // emitted in, and the history view labels foreign-project entries.
 func TestHistorySurvivesProjectSwitch(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
 	for _, d := range []string{src, dst} {

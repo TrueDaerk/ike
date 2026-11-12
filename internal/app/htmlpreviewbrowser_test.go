@@ -16,6 +16,7 @@ import (
 // TestHTMLPreviewBrowserNeedsPane: without an HTML preview the command only
 // says how to get one.
 func TestHTMLPreviewBrowserNeedsPane(t *testing.T) {
+	t.Parallel()
 	m, _ := openHTMLFile(t, "<p>x</p>\n")
 	m = stepHTML(m, HTMLPreviewBrowserMsg{})
 	if n := lastNotification(t, m); n != htmlPreviewNeedsPane {
@@ -27,6 +28,7 @@ func TestHTMLPreviewBrowserNeedsPane(t *testing.T) {
 // the command keeps text mode and toasts the notice naming the setting — the
 // active editor's preview is found even though the editor holds focus.
 func TestHTMLPreviewBrowserFallbackToasts(t *testing.T) {
+	t.Parallel()
 	m, path := openHTMLFile(t, "<p>x</p>\n")
 	m = stepHTML(m, HTMLPreviewMsg{})
 	pv := m.activeWS().Panes.Get(htmlPreviewKeyFor(m, path)).HTMLPreview()
@@ -51,6 +53,7 @@ func TestHTMLPreviewBrowserFallbackToasts(t *testing.T) {
 // mode "browser" in the layout state, dedicated or as a content tab, and the
 // restore brings the mode back; text mode saves no mode.
 func TestHTMLPreviewBrowserModePersists(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, path := openHTMLFile(t, "<p>x</p>\n")
 	m = stepHTML(m, HTMLPreviewMsg{})
@@ -93,6 +96,7 @@ func TestHTMLPreviewBrowserModePersists(t *testing.T) {
 // seam, b and the fallback take the same path — persists the layout on the
 // next settled pass, so the mode survives without a clean quit.
 func TestHTMLPreviewBrowserModeFlipSavesLayout(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m, path := openHTMLFile(t, "<p>x</p>\n")
 	m = stepHTML(m, HTMLPreviewMsg{})

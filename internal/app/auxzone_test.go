@@ -28,6 +28,7 @@ func findSplitWith(n layout.Node, key string) *layout.Split {
 // auxiliary panes to the right; a narrow one keeps the bottom split; a
 // missing key falls back to bottom.
 func TestAuxZoneAdaptive(t *testing.T) {
+	t.Parallel()
 	narrow := sized(t, 100, 40)
 	if z := narrow.auxZone("editor"); z != layout.ZoneBottom {
 		t.Fatalf("narrow host zone = %v, want ZoneBottom", z)
@@ -48,6 +49,7 @@ func TestAuxZoneAdaptive(t *testing.T) {
 // terminal pane opens below on a narrow layout and to the right on a wide
 // landscape editor.
 func TestOpenTerminalAdaptiveSplit(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name   string
 		width  int

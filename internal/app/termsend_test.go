@@ -45,6 +45,7 @@ func selectInEditor(t *testing.T, m Model) Model {
 }
 
 func TestSendSelectionCommandsRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	for _, id := range []string{"terminal.sendSelection", "terminal.sendSelectionRun"} {
 		if _, ok := m.reg.Command(id); !ok {
@@ -56,6 +57,7 @@ func TestSendSelectionCommandsRegistered(t *testing.T) {
 // TestSendSelectionPayloadUsesSelection: with a visual selection the payload
 // is the selected text, not the line around it.
 func TestSendSelectionPayloadUsesSelection(t *testing.T) {
+	t.Parallel()
 	m := selectInEditor(t, sendApp(t, "needle one\ntwo\n"))
 	if got := m.terminalSendText(); got != "needle" {
 		t.Fatalf("payload = %q, want %q", got, "needle")
@@ -66,6 +68,7 @@ func TestSendSelectionPayloadUsesSelection(t *testing.T) {
 // AC: with nothing selected the caret's whole line is the payload, trailing
 // whitespace trimmed, indentation kept.
 func TestSendSelectionPayloadFallsBackToCurrentLine(t *testing.T) {
+	t.Parallel()
 	m := sendApp(t, "  echo hello   \nsecond line\n")
 	if got := m.terminalSendText(); got != "  echo hello" {
 		t.Fatalf("payload = %q, want %q", got, "  echo hello")
@@ -81,6 +84,7 @@ func TestSendSelectionPayloadFallsBackToCurrentLine(t *testing.T) {
 // TestSendSelectionOnBlankLineSendsNothing: a blank line is not a command —
 // the send is refused instead of waking a shell up with an empty paste.
 func TestSendSelectionOnBlankLineSendsNothing(t *testing.T) {
+	t.Parallel()
 	m := sendApp(t, "   \nsecond\n")
 	if got := m.terminalSendText(); got != "" {
 		t.Fatalf("blank-line payload = %q, want empty", got)
@@ -96,6 +100,7 @@ func TestSendSelectionOnBlankLineSendsNothing(t *testing.T) {
 // TestSendSelectionTargetsOpenPopup: with the popup open its focused tab wins,
 // and the send leaves the keyboard where it was.
 func TestSendSelectionTargetsOpenPopup(t *testing.T) {
+	t.Parallel()
 	m := openTestPopupWith(t, sendApp(t, "echo hello\n"))
 	// Blur the layer, i.e. the state this command is used from: the popup is
 	// visible, the editor has the keyboard.
@@ -122,6 +127,7 @@ func TestSendSelectionTargetsOpenPopup(t *testing.T) {
 // TestSendSelectionTargetsSecondPopupTab: "the popup's focused tab" means the
 // active tab of the focused side, not the first shell ever spawned.
 func TestSendSelectionTargetsSecondPopupTab(t *testing.T) {
+	t.Parallel()
 	m := openTestPopupWith(t, sendApp(t, "echo hello\n"))
 	first := m.popup.inst.ActiveTerminal()
 	m.newPopupTerminalTab()
@@ -138,6 +144,7 @@ func TestSendSelectionTargetsSecondPopupTab(t *testing.T) {
 // terminal pane — the payload goes there instead of opening an overlay over
 // the shell the user is already looking at.
 func TestSendSelectionTargetsFocusedTerminalPane(t *testing.T) {
+	t.Parallel()
 	m := sendApp(t, "echo hello\n")
 	out, _ := m.Update(TerminalToggleMsg{})
 	m = out.(Model)
@@ -158,6 +165,7 @@ func TestSendSelectionTargetsFocusedTerminalPane(t *testing.T) {
 // TestSendSelectionOpensPopupAsLastResort: nothing to send to — the popup is
 // opened for the purpose and gets the payload.
 func TestSendSelectionOpensPopupAsLastResort(t *testing.T) {
+	t.Parallel()
 	m := sendApp(t, "echo hello\n")
 	if m.popup.open {
 		t.Fatal("setup: the popup should start closed")
@@ -176,6 +184,7 @@ func TestSendSelectionOpensPopupAsLastResort(t *testing.T) {
 // pane reuses the terminal machinery but is not the user's shell, so a send
 // from it opens the popup rather than typing into the tool.
 func TestSendSelectionIgnoresToolPanes(t *testing.T) {
+	t.Parallel()
 	m := sendApp(t, "echo hello\n")
 	out, _ := m.Update(TerminalToggleMsg{})
 	m = out.(Model)
@@ -200,6 +209,7 @@ func TestSendSelectionIgnoresToolPanes(t *testing.T) {
 // TestSendSelectionKeybindsAreEditorScoped: the default chords reach the
 // commands from an editor, which is the only pane the payload can come from.
 func TestSendSelectionKeybindsBound(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	for _, id := range []string{"terminal.sendSelection", "terminal.sendSelectionRun"} {
 		if _, ok := m.playChordFor(id); !ok {

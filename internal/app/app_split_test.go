@@ -28,6 +28,7 @@ func editorLeaves(m Model) int {
 
 // TestSplitFocusedAddsEditor splits the focused leaf and focuses the new pane.
 func TestSplitFocusedAddsEditor(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	m.cycleFocus() // focus the editor
 	before := editorLeaves(m)
@@ -46,6 +47,7 @@ func TestSplitFocusedAddsEditor(t *testing.T) {
 
 // TestCloseFocusedCollapses closes a split editor and refocuses a survivor.
 func TestCloseFocusedCollapses(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := sized(t, 100, 40)
 	m.cycleFocus()
@@ -63,6 +65,7 @@ func TestCloseFocusedCollapses(t *testing.T) {
 // TestCtrlWClosesFocusedPane verifies ctrl+w closes the focused editor pane and
 // is a no-op on the explorer (the singleton survives).
 func TestCtrlWClosesFocusedPane(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := sized(t, 100, 40)
 	m.cycleFocus()
@@ -84,6 +87,7 @@ func TestCtrlWClosesFocusedPane(t *testing.T) {
 
 // TestCloseFocusedRefusesExplorer keeps the singleton explorer.
 func TestCloseFocusedRefusesExplorer(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	// explorer is focused at start
 	m.CloseFocused()
@@ -94,6 +98,7 @@ func TestCloseFocusedRefusesExplorer(t *testing.T) {
 
 // TestFocusDirMovesSpatially moves focus to the spatially adjacent pane.
 func TestFocusDirMovesSpatially(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	// Default layout: explorer left, editor right.
 	m.setFocus(pane.ExplorerKey)
@@ -112,6 +117,7 @@ func TestFocusDirMovesSpatially(t *testing.T) {
 // a full-width pane along the bottom. Directional moves must follow geometry,
 // not land on the wide bottom pane just because its centre is close.
 func TestFocusTargetPrefersAxisOverlap(t *testing.T) {
+	t.Parallel()
 	// Columns: explorer [0,30), middle [30,60), right [60,100).
 	// Rows: top [0,20), bottom [20,38) for the columns; floating spans
 	// [0,100) over [38,40).
@@ -146,6 +152,7 @@ func TestFocusTargetPrefersAxisOverlap(t *testing.T) {
 // TestFocusKeysCtrlArrowDefault verifies the default Ctrl+arrow bindings move
 // focus spatially through Update (not just the FocusDir method).
 func TestFocusKeysCtrlArrowDefault(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40) // explorer left, editor right
 	if m.activeWS().Panes.Focused() != pane.ExplorerKey {
 		t.Fatal("setup: explorer should start focused")
@@ -165,6 +172,7 @@ func TestFocusKeysCtrlArrowDefault(t *testing.T) {
 // TestFocusKeysConfigurable verifies keymap.bindings.focus_* overrides the
 // default key, and that an empty override disables a direction.
 func TestFocusKeysConfigurable(t *testing.T) {
+	t.Parallel()
 	keys := focusKeys(host.MapConfig{
 		"keymap.bindings.focus_right": "alt+l",
 		"keymap.bindings.focus_left":  "",
@@ -187,6 +195,7 @@ func TestFocusKeysConfigurable(t *testing.T) {
 // TestOpenInNewPaneSplits verifies the NewPane open target spawns a fresh editor
 // rather than replacing the active one.
 func TestOpenInNewPaneSplits(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	dir := t.TempDir()
 	a := filepath.Join(dir, "a.txt")
@@ -216,6 +225,7 @@ func TestOpenInNewPaneSplits(t *testing.T) {
 // TestMultiEditorPersistAndRestore round-trips a two-editor layout: both files
 // reopen in their saved panes.
 func TestMultiEditorPersistAndRestore(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
 	proj := t.TempDir()
@@ -248,6 +258,7 @@ func TestMultiEditorPersistAndRestore(t *testing.T) {
 // TestRestoreMissingFileKeepsEmptyEditor verifies a saved editor whose file is
 // gone restores as an empty editor at that leaf (the split is preserved).
 func TestRestoreMissingFileKeepsEmptyEditor(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
 	proj := t.TempDir()
@@ -283,6 +294,7 @@ func TestRestoreMissingFileKeepsEmptyEditor(t *testing.T) {
 // View must render exactly height rows of exactly width columns, so nothing is
 // pushed off screen and mouse hit-testing stays aligned with m.lay.
 func TestViewNeverOverflowsRect(t *testing.T) {
+	t.Parallel()
 	for _, dim := range [][2]int{{120, 40}, {100, 30}, {80, 25}, {60, 41}} {
 		w, h := dim[0], dim[1]
 		m := sized(t, w, h)
@@ -302,6 +314,7 @@ func TestViewNeverOverflowsRect(t *testing.T) {
 // TestOpenInNewPaneFromExplorerLandsInEditorArea verifies the new pane splits the
 // editor area (explorer stays the leftmost full-height leaf), not the explorer.
 func TestOpenInNewPaneFromExplorerLandsInEditorArea(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 120, 40)
 	dir := t.TempDir()
 	a := filepath.Join(dir, "a.txt")
@@ -327,6 +340,7 @@ func TestOpenInNewPaneFromExplorerLandsInEditorArea(t *testing.T) {
 // explorer no longer sits at the top-left: a vertical split above it gives it a
 // non-zero rect.Y, and hover must still resolve the right row through the rect.
 func TestClickAlignedAfterSplit(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	// Split a new editor ABOVE the explorer, so the explorer moves down.
 	m.setFocus(pane.ExplorerKey)
@@ -351,6 +365,7 @@ func TestClickAlignedAfterSplit(t *testing.T) {
 // TestMouseSelfEdgeSpawnsSplit verifies dragging a pane title to its own edge
 // spawns a new editor split there.
 func TestMouseSelfEdgeSpawnsSplit(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	before := editorLeaves(m)
 	ed := m.lay.Panes[ctxEditor]

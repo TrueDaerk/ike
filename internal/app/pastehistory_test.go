@@ -14,6 +14,7 @@ import (
 // the register history and the app round-trip into the focused editor.
 
 func TestPasteHistModePreviewAndFilter(t *testing.T) {
+	t.Parallel()
 	m := &pasteHistMode{}
 	m.Set([]register.Entry{
 		{Text: "alpha line\nsecond\n", Linewise: true},
@@ -44,6 +45,7 @@ func TestPasteHistModePreviewAndFilter(t *testing.T) {
 }
 
 func TestPasteFromHistoryRoundTrip(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\ntwo\nthree\n")
 	m := openApp(t, a)
@@ -74,6 +76,7 @@ func TestPasteFromHistoryRoundTrip(t *testing.T) {
 // TestPasteHistorySharedAcrossPanes (#1540): registers are app-wide, so a
 // copy in one editor pane is offered by every other editor's history.
 func TestPasteHistorySharedAcrossPanes(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\n")
 	m := openApp(t, a)
@@ -92,6 +95,7 @@ func TestPasteHistorySharedAcrossPanes(t *testing.T) {
 }
 
 func TestPasteFromHistoryEmptyIsToastNoPalette(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\n")
 	m := openApp(t, a)
@@ -105,6 +109,7 @@ func TestPasteFromHistoryEmptyIsToastNoPalette(t *testing.T) {
 // host's copy path, so it lands in the same ring the picker lists and pastes
 // like any yank.
 func TestPaneCopiesReachHistory(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	orig := clipboardWrite
 	copied := ""
 	clipboardWrite = func(s string) { copied = s }
@@ -132,6 +137,7 @@ func TestPaneCopiesReachHistory(t *testing.T) {
 // TestClipboardHistorySizeSetting (#2061): editor.clipboard_history_size sizes
 // the app-wide ring, so the picker lists at most N entries.
 func TestClipboardHistorySizeSetting(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	orig := clipboardWrite
 	clipboardWrite = func(string) {}
 	t.Cleanup(func() { clipboardWrite = orig })
@@ -154,6 +160,7 @@ func TestClipboardHistorySizeSetting(t *testing.T) {
 }
 
 func TestPasteFromHistoryCommandRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if _, ok := m.reg.Command("editor.pasteFromHistory"); !ok {
 		t.Fatal("editor.pasteFromHistory must be registered")

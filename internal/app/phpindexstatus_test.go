@@ -65,6 +65,7 @@ func phpFixtureEditor(t *testing.T, m Model) (Model, *editor.Model) {
 // through the app plugin's registry and carry a default chord, so the
 // keybind audit has nothing to excuse.
 func TestPHPIndexCommandsRegisteredAndBound(t *testing.T) {
+	t.Parallel()
 	reg := registry.New()
 	reg.Add(appCommands{})
 	bound := map[string]string{}
@@ -90,6 +91,7 @@ func TestPHPIndexCommandsRegisteredAndBound(t *testing.T) {
 // TestPHPIndexStatusPopupRendersStats: the command opens the floating shell
 // with the Stats() numbers, and esc dismisses it like every other modal.
 func TestPHPIndexStatusPopupRendersStats(t *testing.T) {
+	// serial: phpOpsModel: t.Setenv
 	m := phpOpsModel(t)
 	tm, _ := m.Update(PHPIndexStatusMsg{})
 	m = tm.(Model)
@@ -107,6 +109,7 @@ func TestPHPIndexStatusPopupRendersStats(t *testing.T) {
 // TestPHPIndexStatusBodyStates: the two states in which the index can never
 // answer say so instead of printing a row of zeroes.
 func TestPHPIndexStatusBodyStates(t *testing.T) {
+	t.Parallel()
 	if got := phpIndexStatusBody(nil); !strings.Contains(got, "unavailable") {
 		t.Errorf("a missing index should read unavailable: %q", got)
 	}
@@ -126,6 +129,7 @@ func TestPHPIndexStatusBodyStates(t *testing.T) {
 // fixture takes its files from the persisted cache, and the popup says how
 // many; the cold first session prints no such line.
 func TestPHPIndexStatusBodyShowsWarmStart(t *testing.T) {
+	// serial: phpOpsModel: t.Setenv
 	withStore(t)
 	m := phpOpsModel(t)
 	if got := phpIndexStatusBody(m.PHPIndex()); strings.Contains(got, "from cache") {
@@ -150,6 +154,7 @@ func TestPHPIndexStatusBodyShowsWarmStart(t *testing.T) {
 // elided from the left, so the box stays inside the terminal and still names
 // the project by its last segments.
 func TestPHPIndexStatusBodyKeepsThePopupNarrow(t *testing.T) {
+	// serial: phpOpsModel: t.Setenv
 	m := phpOpsModel(t)
 	for _, line := range strings.Split(phpIndexStatusBody(m.PHPIndex()), "\n") {
 		if n := len([]rune(line)); n > phpStatusPathWidth+4 {
@@ -173,6 +178,7 @@ func TestPHPIndexStatusBodyKeepsThePopupNarrow(t *testing.T) {
 // walk runs on a PHP buffer, stays silent for another language, and clears
 // once the scan finished.
 func TestPHPIndexStatusSegment(t *testing.T) {
+	// serial: phpOpsModel: t.Setenv
 	m := phpOpsModel(t)
 	m, ed := phpFixtureEditor(t, m)
 
@@ -206,6 +212,7 @@ func TestPHPIndexStatusSegment(t *testing.T) {
 // TestPHPIndexSegmentSilentWhenWarm: the real model's slot says nothing about
 // the index once its scan is done.
 func TestPHPIndexSegmentSilentWhenWarm(t *testing.T) {
+	// serial: phpOpsModel: t.Setenv
 	m := phpOpsModel(t)
 	if m.phpIndexScanning() {
 		t.Fatal("the fixture scan should be finished")
@@ -219,6 +226,7 @@ func TestPHPIndexSegmentSilentWhenWarm(t *testing.T) {
 // TestPHPIndexRebuildRescans: the command drops the walk and rescans, so a
 // file written behind ike's back is in Stats() afterwards.
 func TestPHPIndexRebuildRescans(t *testing.T) {
+	// serial: phpOpsModel: t.Setenv
 	m := phpOpsModel(t)
 	before := m.PHPIndex().Stats()
 	if before.Files == 0 {
@@ -246,6 +254,7 @@ func TestPHPIndexRebuildRescans(t *testing.T) {
 // TestPHPIndexRebuildInertWhenDisabled: with php.trait_index off the command
 // scans nothing and says why, rather than silently doing nothing.
 func TestPHPIndexRebuildInertWhenDisabled(t *testing.T) {
+	// serial: phpOpsModel: t.Setenv
 	withStore(t)
 	m := phpOpsModel(t)
 	off, _ := config.Load(config.Options{})
@@ -266,6 +275,7 @@ func TestPHPIndexRebuildInertWhenDisabled(t *testing.T) {
 // TestPHPIndexScanRecordsTelemetryOp: one php.trait.index_scan op per scan —
 // the initial walk plus the rebuild's — carrying ms, files, truncated and cached (#2885).
 func TestPHPIndexScanRecordsTelemetryOp(t *testing.T) {
+	// serial: phpOpsModel: t.Setenv
 	withStore(t)
 	m := phpOpsModel(t)
 	// The scan op alone never opens a session file (#2318's ghost rule, see

@@ -30,6 +30,7 @@ func diffFixture(t *testing.T) (Model, string, string) {
 // TestQKeyOnDiffPane guards #529: "q" on a focused diff pane must neither
 // quit the app nor panic (quitKey used to nil-deref the missing editor).
 func TestQKeyOnDiffPane(t *testing.T) {
+	t.Parallel()
 	m, _, _ := diffFixture(t)
 	out, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	if isQuit(cmd) {
@@ -43,6 +44,7 @@ func TestQKeyOnDiffPane(t *testing.T) {
 
 // TestQKeyOnVCSPane guards #529 for the VCS tool window.
 func TestQKeyOnVCSPane(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m.vcs.snap = vcs.NewSnapshot(t.TempDir(), map[string]vcs.FileStatus{})
 	out, _ := m.Update(VCSPanelToggleMsg{})
@@ -60,6 +62,7 @@ func TestQKeyOnVCSPane(t *testing.T) {
 // (#496) capturing text, plain keys — including "q" and "?" — must reach the
 // embedded editor instead of the global layer.
 func TestDiffEditInsertTyping(t *testing.T) {
+	t.Parallel()
 	m, _, right := diffFixture(t)
 	key := m.activeWS().Panes.Focused()
 	out, _ := m.Update(diff.EditRequestMsg{Key: key, Path: right})

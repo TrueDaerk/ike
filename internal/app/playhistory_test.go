@@ -35,6 +35,7 @@ func openOtherFile(t *testing.T, m Model, name, body string) Model {
 // offered by ↑ after the refresh, after closing and reopening the mode on the
 // same file, and — in the other dialect — over another file.
 func TestJQPlaygroundHistorySurvivesSourceOverwrite(t *testing.T) {
+	t.Parallel()
 	m, path := playWatchApp(t, `{"a":1,"b":2}`)
 	m = dismissOnboarding(m)
 	m = runJQProgram(m, ".a")
@@ -74,6 +75,7 @@ func TestJQPlaygroundHistorySurvivesSourceOverwrite(t *testing.T) {
 // enter, is recorded by that close like by any other, and offered over the
 // next file.
 func TestJQPlaygroundHistorySurvivesSourceRemoval(t *testing.T) {
+	t.Parallel()
 	m, path := playWatchApp(t, `{"foo":1}`)
 	m = dismissOnboarding(m)
 	m = setProgram(m, ".foo")
@@ -98,6 +100,7 @@ func TestJQPlaygroundHistorySurvivesSourceRemoval(t *testing.T) {
 // disk under the config directory, so a fresh process offers the programs
 // the previous one ran — newest first, from either dialect.
 func TestJQPlaygroundHistoryPersistsAcrossRestart(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = dismissOnboarding(m)
@@ -130,6 +133,7 @@ func TestJQPlaygroundHistoryPersistsAcrossRestart(t *testing.T) {
 // TestJQPlaygroundHistoryFileIsPerUser: the app's list is the one
 // jqplay.HistoryFile names — user state, not the project's .ike.
 func TestJQPlaygroundHistoryFileIsPerUser(t *testing.T) {
+	// serial: withStore: t.Setenv
 	withStore(t)
 	m := newSized()
 	m.playHist().Add(".x")

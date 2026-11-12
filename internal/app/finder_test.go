@@ -36,6 +36,7 @@ func finderApp(t *testing.T) (Model, string) {
 }
 
 func TestFindInPathCommandRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	for _, id := range []string{"project.findInPath", "search.nextMatch", "search.prevMatch"} {
 		if _, ok := m.reg.Command(id); !ok {
@@ -45,6 +46,7 @@ func TestFindInPathCommandRegistered(t *testing.T) {
 }
 
 func TestFinderRendersStreamedResults(t *testing.T) {
+	t.Parallel()
 	m, _ := finderApp(t)
 	frame := m.render()
 	// The title renders styled per rune; assert on the input label and the
@@ -55,6 +57,7 @@ func TestFinderRendersStreamedResults(t *testing.T) {
 }
 
 func TestFinderEnterOpensFileAtMatch(t *testing.T) {
+	t.Parallel()
 	m, path := finderApp(t)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.finder.IsOpen() {
@@ -71,6 +74,7 @@ func TestFinderEnterOpensFileAtMatch(t *testing.T) {
 }
 
 func TestMatchStepNavigatesWithoutOverlay(t *testing.T) {
+	t.Parallel()
 	m, path := finderApp(t)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape}) // close, keep results
 	tm, cmd := m.Update(MatchStepMsg{Delta: 1})
@@ -105,6 +109,7 @@ func commitInFileSearch(t *testing.T, m Model, path string) Model {
 // in-file search, f3/shift+f3 (search.nextMatch/prevMatch) repeat it like n/N
 // instead of stepping the retained find-in-path results.
 func TestMatchStepRepeatsInFileSearchWhenMostRecent(t *testing.T) {
+	t.Parallel()
 	m, hitPath := finderApp(t)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape}) // close, keep results
 	path := filepath.Join(t.TempDir(), "local.txt")
@@ -135,6 +140,7 @@ func TestMatchStepRepeatsInFileSearchWhenMostRecent(t *testing.T) {
 // TestMatchStepMostRecentSearchWins covers the flip side of #376: a new
 // find-in-path scan after a committed in-file search reclaims f3.
 func TestMatchStepMostRecentSearchWins(t *testing.T) {
+	t.Parallel()
 	m, hitPath := finderApp(t)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = dismissOnboarding(m) // or it swallows the "/foo" commit keys
@@ -172,6 +178,7 @@ func TestMatchStepMostRecentSearchWins(t *testing.T) {
 }
 
 func TestFinderSwallowsKeysFromPanes(t *testing.T) {
+	t.Parallel()
 	m, _ := finderApp(t)
 	before := m.finder.Query()
 	m = drainKey(m, tea.KeyPressMsg{Code: 'j', Text: "j"})
@@ -184,6 +191,7 @@ func TestFinderSwallowsKeysFromPanes(t *testing.T) {
 }
 
 func TestFinderMouseClicksToggleAndDismiss(t *testing.T) {
+	t.Parallel()
 	m, _ := finderApp(t)
 	v := m.finder.View()
 	bx := (m.width - lipgloss.Width(v)) / 2
