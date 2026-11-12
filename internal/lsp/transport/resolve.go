@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -19,6 +20,17 @@ import (
 var envOutput = func(name string, args ...string) (string, error) {
 	out, err := exec.Command(name, args...).Output()
 	return strings.TrimSpace(string(out)), err
+}
+
+// NoToolchainProbes makes FallbackDirs answer without running `go env` and
+// `npm prefix -g`, for the test binaries of packages that build whole models
+// (#3135): every model that opens a file whose server is not on PATH would
+// otherwise launch those two toolchains in the background — hundreds of
+// process launches per suite run, each a fork of the whole test binary.
+func NoToolchainProbes() {
+	envOutput = func(string, ...string) (string, error) {
+		return "", errors.New("toolchain probes are disabled")
+	}
 }
 
 // Resolve returns an absolute path for command: PATH first, then the

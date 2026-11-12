@@ -1,9 +1,23 @@
 package theme
 
+import (
+	"slices"
+	"sync"
+)
+
 // Builtins returns the built-in themes, ported from the proven sqlit / Textual
 // palette set. Each supplies all three color groups (ui + captures + files).
 // "default" reproduces IKE's historical colors exactly.
-func Builtins() []Theme {
+//
+// The set is built once (#3135): the registry asks every plugin for its
+// capabilities on each lookup, so the theme provider used to rebuild two dozen
+// themes — each with a few-hundred-entry Files table — for every command,
+// hook and pane lookup, the largest single source of allocation in a session.
+// The slice is the caller's own; the Captures and Files maps are shared and
+// read-only, which is how every consumer has always treated them.
+func Builtins() []Theme { return slices.Clone(builtinSet()) }
+
+var builtinSet = sync.OnceValue(func() []Theme {
 	themes := builtinThemes()
 	// The terminal palettes (#1363) live in ansi_builtins.go; a theme without
 	// an entry there derives its own from its semantic colors.
@@ -13,7 +27,7 @@ func Builtins() []Theme {
 		}
 	}
 	return themes
-}
+})
 
 // builtinThemes is the raw list, before the terminal palettes are attached.
 func builtinThemes() []Theme {

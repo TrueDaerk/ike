@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"reflect"
+	"sync"
 	"testing"
 
 	"ike/internal/host"
@@ -227,4 +228,30 @@ func TestDescribeIncludesDisabled(t *testing.T) {
 	if b := descs[1]; b.ID != "b" || !b.Enabled || b.Panes != 1 {
 		t.Fatalf("b = %+v", b)
 	}
+}
+
+// TestPluginSwitchesAreSafeAcrossModels guards #3135: every model applies its
+// plugin switches to the one global registry on construction while other
+// models' lookups read them, so SetEnabled and IsEnabled must not race (the
+// race detector is the assertion).
+func TestPluginSwitchesAreSafeAcrossModels(t *testing.T) {
+	r := New()
+	r.Add(fake{id: "a"})
+	r.Add(fake{id: "b"})
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 200; j++ {
+				r.SetEnabled("a", true)
+				r.SetEnabled("b", true)
+				if !r.IsEnabled("a") || len(r.activePlugins()) != 2 {
+					t.Error("a plugin switched on by every writer must read as enabled")
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -91,8 +92,9 @@ type popupTerm struct {
 // per-model (#1793): a global floating terminal rides across the fresh model
 // a project switch builds, so per-model counters would collide its session
 // key with the new project's popup sessions — and session-key lookups
-// (popupTabForSession, terminalModelForSession) must stay unambiguous.
-var popupSessSeq int
+// (popupTabForSession, terminalModelForSession) must stay unambiguous. Atomic
+// because models are also built concurrently, one per parallel test (#3135).
+var popupSessSeq atomic.Int64
 
 // instances returns the popup's live tab hosts, primary first — one entry
 // while unsplit, two while split (#1427). Callers that must touch every popup
@@ -420,8 +422,7 @@ func (m *Model) newPopupShell() terminal.Model {
 	if v, ok := m.host.Config().Get("terminal.shell"); ok {
 		shell = v
 	}
-	popupSessSeq++
-	key := fmt.Sprintf("popup:term:%d", popupSessSeq)
+	key := fmt.Sprintf("popup:term:%d", popupSessSeq.Add(1))
 	return terminal.New(key, terminal.Shell(shell), m.popupShellDir(), 80, 24, terminalEnv(), m.host.Send)
 }
 

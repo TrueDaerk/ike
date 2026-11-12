@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"sync/atomic"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -70,7 +71,7 @@ const moveDragMods = tea.ModAlt | tea.ModSuper | tea.ModMeta
 
 // floatTermSeq mints unique host keys for torn-out panels. Package-level like
 // popupSessSeq: keys must stay unique across the models a session builds.
-var floatTermSeq int
+var floatTermSeq atomic.Int64
 
 // popupLayerVisible reports whether the popup terminal layer — the popup box
 // plus every floating panel (#1793) — is shown and has anything to show,
@@ -462,8 +463,7 @@ func (m *Model) tearOutPopupTab(src *pane.Instance, idx, x, y int) {
 		if !ok {
 			return
 		}
-		floatTermSeq++
-		hostInst = pane.NewDetachedTerminalHost(fmt.Sprintf("float%d", floatTermSeq), term, m.host.Config(), m.pal())
+		hostInst = pane.NewDetachedTerminalHost(fmt.Sprintf("float%d", floatTermSeq.Add(1)), term, m.host.Config(), m.pal())
 	} else {
 		hostInst = src
 		m.collapsePopupSlot(src)
@@ -704,8 +704,7 @@ func (m *Model) newFloatTermPanel() {
 		dx, dy := m.popupTermPos()
 		x, y = ui.FloatOrigin(m.width, m.height, w, h, dx, dy)
 	}
-	floatTermSeq++
-	inst := pane.NewDetachedTerminalHost(fmt.Sprintf("float%d", floatTermSeq), m.newPopupShell(), m.host.Config(), m.pal())
+	inst := pane.NewDetachedTerminalHost(fmt.Sprintf("float%d", floatTermSeq.Add(1)), m.newPopupShell(), m.host.Config(), m.pal())
 	f := &floatTerm{inst: inst, w: w, h: h}
 	f.x = ui.ClampDelta(x, 0, 0, max(m.width-w, 0))
 	f.y = ui.ClampDelta(y, 0, 0, max(m.height-h, 0))

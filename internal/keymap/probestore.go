@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync/atomic"
 )
 
 // probestore.go persists keymap-doctor runs (#2080) as per-terminal
@@ -118,28 +119,37 @@ func (s ProbeStore) TerminalIDs() []string {
 }
 
 // probeVerdicts is the installed per-terminal truth, keyed by chord string.
-// Like GOOS it is set once at startup (and after a doctor run) from the tea
-// loop, so it is unguarded by design.
-var probeVerdicts map[string]ProbeResult
+// It is set at startup (and after a doctor run) and read on every
+// classification; the installed map is never mutated, so swapping the pointer
+// is all the synchronisation concurrent models need (#3135).
+var probeVerdictsPtr atomic.Pointer[map[string]ProbeResult]
+
+// installedVerdicts returns the installed table (nil when none).
+func installedVerdicts() map[string]ProbeResult {
+	if p := probeVerdictsPtr.Load(); p != nil {
+		return *p
+	}
+	return nil
+}
 
 // SetProbeVerdicts installs the running terminal's probe verdicts;
 // Classify and ReachabilityNote consult them before the static rules.
 // nil (or empty) clears the installation.
 func SetProbeVerdicts(results []ProbeResult) {
 	if len(results) == 0 {
-		probeVerdicts = nil
+		probeVerdictsPtr.Store(nil)
 		return
 	}
 	m := make(map[string]ProbeResult, len(results))
 	for _, r := range results {
 		m[r.Chord] = r
 	}
-	probeVerdicts = m
+	probeVerdictsPtr.Store(&m)
 }
 
 // ProbeVerdict returns the installed verdict for a single chord-step string.
 func ProbeVerdict(chord string) (ProbeResult, bool) {
-	r, ok := probeVerdicts[chord]
+	r, ok := installedVerdicts()[chord]
 	return r, ok
 }
 
@@ -147,11 +157,11 @@ func ProbeVerdict(chord string) (ProbeResult, bool) {
 // this terminal, with the collapse evidence when there is any — the signal
 // the settings list flags prominently (#2080).
 func ChordProbedMissing(c Chord) (got string, missing bool) {
-	if r, ok := probeVerdicts[c.String()]; ok && !r.Delivered {
+	if r, ok := installedVerdicts()[c.String()]; ok && !r.Delivered {
 		return r.Got, true
 	}
 	for _, k := range c.Steps {
-		if r, ok := probeVerdicts[k.String()]; ok && !r.Delivered {
+		if r, ok := installedVerdicts()[k.String()]; ok && !r.Delivered {
 			return r.Got, true
 		}
 	}

@@ -323,7 +323,13 @@ func New(cfg Config) *Host {
 
 // SetSender wires the program's Send so background workers can inject messages.
 // main.go calls this once after tea.NewProgram, before Run.
-func (h *Host) SetSender(send func(tea.Msg)) { h.send = send }
+func (h *Host) SetSender(send func(tea.Msg)) {
+	// Under sendMu: a worker started before the sender is (re)wired may be in
+	// Send already.
+	h.sendMu.Lock()
+	h.send = send
+	h.sendMu.Unlock()
+}
 
 // SetConfig replaces the configuration the host exposes; the root model calls
 // it on a live config reload so plugins (and the host's own consumers) read
@@ -347,14 +353,15 @@ func (h *Host) SetConfig(cfg Config) {
 // other message arriving while the outbox holds maxOutbox entries is dropped,
 // counted (SendDrops) and reported through the diag logger.
 func (h *Host) Send(msg tea.Msg) {
-	if h.send == nil {
-		return // no program yet: nothing to deliver to
-	}
 	var key string
 	if c, ok := msg.(Coalescable); ok {
 		key = c.CoalesceKey()
 	}
 	h.sendMu.Lock()
+	if h.send == nil {
+		h.sendMu.Unlock()
+		return // no program yet: nothing to deliver to
+	}
 	if key != "" {
 		for i := range h.outbox {
 			if h.outbox[i].key == key {
@@ -420,8 +427,11 @@ func (h *Host) pump() {
 		// reachable through the backing array.
 		h.outbox[0] = sendEntry{}
 		h.outbox = h.outbox[1:]
+		send := h.send
 		h.sendMu.Unlock()
-		h.send(msg)
+		if send != nil {
+			send(msg)
+		}
 	}
 }
 

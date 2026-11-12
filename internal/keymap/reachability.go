@@ -56,7 +56,7 @@ var bareModifiers = map[string]bool{"shift": true, "ctrl": true, "alt": true, "c
 // the static overrides — probed truth wins. Multi-step chords take the worst
 // class of their steps (a chord is only as reachable as its weakest key).
 func Classify(c Chord) Reachability {
-	if r, ok := probeVerdicts[c.String()]; ok {
+	if r, ok := installedVerdicts()[c.String()]; ok {
 		return probedClass(r)
 	}
 	if r, ok := reachabilityOverrides[c.String()]; ok {
@@ -86,7 +86,7 @@ func classifyKey(k Key) Reachability {
 	if bareModifiers[k.Base] {
 		return Undetectable
 	}
-	if r, ok := probeVerdicts[k.String()]; ok {
+	if r, ok := installedVerdicts()[k.String()]; ok {
 		return probedClass(r)
 	}
 	if r, ok := reachabilityOverrides[k.String()]; ok {

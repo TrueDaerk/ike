@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 
 	"ike/internal/intention"
 	"ike/internal/keymap"
@@ -24,6 +25,10 @@ import (
 // Registry holds registered plugins and resolves their capabilities.
 type Registry struct {
 	plugins []plugin.Plugin
+	// mu guards enabled: every model applies the plugin switches of its
+	// config on construction, and models are built concurrently (one per
+	// parallel test, #3135) against the one global registry.
+	mu      sync.RWMutex
 	enabled map[string]bool // plugin id -> enabled; absent means enabled
 }
 
@@ -59,11 +64,17 @@ func (r *Registry) PluginIDs() []string {
 
 // SetEnabled toggles a plugin by id. Unknown ids are remembered so a plugin
 // registered later still honours the flag.
-func (r *Registry) SetEnabled(id string, on bool) { r.enabled[id] = on }
+func (r *Registry) SetEnabled(id string, on bool) {
+	r.mu.Lock()
+	r.enabled[id] = on
+	r.mu.Unlock()
+}
 
 // IsEnabled reports whether the plugin id is enabled (default true).
 func (r *Registry) IsEnabled(id string) bool {
+	r.mu.RLock()
 	on, ok := r.enabled[id]
+	r.mu.RUnlock()
 	return !ok || on
 }
 
