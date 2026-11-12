@@ -4,7 +4,7 @@ title: File Explorer
 description: Expandable file-tree pane rooted at a fixed project base that emits an open-file message.
 resource: internal/explorer/explorer.go
 tags: [architecture, explorer, tree]
-timestamp: 2026-09-29T12:00:00Z
+timestamp: 2026-11-12T12:00:00Z
 ---
 
 # File Explorer
@@ -243,8 +243,9 @@ Marks live in `Model.marks`, keyed by **absolute path**, never by row index, so
 a rescan cannot silently re-point them at the wrong entries; `rebuild` prunes
 only the marks whose entry left the tree (`pruneMarks`). The map is copied on
 write, because `Model` travels by value and a shared map would leak marks into
-stale copies. The root is never markable, and the Scratches section has no
-multi-select at all (see below).
+stale copies. The root is never markable. The Scratches section keeps its
+**own** marks and range (`scrMarks` / `scrSelAnchor`, #3138, see below), so an
+operation only ever consumes the selection of the section it was started in.
 
 Visually, a marked row takes the `rowMarked` kind — the same muted
 `SelectionMuted` recipe as a range member — and its **own indent-guide cell**
@@ -867,9 +868,25 @@ first, section entries after (`selCount`/`vcur`/`setVcur`) — so `j`/`k` step
 across the divider, wrap-around passes both ends, `G` lands on the last
 scratch and `gg` returns to the tree top. `scrCursor >= 0` marks the cursor as
 being in the section; the tree's remembered row then renders as the muted idle
-cursor. The section has **no multi-select** (deletes there are permanent, so
-they stay one-at-a-time deliberate): a shifted motion moves plainly, and a
-tree range never extends past the last tree row. Speed search stays a tree
+cursor.
+
+**Section multi-select (#3138).** `space` and `shift+j/k` work in the section
+like in the tree, overturning #1963's one-at-a-time rule: `space` toggles the
+cursor scratch in `Model.scrMarks` (keyed by path, pruned on every
+`RefreshScratches`), and a shifted motion grows a section-local range from
+`scrSelAnchor`. Neither ever crosses the divider — a tree range stops at the
+last tree row, a section range at the first scratch — and the two sections'
+selections are kept apart: tree marks never reach a scratch delete, scratch
+marks never reach a tree operation (`opTargets`/`OpTargetPaths` stay empty in
+the section), and each section's bulk delete leaves the other's marks alone.
+Marked scratch rows show the accent `✓` in their indent's first cell and the
+muted `SelectionMuted` background, like tree marks; `esc` clears both
+sections' marks. The delete key resolves its targets through
+`scratchOpTargets` (marks, else range, else cursor); a multi-target delete
+opens one confirmation listing every scratch by name — the safety net, since
+the store has no trash — and `deleteScratches` removes each through the
+`scrRemove` seam, refreshes the section once and announces every removed path.
+Copy / cut / paste and rename stay single-entry on scratches. Speed search stays a tree
 affair — starting it exits the section.
 
 **Same operations, different store.** `enter`/`l`/double-click open through

@@ -90,6 +90,7 @@ func (m *Model) RefreshScratches() {
 	}
 	m.scrEntries = entries
 	m.sortScratches()
+	m.pruneScratchMarks()
 	if m.scrDir != "" {
 		if fi, statErr := os.Stat(m.scrDir); statErr == nil {
 			m.scrDirMod = fi.ModTime()
@@ -399,12 +400,39 @@ func (m *Model) ToggleScratchCollapsed() {
 
 // promptScratchDelete opens the explorer's confirm dialog for the selected
 // scratch (#1963); the accept removes it through the store's guarded delete.
+// With section marks or a section range (#3138) the one confirmation lists
+// every target by name — the scratch dir has no trash, so that list is the
+// safety net — and the accept removes them all.
 func (m *Model) promptScratchDelete() {
-	e, ok := m.scratchSelected()
-	if !ok {
+	paths, bulk := m.scratchOpTargets()
+	if len(paths) == 0 {
 		return
 	}
-	path := e.Path
+	if bulk {
+		lines := make([]string, 0, len(paths))
+		for i, p := range paths {
+			if i == maxPromptLines && len(paths) > maxPromptLines+1 {
+				lines = append(lines, fmt.Sprintf("… and %d more", len(paths)-maxPromptLines))
+				break
+			}
+			lines = append(lines, "• "+filepath.Base(p))
+		}
+		anchor := ""
+		if e, ok := m.scratchSelected(); ok {
+			anchor = e.Path
+		}
+		m.prompt = &prompt{
+			kind:   promptConfirm,
+			title:  fmt.Sprintf("Delete %d %s?", len(paths), scratchNoun(len(paths))),
+			lines:  lines,
+			anchor: anchor,
+			accept: func(mm *Model, _ string) tea.Cmd {
+				return mm.deleteScratches(paths)
+			},
+		}
+		return
+	}
+	path := paths[0]
 	m.prompt = &prompt{
 		kind:   promptConfirm,
 		title:  fmt.Sprintf("Delete scratch %q?", filepath.Base(path)),
@@ -426,6 +454,37 @@ func (m *Model) deleteScratch(path string) tea.Cmd {
 	}
 	m.RefreshScratches()
 	return deletedCmd(path, false)
+}
+
+// scratchNoun names a scratch count the way the bulk prompt reads it.
+func scratchNoun(count int) string {
+	if count == 1 {
+		return "scratch"
+	}
+	return "scratches"
+}
+
+// deleteScratches is deleteScratch for a section multi-select (#3138): every
+// target goes through the store seam on its own (best-effort — a failure does
+// not abandon the rest), the section refreshes once, the section selection is
+// consumed, and every removed path is announced so its open tabs close.
+func (m *Model) deleteScratches(paths []string) tea.Cmd {
+	var announce []tea.Cmd
+	var errs []error
+	for _, p := range paths {
+		if err := m.scrRemove(p); err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", filepath.Base(p), err))
+			continue
+		}
+		announce = append(announce, deletedCmd(p, false))
+	}
+	m.clearSel()
+	m.clearScratchMarks()
+	m.RefreshScratches()
+	if len(errs) > 0 {
+		m.fail(batchErr("deleted", len(announce), len(paths), errs))
+	}
+	return tea.Batch(announce...)
 }
 
 // promptScratchRename opens the explorer's rename prompt for the selected
@@ -563,6 +622,10 @@ func (m Model) scratchRow(i int) string {
 		style = style.Background(ss.pal.Selection).Bold(true)
 	case selected:
 		style = style.Background(ss.pal.SelectionMuted)
+	case m.inScratchSelRange(i) || m.scratchMarked(e.Path):
+		// Range members and marks (#3138) read like the tree's: the muted
+		// selection recipe, outranking a hover sweeping over them.
+		style = style.Background(ss.pal.SelectionMuted)
 	case i == m.scrHover:
 		style = style.Background(ss.pal.Panel)
 	}
@@ -586,7 +649,13 @@ func (m Model) scratchRow(i int) string {
 			}
 		}
 	}
-	line := style.Render("  ") + rendered
+	// The indent's first cell doubles as the mark cell (#3138), like the
+	// tree's guide cell: width-neutral, accent-coloured when marked.
+	lead := style.Render("  ")
+	if m.scratchMarked(e.Path) {
+		lead = style.Foreground(ss.pal.Accent).Bold(false).Render(markGlyph) + style.Render(" ")
+	}
+	line := lead + rendered
 	w := 2 + ansi.StringWidth(shown)
 	if age != "" {
 		// Right-align the age: pad the name field out, then the one-column
