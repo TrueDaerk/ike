@@ -6,7 +6,6 @@ import (
 	"runtime"
 	"strings"
 	"testing"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -135,7 +134,6 @@ func TestAgentAskNeedsTraceSession(t *testing.T) {
 }
 
 func TestAgentAskForksWithFakeClaudeAndNeverWritesTheOriginal(t *testing.T) {
-	askSpinInterval = time.Millisecond
 	m, transcript, target := askApp(t)
 	before, err := os.ReadFile(transcript)
 	if err != nil {
@@ -218,7 +216,6 @@ func mustEvalSymlinks(p string) string {
 }
 
 func TestAgentAskHidesContextWhenOff(t *testing.T) {
-	askSpinInterval = time.Millisecond
 	m, _, target := askApp(t)
 	prev := config.Get()
 	cfg := *prev
@@ -238,7 +235,6 @@ func TestAgentAskHidesContextWhenOff(t *testing.T) {
 }
 
 func TestAgentAskMissingClaudeIsADialog(t *testing.T) {
-	askSpinInterval = time.Millisecond
 	m, _, _ := askApp(t)
 	t.Setenv("PATH", t.TempDir())
 	m, cmd := typeAsk(t, m, "why?")
@@ -256,7 +252,6 @@ func TestAgentAskMissingClaudeIsADialog(t *testing.T) {
 }
 
 func TestAgentAskResumeRefusedIsADialog(t *testing.T) {
-	askSpinInterval = time.Millisecond
 	m, _, _ := askApp(t)
 	fakeClaude(t, "", 1)
 	m, cmd := typeAsk(t, m, "why?")
@@ -271,7 +266,6 @@ func TestAgentAskResumeRefusedIsADialog(t *testing.T) {
 }
 
 func TestAgentAskEscCancelsRunAndLateResultIsIgnored(t *testing.T) {
-	askSpinInterval = time.Millisecond
 	m, _, _ := askApp(t)
 	fakeClaude(t, `{"type":"result","subtype":"success","result":"late","session_id":"fork-3"}`, 0)
 	m, cmd := typeAsk(t, m, "why?")
@@ -392,7 +386,6 @@ func typeQuestion(t *testing.T, m Model, q string) (Model, tea.Cmd) {
 // fork is kept for the node, reopening the ask on that node continues it,
 // and ctrl+n starts a fresh fork.
 func TestAgentAskFollowUpChainsOnTheFork(t *testing.T) {
-	askSpinInterval = time.Millisecond
 	m, transcript, _ := askApp(t)
 	before, _ := os.ReadFile(transcript)
 	argsFile, _ := fakeClaude(t, `{"type":"result","subtype":"success","result":"First answer.","session_id":"fork-1"}`, 0)
@@ -481,7 +474,6 @@ func TestAgentAskFollowUpChainsOnTheFork(t *testing.T) {
 // TestAgentAskFollowUpOnVanishedForkForgetsIt: a refused resume of a kept
 // fork fails the ask and forgets the fork, so the next ask forks afresh.
 func TestAgentAskFollowUpOnVanishedForkForgetsIt(t *testing.T) {
-	askSpinInterval = time.Millisecond
 	m, _, _ := askApp(t)
 	fakeClaude(t, `{"type":"result","subtype":"success","result":"ok","session_id":"fork-9"}`, 0)
 	m, cmd := typeAsk(t, m, "why?")

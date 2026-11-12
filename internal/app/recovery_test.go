@@ -40,6 +40,7 @@ func remainingSnapshots(t *testing.T) int {
 }
 
 func TestRecoveryPromptShownAtStartup(t *testing.T) {
+	withStore(t)
 	var file string
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		file = filepath.Join(dir, "work.txt")
@@ -63,6 +64,7 @@ func TestRecoveryNoPromptWhenClean(t *testing.T) {
 }
 
 func TestRecoveryRestoreOpensDirtyBuffer(t *testing.T) {
+	withStore(t)
 	var file string
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		file = filepath.Join(dir, "work.txt")
@@ -115,6 +117,7 @@ func TestRecoveryDiscardRemovesSnapshot(t *testing.T) {
 }
 
 func TestRecoverySkipKeepsSnapshot(t *testing.T) {
+	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		f := filepath.Join(dir, "keep.txt")
 		_ = os.WriteFile(f, []byte("x\n"), 0o644)
@@ -202,6 +205,7 @@ func TestRecoveryDropItemShowsInView(t *testing.T) {
 }
 
 func TestRecoveryBaseChangedWarning(t *testing.T) {
+	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		f := filepath.Join(dir, "moved.txt")
 		_ = os.WriteFile(f, []byte("current on-disk content\n"), 0o644)
@@ -214,6 +218,7 @@ func TestRecoveryBaseChangedWarning(t *testing.T) {
 }
 
 func TestRecoveryUntitledRestoresUnsavedBuffer(t *testing.T) {
+	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		_ = svc.Snapshot(backup.Doc{Key: "untitled:1", Path: "", Text: "scratch notes"})
 	})

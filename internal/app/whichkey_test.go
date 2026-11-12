@@ -117,6 +117,7 @@ func TestWhichKeyZeroDelayShowsAtOnce(t *testing.T) {
 }
 
 func TestWhichKeySurvivesTimeout(t *testing.T) {
+	withStore(t)
 	whichKeyConfigured(t, true, 300)
 	m := sized(t, 120, 40)
 	m = pendPrefixShown(t, m)

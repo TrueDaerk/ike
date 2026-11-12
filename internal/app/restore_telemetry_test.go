@@ -15,6 +15,7 @@ import (
 // the files that vanished under the restore — the same number the summary
 // notice tells the user about.
 func TestSessionRestoreRecordsTabsAndMissing(t *testing.T) {
+	withStore(t)
 	conf, dir := t.TempDir(), t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
@@ -56,6 +57,7 @@ func TestSessionRestoreRecordsTabsAndMissing(t *testing.T) {
 // A restore that loses nothing still reports both fields, so an export can
 // tell "no files were missing" from "this version did not record it" (#2551).
 func TestSessionRestoreRecordsZeroMissing(t *testing.T) {
+	withStore(t)
 	conf, dir := t.TempDir(), t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 

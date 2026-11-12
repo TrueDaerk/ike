@@ -188,6 +188,7 @@ func TestFloatResizeDragRendersAtAnchoredRect(t *testing.T) {
 // to the store on disk, and the reopened window comes back where and as large
 // as the user left it.
 func TestFloatResizeDragPersistsSizeAndOffset(t *testing.T) {
+	withStore(t)
 	m := step(dismissOnboarding(sized(t, 120, 40)), OpenSettingsMsg{})
 	m = dragFloat(t, m, "settings", -1, -1, -3, -2)
 	x, y, w, h := m.settingsRect()
@@ -212,6 +213,7 @@ func TestFloatResizeDragPersistsSizeAndOffset(t *testing.T) {
 // The shell layers persist per content title; the popup box mirrors its
 // offset into the user-scoped fallback store like the move drag (#1714).
 func TestFloatResizeDragPersistsShellAndPopupOffsets(t *testing.T) {
+	withStore(t)
 	m := openAnchorShell(t)
 	m = dragFloat(t, m, "shell", 0, 1, 0, 3)
 	ox, oy := m.winSizes.Offset("ANCHOR TEST")

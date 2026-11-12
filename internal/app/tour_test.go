@@ -12,7 +12,6 @@ import (
 // tourSeed builds a sized app and opens the tour via its command message.
 func tourSeed(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := New()
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	tm, _ = tm.(Model).Update(ShowWelcomeTourMsg{})

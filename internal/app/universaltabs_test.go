@@ -136,6 +136,7 @@ func TestContentTabDragsOutToEdge(t *testing.T) {
 // preview content tab saves and restores mixed — the preview comes back as a
 // tab in the same pane, not as a separate pane or nothing.
 func TestMixedTabStripPersists(t *testing.T) {
+	withStore(t)
 	m, edKey, pvKey := mdPreviewModel(t)
 	pr := m.lay.Panes[pvKey]
 	m = step(m, press(pr.X+2, pr.Y+1))

@@ -72,6 +72,7 @@ func cxRescan(t *testing.T, m Model, l *scanLog, files int, after string) Model 
 }
 
 func TestComplexityScansAfterWindowActionsComeFromCache(t *testing.T) {
+	withStore(t)
 	m, _ := baselineApp(t) // the cold first walk wrote the cache
 	ix := m.ComplexityIndex()
 	files := ix.Stats().Files

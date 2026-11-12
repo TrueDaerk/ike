@@ -29,7 +29,6 @@ func onboardLang(t *testing.T, id string) {
 // onboardSeed builds a sized app on a fresh (empty) config dir — a first start.
 func onboardSeed(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := New()
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	return tm.(Model)
@@ -128,6 +127,7 @@ func TestOnboardingRespectsAutoInstallOff(t *testing.T) {
 }
 
 func TestOnboardingEscSkipsAndPersists(t *testing.T) {
+	withStore(t)
 	onboardLang(t, "obgo")
 	m := onboardSeed(t)
 	tm, cmd := m.updateOnboarding(tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -151,6 +151,7 @@ func TestOnboardingEscSkipsAndPersists(t *testing.T) {
 }
 
 func TestOnboardingUncheckedServersDisabled(t *testing.T) {
+	withStore(t)
 	onboardLang(t, "obgo")
 	onboardLang(t, "obpy")
 	m := onboardSeed(t)

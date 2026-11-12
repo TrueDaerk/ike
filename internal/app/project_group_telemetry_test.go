@@ -102,6 +102,7 @@ func TestGroupOpenRecordsOp(t *testing.T) {
 // TestGroupOpenOpCountsSkippedMember: a member that is gone is one skipped hop
 // in the payload, and the members count stays the present ones the chain ran.
 func TestGroupOpenOpCountsSkippedMember(t *testing.T) {
+	withStore(t)
 	if os.Geteuid() == 0 {
 		t.Skip("root can enter any directory")
 	}

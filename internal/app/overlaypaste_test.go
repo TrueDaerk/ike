@@ -123,6 +123,7 @@ func TestPasteReachesNewProjectNameStep(t *testing.T) {
 // TestPasteReachesLayoutSavePrompt: the save-layout name prompt (#1175)
 // takes a paste at its cursor (#1873).
 func TestPasteReachesLayoutSavePrompt(t *testing.T) {
+	withStore(t)
 	m := sized(t, 100, 40)
 	m = step(m, SaveLayoutPromptMsg{})
 	m = step(m, tea.KeyPressMsg{Code: tea.KeyEnter}) // keep-all-panes selection

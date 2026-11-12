@@ -59,6 +59,7 @@ func TestEditorNormalModeWithActiveTerminalTab(t *testing.T) {
 }
 
 func TestRestoreSnapshotWithActiveTerminalTab(t *testing.T) {
+	withStore(t)
 	m := sized(t, 100, 40)
 	termTabActive(t, m)
 	// Recovery restore (#931 audit): must land the text in a fresh editor tab

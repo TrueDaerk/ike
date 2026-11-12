@@ -74,7 +74,7 @@ func eventsOf(evs []telemetry.Event, typ string) []telemetry.Event {
 // telemetryModel builds an isolated model with one bindable test command.
 func telemetryModel(t *testing.T, cfg host.MapConfig) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t) // the events land in the store, one per model
 	reg := registry.New()
 	reg.Add(fakePlugin{id: "tm", caps: plugin.Capabilities{Commands: []plugin.Command{{
 		ID: "tm.fire", Title: "Fire", Scope: plugin.GlobalScope(),
@@ -103,6 +103,7 @@ func telemetryModel(t *testing.T, cfg host.MapConfig) Model {
 // TestTelemetryKeybindRecordsCommandAndKey drives a bound chord and expects
 // both a key "resolved" event and a command event sourced "keybind".
 func TestTelemetryKeybindRecordsCommandAndKey(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{"keymap.bindings.ctrl+y": "tm.fire"})
 	tm, _ := m.Update(tea.KeyPressMsg{Code: 'y', Mod: tea.ModCtrl})
 	m = tm.(Model)
@@ -122,6 +123,7 @@ func TestTelemetryKeybindRecordsCommandAndKey(t *testing.T) {
 // TestTelemetryPaletteAndMenuSources checks the invocation source survives the
 // palette and menu dispatch paths.
 func TestTelemetryPaletteAndMenuSources(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	tm, _ := m.Update(palette.RunCommandMsg{ID: "tm.fire"})
 	m = tm.(Model)
@@ -143,6 +145,7 @@ func TestTelemetryPaletteAndMenuSources(t *testing.T) {
 // TestTelemetryUnboundChordRecorded expects a modified chord without a binding
 // to land as an "unbound" key event — the missing-keybind signal.
 func TestTelemetryUnboundChordRecorded(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	// ctrl+alt+0 is bound to nothing in any preset.
 	tm, _ := m.Update(tea.KeyPressMsg{Code: '0', Mod: tea.ModCtrl | tea.ModAlt})
@@ -163,6 +166,7 @@ func TestTelemetryUnboundChordRecorded(t *testing.T) {
 // TestTelemetryPlainTypingNeverRecorded is the privacy line: unmodified (and
 // shift-only) presses must never appear in the log, bound or not.
 func TestTelemetryPlainTypingNeverRecorded(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	m.cycleFocus() // focus the editor: plain keys are typing
 	for _, r := range "secret" {
@@ -187,6 +191,7 @@ func TestTelemetryPlainTypingNeverRecorded(t *testing.T) {
 // a launch whose only telemetry is a pane focus change — what the session
 // restore emits on startup — must leave no file behind at all.
 func TestTelemetryStartAndQuitLeavesNoFile(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	m.cycleFocus()
 	m.quit()
@@ -204,6 +209,7 @@ func TestTelemetryStartAndQuitLeavesNoFile(t *testing.T) {
 // TestTelemetryLayoutEvents checks the structural layout hooks: split, pane
 // focus and resize land as layout events with structural payloads only.
 func TestTelemetryLayoutEvents(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	m.cycleFocus()
 	m.SplitFocused(layout.ZoneRight)
@@ -234,6 +240,7 @@ func TestTelemetryLayoutEvents(t *testing.T) {
 // TestTelemetryDisabledWritesNothing flips the setting off and expects no
 // telemetry file at all.
 func TestTelemetryDisabledWritesNothing(t *testing.T) {
+	withStore(t)
 	prev := config.Get()
 	off := *prev
 	off.Telemetry.Enabled = false
@@ -256,6 +263,7 @@ func TestTelemetryDisabledWritesNothing(t *testing.T) {
 // TestTelemetryNoClearTextPaths opens a real file, exercises hooks, and scans
 // every written line for the file's path segments — none may appear.
 func TestTelemetryNoClearTextPaths(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	dir := t.TempDir()
 	path := filepath.Join(dir, "very-secret-name.txt")
@@ -291,6 +299,7 @@ func TestTelemetryNoClearTextPaths(t *testing.T) {
 // session marker (#2348) ahead of it — version, OS and a hashed project token,
 // never the clear-text working directory.
 func TestTelemetrySessionMarker(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{"keymap.bindings.ctrl+y": "tm.fire"})
 	tm, _ := m.Update(tea.KeyPressMsg{Code: 'y', Mod: tea.ModCtrl})
 	m = tm.(Model)
@@ -324,6 +333,7 @@ func TestTelemetrySessionMarker(t *testing.T) {
 // before the exchange departs, #2348) and its answer leaves the matching end
 // op with duration, status class and streaming flag — no URL, key or label.
 func TestTelemetryHTTPFlightLifecycle(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	send := func(ctx context.Context, source, key string, cb httpclient.WSCallbacks) (*httpclient.Response, error) {
 		return nil, nil // never executed: the returned tea.Cmd is not run
@@ -395,6 +405,7 @@ func TestTelemetryHTTPFlightLifecycle(t *testing.T) {
 // TestTelemetryHTTPFlightCancelAndError: a user abort records "canceled", a
 // transport failure "error" — and a stream marks its flag.
 func TestTelemetryHTTPFlightCancelAndError(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	send := func(ctx context.Context, source, key string, cb httpclient.WSCallbacks) (*httpclient.Response, error) {
 		return nil, nil
@@ -475,6 +486,7 @@ func eventsOfNoFlush(t *testing.T) []telemetry.Event {
 // TestTraceLogFollowsSetting: off by default nothing is written; on, every
 // processed message leaves one structural line in trace.log (#2348).
 func TestTraceLogFollowsSetting(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	tm, _ := m.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
 	m = tm.(Model)
@@ -564,6 +576,7 @@ func TestTelemetryHeartbeatIntervalIsAMinute(t *testing.T) {
 // an invocation of an unregistered id — the dispatch funnel's one failure
 // mode — is recorded with ok=false instead of vanishing.
 func TestTelemetryCommandOutcome(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	tm, _ := m.Update(palette.RunCommandMsg{ID: "tm.fire"})
 	m = tm.(Model)
@@ -669,6 +682,7 @@ func TestTelemetryProjectLeaveEvents(t *testing.T) {
 // can tell "typed a command name that does not exist" (a typed query with zero
 // results) from "found it, changed my mind".
 func TestPaletteDismissRecordsResultCount(t *testing.T) {
+	withStore(t)
 	// A query nothing matches: the event reports zero rows on a typed query.
 	m := telemetryModel(t, host.MapConfig{})
 	m.palette.SetSize(100, 40)

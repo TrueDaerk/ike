@@ -132,6 +132,7 @@ func TestGroupCloseActiveNonMemberDropsParkedMembers(t *testing.T) {
 // close degrades to the quit — clean state, no guard — and the marker clears
 // on disk before the process ends.
 func TestGroupCloseNoNonMemberQuits(t *testing.T) {
+	withStore(t)
 	roots := peekFixture(t, "api", "ui")
 	storeGroup(t, "web", roots)
 	m := switchModel(t)
@@ -370,6 +371,7 @@ func TestGroupCloseSaveFailureKeepsGroupOpen(t *testing.T) {
 // order with wrap, a member missing on disk is skipped, and an unparked
 // member is a cold first visit.
 func TestGroupCycleNextPrevWrapSkipMissingColdVisit(t *testing.T) {
+	withStore(t)
 	roots := peekFixture(t, "origin", "api", "ui", "gone", "www")
 	storeGroup(t, "web", roots[1:])
 	if err := os.RemoveAll(roots[3]); err != nil {

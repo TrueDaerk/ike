@@ -93,7 +93,7 @@ func TestAutosaveOffKeepsFileUntouched(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(cfgDir, "settings.toml"), []byte("[editor]\nauto_save = \"off\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	os.Setenv("IKE_CONFIG_DIR", cfgDir)
+	t.Setenv("IKE_CONFIG_DIR", cfgDir)
 	m := New()
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m = tm.(Model)

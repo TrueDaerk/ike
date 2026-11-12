@@ -101,7 +101,7 @@ func TestScratchManagerCommandRegistered(t *testing.T) {
 // TestScratchManagerListsMetadata is the listing criterion: every scratch with
 // its name, language, size and age.
 func TestScratchManagerListsMetadata(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := newSized()
 	paths := smSeed(t, "txt", "sct")
 	if err := os.WriteFile(paths[1], []byte("hello scratch"), 0o644); err != nil {
@@ -123,7 +123,7 @@ func TestScratchManagerListsMetadata(t *testing.T) {
 // TestScratchManagerSpeedSearchNarrows covers the speed search: typing filters
 // the rows and esc clears the query before it closes the dialog.
 func TestScratchManagerSpeedSearchNarrows(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := newSized()
 	smSeed(t, "txt", "sct")
 	m = openManager(t, m)
@@ -148,7 +148,7 @@ func TestScratchManagerSpeedSearchNarrows(t *testing.T) {
 // TestScratchManagerOpensSelection covers enter: the scratch lands as the
 // focused buffer and the manager closes.
 func TestScratchManagerOpensSelection(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := newSized()
 	paths := smSeed(t, "txt")
 	m = openManager(t, m)
@@ -166,7 +166,7 @@ func TestScratchManagerOpensSelection(t *testing.T) {
 // scratch renamed while it is open in an editor keeps the buffer, which
 // re-points at the new path (so the tab title follows it).
 func TestScratchManagerRenameFollowsOpenBuffer(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := dispatch(t, newSized(), NewScratchMsg{Ext: "sct"})
 	old := m.activeWS().Panes.FocusedInstance().Editor().Path()
 
@@ -208,7 +208,7 @@ func TestScratchManagerRenameFollowsOpenBuffer(t *testing.T) {
 // TestScratchManagerRenameCollisionRejected is the collision criterion: the
 // rename is refused with a message and nothing on disk moves.
 func TestScratchManagerRenameCollisionRejected(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := newSized()
 	paths := smSeed(t, "txt", "sct")
 	m = openManager(t, m)
@@ -239,7 +239,7 @@ func TestScratchManagerRenameCollisionRejected(t *testing.T) {
 // TestScratchManagerRenameRejectsPathyName covers the store's guard reaching
 // the dialog: a name with a separator is refused, not acted on.
 func TestScratchManagerRenameRejectsPathyName(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := newSized()
 	smSeed(t, "txt")
 	m = openManager(t, m)
@@ -261,7 +261,7 @@ func TestScratchManagerRenameRejectsPathyName(t *testing.T) {
 // TestScratchManagerDeleteConfirms is the delete criterion: `ctrl+d` asks
 // first, `n` keeps the file and `y` removes it.
 func TestScratchManagerDeleteConfirms(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := newSized()
 	paths := smSeed(t, "txt")
 	m = openManager(t, m)
@@ -291,7 +291,7 @@ func TestScratchManagerDeleteConfirms(t *testing.T) {
 // TestScratchManagerDeleteClosesOpenBuffer covers the open-buffer half of the
 // delete: the editor showing the removed scratch closes with it.
 func TestScratchManagerDeleteClosesOpenBuffer(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := dispatch(t, newSized(), NewScratchMsg{Ext: "sct"})
 	path := m.activeWS().Panes.FocusedInstance().Editor().Path()
 
@@ -317,7 +317,7 @@ func TestScratchManagerDeleteClosesOpenBuffer(t *testing.T) {
 // is what re-languages its highlighting — and the row's language column
 // follows too.
 func TestScratchManagerChangesLanguage(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := dispatch(t, newSized(), NewScratchMsg{Ext: "txt"})
 	old := m.activeWS().Panes.FocusedInstance().Editor().Path()
 
@@ -367,7 +367,7 @@ func TestScratchManagerReachableFromCreateFlow(t *testing.T) {
 // TestScratchManagerClickOpensRow covers the mouse path: a click selects the
 // row, a second one opens it.
 func TestScratchManagerClickOpensRow(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := newSized()
 	paths := smSeed(t, "txt", "sct")
 	m = openManager(t, m)

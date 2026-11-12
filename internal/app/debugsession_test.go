@@ -193,9 +193,6 @@ func debugModelWith(t *testing.T, cfg host.MapConfig) (Model, *stubAdapter, stri
 // registry.Global() when the test dispatches real key bindings (#2192).
 func debugModelReg(t *testing.T, reg *registry.Registry, cfg host.MapConfig) (Model, *stubAdapter, string) {
 	t.Helper()
-	if testStoreRoot != "" {
-		os.Setenv("IKE_CONFIG_DIR", testStoreDir(t, "debug"))
-	}
 	path := filepath.Join(t.TempDir(), "prog.rfake")
 	if err := os.WriteFile(path, []byte("a\nb\nc\nd\n"), 0o644); err != nil {
 		t.Fatal(err)

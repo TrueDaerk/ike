@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
@@ -55,11 +54,9 @@ func newGenSized() Model {
 }
 
 // openGenerate opens the dialog through the real command path. The preview
-// debounce is shortened so drains render it inline.
+// debounce is short for every test (TestMain), so drains render it inline.
 func openGenerate(t *testing.T, m Model) Model {
 	t.Helper()
-	tdPreviewDebounce = time.Millisecond
-	t.Cleanup(func() { tdPreviewDebounce = 250 * time.Millisecond })
 	m = drainCmd(m, m.RunCommand("scratch.generate"))
 	if !m.generateScratchOpen() {
 		t.Fatal("scratch.generate must open the dialog")
@@ -175,6 +172,7 @@ func TestGeneratePreviewShowsErrors(t *testing.T) {
 // TestGenerateEndToEnd drives the dialog to a generated, opened scratch and
 // checks the file is byte-identical to a direct render of the same spec.
 func TestGenerateEndToEnd(t *testing.T) {
+	withStore(t)
 	m := openGenerate(t, newGenSized())
 	// Cycle the format picker to JSON.
 	m.tdGen.setFocus(tdFocFormat)
@@ -218,6 +216,7 @@ func TestGenerateEndToEnd(t *testing.T) {
 // TestGenerateInvalidSpecBlocked: ctrl+g on an invalid spec keeps the dialog
 // open with the offending line; fixing the spec generates.
 func TestGenerateInvalidSpecBlocked(t *testing.T) {
+	withStore(t)
 	m := openGenerate(t, newGenSized())
 	m = tdSetSpec(m, "id = id(\nx = uuid()", "5", "1")
 	m = tdCtrl(m, 'g')
@@ -396,6 +395,7 @@ func TestGenerateTemplatesBuiltin(t *testing.T) {
 // TestGenerateTemplateSaveDelete: ctrl+s saves the spec under a typed name,
 // the template persists, and ctrl+d deletes it again.
 func TestGenerateTemplateSaveDelete(t *testing.T) {
+	withStore(t)
 	m := openGenerate(t, newGenSized())
 	m = tdSetSpec(m, "thing = uuid()", "5", "1")
 	m = tdCtrl(m, 's')
@@ -449,6 +449,7 @@ func TestGenerateTemplateSaveDelete(t *testing.T) {
 // TestGenerateMouse drives the dialog by clicks alone: focus a header field,
 // cycle a picker, place the editor cursor, accept a suggestion, generate.
 func TestGenerateMouse(t *testing.T) {
+	withStore(t)
 	m := openGenerate(t, newGenSized())
 	// Click the Format row: focused; click again: cycles to TSV.
 	m = tdClick(t, m, tdHitHeader, tdFocFormat)
@@ -523,6 +524,7 @@ func TestGenerateEscSemantics(t *testing.T) {
 // TestGenerateSeedRepeatsByteForByte is the determinism criterion seen from
 // the UI: generating twice with the same seed yields two identical scratches.
 func TestGenerateSeedRepeatsByteForByte(t *testing.T) {
+	withStore(t)
 	read := func(m Model) (Model, string) {
 		m = openGenerate(t, m)
 		m = tdSetSpec(m, "id = id()\nu = uuid()", "12", "2024")
@@ -543,6 +545,7 @@ func TestGenerateSeedRepeatsByteForByte(t *testing.T) {
 // TestGenerateRemembersLastSpec: the generated spec is the next dialog's
 // starting point — format, knobs and DSL body.
 func TestGenerateRemembersLastSpec(t *testing.T) {
+	withStore(t)
 	m := openGenerate(t, newGenSized())
 	m.tdGen.setFocus(tdFocFormat)
 	for m.tdGen.formats[m.tdGen.fmtPick] != testdata.FormatYAML {

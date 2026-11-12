@@ -18,6 +18,7 @@ import (
 // TestBookmarkToggleCommandPersists: bookmark.toggle marks the cursor line,
 // a second toggle clears it, and the state reaches disk.
 func TestBookmarkToggleCommandPersists(t *testing.T) {
+	withStore(t)
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\ntwo\nthree\n")
 	m := openApp(t, a)

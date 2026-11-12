@@ -16,6 +16,7 @@ func reloadWithDiags(m Model, diags []config.Diagnostic) Model {
 }
 
 func TestConfigDiagnosticsSurfaceAsNotifications(t *testing.T) {
+	withStore(t)
 	m := sized(t, 100, 40)
 	base := len(m.history)
 	m = reloadWithDiags(m, []config.Diagnostic{

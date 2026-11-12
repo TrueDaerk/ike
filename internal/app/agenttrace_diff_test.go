@@ -76,6 +76,7 @@ func diffTranscript(t *testing.T, id, cwd, main, created, other string) string {
 }
 
 func TestTraceDiffViewProvenanceAndBases(t *testing.T) {
+	withStore(t)
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not installed")
 	}
@@ -220,6 +221,7 @@ func TestTraceAskFallsBackToReconstructedHunk(t *testing.T) {
 // change has it and falling back with a notice otherwise; at the ends the
 // view keeps its diff and says so. Both pane views.
 func TestTraceDiffStepsThroughChanges(t *testing.T) {
+	withStore(t)
 	for _, view := range []tracepanel.ViewMode{tracepanel.ViewTree, tracepanel.ViewGraph} {
 		t.Run(view.String(), func(t *testing.T) {
 			m, dir := traceApp(t)

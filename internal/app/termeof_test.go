@@ -24,6 +24,7 @@ var ctrlD = tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl}
 // binding is written to the pty. ctrl+d is the case from the telemetry — it
 // ends the idle shell, which is only observable if the byte got there.
 func TestTerminalUnboundChordReachesPty(t *testing.T) {
+	withStore(t)
 	m, key := openTestTerminal(t)
 	term := m.activeWS().Panes.Get(key).Terminal()
 	waitIdle(t, term)
@@ -54,6 +55,7 @@ func TestTerminalUnboundChordReachesPty(t *testing.T) {
 // not an expected-but-missing keybind. The telemetry this issue came from
 // recorded exactly that.
 func TestTerminalUnboundChordNotRecorded(t *testing.T) {
+	withStore(t)
 	m, key := openTestTerminal(t)
 	term := m.activeWS().Panes.Get(key).Terminal()
 	waitIdle(t, term)
@@ -85,6 +87,7 @@ func TestTerminalUnboundChordNotRecorded(t *testing.T) {
 // closes when its session ends, the way a dedicated shell pane does — before
 // #2701 the dead tab lingered and had to be closed by hand.
 func TestShellTabClosesOnExit(t *testing.T) {
+	withStore(t)
 	m, _ := openTestTerminal(t)
 	// cmd+t converts the terminal pane into a tab host and adds a sibling
 	// shell (#729, #983); the new tab is the focused one.

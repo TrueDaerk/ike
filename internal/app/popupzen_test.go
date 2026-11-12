@@ -19,6 +19,7 @@ func fullBody(m Model) (x, y, w, h int) {
 }
 
 func TestPopupZenTogglesBox(t *testing.T) {
+	withStore(t)
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 120, 40)))
 	m.winSizes.Put(popupTermPosKey, 3, -2)
 	x0, y0, w0, h0 := m.popupTermRect()
@@ -58,6 +59,7 @@ func TestPopupZenTogglesBox(t *testing.T) {
 }
 
 func TestPopupZenKeepsPriorMaximize(t *testing.T) {
+	withStore(t)
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 120, 40)))
 	m = maximizeOnce(t, m)
 	m = zenOnce(t, m)
@@ -105,6 +107,7 @@ func TestPopupZenDroppedOnHide(t *testing.T) {
 }
 
 func TestFloatPanelZenToggles(t *testing.T) {
+	withStore(t)
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 120, 40)))
 	m.tearOutPopupTab(m.popup.inst, 0, 30, 20)
 	f := m.floatFocused()
@@ -138,6 +141,7 @@ func TestFloatPanelZenToggles(t *testing.T) {
 }
 
 func TestPopupZenClosedTargetRestoresChrome(t *testing.T) {
+	withStore(t)
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 120, 40)))
 	m.tearOutPopupTab(m.popup.inst, 0, 30, 20)
 	f := m.floatFocused()

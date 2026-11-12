@@ -66,6 +66,7 @@ func TestInsertCurlAsRequestUnsupportedFlagNotice(t *testing.T) {
 // non-.http buffer the block lands in a fresh scratch .http file, which
 // opens focused.
 func TestInsertCurlAsRequestScratch(t *testing.T) {
+	withStore(t)
 	m := intentionModel(t, "notes.md", "curl https://example.com/a\n", 0, 0)
 	out, _ := m.Update(InsertCurlAsRequestMsg{})
 	m = out.(Model)
@@ -83,6 +84,7 @@ func TestInsertCurlAsRequestScratch(t *testing.T) {
 // recorder, so the conversion takes the scratch route rather than appearing
 // to do nothing.
 func TestInsertCurlAsRequestReadOnlyFallsBackToScratch(t *testing.T) {
+	withStore(t)
 	m := intentionModel(t, "api.http", "curl https://example.com/a\n", 0, 0)
 	source := m.activeEditor().Text()
 	m.activeEditor().SetReadOnly(true)

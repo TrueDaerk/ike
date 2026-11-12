@@ -65,7 +65,7 @@ func (m *Model) openForgeEdit(req ghissues.EditTextRequestMsg) (tea.Model, tea.C
 	path, err := scratch.Create("md")
 	if err != nil {
 		m.host.Notify(host.Warn, "edit "+req.Target.Label()+": "+err.Error())
-		return m, nil
+		return *m, nil
 	}
 	// The tab should name what it edits, not "scratch-7.md". A name already
 	// taken (a leftover from an abandoned edit) keeps the allocated one —
@@ -81,7 +81,7 @@ func (m *Model) openForgeEdit(req ghissues.EditTextRequestMsg) (tea.Model, tea.C
 	if err := os.WriteFile(path, []byte(seed), 0o644); err != nil {
 		os.Remove(path)
 		m.host.Notify(host.Warn, "edit "+req.Target.Label()+": "+err.Error())
-		return m, nil
+		return *m, nil
 	}
 	if m.forgeEdits == nil {
 		m.forgeEdits = map[string]*forgeEdit{}

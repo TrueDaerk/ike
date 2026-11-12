@@ -27,7 +27,7 @@ func TestScratchCommandsRegistered(t *testing.T) {
 }
 
 func TestNewScratchCreatesAndFocusesBuffer(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := newSized()
 
 	m = dispatch(t, m, NewScratchMsg{Ext: "sct"})
@@ -55,7 +55,6 @@ func TestNewScratchCreatesAndFocusesBuffer(t *testing.T) {
 }
 
 func TestScratchListOpensLockedPalette(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := newSized()
 	if _, ok := m.reg.Command("scratch.list"); !ok {
 		t.Fatal("scratch.list must be registered")
@@ -70,7 +69,6 @@ func TestScratchListOpensLockedPalette(t *testing.T) {
 // behind cmd+shift+n and the File menu — asks for the language instead of
 // silently creating a .txt file.
 func TestNewScratchOpensLanguagePicker(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := newSized()
 	m = dispatch(t, m, ShowNewScratchMsg{})
 	if !m.palette.IsOpen() {
@@ -109,7 +107,7 @@ func TestNewScratchOpensLanguagePicker(t *testing.T) {
 // scratch's first content line (or the empty placeholder) as title and the
 // resolved language as the Detail chip.
 func TestScratchEntriesTitleAndLang(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 
 	seeded, err := scratch.Create("sct")
 	if err != nil {

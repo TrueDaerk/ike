@@ -93,6 +93,7 @@ func repro1989Layout(t *testing.T) {
 // editor closed, opening a file must recreate the editor in the layout's
 // editor slot — next to the explorer — never next to the tool-tab pane.
 func TestOpenFileRecreatesEditorAtLayoutSlot(t *testing.T) {
+	withStore(t)
 	withTools(t, sleepTool("alpha"), sleepTool("beta"), sleepTool("gamma"))
 	m := sized(t, 120, 40)
 	repro1989Layout(t)
@@ -136,6 +137,7 @@ func TestOpenFileRecreatesEditorAtLayoutSlot(t *testing.T) {
 }
 
 func TestSnapshotMultiToolHostAsToolsKind(t *testing.T) {
+	withStore(t)
 	withTools(t, sleepTool("alpha"), sleepTool("beta"))
 	m := sized(t, 120, 40)
 	m = step(m, ToolOpenMsg{Name: "alpha"})

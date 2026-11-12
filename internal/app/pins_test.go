@@ -15,7 +15,7 @@ import (
 // (pin/replace/remove/swap/persistence), the jump commands, and the picker.
 
 func TestPinStorePersistence(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	p := loadPins()
 	p.Set(0, "/a.go")
 	p.Set(2, "/c.go")

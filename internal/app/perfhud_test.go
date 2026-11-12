@@ -109,6 +109,7 @@ func TestPerfHUDOffMeasuresNothing(t *testing.T) {
 }
 
 func TestPerfHUDOverlayAppearsAfterTheFirstSample(t *testing.T) {
+	withStore(t)
 	hudOff(t)
 	m := sized(t, 120, 40)
 	out, _ := m.Update(TogglePerfHUDMsg{})

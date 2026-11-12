@@ -270,6 +270,7 @@ func TestAgentTraceEmptyStateAndActions(t *testing.T) {
 }
 
 func TestAgentTraceFollowsTheAgentToolPane(t *testing.T) {
+	withStore(t)
 	m, key := openWatcher(t)
 	cwd := m.toolPane("watcher").Terminal().Cwd()
 	if got := m.traceTargetNow(); got.key != key {

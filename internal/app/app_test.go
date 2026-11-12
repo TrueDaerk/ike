@@ -33,9 +33,9 @@ import (
 // home directory to a throwaway tree: several tests persist state (saveLayout
 // on file opens, splits and drags; saveSession on quit) and New() restores it,
 // so without isolation one test's artifacts leak into the next run — and into
-// the developer's real .ike. newSized additionally rotates to a fresh
-// subdirectory per model, so tests never see each other's persisted state
-// either. Redirecting $HOME as well is what makes the isolation complete
+// the developer's real .ike. The store itself is unwritable by default (see
+// below), so tests never see each other's persisted state either; a test of
+// persistence takes its own with withStore. Redirecting $HOME as well is what makes the isolation complete
 // (#1288): IKE_CONFIG_DIR is only the first lookup, and the tests that clear
 // it on purpose fall through to $HOME/.ike.
 var testStoreRoot string
@@ -71,6 +71,13 @@ func TestMain(m *testing.M) {
 	debounceTick = func(time.Duration, func(time.Time) tea.Msg) tea.Cmd {
 		return func() tea.Msg { return nil }
 	}
+	// The human-scale delays are short for every test (#3135), so a test
+	// drives a dialog without sleeping and without swapping a package
+	// variable — which would keep it from running in parallel. A test of
+	// the delay itself sets its own value and stays serial.
+	playDebounce, playDimDelay, playSpinDelay, playHintIdle = 0, 0, 0, 0
+	askSpinInterval = time.Millisecond
+	tdPreviewDebounce = time.Millisecond
 	// The terminal tests spawn $SHELL and wait for its prompt. A developer's
 	// login shell brings its rc files, plugins and prompt along — and in a
 	// sandbox may never reach a prompt at all — so every test shell is the
@@ -82,7 +89,18 @@ func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "ike-app-test")
 	if err == nil {
 		testStoreRoot = dir
-		os.Setenv("IKE_CONFIG_DIR", dir)
+		// By default a test model has NO state store (#3135): IKE_CONFIG_DIR
+		// points below a regular file, so every read finds nothing and every
+		// write fails, on any platform and for any user. Nothing a model
+		// persists can therefore reach another model, which is what lets the
+		// tests run in parallel without a per-model directory — the variable
+		// is process-wide, so rotating it per model (as newSized once did)
+		// only works one test at a time. A test that asserts persistence
+		// takes a real store with withStore(t) and thereby stays serial.
+		blocker := filepath.Join(dir, "nostore")
+		if os.WriteFile(blocker, nil, 0o444) == nil {
+			os.Setenv("IKE_CONFIG_DIR", filepath.Join(blocker, "state"))
+		}
 		// A temp HOME too. IKE_CONFIG_DIR is only the *first* lookup: with it
 		// unset — which the project-switch tests do deliberately, so the
 		// per-project .ike under cwd is used — the user-level stores fall back
@@ -262,7 +280,7 @@ func TestMenuBarToggleAndDispatch(t *testing.T) {
 func TestSplitFocusedCommands(t *testing.T) {
 	// SplitFocused persists the layout; redirect the store so the multi-pane
 	// tree never leaks into later tests (which restore it at New()).
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := newSized()
 	tm, _ := m.Update(ToggleExplorerFocusMsg{}) // focus the editor
 	m = tm.(Model)
@@ -370,25 +388,22 @@ func TestRunCommand(t *testing.T) {
 
 var testStoreSeq atomic.Int64
 
-// testStoreDir returns a fresh state directory under the temp store for a
-// model a test builds by hand: the test name keeps it readable, the sequence
-// number keeps it unique — a directory keyed on the name alone made a repeated
-// run (-count=2) load what the first pass persisted (#3056).
-func testStoreDir(t *testing.T, prefix string, extra ...string) string {
+// withStore gives one test a real, empty state store of its own and returns
+// its directory: the test asserts something that is persisted or restored
+// (layout, session, settings, bookmarks, telemetry, …), which the store-less
+// default of TestMain swallows. It sets IKE_CONFIG_DIR for the process, so the
+// test cannot run in parallel — t.Setenv enforces that.
+func withStore(t *testing.T) string {
 	t.Helper()
-	name := prefix + "-" + t.Name()
-	for _, e := range extra {
-		name += "-" + e
-	}
-	return filepath.Join(testStoreRoot, name+"-"+strconv.FormatInt(testStoreSeq.Add(1), 10))
+	dir := t.TempDir()
+	t.Setenv("IKE_CONFIG_DIR", dir)
+	return dir
 }
 
-// newSized builds a freshly isolated, sized model: each call rotates the state
-// store to an empty directory so persisted layouts/sessions never couple tests.
+// newSized builds a sized model. It has no state store unless the test took
+// one (see TestMain and withStore), so persisted layouts/sessions never couple
+// tests.
 func newSized() Model {
-	if testStoreRoot != "" {
-		os.Setenv("IKE_CONFIG_DIR", filepath.Join(testStoreRoot, strconv.FormatInt(testStoreSeq.Add(1), 10)))
-	}
 	m := New()
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	return tm.(Model)
@@ -758,7 +773,7 @@ func TestSessionPersistsAndRestores(t *testing.T) {
 // otherwise on-screen rows map to the wrong lines and mouse clicks miss.
 func TestSessionRestoresViewportFraming(t *testing.T) {
 	proj := t.TempDir()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	chdir(t, proj)
 
 	var b strings.Builder
@@ -1044,7 +1059,8 @@ func TestExplorerToggleHidesAndRestores(t *testing.T) {
 // explorer leaf (hidden via toggle) restores as saved instead of falling back
 // to the default layout (#268).
 func TestRestoreLayoutAcceptsHiddenExplorer(t *testing.T) {
-	m := newSized() // rotates IKE_CONFIG_DIR to a fresh store
+	withStore(t)
+	m := newSized()
 	dir := os.Getenv("IKE_CONFIG_DIR")
 	tm, _ := m.Update(ToggleExplorerFocusMsg{}) // hide (persists the layout)
 	m = tm.(Model)
@@ -1103,6 +1119,7 @@ func TestDefinitionCandidatesOpenPicker(t *testing.T) {
 // cache into rows (stale queries dropped) and refresh the open palette;
 // no-provider stays an honest toast.
 func TestSymbolLiveMode(t *testing.T) {
+	withStore(t)
 	m := newSized()
 	var applied []string
 	tm, _ := m.Update(ilsp.SymbolPromptMsg{Apply: func(q string) tea.Cmd {

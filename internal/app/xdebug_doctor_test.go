@@ -57,6 +57,7 @@ func TestDoctorToggle(t *testing.T) {
 // active" half: doctor events land in the log even when no debug session
 // owns them (e.g. the trailing stopped event after a disconnect).
 func TestDoctorTracksEventsWithoutSession(t *testing.T) {
+	withStore(t)
 	m := sized(t, 120, 40)
 	out, _ := m.Update(DebugDoctorMsg{})
 	m = out.(Model)

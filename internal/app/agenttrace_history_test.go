@@ -84,6 +84,7 @@ func traceNotices(m Model) string {
 }
 
 func TestAgentTraceHistoryRecordsLiveSession(t *testing.T) {
+	withStore(t)
 	m, dir := traceApp(t)
 	target := filepath.Join(t.TempDir(), "main.go")
 	path := filepath.Join(dir, "sess-1.jsonl")
@@ -171,6 +172,7 @@ func traceHooked(t *testing.T) (Model, string, string, string) {
 }
 
 func TestAgentTraceClearStartsSecondRecordAndPickerSwitches(t *testing.T) {
+	withStore(t)
 	m, key, dir, target := traceHooked(t)
 	st := traceStore()
 	if all, _ := st.List(); len(all) != 1 || all[0].ID != "sess-1" {
@@ -256,6 +258,7 @@ func TestAgentTraceClearStartsSecondRecordAndPickerSwitches(t *testing.T) {
 }
 
 func TestAgentTraceAskOnStoredSessionNeedsTranscript(t *testing.T) {
+	withStore(t)
 	m, key, dir, target := traceHooked(t)
 	path2 := filepath.Join(dir, "sess-2.jsonl")
 	if err := os.WriteFile(path2, []byte(transcriptLines("sess-2", projectRoot(), target, 2)), 0o644); err != nil {
@@ -295,6 +298,7 @@ func TestAgentTraceAskOnStoredSessionNeedsTranscript(t *testing.T) {
 }
 
 func TestAgentTraceImportCommand(t *testing.T) {
+	withStore(t)
 	m, dir := traceApp(t)
 	target := filepath.Join(t.TempDir(), "main.go")
 	orig := filepath.Join(dir, "sess-a.jsonl")

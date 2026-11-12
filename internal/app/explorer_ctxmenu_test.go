@@ -29,6 +29,7 @@ func explorerRect(t *testing.T, m Model) layout.Rect {
 // tree opens the node context menu at the pointer; a left press outside
 // dismisses it without leaking.
 func TestRightClickOpensExplorerContextMenu(t *testing.T) {
+	withStore(t)
 	ran := false
 	reg := registry.New()
 	reg.Add(fakePlugin{id: "p", caps: plugin.Capabilities{Commands: []plugin.Command{{
@@ -69,6 +70,7 @@ func TestRightClickOpensExplorerContextMenu(t *testing.T) {
 // opens the node menu anchored below the cursor row, esc closes it, and a
 // multi-selection survives so the menu's bulk actions see it.
 func TestAltEnterOpensExplorerContextMenu(t *testing.T) {
+	withStore(t)
 	root := t.TempDir()
 	a, b := filepath.Join(root, "a.txt"), filepath.Join(root, "b.txt")
 	writeFile(t, a, "a")

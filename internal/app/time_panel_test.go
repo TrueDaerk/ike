@@ -93,6 +93,7 @@ func TestTimeToggleLifecycle(t *testing.T) {
 }
 
 func TestTimeReadFillsPanelWithResolvedName(t *testing.T) {
+	withStore(t)
 	m, cfgDir := timeApp(t)
 	wd, err := os.Getwd()
 	if err != nil {
@@ -178,6 +179,7 @@ func segmentApp(t *testing.T, toml string) (Model, string) {
 }
 
 func TestProjectTimeSegmentOffByDefault(t *testing.T) {
+	withStore(t)
 	m, cfgDir := segmentApp(t, "")
 	wd, err := os.Getwd()
 	if err != nil {

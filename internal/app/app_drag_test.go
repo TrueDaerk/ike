@@ -26,7 +26,6 @@ func sized(t *testing.T, w, h int) Model {
 // test needs the real registered commands (e.g. keymap dispatch, #805).
 func sizedWith(t *testing.T, reg *registry.Registry, w, h int) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(reg, host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	m = out.(Model)

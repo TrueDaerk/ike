@@ -75,6 +75,7 @@ func TestForgePollPauseSettingOffKeepsPolling(t *testing.T) {
 }
 
 func TestForgePollPauseSettingFromConfig(t *testing.T) {
+	withStore(t)
 	if !forgePausePollOnBlur(nil) {
 		t.Error("nil config must default to the pause being on")
 	}
@@ -97,6 +98,7 @@ func TestForgePollPauseSettingFromConfig(t *testing.T) {
 }
 
 func TestForgePollSlowsDownWhileTheIssuesPaneIsClosed(t *testing.T) {
+	withStore(t)
 	m := pollApp(t, host.MapConfig{})
 	// The settled pass reads the pane gate. No Issues window is open in a
 	// freshly sized model, so the cadence stretches.

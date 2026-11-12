@@ -96,6 +96,7 @@ func TestUpdatePanicWritesCrashLogAndKeepsRunning(t *testing.T) {
 // resolves to a crashRecoveredMsg with its report written, and the message
 // raises the toast when it lands.
 func TestCmdPanicIsCaught(t *testing.T) {
+	withStore(t)
 	dir := crashDir(t)
 	m := dismissOnboarding(newSized())
 	m.host.DrainNotifications()

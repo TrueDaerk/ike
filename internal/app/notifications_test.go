@@ -27,6 +27,7 @@ func notify(m Model, sev host.Severity, text string) (Model, tea.Cmd) {
 }
 
 func TestToastExpiry(t *testing.T) {
+	withStore(t)
 	m := newSized()
 	takeDeferredTicks()
 	m, _ = notify(m, host.Info, "saved")
@@ -44,6 +45,7 @@ func TestToastExpiry(t *testing.T) {
 }
 
 func TestErrorToastPersistsUntilEsc(t *testing.T) {
+	withStore(t)
 	m := newSized()
 	m, _ = notify(m, host.Error, "server crashed")
 	// A foreign expiry must not remove it, and no tick targets it anyway.
@@ -59,6 +61,7 @@ func TestErrorToastPersistsUntilEsc(t *testing.T) {
 }
 
 func TestToastStackingNewestOnTopCappedAtThree(t *testing.T) {
+	withStore(t)
 	m := newSized()
 	for _, s := range []string{"one", "two", "three", "four"} {
 		m, _ = notify(m, host.Info, s)
@@ -82,6 +85,7 @@ func TestToastStackingNewestOnTopCappedAtThree(t *testing.T) {
 // server state is tracked per language (#380), transient events become toasts
 // of the matching severity.
 func TestServerStatusRouting(t *testing.T) {
+	withStore(t)
 	m := newSized()
 	tm, _ := m.Update(ilsp.ServerStatusMsg{Lang: "go", Text: "go language server ready", Kind: ilsp.ServerState})
 	m = tm.(Model)
@@ -215,6 +219,7 @@ func TestStatusLineKeepsSegmentsWithHostStatus(t *testing.T) {
 // reports 'saved N files' as an info toast, and hints 'nothing to save' when
 // no buffer is dirty (0082 review, #275) — a silent chord reads as dead.
 func TestSaveAllNotifiesSavedCount(t *testing.T) {
+	withStore(t)
 	m := newSized()
 	tm, _ := m.Update(SaveAllMsg{})
 	if m = tm.(Model); len(m.toasts) != 1 || m.toasts[0].text != "nothing to save" {
@@ -248,6 +253,7 @@ func TestSaveAllNotifiesSavedCount(t *testing.T) {
 // confirms via toast (warn on unknown names) and leaves the persistent status
 // segment untouched.
 func TestThemeSelectNotifies(t *testing.T) {
+	withStore(t)
 	m := newSized()
 	tm, _ := m.Update(SelectThemeMsg{Name: "no-such-theme"})
 	m = tm.(Model)
@@ -283,7 +289,7 @@ func TestHistoryCapturesNewestFirstAndCaps(t *testing.T) {
 func TestMinSeverityFiltersToastsNotHistory(t *testing.T) {
 	// A fresh store: NewWith on the previous test's IKE_CONFIG_DIR would load
 	// whatever that test persisted over this config (#3054).
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := NewWith(registry.New(), host.MapConfig{"notifications.min_severity": "warn"})
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m = tm.(Model)
@@ -353,6 +359,7 @@ func TestNotifCenterListsNewestFirstWithAgeAndSeverity(t *testing.T) {
 // counter counts notifications arriving since the center was last opened, and
 // opening it resets the count.
 func TestNotifCenterUnreadCounter(t *testing.T) {
+	withStore(t)
 	m := newSized()
 	if seg := m.notifSegment(); seg != "" {
 		t.Fatalf("no notifications yet, want empty segment, got %q", seg)
@@ -416,6 +423,7 @@ func TestNotifCenterClearAll(t *testing.T) {
 // TestNotifCenterEscClosesAndKeysPassThrough guards that the center consumes
 // only its own key: Esc still closes the shell.
 func TestNotifCenterEscClosesAndKeysPassThrough(t *testing.T) {
+	withStore(t)
 	m := newSized()
 	m, _ = notify(m, host.Info, "saved")
 	tm, _ := m.Update(ShowNotificationHistoryMsg{})

@@ -60,6 +60,7 @@ func body(s string) *atomic.Value {
 // values, the one matching nothing keeps its warning and shows no value; the
 // hints survive a reopen through a fresh model over the same history.
 func TestHTTPCaptureHintsAfterDispatch(t *testing.T) {
+	withStore(t)
 	srv := jsonServer(t, map[string]*atomic.Value{"/a": body(`{"task":"node-1:42","stats":{"total":7}}`)})
 	m := httpApp(t)
 	src := "### start\n" +
@@ -100,6 +101,7 @@ func TestHTTPCaptureHintsAfterDispatch(t *testing.T) {
 // TestHTTPCaptureHintsNewestResponseWins: a name captured by two requests
 // shows the newer response's value on both directive lines.
 func TestHTTPCaptureHintsNewestResponseWins(t *testing.T) {
+	withStore(t)
 	srv := jsonServer(t, map[string]*atomic.Value{
 		"/one": body(`{"id":"first"}`),
 		"/two": body(`{"id":"second"}`),
@@ -124,6 +126,7 @@ func TestHTTPCaptureHintsNewestResponseWins(t *testing.T) {
 
 // TestHTTPCaptureHintsMaskSecrets: a token shows masked, an id plain.
 func TestHTTPCaptureHintsMaskSecrets(t *testing.T) {
+	withStore(t)
 	srv := jsonServer(t, map[string]*atomic.Value{"/a": body(`{"access_token":"s3cr3t","id":"u-1"}`)})
 	m := httpApp(t)
 	src := "# @capture token = .access_token\n# @capture id = .id\nGET " + srv.URL + "/a\n"
@@ -144,6 +147,7 @@ func TestHTTPCaptureHintsMaskSecrets(t *testing.T) {
 // TestHTTPCaptureHintsSettingOff: http.capture_hints = false removes the
 // hints, and turning it back on restores them.
 func TestHTTPCaptureHintsSettingOff(t *testing.T) {
+	withStore(t)
 	srv := jsonServer(t, map[string]*atomic.Value{"/a": body(`{"id":"u-1"}`)})
 	m := httpApp(t)
 	path := httpVarFile(t, "# @capture id = .id\nGET "+srv.URL+"/a\n", nil)

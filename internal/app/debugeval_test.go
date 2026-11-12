@@ -79,6 +79,7 @@ func waitForEvaluates(t *testing.T, sa *stubAdapter, n int) []json.RawMessage {
 // TestWatchLifecyclePersists: add, edit and remove through the panel's
 // messages mutate the per-project store and hit the disk each time (#2174).
 func TestWatchLifecyclePersists(t *testing.T) {
+	withStore(t)
 	m, _, _ := debugModel(t)
 
 	tm, _ := m.Update(debugpanel.AddWatchMsg{Expr: "x + 1"})

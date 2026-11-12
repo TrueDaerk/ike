@@ -37,7 +37,6 @@ func dispatchExt(t *testing.T, langID string) string {
 // dispatchApp opens a "doc" file classified as langID in the focused editor.
 func dispatchApp(t *testing.T, langID, body string) Model {
 	t.Helper()
-	noDebounce(t)
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "doc."+dispatchExt(t, langID))
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {

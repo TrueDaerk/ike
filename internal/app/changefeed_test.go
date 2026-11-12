@@ -279,6 +279,7 @@ func TestChangeFeedRevertRestoresPreChangeContent(t *testing.T) {
 // pre-change content from, the newest local-history snapshot supplies it — the
 // #1023 store is the fallback the issue calls for.
 func TestChangeFeedRevertViaLocalHistory(t *testing.T) {
+	withStore(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("saved by ike\n"), 0o644); err != nil {
@@ -321,6 +322,7 @@ func TestChangeFeedRevertViaLocalHistory(t *testing.T) {
 // TestChangeFeedRevertUndeletesRemovedFile: a file an agent deleted has no
 // buffer to restore into, so the revert writes it back to disk and opens it.
 func TestChangeFeedRevertUndeletesRemovedFile(t *testing.T) {
+	withStore(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("keep me\n"), 0o644); err != nil {

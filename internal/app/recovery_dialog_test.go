@@ -53,6 +53,7 @@ func TestRecoveryDiffFollowsSelection(t *testing.T) {
 }
 
 func TestRecoveryDiffEmptyWhenSnapshotMatchesDisk(t *testing.T) {
+	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		f := filepath.Join(dir, "same.txt")
 		_ = os.WriteFile(f, []byte("identical\n"), 0o644)
@@ -64,6 +65,7 @@ func TestRecoveryDiffEmptyWhenSnapshotMatchesDisk(t *testing.T) {
 }
 
 func TestRecoveryDiffMissingBaseFile(t *testing.T) {
+	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		f := filepath.Join(dir, "gone.txt")
 		_ = svc.Snapshot(backup.Doc{Key: f, Path: f, Text: "only in the snapshot\n"})
@@ -78,6 +80,7 @@ func TestRecoveryDiffMissingBaseFile(t *testing.T) {
 }
 
 func TestRecoveryRestoreIsUndoable(t *testing.T) {
+	withStore(t)
 	var file string
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		file = filepath.Join(dir, "work.txt")
@@ -99,6 +102,7 @@ func TestRecoveryRestoreIsUndoable(t *testing.T) {
 }
 
 func TestRecoveryRestoreAll(t *testing.T) {
+	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		for _, n := range []string{"a.txt", "b.txt"} {
 			f := filepath.Join(dir, n)
@@ -145,6 +149,7 @@ func TestRecoveryDiscardAll(t *testing.T) {
 }
 
 func TestRecoveryEscDefersEveryUndecidedFile(t *testing.T) {
+	withStore(t)
 	// esc is a deferral, not a silent discard: every snapshot the user has not
 	// answered survives to the next launch (#2160).
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
@@ -165,6 +170,7 @@ func TestRecoveryEscDefersEveryUndecidedFile(t *testing.T) {
 }
 
 func TestRecoveryDialogCompositedIntoRootView(t *testing.T) {
+	withStore(t)
 	// The shell is content-sized and the compositor drops a box that does not
 	// fit the terminal — an over-wide key legend made the whole dialog vanish
 	// instead of wrapping (#2160).

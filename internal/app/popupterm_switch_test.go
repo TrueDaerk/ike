@@ -31,6 +31,7 @@ func twoRoots(t *testing.T) (a, b string) {
 }
 
 func TestPopupParksWithWorkspaceAndResumes(t *testing.T) {
+	withStore(t)
 	_, b := twoRoots(t)
 	m := openTestPopupWith(t, switchModel(t))
 	sess := m.popup.inst.ActiveTerminal().SessionKey()

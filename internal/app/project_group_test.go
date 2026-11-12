@@ -118,6 +118,7 @@ func activeGroupMsgs(msgs []tea.Msg) []project.ActiveGroupMsg {
 // history records (one per hop), no per-hop toast, the landing toast, and
 // the marker written and read back.
 func TestGroupOpenWarmsAllMembersAndLandsOnFirst(t *testing.T) {
+	withStore(t)
 	roots := peekFixture(t, "origin", "api", "ui", "www")
 	storeGroup(t, "web", roots[1:])
 	m := switchModel(t)

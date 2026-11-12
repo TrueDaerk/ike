@@ -67,6 +67,7 @@ func TestVaultMarkerNamesLabel(t *testing.T) {
 }
 
 func TestVaultMarkerOnTab(t *testing.T) {
+	withStore(t)
 	m := openVaultApp(t, "")
 	inst := m.activeWS().Panes.FocusedInstance()
 	labels := tabLabels(inst)

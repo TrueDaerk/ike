@@ -94,7 +94,7 @@ func TestComplexityBaselineAppliesToProblemsAndPanel(t *testing.T) {
 		proj = r
 	}
 	// A baseline written before the model exists applies from the start.
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	chdir(t, proj)
 	writeComplexityFixture(t, proj)
 	path := writeBaselineFile(t, proj, 2, 1)
@@ -179,6 +179,7 @@ func TestComplexityBaselineAppliesToProblemsAndPanel(t *testing.T) {
 }
 
 func TestComplexityBaselineToggleAndAcceptAll(t *testing.T) {
+	withStore(t)
 	m, proj := baselineApp(t)
 	path := complexity.BaselinePath(proj)
 	m = baselineGen(t, m)

@@ -30,7 +30,6 @@ var unhandledChord = tea.KeyPressMsg{Code: '0', Mod: tea.ModCtrl | tea.ModAlt}
 // panes.
 func toolTelemetryModel(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	tm, _ := New().Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m := tm.(Model)
 	if m.onboardingOpen() {
@@ -52,6 +51,7 @@ func httpTelemetryModel(t *testing.T) Model {
 }
 
 func TestTelemetryHTTPSearchOwnsAltBackspace(t *testing.T) {
+	withStore(t)
 	m := httpTelemetryModel(t)
 	hp := func(m Model) interface{ SearchQuery() (string, bool) } {
 		return m.activeWS().Panes.Get(pane.HTTPKey).HTTP()
@@ -68,6 +68,7 @@ func TestTelemetryHTTPSearchOwnsAltBackspace(t *testing.T) {
 }
 
 func TestTelemetryHTTPClosedSearchStillRecordsAltBackspace(t *testing.T) {
+	withStore(t)
 	m := httpTelemetryModel(t)
 	m = drainKey(m, altBackspace())
 	if u := unboundChords(t, m); !slices.Contains(u, "alt+backspace") {
@@ -79,6 +80,7 @@ func TestTelemetryHTTPClosedSearchStillRecordsAltBackspace(t *testing.T) {
 // open prompt only answers for the keys it edits with, so a chord it has no
 // use for is still the missing-keybind signal.
 func TestTelemetryHTTPSearchRecordsUnhandledChord(t *testing.T) {
+	withStore(t)
 	m := httpTelemetryModel(t)
 	m.activeWS().Panes.Get(pane.HTTPKey).HTTP().BeginSearch()
 	m = typeInto(m, "one")
@@ -106,6 +108,7 @@ func issuesTelemetryModel(t *testing.T) Model {
 }
 
 func TestTelemetryIssuesFilterOwnsAltBackspace(t *testing.T) {
+	withStore(t)
 	m := issuesTelemetryModel(t)
 	m = drainKey(m, findChord())
 	gi := func(m Model) string { return m.activeWS().Panes.Get(pane.IssuesKey).Issues().Filter() }
@@ -123,6 +126,7 @@ func TestTelemetryIssuesFilterOwnsAltBackspace(t *testing.T) {
 }
 
 func TestTelemetryIssuesListStillRecordsAltBackspace(t *testing.T) {
+	withStore(t)
 	m := issuesTelemetryModel(t)
 	if m.activeWS().Panes.Get(pane.IssuesKey).Issues().Filtering() {
 		t.Fatal("setup: the filter starts closed")
@@ -134,6 +138,7 @@ func TestTelemetryIssuesListStillRecordsAltBackspace(t *testing.T) {
 }
 
 func TestTelemetryExplorerSpeedSearchOwnsAltBackspace(t *testing.T) {
+	withStore(t)
 	m := toolTelemetryModel(t)
 	m.setFocus(pane.ExplorerKey)
 	m = drainKey(m, findChord())
@@ -151,6 +156,7 @@ func TestTelemetryExplorerSpeedSearchOwnsAltBackspace(t *testing.T) {
 }
 
 func TestTelemetryExplorerTreeStillRecordsAltBackspace(t *testing.T) {
+	withStore(t)
 	m := toolTelemetryModel(t)
 	m.setFocus(pane.ExplorerKey)
 	if m.explorer().Searching() {
@@ -166,6 +172,7 @@ func TestTelemetryExplorerTreeStillRecordsAltBackspace(t *testing.T) {
 // itself rather than through the keymap table (the explorer's ctrl+d half
 // page) is no missing keybind either.
 func TestTelemetryToolPaneConsumedChordNotUnbound(t *testing.T) {
+	withStore(t)
 	m := toolTelemetryModel(t)
 	m.setFocus(pane.ExplorerKey)
 	m = drainKey(m, tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})

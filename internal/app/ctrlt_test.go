@@ -51,6 +51,7 @@ func TestCtrlTTerminalContextNewTab(t *testing.T) {
 // fresh empty editor tab joins the pane; a second ctrl+t reuses the empty tab
 // (#641) instead of stacking blanks.
 func TestCtrlTEditorContextNewEmptyTab(t *testing.T) {
+	withStore(t)
 	m := sizedWith(t, registry.Global(), 100, 40)
 	key := m.activeEditorKey()
 	if key == "" {
@@ -90,7 +91,7 @@ func TestCtrlTEditorContextNewEmptyTab(t *testing.T) {
 // strokes — ctrl+c stays with the PTY even when bound, while a harmless chord
 // like ctrl+y intercepts and fires.
 func TestTerminalContextChordRespectsShellEssentials(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	reg := registry.New()
 	reg.Add(kbPlugin{})
 	cfg := host.MapConfig{

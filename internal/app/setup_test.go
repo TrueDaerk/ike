@@ -60,6 +60,7 @@ func TestTourEscSkipsSetupFlow(t *testing.T) {
 }
 
 func TestThemePickPreviewAndPersist(t *testing.T) {
+	withStore(t)
 	m := tourSeed(t)
 	m = finishTourFully(t, m)
 	before := m.themePal
@@ -84,6 +85,7 @@ func TestThemePickPreviewAndPersist(t *testing.T) {
 }
 
 func TestThemePickEscRestores(t *testing.T) {
+	withStore(t)
 	m := tourSeed(t)
 	m = finishTourFully(t, m)
 	before := m.themePal

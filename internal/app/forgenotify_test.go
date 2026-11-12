@@ -46,6 +46,7 @@ func newDialogSized() Model {
 }
 
 func TestForgeIssueOpenedDefaultsOff(t *testing.T) {
+	withStore(t)
 	m := feedEvents(newSized(), issueEvent(12, "Fix the thing"))
 	if m.forgeDialogOpen() {
 		t.Fatal("an IssueOpened event must not raise the dialog by default (#2617)")
@@ -205,6 +206,7 @@ func TestForgeBadgeClearsWhenDialogOpens(t *testing.T) {
 }
 
 func TestForgeStylesPerEventType(t *testing.T) {
+	withStore(t)
 	m := newSized()
 	// pr_merged defaults to a toast: no dialog, no badge, but a toast.
 	m = feedEvents(m, forge.Event{Kind: forge.PRMerged, Number: 3, Title: "merged"})

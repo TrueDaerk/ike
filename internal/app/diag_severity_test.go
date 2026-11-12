@@ -22,6 +22,7 @@ func reloadWithSeverity(t *testing.T, m Model, rules []string) Model {
 // TestSeverityRulesRemapPublishes: a matching publish reaches the Problems
 // store with the remapped severity; off drops, syntax errors stay put (#1503).
 func TestSeverityRulesRemapPublishes(t *testing.T) {
+	withStore(t)
 	m := problemsApp(t)
 	m = reloadWithSeverity(t, m, []string{
 		"reportArgumentType warning",
@@ -52,6 +53,7 @@ func TestSeverityRulesRemapPublishes(t *testing.T) {
 // TestSeverityRuleEditRemapsLive: a rule edit re-applies to the raw cache —
 // no republish needed — and removing it restores the published severity.
 func TestSeverityRuleEditRemapsLive(t *testing.T) {
+	withStore(t)
 	m := problemsApp(t)
 	d := ignoreDiag("Pyright", "reportArgumentType", "type mismatch")
 	d.Severity = 1

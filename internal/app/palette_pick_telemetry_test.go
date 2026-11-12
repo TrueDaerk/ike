@@ -19,6 +19,7 @@ import (
 // lands a "palette.pick" event carrying the mode, the query length, the
 // 0-based rank and the row count — and never the query itself.
 func TestPalettePickRecordsRank(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	m.palette.SetSize(100, 40)
 	m.palette.Open(palette.Context{})
@@ -61,6 +62,7 @@ func TestPalettePickRecordsRank(t *testing.T) {
 // A dismissal is not a pick and a pick is not a dismissal: the two outcomes
 // stay disjoint, so counting one never double-counts the other (#2551).
 func TestPaletteDismissRecordsNoPick(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	m.palette.SetSize(100, 40)
 	m.palette.Open(palette.Context{})
@@ -79,6 +81,7 @@ func TestPaletteDismissRecordsNoPick(t *testing.T) {
 // A mouse click on a row is a pick too (#2551): the click funnel reads the
 // pick alongside the key path, so a mouse-driven palette is not a blind spot.
 func TestPaletteClickPickRecordsRank(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	m.palette.SetSize(100, 40)
 	m.palette.Open(palette.Context{})

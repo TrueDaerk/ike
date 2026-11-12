@@ -183,6 +183,7 @@ func TestIntentionPopupDrawsAboveBlurredPopupTerminal(t *testing.T) {
 // the viewport no on-screen anchor exists, so the picker opens centered,
 // and its telemetry says so.
 func TestIntentionPopupCentersWithoutAnchor(t *testing.T) {
+	withStore(t)
 	var b strings.Builder
 	for i := 0; i < 200; i++ {
 		b.WriteString("key: value\n")
@@ -214,6 +215,7 @@ func TestIntentionPopupCentersWithoutAnchor(t *testing.T) {
 // TestIntentionPopupAnchoredTelemetry: the ordinary anchored open reports
 // anchored=true on its pick.
 func TestIntentionPopupAnchoredTelemetry(t *testing.T) {
+	withStore(t)
 	m := vaultIntentionModel(t, "secret: plaintext\n")
 	m = focusPaneKey(t, m, editorKeys(m)[0])
 	m.activeEditor().SetCursor(0, 3)
@@ -248,6 +250,7 @@ func TestFitPopupAnchorRejectsOffScreen(t *testing.T) {
 // alt+enter over the plaintext vault.yml, pick "Treat as Vault File", and the
 // file on disk is vault ciphertext.
 func TestIntentionPopupPickEncryptsVaultFile(t *testing.T) {
+	withStore(t)
 	m := vaultIntentionModel(t, "secret: plaintext\n")
 	m = focusPaneKey(t, m, editorKeys(m)[0])
 	m.activeEditor().SetCursor(0, 3)

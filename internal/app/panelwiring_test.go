@@ -16,6 +16,7 @@ import (
 // window shares (#2463): the remembered pane when it is still part of the
 // layout, otherwise the active editor, otherwise the explorer.
 func TestPanelReturnTargetFallbackChain(t *testing.T) {
+	withStore(t)
 	m := problemsApp(t)
 	editorKey := m.activeEditorKey()
 	if editorKey == "" {
@@ -186,6 +187,7 @@ func TestArmTickGenerationGuard(t *testing.T) {
 // TestWriteDirtyTabsWalksBackgroundTabs guards the shared save-everything walk
 // (#2463): every dirty buffer produces one action, clean ones none.
 func TestWriteDirtyTabsWalksBackgroundTabs(t *testing.T) {
+	withStore(t)
 	m := problemsApp(t)
 	if cmds := m.writeDirtyTabs("write_raw"); len(cmds) != 0 {
 		t.Fatalf("a clean workspace must produce no writes, got %d", len(cmds))

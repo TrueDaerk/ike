@@ -17,7 +17,6 @@ import (
 // with the diff pane focused.
 func diffFixture(t *testing.T) (Model, string, string) {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	dir := t.TempDir()
 	left := filepath.Join(dir, "l.txt")
 	right := filepath.Join(dir, "r.txt")
@@ -44,7 +43,6 @@ func TestQKeyOnDiffPane(t *testing.T) {
 
 // TestQKeyOnVCSPane guards #529 for the VCS tool window.
 func TestQKeyOnVCSPane(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := newSized()
 	m.vcs.snap = vcs.NewSnapshot(t.TempDir(), map[string]vcs.FileStatus{})
 	out, _ := m.Update(VCSPanelToggleMsg{})

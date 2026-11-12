@@ -31,6 +31,7 @@ func openDirtyKey(t *testing.T, m Model, path string) (Model, string) {
 }
 
 func TestBackupDisabledPurgesAtStartup(t *testing.T) {
+	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		_ = os.WriteFile(filepath.Join(dir, "settings.toml"), []byte("[backup]\nenable = false\n"), 0o644)
 		f := filepath.Join(dir, "gone.txt")
@@ -46,6 +47,7 @@ func TestBackupDisabledPurgesAtStartup(t *testing.T) {
 }
 
 func TestBackupPromptCloseRunsAgeGC(t *testing.T) {
+	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		old := backup.NewAs(backup.Dir(dir), backupClock(time.Now().Add(-8*24*time.Hour)), deadSession)
 		f := filepath.Join(dir, "old.txt")
@@ -71,6 +73,7 @@ func TestBackupPromptCloseRunsAgeGC(t *testing.T) {
 }
 
 func TestBackupChangeSeamMarksAndSnapshotsDirtyBuffer(t *testing.T) {
+	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {})
 	file := filepath.Join(os.Getenv("IKE_CONFIG_DIR"), "work.txt")
 	if err := os.WriteFile(file, []byte("on disk\n"), 0o644); err != nil {
@@ -101,6 +104,7 @@ func TestBackupChangeSeamMarksAndSnapshotsDirtyBuffer(t *testing.T) {
 }
 
 func TestBackupSaveRemovesSnapshot(t *testing.T) {
+	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {})
 	file := filepath.Join(os.Getenv("IKE_CONFIG_DIR"), "work.txt")
 	if err := os.WriteFile(file, []byte("on disk\n"), 0o644); err != nil {
@@ -130,6 +134,7 @@ func TestBackupSaveRemovesSnapshot(t *testing.T) {
 }
 
 func TestBackupCloseWithDiscardRemovesSnapshot(t *testing.T) {
+	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {})
 	file := filepath.Join(os.Getenv("IKE_CONFIG_DIR"), "work.txt")
 	if err := os.WriteFile(file, []byte("on disk\n"), 0o644); err != nil {
@@ -147,6 +152,7 @@ func TestBackupCloseWithDiscardRemovesSnapshot(t *testing.T) {
 }
 
 func TestBackupCleanQuitRemovesOpenBuffersOnly(t *testing.T) {
+	withStore(t)
 	var foreign string
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		// A snapshot skipped at the restore prompt: its file is never opened.
@@ -178,6 +184,7 @@ func TestBackupCleanQuitRemovesOpenBuffersOnly(t *testing.T) {
 }
 
 func TestBackupDisableViaReloadPurges(t *testing.T) {
+	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {})
 	file := filepath.Join(os.Getenv("IKE_CONFIG_DIR"), "work.txt")
 	if err := os.WriteFile(file, []byte("on disk\n"), 0o644); err != nil {

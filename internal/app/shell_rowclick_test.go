@@ -83,6 +83,7 @@ func TestPinPickerRowClickIgnoresHints(t *testing.T) {
 // TestLocalHistoryRowClickSelectsThenOpens: rows map onto snapshots; a click
 // on the selected one opens the diff pane, the panel's enter.
 func TestLocalHistoryRowClickSelectsThenOpens(t *testing.T) {
+	withStore(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
@@ -113,6 +114,7 @@ func TestLocalHistoryRowClickSelectsThenOpens(t *testing.T) {
 // TestLocalHistoryRowClickIgnoresTail: the blank tail and the key hints below
 // the snapshot list select nothing.
 func TestLocalHistoryRowClickIgnoresTail(t *testing.T) {
+	withStore(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
@@ -191,6 +193,7 @@ func TestHistoryPickerRowClickSelectsThenShowsPatch(t *testing.T) {
 // above the files, and the dialog has no enter action — a click selects and
 // nothing else, twice over.
 func TestRecoveryRowClickSelectsOnly(t *testing.T) {
+	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		for _, name := range []string{"one.txt", "two.txt"} {
 			file := filepath.Join(dir, name)
@@ -279,6 +282,7 @@ func TestToolSetupRowClickTogglesSelected(t *testing.T) {
 // TestThemePickRowClickPreviewsThenKeeps: a click previews the theme live, a
 // click on the already-selected theme keeps it (the chooser's enter).
 func TestThemePickRowClickPreviewsThenKeeps(t *testing.T) {
+	withStore(t)
 	m := tourSeed(t)
 	m = finishTourFully(t, m)
 	if !m.themePickOpen() || len(m.themePick.names) < 2 {

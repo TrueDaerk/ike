@@ -19,7 +19,6 @@ import (
 // hexApp is a sized app on cfg, so a test can pick the binary-open mode.
 func hexApp(t *testing.T, cfg host.Config) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	// The global registry carries the compile-in file handlers (hex, image,
 	// data, …) these tests route through.
 	m := NewWith(registry.Global(), cfg)

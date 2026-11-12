@@ -20,6 +20,7 @@ func leafSet(m Model) map[string]bool {
 }
 
 func TestHideToolWindowsToggleRestoresExactly(t *testing.T) {
+	withStore(t)
 	m, termKey := openTestTerminal(t) // editor + explorer + terminal
 	if !m.explorerVisible() {
 		t.Fatal("fixture: explorer expected visible")
@@ -67,6 +68,7 @@ func TestHideToolWindowsNoToolsIsNoop(t *testing.T) {
 }
 
 func TestHideToolWindowsManualReopenWhileHidden(t *testing.T) {
+	withStore(t)
 	m, termKey := openTestTerminal(t)
 	m = step(m, HideToolWindowsMsg{})
 	// Re-open the explorer manually while hidden.
@@ -92,6 +94,7 @@ func TestHideToolWindowsManualReopenWhileHidden(t *testing.T) {
 }
 
 func TestHideToolWindowsToolClosedWhileHidden(t *testing.T) {
+	withStore(t)
 	m, termKey := openTestTerminal(t)
 	m = step(m, HideToolWindowsMsg{})
 	// The terminal instance goes away while hidden.
@@ -108,6 +111,7 @@ func TestHideToolWindowsToolClosedWhileHidden(t *testing.T) {
 }
 
 func TestHideToolWindowsEditorSplitChangedWhileHidden(t *testing.T) {
+	withStore(t)
 	m, termKey := openTestTerminal(t)
 	m = step(m, HideToolWindowsMsg{})
 	m = dispatch(t, m, SplitFocusedMsg{Zone: layout.ZoneRight}) // editor layout diverges

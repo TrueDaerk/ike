@@ -67,6 +67,7 @@ func registerPHPListenStub() {
 // TestDebugListenToggle guards #823: debug.listen starts the persistent
 // listener session and a second toggle stops it.
 func TestDebugListenToggle(t *testing.T) {
+	withStore(t)
 	// A free port keeps the bridge's bind off the real Xdebug default.
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

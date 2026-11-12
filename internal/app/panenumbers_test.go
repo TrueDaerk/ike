@@ -26,7 +26,6 @@ import (
 // numberedApp is a sized app on cfg, so a test can pick the pane-number mode.
 func numberedApp(t *testing.T, cfg host.Config) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	reg := registry.New()
 	reg.Add(appCommands{})
 	m := NewWith(reg, cfg)
@@ -90,6 +89,7 @@ func TestPaneNumberOrderIsReadingOrder(t *testing.T) {
 // TestPaneNumbersFollowLayoutChanges: closing a pane renumbers the survivors
 // on the spot — the numbering is derived from the live layout, never cached.
 func TestPaneNumbersFollowLayoutChanges(t *testing.T) {
+	withStore(t)
 	m := splitOrderApp(t)
 	before := m.paneNumberOrder()
 	last := before[len(before)-1]

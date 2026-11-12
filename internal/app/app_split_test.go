@@ -46,6 +46,7 @@ func TestSplitFocusedAddsEditor(t *testing.T) {
 
 // TestCloseFocusedCollapses closes a split editor and refocuses a survivor.
 func TestCloseFocusedCollapses(t *testing.T) {
+	withStore(t)
 	m := sized(t, 100, 40)
 	m.cycleFocus()
 	m.SplitFocused(layout.ZoneRight)
@@ -62,6 +63,7 @@ func TestCloseFocusedCollapses(t *testing.T) {
 // TestCtrlWClosesFocusedPane verifies ctrl+w closes the focused editor pane and
 // is a no-op on the explorer (the singleton survives).
 func TestCtrlWClosesFocusedPane(t *testing.T) {
+	withStore(t)
 	m := sized(t, 100, 40)
 	m.cycleFocus()
 	m.SplitFocused(layout.ZoneRight)

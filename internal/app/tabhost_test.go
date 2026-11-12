@@ -36,6 +36,7 @@ func closeAllSessions(m Model) {
 // host — the shell stays as the first tab, the tool session joins beside it,
 // the vacated tool pane closes, and the chrome shows the tool glyph.
 func TestToolPaneDropOnTerminalCenterStacksSessions(t *testing.T) {
+	withStore(t)
 	withTools(t, sleepTool("watcher"))
 	m := sized(t, 100, 40)
 	t.Cleanup(func() { closeAllSessions(m) })

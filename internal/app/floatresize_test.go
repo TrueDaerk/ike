@@ -20,6 +20,7 @@ func overlayBox(m Model, view string) (bx, by, w, h int) {
 }
 
 func TestSettingsMouseResizeRightEdge(t *testing.T) {
+	withStore(t)
 	m := sized(t, 120, 40)
 	m = step(m, OpenSettingsMsg{})
 	if !m.settings.IsOpen() {

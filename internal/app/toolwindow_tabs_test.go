@@ -173,6 +173,7 @@ func TestExplorerNeverMergesAsTab(t *testing.T) {
 // hosted as a tab focuses that tab instead of opening a second instance, and
 // a second toggle hands focus back.
 func TestToggleFocusesHostedToolWindow(t *testing.T) {
+	withStore(t)
 	m := httpAndProblems(t)
 	m = dragPaneOnto(t, m, pane.ProblemsKey, pane.HTTPKey)
 	hostKey, pTab, _, _ := m.toolWindowAt(pane.KindProblems)
@@ -212,6 +213,7 @@ func TestToggleFocusesHostedToolWindow(t *testing.T) {
 // window's tab onto the host's edge restores a dedicated pane of the
 // original kind under its fixed key, the live model moving with it.
 func TestHostedToolWindowSplitsBackOutIntact(t *testing.T) {
+	withStore(t)
 	m := httpAndProblems(t)
 	m = dragPaneOnto(t, m, pane.ProblemsKey, pane.HTTPKey)
 	hostKey, pTab, nested, _ := m.toolWindowAt(pane.KindProblems)
@@ -243,6 +245,7 @@ func TestHostedToolWindowSplitsBackOutIntact(t *testing.T) {
 // HTTP viewer and the Problems window saves and restores with both as tabs
 // — no dedicated leaf, no duplicate, the app hooks wired.
 func TestHostedToolWindowsPersistAcrossRestore(t *testing.T) {
+	withStore(t)
 	m := httpAndProblems(t)
 	m = dragPaneOnto(t, m, pane.ProblemsKey, pane.HTTPKey)
 	hostKey, _, _, _ := m.toolWindowAt(pane.KindHTTP)
@@ -276,6 +279,7 @@ func TestHostedToolWindowsPersistAcrossRestore(t *testing.T) {
 // window both as a dedicated leaf and as a hosted tab restores it once, in
 // the host — the dedicated leaf prunes.
 func TestLayoutNamingWindowTwiceRestoresOnce(t *testing.T) {
+	withStore(t)
 	m := httpAndProblems(t)
 	m = dragPaneOnto(t, m, pane.ProblemsKey, pane.HTTPKey)
 	hostKey, _, _, _ := m.toolWindowAt(pane.KindHTTP)
@@ -306,6 +310,7 @@ func TestLayoutNamingWindowTwiceRestoresOnce(t *testing.T) {
 // shapes, never duplicating, and building them fresh in a workspace where
 // they are closed.
 func TestNamedLayoutRoundTripsHostedToolWindows(t *testing.T) {
+	withStore(t)
 	m := httpAndProblems(t)
 	m = dragPaneOnto(t, m, pane.ProblemsKey, pane.HTTPKey)
 	hostKey, _, _, _ := m.toolWindowAt(pane.KindHTTP)
@@ -336,8 +341,9 @@ func TestNamedLayoutRoundTripsHostedToolWindows(t *testing.T) {
 
 	// Apply after the windows moved back out to dedicated panes: they are
 	// adopted into the slot's host, the husks close.
+	withStore(t) // a fresh store: m2 must not restore what m persisted
 	m2 := httpAndProblems(t)
-	saveUserLayouts(savedLayouts{Layouts: map[string]persistedLayout{"dev": snap}}) // sized re-pointed IKE_CONFIG_DIR
+	saveUserLayouts(savedLayouts{Layouts: map[string]persistedLayout{"dev": snap}})
 	m2 = step(m2, ApplyLayoutMsg{Name: "dev"})
 	if windowCount(m2, pane.KindHTTP) != 1 || windowCount(m2, pane.KindProblems) != 1 {
 		t.Fatal("apply must move dedicated windows into the host, not duplicate them")
@@ -370,6 +376,7 @@ func TestNamedLayoutRoundTripsHostedToolWindows(t *testing.T) {
 // layout with dedicated HTTP and Problems slots applied while both windows
 // are hosted as tabs detaches them into their slots, once each.
 func TestNamedLayoutDedicatedSlotAdoptsHostedWindow(t *testing.T) {
+	withStore(t)
 	split := httpAndProblems(t)
 	snap, ok := snapshotLayout(split.activeWS().Tree, split.activeWS().Panes)
 	if !ok || snap.Panes[pane.HTTPKey].Kind != "http" || snap.Panes[pane.ProblemsKey].Kind != "problems" {
@@ -377,7 +384,7 @@ func TestNamedLayoutDedicatedSlotAdoptsHostedWindow(t *testing.T) {
 	}
 	m := httpAndProblems(t)
 	m = dragPaneOnto(t, m, pane.ProblemsKey, pane.HTTPKey)
-	saveUserLayouts(savedLayouts{Layouts: map[string]persistedLayout{"split": snap}}) // after sized re-pointed IKE_CONFIG_DIR
+	saveUserLayouts(savedLayouts{Layouts: map[string]persistedLayout{"split": snap}})
 	m = step(m, ApplyLayoutMsg{Name: "split"})
 	for _, kind := range []pane.Kind{pane.KindHTTP, pane.KindProblems} {
 		if windowCount(m, kind) != 1 {

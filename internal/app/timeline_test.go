@@ -130,6 +130,7 @@ func pressTimeline(m Model, key string) (Model, tea.Cmd) {
 }
 
 func TestTimelineMergesSnapshotsAndCommits(t *testing.T) {
+	withStore(t)
 	m, path := timelineRepo(t)
 	m.recordLocalHistory(path) // one snapshot of the committed content
 	m = openTimelineWithGit(t, m)
@@ -184,6 +185,7 @@ func TestTimelineMergesSnapshotsAndCommits(t *testing.T) {
 }
 
 func TestTimelineFilterCycles(t *testing.T) {
+	withStore(t)
 	m, path := timelineRepo(t)
 	m.recordLocalHistory(path)
 	m = openTimelineWithGit(t, m)
@@ -275,6 +277,7 @@ func TestTimelineDiffAgainstBufferBothSources(t *testing.T) {
 }
 
 func TestTimelineDiffBetweenEntriesAcrossSources(t *testing.T) {
+	withStore(t)
 	m, path := timelineRepo(t)
 	m.recordLocalHistory(path)
 	m = openTimelineWithGit(t, m)
@@ -327,6 +330,7 @@ func TestTimelineDiffBetweenEntriesAcrossSources(t *testing.T) {
 }
 
 func TestTimelineRestoreSnapshotIsUndoable(t *testing.T) {
+	withStore(t)
 	m, path := timelineRepo(t)
 	m.recordLocalHistory(path) // snapshot of "v1\nv2\n"
 	ed := m.editorForPath(path)
@@ -369,6 +373,7 @@ func TestTimelineRestoreSnapshotIsUndoable(t *testing.T) {
 }
 
 func TestTimelineDegenerateFiles(t *testing.T) {
+	withStore(t)
 	// A tracked file that was never saved in this session: git entries only.
 	m, path := timelineRepo(t)
 	m = openTimelineWithGit(t, m)
@@ -413,6 +418,7 @@ func TestTimelineDegenerateFiles(t *testing.T) {
 // TestTimelineIncrementalLoading guards the paging path: the first window
 // reports more, and walking toward the end pulls the next one in.
 func TestTimelineIncrementalLoading(t *testing.T) {
+	withStore(t)
 	m, path := timelineRepo(t)
 	m.recordLocalHistory(path)
 	tm, _ := m.Update(TimelineMsg{})
@@ -456,6 +462,7 @@ func TestTimelineIncrementalLoading(t *testing.T) {
 // TestTimelineGitErrorKeepsSnapshots guards the failure path: a failing git
 // window leaves the local half usable instead of closing the view.
 func TestTimelineGitErrorKeepsSnapshots(t *testing.T) {
+	withStore(t)
 	m, path := timelineRepo(t)
 	m.recordLocalHistory(path)
 	tm, _ := m.Update(TimelineMsg{})

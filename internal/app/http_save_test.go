@@ -76,6 +76,7 @@ func TestHTTPSaveResponseWritesRawBody(t *testing.T) {
 // TestHTTPSaveResponseWritesBinaryBody: a body the viewer cannot even render
 // still lands on disk byte for byte.
 func TestHTTPSaveResponseWritesBinaryBody(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	raw := []byte{0x89, 'P', 'N', 'G', 0x00, 0x1a}
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: savableResponse("https://api.test/logo.png", "image/png", raw)})

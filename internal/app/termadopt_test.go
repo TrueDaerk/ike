@@ -34,6 +34,7 @@ func terminalDragApp(t *testing.T) (Model, string, string) {
 // in an editor's center adopts the running session as a terminal tab and
 // closes the vacated terminal pane.
 func TestTerminalPaneCenterDropBecomesTab(t *testing.T) {
+	withStore(t)
 	m, edKey, termKey := terminalDragApp(t)
 	sess := m.activeWS().Panes.Get(termKey).Terminal().SessionKey()
 	if sess == "" {

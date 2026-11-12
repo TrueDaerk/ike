@@ -93,6 +93,7 @@ func TestAutoSaveOnSwitchUnsaveableParksSilently(t *testing.T) {
 // and the external change survives; the dirty buffer parks with its
 // workspace.
 func TestAutoSaveSwitchStaleBufferIsNotClobbered(t *testing.T) {
+	withStore(t)
 	_, dst, file := switchFixture(t)
 	m := autoSaveSwitchModel(t)
 	m = openDirty(t, m, file)

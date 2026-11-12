@@ -117,6 +117,7 @@ func TestPeekEnterMarksAndSkipsHistory(t *testing.T) {
 // resumes, the peeked workspace is dropped, and an untouched peek leaves no
 // .ike residue in the peeked project.
 func TestPeekReturnRestoresAndUnloads(t *testing.T) {
+	withStore(t)
 	roots := peekFixture(t, "origin", "peeked")
 	m := switchModel(t)
 	m, _ = enterPeek(t, m, roots[1])
@@ -147,7 +148,7 @@ func TestPeekRoundTripKeepsHistory(t *testing.T) {
 	// A private user layer (set after switchModel, which resets the env):
 	// other tests' leaked record goroutines must not write into this test's
 	// history between the two snapshots.
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	if err := project.RecordOpen(config.Discover("."), roots[0], time.Now()); err != nil {
 		t.Fatal(err)
 	}

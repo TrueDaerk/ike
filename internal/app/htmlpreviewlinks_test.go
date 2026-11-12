@@ -163,6 +163,7 @@ func TestHTMLPreviewTabWithoutLinksCyclesFocus(t *testing.T) {
 // TestHTMLPreviewAnchorLinkScrolls: "#anchor" scrolls the preview itself; an
 // unknown one toasts.
 func TestHTMLPreviewAnchorLinkScrolls(t *testing.T) {
+	withStore(t)
 	var b strings.Builder
 	b.WriteString("<p><a href=\"#end\">down</a></p>\n")
 	for range 80 {

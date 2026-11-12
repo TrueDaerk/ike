@@ -149,7 +149,6 @@ func countTabsForPath(m Model, vpath string) int {
 // newCapped builds a model whose large-file byte threshold is kb kilobytes.
 func newCapped(t *testing.T, kb int) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.New(), host.MapConfig{"files.large_file_kb": strconv.Itoa(kb)})
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	return tm.(Model)
@@ -179,7 +178,7 @@ func TestOpenGzipTruncatesAtTheLargeFileCap(t *testing.T) {
 // TestOpenGzipTruncatesAtTheLineCap: the other large-file threshold. A log
 // compresses far below the byte cap and can still be unusably long.
 func TestOpenGzipTruncatesAtTheLineCap(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := NewWith(registry.New(), host.MapConfig{"files.large_file_lines": "10"})
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m = tm.(Model)

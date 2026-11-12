@@ -55,6 +55,7 @@ func collected(wps ...weak.Pointer[workspace.Workspace]) bool {
 // dropped Workspace must be garbage — nothing in the app (recent list, hooks,
 // caches, goroutines) may keep it reachable.
 func TestCloseWorkspaceReleasesWorkspace(t *testing.T) {
+	withStore(t)
 	_, b := twoProjects(t)
 	m := switchModel(t)
 	wp := weak.Make(m.activeWS())

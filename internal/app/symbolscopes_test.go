@@ -107,7 +107,7 @@ func TestSymbolScopesFillLaterViewFromCache(t *testing.T) {
 
 func TestSymbolScopesToggleGatesDelivery(t *testing.T) {
 	cfg := host.MapConfig{"editor.sticky_scroll_symbols": "false"}
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := NewWith(registry.New(), cfg)
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m = out.(Model)

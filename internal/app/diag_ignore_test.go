@@ -57,6 +57,7 @@ func runForReload(t *testing.T, cmd tea.Cmd) config.ConfigReloadedMsg {
 // TestIgnoreRulesFilterPublishes: a matching publish is dropped before the
 // Problems store sees it (#1259).
 func TestIgnoreRulesFilterPublishes(t *testing.T) {
+	withStore(t)
 	m := problemsApp(t)
 	m = reloadWithIgnore(t, m, []string{"source=intelephense code=P1006"})
 
@@ -74,6 +75,7 @@ func TestIgnoreRulesFilterPublishes(t *testing.T) {
 // TestIgnoreRuleEditRefiltersLive: adding a rule re-filters what is already on
 // screen from the raw cache — no republish needed (#1259).
 func TestIgnoreRuleEditRefiltersLive(t *testing.T) {
+	withStore(t)
 	m := problemsApp(t)
 	// A real type mismatch: no default rule (#1260) matches it.
 	out, _ := m.Update(ilsp.DiagnosticsMsg{Path: "/a.php", Diagnostics: []ilsp.Diagnostic{

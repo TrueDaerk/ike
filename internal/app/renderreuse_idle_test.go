@@ -157,6 +157,7 @@ func TestChangeFeedCaptureBehindClosedPickerReusesFrame(t *testing.T) {
 }
 
 func TestWatchBatchOverUnviewedPathsReusesFrame(t *testing.T) {
+	withStore(t)
 	dir := t.TempDir()
 	a := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(a, []byte("one\n"), 0o644); err != nil {

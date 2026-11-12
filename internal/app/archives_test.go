@@ -363,7 +363,7 @@ func TestOpenArchiveEntryMissingReports(t *testing.T) {
 // TestArchivePaneRestoresByPath guards session restore (#1762): the layout
 // store records the pane by path and a fresh model re-lists the archive.
 func TestArchivePaneRestoresByPath(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	p := writeTestArchive(t, "src.tar", map[string]string{"a.txt": "hi\n"})
 
 	m := NewWith(registry.New(), host.MapConfig{})

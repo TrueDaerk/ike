@@ -126,6 +126,7 @@ func TestPHPIndexStatusBodyStates(t *testing.T) {
 // fixture takes its files from the persisted cache, and the popup says how
 // many; the cold first session prints no such line.
 func TestPHPIndexStatusBodyShowsWarmStart(t *testing.T) {
+	withStore(t)
 	m := phpOpsModel(t)
 	if got := phpIndexStatusBody(m.PHPIndex()); strings.Contains(got, "from cache") {
 		t.Fatalf("a cold first session has nothing from the cache:\n%s", got)
@@ -245,6 +246,7 @@ func TestPHPIndexRebuildRescans(t *testing.T) {
 // TestPHPIndexRebuildInertWhenDisabled: with php.trait_index off the command
 // scans nothing and says why, rather than silently doing nothing.
 func TestPHPIndexRebuildInertWhenDisabled(t *testing.T) {
+	withStore(t)
 	m := phpOpsModel(t)
 	off, _ := config.Load(config.Options{})
 	off.PHP.TraitIndex = false
@@ -264,6 +266,7 @@ func TestPHPIndexRebuildInertWhenDisabled(t *testing.T) {
 // TestPHPIndexScanRecordsTelemetryOp: one php.trait.index_scan op per scan —
 // the initial walk plus the rebuild's — carrying ms, files, truncated and cached (#2885).
 func TestPHPIndexScanRecordsTelemetryOp(t *testing.T) {
+	withStore(t)
 	m := phpOpsModel(t)
 	// The scan op alone never opens a session file (#2318's ghost rule, see
 	// startsSession): it is background work that finishes on every launch. One

@@ -19,7 +19,6 @@ import (
 
 func problemsApp(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.New(), host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return out.(Model)
@@ -116,6 +115,7 @@ func TestProblemsPanelLiveUpdatesAndNavigates(t *testing.T) {
 }
 
 func TestProblemsPanePersists(t *testing.T) {
+	withStore(t)
 	m := problemsApp(t)
 	out, _ := m.Update(ProblemsToggleMsg{})
 	m = out.(Model)
@@ -138,6 +138,7 @@ var _ = problems.OpenLocationMsg{}
 // the Problems pane restores it (empty) instead of silently falling back to
 // the default layout — the restoreLayout pre-filter was missing "problems".
 func TestRestoreLayoutAcceptsProblemsLeaf(t *testing.T) {
+	withStore(t)
 	m := problemsApp(t)
 	out, _ := m.Update(ProblemsToggleMsg{})
 	m = out.(Model)

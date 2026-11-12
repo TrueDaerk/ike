@@ -29,6 +29,7 @@ func (t segToolchain) Interpreter(string) (string, bool) { return t.path, t.path
 // TestStatusLineNotificationCounter guards the counter segment (#101): drained
 // notifications raise "● N", and opening the history view resets it.
 func TestStatusLineNotificationCounter(t *testing.T) {
+	withStore(t)
 	m := newSized()
 	m.setFocus(m.activeEditorKey())
 	m.host.Notify(host.Info, "one")

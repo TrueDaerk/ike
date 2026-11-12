@@ -22,6 +22,7 @@ func itemAt(path string, line int, text string, start, end int) locations.Item {
 }
 
 func TestReplaceOnDiskUnopenedFile(t *testing.T) {
+	withStore(t)
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "u.txt")
 	if err := os.WriteFile(path, []byte("a needle\nplain\nb needle\n"), 0o644); err != nil {
@@ -100,6 +101,7 @@ func TestReplaceCaptureGroupsOnDisk(t *testing.T) {
 }
 
 func TestReplaceSkipsStaleDiskMatches(t *testing.T) {
+	withStore(t)
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "s.txt")
 	if err := os.WriteFile(path, []byte("rewritten meanwhile\n"), 0o644); err != nil {
@@ -138,6 +140,7 @@ func TestReplaceInPathCommandAndOverlay(t *testing.T) {
 // several times is a single results row, so its extra ranges must still be
 // rewritten.
 func TestReplaceAppliesEveryRangeOfACollapsedRow(t *testing.T) {
+	withStore(t)
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "multi.txt")
 	if err := os.WriteFile(path, []byte("needle and needle\n"), 0o644); err != nil {

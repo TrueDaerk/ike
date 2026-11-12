@@ -175,6 +175,7 @@ func TestMarkdownPreviewClosesLikeAPane(t *testing.T) {
 // a saved preview leaf restores as a preview of the same file, re-read from
 // disk.
 func TestMarkdownPreviewPersistsAndRestores(t *testing.T) {
+	withStore(t)
 	m, path := openMarkdownFile(t, "# Persisted\n")
 	tm, _ := m.Update(MarkdownPreviewMsg{})
 	m = tm.(Model)

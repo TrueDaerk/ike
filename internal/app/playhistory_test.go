@@ -98,6 +98,7 @@ func TestJQPlaygroundHistorySurvivesSourceRemoval(t *testing.T) {
 // disk under the config directory, so a fresh process offers the programs
 // the previous one ran — newest first, from either dialect.
 func TestJQPlaygroundHistoryPersistsAcrossRestart(t *testing.T) {
+	withStore(t)
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = dismissOnboarding(m)
 	m = runJQProgram(m, ".a")
@@ -129,6 +130,7 @@ func TestJQPlaygroundHistoryPersistsAcrossRestart(t *testing.T) {
 // TestJQPlaygroundHistoryFileIsPerUser: the app's list is the one
 // jqplay.HistoryFile names — user state, not the project's .ike.
 func TestJQPlaygroundHistoryFileIsPerUser(t *testing.T) {
+	withStore(t)
 	m := newSized()
 	m.playHist().Add(".x")
 	want := filepath.Join(os.Getenv("IKE_CONFIG_DIR"), "playground-history.json")

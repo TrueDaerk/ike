@@ -20,7 +20,6 @@ import (
 // previewApp boots a sized model with one open Python buffer.
 func previewApp(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	dir := t.TempDir()
 	file := filepath.Join(dir, "a.py")
 	if err := os.WriteFile(file, []byte("import os\n"), 0o644); err != nil {
@@ -37,6 +36,7 @@ func previewApp(t *testing.T) Model {
 // palette through the live pane registry, so an already-open buffer re-colors
 // its syntax spans without being reopened.
 func TestPreviewTickRethemesOpenBuffers(t *testing.T) {
+	withStore(t)
 	m := previewApp(t)
 	before := m.activeWS().Panes.Palette()
 	if before == nil || before.Name != "default" {

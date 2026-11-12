@@ -157,6 +157,7 @@ func TestPlaygroundUnfilteredHelpQClosesOverlayOnly(t *testing.T) {
 // saved-filter picker are locked palette modes, which already precede the
 // playground — pinned here so the order stays.
 func TestPlaygroundEscClosesPalettePickersFirst(t *testing.T) {
+	withStore(t)
 	open := map[string]func(m *Model){
 		"cheatsheet": func(m *Model) { m.openPlayCheatsheet(m.play.dialect, "") },
 		"filters": func(m *Model) {

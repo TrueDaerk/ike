@@ -62,7 +62,7 @@ func threePaneSnapshot(t *testing.T) persistedLayout {
 }
 
 func TestLayoutStoreRoundTrip(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	s := savedLayouts{Layouts: map[string]persistedLayout{"dev": twoPaneSnapshot(t)}, Default: "dev"}
 	saveUserLayouts(s)
 	got := loadUserLayouts()
@@ -79,6 +79,7 @@ func TestLayoutStoreRoundTrip(t *testing.T) {
 }
 
 func TestDeleteLayoutClearsDefault(t *testing.T) {
+	withStore(t)
 	m, _ := openTestTerminal(t)
 	saveUserLayouts(savedLayouts{Layouts: map[string]persistedLayout{"dev": twoPaneSnapshot(t)}, Default: "dev"})
 	m = step(m, DeleteLayoutMsg{Name: "dev"})
@@ -118,6 +119,7 @@ func TestSnapshotLayoutStripsToKinds(t *testing.T) {
 }
 
 func TestSaveLayoutPromptSavesAndGuardsOverwrite(t *testing.T) {
+	withStore(t)
 	m := sized(t, 100, 40)
 	m = step(m, SaveLayoutPromptMsg{})
 	// The pane selection (#1568) precedes the prompt; enter keeps all panes.
@@ -148,6 +150,7 @@ func TestSaveLayoutPromptSavesAndGuardsOverwrite(t *testing.T) {
 }
 
 func TestApplyLayoutKeepsSurplusEditorsAsPanes(t *testing.T) {
+	withStore(t)
 	dir := t.TempDir()
 	pa := filepath.Join(dir, "a.txt")
 	pb := filepath.Join(dir, "b.txt")
@@ -191,6 +194,7 @@ func TestApplyLayoutKeepsSurplusEditorsAsPanes(t *testing.T) {
 // graft in their pre-apply relative arrangement (#1577): a stacked pair stays
 // stacked instead of flattening into a row of siblings.
 func TestApplyLayoutPreservesLeftoverArrangement(t *testing.T) {
+	withStore(t)
 	dir := t.TempDir()
 	paths := map[string]string{}
 	for _, name := range []string{"a", "b", "c"} {
@@ -253,6 +257,7 @@ func editorTerminalTabs(m Model) []*terminal.Model {
 }
 
 func TestApplyLayoutKeepsOrphanShellAsPane(t *testing.T) {
+	withStore(t)
 	m, termKey := openTestTerminal(t)
 	sessKey := m.activeWS().Panes.Get(termKey).Terminal().SessionKey()
 	saveUserLayouts(savedLayouts{Layouts: map[string]persistedLayout{"plain": twoPaneSnapshot(t)}})
@@ -299,6 +304,7 @@ func termSlotSnapshot(t *testing.T) persistedLayout {
 }
 
 func TestApplyLayoutKeepsSurplusShellAsPane(t *testing.T) {
+	withStore(t)
 	m, key1 := openTestTerminal(t)
 	m = step(m, TerminalNewMsg{})
 	key2 := m.activeWS().Panes.Focused()
@@ -334,6 +340,7 @@ func TestApplyLayoutKeepsSurplusShellAsPane(t *testing.T) {
 }
 
 func TestApplyLayoutFillsMissingSlotsWithScratch(t *testing.T) {
+	withStore(t)
 	m := sized(t, 100, 40) // one editor pane only
 	saveUserLayouts(savedLayouts{Layouts: map[string]persistedLayout{"wide": threePaneSnapshot(t)}})
 	m = step(m, ApplyLayoutMsg{Name: "wide"})
@@ -349,7 +356,7 @@ func TestApplyLayoutFillsMissingSlotsWithScratch(t *testing.T) {
 }
 
 func TestRestoreLayoutFallsBackToDefaultLayout(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	saveUserLayouts(savedLayouts{Layouts: map[string]persistedLayout{"wide": threePaneSnapshot(t)}, Default: "wide"})
 	m := New() // fresh project: no layout.json in the redirected store
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
@@ -366,6 +373,7 @@ func TestRestoreLayoutFallsBackToDefaultLayout(t *testing.T) {
 }
 
 func TestRestoreDefaultLayoutBuiltIn(t *testing.T) {
+	withStore(t)
 	m, termKey := openTestTerminal(t) // no saved layouts, no default
 	m = step(m, RestoreDefaultLayoutMsg{})
 	leaves := leafSet(m)
@@ -406,6 +414,7 @@ func TestLayoutsModeResults(t *testing.T) {
 }
 
 func TestSetDefaultLayout(t *testing.T) {
+	withStore(t)
 	m := sized(t, 100, 40)
 	saveUserLayouts(savedLayouts{Layouts: map[string]persistedLayout{"dev": twoPaneSnapshot(t)}})
 	m = step(m, SetDefaultLayoutMsg{Name: "dev"})

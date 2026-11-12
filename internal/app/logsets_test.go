@@ -277,6 +277,7 @@ func TestMergedTimelineFollowSurvivesARotation(t *testing.T) {
 // TestMergedTimelineRespectsTheLargeFileCap: the merge is bounded by the
 // large-file thresholds, and what a cap costs is the oldest end.
 func TestMergedTimelineRespectsTheLargeFileCap(t *testing.T) {
+	withStore(t)
 	registerLogLanguage(t)
 	dir := t.TempDir()
 	writeLog(t, dir, "app.log", strings.Repeat("live line\n", 200))

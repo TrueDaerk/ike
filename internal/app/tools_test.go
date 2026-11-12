@@ -65,6 +65,7 @@ func TestToolSlug(t *testing.T) {
 }
 
 func TestToolOpenSpawnsFocusesAndReturns(t *testing.T) {
+	withStore(t)
 	withTools(t, sleepTool("watcher"))
 	m := sized(t, 100, 40)
 	editorKey := m.activeWS().Panes.Focused()
@@ -189,6 +190,7 @@ func TestToolToggleFindsTabHostedTool(t *testing.T) {
 // true} spawns additional instances; the plain command toggles the most
 // recent one. Without multiple, New is ignored.
 func TestToolMultipleInstances(t *testing.T) {
+	withStore(t)
 	entry := sleepTool("claude")
 	entry.Multiple = true
 	withTools(t, entry)
@@ -272,6 +274,7 @@ func TestToolPaneChromeIsNotATerminal(t *testing.T) {
 // TestToolExitKeepsPaneOpen guards #810: a tool pane survives its program's
 // exit, keeping its layout slot, and shows the footer actions.
 func TestToolExitKeepsPaneOpen(t *testing.T) {
+	withStore(t)
 	withTools(t, sleepTool("shortlived"))
 	m := sized(t, 100, 40)
 	out, _ := m.Update(ToolOpenMsg{Name: "shortlived"})
@@ -300,6 +303,7 @@ func TestToolExitKeepsPaneOpen(t *testing.T) {
 // TestToolExitRestartInPlace: r (and the footer click) rerun the command in
 // the same pane; the close click removes it.
 func TestToolExitRestartAndClose(t *testing.T) {
+	withStore(t)
 	withTools(t, sleepTool("shortlived"))
 	m := sized(t, 100, 40)
 	out, _ := m.Update(ToolOpenMsg{Name: "shortlived"})
@@ -360,6 +364,7 @@ func TestToolUnknownNameIsNoop(t *testing.T) {
 }
 
 func TestToolIdentityPersistsAndRestores(t *testing.T) {
+	withStore(t)
 	withTools(t, sleepTool("persisted"))
 	m := sized(t, 100, 40)
 	dir := os.Getenv("IKE_CONFIG_DIR")

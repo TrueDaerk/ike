@@ -34,6 +34,7 @@ func historyFiles(t *testing.T) []string {
 }
 
 func TestHTTPNoLogSkipsDiskKeepsSession(t *testing.T) {
+	withStore(t)
 	body := "one"
 	srv := bodyServer(t, func() string { return body })
 

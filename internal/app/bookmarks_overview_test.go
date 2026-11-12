@@ -122,6 +122,7 @@ func TestBookmarkOverviewEnterJumps(t *testing.T) {
 // TestBookmarkOverviewDeleteRemoves: the delete key drops the selected
 // bookmark from the store and from the list, and persists.
 func TestBookmarkOverviewDeleteRemoves(t *testing.T) {
+	withStore(t)
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "alpha\nbeta\n")
 	m := openApp(t, a)
@@ -208,6 +209,7 @@ func TestBookmarkOverviewEditCancelReturns(t *testing.T) {
 // unbookmarked line places the bookmark together with its description — the
 // "describe while placing" flavour.
 func TestBookmarkAnnotateCreatesDescribedBookmark(t *testing.T) {
+	withStore(t)
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "alpha\nbeta\n")
 	m := openApp(t, a)

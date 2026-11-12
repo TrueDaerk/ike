@@ -148,6 +148,7 @@ func TestNotebookRerendersOnExternalChange(t *testing.T) {
 // TestNotebookCopyAndScratch: the pane's clipboard and scratch requests are
 // carried out by the root model.
 func TestNotebookCopyAndScratch(t *testing.T) {
+	withStore(t)
 	m := hexApp(t, host.MapConfig{})
 	out, _ := m.Update(nbview.CopyMsg{Text: "print(1)", What: "cell 2 source"})
 	m = out.(Model)
@@ -204,6 +205,7 @@ func TestNotebookSaveImage(t *testing.T) {
 // TestNotebookPanePersistence: the pane's identity round-trips through the
 // layout snapshot, so a restored session re-reads the notebook.
 func TestNotebookPanePersistence(t *testing.T) {
+	withStore(t)
 	m := hexApp(t, host.MapConfig{})
 	path := writeTestNotebook(t, "analysis.ipynb", testNotebook)
 	m = settle(t, m, m.host.Dispatch(palette.OpenFileMsg{Path: path}))

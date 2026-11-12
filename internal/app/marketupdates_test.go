@@ -64,6 +64,7 @@ func TestMarketUpdateCheckRespectsSetting(t *testing.T) {
 // TestMarketUpdateCheckRateLimited: a recent successful check suppresses the
 // next one, and the successful check itself stamps the state file.
 func TestMarketUpdateCheckRateLimited(t *testing.T) {
+	withStore(t)
 	m, calls := checkModel(t, true, emptyCatalog)
 	cmd := m.marketUpdateCheckCmd()
 	if cmd == nil {
@@ -94,6 +95,7 @@ func TestMarketUpdateCheckRateLimited(t *testing.T) {
 // TestMarketUpdateCheckSilentOnFailure: an unreachable catalog produces no
 // message and leaves the rate limit untouched, so the next start retries.
 func TestMarketUpdateCheckSilentOnFailure(t *testing.T) {
+	withStore(t)
 	m, _ := checkModel(t, true, func() (market.Index, []string, error) {
 		return market.Index{}, nil, errors.New("dial tcp: no route to host")
 	})
@@ -112,6 +114,7 @@ func TestMarketUpdateCheckSilentOnFailure(t *testing.T) {
 // TestMarketUpdateCheckFindsUpdates: an installed plugin older than the
 // catalog comes back in the message the app turns into the notification.
 func TestMarketUpdateCheckFindsUpdates(t *testing.T) {
+	withStore(t)
 	m, _ := checkModel(t, true, func() (market.Index, []string, error) {
 		return market.ParseIndex([]byte(`{"version": 1, "plugins": [
 			{"name": "alpha", "version": "2.0.0", "capabilities": ["commands"],

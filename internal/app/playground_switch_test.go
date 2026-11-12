@@ -23,7 +23,6 @@ import (
 // JSON file of project a open and the jq playground running program over it.
 func playSwitchModel(t *testing.T, body, program string) (m Model, b string) {
 	t.Helper()
-	noDebounce(t)
 	a, b := twoProjects(t)
 	m = dismissOnboarding(switchModel(t))
 	path := filepath.Join(a, "data.json")
@@ -222,7 +221,6 @@ func TestPlaygroundClosesWithDocumentAfterResume(t *testing.T) {
 // TestHTTPPlaygroundSurvivesProjectSwitch: a playground over a response pane
 // behaves the same as long as the response pane survives the switch.
 func TestHTTPPlaygroundSurvivesProjectSwitch(t *testing.T) {
-	noDebounce(t)
 	a, b := twoProjects(t)
 	m := switchModel(t)
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})

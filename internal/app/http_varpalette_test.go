@@ -41,7 +41,6 @@ const httpVarsSrc = "@apiBase = {{domain}}/api\n" +
 // palette-context chords and the HTTP Variables settings page exist.
 func httpVarsApp(t *testing.T) (Model, string, time.Time) {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.Global(), host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = out.(Model)
@@ -108,6 +107,7 @@ func httpVarTitles(items []palette.Item) []string {
 // sorted by name; a placeholder value shows written → expanded, a secret is
 // masked, and the captured row names its request and age.
 func TestHTTPVarsPaletteRows(t *testing.T) {
+	withStore(t)
 	m, _, _ := httpVarsApp(t)
 	if c, ok := m.reg.Command(httpVariablesCommand); !ok || c.Title != "HTTP Variables" {
 		t.Fatalf("command %s = %+v (ok=%v), want title \"HTTP Variables\"", httpVariablesCommand, c, ok)
@@ -137,6 +137,7 @@ func TestHTTPVarsPaletteRows(t *testing.T) {
 // TestHTTPVarsPaletteFilter: the query narrows by name, origin and value —
 // but never by a masked secret's real value.
 func TestHTTPVarsPaletteFilter(t *testing.T) {
+	withStore(t)
 	m, _, _ := httpVarsApp(t)
 	m, _ = openHTTPVars(t, m)
 	for query, want := range map[string]string{
@@ -191,6 +192,7 @@ func TestHTTPVarsPaletteJumpFile(t *testing.T) {
 // response that produced it in the response pane — the older entry, not the
 // newer run that captured nothing.
 func TestHTTPVarsPaletteJumpCapture(t *testing.T) {
+	withStore(t)
 	m, _, _ := httpVarsApp(t)
 	m, items := openHTTPVars(t, m)
 	out, _ := m.Update(httpVarItem(t, items, "session").Msg)

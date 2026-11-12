@@ -222,7 +222,7 @@ func TestDiffRetargetsOnlyTheTargetPane(t *testing.T) {
 // TestDiffPlacementSplitKeepsOldBehaviour: diff.placement = "split" restores
 // the workspace-wide single slot and the split-beside-the-editor placement.
 func TestDiffPlacementSplitKeepsOldBehaviour(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	left, right := diffPair(t)
 	m := NewWith(registry.New(), host.MapConfig{"diff.placement": "split"})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})

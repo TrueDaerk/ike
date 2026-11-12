@@ -26,6 +26,7 @@ func navChord(code rune, mod tea.KeyMod) tea.KeyPressMsg {
 // expression (the next typed rune lands there), cmd+right brings it back to
 // the end, and ctrl+left jumps a word.
 func TestProblemsFilterTakesTheCaretChords(t *testing.T) {
+	withStore(t)
 	m := findApp(t)
 	tm, cmd := m.Update(ProblemsToggleMsg{})
 	m = drainCmd(tm.(Model), cmd)
@@ -71,6 +72,7 @@ func TestProblemsFilterTakesTheCaretChords(t *testing.T) {
 // TestIssuesFilterTakesTheCaretChords: the same in the issues pane's filter
 // overlay, the surface the telemetry recorded ctrl+left against.
 func TestIssuesFilterTakesTheCaretChords(t *testing.T) {
+	withStore(t)
 	m := findApp(t)
 	tm, cmd := m.Update(IssuesToggleMsg{})
 	m = drainCmd(tm.(Model), cmd)
@@ -106,6 +108,7 @@ func TestIssuesFilterTakesTheCaretChords(t *testing.T) {
 // TestTerminalSearchTakesTheCaretChords: the scrollback search field is the
 // third host the telemetry named (ctrl+right there).
 func TestTerminalSearchTakesTheCaretChords(t *testing.T) {
+	withStore(t)
 	m, key := openTestTerminal(t)
 	// The first-start LSP dialog (#301) owns the keyboard ahead of everything
 	// else, so a scripted key would never reach the pane behind it.
@@ -149,6 +152,7 @@ func TestTerminalSearchTakesTheCaretChords(t *testing.T) {
 // the scrollback search open, so the way out of a terminal is never lost —
 // only the two chords a caret actually uses are taken.
 func TestTerminalFocusMovesSurviveTheSearchField(t *testing.T) {
+	withStore(t)
 	m, key := openTestTerminal(t)
 	if m.onboardingOpen() {
 		m = m.closeOnboarding().(Model)

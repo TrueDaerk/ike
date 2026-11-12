@@ -16,6 +16,7 @@ import (
 // label state.
 
 func TestTogglePinRoundTripsThroughLayout(t *testing.T) {
+	withStore(t)
 	conf := t.TempDir()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")

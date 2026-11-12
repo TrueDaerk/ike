@@ -37,6 +37,7 @@ func openAll(t *testing.T, m Model, paths ...string) Model {
 }
 
 func TestPerTabCursorAndScrollRoundTrip(t *testing.T) {
+	withStore(t)
 	conf, dir := t.TempDir(), t.TempDir()
 	a := writeTemp(t, dir, "a.txt", numberedLines(60))
 	b := writeTemp(t, dir, "b.txt", numberedLines(60))
@@ -90,6 +91,7 @@ func TestPerTabCursorAndScrollRoundTrip(t *testing.T) {
 }
 
 func TestInactiveRestoredTabsLoadLazily(t *testing.T) {
+	withStore(t)
 	conf, dir := t.TempDir(), t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
@@ -131,6 +133,7 @@ func TestInactiveRestoredTabsLoadLazily(t *testing.T) {
 // wiring an explicit open gives — highlighting, marks, hooks — and the record
 // is consumed there rather than piling up.
 func TestLazyLoadIsWiredLikeAnOpen(t *testing.T) {
+	withStore(t)
 	conf, dir := t.TempDir(), t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
@@ -160,6 +163,7 @@ func TestLazyLoadIsWiredLikeAnOpen(t *testing.T) {
 // restore makes possible: quitting without ever activating a restored tab
 // must persist it — path, position in the strip, and caret — unchanged.
 func TestDeferredTabSurvivesAnUntouchedRestart(t *testing.T) {
+	withStore(t)
 	conf, dir := t.TempDir(), t.TempDir()
 	a := writeTemp(t, dir, "a.txt", numberedLines(60))
 	b := writeTemp(t, dir, "b.txt", numberedLines(60))
@@ -191,6 +195,7 @@ func TestDeferredTabSurvivesAnUntouchedRestart(t *testing.T) {
 }
 
 func TestMissingRestoredFilesNotifyOnce(t *testing.T) {
+	withStore(t)
 	conf, dir := t.TempDir(), t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
@@ -233,6 +238,7 @@ func TestMissingRestoredFilesNotifyOnce(t *testing.T) {
 // falls back to an empty scratch slot instead of showing stale content, and
 // the neighbouring tabs keep working.
 func TestMissingDeferredFileLeavesTheStripIntact(t *testing.T) {
+	withStore(t)
 	conf, dir := t.TempDir(), t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")

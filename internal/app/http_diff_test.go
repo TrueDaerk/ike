@@ -65,6 +65,7 @@ func TestHTTPDiffKeyRoutes(t *testing.T) {
 // response of the request except the one on show, and choosing a row opens
 // the pair in the diff pane, older on the left (#1992).
 func TestHTTPDiffPickerListsOtherEntries(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	path := httpPickerFile(t)
 	seedHTTPBodies(t, path, "first", `{"n":1}`, `{"n":2}`, `{"n":3}`)
@@ -116,6 +117,7 @@ func TestHTTPDiffPickerListsOtherEntries(t *testing.T) {
 // (#1992): two responses differing only in key order and formatting produce
 // an empty diff, while a changed value still shows up.
 func TestHTTPDiffNormalizesJSON(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	path := httpPickerFile(t)
 	seedHTTPBodies(t, path, "first",
@@ -147,6 +149,7 @@ func TestHTTPDiffNormalizesJSON(t *testing.T) {
 // TestHTTPDiffComparesHeaders: the diff text carries the status line and the
 // headers as well as the body (#1992).
 func TestHTTPDiffComparesHeaders(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	path := httpPickerFile(t)
 	store := httphistory.New(httpHistoryDir())
@@ -191,6 +194,7 @@ func TestHTTPDiffSingleEntryExplains(t *testing.T) {
 // TestHTTPDiffWithoutPaneExplains: the command is reachable from the palette
 // at any time, so it has to survive being run with no response pane (#1992).
 func TestHTTPDiffWithoutPaneExplains(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	out, _ := m.Update(HTTPDiffResponsesMsg{})
 	m = out.(Model)
@@ -203,6 +207,7 @@ func TestHTTPDiffWithoutPaneExplains(t *testing.T) {
 // the picker and choosing a row — the stale pair must not diff the wrong two
 // responses (#1992).
 func TestHTTPDiffStalePairExplains(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	path := httpPickerFile(t)
 	seedHTTPBodies(t, path, "first", `{"n":1}`, `{"n":2}`)
@@ -258,6 +263,7 @@ func TestHTTPDiffPreviousRunKeyRoutes(t *testing.T) {
 // shortcut opens the shown one against the run right before it, skipping the
 // picker entirely (#2060).
 func TestHTTPDiffPreviousRunOpensDirectly(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	path := httpPickerFile(t)
 	seedHTTPBodies(t, path, "first", `{"n":1}`, `{"n":2}`, `{"n":3}`)
@@ -285,6 +291,7 @@ func TestHTTPDiffPreviousRunOpensDirectly(t *testing.T) {
 // TestHTTPDiffPreviousRunAtOldestExplains: the oldest stored response has no
 // earlier run to compare against — say so instead of diffing nothing (#2060).
 func TestHTTPDiffPreviousRunAtOldestExplains(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	path := httpPickerFile(t)
 	seedHTTPBodies(t, path, "first", `{"n":1}`, `{"n":2}`)
@@ -323,6 +330,7 @@ func TestHTTPDiffPreviousRunSingleEntryExplains(t *testing.T) {
 // the palette at any time, so it has to survive being run with no response
 // pane open (#2060).
 func TestHTTPDiffPreviousRunWithoutPaneExplains(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	out, _ := m.Update(HTTPDiffPreviousRunMsg{})
 	m = out.(Model)
@@ -336,6 +344,7 @@ func TestHTTPDiffPreviousRunWithoutPaneExplains(t *testing.T) {
 // OOM session dispatched cmd+shift+d from a markdown editor. It must open the
 // diff (or notify), never loop or crash.
 func TestHTTPDiffPreviousRunFromNonHTTPPane(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	path := httpPickerFile(t)
 	seedHTTPBodies(t, path, "first", `{"n":1}`, `{"n":2}`)

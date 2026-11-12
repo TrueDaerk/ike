@@ -50,6 +50,7 @@ func TestTerminalNewSplitsAndFocuses(t *testing.T) {
 }
 
 func TestTerminalKeysBypassGlobalHandling(t *testing.T) {
+	withStore(t)
 	m, key := openTestTerminal(t)
 	// 'q' must go to the shell, not quit the app.
 	out, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
@@ -89,6 +90,7 @@ func TestTerminalFocusKeysEscape(t *testing.T) {
 // palette, cmd+shift+p opens the project switcher — while unrelated chords
 // keep belonging to the shell.
 func TestTerminalGlobalChords(t *testing.T) {
+	withStore(t)
 	m := sizedWith(t, registry.Global(), 100, 40)
 	out, _ := m.Update(TerminalNewMsg{})
 	m = out.(Model)
@@ -624,6 +626,7 @@ func TestTerminalEnvDetectedVenv(t *testing.T) {
 // status line says TERMINAL (shell · dir) instead of mirroring the active
 // editor's mode/file/cursor — which made it hard to tell where input goes.
 func TestStatusLineNamesFocusedTerminal(t *testing.T) {
+	withStore(t)
 	m, key := openTestTerminal(t)
 	line := m.statusLine()
 	if !strings.Contains(line, "TERMINAL") {

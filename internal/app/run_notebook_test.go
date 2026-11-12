@@ -107,6 +107,7 @@ func assertNotebookArgv(t *testing.T, m Model, path string) *terminal.Model {
 // TestRunFileOnNotebookPane: shift+f10 on a focused notebook viewer runs the
 // notebook through nbconvert and persists its default configuration.
 func TestRunFileOnNotebookPane(t *testing.T) {
+	withStore(t)
 	m, path := notebookRunApp(t, `echo "$@"`)
 	tm, _ := m.Update(RunFileMsg{})
 	m = tm.(Model)
@@ -235,6 +236,7 @@ func TestNotebookCleanExitNoHint(t *testing.T) {
 // the notebook reports a removal to the watcher — the pane re-reads the
 // replacement and the poll set is re-armed for the new inode.
 func TestNotebookReloadsOnAtomicReplace(t *testing.T) {
+	withStore(t)
 	m := hexApp(t, host.MapConfig{})
 	path := writeTestNotebook(t, "analysis.ipynb", testNotebook)
 	m = settle(t, m, m.host.Dispatch(palette.OpenFileMsg{Path: path}))

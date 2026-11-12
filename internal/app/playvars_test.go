@@ -198,6 +198,7 @@ func TestPlayVarsMouse(t *testing.T) {
 // TestPlayVarsSavedFilter: a filter saved with the line up stores the
 // variables, the picker marks it with `$`, and picking it restores the line.
 func TestPlayVarsSavedFilter(t *testing.T) {
+	withStore(t)
 	m := varsPlay(t)
 	m = toggleVars(m)
 	m = typeInto(m, "id=42")

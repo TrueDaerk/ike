@@ -47,7 +47,6 @@ func (q quickFixRecorder) Capabilities() plugin.Capabilities {
 // plus the slot the recorded request lands in.
 func quickFixApp(t *testing.T) (Model, *ilsp.QuickFixRequest) {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	got := &ilsp.QuickFixRequest{}
 	reg := registry.New()
 	reg.Add(quickFixRecorder{got: got})

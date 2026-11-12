@@ -119,7 +119,7 @@ func TestScratchNewOffersCustomRow(t *testing.T) {
 // TestScratchNewCustomExtCreates covers the scratch.new flow: typing "tf"
 // creates a .tf scratch and opens it.
 func TestScratchNewCustomExtCreates(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := newSized()
 	m = openCustomExt(t, m)
 	m = typeExt(m, ".tf")
@@ -141,7 +141,7 @@ func TestScratchNewCustomExtCreates(t *testing.T) {
 // list: typing an extension that has a row of its own produces the very same
 // scratch the row does.
 func TestScratchNewCustomExtIsNoSpecialCase(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := newSized()
 	m = openCustomExt(t, m)
 	m = typeExt(m, "sct")
@@ -187,7 +187,6 @@ func TestScratchNewCustomExtRejects(t *testing.T) {
 // TestScratchNewCustomExtEscReturnsToPicker covers the way back: esc leaves
 // the prompt for the language list it was opened from, not for the editor.
 func TestScratchNewCustomExtEscReturnsToPicker(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := newSized()
 	m = openCustomExt(t, m)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -204,7 +203,7 @@ func TestScratchNewCustomExtEscReturnsToPicker(t *testing.T) {
 // Custom… row opens a prompt, and the typed extension re-languages the scratch
 // through the same store call the rows use.
 func TestScratchManagerCustomExtRenames(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := newSized()
 	paths := smSeed(t, "txt")
 	m = openManager(t, m)
@@ -250,7 +249,7 @@ func TestScratchManagerCustomExtRenames(t *testing.T) {
 // TestScratchManagerCustomExtRejects covers the manager's validation: the
 // prompt keeps the step with a message and the scratch keeps its name.
 func TestScratchManagerCustomExtRejects(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := newSized()
 	paths := smSeed(t, "txt")
 	m = openManager(t, m)
@@ -282,7 +281,7 @@ func TestScratchManagerCustomExtRejects(t *testing.T) {
 // TestScratchManagerCustomExtEscGoesBack covers the step walk: esc from the
 // prompt lands in the language list, not outside the dialog.
 func TestScratchManagerCustomExtEscGoesBack(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := newSized()
 	paths := smSeed(t, "txt")
 	m = openManager(t, m)

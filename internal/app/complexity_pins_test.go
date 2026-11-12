@@ -13,6 +13,7 @@ import (
 )
 
 func TestComplexityPinToggleSavesAndApplies(t *testing.T) {
+	withStore(t)
 	m, proj := baselineApp(t)
 	path := complexity.PinsPath(proj)
 	m = baselineGen(t, m)

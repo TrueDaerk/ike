@@ -215,6 +215,7 @@ func TestTraitDiagReappearsWhenConsumerLosesMember(t *testing.T) {
 // TestTraitDiagSuppressionHonoursSetting: with php.trait_index off the pass
 // drops nothing — behaviour equals the server's alone.
 func TestTraitDiagSuppressionHonoursSetting(t *testing.T) {
+	withStore(t)
 	m, aPath, _ := traitDiagApp(t)
 
 	off, _ := config.Load(config.Options{})

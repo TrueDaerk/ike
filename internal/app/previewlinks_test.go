@@ -134,6 +134,7 @@ func TestPreviewLinkCopyGoesToClipboard(t *testing.T) {
 // TestPreviewAnchorScrollsPreview guards the in-document case: a "#anchor"
 // link scrolls the preview itself rather than opening anything.
 func TestPreviewAnchorScrollsPreview(t *testing.T) {
+	withStore(t)
 	var b strings.Builder
 	b.WriteString("# Top\n\nJump to [the end](#the-end).\n\n")
 	for i := 0; i < 60; i++ {

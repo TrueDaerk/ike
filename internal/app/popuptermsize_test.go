@@ -66,6 +66,7 @@ func TestPopupSizeZeroProjectDeltaBeatsGlobal(t *testing.T) {
 }
 
 func TestPopupResizeChordMirrorsIntoGlobalStore(t *testing.T) {
+	withStore(t)
 	m := openTestPopup(t)
 	m = resizePopupChord(t, m)
 	pdw, pdh := m.winSizes.Get(popupTermSizeKey)
@@ -82,6 +83,7 @@ func TestPopupResizeChordMirrorsIntoGlobalStore(t *testing.T) {
 }
 
 func TestPopupResizeDragMirrorsIntoGlobalStore(t *testing.T) {
+	withStore(t)
 	m := openTestPopup(t)
 	px, py, pw, ph := m.popupTermRect()
 	bx, by := px+pw-1, py+ph/2

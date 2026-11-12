@@ -246,6 +246,7 @@ func TestAgentTraceHookPushReadsAtOnce(t *testing.T) {
 // (hook push, 'r') starts is applied when it lands — its events are consumed
 // either way — and a read asked for meanwhile runs right after it.
 func TestAgentTraceReadSurvivesRelocation(t *testing.T) {
+	withStore(t)
 	m, _, path := liveTrace(t)
 	cwd := m.toolPane("watcher").Terminal().Cwd()
 	appendTraceTurn(t, path, cwd, 2)
@@ -274,6 +275,7 @@ func TestAgentTraceReadSurvivesRelocation(t *testing.T) {
 // is restarted by the next relocation, and a read that never reported
 // stops blocking after agentTraceReadLost.
 func TestAgentTraceRevivesLostChainAndRead(t *testing.T) {
+	withStore(t)
 	m, _, _ := liveTrace(t)
 	gen := m.traceTickGen
 	out, _ := m.Update(tracepanel.RefreshMsg{})

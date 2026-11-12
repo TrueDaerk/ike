@@ -14,6 +14,7 @@ func maximizeOnce(t *testing.T, m Model) Model {
 }
 
 func TestPopupMaximizeTogglesBox(t *testing.T) {
+	withStore(t)
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 120, 40)))
 	m.winSizes.Put(popupTermPosKey, 3, -2)
 	x0, y0, w0, h0 := m.popupTermRect()
@@ -62,6 +63,7 @@ func TestPopupMaximizeDroppedOnHide(t *testing.T) {
 }
 
 func TestPinnedPopupMaximizeRestoresDock(t *testing.T) {
+	withStore(t)
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 120, 40)))
 	out, _ := m.Update(TerminalPopupPinMsg{})
 	m = out.(Model)
@@ -79,6 +81,7 @@ func TestPinnedPopupMaximizeRestoresDock(t *testing.T) {
 }
 
 func TestFloatPanelMaximizeToggles(t *testing.T) {
+	withStore(t)
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 120, 40)))
 	m.tearOutPopupTab(m.popup.inst, 0, 30, 20)
 	f := m.floatFocused()

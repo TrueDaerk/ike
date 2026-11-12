@@ -43,6 +43,7 @@ func TestLargeFileDetailsPopup(t *testing.T) {
 }
 
 func TestLargeFileDetailsRefusedForNormalFiles(t *testing.T) {
+	withStore(t)
 	largefile.Reset()
 	t.Cleanup(largefile.Reset)
 	m := sizedWith(t, registry.New(), 120, 40)

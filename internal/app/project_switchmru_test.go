@@ -111,6 +111,7 @@ func TestSwitchMRUPicksNthEntry(t *testing.T) {
 // TestSwitchMRUBeyondListNotifies is the no-op case: a digit past the end of
 // the list changes nothing and says why.
 func TestSwitchMRUBeyondListNotifies(t *testing.T) {
+	withStore(t)
 	a, _ := twoProjects(t)
 	m := switchModel(t)
 	seedHistory(t, cwd(t))

@@ -224,6 +224,7 @@ func hasHint(hints []string, want string) bool {
 // context, not the hosting editor's. The mode owns the keyboard ahead of the
 // keymap layer, so before this its misses left no trace at all.
 func TestPlaygroundRecordsUnboundUnderOwnContext(t *testing.T) {
+	withStore(t)
 	m := openJQ(t, playApp(t, `{"foo":1}`))
 	if m.onboardingOpen() { // the first-start LSP dialog eats keys on hosts missing a server
 		m = m.closeOnboarding().(Model)

@@ -202,6 +202,7 @@ func TestPrettierOfferAcceptInstallsAndReformats(t *testing.T) {
 }
 
 func TestPrettierOfferDeclinePersistsAndNeverAsksAgain(t *testing.T) {
+	withStore(t)
 	f := newPrettierFixture(t)
 	_ = f.update(format.FileRequestMsg{})
 	f.run(f.update(tea.KeyPressMsg{Code: '2', Text: "2"}))

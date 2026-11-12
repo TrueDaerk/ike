@@ -13,7 +13,6 @@ import (
 
 func vcsApp(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	return NewWith(registry.New(), host.MapConfig{})
 }
 
@@ -184,6 +183,7 @@ func TestRevertHunkFlow(t *testing.T) {
 }
 
 func TestUndoRevertFlow(t *testing.T) {
+	withStore(t)
 	m := vcsApp(t)
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m = out.(Model)

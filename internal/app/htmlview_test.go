@@ -322,6 +322,7 @@ func TestHTMLPreviewSplitBesideTabPreview(t *testing.T) {
 // TestHTMLViewPersistsAndRestores: session restore brings the tab back in the
 // view it was in, the browser mode included.
 func TestHTMLViewPersistsAndRestores(t *testing.T) {
+	withStore(t)
 	m, path, _ := openHTMLTab(t, "<p>Restored Page</p>\n")
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	m2 := stepHTML(New(), tea.WindowSizeMsg{Width: 100, Height: 30})
@@ -349,6 +350,7 @@ func TestHTMLViewPersistsAndRestores(t *testing.T) {
 // TestHTMLViewBrowserModePersists: a tab in Preview view whose preview is in
 // browser mode restores in browser mode.
 func TestHTMLViewBrowserModePersists(t *testing.T) {
+	withStore(t)
 	m, path, key := openHTMLTab(t, "<p>x</p>\n")
 	inst, idx := htmlTab(m, key)
 	inst.ShownTabView(idx).HTMLPreview().SetBrowserMode(true)

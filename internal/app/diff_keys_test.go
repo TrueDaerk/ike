@@ -18,7 +18,7 @@ import (
 // TestDiffReopenFocusesExisting guards #509: opening the same diff again
 // focuses the existing pane instead of splitting a duplicate.
 func TestDiffReopenFocusesExisting(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	dir := t.TempDir()
 	left := filepath.Join(dir, "l.txt")
 	right := filepath.Join(dir, "r.txt")
@@ -56,7 +56,7 @@ func TestDiffReopenFocusesExisting(t *testing.T) {
 // TestDiffSingleWindowRetargets guards #513: opening a different diff reuses
 // the one diff pane by default; diff.windows = "multi" restores splitting.
 func TestDiffSingleWindowRetargets(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	dir := t.TempDir()
 	a := filepath.Join(dir, "a.txt")
 	b := filepath.Join(dir, "b.txt")
@@ -94,7 +94,7 @@ func TestDiffSingleWindowRetargets(t *testing.T) {
 // under the focused placement (#2507): the second diff opens a second viewer
 // — a tab beside the first — instead of retargeting the one slot.
 func TestDiffMultiWindowConfigOpensSecondViewer(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	dir := t.TempDir()
 	a := filepath.Join(dir, "a.txt")
 	b := filepath.Join(dir, "b.txt")
@@ -118,7 +118,7 @@ func TestDiffMultiWindowConfigOpensSecondViewer(t *testing.T) {
 // TestDiffMultiWindowSplitPlacementSplits: with diff.placement = "split" the
 // multi mode carves off a second pane, exactly as before #2507.
 func TestDiffMultiWindowSplitPlacementSplits(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	dir := t.TempDir()
 	a := filepath.Join(dir, "a.txt")
 	b := filepath.Join(dir, "b.txt")
@@ -152,7 +152,6 @@ func countDiffViewers(m Model) int {
 // TestDiffF7StepsHunks guards #495: F7 / shift+F7 drive the focused diff
 // pane's hunk navigation through the diff-scoped default bindings.
 func TestDiffF7StepsHunks(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	dir := t.TempDir()
 	left := filepath.Join(dir, "l.txt")
 	right := filepath.Join(dir, "r.txt")
@@ -192,7 +191,6 @@ func TestDiffF7StepsHunks(t *testing.T) {
 // focused diff pane and shift its shared horizontal offset — no global binding
 // steals them — and the mouse seam clamps the same way.
 func TestDiffArrowsScrollHorizontally(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	dir := t.TempDir()
 	long := strings.Repeat("wxyz ", 60) + "\n"
 	left := filepath.Join(dir, "l.txt")
@@ -225,7 +223,6 @@ func TestDiffArrowsScrollHorizontally(t *testing.T) {
 // is an empty scratch pane takes over that pane in place instead of splitting a
 // new one — leaf count stays the same and the empty editor is gone.
 func TestDiffReusesEmptyEditor(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	dir := t.TempDir()
 	left := filepath.Join(dir, "l.txt")
 	right := filepath.Join(dir, "r.txt")
@@ -256,7 +253,7 @@ func TestDiffReusesEmptyEditor(t *testing.T) {
 // the diff joins it as a content tab (#2507) rather than replacing it, and no
 // new leaf appears.
 func TestDiffDoesNotClobberNonEmptyEditor(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	dir := t.TempDir()
 	f := filepath.Join(dir, "open.txt")
 	left := filepath.Join(dir, "l.txt")
@@ -299,7 +296,7 @@ func TestDiffDoesNotClobberNonEmptyEditor(t *testing.T) {
 // TestDiffSplitPlacementSplits guards diff.placement = "split" (#2507): the
 // pre-#2507 behaviour, a fresh pane to the right of the file-backed editor.
 func TestDiffSplitPlacementSplits(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	dir := t.TempDir()
 	f := filepath.Join(dir, "open.txt")
 	left := filepath.Join(dir, "l.txt")

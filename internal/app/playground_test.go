@@ -24,20 +24,10 @@ import (
 // errors, the debounce/generation cancellation, the result actions and the
 // session program history.
 
-// noDebounce makes evaluation fire on the next tick instead of after the
-// human-scale delay, so a test drives the dialog without sleeping.
-func noDebounce(t *testing.T) {
-	t.Helper()
-	prev, prevDim, prevSpin, prevIdle := playDebounce, playDimDelay, playSpinDelay, playHintIdle
-	playDebounce, playDimDelay, playSpinDelay, playHintIdle = 0, 0, 0, 0
-	t.Cleanup(func() { playDebounce, playDimDelay, playSpinDelay, playHintIdle = prev, prevDim, prevSpin, prevIdle })
-}
-
 // playApp opens body as a .json file in the focused editor and returns the
 // model, which is the "open JSON buffer" the playground is written for.
 func playApp(t *testing.T, body string) Model {
 	t.Helper()
-	noDebounce(t)
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "data.json")
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
@@ -129,7 +119,6 @@ func TestJQPlaygroundClearedQueryShowsIdentity(t *testing.T) {
 // document path is .spec.name — the input the two path-seeding cases need.
 func playCaretApp(t *testing.T) Model {
 	t.Helper()
-	noDebounce(t)
 	// The path seed reads the caret's document path, which needs the buffer's
 	// language id — and internal/app does not pull in the language plugins
 	// the shipped binary registers. A bare entry under a test-only extension
@@ -618,6 +607,7 @@ func TestJQPlaygroundCopiesResult(t *testing.T) {
 // TestJQPlaygroundOpensResultAsScratch: ctrl+o writes the result into a fresh
 // .json scratch and opens it, so a multi-step jq session can keep going.
 func TestJQPlaygroundOpensResultAsScratch(t *testing.T) {
+	withStore(t)
 	m := openJQ(t, playApp(t, `{"foo":[1,2,3]}`))
 	m = setProgram(m, "[.foo[] | . * 2]")
 	m = drainKey(m, tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl})
@@ -1078,7 +1068,6 @@ func TestJQPlaygroundClosesWithHostingPane(t *testing.T) {
 // TestJQPlaygroundQueriesHTTPResponse: the playground works on `.http`
 // response bodies as well as on plain JSON files.
 func TestJQPlaygroundQueriesHTTPResponse(t *testing.T) {
-	noDebounce(t)
 	m := httpApp(t)
 	resp := sampleResponse("one")
 	resp.Body = []byte(`{"items":[{"id":7},{"id":8}]}`)
@@ -1762,6 +1751,7 @@ func TestJQPlaygroundMultiLineWindowFollowsCaret(t *testing.T) {
 // history, the saved filters (#1995) and the seeding all keep working on one
 // line, and toggling the view moves neither the program nor the caret.
 func TestJQPlaygroundMultiLineKeepsOneLineProgram(t *testing.T) {
+	withStore(t)
 	m, _ := playMultiLineApp(t)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyUp})
 	pos := m.play.program.Cur

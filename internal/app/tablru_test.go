@@ -78,6 +78,7 @@ func TestTabLimitEvictsTheTrueLRUNotAFixedSlot(t *testing.T) {
 // in the session, so a restarted pane still evicts by real recency — and two
 // consecutive opens evict two different tabs instead of the same slot twice.
 func TestTabLimitAfterRestoreEvictsByPersistedRecency(t *testing.T) {
+	withStore(t)
 	conf := t.TempDir()
 	dir := t.TempDir()
 	var p []string

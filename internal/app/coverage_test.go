@@ -23,7 +23,6 @@ import (
 
 func coverageApp(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.New(), host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	return out.(Model)

@@ -68,7 +68,6 @@ func reviewRepo(t *testing.T) string {
 // and the review instance.
 func reviewApp(t *testing.T) (Model, string, *pane.Instance) {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	dir := reviewRepo(t)
 	m := newSized()
 	m = reviewSnapshot(t, m, dir)
@@ -250,6 +249,7 @@ func TestReviewRefreshDropsCleanFileAndKeepsPosition(t *testing.T) {
 }
 
 func TestReviewWorkingTreeEditReloadsInPlace(t *testing.T) {
+	withStore(t)
 	m, dir, inst := reviewApp(t)
 	d := inst.Diff()
 	if d.HunkCount() != 1 {
@@ -269,7 +269,6 @@ func TestReviewWorkingTreeEditReloadsInPlace(t *testing.T) {
 }
 
 func TestReviewEntryPointsFromThePanel(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	dir := reviewRepo(t)
 	m := newSized()
 	m = reviewSnapshot(t, m, dir)
@@ -306,7 +305,6 @@ func TestReviewEntryPointsFromThePanel(t *testing.T) {
 }
 
 func TestReviewChangesOnCleanTreeNotifies(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	dir := t.TempDir()
 	git := exec.Command("git", "init", "-q")
 	git.Dir = dir

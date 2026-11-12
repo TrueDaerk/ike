@@ -65,6 +65,7 @@ func TestPaletteHintKeybindDefaultOn(t *testing.T) {
 // TestPalettePickToastsBoundChord is the acceptance criterion: a pick of a
 // command bound in the focused context lands an "also: <chord>" toast.
 func TestPalettePickToastsBoundChord(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{"keymap.bindings.ctrl+y": "tm.fire"})
 	m = pickFromPalette(t, m, "fire")
 	if toastsWith(m, "also: ctrl+y") != 1 {
@@ -77,6 +78,7 @@ func TestPalettePickToastsBoundChord(t *testing.T) {
 
 // The setting silences the hint (and the offer), the pick still runs.
 func TestPalettePickHintOff(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{
 		"keymap.bindings.ctrl+y": "tm.fire",
 		"palette.hint_keybind":   "false",
@@ -99,6 +101,7 @@ func TestPalettePickHintOff(t *testing.T) {
 // A binding that only applies in another pane is neither a hint (it would
 // not have worked here) nor an unbound command (it has a key).
 func TestPalettePickOtherContextBindingIsSilent(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{"keymap.bindings.explorer.ctrl+y": "tm.fire"})
 	m.setFocus(m.activeEditorKey())
 	for i := 0; i < unboundPickOfferAt; i++ {
@@ -113,6 +116,7 @@ func TestPalettePickOtherContextBindingIsSilent(t *testing.T) {
 // raises the offer once, naming palette.bindLastPick's chord; earlier and
 // later picks stay quiet.
 func TestPalettePickOffersBindAfterThree(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	for i := 1; i < unboundPickOfferAt; i++ {
 		m = pickFromPalette(t, m, "slow")
@@ -150,6 +154,7 @@ func TestPalettePickOffersBindAfterThree(t *testing.T) {
 // Before any palette pick the command explains itself instead of opening an
 // empty keymap list.
 func TestBindLastPickWithoutPick(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	tm, _ := m.Update(palette.RunCommandMsg{ID: bindLastPickCommand})
 	m = tm.(Model)

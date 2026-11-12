@@ -74,6 +74,7 @@ func showStoredDiff(t *testing.T, m Model, id, key string) Model {
 }
 
 func TestTraceDiffOnStoredSession(t *testing.T) {
+	withStore(t)
 	m, dir := traceApp(t)
 	if m.onboardingOpen() {
 		m = m.closeOnboarding().(Model)
@@ -152,6 +153,7 @@ func TestTraceDiffOnStoredSession(t *testing.T) {
 // read; the stored session picked from the history still diffs from its
 // record.
 func TestTraceDiffStoredWithoutLiveReader(t *testing.T) {
+	withStore(t)
 	m, _ := traceApp(t)
 	if m.onboardingOpen() {
 		m = m.closeOnboarding().(Model)

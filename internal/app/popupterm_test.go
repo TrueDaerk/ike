@@ -30,6 +30,7 @@ func openTestPopupWith(t *testing.T, m Model) Model {
 }
 
 func TestPopupTerminalToggle(t *testing.T) {
+	withStore(t)
 	m := openTestPopup(t)
 	if m.popup.inst.TabCount() != 1 {
 		t.Fatalf("first toggle should spawn one shell tab, got %d", m.popup.inst.TabCount())
@@ -65,6 +66,7 @@ func TestPopupTerminalToggle(t *testing.T) {
 }
 
 func TestPopupTerminalKeysBypassGlobalHandling(t *testing.T) {
+	withStore(t)
 	m := openTestPopup(t)
 	// 'q' must go to the popup's shell, not quit the app.
 	out, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
@@ -134,6 +136,7 @@ func TestPopupTerminalTabs(t *testing.T) {
 }
 
 func TestPopupShellExitClosesTabThenPopup(t *testing.T) {
+	withStore(t)
 	m := openTestPopup(t)
 	out, _ := m.Update(tea.KeyPressMsg{Code: 't', Mod: tea.ModSuper})
 	m = out.(Model)
@@ -280,6 +283,7 @@ func TestPopupIndicatorGoneWithoutShells(t *testing.T) {
 }
 
 func TestPopupResizeDragPersistsDelta(t *testing.T) {
+	withStore(t)
 	m := openTestPopup(t)
 	px, py, pw, ph := m.popupTermRect()
 	// Grab the right border's middle cell and drag outward.
@@ -402,6 +406,7 @@ func TestPopupBroadcastToggle(t *testing.T) {
 // the focus border (#1592) so the shared-input state is obvious at a glance;
 // toggling broadcast off restores the single focused border.
 func TestPopupBroadcastBorders(t *testing.T) {
+	withStore(t)
 	m := splitTestPopup(t)
 	focus := fgSGR(m.pal().BorderFocus)
 	off := strings.Count(m.renderPopupTerm(), focus)
@@ -425,6 +430,7 @@ func TestPopupBroadcastBorders(t *testing.T) {
 // TestPopupSplitCollapse: a side's last shell exit collapses the split back to
 // a single box (#1427) — the surviving side keeps running, broadcast resets.
 func TestPopupSplitCollapse(t *testing.T) {
+	withStore(t)
 	m := splitTestPopup(t)
 	out, _ := m.Update(tea.KeyPressMsg{Code: 'i', Mod: tea.ModSuper | tea.ModShift})
 	m = out.(Model)
@@ -535,6 +541,7 @@ func TestPopupBothSidesExitSameTick(t *testing.T) {
 // while the prompt is open, confirming must close nothing — before the fix it
 // killed whatever tab had become active.
 func TestTermGuardStaleTargetPopup(t *testing.T) {
+	withStore(t)
 	m := openTestPopup(t)
 	out, _ := m.Update(tea.KeyPressMsg{Code: 't', Mod: tea.ModSuper})
 	m = out.(Model)

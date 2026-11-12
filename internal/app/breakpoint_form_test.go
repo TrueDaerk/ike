@@ -37,6 +37,7 @@ func formModel(t *testing.T, caps map[string]any) (Model, *stubAdapter, string) 
 // TestBreakpointFormEditsPersistsAndSyncs walks the three fields, applies
 // them, and checks the store, the disk and the live session all see it.
 func TestBreakpointFormEditsPersistsAndSyncs(t *testing.T) {
+	withStore(t)
 	m, sa, path := formModel(t, allRefinementCaps)
 	m = typeInto(m, "i > 3")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})

@@ -16,7 +16,6 @@ import (
 
 func breakpointsApp(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.New(), host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return out.(Model)
@@ -84,6 +83,7 @@ func TestBreakpointsPanelSyncsWithGutter(t *testing.T) {
 // TestBreakpointsPanelActions covers enable/disable, delete-all and the jump
 // routed through the standard open funnel.
 func TestBreakpointsPanelActions(t *testing.T) {
+	withStore(t)
 	m := breakpointsApp(t)
 	dir := t.TempDir()
 	target := filepath.Join(dir, "a.go")
@@ -128,6 +128,7 @@ func TestBreakpointsPanelActions(t *testing.T) {
 }
 
 func TestBreakpointsPanePersists(t *testing.T) {
+	withStore(t)
 	m := breakpointsApp(t)
 	out, _ := m.Update(BreakpointsToggleMsg{})
 	m = out.(Model)

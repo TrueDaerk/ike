@@ -62,6 +62,7 @@ func retryEvents(t *testing.T, cmd tea.Cmd) []tea.Msg {
 }
 
 func TestHTTPRetryPaneShowsFinalAttempt(t *testing.T) {
+	withStore(t)
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if hits.Add(1) < 3 {

@@ -54,6 +54,7 @@ func captureServer(t *testing.T, first string) (*httptest.Server, *atomic.Value)
 // captures a task id, the second one substitutes it into its target, and the
 // captured value beats the file's own `@task=` definition of the same name.
 func TestHTTPCaptureFeedsLaterRequest(t *testing.T) {
+	withStore(t)
 	srv, seen := captureServer(t, `{"task":"node-1:42"}`)
 	m := httpApp(t)
 	src := "@task = none\n\n" +
@@ -95,6 +96,7 @@ func TestHTTPCaptureFeedsLaterRequest(t *testing.T) {
 // response, so a fresh model over the same project resolves `{{task}}`
 // without dispatching the capturing request again.
 func TestHTTPCaptureSurvivesReopen(t *testing.T) {
+	withStore(t)
 	srv, seen := captureServer(t, `{"task":"node-1:42"}`)
 	m := httpApp(t)
 	src := "### start\n# @capture task = .task\nPOST " + srv.URL + "/_reindex\n\n" +

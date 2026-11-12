@@ -45,6 +45,7 @@ func ratioNear(t *testing.T, got, want float64, what string) {
 // defined TT/ZZ arrangement, closing Z hands the strip back to T, and the
 // explorer snaps to its X column throughout.
 func TestSlotOpenSequence(t *testing.T) {
+	withStore(t)
 	issueLayout(t,
 		[]string{"X=explorer", "T=toolt", "Z=toolz"},
 		sleepTool("toolt"), sleepTool("toolz"))

@@ -60,6 +60,7 @@ func sectionRowY(t *testing.T, m Model) int {
 // TestExplorerWheelScrollsScratchSection (#1965): a wheel over the Scratches
 // section scrolls the section, while a wheel over the tree leaves it alone.
 func TestExplorerWheelScrollsScratchSection(t *testing.T) {
+	withStore(t)
 	m := newSized()
 	seedScratches(t, m, 20)
 	if got := len(m.explorer().ScratchEntries()); got != 20 {
@@ -85,6 +86,7 @@ func TestExplorerWheelScrollsScratchSection(t *testing.T) {
 // TestScratchSectionLastOpenedFromMRU (#1965): opening a scratch stamps the
 // MRU store, and the section's age column reads that time — not the mtime.
 func TestScratchSectionLastOpenedFromMRU(t *testing.T) {
+	withStore(t)
 	m := newSized()
 	paths := seedScratches(t, m, 1)
 	// Age the file well past the open we are about to record.

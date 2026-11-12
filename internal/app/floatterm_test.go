@@ -44,6 +44,7 @@ func tearOutFirstTab(t *testing.T, m Model) (Model, *floatTerm) {
 }
 
 func TestPopupMoveDragPersistsPosition(t *testing.T) {
+	withStore(t)
 	m := openTestPopup(t)
 	x0, y0, _, _ := m.popupTermRect()
 	px, py, pw, _ := m.popupTermRect()
@@ -83,6 +84,7 @@ func TestPopupMoveOffsetClampsToScreen(t *testing.T) {
 }
 
 func TestTearOutTabKeepsSessionLiveAndFocusesPanel(t *testing.T) {
+	withStore(t)
 	m := openTestPopup(t)
 	m, f := tearOutFirstTab(t, m)
 	if m.popup.inst.TabCount() != 1 {
@@ -374,6 +376,7 @@ func TestPopupResizeChordActsOnFocusedPanel(t *testing.T) {
 }
 
 func TestExitedSessionClosesPanel(t *testing.T) {
+	withStore(t)
 	m := openTestPopup(t)
 	m, f := tearOutFirstTab(t, m)
 	sess := f.inst.ActiveTerminal().SessionKey()
@@ -392,6 +395,7 @@ func TestExitedSessionClosesPanel(t *testing.T) {
 }
 
 func TestGlobalPanelRidesAcrossProjectSwitch(t *testing.T) {
+	withStore(t)
 	_, b := twoRoots(t)
 	m := openTestPopupWith(t, switchModel(t))
 	m, f := tearOutFirstTab(t, m)

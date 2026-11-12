@@ -92,6 +92,7 @@ func TestComplexityVerdictDiffsSessionRepoAndToasts(t *testing.T) {
 }
 
 func TestComplexityVerdictPostsRowIntoTracePane(t *testing.T) {
+	withStore(t)
 	m, dir := traceApp(t)
 	if m.onboardingOpen() {
 		m = m.closeOnboarding().(Model)

@@ -16,7 +16,6 @@ import (
 
 func usagesApp(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.New(), host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return out.(Model)
@@ -114,6 +113,7 @@ func TestUsagesRefreshKeyRunsCarriedContinuation(t *testing.T) {
 }
 
 func TestUsagesPanePersistsAndRestoresEmpty(t *testing.T) {
+	withStore(t)
 	m := usagesApp(t)
 	out, _ := m.Update(UsagesToggleMsg{})
 	m = out.(Model)

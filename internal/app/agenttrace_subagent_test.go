@@ -36,7 +36,6 @@ func subagentLines(id, cwd, target string) string {
 }
 
 func TestAgentTraceSubagentEditsLinkAndAsk(t *testing.T) {
-	askSpinInterval = time.Millisecond
 	m, dir := traceApp(t)
 	if m.onboardingOpen() {
 		m = m.closeOnboarding().(Model)

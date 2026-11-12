@@ -236,7 +236,7 @@ func TestNetLinkDeliversAsDeepLink(t *testing.T) {
 // leaves it alone, a new port restarts it, disabling stops it.
 func TestReconfigureNetwork(t *testing.T) {
 	m := switchModel(t)
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	cfg := config.Get()
 	cfg.Network.Enabled = false
 	m.reconfigureNetwork(cfg)
@@ -279,6 +279,7 @@ func TestReconfigureNetwork(t *testing.T) {
 
 // TestNetworkForgetClients: the command empties the store, listener or not.
 func TestNetworkForgetClients(t *testing.T) {
+	withStore(t)
 	m := switchModel(t)
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	store, err := netlink.OpenStore(netlink.DefaultStorePath())
@@ -314,7 +315,7 @@ func TestNetListenAddr(t *testing.T) {
 func TestNetLinkSurvivesProjectSwitch(t *testing.T) {
 	_, dst, _ := deepLinkFixture(t)
 	m := switchModel(t)
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	cfg := config.Get()
 	cfg.Network.Enabled, cfg.Network.Bind, cfg.Network.Port = true, "127.0.0.1", 0
 	if err := m.startNetLink(cfg); err != nil {
@@ -387,7 +388,7 @@ func TestNetService(t *testing.T) {
 // without an announcer.
 func TestReconfigureNetworkDiscovery(t *testing.T) {
 	m := switchModel(t)
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	cfg := config.Get()
 	t.Cleanup(netResetConfig(cfg))
 	cfg.Network.Name = ""

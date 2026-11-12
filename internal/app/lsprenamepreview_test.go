@@ -53,6 +53,7 @@ func openRenamePreview(t *testing.T) (Model, *int) {
 }
 
 func TestLSPRenamePreviewListsFilesAndDiff(t *testing.T) {
+	withStore(t)
 	m, _ := openRenamePreview(t)
 	body := ansi.Strip(m.lspRenamePreviewBody(80)) // unstyled: intra-line diff highlights (#2847)
 	for _, want := range []string{"Greet", "Greeting", "2 edits", "1 edit", "3 edits in 2 files"} {

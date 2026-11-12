@@ -32,6 +32,7 @@ func trendApp(t *testing.T) Model {
 }
 
 func TestComplexityTrendBookkeeping(t *testing.T) {
+	withStore(t)
 	m := trendApp(t)
 	// No snapshot: the tab says so and nothing is scheduled.
 	m.vcs.snap = nil

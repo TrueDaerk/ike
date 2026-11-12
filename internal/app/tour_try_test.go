@@ -18,7 +18,6 @@ import (
 // kbtest.fire) and the welcome tour open on its first page.
 func tourModel(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	reg := registry.New()
 	reg.Add(kbPlugin{})
 	m := NewWith(reg, host.MapConfig{"keymap.bindings.ctrl+y": "kbtest.fire"})

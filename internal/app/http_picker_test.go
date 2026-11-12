@@ -61,6 +61,7 @@ func TestHTTPPanePickRequestKeyRoutes(t *testing.T) {
 // requests of the pane's .http file that have stored responses, and choosing
 // one loads its history like http.showResponse does (#1829).
 func TestHTTPRequestPickerListsStoredRequests(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	path := httpPickerFile(t)
 	seedHTTPHistory(t, path, "first", 2)
@@ -114,6 +115,7 @@ func TestHTTPRequestPickerListsStoredRequests(t *testing.T) {
 // TestHTTPRequestPickerEmptyStore: a file whose requests were never
 // dispatched explains itself instead of opening an empty palette (#1829).
 func TestHTTPRequestPickerEmptyStore(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	path := httpPickerFile(t)
 	out, _ := m.Update(HTTPResponseMsg{Source: path, Request: "first", Resp: sampleResponse("first")})
@@ -140,6 +142,7 @@ func TestHTTPRequestPickerEmptyStore(t *testing.T) {
 // falls back to the focused .http file — stored history survives restarts
 // (#1251), so the pane being empty is no dead end (#1829).
 func TestHTTPRequestPickerWithoutPaneUsesEditor(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	path := httpPickerFile(t)
 	seedHTTPHistory(t, path, "third", 1)
@@ -169,6 +172,7 @@ func TestHTTPRequestPickerWithoutPaneUsesEditor(t *testing.T) {
 // TestHTTPRequestPickerReadsUnsavedBuffer: request blocks added but not saved
 // yet still enumerate — the picker reads the open buffer, not the disk file.
 func TestHTTPRequestPickerReadsUnsavedBuffer(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	path := filepath.Join(t.TempDir(), "req.http")
 	if err := os.WriteFile(path, []byte("### one\nGET http://localhost/a\n"), 0o644); err != nil {

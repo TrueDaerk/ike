@@ -17,6 +17,7 @@ import (
 // TestLocalHistoryRecordsOnSave: the save-side hook (#1023) stores the
 // written bytes, and an identical second save dedupes to one entry.
 func TestLocalHistoryRecordsOnSave(t *testing.T) {
+	withStore(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
@@ -54,6 +55,7 @@ func TestLocalHistoryRecordsOnSave(t *testing.T) {
 // buffer through the edit path — marks it dirty, leaves the file on disk
 // untouched, and a single undo reverts it.
 func TestLocalHistoryRestoreThroughBuffer(t *testing.T) {
+	withStore(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("one\ntwo\n"), 0o644); err != nil {
@@ -94,6 +96,7 @@ func TestLocalHistoryRestoreThroughBuffer(t *testing.T) {
 // TestLocalHistoryEnterOpensDiffPane: enter on a snapshot opens the reusable
 // diff pane with the snapshot on the left and the live buffer on the right.
 func TestLocalHistoryEnterOpensDiffPane(t *testing.T) {
+	withStore(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
@@ -145,6 +148,7 @@ func TestLocalHistoryPickerNeedsSnapshots(t *testing.T) {
 // a value model — content bound only at open time renders the open-time
 // selection forever).
 func TestLocalHistoryPickerRenderFollowsSelection(t *testing.T) {
+	withStore(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
@@ -173,6 +177,7 @@ func TestLocalHistoryPickerRenderFollowsSelection(t *testing.T) {
 // snapshot's inline git-style diff (+/- markers, @@ hunk header) on the right
 // of the column separator.
 func TestLocalHistoryPanelLayout(t *testing.T) {
+	withStore(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("one\ntwo\n"), 0o644); err != nil {
@@ -210,6 +215,7 @@ func TestLocalHistoryPanelLayout(t *testing.T) {
 // left list recomputes the inline diff on the right immediately — no extra
 // step to open a diff.
 func TestLocalHistoryDiffFollowsSelection(t *testing.T) {
+	withStore(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
@@ -236,6 +242,7 @@ func TestLocalHistoryDiffFollowsSelection(t *testing.T) {
 // TestLocalHistoryDiffNoChanges (#1969): a snapshot identical to the buffer
 // renders a notice instead of an empty diff.
 func TestLocalHistoryDiffNoChanges(t *testing.T) {
+	withStore(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {

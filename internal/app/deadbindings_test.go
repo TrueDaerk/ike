@@ -17,7 +17,6 @@ import (
 // rebind writes into the test's own user config.
 func deadBindingsApp(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.New(), host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return out.(Model)
@@ -47,6 +46,7 @@ func TestDeadBindingsReportOpens(t *testing.T) {
 // override at user scope — the new chord binds the command, the old one
 // unbinds — and the reload it triggers re-audits the open report.
 func TestDeadBindingsRebindPersists(t *testing.T) {
+	withStore(t)
 	m := deadBindingsApp(t)
 	out, _ := m.Update(KeymapDeadBindingsMsg{})
 	m = out.(Model)

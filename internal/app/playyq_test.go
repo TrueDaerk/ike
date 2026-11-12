@@ -24,7 +24,6 @@ import (
 // buffer" the yq playground is written for.
 func yqApp(t *testing.T, body string) Model {
 	t.Helper()
-	noDebounce(t)
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "deploy.yaml")
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
@@ -158,6 +157,7 @@ func TestYQPlaygroundCopiesResult(t *testing.T) {
 // fresh `.yaml` scratch — the extension is what makes the scratch highlight
 // and re-query as YAML.
 func TestYQPlaygroundOpensResultAsYAMLScratch(t *testing.T) {
+	withStore(t)
 	m := openYQ(t, yqApp(t, "spec:\n  replicas: 3\n"))
 	m = setProgram(m, ".spec")
 	m = drainKey(m, tea.KeyPressMsg{Code: 'o', Mod: tea.ModCtrl})
@@ -220,6 +220,7 @@ func TestYQPlaygroundHistoryIsShared(t *testing.T) {
 // land apart from jq's: different files, and neither picker lists the other's
 // entries.
 func TestYQFiltersAreASeparateLibrary(t *testing.T) {
+	withStore(t)
 	m := openYQ(t, yqApp(t, "spec:\n  replicas: 3\n"))
 	m = setProgram(m, ".spec.replicas")
 	m = saveFilter(t, m, "replica count", false)
@@ -244,6 +245,7 @@ func TestYQFiltersAreASeparateLibrary(t *testing.T) {
 // the yq library, because the program it inserts has to run against the
 // document the playground is over.
 func TestYQFilterPickerFollowsTheOpenPlayground(t *testing.T) {
+	withStore(t)
 	m := openYQ(t, yqApp(t, "spec:\n  replicas: 3\n"))
 	m = setProgram(m, ".spec.replicas")
 	m = saveFilter(t, m, "replica count", false)
@@ -261,6 +263,7 @@ func TestYQFilterPickerFollowsTheOpenPlayground(t *testing.T) {
 // open starts the yq playground, not the jq one — its program is written for
 // YAML documents.
 func TestYQFilterInsertOpensItsOwnPlayground(t *testing.T) {
+	withStore(t)
 	m := openYQ(t, yqApp(t, "spec:\n  replicas: 3\n"))
 	m = setProgram(m, ".spec.replicas")
 	m = saveFilter(t, m, "replica count", false)
@@ -298,7 +301,6 @@ func TestYQPlaygroundIgnoresHTTPResponses(t *testing.T) {
 // document path is what seeds the query line (#1660) — `."my-key"` where jq
 // writes `.["my-key"]`.
 func TestYQPlaygroundAtPathSeedsTheYQPath(t *testing.T) {
-	noDebounce(t)
 	// The path seed reads the buffer's language id; internal/app does not pull
 	// in the shipped language plugins, so a bare test-only entry stands in.
 	registerTestLang(t, lang.Language{ID: "yaml", Extensions: []string{"yqseed"}})

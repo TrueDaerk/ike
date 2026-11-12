@@ -85,6 +85,7 @@ func TestComplexityFilterTypesSpace(t *testing.T) {
 }
 
 func TestComplexityGroupPersists(t *testing.T) {
+	withStore(t)
 	m, _ := timeApp(t)
 	out, _ := m.Update(ComplexityToggleMsg{})
 	m = out.(Model)

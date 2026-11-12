@@ -73,6 +73,7 @@ func TestPopupPinKeepsVisibleAndTogglesFocus(t *testing.T) {
 // TestPinnedPopupAnchorsToBottomEdge: pinned, the box is a full-width strip at
 // the bottom of the screen instead of the centered overlay (#2406).
 func TestPinnedPopupAnchorsToBottomEdge(t *testing.T) {
+	withStore(t)
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 100, 40)))
 	_, _, cw, _ := m.popupTermRect()
 	if cw >= m.width {
@@ -101,6 +102,7 @@ func TestPinnedPopupAnchorsToBottomEdge(t *testing.T) {
 // (#1407 payload) and comes back on resume, while the other project's popup is
 // unaffected (#2406).
 func TestPopupPinRestoredAfterSwitch(t *testing.T) {
+	withStore(t)
 	a, b := twoRoots(t)
 	m := openTestPopupWith(t, unmodaled(t, switchModel(t)))
 	out, _ := m.Update(TerminalPopupPinMsg{})

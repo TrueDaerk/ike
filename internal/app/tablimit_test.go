@@ -207,6 +207,7 @@ func openApp2(t *testing.T, m Model, paths ...string) Model {
 // (and the undo history persists) instead of the evicted tab silently losing
 // both.
 func TestTabLimitEvictionDropsBackup(t *testing.T) {
+	withStore(t)
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "a\n")
 	b := writeTemp(t, dir, "b.txt", "b\n")

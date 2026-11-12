@@ -124,6 +124,7 @@ func assertIssue2141Grouping(t *testing.T, m Model) (tools, claude string) {
 // re-attached through the "group with any other tool pane" rule and piled up
 // as tabs of the claude pane.
 func TestSwitchBackRestoresSavedToolTabPane(t *testing.T) {
+	withStore(t)
 	a, b := twoRoots(t)
 	writeIssue2141Layout(t, a)
 	m := globalToolModelWith(t, issue2141Tools)
@@ -139,6 +140,7 @@ func TestSwitchBackRestoresSavedToolTabPane(t *testing.T) {
 // project whose layout hosts the tools as tabs restores them in that pane,
 // not next to the tool the switch carried in.
 func TestSwitchIntoProjectRestoresSavedToolTabPane(t *testing.T) {
+	withStore(t)
 	_, b := twoRoots(t)
 	writeIssue2141Layout(t, b)
 	m := globalToolModelWith(t, issue2141Tools)
@@ -183,6 +185,7 @@ func TestSwitchBackKeepsSlottedToolTabsInTheirSlot(t *testing.T) {
 // layout — no parked session in play — reproduces the saved arrangement too,
 // which is what makes a plain IKE restart come back as it was left.
 func TestRestoreKeepsSavedToolTabPane(t *testing.T) {
+	withStore(t)
 	a, _ := twoRoots(t)
 	writeIssue2141Layout(t, a)
 	m := globalToolModelWith(t, issue2141Tools)

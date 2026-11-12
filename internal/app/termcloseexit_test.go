@@ -51,6 +51,7 @@ func waitExited(t *testing.T, term *terminal.Model) {
 // TestPopupTabClosesAfterExit: a finished run parked in a popup terminal tab
 // (#1398) closes with the reserved cmd+w, where the EOF path used to no-op.
 func TestPopupTabClosesAfterExit(t *testing.T) {
+	withStore(t)
 	m := openTestPopup(t)
 	inst := m.popup.inst
 	deadTermTab(t, m, inst, "popuprun")
@@ -84,6 +85,7 @@ func TestPopupTabCloseGlyphClosesAfterExit(t *testing.T) {
 // (#1793) — the placement with no pane registry behind it at all. Its last
 // tab going drops the panel.
 func TestFloatPanelClosesAfterExit(t *testing.T) {
+	withStore(t)
 	m := openTestPopup(t)
 	m, f := tearOutFirstTab(t, m)
 	f.inst.CloseTerminalTabs() // the panel's shell ends, its tab stays

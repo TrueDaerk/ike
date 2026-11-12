@@ -251,7 +251,7 @@ func TestShowTableSchemaOpensReadOnlyBuffer(t *testing.T) {
 // TestDataPaneRestoresByPath: the pane persists as kind "data" plus the file
 // path and restores by re-opening the database.
 func TestDataPaneRestoresByPath(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	p := writeTestDB(t, "app.db")
 
 	m := NewWith(registry.New(), host.MapConfig{})

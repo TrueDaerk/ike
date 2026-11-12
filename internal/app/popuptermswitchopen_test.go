@@ -59,6 +59,7 @@ func TestPopupOnSwitchAlwaysOpenSpawnsFreshPopup(t *testing.T) {
 }
 
 func TestPopupOnSwitchAlwaysOpenResumesParkedPopup(t *testing.T) {
+	withStore(t)
 	a, b := twoRoots(t)
 	m := openTestPopupWith(t, switchModel(t))
 	sess := m.popup.inst.ActiveTerminal().SessionKey()
@@ -86,6 +87,7 @@ func TestPopupOnSwitchAlwaysOpenResumesParkedPopup(t *testing.T) {
 }
 
 func TestPopupOnSwitchRestoreKeepsClosedPopupClosed(t *testing.T) {
+	withStore(t)
 	a, b := twoRoots(t)
 	m := openTestPopupWith(t, switchModel(t))
 	out, _ := m.Update(TerminalPopupMsg{})

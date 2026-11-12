@@ -89,6 +89,7 @@ func TestHTTPRunResolvesSingleEnvironment(t *testing.T) {
 // lists them, the choice persists per directory, and the next dispatch
 // resolves against it — in-file definitions still winning (#1867).
 func TestHTTPEnvPickerSelectsEnvironment(t *testing.T) {
+	withStore(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(r.URL.Path))
 	}))
@@ -151,6 +152,7 @@ func TestHTTPEnvPickerSelectsEnvironment(t *testing.T) {
 // opened once, cmd+e (palette.recentFiles) silently opened the HTTP
 // environment picker instead of Recent Files.
 func TestRecentFilesSurvivesHTTPEnvPrefix(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	path := httpVarFile(t, "GET {{host}}\n", map[string]string{
 		httpfile.EnvFileName: `{"dev": {"host": "https://dev.invalid"}, "prod": {"host": "https://example.invalid"}}`,

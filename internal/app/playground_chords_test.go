@@ -191,6 +191,7 @@ func TestPlaygroundTerminalPopupChordFromQueryLine(t *testing.T) {
 // (#2539's recorder): none of the three chords lands in the usage log as an
 // unbound key any more — each is consumed by something that means it.
 func TestPlaygroundChordsNotRecordedUnbound(t *testing.T) {
+	withStore(t)
 	m := playReady(t, `{"foo":1}`)
 	m.play.program.Set(".foo")
 

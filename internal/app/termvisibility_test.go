@@ -198,6 +198,7 @@ func TestCaretMovesSendNoPreviewCursorWithoutAPreviewPane(t *testing.T) {
 }
 
 func TestUserInputRestartsTheForgeIdleClock(t *testing.T) {
+	withStore(t)
 	m := pollApp(t, host.MapConfig{})
 	p := m.forgePoller()
 	if p == nil {

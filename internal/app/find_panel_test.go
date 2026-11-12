@@ -20,7 +20,6 @@ import (
 // dispatches find.openInPanel through the registered command.
 func findPanelApp(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.Global(), host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return out.(Model)
@@ -55,6 +54,7 @@ func pressOpenInFindPanel(t *testing.T, m Model) Model {
 // transient find-usages popup: the chord tips its hits into the persistent
 // panel, closes the overlay, and an entry still navigates.
 func TestUsagesPopupOpensInFindPanel(t *testing.T) {
+	withStore(t)
 	m := findPanelApp(t)
 	dir := t.TempDir()
 	target := filepath.Join(dir, "a.go")

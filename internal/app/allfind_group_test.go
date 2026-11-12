@@ -123,6 +123,7 @@ func TestFindInGroupOpensOverMembers(t *testing.T) {
 // shared query/toggle/glob state but never writes the all-projects root
 // selection — project.find_all.excluded_roots stays as the user left it.
 func TestGroupSearchLeavesExcludedRootsAlone(t *testing.T) {
+	withStore(t)
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "a.go"), []byte("needle\n"), 0o644); err != nil {
 		t.Fatal(err)

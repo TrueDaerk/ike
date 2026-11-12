@@ -57,6 +57,7 @@ const wantKinds = "builtin,quickfix*2,source.organizeImports"
 // TestActionsDismissRecordsOfferedKinds is the acceptance criterion for the
 // dismiss half: esc out of the popup says which kinds were rejected.
 func TestActionsDismissRecordsOfferedKinds(t *testing.T) {
+	withStore(t)
 	m := kindedActionsModel(t)
 	tm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = tm.(Model)
@@ -82,6 +83,7 @@ func TestActionsDismissRecordsOfferedKinds(t *testing.T) {
 // travels next to the offer's, so "which kinds get picked out of which offers"
 // becomes answerable.
 func TestActionsPickRecordsPickedKind(t *testing.T) {
+	withStore(t)
 	m := kindedActionsModel(t)
 	// The second row: the preferred quickfix sorts first, so this is the
 	// organize-imports action — provably not a constant.
@@ -110,6 +112,7 @@ func TestActionsPickRecordsPickedKind(t *testing.T) {
 // A built-in intention reports the "builtin" marker rather than ike's own kind
 // vocabulary, which would drown the server kinds the ranking question is about.
 func TestActionsPickOfBuiltinRecordsMarker(t *testing.T) {
+	withStore(t)
 	m := kindedActionsModel(t)
 	for i := 0; i < 3; i++ {
 		tm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
@@ -132,6 +135,7 @@ func TestActionsPickOfBuiltinRecordsMarker(t *testing.T) {
 // not an identifier — a server building one out of the user's code — collapses
 // to "other" instead of travelling in clear text.
 func TestActionsKindTokensAreAClosedVocabulary(t *testing.T) {
+	withStore(t)
 	for name, tc := range map[string]struct {
 		kind string
 		want string
@@ -172,6 +176,7 @@ const kindLeakProbeLen = 64
 // neither field is written at all — a reader can tell "no kinds recorded" from
 // "this mode has none".
 func TestOtherPaletteModesRecordNoKinds(t *testing.T) {
+	withStore(t)
 	for _, prefix := range []rune{':', '@'} {
 		t.Run(string(prefix), func(t *testing.T) {
 			m := telemetryModel(t, host.MapConfig{})

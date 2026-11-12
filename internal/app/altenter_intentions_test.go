@@ -64,6 +64,7 @@ func TestAltEnterOpensIntentionsInJSONBuffer(t *testing.T) {
 // = "" — which unbound the editor's lsp.codeAction too, so alt+enter did
 // nothing in any buffer.
 func TestAltEnterSurvivesExplorerRebind(t *testing.T) {
+	withStore(t)
 	m := intentionModel(t, "x.json", `{"name": "value"}`, 0, 11)
 	orig := config.Get()
 	t.Cleanup(func() { config.Set(orig) })

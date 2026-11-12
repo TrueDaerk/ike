@@ -51,6 +51,7 @@ func TestHTMLPreviewBrowserFallbackToasts(t *testing.T) {
 // mode "browser" in the layout state, dedicated or as a content tab, and the
 // restore brings the mode back; text mode saves no mode.
 func TestHTMLPreviewBrowserModePersists(t *testing.T) {
+	withStore(t)
 	m, path := openHTMLFile(t, "<p>x</p>\n")
 	m = stepHTML(m, HTMLPreviewMsg{})
 	key := htmlPreviewKeyFor(m, path)
@@ -92,6 +93,7 @@ func TestHTMLPreviewBrowserModePersists(t *testing.T) {
 // seam, b and the fallback take the same path — persists the layout on the
 // next settled pass, so the mode survives without a clean quit.
 func TestHTMLPreviewBrowserModeFlipSavesLayout(t *testing.T) {
+	withStore(t)
 	m, path := openHTMLFile(t, "<p>x</p>\n")
 	m = stepHTML(m, HTMLPreviewMsg{})
 	key := htmlPreviewKeyFor(m, path)

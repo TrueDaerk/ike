@@ -34,8 +34,7 @@ func TestSlowUpdateLogsEntry(t *testing.T) {
 func TestFastUpdateDoesNotLog(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
-	m := newSized() // rotates IKE_CONFIG_DIR itself; re-pin for the assertion
-	t.Setenv("IKE_CONFIG_DIR", dir)
+	m := newSized()
 	tm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	_ = tm
 	if _, err := os.Stat(filepath.Join(dir, "debug.log")); !os.IsNotExist(err) {

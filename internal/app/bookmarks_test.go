@@ -163,6 +163,7 @@ func TestBookmarkRemove(t *testing.T) {
 // TestGlobalMarkPersistedViaEditorKeys: m{A} in the editor writes through the
 // injected hook into the persistent store.
 func TestGlobalMarkPersistedViaEditorKeys(t *testing.T) {
+	withStore(t)
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\ntwo\n")
 	m := openApp(t, a)

@@ -22,7 +22,6 @@ import (
 // behind the app's back the way another process would.
 func playWatchApp(t *testing.T, body string) (Model, string) {
 	t.Helper()
-	noDebounce(t)
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "data.json")
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
@@ -200,7 +199,6 @@ func TestJQPlaygroundClosesWhenSourceFileRemoved(t *testing.T) {
 // buffer is the only copy of the document left, so the mode stays up over
 // content that still exists — and says what happened on disk.
 func TestJQPlaygroundKeepsUnsavedBufferAfterRemoval(t *testing.T) {
-	noDebounce(t)
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "data.json")
 	if err := os.WriteFile(path, []byte(`{"foo":1}`), 0o644); err != nil {
@@ -260,7 +258,7 @@ func TestJQPlaygroundIgnoresForeignFileChange(t *testing.T) {
 // TestJQPlaygroundHTTPResponseIsNotFollowed: an HTTP response is not a file.
 // It has no path to watch, and nothing on disk can renew it.
 func TestJQPlaygroundHTTPResponseIsNotFollowed(t *testing.T) {
-	noDebounce(t)
+	withStore(t)
 	m := httpApp(t)
 	resp := sampleResponse("one")
 	resp.Body = []byte(`{"items":[{"id":7}]}`)

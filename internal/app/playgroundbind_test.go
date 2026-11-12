@@ -133,7 +133,6 @@ func TestPlaygroundSurvivesFocusChange(t *testing.T) {
 // file document (its source key is `http:<paneKey>`), and the document binding
 // must not hide it.
 func TestHTTPPlaygroundUnaffectedByDocumentBinding(t *testing.T) {
-	noDebounce(t)
 	m := httpApp(t)
 	resp := sampleResponse("one")
 	resp.Body = []byte(`{"items":[{"id":7},{"id":8}]}`)

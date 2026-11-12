@@ -19,6 +19,7 @@ import (
 // TestModelGenerationIsUnique: every built model owns a distinct generation,
 // so a stale tick can never match a fresh model by accident.
 func TestModelGenerationIsUnique(t *testing.T) {
+	withStore(t)
 	a := sized(t, 100, 40)
 	b := sized(t, 100, 40)
 	if a.modelGen == 0 || b.modelGen == 0 {
@@ -158,6 +159,7 @@ func TestStalePerfTickRetires(t *testing.T) {
 // a grace tick outliving a project switch judged the fresh model's zero-valued
 // caps and popped "keyboard shortcuts will not work" on a Kitty terminal.
 func TestStaleTermCheckKeepsVerdictQuiet(t *testing.T) {
+	withStore(t)
 	m := sized(t, 100, 40)
 	m.caps = termCaps{} // a freshly rebuilt model: nothing probed yet
 	out, cmd := m.Update(termCheckMsg{gen: m.modelGen - 1})

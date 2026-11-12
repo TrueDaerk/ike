@@ -19,6 +19,7 @@ import (
 // box shows the text in the shell.
 
 func TestAgentTraceViewToggleAndRemember(t *testing.T) {
+	withStore(t)
 	m, dir := traceApp(t)
 	target := filepath.Join(t.TempDir(), "x.go")
 	if err := os.WriteFile(filepath.Join(dir, "sess-g.jsonl"), []byte(transcriptLines("sess-g", projectRoot(), target, 1)), 0o644); err != nil {

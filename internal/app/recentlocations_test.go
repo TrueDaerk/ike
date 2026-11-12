@@ -47,6 +47,7 @@ func TestEditRingRecordsBufferChanges(t *testing.T) {
 }
 
 func TestNavLastEditWalksBack(t *testing.T) {
+	withStore(t)
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
@@ -72,6 +73,7 @@ func TestNavLastEditWalksBack(t *testing.T) {
 }
 
 func TestNavLastEditEmptyToasts(t *testing.T) {
+	withStore(t)
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
@@ -139,6 +141,7 @@ func TestRecentLocationsDedupesEditAndJump(t *testing.T) {
 }
 
 func TestRecentLocationsEmptyToasts(t *testing.T) {
+	withStore(t)
 	m := newSized()
 	tm, _ := m.Update(ShowRecentLocationsMsg{})
 	m = tm.(Model)

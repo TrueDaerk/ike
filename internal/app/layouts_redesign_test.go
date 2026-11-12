@@ -74,6 +74,7 @@ func totalToolSessions(m Model) int {
 // saved tool list it matches — never by blind queue order, which would swap
 // the two tool areas when registry order and slot order diverge.
 func TestApplyLayoutMatchesToolHostsByComposition(t *testing.T) {
+	withStore(t)
 	withTools(t, sleepTool("alpha"), sleepTool("beta"), sleepTool("gamma"), sleepTool("delta"))
 	m := sized(t, 120, 40)
 	m = step(m, ToolOpenMsg{Name: "alpha"})
@@ -112,6 +113,7 @@ func TestApplyLayoutMatchesToolHostsByComposition(t *testing.T) {
 // with exactly its saved tab set — a tab closed since the save comes back on
 // apply, in the same host pane.
 func TestApplyLayoutRestoresMissingToolTab(t *testing.T) {
+	withStore(t)
 	withTools(t, sleepTool("alpha"), sleepTool("beta"))
 	m := sized(t, 120, 40)
 	m = step(m, ToolOpenMsg{Name: "alpha"})
@@ -148,6 +150,7 @@ func TestApplyLayoutRestoresMissingToolTab(t *testing.T) {
 // editor slot — and an apply re-slots the live viewer pane instead of
 // treating it as editor content.
 func TestHTTPViewerSnapshotsAsToolAndReslotsOnApply(t *testing.T) {
+	withStore(t)
 	m := sized(t, 100, 40)
 	m.openHTTPPanel()
 	if !leafSet(m)[pane.HTTPKey] {

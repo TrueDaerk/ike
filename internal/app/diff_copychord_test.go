@@ -74,6 +74,7 @@ func TestDiffCopyChordBound(t *testing.T) {
 // it as a resolved diff.copy and never as an unbound chord (the telemetry
 // signal this issue came from).
 func TestDiffCopyChordNotUnbound(t *testing.T) {
+	withStore(t)
 	pinDarwin(t)
 	stubClipboard(t, "")
 	m := diffPaneApp(t)

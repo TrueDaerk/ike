@@ -15,6 +15,7 @@ import (
 // accumulated setup phases reads as one slow host. The count only: no URL,
 // host or Location ever reaches the log.
 func TestTelemetryHTTPFlightCarriesRedirects(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	send := func(ctx context.Context, source, key string, cb httpclient.WSCallbacks) (*httpclient.Response, error) {
 		return nil, nil // never executed: the returned tea.Cmd is not run
@@ -53,6 +54,7 @@ func TestTelemetryHTTPFlightCarriesRedirects(t *testing.T) {
 // TestTelemetryHTTPFlightWithoutRedirects: a direct answer adds no field, so
 // its absence on v15 reads as zero rather than as a lost one (#2716).
 func TestTelemetryHTTPFlightWithoutRedirects(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	send := func(ctx context.Context, source, key string, cb httpclient.WSCallbacks) (*httpclient.Response, error) {
 		return nil, nil

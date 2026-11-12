@@ -64,6 +64,7 @@ func resendServer(t *testing.T, log *[]recorded) *httptest.Server {
 // request that goes out again is the one that produced the shown response,
 // even after the .http file was rewritten in between.
 func TestHTTPResendRepeatsStoredRequestAfterEdit(t *testing.T) {
+	withStore(t)
 	var log []recorded
 	srv := resendServer(t, &log)
 
@@ -161,6 +162,7 @@ func TestHTTPResendRepeatsStoredRequestAfterEdit(t *testing.T) {
 // snapshot existed cannot be re-sent — the pane says so instead of firing
 // something else (#1832).
 func TestHTTPResendLegacyEntryNotifies(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	path := filepath.Join(t.TempDir(), "req.http")
 	if err := os.WriteFile(path, []byte("### one\nGET http://localhost/a\n"), 0o644); err != nil {

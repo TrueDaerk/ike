@@ -41,6 +41,7 @@ func warmupNotice(m Model) *histEntry {
 // threshold passes without a publish records exactly one notification naming
 // the language, and that notification offers lsp.restart as a follow-up.
 func TestLSPWarmupNoticeFires(t *testing.T) {
+	withStore(t)
 	chdir(t, t.TempDir())
 	m := warmupNoticeModel(t, 15000)
 	m.switchLSPWait = &switchLSPWait{start: time.Now(), lang: "go"}

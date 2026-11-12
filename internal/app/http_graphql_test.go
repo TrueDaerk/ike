@@ -82,6 +82,7 @@ func openGraphQLFile(t *testing.T, m Model, url string) Model {
 }
 
 func TestGraphQLIntrospectCachesTheSchema(t *testing.T) {
+	withStore(t)
 	srv, seen := graphQLServer(t)
 	m := httpApp(t)
 	m = openGraphQLFile(t, m, srv.URL+"/graphql")
@@ -159,6 +160,7 @@ func findGraphQLSchema(cmd tea.Cmd) (httpGraphQLSchemaMsg, bool) {
 }
 
 func TestGraphQLSchemaOpensSDLScratch(t *testing.T) {
+	withStore(t)
 	srv, _ := graphQLServer(t)
 	m := httpApp(t)
 	m = openGraphQLFile(t, m, srv.URL+"/graphql")

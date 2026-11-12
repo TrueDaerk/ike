@@ -25,7 +25,6 @@ import (
 
 func httpApp(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.New(), host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return out.(Model)
@@ -150,6 +149,7 @@ func TestHTTPErrorNotifies(t *testing.T) {
 }
 
 func TestHTTPPanePersistsAsEmptySingleton(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
 	m = out.(Model)
@@ -167,6 +167,7 @@ func TestHTTPPanePersistsAsEmptySingleton(t *testing.T) {
 }
 
 func TestHTTPResponsePersistsHistory(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	for i := 0; i < 7; i++ {
 		resp := sampleResponse("one")
@@ -192,6 +193,7 @@ func TestHTTPResponsePersistsHistory(t *testing.T) {
 }
 
 func TestHTTPResponseReopensViewerAfterClose(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
 	m = out.(Model)
@@ -475,6 +477,7 @@ func TestHTTPCopyWithoutPaneNotifies(t *testing.T) {
 // TestHTTPResponseHistoryCommand covers http.responseHistory (#1267): it
 // focuses the viewer and reports the stored count.
 func TestHTTPResponseHistoryCommand(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	for i := 0; i < 3; i++ {
 		resp := sampleResponse("one")
@@ -499,6 +502,7 @@ func TestHTTPResponseHistoryCommand(t *testing.T) {
 // with the cursor on a request that was dispatched before, the command loads
 // its stored responses into the viewer without dispatching anything.
 func TestHTTPShowResponseLoadsStoredHistory(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "req.http")
@@ -547,6 +551,7 @@ func TestHTTPShowResponseLoadsStoredHistory(t *testing.T) {
 // part of the layout yet — stored responses are viewable right after a
 // restart, before any dispatch (#1492).
 func TestHTTPShowResponseOpensViewer(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	path := filepath.Join(t.TempDir(), "req.http")
 	if err := os.WriteFile(path, []byte("### one\nGET http://localhost/a\n"), 0o644); err != nil {
@@ -572,6 +577,7 @@ func TestHTTPShowResponseOpensViewer(t *testing.T) {
 // context on a focused .http file must invoke http.showResponse and open the
 // viewer with the stored history, without dispatching anything.
 func TestHTTPShowResponseKeybinding(t *testing.T) {
+	withStore(t)
 	m := sizedWith(t, registry.Global(), 120, 40)
 	path := filepath.Join(t.TempDir(), "req.http")
 	if err := os.WriteFile(path, []byte("### one\nGET http://localhost/a\n"), 0o644); err != nil {
@@ -904,6 +910,7 @@ func flightMarkAt(t *testing.T, m Model, line int) string {
 // its own request line, with the elapsed time, and the marker clears when the
 // response lands.
 func TestHTTPInlineFlightMarker(t *testing.T) {
+	withStore(t)
 	release := make(chan struct{})
 	srv := slowServer(t, release)
 	m := httpFileApp(t, srv.URL)

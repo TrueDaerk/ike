@@ -20,7 +20,6 @@ import (
 
 func pollApp(t *testing.T, cfg host.Config) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.New(), cfg)
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return out.(Model)
@@ -79,6 +78,7 @@ func TestInitDoesNotArmTheForgePoll(t *testing.T) {
 // tick command, so any synchronous command drainer (the `settle` test helper,
 // #1795's data-pane restore) spins forever waiting out poll intervals.
 func TestForgePollUpdateSettlesWithoutAPendingTick(t *testing.T) {
+	withStore(t)
 	m := pollApp(t, host.MapConfig{})
 	m.StartForgePoll()
 	for i := 0; i < 3; i++ {
@@ -91,6 +91,7 @@ func TestForgePollUpdateSettlesWithoutAPendingTick(t *testing.T) {
 }
 
 func TestForgePollReopensAfterTheSettingIsTurnedBackOn(t *testing.T) {
+	withStore(t)
 	m := pollApp(t, host.MapConfig{"forge.poll_interval_seconds": "0"})
 	if m.armForgePoll() != nil {
 		t.Fatal("nothing to reopen while polling is off")
@@ -285,6 +286,7 @@ func TestForgePollDegradeAndRecoverToastOnce(t *testing.T) {
 }
 
 func TestForgePollStopsOnSetupProblemAndResumesOnRefresh(t *testing.T) {
+	withStore(t)
 	m := pollApp(t, host.MapConfig{})
 	out, _ := m.Update(forge.IssuesMsg{Poll: true, Setup: "gh not found"})
 	m = out.(Model)

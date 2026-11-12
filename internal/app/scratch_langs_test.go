@@ -97,7 +97,7 @@ func TestScratchRowTitleNamesDialect(t *testing.T) {
 // picker lists JavaScript, its command is registered, and the row is found by
 // the language name as well as by its extension.
 func TestScratchNewOffersJavaScript(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := newSized()
 	if _, ok := m.reg.Command("scratch.new.typescript.js"); !ok {
 		t.Fatal("the JavaScript row needs a registered creator command")
@@ -138,7 +138,7 @@ func TestScratchNewOffersJavaScript(t *testing.T) {
 // the JavaScript row is found by ".js", choosing it renames the scratch and
 // the list names it JavaScript.
 func TestScratchManagerSwitchesToJavaScript(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := newSized()
 	paths := smSeed(t, "txt")
 	m = openManager(t, m)

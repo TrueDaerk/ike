@@ -20,7 +20,6 @@ import (
 // and both paths.
 func playTabApp(t *testing.T) (Model, string, string) {
 	t.Helper()
-	noDebounce(t)
 	dir := t.TempDir()
 	notes := writeTemp(t, dir, "notes.txt", "notes\n")
 	data := filepath.Join(dir, "data.json")
@@ -56,7 +55,6 @@ func TestPlaygroundKeepsTabBar(t *testing.T) {
 // TestPlaygroundSingleTabKeepsTitle: with one tab and always_show off there is
 // no bar to make room for, so the playground title renders as before.
 func TestPlaygroundSingleTabKeepsTitle(t *testing.T) {
-	noDebounce(t)
 	m := openJQ(t, playApp(t, `{"name":"ike"}`))
 	inst := m.activeWS().Panes.FocusedInstance()
 	if m.paneTabBarShown(inst) {

@@ -144,7 +144,6 @@ func TestPlaygroundOpenFromResponseUnqueryableNotifies(t *testing.T) {
 // unchanged — an open response pane that does *not* have the focus stays out
 // of the way, dialect and input both resolved from the buffer.
 func TestPlaygroundOpenPrefersFocusedEditorOverResponse(t *testing.T) {
-	noDebounce(t)
 	m := filledHTTP(t, sampleResponse("one")) // JSON response, would route to jq
 	path := filepath.Join(t.TempDir(), "doc."+dispatchExt(t, "yaml"))
 	if err := os.WriteFile(path, []byte("tags:\n  - tui\n"), 0o644); err != nil {

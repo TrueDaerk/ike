@@ -241,6 +241,7 @@ func TestGlobalToolAttachKeepsActiveTab(t *testing.T) {
 // everywhere (#1903) while another project is in front; switching back must
 // fall back to a live tab instead of panicking or blanking the pane.
 func TestActiveToolTabSurvivesClosedTool(t *testing.T) {
+	withStore(t)
 	_, b := twoRoots(t)
 	m := globalToolModelWith(t, slotGlobalSettings)
 

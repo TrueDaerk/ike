@@ -42,6 +42,7 @@ func cxIntentionTitles(m Model) []string {
 }
 
 func TestComplexityIntentionItems(t *testing.T) {
+	withStore(t)
 	m, _ := cxIntentionApp(t, 2) // the header of A
 	got := strings.Join(cxIntentionTitles(m), "\n")
 	for _, want := range []string{

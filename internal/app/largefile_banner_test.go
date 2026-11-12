@@ -38,6 +38,7 @@ func largeModel(t *testing.T) (Model, string) {
 
 // TestLargeFileBannerShowsAndDismisses guards #1124.
 func TestLargeFileBannerShowsAndDismisses(t *testing.T) {
+	withStore(t)
 	m, path := largeModel(t)
 	text, _, _, _, ok := m.largeFileBanner()
 	if !ok {
@@ -74,6 +75,7 @@ func TestLargeFileBannerForceRemoves(t *testing.T) {
 
 // TestLargeFileBannerAbsentForNormalFiles guards #1124.
 func TestLargeFileBannerAbsentForNormalFiles(t *testing.T) {
+	withStore(t)
 	largefile.Reset()
 	t.Cleanup(largefile.Reset)
 	m := sizedWith(t, registry.New(), 120, 40)

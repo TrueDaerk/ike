@@ -43,6 +43,7 @@ func TestReplaceOnDiskPreservesEncodingAndEOL(t *testing.T) {
 }
 
 func TestReplaceSkipsFileChangedSinceScan(t *testing.T) {
+	withStore(t)
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "f.txt")
 	if err := os.WriteFile(path, []byte("a needle\n"), 0o644); err != nil {

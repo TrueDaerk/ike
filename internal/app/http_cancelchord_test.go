@@ -26,7 +26,6 @@ import (
 // make the binding resolve to nothing regardless of the table.
 func cancelChordApp(t *testing.T, url string) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	reg := registry.New()
 	reg.Add(appCommands{})
 	m := NewWith(reg, host.MapConfig{})
@@ -172,6 +171,7 @@ func TestHTTPPaneLearnsCancelChord(t *testing.T) {
 // time rather than only that it was slow — and still nothing about the
 // request itself.
 func TestTelemetryHTTPFlightCarriesTiming(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	send := func(ctx context.Context, source, key string, cb httpclient.WSCallbacks) (*httpclient.Response, error) {
 		return nil, nil // never executed: the returned tea.Cmd is not run
@@ -208,6 +208,7 @@ func TestTelemetryHTTPFlightCarriesTiming(t *testing.T) {
 // no breakdown fields at all, rather than six zeros that would read as a
 // suspiciously instant exchange.
 func TestTelemetryHTTPFlightWithoutTiming(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	send := func(ctx context.Context, source, key string, cb httpclient.WSCallbacks) (*httpclient.Response, error) {
 		return nil, nil

@@ -99,6 +99,7 @@ func funcDiffViewer(m Model, key string) (*pane.Instance, bool) {
 }
 
 func TestComplexityFunctionDiffChangedRow(t *testing.T) {
+	withStore(t)
 	m, root, d := funcDiffApp(t)
 	mod := filepath.Join(root, "mod.go")
 	c := d.Files[mod].Changed[0]
@@ -208,6 +209,7 @@ func TestComplexityFunctionDiffAddedRowAndOffsets(t *testing.T) {
 }
 
 func TestComplexityFunctionDiffRanged(t *testing.T) {
+	withStore(t)
 	dir := gitRepo(t)
 	root, err := vcs.DetectRoot(dir)
 	if err != nil {

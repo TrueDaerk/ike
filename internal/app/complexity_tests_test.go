@@ -14,6 +14,7 @@ import (
 // flips them back, and the state survives a layout save / restore beside
 // the grouping.
 func TestComplexityToggleTests(t *testing.T) {
+	withStore(t)
 	m, _ := timeApp(t)
 	m = dismissOnboarding(m)
 	out, _ := m.Update(ComplexityToggleTestsMsg{})

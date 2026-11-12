@@ -225,6 +225,7 @@ func TestHTMLPreviewCursorSync(t *testing.T) {
 // TestHTMLPreviewGzBuffer: an .html.gz opens through the gz viewer as its
 // decompressed page and previews like a plain .html.
 func TestHTMLPreviewGzBuffer(t *testing.T) {
+	withStore(t)
 	p := writeGzFile(t, "site.html.gz", []byte("<html><body><h1>Compressed Page</h1><p>inside the gz</p></body></html>\n"))
 	m := newSized()
 	m = step(m, OpenGzipMsg{Path: p})
@@ -256,6 +257,7 @@ func TestHTMLPreviewGzBuffer(t *testing.T) {
 // TestHTMLPreviewPersistsAndRestores: a saved preview leaf restores as a
 // preview of the same file, re-read from disk (session restore).
 func TestHTMLPreviewPersistsAndRestores(t *testing.T) {
+	withStore(t)
 	m, path := openHTMLFile(t, "<h2>Persisted Page</h2>\n")
 	m = stepHTML(m, HTMLPreviewMsg{})
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
@@ -276,6 +278,7 @@ func TestHTMLPreviewPersistsAndRestores(t *testing.T) {
 // TestHTMLPreviewTabPersistsAndRestores: a preview merged into the editor's
 // tab strip survives the session as a content tab.
 func TestHTMLPreviewTabPersistsAndRestores(t *testing.T) {
+	withStore(t)
 	m, path := openHTMLFile(t, "<p>Tabbed Page</p>\n")
 	edKey := m.activeWS().Panes.Focused()
 	m = stepHTML(m, HTMLPreviewMsg{})

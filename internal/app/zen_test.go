@@ -92,6 +92,7 @@ func TestZenCommandRegistered(t *testing.T) {
 // Zen works for any focused pane kind (#934), not only editors.
 
 func TestZenOnTerminalPane(t *testing.T) {
+	withStore(t)
 	m, key := openTestTerminal(t)
 	m = dispatch(t, m, ZenModeMsg{})
 	if !m.zen || m.zoomed != key {
@@ -154,6 +155,7 @@ func TestZenOnTerminalDropsOnTreeMutation(t *testing.T) {
 // on and — crucially — back off while the terminal keeps focus (no stuck
 // chrome-hidden state).
 func TestZenChordFromTerminal(t *testing.T) {
+	withStore(t)
 	m := sizedWith(t, registry.Global(), 100, 40)
 	out, _ := m.Update(TerminalNewMsg{})
 	m = out.(Model)

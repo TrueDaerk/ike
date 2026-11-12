@@ -27,7 +27,7 @@ func newWithSettings(t *testing.T, toml string) Model {
 	if err := os.WriteFile(filepath.Join(cfgDir, "settings.toml"), []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	os.Setenv("IKE_CONFIG_DIR", cfgDir)
+	t.Setenv("IKE_CONFIG_DIR", cfgDir)
 	m := New()
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	return tm.(Model)

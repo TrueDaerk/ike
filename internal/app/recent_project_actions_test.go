@@ -101,6 +101,7 @@ func TestRecentProjectsColumnMarksOpenProjects(t *testing.T) {
 // project down as a timed project.close op, keeps the active project and the
 // dialog, and leaves the row listed without its marker.
 func TestRecentRowCloseClosesWithoutSwitching(t *testing.T) {
+	withStore(t)
 	m, alpha, _ := recentRowsFixture(t)
 	active := m.activeWS().Root
 
@@ -140,6 +141,7 @@ func TestRecentRowCloseGlobalChord(t *testing.T) {
 
 // TestRecentRowCloseOnClosedProjectIsNoop: a closed row has nothing to close.
 func TestRecentRowCloseOnClosedProjectIsNoop(t *testing.T) {
+	withStore(t)
 	m, _, _ := recentRowsFixture(t)
 	m = pressRecentRow(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
 	if it, _ := m.recentProjectRow(); it.Title != "gamma" {
@@ -158,6 +160,7 @@ func TestRecentRowCloseOnClosedProjectIsNoop(t *testing.T) {
 // TestRecentRowRemoveRefusedForOpenProject: forgetting an open project is
 // refused with a notice; the workspace and its history entry stay.
 func TestRecentRowRemoveRefusedForOpenProject(t *testing.T) {
+	withStore(t)
 	m, alpha, _ := recentRowsFixture(t)
 	out, cmd := m.Update(removeRowKey)
 	m = out.(Model)
@@ -179,6 +182,7 @@ func TestRecentRowRemoveRefusedForOpenProject(t *testing.T) {
 // TestRecentRowRemoveForgetsClosedProject: on a closed row the remove chord
 // deletes the history entry.
 func TestRecentRowRemoveForgetsClosedProject(t *testing.T) {
+	withStore(t)
 	m, _, gamma := recentRowsFixture(t)
 	m = pressRecentRow(t, m, tea.KeyPressMsg{Code: tea.KeyDown})
 	out, cmd := m.Update(removeRowKey)
@@ -201,6 +205,7 @@ func TestRecentRowRemoveForgetsClosedProject(t *testing.T) {
 // TestRecentRowChordsFallThroughElsewhere: off a recent project row the
 // chords are not the row actions — the palette keeps them (query editing).
 func TestRecentRowChordsFallThroughElsewhere(t *testing.T) {
+	withStore(t)
 	m, _, _ := recentRowsFixture(t)
 	m.palette.Open(m.paletteContext())
 	if _, ok := m.recentProjectRow(); ok {

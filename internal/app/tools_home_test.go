@@ -132,6 +132,7 @@ func TestToolHomeOccupiedSlotAddsTab(t *testing.T) {
 // rewrites the configured home — after closing it, the next open docks at the
 // configured edge again.
 func TestToolHomeMoveThenReopen(t *testing.T) {
+	withStore(t)
 	withTools(t, homeTool("watcher", "bottom"))
 	m := sized(t, 100, 40)
 	out, _ := m.Update(ToolOpenMsg{Name: "watcher"})

@@ -131,6 +131,7 @@ func dragPane(t *testing.T, m Model, key string, x, y int) Model {
 // dragged elsewhere, closing it and running again brings it back *there*, not
 // at the configured placement.
 func TestRunHomeFollowsUserMove(t *testing.T) {
+	withStore(t)
 	m := runModel(t, "bottom")
 	tm, _ := m.Update(RunFileMsg{})
 	m = tm.(Model)
@@ -173,6 +174,7 @@ func TestRunHomeFollowsUserMove(t *testing.T) {
 // strip (#811) is remembered as a full-span dock, not as a split off whichever
 // leaf happened to touch it.
 func TestRunHomeFollowsOuterDock(t *testing.T) {
+	withStore(t)
 	m := runModel(t, "bottom")
 	tm, _ := m.Update(RunFileMsg{})
 	m = tm.(Model)

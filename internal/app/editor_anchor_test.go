@@ -132,6 +132,7 @@ func TestOpenFileWithNoEditorLandsInIssuesArea(t *testing.T) {
 // held by the explorer alone (`E` over `C | L | H`), the editor splits the
 // explorer at the saved share of the row — the explorer keeps its width.
 func TestOpenFileWithNoEditorAndEmptySlotSplitsAtHopLevel(t *testing.T) {
+	withStore(t)
 	m, _, _ := issue3109Model(t)
 	defer closeLeafTerminals(m)
 	m.closePane(pane.IssuesKey)
@@ -195,6 +196,7 @@ func TestDebugWithNoEditorOpensInFlexibleRegion(t *testing.T) {
 // bottom home still joins the layout's tool strip under the editor (#2191
 // unchanged).
 func TestRunWithEditorKeepsBottomDock(t *testing.T) {
+	withStore(t)
 	m, _, _ := issue3109Model(t)
 	defer closeLeafTerminals(m)
 	m.closePane(pane.IssuesKey)

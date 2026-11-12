@@ -34,6 +34,7 @@ func flexSnapshot(t *testing.T) persistedLayout {
 }
 
 func TestSaveLayoutOpensSelectionThenPrompt(t *testing.T) {
+	withStore(t)
 	m := sized(t, 100, 40)
 	m = step(m, SaveLayoutPromptMsg{})
 	if !m.layoutSelectOpen() {
@@ -64,6 +65,7 @@ func TestSaveLayoutOpensSelectionThenPrompt(t *testing.T) {
 }
 
 func TestSaveLayoutSelectionTogglesAndGuardsEmpty(t *testing.T) {
+	withStore(t)
 	m := sized(t, 100, 40) // explorer + editor
 	m = step(m, SaveLayoutPromptMsg{})
 	// Deselect everything: enter must refuse.
@@ -112,6 +114,7 @@ func TestSaveLayoutSelectionTogglesAndGuardsEmpty(t *testing.T) {
 }
 
 func TestSaveLayoutSelectionEscCancels(t *testing.T) {
+	withStore(t)
 	m := sized(t, 100, 40)
 	m = step(m, SaveLayoutPromptMsg{})
 	m = step(m, tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -124,6 +127,7 @@ func TestSaveLayoutSelectionEscCancels(t *testing.T) {
 }
 
 func TestLayoutSelectClickTogglesPane(t *testing.T) {
+	withStore(t)
 	m := sized(t, 100, 40)
 	m = step(m, SaveLayoutPromptMsg{})
 	if !m.layoutSelectOpen() {
@@ -155,6 +159,7 @@ func TestLayoutSelectClickTogglesPane(t *testing.T) {
 }
 
 func TestLayoutSelectBodyMarksSelectionAndFillsWidth(t *testing.T) {
+	withStore(t)
 	m := sized(t, 100, 40)
 	m = step(m, SaveLayoutPromptMsg{})
 	body := m.layoutSelectBody(72)
@@ -213,6 +218,7 @@ func TestSnapshotLayoutSelectedKeepsFlexAtLargestRegion(t *testing.T) {
 }
 
 func TestApplyFlexLayoutSpreadsUnsavedPanes(t *testing.T) {
+	withStore(t)
 	dir := t.TempDir()
 	pa := filepath.Join(dir, "a.txt")
 	pb := filepath.Join(dir, "b.txt")
@@ -256,6 +262,7 @@ func TestApplyFlexLayoutSpreadsUnsavedPanes(t *testing.T) {
 }
 
 func TestApplyFlexLayoutWithNothingLeftOverAddsScratch(t *testing.T) {
+	withStore(t)
 	m := sized(t, 100, 40) // explorer + one empty editor
 	// A flex layout pinning only the explorer: the sole editor is unconsumed
 	// and flows into the region; closing it first leaves nothing to graft.
@@ -277,7 +284,7 @@ func TestApplyFlexLayoutWithNothingLeftOverAddsScratch(t *testing.T) {
 }
 
 func TestRestoreFlexDefaultLayoutAtStartup(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	saveUserLayouts(savedLayouts{Layouts: map[string]persistedLayout{"flex": flexSnapshot(t)}, Default: "flex"})
 	m := New() // fresh project: the flex default materializes
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})

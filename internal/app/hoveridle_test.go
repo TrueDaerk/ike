@@ -24,7 +24,6 @@ import (
 // pane's rect and its gutter width.
 func hoverIdleModel(t *testing.T) (Model, layout.Rect, int) {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.New(), host.MapConfig{"editor.line_numbers": "true"})
 	out0, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m = out0.(Model)
@@ -53,6 +52,7 @@ func contentCell(r layout.Rect, gw, line, col int) (x, y int) {
 }
 
 func TestMouseHoverIdleArmsOncePerCell(t *testing.T) {
+	withStore(t)
 	m, r, gw := hoverIdleModel(t)
 	x, y := contentCell(r, gw, 0, 2)
 	m = step(m, motion(x, y))

@@ -21,6 +21,7 @@ import (
 // "palette.dismiss" event (#2408 moved it off the pseudo-command #2399 used)
 // carrying the mode and the typed query length.
 func TestRecentDismissRecordsTelemetry(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	tm, _ := m.Update(ShowRecentFilesMsg{})
 	m = tm.(Model)
@@ -55,6 +56,7 @@ func TestRecentDismissRecordsTelemetry(t *testing.T) {
 // reports its dismissals, each stamped with its own prefix — the command
 // palette's esc must not be filed as a recent-files one.
 func TestOtherPaletteDismissalsRecordTheirMode(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	m.palette.SetSize(100, 40)
 	m.palette.Open(palette.Context{})
@@ -141,6 +143,7 @@ func TestRecentRankingSetting(t *testing.T) {
 // command still opens the palette locked to the recent-files mode, so the
 // #2399 additions ride on the same open.
 func TestRecentPaletteOpensLocked(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	tm, _ := m.Update(ShowRecentFilesMsg{})
 	m = tm.(Model)

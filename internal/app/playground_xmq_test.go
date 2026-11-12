@@ -37,7 +37,6 @@ func fakeXMQOnPath(t *testing.T) {
 // xmqApp opens body as an .xml (or .html) file in the focused editor.
 func xmqApp(t *testing.T, ext, body string) Model {
 	t.Helper()
-	noDebounce(t)
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "data."+ext)
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
@@ -129,7 +128,6 @@ func TestXMQPlaygroundErrorKeepsLastResult(t *testing.T) {
 // TestXMQMissingBinaryDialog: without a binary anywhere the open answers with
 // the centered install-hint dialog instead of mounting a broken mode.
 func TestXMQMissingBinaryDialog(t *testing.T) {
-	noDebounce(t)
 	t.Setenv("PATH", t.TempDir())
 	jqplay.SetXMQPath("")
 	m := xmqApp(t, "xml", "<r/>\n")

@@ -218,7 +218,7 @@ func TestBreadcrumbGeometryContentClick(t *testing.T) {
 
 func TestBreadcrumbConfigToggleLive(t *testing.T) {
 	cfg := host.MapConfig{}
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := NewWith(registry.New(), cfg)
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m = out.(Model)

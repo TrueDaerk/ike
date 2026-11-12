@@ -41,6 +41,7 @@ func (m Model) atPosition(t *testing.T, path string, line int) Model {
 }
 
 func TestNavBackForwardAcrossJumps(t *testing.T) {
+	withStore(t)
 	_, files := navProject(t)
 	m := newSized()
 
@@ -94,6 +95,7 @@ func TestNavSameFileLineJumpRecords(t *testing.T) {
 }
 
 func TestNavFreshJumpTruncatesForward(t *testing.T) {
+	withStore(t)
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)

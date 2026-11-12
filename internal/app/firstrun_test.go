@@ -41,6 +41,7 @@ func runReload(t *testing.T, m Model, cmd tea.Cmd) Model {
 }
 
 func TestFirstRunTourThenLSPDialogThenNeverAgain(t *testing.T) {
+	withStore(t)
 	onboardLang(t, "frgo")
 	m, cmd := firstRunSeed(t)
 	if !m.tourOpen() {

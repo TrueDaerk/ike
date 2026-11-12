@@ -96,7 +96,7 @@ func TestRecentFilesTouchStampsTime(t *testing.T) {
 }
 
 func TestSessionRoundTripsRecentFiles(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	ts := time.Date(2026, 7, 24, 9, 30, 0, 0, time.UTC)
 	saveSession(sessionState{RecentFiles: recentFileList{
 		{Path: "x.go", TS: ts},
@@ -142,6 +142,7 @@ func TestSessionLoadsLegacyRecentFilesShape(t *testing.T) {
 // TestRemoveRecentFileMsgRemovesAndPersists (#1113): the palette's aux action
 // drops the entry from the MRU store and persists the session immediately.
 func TestRemoveRecentFileMsgRemovesAndPersists(t *testing.T) {
+	withStore(t)
 	m := sized(t, 100, 40)
 	m.recent.Touch("a.go")
 	m.recent.Touch("b.go")
@@ -160,7 +161,7 @@ func TestRemoveRecentFileMsgRemovesAndPersists(t *testing.T) {
 // TestSessionSaveRestoreCycleKeepsMRU (#1112): the regression the bug report
 // asks for — a full save/load/Set cycle keeps the MRU across "sessions".
 func TestSessionSaveRestoreCycleKeepsMRU(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	r := &recentFiles{}
 	r.Touch("a.go")
 	r.Touch("b.go")

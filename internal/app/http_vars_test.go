@@ -71,6 +71,7 @@ func TestHTTPVarDiagnosticsFlagsEveryOccurrence(t *testing.T) {
 // TestHTTPVarsLintMarksTheBuffer: the editor-level path — an open file with a
 // typo'd reference carries a warning, and fixing the definition clears it.
 func TestHTTPVarsLintMarksTheBuffer(t *testing.T) {
+	withStore(t)
 	m := httpApp(t)
 	path := httpVarFile(t, "@host = https://x.test\nGET {{hsot}}/a\n", nil)
 	out, _ := m.Update(explorer.OpenFileMsg{Path: path})

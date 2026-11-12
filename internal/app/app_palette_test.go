@@ -32,7 +32,7 @@ func (palettePlugin) Capabilities() plugin.Capabilities {
 func TestPaletteToggleKeyOpens(t *testing.T) {
 	// The toggle chord defaults to empty (#523: ctrl+p belongs to
 	// lsp.parameterInfo); a configured key still opens the palette.
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := NewWith(registry.New(), host.MapConfig{"palette.toggle_key": "ctrl+g"})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m = out.(Model)
@@ -62,7 +62,7 @@ func TestPaletteToggleKeyDefaultsEmpty(t *testing.T) {
 }
 
 func TestPaletteRunCommandMsgRunsCommand(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	reg := registry.New()
 	reg.Add(palettePlugin{})
 	m := NewWith(reg, host.MapConfig{})

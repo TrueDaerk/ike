@@ -65,6 +65,7 @@ func TestAllFindProjectsMapsHistory(t *testing.T) {
 // confirm: the form closes (editor regains the keyboard), the scan starts
 // with a fresh generation, and the state persists to the user layer.
 func TestAllFindConfirmStartsBackgroundScanAndPersists(t *testing.T) {
+	withStore(t)
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "a.go"), []byte("needle\n"), 0o644); err != nil {
 		t.Fatal(err)

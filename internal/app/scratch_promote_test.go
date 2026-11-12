@@ -41,6 +41,7 @@ func promoteTo(m Model, target string) Model {
 // lands at the chosen path, the store entry is gone, and the open tab now
 // works on the real file — so the next save writes there, not into the store.
 func TestPromoteScratchWritesFileAndRepointsTab(t *testing.T) {
+	withStore(t)
 	m := promoteApp(t, "keep me\n")
 	src := m.promotePath
 	if filepath.Base(m.promoteInput.Text) != filepath.Base(src) {
@@ -78,6 +79,7 @@ func TestPromoteScratchWritesFileAndRepointsTab(t *testing.T) {
 // TestPromoteScratchFlushesDirtyBuffer: unsaved edits go with the file, so the
 // promoted result is what the user sees rather than the last written state.
 func TestPromoteScratchFlushesDirtyBuffer(t *testing.T) {
+	withStore(t)
 	m := dispatch(t, newSized(), NewScratchMsg{Ext: "sct", Content: "old\n"})
 	// Type a line in insert mode, then leave it unsaved.
 	m = drainKey(m, tea.KeyPressMsg{Code: 'i', Text: "i"})
@@ -105,6 +107,7 @@ func TestPromoteScratchFlushesDirtyBuffer(t *testing.T) {
 // TestPromoteScratchRefusesExistingTarget is the no-clobber AC: the prompt
 // stays open with the reason, the target keeps its content, the scratch stays.
 func TestPromoteScratchRefusesExistingTarget(t *testing.T) {
+	withStore(t)
 	m := promoteApp(t, "mine\n")
 	src := m.promotePath
 	target := filepath.Join(t.TempDir(), "taken.sct")
@@ -130,6 +133,7 @@ func TestPromoteScratchRefusesExistingTarget(t *testing.T) {
 // TestPromoteScratchWriteErrorKeepsStoreEntry: a target that cannot be created
 // leaves the store entry and the open tab exactly as they were.
 func TestPromoteScratchWriteErrorKeepsStoreEntry(t *testing.T) {
+	withStore(t)
 	m := promoteApp(t, "mine\n")
 	src := m.promotePath
 	blocker := filepath.Join(t.TempDir(), "blocker")
@@ -152,6 +156,7 @@ func TestPromoteScratchWriteErrorKeepsStoreEntry(t *testing.T) {
 
 // TestPromoteScratchEmptyPathRefused: enter on an empty line asks again.
 func TestPromoteScratchEmptyPathRefused(t *testing.T) {
+	withStore(t)
 	m := promoteApp(t, "mine\n")
 
 	m = promoteTo(m, "   ")
@@ -165,6 +170,7 @@ func TestPromoteScratchEmptyPathRefused(t *testing.T) {
 
 // TestPromoteScratchEscapeCancels: nothing moves and the prompt closes.
 func TestPromoteScratchEscapeCancels(t *testing.T) {
+	withStore(t)
 	m := promoteApp(t, "mine\n")
 	src := m.promotePath
 
@@ -217,6 +223,7 @@ func TestPromoteTargetIsRelativeToProjectRoot(t *testing.T) {
 // and opens the prompt for the marked scratch, so the manager's row is the
 // subject rather than whatever happens to be focused behind it.
 func TestScratchManagerPromoteHandsOffSelection(t *testing.T) {
+	withStore(t)
 	m := newSized()
 	paths := smSeed(t, "sct", "sct")
 	m = openManager(t, m)

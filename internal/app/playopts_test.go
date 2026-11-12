@@ -165,6 +165,7 @@ func TestPlayChipsHiddenForXMQ(t *testing.T) {
 // TestPlayTogglesCopyAndScratch: copy and open-as-scratch write the toggled
 // form, the raw one into a `.txt` scratch.
 func TestPlayTogglesCopyAndScratch(t *testing.T) {
+	withStore(t)
 	m := openJQ(t, playApp(t, `{"tags":["a","b"]}`))
 	m = setProgram(m, ".tags[]")
 	m = toggleOpt(m, PlayOptRaw)

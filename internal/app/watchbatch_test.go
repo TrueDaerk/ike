@@ -55,6 +55,7 @@ func TestWatchBatchRoutesEveryEvent(t *testing.T) {
 // command reads the local-history snapshot and lands it via
 // changeFeedCapturedMsg.
 func TestWatchBatchDefersSnapshotCapture(t *testing.T) {
+	withStore(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("saved by ike\n"), 0o644); err != nil {

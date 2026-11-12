@@ -93,7 +93,6 @@ func TestSwitchMRUFollowsGroupOrder(t *testing.T) {
 // TestActiveProjectGroupWithoutMarker is the no-group case both halves rest
 // on: no marker, the zero group, no reordering and no badge.
 func TestActiveProjectGroupWithoutMarker(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	prev := config.Get()
 	cfg := *prev
 	cfg.Project.ActiveGroup = ""

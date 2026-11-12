@@ -86,6 +86,7 @@ func TestHTTPWSSendWithoutSession(t *testing.T) {
 // TestTelemetryHTTPFlightWSKindAndFrames: a websocket flight's end op carries
 // kind=ws and the frame count (#2422) — structural only.
 func TestTelemetryHTTPFlightWSKindAndFrames(t *testing.T) {
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	m = wsFlightModel(t, m)
 	tm, _ := m.Update(HTTPResponseMsg{Source: "a.http", Request: "ws",

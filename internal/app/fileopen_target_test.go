@@ -75,6 +75,7 @@ func TestOpenPathOutsideWorkspace(t *testing.T) {
 // TestFileOpenSkipsDedicatedTerminal: with a dedicated terminal pane focused,
 // a file open lands in an editor pane and the terminal pane survives as-is.
 func TestFileOpenSkipsDedicatedTerminal(t *testing.T) {
+	withStore(t)
 	m, key := openTestTerminal(t)
 	path := tmpFile(t, "b.txt", "world\n")
 	out, _ := m.openPath(path, false)

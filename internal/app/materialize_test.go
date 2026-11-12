@@ -55,6 +55,7 @@ func scratchDir(t *testing.T) string {
 // its text is what the file holds — which is what makes the LSP `didOpen`
 // wiring bindUntitled performs meaningful.
 func TestMaterializeBindsBufferToScratchFile(t *testing.T) {
+	withStore(t)
 	m := typedBuffer(t, "json", `{"a": 1}`)
 	dir := scratchDir(t)
 
@@ -119,6 +120,7 @@ func TestMaterializeSavesUnderRealNameAfterwards(t *testing.T) {
 // in: no type chosen, a type with no extension, and a buffer that already has
 // a file. None of them may leave a file behind.
 func TestMaterializeRefusals(t *testing.T) {
+	withStore(t)
 	t.Run("untyped buffer", func(t *testing.T) {
 		m := filelessModel(t, "some pasted text", 0, 0)
 		dir := scratchDir(t)
@@ -169,6 +171,7 @@ func assertNoScratch(t *testing.T, dir string) {
 // command creates is one the scratch panel lists (and can delete), not a
 // second temp store nobody cleans up.
 func TestMaterializeUsesScratchStore(t *testing.T) {
+	withStore(t)
 	m := typedBuffer(t, "yaml", "a: 1")
 	out, _ := m.Update(MaterializeBufferMsg{})
 	m = out.(Model)
@@ -216,7 +219,6 @@ func TestTypedBufferOffersPlaygroundAndMaterialize(t *testing.T) {
 // command opens over the file-less buffer and queries its content — no save,
 // no copy into a scratch first.
 func TestTypedBufferOpensPlaygroundOverItsOwnText(t *testing.T) {
-	noDebounce(t)
 	m := typedBuffer(t, "json", `{"foo":[{"bar":1},{"bar":4}]}`)
 	tm, cmd := m.Update(OpenPlaygroundMsg{})
 	m = drainCmd(tm.(Model), cmd)

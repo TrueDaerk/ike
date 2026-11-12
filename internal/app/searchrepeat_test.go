@@ -172,6 +172,7 @@ func TestMatchStepRecencyBetweenInFileAndFindInPath(t *testing.T) {
 // P1, baz in P2 — and a switch back repeats the project's own query in a
 // fresh editor.
 func TestLastSearchKeptPerProject(t *testing.T) {
+	withStore(t)
 	a, b := twoProjects(t)
 	m := dismissOnboarding(switchModel(t))
 	write := func(dir, name, body string) string {
