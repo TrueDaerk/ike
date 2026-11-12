@@ -237,6 +237,14 @@ type Model struct {
 	scrCollapsed bool
 	scrHeight    int  // section body rows when expanded (drag-adjustable)
 	scrDragMoved bool // the active divider drag moved (release must not toggle)
+	// Section multi-select (#3138, marks.go): the Scratches section's own
+	// sticky marks (by path) and shift+j/k range anchor (section-local index,
+	// -1 = none). They are deliberately separate from the tree's marks and
+	// selAnchor, so an operation only ever consumes the selection of the
+	// section it was started in — tree marks never reach a scratch delete
+	// and scratch marks never reach a tree operation.
+	scrMarks     map[string]bool
+	scrSelAnchor int
 	// scrOpened is the last-opened time per path behind the section's
 	// right-aligned age column (#1965), pushed in by the app from its MRU
 	// store. A path the store never saw falls back to the file's mtime.
@@ -261,24 +269,25 @@ func New(dir string) Model {
 		loading:  true,
 	}
 	m := Model{
-		root:        root,
-		hover:       -1,
-		indent:      2,
-		sort:        "name",
-		exclude:     defaultExclude(),
-		excludeCfg:  strings.Join(defaultExclude(), ","),
-		colors:      defaultColors(),
-		selAnchor:   -1,
-		now:         time.Now,
-		autoRefresh: true,
-		hMarks:      true,
-		pollEvery:   2 * time.Second,
-		wcache:      &widthCache{},
-		scrEnabled:  true,
-		scrSort:     "name",
-		scrHeight:   defaultScratchHeight,
-		scrCursor:   -1,
-		scrHover:    -1,
+		root:         root,
+		hover:        -1,
+		indent:       2,
+		sort:         "name",
+		exclude:      defaultExclude(),
+		excludeCfg:   strings.Join(defaultExclude(), ","),
+		colors:       defaultColors(),
+		selAnchor:    -1,
+		now:          time.Now,
+		autoRefresh:  true,
+		hMarks:       true,
+		pollEvery:    2 * time.Second,
+		wcache:       &widthCache{},
+		scrEnabled:   true,
+		scrSort:      "name",
+		scrHeight:    defaultScratchHeight,
+		scrCursor:    -1,
+		scrHover:     -1,
+		scrSelAnchor: -1,
 	}
 	m.rebuildColorIndex()
 	m.rebuild()
@@ -842,6 +851,7 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	case ClearMarksMsg:
 		m.clearSel()
 		m.clearMarks()
+		m.clearScratchMarks()
 		return m, nil
 	case MoveSelectionMsg:
 		m.promptMove()
@@ -936,9 +946,11 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 			return m, nil
 		case "esc":
 			// Esc clears both selections — the transient range and the
-			// sticky marks (#2166) — and never moves the cursor.
+			// sticky marks (#2166), in the tree and in the Scratches
+			// section (#3138) — and never moves the cursor.
 			m.clearSel()
 			m.clearMarks()
+			m.clearScratchMarks()
 			return m, nil
 		}
 		m.clearSel()
@@ -1026,13 +1038,14 @@ func (m *Model) current() *node {
 
 // extendSel grows the contiguous selection (#1044) by one shifted motion:
 // the first extension anchors at the current cursor row, then the cursor
-// moves, so the selection is always the anchor..cursor range. The Scratches
-// section (#1963) has no multi-select — permanent deletes must stay
-// one-at-a-time deliberate — so there a shifted motion moves plainly, and a
-// tree range never extends past the last tree row.
+// moves, so the selection is always the anchor..cursor range. In the
+// Scratches section (#1963) the same gesture builds the section's own range
+// (#3138, scrSelAnchor); a range never crosses the divider — a tree range
+// stops at the last tree row, a section range at the first scratch — so the
+// selection an operation consumes always belongs to one section.
 func (m *Model) extendSel(delta int) {
 	if m.inScratch() {
-		m.stepCursor(delta)
+		m.extendScratchSel(delta)
 		return
 	}
 	if len(m.rows) == 0 {
@@ -1046,7 +1059,8 @@ func (m *Model) extendSel(delta int) {
 }
 
 // clearSel collapses the multi-select range back to the bare cursor.
-func (m *Model) clearSel() { m.selAnchor = -1 }
+// Both sections' ranges collapse together: any plain motion ends either.
+func (m *Model) clearSel() { m.selAnchor, m.scrSelAnchor = -1, -1 }
 
 // selRange returns the inclusive visible-row bounds of the active contiguous
 // selection (anchor..cursor, either direction); ok is false when none is
@@ -2194,7 +2208,7 @@ func (m Model) MouseClick(x, y int) (Model, tea.Cmd) {
 func (m *Model) ShiftClick(x, y int) {
 	textW, textH, _, _, _ := m.viewport()
 	if x < 0 || y < 0 || x >= textW || y >= textH {
-		return // section rows (#1963) have no multi-select to extend into
+		return // shift+click stays a tree gesture; the section ranges via shift+j/k (#3138)
 	}
 	i := m.offset + y
 	if i >= len(m.rows) {
@@ -2227,6 +2241,12 @@ func (m *Model) ContextClick(x, y int) bool {
 		// A right-click on a Scratches row (#1963) selects it so the menu's
 		// path-driven actions target the scratch; the divider gets no menu.
 		if i, ok := m.scratchIndexAt(y); ok && x >= 0 && x < m.width {
+			if m.inScratchSelRange(i) {
+				// Inside the section range (#3138) the menu's Delete acts on
+				// the whole range, as in the tree.
+				m.resetClick()
+				return true
+			}
 			m.clearSel()
 			m.scrCursor = i
 			m.followScratchCursor()

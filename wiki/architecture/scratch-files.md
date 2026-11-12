@@ -4,7 +4,7 @@ title: Scratch Files
 description: JetBrains-style scratch buffers — language-aware quick files under the user state dir, created from the palette (curated language rows plus a free "Custom…" extension), from the active selection or generated as synthetic test data in nine formats, managed from a floating manager and the explorer's Scratches section (open, rename, delete, change language, promote to a project file), surviving restarts as ordinary files.
 resource: internal/scratch
 tags: [architecture, scratch, palette, languages, explorer, testdata]
-timestamp: 2026-08-31T18:00:00Z
+timestamp: 2026-11-12T12:00:00Z
 ---
 
 # Scratch Files
@@ -556,7 +556,12 @@ short version:
   `scratch.Delete` / `scratch.Rename` and announce the standard
   `FileDeletedMsg` / `FileMovedMsg`, so open tabs close or re-point exactly
   like a tree delete/rename. Scratch deletes are permanent (the store has no
-  trash), which is also why the section has no multi-select delete.
+  trash).
+- **Multi-select delete** (#3138): `space` marks scratches and `shift+j/k`
+  ranges over them, exactly like in the tree; the delete key then removes all
+  of them after one confirmation listing every target by name, each through
+  `scratch.Delete`, and closes their open tabs. Section and tree selections
+  never mix. Rename and copy/cut/paste stay single-entry.
 - **`n` delegates to `scratch.new`**: the store owns naming and templates, so
   the explorer's new-file affordance opens the language picker.
 - **Scrolls like the tree** (#1965): the cursor pulls the section's window

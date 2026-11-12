@@ -61,7 +61,8 @@ func (m *Model) ContextRow() (x, y int, ok bool) {
 
 // OpTargetPaths returns the entries a file operation acts on — the marked
 // entries, else the shift range, else the cursor entry — and whether that is
-// a multi-select. It is empty on the Scratches section and on the root.
+// a multi-select. It is empty on the Scratches section (its own marks and
+// range only feed the section delete, #3138) and on the root.
 func (m Model) OpTargetPaths() (paths []string, bulk bool) {
 	ts, bulk := m.opTargets()
 	for _, t := range ts {
