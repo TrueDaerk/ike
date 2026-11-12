@@ -1,5 +1,19 @@
 # Log
 
+## 2026-11-12 (Tests: `internal/app` runs in parallel, #3135)
+
+- [Change Workflow](/process/change-workflow.md): every `internal/app` test
+  opens with `t.Parallel()` or a `// serial: <why>` line (sweep guard
+  `TestEveryTestIsParallelOrSaysWhy`); a test model has no state store unless
+  the test takes one with `withStore(t)`, which is what lets models overlap;
+  `TestMain` sets the short delays once and keeps missing language servers
+  from launching toolchain probes. Hardened on the way, since models are now
+  built concurrently: the registry's plugin switches, the keymap probe
+  verdicts, the popup/float terminal key counters and the host's sender are
+  synchronised; `foregroundPgrp` no longer races the pty close and
+  `closeEmulator` no longer races a trailing resize replay; `theme.Builtins`
+  builds the set once instead of on every registry lookup.
+
 ## 2026-11-11 (Layout: file open beside a flexible-region viewer, #3131)
 
 - [Pane Layout & Drag](/architecture/pane-layout.md): with no text editor

@@ -25,6 +25,8 @@
 # finishes in well under a minute of test time. Every test must therefore
 # leave the process as it found it (cwd, env, package-level seams) — the
 # order-dependence a shard exposes is a bug in the test, not in the shard.
+# Inside a shard the tests that touch no process-wide state run in parallel
+# (t.Parallel, #3135); the rest say why they are serial.
 #
 # Caching: .github/actions/setup-go restores the newest Go build and module
 # caches saved for the same OS and job kind, and the jobs save a fresh one on
