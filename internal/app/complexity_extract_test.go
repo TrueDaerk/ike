@@ -110,9 +110,7 @@ func TestComplexityExtractSameFileDuplicates(t *testing.T) {
 	if !hasToast(m, "applied the agent's diff extracting the 2 duplicates of lines 4–8 of ") || !hasToast(m, "x1.jsonl") {
 		t.Errorf("toasts = %v", toastTexts(m))
 	}
-	if body := newestExtractScratch(t); !strings.Contains(body, "# Extract 2 duplicates of lines 4–8\n") || !strings.Contains(body, ": lines 4–8, 12–16 — 60 tokens each") {
-		t.Errorf("scratch = %s", body)
-	}
+	cxAssertNoScratch(t, m)
 	if len(m.cxAgent.running) != 0 {
 		t.Error("the slot must be free again")
 	}
@@ -216,9 +214,7 @@ func TestComplexityExtractMultiFileDuplicates(t *testing.T) {
 	if !hasToast(m, "extracting the 2 duplicates of a.go:4–8 across 2 files into a shared helper — changed ") || !hasToast(m, "u in each buffer reverts") {
 		t.Errorf("toasts = %v", toastTexts(m))
 	}
-	if body := newestExtractScratch(t); !strings.Contains(body, "Occurrences: "+displayPath(fa)+":4–8, "+displayPath(fb)+":4–8 — 60 tokens each") || !strings.Contains(body, "> Applied to the buffers of ") {
-		t.Errorf("scratch = %s", body)
-	}
+	cxAssertNoScratch(t, m)
 	// One u per buffer reverts its part.
 	m = drainKey(m, tea.KeyPressMsg{Code: 'u', Text: "u"})
 	if got := m.editorForPath(fa).Text(); got != strings.TrimSuffix(cxExtractA, "\n") {
@@ -250,7 +246,8 @@ func TestComplexityExtractMultiFilePartialMissAppliesNothing(t *testing.T) {
 	if ed := m.activeEditor(); ed == nil || filepath.Ext(ed.Path()) != ".md" {
 		t.Fatal("the scratch must open in front")
 	}
-	if body := newestExtractScratch(t); !strings.Contains(body, "does not apply cleanly to the buffer of "+displayPath(fb)) {
+	if body := newestExtractScratch(t); !strings.Contains(body, "does not apply cleanly to the buffer of "+displayPath(fb)) ||
+		!strings.Contains(body, "Occurrences: "+displayPath(fa)+":4–8, "+displayPath(fb)+":4–8 — 60 tokens each") {
 		t.Errorf("scratch = %s", body)
 	}
 }
@@ -293,4 +290,18 @@ func newestExtractScratch(t *testing.T) string {
 		t.Fatal("no extract scratch was written")
 	}
 	return best
+}
+
+// TestCxAgentScratchSameFileExtractHeader pins the header of a same-file
+// extract scratch, which only a non-applied answer writes since #3137.
+func TestCxAgentScratchSameFileExtractHeader(t *testing.T) {
+	t.Parallel()
+	req := complexitypanel.AskAgentMsg{Name: "2 duplicates of lines 4–8", Path: "/p/a.go", Tokens: 60,
+		Dup: []complexity.Occurrence{{Path: "/p/a.go", Line: 3, EndLine: 7}, {Path: "/p/a.go", Line: 11, EndLine: 15}}}
+	body := cxAgentScratch{req: req, answer: "Why.", model: "sonnet", note: "Nothing was applied."}.body()
+	for _, part := range []string{"# Extract 2 duplicates of lines 4–8\n", ": lines 4–8, 12–16 — 60 tokens each", "Model: sonnet", "> Nothing was applied."} {
+		if !strings.Contains(body, part) {
+			t.Errorf("scratch lacks %q:\n%s", part, body)
+		}
+	}
 }

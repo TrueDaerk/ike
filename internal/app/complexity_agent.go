@@ -34,11 +34,13 @@ import (
 // With complexity.agent_apply on (#3009, the default) the answer's unified
 // diff is applied to the function's open buffer (opened when needed) as one
 // undoable edit — dirty, unsaved, never through git — the editor jumps to
-// the function, the scratch with the agent's explanation opens in a
-// background tab, and a notification reports the CCN / cognitive before →
-// after, re-measured from the buffer. A hunk that does not match applies
-// nothing and opens the scratch in front. Off restores the scratch-only
-// behaviour of #2964.
+// the function and a notification reports the CCN / cognitive before →
+// after, re-measured from the buffer. A successful apply writes no scratch
+// (#3137): the notification names the session log, which holds the full
+// answer. Every answer that is not applied — no diff, a diff that does not
+// parse or touches a file outside the request, a hunk that does not match
+// — applies nothing and opens the scratch with the explanation in front.
+// Off restores the scratch-only behaviour of #2964.
 //
 // While a run is in flight the status line shows "[agent: simplify <fn>
 // m:ss]" (repainted by a demand-armed one-second tick that stops with the
@@ -489,18 +491,12 @@ func (m Model) applyComplexityAgentDiff(msg cxAgentDoneMsg, run *cxAgentRun, sc 
 			return m.complexityAgentNotApplied(sc, run, msg.res, cxMissFile(e.path, multi), err)
 		}
 	}
-	// The explanation opens first and the changed files after it, the
-	// request's own file last, so it is the tab in front and the scratch
-	// waits behind them. The edits come last: a tab switch after one would
-	// hand the dirty buffer to editor.auto_save = "focus", and the apply
-	// never saves.
+	// The changed files open with the request's own file last, so it is
+	// the tab in front; a successful apply writes no scratch (#3137) — the
+	// notification and the session log are its record. The edits come
+	// last: a tab switch after one would hand the dirty buffer to
+	// editor.auto_save = "focus", and the apply never saves.
 	var cmds []tea.Cmd
-	sc.note = cxAppliedNote(edits)
-	if scratchPath, err := scratch.CreateWithContent("md", []byte(sc.body())); err == nil {
-		tm, cmd := m.openPathAt(scratchPath, 0, 0)
-		m = asAppModel(tm, m)
-		cmds = append(cmds, cmd)
-	}
 	for _, e := range cxOpenOrder(edits, msg.req.Path) {
 		tm, cmd := m.openPathAt(e.path, cxOpenLine(msg.req, e.path), 0)
 		m = asAppModel(tm, m)
@@ -543,18 +539,6 @@ func cxMissFile(path string, multi bool) string {
 		return ""
 	}
 	return displayPath(path)
-}
-
-// cxAppliedNote is the scratch's note on an applied diff.
-func cxAppliedNote(edits []cxFileHunks) string {
-	if len(edits) == 1 {
-		return "Applied to the buffer of " + displayPath(edits[0].path) + " as one edit — u reverts it, save writes it."
-	}
-	names := make([]string, len(edits))
-	for i, e := range edits {
-		names[i] = displayPath(e.path)
-	}
-	return "Applied to the buffers of " + strings.Join(names, ", ") + " as one edit each — u in each buffer reverts it, save writes it."
 }
 
 // cxOpenOrder is the order the changed files open in: the request's own
