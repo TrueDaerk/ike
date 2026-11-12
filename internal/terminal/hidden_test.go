@@ -12,6 +12,10 @@ import (
 // OutputMsg for the first output of its hidden stretch (the activity
 // indicators ride on it) and then nothing until it is shown again, when the
 // owed repaint arrives exactly once.
+//
+// The "nothing arrives" checks wait for the feed loop to go idle (#3136):
+// by then every repaint decision for the fed bytes is made, so a stray
+// OutputMsg is either already queued or armed behind the notify timer.
 
 func TestHiddenSessionWakesOnceThenFolds(t *testing.T) {
 	msgs := make(chan tea.Msg, 64)
@@ -33,14 +37,10 @@ func TestHiddenSessionWakesOnceThenFolds(t *testing.T) {
 	// Every later burst folds: no message, however much arrives.
 	for i := 0; i < 5; i++ {
 		m.FeedText("more\n")
-		time.Sleep(3 * notifyQuiet)
+		waitFeedIdle(t, m.sess)
+		assertNoRepaint(t, m.sess, msgs, "hidden session after its one wake")
 	}
 	waitView(t, &m, "more") // the grid still ingests while hidden
-	select {
-	case msg := <-msgs:
-		t.Fatalf("hidden session sent %T after its one wake", msg)
-	case <-time.After(60 * time.Millisecond):
-	}
 	// Showing it again delivers the owed repaint, once.
 	m.SetHidden(false)
 	select {
@@ -51,11 +51,7 @@ func TestHiddenSessionWakesOnceThenFolds(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("un-hiding must deliver the owed repaint")
 	}
-	select {
-	case msg := <-msgs:
-		t.Fatalf("un-hiding sent a second %T", msg)
-	case <-time.After(60 * time.Millisecond):
-	}
+	assertNoRepaint(t, m.sess, msgs, "un-hiding a second time")
 	// Visible again: output reports per burst as before.
 	m.FeedText("visible\n")
 	select {
@@ -78,12 +74,8 @@ func TestHiddenWakeRearmsPerHiddenStretch(t *testing.T) {
 			t.Fatalf("stretch %d: the first hidden output must wake once", stretch)
 		}
 		m.FeedText("burst\n")
-		time.Sleep(3 * notifyQuiet)
-		select {
-		case msg := <-msgs:
-			t.Fatalf("stretch %d: second burst sent %T", stretch, msg)
-		case <-time.After(60 * time.Millisecond):
-		}
+		waitFeedIdle(t, m.sess)
+		assertNoRepaint(t, m.sess, msgs, "second burst of a hidden stretch")
 		m.SetHidden(false)
 		select {
 		case <-msgs: // the owed repaint
@@ -99,9 +91,5 @@ func TestHiddenWithoutOutputOwesNoWake(t *testing.T) {
 	t.Cleanup(m.Close)
 	m.SetHidden(true)
 	m.SetHidden(false)
-	select {
-	case msg := <-msgs:
-		t.Fatalf("a silent hidden stretch sent %T", msg)
-	case <-time.After(60 * time.Millisecond):
-	}
+	assertNoRepaint(t, m.sess, msgs, "a silent hidden stretch")
 }

@@ -14,13 +14,13 @@ import (
 // session is dead, plus the dialog click mapping following the recomputed
 // geometry.
 
-// deadRun builds a finished run session at w×h that printed script's output
-// first. The model is one column wider: the rightmost column is the pane's
-// scrollbar gutter, so the grid is exactly w wide.
-func deadRun(t *testing.T, w, h int, script string, tool bool) *Model {
+// deadRun builds a finished run session at w×h that printed n numbered lines
+// (printLines) first. The model is one column wider: the rightmost column is
+// the pane's scrollbar gutter, so the grid is exactly w wide.
+func deadRun(t *testing.T, w, h, n int, tool bool) *Model {
 	t.Helper()
 	c := &collector{}
-	s, err := StartCommandSession("terminal", []string{"/bin/sh", "-c", script}, t.TempDir(), w, h, nil, c.send)
+	s, err := StartCommandSession("terminal", []string{"/bin/sh", "-c", printLines(n)}, t.TempDir(), w, h, nil, c.send)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,9 +30,16 @@ func deadRun(t *testing.T, w, h int, script string, tool bool) *Model {
 		m.SetTool("claude")
 	}
 	waitFor(t, "session exit", func() bool { return !s.Running() })
-	waitFor(t, "run output on the grid", func() bool {
-		return strings.Contains(ansi.Strip(s.View()), "line-") ||
-			strings.Contains(ansi.Strip(s.HistoryLine(0)), "line-")
+	// The last row, not just any row: the feed loop may still be replaying
+	// the output when the child has already exited.
+	last := "line-" + strconv.Itoa(n)
+	waitFor(t, "the whole run output on the grid", func() bool {
+		for v := 0; v < s.ScrollbackLen()+h; v++ {
+			if s.LineText(v) == last {
+				return true
+			}
+		}
+		return false
 	})
 	return m
 }
@@ -45,7 +52,7 @@ func printLines(n int) string {
 // TestDeadPaneCopiesSelection: the exited pane is selectable and yields its
 // selection as text — what the app's copy chord puts on the clipboard.
 func TestDeadPaneCopiesSelection(t *testing.T) {
-	m := deadRun(t, 40, 10, printLines(3), true)
+	m := deadRun(t, 40, 10, 3, true)
 	m.MousePress(0, 0)
 	m.MouseDrag(6, 0)
 	m.MouseRelease(6, 0)
@@ -60,7 +67,7 @@ func TestDeadPaneCopiesSelection(t *testing.T) {
 // TestDeadPaneWheelScrollsScrollback: the wheel pages the finished session's
 // own history instead of going to the child that is gone.
 func TestDeadPaneWheelScrollsScrollback(t *testing.T) {
-	m := deadRun(t, 40, 6, printLines(40), true)
+	m := deadRun(t, 40, 6, 40, true)
 	if m.ScrollbackLen() == 0 {
 		t.Fatal("40 lines in a 6-row pane must produce scrollback")
 	}
@@ -77,7 +84,7 @@ func TestDeadPaneWheelScrollsScrollback(t *testing.T) {
 // TestDeadPaneKeysScrollScrollback: the paging keys work while dead, and an
 // inert key no longer snaps the view back to live.
 func TestDeadPaneKeysScrollScrollback(t *testing.T) {
-	m := deadRun(t, 40, 6, printLines(40), true)
+	m := deadRun(t, 40, 6, 40, true)
 	m.Update(tea.KeyPressMsg{Code: tea.KeyPgUp})
 	if want := m.pageSize(); m.Scroll() != want {
 		t.Fatalf("pgup scroll = %d, want %d", m.Scroll(), want)
@@ -103,7 +110,7 @@ func TestDeadPaneKeysScrollScrollback(t *testing.T) {
 // TestDeadPaneScrolledKeepsDialog: paging the output keeps the exit dialog —
 // and therefore its click targets — in place.
 func TestDeadPaneScrolledKeepsDialog(t *testing.T) {
-	m := deadRun(t, 60, 12, printLines(40), true)
+	m := deadRun(t, 60, 12, 40, true)
 	m.MouseWheel(0, 0, 4)
 	view := ansi.Strip(m.View())
 	if !strings.Contains(view, "claude exited") {
@@ -122,7 +129,7 @@ func TestDeadPaneScrolledKeepsDialog(t *testing.T) {
 // reflows the content and re-centers the dialog; the click mapping follows
 // the recomputed geometry, the stale one no longer hits.
 func TestDeadPaneResizeReflowsAndRecenters(t *testing.T) {
-	m := deadRun(t, 60, 12, printLines(20), true)
+	m := deadRun(t, 60, 12, 20, true)
 	before, ok := m.deadDialogGeom()
 	if !ok {
 		t.Fatal("60x12 must fit the dialog")
@@ -155,7 +162,7 @@ func TestDeadPaneResizeReflowsAndRecenters(t *testing.T) {
 // TestDeadRunPaneFooterResizes: a plain run pane (no tool) reflows to the new
 // size while dead and keeps its exit footer.
 func TestDeadRunPaneFooterResizes(t *testing.T) {
-	m := deadRun(t, 40, 8, printLines(3), false)
+	m := deadRun(t, 40, 8, 3, false)
 	m.SetSize(70, 14)
 	waitFor(t, "reflow at the new width", func() bool { return m.sess.Width() == 69 })
 	view := ansi.Strip(m.View())

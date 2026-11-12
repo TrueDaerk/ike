@@ -3,7 +3,6 @@ package terminal
 import (
 	"strings"
 	"testing"
-	"time"
 )
 
 // pastetoshell_test.go covers #2542's delivery half: PasteToShell is the seam
@@ -49,8 +48,13 @@ func TestPasteToShellWithoutSubmitStaysOnTheLine(t *testing.T) {
 	waitFor(t, "payload on the prompt line", func() bool {
 		return strings.Contains(plainView(s), "gamma-delta")
 	})
-	// Give a would-be execution ample time to produce a second occurrence.
-	time.Sleep(300 * time.Millisecond)
+	// Finish the line so it prints only a marker, then wait for that marker:
+	// the shell runs its input in order, so had the paste been submitted on
+	// its own, its output would have landed before the marker (#3136).
+	for _, r := range " >/dev/null; printf 'zz-%s\\n' end\r" {
+		s.SendKey(keyFor(r))
+	}
+	waitFor(t, "the marker command ran", func() bool { return strings.Contains(plainView(s), "zz-end") })
 	if n := strings.Count(plainView(s), "gamma-delta"); n != 1 {
 		t.Fatalf("payload occurrences = %d, want 1 (pasted, not run):\n%s", n, plainView(s))
 	}

@@ -63,6 +63,26 @@ func waitWrappedRows(t *testing.T, s *Session, follow string) int {
 	return find()
 }
 
+// waitOutputRow waits for the output row of an `echo …` command — the row
+// holding want without "echo " — and returns its screen row and want's
+// column. The wait is on the output row itself, not on a count of want: the
+// echoed command line holds want too and can satisfy any count before the
+// output lands (#3136).
+func waitOutputRow(t *testing.T, s *Session, want string) (row, col int) {
+	t.Helper()
+	row, col = -1, -1
+	waitFor(t, "the echo output row", func() bool {
+		for i, r := range strings.Split(plainView(s), "\n") {
+			if idx := strings.Index(r, want); idx >= 0 && !strings.Contains(r, "echo ") {
+				row, col = i, idx
+				return true
+			}
+		}
+		return false
+	})
+	return row, col
+}
+
 // screenRow converts a virtual line index to the pane-local row a mouse event
 // uses (live view, no scroll offset).
 func screenRow(s *Session, v int) int { return v - s.ScrollbackLen() }
@@ -172,20 +192,7 @@ func TestDoubleClickSelectsWord(t *testing.T) {
 	for _, r := range "echo run /usr/local/bin now\r" {
 		s.SendKey(keyFor(r))
 	}
-	waitFor(t, "echo output", func() bool {
-		return strings.Count(plainView(s), "/usr/local/bin") >= 2
-	})
-	rows := strings.Split(plainView(s), "\n")
-	rowIdx, colIdx := -1, -1
-	for i, r := range rows {
-		if idx := strings.Index(r, "/usr/local/bin"); idx >= 0 && !strings.Contains(r, "echo ") {
-			rowIdx, colIdx = i, idx
-			break
-		}
-	}
-	if rowIdx < 0 {
-		t.Fatalf("output row not found in:\n%s", plainView(s))
-	}
+	rowIdx, colIdx := waitOutputRow(t, s, "/usr/local/bin")
 
 	// Double click in the middle of the path: slashes glue it into one word.
 	m.MousePress(colIdx+6, rowIdx)
@@ -237,13 +244,7 @@ func TestReflowShrinkRewraps(t *testing.T) {
 		return -1
 	}
 	v := -1
-	deadline := time.Now().Add(5 * time.Second)
-	for v < 0 && time.Now().Before(deadline) {
-		if v = find(); v < 0 {
-			time.Sleep(20 * time.Millisecond)
-		}
-	}
-	if v < 0 {
+	if !pollUntil(5*time.Second, func() bool { v = find(); return v >= 0 }) {
 		t.Fatalf("rewrapped rows not found; view:\n%s", plainView(s))
 	}
 	if !s.SoftWrapped(v) {
@@ -355,20 +356,7 @@ func TestDoubleClickDragExtendsWordWise(t *testing.T) {
 	for _, r := range "echo run /usr/local/bin now\r" {
 		s.SendKey(keyFor(r))
 	}
-	waitFor(t, "echo output", func() bool {
-		return strings.Count(plainView(s), "/usr/local/bin") >= 2
-	})
-	rows := strings.Split(plainView(s), "\n")
-	rowIdx, colIdx := -1, -1
-	for i, r := range rows {
-		if idx := strings.Index(r, "/usr/local/bin"); idx >= 0 && !strings.Contains(r, "echo ") {
-			rowIdx, colIdx = i, idx
-			break
-		}
-	}
-	if rowIdx < 0 {
-		t.Fatalf("output row not found in:\n%s", plainView(s))
-	}
+	rowIdx, colIdx := waitOutputRow(t, s, "/usr/local/bin")
 
 	// Double click on "run", then drag forward through the path and on to
 	// "now": each step grows the selection by whole words.

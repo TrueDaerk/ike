@@ -23,14 +23,7 @@ import (
 // starts conhost and cmd.exe noticeably slower than a unix pty spawns sh.
 func conptyWait(t *testing.T, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		if cond() {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("timed out waiting for %s", what)
+	waitUntil(t, 10*time.Second, what, cond)
 }
 
 // conptyText is the screen plus scrollback as plain text, so output that
@@ -75,7 +68,7 @@ func TestConPTYShellEchoesInputAndResizes(t *testing.T) {
 	// A width change is applied from the trailing debounce timer; the console
 	// must report the new size to the child afterwards.
 	s.Resize(100, 30)
-	time.Sleep(2 * resizeQuiet)
+	conptyWait(t, "the trailing resize to apply", func() bool { return resizeSettled(s, 100, 30) })
 	for _, r := range "mode con\r" {
 		s.SendKey(keyFor(r))
 	}

@@ -1,5 +1,14 @@
 # Log
 
+## 2026-11-12 (Tests: condition-based waiting in `internal/terminal`, #3136)
+
+- [Change Workflow](/process/change-workflow.md): new "No fixed sleeps in
+  tests" rule. `internal/terminal` tests wait through `pollUntil` /
+  `waitUntil` and the new seams (spool parked-caller counts behind
+  `waitFeedIdle` / `assertNoRepaint`, the per-session resize-debounce
+  override behind `setResizeQuiet` / `waitResized`); the package's test run
+  drops from ~11.4 s to ~2.9 s. The remaining packages are tracked in #3140.
+
 ## 2026-11-12 (Tests: `internal/app` runs in parallel, #3135)
 
 - [Change Workflow](/process/change-workflow.md): every `internal/app` test

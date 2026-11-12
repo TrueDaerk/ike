@@ -18,12 +18,8 @@ import (
 // a path literally.
 func waitPlainView(t *testing.T, m *Model, want string) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if strings.Contains(ansi.Strip(m.View()), want) {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
+	if pollUntil(3*time.Second, func() bool { return strings.Contains(ansi.Strip(m.View()), want) }) {
+		return
 	}
 	t.Fatalf("view never showed %q:\n%s", want, ansi.Strip(m.View()))
 }
@@ -156,7 +152,7 @@ func TestLinkHintsOverScrollback(t *testing.T) {
 	for i := 0; i < 30; i++ {
 		m.FeedText("filler\n")
 	}
-	waitPlainView(t, &m, "filler")
+	waitFeedIdle(t, m.sess) // all 30 fillers, not just the first one
 	if m.StartLinkHints() {
 		t.Fatal("the reference scrolled out of view must not be labelled")
 	}

@@ -251,6 +251,24 @@ What keeps the budget, and what a new test must follow:
   `waitPrompt`s first), and a bridge test disconnecting right behind the
   "accepted" trace, which precedes the run the bridge sends from a goroutine
   (`TestDoctorAcceptedTrace` waits for the request's `continued` first).
+- **No fixed sleeps in tests (#3136).** A test waits for a condition, never
+  for a stretch of wall clock: it polls the observable state with a short
+  interval and a deadline, blocks on a channel the code under test exposes,
+  or shortens a production timer through a seam instead of sleeping through
+  it. In `internal/terminal` every wait funnels through `pollUntil` /
+  `waitUntil` (`wait_test.go`, 2 ms interval) — the package's only
+  `time.Sleep`; the seams are the spool's parked-caller counts (a put
+  blocked on the cap, the feed loop idle in `take` → `waitFeedIdle`), the
+  per-session `quietOverride` for the resize debounce (`setResizeQuiet`,
+  `waitResized`) and a backdated `lastResize` for "after the quiet window".
+  "Nothing arrives" assertions wait for the cause to be fully processed
+  (`waitFeedIdle`) and then check that no repaint is queued or armed
+  (`assertNoRepaint`) instead of watching a channel for 60 ms. A fast poll
+  exposes proxy waits a slow one hid — a `startSh` shell is at its prompt
+  before the test types, and a chord meant for a child waits until the child
+  owns the foreground (`Busy`). A sleep that has to stay carries a one-line
+  comment saying why no condition can be waited on; the packages still to
+  convert are listed in #3140.
 - **A test's git leaves no daemon behind (#3018).** Since git 2.47 a commit
   (as a fetch, a merge, a rebase) ends by spawning `git maintenance run
   --auto --detach`, a child that outlives the commit; git 2.52 made the

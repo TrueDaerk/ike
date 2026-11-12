@@ -70,13 +70,14 @@ func TestSendKeyCtrlCWithEmptySpoolStillDelivers(t *testing.T) {
 	for _, r := range "sleep 30\r" {
 		s.SendKey(keyFor(r))
 	}
-	waitFor(t, "sleep echoed", func() bool {
-		return strings.Contains(plainView(s), "sleep 30")
-	})
+	// Wait until sleep owns the foreground, not just until the line echoed:
+	// a ctrl+c landing before the shell forks never reaches the sleep.
+	waitFor(t, "sleep owns the foreground", func() bool { return s.Busy() })
 
 	s.SendKey(vt.KeyPressEvent{Code: 'c', Mod: vt.ModCtrl})
 
 	// The interrupt must kill the sleep and hand the prompt back.
+	waitFor(t, "the shell owns the foreground again", func() bool { return !s.Busy() })
 	for _, r := range "echo interrupted-ok\r" {
 		s.SendKey(keyFor(r))
 	}

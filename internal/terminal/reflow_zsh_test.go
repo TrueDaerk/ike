@@ -17,17 +17,32 @@ func TestReflowRapidCyclesZsh(t *testing.T) {
 		t.Skip("zsh unavailable:", err)
 	}
 	t.Cleanup(s.Close)
+	// Every width below gets its own trailing apply within milliseconds
+	// instead of the production window (#3136).
+	setResizeQuiet(s, 5*time.Millisecond)
 
-	cmd := `printf 'Name          Status  User  File\nmariadb       started geant /Library/LaunchAgents/homebrew.mxcl.mariadb.plist\nphp           started geant /Library/LaunchAgents/homebrew.mxcl.php.plist\n'`
-	for _, r := range cmd + "\r" {
-		s.SendKey(keyFor(r))
+	run := func(cmd string) {
+		for _, r := range cmd + "\r" {
+			s.SendKey(keyFor(r))
+		}
 	}
+	// settle waits until zsh has run a marker command typed after everything
+	// before it — the earlier output and the SIGWINCH redraws are in. The
+	// marker is built from two printf args, so the echoed command line never
+	// contains it.
+	settle := func(tag string) {
+		t.Helper()
+		run(`printf 'zz-%s\n' ` + tag)
+		waitFor(t, "marker "+tag, func() bool { return strings.Contains(plainView(s), "zz-"+tag) })
+	}
+
+	run(`printf 'Name          Status  User  File\nmariadb       started geant /Library/LaunchAgents/homebrew.mxcl.mariadb.plist\nphp           started geant /Library/LaunchAgents/homebrew.mxcl.php.plist\n'`)
 	waitFor(t, "table output", func() bool {
 		v := plainView(s)
 		return strings.Contains(v, "mariadb       started geant /Library") &&
 			strings.Count(v, "php") >= 2
 	})
-	time.Sleep(300 * time.Millisecond)
+	settle("before")
 
 	dump := func(tag string) string {
 		total := s.ScrollbackLen() + 20
@@ -41,15 +56,17 @@ func TestReflowRapidCyclesZsh(t *testing.T) {
 	}
 	dump("before")
 
-	// Real app-layer path: debounced Resize (leading apply + trailing apply
-	// from a timer goroutine), bursts of intermediate widths like a drag.
+	// Real app-layer path: debounced Resize applied from the timer
+	// goroutine, a burst of intermediate widths like a drag — each one
+	// applied while zsh's redraw for the previous one is still in flight.
 	for _, w := range []int{104, 90, 83, 70, 77, 95, 60, 78, 102, 110, 68, 55, 91, 110} {
 		s.Resize(w, 20)
-		time.Sleep(60 * time.Millisecond)
+		waitResized(t, s, w, 20)
 	}
-	time.Sleep(500 * time.Millisecond)
+	settle("cycled")
 	s.Resize(110, 20)
-	time.Sleep(700 * time.Millisecond)
+	waitResized(t, s, 110, 20)
+	settle("final")
 
 	final := dump("final")
 	for _, bad := range []string{"plistphp", "plistName", "Filemariadb", "plistgeant"} {

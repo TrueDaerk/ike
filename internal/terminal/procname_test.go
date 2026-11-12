@@ -57,13 +57,12 @@ func TestForegroundNameIdleAndBusy(t *testing.T) {
 		s.SendKey(keyFor(r))
 	}
 	waitFor(t, "sleep owns the foreground", func() bool { return s.Busy() })
-	deadline := time.Now().Add(5 * time.Second)
 	var name string
-	for time.Now().Before(deadline) {
-		if name = s.ForegroundName(); strings.Contains(name, "sleep") {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
+	if pollUntil(5*time.Second, func() bool {
+		name = s.ForegroundName()
+		return strings.Contains(name, "sleep")
+	}) {
+		return
 	}
 	t.Fatalf("the foreground job must be named, got %q", name)
 }

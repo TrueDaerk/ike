@@ -20,6 +20,12 @@ type spool struct {
 	chunks   [][]byte
 	size     int
 	closed   bool
+	// putWaiters / takeWaiters count the callers parked on hasRoom /
+	// nonEmpty right now. The data path never reads them: they expose the
+	// "a producer is blocked on the cap" and "the consumer sits idle in
+	// take" states that tests wait on instead of sleeping (#3136).
+	putWaiters  int
+	takeWaiters int
 }
 
 func newSpool() *spool {
@@ -35,7 +41,9 @@ func (sp *spool) put(p []byte) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 	for sp.size >= spoolMax && !sp.closed {
+		sp.putWaiters++
 		sp.hasRoom.Wait()
+		sp.putWaiters--
 	}
 	if sp.closed {
 		return
@@ -54,7 +62,9 @@ func (sp *spool) take() (chunk []byte, ok bool) {
 	sp.mu.Lock()
 	defer sp.mu.Unlock()
 	for len(sp.chunks) == 0 && !sp.closed {
+		sp.takeWaiters++
 		sp.nonEmpty.Wait()
+		sp.takeWaiters--
 	}
 	if len(sp.chunks) == 0 {
 		return nil, false
