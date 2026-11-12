@@ -39,6 +39,7 @@ func shellRowClick(t *testing.T, m Model, row int) Model {
 // TestPinPickerRowClickSelectsThenJumps: the four slot lines are rows 0..3; a
 // click selects, a second click on the same slot jumps to its file.
 func TestPinPickerRowClickSelectsThenJumps(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	for i := 0; i < 2; i++ {
@@ -66,6 +67,7 @@ func TestPinPickerRowClickSelectsThenJumps(t *testing.T) {
 // TestPinPickerRowClickIgnoresHints: the blank line and the key hints under
 // the four slots select nothing.
 func TestPinPickerRowClickIgnoresHints(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
@@ -83,6 +85,8 @@ func TestPinPickerRowClickIgnoresHints(t *testing.T) {
 // TestLocalHistoryRowClickSelectsThenOpens: rows map onto snapshots; a click
 // on the selected one opens the diff pane, the panel's enter.
 func TestLocalHistoryRowClickSelectsThenOpens(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
@@ -113,6 +117,8 @@ func TestLocalHistoryRowClickSelectsThenOpens(t *testing.T) {
 // TestLocalHistoryRowClickIgnoresTail: the blank tail and the key hints below
 // the snapshot list select nothing.
 func TestLocalHistoryRowClickIgnoresTail(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
@@ -133,6 +139,7 @@ func TestLocalHistoryRowClickIgnoresTail(t *testing.T) {
 // TestTimelineRowClickSelectsThenDiffs: a click selects a merged entry, a
 // second click on it diffs that entry against the buffer.
 func TestTimelineRowClickSelectsThenDiffs(t *testing.T) {
+	t.Parallel()
 	m, _ := timelineRepo(t)
 	m = openTimelineWithGit(t, m)
 	if len(m.tl.merged) < 2 {
@@ -151,6 +158,7 @@ func TestTimelineRowClickSelectsThenDiffs(t *testing.T) {
 // TestTimelineRowClickIgnoresHints: the key-hint block under the entries is
 // inert.
 func TestTimelineRowClickIgnoresHints(t *testing.T) {
+	t.Parallel()
 	m, _ := timelineRepo(t)
 	m = openTimelineWithGit(t, m)
 	m = shellRowClick(t, m, len(m.tl.merged)+2)
@@ -164,6 +172,7 @@ func TestTimelineRowClickIgnoresHints(t *testing.T) {
 // TestHistoryPickerRowClickSelectsThenShowsPatch: a click selects a commit, a
 // second click on it opens the patch view.
 func TestHistoryPickerRowClickSelectsThenShowsPatch(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m.openHistoryPicker(rangeLogFixture())
 	if !m.historyPickerOpen() {
@@ -191,6 +200,8 @@ func TestHistoryPickerRowClickSelectsThenShowsPatch(t *testing.T) {
 // above the files, and the dialog has no enter action — a click selects and
 // nothing else, twice over.
 func TestRecoveryRowClickSelectsOnly(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
+	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {
 		for _, name := range []string{"one.txt", "two.txt"} {
 			file := filepath.Join(dir, name)
@@ -224,6 +235,7 @@ func TestRecoveryRowClickSelectsOnly(t *testing.T) {
 // spacer are inert, a click selects a language and a click on the selected one
 // toggles its checkbox (the dialog's space).
 func TestOnboardingRowClickSelectsThenToggles(t *testing.T) {
+	// serial: onboardLang: sets package variable onboardingAutoOpen
 	onboardLang(t, "obgo")
 	m := onboardSeed(t)
 	if !m.onboardingOpen() {
@@ -256,6 +268,7 @@ func TestOnboardingRowClickSelectsThenToggles(t *testing.T) {
 // TestToolSetupRowClickTogglesSelected: the tool dialog is the onboarding
 // dialog's twin — a click on the selected row toggles its checkbox.
 func TestToolSetupRowClickTogglesSelected(t *testing.T) {
+	// serial: catalogStub: sets package variable setupCatalog
 	catalogStub(t, nil, stubEntry("misstool"), stubEntry("othertool"))
 	m := toolSetupSeed(t)
 	if !m.toolSetupOpen() || len(m.toolSetup.rows) < 2 {
@@ -279,6 +292,8 @@ func TestToolSetupRowClickTogglesSelected(t *testing.T) {
 // TestThemePickRowClickPreviewsThenKeeps: a click previews the theme live, a
 // click on the already-selected theme keeps it (the chooser's enter).
 func TestThemePickRowClickPreviewsThenKeeps(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := tourSeed(t)
 	m = finishTourFully(t, m)
 	if !m.themePickOpen() || len(m.themePick.names) < 2 {
@@ -308,6 +323,7 @@ func TestThemePickRowClickPreviewsThenKeeps(t *testing.T) {
 // group is inert, a click picks the bookmark under it and a click on the
 // selected one jumps.
 func TestBookmarkOverviewRowClickSelectsThenJumps(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "alpha\n")
 	b := writeTemp(t, dir, "b.txt", "delta\nepsilon\nzeta\n")
@@ -342,6 +358,7 @@ func TestBookmarkOverviewRowClickSelectsThenJumps(t *testing.T) {
 // TestChangeFeedRowClickSelectsThenOpens: a click picks the entry on that
 // line, a click on the selected one opens the file.
 func TestChangeFeedRowClickSelectsThenOpens(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "alpha\n")
 	b := writeTemp(t, dir, "b.txt", "beta\n")
@@ -383,6 +400,7 @@ func TestChangeFeedRowClickSelectsThenOpens(t *testing.T) {
 // are inert, a click picks an affected file and a click on the selected one
 // applies the rename.
 func TestLSPRenamePreviewRowClickSelectsThenApplies(t *testing.T) {
+	t.Parallel()
 	m, applied := openRenamePreview(t)
 	m = shellRowClick(t, m, 0) // the headline
 	if m.lspRenamePreview.cursor != 0 || *applied != 0 {
@@ -410,6 +428,7 @@ func TestLSPRenamePreviewRowClickSelectsThenApplies(t *testing.T) {
 // resize instead of reaching a picker, and one on the heading rows reaches
 // nothing at all.
 func TestShellBodyClickIgnoresChrome(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m.openHistoryPicker(rangeLogFixture())
 	v := m.shell.View()
@@ -441,6 +460,7 @@ func TestShellBodyClickIgnoresChrome(t *testing.T) {
 // TestShellBodyClickHonoursScrollOffset: the row a click lands on is the
 // scrolled-to content row, not the on-screen line.
 func TestShellBodyClickHonoursScrollOffset(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	msg := rangeLogFixture()
 	for len(msg.Entries) < 60 {

@@ -18,6 +18,8 @@ import (
 // case: a program run on a file, then closed, is offered — and evaluated —
 // when a fresh process opens the playground on the same path.
 func TestJQPlaygroundLastProgramPersistsAcrossRestart(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, _ := playWatchApp(t, `{"items":[10,20,30]}`)
 	m = dismissOnboarding(m)
 	m = setProgram(m, ".items[0]")
@@ -56,6 +58,8 @@ func TestJQPlaygroundLastProgramPersistsAcrossRestart(t *testing.T) {
 // JSON file with the same base name keep independent entries — the dialect is
 // part of the persisted key, like the in-session map.
 func TestJQPlaygroundLastProgramDialectSeparate(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = dismissOnboarding(m)
 	m = setProgram(m, ".a")

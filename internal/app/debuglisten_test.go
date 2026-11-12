@@ -67,6 +67,8 @@ func registerPHPListenStub() {
 // TestDebugListenToggle guards #823: debug.listen starts the persistent
 // listener session and a second toggle stops it.
 func TestDebugListenToggle(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
+	withStore(t)
 	// A free port keeps the bridge's bind off the real Xdebug default.
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -97,6 +99,7 @@ func TestDebugListenToggle(t *testing.T) {
 // TestDebugMapPromptWritesMapping guards #832: the path-mapping hint from a
 // listening session opens the prompt; m writes the mapping at project scope.
 func TestDebugMapPromptWritesMapping(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)
@@ -156,6 +159,7 @@ func TestDebugMapPromptWritesMapping(t *testing.T) {
 // connection is surfaced, and a burst of them (one page load can open many)
 // notifies on the first and then every tenth — the console keeps all of them.
 func TestDebugDropNotifiesThrottled(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	chdir(t, t.TempDir())
 	m := sized(t, 100, 40)
 	out, _ := m.Update(DebugListenMsg{})

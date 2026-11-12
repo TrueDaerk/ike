@@ -22,7 +22,6 @@ import (
 // behind the app's back the way another process would.
 func playWatchApp(t *testing.T, body string) (Model, string) {
 	t.Helper()
-	noDebounce(t)
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "data.json")
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
@@ -48,6 +47,7 @@ func playExternalWrite(t *testing.T, m Model, path, body string) Model {
 // content — while the query, the caret and the history position stay put,
 // because the input was renewed, not the playground.
 func TestJQPlaygroundFollowsExternalChange(t *testing.T) {
+	t.Parallel()
 	m, path := playWatchApp(t, `{"foo":1}`)
 	m = setProgram(m, ".foo")
 	if got := m.play.result.Text(); got != "1" {
@@ -75,6 +75,7 @@ func TestJQPlaygroundFollowsExternalChange(t *testing.T) {
 // and when — the transient status line alone is gone with the next keystroke,
 // and "is this still current?" would be unanswered again.
 func TestJQPlaygroundRefreshIsVisible(t *testing.T) {
+	t.Parallel()
 	m, path := playWatchApp(t, `{"foo":1}`)
 	m = setProgram(m, ".foo")
 	if !m.play.reloadedAt.IsZero() {
@@ -107,6 +108,7 @@ func TestJQPlaygroundRefreshIsVisible(t *testing.T) {
 // leave competing runs behind — the generation stamp drops every superseded
 // parse and evaluation, so only the newest content is on screen.
 func TestJQPlaygroundChangeBurstKeepsNewestOnly(t *testing.T) {
+	t.Parallel()
 	m, path := playWatchApp(t, `{"foo":0}`)
 	m = setProgram(m, ".foo")
 
@@ -139,6 +141,7 @@ func TestJQPlaygroundChangeBurstKeepsNewestOnly(t *testing.T) {
 // intermediate save of a hand-edited file must not blank the pane, and it
 // must not close the playground either.
 func TestJQPlaygroundUnparsableChangeKeepsResult(t *testing.T) {
+	t.Parallel()
 	m, path := playWatchApp(t, `{"foo":1}`)
 	m = setProgram(m, ".foo")
 
@@ -174,6 +177,7 @@ func TestJQPlaygroundUnparsableChangeKeepsResult(t *testing.T) {
 // away and the mode ends in a defined state — closed, with a message naming
 // the file, rather than querying a document that no longer exists.
 func TestJQPlaygroundClosesWhenSourceFileRemoved(t *testing.T) {
+	t.Parallel()
 	m, path := playWatchApp(t, `{"foo":1}`)
 	m = setProgram(m, ".foo")
 	if err := os.Remove(path); err != nil {
@@ -200,7 +204,7 @@ func TestJQPlaygroundClosesWhenSourceFileRemoved(t *testing.T) {
 // buffer is the only copy of the document left, so the mode stays up over
 // content that still exists — and says what happened on disk.
 func TestJQPlaygroundKeepsUnsavedBufferAfterRemoval(t *testing.T) {
-	noDebounce(t)
+	t.Parallel()
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "data.json")
 	if err := os.WriteFile(path, []byte(`{"foo":1}`), 0o644); err != nil {
@@ -239,6 +243,7 @@ func TestJQPlaygroundKeepsUnsavedBufferAfterRemoval(t *testing.T) {
 // TestJQPlaygroundIgnoresForeignFileChange: the watcher reports everything it
 // watches; a playground follows its own source document and nothing else.
 func TestJQPlaygroundIgnoresForeignFileChange(t *testing.T) {
+	t.Parallel()
 	m, path := playWatchApp(t, `{"foo":1}`)
 	m = setProgram(m, ".foo")
 
@@ -260,7 +265,8 @@ func TestJQPlaygroundIgnoresForeignFileChange(t *testing.T) {
 // TestJQPlaygroundHTTPResponseIsNotFollowed: an HTTP response is not a file.
 // It has no path to watch, and nothing on disk can renew it.
 func TestJQPlaygroundHTTPResponseIsNotFollowed(t *testing.T) {
-	noDebounce(t)
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := httpApp(t)
 	resp := sampleResponse("one")
 	resp.Body = []byte(`{"items":[{"id":7}]}`)
@@ -278,6 +284,7 @@ func TestJQPlaygroundHTTPResponseIsNotFollowed(t *testing.T) {
 // a different stretch of the file after an edit, so re-reading it would query
 // something the user never selected.
 func TestJQPlaygroundSelectionIsNotFollowed(t *testing.T) {
+	t.Parallel()
 	m := playApp(t, "{\"a\":1}\nnot json at all\n")
 	// The selection is made on the editor itself: what is under test is the
 	// resolved source, not the key that produced the visual mode.

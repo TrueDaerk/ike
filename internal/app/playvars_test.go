@@ -35,6 +35,7 @@ func varsPlay(t *testing.T) Model {
 // variable gojq's compile error takes the info row; `id=42` on the variables
 // line makes the program run and select the record.
 func TestPlayVarsBindSelectByID(t *testing.T) {
+	t.Parallel()
 	m := varsPlay(t)
 	if !strings.Contains(m.play.runErr, "variable not defined: $id") {
 		t.Fatalf("runErr = %q, want gojq's compile error", m.play.runErr)
@@ -67,6 +68,7 @@ func TestPlayVarsBindSelectByID(t *testing.T) {
 // TestPlayVarsParseErrorOnInfoRow: a line that does not parse is reported
 // on the info row, and fixing it runs again.
 func TestPlayVarsParseErrorOnInfoRow(t *testing.T) {
+	t.Parallel()
 	m := varsPlay(t)
 	m = toggleVars(m)
 	m = typeInto(m, "id")
@@ -83,6 +85,7 @@ func TestPlayVarsParseErrorOnInfoRow(t *testing.T) {
 // line still up and binding, focus again, hide — and a hidden line binds
 // nothing, so the program fails to compile again.
 func TestPlayVarsToggleCycle(t *testing.T) {
+	t.Parallel()
 	m := varsPlay(t)
 	m = toggleVars(m)
 	m = typeInto(m, "id=41")
@@ -113,6 +116,7 @@ func TestPlayVarsToggleCycle(t *testing.T) {
 // TestPlayVarsDefaultChord: ctrl+alt+b reaches playground.variables from the
 // query line and, as the line's own unclaimed key, hides it again.
 func TestPlayVarsDefaultChord(t *testing.T) {
+	t.Parallel()
 	m := varsPlay(t)
 	chord := tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl | tea.ModAlt}
 	m = drainKey(m, chord)
@@ -132,6 +136,7 @@ func TestPlayVarsDefaultChord(t *testing.T) {
 // while it is shown — the reserved rows, the rendered body and the result
 // buffer's height agree, with and without the stale banner.
 func TestPlayVarsHeaderGeometry(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, dismissOnboarding(playApp(t, `{"items":[`+strings.Repeat(`{"n":1},`, 40)+`{"n":2}]}`)))
 	m = setProgram(m, ".items[]")
 	key := m.play.paneKey
@@ -171,6 +176,7 @@ func TestPlayVarsHeaderGeometry(t *testing.T) {
 // caret; a click on the query row above still reaches the query line, and
 // the chips on the info row below still toggle.
 func TestPlayVarsMouse(t *testing.T) {
+	t.Parallel()
 	m := varsPlay(t)
 	m = toggleVars(m)
 	m = typeInto(m, "id=42")
@@ -198,6 +204,8 @@ func TestPlayVarsMouse(t *testing.T) {
 // TestPlayVarsSavedFilter: a filter saved with the line up stores the
 // variables, the picker marks it with `$`, and picking it restores the line.
 func TestPlayVarsSavedFilter(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := varsPlay(t)
 	m = toggleVars(m)
 	m = typeInto(m, "id=42")
@@ -235,6 +243,7 @@ func TestPlayVarsSavedFilter(t *testing.T) {
 // back the program with its variables line shown — from the session and from
 // the persisted store.
 func TestPlayVarsRememberedWithLastProgram(t *testing.T) {
+	t.Parallel()
 	m := varsPlay(t)
 	m = toggleVars(m)
 	m = typeInto(m, "id=41")
@@ -261,6 +270,7 @@ func TestPlayVarsRememberedWithLastProgram(t *testing.T) {
 
 // TestPlayVarsYQ: the yq playground binds the line the same way.
 func TestPlayVarsYQ(t *testing.T) {
+	t.Parallel()
 	m := openYQ(t, dismissOnboarding(yqApp(t, "items:\n  - {name: a, tag: x}\n  - {name: b, tag: y}\n")))
 	m = setProgram(m, ".items[] | select(.tag == $t) | .name")
 	m = toggleVars(m)

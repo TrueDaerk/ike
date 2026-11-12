@@ -25,6 +25,7 @@ func atClock(m Model, t time.Time) Model {
 }
 
 func TestPlaygroundEscEscOpensPalette(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"foo":1}`))
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	m = atClock(m, now)
@@ -47,6 +48,7 @@ func TestPlaygroundEscEscOpensPalette(t *testing.T) {
 }
 
 func TestPlaygroundEscEscFromResultBuffer(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"foo":1}`))
 	m.play.setBufFocus(true)
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -65,6 +67,7 @@ func TestPlaygroundEscEscFromResultBuffer(t *testing.T) {
 }
 
 func TestPlaygroundSingleEscKeepsMeaningOutsideTheWindow(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"foo":1}`))
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	m = atClock(m, now)
@@ -87,6 +90,7 @@ func TestPlaygroundSingleEscKeepsMeaningOutsideTheWindow(t *testing.T) {
 // dismissal, not the first half of the palette chord — the same rule the
 // editor's insert mode follows.
 func TestPlaygroundEscDismissesCompletionWithoutArming(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"foo":1}`))
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	m = atClock(m, now)
@@ -112,6 +116,7 @@ func TestPlaygroundEscDismissesCompletionWithoutArming(t *testing.T) {
 }
 
 func TestPlaygroundCodeActionReportsUnavailable(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"foo":1}`))
 	if !m.playCodeActionChord(altEnter()) {
 		t.Fatal("alt+enter must resolve as the lsp.codeAction chord")
@@ -134,6 +139,7 @@ func TestPlaygroundCodeActionReportsUnavailable(t *testing.T) {
 }
 
 func TestPlaygroundCodeActionReportsUnavailableInResultBuffer(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"foo":1}`))
 	m.play.setBufFocus(true)
 	out, _ := m.Update(altEnter())
@@ -149,6 +155,7 @@ func altEnter() tea.KeyPressMsg {
 }
 
 func TestPlaygroundHelpOpensOnItsOwnContext(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"foo":1}`))
 	if got := m.helpContext(); got != ctxPlayground {
 		t.Fatalf("help context = %q, want %q while the playground owns the keyboard", got, ctxPlayground)
@@ -187,6 +194,7 @@ func TestPlaygroundHelpOpensOnItsOwnContext(t *testing.T) {
 }
 
 func TestPlaygroundHelpGroupsEmptyWhenNotFocused(t *testing.T) {
+	t.Parallel()
 	m := playApp(t, `{"foo":1}`)
 	if g := m.playgroundHelpGroups(); g != nil {
 		t.Fatalf("a closed playground contributes no help groups, got %d", len(g))
@@ -199,6 +207,7 @@ func TestPlaygroundHelpGroupsEmptyWhenNotFocused(t *testing.T) {
 // TestPlaygroundHintsNameTheHelpKey keeps the discoverability fix honest: the
 // info row is where a user finds out the cheatsheet exists at all.
 func TestPlaygroundHintsNameTheHelpKey(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"foo":1}`))
 	if !hasHint(m.playHints(), playHelpHint) {
 		t.Fatalf("query-line hints must name the help key, got %v", m.playHints())
@@ -224,6 +233,8 @@ func hasHint(hints []string, want string) bool {
 // context, not the hosting editor's. The mode owns the keyboard ahead of the
 // keymap layer, so before this its misses left no trace at all.
 func TestPlaygroundRecordsUnboundUnderOwnContext(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openJQ(t, playApp(t, `{"foo":1}`))
 	if m.onboardingOpen() { // the first-start LSP dialog eats keys on hosts missing a server
 		m = m.closeOnboarding().(Model)

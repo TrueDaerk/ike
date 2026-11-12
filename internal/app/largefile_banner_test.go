@@ -38,6 +38,8 @@ func largeModel(t *testing.T) (Model, string) {
 
 // TestLargeFileBannerShowsAndDismisses guards #1124.
 func TestLargeFileBannerShowsAndDismisses(t *testing.T) {
+	// serial: largeModel: largefile.Reset (process-wide state of package largefile)
+	withStore(t)
 	m, path := largeModel(t)
 	text, _, _, _, ok := m.largeFileBanner()
 	if !ok {
@@ -62,6 +64,7 @@ func TestLargeFileBannerShowsAndDismisses(t *testing.T) {
 // TestLargeFileBannerForceRemoves guards #1124: forcing code insight removes
 // the banner immediately (InsightOff turns false).
 func TestLargeFileBannerForceRemoves(t *testing.T) {
+	// serial: largeModel: largefile.Reset (process-wide state of package largefile)
 	m, _ := largeModel(t)
 	if _, _, _, _, ok := m.largeFileBanner(); !ok {
 		t.Fatal("setup: banner missing")
@@ -74,6 +77,8 @@ func TestLargeFileBannerForceRemoves(t *testing.T) {
 
 // TestLargeFileBannerAbsentForNormalFiles guards #1124.
 func TestLargeFileBannerAbsentForNormalFiles(t *testing.T) {
+	// serial: largefile.Reset (process-wide state of package largefile)
+	withStore(t)
 	largefile.Reset()
 	t.Cleanup(largefile.Reset)
 	m := sizedWith(t, registry.New(), 120, 40)

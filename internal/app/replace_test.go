@@ -22,6 +22,8 @@ func itemAt(path string, line int, text string, start, end int) locations.Item {
 }
 
 func TestReplaceOnDiskUnopenedFile(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "u.txt")
 	if err := os.WriteFile(path, []byte("a needle\nplain\nb needle\n"), 0o644); err != nil {
@@ -42,6 +44,7 @@ func TestReplaceOnDiskUnopenedFile(t *testing.T) {
 }
 
 func TestReplaceThroughDirtyBufferNotDisk(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "d.txt")
 	if err := os.WriteFile(path, []byte("keep needle safe\n"), 0o644); err != nil {
@@ -83,6 +86,7 @@ func TestReplaceThroughDirtyBufferNotDisk(t *testing.T) {
 }
 
 func TestReplaceCaptureGroupsOnDisk(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "c.txt")
 	if err := os.WriteFile(path, []byte("id: item-42\n"), 0o644); err != nil {
@@ -100,6 +104,8 @@ func TestReplaceCaptureGroupsOnDisk(t *testing.T) {
 }
 
 func TestReplaceSkipsStaleDiskMatches(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "s.txt")
 	if err := os.WriteFile(path, []byte("rewritten meanwhile\n"), 0o644); err != nil {
@@ -119,6 +125,7 @@ func TestReplaceSkipsStaleDiskMatches(t *testing.T) {
 }
 
 func TestReplaceInPathCommandAndOverlay(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if _, ok := m.reg.Command("project.replaceInPath"); !ok {
 		t.Fatal("project.replaceInPath must be a registry command")
@@ -138,6 +145,8 @@ func TestReplaceInPathCommandAndOverlay(t *testing.T) {
 // several times is a single results row, so its extra ranges must still be
 // rewritten.
 func TestReplaceAppliesEveryRangeOfACollapsedRow(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "multi.txt")
 	if err := os.WriteFile(path, []byte("needle and needle\n"), 0o644); err != nil {

@@ -95,6 +95,7 @@ func enterPeek(t *testing.T, m Model, root string) (Model, []tea.Msg) {
 // TestPeekEnterMarksAndSkipsHistory (#2136): the peek switch re-roots like a
 // normal switch but marks the model, shows the indicator, and records nothing.
 func TestPeekEnterMarksAndSkipsHistory(t *testing.T) {
+	// serial: enterPeek: waits on the wall clock (load-sensitive)
 	roots := peekFixture(t, "origin", "peeked")
 	m := switchModel(t)
 
@@ -117,6 +118,8 @@ func TestPeekEnterMarksAndSkipsHistory(t *testing.T) {
 // resumes, the peeked workspace is dropped, and an untouched peek leaves no
 // .ike residue in the peeked project.
 func TestPeekReturnRestoresAndUnloads(t *testing.T) {
+	// serial: runPeekCmds: waits on the wall clock (load-sensitive)
+	withStore(t)
 	roots := peekFixture(t, "origin", "peeked")
 	m := switchModel(t)
 	m, _ = enterPeek(t, m, roots[1])
@@ -142,12 +145,13 @@ func TestPeekReturnRestoresAndUnloads(t *testing.T) {
 // project.history — and with it the startup restore head — is unchanged: the
 // origin stays in front, the peeked project never appears.
 func TestPeekRoundTripKeepsHistory(t *testing.T) {
+	// serial: enterPeek: waits on the wall clock (load-sensitive)
 	roots := peekFixture(t, "origin", "peeked")
 	m := switchModel(t)
 	// A private user layer (set after switchModel, which resets the env):
 	// other tests' leaked record goroutines must not write into this test's
 	// history between the two snapshots.
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	if err := project.RecordOpen(config.Discover("."), roots[0], time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -175,6 +179,7 @@ func TestPeekRoundTripKeepsHistory(t *testing.T) {
 // TestPeekKeepConverts (#2136): project.peek.keep clears the marker and
 // records the peeked project as a normal open — it becomes the restore head.
 func TestPeekKeepConverts(t *testing.T) {
+	// serial: t.Setenv
 	roots := peekFixture(t, "origin", "peeked")
 	m := switchModel(t)
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir()) // private user layer, see above
@@ -197,6 +202,7 @@ func TestPeekKeepConverts(t *testing.T) {
 // within a peek converts it — the peeked root is recorded (before the target)
 // and the marker clears.
 func TestPeekEscalatesOnNormalSwitch(t *testing.T) {
+	// serial: t.Setenv
 	roots := peekFixture(t, "origin", "peeked", "third")
 	m := switchModel(t)
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir()) // private user layer, see above
@@ -221,6 +227,7 @@ func TestPeekEscalatesOnNormalSwitch(t *testing.T) {
 // return behind the existing guard — esc keeps the peek, d discards and
 // returns.
 func TestPeekReturnBusyGuard(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	roots := peekFixture(t, "origin", "peeked")
 	file := filepath.Join(roots[1], "f.txt")
 	if err := os.WriteFile(file, []byte("one\n"), 0o644); err != nil {
@@ -257,6 +264,7 @@ func TestPeekReturnBusyGuard(t *testing.T) {
 // TestPeekReturnWithoutPeek (#2136): project.peek.return outside a peek is a
 // friendly no-op.
 func TestPeekReturnWithoutPeek(t *testing.T) {
+	// serial: peekFixture: t.Chdir (process working directory)
 	peekFixture(t, "only")
 	m := switchModel(t)
 	out, _ := m.Update(project.PeekReturnMsg{})

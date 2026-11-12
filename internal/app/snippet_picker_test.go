@@ -22,6 +22,7 @@ func withAppSnippets(t *testing.T, entries []config.SnippetEntry) {
 // the palette locked to the picker, carrying the templates the focused
 // buffer's language offers — the go-scoped entry stays out of a txt buffer.
 func TestSnippetPickerOpensWithTheBufferTemplates(t *testing.T) {
+	// serial: withAppSnippets: config.Set (process-wide configuration)
 	dir := t.TempDir()
 	m := openApp(t, writeTemp(t, dir, "a.txt", "\n"))
 	withAppSnippets(t, []config.SnippetEntry{
@@ -46,6 +47,7 @@ func TestSnippetPickerOpensWithTheBufferTemplates(t *testing.T) {
 // TestSnippetPickerNoTemplatesNotifies (#2694): a buffer whose language has no
 // templates gets the notice, not an empty picker.
 func TestSnippetPickerNoTemplatesNotifies(t *testing.T) {
+	// serial: withAppSnippets: config.Set (process-wide configuration)
 	dir := t.TempDir()
 	// .txt has no built-ins, so the list is genuinely empty.
 	m := openApp(t, writeTemp(t, dir, "a.txt", "\n"))
@@ -60,6 +62,7 @@ func TestSnippetPickerNoTemplatesNotifies(t *testing.T) {
 // TestSnippetPickerRowExpandsAtTheCaret (#2694): activating a row expands the
 // template with its tab stops into the focused editor, like trigger+tab.
 func TestSnippetPickerRowExpandsAtTheCaret(t *testing.T) {
+	// serial: withAppSnippets: config.Set (process-wide configuration)
 	dir := t.TempDir()
 	m := openApp(t, writeTemp(t, dir, "a.txt", "\n"))
 	withAppSnippets(t, []config.SnippetEntry{{Trigger: "pair", Body: "left($1) right(val)"}})
@@ -87,6 +90,7 @@ func TestSnippetPickerRowExpandsAtTheCaret(t *testing.T) {
 // TestSnippetPickerFiltersByHumps (#2694): the rows filter with the hump
 // matcher (#2650) — "if" finds iferr, "ferr" does not (no segment start).
 func TestSnippetPickerFiltersByHumps(t *testing.T) {
+	t.Parallel()
 	mode := newSnippetPickerMode()
 	mode.entries = []snippets.Entry{
 		{Trigger: "iferr", Language: "go", Body: "if err != nil {\n\t$1\n}"},

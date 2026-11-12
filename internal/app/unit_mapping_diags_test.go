@@ -12,6 +12,7 @@ import (
 // it reads as the mapping being ignored, because the field falls back to its
 // built-in reading.
 func TestUnitMappingDiags(t *testing.T) {
+	// serial: numhint.SetFieldUnits (process-wide state of package numhint)
 	numhint.SetFieldUnits([]string{"request_timeout=s", "ttl=parsecs"})
 	t.Cleanup(func() { numhint.SetFieldUnits(nil) })
 

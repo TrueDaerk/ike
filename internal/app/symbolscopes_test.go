@@ -37,6 +37,7 @@ func symScopeTree() []ilsp.SymbolNode {
 }
 
 func TestSymbolScopesConversion(t *testing.T) {
+	t.Parallel()
 	got := symbolScopes(symScopeTree())
 	want := []struct{ header, end int }{{0, 30}, {5, 20}}
 	if len(got) != len(want) {
@@ -50,6 +51,7 @@ func TestSymbolScopesConversion(t *testing.T) {
 }
 
 func TestSymbolScopesPreOrder(t *testing.T) {
+	t.Parallel()
 	// enclosingHeaders walks the list once and expects outer before inner.
 	scopes := symbolScopes([]ilsp.SymbolNode{{
 		Name: "A", Line: 0, EndLine: 40,
@@ -68,6 +70,7 @@ func TestSymbolScopesPreOrder(t *testing.T) {
 }
 
 func TestSymbolScopesReachEditorOnDelivery(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	path := symScopeFile(t)
 	out, _ := m.openPath(path, false)
@@ -83,6 +86,7 @@ func TestSymbolScopesReachEditorOnDelivery(t *testing.T) {
 }
 
 func TestSymbolScopesFillLaterViewFromCache(t *testing.T) {
+	t.Parallel()
 	// A view that missed the reply — a pane that opened the file after its
 	// tree was cached, or a tab switched back to one — is filled by the
 	// settled-pass sync from the cache alone; the request dedup would never
@@ -106,8 +110,9 @@ func TestSymbolScopesFillLaterViewFromCache(t *testing.T) {
 }
 
 func TestSymbolScopesToggleGatesDelivery(t *testing.T) {
+	// serial: withStore: t.Setenv
 	cfg := host.MapConfig{"editor.sticky_scroll_symbols": "false"}
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := NewWith(registry.New(), cfg)
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m = out.(Model)

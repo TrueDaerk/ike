@@ -76,6 +76,8 @@ func diffTranscript(t *testing.T, id, cwd, main, created, other string) string {
 }
 
 func TestTraceDiffViewProvenanceAndBases(t *testing.T) {
+	// serial: traceApp: t.Setenv
+	withStore(t)
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not installed")
 	}
@@ -192,6 +194,7 @@ func TestTraceDiffViewProvenanceAndBases(t *testing.T) {
 // TestTraceAskFallsBackToReconstructedHunk: without a feed link the ask
 // context carries the transcript's hunk (#2859).
 func TestTraceAskFallsBackToReconstructedHunk(t *testing.T) {
+	// serial: traceApp: t.Setenv
 	m, dir := traceApp(t)
 	target := filepath.Join(t.TempDir(), "main.go")
 	if err := os.WriteFile(filepath.Join(dir, "sess-1.jsonl"), []byte(transcriptLines("sess-1", projectRoot(), target, 1)), 0o644); err != nil {
@@ -220,6 +223,8 @@ func TestTraceAskFallsBackToReconstructedHunk(t *testing.T) {
 // change has it and falling back with a notice otherwise; at the ends the
 // view keeps its diff and says so. Both pane views.
 func TestTraceDiffStepsThroughChanges(t *testing.T) {
+	// serial: traceApp: t.Setenv
+	withStore(t)
 	for _, view := range []tracepanel.ViewMode{tracepanel.ViewTree, tracepanel.ViewGraph} {
 		t.Run(view.String(), func(t *testing.T) {
 			m, dir := traceApp(t)

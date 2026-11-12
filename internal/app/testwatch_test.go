@@ -74,6 +74,7 @@ func fkPackage(t *testing.T) (dir, testFile, src string) {
 }
 
 func TestWatchToggleShowsBadge(t *testing.T) {
+	t.Parallel()
 	m := testsApp(t)
 	out, _ := m.Update(TestsToggleMsg{})
 	m = out.(Model)
@@ -101,6 +102,7 @@ func TestWatchToggleShowsBadge(t *testing.T) {
 }
 
 func TestWatchSaveTriggersScopedRerun(t *testing.T) {
+	t.Parallel()
 	dir, testFile, src := fkPackage(t)
 	// The last run was a single test; saving a plain source file of the same
 	// directory-scoped package must widen the re-run to the whole package.
@@ -133,6 +135,7 @@ func TestWatchSaveTriggersScopedRerun(t *testing.T) {
 }
 
 func TestWatchDebouncesBurstOfSaves(t *testing.T) {
+	t.Parallel()
 	dir, testFile, src := fkPackage(t)
 	last, _ := run.TestConfig(dir, testFile, nil)
 	m := watchApp(t, dir, last)
@@ -159,6 +162,7 @@ func TestWatchDebouncesBurstOfSaves(t *testing.T) {
 }
 
 func TestWatchQueuesAtMostOneRerunWhileRunning(t *testing.T) {
+	t.Parallel()
 	dir, testFile, src := fkPackage(t)
 	last, _ := run.TestConfig(dir, testFile, nil)
 	m := watchApp(t, dir, last)
@@ -202,6 +206,7 @@ func TestWatchQueuesAtMostOneRerunWhileRunning(t *testing.T) {
 }
 
 func TestWatchFileScopedLanguageFallsBackToLastScope(t *testing.T) {
+	t.Parallel()
 	dir, testFile, _ := fkPackage(t)
 	last, _ := run.TestConfig(dir, testFile, nil)
 	m := watchApp(t, dir, last)
@@ -229,6 +234,7 @@ func TestWatchFileScopedLanguageFallsBackToLastScope(t *testing.T) {
 }
 
 func TestWatchScopeFallsBackOutsideRootAndWithoutTests(t *testing.T) {
+	t.Parallel()
 	dir, testFile, _ := fkPackage(t)
 	last, _ := run.TestConfig(dir, testFile, nil)
 	m := watchApp(t, dir, last)
@@ -252,6 +258,7 @@ func TestWatchScopeFallsBackOutsideRootAndWithoutTests(t *testing.T) {
 }
 
 func TestWatchOffAndClosedPaneStopTriggering(t *testing.T) {
+	t.Parallel()
 	dir, testFile, src := fkPackage(t)
 	last, _ := run.TestConfig(dir, testFile, nil)
 	m := watchApp(t, dir, last)
@@ -277,6 +284,7 @@ func TestWatchOffAndClosedPaneStopTriggering(t *testing.T) {
 }
 
 func TestTestDirScopedDiscriminatesLanguages(t *testing.T) {
+	t.Parallel()
 	if !lang.TestDirScoped("/p/impl.fk") {
 		t.Fatal("a FileArgv without {file} is directory-scoped")
 	}

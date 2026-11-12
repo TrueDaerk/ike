@@ -89,6 +89,7 @@ func countLeaves(m Model, kind pane.Kind) int {
 // area (sharing with the Issues pane), the explorer keeps its width and the
 // Issues pane is not duplicated.
 func TestOpenFileWithNoEditorLandsInIssuesArea(t *testing.T) {
+	// serial: issue3109Model: config.Set (process-wide configuration)
 	m, _, _ := issue3109Model(t)
 	defer closeLeafTerminals(m)
 	explorerW := m.lay.Panes[pane.ExplorerKey].W
@@ -132,6 +133,8 @@ func TestOpenFileWithNoEditorLandsInIssuesArea(t *testing.T) {
 // held by the explorer alone (`E` over `C | L | H`), the editor splits the
 // explorer at the saved share of the row — the explorer keeps its width.
 func TestOpenFileWithNoEditorAndEmptySlotSplitsAtHopLevel(t *testing.T) {
+	// serial: issue3109Model: config.Set (process-wide configuration)
+	withStore(t)
 	m, _, _ := issue3109Model(t)
 	defer closeLeafTerminals(m)
 	m.closePane(pane.IssuesKey)
@@ -161,6 +164,7 @@ func TestOpenFileWithNoEditorAndEmptySlotSplitsAtHopLevel(t *testing.T) {
 // pane opens in the flexible region (beside the Issues window), not beside
 // the HTTP pane in the bottom strip.
 func TestRunWithNoEditorOpensInFlexibleRegion(t *testing.T) {
+	// serial: issue3109Model: config.Set (process-wide configuration)
 	m, _, _ := issue3109Model(t)
 	defer closeLeafTerminals(m)
 	m.setFocus(pane.HTTPKey)
@@ -177,6 +181,7 @@ func TestRunWithNoEditorOpensInFlexibleRegion(t *testing.T) {
 
 // TestDebugWithNoEditorOpensInFlexibleRegion is the Debug counterpart.
 func TestDebugWithNoEditorOpensInFlexibleRegion(t *testing.T) {
+	// serial: issue3109Model: config.Set (process-wide configuration)
 	m, _, _ := issue3109Model(t)
 	defer closeLeafTerminals(m)
 	m.setFocus(pane.HTTPKey)
@@ -195,6 +200,8 @@ func TestDebugWithNoEditorOpensInFlexibleRegion(t *testing.T) {
 // bottom home still joins the layout's tool strip under the editor (#2191
 // unchanged).
 func TestRunWithEditorKeepsBottomDock(t *testing.T) {
+	// serial: issue3109Model: config.Set (process-wide configuration)
+	withStore(t)
 	m, _, _ := issue3109Model(t)
 	defer closeLeafTerminals(m)
 	m.closePane(pane.IssuesKey)

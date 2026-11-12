@@ -13,6 +13,7 @@ import (
 // the invariant: after one handler pass, no past-due mark can remain armed.
 
 func TestBackupTickAlwaysDrainsDueMarks(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m.backupDeb.Mark("gone-buffer", time.Now().Add(-time.Hour))
 	_ = m.snapshotDueBackups(time.Now())
@@ -22,6 +23,7 @@ func TestBackupTickAlwaysDrainsDueMarks(t *testing.T) {
 }
 
 func TestAutosaveIdleTickAlwaysDrainsDueMarks(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m.autosaveIdleDeb.Mark("gone-buffer", time.Now().Add(-time.Hour))
 	m.saveDueIdleBuffers(time.Now())

@@ -13,6 +13,7 @@ import (
 // app's surfaces: the hints, the Problems feed and their live reload.
 
 func TestComplexityHintsForPerFileThresholds(t *testing.T) {
+	t.Parallel()
 	fns := []complexity.Function{{Name: "f", Line: 3, CCN: 20, Cognitive: 4}}
 	if h := complexityHintsFor(fns, complexity.Thresholds{CCN: 15, Cog: 15}, false, nil, false); len(h) != 1 || !h[0].Warn {
 		t.Fatalf("CCN 20 under the global 15 must warn: %+v", h)
@@ -27,6 +28,7 @@ func TestComplexityHintsForPerFileThresholds(t *testing.T) {
 }
 
 func TestComplexityDiagnosticsPerFileThresholds(t *testing.T) {
+	t.Parallel()
 	v := complexity.View{Files: map[string][]complexity.Function{
 		"/p/legacy/old.go": {{Name: "Old", Line: 1, CCN: 20}},
 		"/p/src/new.go":    {{Name: "New", Line: 1, CCN: 20}},
@@ -49,6 +51,7 @@ func TestComplexityDiagnosticsPerFileThresholds(t *testing.T) {
 // TestComplexityOverridesLiveReload: a reloaded override re-feeds Problems
 // and repaints the hints, whose key carries the resolved thresholds.
 func TestComplexityOverridesLiveReload(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	m, src := complexityApp(t)
 	out, cmd := m.openPathAt(src, 0, 0)
 	m = out.(Model)

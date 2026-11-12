@@ -36,7 +36,7 @@ func subagentLines(id, cwd, target string) string {
 }
 
 func TestAgentTraceSubagentEditsLinkAndAsk(t *testing.T) {
-	askSpinInterval = time.Millisecond
+	// serial: fakeClaude: t.Setenv
 	m, dir := traceApp(t)
 	if m.onboardingOpen() {
 		m = m.closeOnboarding().(Model)

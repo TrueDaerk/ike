@@ -12,6 +12,7 @@ import (
 // shared view of the focused editor's document.
 
 func TestSplitViewSharesDocumentAndCopiesPosition(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	content := strings.Repeat("line\n", 40)
 	a := writeTemp(t, dir, "a.txt", content)
@@ -40,6 +41,7 @@ func TestSplitViewSharesDocumentAndCopiesPosition(t *testing.T) {
 }
 
 func TestSplitViewEditMirrorsAcrossViews(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "alpha\n")
 	m := openApp(t, a)
@@ -58,6 +60,7 @@ func TestSplitViewEditMirrorsAcrossViews(t *testing.T) {
 }
 
 func TestSplitViewNoFileIsNoop(t *testing.T) {
+	t.Parallel()
 	m := newSized() // fresh scratch editor, no file loaded
 	before := len(m.activeWS().Panes.Keys())
 	focused := m.activeWS().Panes.Focused()
@@ -73,6 +76,7 @@ func TestSplitViewNoFileIsNoop(t *testing.T) {
 }
 
 func TestSplitViewCommandsRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	for _, id := range []string{"editor.splitViewRight", "editor.splitViewDown"} {
 		if _, ok := m.reg.Command(id); !ok {

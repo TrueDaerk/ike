@@ -13,7 +13,6 @@ import (
 // split) with the explorer focused and the mode armed.
 func resizeModeModel(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := newSized()
 	tm, _ := m.Update(PaneResizeModeMsg{})
 	m = tm.(Model)
@@ -26,6 +25,8 @@ func resizeModeModel(t *testing.T) Model {
 // TestResizeModeEnterStepsAndExit (#2150): one chord enters the mode, plain
 // h/j/k/l and arrows resize repeatedly without re-typing it, and esc leaves.
 func TestResizeModeEnterStepsAndExit(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := resizeModeModel(t)
 	focused := m.activeWS().Panes.Focused()
 	before := m.lay.Panes[focused].W
@@ -59,6 +60,7 @@ func TestResizeModeEnterStepsAndExit(t *testing.T) {
 
 // TestResizeModeEnterExitByEnter: enter is the second documented exit key.
 func TestResizeModeEnterExitByEnter(t *testing.T) {
+	t.Parallel()
 	m := resizeModeModel(t)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.resizeMode {
@@ -69,7 +71,7 @@ func TestResizeModeEnterExitByEnter(t *testing.T) {
 // TestResizeModeVerticalSteps: j/k move the horizontal edge of a stacked
 // split, so the vertical pair resizes too.
 func TestResizeModeVerticalSteps(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	t.Parallel()
 	m := newSized()
 	tm, _ := m.Update(ToggleExplorerFocusMsg{}) // focus the editor
 	m = tm.(Model)
@@ -94,6 +96,7 @@ func TestResizeModeVerticalSteps(t *testing.T) {
 // key reaches an editor or a command — no accidental edits, and the mode
 // stays put.
 func TestResizeModeOtherKeysAreInert(t *testing.T) {
+	t.Parallel()
 	m := resizeModeModel(t)
 	focused := m.activeWS().Panes.Focused()
 	before := m.lay.Panes[focused].W
@@ -122,6 +125,7 @@ func TestResizeModeOtherKeysAreInert(t *testing.T) {
 
 // TestResizeModeStatusHint: the mode is visible while active and gone after.
 func TestResizeModeStatusHint(t *testing.T) {
+	t.Parallel()
 	m := resizeModeModel(t)
 	line := m.statusLine()
 	if !strings.Contains(line, "RESIZE") || !strings.Contains(line, "esc") {
@@ -136,7 +140,7 @@ func TestResizeModeStatusHint(t *testing.T) {
 // TestResizeModeRefusesWithoutSplit: a maximized pane has no divider to move,
 // so the mode declines to arm instead of swallowing the keyboard.
 func TestResizeModeRefusesWithoutSplit(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	t.Parallel()
 	m := newSized()
 	tm, _ := m.Update(MaximizePaneMsg{})
 	m = tm.(Model)

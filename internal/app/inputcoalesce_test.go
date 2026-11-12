@@ -46,6 +46,7 @@ func waitForFlush(t *testing.T, snapshot func() []tea.Msg) coalescedInputMsg {
 // measured render cost (#610): cheap frames stay at the floor (~60fps), expensive
 // frames back off toward the ceiling so render CPU stays bounded.
 func TestNextIntervalAdaptsToRenderCost(t *testing.T) {
+	// serial: sets package variable renderNanos
 	defer renderNanos.Store(0)
 
 	renderNanos.Store(int64(1 * time.Millisecond)) // cheap frame
@@ -67,6 +68,7 @@ func TestNextIntervalAdaptsToRenderCost(t *testing.T) {
 // TestFilterPassesNonMouseThrough verifies keys and other messages are never
 // dropped or delayed by the coalescer.
 func TestFilterPassesNonMouseThrough(t *testing.T) {
+	t.Parallel()
 	c := NewMouseCoalescer()
 	for _, msg := range []tea.Msg{
 		tea.KeyPressMsg{},
@@ -85,6 +87,7 @@ func TestFilterPassesNonMouseThrough(t *testing.T) {
 // (return nil, so bubbletea skips Update+render) and re-injected as one batch
 // preserving every wheel notch and the latest motion.
 func TestFilterAbsorbsMouseAndFlushes(t *testing.T) {
+	// serial: waitForFlush: waits on the wall clock (load-sensitive)
 	c := NewMouseCoalescer()
 	send, snapshot := collectSender()
 	c.SetSender(send)
@@ -119,6 +122,7 @@ func TestFilterAbsorbsMouseAndFlushes(t *testing.T) {
 // so N busy terminals cost one Update+render per flush instead of N per
 // quiet interval.
 func TestFilterAbsorbsTerminalOutput(t *testing.T) {
+	// serial: waitForFlush: waits on the wall clock (load-sensitive)
 	c := NewMouseCoalescer()
 	send, snapshot := collectSender()
 	c.SetSender(send)
@@ -148,6 +152,7 @@ func TestFilterAbsorbsTerminalOutput(t *testing.T) {
 // it does not spawn a growing pile of blocked flush goroutines. Every wheel is
 // still delivered once the consumer catches up (#602 regression guard).
 func TestFlushSingleInFlightUnderBackpressure(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	c := NewMouseCoalescer()
 
 	var mu sync.Mutex
@@ -218,6 +223,7 @@ func TestFlushSingleInFlightUnderBackpressure(t *testing.T) {
 // TestFilterDoesNotReabsorbInjected verifies the re-injected batch passes through
 // the filter (it must not be re-absorbed, which would loop forever).
 func TestFilterDoesNotReabsorbInjected(t *testing.T) {
+	t.Parallel()
 	c := NewMouseCoalescer()
 	if got := c.Filter(nil, coalescedInputMsg{}); got == nil {
 		t.Fatal("coalescedInputMsg must pass through the filter")
@@ -227,6 +233,7 @@ func TestFilterDoesNotReabsorbInjected(t *testing.T) {
 // TestFlushWithoutSenderIsSafe verifies absorbing before a sender is wired does
 // not panic and simply holds the events.
 func TestFlushWithoutSenderIsSafe(t *testing.T) {
+	t.Parallel()
 	c := NewMouseCoalescer()
 	if got := c.Filter(nil, tea.MouseWheelMsg{Button: tea.MouseWheelUp}); got != nil {
 		t.Fatal("wheel not absorbed without a sender")
@@ -251,6 +258,7 @@ func flushLatency(t *testing.T, c *MouseCoalescer, snapshot func() []tea.Msg, ke
 // attended window, flushes no sooner than termIdleInterval (~10 fps) instead
 // of the ~60 fps mouse floor.
 func TestTerminalOnlyBatchBacksOffWhenUnattended(t *testing.T) {
+	// serial: sets package variable renderNanos
 	defer renderNanos.Store(0)
 	renderNanos.Store(0) // cheap frames: the mouse floor would be 16ms
 	c := NewMouseCoalescer()
@@ -265,6 +273,7 @@ func TestTerminalOnlyBatchBacksOffWhenUnattended(t *testing.T) {
 // output following a key (its echo, typically) flushes at the mouse cadence:
 // the back-off applies only once the attended window has passed (#3078).
 func TestRecentInputKeepsTerminalOutputAtTheNormalCadence(t *testing.T) {
+	// serial: sets package variable renderNanos
 	defer renderNanos.Store(0)
 	renderNanos.Store(0)
 	c := NewMouseCoalescer()
@@ -284,6 +293,7 @@ func TestRecentInputKeepsTerminalOutputAtTheNormalCadence(t *testing.T) {
 // handled immediately by the loop, and the shell's echo does not wait out
 // the back-off behind it.
 func TestUserInputPullsAnUnattendedFlushForward(t *testing.T) {
+	// serial: sets package variable renderNanos
 	defer renderNanos.Store(0)
 	renderNanos.Store(0)
 	for _, tc := range []struct {

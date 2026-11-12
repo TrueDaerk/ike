@@ -34,6 +34,7 @@ func seedActiveGroup(t *testing.T, name string, roots ...string) {
 // acceptance: with a group active its members lead the column, in their MRU
 // order, each carrying the `⦿ <group>` badge.
 func TestRecentProjectsColumnPutsGroupMembersFirst(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	alpha, beta := filepath.Join(base, "alpha"), filepath.Join(base, "beta")
 	here := filepath.Join(base, "here")
@@ -65,6 +66,7 @@ func TestRecentProjectsColumnPutsGroupMembersFirst(t *testing.T) {
 // first *row* of the reordered list, i.e. on a group member, even though a
 // non-member is the more recently used project.
 func TestSwitchMRUFollowsGroupOrder(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	var dirs []string
 	for _, name := range []string{"here", "other", "member"} {
@@ -93,7 +95,7 @@ func TestSwitchMRUFollowsGroupOrder(t *testing.T) {
 // TestActiveProjectGroupWithoutMarker is the no-group case both halves rest
 // on: no marker, the zero group, no reordering and no badge.
 func TestActiveProjectGroupWithoutMarker(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	// serial: config.Set (process-wide configuration)
 	prev := config.Get()
 	cfg := *prev
 	cfg.Project.ActiveGroup = ""

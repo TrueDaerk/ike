@@ -12,6 +12,7 @@ import (
 // an in-file search landing is still scanning in the background, the status
 // line's large-file slot says so, and the landing's arrival clears it.
 func TestSearchPendingBadgeInStatusLine(t *testing.T) {
+	// serial: largeModel: largefile.Reset (process-wide state of package largefile)
 	m, _ := largeModel(t)
 	ed := m.activeEditor()
 	if ed == nil {

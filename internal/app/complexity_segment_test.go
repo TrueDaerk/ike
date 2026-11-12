@@ -38,6 +38,7 @@ func cxSegmentApp(t *testing.T, base, head map[string][]complexity.Function) Mod
 }
 
 func TestComplexitySegmentRendering(t *testing.T) {
+	// serial: cxSegmentApp: t.Setenv
 	cxSegmentConfig(t, true, true)
 	f := func(ccn int) map[string][]complexity.Function {
 		return map[string][]complexity.Function{"/r/a.go": {{Name: "f", CCN: ccn, Line: 1}}}
@@ -88,6 +89,7 @@ func TestComplexitySegmentRendering(t *testing.T) {
 func containsPlain(s, sub string) bool { return strings.Contains(ansi.Strip(s), sub) }
 
 func TestComplexitySegmentHidden(t *testing.T) {
+	// serial: cxSegmentApp: t.Setenv
 	f := map[string][]complexity.Function{"/r/a.go": {{Name: "f", CCN: 3, Line: 1}}}
 	cxSegmentConfig(t, false, true)
 	if s := cxSegmentApp(t, nil, f).complexitySegment(); s != "" {
@@ -111,6 +113,7 @@ func TestComplexitySegmentHidden(t *testing.T) {
 // TestComplexitySegmentArmsDiff: with the Changes tab closed, the segment
 // alone keeps the diff armed on a VCS refresh; off, nothing is scheduled.
 func TestComplexitySegmentArmsDiff(t *testing.T) {
+	// serial: cxSegmentConfig: config.Set (process-wide configuration)
 	cxSegmentConfig(t, false, true)
 	m, _ := timeApp(t)
 	if m.complexityPanel() != nil {
@@ -138,6 +141,7 @@ func TestComplexitySegmentArmsDiff(t *testing.T) {
 // TestComplexitySegmentClickOpensChanges: the click opens the window on
 // its Changes tab.
 func TestComplexitySegmentClickOpensChanges(t *testing.T) {
+	// serial: cxSegmentConfig: config.Set (process-wide configuration)
 	cxSegmentConfig(t, true, true)
 	m, _ := timeApp(t)
 	m.openComplexityChanges()

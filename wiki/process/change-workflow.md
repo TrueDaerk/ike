@@ -4,7 +4,7 @@ title: Change Workflow
 description: The lifecycle of every change — issue first, issue branch, version bump, PR, merge, branch cleanup, plus the settings-UI, default-keybind, shared-building-block and span-family-ledger obligations.
 tags: [process, git, release]
 resource: internal/version/version.go
-timestamp: 2026-10-27T07:30:00Z
+timestamp: 2026-11-12T09:00:00Z
 ---
 
 # Change Workflow
@@ -149,7 +149,8 @@ consequences for tests:
   package-level seam — passes locally and fails in one shard. In
   `internal/app`, change directory through `chdir(t, dir)` (never `t.Chdir`:
   the cwd cache in `cwdcache.go` would outlive the test; a sweep test enforces
-  it) and give a model built with `NewWith` its own `IKE_CONFIG_DIR`.
+  it). A test model has **no state store** unless the test takes one with
+  `withStore(t)` — see the next section.
 - **No test installs a tool.** The app `TestMain` calls `lsp.NoInstalls()`
   (`plugins/lsp`): opening a `.go` file where gopls is missing — every CI
   runner — would otherwise run `go install …gopls@latest` in the background
@@ -161,6 +162,30 @@ consequences for tests:
 
 What keeps the budget, and what a new test must follow:
 
+- **`internal/app` tests run in parallel (#3135).** Every top-level test
+  opens with `t.Parallel()` or with a `// serial: <why>` line; the sweep guard
+  `TestEveryTestIsParallelOrSaysWhy` (`parallelsweep_test.go`) fails on a test
+  with neither. Go runs the serial tests first, one by one, then the parallel
+  ones together, so a test is serial exactly when it touches state the whole
+  process shares: the environment (`t.Setenv`, which Go refuses in a parallel
+  test anyway), the working directory (`chdir`), a package-level seam or
+  switch (`clipboardWrite`, `keymap.GOOS`, `config.Set`, `perfhud.Reset`, …),
+  the language or plugin registry, a process-wide counter (`diag.*`), or the
+  wall clock — a poll with a deadline is load-sensitive and stays out of the
+  parallel phase. A parallel test builds its fixtures in `t.TempDir()` and
+  never swaps a package variable; a delay every test wants short is set once
+  in `TestMain` (`playDebounce`, `askSpinInterval`, `tdPreviewDebounce`).
+- **A test model has no state store by default.** `IKE_CONFIG_DIR` is
+  process-wide, so it cannot be rotated per model once tests overlap.
+  `TestMain` points it below a regular file instead: every read finds nothing
+  and every write fails, so nothing one model persists (layout, session,
+  recents, bookmarks, telemetry, …) can reach another. A test that asserts on
+  something persisted or restored — or on the *absence* of it, which would
+  otherwise pass vacuously — calls `withStore(t)` for a real, empty store of
+  its own and is serial by that. The same `TestMain` keeps a missing language
+  server from launching `go env` / `npm prefix -g` in the background
+  (`transport.NoToolchainProbes`): two process launches per opened file,
+  each a fork of the whole test binary.
 - **No test waits on real time where a seam exists.** `internal/app` runs
   commands synchronously (`drainCmd`, `settle`), so a `tea.Tick` executed in a
   drain *sleeps its delay*. Every timer the app schedules goes through

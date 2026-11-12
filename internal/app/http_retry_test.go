@@ -62,6 +62,8 @@ func retryEvents(t *testing.T, cmd tea.Cmd) []tea.Msg {
 }
 
 func TestHTTPRetryPaneShowsFinalAttempt(t *testing.T) {
+	// serial: retryEvents: waits on the wall clock (load-sensitive)
+	withStore(t)
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if hits.Add(1) < 3 {
@@ -129,6 +131,7 @@ func TestHTTPRetryPaneShowsFinalAttempt(t *testing.T) {
 
 // A series whose last attempt times out names the attempt in the message.
 func TestHTTPRetryTimeoutNamesAttempt(t *testing.T) {
+	// serial: retryEvents: waits on the wall clock (load-sensitive)
 	srv := hangingHTTPServer(t)
 	m := httpApp(t)
 	source := filepath.Join(t.TempDir(), "api.http")

@@ -71,6 +71,7 @@ func writeTestDB(t *testing.T, name string) string {
 // the data pane message instead of loading a buffer, and so does a database
 // with a foreign extension via the magic sniff.
 func TestOpenPathRoutesDatabasesToHandler(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"app.db", "app.sqlite", "app.sqlite3", "app.data"} {
 		t.Run(name, func(t *testing.T) {
 			m := newSized()
@@ -93,6 +94,7 @@ func TestOpenPathRoutesDatabasesToHandler(t *testing.T) {
 // database is still claimed by extension — the pane then shows the engine's
 // error instead of a binary buffer.
 func TestPlainDBExtensionWithoutMagicStillClaimed(t *testing.T) {
+	t.Parallel()
 	p := filepath.Join(t.TempDir(), "legacy.db")
 	if err := os.WriteFile(p, []byte("dBASE or whatever"), 0o644); err != nil {
 		t.Fatal(err)
@@ -126,6 +128,7 @@ func writeDuckTestDB(t *testing.T, name string) string {
 // pane, and so does a DuckDB database carrying a foreign extension — the
 // magic sniff claims it before any engine runs.
 func TestOpenPathRoutesDuckDBToHandler(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"app.duckdb", "app.ddb", "app.warehouse"} {
 		t.Run(name, func(t *testing.T) {
 			m := newSized()
@@ -147,6 +150,7 @@ func TestOpenPathRoutesDuckDBToHandler(t *testing.T) {
 // TestOpenDuckDataPaneShowsTables: a DuckDB file lands in the same pane, with
 // its tables listed and the first page loaded.
 func TestOpenDuckDataPaneShowsTables(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeDuckTestDB(t, "app.duckdb")
 	m = openData(t, m, p)
@@ -166,6 +170,7 @@ func TestOpenDuckDataPaneShowsTables(t *testing.T) {
 // TestOpenDataPaneShowsTables: the pane opens focused, bound to the file,
 // with the table loaded into the grid.
 func TestOpenDataPaneShowsTables(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeTestDB(t, "app.db")
 	m = openData(t, m, p)
@@ -196,6 +201,7 @@ func TestOpenDataPaneShowsTables(t *testing.T) {
 // no frame (#1795) — the pane is there, focused and drawable, while the engine
 // open runs as a command, and the IDE keeps taking keys meanwhile.
 func TestDataPaneAppearsBeforeTheDatabaseOpens(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeTestDB(t, "app.db")
 	cmd := m.openDataPane(p)
@@ -226,6 +232,7 @@ func TestDataPaneAppearsBeforeTheDatabaseOpens(t *testing.T) {
 // TestShowTableSchemaOpensReadOnlyBuffer: the schema message lands in a
 // read-only editor tab holding the DDL under a virtual .sql path.
 func TestShowTableSchemaOpensReadOnlyBuffer(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeTestDB(t, "app.db")
 	m = openData(t, m, p)
@@ -251,7 +258,8 @@ func TestShowTableSchemaOpensReadOnlyBuffer(t *testing.T) {
 // TestDataPaneRestoresByPath: the pane persists as kind "data" plus the file
 // path and restores by re-opening the database.
 func TestDataPaneRestoresByPath(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	// serial: withStore: t.Setenv
+	withStore(t)
 	p := writeTestDB(t, "app.db")
 
 	m := NewWith(registry.New(), host.MapConfig{})
@@ -298,6 +306,7 @@ func TestDataPaneRestoresByPath(t *testing.T) {
 // toggles the pane's sidebar/grid regions instead of cycling the IDE's panes,
 // which stays on ctrl+tab and the focus keys.
 func TestTabTogglesDataRegion(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeTestDB(t, "app.db")
 	m = openData(t, m, p)
@@ -326,6 +335,7 @@ func TestTabTogglesDataRegion(t *testing.T) {
 // TestDataPaneMouseScrollsAndSelects: the wheel scrolls the focused region and
 // pans the columns, a click selects and takes the region (#1788).
 func TestDataPaneMouseScrollsAndSelects(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeTestDB(t, "app.db")
 	m = openData(t, m, p)

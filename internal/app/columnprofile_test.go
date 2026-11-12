@@ -25,6 +25,7 @@ import (
 // against an open data viewer and checks the popup ends up on screen with the
 // numbers the engine computed.
 func TestDataColumnProfileRunsInTheFocusedViewer(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m = openData(t, m, writeTestDB(t, "app.db"))
 	inst := m.focusedContent()
@@ -47,6 +48,7 @@ func TestDataColumnProfileRunsInTheFocusedViewer(t *testing.T) {
 // TestDataColumnProfileIsPaneScoped: the command only exists while a data
 // viewer has the focus — it is a grid action, not a global one.
 func TestDataColumnProfileIsPaneScoped(t *testing.T) {
+	t.Parallel()
 	cmd, ok := registry.Global().Command("data.columnProfile")
 	if !ok {
 		t.Fatal("data.columnProfile must be registered")
@@ -71,6 +73,7 @@ func TestDataColumnProfileIsPaneScoped(t *testing.T) {
 // TestCSVColumnProfileScansTheBuffer profiles the caret's column of a csv
 // buffer and shows it in the shell; y copies exactly what is shown.
 func TestCSVColumnProfileScansTheBuffer(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	p := filepath.Join(t.TempDir(), "sales.csv")
 	body := "region,qty\nnorth,1\nsouth,\nnorth,3\n"
 	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
@@ -111,6 +114,7 @@ func TestCSVColumnProfileScansTheBuffer(t *testing.T) {
 // editor context, so it can fire on a plain file — it must then say so rather
 // than profile nonsense.
 func TestCSVColumnProfileIgnoresANonTableBuffer(t *testing.T) {
+	t.Parallel()
 	p := filepath.Join(t.TempDir(), "notes.txt")
 	if err := os.WriteFile(p, []byte("hello\nworld\n"), 0o644); err != nil {
 		t.Fatal(err)

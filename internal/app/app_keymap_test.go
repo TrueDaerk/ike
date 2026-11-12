@@ -34,7 +34,8 @@ func (kbPlugin) Capabilities() plugin.Capabilities {
 // TestKeymapResolvesToRegisteredCommand verifies a config-bound chord drives the
 // registered command through the root model's keybinding layer.
 func TestKeymapResolvesToRegisteredCommand(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	// serial: withStore: t.Setenv
+	withStore(t)
 	reg := registry.New()
 	reg.Add(kbPlugin{})
 	cfg := host.MapConfig{"keymap.bindings.ctrl+y": "kbtest.fire"}
@@ -96,7 +97,8 @@ func (p hookPlugin) Capabilities() plugin.Capabilities {
 // plugin hooks with the command id, for both the palette path (RunCommand)
 // and the keybinding path.
 func TestCommandExecutedHookFires(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	// serial: withStore: t.Setenv
+	withStore(t)
 	var executed []string
 	reg := registry.New()
 	reg.Add(hookPlugin{executed: &executed})
@@ -119,7 +121,8 @@ func TestCommandExecutedHookFires(t *testing.T) {
 // command is consumed with an info toast naming the blocking dependency
 // instead of dying silently (#267).
 func TestKeymapBlockedBindingToasts(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	// serial: keymap.StubBlockedForTest (process-wide ledger)
+	withStore(t)
 	reg := registry.New()
 	// The real ledger emptied with 0320 (#466) — the machinery is exercised
 	// through a stubbed entry bound to a custom chord.
@@ -162,7 +165,8 @@ func (p langScopedPlugin) Capabilities() plugin.Capabilities {
 // editor[<lang>]-scoped override fires only in editors whose buffer has that
 // language; any other editor still runs the chord's global binding.
 func TestLangScopedBindingResolvesPerBuffer(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	// serial: registerTestLang: lang.Register (process-wide language registry)
+	withStore(t)
 	registerTestLang(t, lang.Language{ID: "lstest", Extensions: []string{"lstest"}})
 	var fired []string
 	reg := registry.New()
@@ -215,7 +219,8 @@ func TestLangScopedBindingResolvesPerBuffer(t *testing.T) {
 // TestKeymapInertBindingFallsThrough verifies an unregistered command id leaves
 // the key to normal dispatch instead of swallowing it.
 func TestKeymapInertBindingFallsThrough(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	// serial: withStore: t.Setenv
+	withStore(t)
 	reg := registry.New()
 	// Bind ctrl+y to a command nobody registers: the binding is inert.
 	cfg := host.MapConfig{"keymap.bindings.ctrl+y": "nobody.home"}

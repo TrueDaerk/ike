@@ -17,6 +17,7 @@ import (
 // default dark theme's tokens, which are near-unreadable on a light theme's
 // background.
 func TestRestoredLayoutKeepsThemePalette(t *testing.T) {
+	// serial: t.Setenv
 	store := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", store)
 	dir := t.TempDir()

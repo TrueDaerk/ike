@@ -41,6 +41,7 @@ func cxExtractApp(t *testing.T, groups []complexity.CloneGroup) Model {
 }
 
 func TestComplexityExtractSameFileDuplicates(t *testing.T) {
+	// serial: sets package variable cxAgentRunner
 	file := filepath.Join(t.TempDir(), "a.go")
 	if err := os.WriteFile(file, []byte(cxExtractSrc), 0o644); err != nil {
 		t.Fatal(err)
@@ -169,6 +170,7 @@ func cxExtractAnswer(t *testing.T, answer string) *string {
 }
 
 func TestComplexityExtractMultiFileDuplicates(t *testing.T) {
+	// serial: cxExtractAnswer: sets package variable cxAgentRunner
 	m, fa, fb, req := cxExtractTwoFiles(t)
 	prompt := cxExtractAnswer(t, "```diff\n"+cxExtractHunkA+cxExtractHunkB+"```\nBoth now call sum.")
 	m, run := startCxAgent(t, m, req)
@@ -231,6 +233,7 @@ func TestComplexityExtractMultiFileDuplicates(t *testing.T) {
 }
 
 func TestComplexityExtractMultiFilePartialMissAppliesNothing(t *testing.T) {
+	// serial: cxExtractAnswer: sets package variable cxAgentRunner
 	m, fa, fb, req := cxExtractTwoFiles(t)
 	// a.go's part applies, b.go's misses: neither buffer may change.
 	badB := strings.Replace(cxExtractHunkB, "-\tt := 0\n", "-\tt := 1\n", 1)
@@ -253,6 +256,7 @@ func TestComplexityExtractMultiFilePartialMissAppliesNothing(t *testing.T) {
 }
 
 func TestComplexityExtractMultiFileRefusesForeignFile(t *testing.T) {
+	// serial: cxExtractAnswer: sets package variable cxAgentRunner
 	m, fa, fb, req := cxExtractTwoFiles(t)
 	foreign := "--- a/c.go\n+++ b/c.go\n@@ -1 +1 @@\n-package p\n+package q\n"
 	cxExtractAnswer(t, "```diff\n"+cxExtractHunkA+cxExtractHunkB+foreign+"```\nWhy.")

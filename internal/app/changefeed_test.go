@@ -31,6 +31,7 @@ func externalWrite(t *testing.T, m Model, path, content string) Model {
 // mini-diff shows what changed, with the pre-change content taken off the open
 // buffer before the auto-reload overwrites it.
 func TestChangeFeedRecordsExternalWriteWithDiff(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("one\ntwo\n"), 0o644); err != nil {
@@ -83,6 +84,7 @@ func TestChangeFeedRecordsExternalWriteWithDiff(t *testing.T) {
 // agent's. The watcher stamps a save epoch on every write; the feed re-asks it
 // before recording.
 func TestChangeFeedIgnoresOwnSaves(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
@@ -105,6 +107,7 @@ func TestChangeFeedIgnoresOwnSaves(t *testing.T) {
 // TestChangeFeedSkipsNonFileEvents: directory, repository-metadata and
 // settings events name no project file the user edited.
 func TestChangeFeedSkipsNonFileEvents(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	m := newSized()
 	for _, kind := range []watch.Kind{watch.DirChanged, watch.GitChanged, watch.ConfigChanged} {
@@ -119,6 +122,7 @@ func TestChangeFeedSkipsNonFileEvents(t *testing.T) {
 // TestChangeFeedHidesWatcherNoise: the feed follows the watcher's own ignore
 // rules, so a vendored directory churning cannot bury the real changes.
 func TestChangeFeedHidesWatcherNoise(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	noise := filepath.Join(dir, "node_modules", "pkg")
 	if err := os.MkdirAll(noise, 0o755); err != nil {
@@ -142,6 +146,7 @@ func TestChangeFeedHidesWatcherNoise(t *testing.T) {
 // TestChangeFeedCoalescesAndCaps: an agent rewriting the same file is one row,
 // and the configured cap bounds the session's list.
 func TestChangeFeedCoalescesAndCaps(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	m := newSized()
 	m.host.SetConfig(host.MapConfig{"files.change_feed_limit": "3"})
@@ -171,6 +176,7 @@ func TestChangeFeedCoalescesAndCaps(t *testing.T) {
 // TestChangeFeedSurvivesPaneSwitches: the feed lives on the root model, not on
 // the panel, so closing it and moving focus around leaves it intact.
 func TestChangeFeedSurvivesPaneSwitches(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
@@ -202,6 +208,7 @@ func TestChangeFeedSurvivesPaneSwitches(t *testing.T) {
 // open, so the list folds new events in and the selection stays on the file it
 // was on rather than sliding down as rows prepend.
 func TestChangeFeedFollowsLiveChanges(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a, b := filepath.Join(dir, "a.txt"), filepath.Join(dir, "b.txt")
 	m := newSized()
@@ -225,6 +232,7 @@ func TestChangeFeedFollowsLiveChanges(t *testing.T) {
 // first and then restores the pre-change content through the local-history
 // restore path — one undoable edit, disk untouched until the save.
 func TestChangeFeedRevertRestoresPreChangeContent(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("mine\n"), 0o644); err != nil {
@@ -279,6 +287,8 @@ func TestChangeFeedRevertRestoresPreChangeContent(t *testing.T) {
 // pre-change content from, the newest local-history snapshot supplies it — the
 // #1023 store is the fallback the issue calls for.
 func TestChangeFeedRevertViaLocalHistory(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("saved by ike\n"), 0o644); err != nil {
@@ -321,6 +331,8 @@ func TestChangeFeedRevertViaLocalHistory(t *testing.T) {
 // TestChangeFeedRevertUndeletesRemovedFile: a file an agent deleted has no
 // buffer to restore into, so the revert writes it back to disk and opens it.
 func TestChangeFeedRevertUndeletesRemovedFile(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("keep me\n"), 0o644); err != nil {
@@ -370,6 +382,7 @@ func TestChangeFeedRevertUndeletesRemovedFile(t *testing.T) {
 // TestChangeFeedOpenAndDismiss: enter opens the file, x drops the row, c
 // clears the feed.
 func TestChangeFeedOpenAndDismiss(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a, b := filepath.Join(dir, "a.txt"), filepath.Join(dir, "b.txt")
 	m := newSized()
@@ -408,6 +421,7 @@ func TestChangeFeedOpenAndDismiss(t *testing.T) {
 // reloaded — it goes stale, and the feed's reload action is how the user drops
 // their edits in favour of the external version.
 func TestChangeFeedReloadsConflictedBuffer(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
@@ -441,6 +455,7 @@ func TestChangeFeedReloadsConflictedBuffer(t *testing.T) {
 // reloading a file that is not open — explains itself without tearing down the
 // list the user was reading.
 func TestChangeFeedRefusedActionKeepsPanelOpen(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	m := newSized()
 	m = externalWrite(t, m, filepath.Join(dir, "a.txt"), "a\n") // never opened
@@ -458,6 +473,7 @@ func TestChangeFeedRefusedActionKeepsPanelOpen(t *testing.T) {
 // TestChangeFeedDiffPane: d lands the before/after pair in the reusable diff
 // pane instead of the panel's mini-diff.
 func TestChangeFeedDiffPane(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
@@ -483,6 +499,7 @@ func TestChangeFeedDiffPane(t *testing.T) {
 // no previous version — the panel says so instead of offering a revert that
 // would have to invent one.
 func TestChangeFeedCreatedEntryHasNoRevert(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "new.txt")
 	if err := os.WriteFile(path, []byte("fresh\n"), 0o644); err != nil {
@@ -515,6 +532,7 @@ func TestChangeFeedCreatedEntryHasNoRevert(t *testing.T) {
 // TestChangeFeedEmptyNotifies: the command explains itself rather than opening
 // a blank panel.
 func TestChangeFeedEmptyNotifies(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	tm, _ := m.Update(ChangeFeedMsg{}) // the command routes to openChangeFeed
 	m = tm.(Model)
@@ -531,6 +549,7 @@ func TestChangeFeedEmptyNotifies(t *testing.T) {
 // TestChangeFeedLimitZeroDisables: files.change_feed_limit = 0 is the off
 // switch — nothing is recorded.
 func TestChangeFeedLimitZeroDisables(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	m := newSized()
 	m.host.SetConfig(host.MapConfig{"files.change_feed_limit": "0"})

@@ -55,6 +55,7 @@ func footerOf(t *testing.T, m Model, row palette.Item) string {
 // TestIntentionPreviewShowsBuiltinEdit: highlighting a built-in intention that
 // rewrites the buffer shows its diff — the "+" side is what applying writes.
 func TestIntentionPreviewShowsBuiltinEdit(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	m := intentionModel(t, "x.json", `{"debug": true}`, 0, 10)
 	out, _ := m.Update(ilsp.CodeActionsMsg{Intentions: true})
 	m = out.(Model)
@@ -73,6 +74,7 @@ func TestIntentionPreviewShowsBuiltinEdit(t *testing.T) {
 // TestIntentionPreviewDoesNotTouchTheBuffer is the "preview applies nothing"
 // contract: the buffer text and its dirty flag are what they were.
 func TestIntentionPreviewDoesNotTouchTheBuffer(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	const content = `{"debug": true}`
 	m := intentionModel(t, "x.json", content, 0, 10)
 	out, _ := m.Update(ilsp.CodeActionsMsg{Intentions: true})
@@ -94,6 +96,7 @@ func TestIntentionPreviewDoesNotTouchTheBuffer(t *testing.T) {
 // TestIntentionPreviewCommandRowSaysNoPreview: an entry that dispatches a
 // command has no edit to show and says so instead of an empty diff.
 func TestIntentionPreviewCommandRowSaysNoPreview(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	m := intentionModel(t, "x.json", `{"name": "value"}`, 0, 11)
 	out, _ := m.Update(ilsp.CodeActionsMsg{Intentions: true})
 	m = out.(Model)
@@ -110,6 +113,7 @@ func TestIntentionPreviewCommandRowSaysNoPreview(t *testing.T) {
 // TestIntentionPreviewResolvesLSPRowLazily: an LSP row asks the bridge for its
 // preview exactly once — highlighting it again reuses the answer.
 func TestIntentionPreviewResolvesLSPRowLazily(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	m := intentionModel(t, "x.json", `{"name": "value"}`, 0, 11)
 	asked := 0
 	out, _ := m.Update(ilsp.CodeActionsMsg{
@@ -159,6 +163,7 @@ func TestIntentionPreviewResolvesLSPRowLazily(t *testing.T) {
 // TestIntentionPreviewIgnoresRepliesForAnotherOffer: a late reply naming a
 // different file is dropped instead of shown against the current rows.
 func TestIntentionPreviewIgnoresRepliesForAnotherOffer(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	m := intentionModel(t, "x.json", `{"name": "value"}`, 0, 11)
 	out, _ := m.Update(ilsp.CodeActionsMsg{
 		Intentions: true,
@@ -184,6 +189,7 @@ func TestIntentionPreviewIgnoresRepliesForAnotherOffer(t *testing.T) {
 // TestIntentionPreviewFallsBackWithoutABridge: an offer that reached no server
 // cannot preview its rows, and says so rather than waiting forever.
 func TestIntentionPreviewFallsBackWithoutABridge(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	m := intentionModel(t, "x.json", `{"name": "value"}`, 0, 11)
 	out, _ := m.Update(ilsp.CodeActionsMsg{
 		Intentions: true,
@@ -204,6 +210,7 @@ func TestIntentionPreviewFallsBackWithoutABridge(t *testing.T) {
 // TestIntentionPopupSchedulesPreviewOnOpen: opening highlights a row, which is
 // a selection change — so the debounce is scheduled right away.
 func TestIntentionPopupSchedulesPreviewOnOpen(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	m := intentionModel(t, "x.json", `{"debug": true}`, 0, 10)
 	out, cmd := m.Update(ilsp.CodeActionsMsg{Intentions: true})
 	m = out.(Model)

@@ -29,6 +29,8 @@ func explorerRect(t *testing.T, m Model) layout.Rect {
 // tree opens the node context menu at the pointer; a left press outside
 // dismisses it without leaking.
 func TestRightClickOpensExplorerContextMenu(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	ran := false
 	reg := registry.New()
 	reg.Add(fakePlugin{id: "p", caps: plugin.Capabilities{Commands: []plugin.Command{{
@@ -69,6 +71,8 @@ func TestRightClickOpensExplorerContextMenu(t *testing.T) {
 // opens the node menu anchored below the cursor row, esc closes it, and a
 // multi-selection survives so the menu's bulk actions see it.
 func TestAltEnterOpensExplorerContextMenu(t *testing.T) {
+	// serial: packTestModel: t.Setenv
+	withStore(t)
 	root := t.TempDir()
 	a, b := filepath.Join(root, "a.txt"), filepath.Join(root, "b.txt")
 	writeFile(t, a, "a")
@@ -118,6 +122,7 @@ func TestAltEnterOpensExplorerContextMenu(t *testing.T) {
 // TestAltEnterStaysCodeActionInEditor: the explorer binding is scoped to the
 // tree; the editor's alt+enter is still lsp.codeAction (#2805).
 func TestAltEnterStaysCodeActionInEditor(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if !m.playEditorChord(tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModAlt}, "lsp.codeAction") {
 		t.Fatal("alt+enter must still resolve to lsp.codeAction in the editor")

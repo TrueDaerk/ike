@@ -28,6 +28,7 @@ func cmdBackspace() tea.KeyPressMsg {
 }
 
 func TestKillChordsEditTheSearchLineNotTheBuffer(t *testing.T) {
+	t.Parallel()
 	m := openedEditor(t, killDoc)
 	m = drainKey(m, tea.KeyPressMsg{Code: '/', Text: "/"})
 	m = typeInto(m, "alpha beta")
@@ -53,6 +54,7 @@ func TestKillChordsEditTheSearchLineNotTheBuffer(t *testing.T) {
 }
 
 func TestKillChordsEditTheExLineNotTheBuffer(t *testing.T) {
+	t.Parallel()
 	m := openedEditor(t, killDoc)
 	m = drainKey(m, tea.KeyPressMsg{Code: ':', Text: ":"})
 	m = typeInto(m, "set number")
@@ -74,6 +76,7 @@ func TestKillChordsEditTheExLineNotTheBuffer(t *testing.T) {
 }
 
 func TestKillChordsStayBufferCommandsOutsideTheCommandLine(t *testing.T) {
+	t.Parallel()
 	m := openedEditor(t, killDoc)
 	if m.editorLineInput() {
 		t.Fatal("no line input should be open in resting normal mode")

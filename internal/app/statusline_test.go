@@ -29,6 +29,8 @@ func (t segToolchain) Interpreter(string) (string, bool) { return t.path, t.path
 // TestStatusLineNotificationCounter guards the counter segment (#101): drained
 // notifications raise "● N", and opening the history view resets it.
 func TestStatusLineNotificationCounter(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := newSized()
 	m.setFocus(m.activeEditorKey())
 	m.host.Notify(host.Info, "one")
@@ -48,6 +50,7 @@ func TestStatusLineNotificationCounter(t *testing.T) {
 // language with a resolvable interpreter shows "<lang>:<name>" for the focused
 // buffer — the venv directory's name when the binary lives in a venv.
 func TestStatusLineToolchainSegment(t *testing.T) {
+	// serial: registerTestLang: lang.Register (process-wide language registry)
 	dir := t.TempDir()
 	venv := filepath.Join(dir, "proj-env")
 	if err := os.MkdirAll(filepath.Join(venv, "bin"), 0o755); err != nil {
@@ -91,6 +94,7 @@ func TestStatusLineToolchainSegment(t *testing.T) {
 // caret's column shows with the header name from the first row, and the slot
 // stays hidden for ordinary files.
 func TestStatusLineSVColumnSegment(t *testing.T) {
+	// serial: registerTestLang: lang.Register (process-wide language registry)
 	registerTestLang(t, lang.Language{ID: "csv", Extensions: []string{"csv"}})
 	dir := t.TempDir()
 	data := filepath.Join(dir, "data.csv")
@@ -121,6 +125,7 @@ func TestStatusLineSVColumnSegment(t *testing.T) {
 // TestStatusLineDocPathSegment guards the JSON/YAML path segment (#1660): the
 // caret's path shows in a YAML buffer and the slot stays hidden elsewhere.
 func TestStatusLineDocPathSegment(t *testing.T) {
+	// serial: registerTestLang: lang.Register (process-wide language registry)
 	registerTestLang(t, lang.Language{ID: "yaml", Extensions: []string{"yaml", "yml"}})
 	dir := t.TempDir()
 	doc := filepath.Join(dir, "deploy.yaml")
@@ -156,6 +161,7 @@ func TestStatusLineDocPathSegment(t *testing.T) {
 // committed search shows "current/total" in the status line, n advances the
 // index in place, and clearing the highlights hides the slot again.
 func TestStatusLineSearchSegment(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "hits.txt")
 	if err := os.WriteFile(path, []byte("foo one\nbar\nfoo two\nfoo three\n"), 0o644); err != nil {
@@ -197,6 +203,7 @@ func TestStatusLineSearchSegment(t *testing.T) {
 // segment renders without touching statusLine(), and an empty render hides
 // the slot (no dangling divider).
 func TestStatusLineSegmentsExtensible(t *testing.T) {
+	// serial: sets package variable statusLeft
 	orig := statusLeft
 	defer func() { statusLeft = orig }()
 	statusLeft = append(statusLeft,
@@ -225,6 +232,7 @@ func segList(pairs ...string) []renderedSeg {
 }
 
 func TestComposeStatusFitsUntouched(t *testing.T) {
+	t.Parallel()
 	left := segList("mode", "NORMAL", "file", "main.go")
 	right := segList("cursor", "Ln 1, Col 1")
 	line := composeStatus(left, right, 80)
@@ -239,6 +247,7 @@ func TestComposeStatusFitsUntouched(t *testing.T) {
 }
 
 func TestComposeStatusShrinksFileFirst(t *testing.T) {
+	t.Parallel()
 	longPath := "internal/some/deeply/nested/directory/with/a/really/long/file_name.go"
 	left := segList("mode", "NORMAL", "file", longPath, "eol", "LF")
 	right := segList("cursor", "Ln 120, Col 42")
@@ -260,6 +269,7 @@ func TestComposeStatusShrinksFileFirst(t *testing.T) {
 }
 
 func TestComposeStatusDropsLowPriorityInOrder(t *testing.T) {
+	t.Parallel()
 	left := segList(
 		"mode", "NORMAL",
 		"file", "a/deep/path/to/the/current/buffer/file_with_long_name.go",
@@ -286,6 +296,7 @@ func TestComposeStatusDropsLowPriorityInOrder(t *testing.T) {
 }
 
 func TestComposeStatusHardClipLastResort(t *testing.T) {
+	t.Parallel()
 	left := segList("mode", "NORMAL", "file", "somefile_with_a_name.go")
 	right := segList("cursor", "Ln 1, Col 1")
 	line := composeStatus(left, right, 20) // narrower than mode+min file+cursor
@@ -295,6 +306,7 @@ func TestComposeStatusHardClipLastResort(t *testing.T) {
 }
 
 func TestMiddleEllipsis(t *testing.T) {
+	t.Parallel()
 	if got := middleEllipsis("abcdefghij", 7); got != "abc…hij" || len([]rune(got)) != 7 {
 		t.Fatalf("middleEllipsis = %q", got)
 	}
@@ -310,6 +322,7 @@ func TestMiddleEllipsis(t *testing.T) {
 // renders in its mode colour, so the mode is recognizable without reading the
 // label, and the colour changes with the mode.
 func TestStatusLineModeBadge(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m.setFocus(m.activeEditorKey())
 
@@ -346,6 +359,7 @@ func modeSGR(m Model, md editor.Mode) string {
 // visual selection over a log buffer reports the elapsed time between its
 // first and last timestamped line, and the segment is hidden without one.
 func TestStatusLineLogSpanSegment(t *testing.T) {
+	// serial: registerTestLang: lang.Register (process-wide language registry)
 	registerTestLang(t, lang.Language{ID: "log", Extensions: []string{"log"}, Spans: logline.Spans})
 	path := filepath.Join(t.TempDir(), "app.log")
 	content := "10:11:10 INFO request start\n\tat Foo.bar(Foo.java:42)\n10:13:40 INFO response sent\n"

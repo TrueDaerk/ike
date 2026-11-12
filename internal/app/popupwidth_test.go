@@ -12,6 +12,7 @@ import (
 // growing at the configured cap on large terminals; extra width adds margin.
 
 func TestSettingsWidthCappedOnLargeTerminal(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 250, 50) // fullscreen-like
 	m = step(m, OpenSettingsMsg{})
 	if w, _ := m.settingsSize(); w != 110 {
@@ -24,6 +25,7 @@ func TestSettingsWidthCappedOnLargeTerminal(t *testing.T) {
 }
 
 func TestPaletteWidthCappedOnLargeTerminal(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 250, 50)
 	m.palette.SetMaxWidth(110)
 	m.palette.Open(palette.Context{ContextID: "editor", Root: "."})
@@ -41,6 +43,7 @@ func TestPaletteWidthCappedOnLargeTerminal(t *testing.T) {
 }
 
 func TestPaletteResizeDeltaAppliesOnTopOfCap(t *testing.T) {
+	t.Parallel()
 	// The user's #774 width delta wins over the cap within terminal bounds.
 	m := sized(t, 250, 50)
 	m.palette.SetMaxWidth(110)
@@ -53,6 +56,7 @@ func TestPaletteResizeDeltaAppliesOnTopOfCap(t *testing.T) {
 }
 
 func TestPopupMaxWidthZeroDisablesCap(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 250, 50)
 	m.palette.SetMaxWidth(0)
 	m.palette.Open(palette.Context{ContextID: "editor", Root: "."})

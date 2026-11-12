@@ -28,6 +28,7 @@ func depApp(t *testing.T) (Model, string) {
 }
 
 func TestDepEditPromptConfirmApplies(t *testing.T) {
+	t.Parallel()
 	m, path := depApp(t)
 	// First edit is blocked and stashed inside the editor.
 	m = drainKey(m, tea.KeyPressMsg{Code: 'x', Text: "x"})
@@ -52,6 +53,7 @@ func TestDepEditPromptConfirmApplies(t *testing.T) {
 }
 
 func TestDepEditPromptCancelKeepsLock(t *testing.T) {
+	t.Parallel()
 	m, path := depApp(t)
 	m = drainKey(m, tea.KeyPressMsg{Code: 'x', Text: "x"})
 	tm, _ := m.Update(editor.DepEditBlockedMsg{Path: path})

@@ -12,6 +12,7 @@ import (
 // left press reaches the editor's click path — shift+click extends (here:
 // starts) a selection, while the next plain click drops it again.
 func TestEditorShiftClickExtendsSelection(t *testing.T) {
+	t.Parallel()
 	m, r, key := editorDragModel(t)
 	x := r.X + paneContentX
 	y := r.Y + paneContentY

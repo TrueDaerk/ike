@@ -56,6 +56,7 @@ func runSwitch(t *testing.T, m Model, cmd tea.Cmd) Model {
 // digit one: ctrl+alt+1 lands where project.switchLast would — the project one
 // came from — and resumes its parked workspace instead of rebuilding it.
 func TestSwitchMRUFirstIsTheSwitchLastTarget(t *testing.T) {
+	// serial: seedHistory: config.Set (process-wide configuration)
 	a, b := twoProjects(t)
 	m := switchModel(t)
 
@@ -88,6 +89,7 @@ func TestSwitchMRUFirstIsTheSwitchLastTarget(t *testing.T) {
 // TestSwitchMRUPicksNthEntry covers the numbering itself: digit three is the
 // third-most-recent project, counted after the current one is dropped.
 func TestSwitchMRUPicksNthEntry(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	var dirs []string
 	for _, name := range []string{"one", "two", "three", "four"} {
@@ -111,6 +113,8 @@ func TestSwitchMRUPicksNthEntry(t *testing.T) {
 // TestSwitchMRUBeyondListNotifies is the no-op case: a digit past the end of
 // the list changes nothing and says why.
 func TestSwitchMRUBeyondListNotifies(t *testing.T) {
+	// serial: seedHistory: config.Set (process-wide configuration)
+	withStore(t)
 	a, _ := twoProjects(t)
 	m := switchModel(t)
 	seedHistory(t, cwd(t))
@@ -130,6 +134,7 @@ func TestSwitchMRUBeyondListNotifies(t *testing.T) {
 // first and *without* the chord digit #2489 used to render in front of every
 // name — the chords stay, only the number goes.
 func TestRecentProjectsColumnHasNoMRUDigits(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	alpha, beta := filepath.Join(base, "alpha"), filepath.Join(base, "beta")
 	here := filepath.Join(base, "here")
@@ -166,6 +171,7 @@ func TestRecentProjectsColumnHasNoMRUDigits(t *testing.T) {
 // each bound to its own ctrl+alt+digit on both platforms, and each reachable
 // from a focused terminal like the other project entry points (#805).
 func TestSwitchMRUCommandsAndChords(t *testing.T) {
+	t.Parallel()
 	for _, goos := range []string{"darwin", "linux"} {
 		bound := map[string]string{}
 		for _, b := range keymap.DefaultsFor(keymap.PresetJetBrains, goos) {

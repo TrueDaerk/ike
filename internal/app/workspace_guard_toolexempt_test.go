@@ -35,6 +35,7 @@ func guardedTool(name string) config.ToolEntry {
 // of wsActivity.running — the workspace is not busy — but records the name so
 // the close can report it.
 func TestGuardExemptToolIsNotActivity(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	withTools(t, noGuardTool("sql"))
 	var a wsActivity
 	a.addTerm(fakeTerm{running: true, tool: "sql"})
@@ -49,6 +50,7 @@ func TestGuardExemptToolIsNotActivity(t *testing.T) {
 // TestGuardTrueAndAbsentKeyStillAsk: the default is guarded, and an explicit
 // guard = true is the same thing spelled out.
 func TestGuardTrueAndAbsentKeyStillAsk(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	withTools(t, sleepTool("sql"), guardedTool("yarn"))
 	for _, name := range []string{"sql", "yarn"} {
 		var a wsActivity
@@ -65,6 +67,7 @@ func TestGuardTrueAndAbsentKeyStillAsk(t *testing.T) {
 // TestGuardExemptUnconfiguredToolStillAsks: a live tool with no config entry
 // (a stale layout entry, a built-in) keeps the old rule.
 func TestGuardExemptUnconfiguredToolStillAsks(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	withTools(t, noGuardTool("sql"))
 	var a wsActivity
 	a.addTerm(fakeTerm{running: true, tool: "k9s"})
@@ -77,6 +80,7 @@ func TestGuardExemptUnconfiguredToolStillAsks(t *testing.T) {
 // tool, and in a command session, is the user's program — guard = false on an
 // entry of the same name changes nothing.
 func TestGuardRunToolAndCommandsCannotBeExempted(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	withTools(t, noGuardTool(runToolName), noGuardTool("build"))
 	var a wsActivity
 	a.addTerm(fakeTerm{running: true, busy: true, tool: runToolName, label: "dev"})
@@ -94,6 +98,7 @@ func TestGuardRunToolAndCommandsCannotBeExempted(t *testing.T) {
 // of dying, so it gates no guard with or without the flag — and it is not
 // reported as killed either.
 func TestGuardGlobalToolUnaffectedByFlag(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	entry := noGuardTool("dash")
 	entry.Global = true
 	withTools(t, entry)
@@ -106,6 +111,7 @@ func TestGuardGlobalToolUnaffectedByFlag(t *testing.T) {
 
 // TestExemptToolsNoticeWording pins the notice (#2704) and its dedup/sort.
 func TestExemptToolsNoticeWording(t *testing.T) {
+	t.Parallel()
 	if got := exemptToolsNotice(nil); got != "" {
 		t.Errorf("no exempt tools must produce no notice, got %q", got)
 	}
@@ -122,6 +128,7 @@ func TestExemptToolsNoticeWording(t *testing.T) {
 // eviction probe read collectActivity, so an exempt tool pane leaves the
 // workspace idle for them too.
 func TestQuitAndEvictionGuardsHonourFlag(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	withTools(t, noGuardTool("sql"))
 	m := sized(t, 120, 40)
 	m = step(m, ToolOpenMsg{Name: "sql"})
@@ -148,6 +155,7 @@ func TestQuitAndEvictionGuardsHonourFlag(t *testing.T) {
 // TestGuardedToolStillBlocksQuitAndEviction is the counterpart: the same pane
 // without the flag keeps both guards firing.
 func TestGuardedToolStillBlocksQuitAndEviction(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	withTools(t, sleepTool("sql"))
 	m := sized(t, 120, 40)
 	m = step(m, ToolOpenMsg{Name: "sql"})
@@ -169,6 +177,7 @@ func TestGuardedToolStillBlocksQuitAndEviction(t *testing.T) {
 // only live state is two exempt tools closes without asking and the notice
 // names what was killed.
 func TestCloseProjectExemptToolsNoPrompt(t *testing.T) {
+	// serial: switchAutoSaveOff: t.Setenv
 	roots := peekFixture(t, "origin", "api")
 	switchAutoSaveOff(t)
 	m := dismissOnboarding(switchModel(t))
@@ -200,6 +209,7 @@ func TestCloseProjectExemptToolsNoPrompt(t *testing.T) {
 // TestCloseProjectGuardedToolStillAsks: the same shape with the flag absent
 // keeps the prompt.
 func TestCloseProjectGuardedToolStillAsks(t *testing.T) {
+	// serial: peekFixture: t.Chdir (process working directory)
 	roots := peekFixture(t, "origin", "api")
 	switchAutoSaveOff(t)
 	m := dismissOnboarding(switchModel(t))
@@ -227,6 +237,7 @@ func TestCloseProjectGuardedToolStillAsks(t *testing.T) {
 // inventory (#2136), so an exempt tool returns straight away and the notice
 // names it.
 func TestPeekReturnExemptToolNoPrompt(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	roots := peekFixture(t, "origin", "peeked")
 	m := switchModel(t)
 	m, _ = enterPeek(t, m, roots[1])

@@ -17,6 +17,7 @@ import (
 // the detail popup, and the VCS gutter guard.
 
 func TestLargeFileBadgeInStatusLine(t *testing.T) {
+	// serial: largeModel: largefile.Reset (process-wide state of package largefile)
 	m, _ := largeModel(t)
 	if !strings.Contains(m.render(), "[large file]") {
 		t.Fatal("the status line must badge the degraded document")
@@ -24,6 +25,7 @@ func TestLargeFileBadgeInStatusLine(t *testing.T) {
 }
 
 func TestLargeFileDetailsPopup(t *testing.T) {
+	// serial: largeModel: largefile.Reset (process-wide state of package largefile)
 	m, _ := largeModel(t)
 	m = step(m, LargeFileDetailsMsg{})
 	if !m.largeDetail {
@@ -43,6 +45,8 @@ func TestLargeFileDetailsPopup(t *testing.T) {
 }
 
 func TestLargeFileDetailsRefusedForNormalFiles(t *testing.T) {
+	// serial: largefile.Reset (process-wide state of package largefile)
+	withStore(t)
 	largefile.Reset()
 	t.Cleanup(largefile.Reset)
 	m := sizedWith(t, registry.New(), 120, 40)
@@ -59,6 +63,7 @@ func TestLargeFileDetailsRefusedForNormalFiles(t *testing.T) {
 }
 
 func TestVCSMarksSkippedForLargeFile(t *testing.T) {
+	// serial: largeModel: largefile.Reset (process-wide state of package largefile)
 	m, path := largeModel(t)
 	ed := m.activeEditor()
 	if ed == nil || !ed.LargeFile() {

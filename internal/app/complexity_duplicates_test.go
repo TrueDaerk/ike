@@ -17,6 +17,7 @@ import (
 // changed clone size re-runs.
 
 func TestComplexityDuplicatesBookkeeping(t *testing.T) {
+	// serial: timeApp: t.Setenv
 	m, _ := timeApp(t)
 	st := m.cxDup
 	if st == nil || !st.stale || st.computing {

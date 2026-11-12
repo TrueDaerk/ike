@@ -148,6 +148,7 @@ func messages(diags []ilsp.Diagnostic) []string {
 // declares, the same code inside the consumer class, and another code inside
 // the trait all stay.
 func TestTraitDiagsSuppressedOnlyInsideTheTrait(t *testing.T) {
+	// serial: traitDiagApp: t.Setenv
 	m, aPath, bPath := traitDiagApp(t)
 
 	abcLine := lineOf(t, traitAPHP, "$this->abc()")
@@ -187,6 +188,7 @@ func TestTraitDiagsSuppressedOnlyInsideTheTrait(t *testing.T) {
 // consumer buffer drops abc(), the index re-extracts, and the refilter the
 // index's change notification asks for brings the marker back.
 func TestTraitDiagReappearsWhenConsumerLosesMember(t *testing.T) {
+	// serial: traitDiagApp: t.Setenv
 	m, aPath, bPath := traitDiagApp(t)
 
 	abcLine := lineOf(t, traitAPHP, "$this->abc()")
@@ -215,6 +217,8 @@ func TestTraitDiagReappearsWhenConsumerLosesMember(t *testing.T) {
 // TestTraitDiagSuppressionHonoursSetting: with php.trait_index off the pass
 // drops nothing — behaviour equals the server's alone.
 func TestTraitDiagSuppressionHonoursSetting(t *testing.T) {
+	// serial: traitDiagApp: t.Setenv
+	withStore(t)
 	m, aPath, _ := traitDiagApp(t)
 
 	off, _ := config.Load(config.Options{})
@@ -231,6 +235,7 @@ func TestTraitDiagSuppressionHonoursSetting(t *testing.T) {
 // TestProblemsPanelReportsTraitSuppression: the panel header names the
 // suppressed diagnostics separately — they are never rows.
 func TestProblemsPanelReportsTraitSuppression(t *testing.T) {
+	// serial: traitDiagApp: t.Setenv
 	m, aPath, _ := traitDiagApp(t)
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = out.(Model)

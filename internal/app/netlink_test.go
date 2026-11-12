@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -41,6 +42,7 @@ func testChallenge(ttl time.Duration) netlink.Challenge {
 // two groups parted by a middle dot — and a narrow budget falls back to one
 // bold "4 8 1 · 9 3 6" line. Neither layout contains a zero glyph.
 func TestNetCodeLayouts(t *testing.T) {
+	t.Parallel()
 	code, err := netlink.ParseCode("481936")
 	if err != nil {
 		t.Fatal(err)
@@ -83,6 +85,7 @@ func TestNetCodeLayouts(t *testing.T) {
 // device, the PIN and a bar; a tick keeps it open while time remains and
 // closes it (with a notice) once the code expired.
 func TestNetPairPopupShowsCodeAndCounts(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	m := switchModel(t)
 	c := testChallenge(time.Minute)
 	out, cmd := m.Update(netChallengeMsg{c: c})
@@ -130,6 +133,7 @@ func TestNetPairPopupShowsCodeAndCounts(t *testing.T) {
 // TestNetPairReplacementAndClear: a second challenge replaces the first in
 // place (new generation); cleared / paired close the popup.
 func TestNetPairReplacementAndClear(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	m := switchModel(t)
 	out, _ := m.Update(netChallengeMsg{c: testChallenge(time.Minute)})
 	m = out.(Model)
@@ -158,6 +162,7 @@ func TestNetPairReplacementAndClear(t *testing.T) {
 // TestNetPairEscRefuses: esc closes the popup and, with a live server,
 // cancels the challenge so the device's next request is refused.
 func TestNetPairEscRefuses(t *testing.T) {
+	// serial: t.Setenv
 	m := switchModel(t)
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	cfg := config.Get()
@@ -188,10 +193,19 @@ func TestNetPairEscRefuses(t *testing.T) {
 // TestNetLinkDeliversAsDeepLink: an authenticated open on the wire lands in
 // the Update loop as a DeepLinkMsg carrying the assembled ike:// URL.
 func TestNetLinkDeliversAsDeepLink(t *testing.T) {
+	// serial: t.Setenv
 	m := switchModel(t)
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
-	var got []tea.Msg
-	m.host.SetSender(func(msg tea.Msg) { got = append(got, msg) })
+	var (
+		gotMu sync.Mutex
+		sent  []tea.Msg
+	)
+	m.host.SetSender(func(msg tea.Msg) { gotMu.Lock(); sent = append(sent, msg); gotMu.Unlock() })
+	delivered := func() []tea.Msg {
+		gotMu.Lock()
+		defer gotMu.Unlock()
+		return append([]tea.Msg(nil), sent...)
+	}
 	cfg := config.Get()
 	cfg.Network.Enabled, cfg.Network.Bind, cfg.Network.Port = true, "127.0.0.1", 0
 	if err := m.startNetLink(cfg); err != nil {
@@ -216,9 +230,10 @@ func TestNetLinkDeliversAsDeepLink(t *testing.T) {
 		t.Fatalf("reply %q err %v", line, err)
 	}
 	deadline := time.Now().Add(2 * time.Second)
-	for len(got) == 0 && time.Now().Before(deadline) {
+	for len(delivered()) == 0 && time.Now().Before(deadline) {
 		time.Sleep(10 * time.Millisecond)
 	}
+	got := delivered()
 	if len(got) != 1 {
 		t.Fatalf("delivered %d messages, want 1", len(got))
 	}
@@ -235,8 +250,9 @@ func TestNetLinkDeliversAsDeepLink(t *testing.T) {
 // TestReconfigureNetwork: enabling starts the listener, an unchanged config
 // leaves it alone, a new port restarts it, disabling stops it.
 func TestReconfigureNetwork(t *testing.T) {
+	// serial: changes the process-wide configuration in place (config.Get)
 	m := switchModel(t)
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	cfg := config.Get()
 	cfg.Network.Enabled = false
 	m.reconfigureNetwork(cfg)
@@ -279,6 +295,7 @@ func TestReconfigureNetwork(t *testing.T) {
 
 // TestNetworkForgetClients: the command empties the store, listener or not.
 func TestNetworkForgetClients(t *testing.T) {
+	// serial: t.Setenv
 	m := switchModel(t)
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	store, err := netlink.OpenStore(netlink.DefaultStorePath())
@@ -301,6 +318,7 @@ func TestNetworkForgetClients(t *testing.T) {
 
 // TestNetListenAddr: IPv6 binds are bracketed, empty binds every interface.
 func TestNetListenAddr(t *testing.T) {
+	t.Parallel()
 	for bind, want := range map[string]string{"": ":4530", "0.0.0.0": "0.0.0.0:4530", "::1": "[::1]:4530", "[::]": "[::]:4530"} {
 		cfg := &config.Config{Network: config.Network{Port: 4530, Bind: bind}}
 		if got := netListenAddr(cfg); got != want {
@@ -312,9 +330,10 @@ func TestNetListenAddr(t *testing.T) {
 // TestNetLinkSurvivesProjectSwitch: the listener rides across the model
 // rebuild a switch performs — it is neither closed nor bound twice.
 func TestNetLinkSurvivesProjectSwitch(t *testing.T) {
+	// serial: changes the process-wide configuration in place (config.Get)
 	_, dst, _ := deepLinkFixture(t)
 	m := switchModel(t)
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	cfg := config.Get()
 	cfg.Network.Enabled, cfg.Network.Bind, cfg.Network.Port = true, "127.0.0.1", 0
 	if err := m.startNetLink(cfg); err != nil {
@@ -339,6 +358,7 @@ func TestNetLinkSurvivesProjectSwitch(t *testing.T) {
 // on and a bind another device can reach — loopback is skipped, the
 // unspecified and a LAN address pass.
 func TestNetDiscoverable(t *testing.T) {
+	// serial: changes the process-wide configuration in place (config.Get)
 	cfg := config.Get()
 	t.Cleanup(netResetConfig(cfg))
 	cfg.Network.Enabled, cfg.Network.MDNS = true, true
@@ -363,6 +383,7 @@ func TestNetDiscoverable(t *testing.T) {
 // port, the version TXT, and — for a bind to one address — that address
 // only; the unspecified bind leaves the addresses to the interfaces.
 func TestNetService(t *testing.T) {
+	// serial: changes the process-wide configuration in place (config.Get)
 	cfg := config.Get()
 	t.Cleanup(netResetConfig(cfg))
 	cfg.Network.Port, cfg.Network.Name, cfg.Network.Bind = 4531, " desk ", "192.168.1.20"
@@ -386,8 +407,9 @@ func TestNetService(t *testing.T) {
 // name are part of the restart key, and a loopback bind runs the listener
 // without an announcer.
 func TestReconfigureNetworkDiscovery(t *testing.T) {
+	// serial: changes the process-wide configuration in place (config.Get)
 	m := switchModel(t)
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	cfg := config.Get()
 	t.Cleanup(netResetConfig(cfg))
 	cfg.Network.Name = ""

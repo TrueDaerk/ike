@@ -10,6 +10,7 @@ import (
 // (#608). Correctness matters: a stale cwd would mis-shorten paths in the status
 // line and title.
 func TestCachedGetwdCachesUntilInvalidated(t *testing.T) {
+	// serial: os.Chdir (process working directory)
 	invalidateCwd()
 	start, err := cachedGetwd()
 	if err != nil {

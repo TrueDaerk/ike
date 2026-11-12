@@ -23,6 +23,7 @@ func pushTestLayer(m Model, heading string) *ui.Floating {
 // dismisses one layer at a time — the pushed layer first, the base shell on
 // the second press.
 func TestFloatingStackLayersOverShell(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	tm, _ := m.Update(ShowKeymapHelpMsg{})
 	m = tm.(Model)
@@ -63,6 +64,7 @@ func TestFloatingStackLayersOverShell(t *testing.T) {
 // (#116 under #1237): a press outside the topmost layer pops only that layer;
 // a press inside keeps it open. The base shell needs its own outside press.
 func TestFloatingStackOutsideClickPopsOneLayer(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	tm, _ := m.Update(ShowKeymapHelpMsg{})
 	m = tm.(Model)

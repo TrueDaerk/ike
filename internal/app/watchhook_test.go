@@ -18,6 +18,7 @@ import (
 // bridge) with the right change kind, including the remove-then-recreate
 // fixup; directory events stay hook-silent.
 func TestWatchEventsFireExternalFileChangeHooks(t *testing.T) {
+	t.Parallel()
 	var got []plugin.FileChange
 	reg := registry.New()
 	reg.Add(fakePlugin{id: "p", caps: plugin.Capabilities{
@@ -69,6 +70,8 @@ func TestWatchEventsFireExternalFileChangeHooks(t *testing.T) {
 // TestBufferSavedHookFires guards #1161: a completed save reaches registered
 // EventBufferSaved hooks — the lsp plugin's didSave path hangs off this.
 func TestBufferSavedHookFires(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	got := make(chan string, 1)
 	reg := registry.New()
 	reg.Add(fakePlugin{id: "p", caps: plugin.Capabilities{Hooks: []plugin.Hook{{

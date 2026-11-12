@@ -50,6 +50,7 @@ func neighbour(t *testing.T, m Model, key string) (string, layout.Zone) {
 // the explorer is beside it — a run must join that strip instead of splitting
 // the whole workspace at its outermost bottom.
 func TestRunOpensInNestedToolRegion(t *testing.T) {
+	t.Parallel()
 	m := runModel(t, "bottom")
 	tm, _ := m.Update(ProblemsToggleMsg{})
 	m = tm.(Model)
@@ -98,6 +99,7 @@ func TestRunOpensInNestedToolRegion(t *testing.T) {
 // TestRunKeepsWorkspaceDockWithoutToolRegion: an editor below the editor is
 // no tool region, so the plain #1889 full-span bottom dock still applies.
 func TestRunKeepsWorkspaceDockWithoutToolRegion(t *testing.T) {
+	t.Parallel()
 	m := runModel(t, "bottom")
 	path := m.activeFilePath()
 	tm, _ := m.Update(SplitFocusedMsg{Zone: layout.ZoneBottom})
@@ -131,6 +133,8 @@ func dragPane(t *testing.T, m Model, key string, x, y int) Model {
 // dragged elsewhere, closing it and running again brings it back *there*, not
 // at the configured placement.
 func TestRunHomeFollowsUserMove(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := runModel(t, "bottom")
 	tm, _ := m.Update(RunFileMsg{})
 	m = tm.(Model)
@@ -173,6 +177,8 @@ func TestRunHomeFollowsUserMove(t *testing.T) {
 // strip (#811) is remembered as a full-span dock, not as a split off whichever
 // leaf happened to touch it.
 func TestRunHomeFollowsOuterDock(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := runModel(t, "bottom")
 	tm, _ := m.Update(RunFileMsg{})
 	m = tm.(Model)
@@ -201,6 +207,7 @@ func TestRunHomeFollowsOuterDock(t *testing.T) {
 // fresh session — which prunes the Run leaf on restore (#1905) — still runs
 // into the pane the user chose.
 func TestRunHomeSurvivesRestart(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
 	path := filepath.Join(t.TempDir(), "prog.rfake")
@@ -241,6 +248,7 @@ func TestRunHomeSurvivesRestart(t *testing.T) {
 // overruled, so changing run.placement re-asserts the setting instead of
 // being shadowed by an old drag.
 func TestRunHomeIgnoredAfterPlacementChange(t *testing.T) {
+	t.Parallel()
 	m := runModel(t, "bottom")
 	saveRunHome(runHome{Anchor: pane.ExplorerKey, Zone: "bottom", Placement: "left"})
 	tm, _ := m.Update(RunFileMsg{})
@@ -254,6 +262,7 @@ func TestRunHomeIgnoredAfterPlacementChange(t *testing.T) {
 // TestRunHomeIgnoredWhenAnchorGone: a record pointing at a pane this
 // workspace no longer has falls back to the placement rules.
 func TestRunHomeIgnoredWhenAnchorGone(t *testing.T) {
+	t.Parallel()
 	m := runModel(t, "bottom")
 	saveRunHome(runHome{Anchor: "editor:9", Zone: "right", Placement: "bottom"})
 	tm, _ := m.Update(RunFileMsg{})

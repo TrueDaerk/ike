@@ -20,6 +20,7 @@ func stubClipboardRead(t *testing.T, text string) {
 // an editor pane the whole live buffer lands on the right, the clipboard on
 // the left, in a focused diff pane.
 func TestCompareClipboardBuffer(t *testing.T) {
+	// serial: stubClipboardRead: sets package variable clipboardRead
 	m := newSized()
 	path := writeTempFile(t, "buf.txt", "a\nold\nc\n")
 	tm, _ := m.openPath(path, false)
@@ -48,6 +49,7 @@ func TestCompareClipboardBuffer(t *testing.T) {
 // TestCompareClipboardSelection narrows the right side to the visual
 // selection: only the selected line is compared, and the title marks it.
 func TestCompareClipboardSelection(t *testing.T) {
+	// serial: stubClipboardRead: sets package variable clipboardRead
 	m := newSized()
 	path := writeTempFile(t, "sel.txt", "keep\nsecret\n")
 	tm, _ := m.openPath(path, false)
@@ -80,6 +82,7 @@ func TestCompareClipboardSelection(t *testing.T) {
 
 // TestCompareClipboardEmpty shows a notification instead of an empty diff.
 func TestCompareClipboardEmpty(t *testing.T) {
+	// serial: stubClipboardRead: sets package variable clipboardRead
 	m := newSized()
 	path := writeTempFile(t, "buf.txt", "a\n")
 	tm, _ := m.openPath(path, false)

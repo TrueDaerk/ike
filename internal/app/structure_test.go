@@ -33,6 +33,7 @@ func sampleNodes() []ilsp.SymbolNode {
 }
 
 func TestStructureToggleStateMachine(t *testing.T) {
+	t.Parallel()
 	m, _ := structureSeed(t)
 	editorKey := m.activeEditorKey()
 
@@ -65,6 +66,7 @@ func TestStructureToggleStateMachine(t *testing.T) {
 }
 
 func TestStructureOpenRequestsSymbolsOnce(t *testing.T) {
+	t.Parallel()
 	m, files := structureSeed(t)
 	tm, _ := m.Update(StructureToggleMsg{})
 	m = tm.(Model)
@@ -89,6 +91,7 @@ func TestStructureOpenRequestsSymbolsOnce(t *testing.T) {
 }
 
 func TestStructureSymbolsDeliveryAndFollow(t *testing.T) {
+	t.Parallel()
 	m, files := structureSeed(t)
 	tm, _ := m.Update(StructureToggleMsg{})
 	m = tm.(Model)
@@ -113,6 +116,7 @@ func TestStructureSymbolsDeliveryAndFollow(t *testing.T) {
 }
 
 func TestStructureNavigateMovesEditorAndRecordsHistory(t *testing.T) {
+	t.Parallel()
 	m, files := structureSeed(t)
 	tm, _ := m.Update(StructureToggleMsg{})
 	m = tm.(Model)
@@ -126,6 +130,7 @@ func TestStructureNavigateMovesEditorAndRecordsHistory(t *testing.T) {
 }
 
 func TestStructureBufferSwitchRefreshes(t *testing.T) {
+	t.Parallel()
 	m, files := structureSeed(t)
 	tm, _ := m.Update(StructureToggleMsg{})
 	m = tm.(Model)
@@ -152,6 +157,7 @@ func TestStructureBufferSwitchRefreshes(t *testing.T) {
 }
 
 func TestStructureTabSwitchCacheHit(t *testing.T) {
+	t.Parallel()
 	m, files := structureSeed(t)
 	tm, _ := m.Update(StructureToggleMsg{})
 	m = tm.(Model)
@@ -186,6 +192,7 @@ func TestStructureTabSwitchCacheHit(t *testing.T) {
 }
 
 func TestStructureEditInvalidatesCache(t *testing.T) {
+	t.Parallel()
 	m, files := structureSeed(t)
 	tm, _ := m.Update(StructureToggleMsg{})
 	m = tm.(Model)
@@ -225,6 +232,7 @@ func TestStructureEditInvalidatesCache(t *testing.T) {
 }
 
 func TestStructureDebounceDropsSupersededTick(t *testing.T) {
+	t.Parallel()
 	m, files := structureSeed(t)
 	tm, _ := m.Update(StructureToggleMsg{})
 	m = tm.(Model)
@@ -261,6 +269,7 @@ func TestStructureDebounceDropsSupersededTick(t *testing.T) {
 // answered for, so the forced refresh is dropped (#2401). A save of a buffer
 // the cache no longer covers still re-requests.
 func TestStructureSaveOfUnchangedBufferAsksNothing(t *testing.T) {
+	t.Parallel()
 	m, files := structureSeed(t)
 	tm, _ := m.Update(StructureToggleMsg{})
 	m = tm.(Model)
@@ -295,6 +304,7 @@ func TestStructureSaveOfUnchangedBufferAsksNothing(t *testing.T) {
 }
 
 func TestStructurePanePersists(t *testing.T) {
+	// serial: t.Setenv
 	store := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", store)
 

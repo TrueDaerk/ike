@@ -37,6 +37,7 @@ func playExportRowFor(t *testing.T, m Model, target string) playExportRow {
 // TestPlayExportChordOpensPicker: the default chord reaches the picker from
 // the query line, locked to the export mode with every target listed.
 func TestPlayExportChordOpensPicker(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playExportApp(t, `[{"a":1}]`))
 	m = setProgram(m, ".")
 	m = drainKey(m, tea.KeyPressMsg{Code: 'v', Mod: tea.ModCtrl | tea.ModAlt})
@@ -51,6 +52,7 @@ func TestPlayExportChordOpensPicker(t *testing.T) {
 // TestPlayExportGating: CSV / TSV are offered for a list of objects and shown
 // unavailable with a reason otherwise; the HTTP row needs an open .http buffer.
 func TestPlayExportGating(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	m := openJQ(t, playExportApp(t, `{"rows":[{"a":1},{"b":"x"}],"nested":[[1],[2]]}`))
 	m = setProgram(m, ".rows")
 	for _, target := range []string{playExportSave, playExportCSV, playExportTSV} {
@@ -92,6 +94,7 @@ func TestPlayExportGating(t *testing.T) {
 
 // TestPlayExportCopiesCSV: the CSV row copies the table to the clipboard.
 func TestPlayExportCopiesCSV(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	copied := ""
 	prev := clipboardWrite
 	clipboardWrite = func(s string) { copied = s }
@@ -114,6 +117,7 @@ func TestPlayExportCopiesCSV(t *testing.T) {
 // TestPlayExportSaveAsFile: the prompt writes the shown form to the path and
 // opens it; an existing file needs a second enter.
 func TestPlayExportSaveAsFile(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playExportApp(t, `{"foo":[1,2]}`))
 	m = setProgram(m, ".foo")
 	tm, _ := m.Update(PlayExportMsg{Target: playExportSave})
@@ -155,6 +159,7 @@ func TestPlayExportSaveAsFile(t *testing.T) {
 // TestPlayExportHTTPBody: with an .http buffer open the result becomes the
 // body of the request under its cursor — replacing one, or adding one.
 func TestPlayExportHTTPBody(t *testing.T) {
+	t.Parallel()
 	m := playExportApp(t, `{"id":7}`)
 	dir := t.TempDir()
 	httpPath := filepath.Join(dir, "api.http")

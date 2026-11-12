@@ -23,7 +23,6 @@ import (
 // JSON file of project a open and the jq playground running program over it.
 func playSwitchModel(t *testing.T, body, program string) (m Model, b string) {
 	t.Helper()
-	noDebounce(t)
 	a, b := twoProjects(t)
 	m = dismissOnboarding(switchModel(t))
 	path := filepath.Join(a, "data.json")
@@ -81,6 +80,7 @@ func switchTo(t *testing.T, m Model, root string) Model {
 // keeps the query, the result, the history position and the multi-line
 // state; the other project shows no playground meanwhile.
 func TestPlaygroundSurvivesProjectSwitch(t *testing.T) {
+	// serial: switchTo: waits on the wall clock (load-sensitive)
 	m, b := playSwitchModel(t, `{"foo":[1,2,3]}`, ".foo[1]")
 	a := cwd(t)
 	m = runJQProgram(m, ".foo[1]")
@@ -140,6 +140,7 @@ func TestPlaygroundSurvivesProjectSwitch(t *testing.T) {
 // program history is session state and rides across the switch, so a
 // playground opened in project b offers project a's programs.
 func TestPlaygroundSwitchKeepsSessionHistory(t *testing.T) {
+	// serial: switchTo: waits on the wall clock (load-sensitive)
 	m, b := playSwitchModel(t, `{"foo":1}`, ".foo")
 	m = runJQProgram(m, ".foo")
 	hist := m.playHistory
@@ -155,6 +156,7 @@ func TestPlaygroundSwitchKeepsSessionHistory(t *testing.T) {
 // TestPlaygroundResumesPendingRun: a query typed right before the switch
 // still has its result when the project comes back.
 func TestPlaygroundResumesPendingRun(t *testing.T) {
+	// serial: switchTo: waits on the wall clock (load-sensitive)
 	m, b := playSwitchModel(t, `{"foo":[1,2,3]}`, ".foo[0]")
 	a := cwd(t)
 	m.play.program.Set(".foo[2]")
@@ -179,6 +181,7 @@ func TestPlaygroundResumesPendingRun(t *testing.T) {
 // workspace was parked is re-read on resume (#2356 semantics), since no
 // watcher event ever reached the playground.
 func TestPlaygroundResumeRereadsChangedFile(t *testing.T) {
+	// serial: switchTo: waits on the wall clock (load-sensitive)
 	m, b := playSwitchModel(t, `{"foo":[1,2,3]}`, ".foo[0]")
 	a := cwd(t)
 	path := m.play.srcPath
@@ -201,6 +204,7 @@ func TestPlaygroundResumeRereadsChangedFile(t *testing.T) {
 // TestPlaygroundClosesWithDocumentAfterResume: the "closes when its document
 // leaves" rule (#2355) still applies to a resumed playground.
 func TestPlaygroundClosesWithDocumentAfterResume(t *testing.T) {
+	// serial: switchTo: waits on the wall clock (load-sensitive)
 	m, b := playSwitchModel(t, `{"foo":[1,2,3]}`, ".foo[0]")
 	a := cwd(t)
 	m = switchTo(t, m, b)
@@ -222,7 +226,7 @@ func TestPlaygroundClosesWithDocumentAfterResume(t *testing.T) {
 // TestHTTPPlaygroundSurvivesProjectSwitch: a playground over a response pane
 // behaves the same as long as the response pane survives the switch.
 func TestHTTPPlaygroundSurvivesProjectSwitch(t *testing.T) {
-	noDebounce(t)
+	// serial: switchModel: t.Setenv
 	a, b := twoProjects(t)
 	m := switchModel(t)
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})

@@ -48,6 +48,7 @@ func awaitMsg(t *testing.T, msgs chan tea.Msg, match func(tea.Msg) bool) tea.Msg
 // the registry provider, applies its text result to the buffer as edits, and
 // names the source in a status toast (#1401).
 func TestReformatFileRunsProviderAndApplies(t *testing.T) {
+	// serial: format.Register (process-wide state of package format)
 	m, _, msgs := reformatApp(t, "notes.sql", "select 1\n")
 	format.Register(format.Provider{
 		Name: "built-in", Tier: format.TierBuiltin, Languages: nil,
@@ -79,6 +80,7 @@ func TestReformatFileRunsProviderAndApplies(t *testing.T) {
 // TestReformatProviderNoticeIsInfo: a provider Notice surfaces as an info
 // toast naming the reason, with no edits.
 func TestReformatProviderNoticeIsInfo(t *testing.T) {
+	// serial: format.Register (process-wide state of package format)
 	m, _, msgs := reformatApp(t, "notes.sql", "select 1\n")
 	format.Register(format.Provider{
 		Name: "picky", Tier: format.TierBuiltin,
@@ -102,6 +104,7 @@ func TestReformatProviderNoticeIsInfo(t *testing.T) {
 // TestReformatProviderErrorLeavesBufferUntouched: a failing provider reports
 // an error toast and changes nothing (#1401 — failure is never destructive).
 func TestReformatProviderErrorLeavesBufferUntouched(t *testing.T) {
+	// serial: format.Register (process-wide state of package format)
 	m, _, msgs := reformatApp(t, "notes.sql", "select 1\n")
 	format.Register(format.Provider{
 		Name: "broken", Tier: format.TierBuiltin,
@@ -136,6 +139,7 @@ func TestReformatProviderErrorLeavesBufferUntouched(t *testing.T) {
 // TestReformatNoProviderIsClearMessage: without any provider the command is a
 // warn toast, not a silent no-op (#1401).
 func TestReformatNoProviderIsClearMessage(t *testing.T) {
+	// serial: reformatApp: format.ResetForTest (process-wide state of package format)
 	m, _, _ := reformatApp(t, "notes.sql", "select 1\n")
 
 	out, _ := m.Update(format.FileRequestMsg{})
@@ -155,6 +159,7 @@ func TestReformatNoProviderIsClearMessage(t *testing.T) {
 // the user is told only whole-file reformat is available instead of the whole
 // file being formatted silently (#1401).
 func TestReformatSelectionWholeFileOnly(t *testing.T) {
+	// serial: format.Register (process-wide state of package format)
 	m, _, _ := reformatApp(t, "notes.sql", "select 1\nselect 2\n")
 	called := false
 	format.Register(format.Provider{
@@ -186,6 +191,7 @@ func TestReformatSelectionWholeFileOnly(t *testing.T) {
 // TestReformatSelectionRunsRangeProvider: an active selection reaches the
 // range-capable provider with the normalized span.
 func TestReformatSelectionRunsRangeProvider(t *testing.T) {
+	// serial: format.Register (process-wide state of package format)
 	m, file, msgs := reformatApp(t, "notes.sql", "select 1\nselect 2\n")
 	var gotStart, gotEnd format.Pos
 	format.Register(format.Provider{
@@ -232,6 +238,7 @@ func runCmd(c tea.Cmd) {
 // context-sensitive (#1603) — an active visual selection routes to the
 // range-capable provider instead of the whole file.
 func TestReformatFileWithSelectionFormatsRange(t *testing.T) {
+	// serial: format.Register (process-wide state of package format)
 	m, _, msgs := reformatApp(t, "notes.sql", "select 1\nselect 2\n")
 	wholeFile := false
 	var gotStart, gotEnd format.Pos
@@ -267,6 +274,7 @@ func TestReformatFileWithSelectionFormatsRange(t *testing.T) {
 // range-capable provider — the context-sensitive command widens to the whole
 // file with a notice instead of doing nothing (#1603).
 func TestReformatFileWithSelectionFallsBackToWholeFile(t *testing.T) {
+	// serial: format.Register (process-wide state of package format)
 	m, _, msgs := reformatApp(t, "notes.sql", "select 1\nselect 2\n")
 	called := false
 	format.Register(format.Provider{
@@ -302,6 +310,7 @@ func TestReformatFileWithSelectionFallsBackToWholeFile(t *testing.T) {
 // TestReformatWithoutSelectionExplains: reformat-selection without a visual
 // selection tells the user what to do.
 func TestReformatWithoutSelectionExplains(t *testing.T) {
+	// serial: format.Register (process-wide state of package format)
 	m, _, _ := reformatApp(t, "notes.sql", "select 1\n")
 	format.Register(format.Provider{
 		Name: "built-in", Tier: format.TierBuiltin,

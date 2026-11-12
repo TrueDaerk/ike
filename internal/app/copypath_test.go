@@ -13,6 +13,7 @@ import (
 // must be registry commands, or the context-menu entries render permanently
 // disabled and the palette never lists them.
 func TestCopyPathCommandsRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	for _, id := range []string{"file.copyPath", "file.copyRelPath", "file.copyReference"} {
 		if _, ok := m.reg.Command(id); !ok {
@@ -24,6 +25,7 @@ func TestCopyPathCommandsRegistered(t *testing.T) {
 // TestCopyPathForms guards #1173: absolute, project-relative and
 // reference (relpath:line) forms for the focused editor's file.
 func TestCopyPathForms(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	var copied string
 	orig := clipboardWrite
 	clipboardWrite = func(s string) { copied = s }
@@ -56,6 +58,7 @@ func TestCopyPathForms(t *testing.T) {
 // TestCopyPathExplorerSelection guards #1173: explorer focus targets the
 // tree selection; no line suffix there.
 func TestCopyPathExplorerSelection(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	var copied string
 	orig := clipboardWrite
 	clipboardWrite = func(s string) { copied = s }

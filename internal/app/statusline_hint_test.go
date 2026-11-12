@@ -15,6 +15,7 @@ import (
 // focused editor pane with no file points at help and search-everywhere; the
 // hint disappears the moment a file opens.
 func TestEmptyEditorHintShowsAndClears(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m.setFocus(m.activeEditorKey())
 	if line := ansi.Strip(m.statusLine()); !strings.Contains(line, "? help") {
@@ -35,6 +36,7 @@ func TestEmptyEditorHintShowsAndClears(t *testing.T) {
 // TestEmptyEditorHintRendersRemap: a search-everywhere remap outside the
 // curated chord list displays the live chord (resolver truth).
 func TestEmptyEditorHintRendersRemap(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	hint := emptyHintSegment(m, nil)
 	if !strings.Contains(hint, "shift shift") {
@@ -45,6 +47,7 @@ func TestEmptyEditorHintRendersRemap(t *testing.T) {
 // TestEmptyEditorHintSuppressedWhenNarrow: below ~70 columns the hint drops
 // so it never crowds the bar.
 func TestEmptyEditorHintSuppressedWhenNarrow(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 60, Height: 20})
 	m = tm.(Model)
@@ -58,6 +61,7 @@ func TestEmptyEditorHintSuppressedWhenNarrow(t *testing.T) {
 // hint active on an 80-column terminal the bar must never exceed the width —
 // lipgloss pads but does not clip, and an over-wide bar wraps onto two rows.
 func TestStatusLineNeverWrapsAt80(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	m = tm.(Model)

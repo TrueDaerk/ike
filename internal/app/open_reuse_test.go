@@ -16,7 +16,7 @@ import (
 // TestOpenReusesEmptyEditorTab: opening a file while the active editor is a
 // truly empty scratch tab fills that tab in place — no new leaf, no new tab.
 func TestOpenReusesEmptyEditorTab(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	t.Parallel()
 	dir := t.TempDir()
 	f := filepath.Join(dir, "a.txt")
 	os.WriteFile(f, []byte("hello\n"), 0o644)
@@ -46,7 +46,8 @@ func TestOpenReusesEmptyEditorTab(t *testing.T) {
 // TestOpenPreservesScratchText: a pathless tab with typed text is not
 // reusable — opening a file appends a new tab and the scratch text survives.
 func TestOpenPreservesScratchText(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	// serial: withStore: t.Setenv
+	withStore(t)
 	dir := t.TempDir()
 	f := filepath.Join(dir, "a.txt")
 	os.WriteFile(f, []byte("hello\n"), 0o644)
@@ -77,7 +78,7 @@ func TestOpenPreservesScratchText(t *testing.T) {
 // reuses an empty active editor instead of splitting past it and stranding a
 // blank pane — the file-open twin of TestDiffReusesEmptyEditor (#628).
 func TestOpenNewPaneReusesEmptyEditor(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	t.Parallel()
 	dir := t.TempDir()
 	f := filepath.Join(dir, "a.txt")
 	os.WriteFile(f, []byte("hello\n"), 0o644)
@@ -103,7 +104,7 @@ func TestOpenNewPaneReusesEmptyEditor(t *testing.T) {
 // TestOpenNewPaneSplitsBesideFileBackedEditor: NewPane still splits when the
 // active editor holds a file.
 func TestOpenNewPaneSplitsBesideFileBackedEditor(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	t.Parallel()
 	dir := t.TempDir()
 	a := filepath.Join(dir, "a.txt")
 	b := filepath.Join(dir, "b.txt")

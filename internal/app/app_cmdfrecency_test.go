@@ -16,6 +16,7 @@ import (
 // is fed by the single dispatch funnel and persisted per project, so the next
 // palette open — in this or a later session — ranks the command higher.
 func TestDispatchRecordsCommandFrecency(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
 

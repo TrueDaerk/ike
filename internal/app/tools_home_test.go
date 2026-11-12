@@ -38,6 +38,7 @@ func closeToolInstances(m Model, name string) {
 // TestToolHomeFreeSlotDocks: a placement on a free edge docks the tool
 // full-span against that edge instead of splitting off the editor.
 func TestToolHomeFreeSlotDocks(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	for _, tc := range []struct {
 		placement string
 		orient    layout.Orient
@@ -91,6 +92,7 @@ func toolZone(t *testing.T, placement string) layout.Zone {
 // TestToolHomeOccupiedSlotAddsTab: a second tool configured for the same edge
 // joins the occupant's tab list as the focused tab — no forced split.
 func TestToolHomeOccupiedSlotAddsTab(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	withTools(t, homeTool("first", "bottom"), homeTool("second", "bottom"))
 	m := sized(t, 100, 40)
 	out, _ := m.Update(ToolOpenMsg{Name: "first"})
@@ -132,6 +134,8 @@ func TestToolHomeOccupiedSlotAddsTab(t *testing.T) {
 // rewrites the configured home — after closing it, the next open docks at the
 // configured edge again.
 func TestToolHomeMoveThenReopen(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	withTools(t, homeTool("watcher", "bottom"))
 	m := sized(t, 100, 40)
 	out, _ := m.Update(ToolOpenMsg{Name: "watcher"})
@@ -170,6 +174,7 @@ func TestToolHomeMoveThenReopen(t *testing.T) {
 // (never a tab host) stacks the tool into the same dock via a perpendicular
 // split instead of tabbing or re-docking.
 func TestToolHomeNonTabbableOccupantSharesDock(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	withTools(t, homeTool("watcher", "left"))
 	m := sized(t, 100, 40)
 	if got := layout.EdgeLeaf(m.activeWS().Tree, layout.ZoneLeft); got != pane.ExplorerKey {
@@ -197,6 +202,7 @@ func TestToolHomeNonTabbableOccupantSharesDock(t *testing.T) {
 // TestToolHomeUnconfiguredKeepsAuxZone: without a placement the adaptive
 // heuristic (#1588) still splits the tool off the editor — no docking.
 func TestToolHomeUnconfiguredKeepsAuxZone(t *testing.T) {
+	// serial: withTools: config.Set (process-wide configuration)
 	withTools(t, sleepTool("watcher"))
 	m := sized(t, 100, 40)
 	editorKey := m.activeEditorKey()

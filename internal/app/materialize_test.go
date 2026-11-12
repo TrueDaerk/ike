@@ -55,6 +55,8 @@ func scratchDir(t *testing.T) string {
 // its text is what the file holds — which is what makes the LSP `didOpen`
 // wiring bindUntitled performs meaningful.
 func TestMaterializeBindsBufferToScratchFile(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := typedBuffer(t, "json", `{"a": 1}`)
 	dir := scratchDir(t)
 
@@ -95,6 +97,7 @@ func TestMaterializeBindsBufferToScratchFile(t *testing.T) {
 // materializing is not a one-way door — the buffer is an ordinary file buffer
 // afterwards, so "Save As" moves it into the project.
 func TestMaterializeSavesUnderRealNameAfterwards(t *testing.T) {
+	// serial: typedBuffer: lang.Register (process-wide language registry)
 	m := typedBuffer(t, "json", `{"a": 1}`)
 	out, _ := m.Update(MaterializeBufferMsg{})
 	m = out.(Model)
@@ -119,6 +122,8 @@ func TestMaterializeSavesUnderRealNameAfterwards(t *testing.T) {
 // in: no type chosen, a type with no extension, and a buffer that already has
 // a file. None of them may leave a file behind.
 func TestMaterializeRefusals(t *testing.T) {
+	// serial: intentionModel: t.Setenv
+	withStore(t)
 	t.Run("untyped buffer", func(t *testing.T) {
 		m := filelessModel(t, "some pasted text", 0, 0)
 		dir := scratchDir(t)
@@ -169,6 +174,8 @@ func assertNoScratch(t *testing.T, dir string) {
 // command creates is one the scratch panel lists (and can delete), not a
 // second temp store nobody cleans up.
 func TestMaterializeUsesScratchStore(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := typedBuffer(t, "yaml", "a: 1")
 	out, _ := m.Update(MaterializeBufferMsg{})
 	m = out.(Model)
@@ -193,6 +200,7 @@ func TestMaterializeUsesScratchStore(t *testing.T) {
 // #2056: both follow-ups are reachable through alt+enter, which is where the
 // type was chosen in the first place.
 func TestTypedBufferOffersPlaygroundAndMaterialize(t *testing.T) {
+	// serial: typedBuffer: lang.Register (process-wide language registry)
 	for _, tc := range []struct {
 		langID, content, want string
 	}{
@@ -216,7 +224,7 @@ func TestTypedBufferOffersPlaygroundAndMaterialize(t *testing.T) {
 // command opens over the file-less buffer and queries its content — no save,
 // no copy into a scratch first.
 func TestTypedBufferOpensPlaygroundOverItsOwnText(t *testing.T) {
-	noDebounce(t)
+	// serial: typedBuffer: lang.Register (process-wide language registry)
 	m := typedBuffer(t, "json", `{"foo":[{"bar":1},{"bar":4}]}`)
 	tm, cmd := m.Update(OpenPlaygroundMsg{})
 	m = drainCmd(tm.(Model), cmd)

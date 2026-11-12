@@ -21,6 +21,7 @@ func keyMsg(r rune) tea.KeyPressMsg { return tea.KeyPressMsg{Text: string(r), Co
 // TestBookmarksModeListsLocalAndGlobal: rows show "'x  path:line" with a
 // preview detail, carry jump msgs, and expose the aux removal.
 func TestBookmarksModeListsLocalAndGlobal(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\n  two\nthree\n")
 	b := writeTemp(t, dir, "b.txt", "bee line\n")
@@ -65,6 +66,7 @@ func TestBookmarksModeListsLocalAndGlobal(t *testing.T) {
 // TestShowBookmarksOpensPicker: with marks present the palette opens locked;
 // without any it stays closed (toast instead).
 func TestShowBookmarksOpensPicker(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\n")
 	m := openApp(t, a)
@@ -84,6 +86,7 @@ func TestShowBookmarksOpensPicker(t *testing.T) {
 
 // TestBookmarkJumpLocal: a local row's activation jumps the focused editor.
 func TestBookmarkJumpLocal(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\ntwo\nthree\n")
 	m := openApp(t, a)
@@ -102,6 +105,7 @@ func TestBookmarkJumpLocal(t *testing.T) {
 // mark's file through the standard funnel and lands on the position; the
 // quote (non-exact) form settles on the first non-blank.
 func TestGlobalMarkJumpOpensFile(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\n")
 	b := writeTemp(t, dir, "b.txt", "zero\n  indented target\n")
@@ -127,6 +131,7 @@ func TestGlobalMarkJumpOpensFile(t *testing.T) {
 
 // TestGlobalMarkJumpUnsetToasts: an unset letter never navigates.
 func TestGlobalMarkJumpUnsetToasts(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\n")
 	m := openApp(t, a)
@@ -139,6 +144,7 @@ func TestGlobalMarkJumpUnsetToasts(t *testing.T) {
 // TestBookmarkRemove: the aux action drops local and global marks and
 // re-lists.
 func TestBookmarkRemove(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\n")
 	m := openApp(t, a)
@@ -163,6 +169,8 @@ func TestBookmarkRemove(t *testing.T) {
 // TestGlobalMarkPersistedViaEditorKeys: m{A} in the editor writes through the
 // injected hook into the persistent store.
 func TestGlobalMarkPersistedViaEditorKeys(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\ntwo\n")
 	m := openApp(t, a)
@@ -184,6 +192,7 @@ func TestGlobalMarkPersistedViaEditorKeys(t *testing.T) {
 // TestBookmarksCommandRegistered: nav.bookmarks exists (palette-only, no
 // default chord — keymap budget #711).
 func TestBookmarksCommandRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if _, ok := m.reg.Command("nav.bookmarks"); !ok {
 		t.Fatal("nav.bookmarks must be registered")

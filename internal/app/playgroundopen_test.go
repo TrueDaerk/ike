@@ -37,7 +37,6 @@ func dispatchExt(t *testing.T, langID string) string {
 // dispatchApp opens a "doc" file classified as langID in the focused editor.
 func dispatchApp(t *testing.T, langID, body string) Model {
 	t.Helper()
-	noDebounce(t)
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "doc."+dispatchExt(t, langID))
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
@@ -57,6 +56,7 @@ func openDispatcher(t *testing.T, m Model) Model {
 // TestPlaygroundOpenPicksDialectByLanguage is the issue's acceptance case: one
 // command, the right playground per buffer language.
 func TestPlaygroundOpenPicksDialectByLanguage(t *testing.T) {
+	// serial: dispatchApp: lang.Register (process-wide language registry)
 	for _, tc := range []struct {
 		name string // the buffer language id
 		body string
@@ -82,6 +82,7 @@ func TestPlaygroundOpenPicksDialectByLanguage(t *testing.T) {
 // playground itself (#2415) — with the hook installed, the dispatcher calls it
 // instead of opening jq or answering "no playground".
 func TestPlaygroundOpenRoutesMarkupToXMQ(t *testing.T) {
+	// serial: sets package variable startXMQPlayground
 	for _, name := range []string{"xml", "html"} {
 		t.Run(name, func(t *testing.T) {
 			called := 0
@@ -103,6 +104,7 @@ func TestPlaygroundOpenRoutesMarkupToXMQ(t *testing.T) {
 // TestPlaygroundOpenWithoutXMQSaysSo: until the hook is installed, the markup
 // route answers rather than opening the wrong dialect.
 func TestPlaygroundOpenWithoutXMQSaysSo(t *testing.T) {
+	// serial: sets package variable startXMQPlayground
 	prev := startXMQPlayground
 	startXMQPlayground = nil
 	t.Cleanup(func() { startXMQPlayground = prev })
@@ -117,6 +119,7 @@ func TestPlaygroundOpenWithoutXMQSaysSo(t *testing.T) {
 // TestPlaygroundOpenUnsupportedLanguageNotifies: a language no playground
 // speaks names itself in the notification.
 func TestPlaygroundOpenUnsupportedLanguageNotifies(t *testing.T) {
+	// serial: dispatchApp: lang.Register (process-wide language registry)
 	m := dispatchAndNotify(t, dispatchApp(t, "go", "package main\n"))
 	if m.playOpen() {
 		t.Fatal("a Go buffer must not open a playground")

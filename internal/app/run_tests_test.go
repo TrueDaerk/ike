@@ -42,9 +42,6 @@ func lastRunCfg() *run.Config {
 // TestOne and line 3 declares TestTwo.
 func testRunModel(t *testing.T) (Model, string) {
 	t.Helper()
-	if testStoreRoot != "" {
-		os.Setenv("IKE_CONFIG_DIR", testStoreDir(t, "runtests"))
-	}
 	path := filepath.Join(t.TempDir(), "x_test.atst")
 	content := "func TestOne(t T) {\n}\nhelper\nfunc TestTwo(t T) {\n}\n"
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
@@ -63,6 +60,8 @@ func testRunModel(t *testing.T) (Model, string) {
 // command runs exactly that test in the run-terminal placement and registers
 // it as the rerun-last target.
 func TestRunTestAtCursor(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, _ := testRunModel(t)
 	tm, _ := m.Update(RunTestAtCursorMsg{})
 	m = tm.(Model)
@@ -83,6 +82,8 @@ func TestRunTestAtCursor(t *testing.T) {
 // TestRunTestAtCursorNearest: with the cursor below TestTwo, the nearest
 // preceding declaration wins.
 func TestRunTestAtCursorNearest(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, _ := testRunModel(t)
 	// Move the caret to the last line (G) inside the focused editor.
 	tm, _ := m.Update(tea.KeyPressMsg{Text: "G", Code: 'G'})
@@ -96,6 +97,8 @@ func TestRunTestAtCursorNearest(t *testing.T) {
 
 // TestRunTestsInFile runs the file scope and registers it for rerun.
 func TestRunTestsInFile(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, _ := testRunModel(t)
 	tm, _ := m.Update(RunTestsInFileMsg{})
 	m = tm.(Model)
@@ -111,6 +114,8 @@ func TestRunTestsInFile(t *testing.T) {
 // TestRunTestRerun: run.rerun after a test run repeats the test (reusing the
 // finished terminal, no extra tab).
 func TestRunTestRerun(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, _ := testRunModel(t)
 	tm, _ := m.Update(RunTestAtCursorMsg{})
 	m = tm.(Model)
@@ -127,9 +132,7 @@ func TestRunTestRerun(t *testing.T) {
 // TestRunTestAtCursorNoTest: a file without a marker at or above the cursor
 // notifies instead of running.
 func TestRunTestAtCursorNoTest(t *testing.T) {
-	if testStoreRoot != "" {
-		os.Setenv("IKE_CONFIG_DIR", testStoreDir(t, "runtests-none"))
-	}
+	t.Parallel()
 	path := filepath.Join(t.TempDir(), "y_test.atst")
 	if err := os.WriteFile(path, []byte("helper\nfunc TestLate(t T) {\n}\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -161,6 +164,8 @@ func editorRectOf(t *testing.T, m Model) layout.Rect {
 // toggling the breakpoint — on every line, including test-marker lines — and
 // ctrl/cmd+click on a marker line runs that test instead.
 func TestGutterClickDecision(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, path := testRunModel(t)
 	r := editorRectOf(t, m)
 	x := r.X + paneContentX // first gutter cell (the sign column)

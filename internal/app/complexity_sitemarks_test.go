@@ -43,6 +43,7 @@ func cxMarkLines(marks []editor.ComplexitySiteMark) map[int]editor.ComplexitySit
 
 // TestComplexitySiteMarksForOff: off paints nothing.
 func TestComplexitySiteMarksForOff(t *testing.T) {
+	t.Parallel()
 	if got := complexitySiteMarksFor(cxSiteFixture(), 15, 15, config.HintOff, -1); len(got) != 0 {
 		t.Fatalf("off: got %+v, want none", got)
 	}
@@ -52,6 +53,7 @@ func TestComplexitySiteMarksForOff(t *testing.T) {
 // threshold, with the Sonar texts, joined per line, warn from +3, and no
 // mark for a CCN-only arm.
 func TestComplexitySiteMarksForWarn(t *testing.T) {
+	t.Parallel()
 	got := cxMarkLines(complexitySiteMarksFor(cxSiteFixture(), 15, 15, config.HintWarn, -1))
 	if _, ok := got[1]; ok {
 		t.Error("warn: the under-threshold function must carry no marks")
@@ -74,6 +76,7 @@ func TestComplexitySiteMarksForWarn(t *testing.T) {
 // TestComplexitySiteMarksForAll: all paints every function; a site the
 // encloser shares with a nested unit is marked once.
 func TestComplexitySiteMarksForAll(t *testing.T) {
+	t.Parallel()
 	fns := cxSiteFixture()
 	fns = append(fns, complexity.Function{Name: "nested", Line: 12, Sites: []complexity.Site{
 		{Line: 13, Col: 3, Kind: "if", CCN: 1, Cognitive: 1},
@@ -90,6 +93,7 @@ func TestComplexitySiteMarksForAll(t *testing.T) {
 // TestComplexitySiteMarksForShow: a panel `m` paints its function in off
 // mode and only that one.
 func TestComplexitySiteMarksForShow(t *testing.T) {
+	t.Parallel()
 	got := cxMarkLines(complexitySiteMarksFor(cxSiteFixture(), 15, 15, config.HintOff, 0))
 	if len(got) != 1 || got[1].Text != "+1" {
 		t.Fatalf("show: got %+v, want only the shown function's site", got)
@@ -134,6 +138,7 @@ func cxOpenSource(t *testing.T) (Model, string) {
 // all marks every function's sites, off clears them, and the hint mode
 // off leaves them alone (independent toggles).
 func TestComplexitySiteMarksModeWiring(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	m, src := cxOpenSource(t)
 	fn := cxSitedFunction(t, m, src)
 	m = cxSitesConfig(t, m, config.HintOff, config.HintAll)
@@ -170,6 +175,7 @@ func TestComplexitySiteMarksModeWiring(t *testing.T) {
 // TestComplexitySiteMarksShowOnce: the panel's `m` paints the function's
 // sites with both modes off; an edit drops them.
 func TestComplexitySiteMarksShowOnce(t *testing.T) {
+	// serial: cxOpenSource: config.Set (process-wide configuration)
 	m, src := cxOpenSource(t)
 	fn := cxSitedFunction(t, m, src)
 	m = cxSitesConfig(t, m, config.HintOff, config.HintOff)
@@ -209,6 +215,7 @@ func TestComplexitySiteMarksShowOnce(t *testing.T) {
 // TestComplexitySiteMarksShareMeasurement: a dirty buffer is measured once
 // per key, and that one measurement lands both the hints and the marks.
 func TestComplexitySiteMarksShareMeasurement(t *testing.T) {
+	// serial: sets package variable cxHintMeasure
 	var calls atomic.Int32
 	orig := cxHintMeasure
 	cxHintMeasure = func(path, text string) []complexity.Function {

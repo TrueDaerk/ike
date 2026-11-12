@@ -13,6 +13,7 @@ import (
 // real global registry, so a command rename breaks CI instead of silently
 // dropping a row from the default help view.
 func TestEssentialsCurationResolves(t *testing.T) {
+	t.Parallel()
 	known := map[string]bool{}
 	for _, c := range registry.Global().Commands() {
 		known[c.ID] = true
@@ -31,6 +32,7 @@ func TestEssentialsCurationResolves(t *testing.T) {
 // function keys, or chords that exist on every platform ("ctrl+r"). Anything
 // platform-specific belongs in the keymap layer, which normalizes.
 func TestDocShortcutHintsArePlatformNeutral(t *testing.T) {
+	t.Parallel()
 	for _, c := range registry.Global().Commands() {
 		if strings.Contains(c.Shortcut, "cmd+") || strings.Contains(c.Shortcut, "opt+") {
 			t.Errorf("command %q doc shortcut hint %q is mac-specific; bind it in the keymap layer or use a neutral hint", c.ID, c.Shortcut)

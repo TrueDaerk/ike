@@ -69,6 +69,7 @@ func cursorOf(t *testing.T, m Model) (int, int) {
 // file B, cmd+g steps foo in B (seeded as B's own search), cmd+shift+g steps
 // back — no find-in-path result is opened.
 func TestMatchStepRepeatsLastSearchInOtherEditor(t *testing.T) {
+	t.Parallel()
 	m := dismissOnboarding(newSized())
 	a := tempFileWith(t, "a.txt", "foo one foo two\n")
 	b := tempFileWith(t, "b.txt", "x\nfoo b1\nfoo b2\n")
@@ -105,6 +106,7 @@ func TestMatchStepRepeatsLastSearchInOtherEditor(t *testing.T) {
 // TestMatchStepLastSearchNoMatchToasts: file B has no foo — a toast says so
 // and the view stays where it is.
 func TestMatchStepLastSearchNoMatchToasts(t *testing.T) {
+	t.Parallel()
 	m := dismissOnboarding(newSized())
 	a := tempFileWith(t, "a.txt", "foo one foo two\n")
 	b := tempFileWith(t, "b.txt", "nothing here\nnor here\n")
@@ -127,6 +129,7 @@ func TestMatchStepLastSearchNoMatchToasts(t *testing.T) {
 // in-file search committed afterwards takes cmd+g back, even from an editor
 // that never typed it.
 func TestMatchStepRecencyBetweenInFileAndFindInPath(t *testing.T) {
+	t.Parallel()
 	m, hitPath := finderApp(t)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape}) // close, keep results
 	m = stepMatch(m, 1)
@@ -172,6 +175,8 @@ func TestMatchStepRecencyBetweenInFileAndFindInPath(t *testing.T) {
 // P1, baz in P2 — and a switch back repeats the project's own query in a
 // fresh editor.
 func TestLastSearchKeptPerProject(t *testing.T) {
+	// serial: switchModel: t.Setenv
+	withStore(t)
 	a, b := twoProjects(t)
 	m := dismissOnboarding(switchModel(t))
 	write := func(dir, name, body string) string {

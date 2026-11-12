@@ -19,6 +19,8 @@ import (
 // box shows the text in the shell.
 
 func TestAgentTraceViewToggleAndRemember(t *testing.T) {
+	// serial: traceApp: t.Setenv
+	withStore(t)
 	m, dir := traceApp(t)
 	target := filepath.Join(t.TempDir(), "x.go")
 	if err := os.WriteFile(filepath.Join(dir, "sess-g.jsonl"), []byte(transcriptLines("sess-g", projectRoot(), target, 1)), 0o644); err != nil {
@@ -60,6 +62,7 @@ func TestAgentTraceViewToggleAndRemember(t *testing.T) {
 }
 
 func TestAgentTraceGraphLiveAppendKeepsSelectionAndExpansion(t *testing.T) {
+	// serial: traceApp: t.Setenv
 	m, dir := traceApp(t)
 	target := filepath.Join(t.TempDir(), "x.go")
 	if err := os.WriteFile(target, []byte("a\nb\nc\nd\n"), 0o644); err != nil {

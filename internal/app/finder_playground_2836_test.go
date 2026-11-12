@@ -25,6 +25,7 @@ import (
 // carries no project.* commands, so cmd+shift+f from the playground would
 // resolve and then find nothing to run (production registers them).
 func TestFindInPathSequenceFromPlaygroundSurvives(t *testing.T) {
+	// serial: switchTo: waits on the wall clock (load-sensitive)
 	for _, split := range []bool{false, true} {
 		for _, viaSwitch := range []bool{false, true} {
 			for _, buf := range []bool{false, true} {

@@ -19,6 +19,8 @@ import (
 // TestModelGenerationIsUnique: every built model owns a distinct generation,
 // so a stale tick can never match a fresh model by accident.
 func TestModelGenerationIsUnique(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	a := sized(t, 100, 40)
 	b := sized(t, 100, 40)
 	if a.modelGen == 0 || b.modelGen == 0 {
@@ -36,6 +38,7 @@ func TestModelGenerationIsUnique(t *testing.T) {
 // self-sustains — both chains re-arm while a view keeps following. A tick
 // from a departed model must be dropped without a poll and without a re-arm.
 func TestStaleFollowTickRetires(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	path := filepath.Join(t.TempDir(), "app.log")
 	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
@@ -76,6 +79,7 @@ func TestStaleFollowTickRetires(t *testing.T) {
 // TestStaleArmedTicksRetire walks the remaining armed-flag ticks: each drops a
 // foreign generation without touching the receiving model's guard.
 func TestStaleArmedTicksRetire(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name  string
 		msg   func(gen int64) tea.Msg
@@ -132,6 +136,7 @@ func TestStaleArmedTicksRetire(t *testing.T) {
 // TestStalePerfTickRetires: the HUD's sampling tick is generation-stamped too,
 // so a departed model's tick neither samples nor re-arms.
 func TestStalePerfTickRetires(t *testing.T) {
+	// serial: perfhud.SetEnabled (process-wide switch)
 	m := sized(t, 100, 40)
 	if cmd := m.togglePerfHUD(); cmd == nil || !m.perfTickArmed {
 		t.Fatal("setup: the HUD must arm its sampling tick")
@@ -158,6 +163,8 @@ func TestStalePerfTickRetires(t *testing.T) {
 // a grace tick outliving a project switch judged the fresh model's zero-valued
 // caps and popped "keyboard shortcuts will not work" on a Kitty terminal.
 func TestStaleTermCheckKeepsVerdictQuiet(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := sized(t, 100, 40)
 	m.caps = termCaps{} // a freshly rebuilt model: nothing probed yet
 	out, cmd := m.Update(termCheckMsg{gen: m.modelGen - 1})

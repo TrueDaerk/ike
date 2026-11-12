@@ -13,6 +13,7 @@ import (
 // its sites, space in the complexity context toggles the same, and a
 // selection with nothing to expand says so.
 func TestComplexitySitesCommandAndKey(t *testing.T) {
+	// serial: timeApp: t.Setenv
 	m, _ := timeApp(t)
 	m = dismissOnboarding(m)
 	out, _ := m.Update(ComplexityToggleMsg{})

@@ -35,6 +35,7 @@ func bodyServer(t *testing.T, body func() string) *httptest.Server {
 // TestHTTPRerunKeyRoutes: "R" in the focused viewer asks the host to re-run —
 // the pane reaches neither the .http file nor the environment.
 func TestHTTPRerunKeyRoutes(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseMsg{Source: "/p/req.http", Request: "one", Resp: sampleResponse("one")})
 	m = out.(Model)
@@ -54,6 +55,8 @@ func TestHTTPRerunKeyRoutes(t *testing.T) {
 // .http file, so an edit made since the stored response counts. The answer
 // lands in the pane and in the history like any dispatch.
 func TestHTTPRerunUsesCurrentRequest(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	var log []recorded
 	srv := resendServer(t, &log)
 
@@ -117,6 +120,8 @@ func TestHTTPRerunUsesCurrentRequest(t *testing.T) {
 // default) the comparison of the re-run against the run before it opens by
 // itself once the answer is stored (#2247) — the whole point of re-running.
 func TestHTTPRerunOpensPreviousRunDiff(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	var body = "one"
 	srv := bodyServer(t, func() string { return body })
 
@@ -163,6 +168,8 @@ func TestHTTPRerunOpensPreviousRunDiff(t *testing.T) {
 // that differ only in Date and a request id as unchanged (#2247) — that noise
 // is what made previous-vs-new unreadable.
 func TestHTTPRerunDiffFiltersVolatileHeaders(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := httpApp(t)
 	path := httpPickerFile(t)
 	store := httphistory.New(httpHistoryDir())
@@ -195,6 +202,8 @@ func TestHTTPRerunDiffFiltersVolatileHeaders(t *testing.T) {
 // response was stored cannot be re-run — say so (and name the re-send)
 // instead of dispatching something else (#2247).
 func TestHTTPRerunMissingRequestNotifies(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := httpApp(t)
 	path := filepath.Join(t.TempDir(), "req.http")
 	if err := os.WriteFile(path, []byte("### renamed\nGET http://localhost/a\n"), 0o644); err != nil {
@@ -218,6 +227,7 @@ func TestHTTPRerunMissingRequestNotifies(t *testing.T) {
 // TestHTTPRerunWithoutPaneNotifies: the palette entry is reachable with no
 // viewer open (#2247).
 func TestHTTPRerunWithoutPaneNotifies(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	out, _ := m.Update(HTTPRerunMsg{})
 	m = out.(Model)

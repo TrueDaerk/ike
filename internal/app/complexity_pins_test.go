@@ -13,6 +13,8 @@ import (
 )
 
 func TestComplexityPinToggleSavesAndApplies(t *testing.T) {
+	// serial: baselineApp: t.Setenv
+	withStore(t)
 	m, proj := baselineApp(t)
 	path := complexity.PinsPath(proj)
 	m = baselineGen(t, m)
@@ -58,6 +60,7 @@ func TestComplexityPinToggleSavesAndApplies(t *testing.T) {
 }
 
 func TestComplexitySessionBaseRecordedOncePerRoot(t *testing.T) {
+	// serial: baselineApp: t.Setenv
 	m, _ := baselineApp(t)
 	m = baselineGen(t, m)
 	out, _ := m.Update(ComplexityToggleMsg{})

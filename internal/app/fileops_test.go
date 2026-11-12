@@ -63,6 +63,7 @@ func projectDir(t *testing.T) (root, file string) {
 // command arrives as RenameFileMsg (palette path): with an editor focused
 // shift+f6 belongs to lsp.rename now (0082 sheet 13, #18).
 func TestRenamePromptRenamesAndEditorFollows(t *testing.T) {
+	t.Parallel()
 	root, file := projectDir(t)
 	m := newSized()
 	tm, _ := m.openPath(file, false)
@@ -114,6 +115,7 @@ func TestRenamePromptRenamesAndEditorFollows(t *testing.T) {
 // TestMoveRepointsOpenEditor guards the follow-on-move path: moving a file
 // into a folder re-points the editor instead of closing its pane.
 func TestMoveRepointsOpenEditor(t *testing.T) {
+	t.Parallel()
 	root, file := projectDir(t)
 	m := newSized()
 	tm, _ := m.openPath(file, false)
@@ -138,6 +140,7 @@ func TestMoveRepointsOpenEditor(t *testing.T) {
 // TestDirRenameRepointsNestedEditor: renaming a folder re-points editors on
 // files underneath it.
 func TestDirRenameRepointsNestedEditor(t *testing.T) {
+	t.Parallel()
 	root, _ := projectDir(t)
 	nested := filepath.Join(root, "sub", "c.txt")
 	if err := os.WriteFile(nested, []byte("c\n"), 0o644); err != nil {
@@ -161,6 +164,7 @@ func TestDirRenameRepointsNestedEditor(t *testing.T) {
 // focus to the explorer so the prompt captures every typed key — previously
 // the filename executed as vim commands against the buffer.
 func TestPaletteFileOpFocusesExplorer(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	for _, tc := range []struct {
 		name string
 		msg  tea.Msg
@@ -199,6 +203,7 @@ func TestPaletteFileOpFocusesExplorer(t *testing.T) {
 // after a palette-invoked New File, typed keys land in the prompt (creating
 // the file on enter) and never leak into the editor buffer as vim commands.
 func TestPaletteNewFileTypesIntoPromptNotEditor(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	root, file := projectDir(t)
 	chdir(t, root)
 	m := newSized()
@@ -230,6 +235,7 @@ func TestPaletteNewFileTypesIntoPromptNotEditor(t *testing.T) {
 // palette file op must re-show the explorer so its prompt is visible and
 // focused instead of rendering into a pane that is not in the layout.
 func TestPaletteFileOpShowsHiddenExplorer(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	root, file := projectDir(t)
 	chdir(t, root)
 	m := newSized()
@@ -257,6 +263,7 @@ func TestPaletteFileOpShowsHiddenExplorer(t *testing.T) {
 // focused stashes the source and opens the palette locked to the directory
 // mode.
 func TestF6OpensDirectoryPicker(t *testing.T) {
+	t.Parallel()
 	_, file := projectDir(t)
 	m := newSized()
 	tm, _ := m.openPath(file, false)

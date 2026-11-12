@@ -29,6 +29,7 @@ func openRenamePrompt(t *testing.T, placeholder string) (Model, *string) {
 }
 
 func TestLSPRenamePromptApplies(t *testing.T) {
+	t.Parallel()
 	m, applied := openRenamePrompt(t, "Greet")
 	// Extend the placeholder and confirm.
 	for _, r := range "ing" {
@@ -46,6 +47,7 @@ func TestLSPRenamePromptApplies(t *testing.T) {
 }
 
 func TestLSPRenamePromptCancelAndEmpty(t *testing.T) {
+	t.Parallel()
 	m, applied := openRenamePrompt(t, "Greet")
 	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = out.(Model)
@@ -68,6 +70,7 @@ func TestLSPRenamePromptCancelAndEmpty(t *testing.T) {
 // keeps the prompt open with its message shown and nothing applied; fixing
 // the name clears the message and applies.
 func TestLSPRenamePromptRejectsInvalidName(t *testing.T) {
+	t.Parallel()
 	m := dismissOnboarding(sized(t, 100, 40))
 	var applied string
 	out, _ := m.Update(ilsp.RenamePromptMsg{
@@ -124,6 +127,7 @@ func TestLSPRenamePromptRejectsInvalidName(t *testing.T) {
 }
 
 func TestLSPRenamePromptSwallowsKeys(t *testing.T) {
+	t.Parallel()
 	m, applied := openRenamePrompt(t, "sym")
 	out, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
 	m = out.(Model)

@@ -44,6 +44,8 @@ func tearOutFirstTab(t *testing.T, m Model) (Model, *floatTerm) {
 }
 
 func TestPopupMoveDragPersistsPosition(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openTestPopup(t)
 	x0, y0, _, _ := m.popupTermRect()
 	px, py, pw, _ := m.popupTermRect()
@@ -74,6 +76,7 @@ func TestPopupMoveDragPersistsPosition(t *testing.T) {
 }
 
 func TestPopupMoveOffsetClampsToScreen(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	m.winSizes.Set(popupTermPosKey, 10_000, 10_000)
 	x, y, w, h := m.popupTermRect()
@@ -83,6 +86,8 @@ func TestPopupMoveOffsetClampsToScreen(t *testing.T) {
 }
 
 func TestTearOutTabKeepsSessionLiveAndFocusesPanel(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openTestPopup(t)
 	m, f := tearOutFirstTab(t, m)
 	if m.popup.inst.TabCount() != 1 {
@@ -105,6 +110,7 @@ func TestTearOutTabKeepsSessionLiveAndFocusesPanel(t *testing.T) {
 }
 
 func TestTearOutLastTabMovesWholeHost(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	inst := m.popup.inst
 	sess := inst.ActiveTerminal().SessionKey()
@@ -159,6 +165,7 @@ func topFloatPanel(m Model) *floatTerm {
 }
 
 func TestFloatPanelClickRaisesAndFocuses(t *testing.T) {
+	t.Parallel()
 	m, lower, _ := twoFloatPanels(t, openTestPopup(t))
 	m = step(m, press(lower.x+10, lower.y+5))
 	m = step(m, release(lower.x+10, lower.y+5)) // settle the selection drag the body press armed
@@ -181,6 +188,7 @@ func TestFloatPanelClickRaisesAndFocuses(t *testing.T) {
 // (#1806) — the newly focused panel is raised to the top of the z-order, so
 // keyboard owner and topmost panel always agree (#1237).
 func TestFloatPanelKeyFocusRaises(t *testing.T) {
+	t.Parallel()
 	m, lower, upper := twoFloatPanels(t, openTestPopup(t))
 	// Down the stack: the second-topmost panel takes the keyboard and rises.
 	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModCtrl})
@@ -215,6 +223,7 @@ func TestFloatPanelKeyFocusRaises(t *testing.T) {
 // TestFloatFocusInvariantAcrossSwitches: mixed click/keyboard switches in any
 // order keep the #1237 invariant — the topmost panel owns the keyboard.
 func TestFloatFocusInvariantAcrossSwitches(t *testing.T) {
+	t.Parallel()
 	m, lower, upper := twoFloatPanels(t, openTestPopup(t))
 	check := func(what string) {
 		t.Helper()
@@ -257,6 +266,7 @@ func TestFloatFocusInvariantAcrossSwitches(t *testing.T) {
 // over a panel that covered it, and the next step lowers it again under the
 // panel it hands the keyboard to.
 func TestPopupBoxFocusKeyRaisesBox(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	m, f := tearOutFirstTab(t, m)
 	px, py, pw, ph := m.popupTermRect()
@@ -295,6 +305,7 @@ func TestPopupBoxFocusKeyRaisesBox(t *testing.T) {
 // on the box lifts it over the panels, a click back on a panel lifts that one,
 // and the layer's dismiss keeps working after the reordering (#1806).
 func TestPopupBoxClickRaisesBox(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	m, f := tearOutFirstTab(t, m)
 	px, py, pw, ph := m.popupTermRect()
@@ -333,6 +344,7 @@ func TestPopupBoxClickRaisesBox(t *testing.T) {
 }
 
 func TestToggleHidesAndShowsWholeLayer(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	m, f := tearOutFirstTab(t, m)
 	inst := m.popup.inst
@@ -355,6 +367,7 @@ func TestToggleHidesAndShowsWholeLayer(t *testing.T) {
 }
 
 func TestPopupResizeChordActsOnFocusedPanel(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	m, f := tearOutFirstTab(t, m)
 	w0, h0 := f.w, f.h
@@ -374,6 +387,8 @@ func TestPopupResizeChordActsOnFocusedPanel(t *testing.T) {
 }
 
 func TestExitedSessionClosesPanel(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openTestPopup(t)
 	m, f := tearOutFirstTab(t, m)
 	sess := f.inst.ActiveTerminal().SessionKey()
@@ -392,6 +407,8 @@ func TestExitedSessionClosesPanel(t *testing.T) {
 }
 
 func TestGlobalPanelRidesAcrossProjectSwitch(t *testing.T) {
+	// serial: switchModel: t.Setenv
+	withStore(t)
 	_, b := twoRoots(t)
 	m := openTestPopupWith(t, switchModel(t))
 	m, f := tearOutFirstTab(t, m)
@@ -440,6 +457,7 @@ func TestGlobalPanelRidesAcrossProjectSwitch(t *testing.T) {
 }
 
 func TestProjectPanelParksAndDiesWithWorkspace(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	_, b := twoRoots(t)
 	m := openTestPopupWith(t, switchModel(t))
 	m, f := tearOutFirstTab(t, m)
@@ -467,6 +485,7 @@ func TestProjectPanelParksAndDiesWithWorkspace(t *testing.T) {
 }
 
 func TestQuitEndsGlobalPanelSession(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	m, f := tearOutFirstTab(t, m)
 	m.toggleFloatTermGlobal(f)

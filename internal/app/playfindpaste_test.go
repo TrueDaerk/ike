@@ -48,6 +48,7 @@ func assertPasteInSearchLine(t *testing.T, m Model, cmd tea.Cmd, program, result
 // TestPlayPasteIntoResultSearchLine: the search opened with "/" after tabbing
 // into the result takes the paste, flattened like the editor's own search line.
 func TestPlayPasteIntoResultSearchLine(t *testing.T) {
+	t.Parallel()
 	m := playNoOnboarding(openJQ(t, playApp(t, `{"foo":["alpha","beta","gamma"]}`)))
 	m = setProgram(m, ".foo[]")
 	program, result := m.play.program.Text, m.play.result.Text()
@@ -65,6 +66,7 @@ func TestPlayPasteIntoResultSearchLine(t *testing.T) {
 // find chord opened from the query line takes the paste, and esc still hands
 // the keyboard back to the query line afterwards.
 func TestPlayPasteIntoSearchFromQueryLine(t *testing.T) {
+	t.Parallel()
 	m := playNoOnboarding(openJQ(t, playApp(t, `{"foo":["alpha","beta","gamma"]}`)))
 	m = setProgram(m, ".foo[]")
 	program, result := m.play.program.Text, m.play.result.Text()
@@ -86,6 +88,7 @@ func TestPlayPasteIntoSearchFromQueryLine(t *testing.T) {
 // TestPlayPasteQueryLineUnchanged: with no prompt open the query line keeps
 // the #1936 behaviour — flattened, history reset, re-evaluated.
 func TestPlayPasteQueryLineUnchanged(t *testing.T) {
+	t.Parallel()
 	m := playNoOnboarding(openJQ(t, playApp(t, `{"foo":[1,2,3]}`)))
 	m.play.program.Clear()
 	m.play.histIdx = 2
@@ -110,6 +113,7 @@ func TestPlayPasteQueryLineUnchanged(t *testing.T) {
 // result buffer focused without a prompt: the read-only buffer never takes the
 // paste — the query line does, and the keyboard moves back there with it.
 func TestPlayPasteResultBufferNormalMode(t *testing.T) {
+	t.Parallel()
 	m := playNoOnboarding(openJQ(t, playApp(t, `{"foo":[1,2,3]}`)))
 	m = setProgram(m, ".foo[]")
 	result := m.play.result.Text()

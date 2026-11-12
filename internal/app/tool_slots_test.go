@@ -45,6 +45,8 @@ func ratioNear(t *testing.T, got, want float64, what string) {
 // defined TT/ZZ arrangement, closing Z hands the strip back to T, and the
 // explorer snaps to its X column throughout.
 func TestSlotOpenSequence(t *testing.T) {
+	// serial: issueLayout: config.Set (process-wide configuration)
+	withStore(t)
 	issueLayout(t,
 		[]string{"X=explorer", "T=toolt", "Z=toolz"},
 		sleepTool("toolt"), sleepTool("toolz"))
@@ -114,6 +116,7 @@ func TestSlotOpenSequence(t *testing.T) {
 // TestSlotSharedSlotAddsTab: the second tool assigned to an occupied slot
 // joins the slot pane as the focused tab — no extra split.
 func TestSlotSharedSlotAddsTab(t *testing.T) {
+	// serial: issueLayout: config.Set (process-wide configuration)
 	issueLayout(t,
 		[]string{"T=first", "T=second"},
 		sleepTool("first"), sleepTool("second"))
@@ -152,6 +155,7 @@ func TestSlotSharedSlotAddsTab(t *testing.T) {
 // *global* sql tool assigned to Z joins the lazygit pane as the focused tab
 // exactly like a non-global tool would — no subdividing split.
 func TestSlotGlobalToolJoinsAsTab(t *testing.T) {
+	// serial: issueLayout: config.Set (process-wide configuration)
 	global := sleepTool("sql")
 	global.Global = true
 	issueLayout(t,
@@ -191,6 +195,7 @@ func TestSlotGlobalToolJoinsAsTab(t *testing.T) {
 // TestSlotBuiltinPanel: a built-in tool window assigned to a slot opens at
 // the slot's exact position instead of its hardcoded adaptive split.
 func TestSlotBuiltinPanel(t *testing.T) {
+	// serial: issueLayout: config.Set (process-wide configuration)
 	issueLayout(t, []string{"Z=problems"})
 	m := sized(t, 100, 40)
 	m = step(m, ProblemsToggleMsg{})
@@ -208,6 +213,7 @@ func TestSlotBuiltinPanel(t *testing.T) {
 // TestSlotUnassignedToolKeepsAdaptive: a template being configured must not
 // change anything for tools without an assignment.
 func TestSlotUnassignedToolKeepsAdaptive(t *testing.T) {
+	// serial: issueLayout: config.Set (process-wide configuration)
 	issueLayout(t, []string{"T=other"}, sleepTool("watcher"), sleepTool("other"))
 	m := sized(t, 100, 40)
 	editorKey := m.activeEditorKey()

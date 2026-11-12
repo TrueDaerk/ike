@@ -154,6 +154,7 @@ func copyInto(t *testing.T, src, dir string) string {
 // archives and plain .gz files, gzip on other files and zip on directories —
 // and never the wrong family (#2805).
 func TestExplorerMenuGatesArchiveActions(t *testing.T) {
+	// serial: packTestModel: t.Setenv
 	root := t.TempDir()
 	zipPath := copyInto(t, writeTestArchive(t, "x.zip", map[string]string{"a.txt": "a"}), root)
 	tgz := copyInto(t, writeTestArchive(t, "y.tar.gz", map[string]string{"b.txt": "b"}), root)
@@ -195,6 +196,7 @@ func TestExplorerMenuGatesArchiveActions(t *testing.T) {
 // TestExplorerExtractHereZip: Extract Here unpacks x.zip into ./x/ and the
 // tree selects the new directory.
 func TestExplorerExtractHereZip(t *testing.T) {
+	// serial: packTestModel: t.Setenv
 	root := t.TempDir()
 	p := copyInto(t, writeTestArchive(t, "x.zip", map[string]string{
 		"cmd/main.go": "package main\n",
@@ -214,6 +216,7 @@ func TestExplorerExtractHereZip(t *testing.T) {
 // TestExplorerExtractHereTarGz: a tar.gz lands in the directory named after it
 // without the compound suffix.
 func TestExplorerExtractHereTarGz(t *testing.T) {
+	// serial: packTestModel: t.Setenv
 	root := t.TempDir()
 	p := copyInto(t, writeTestArchive(t, "x.tar.gz", map[string]string{"a.txt": "a\n"}), root)
 	m := packTestModel(t, root)
@@ -227,6 +230,7 @@ func TestExplorerExtractHereTarGz(t *testing.T) {
 // TestExplorerExtractRefusesTraversal: a crafted zip naming ../evil.txt
 // extracts its safe members and never writes outside the target.
 func TestExplorerExtractRefusesTraversal(t *testing.T) {
+	// serial: packTestModel: t.Setenv
 	root := t.TempDir()
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
@@ -259,6 +263,7 @@ func TestExplorerExtractRefusesTraversal(t *testing.T) {
 // TestExplorerExtractHereHonoursCap: the archive extraction cap applies to
 // the explorer's entry point as well.
 func TestExplorerExtractHereHonoursCap(t *testing.T) {
+	// serial: packTestModel: t.Setenv
 	root := t.TempDir()
 	p := copyInto(t, writeTestArchive(t, "big.zip", map[string]string{"a.txt": strings.Repeat("x", 4096)}), root)
 	gz := filepath.Join(root, "big.log.gz")
@@ -284,6 +289,7 @@ func TestExplorerExtractHereHonoursCap(t *testing.T) {
 // TestExplorerExtractHereGzipAndOverwriteGuard: app.log.gz extracts to
 // app.log; a second run asks first, s keeps the file and o replaces it.
 func TestExplorerExtractHereGzipAndOverwriteGuard(t *testing.T) {
+	// serial: packTestModel: t.Setenv
 	root := t.TempDir()
 	gz := filepath.Join(root, "app.log.gz")
 	writeGzipFile(t, gz, "fresh\n")
@@ -321,6 +327,7 @@ func TestExplorerExtractHereGzipAndOverwriteGuard(t *testing.T) {
 // TestExplorerExtractToOpensPrompt: Extract To… opens the archive viewer's
 // target-directory prompt, and accepting it extracts and selects the target.
 func TestExplorerExtractToOpensPrompt(t *testing.T) {
+	// serial: packTestModel: t.Setenv
 	root := t.TempDir()
 	p := copyInto(t, writeTestArchive(t, "x.zip", map[string]string{"a.txt": "a"}), root)
 	gz := filepath.Join(root, "app.log.gz")
@@ -365,6 +372,7 @@ func TestExplorerExtractToOpensPrompt(t *testing.T) {
 // TestExplorerCompressGzip: a plain file gzips to <file>.gz beside it, the
 // original kept and the new file selected.
 func TestExplorerCompressGzip(t *testing.T) {
+	// serial: packTestModel: t.Setenv
 	root := t.TempDir()
 	src := filepath.Join(root, "notes.txt")
 	writeFile(t, src, "hello\n")
@@ -407,6 +415,7 @@ func TestExplorerCompressGzip(t *testing.T) {
 // TestExplorerCompressZip: a directory zips to <dir>.zip with relative member
 // paths, and a multi-selection zips too.
 func TestExplorerCompressZip(t *testing.T) {
+	// serial: packTestModel: t.Setenv
 	root := t.TempDir()
 	dir := filepath.Join(root, "proj")
 	writeFile(t, filepath.Join(dir, "main.go"), "package main\n")
@@ -436,6 +445,7 @@ func TestExplorerCompressZip(t *testing.T) {
 // TestExplorerArchiveActionsRefuseWrongKind: the commands say so instead of
 // acting when the selection does not fit.
 func TestExplorerArchiveActionsRefuseWrongKind(t *testing.T) {
+	// serial: packTestModel: t.Setenv
 	root := t.TempDir()
 	src := filepath.Join(root, "notes.txt")
 	writeFile(t, src, "hi")
@@ -456,6 +466,7 @@ func TestExplorerArchiveActionsRefuseWrongKind(t *testing.T) {
 // on a plain file — while an open speed search still takes it as a typed
 // character, and the node menu's Extract To… shows the key.
 func TestExplorerEKeyExtractTo(t *testing.T) {
+	// serial: packTestModel: t.Setenv
 	root := t.TempDir()
 	p := copyInto(t, writeTestArchive(t, "x.zip", map[string]string{"a.txt": "a"}), root)
 	src := filepath.Join(root, "notes.txt")

@@ -60,6 +60,8 @@ func body(s string) *atomic.Value {
 // values, the one matching nothing keeps its warning and shows no value; the
 // hints survive a reopen through a fresh model over the same history.
 func TestHTTPCaptureHintsAfterDispatch(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	srv := jsonServer(t, map[string]*atomic.Value{"/a": body(`{"task":"node-1:42","stats":{"total":7}}`)})
 	m := httpApp(t)
 	src := "### start\n" +
@@ -100,6 +102,8 @@ func TestHTTPCaptureHintsAfterDispatch(t *testing.T) {
 // TestHTTPCaptureHintsNewestResponseWins: a name captured by two requests
 // shows the newer response's value on both directive lines.
 func TestHTTPCaptureHintsNewestResponseWins(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	srv := jsonServer(t, map[string]*atomic.Value{
 		"/one": body(`{"id":"first"}`),
 		"/two": body(`{"id":"second"}`),
@@ -124,6 +128,8 @@ func TestHTTPCaptureHintsNewestResponseWins(t *testing.T) {
 
 // TestHTTPCaptureHintsMaskSecrets: a token shows masked, an id plain.
 func TestHTTPCaptureHintsMaskSecrets(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	srv := jsonServer(t, map[string]*atomic.Value{"/a": body(`{"access_token":"s3cr3t","id":"u-1"}`)})
 	m := httpApp(t)
 	src := "# @capture token = .access_token\n# @capture id = .id\nGET " + srv.URL + "/a\n"
@@ -144,6 +150,8 @@ func TestHTTPCaptureHintsMaskSecrets(t *testing.T) {
 // TestHTTPCaptureHintsSettingOff: http.capture_hints = false removes the
 // hints, and turning it back on restores them.
 func TestHTTPCaptureHintsSettingOff(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
+	withStore(t)
 	srv := jsonServer(t, map[string]*atomic.Value{"/a": body(`{"id":"u-1"}`)})
 	m := httpApp(t)
 	path := httpVarFile(t, "# @capture id = .id\nGET "+srv.URL+"/a\n", nil)
@@ -173,6 +181,7 @@ func TestHTTPCaptureHintsSettingOff(t *testing.T) {
 // TestCaptureHintValue: long values are cut to 60 runes plus an ellipsis,
 // line breaks read as ⏎, secret-suspect names mask.
 func TestCaptureHintValue(t *testing.T) {
+	t.Parallel()
 	long := strings.Repeat("ä", 200)
 	if got, want := captureHintValue("id", long), strings.Repeat("ä", 60)+"…"; got != want {
 		t.Errorf("long value = %q", got)

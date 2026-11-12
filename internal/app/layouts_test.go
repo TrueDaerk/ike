@@ -62,7 +62,8 @@ func threePaneSnapshot(t *testing.T) persistedLayout {
 }
 
 func TestLayoutStoreRoundTrip(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	// serial: withStore: t.Setenv
+	withStore(t)
 	s := savedLayouts{Layouts: map[string]persistedLayout{"dev": twoPaneSnapshot(t)}, Default: "dev"}
 	saveUserLayouts(s)
 	got := loadUserLayouts()
@@ -79,6 +80,8 @@ func TestLayoutStoreRoundTrip(t *testing.T) {
 }
 
 func TestDeleteLayoutClearsDefault(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, _ := openTestTerminal(t)
 	saveUserLayouts(savedLayouts{Layouts: map[string]persistedLayout{"dev": twoPaneSnapshot(t)}, Default: "dev"})
 	m = step(m, DeleteLayoutMsg{Name: "dev"})
@@ -89,6 +92,7 @@ func TestDeleteLayoutClearsDefault(t *testing.T) {
 }
 
 func TestSnapshotLayoutStripsToKinds(t *testing.T) {
+	t.Parallel()
 	m, termKey := openTestTerminal(t) // explorer + editor (+ file?) + terminal
 	snap, ok := snapshotLayout(m.activeWS().Tree, m.activeWS().Panes)
 	if !ok {
@@ -118,6 +122,8 @@ func TestSnapshotLayoutStripsToKinds(t *testing.T) {
 }
 
 func TestSaveLayoutPromptSavesAndGuardsOverwrite(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := sized(t, 100, 40)
 	m = step(m, SaveLayoutPromptMsg{})
 	// The pane selection (#1568) precedes the prompt; enter keeps all panes.
@@ -148,6 +154,8 @@ func TestSaveLayoutPromptSavesAndGuardsOverwrite(t *testing.T) {
 }
 
 func TestApplyLayoutKeepsSurplusEditorsAsPanes(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	dir := t.TempDir()
 	pa := filepath.Join(dir, "a.txt")
 	pb := filepath.Join(dir, "b.txt")
@@ -191,6 +199,8 @@ func TestApplyLayoutKeepsSurplusEditorsAsPanes(t *testing.T) {
 // graft in their pre-apply relative arrangement (#1577): a stacked pair stays
 // stacked instead of flattening into a row of siblings.
 func TestApplyLayoutPreservesLeftoverArrangement(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	dir := t.TempDir()
 	paths := map[string]string{}
 	for _, name := range []string{"a", "b", "c"} {
@@ -253,6 +263,8 @@ func editorTerminalTabs(m Model) []*terminal.Model {
 }
 
 func TestApplyLayoutKeepsOrphanShellAsPane(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, termKey := openTestTerminal(t)
 	sessKey := m.activeWS().Panes.Get(termKey).Terminal().SessionKey()
 	saveUserLayouts(savedLayouts{Layouts: map[string]persistedLayout{"plain": twoPaneSnapshot(t)}})
@@ -299,6 +311,8 @@ func termSlotSnapshot(t *testing.T) persistedLayout {
 }
 
 func TestApplyLayoutKeepsSurplusShellAsPane(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, key1 := openTestTerminal(t)
 	m = step(m, TerminalNewMsg{})
 	key2 := m.activeWS().Panes.Focused()
@@ -334,6 +348,8 @@ func TestApplyLayoutKeepsSurplusShellAsPane(t *testing.T) {
 }
 
 func TestApplyLayoutFillsMissingSlotsWithScratch(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := sized(t, 100, 40) // one editor pane only
 	saveUserLayouts(savedLayouts{Layouts: map[string]persistedLayout{"wide": threePaneSnapshot(t)}})
 	m = step(m, ApplyLayoutMsg{Name: "wide"})
@@ -349,7 +365,8 @@ func TestApplyLayoutFillsMissingSlotsWithScratch(t *testing.T) {
 }
 
 func TestRestoreLayoutFallsBackToDefaultLayout(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	// serial: withStore: t.Setenv
+	withStore(t)
 	saveUserLayouts(savedLayouts{Layouts: map[string]persistedLayout{"wide": threePaneSnapshot(t)}, Default: "wide"})
 	m := New() // fresh project: no layout.json in the redirected store
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
@@ -366,6 +383,8 @@ func TestRestoreLayoutFallsBackToDefaultLayout(t *testing.T) {
 }
 
 func TestRestoreDefaultLayoutBuiltIn(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, termKey := openTestTerminal(t) // no saved layouts, no default
 	m = step(m, RestoreDefaultLayoutMsg{})
 	leaves := leafSet(m)
@@ -384,6 +403,7 @@ func TestRestoreDefaultLayoutBuiltIn(t *testing.T) {
 }
 
 func TestLayoutsModeResults(t *testing.T) {
+	t.Parallel()
 	mode := newLayoutsMode(func() ([]string, string) { return []string{"b", "a"}, "a" })
 	items := mode.Results("", palette.Context{})
 	if len(items) != 2 || items[0].Title != "a" || items[1].Title != "b" {
@@ -406,6 +426,8 @@ func TestLayoutsModeResults(t *testing.T) {
 }
 
 func TestSetDefaultLayout(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := sized(t, 100, 40)
 	saveUserLayouts(savedLayouts{Layouts: map[string]persistedLayout{"dev": twoPaneSnapshot(t)}})
 	m = step(m, SetDefaultLayoutMsg{Name: "dev"})

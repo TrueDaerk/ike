@@ -17,6 +17,7 @@ import (
 // organize-imports on save (#1148): a manual save parked behind the chain is
 // completed — written to disk — when the bridge's SaveChainDoneMsg arrives.
 func TestSaveChainDoneCompletesDeferredWrite(t *testing.T) {
+	// serial: ilsp.SetSaveChain (process-wide state of package ilsp)
 	m := newSized()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")

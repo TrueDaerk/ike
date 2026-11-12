@@ -11,6 +11,7 @@ import (
 )
 
 func TestImageSyncSkipsWorkWithoutImagePanes(t *testing.T) {
+	// serial: testing.AllocsPerRun (refuses parallel tests)
 	m := newSized()
 	if m.activeWS().Panes.ImagesMinted() {
 		t.Fatal("setup: a fresh workspace has no image panes")
@@ -34,6 +35,7 @@ func TestImageSyncSkipsWorkWithoutImagePanes(t *testing.T) {
 }
 
 func TestBreadcrumbLayoutSkipsWorkWithoutSymbols(t *testing.T) {
+	// serial: testing.AllocsPerRun (refuses parallel tests)
 	m := newSized()
 	if m.crumbSig != "" {
 		t.Fatalf("setup: no pane shows a breadcrumb row, sig = %q", m.crumbSig)
@@ -47,6 +49,7 @@ func TestBreadcrumbLayoutSkipsWorkWithoutSymbols(t *testing.T) {
 }
 
 func TestDomSyncSkipsWorkWithoutInspector(t *testing.T) {
+	// serial: testing.AllocsPerRun (refuses parallel tests)
 	m := newSized()
 	if m.domPanel() != nil || m.domHLPath != "" {
 		t.Fatal("setup: no DOM inspector and no highlighted file")

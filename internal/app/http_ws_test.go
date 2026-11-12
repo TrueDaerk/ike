@@ -28,6 +28,7 @@ func wsFlightModel(t *testing.T, m Model) Model {
 // TestHTTPWSStreamUnlocksInput: the stream start of a websocket flight marks
 // the pane ws-live (#2422), a plain flight's does not.
 func TestHTTPWSStreamUnlocksInput(t *testing.T) {
+	t.Parallel()
 	m := wsFlightModel(t, httpApp(t))
 	events := make(chan tea.Msg, 1)
 	tm, _ := m.Update(HTTPStreamStartMsg{Source: "a.http", Request: "ws",
@@ -45,6 +46,7 @@ func TestHTTPWSStreamUnlocksInput(t *testing.T) {
 // TestHTTPWSSessionStoredAndSendRouted: the session handle lands on the
 // flight entry and the pane's WSSendMsg resolves it (#2422).
 func TestHTTPWSSessionStoredAndSendRouted(t *testing.T) {
+	t.Parallel()
 	m := wsFlightModel(t, httpApp(t))
 	events := make(chan tea.Msg, 1)
 	tm, _ := m.Update(HTTPStreamStartMsg{Source: "a.http", Request: "ws",
@@ -77,6 +79,7 @@ func TestHTTPWSSessionStoredAndSendRouted(t *testing.T) {
 // TestHTTPWSSendWithoutSession: WSSendMsg without an open session notifies
 // instead of panicking (#2422).
 func TestHTTPWSSendWithoutSession(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	if cmd := m.sendWSMessage("hello"); cmd != nil {
 		t.Fatal("send without a session produced a command")
@@ -86,6 +89,8 @@ func TestHTTPWSSendWithoutSession(t *testing.T) {
 // TestTelemetryHTTPFlightWSKindAndFrames: a websocket flight's end op carries
 // kind=ws and the frame count (#2422) — structural only.
 func TestTelemetryHTTPFlightWSKindAndFrames(t *testing.T) {
+	// serial: telemetryModel: waits on the wall clock (load-sensitive)
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	m = wsFlightModel(t, m)
 	tm, _ := m.Update(HTTPResponseMsg{Source: "a.http", Request: "ws",

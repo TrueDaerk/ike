@@ -47,6 +47,7 @@ func diffPaneApp(t *testing.T) Model {
 // TestDiffCopyCommandRegistered: diff.copy must be a registry command, or the
 // binding is inert and the palette never lists it.
 func TestDiffCopyCommandRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if _, ok := m.reg.Command("diff.copy"); !ok {
 		t.Fatal("diff.copy must be a registry command")
@@ -57,6 +58,7 @@ func TestDiffCopyCommandRegistered(t *testing.T) {
 // both platforms — off darwin it folds onto ctrl+c like every cmd row — and
 // no ctrl+c secondary is added on darwin, where it stays the quit chord.
 func TestDiffCopyChordBound(t *testing.T) {
+	t.Parallel()
 	for _, goos := range []string{"darwin", "linux"} {
 		table := keymap.BuildTable(keymap.DefaultsFor(keymap.PresetJetBrains, goos), nil, goos)
 		chord := keymap.NormalizeChord(keymap.MustParseChord("cmd+c"), goos)
@@ -74,6 +76,8 @@ func TestDiffCopyChordBound(t *testing.T) {
 // it as a resolved diff.copy and never as an unbound chord (the telemetry
 // signal this issue came from).
 func TestDiffCopyChordNotUnbound(t *testing.T) {
+	// serial: pinDarwin: sets keymap.GOOS
+	withStore(t)
 	pinDarwin(t)
 	stubClipboard(t, "")
 	m := diffPaneApp(t)
@@ -102,6 +106,7 @@ func TestDiffCopyChordNotUnbound(t *testing.T) {
 // TestDiffCopyChordCopiesSelection: a live selection reaches the clipboard
 // through the shared diff.CopyMsg path, toast included.
 func TestDiffCopyChordCopiesSelection(t *testing.T) {
+	// serial: pinDarwin: sets keymap.GOOS
 	pinDarwin(t)
 	copied := stubClipboard(t, "")
 	m := diffPaneApp(t)
@@ -128,6 +133,7 @@ func TestDiffCopyChordCopiesSelection(t *testing.T) {
 // TestDiffCopyChordCopiesHunk: with no selection the chord copies the current
 // hunk as a unified patch — the pane key's fallback.
 func TestDiffCopyChordCopiesHunk(t *testing.T) {
+	// serial: pinDarwin: sets keymap.GOOS
 	pinDarwin(t)
 	copied := stubClipboard(t, "")
 	m := diffPaneApp(t)
@@ -142,6 +148,7 @@ func TestDiffCopyChordCopiesHunk(t *testing.T) {
 // TestDiffCopyCommandWithoutPane: the command is reachable from the palette
 // with no diff focused; it must say so rather than copy nothing.
 func TestDiffCopyCommandWithoutPane(t *testing.T) {
+	// serial: stubClipboard: sets package variable clipboardRead
 	copied := stubClipboard(t, "")
 	m := newSized()
 	m.setFocus(pane.ExplorerKey)

@@ -53,6 +53,7 @@ func linkOpenedFile(m Model, base string) (bool, int) {
 // opens all members, lands on the selected one, opens the file at its line
 // and shows the tool window.
 func TestDeepLinkGroupOpensMembersAndLands(t *testing.T) {
+	// serial: peekFixture: t.Chdir (process working directory)
 	roots := peekFixture(t, "origin", "api", "ui", "www")
 	storeGroup(t, "web", roots[1:])
 	if err := os.WriteFile(filepath.Join(roots[2], "f.txt"), []byte("a\nb\nc\n"), 0o644); err != nil {
@@ -86,6 +87,7 @@ func TestDeepLinkGroupOpensMembersAndLands(t *testing.T) {
 // TestDeepLinkGroupAloneLandsOnFirstMember: without project=/remote= the
 // chain's own rule decides — member 1.
 func TestDeepLinkGroupAloneLandsOnFirstMember(t *testing.T) {
+	// serial: peekFixture: t.Chdir (process working directory)
 	roots := peekFixture(t, "origin", "api", "ui")
 	storeGroup(t, "web", roots[1:])
 	m := switchModel(t)
@@ -105,6 +107,7 @@ func TestDeepLinkGroupAloneLandsOnFirstMember(t *testing.T) {
 // TestDeepLinkGroupRefusesNonMember: a project beside the group that is not
 // one of its members refuses the link — nothing switches, nothing opens.
 func TestDeepLinkGroupRefusesNonMember(t *testing.T) {
+	// serial: peekFixture: t.Chdir (process working directory)
 	roots := peekFixture(t, "origin", "api", "ui")
 	storeGroup(t, "web", roots[1:2]) // only api is a member
 	m := switchModel(t)
@@ -124,6 +127,7 @@ func TestDeepLinkGroupRefusesNonMember(t *testing.T) {
 // TestDeepLinkUnknownGroupNotifies: a group name nobody stored is refused
 // with one notification and nothing else.
 func TestDeepLinkUnknownGroupNotifies(t *testing.T) {
+	// serial: peekFixture: t.Chdir (process working directory)
 	roots := peekFixture(t, "origin", "api")
 	storeGroup(t, "web", roots[1:])
 	m := switchModel(t)

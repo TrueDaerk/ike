@@ -60,6 +60,7 @@ func imageOf(m Model, key string) *imgview.Model {
 // TestImageWheelPansOnlyWhenZoomed: the plain wheel and shift+wheel are inert
 // at fit; once zoomed they pan the crop vertically and horizontally.
 func TestImageWheelPansOnlyWhenZoomed(t *testing.T) {
+	t.Parallel()
 	m, key, x, y := imageApp(t)
 	iv := imageOf(m, key)
 	full := iv.Crop()
@@ -92,6 +93,7 @@ func TestImageWheelPansOnlyWhenZoomed(t *testing.T) {
 
 // TestImageAltWheelZooms: alt+wheel zooms in and out around the pointer.
 func TestImageAltWheelZooms(t *testing.T) {
+	t.Parallel()
 	m, key, x, y := imageApp(t)
 	iv := imageOf(m, key)
 	m = step(m, tea.MouseWheelMsg{X: x + 5, Y: y + 3, Button: tea.MouseWheelUp, Mod: tea.ModAlt})
@@ -115,6 +117,7 @@ func TestImageAltWheelZooms(t *testing.T) {
 // TestImageDragPans: a primary-button drag moves the zoomed picture; at fit
 // the press only focuses the pane.
 func TestImageDragPans(t *testing.T) {
+	t.Parallel()
 	m, key, x, y := imageApp(t)
 	iv := imageOf(m, key)
 	full := iv.Crop()
@@ -153,6 +156,7 @@ func TestImageDragPans(t *testing.T) {
 // TestImageZoomKeysReachFocusedPane: +/-/0 in the focused image pane change
 // the zoom through the ordinary key routing.
 func TestImageZoomKeysReachFocusedPane(t *testing.T) {
+	t.Parallel()
 	m, key, _, _ := imageApp(t)
 	iv := imageOf(m, key)
 	m.setFocus(key)

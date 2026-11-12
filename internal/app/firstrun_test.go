@@ -41,6 +41,8 @@ func runReload(t *testing.T, m Model, cmd tea.Cmd) Model {
 }
 
 func TestFirstRunTourThenLSPDialogThenNeverAgain(t *testing.T) {
+	// serial: firstRunSeed: sets package variable tourAutoOpen
+	withStore(t)
 	onboardLang(t, "frgo")
 	m, cmd := firstRunSeed(t)
 	if !m.tourOpen() {
@@ -78,6 +80,7 @@ func TestFirstRunTourThenLSPDialogThenNeverAgain(t *testing.T) {
 }
 
 func TestTourGatesOnOnboardedFlagNotFileExistence(t *testing.T) {
+	// serial: sets package variable tourAutoOpen
 	// #671: main records the project open into the settings file BEFORE the
 	// model is built, so the file exists on every launch — the flag alone
 	// decides whether the tour is due.
@@ -111,6 +114,7 @@ func TestTourGatesOnOnboardedFlagNotFileExistence(t *testing.T) {
 }
 
 func TestRecoveryPromptWinsOverTour(t *testing.T) {
+	// serial: firstRunSeed: sets package variable tourAutoOpen
 	m, cmd := firstRunSeed(t)
 	if !m.tourOpen() {
 		t.Fatal("setup: tour open")

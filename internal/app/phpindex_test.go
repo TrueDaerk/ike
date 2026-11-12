@@ -51,6 +51,7 @@ func waitPHPScan(t *testing.T, x *phpindex.Index) {
 // drops it at once, on rebuilds it, and the engine forwards buffer edits to
 // it without a disk write.
 func TestPHPIndexBuiltAndToggledLive(t *testing.T) {
+	// serial: t.Setenv
 	proj := t.TempDir()
 	state := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", state)
@@ -122,6 +123,7 @@ func TestPHPIndexBuiltAndToggledLive(t *testing.T) {
 // from carries the [php] keys as strings; a malformed value keeps the
 // default.
 func TestPHPOptionsFromHostConfig(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	old := config.Get()
 	t.Cleanup(func() { config.Set(old) })
 	c, _ := config.Load(config.Options{})

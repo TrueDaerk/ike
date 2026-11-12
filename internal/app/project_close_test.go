@@ -51,6 +51,7 @@ func closeCurrentFixture(t *testing.T) (m Model, aRoot, bRoot, dirtyPath string)
 // project drops its workspace and resumes the most recently used background
 // workspace in place.
 func TestCloseProjectResumesMRUBackground(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	a, b := filepath.Join(base, "a"), filepath.Join(base, "b")
 	for _, d := range []string{a, b} {
@@ -86,6 +87,7 @@ func TestCloseProjectResumesMRUBackground(t *testing.T) {
 // TestCloseProjectLastQuits (#1355): with no background workspace,
 // project.close quits the IDE (clean state: no guard).
 func TestCloseProjectLastQuits(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	dir := t.TempDir()
 	chdir(t, dir)
 	m := switchModel(t)
@@ -105,6 +107,7 @@ func TestCloseProjectLastQuits(t *testing.T) {
 // TestCloseProjectLastDirtyOpensQuitGuard (#1355): the quit degradation still
 // runs through the #287 guard when buffers are dirty.
 func TestCloseProjectLastDirtyOpensQuitGuard(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	dir := t.TempDir()
 	file := filepath.Join(dir, "f.txt")
 	if err := os.WriteFile(file, []byte("one\n"), 0o644); err != nil {
@@ -125,6 +128,7 @@ func TestCloseProjectLastDirtyOpensQuitGuard(t *testing.T) {
 // prompts before closing; esc keeps everything untouched; d closes discarding
 // and resumes the background workspace.
 func TestCloseProjectBusyPromptsAndCancel(t *testing.T) {
+	// serial: closeCurrentFixture: t.Chdir (process working directory)
 	m, a, bRoot, dirtyPath := closeCurrentFixture(t)
 
 	out, _ := m.Update(project.CloseProjectMsg{})
@@ -159,6 +163,7 @@ func TestCloseProjectBusyPromptsAndCancel(t *testing.T) {
 // TestCloseProjectSaveThenClose (#1355): s writes the active workspace's
 // dirty buffers, then closes it and resumes the background workspace.
 func TestCloseProjectSaveThenClose(t *testing.T) {
+	// serial: closeCurrentFixture: t.Chdir (process working directory)
 	m, _, bRoot, dirtyPath := closeCurrentFixture(t)
 
 	out, _ := m.Update(project.CloseProjectMsg{})
@@ -185,6 +190,7 @@ func TestCloseProjectSaveThenClose(t *testing.T) {
 // makes the active workspace busy, so the close guard opens instead of the
 // chord being swallowed by the shell.
 func TestCloseProjectChordEscapesTerminal(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	a, b := filepath.Join(base, "a"), filepath.Join(base, "b")
 	for _, d := range []string{a, b} {

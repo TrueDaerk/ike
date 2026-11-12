@@ -158,6 +158,7 @@ func dispatched(cmd tea.Cmd) []tea.Msg {
 // TestOpenPathRoutesArchivesToHandler: .tar/.tgz/.tar.gz/.zip never land in a
 // raw text buffer — the handler claims them and dispatches OpenArchiveMsg.
 func TestOpenPathRoutesArchivesToHandler(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"src.tar", "src.tgz", "src.tar.gz", "src.zip"} {
 		t.Run(name, func(t *testing.T) {
 			m := newSized()
@@ -179,6 +180,7 @@ func TestOpenPathRoutesArchivesToHandler(t *testing.T) {
 // TestPlainGzipIsNotClaimed: a .gz that holds no tar stays with the gz
 // handler (the sibling viewer) — the sniff has to look inside.
 func TestPlainGzipIsNotClaimed(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	zw := gzip.NewWriter(&buf)
 	if _, err := zw.Write([]byte("2026-08-10 boot ok\n")); err != nil {
@@ -204,6 +206,7 @@ func TestPlainGzipIsNotClaimed(t *testing.T) {
 // TestOpenArchivePaneListsEntries: the pane opens focused, bound to the file,
 // and shows the entry list.
 func TestOpenArchivePaneListsEntries(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeTestArchive(t, "src.tar", map[string]string{
 		"cmd/main.go": "package main\n",
@@ -265,6 +268,7 @@ func readOnlyEditor(m Model, vpath string) *editor.Model {
 // read-only buffer whose language resolves from the entry's file name, and
 // editing/saving is refused.
 func TestOpenArchiveEntryReadOnly(t *testing.T) {
+	// serial: registerTestLang: lang.Register (process-wide language registry)
 	m := newSized()
 	p := writeTestArchive(t, "src.tar", map[string]string{"cmd/main.go": "package main\n"})
 	tm, cmd := m.Update(archview.OpenEntryMsg{Archive: p, Entry: "cmd/main.go"})
@@ -327,6 +331,7 @@ func TestOpenArchiveEntryReadOnly(t *testing.T) {
 // same ceiling as a file on disk (#149) — the refusal itself is covered by
 // internal/archive's ErrTooLarge test.
 func TestArchiveLimitIsTheLargeFileThreshold(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if got := m.largeFileLimit(); got != largefile.DefaultMaxKB*1024 {
 		t.Fatalf("largeFileLimit = %d, want %d", got, largefile.DefaultMaxKB*1024)
@@ -336,6 +341,7 @@ func TestArchiveLimitIsTheLargeFileThreshold(t *testing.T) {
 // TestOpenArchiveEntryBinaryRefused: a binary member never reaches a text
 // buffer — the whole point of routing archives away from the editor.
 func TestOpenArchiveEntryBinaryRefused(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeTestArchive(t, "bin.tar", map[string]string{"a.bin": "\x00\x01\x02binary\x00"})
 	cmd := m.openArchiveEntry(p, "a.bin")
@@ -350,6 +356,7 @@ func TestOpenArchiveEntryBinaryRefused(t *testing.T) {
 // TestOpenArchiveEntryMissingReports: a vanished member reports instead of
 // opening an empty buffer.
 func TestOpenArchiveEntryMissingReports(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeTestArchive(t, "src.tar", map[string]string{"a.txt": "hi\n"})
 	if cmd := m.openArchiveEntry(p, "gone.txt"); cmd != nil {
@@ -363,7 +370,8 @@ func TestOpenArchiveEntryMissingReports(t *testing.T) {
 // TestArchivePaneRestoresByPath guards session restore (#1762): the layout
 // store records the pane by path and a fresh model re-lists the archive.
 func TestArchivePaneRestoresByPath(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	// serial: withStore: t.Setenv
+	withStore(t)
 	p := writeTestArchive(t, "src.tar", map[string]string{"a.txt": "hi\n"})
 
 	m := NewWith(registry.New(), host.MapConfig{})
@@ -405,6 +413,7 @@ func TestArchivePaneRestoresByPath(t *testing.T) {
 
 // TestArchiveEntryTitle labels a preview by entry and archive.
 func TestArchiveEntryTitle(t *testing.T) {
+	t.Parallel()
 	got, ok := archiveEntryTitle("/tmp/src.tar!cmd/main.go")
 	if !ok || got != "main.go (src.tar)" {
 		t.Fatalf("title = %q/%v", got, ok)
@@ -432,6 +441,7 @@ func gzMember(t *testing.T, body []byte) string {
 // (#1948): a .log.gz *inside* a tar opens as decompressed text with the inner
 // name's language, instead of being refused as a binary blob.
 func TestOpenArchiveGzipEntryDecompressed(t *testing.T) {
+	// serial: registerTestLang: lang.Register (process-wide language registry)
 	m := newSized()
 	body := "2026-08-10 boot ok\n2026-08-10 ready\n"
 	p := writeTestArchive(t, "backup.tar", map[string]string{
@@ -489,6 +499,7 @@ func countReadOnly(m Model, vpath string) int {
 // *decompressed* bytes for a member too — a member that fits the limit
 // compressed must not blow the buffer up when it is unpacked.
 func TestOpenArchiveGzipEntryTruncatesAtTheCap(t *testing.T) {
+	t.Parallel()
 	m := newCapped(t, 3) // 3 KB of output; the compressed member is ~1 KB
 	p := writeTestArchive(t, "backup.tar", map[string]string{
 		"big.txt.gz": gzMember(t, bytes.Repeat([]byte("a"), 1<<20)),
@@ -509,6 +520,7 @@ func TestOpenArchiveGzipEntryTruncatesAtTheCap(t *testing.T) {
 // show, so it degrades to the gz viewer's metadata notice — not mojibake, and
 // not the old blanket binary refusal.
 func TestOpenArchiveGzipEntryBinaryShowsMetadata(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeTestArchive(t, "backup.tar", map[string]string{
 		"img/logo.png.gz": gzMember(t, append([]byte("\x89PNG\r\n\x1a\n"), make([]byte, 64)...)),
@@ -531,6 +543,7 @@ func TestOpenArchiveGzipEntryBinaryShowsMetadata(t *testing.T) {
 // inside an archive. IKE has no nested view, so it says so — the one thing it
 // must never do is refuse it as "binary archive entry".
 func TestOpenArchiveGzipEntryNestedArchiveNotice(t *testing.T) {
+	t.Parallel()
 	inner := tarBytes(t, map[string]string{"a.txt": "hi\n"})
 	cases := []struct{ name, entry string }{
 		// Named as a tarball: refused before a byte is decompressed.
@@ -574,6 +587,7 @@ func allReadOnly(m Model) []*editor.Model {
 // TestOpenArchiveEntryPlainMembersUnaffected guards the seam: adding the gzip
 // branch must not change what a plain text or plain binary member does.
 func TestOpenArchiveEntryPlainMembersUnaffected(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeTestArchive(t, "src.tar", map[string]string{
 		"a.txt": "hi\n",
@@ -591,6 +605,7 @@ func TestOpenArchiveEntryPlainMembersUnaffected(t *testing.T) {
 
 // TestArchiveGzipInner keeps the decompressed name in the member's directory.
 func TestArchiveGzipInner(t *testing.T) {
+	t.Parallel()
 	cases := []struct{ entry, inner, want string }{
 		{"logs/app.log.gz", "app.log", "logs/app.log"},
 		{"app.log.gz", "app.log", "app.log"},
@@ -606,6 +621,7 @@ func TestArchiveGzipInner(t *testing.T) {
 // TestOpenZipPaneListsEntries: a zip opens in the same pane as a tar, with
 // the same tree, and the header names the format (#2594).
 func TestOpenZipPaneListsEntries(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeTestArchive(t, "src.zip", map[string]string{
 		"cmd/main.go": "package main\n",
@@ -641,6 +657,7 @@ func TestOpenZipPaneListsEntries(t *testing.T) {
 // TestOpenZipEntryReadOnly: enter on a zip member previews it read-only,
 // exactly as for a tar member.
 func TestOpenZipEntryReadOnly(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeTestArchive(t, "src.zip", map[string]string{"cmd/main.go": "package main\n"})
 	tm, cmd := m.Update(archview.OpenEntryMsg{Archive: p, Entry: "cmd/main.go"})
@@ -662,6 +679,7 @@ func TestOpenZipEntryReadOnly(t *testing.T) {
 // TestReloadZipPaneRelists: ctrl+r re-reads a zip in place, so a re-packed
 // file shows its new members (#2314) for zip too.
 func TestReloadZipPaneRelists(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeTestArchive(t, "src.zip", map[string]string{"a.txt": "a\n"})
 	tm, _ := m.Update(OpenArchiveMsg{Path: p})

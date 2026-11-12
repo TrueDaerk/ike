@@ -35,6 +35,7 @@ func barCell(t *testing.T, m Model, dx int) (int, int) {
 }
 
 func TestTabAtGeometry(t *testing.T) {
+	t.Parallel()
 	// Segments " aa ✕ │ bb ✕ │ cc ✕ " → widths 6|1|6|1|6 (#1128 close zones).
 	labels := []string{"aa", "bb", "cc"}
 	if got := tabAt(labels, 0, 40, 1); got != 0 {
@@ -60,6 +61,7 @@ func TestTabAtGeometry(t *testing.T) {
 // TestTabHitCloseZone guards #1128: the ✕ cell after a label's right pad is
 // the segment's close zone, the label cells are not.
 func TestTabHitCloseZone(t *testing.T) {
+	t.Parallel()
 	labels := []string{"aa", "bb", "cc"} // " aa ✕ │ bb ✕ │ cc ✕ "
 	if idx, onClose := tabHit(labels, 0, 40, 4); idx != 0 || !onClose {
 		t.Fatalf("x=4 must be tab 0's ✕ zone, got idx=%d onClose=%v", idx, onClose)
@@ -80,6 +82,7 @@ func TestTabHitCloseZone(t *testing.T) {
 }
 
 func TestLeftClickFocusesTab(t *testing.T) {
+	t.Parallel()
 	m, paths := tabApp(t) // three tabs, third active
 	inst := m.activeWS().Panes.FocusedInstance()
 	// " a.txt │ b.txt │ c.txt " — x=1 lands inside the first segment.
@@ -100,6 +103,7 @@ func TestLeftClickFocusesTab(t *testing.T) {
 }
 
 func TestMiddleClickClosesTab(t *testing.T) {
+	t.Parallel()
 	m, paths := tabApp(t)
 	inst := m.activeWS().Panes.FocusedInstance()
 	x, y := barCell(t, m, 1)
@@ -118,6 +122,7 @@ func TestMiddleClickClosesTab(t *testing.T) {
 }
 
 func TestWheelOverBarCycles(t *testing.T) {
+	t.Parallel()
 	m, paths := tabApp(t) // third tab active
 	inst := m.activeWS().Panes.FocusedInstance()
 	x, y := barCell(t, m, 1)
@@ -137,6 +142,7 @@ func TestWheelOverBarCycles(t *testing.T) {
 }
 
 func TestActiveTabClickStartsDrag(t *testing.T) {
+	t.Parallel()
 	m, _ := tabApp(t) // third tab active
 	inst := m.activeWS().Panes.FocusedInstance()
 	// Find a cell inside the active (third) segment: walk the bar until
@@ -178,6 +184,7 @@ func TestActiveTabClickStartsDrag(t *testing.T) {
 // the source pane's bottom edge splits off a pane holding just that file; the
 // remaining tabs stay put.
 func TestTabDragToOwnEdgeSplitsSingleFile(t *testing.T) {
+	t.Parallel()
 	m, paths := tabApp(t)
 	src := m.activeWS().Panes.Focused()
 	inst := m.activeWS().Panes.FocusedInstance()
@@ -219,6 +226,7 @@ func terminalTabApp(t *testing.T) (m Model, paths [3]string, src, term string) {
 // terminal pane's edge zone splits the terminal there and opens the file in
 // the fresh editor leaf, like a self-edge drop.
 func TestTabDragToTerminalEdgeSplits(t *testing.T) {
+	t.Parallel()
 	m, paths, src, term := terminalTabApp(t)
 	inst := m.activeWS().Panes.Get(src)
 	x, y := barCell(t, m, 1) // grab a.txt
@@ -246,6 +254,7 @@ func TestTabDragToTerminalEdgeSplits(t *testing.T) {
 // a drop in a terminal's center converts it into a tab host — the shell
 // session becomes the first tab and the dragged file joins beside it.
 func TestTabDragToTerminalCenterMerges(t *testing.T) {
+	t.Parallel()
 	m, paths, src, term := terminalTabApp(t)
 	inst := m.activeWS().Panes.Get(src)
 	tinst := m.activeWS().Panes.Get(term)
@@ -276,6 +285,7 @@ func TestTabDragToTerminalCenterMerges(t *testing.T) {
 // the ghost renders over a terminal target's edge zone and its interior now
 // shows the center merge ghost.
 func TestTabDragOverTerminalShowsFeedback(t *testing.T) {
+	t.Parallel()
 	m, _, _, term := terminalTabApp(t)
 	x, y := barCell(t, m, 1)
 	m = step(m, press(x, y))
@@ -295,6 +305,7 @@ func TestTabDragOverTerminalShowsFeedback(t *testing.T) {
 // TestTabDragToOtherPaneMovesOnlyThatFile guards #305: dropping a tab on
 // another editor pane relocates exactly that document.
 func TestTabDragToOtherPaneMovesOnlyThatFile(t *testing.T) {
+	t.Parallel()
 	m, paths := tabApp(t)
 	src := m.activeWS().Panes.Focused()
 	inst := m.activeWS().Panes.FocusedInstance()

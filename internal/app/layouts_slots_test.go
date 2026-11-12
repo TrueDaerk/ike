@@ -70,6 +70,8 @@ func assertIssueTemplateGeometry(t *testing.T, m Model, tKey, zKey string) {
 // template's exact geometry, nothing duplicates, and the derived slot
 // bookkeeping matches the tree.
 func TestApplyLayoutSlotRoundTrip(t *testing.T) {
+	// serial: issueLayout: config.Set (process-wide configuration)
+	withStore(t)
 	issueLayout(t,
 		[]string{"X=explorer", "T=toolt", "Z=toolz"},
 		sleepTool("toolt"), sleepTool("toolz"))
@@ -111,6 +113,8 @@ func TestApplyLayoutSlotRoundTrip(t *testing.T) {
 // on an immediate re-apply, and a cold apply restarts both tools tabbed in
 // the slot instead of as separate leaves.
 func TestApplyLayoutSlotTabsRoundTrip(t *testing.T) {
+	// serial: issueLayout: config.Set (process-wide configuration)
+	withStore(t)
 	issueLayout(t,
 		[]string{"T=ta", "T=tb"},
 		sleepTool("ta"), sleepTool("tb"))
@@ -162,6 +166,8 @@ func TestApplyLayoutSlotTabsRoundTrip(t *testing.T) {
 // tabs, and an apply while the global session is parked (the switch seam)
 // re-attaches it as the missing tab instead of spawning a duplicate.
 func TestApplyLayoutGlobalSlotTab(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	global := sleepTool("tg")
 	global.Global = true
 	issueLayout(t,
@@ -216,6 +222,8 @@ func TestApplyLayoutGlobalSlotTab(t *testing.T) {
 // the template assigns the tool a slot — the layout is the whole truth on
 // apply; the slot config only governs where a runtime open would place it.
 func TestApplyLayoutWinsOverSlotConfig(t *testing.T) {
+	// serial: issueLayout: config.Set (process-wide configuration)
+	withStore(t)
 	withTools(t, sleepTool("toolt"))
 	m := sized(t, 100, 40)
 	m = step(m, ToolOpenMsg{Name: "toolt"}) // adaptive placement, no template
@@ -263,6 +271,8 @@ func TestApplyLayoutWinsOverSlotConfig(t *testing.T) {
 // terminals are never killed (#1175) and slots stay authoritative — and a
 // subsequent slotted open still follows #1897 (Z subdivides the strip).
 func TestApplyLayoutKeepsOpenSlottedTool(t *testing.T) {
+	// serial: issueLayout: config.Set (process-wide configuration)
+	withStore(t)
 	issueLayout(t,
 		[]string{"X=explorer", "T=toolt", "Z=toolz"},
 		sleepTool("toolt"), sleepTool("toolz"))
@@ -298,6 +308,8 @@ func TestApplyLayoutKeepsOpenSlottedTool(t *testing.T) {
 // TestRestoreDefaultLayoutHonorsSlots: window.restoreLayout with a saved
 // default containing a slotted tool re-materializes the tool in its slot.
 func TestRestoreDefaultLayoutHonorsSlots(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	issueLayout(t, []string{"T=toolt"}, sleepTool("toolt"))
 	m := sized(t, 100, 40)
 	m = step(m, ToolOpenMsg{Name: "toolt"})

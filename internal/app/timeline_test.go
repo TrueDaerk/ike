@@ -130,6 +130,8 @@ func pressTimeline(m Model, key string) (Model, tea.Cmd) {
 }
 
 func TestTimelineMergesSnapshotsAndCommits(t *testing.T) {
+	// serial: sets package variable clipboardWrite
+	withStore(t)
 	m, path := timelineRepo(t)
 	m.recordLocalHistory(path) // one snapshot of the committed content
 	m = openTimelineWithGit(t, m)
@@ -184,6 +186,8 @@ func TestTimelineMergesSnapshotsAndCommits(t *testing.T) {
 }
 
 func TestTimelineFilterCycles(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, path := timelineRepo(t)
 	m.recordLocalHistory(path)
 	m = openTimelineWithGit(t, m)
@@ -209,6 +213,7 @@ func TestTimelineFilterCycles(t *testing.T) {
 // TestTimelineDefaultFilterFromSettings guards the history.timeline_source
 // setting: the Timeline opens on the configured filter.
 func TestTimelineDefaultFilterFromSettings(t *testing.T) {
+	// serial: newWithSettings: t.Setenv
 	m, path := timelineRepoIn(t, newWithSettings(t, "[history]\ntimeline_source = \"git\"\n"))
 	m.recordLocalHistory(path)
 	m = openTimelineWithGit(t, m)
@@ -221,6 +226,7 @@ func TestTimelineDefaultFilterFromSettings(t *testing.T) {
 }
 
 func TestTimelineDiffAgainstBufferBothSources(t *testing.T) {
+	t.Parallel()
 	m, path := timelineRepo(t)
 	m.recordLocalHistory(path) // snapshot of "v1\nv2\n"
 	m = openTimelineWithGit(t, m)
@@ -275,6 +281,8 @@ func TestTimelineDiffAgainstBufferBothSources(t *testing.T) {
 }
 
 func TestTimelineDiffBetweenEntriesAcrossSources(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, path := timelineRepo(t)
 	m.recordLocalHistory(path)
 	m = openTimelineWithGit(t, m)
@@ -327,6 +335,8 @@ func TestTimelineDiffBetweenEntriesAcrossSources(t *testing.T) {
 }
 
 func TestTimelineRestoreSnapshotIsUndoable(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, path := timelineRepo(t)
 	m.recordLocalHistory(path) // snapshot of "v1\nv2\n"
 	ed := m.editorForPath(path)
@@ -369,6 +379,8 @@ func TestTimelineRestoreSnapshotIsUndoable(t *testing.T) {
 }
 
 func TestTimelineDegenerateFiles(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	// A tracked file that was never saved in this session: git entries only.
 	m, path := timelineRepo(t)
 	m = openTimelineWithGit(t, m)
@@ -413,6 +425,8 @@ func TestTimelineDegenerateFiles(t *testing.T) {
 // TestTimelineIncrementalLoading guards the paging path: the first window
 // reports more, and walking toward the end pulls the next one in.
 func TestTimelineIncrementalLoading(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, path := timelineRepo(t)
 	m.recordLocalHistory(path)
 	tm, _ := m.Update(TimelineMsg{})
@@ -456,6 +470,8 @@ func TestTimelineIncrementalLoading(t *testing.T) {
 // TestTimelineGitErrorKeepsSnapshots guards the failure path: a failing git
 // window leaves the local half usable instead of closing the view.
 func TestTimelineGitErrorKeepsSnapshots(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, path := timelineRepo(t)
 	m.recordLocalHistory(path)
 	tm, _ := m.Update(TimelineMsg{})

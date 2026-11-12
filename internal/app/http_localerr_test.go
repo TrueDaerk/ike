@@ -13,6 +13,7 @@ import (
 // file — leaves a one-line human message in the response pane instead of the
 // raw Go error.
 func TestHTTPLocalFailureShowsHumanMessageInPane(t *testing.T) {
+	// serial: awaitHTTPResponse: waits on the wall clock (load-sensitive)
 	tests := []struct {
 		name, text, want string
 	}{

@@ -12,6 +12,7 @@ import (
 // and the missing-path fallback buffer.
 
 func TestCLITargetsOpenAsTabsFirstFocused(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\nbbb\nccc\n")
 	b := writeTemp(t, dir, "b.txt", "bbb\n")
@@ -40,6 +41,7 @@ func TestCLITargetsOpenAsTabsFirstFocused(t *testing.T) {
 }
 
 func TestCLITargetLineColPlacementAndClamp(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "alpha\nbravo charlie\n")
 	m := newSized()
@@ -65,6 +67,7 @@ func TestCLITargetLineColPlacementAndClamp(t *testing.T) {
 }
 
 func TestCLITargetMissingPathOpensUnsavedBuffer(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	missing := dir + "/new.txt"
 	m := newSized()
@@ -80,6 +83,7 @@ func TestCLITargetMissingPathOpensUnsavedBuffer(t *testing.T) {
 }
 
 func TestStdinBufferOpensPathlessDirtyFocused(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m = m.OpenStdinBuffer("piped line 1\npiped line 2\n")
 	ed := m.activeWS().Panes.FocusedInstance().Editor()
@@ -98,6 +102,7 @@ func TestStdinBufferOpensPathlessDirtyFocused(t *testing.T) {
 }
 
 func TestStdinBufferAppendsAfterFileTargets(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "aaa\n")
 	m := newSized()
@@ -118,6 +123,7 @@ func TestStdinBufferAppendsAfterFileTargets(t *testing.T) {
 }
 
 func TestCLITargetsZeroIsNoop(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	before := m.activeWS().Panes.Focused()
 	m = m.OpenCLITargets(nil)

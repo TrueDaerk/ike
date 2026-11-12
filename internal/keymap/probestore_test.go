@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -171,5 +172,31 @@ func TestDefaultsFragileFollowsProbe(t *testing.T) {
 	SetProbeVerdicts([]ProbeResult{{Chord: "cmd+p", Delivered: true}})
 	if f, _ := fragileOf("cmd+p"); f {
 		t.Fatal("probed-delivered default must rebuild non-fragile")
+	}
+}
+
+// TestProbeVerdictsInstallIsSafeAcrossModels guards #3135: each model
+// installs the stored verdicts on construction while other models classify
+// chords, so the installation must not race the readers (the race detector is
+// the assertion).
+func TestProbeVerdictsInstallIsSafeAcrossModels(t *testing.T) {
+	t.Cleanup(func() { SetProbeVerdicts(nil) })
+	chord := MustParseChord("cmd+p")
+	results := []ProbeResult{{Chord: chord.String(), Delivered: true}}
+	var wg sync.WaitGroup
+	for i := 0; i < 8; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < 200; j++ {
+				SetProbeVerdicts(results)
+				_ = Classify(chord)
+				_, _ = ProbeVerdict(chord.String())
+			}
+		}()
+	}
+	wg.Wait()
+	if v, ok := ProbeVerdict(chord.String()); !ok || !v.Delivered {
+		t.Fatalf("installed verdict = %+v (%v), want delivered", v, ok)
 	}
 }

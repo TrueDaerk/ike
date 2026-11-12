@@ -46,6 +46,7 @@ func openVaultApp(t *testing.T, label string) Model {
 }
 
 func TestVaultMarkerInStatusLine(t *testing.T) {
+	// serial: openVaultApp: t.Setenv
 	m := openVaultApp(t, "")
 	ed := m.focusedEditor()
 	if ed == nil || !ed.Vault() {
@@ -60,6 +61,7 @@ func TestVaultMarkerInStatusLine(t *testing.T) {
 }
 
 func TestVaultMarkerNamesLabel(t *testing.T) {
+	// serial: openVaultApp: t.Setenv
 	m := openVaultApp(t, "prod")
 	if seg := fileSegment(m, m.focusedEditor()); !strings.HasSuffix(seg, "[vault: prod]") {
 		t.Fatalf("file segment = %q, want [vault: prod]", seg)
@@ -67,6 +69,8 @@ func TestVaultMarkerNamesLabel(t *testing.T) {
 }
 
 func TestVaultMarkerOnTab(t *testing.T) {
+	// serial: openVaultApp: t.Setenv
+	withStore(t)
 	m := openVaultApp(t, "")
 	inst := m.activeWS().Panes.FocusedInstance()
 	labels := tabLabels(inst)
@@ -89,6 +93,7 @@ func TestVaultMarkerOnTab(t *testing.T) {
 // TestVaultMarkerInSingleTabTitle: with one open document the pane draws the
 // plain title instead of the tab bar, so the lock has to show up there too.
 func TestVaultMarkerInSingleTabTitle(t *testing.T) {
+	// serial: t.Setenv
 	t.Setenv(ansiblevault.EnvPasswordFile, "")
 	t.Setenv(ansiblevault.EnvPassword, vaultMarkerPassword)
 	dir := t.TempDir()
@@ -107,6 +112,7 @@ func TestVaultMarkerInSingleTabTitle(t *testing.T) {
 }
 
 func TestPlainBufferHasNoVaultMarker(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	m := openApp(t, writeTemp(t, dir, "plain.yml", "a: 1\n"))
 	if seg := fileSegment(m, m.focusedEditor()); strings.Contains(seg, "vault") {
@@ -117,6 +123,7 @@ func TestPlainBufferHasNoVaultMarker(t *testing.T) {
 // TestTreatAsVaultShowsMarkers: flipping a plain buffer into a vault document
 // makes both markers appear without reopening the file.
 func TestTreatAsVaultShowsMarkers(t *testing.T) {
+	// serial: t.Setenv
 	t.Setenv(ansiblevault.EnvPasswordFile, "")
 	t.Setenv(ansiblevault.EnvPassword, vaultMarkerPassword)
 	dir := t.TempDir()

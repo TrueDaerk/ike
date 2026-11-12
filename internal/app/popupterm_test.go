@@ -30,6 +30,8 @@ func openTestPopupWith(t *testing.T, m Model) Model {
 }
 
 func TestPopupTerminalToggle(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openTestPopup(t)
 	if m.popup.inst.TabCount() != 1 {
 		t.Fatalf("first toggle should spawn one shell tab, got %d", m.popup.inst.TabCount())
@@ -65,6 +67,8 @@ func TestPopupTerminalToggle(t *testing.T) {
 }
 
 func TestPopupTerminalKeysBypassGlobalHandling(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openTestPopup(t)
 	// 'q' must go to the popup's shell, not quit the app.
 	out, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
@@ -84,6 +88,7 @@ func TestPopupTerminalKeysBypassGlobalHandling(t *testing.T) {
 // TestPopupToggleChord: cmd+alt+t opens the popup through the keymap layer and
 // hides it again from inside through the reserved-set handler (#1398).
 func TestPopupToggleChord(t *testing.T) {
+	t.Parallel()
 	m := sizedWith(t, registry.Global(), 100, 40)
 	m = drainKey(m, tea.KeyPressMsg{Code: 't', Mod: tea.ModSuper | tea.ModAlt})
 	if !m.popup.open || m.popup.inst == nil {
@@ -104,6 +109,7 @@ func TestPopupToggleChord(t *testing.T) {
 // TestTerminalNewChordMoved: terminal.new moved to cmd+alt+shift+t when the
 // popup took cmd+alt+t (#1398).
 func TestTerminalNewChordMoved(t *testing.T) {
+	t.Parallel()
 	m := sizedWith(t, registry.Global(), 100, 40)
 	m = drainKey(m, tea.KeyPressMsg{Code: 't', Mod: tea.ModSuper | tea.ModAlt | tea.ModShift})
 	key := m.activeWS().Panes.Focused()
@@ -115,6 +121,7 @@ func TestTerminalNewChordMoved(t *testing.T) {
 }
 
 func TestPopupTerminalTabs(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	// cmd+t opens a sibling tab inside the popup.
 	out, _ := m.Update(tea.KeyPressMsg{Code: 't', Mod: tea.ModSuper})
@@ -134,6 +141,8 @@ func TestPopupTerminalTabs(t *testing.T) {
 }
 
 func TestPopupShellExitClosesTabThenPopup(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openTestPopup(t)
 	out, _ := m.Update(tea.KeyPressMsg{Code: 't', Mod: tea.ModSuper})
 	m = out.(Model)
@@ -161,6 +170,7 @@ func TestPopupShellExitClosesTabThenPopup(t *testing.T) {
 // longer hides it — the layer stays visible, only the keyboard moves to the
 // panes below, so a copy round trip keeps the popup on screen.
 func TestPopupOutsideClickBlurs(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	sess := m.popup.inst.ActiveTerminal().SessionKey()
 	m = step(m, press(0, 0)) // far outside the centered box
@@ -194,6 +204,7 @@ func TestPopupOutsideClickBlurs(t *testing.T) {
 // TestPopupBlurredClickBackFocuses guards #2309: a press into the visible,
 // blurred popup box takes the keyboard back.
 func TestPopupBlurredClickBackFocuses(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	m = step(m, press(0, 0))
 	if !m.popup.blurred {
@@ -213,6 +224,7 @@ func TestPopupBlurredClickBackFocuses(t *testing.T) {
 // TestPopupBlurredKeysGoToPanes guards #2309: while the layer is blurred the
 // key funnel belongs to the panes below — the popup's shell sees nothing.
 func TestPopupBlurredKeysGoToPanes(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	m = step(m, press(0, 0))
 	if m.focusContext() == "terminal" {
@@ -229,6 +241,7 @@ func TestPopupBlurredKeysGoToPanes(t *testing.T) {
 // popup shell arms the statusbar activity segment; showing the layer clears
 // it. Output into the visible layer never arms it.
 func TestPopupUnseenOutputIndicator(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	sess := m.popup.inst.ActiveTerminal().SessionKey()
 
@@ -266,6 +279,7 @@ func TestPopupUnseenOutputIndicator(t *testing.T) {
 // live shell there is nothing left to look at — the segment stays hidden even
 // if unseen output had been recorded before the exit.
 func TestPopupIndicatorGoneWithoutShells(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	sess := m.popup.inst.ActiveTerminal().SessionKey()
 	out, _ := m.Update(TerminalPopupMsg{})
@@ -280,6 +294,8 @@ func TestPopupIndicatorGoneWithoutShells(t *testing.T) {
 }
 
 func TestPopupResizeDragPersistsDelta(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openTestPopup(t)
 	px, py, pw, ph := m.popupTermRect()
 	// Grab the right border's middle cell and drag outward.
@@ -315,6 +331,7 @@ func splitTestPopup(t *testing.T) Model {
 // TestPopupSplit: cmd+d splits the popup into two side-by-side shells (#1427),
 // the fresh right side takes focus, and a second cmd+d is a no-op.
 func TestPopupSplit(t *testing.T) {
+	t.Parallel()
 	m := splitTestPopup(t)
 	if !m.popup.focusRight {
 		t.Fatal("the fresh split side should take focus")
@@ -349,6 +366,7 @@ func TestPopupSplit(t *testing.T) {
 // TestPopupSplitFocusKeys: the spatial focus keys (default ctrl+left/right)
 // move the keyboard between the split sides (#1427).
 func TestPopupSplitFocusKeys(t *testing.T) {
+	t.Parallel()
 	m := splitTestPopup(t)
 	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyLeft, Mod: tea.ModCtrl})
 	m = out.(Model)
@@ -366,6 +384,7 @@ func TestPopupSplitFocusKeys(t *testing.T) {
 // (#1427) — the toggle needs a split, marks both titles, and routes pastes to
 // every active shell.
 func TestPopupBroadcastToggle(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	// Unsplit the chord is a no-op.
 	out, _ := m.Update(tea.KeyPressMsg{Code: 'i', Mod: tea.ModSuper | tea.ModShift})
@@ -402,6 +421,8 @@ func TestPopupBroadcastToggle(t *testing.T) {
 // the focus border (#1592) so the shared-input state is obvious at a glance;
 // toggling broadcast off restores the single focused border.
 func TestPopupBroadcastBorders(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := splitTestPopup(t)
 	focus := fgSGR(m.pal().BorderFocus)
 	off := strings.Count(m.renderPopupTerm(), focus)
@@ -417,7 +438,9 @@ func TestPopupBroadcastBorders(t *testing.T) {
 	}
 	out, _ = m.Update(tea.KeyPressMsg{Code: 'i', Mod: tea.ModSuper | tea.ModShift})
 	m = out.(Model)
-	if got := strings.Count(m.renderPopupTerm(), focus); got != off {
+	// The same tolerance as above: the live shells may have printed their
+	// prompt between the first render and this one (#3135).
+	if got := strings.Count(m.renderPopupTerm(), focus); got < off-2 || got > off+2 {
 		t.Fatalf("toggling broadcast off should restore one focused border: off=%d got=%d", off, got)
 	}
 }
@@ -425,6 +448,8 @@ func TestPopupBroadcastBorders(t *testing.T) {
 // TestPopupSplitCollapse: a side's last shell exit collapses the split back to
 // a single box (#1427) — the surviving side keeps running, broadcast resets.
 func TestPopupSplitCollapse(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := splitTestPopup(t)
 	out, _ := m.Update(tea.KeyPressMsg{Code: 'i', Mod: tea.ModSuper | tea.ModShift})
 	m = out.(Model)
@@ -460,6 +485,7 @@ func TestPopupSplitCollapse(t *testing.T) {
 }
 
 func TestPopupPaletteOpensAbove(t *testing.T) {
+	t.Parallel()
 	m := sizedWith(t, registry.Global(), 100, 40)
 	m = openTestPopupWith(t, m)
 	// The global palette chord stays with the IDE inside the popup (#805).
@@ -477,6 +503,7 @@ func TestPopupPaletteOpensAbove(t *testing.T) {
 // split, right side and focus stay consistent — and a duplicate ExitedMsg for
 // the same session (broadcast can deliver several exits per tick) is a no-op.
 func TestPopupSplitSecondTabExit(t *testing.T) {
+	t.Parallel()
 	m := splitTestPopup(t)
 	// Focus the left side (ctrl+left crosses the split, #1427) and open the
 	// second tab there.
@@ -514,6 +541,7 @@ func TestPopupSplitSecondTabExit(t *testing.T) {
 // (broadcast ctrl+d, #1427) — the primary's exit promotes the right side, the
 // promoted side's exit drops the popup; no close path may fire twice.
 func TestPopupBothSidesExitSameTick(t *testing.T) {
+	t.Parallel()
 	m := splitTestPopup(t)
 	leftSess := m.popup.inst.ActiveTerminal().SessionKey()
 	rightSess := m.popup.split.ActiveTerminal().SessionKey()
@@ -535,6 +563,8 @@ func TestPopupBothSidesExitSameTick(t *testing.T) {
 // while the prompt is open, confirming must close nothing — before the fix it
 // killed whatever tab had become active.
 func TestTermGuardStaleTargetPopup(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openTestPopup(t)
 	out, _ := m.Update(tea.KeyPressMsg{Code: 't', Mod: tea.ModSuper})
 	m = out.(Model)

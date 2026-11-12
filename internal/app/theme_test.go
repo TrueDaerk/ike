@@ -29,6 +29,7 @@ func themeReg() *registry.Registry {
 }
 
 func TestResolveTheme(t *testing.T) {
+	t.Parallel()
 	// Named built-in resolves without warning.
 	pal, warn := resolveTheme(themeReg(), host.MapConfig{"theme.name": "tokyo-night"}, nil)
 	if pal.Name != "tokyo-night" || warn != "" {
@@ -48,6 +49,7 @@ func TestResolveTheme(t *testing.T) {
 
 // TestRegistryThemes: a plugin-registered theme is visible to resolution.
 func TestRegistryThemes(t *testing.T) {
+	t.Parallel()
 	r := themeReg()
 	r.Add(fakeThemePlugin{})
 	pal, warn := resolveTheme(r, host.MapConfig{"theme.name": "plugin-theme"}, nil)
@@ -78,6 +80,7 @@ func (fakeThemePlugin) Capabilities() plugin.Capabilities {
 // TestSelectThemeCommand: the palette command dispatches SelectThemeMsg and the
 // root switches the live palette, session-only.
 func TestSelectThemeCommand(t *testing.T) {
+	t.Parallel()
 	m := NewWith(themeReg(), host.MapConfig{})
 	if m.pal().Name != theme.DefaultName {
 		t.Fatalf("start theme = %q", m.pal().Name)
@@ -104,6 +107,7 @@ func TestSelectThemeCommand(t *testing.T) {
 // write the Settings page does — so it follows the user across projects and
 // restarts instead of living in the per-project session.
 func TestSelectThemePersistsUserScope(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
 	cfg, _ := config.Load(config.Options{})
@@ -176,6 +180,7 @@ func runUntilReload(t *testing.T, cmd tea.Cmd) tea.Msg {
 // TestStaleSessionThemeIgnored (#667): a pre-#667 session.json carrying a
 // per-project theme override no longer beats the config at startup.
 func TestStaleSessionThemeIgnored(t *testing.T) {
+	// serial: t.Setenv
 	state := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", state)
 	chdir(t, t.TempDir())
@@ -195,6 +200,7 @@ func TestStaleSessionThemeIgnored(t *testing.T) {
 // another project reads the value from the config, with no session entry
 // involved.
 func TestToggleWritesGlobalShowHidden(t *testing.T) {
+	// serial: t.Setenv
 	proj := t.TempDir()
 	state := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", state)
@@ -258,6 +264,7 @@ func TestToggleWritesGlobalShowHidden(t *testing.T) {
 // old session.json carrying the pre-#2663 field is ignored instead of
 // clobbering the preference.
 func TestReloadAppliesShowHiddenLive(t *testing.T) {
+	// serial: t.Setenv
 	proj := t.TempDir()
 	state := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", state)
@@ -290,6 +297,7 @@ func TestReloadAppliesShowHiddenLive(t *testing.T) {
 // cannot be written, the tree keeps the flipped state for this session and the
 // failure surfaces as a config diagnostic.
 func TestToggleWriteFailureKeepsSessionToggle(t *testing.T) {
+	// serial: t.Setenv
 	proj := t.TempDir()
 	state := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", state)
@@ -338,6 +346,7 @@ func TestToggleWriteFailureKeepsSessionToggle(t *testing.T) {
 // panes — a parked background workspace (#777) must follow the preference too,
 // so switching back does not show a tree contradicting the toggle.
 func TestReloadAppliesShowHiddenToParkedWorkspaces(t *testing.T) {
+	// serial: t.Setenv
 	state := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", state)
 	chdir(t, t.TempDir())
@@ -375,6 +384,7 @@ func TestReloadAppliesShowHiddenToParkedWorkspaces(t *testing.T) {
 // background, the light/dark pair wins; without a classification (or with
 // auto off) theme.name applies.
 func TestResolveThemeAuto(t *testing.T) {
+	t.Parallel()
 	dark, light := true, false
 	cfg := host.MapConfig{
 		"theme.name":  "tokyo-night",
@@ -413,6 +423,7 @@ func TestResolveThemeAuto(t *testing.T) {
 // TestThemeNamesByDark: the auto-pair enums partition the registry by the
 // themes' Dark flag.
 func TestThemeNamesByDark(t *testing.T) {
+	t.Parallel()
 	lights := themeNamesByDark(themeReg(), false)
 	darks := themeNamesByDark(themeReg(), true)
 	if len(lights) == 0 || len(darks) == 0 {
@@ -435,6 +446,7 @@ func TestThemeNamesByDark(t *testing.T) {
 // TestBackgroundColorAppliesAutoTheme (#1480): the OSC 11 reply re-resolves
 // the auto pair, and an explicit selection turns auto off again.
 func TestBackgroundColorAppliesAutoTheme(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
 	if err := os.WriteFile(filepath.Join(dir, "settings.toml"),

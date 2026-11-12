@@ -57,6 +57,7 @@ func pendPrefixShown(t *testing.T, m Model) Model {
 }
 
 func TestWhichKeyWaitsForTheDelay(t *testing.T) {
+	// serial: whichKeyConfigured: config.Set (process-wide configuration)
 	whichKeyConfigured(t, true, 300)
 	m := sized(t, 120, 40)
 	m = pendPrefix(t, m)
@@ -74,6 +75,7 @@ func TestWhichKeyWaitsForTheDelay(t *testing.T) {
 }
 
 func TestWhichKeyStaleDelayIgnored(t *testing.T) {
+	// serial: whichKeyConfigured: config.Set (process-wide configuration)
 	whichKeyConfigured(t, true, 300)
 	m := sized(t, 120, 40)
 	m = pendPrefix(t, m)
@@ -94,6 +96,7 @@ func TestWhichKeyStaleDelayIgnored(t *testing.T) {
 }
 
 func TestWhichKeyDisabled(t *testing.T) {
+	// serial: whichKeyConfigured: config.Set (process-wide configuration)
 	whichKeyConfigured(t, false, 0)
 	m := sized(t, 120, 40)
 	m = pendPrefix(t, m)
@@ -108,6 +111,7 @@ func TestWhichKeyDisabled(t *testing.T) {
 }
 
 func TestWhichKeyZeroDelayShowsAtOnce(t *testing.T) {
+	// serial: whichKeyConfigured: config.Set (process-wide configuration)
 	whichKeyConfigured(t, true, 0)
 	m := sized(t, 120, 40)
 	m = pendPrefix(t, m)
@@ -117,6 +121,8 @@ func TestWhichKeyZeroDelayShowsAtOnce(t *testing.T) {
 }
 
 func TestWhichKeySurvivesTimeout(t *testing.T) {
+	// serial: whichKeyConfigured: config.Set (process-wide configuration)
+	withStore(t)
 	whichKeyConfigured(t, true, 300)
 	m := sized(t, 120, 40)
 	m = pendPrefixShown(t, m)
@@ -133,6 +139,7 @@ func TestWhichKeySurvivesTimeout(t *testing.T) {
 }
 
 func TestWhichKeyDismissedByClick(t *testing.T) {
+	// serial: whichKeyConfigured: config.Set (process-wide configuration)
 	whichKeyConfigured(t, true, 300)
 	m := sized(t, 120, 40)
 	m = pendPrefixShown(t, m)
@@ -149,6 +156,7 @@ func TestWhichKeyDismissedByClick(t *testing.T) {
 }
 
 func TestWhichKeyDismissedByNonMatchingKey(t *testing.T) {
+	// serial: whichKeyConfigured: config.Set (process-wide configuration)
 	whichKeyConfigured(t, true, 300)
 	m := sized(t, 120, 40)
 	m = pendPrefixShown(t, m)
@@ -168,6 +176,7 @@ func TestWhichKeyDismissedByNonMatchingKey(t *testing.T) {
 }
 
 func TestWhichKeyEscCancelsSequence(t *testing.T) {
+	// serial: whichKeyConfigured: config.Set (process-wide configuration)
 	whichKeyConfigured(t, true, 300)
 	m := sized(t, 120, 40)
 	m = pendPrefixShown(t, m)
@@ -189,6 +198,7 @@ func TestWhichKeyEscCancelsSequence(t *testing.T) {
 }
 
 func TestWhichKeyClosesOnCompletion(t *testing.T) {
+	// serial: whichKeyConfigured: config.Set (process-wide configuration)
 	whichKeyConfigured(t, true, 300)
 	m := sized(t, 120, 40)
 	m = pendPrefixShown(t, m)
@@ -201,6 +211,7 @@ func TestWhichKeyClosesOnCompletion(t *testing.T) {
 }
 
 func TestWhichKeyNarrowingUpdatesImmediately(t *testing.T) {
+	// serial: whichKeyConfigured: config.Set (process-wide configuration)
 	whichKeyConfigured(t, true, 300)
 	m := sized(t, 120, 40)
 	// A three-step user chord (cmd+k g s / cmd+k g b) so the second step

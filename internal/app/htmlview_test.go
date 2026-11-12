@@ -86,6 +86,7 @@ func stripClick(t *testing.T, m Model, key string, col int) Model {
 // rendered page in the tab, with [Source] [Preview] in the body's bottom-left
 // corner and Preview highlighted.
 func TestHTMLOpenLandsInPreview(t *testing.T) {
+	// serial: openHTMLTab: config.Set (process-wide configuration)
 	m, path, key := openHTMLTab(t, "<h2>Rendered Heading</h2>\n<p>body text</p>\n")
 	inst, idx := htmlTab(m, key)
 	if inst.TabViewMode(idx) != pane.ViewPreview || inst.ShownTabView(idx) == nil {
@@ -115,6 +116,7 @@ func TestHTMLOpenLandsInPreview(t *testing.T) {
 
 // TestHTMLOpenModeSource: preview.html_open_mode = source opens the editor.
 func TestHTMLOpenModeSource(t *testing.T) {
+	// serial: openHTMLTabMode: config.Set (process-wide configuration)
 	m, _, key := openHTMLTabMode(t, "<p>x</p>\n", config.HTMLOpenSource)
 	inst, idx := htmlTab(m, key)
 	if inst.TabViewMode(idx) != pane.ViewSource {
@@ -129,6 +131,7 @@ func TestHTMLOpenModeSource(t *testing.T) {
 // TestHTMLViewStripClicks: [Source] shows the editor with the caret where it
 // was, [Preview] returns to the rendered view at its previous scroll.
 func TestHTMLViewStripClicks(t *testing.T) {
+	// serial: openHTMLTab: config.Set (process-wide configuration)
 	m, _, key := openHTMLTab(t, paragraphs(80))
 	inst, idx := htmlTab(m, key)
 	ed := inst.TabEditor(idx)
@@ -167,6 +170,7 @@ func TestHTMLViewStripClicks(t *testing.T) {
 // TestHTMLViewStripBrowserButton: [Browser] toggles the preview's browser
 // mode exactly like b — here with no browser, the same fallback toast.
 func TestHTMLViewStripBrowserButton(t *testing.T) {
+	// serial: openHTMLTab: config.Set (process-wide configuration)
 	m, _, key := openHTMLTab(t, "<p>x</p>\n")
 	inst, idx := htmlTab(m, key)
 	pv := inst.ShownTabView(idx).HTMLPreview()
@@ -190,6 +194,7 @@ func TestHTMLViewStripBrowserButton(t *testing.T) {
 // TestHTMLViewToggleCommand: html.view.toggle flips the views; source and
 // preview pick one; keys in Preview view drive the preview, not the buffer.
 func TestHTMLViewToggleCommand(t *testing.T) {
+	// serial: openHTMLTab: config.Set (process-wide configuration)
 	m, _, key := openHTMLTab(t, paragraphs(80))
 	inst, idx := htmlTab(m, key)
 	ed := inst.TabEditor(idx)
@@ -222,6 +227,7 @@ func TestHTMLViewToggleCommand(t *testing.T) {
 
 // TestHTMLViewNeedsHTMLTab: the view commands toast on a non-HTML tab.
 func TestHTMLViewNeedsHTMLTab(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if m.onboardingOpen() {
 		m = m.closeOnboarding().(Model)
@@ -240,6 +246,7 @@ func TestHTMLViewNeedsHTMLTab(t *testing.T) {
 // TestHTMLViewCommandsRegistered: the three commands are on the palette,
 // gated to HTML buffers.
 func TestHTMLViewCommandsRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	for _, id := range []string{"html.view.toggle", "html.view.source", "html.view.preview"} {
 		c, ok := m.reg.Command(id)
@@ -256,6 +263,7 @@ func TestHTMLViewCommandsRegistered(t *testing.T) {
 // file in Source with the caret on the target line, and switches a tab that
 // already shows the page rendered back to Source.
 func TestHTMLJumpLandsInSource(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if m.onboardingOpen() {
 		m = m.closeOnboarding().(Model)
@@ -299,6 +307,7 @@ func TestHTMLJumpLandsInSource(t *testing.T) {
 // TestHTMLViewResyncsOnShow: an edit made in Source view shows when the tab
 // switches back to Preview.
 func TestHTMLViewResyncsOnShow(t *testing.T) {
+	// serial: openHTMLTab: config.Set (process-wide configuration)
 	m, _, key := openHTMLTab(t, "<p>before</p>\n")
 	inst, idx := htmlTab(m, key)
 	m = stepHTML(m, HTMLViewMsg{})
@@ -312,6 +321,7 @@ func TestHTMLViewResyncsOnShow(t *testing.T) {
 // TestHTMLPreviewSplitBesideTabPreview: html.preview still splits a preview
 // pane beside a tab showing its Preview view, rather than focusing the tab.
 func TestHTMLPreviewSplitBesideTabPreview(t *testing.T) {
+	// serial: openHTMLTab: config.Set (process-wide configuration)
 	m, path, _ := openHTMLTab(t, "<p>x</p>\n")
 	m = stepHTML(m, HTMLPreviewMsg{})
 	if htmlPreviewKeyFor(m, path) == "" {
@@ -322,6 +332,8 @@ func TestHTMLPreviewSplitBesideTabPreview(t *testing.T) {
 // TestHTMLViewPersistsAndRestores: session restore brings the tab back in the
 // view it was in, the browser mode included.
 func TestHTMLViewPersistsAndRestores(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, path, _ := openHTMLTab(t, "<p>Restored Page</p>\n")
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
 	m2 := stepHTML(New(), tea.WindowSizeMsg{Width: 100, Height: 30})
@@ -349,6 +361,8 @@ func TestHTMLViewPersistsAndRestores(t *testing.T) {
 // TestHTMLViewBrowserModePersists: a tab in Preview view whose preview is in
 // browser mode restores in browser mode.
 func TestHTMLViewBrowserModePersists(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, path, key := openHTMLTab(t, "<p>x</p>\n")
 	inst, idx := htmlTab(m, key)
 	inst.ShownTabView(idx).HTMLPreview().SetBrowserMode(true)
@@ -367,6 +381,7 @@ func TestHTMLViewBrowserModePersists(t *testing.T) {
 // TestHTMLViewNamedLayout: applying a named layout keeps the tab in the view
 // it was in — the live editor pane carries its tabs into the slot.
 func TestHTMLViewNamedLayout(t *testing.T) {
+	// serial: openHTMLTab: config.Set (process-wide configuration)
 	m, path, _ := openHTMLTab(t, "<p>layout</p>\n")
 	snap, ok := snapshotLayout(m.activeWS().Tree, m.activeWS().Panes)
 	if !ok {
@@ -388,6 +403,7 @@ func TestHTMLViewNamedLayout(t *testing.T) {
 
 // TestHTMLViewCloseTabClosesPreview: closing the tab closes both views.
 func TestHTMLViewCloseTabClosesPreview(t *testing.T) {
+	// serial: openHTMLTab: config.Set (process-wide configuration)
 	m, path, key := openHTMLTab(t, "<p>x</p>\n")
 	other := filepath.Join(filepath.Dir(path), "notes.txt")
 	if err := os.WriteFile(other, []byte("n\n"), 0o644); err != nil {

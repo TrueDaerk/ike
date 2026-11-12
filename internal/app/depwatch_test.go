@@ -51,7 +51,7 @@ func depProject(t *testing.T) (root, site string) {
 // rests on: after opening the project the watcher's registered path set holds
 // the site-packages *directory* and not a single file below it.
 func TestDepWatchesAreNonRecursive(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	// serial: depProject: langreg.Register (process-wide state of package langreg)
 	root, site := depProject(t)
 
 	m := newSized()
@@ -92,7 +92,8 @@ func TestDepWatchesAreNonRecursive(t *testing.T) {
 // carrying the declaring language and the project root, while an ordinary
 // project file carries neither.
 func TestDepMarkerEventsAreTagged(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	// serial: depProject: langreg.Register (process-wide state of package langreg)
+	withStore(t)
 	root, site := depProject(t)
 
 	var got []plugin.FileChange
@@ -149,7 +150,7 @@ func TestDepMarkerEventsAreTagged(t *testing.T) {
 // watcher drops the old project's marker registrations and takes the new
 // project's, so a switch never leaks a watch.
 func TestDepWatchesFollowProjectSwitch(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	// serial: depProject: langreg.Register (process-wide state of package langreg)
 	root, site := depProject(t)
 
 	m := newSized()

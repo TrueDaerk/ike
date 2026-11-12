@@ -45,6 +45,7 @@ func httpPaneApp(t *testing.T) Model {
 // TestCopyResponseCommandRegistered: http.copyResponse must be a registry
 // command, or the binding is inert and the palette never lists it.
 func TestCopyResponseCommandRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if _, ok := m.reg.Command("http.copyResponse"); !ok {
 		t.Fatal("http.copyResponse must be a registry command")
@@ -54,6 +55,7 @@ func TestCopyResponseCommandRegistered(t *testing.T) {
 // TestCopyChordDefaultsBound: cmd+c resolves in both contexts, on both
 // platforms — where off darwin it folds onto ctrl+c like every cmd row.
 func TestCopyChordDefaultsBound(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		ctx  keymap.Context
 		cmd  string
@@ -89,6 +91,7 @@ func TestCopyChordDefaultsBound(t *testing.T) {
 // TestCopyChordNoCtrlSecondary: ctrl+c stays unbound in both contexts on
 // darwin, so a selection-less press keeps its global quit meaning (#2062).
 func TestCopyChordNoCtrlSecondary(t *testing.T) {
+	t.Parallel()
 	table := keymap.BuildTable(keymap.DefaultsFor(keymap.PresetJetBrains, "darwin"), nil, "darwin")
 	for _, ctx := range []keymap.Context{keymap.HTTP, keymap.Explorer} {
 		if b, ok := table.Lookup(keymap.MustParseChord("ctrl+c"), ctx); ok {
@@ -100,6 +103,7 @@ func TestCopyChordNoCtrlSecondary(t *testing.T) {
 // TestCopyChordCopiesResponseBody: with no selection the chord copies the
 // whole body, dispatched through the keymap layer.
 func TestCopyChordCopiesResponseBody(t *testing.T) {
+	// serial: pinDarwin: sets keymap.GOOS
 	pinDarwin(t)
 	copied := stubClipboard(t, "")
 	m := httpPaneApp(t)
@@ -113,6 +117,7 @@ func TestCopyChordCopiesResponseBody(t *testing.T) {
 // TestCopyChordCopiesSelection: a live selection wins over the body, the way
 // the pane-local key has always behaved.
 func TestCopyChordCopiesSelection(t *testing.T) {
+	// serial: pinDarwin: sets keymap.GOOS
 	pinDarwin(t)
 	copied := stubClipboard(t, "")
 	m := httpPaneApp(t)
@@ -138,6 +143,7 @@ func TestCopyChordCopiesSelection(t *testing.T) {
 // TestCopyResponseCommandWithoutPane: the command is reachable from the
 // palette with no viewer open; it must say so rather than copy nothing.
 func TestCopyResponseCommandWithoutPane(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	if _, cmd := m.Update(HTTPCopyResponseMsg{}); cmd != nil {
 		if _, ok := cmd().(httppane.CopyMsg); ok {
@@ -150,6 +156,7 @@ func TestCopyResponseCommandWithoutPane(t *testing.T) {
 // entry on the explorer's file clipboard (#2660) and leaves the OS clipboard
 // — which carries text, never paths — untouched.
 func TestCopyChordFillsExplorerClipboard(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	pinDarwin(t)
 	var copied string
 	orig := clipboardWrite

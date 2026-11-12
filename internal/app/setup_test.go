@@ -40,6 +40,7 @@ func toolchainLang(t *testing.T, id, path string) {
 }
 
 func TestTourFinishOpensThemePicker(t *testing.T) {
+	t.Parallel()
 	m := tourSeed(t)
 	m = finishTourFully(t, m)
 	if !m.themePickOpen() {
@@ -51,6 +52,7 @@ func TestTourFinishOpensThemePicker(t *testing.T) {
 }
 
 func TestTourEscSkipsSetupFlow(t *testing.T) {
+	t.Parallel()
 	m := tourSeed(t)
 	tm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	m = tm.(Model)
@@ -60,6 +62,8 @@ func TestTourEscSkipsSetupFlow(t *testing.T) {
 }
 
 func TestThemePickPreviewAndPersist(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := tourSeed(t)
 	m = finishTourFully(t, m)
 	before := m.themePal
@@ -84,6 +88,8 @@ func TestThemePickPreviewAndPersist(t *testing.T) {
 }
 
 func TestThemePickEscRestores(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := tourSeed(t)
 	m = finishTourFully(t, m)
 	before := m.themePal
@@ -105,6 +111,7 @@ func TestThemePickEscRestores(t *testing.T) {
 }
 
 func TestSetupFlowChainsLSPAndToolchain(t *testing.T) {
+	// serial: t.Setenv
 	onboardLang(t, "setuplang")
 	toolchainLang(t, "setuptool", "/usr/bin/setuptool")
 	catalogStub(t, nil, stubEntry("chaintool"))
@@ -156,6 +163,7 @@ func TestSetupFlowChainsLSPAndToolchain(t *testing.T) {
 }
 
 func TestToolchainSummaryMarksMissing(t *testing.T) {
+	// serial: toolchainLang: lang.Register (process-wide language registry)
 	toolchainLang(t, "misstool", "")
 	m := tourSeed(t)
 	m = finishTourFully(t, m)

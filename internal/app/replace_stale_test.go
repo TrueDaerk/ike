@@ -19,6 +19,7 @@ import (
 )
 
 func TestReplaceOnDiskPreservesEncodingAndEOL(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "u16.txt")
 	data, err := textenc.Encode("a needle\nplain\n", textenc.UTF16LE, textenc.CRLF)
@@ -43,6 +44,8 @@ func TestReplaceOnDiskPreservesEncodingAndEOL(t *testing.T) {
 }
 
 func TestReplaceSkipsFileChangedSinceScan(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "f.txt")
 	if err := os.WriteFile(path, []byte("a needle\n"), 0o644); err != nil {
@@ -65,6 +68,7 @@ func TestReplaceSkipsFileChangedSinceScan(t *testing.T) {
 }
 
 func TestReplaceRefreshesMtimeAfterOwnWrite(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "f.txt")
 	if err := os.WriteFile(path, []byte("a needle\nb needle\n"), 0o644); err != nil {

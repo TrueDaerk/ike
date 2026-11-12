@@ -21,6 +21,7 @@ func rightClick(m Model, x, y int) Model {
 // TestRightClickOpensEditorContextMenu guards #1020: a right-click on editor
 // content opens the context menu at the pointer and moves the caret there.
 func TestRightClickOpensEditorContextMenu(t *testing.T) {
+	t.Parallel()
 	m, r, _ := cmdClickModel(t)
 	x, y := r.X+paneContentX+10, r.Y+paneContentY
 	m = rightClick(m, x, y)
@@ -35,6 +36,7 @@ func TestRightClickOpensEditorContextMenu(t *testing.T) {
 // TestContextMenuEntryClickRunsCommand guards #1020: left-clicking an enabled
 // entry dispatches its registry command through the RunMsg funnel.
 func TestContextMenuEntryClickRunsCommand(t *testing.T) {
+	t.Parallel()
 	m, r, ran := cmdClickModel(t)
 	m = rightClick(m, r.X+paneContentX+10, r.Y+paneContentY)
 	// Only lsp.definition is registered in this model, so it is the first
@@ -67,6 +69,7 @@ func TestContextMenuEntryClickRunsCommand(t *testing.T) {
 // TestContextMenuOutsidePressDismisses guards #1020: a press outside the open
 // menu dismisses it without leaking to the panes below.
 func TestContextMenuOutsidePressDismisses(t *testing.T) {
+	t.Parallel()
 	m, r, _ := cmdClickModel(t)
 	m = rightClick(m, r.X+paneContentX+10, r.Y+paneContentY)
 	before := m.activeWS().Panes.Focused()
@@ -81,6 +84,7 @@ func TestContextMenuOutsidePressDismisses(t *testing.T) {
 
 // TestContextMenuEscDismisses guards #1020: the open menu owns the keyboard.
 func TestContextMenuEscDismisses(t *testing.T) {
+	t.Parallel()
 	m, r, _ := cmdClickModel(t)
 	m = rightClick(m, r.X+paneContentX+10, r.Y+paneContentY)
 	m = step(m, tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -127,6 +131,7 @@ func ctxItemCount(m Model) int {
 // inside a conflict block appends the three accept entries; outside the block
 // the menu keeps its static shape.
 func TestContextMenuMergeEntriesInsideConflict(t *testing.T) {
+	t.Parallel()
 	m, r := conflictClickModel(t)
 	// Inside the block (line 1, "ours").
 	m = rightClick(m, r.X+paneContentX+2, r.Y+paneContentY+1)

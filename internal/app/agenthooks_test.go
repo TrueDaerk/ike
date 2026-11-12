@@ -40,6 +40,7 @@ func sendAgentEvent(m Model, ev deeplink.Event) Model {
 // TestAgentEventBindsByPane: an event naming this instance's terminal via
 // $IKE_SESSION binds there regardless of the cwd.
 func TestAgentEventBindsByPane(t *testing.T) {
+	// serial: openWatcher: config.Set (process-wide configuration)
 	m, key := openWatcher(t)
 	ev := agentEvent("SessionStart", "/nowhere/else")
 	ev.Pane, ev.PID = key, os.Getpid()
@@ -69,6 +70,7 @@ func TestAgentEventBindsByPane(t *testing.T) {
 // TestAgentEventBindsByCwd: without a pane key the event binds to the tool
 // pane whose working directory is the session's.
 func TestAgentEventBindsByCwd(t *testing.T) {
+	// serial: openWatcher: config.Set (process-wide configuration)
 	m, key := openWatcher(t)
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -83,6 +85,7 @@ func TestAgentEventBindsByCwd(t *testing.T) {
 // TestAgentEventUnmatchedIsDropped: no terminal in the directory — nothing
 // binds, discovery stays the pane's source.
 func TestAgentEventUnmatchedIsDropped(t *testing.T) {
+	// serial: openWatcher: config.Set (process-wide configuration)
 	m, key := openWatcher(t)
 	m = sendAgentEvent(m, agentEvent("SessionStart", t.TempDir()))
 	if _, ok := m.agentSessionFor(key); ok || len(m.agentSessions) != 0 {
@@ -93,6 +96,7 @@ func TestAgentEventUnmatchedIsDropped(t *testing.T) {
 // TestLocateAgentSessionFallsBackToDiscovery: a live hook binding wins; an
 // ended or missing one falls back to the transcript scan.
 func TestLocateAgentSessionFallsBackToDiscovery(t *testing.T) {
+	t.Parallel()
 	projects := t.TempDir()
 	cwd := t.TempDir()
 	dir := filepath.Join(projects, agenttrace.EncodeCWD(cwd))
@@ -124,6 +128,7 @@ func TestLocateAgentSessionFallsBackToDiscovery(t *testing.T) {
 // TestAgentHooksCommands runs agent.hooks.install / uninstall against a
 // temporary Claude config dir.
 func TestAgentHooksCommands(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", dir)
 	exe := filepath.Join(dir, "ike")

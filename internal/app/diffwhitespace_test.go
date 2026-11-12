@@ -15,6 +15,7 @@ import (
 // write triggers carries the value every open diff then follows.
 
 func TestDiffIgnoreWhitespacePersists(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	userPath := filepath.Join(t.TempDir(), "settings.toml")
 	opts := config.Options{UserPath: userPath}
 	cfg, _ := config.Load(opts)
@@ -47,6 +48,7 @@ func TestDiffIgnoreWhitespacePersists(t *testing.T) {
 // TestDiffPaneChromeShowsIgnoreWhitespace: the toggle is state a reader has to
 // see — it decides which changes are listed at all — so the title band marks it.
 func TestDiffPaneChromeShowsIgnoreWhitespace(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	reg := m.activeWS().Panes
 	key := reg.AddDiff("/tmp/left.txt", "/tmp/right.txt")

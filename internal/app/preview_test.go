@@ -40,6 +40,7 @@ func previewKeyFor(m Model, path string) string {
 // the active editor with a preview pane bound to its buffer, keeps focus on
 // the editor, and renders the document.
 func TestMarkdownPreviewOpensSplit(t *testing.T) {
+	t.Parallel()
 	m, path := openMarkdownFile(t, "# Hello Preview\n\nbody text\n")
 	editorKey := m.activeWS().Panes.Focused()
 	tm, _ := m.Update(MarkdownPreviewMsg{})
@@ -59,6 +60,7 @@ func TestMarkdownPreviewOpensSplit(t *testing.T) {
 // TestMarkdownPreviewNeedsMarkdownBuffer guards the guard: a non-markdown
 // buffer opens no preview.
 func TestMarkdownPreviewNeedsMarkdownBuffer(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "notes.txt")
 	if err := os.WriteFile(path, []byte("plain\n"), 0o644); err != nil {
@@ -78,6 +80,7 @@ func TestMarkdownPreviewNeedsMarkdownBuffer(t *testing.T) {
 // TestMarkdownPreviewRefocusesExisting guards the no-duplicate rule: invoking
 // the command again focuses the existing preview instead of splitting twice.
 func TestMarkdownPreviewRefocusesExisting(t *testing.T) {
+	t.Parallel()
 	m, path := openMarkdownFile(t, "# Once\n")
 	tm, _ := m.Update(MarkdownPreviewMsg{})
 	m = tm.(Model)
@@ -102,6 +105,7 @@ func TestMarkdownPreviewRefocusesExisting(t *testing.T) {
 // the debounce, and the resulting tick re-renders the preview with the new
 // buffer text.
 func TestMarkdownPreviewLiveUpdate(t *testing.T) {
+	t.Parallel()
 	m, path := openMarkdownFile(t, "# Draft\n")
 	editorKey := m.activeWS().Panes.Focused()
 	tm, _ := m.Update(MarkdownPreviewMsg{})
@@ -135,6 +139,7 @@ func TestMarkdownPreviewLiveUpdate(t *testing.T) {
 // TestMarkdownPreviewCursorSync guards scroll sync: a CursorMsg for the bound
 // path scrolls the preview toward the cursor's mapped position.
 func TestMarkdownPreviewCursorSync(t *testing.T) {
+	t.Parallel()
 	var b strings.Builder
 	b.WriteString("# Top\n\n")
 	for i := 0; i < 60; i++ {
@@ -160,6 +165,7 @@ func TestMarkdownPreviewCursorSync(t *testing.T) {
 // TestMarkdownPreviewClosesLikeAPane guards close: the focused preview closes
 // through the ordinary pane-close path and the layout collapses.
 func TestMarkdownPreviewClosesLikeAPane(t *testing.T) {
+	t.Parallel()
 	m, path := openMarkdownFile(t, "# Bye\n")
 	tm, _ := m.Update(MarkdownPreviewMsg{})
 	m = tm.(Model)
@@ -175,6 +181,8 @@ func TestMarkdownPreviewClosesLikeAPane(t *testing.T) {
 // a saved preview leaf restores as a preview of the same file, re-read from
 // disk.
 func TestMarkdownPreviewPersistsAndRestores(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, path := openMarkdownFile(t, "# Persisted\n")
 	tm, _ := m.Update(MarkdownPreviewMsg{})
 	m = tm.(Model)

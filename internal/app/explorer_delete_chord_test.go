@@ -28,6 +28,8 @@ func deleteChordApp(t *testing.T) (Model, string) {
 // trash the selected entry straight away — the cmd+ spelling used to never
 // match the press — and the chord is not logged as unbound.
 func TestExplorerBackspaceChordsDeleteWithoutPrompt(t *testing.T) {
+	// serial: pinDarwin: sets keymap.GOOS
+	withStore(t)
 	pinDarwin(t)
 	for _, tc := range []struct {
 		name string
@@ -62,6 +64,8 @@ func TestExplorerBackspaceChordsDeleteWithoutPrompt(t *testing.T) {
 // TestExplorerDeleteKeysStillConfirm: d and delete keep the prompt (#3107);
 // only the deliberate backspace chords skip it.
 func TestExplorerDeleteKeysStillConfirm(t *testing.T) {
+	// serial: deleteChordApp: t.Setenv
+	withStore(t)
 	for _, tc := range []struct {
 		name string
 		key  tea.KeyPressMsg

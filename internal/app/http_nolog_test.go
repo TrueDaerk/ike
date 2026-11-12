@@ -34,6 +34,8 @@ func historyFiles(t *testing.T) []string {
 }
 
 func TestHTTPNoLogSkipsDiskKeepsSession(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	body := "one"
 	srv := bodyServer(t, func() string { return body })
 

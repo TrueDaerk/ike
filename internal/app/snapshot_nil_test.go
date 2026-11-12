@@ -32,6 +32,7 @@ func termTabActive(t *testing.T, m Model) string {
 }
 
 func TestSnapshotSessionWithActiveTerminalTab(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	termTabActive(t, m)
 	// The crash path (#931): activeEditorKey returns the pane, Editor() is nil.
@@ -42,6 +43,7 @@ func TestSnapshotSessionWithActiveTerminalTab(t *testing.T) {
 }
 
 func TestQuitWithActiveTerminalTab(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	termTabActive(t, m)
 	// quit runs snapshotSession on the same path (#931).
@@ -51,6 +53,7 @@ func TestQuitWithActiveTerminalTab(t *testing.T) {
 }
 
 func TestEditorNormalModeWithActiveTerminalTab(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	termTabActive(t, m)
 	if m.editorNormalMode() {
@@ -59,6 +62,8 @@ func TestEditorNormalModeWithActiveTerminalTab(t *testing.T) {
 }
 
 func TestRestoreSnapshotWithActiveTerminalTab(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := sized(t, 100, 40)
 	termTabActive(t, m)
 	// Recovery restore (#931 audit): must land the text in a fresh editor tab
@@ -72,6 +77,7 @@ func TestRestoreSnapshotWithActiveTerminalTab(t *testing.T) {
 }
 
 func TestActiveEditorKeyStillNamesTerminalTabPane(t *testing.T) {
+	t.Parallel()
 	// Documented invariant (#931): the key names an editor-kind pane even
 	// when its active tab is a terminal — callers nil-check Editor().
 	m := sized(t, 100, 40)

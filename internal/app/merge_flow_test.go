@@ -35,6 +35,7 @@ func conflictedRepo(t *testing.T, m Model, name, content string) (Model, string)
 // TestConflictedOpenOffersMergeTool: opening a git-conflicted file raises the
 // prominent offer, and enter routes into the stage fetch.
 func TestConflictedOpenOffersMergeTool(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m, path := conflictedRepo(t, m, "c.txt", "a\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> other\nz\n")
 	tm, _ := m.openPathInEditor(path)
@@ -62,6 +63,7 @@ func TestConflictedOpenOffersMergeTool(t *testing.T) {
 // TestConflictedOpenOfferDismissAndOnce: esc leaves the user in the editor,
 // and the offer does not interrupt again for the same file.
 func TestConflictedOpenOfferDismissAndOnce(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m, path := conflictedRepo(t, m, "c.txt", "a\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> other\nz\n")
 	tm, _ := m.openPathInEditor(path)
@@ -83,6 +85,7 @@ func TestConflictedOpenOfferDismissAndOnce(t *testing.T) {
 // TestCleanOpenNoMergeOffer: a file git does not report as conflicted opens
 // without any dialog.
 func TestCleanOpenNoMergeOffer(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "clean.txt")
@@ -100,6 +103,7 @@ func TestCleanOpenNoMergeOffer(t *testing.T) {
 // TestMergeFinishOfferSavesAndCloses: resolving the last conflict offers
 // save/finish, and enter applies the merge.
 func TestMergeFinishOfferSavesAndCloses(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m, key := openMergeView(t, m)
 	path := m.activeWS().Panes.Get(key).Merge().Path()
@@ -129,6 +133,7 @@ func TestMergeFinishOfferSavesAndCloses(t *testing.T) {
 // TestMergeFinishOfferDismissRearms: esc keeps the view open, and an undo that
 // brings the conflict back re-arms the offer for the next resolution.
 func TestMergeFinishOfferDismissRearms(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m, key := openMergeView(t, m)
 	tm, _ := m.Update(editor.ActionMsg{Action: "merge_next_conflict"})
@@ -159,6 +164,7 @@ func TestMergeFinishOfferDismissRearms(t *testing.T) {
 // conflict at all, so the block count alone would call the merge finished —
 // the marker check refuses it, and no offer is raised either.
 func TestMergeFinishBlockedByLeftoverMarkers(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m, key := openMergeView(t, m)
 	mg := m.activeWS().Panes.Get(key).Merge()
@@ -189,6 +195,7 @@ func TestMergeFinishBlockedByLeftoverMarkers(t *testing.T) {
 // TestMergeStatusCounter: the status line tracks the caret's place in the
 // cycle, the remaining count, and the all-resolved state.
 func TestMergeStatusCounter(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m, key := openMergeView(t, m)
 	tm, _ := m.Update(editor.ActionMsg{Action: "merge_next_conflict"})

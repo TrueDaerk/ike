@@ -57,6 +57,7 @@ func freezeArtifacts(t *testing.T, dir string) (events []map[string]string, dump
 // `freeze` event plus one goroutine dump next to the project's debug.log —
 // and a second frozen beat of the same episode adds an event, not a dump.
 func TestHeartbeatRecordsFreezeAndDumps(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
 
@@ -106,6 +107,7 @@ func TestHeartbeatRecordsFreezeAndDumps(t *testing.T) {
 
 // A loop that keeps completing passes produces neither event nor dump.
 func TestHeartbeatSilentWhileTheLoopRuns(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
 
@@ -138,6 +140,7 @@ func TestHeartbeatSilentWhileTheLoopRuns(t *testing.T) {
 // a quiet minute looks like since the idle-churn work (#2540, #2626), and
 // what used to litter `.ike/` with goroutine dumps.
 func TestHeartbeatIgnoresAnIdleLoop(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
 
@@ -167,6 +170,7 @@ func TestHeartbeatIgnoresAnIdleLoop(t *testing.T) {
 // input counter the watch reads is fed by the program's message filter — so
 // a key press reaching the filter is what makes the next quiet beat count.
 func TestHeartbeatRecordsFreezeOnPendingInput(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
 

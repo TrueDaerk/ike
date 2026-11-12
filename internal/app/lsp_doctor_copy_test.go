@@ -13,6 +13,7 @@ import (
 )
 
 func TestLSPDoctorCopyPutsReportOnClipboard(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	orig := clipboardWrite
 	copied := ""
 	clipboardWrite = func(s string) { copied = s }
@@ -57,6 +58,7 @@ func TestLSPDoctorCopyPutsReportOnClipboard(t *testing.T) {
 }
 
 func TestLSPDoctorCopyWithoutReportIsNoOp(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	orig := clipboardWrite
 	copied := ""
 	clipboardWrite = func(s string) { copied = s }

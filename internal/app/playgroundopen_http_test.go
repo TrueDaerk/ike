@@ -36,6 +36,7 @@ func typedResponse(ct, body string) *httpclient.Response {
 // viewer focused, the one chord opens the playground the body's type speaks —
 // over the response, in the response's own pane.
 func TestPlaygroundOpenFromResponsePane(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		ct   string
@@ -68,6 +69,7 @@ func TestPlaygroundOpenFromResponsePane(t *testing.T) {
 // TestPlaygroundOpenFromResponseMatchesJQKey: over a JSON response the chord
 // lands exactly where "q" does (#2157) — same dialect, same source, same pane.
 func TestPlaygroundOpenFromResponseMatchesJQKey(t *testing.T) {
+	t.Parallel()
 	out, _ := filledHTTP(t, sampleResponse("one")).Update(httppane.JQPlaygroundMsg{})
 	want := out.(Model)
 	byChord := openDispatcher(t, filledHTTP(t, sampleResponse("one")))
@@ -86,6 +88,7 @@ func TestPlaygroundOpenFromResponseMatchesJQKey(t *testing.T) {
 // TestPlaygroundOpenFromResponseRoutesMarkupToXMQ: an XML/HTML response takes
 // the xmq route, the hook standing in for the playground (#2415).
 func TestPlaygroundOpenFromResponseRoutesMarkupToXMQ(t *testing.T) {
+	// serial: sets package variable startXMQPlayground
 	for _, tc := range []struct{ name, ct, body string }{
 		{"xml", "application/xml", "<root><item/></root>"},
 		{"html", "text/html", "<html><body>hi</body></html>"},
@@ -111,6 +114,7 @@ func TestPlaygroundOpenFromResponseRoutesMarkupToXMQ(t *testing.T) {
 // markup route answers instead of opening the wrong dialect — over a response
 // exactly as over a buffer.
 func TestPlaygroundOpenFromResponseWithoutXMQSaysSo(t *testing.T) {
+	// serial: sets package variable startXMQPlayground
 	prev := startXMQPlayground
 	startXMQPlayground = nil
 	t.Cleanup(func() { startXMQPlayground = prev })
@@ -125,6 +129,7 @@ func TestPlaygroundOpenFromResponseWithoutXMQSaysSo(t *testing.T) {
 // TestPlaygroundOpenFromResponseUnqueryableNotifies: a body no playground
 // speaks names its type where it is known, and nothing opens.
 func TestPlaygroundOpenFromResponseUnqueryableNotifies(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, ct, body, want string }{
 		{"plain text", "text/plain", "hello\n", "no playground for this buffer"},
 		{"css", "text/css", "a{color:red}", "no playground for css"},
@@ -144,7 +149,7 @@ func TestPlaygroundOpenFromResponseUnqueryableNotifies(t *testing.T) {
 // unchanged — an open response pane that does *not* have the focus stays out
 // of the way, dialect and input both resolved from the buffer.
 func TestPlaygroundOpenPrefersFocusedEditorOverResponse(t *testing.T) {
-	noDebounce(t)
+	// serial: dispatchExt: lang.Register (process-wide language registry)
 	m := filledHTTP(t, sampleResponse("one")) // JSON response, would route to jq
 	path := filepath.Join(t.TempDir(), "doc."+dispatchExt(t, "yaml"))
 	if err := os.WriteFile(path, []byte("tags:\n  - tui\n"), 0o644); err != nil {

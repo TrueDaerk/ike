@@ -38,6 +38,7 @@ func (f fakeTerm) ForegroundName() string { return f.fg }
 // TestGuardIgnoresIdleShell: a live shell sitting at its prompt is no
 // activity — nothing is lost but scrollback, so the guard never opens.
 func TestGuardIgnoresIdleShell(t *testing.T) {
+	t.Parallel()
 	var a wsActivity
 	a.addTerm(fakeTerm{running: true})
 	if a.busy() || len(a.running) != 0 {
@@ -48,6 +49,7 @@ func TestGuardIgnoresIdleShell(t *testing.T) {
 // TestGuardCountsBusyShellAndNamesIt: a shell with a foreground job counts
 // and the prompt body names the process.
 func TestGuardCountsBusyShellAndNamesIt(t *testing.T) {
+	t.Parallel()
 	var a wsActivity
 	a.addTerm(fakeTerm{running: true, busy: true, fg: "vim"})
 	if !a.busy() {
@@ -61,6 +63,7 @@ func TestGuardCountsBusyShellAndNamesIt(t *testing.T) {
 // TestGuardBusyShellWithoutNameStaysGeneric: the name lookup is best effort —
 // without one the line still says something is running.
 func TestGuardBusyShellWithoutNameStaysGeneric(t *testing.T) {
+	t.Parallel()
 	var a wsActivity
 	a.addTerm(fakeTerm{running: true, busy: true})
 	if got := strings.Join(a.summary(), "\n"); got != "running shell process" {
@@ -72,6 +75,7 @@ func TestGuardBusyShellWithoutNameStaysGeneric(t *testing.T) {
 // session whose process already exited (running but not busy), are gone —
 // neither asks.
 func TestGuardIgnoresDeadAndFinishedSessions(t *testing.T) {
+	t.Parallel()
 	var a wsActivity
 	a.addTerm(fakeTerm{running: false, busy: true, fg: "vim"})
 	a.addTerm(fakeTerm{running: true, cmd: true, label: "build"})       // exited
@@ -84,6 +88,7 @@ func TestGuardIgnoresDeadAndFinishedSessions(t *testing.T) {
 // TestGuardCountsRunningCommandSession: a command still running counts and is
 // named by its configuration label, like before #2702.
 func TestGuardCountsRunningCommandSession(t *testing.T) {
+	t.Parallel()
 	var a wsActivity
 	a.addTerm(fakeTerm{running: true, busy: true, cmd: true, label: "npm run dev"})
 	a.addTerm(fakeTerm{running: true, busy: true, tool: runToolName, label: "tests"})
@@ -97,6 +102,7 @@ func TestGuardCountsRunningCommandSession(t *testing.T) {
 // TestGuardCountsToolPaneRegardless: a tool pane keeps its own rule — its
 // exit closes the pane, so a live one is always work the close would kill.
 func TestGuardCountsToolPaneRegardless(t *testing.T) {
+	t.Parallel()
 	var a wsActivity
 	a.addTerm(fakeTerm{running: true, tool: "lazygit"})
 	if !a.busy() || strings.Join(a.summary(), "") != "tool lazygit" {
@@ -121,6 +127,7 @@ func waitBusy(t *testing.T, term *terminal.Model) {
 // only live state is an idle shell closes straight away, and the same shell
 // with `sleep` running raises the guard naming the process.
 func TestCloseProjectIdleShellNoPrompt(t *testing.T) {
+	// serial: peekFixture: t.Chdir (process working directory)
 	roots := peekFixture(t, "origin", "api")
 	switchAutoSaveOff(t)
 	m := dismissOnboarding(switchModel(t))

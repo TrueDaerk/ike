@@ -28,6 +28,7 @@ func renderedRow(m Model, needle string) string {
 // TestPlayChangesMarkDifferingLines is the issue's first acceptance case:
 // `.items[0]` → `.items[1]` marks the one differing line, and only it.
 func TestPlayChangesMarkDifferingLines(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, dismissOnboarding(playApp(t, playChangesDoc)))
 	if m.play.changes != nil || m.play.resultEd.HostChanges() != nil {
 		t.Fatalf("the first run has nothing to compare against, got %v", m.play.changes)
@@ -51,6 +52,7 @@ func TestPlayChangesMarkDifferingLines(t *testing.T) {
 // TestPlayChangesPureDeletion: a removed line leaves only the thin marker, on
 // the line after the gap.
 func TestPlayChangesPureDeletion(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, dismissOnboarding(playApp(t, `[1,2,3]`)))
 	m = setProgram(m, ".")
 	m = setProgram(m, "map(select(. != 2))")
@@ -68,6 +70,7 @@ func TestPlayChangesPureDeletion(t *testing.T) {
 // keeps the sign cell (#2789) — the change recolours it rather than hiding
 // the value boundary.
 func TestPlayChangesKeepValueGlyphs(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, dismissOnboarding(playApp(t, `[1,2,3]`)))
 	m = setProgram(m, ".[]")
 	m = setProgram(m, ".[] | . * 10")
@@ -82,6 +85,7 @@ func TestPlayChangesKeepValueGlyphs(t *testing.T) {
 // TestPlayChangesClearedResultHasNoMarks: ctrl+l drops the marks, and the run
 // after it has nothing to compare against.
 func TestPlayChangesClearedResultHasNoMarks(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, dismissOnboarding(playApp(t, playChangesDoc)))
 	m = setProgram(m, ".items[0]")
 	m = setProgram(m, ".items[1]")
@@ -102,6 +106,7 @@ func TestPlayChangesClearedResultHasNoMarks(t *testing.T) {
 // TestPlayChangesSurviveFocusAndDropOnNextResult: the marks hold across focus
 // switches and a failed run, and the next good result replaces them.
 func TestPlayChangesSurviveFocusAndDropOnNextResult(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, dismissOnboarding(playApp(t, playChangesDoc)))
 	m = setProgram(m, ".items[0]")
 	m = setProgram(m, ".items[1]")
@@ -127,6 +132,7 @@ func TestPlayChangesSurviveFocusAndDropOnNextResult(t *testing.T) {
 
 // TestPlayChangesYQ: the yq dialect marks the same way.
 func TestPlayChangesYQ(t *testing.T) {
+	t.Parallel()
 	m := openYQ(t, dismissOnboarding(yqApp(t, "items:\n  - a: 1\n    b: 2\n  - a: 1\n    b: 5\n")))
 	m = setProgram(m, ".items[0]")
 	m = setProgram(m, ".items[1]")
@@ -151,6 +157,7 @@ func playDiffLines(n int) string {
 // TestPlayChangeMarksBudget: the diff runs up to playDiffMaxLines per side
 // and is skipped past it.
 func TestPlayChangeMarksBudget(t *testing.T) {
+	t.Parallel()
 	if overLineBudget(playDiffLines(playDiffMaxLines)) {
 		t.Error("exactly the budget must still diff")
 	}

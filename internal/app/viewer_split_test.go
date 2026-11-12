@@ -54,6 +54,7 @@ var viewerOpens = []struct {
 // explorer holds the focus splits the editor the user came from, not the
 // explorer (#1779).
 func TestViewerOpenFromExplorerSplitsRecentEditor(t *testing.T) {
+	t.Parallel()
 	for _, tc := range viewerOpens {
 		t.Run(tc.name, func(t *testing.T) {
 			m := newSized()
@@ -82,6 +83,7 @@ func TestViewerOpenFromExplorerSplitsRecentEditor(t *testing.T) {
 // TestViewerOpenFromEditorSplitsFocusedPane: with an editor focused the target
 // stays the focused pane — the pre-#1779 behaviour.
 func TestViewerOpenFromEditorSplitsFocusedPane(t *testing.T) {
+	t.Parallel()
 	for _, tc := range viewerOpens {
 		t.Run(tc.name, func(t *testing.T) {
 			m := newSized()
@@ -103,6 +105,7 @@ func TestViewerOpenFromEditorSplitsFocusedPane(t *testing.T) {
 // TestViewerOpenWithoutEditorStillOpens: a workspace holding only the explorer
 // has no better target left — the pane still opens rather than being dropped.
 func TestViewerOpenWithoutEditorStillOpens(t *testing.T) {
+	t.Parallel()
 	for _, tc := range viewerOpens {
 		t.Run(tc.name, func(t *testing.T) {
 			m := newSized()
@@ -131,6 +134,7 @@ func TestViewerOpenWithoutEditorStillOpens(t *testing.T) {
 // content pane and keeps the split, while a focused tool window falls back to
 // the recent editor.
 func TestViewerSplitTargetPrefersContentPanes(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	editorKey := m.fileEditorKey()
 	m.setFocus(editorKey)

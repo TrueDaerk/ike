@@ -41,6 +41,8 @@ func (m Model) atPosition(t *testing.T, path string, line int) Model {
 }
 
 func TestNavBackForwardAcrossJumps(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	_, files := navProject(t)
 	m := newSized()
 
@@ -80,6 +82,7 @@ func TestNavBackForwardAcrossJumps(t *testing.T) {
 }
 
 func TestNavSameFileLineJumpRecords(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
@@ -94,6 +97,8 @@ func TestNavSameFileLineJumpRecords(t *testing.T) {
 }
 
 func TestNavFreshJumpTruncatesForward(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
@@ -118,6 +123,7 @@ func TestNavFreshJumpTruncatesForward(t *testing.T) {
 }
 
 func TestNavCommandsRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	for _, id := range []string{"nav.back", "nav.forward"} {
 		if _, ok := m.reg.Command(id); !ok {
@@ -127,6 +133,7 @@ func TestNavCommandsRegistered(t *testing.T) {
 }
 
 func TestNavBackAfterLargeMotion(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
@@ -149,6 +156,7 @@ func TestNavBackAfterLargeMotion(t *testing.T) {
 }
 
 func TestNavBackSkipsDeletedFile(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
@@ -171,6 +179,7 @@ func TestNavBackSkipsDeletedFile(t *testing.T) {
 }
 
 func TestNavBackReturnsToOriginPane(t *testing.T) {
+	t.Parallel()
 	// #930: a nav-history jump into a file that is open in another pane
 	// focuses that pane instead of re-opening the file in the active one.
 	_, files := navProject(t)
@@ -209,6 +218,7 @@ func TestNavBackReturnsToOriginPane(t *testing.T) {
 // the open funnel recorded and the tab bar — the most ordinary way to change
 // file — produced no history at all.
 func TestNavBackAfterTabSwitch(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
@@ -231,6 +241,7 @@ func TestNavBackAfterTabSwitch(t *testing.T) {
 // history jump that lands via the tab bar must not record its own arrival,
 // which would make Back oscillate between two files forever.
 func TestNavTabSwitchDuringHistoryNav(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
@@ -251,6 +262,7 @@ func TestNavTabSwitchDuringHistoryNav(t *testing.T) {
 // input, a navigation button press is swallowed — navigating the editor
 // hidden underneath would be invisible and would strand the overlay.
 func TestMouseNavButtonUnderOverlay(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m.palette.SetSize(m.width, m.height)
 	m.palette.Open(palette.Context{ContextID: m.focusContext(), Root: "."})

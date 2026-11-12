@@ -78,6 +78,7 @@ func fireDeferredTicks(t *testing.T, m Model) Model {
 // TestTickHookDefersLongTimers pins the seam: a long timer never sleeps in a
 // drain, a short one still fires for real.
 func TestTickHookDefersLongTimers(t *testing.T) {
+	// serial: measures the wall clock (load-sensitive)
 	takeDeferredTicks()
 	start := time.Now()
 	if cmd := tickCmd(4*time.Second, func(time.Time) tea.Msg { return "late" }); cmd == nil || cmd() != nil {

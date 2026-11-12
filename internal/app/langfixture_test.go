@@ -53,6 +53,7 @@ func withTestExtension(t *testing.T, id, ext string) {
 // init() are the exception — they are in place before the first test and stay
 // constant.
 func TestNoRawLangRegisterInTests(t *testing.T) {
+	t.Parallel()
 	files, err := filepath.Glob("*_test.go")
 	if err != nil {
 		t.Fatal(err)

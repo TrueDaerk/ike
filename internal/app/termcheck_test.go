@@ -10,6 +10,7 @@ import (
 // TestTermCheckIssues (#720): each deficiency produces exactly one specific
 // entry; a fully capable environment produces none.
 func TestTermCheckIssues(t *testing.T) {
+	t.Parallel()
 	full := termCaps{kitty: true, profile: colorprofile.TrueColor, profileSeen: true}
 	if got := termCheckIssues(full, false); len(got) != 0 {
 		t.Fatalf("capable environment should report nothing, got %+v", got)
@@ -46,6 +47,7 @@ func TestTermCheckIssues(t *testing.T) {
 
 // TestInsideTmux covers the environment shapes: $TMUX, TERM prefixes, plain.
 func TestInsideTmux(t *testing.T) {
+	t.Parallel()
 	env := func(vals map[string]string) func(string) string {
 		return func(k string) string { return vals[k] }
 	}
@@ -74,6 +76,7 @@ func freeShell(m *Model) {
 // TestRunTermCheckOpensReport: a deficient environment opens the floating
 // report once; the verdict never re-fires.
 func TestRunTermCheckOpensReport(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 30)
 	freeShell(&m)
 	m.caps.kitty = false // deficient: warns unless the guard holds
@@ -95,6 +98,7 @@ func TestRunTermCheckOpensReport(t *testing.T) {
 // the report as pending — no retry tick, no wake — and the settled-pass drain
 // opens it once the surface frees up.
 func TestRunTermCheckWaitsForBusyShell(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 30)
 	freeShell(&m)
 	m.caps.kitty = false
@@ -120,6 +124,7 @@ func TestRunTermCheckWaitsForBusyShell(t *testing.T) {
 
 // TestRunTermCheckSilentWhenCapable: no issues → no shell, nothing pending.
 func TestRunTermCheckSilentWhenCapable(t *testing.T) {
+	// serial: t.Setenv
 	m := sized(t, 100, 30)
 	freeShell(&m)
 	m.caps = termCaps{kitty: true, profile: colorprofile.TrueColor, profileSeen: true}

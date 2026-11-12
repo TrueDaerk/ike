@@ -24,6 +24,7 @@ func hudOff(t *testing.T) {
 }
 
 func TestPerfHUDToggleStartsAndStopsCollection(t *testing.T) {
+	// serial: hudOff: perfhud.Reset (process-wide state of package perfhud)
 	hudOff(t)
 	m := sized(t, 100, 30)
 
@@ -53,6 +54,7 @@ func TestPerfHUDToggleStartsAndStopsCollection(t *testing.T) {
 }
 
 func TestPerfHUDCountsMessagesAndAttributesPanes(t *testing.T) {
+	// serial: hudOff: perfhud.Reset (process-wide state of package perfhud)
 	hudOff(t)
 	m := sized(t, 120, 40)
 	out, _ := m.Update(TogglePerfHUDMsg{})
@@ -90,6 +92,7 @@ func TestPerfHUDCountsMessagesAndAttributesPanes(t *testing.T) {
 }
 
 func TestPerfHUDOffMeasuresNothing(t *testing.T) {
+	// serial: hudOff: perfhud.Reset (process-wide state of package perfhud)
 	hudOff(t)
 	m := sized(t, 100, 30)
 	out, _ := m.Update(tea.KeyPressMsg{Code: 'j', Text: "j"})
@@ -109,6 +112,8 @@ func TestPerfHUDOffMeasuresNothing(t *testing.T) {
 }
 
 func TestPerfHUDOverlayAppearsAfterTheFirstSample(t *testing.T) {
+	// serial: hudOff: perfhud.Reset (process-wide state of package perfhud)
+	withStore(t)
 	hudOff(t)
 	m := sized(t, 120, 40)
 	out, _ := m.Update(TogglePerfHUDMsg{})
@@ -142,6 +147,7 @@ func TestPerfHUDOverlayAppearsAfterTheFirstSample(t *testing.T) {
 // the box's numbers only change once per sample, so composing it belongs on
 // the tick, not in every frame the user's typing produces.
 func TestPerfHUDBoxIsLaidOutPerSampleNotPerFrame(t *testing.T) {
+	// serial: hudOff: perfhud.Reset (process-wide state of package perfhud)
 	hudOff(t)
 	m := sized(t, 120, 40)
 	out, _ := m.Update(TogglePerfHUDMsg{})
@@ -180,6 +186,7 @@ func TestPerfHUDBoxIsLaidOutPerSampleNotPerFrame(t *testing.T) {
 }
 
 func TestPerfSnapshotCopiesAPlainTextBlock(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	hudOff(t)
 	var copied string
 	orig := clipboardWrite
@@ -206,6 +213,7 @@ func TestPerfSnapshotCopiesAPlainTextBlock(t *testing.T) {
 }
 
 func TestPerfSnapshotWorksWithTheHUDClosed(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	hudOff(t)
 	var copied string
 	orig := clipboardWrite
@@ -227,6 +235,7 @@ func TestPerfSnapshotWorksWithTheHUDClosed(t *testing.T) {
 }
 
 func TestArmedTimersCountsTheHUDsOwnTick(t *testing.T) {
+	// serial: hudOff: perfhud.Reset (process-wide state of package perfhud)
 	hudOff(t)
 	m := sized(t, 100, 30)
 	base := m.armedTimers()
@@ -249,6 +258,7 @@ func TestArmedTimersCountsTheHUDsOwnTick(t *testing.T) {
 }
 
 func TestPerfHUDSettingsDriveIntervalAndHistory(t *testing.T) {
+	t.Parallel()
 	if got := perfHUDInterval(host.MapConfig{}); got != time.Second {
 		t.Errorf("default interval = %s, want 1s", got)
 	}

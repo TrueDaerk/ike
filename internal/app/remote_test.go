@@ -16,6 +16,7 @@ import (
 // TestRemoteModeResults verifies the browse picker rows: the same host list
 // as the ssh terminal picker, but activation carries a browse pick.
 func TestRemoteModeResults(t *testing.T) {
+	t.Parallel()
 	mode := newRemoteMode()
 	mode.entries = []sshconf.Host{{Alias: "web01", HostName: "web01.example.com"}}
 	items := mode.Results("", palette.Context{})
@@ -32,6 +33,7 @@ func TestRemoteModeResults(t *testing.T) {
 // browser keyed by the alias, a second pick refocuses instead of duplicating,
 // and an empty pick opens nothing.
 func TestOpenRemotePaneOncePerHost(t *testing.T) {
+	t.Parallel()
 	m := NewWith(registry.New(), host.MapConfig{})
 	tm0, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = tm0.(Model)
@@ -66,6 +68,7 @@ func TestOpenRemotePaneOncePerHost(t *testing.T) {
 // virtual path, its title naming the host — and a save is refused, so nothing
 // is ever silently written to the cache instead of the host.
 func TestRemoteFetchedOpensReadOnly(t *testing.T) {
+	t.Parallel()
 	m := NewWith(registry.New(), host.MapConfig{})
 	tm, _ := m.Update(remoteFetchedMsg{
 		Alias: "web01",
@@ -89,6 +92,7 @@ func TestRemoteFetchedOpensReadOnly(t *testing.T) {
 // TestRemoteFetchedRefusesBinary verifies the binary refusal: bytes nothing
 // claims and no text buffer can show open nothing.
 func TestRemoteFetchedRefusesBinary(t *testing.T) {
+	t.Parallel()
 	m := NewWith(registry.New(), host.MapConfig{})
 	editors := 0
 	for _, k := range m.activeWS().Panes.Keys() {
@@ -119,6 +123,7 @@ func TestRemoteFetchedRefusesBinary(t *testing.T) {
 
 // TestRemoteEntryTitle verifies the origin decoder both ways.
 func TestRemoteEntryTitle(t *testing.T) {
+	t.Parallel()
 	if title, ok := remoteEntryTitle("sftp://web01/var/log/app.log"); !ok || title != "app.log (web01)" {
 		t.Fatalf("title = %q, %v", title, ok)
 	}
@@ -130,6 +135,7 @@ func TestRemoteEntryTitle(t *testing.T) {
 // TestRemoteFetchLimit verifies the remote.max_fetch_mb read: the configured
 // cap in bytes, the built-in 64 MiB without one.
 func TestRemoteFetchLimit(t *testing.T) {
+	t.Parallel()
 	m := NewWith(registry.New(), host.MapConfig{"remote.max_fetch_mb": "2"})
 	if got := m.remoteFetchLimit(); got != 2<<20 {
 		t.Fatalf("limit = %d, want %d", got, 2<<20)
@@ -142,6 +148,7 @@ func TestRemoteFetchLimit(t *testing.T) {
 
 // TestRemoteBrowseCommandRegistered verifies the palette command exists.
 func TestRemoteBrowseCommandRegistered(t *testing.T) {
+	t.Parallel()
 	for _, c := range registry.Global().Commands() {
 		if c.ID == "remote.browse" {
 			return

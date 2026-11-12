@@ -11,6 +11,7 @@ import (
 // file is already open instead of opening a duplicate tab.
 
 func TestGotoDefinitionFocusesOtherPane(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
@@ -40,6 +41,7 @@ func TestGotoDefinitionFocusesOtherPane(t *testing.T) {
 }
 
 func TestGotoDefinitionSamePaneActivatesTab(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
@@ -63,6 +65,7 @@ func TestGotoDefinitionSamePaneActivatesTab(t *testing.T) {
 }
 
 func TestGotoDefinitionUnopenedOpensInCurrentPane(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)

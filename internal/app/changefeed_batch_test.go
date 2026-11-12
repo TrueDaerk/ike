@@ -27,6 +27,7 @@ func shellBody(m Model) string { return m.shell.Content().Render(80) }
 // leaves the conflicted ones — a file changed externally *and* edited in IKE
 // is a decision only the user can make, so the batch reports it instead.
 func TestChangeFeedReloadAllSkipsDirtyBuffers(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	clean, conflict := filepath.Join(dir, "clean.txt"), filepath.Join(dir, "conflict.txt")
 	for _, p := range []string{clean, conflict} {
@@ -71,6 +72,7 @@ func TestChangeFeedReloadAllSkipsDirtyBuffers(t *testing.T) {
 // and one that is gone are no more reloadable in a batch than under R, and the
 // batch says so rather than pretending it did something.
 func TestChangeFeedReloadAllReportsUnreachableEntries(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	gone := filepath.Join(dir, "gone.txt")
 	if err := os.WriteFile(gone, []byte("keep\n"), 0o644); err != nil {
@@ -100,6 +102,7 @@ func TestChangeFeedReloadAllReportsUnreachableEntries(t *testing.T) {
 // names every file it is about to restore — a revert of a whole agent run must
 // not be answered from a row count alone.
 func TestChangeFeedRevertAllConfirmsWithFileList(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a, b := filepath.Join(dir, "a.txt"), filepath.Join(dir, "b.txt")
 	for _, p := range []string{a, b} {
@@ -161,6 +164,7 @@ func TestChangeFeedRevertAllConfirmsWithFileList(t *testing.T) {
 // left out of the confirmation entirely and named as skipped — the batch never
 // overwrites the user's own edits.
 func TestChangeFeedRevertAllExcludesConflicts(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	plain, conflict := filepath.Join(dir, "plain.txt"), filepath.Join(dir, "conflict.txt")
 	for _, p := range []string{plain, conflict} {
@@ -205,6 +209,7 @@ func TestChangeFeedRevertAllExcludesConflicts(t *testing.T) {
 // applies to exactly those — marking refines the scope, it is not a
 // precondition for acting on the whole feed.
 func TestChangeFeedMarksScopeTheBatch(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a, b := filepath.Join(dir, "a.txt"), filepath.Join(dir, "b.txt")
 	for _, p := range []string{a, b} {
@@ -254,6 +259,7 @@ func TestChangeFeedMarksScopeTheBatch(t *testing.T) {
 // renders titled groups, and the entries nothing could be attributed to stay
 // together under the plain "unattributed" title.
 func TestChangeFeedGroupsByProcess(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	now := time.Now()
 	m.feed.Add(changefeed.Entry{
@@ -286,6 +292,7 @@ func TestChangeFeedGroupsByProcess(t *testing.T) {
 // effort and refuses to guess — no session running anything is no source, and
 // neither is an idle or dead one.
 func TestChangeFeedAttributionStaysSilentWithoutACandidate(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if got, key := m.changeFeedSource(); got != "" || key != "" {
 		t.Fatalf("changeFeedSource = %q with nothing running, want no attribution", got)
@@ -303,6 +310,7 @@ func TestChangeFeedAttributionStaysSilentWithoutACandidate(t *testing.T) {
 // TestChangeFeedUngroupedWithoutAttribution: nothing attributed means no group
 // titles at all — a header that says nothing is worse than no header.
 func TestChangeFeedUngroupedWithoutAttribution(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	m := newSized()
 	m = externalWrite(t, m, filepath.Join(dir, "a.txt"), "x\n")

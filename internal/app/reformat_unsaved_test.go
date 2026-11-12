@@ -95,6 +95,7 @@ func assertEmptyDir(t *testing.T, dir string) {
 // (prettier --stdin-filepath picks its parser from it), nothing is created
 // on disk, the buffer stays file-less, and one undo reverts the reformat.
 func TestReformatUnsavedJSONViaExternalStdin(t *testing.T) {
+	// serial: format.RegisterExternalDefault (process-wide state of package format)
 	m, root, msgs := unsavedReformatApp(t, "json", `{"a":1}`)
 	bin, argLog := fakeFormatter(t, "tr a-z A-Z")
 	format.RegisterExternalDefault("json", format.External{Command: bin, Args: []string{"--stdin-filepath", "${FILE}"}})
@@ -126,6 +127,7 @@ func TestReformatUnsavedJSONViaExternalStdin(t *testing.T) {
 // own temp copy, which carries the language's extension; the synthetic path
 // is never created.
 func TestReformatUnsavedMarkdownViaTempFile(t *testing.T) {
+	// serial: format.RegisterExternalDefault (process-wide state of package format)
 	m, root, msgs := unsavedReformatApp(t, "markdown", "# title\n")
 	bin, argLog := fakeFormatter(t, "tr a-z A-Z < \"$1\" > \"$1.out\" && mv \"$1.out\" \"$1\"")
 	format.RegisterExternalDefault("markdown", format.External{Command: bin, Args: []string{"${FILE}"}, TempFile: true})
@@ -147,6 +149,7 @@ func TestReformatUnsavedMarkdownViaTempFile(t *testing.T) {
 // file, so an unsaved buffer falls through to the next provider — and with
 // no other provider, the usual "no formatter" notice appears.
 func TestReformatUnsavedSkipsTierNeedingFile(t *testing.T) {
+	// serial: format.Register (process-wide state of package format)
 	m, _, msgs := unsavedReformatApp(t, "json", `{"a":1}`)
 	needsFile := format.Provider{
 		Name: "server", Tier: format.TierLSP, NeedsFile: true,
@@ -178,6 +181,7 @@ func TestReformatUnsavedSkipsTierNeedingFile(t *testing.T) {
 // TestReformatUntypedBufferAsksForLanguage: a file-less buffer without a
 // language says a language must be set, instead of the old file-backed wording.
 func TestReformatUntypedBufferAsksForLanguage(t *testing.T) {
+	t.Parallel()
 	m := filelessModel(t, "plain", 0, 0)
 	out, _ := m.Update(format.FileRequestMsg{})
 	m = out.(Model)
@@ -190,6 +194,7 @@ func TestReformatUntypedBufferAsksForLanguage(t *testing.T) {
 // unsaved buffer under the same conditions, and accepting it reformats that
 // buffer with the freshly installed prettier.
 func TestPrettierOfferForUnsavedBuffer(t *testing.T) {
+	// serial: awaitMsg: waits on the wall clock (load-sensitive)
 	f := newPrettierFixture(t)
 	m := filelessModel(t, "a: 1", 0, 0)
 	out, _ := m.Update(SetBufferLangMsg{ID: "prettylang"})
@@ -219,6 +224,7 @@ func TestPrettierOfferForUnsavedBuffer(t *testing.T) {
 // TestReformatPathSynthetic pins the path rules: a real path wins, a typed
 // buffer gets root + the language path's base name, an untyped one none.
 func TestReformatPathSynthetic(t *testing.T) {
+	t.Parallel()
 	if p, fb, ok := reformatPath("/x/a.go", "/x/a.go", "/root"); p != "/x/a.go" || !fb || !ok {
 		t.Errorf("saved file: got %q %v %v", p, fb, ok)
 	}

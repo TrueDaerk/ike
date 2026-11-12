@@ -13,6 +13,7 @@ import (
 // TestFormatEditsMsgRoutesToEditor: formatting edits land in the owning
 // editor's buffer as one applied batch.
 func TestFormatEditsMsgRoutesToEditor(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	dir := t.TempDir()
 	file := filepath.Join(dir, "main.go")
@@ -40,6 +41,7 @@ func TestFormatEditsMsgRoutesToEditor(t *testing.T) {
 // the next keystroke. The handler must return a parse command for the applying
 // view so the reformatted content is re-highlighted immediately.
 func TestFormatEditsMsgSchedulesReparse(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	dir := t.TempDir()
 	file := filepath.Join(dir, "main.go")
@@ -74,6 +76,7 @@ func TestFormatEditsMsgSchedulesReparse(t *testing.T) {
 // view — routing it to every view applied every edit once per view (an LSP
 // rename of z -> match1 with a split open produced match1atch1).
 func TestFormatEditsMsgAppliesOncePerDocument(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	file := writeTemp(t, dir, "a.py", "print(z)\n")
 	m := openApp(t, file)

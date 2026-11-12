@@ -65,6 +65,7 @@ func deepLinkFixture(t *testing.T) (cur, dst, file string) {
 // TestDeepLinkMalformedNotifies: a malformed URL produces a notification and
 // nothing else — no switch, no dialog.
 func TestDeepLinkMalformedNotifies(t *testing.T) {
+	// serial: deepLinkFixture: t.Chdir (process working directory)
 	cur, _, _ := deepLinkFixture(t)
 	m := switchModel(t)
 	out, _ := m.Update(DeepLinkMsg{URL: "ike://open?remote=garbage&project=x"})
@@ -80,6 +81,7 @@ func TestDeepLinkMalformedNotifies(t *testing.T) {
 // TestDeepLinkSwitchOpensFilePayload: a resolved single match switches and,
 // once the switch lands, opens the linked file at its line.
 func TestDeepLinkSwitchOpensFilePayload(t *testing.T) {
+	// serial: deepLinkFixture: t.Chdir (process working directory)
 	_, dst, file := deepLinkFixture(t)
 	m := switchModel(t)
 	link := deeplink.Link{Project: "dst", File: "f.txt", Line: 2}
@@ -116,6 +118,7 @@ func TestDeepLinkSwitchOpensFilePayload(t *testing.T) {
 // TestDeepLinkMissingFileKeepsSwitch: a file that does not exist in the target
 // project only produces a notification — the switch itself stands.
 func TestDeepLinkMissingFileKeepsSwitch(t *testing.T) {
+	// serial: deepLinkFixture: t.Chdir (process working directory)
 	_, dst, _ := deepLinkFixture(t)
 	m := switchModel(t)
 	link := deeplink.Link{Project: "dst", File: "no/such.txt"}
@@ -132,6 +135,7 @@ func TestDeepLinkMissingFileKeepsSwitch(t *testing.T) {
 // TestDeepLinkChooserSwitchesToPick: several matches open the chooser; picking
 // an entry switches to it, esc leaves everything untouched.
 func TestDeepLinkChooserSwitchesToPick(t *testing.T) {
+	// serial: deepLinkFixture: t.Chdir (process working directory)
 	cur, dst, _ := deepLinkFixture(t)
 	m := switchModel(t)
 	link := deeplink.Link{RemoteKey: "github.com/a/b", RemoteRaw: "git@github.com:a/b"}
@@ -162,6 +166,7 @@ func TestDeepLinkChooserSwitchesToPick(t *testing.T) {
 // opens the clone dialog with the linked URL verbatim; the payload parks for
 // after the clone. Cancelling the dialog drops the payload.
 func TestDeepLinkCloneFallbackPrefillsDialog(t *testing.T) {
+	// serial: cloneProjectsDir: config.Set (process-wide configuration)
 	cur, _, _ := deepLinkFixture(t)
 	m := switchModel(t)
 	cloneProjectsDir(t)
@@ -196,6 +201,7 @@ func TestDeepLinkCloneFallbackPrefillsDialog(t *testing.T) {
 // project that is already current must say so — before, it applied an empty
 // payload and the user could not tell whether the click arrived at all.
 func TestDeepLinkSameProjectNoPayloadNotifies(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	cur, _, _ := deepLinkFixture(t)
 	m := switchModel(t)
 	link := deeplink.Link{Project: "cur"}
@@ -216,6 +222,7 @@ func TestDeepLinkSameProjectNoPayloadNotifies(t *testing.T) {
 // TestDeepLinkToolOpensOnce: the tool payload opens the named tool window
 // only when it is not already open — never a second instance.
 func TestDeepLinkToolOpensOnce(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	deepLinkFixture(t)
 	m := switchModel(t)
 	m, _ = m.deepLinkOpenTool("problems")
@@ -232,6 +239,7 @@ func TestDeepLinkToolOpensOnce(t *testing.T) {
 // TestDeepLinkSameProjectAppliesPayloadDirectly: a link to the current
 // project skips the switch and applies the payload in place.
 func TestDeepLinkSameProjectAppliesPayloadDirectly(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	cur, _, _ := deepLinkFixture(t)
 	if err := os.WriteFile(filepath.Join(cur, "here.txt"), []byte("hi\n"), 0o644); err != nil {
 		t.Fatal(err)

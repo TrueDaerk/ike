@@ -46,6 +46,7 @@ func actionsOffer() (ilsp.CodeActionsMsg, *int) {
 }
 
 func TestActionsModePreferredFirstAndIndices(t *testing.T) {
+	t.Parallel()
 	a := &actionsMode{}
 	msg, picked := actionsOffer()
 	a.Set(msg)
@@ -68,6 +69,7 @@ func TestActionsModePreferredFirstAndIndices(t *testing.T) {
 }
 
 func TestCodeActionsMsgOpensLockedPicker(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	msg, picked := actionsOffer()
 	out, _ := m.Update(msg)
@@ -91,6 +93,7 @@ func TestCodeActionsMsgOpensLockedPicker(t *testing.T) {
 // by kind — kinds in first-appearance order, stable within one — even when
 // the provider list interleaves kinds.
 func TestSetMergedOrder(t *testing.T) {
+	t.Parallel()
 	a := &actionsMode{}
 	msg, _ := actionsOffer()
 	a.SetMerged(msg, []intention.Item{
@@ -120,6 +123,7 @@ func TestSetMergedOrder(t *testing.T) {
 // TestMergedActivation guards the two activation paths: an LSP row runs the
 // bridge continuation, a built-in row resolves to its command id.
 func TestMergedActivation(t *testing.T) {
+	t.Parallel()
 	a := &actionsMode{}
 	msg, picked := actionsOffer()
 	a.SetMerged(msg, []intention.Item{{Title: "Decode JWT at Caret", Kind: "decode", CommandID: "editor.decodeJWT"}})
@@ -173,6 +177,7 @@ func intentionModel(t *testing.T, name, content string, line, col int) Model {
 // core: an empty LSP offer over a JSON buffer still opens the picker —
 // anchored at the caret — with the doc-path built-ins listed.
 func TestIntentionsOfferMergesBuiltinsAnchored(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	m := intentionModel(t, "x.json", `{"name": "value"}`, 0, 11)
 	out, _ := m.Update(ilsp.CodeActionsMsg{Intentions: true})
 	m = out.(Model)
@@ -198,6 +203,7 @@ func TestIntentionsOfferMergesBuiltinsAnchored(t *testing.T) {
 // and no applicable built-ins the picker stays closed and the app reports
 // "no code actions here".
 func TestIntentionsEmptyMergeToasts(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	m := intentionModel(t, "main.go", "", 0, 0)
 	out, _ := m.Update(ilsp.CodeActionsMsg{Intentions: true})
 	m = out.(Model)
@@ -213,6 +219,7 @@ func TestIntentionsEmptyMergeToasts(t *testing.T) {
 // first nine rows and nothing beyond, and a filter query drops the hints
 // (digits type into the query then, so a visible number would lie).
 func TestActionsModeDigitHints(t *testing.T) {
+	t.Parallel()
 	a := &actionsMode{}
 	var builtins []intention.Item
 	for i := 0; i < 11; i++ {
@@ -249,6 +256,7 @@ func TestActionsModeDigitHints(t *testing.T) {
 // caret popup is open with an empty query, "2" runs the second listed entry —
 // the same dispatch enter on that row would do.
 func TestIntentionPopupDigitRunsAction(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	m := intentionModel(t, "x.json", `{"name": "value"}`, 0, 11)
 	out, _ := m.Update(ilsp.CodeActionsMsg{Intentions: true})
 	m = out.(Model)
@@ -275,6 +283,7 @@ func TestIntentionPopupDigitRunsAction(t *testing.T) {
 // TestIntentionPopupDigitFiltersWithQuery: once a filter query is typed the
 // digits are ordinary query text again and the popup stays open.
 func TestIntentionPopupDigitFiltersWithQuery(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	m := intentionModel(t, "x.json", `{"name": "value"}`, 0, 11)
 	out, _ := m.Update(ilsp.CodeActionsMsg{Intentions: true})
 	m = out.(Model)
@@ -323,6 +332,7 @@ func filelessModel(t *testing.T, content string, line, col int) Model {
 // here the caret line is a curl command, an intention the catalog offers in
 // any buffer — instead of hanging the Update loop on the bridge's reply.
 func TestIntentionsFilelessBufferOpensPicker(t *testing.T) {
+	t.Parallel()
 	m := filelessModel(t, "curl https://example.com/things", 0, 0)
 	out, _ := m.Update(ilsp.CodeActionsMsg{Intentions: true})
 	m = out.(Model)
@@ -348,6 +358,7 @@ func TestIntentionsFilelessBufferOpensPicker(t *testing.T) {
 // buffer with no file is never empty-handed since #2033 — the caret has no
 // facts, but the buffer itself can still be given a type.
 func TestIntentionsFilelessBufferOffersLanguagePick(t *testing.T) {
+	t.Parallel()
 	m := filelessModel(t, "", 0, 0)
 	out, _ := m.Update(ilsp.CodeActionsMsg{Intentions: true})
 	m = out.(Model)
@@ -386,6 +397,7 @@ func offers(titles []string, title string) bool {
 // and the re-send act on the shown response pane — with none open they only
 // ever answered "no response pane open", so they are not offered.
 func TestIntentionsHTTPResponseEntriesNeedAResponse(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	stubClipboardRead(t, "")
 	m := intentionModel(t, "api.http", "GET https://example.com/things\n", 0, 0)
 	titles := intentionTitles(t, m)
@@ -404,6 +416,7 @@ func TestIntentionsHTTPResponseEntriesNeedAResponse(t *testing.T) {
 // TestIntentionsHTTPEnvironmentNeedsAnEnvFile: "Select Environment" appears
 // only next to an http-client.env.json that defines one (#2026).
 func TestIntentionsHTTPEnvironmentNeedsAnEnvFile(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	stubClipboardRead(t, "")
 	m := intentionModel(t, "api.http", "GET https://example.com/things\n", 0, 0)
 	if titles := intentionTitles(t, m); offers(titles, "Select Environment") {
@@ -422,6 +435,7 @@ func TestIntentionsHTTPEnvironmentNeedsAnEnvFile(t *testing.T) {
 // TestIntentionsClipboardDiffNeedsAClipboard guards #2026: comparing a
 // selection with an empty clipboard only reported "clipboard is empty".
 func TestIntentionsClipboardDiffNeedsAClipboard(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	stubClipboardRead(t, "")
 	m := intentionModel(t, "x.json", "{\n  \"name\": \"value\"\n}\n", 1, 3)
 	m = drainKey(m, tea.KeyPressMsg{Code: 'V', Text: "V"}) // visual-line select
@@ -441,6 +455,7 @@ func TestIntentionsClipboardDiffNeedsAClipboard(t *testing.T) {
 // (#1762) drops every edit through the locked recorder, so the rewriting
 // entries — here the value toggle — stay out of the popup.
 func TestIntentionsReadOnlyBufferOffersNoEdits(t *testing.T) {
+	// serial: intentionModel: t.Setenv
 	stubClipboardRead(t, "")
 	m := intentionModel(t, "x.json", "{\n  \"debug\": true\n}\n", 1, 12)
 	if titles := intentionTitles(t, m); !offers(titles, "Toggle Value Under Caret") {
@@ -455,6 +470,7 @@ func TestIntentionsReadOnlyBufferOffersNoEdits(t *testing.T) {
 // TestActionKindLabel guards #309: LSP kinds render readably and an omitted
 // kind still yields a chip.
 func TestActionKindLabel(t *testing.T) {
+	t.Parallel()
 	cases := map[string]string{
 		"":                       "action",
 		"quickfix":               "quick fix",

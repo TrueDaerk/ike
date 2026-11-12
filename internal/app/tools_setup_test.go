@@ -62,7 +62,6 @@ func stubEntry(name string) toolcatalog.Entry {
 // via its palette message.
 func toolSetupSeed(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := New()
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	tm, _ = tm.(Model).Update(ShowToolSetupMsg{})
@@ -70,6 +69,7 @@ func toolSetupSeed(t *testing.T) Model {
 }
 
 func TestToolSetupListsOfferedWithInstallState(t *testing.T) {
+	// serial: catalogStub: sets package variable setupCatalog
 	installed, missing := stubEntry("insttool"), stubEntry("misstool")
 	catalogStub(t, []string{"insttool-bin", "fakebrew"}, installed, missing)
 	m := toolSetupSeed(t)
@@ -86,6 +86,7 @@ func TestToolSetupListsOfferedWithInstallState(t *testing.T) {
 }
 
 func TestToolSetupGateAndConfiguredHidden(t *testing.T) {
+	// serial: sets toolcatalog.LookPath
 	gated := stubEntry("gatedtool")
 	gated.Requires = "docker"
 	// The gate is applied by toolcatalog.Offered; the dialog seam uses it
@@ -102,7 +103,7 @@ func TestToolSetupGateAndConfiguredHidden(t *testing.T) {
 	// Already-configured tools are not offered again: with every catalog
 	// entry configured the dialog refuses to open.
 	catalogStub(t, nil, stubEntry("donetool"))
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	writeUserSettings(t, "[[tools.custom]]\nname = \"donetool\"\ncommand = \"donetool-bin\"\n")
 	m := New()
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
@@ -114,6 +115,8 @@ func TestToolSetupGateAndConfiguredHidden(t *testing.T) {
 }
 
 func TestToolSetupConfirmWritesConfigAndInstalls(t *testing.T) {
+	// serial: sets toolcatalog.RunInstall
+	withStore(t)
 	installed, missing := stubEntry("insttool"), stubEntry("misstool")
 	catalogStub(t, []string{"insttool-bin", "fakebrew"}, installed, missing)
 	var ran [][]string
@@ -159,6 +162,7 @@ func TestToolSetupConfirmWritesConfigAndInstalls(t *testing.T) {
 }
 
 func TestToolSetupEscWritesNothing(t *testing.T) {
+	// serial: catalogStub: sets package variable setupCatalog
 	catalogStub(t, nil, stubEntry("skiptool"))
 	m := toolSetupSeed(t)
 	tm, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})

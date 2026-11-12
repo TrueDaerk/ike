@@ -15,6 +15,7 @@ import (
 // TestSymbolPickerRowsCarryPreviewTargets: every cached workspace-symbol row
 // points the preview at its declaration (1-based), and the mode opts in.
 func TestSymbolPickerRowsCarryPreviewTargets(t *testing.T) {
+	t.Parallel()
 	s := &symbolMode{}
 	if !s.CodePreview() {
 		t.Fatal("the symbol picker must render the code column")
@@ -52,6 +53,7 @@ func TestSymbolPickerRowsCarryPreviewTargets(t *testing.T) {
 // project bookmarks all point at their file and 1-based line; a pathless mark
 // carries none, so its column stays blank instead of claiming a bad read.
 func TestBookmarksPickerRowsCarryPreviewTargets(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "one\n  two\nthree\n")
 	b := writeTemp(t, dir, "b.txt", "bee line\n")
@@ -91,6 +93,7 @@ func TestBookmarksPickerRowsCarryPreviewTargets(t *testing.T) {
 // TestBookmarksPickerPathlessMarkHasNoTarget: a mark in a scratch buffer has
 // no file, so the row leaves the preview column empty (#2053).
 func TestBookmarksPickerPathlessMarkHasNoTarget(t *testing.T) {
+	t.Parallel()
 	if got := markTarget("", 7); got.Path != "" || got.Line != 0 {
 		t.Fatalf("pathless mark target = %+v, want the zero target", got)
 	}

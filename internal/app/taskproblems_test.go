@@ -48,6 +48,7 @@ func (s *snapshotSink) wait(t *testing.T, n int) []TaskProblemsMsg {
 // publishes coalesced full-set snapshots: matched chunks inside one quiet
 // window fold into a single message (#2176) instead of one per chunk.
 func TestTaskCollectorFeedPublishesCoalescedSnapshots(t *testing.T) {
+	// serial: wait: waits on the wall clock (load-sensitive)
 	sink := &snapshotSink{}
 	gom, _ := matcher.Builtin("go")
 	c := &taskCollector{
@@ -88,6 +89,7 @@ func TestTaskCollectorFeedPublishesCoalescedSnapshots(t *testing.T) {
 
 // resolveMatchers skips unknown names instead of failing the run.
 func TestResolveMatchersBuiltinsAndUnknown(t *testing.T) {
+	t.Parallel()
 	ms := resolveMatchers([]string{"go", "no-such-matcher", "tsc"})
 	if len(ms) != 2 || ms[0].Name() != "go" || ms[1].Name() != "tsc" {
 		names := make([]string, len(ms))

@@ -107,6 +107,8 @@ func assertNotebookArgv(t *testing.T, m Model, path string) *terminal.Model {
 // TestRunFileOnNotebookPane: shift+f10 on a focused notebook viewer runs the
 // notebook through nbconvert and persists its default configuration.
 func TestRunFileOnNotebookPane(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, path := notebookRunApp(t, `echo "$@"`)
 	tm, _ := m.Update(RunFileMsg{})
 	m = tm.(Model)
@@ -128,6 +130,7 @@ func TestRunFileOnNotebookPane(t *testing.T) {
 // TestNotebookRunMsgAndKey: the pane's RunMsg and the notebook.run command
 // (r via the keymap) launch the same run; rerun repeats it.
 func TestNotebookRunMsgAndKey(t *testing.T) {
+	// serial: notebookRunApp: lang.Register (process-wide language registry)
 	m, path := notebookRunApp(t, `echo "$@"`)
 	tm, _ := m.Update(nbview.RunMsg{Path: path})
 	m = tm.(Model)
@@ -153,6 +156,7 @@ func TestNotebookRunMsgAndKey(t *testing.T) {
 // TestNotebookRunRefusesOtherPanes: notebook.run with no notebook focused is
 // a notice, not a launch.
 func TestNotebookRunRefusesOtherPanes(t *testing.T) {
+	t.Parallel()
 	m := hexApp(t, host.MapConfig{})
 	tm, _ := m.Update(NotebookRunMsg{})
 	m = tm.(Model)
@@ -167,6 +171,7 @@ func TestNotebookRunRefusesOtherPanes(t *testing.T) {
 // TestNotebookMissingJupyterHint: a run that exits at once with Python's
 // missing-module error gets the pip hint on top of the Run tool's output.
 func TestNotebookMissingJupyterHint(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	m, _ := notebookRunApp(t, `echo "/usr/bin/python3: No module named jupyter" >&2; exit 1`)
 	tm, _ := m.Update(RunFileMsg{})
 	m = tm.(Model)
@@ -208,6 +213,7 @@ func TestNotebookMissingJupyterHint(t *testing.T) {
 // TestNotebookCleanExitNoHint: a run that exits fine (or fails for another
 // reason) says nothing beyond the Run tool.
 func TestNotebookCleanExitNoHint(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	m, _ := notebookRunApp(t, `echo "[NbConvertApp] Writing"; exit 0`)
 	tm, _ := m.Update(RunFileMsg{})
 	m = tm.(Model)
@@ -235,6 +241,8 @@ func TestNotebookCleanExitNoHint(t *testing.T) {
 // the notebook reports a removal to the watcher — the pane re-reads the
 // replacement and the poll set is re-armed for the new inode.
 func TestNotebookReloadsOnAtomicReplace(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := hexApp(t, host.MapConfig{})
 	path := writeTestNotebook(t, "analysis.ipynb", testNotebook)
 	m = settle(t, m, m.host.Dispatch(palette.OpenFileMsg{Path: path}))
@@ -272,6 +280,7 @@ func TestNotebookReloadsOnAtomicReplace(t *testing.T) {
 // TestDebugNotebookRefused: a notebook configuration never goes under the
 // debugger — there is no program for debugpy to attach to.
 func TestDebugNotebookRefused(t *testing.T) {
+	t.Parallel()
 	m := hexApp(t, host.MapConfig{})
 	m.startDebugConfig(t.TempDir(), run.Config{Name: "a.ipynb", Kind: run.KindRun, Lang: "python", File: "a.ipynb", Notebook: true})
 	notes := m.host.DrainNotifications()

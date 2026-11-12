@@ -31,6 +31,7 @@ func unmodaled(t *testing.T, m Model) Model {
 }
 
 func TestPopupPinKeepsVisibleAndTogglesFocus(t *testing.T) {
+	t.Parallel()
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 100, 40)))
 	out, _ := m.Update(TerminalPopupPinMsg{})
 	m = out.(Model)
@@ -73,6 +74,8 @@ func TestPopupPinKeepsVisibleAndTogglesFocus(t *testing.T) {
 // TestPinnedPopupAnchorsToBottomEdge: pinned, the box is a full-width strip at
 // the bottom of the screen instead of the centered overlay (#2406).
 func TestPinnedPopupAnchorsToBottomEdge(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openTestPopupWith(t, unmodaled(t, sized(t, 100, 40)))
 	_, _, cw, _ := m.popupTermRect()
 	if cw >= m.width {
@@ -101,6 +104,8 @@ func TestPinnedPopupAnchorsToBottomEdge(t *testing.T) {
 // (#1407 payload) and comes back on resume, while the other project's popup is
 // unaffected (#2406).
 func TestPopupPinRestoredAfterSwitch(t *testing.T) {
+	// serial: switchModel: t.Setenv
+	withStore(t)
 	a, b := twoRoots(t)
 	m := openTestPopupWith(t, unmodaled(t, switchModel(t)))
 	out, _ := m.Update(TerminalPopupPinMsg{})

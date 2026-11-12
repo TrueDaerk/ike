@@ -33,6 +33,7 @@ func hasTab(inst *pane.Instance, path string) bool { return inst.TabForPath(path
 // untouched tab — and every further open must close the next-oldest one instead
 // of recycling the same slot.
 func TestTabLimitEvictsTheTrueLRUNotAFixedSlot(t *testing.T) {
+	// serial: withTabLimit: config.Set (process-wide configuration)
 	dir := t.TempDir()
 	var p []string
 	for _, n := range []string{"a", "b", "c", "d", "e", "f", "g", "h"} {
@@ -78,6 +79,8 @@ func TestTabLimitEvictsTheTrueLRUNotAFixedSlot(t *testing.T) {
 // in the session, so a restarted pane still evicts by real recency — and two
 // consecutive opens evict two different tabs instead of the same slot twice.
 func TestTabLimitAfterRestoreEvictsByPersistedRecency(t *testing.T) {
+	// serial: fixedDirApp: t.Setenv
+	withStore(t)
 	conf := t.TempDir()
 	dir := t.TempDir()
 	var p []string
@@ -127,6 +130,7 @@ func TestTabLimitAfterRestoreEvictsByPersistedRecency(t *testing.T) {
 // five unpinned tabs coexist beside them; the sixth unpinned open evicts the
 // least recently used unpinned tab and never a pinned one.
 func TestPinnedTabsDoNotCountTowardTabLimit(t *testing.T) {
+	// serial: withTabLimit: config.Set (process-wide configuration)
 	dir := t.TempDir()
 	var pins, files []string
 	for _, n := range []string{"p1", "p2", "p3"} {
@@ -165,6 +169,7 @@ func TestPinnedTabsDoNotCountTowardTabLimit(t *testing.T) {
 // TestCloseTabClosesPinnedActiveTab: pinning exempts a tab from the automatic
 // closes only — cmd+w on the pinned active tab still closes it (#1172).
 func TestCloseTabClosesPinnedActiveTab(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "a.txt", "a\n")
 	b := writeTemp(t, dir, "b.txt", "b\n")
@@ -189,6 +194,7 @@ func TestCloseTabClosesPinnedActiveTab(t *testing.T) {
 // TestBatchClosesSkipPinnedTabs covers the #2538 scopes beyond Close Others:
 // Close Left, Close Right, Close Unmodified and Close All all keep pinned tabs.
 func TestBatchClosesSkipPinnedTabs(t *testing.T) {
+	t.Parallel()
 	// run pins the tab at pinAt, activates activeAt, dispatches the batch
 	// close and expects the pinned tab to still be there.
 	run := func(t *testing.T, pinAt, activeAt int, msg tea.Msg) {

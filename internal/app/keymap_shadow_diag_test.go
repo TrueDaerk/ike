@@ -13,6 +13,8 @@ import (
 // deduped per session like the other config diagnostics.
 
 func TestKeymapShadowSurfacesAsNotification(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := sized(t, 100, 40)
 	base := len(m.history)
 	cfg := *config.Get()

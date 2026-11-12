@@ -34,6 +34,7 @@ func alwaysOpenConfig(t *testing.T) {
 }
 
 func TestPopupOnSwitchAlwaysOpenSpawnsFreshPopup(t *testing.T) {
+	// serial: alwaysOpenConfig: t.Setenv
 	_, b := twoRoots(t)
 	m := switchModel(t)
 	if m.popup.inst != nil || m.popup.open {
@@ -59,6 +60,8 @@ func TestPopupOnSwitchAlwaysOpenSpawnsFreshPopup(t *testing.T) {
 }
 
 func TestPopupOnSwitchAlwaysOpenResumesParkedPopup(t *testing.T) {
+	// serial: alwaysOpenConfig: t.Setenv
+	withStore(t)
 	a, b := twoRoots(t)
 	m := openTestPopupWith(t, switchModel(t))
 	sess := m.popup.inst.ActiveTerminal().SessionKey()
@@ -86,6 +89,8 @@ func TestPopupOnSwitchAlwaysOpenResumesParkedPopup(t *testing.T) {
 }
 
 func TestPopupOnSwitchRestoreKeepsClosedPopupClosed(t *testing.T) {
+	// serial: switchModel: t.Setenv
+	withStore(t)
 	a, b := twoRoots(t)
 	m := openTestPopupWith(t, switchModel(t))
 	out, _ := m.Update(TerminalPopupMsg{})
@@ -109,6 +114,7 @@ func TestPopupOnSwitchRestoreKeepsClosedPopupClosed(t *testing.T) {
 }
 
 func TestPopupOnSwitchAlwaysOpenRefocusesBlurredPopup(t *testing.T) {
+	// serial: alwaysOpenConfig: t.Setenv
 	a, b := twoRoots(t)
 	m := openTestPopupWith(t, switchModel(t))
 	m.blurPopupLayer()

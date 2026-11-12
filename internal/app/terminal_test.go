@@ -35,6 +35,7 @@ func openTestTerminal(t *testing.T) (Model, string) {
 }
 
 func TestTerminalNewSplitsAndFocuses(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	m, key := openTestTerminal(t)
 	if !strings.HasPrefix(key, "terminal") {
 		t.Fatalf("key = %q", key)
@@ -50,6 +51,8 @@ func TestTerminalNewSplitsAndFocuses(t *testing.T) {
 }
 
 func TestTerminalKeysBypassGlobalHandling(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, key := openTestTerminal(t)
 	// 'q' must go to the shell, not quit the app.
 	out, cmd := m.Update(tea.KeyPressMsg{Code: 'q', Text: "q"})
@@ -75,6 +78,7 @@ func TestTerminalKeysBypassGlobalHandling(t *testing.T) {
 // TestTerminalFocusKeysEscape: the spatial focus moves work from a focused
 // terminal (#228) — ctrl+arrows are part of the reserved set now.
 func TestTerminalFocusKeysEscape(t *testing.T) {
+	t.Parallel()
 	m, key := openTestTerminal(t)
 	// The terminal splits below the editor; ctrl+up must land elsewhere.
 	out, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyUp, Mod: tea.ModCtrl})
@@ -89,6 +93,8 @@ func TestTerminalFocusKeysEscape(t *testing.T) {
 // palette, cmd+shift+p opens the project switcher — while unrelated chords
 // keep belonging to the shell.
 func TestTerminalGlobalChords(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := sizedWith(t, registry.Global(), 100, 40)
 	out, _ := m.Update(TerminalNewMsg{})
 	m = out.(Model)
@@ -123,6 +129,7 @@ func TestTerminalGlobalChords(t *testing.T) {
 // TestTerminalGlobalChordsWidened guards #973: settings, explorer toggle and
 // the other IDE-level chords escape a focused terminal too.
 func TestTerminalGlobalChordsWidened(t *testing.T) {
+	t.Parallel()
 	m := sizedWith(t, registry.Global(), 100, 40)
 	out, _ := m.Update(TerminalNewMsg{})
 	m = out.(Model)
@@ -157,6 +164,7 @@ func TestTerminalGlobalChordsWidened(t *testing.T) {
 // focused tab host's tabs from inside a terminal tab, while the ctrl+alt
 // secondaries stay with the shell.
 func TestTerminalTabSwitchChords(t *testing.T) {
+	t.Parallel()
 	m := sizedWith(t, registry.Global(), 100, 40)
 	out, _ := m.Update(TerminalNewMsg{})
 	m = out.(Model)
@@ -195,6 +203,7 @@ func TestTerminalTabSwitchChords(t *testing.T) {
 // Everywhere from a terminal; a single tap (or taps with other keys between)
 // stays with the shell.
 func TestTerminalDoubleShift(t *testing.T) {
+	t.Parallel()
 	m := sizedWith(t, registry.Global(), 100, 40)
 	out, _ := m.Update(TerminalNewMsg{})
 	m = out.(Model)
@@ -228,6 +237,7 @@ func TestTerminalDoubleShift(t *testing.T) {
 // TestTerminalSelectionCopyKey: with a mouse selection, cmd+c is reserved and
 // clears the selection; without one it stays with the shell (#227).
 func TestTerminalSelectionCopyKey(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	var copied string
 	orig := clipboardWrite
 	clipboardWrite = func(text string) { copied = text }
@@ -261,6 +271,7 @@ func TestTerminalSelectionCopyKey(t *testing.T) {
 // the bracketed-paste path (#727) — under the Kitty protocol the host delivers
 // cmd+v as a key event, so the app must perform the paste itself.
 func TestTerminalPasteKey(t *testing.T) {
+	// serial: sets package variable clipboardRead
 	orig := clipboardRead
 	clipboardRead = func() string { return "IKE_PASTE_MARKER" }
 	t.Cleanup(func() { clipboardRead = orig })
@@ -283,6 +294,7 @@ func TestTerminalPasteKey(t *testing.T) {
 }
 
 func TestTerminalExitClosesPane(t *testing.T) {
+	t.Parallel()
 	m, key := openTestTerminal(t)
 	out, _ := m.Update(terminal.ExitedMsg{Key: key})
 	m = out.(Model)
@@ -297,6 +309,7 @@ func TestTerminalExitClosesPane(t *testing.T) {
 // TestTerminalLayoutRestoresFreshShell guards #96: a saved layout with a
 // terminal leaf restores as a fresh shell in the saved position, cwd intact.
 func TestTerminalLayoutRestoresFreshShell(t *testing.T) {
+	// serial: t.Setenv
 	store := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", store)
 	m := NewWith(registry.New(), host.MapConfig{})
@@ -339,6 +352,7 @@ func TestTerminalLayoutRestoresFreshShell(t *testing.T) {
 // not gain a second leaf (which would mirror one instance in two panes) or
 // leave a duplicate shell running.
 func TestTerminalSwitchRoundTripNoDuplicates(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
 	for _, d := range []string{src, dst} {
@@ -391,6 +405,7 @@ func TestTerminalSwitchRoundTripNoDuplicates(t *testing.T) {
 // TestTerminalScrollbackReservedKeys: shift+pgup pages instead of reaching the
 // shell, ctrl+tab stays the only reserved escape.
 func TestTerminalScrollbackReservedKeys(t *testing.T) {
+	t.Parallel()
 	m, key := openTestTerminal(t)
 	inst := m.activeWS().Panes.Get(key)
 	inst.Terminal().ScrollBy(0) // touch: live view
@@ -406,6 +421,7 @@ func TestTerminalScrollbackReservedKeys(t *testing.T) {
 
 // TestTerminalToggleStateMachine guards #97: create → return → refocus.
 func TestTerminalToggleStateMachine(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	before := m.activeWS().Panes.Focused()
 
@@ -445,6 +461,7 @@ func TestTerminalToggleStateMachine(t *testing.T) {
 
 // TestTerminalClearEmptiesScrollback guards terminal.clear (#97).
 func TestTerminalClearEmptiesScrollback(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	m, key := openTestTerminal(t)
 	inst := m.activeWS().Panes.Get(key)
 	term := inst.Terminal()
@@ -460,6 +477,17 @@ func TestTerminalClearEmptiesScrollback(t *testing.T) {
 	if term.ScrollbackLen() == 0 {
 		t.Skip("shell produced no scrollback in time")
 	}
+	// Let the output finish: lines still arriving after the clear would
+	// refill the scrollback the assertion expects empty (#3135). Settled
+	// means unchanged for 200 ms, well past the gap between two chunks.
+	for last, stable := -1, 0; stable < 10 && time.Now().Before(deadline); {
+		if n := term.ScrollbackLen(); n == last {
+			stable++
+		} else {
+			last, stable = n, 0
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 	out, _ := m.Update(TerminalClearMsg{})
 	m = out.(Model)
 	if term.ScrollbackLen() != 0 {
@@ -469,6 +497,7 @@ func TestTerminalClearEmptiesScrollback(t *testing.T) {
 
 // TestTerminalCommandsRegistered: the three commands resolve by id.
 func TestTerminalCommandsRegistered(t *testing.T) {
+	t.Parallel()
 	for _, id := range []string{"terminal.new", "terminal.toggle", "terminal.clear"} {
 		if _, ok := registry.Global().Command(id); !ok {
 			t.Fatalf("%s should be registered", id)
@@ -514,6 +543,7 @@ func registerEnvTestPython(t *testing.T) {
 // shim — plus the title indicator; no explicit setting and no detected
 // project env leaves the environment untouched.
 func TestTerminalEnvFromSettings(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	chdir(t, dir)
 	// Resolve symlinks (macOS /var -> /private/var): paths detected via the
@@ -580,6 +610,7 @@ func TestTerminalEnvFromSettings(t *testing.T) {
 // first on PATH, no shim. The old "silent detection never injects" rule is
 // gone; the JetBrains behavior is the project interpreter being active.
 func TestTerminalEnvDetectedVenv(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	chdir(t, dir)
 	// Resolve symlinks (macOS /var -> /private/var): paths detected via the
@@ -624,6 +655,8 @@ func TestTerminalEnvDetectedVenv(t *testing.T) {
 // status line says TERMINAL (shell · dir) instead of mirroring the active
 // editor's mode/file/cursor — which made it hard to tell where input goes.
 func TestStatusLineNamesFocusedTerminal(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, key := openTestTerminal(t)
 	line := m.statusLine()
 	if !strings.Contains(line, "TERMINAL") {
@@ -647,6 +680,7 @@ func TestStatusLineNamesFocusedTerminal(t *testing.T) {
 // TestStatusLineNamesFocusedExplorer guards #381 for the explorer: its focus
 // names the pane kind, never an implied editor normal mode.
 func TestStatusLineNamesFocusedExplorer(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	m.setFocus(pane.ExplorerKey)
 	line := m.statusLine()
@@ -661,6 +695,7 @@ func TestStatusLineNamesFocusedExplorer(t *testing.T) {
 // TestReservedKeyCanonicalizesSuperMeta guards #981: bubbletea delivers the
 // Command key as super+/meta+ tokens; both must match the reserved cmd chords.
 func TestReservedKeyCanonicalizesSuperMeta(t *testing.T) {
+	t.Parallel()
 	for _, form := range []string{"super+t", "meta+t"} {
 		m, _ := openTestTerminal(t)
 		handled, out, _ := m.terminalReservedKey(form)
@@ -681,6 +716,7 @@ func TestReservedKeyCanonicalizesSuperMeta(t *testing.T) {
 // sends an EOF — the shell exits and ExitedMsg closes the pane — without
 // raising the busy guard.
 func TestReservedCmdWClosesIdleTerminal(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	m, key := openTestTerminal(t)
 	term := m.activeWS().Panes.Get(key).Terminal()
 	// Independent deadlines per wait (#1008): under full-suite load the
@@ -718,6 +754,7 @@ func TestReservedCmdWClosesIdleTerminal(t *testing.T) {
 // TestTermCloseGuardEnterClosesEscKeeps: the busy-terminal guard (#986)
 // closes the pane on enter and keeps it on esc.
 func TestTermCloseGuardEnterClosesEscKeeps(t *testing.T) {
+	t.Parallel()
 	m, key := openTestTerminal(t)
 	m.openTermClosePrompt()
 	if !m.termClosePromptOpen() {
@@ -745,6 +782,7 @@ func TestTermCloseGuardEnterClosesEscKeeps(t *testing.T) {
 // TestReservedCmdDSplitsTerminalRight guards #982: cmd+d inside a focused
 // terminal splits its pane to the right with a fresh, focused terminal.
 func TestReservedCmdDSplitsTerminalRight(t *testing.T) {
+	t.Parallel()
 	m, key := openTestTerminal(t)
 	handled, out, _ := m.terminalReservedKey("cmd+d")
 	if !handled {
@@ -766,6 +804,7 @@ func TestReservedCmdDSplitsTerminalRight(t *testing.T) {
 // TestReservedCmdDSplitsEditorHostedTerminalRight: cmd+d with a terminal tab
 // focused in an editor pane (#573) splits that pane right with a terminal pane.
 func TestReservedCmdDSplitsEditorHostedTerminalRight(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	out, _ := m.Update(TerminalNewTabMsg{})
 	m = out.(Model)
@@ -797,6 +836,7 @@ func TestReservedCmdDSplitsEditorHostedTerminalRight(t *testing.T) {
 // dedicated terminal pane converts it into a tab host in place — the live
 // shell becomes the first tab and a fresh terminal tab opens focused.
 func TestReservedCmdTConvertsTerminalPaneToTabs(t *testing.T) {
+	t.Parallel()
 	m, key := openTestTerminal(t)
 	handled, out, _ := m.terminalReservedKey("cmd+t")
 	if !handled {
@@ -825,6 +865,7 @@ func TestReservedCmdTConvertsTerminalPaneToTabs(t *testing.T) {
 // TestReservedCmdTAddsTabInEditorHostedTerminal: with a terminal tab active
 // in an editor pane (#573), cmd+t adds a sibling terminal tab to that pane.
 func TestReservedCmdTAddsTabInEditorHostedTerminal(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	out, _ := m.Update(TerminalNewTabMsg{})
 	m = out.(Model)
@@ -858,6 +899,7 @@ func TestReservedCmdTAddsTabInEditorHostedTerminal(t *testing.T) {
 // terminal opens the scrollback search directly — no prior scrollback entry
 // via shift+pgup needed.
 func TestReservedCmdFOpensScrollbackSearch(t *testing.T) {
+	t.Parallel()
 	m, key := openTestTerminal(t)
 	handled, out, _ := m.terminalReservedKey("cmd+f")
 	if !handled {
@@ -874,6 +916,7 @@ func TestReservedCmdFOpensScrollbackSearch(t *testing.T) {
 // its own while the prompt is open — closing its pane and moving focus —
 // confirming must not close the pane that inherited focus.
 func TestTermGuardStaleTargetPane(t *testing.T) {
+	t.Parallel()
 	m, key := openTestTerminal(t)
 	sess := m.activeWS().Panes.Get(key).Terminal().SessionKey()
 
@@ -896,6 +939,7 @@ func TestTermGuardStaleTargetPane(t *testing.T) {
 // still copies the mouse selection — the exited pane is a read-only view of
 // the output, not an inert one.
 func TestDeadTerminalSelectionCopyKey(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	var copied string
 	orig := clipboardWrite
 	clipboardWrite = func(text string) { copied = text }
@@ -943,6 +987,7 @@ func TestDeadTerminalSelectionCopyKey(t *testing.T) {
 // TestReservedCmdShiftCOpensCopyMode guards #2162: cmd+shift+c inside a
 // focused terminal enters copy mode, and the pane title names the mode.
 func TestReservedCmdShiftCOpensCopyMode(t *testing.T) {
+	t.Parallel()
 	m, key := openTestTerminal(t)
 	handled, out, _ := m.terminalReservedKey("cmd+shift+c")
 	if !handled {
@@ -961,6 +1006,7 @@ func TestReservedCmdShiftCOpensCopyMode(t *testing.T) {
 // TestCopiedMsgReachesClipboard guards #2162: a copy-mode yank routes through
 // the app's clipboard funnel like every other pane copy.
 func TestCopiedMsgReachesClipboard(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	var copied string
 	orig := clipboardWrite
 	clipboardWrite = func(text string) { copied = text }

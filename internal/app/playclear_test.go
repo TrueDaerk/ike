@@ -26,6 +26,7 @@ func intoResult(m Model) Model {
 // ctrl+l in the result buffer empties it, and the next change to the filter
 // fills it again.
 func TestPlaygroundClearEmptiesTheOutput(t *testing.T) {
+	t.Parallel()
 	m := playReady(t, `{"foo":[{"bar":1},{"bar":4}]}`)
 	m = setProgram(m, ".foo")
 	if !strings.Contains(m.play.result.Text(), `"bar": 4`) {
@@ -58,6 +59,7 @@ func TestPlaygroundClearEmptiesTheOutput(t *testing.T) {
 // TestPlaygroundClearKeepsTheQueryLine: clearing the screen is not clearing
 // the work — the program, its caret and the history all stay.
 func TestPlaygroundClearKeepsTheQueryLine(t *testing.T) {
+	t.Parallel()
 	m := playReady(t, `{"foo":1}`)
 	m = setProgram(m, ".foo")
 	m.play.hist.Add(".bar")
@@ -82,6 +84,7 @@ func TestPlaygroundClearKeepsTheQueryLine(t *testing.T) {
 // flags the buffer with go with the output — a message about a result that is
 // no longer on screen describes nothing.
 func TestPlaygroundClearDropsTheErrorLine(t *testing.T) {
+	t.Parallel()
 	m := playReady(t, `{"foo":1}`)
 	m = setProgram(m, ".foo")
 	m = setProgram(m, ".foo | (")
@@ -105,6 +108,7 @@ func TestPlaygroundClearDropsTheErrorLine(t *testing.T) {
 // TestPlaygroundClearKeepsTheFilterPickerOnTheQueryLine: the key is split by
 // focus, so the query line's ctrl+l still opens the saved filters (#1995).
 func TestPlaygroundClearKeepsTheFilterPickerOnTheQueryLine(t *testing.T) {
+	t.Parallel()
 	m := playReady(t, `{"foo":1}`)
 	m = setProgram(m, ".foo")
 
@@ -127,6 +131,7 @@ func TestPlaygroundClearKeepsTheFilterPickerOnTheQueryLine(t *testing.T) {
 // a yq one — the buffer's display path is what resolves its highlighting, so
 // the empty result must carry the dialect rather than the zero value's jq.
 func TestPlaygroundClearDialectKeepsTheResultPath(t *testing.T) {
+	t.Parallel()
 	m := playReady(t, `{"foo":1}`)
 	m = setProgram(m, ".foo")
 	m = intoResult(m)

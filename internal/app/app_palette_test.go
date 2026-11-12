@@ -30,9 +30,10 @@ func (palettePlugin) Capabilities() plugin.Capabilities {
 }
 
 func TestPaletteToggleKeyOpens(t *testing.T) {
+	// serial: withStore: t.Setenv
 	// The toggle chord defaults to empty (#523: ctrl+p belongs to
 	// lsp.parameterInfo); a configured key still opens the palette.
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := NewWith(registry.New(), host.MapConfig{"palette.toggle_key": "ctrl+g"})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m = out.(Model)
@@ -53,6 +54,7 @@ func TestPaletteToggleKeyOpens(t *testing.T) {
 }
 
 func TestPaletteToggleKeyDefaultsEmpty(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	out, _ := m.Update(tea.KeyPressMsg{Code: 'p', Mod: tea.ModCtrl})
 	m = out.(Model)
@@ -62,7 +64,8 @@ func TestPaletteToggleKeyDefaultsEmpty(t *testing.T) {
 }
 
 func TestPaletteRunCommandMsgRunsCommand(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	// serial: withStore: t.Setenv
+	withStore(t)
 	reg := registry.New()
 	reg.Add(palettePlugin{})
 	m := NewWith(reg, host.MapConfig{})
@@ -92,6 +95,7 @@ func TestPaletteRunCommandMsgRunsCommand(t *testing.T) {
 }
 
 func TestEscEscOpensPalette(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	m.cycleFocus() // focus the editor (normal mode, not capturing)
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -115,6 +119,7 @@ func TestEscEscOpensPalette(t *testing.T) {
 }
 
 func TestEscEscOutsideTimeoutDoesNotOpenPalette(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	m.cycleFocus() // focus the editor (normal mode, not capturing)
 	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -145,6 +150,7 @@ func TestEscEscOutsideTimeoutDoesNotOpenPalette(t *testing.T) {
 }
 
 func TestAtKeyOpensAnchoredFileFinder(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	m.cycleFocus() // focus the editor in normal mode
 	out, _ := m.Update(tea.KeyPressMsg{Text: "@", Code: '@'})
@@ -162,6 +168,7 @@ func TestAtKeyOpensAnchoredFileFinder(t *testing.T) {
 // pane anchor with the directory as the query, instead of jumping to the
 // centered box.
 func TestAnchoredFinderDescendStaysAnchored(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	m.cycleFocus() // focus the editor in normal mode
 	out, _ := m.Update(tea.KeyPressMsg{Text: "@", Code: '@'})
@@ -187,6 +194,7 @@ func TestAnchoredFinderDescendStaysAnchored(t *testing.T) {
 }
 
 func TestPaletteOpenFileMsgOpensPath(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	dir := t.TempDir()
 	path := dir + "/note.txt"

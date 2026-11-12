@@ -23,7 +23,6 @@ import (
 
 func coverageApp(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.New(), host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	return out.(Model)
@@ -50,6 +49,7 @@ func registerCovLang(t *testing.T, path string) {
 // TestFinishTestRunConsumesCoverage: a coverage run's completion fills the
 // store from the profile, deletes the temp file and pushes marks.
 func TestFinishTestRunConsumesCoverage(t *testing.T) {
+	// serial: registerCovLang: lang.Register (process-wide language registry)
 	m := coverageApp(t)
 	src := filepath.Join(t.TempDir(), "f.cvt")
 	registerCovLang(t, src)
@@ -81,6 +81,7 @@ func TestFinishTestRunConsumesCoverage(t *testing.T) {
 // TestCoverageMarksCmdSeedsOpenedFiles: a covered file opened after the run
 // gets its stored marks; hidden display or unknown files yield nothing.
 func TestCoverageMarksCmdSeedsOpenedFiles(t *testing.T) {
+	t.Parallel()
 	m := coverageApp(t)
 	m.coverage.SetRun([]lang.FileCoverage{{Path: "/cov.go", Lines: map[int]lang.CoverKind{1: lang.CoverCovered}}})
 	cmd := m.coverageMarksCmd("/cov.go")
@@ -103,6 +104,7 @@ func TestCoverageMarksCmdSeedsOpenedFiles(t *testing.T) {
 // TestToggleCoverageMarks: the toggle flips the display state; without data
 // it only explains itself.
 func TestToggleCoverageMarks(t *testing.T) {
+	t.Parallel()
 	m := coverageApp(t)
 	if m.toggleCoverageMarks(); !m.coverageShown {
 		t.Fatal("an empty store must leave the display state untouched")
@@ -121,6 +123,7 @@ func TestToggleCoverageMarks(t *testing.T) {
 // TestEditMarksStoreStale: a buffer change (editor.SyncMsg) flags the file's
 // stored coverage stale for later opens.
 func TestEditMarksStoreStale(t *testing.T) {
+	t.Parallel()
 	m := coverageApp(t)
 	m.coverage.SetRun([]lang.FileCoverage{{Path: "/cov.go", Lines: map[int]lang.CoverKind{1: lang.CoverCovered}}})
 	out, _ := m.Update(editor.SyncMsg{Path: "/cov.go"})
@@ -152,6 +155,7 @@ func coverageStatusApp(t *testing.T, src string, on bool) Model {
 // percentage reaches the status line, an edit marks it stale, and an
 // uncovered file shows nothing.
 func TestCoverageStatusSegment(t *testing.T) {
+	// serial: coverageStatusApp: config.Set (process-wide configuration)
 	dir := t.TempDir()
 	src := filepath.Join(dir, "f.cvt")
 	if err := os.WriteFile(src, []byte("a\nb\nc\n"), 0o644); err != nil {
@@ -188,6 +192,7 @@ func TestCoverageStatusSegment(t *testing.T) {
 // TestCoverageStatusSegmentOptIn: the segment stays off while
 // tests.coverage_status is off — the default.
 func TestCoverageStatusSegmentOptIn(t *testing.T) {
+	// serial: coverageStatusApp: config.Set (process-wide configuration)
 	src := filepath.Join(t.TempDir(), "f.cvt")
 	if err := os.WriteFile(src, []byte("a\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -203,6 +208,7 @@ func TestCoverageStatusSegmentOptIn(t *testing.T) {
 // TestCoverageFilesForPanel: the store's per-file summaries reach the Test
 // Results panel worst-covered first.
 func TestCoverageFilesForPanel(t *testing.T) {
+	t.Parallel()
 	m := coverageApp(t)
 	m.coverage.SetRun([]lang.FileCoverage{
 		{Path: "/full.go", Lines: map[int]lang.CoverKind{1: lang.CoverCovered}},

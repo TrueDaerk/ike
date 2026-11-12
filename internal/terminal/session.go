@@ -1662,6 +1662,11 @@ func (s *Session) closeEmulator() {
 	s.ioWG.Wait()
 	s.wlWG.Wait()
 	if s.emClosed.CompareAndSwap(false, true) {
+		// Under mu: a trailing resize timer may still be replaying the
+		// history through the emulator (flushResize holds mu for that), and
+		// it is in neither wait group.
+		s.mu.Lock()
 		_ = s.em.Close()
+		s.mu.Unlock()
 	}
 }

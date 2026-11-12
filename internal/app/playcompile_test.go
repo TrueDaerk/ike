@@ -26,6 +26,7 @@ func playKey(m Model, r rune) (Model, tea.Cmd) {
 // error on the keystroke itself — no tick, no run — and completing the
 // program to `.a | .b` clears it and evaluates.
 func TestPlayCompileErrorShowsBeforeDebounce(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, dismissOnboarding(playApp(t, `{"a":{"b":7}}`)))
 	m = setProgram(m, ".a ")
 	gen := m.play.gen
@@ -60,6 +61,7 @@ func TestPlayCompileErrorShowsBeforeDebounce(t *testing.T) {
 // valid program cannot land over the compile error of the one typed since —
 // nor can the debounce tick scheduled for it.
 func TestPlayCompileErrorDropsInFlightRun(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	s := m.play
 	s.program.Set(".a")
@@ -85,6 +87,7 @@ func TestPlayCompileErrorDropsInFlightRun(t *testing.T) {
 // TestPlayCompileErrorKeepsLastGoodResult: the compile error behaves like any
 // failed run (#2412) — the last good result stays, marked stale.
 func TestPlayCompileErrorKeepsLastGoodResult(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = setProgram(m, ".a")
 	good := m.play.result.Text()
@@ -101,6 +104,7 @@ func TestPlayCompileErrorKeepsLastGoodResult(t *testing.T) {
 // TestPlayCompileXMQUnterminatedQuote: the xmq dialect's compile step is the
 // shell-word split, so an open quote never reaches the binary.
 func TestPlayCompileXMQUnterminatedQuote(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	s := m.play
 	s.dialect = jqplay.DialectXMQ
@@ -127,6 +131,7 @@ func playErrMarked(m Model, text string) string {
 // an unexpected end marks the cell past the program, and the mark clears as
 // soon as the program compiles again.
 func TestPlayCompileErrorUnderlinesPosition(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"a":{"x":1}}`))
 	m = setProgram(m, ".a | selct(.x)")
 	if !m.play.compileBad {
@@ -169,6 +174,7 @@ func TestPlayCompileErrorUnderlinesPosition(t *testing.T) {
 // check placed it in; a text the check has not seen (or an error without a
 // position) renders unmarked and never indexes out of range.
 func TestPlayCompileErrorMarkNeedsItsProgram(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = setProgram(m, ".a | selct(.x)")
 	s := m.play
@@ -189,6 +195,7 @@ func TestPlayCompileErrorMarkNeedsItsProgram(t *testing.T) {
 // TestPlayCompileXMQMarksOpenQuote (#2781): the xmq dialect marks an
 // unterminated quote from the quote to the end of the line.
 func TestPlayCompileXMQMarksOpenQuote(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	s := m.play
 	s.dialect = jqplay.DialectXMQ

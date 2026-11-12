@@ -16,7 +16,6 @@ import (
 
 func depsApp(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.New(), host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return out.(Model)
@@ -34,6 +33,7 @@ func depsResult() deps.Result {
 }
 
 func TestDepsToggleLifecycle(t *testing.T) {
+	t.Parallel()
 	m := depsApp(t)
 	before := m.activeWS().Panes.Focused()
 
@@ -57,6 +57,7 @@ func TestDepsToggleLifecycle(t *testing.T) {
 }
 
 func TestDepsScanFeedsPanelAndProblems(t *testing.T) {
+	// serial: deps.SetSnapshot (process-wide state of package deps)
 	m := depsApp(t)
 	t.Cleanup(func() { deps.SetSnapshot(deps.Result{}) })
 
@@ -85,6 +86,7 @@ func TestDepsScanFeedsPanelAndProblems(t *testing.T) {
 }
 
 func TestDepsHoverServesSnapshot(t *testing.T) {
+	// serial: deps.SetSnapshot (process-wide state of package deps)
 	deps.SetSnapshot(depsResult())
 	t.Cleanup(func() { deps.SetSnapshot(deps.Result{}) })
 
@@ -106,6 +108,7 @@ func TestDepsHoverServesSnapshot(t *testing.T) {
 }
 
 func TestDepsIntentionOffersUpdate(t *testing.T) {
+	// serial: deps.SetSnapshot (process-wide state of package deps)
 	deps.SetSnapshot(depsResult())
 	t.Cleanup(func() { deps.SetSnapshot(deps.Result{}) })
 
@@ -124,6 +127,7 @@ func TestDepsIntentionOffersUpdate(t *testing.T) {
 }
 
 func TestDepsVulnsDialogOpens(t *testing.T) {
+	t.Parallel()
 	m := depsApp(t)
 	out, _ := m.Update(depspanel.VulnsMsg{Dep: depsResult().Manifests[0].Deps[1]})
 	m = out.(Model)
@@ -138,6 +142,7 @@ func TestDepsVulnsDialogOpens(t *testing.T) {
 }
 
 func TestDepsMissingToolsDialogOnManualScan(t *testing.T) {
+	t.Parallel()
 	m := depsApp(t)
 	res := deps.Result{Missing: []deps.MissingTool{{Provider: "go", Tool: deps.Tool{Name: "govulncheck", Hint: "go install …", Optional: true}}}}
 	out, _ := m.Update(DepsScanMsg{Result: res, Manual: true})

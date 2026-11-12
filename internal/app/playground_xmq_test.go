@@ -37,7 +37,6 @@ func fakeXMQOnPath(t *testing.T) {
 // xmqApp opens body as an .xml (or .html) file in the focused editor.
 func xmqApp(t *testing.T, ext, body string) Model {
 	t.Helper()
-	noDebounce(t)
 	m := newSized()
 	path := filepath.Join(t.TempDir(), "data."+ext)
 	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
@@ -62,6 +61,7 @@ func openXMQ(t *testing.T, m Model) Model {
 // command, the CLI's stdout in the result buffer — argument splitting and the
 // stdin feed both visible through the fake binary.
 func TestXMQPlaygroundEvaluates(t *testing.T) {
+	// serial: fakeXMQOnPath: t.Setenv
 	fakeXMQOnPath(t)
 	m := openXMQ(t, xmqApp(t, "xml", "<root><item id=\"3\"/></root>\n"))
 	m = setProgram(m, `select '//item[@id="3"]'`)
@@ -89,6 +89,7 @@ func TestXMQPlaygroundEvaluates(t *testing.T) {
 // TestXMQPlaygroundOutputLanguage: the result buffer's display path follows
 // the command's output language — json for to-json, the xmq default else.
 func TestXMQPlaygroundOutputLanguage(t *testing.T) {
+	// serial: fakeXMQOnPath: t.Setenv
 	fakeXMQOnPath(t)
 	m := openXMQ(t, xmqApp(t, "xml", "<r/>\n"))
 	m = setProgram(m, "to-json")
@@ -105,6 +106,7 @@ func TestXMQPlaygroundOutputLanguage(t *testing.T) {
 // row while the previous output stays in the buffer (#2412's contract, third
 // dialect).
 func TestXMQPlaygroundErrorKeepsLastResult(t *testing.T) {
+	// serial: fakeXMQOnPath: t.Setenv
 	fakeXMQOnPath(t)
 	m := openXMQ(t, xmqApp(t, "xml", "<r/>\n"))
 	m = setProgram(m, "to-xml")
@@ -129,7 +131,7 @@ func TestXMQPlaygroundErrorKeepsLastResult(t *testing.T) {
 // TestXMQMissingBinaryDialog: without a binary anywhere the open answers with
 // the centered install-hint dialog instead of mounting a broken mode.
 func TestXMQMissingBinaryDialog(t *testing.T) {
-	noDebounce(t)
+	// serial: t.Setenv
 	t.Setenv("PATH", t.TempDir())
 	jqplay.SetXMQPath("")
 	m := xmqApp(t, "xml", "<r/>\n")
@@ -155,6 +157,7 @@ func TestXMQMissingBinaryDialog(t *testing.T) {
 // TestXMQPlaygroundAtPathSeedsXPath: the at-path open prefills a `select`
 // over the element under the caret — for XML in the document's own tag case.
 func TestXMQPlaygroundAtPathSeedsXPath(t *testing.T) {
+	// serial: fakeXMQOnPath: t.Setenv
 	fakeXMQOnPath(t)
 	m := xmqApp(t, "xml", "<root>\n  <item id=\"1\"/>\n  <item id=\"2\"/>\n</root>\n")
 	m.activeEditor().SetCursor(2, 4) // on the second <item>
@@ -171,6 +174,7 @@ func TestXMQPlaygroundAtPathSeedsXPath(t *testing.T) {
 // TestXMQPlaygroundAtPathHTML: the HTML flavour goes through the DOM parser,
 // whose tree carries the implied html/body chain.
 func TestXMQPlaygroundAtPathHTML(t *testing.T) {
+	// serial: fakeXMQOnPath: t.Setenv
 	fakeXMQOnPath(t)
 	src := "<html><body><div>one</div><div>two</div></body></html>\n"
 	m := xmqApp(t, "html", src)
@@ -185,6 +189,7 @@ func TestXMQPlaygroundAtPathHTML(t *testing.T) {
 // TestXMQDispatcherOpensRealPlayground: the playground.open route lands in
 // the real mode now (#2415's seam, assigned in #2414).
 func TestXMQDispatcherOpensRealPlayground(t *testing.T) {
+	// serial: fakeXMQOnPath: t.Setenv
 	fakeXMQOnPath(t)
 	m := dispatchApp(t, "xml", "<r/>\n") // registers the xml language when the plugin is not linked
 	tm, cmd := m.Update(OpenPlaygroundForBufferMsg{})

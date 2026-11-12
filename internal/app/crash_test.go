@@ -46,6 +46,7 @@ func crashNotifications(m Model, want string) []host.Notification {
 // goroutine dumps, the key context, the focused pane and the recent telemetry
 // events; the model survives and the next message is handled normally.
 func TestUpdatePanicWritesCrashLogAndKeepsRunning(t *testing.T) {
+	// serial: crashDir: crashlog.SetDir (process-wide state of package crashlog)
 	dir := crashDir(t)
 	m := dismissOnboarding(newSized())
 	m.host.DrainNotifications()
@@ -96,6 +97,8 @@ func TestUpdatePanicWritesCrashLogAndKeepsRunning(t *testing.T) {
 // resolves to a crashRecoveredMsg with its report written, and the message
 // raises the toast when it lands.
 func TestCmdPanicIsCaught(t *testing.T) {
+	// serial: crashDir: crashlog.SetDir (process-wide state of package crashlog)
+	withStore(t)
 	dir := crashDir(t)
 	m := dismissOnboarding(newSized())
 	m.host.DrainNotifications()
@@ -144,6 +147,7 @@ func TestCmdPanicIsCaught(t *testing.T) {
 // fallback frame; the toast lands on the next pass and a fixed View renders
 // again.
 func TestViewPanicRendersFallback(t *testing.T) {
+	// serial: crashDir: crashlog.SetDir (process-wide state of package crashlog)
 	dir := crashDir(t)
 	m := dismissOnboarding(newSized())
 	m.host.DrainNotifications()
@@ -169,6 +173,7 @@ func TestViewPanicRendersFallback(t *testing.T) {
 // running model's host as an error notification naming the report — the
 // process is still here to assert it.
 func TestGoroutinePanicNotifiesUI(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	dir := crashDir(t)
 	m := dismissOnboarding(newSized())
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30}) // publishes the live host
@@ -197,6 +202,7 @@ func TestGoroutinePanicNotifiesUI(t *testing.T) {
 // TestNoticeLastCrashOnceAndOpen: the next-launch notice fires once per
 // unacknowledged report, and crash.openLastLog opens the newest report.
 func TestNoticeLastCrashOnceAndOpen(t *testing.T) {
+	// serial: crashDir: crashlog.SetDir (process-wide state of package crashlog)
 	crashDir(t)
 	m := dismissOnboarding(newSized())
 	m.host.DrainNotifications()
@@ -228,6 +234,7 @@ func TestNoticeLastCrashOnceAndOpen(t *testing.T) {
 // TestCrashFocusPublished: the settled pass publishes the key context and the
 // focused pane for reports written off the loop.
 func TestCrashFocusPublished(t *testing.T) {
+	// serial: crashDir: crashlog.SetDir (process-wide state of package crashlog)
 	crashDir(t)
 	m := dismissOnboarding(newSized())
 	path := tempFileWith(t, "a.py", "x = 1\n")

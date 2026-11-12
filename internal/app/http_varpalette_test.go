@@ -41,7 +41,6 @@ const httpVarsSrc = "@apiBase = {{domain}}/api\n" +
 // palette-context chords and the HTTP Variables settings page exist.
 func httpVarsApp(t *testing.T) (Model, string, time.Time) {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.Global(), host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	m = out.(Model)
@@ -108,6 +107,8 @@ func httpVarTitles(items []palette.Item) []string {
 // sorted by name; a placeholder value shows written → expanded, a secret is
 // masked, and the captured row names its request and age.
 func TestHTTPVarsPaletteRows(t *testing.T) {
+	// serial: httpVarsApp: config.Set (process-wide configuration)
+	withStore(t)
 	m, _, _ := httpVarsApp(t)
 	if c, ok := m.reg.Command(httpVariablesCommand); !ok || c.Title != "HTTP Variables" {
 		t.Fatalf("command %s = %+v (ok=%v), want title \"HTTP Variables\"", httpVariablesCommand, c, ok)
@@ -137,6 +138,8 @@ func TestHTTPVarsPaletteRows(t *testing.T) {
 // TestHTTPVarsPaletteFilter: the query narrows by name, origin and value —
 // but never by a masked secret's real value.
 func TestHTTPVarsPaletteFilter(t *testing.T) {
+	// serial: httpVarsApp: config.Set (process-wide configuration)
+	withStore(t)
 	m, _, _ := httpVarsApp(t)
 	m, _ = openHTTPVars(t, m)
 	for query, want := range map[string]string{
@@ -157,6 +160,7 @@ func TestHTTPVarsPaletteFilter(t *testing.T) {
 // shadows lists as "process env" with the process value, and Enter on it
 // explains instead of jumping.
 func TestHTTPVarsPaletteProcessEnv(t *testing.T) {
+	// serial: t.Setenv
 	m, _, _ := httpVarsApp(t)
 	t.Setenv("IKE_TEST_3122", "from-process")
 	c := *config.Get()
@@ -178,6 +182,7 @@ func TestHTTPVarsPaletteProcessEnv(t *testing.T) {
 // TestHTTPVarsPaletteJumpFile: Enter on a file variable moves the caret to
 // its `@name =` line.
 func TestHTTPVarsPaletteJumpFile(t *testing.T) {
+	// serial: httpVarsApp: config.Set (process-wide configuration)
 	m, _, _ := httpVarsApp(t)
 	m, items := openHTTPVars(t, m)
 	out, _ := m.Update(httpVarItem(t, items, "user").Msg)
@@ -191,6 +196,8 @@ func TestHTTPVarsPaletteJumpFile(t *testing.T) {
 // response that produced it in the response pane — the older entry, not the
 // newer run that captured nothing.
 func TestHTTPVarsPaletteJumpCapture(t *testing.T) {
+	// serial: httpVarsApp: config.Set (process-wide configuration)
+	withStore(t)
 	m, _, _ := httpVarsApp(t)
 	m, items := openHTTPVars(t, m)
 	out, _ := m.Update(httpVarItem(t, items, "session").Msg)
@@ -211,6 +218,7 @@ func TestHTTPVarsPaletteJumpCapture(t *testing.T) {
 // file that supplies it at the key's line — the private file for a value it
 // overrides.
 func TestHTTPVarsPaletteJumpEnv(t *testing.T) {
+	// serial: httpVarsApp: config.Set (process-wide configuration)
 	m, path, _ := httpVarsApp(t)
 	m, items := openHTTPVars(t, m)
 	out, _ := m.Update(httpVarItem(t, items, "domain").Msg)
@@ -241,6 +249,7 @@ func openHTTPVarsFrom(t *testing.T, m Model, path string) (Model, []palette.Item
 // TestHTTPVarsPaletteJumpGlobal: Enter on a global variable opens the HTTP
 // Variables settings page.
 func TestHTTPVarsPaletteJumpGlobal(t *testing.T) {
+	// serial: httpVarsApp: config.Set (process-wide configuration)
 	m, _, _ := httpVarsApp(t)
 	m, items := openHTTPVars(t, m)
 	out, _ := m.Update(httpVarItem(t, items, "region").Msg)
@@ -254,6 +263,7 @@ func TestHTTPVarsPaletteJumpGlobal(t *testing.T) {
 // unmasked, expanded value and keeps the palette open; outside the mode the
 // chord is not claimed.
 func TestHTTPVarsPaletteCopy(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	var copied string
 	orig := clipboardWrite
 	clipboardWrite = func(s string) { copied = s }
@@ -312,6 +322,7 @@ func runHTTPVarsKey(t *testing.T, m Model, key tea.KeyPressMsg) Model {
 // explains itself and opens nothing; an .http file without variables opens
 // an empty list.
 func TestHTTPVarsPaletteNeedsHTTPBuffer(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	dir := t.TempDir()
 	txt := filepath.Join(dir, "notes.txt")

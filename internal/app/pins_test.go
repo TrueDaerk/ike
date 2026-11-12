@@ -15,7 +15,8 @@ import (
 // (pin/replace/remove/swap/persistence), the jump commands, and the picker.
 
 func TestPinStorePersistence(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	// serial: withStore: t.Setenv
+	withStore(t)
 	p := loadPins()
 	p.Set(0, "/a.go")
 	p.Set(2, "/c.go")
@@ -50,6 +51,7 @@ func TestPinStorePersistence(t *testing.T) {
 }
 
 func TestPinAndJumpCommands(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
@@ -75,6 +77,7 @@ func TestPinAndJumpCommands(t *testing.T) {
 }
 
 func TestPinJumpMissingFileOpensPicker(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)
@@ -99,6 +102,7 @@ func TestPinJumpMissingFileOpensPicker(t *testing.T) {
 }
 
 func TestPinPickerNavigateReorderJump(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	for i := 0; i < 2; i++ {
@@ -139,6 +143,7 @@ func TestPinPickerNavigateReorderJump(t *testing.T) {
 }
 
 func TestPinPickerPinsActiveFile(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[2], false)
@@ -152,6 +157,7 @@ func TestPinPickerPinsActiveFile(t *testing.T) {
 }
 
 func TestPinCommandsRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	for _, id := range []string{
 		"nav.pins",
@@ -169,6 +175,7 @@ func TestPinCommandsRegistered(t *testing.T) {
 // model is a value model — a closure bound only at open time renders the
 // open-time state forever).
 func TestPinPickerRenderFollowsSelection(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	for i := 0; i < 2; i++ {

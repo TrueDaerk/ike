@@ -41,6 +41,7 @@ func editorApp(t *testing.T, content string) Model {
 // whose message makes the editor ask for completion at the caret — char-less,
 // so no delay and no trigger-character gate applies.
 func TestCtrlSpaceRequestsCompletion(t *testing.T) {
+	t.Parallel()
 	m := editorApp(t, "fmt\n")
 	m = drainKey(m, tea.KeyPressMsg{Code: 'i', Text: "i"})
 	got := triggerRecorder(t, m)
@@ -64,6 +65,7 @@ func TestCtrlSpaceRequestsCompletion(t *testing.T) {
 // TestCtrlSpaceNormalModeIsSilent: the same chord in normal mode is a no-op —
 // no request, and no error notification either.
 func TestCtrlSpaceNormalModeIsSilent(t *testing.T) {
+	t.Parallel()
 	m := editorApp(t, "fmt\n")
 	got := triggerRecorder(t, m)
 

@@ -54,6 +54,8 @@ func captureServer(t *testing.T, first string) (*httptest.Server, *atomic.Value)
 // captures a task id, the second one substitutes it into its target, and the
 // captured value beats the file's own `@task=` definition of the same name.
 func TestHTTPCaptureFeedsLaterRequest(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	srv, seen := captureServer(t, `{"task":"node-1:42"}`)
 	m := httpApp(t)
 	src := "@task = none\n\n" +
@@ -95,6 +97,8 @@ func TestHTTPCaptureFeedsLaterRequest(t *testing.T) {
 // response, so a fresh model over the same project resolves `{{task}}`
 // without dispatching the capturing request again.
 func TestHTTPCaptureSurvivesReopen(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	srv, seen := captureServer(t, `{"task":"node-1:42"}`)
 	m := httpApp(t)
 	src := "### start\n# @capture task = .task\nPOST " + srv.URL + "/_reindex\n\n" +
@@ -128,6 +132,7 @@ func TestHTTPCaptureSurvivesReopen(t *testing.T) {
 // warns on its own line — the request itself still completes and its response
 // still shows.
 func TestHTTPCaptureFailureMarksDirective(t *testing.T) {
+	t.Parallel()
 	srv, _ := captureServer(t, `{"other":1}`)
 	m := httpApp(t)
 	path := httpVarFile(t, "# @capture task = .task\nGET "+srv.URL+"/x\n", nil)
@@ -167,6 +172,7 @@ func TestHTTPCaptureFailureMarksDirective(t *testing.T) {
 // TestHTTPCaptureSuccessClearsTheMarker: a re-run that works removes the
 // previous complaint — the marker tracks the current state of the directive.
 func TestHTTPCaptureSuccessClearsTheMarker(t *testing.T) {
+	t.Parallel()
 	var body atomic.Value
 	body.Store(`{"other":1}`)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -201,6 +207,7 @@ func TestHTTPCaptureSuccessClearsTheMarker(t *testing.T) {
 // TestCaptureDiagnosticsSkipSuccesses: only failures are reported, and each
 // one spans its directive line.
 func TestCaptureDiagnosticsSkipSuccesses(t *testing.T) {
+	t.Parallel()
 	results := []httpclient.CaptureResult{
 		{Capture: httpfile.Capture{Name: "ok", Expr: ".a", Line: 2, EndCol: 17}, Value: "1"},
 		{Capture: httpfile.Capture{Name: "bad", Expr: ".b", Line: 4, EndCol: 18}, Err: "the expression matched no value"},

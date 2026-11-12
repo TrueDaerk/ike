@@ -34,6 +34,7 @@ func putResultCursor(t *testing.T, m Model, needle string) {
 // query line gets the focus with the caret at the end, and the run shows the
 // value.
 func TestPlayAppendPathFromResultCursor(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"items":[{"name":"a"},{"name":"b"},{"name":"c"},{"name":"d","tags":["x"]}]}`))
 	m = setProgram(m, ".items")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
@@ -60,6 +61,7 @@ func TestPlayAppendPathFromResultCursor(t *testing.T) {
 // TestPlayAppendPathGeneralised: the Any flavour writes every index as `[]`,
 // so the stage reaches the same key in all items.
 func TestPlayAppendPathGeneralised(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"items":[{"name":"a"},{"name":"b"}]}`))
 	m = setProgram(m, ".items")
 	putResultCursor(t, m, `"name": "b"`)
@@ -78,6 +80,7 @@ func TestPlayAppendPathGeneralised(t *testing.T) {
 // TestPlayAppendPathChord: the default ctrl+. reaches the command from the
 // result buffer through the playground's Global fallback.
 func TestPlayAppendPathChord(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"a":{"b":1}}`))
 	// The first-start LSP onboarding dialog swallows scripted keys; a no-op
 	// once an earlier test dismissed it.
@@ -99,6 +102,7 @@ func TestPlayAppendPathChord(t *testing.T) {
 // TestPlayAppendPathAtRoot: nothing to append at the document root — the
 // program is left alone and the info row says why.
 func TestPlayAppendPathAtRoot(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = setProgram(m, ".")
 	m.play.resultEd.SetCursor(0, 0)
@@ -115,6 +119,7 @@ func TestPlayAppendPathAtRoot(t *testing.T) {
 // TestPlayAppendPathYQ: a yq result is YAML and the path takes yq's spelling
 // for a key needing quotes.
 func TestPlayAppendPathYQ(t *testing.T) {
+	// serial: registerTestLang: lang.Register (process-wide language registry)
 	// The path scan reads the result buffer's language id; internal/app does
 	// not pull in the shipped language plugins, so a bare entry stands in.
 	registerTestLang(t, lang.Language{ID: "yaml", Extensions: []string{"yaml", "yml"}})
@@ -137,6 +142,7 @@ func TestPlayAppendPathYQ(t *testing.T) {
 // notice — and even a to-json result is only named, never appended to a
 // command line that is not a jq pipeline.
 func TestPlayAppendPathXMQ(t *testing.T) {
+	// serial: fakeXMQOnPath: t.Setenv
 	fakeXMQOnPath(t)
 	m := openXMQ(t, xmqApp(t, "xml", "<r/>\n"))
 	m = setProgram(m, "select //a")
@@ -160,6 +166,7 @@ func TestPlayAppendPathXMQ(t *testing.T) {
 // TestPlayAppendStage: the identity (and the blank program) is replaced, a
 // trailing comment keeps the stage off its line.
 func TestPlayAppendStage(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ program, want string }{
 		{"", ".a"},
 		{" . ", ".a"},

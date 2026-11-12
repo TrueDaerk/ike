@@ -37,6 +37,7 @@ func pipeTab(t *testing.T, m Model, inst *pane.Instance, key string) *terminal.M
 }
 
 func TestInactiveTerminalTabsParkOnTheSettledPass(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	inst := m.activeWS().Panes.Get(m.activeEditorKey())
 	if inst == nil {
@@ -78,6 +79,7 @@ func TestInactiveTerminalTabsParkOnTheSettledPass(t *testing.T) {
 }
 
 func TestClosedPopupLayerParksItsShells(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	// A pipe tab stands in for the shell: the full suite on some machines
 	// cannot spawn one more zsh, and the visibility park is about tabs, not
@@ -109,6 +111,7 @@ func TestClosedPopupLayerParksItsShells(t *testing.T) {
 }
 
 func TestHiddenPopupWakesOnceAndArmsTheIndicator(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	m := openTestPopup(t)
 	msgs := make(chan tea.Msg, 64)
 	m.host.SetSender(func(msg tea.Msg) { msgs <- msg })
@@ -159,6 +162,7 @@ func TestHiddenPopupWakesOnceAndArmsTheIndicator(t *testing.T) {
 }
 
 func TestCaretMovesSendNoPreviewCursorWithoutAPreviewPane(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	msgs := make(chan tea.Msg, 64)
 	h := host.New(host.MapConfig{})
 	h.SetSender(func(msg tea.Msg) { msgs <- msg })
@@ -198,6 +202,8 @@ func TestCaretMovesSendNoPreviewCursorWithoutAPreviewPane(t *testing.T) {
 }
 
 func TestUserInputRestartsTheForgeIdleClock(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := pollApp(t, host.MapConfig{})
 	p := m.forgePoller()
 	if p == nil {

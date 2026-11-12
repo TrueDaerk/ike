@@ -38,6 +38,7 @@ func findApp(t *testing.T) Model {
 // TestFindChordOpensTheExplorerSpeedSearch is the issue's headline case: the
 // chord that finds in the editor finds in the explorer too.
 func TestFindChordOpensTheExplorerSpeedSearch(t *testing.T) {
+	t.Parallel()
 	m := findApp(t)
 	m.setFocus(pane.ExplorerKey)
 	if m.explorer().Searching() {
@@ -52,6 +53,7 @@ func TestFindChordOpensTheExplorerSpeedSearch(t *testing.T) {
 // TestFindChordOpensToolWindowFilters walks the singleton tool windows the
 // issue lists: the chord focuses each pane's filter row.
 func TestFindChordOpensToolWindowFilters(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name    string
 		open    tea.Msg
@@ -86,6 +88,7 @@ func TestFindChordOpensToolWindowFilters(t *testing.T) {
 // TestFindChordInAnEditorStaysWithEditorFind: the Editor-scoped editor.find
 // shadows the Global search.open, so the chord keeps its editor meaning.
 func TestFindChordInAnEditorStaysWithEditorFind(t *testing.T) {
+	t.Parallel()
 	m := findApp(t)
 	key := m.activeEditorKey()
 	if key == "" {
@@ -105,6 +108,7 @@ func TestFindChordInAnEditorStaysWithEditorFind(t *testing.T) {
 // TestFindChordNotifiesWithoutAPaneSearch: a pane with no search of its own
 // answers with a notice rather than nothing at all.
 func TestFindChordNotifiesWithoutAPaneSearch(t *testing.T) {
+	t.Parallel()
 	m := findApp(t)
 	tm, cmd := m.Update(StructureToggleMsg{})
 	m = drainCmd(tm.(Model), cmd)

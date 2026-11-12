@@ -27,7 +27,7 @@ func newWithSettings(t *testing.T, toml string) Model {
 	if err := os.WriteFile(filepath.Join(cfgDir, "settings.toml"), []byte(toml), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	os.Setenv("IKE_CONFIG_DIR", cfgDir)
+	t.Setenv("IKE_CONFIG_DIR", cfgDir)
 	m := New()
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	return tm.(Model)
@@ -37,6 +37,7 @@ func newWithSettings(t *testing.T, toml string) Model {
 // change seam arms the idle debounce and an expired deadline writes the
 // buffer through the normal save path, clearing the modified indicator.
 func TestIdleAutosaveMarksAndSaves(t *testing.T) {
+	// serial: newWithSettings: t.Setenv
 	m := newWithSettings(t, "[editor]\nauto_save = \"idle\"\nauto_save_idle_ms = 500\n")
 	if m.autosaveIdleIv != 500*time.Millisecond {
 		t.Fatalf("idle interval = %v, want 500ms", m.autosaveIdleIv)
@@ -75,6 +76,7 @@ func TestIdleAutosaveMarksAndSaves(t *testing.T) {
 // TestIdleAutosaveSkipsUntitled: a pathless buffer never arms the idle
 // debounce — autosave has nowhere to write it.
 func TestIdleAutosaveSkipsUntitled(t *testing.T) {
+	// serial: newWithSettings: t.Setenv
 	m := newWithSettings(t, "[editor]\nauto_save = \"idle\"\n")
 	key := m.activeWS().Panes.Focused()
 	tm, _ := m.Update(editor.SyncMsg{Path: "", FromKey: key})
@@ -88,6 +90,7 @@ func TestIdleAutosaveSkipsUntitled(t *testing.T) {
 // idle debounce (and "idle" keeps the on-blur save from #174 active, which
 // TestFocusSwitchAutosavesDirtyEditor covers for the shared path).
 func TestIdleAutosaveOffInFocusMode(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
@@ -110,6 +113,7 @@ func TestIdleAutosaveOffInFocusMode(t *testing.T) {
 // TestIdleAutosaveSaveCancelsMark: a save (clean buffer on the seam) drops
 // the pending idle mark.
 func TestIdleAutosaveSaveCancelsMark(t *testing.T) {
+	// serial: newWithSettings: t.Setenv
 	m := newWithSettings(t, "[editor]\nauto_save = \"idle\"\n")
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")

@@ -13,11 +13,11 @@ import (
 
 func vcsApp(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	return NewWith(registry.New(), host.MapConfig{})
 }
 
 func TestVCSBranchSegment(t *testing.T) {
+	t.Parallel()
 	m := vcsApp(t)
 	if got := m.branchSegment(); got != "" {
 		t.Fatalf("no snapshot: segment = %q, want hidden", got)
@@ -33,6 +33,7 @@ func TestVCSBranchSegment(t *testing.T) {
 }
 
 func TestVCSSnapshotReachesExplorer(t *testing.T) {
+	t.Parallel()
 	m := vcsApp(t)
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m = out.(Model)
@@ -45,6 +46,7 @@ func TestVCSSnapshotReachesExplorer(t *testing.T) {
 }
 
 func TestVCSMarksCmdGatesOnStatus(t *testing.T) {
+	t.Parallel()
 	m := vcsApp(t)
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m = out.(Model)
@@ -94,6 +96,7 @@ func TestVCSMarksCmdGatesOnStatus(t *testing.T) {
 }
 
 func TestRevertFlowPromptAndCancel(t *testing.T) {
+	t.Parallel()
 	m := vcsApp(t)
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m = out.(Model)
@@ -145,6 +148,7 @@ func TestRevertFlowPromptAndCancel(t *testing.T) {
 }
 
 func TestRevertHunkFlow(t *testing.T) {
+	t.Parallel()
 	m := vcsApp(t)
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m = out.(Model)
@@ -184,6 +188,8 @@ func TestRevertHunkFlow(t *testing.T) {
 }
 
 func TestUndoRevertFlow(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := vcsApp(t)
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	m = out.(Model)
@@ -229,6 +235,7 @@ func TestUndoRevertFlow(t *testing.T) {
 }
 
 func TestVCSWatcherEventArmsDebounce(t *testing.T) {
+	t.Parallel()
 	m := vcsApp(t)
 	_, cmd := m.Update(watch.EventMsg{Kind: watch.FileChanged, Path: "x.go"})
 	if cmd == nil || !m.vcs.tickArmed {
@@ -244,6 +251,7 @@ func TestVCSWatcherEventArmsDebounce(t *testing.T) {
 // reported by the watcher (external commit, branch switch, staging) arm the
 // snapshot refresh like any working-tree event.
 func TestVCSGitChangedArmsDebounce(t *testing.T) {
+	t.Parallel()
 	m := vcsApp(t)
 	_, cmd := m.Update(watch.EventMsg{Kind: watch.GitChanged, Path: "/r/.git"})
 	if cmd == nil || !m.vcs.tickArmed {
@@ -252,6 +260,7 @@ func TestVCSGitChangedArmsDebounce(t *testing.T) {
 }
 
 func TestVCSSaveInvalidateArmsDebounce(t *testing.T) {
+	t.Parallel()
 	m := vcsApp(t)
 	if _, cmd := m.Update(vcsInvalidateMsg{}); cmd == nil || !m.vcs.tickArmed {
 		t.Fatal("invalidate must arm the vcs debounce tick")
@@ -259,6 +268,7 @@ func TestVCSSaveInvalidateArmsDebounce(t *testing.T) {
 }
 
 func TestVCSTickRunsSerializedRefresh(t *testing.T) {
+	t.Parallel()
 	m := vcsApp(t)
 	m.vcs.tickArmed = true
 	if _, cmd := m.Update(vcsTickMsg{}); cmd == nil {

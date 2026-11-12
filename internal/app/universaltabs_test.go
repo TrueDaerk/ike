@@ -41,6 +41,7 @@ func mdPreviewModel(t *testing.T) (Model, string, string) {
 // markdown preview pane onto an editor pane's center merges its live content
 // into the tab strip and closes the vacated pane.
 func TestViewerPaneDropOnEditorCenterBecomesTab(t *testing.T) {
+	t.Parallel()
 	m, edKey, pvKey := mdPreviewModel(t)
 	pr := m.lay.Panes[pvKey]
 	m = step(m, press(pr.X+2, pr.Y+1))
@@ -67,6 +68,7 @@ func TestViewerPaneDropOnEditorCenterBecomesTab(t *testing.T) {
 // pane with an open file onto a viewer pane's center converts the viewer
 // into a tab host — its content stays as the first tab, the file joins it.
 func TestEditorPaneDropOnViewerCenterConvertsHost(t *testing.T) {
+	t.Parallel()
 	m, edKey, pvKey := mdPreviewModel(t)
 	er := m.lay.Panes[edKey]
 	m = step(m, press(er.X+2, er.Y+1))
@@ -95,6 +97,7 @@ func TestEditorPaneDropOnViewerCenterConvertsHost(t *testing.T) {
 // own edge zone splits back out into a dedicated viewer pane, live content
 // intact.
 func TestContentTabDragsOutToEdge(t *testing.T) {
+	t.Parallel()
 	m, edKey, pvKey := mdPreviewModel(t)
 	pr := m.lay.Panes[pvKey]
 	m = step(m, press(pr.X+2, pr.Y+1))
@@ -136,6 +139,8 @@ func TestContentTabDragsOutToEdge(t *testing.T) {
 // preview content tab saves and restores mixed — the preview comes back as a
 // tab in the same pane, not as a separate pane or nothing.
 func TestMixedTabStripPersists(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, edKey, pvKey := mdPreviewModel(t)
 	pr := m.lay.Panes[pvKey]
 	m = step(m, press(pr.X+2, pr.Y+1))
@@ -181,6 +186,7 @@ func TestMixedTabStripPersists(t *testing.T) {
 // singleton tool window still resolves to edge zones only — no center merge,
 // no silent conversion.
 func TestSingletonPaneStaysEdgeOnlyTarget(t *testing.T) {
+	t.Parallel()
 	m, edKey, pvKey := mdPreviewModel(t)
 	_ = pvKey
 	r, ok := m.lay.Panes[pane.ExplorerKey]

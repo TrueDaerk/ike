@@ -22,6 +22,7 @@ import (
 // TestProjectPickerOpensLocked verifies the project.switch wiring (#12): the
 // dispatched OpenPickerMsg opens the palette locked to the picker mode.
 func TestProjectPickerOpensLocked(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	if m.palette.IsOpen() {
 		t.Fatal("palette should start closed")
@@ -37,6 +38,7 @@ func TestProjectPickerOpensLocked(t *testing.T) {
 // probe result landing as GitInfoMsg is cached and shows up in the open
 // picker's rows, without the palette closing or losing its selection.
 func TestProjectPickerGitInfoFillsRows(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	out, _ := m.Update(project.OpenPickerMsg{})
 	m = out.(Model)
@@ -104,6 +106,7 @@ func cwd(t *testing.T) string {
 // re-rooted, old project's session persisted, and the follow-up cmd batch
 // emitting SwitchedMsg.
 func TestSwitchProjectReRoots(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
 	for _, d := range []string{src, dst} {
@@ -132,6 +135,7 @@ func TestSwitchProjectReRoots(t *testing.T) {
 
 // TestSwitchSameRootIsNoop: switching to the current root does not rebuild.
 func TestSwitchSameRootIsNoop(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	dir := t.TempDir()
 	chdir(t, dir)
 	m := switchModel(t)
@@ -146,6 +150,7 @@ func TestSwitchSameRootIsNoop(t *testing.T) {
 // TestSwitchFailedSurfacesError: an invalid path never mutates the project and
 // lands as an error toast.
 func TestSwitchFailedSurfacesError(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	dir := t.TempDir()
 	chdir(t, dir)
 	m := switchModel(t)
@@ -170,6 +175,7 @@ func TestSwitchFailedSurfacesError(t *testing.T) {
 // the switch — the workspace (buffers included) parks in the background, the
 // file stays unwritten, and switching back resumes the edit in place.
 func TestSwitchWithDirtyBufferIsSeamless(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
 	for _, d := range []string{src, dst} {
@@ -232,6 +238,7 @@ func TestSwitchWithDirtyBufferIsSeamless(t *testing.T) {
 // TestSwitchRoundTripResumesWorkspaceLive (#777): the parked workspace comes
 // back as the same live unit — same registry, same running terminal session.
 func TestSwitchRoundTripResumesWorkspaceLive(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
 	for _, d := range []string{src, dst} {
@@ -288,6 +295,7 @@ func TestSwitchRoundTripResumesWorkspaceLive(t *testing.T) {
 // (quit, hidden-toggle, switch-away) overwrote A's persisted recent_files
 // with it. The MRU must reload from the session file on every startup path.
 func TestSwitchRoundTripKeepsRecentFiles(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
 	for _, d := range []string{src, dst} {
@@ -325,6 +333,7 @@ func TestSwitchRoundTripKeepsRecentFiles(t *testing.T) {
 // against the active workspace's root after a switch — a fresh terminal lands
 // in the new project, not the old one.
 func TestSwitchNewTerminalSpawnsInNewRoot(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
 	for _, d := range []string{src, dst} {
@@ -353,6 +362,7 @@ func TestSwitchNewTerminalSpawnsInNewRoot(t *testing.T) {
 // root-derived work anchors at the resumed project again — while the parked
 // project's existing terminals kept their own origin dir untouched.
 func TestResumeNewTerminalSpawnsInResumedRoot(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
 	for _, d := range []string{src, dst} {
@@ -390,6 +400,7 @@ func TestResumeNewTerminalSpawnsInResumedRoot(t *testing.T) {
 // switch — a [ui] setting in the target's .ike/settings.toml is effective
 // right after switching, and the config options point at the new root.
 func TestSwitchReAnchorsConfigLayer(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
 	for _, d := range []string{src, dst, filepath.Join(dst, ".ike")} {
@@ -431,6 +442,7 @@ func evictFixture(t *testing.T) (a, b, c string) {
 // TestWorkspaceCapEvictsIdleLRU (#780): past project.max_workspaces the
 // least-recently-used idle background workspace drops silently.
 func TestWorkspaceCapEvictsIdleLRU(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	a, b, c := evictFixture(t)
 	chdir(t, a)
 	m := switchModel(t)
@@ -451,6 +463,7 @@ func TestWorkspaceCapEvictsIdleLRU(t *testing.T) {
 // workspace (dirty buffer) is never prompted about and never evicted — it is
 // skipped and kept over the cap; the next idle workspace drops instead.
 func TestWorkspaceCapKeepsBusyWorkspace(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	a, b, c := evictFixture(t)
 	file := filepath.Join(a, "a.txt")
 	if err := os.WriteFile(file, []byte("one\n"), 0o644); err != nil {
@@ -479,6 +492,7 @@ func TestWorkspaceCapKeepsBusyWorkspace(t *testing.T) {
 // be unloaded from the recent-projects list without switching; the active
 // one cannot.
 func TestCloseWorkspaceFromList(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	a, b := filepath.Join(base, "a"), filepath.Join(base, "b")
 	for _, d := range []string{a, b} {
@@ -522,6 +536,7 @@ func TestCloseWorkspaceFromList(t *testing.T) {
 // TestPickerMarksOpenWorkspaces (#820): picker items for in-memory roots
 // carry the badge and the close aux action.
 func TestPickerMarksOpenWorkspaces(t *testing.T) {
+	t.Parallel()
 	entries := []project.Entry{{Name: "alpha", Path: "/p/alpha"}, {Name: "beta", Path: "/p/beta"}}
 	pm := project.NewPickerMode(func() []project.Entry { return entries })
 	pm.SetOpen(func(path string) bool { return path == "/p/alpha" })
@@ -581,6 +596,7 @@ func busyCloseFixture(t *testing.T) (m Model, aRoot, dirtyPath string) {
 // TestCloseFromListBusyPromptsAndCancel (#821): closing a background
 // workspace with unsaved changes prompts; esc keeps it untouched; d closes.
 func TestCloseFromListBusyPromptsAndCancel(t *testing.T) {
+	// serial: busyCloseFixture: t.Chdir (process working directory)
 	m, root, _ := busyCloseFixture(t)
 
 	out, _ := m.Update(project.CloseWorkspaceMsg{Path: root})
@@ -609,6 +625,7 @@ func TestCloseFromListBusyPromptsAndCancel(t *testing.T) {
 // TestCloseFromListSaveThenClose (#821): s writes the background workspace's
 // dirty buffers, then closes it.
 func TestCloseFromListSaveThenClose(t *testing.T) {
+	// serial: busyCloseFixture: t.Chdir (process working directory)
 	m, root, path := busyCloseFixture(t)
 	out, _ := m.Update(project.CloseWorkspaceMsg{Path: root})
 	m = out.(Model)
@@ -633,6 +650,7 @@ func TestCloseFromListSaveThenClose(t *testing.T) {
 // workspace's unsaved changes even when the active one is clean; esc keeps
 // ike running with the workspace untouched.
 func TestQuitAggregatesBackgroundDirty(t *testing.T) {
+	// serial: busyCloseFixture: t.Chdir (process working directory)
 	m, root, _ := busyCloseFixture(t)
 	out, _ := m.guardedQuit()
 	m = out.(Model)
@@ -651,6 +669,7 @@ func TestQuitAggregatesBackgroundDirty(t *testing.T) {
 // atomic-rename saves) produce no events. Resuming the workspace must catch
 // the buffers up: clean ones reload from disk.
 func TestSwitchBackReconcilesParkedBuffers(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
 	for _, d := range []string{src, dst} {
@@ -730,6 +749,7 @@ func scanResults(t *testing.T, cmd tea.Cmd) []explorer.ScanDoneMsg {
 // events. Switching back must resync the explorer tree once — even with the
 // auto-refresh poll unavailable — so the resumed tree shows the new file.
 func TestSwitchBackResyncsExplorer(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	base := t.TempDir()
 	src, dst := filepath.Join(base, "src"), filepath.Join(base, "dst")
 	for _, d := range []string{src, dst} {
@@ -773,6 +793,7 @@ func TestSwitchBackResyncsExplorer(t *testing.T) {
 // receiving events, so a parked workspace no longer pins the stopped watcher,
 // the dead nav history and the stale stores the emitter closures reference.
 func TestDetachWorkspaceServicesDropsEmitters(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	w := m.activeWS()
 	events := 0
@@ -810,6 +831,7 @@ func TestDetachWorkspaceServicesDropsEmitters(t *testing.T) {
 // discarded edits reappeared as a crash-recovery prompt at the next launch,
 // the exact case backupDropOnCloseTab guards for manual tab closes.
 func TestDiscardCloseDropsParkedBackups(t *testing.T) {
+	// serial: busyCloseFixture: t.Chdir (process working directory)
 	m, root, path := busyCloseFixture(t)
 	// The snapshot lives in the parked project's own state dir (#2185), which
 	// is where the switch flushed it.
@@ -841,6 +863,7 @@ func TestDiscardCloseDropsParkedBackups(t *testing.T) {
 // directory — the fresh model's empty debouncer would otherwise drop the mark
 // and leave the parked edits unprotected against a crash.
 func TestSwitchFlushesParkedDirtyBackups(t *testing.T) {
+	// serial: busyCloseFixture: t.Chdir (process working directory)
 	_, root, path := busyCloseFixture(t)
 	snaps, err := backupServiceFor(root).List()
 	if err != nil {
@@ -863,6 +886,7 @@ func TestSwitchFlushesParkedDirtyBackups(t *testing.T) {
 // TestCleanQuitDropsParkedBackups (#1550): backupCleanShutdown covers parked
 // workspaces' editors, not only the active workspace's.
 func TestCleanQuitDropsParkedBackups(t *testing.T) {
+	// serial: busyCloseFixture: t.Chdir (process working directory)
 	m, root, path := busyCloseFixture(t)
 	// Removal must reach the parked project's own state dir, not the active
 	// one's (#2185) — the snapshot key is an absolute path, but the directory

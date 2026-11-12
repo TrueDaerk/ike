@@ -22,6 +22,7 @@ func pendingTick(m Model) forge.PollTickMsg {
 }
 
 func TestForgePollBlurPausesAndFocusResumes(t *testing.T) {
+	t.Parallel()
 	m := pollApp(t, host.MapConfig{})
 	m.StartForgePoll()
 	tick := pendingTick(m)
@@ -56,6 +57,7 @@ func TestForgePollBlurPausesAndFocusResumes(t *testing.T) {
 }
 
 func TestForgePollPauseSettingOffKeepsPolling(t *testing.T) {
+	t.Parallel()
 	// forge.poll_pause_on_blur = false is today's behaviour: blur changes
 	// nothing at all.
 	m := pollApp(t, host.MapConfig{"forge.poll_pause_on_blur": "false"})
@@ -75,6 +77,8 @@ func TestForgePollPauseSettingOffKeepsPolling(t *testing.T) {
 }
 
 func TestForgePollPauseSettingFromConfig(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	if !forgePausePollOnBlur(nil) {
 		t.Error("nil config must default to the pause being on")
 	}
@@ -97,6 +101,8 @@ func TestForgePollPauseSettingFromConfig(t *testing.T) {
 }
 
 func TestForgePollSlowsDownWhileTheIssuesPaneIsClosed(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := pollApp(t, host.MapConfig{})
 	// The settled pass reads the pane gate. No Issues window is open in a
 	// freshly sized model, so the cadence stretches.

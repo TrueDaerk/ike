@@ -7,6 +7,7 @@ import "testing"
 // idle session's pass rate is then bounded by the documented exceptions alone
 // (explorer keep-alive poll, forge poll where configured).
 func TestIdleModelArmsNoTimers(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 30)
 	if n := m.armedTimers(); n != 0 {
 		t.Fatalf("idle model holds %d armed timers, want 0 — a debounce tick "+
@@ -19,6 +20,7 @@ func TestIdleModelArmsNoTimers(t *testing.T) {
 // (the pre-#2402 retry tick was ~10 idle passes per 10s for the first minute
 // of every session that started inside a modal).
 func TestTermCheckDeferralArmsNoTimer(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 30)
 	m.caps.kitty = false
 	m.shell.Open()

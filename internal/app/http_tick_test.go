@@ -11,6 +11,7 @@ import (
 // that window built a second permanent chain (each tick is a full re-parse
 // of every open .http buffer, 4 Hz per chain).
 func TestHTTPFlightTickSingleChain(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 
 	if cmd := m.startHTTPFlight("k1", &httpFlightEntry{label: "GET /a", started: time.Now()}); cmd == nil {

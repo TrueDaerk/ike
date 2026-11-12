@@ -51,6 +51,8 @@ func waitExited(t *testing.T, term *terminal.Model) {
 // TestPopupTabClosesAfterExit: a finished run parked in a popup terminal tab
 // (#1398) closes with the reserved cmd+w, where the EOF path used to no-op.
 func TestPopupTabClosesAfterExit(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openTestPopup(t)
 	inst := m.popup.inst
 	deadTermTab(t, m, inst, "popuprun")
@@ -71,6 +73,7 @@ func TestPopupTabClosesAfterExit(t *testing.T) {
 // TestPopupTabCloseGlyphClosesAfterExit: the active tab's ✕ takes the same
 // route as cmd+w, so the mouse close works on a finished session too.
 func TestPopupTabCloseGlyphClosesAfterExit(t *testing.T) {
+	// serial: deadTermTab: waits on the wall clock (load-sensitive)
 	m := openTestPopup(t)
 	inst := m.popup.inst
 	deadTermTab(t, m, inst, "popuprun")
@@ -84,6 +87,8 @@ func TestPopupTabCloseGlyphClosesAfterExit(t *testing.T) {
 // (#1793) — the placement with no pane registry behind it at all. Its last
 // tab going drops the panel.
 func TestFloatPanelClosesAfterExit(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openTestPopup(t)
 	m, f := tearOutFirstTab(t, m)
 	f.inst.CloseTerminalTabs() // the panel's shell ends, its tab stays
@@ -107,6 +112,7 @@ func TestFloatPanelClosesAfterExit(t *testing.T) {
 // reporting true. The close path must read the exited state instead, or the
 // finished area can never be closed from the keyboard.
 func TestDebugConsoleClosesAfterExit(t *testing.T) {
+	t.Parallel()
 	m, _, path := debugModelReg(t, registry.Global(), host.MapConfig{})
 	frames := []dap.StackFrame{{ID: 1, Name: "f", Source: dap.Source{Path: path}, Line: 2, Column: 1}}
 	tm, _ := m.Update(debugStoppedMsg{threadID: 1, frames: frames})
@@ -128,6 +134,7 @@ func TestDebugConsoleClosesAfterExit(t *testing.T) {
 // TestToolPaneClosesAfterExit guards the placement that already worked
 // (#741/#810) against regressing with the shared exited check.
 func TestToolPaneClosesAfterExit(t *testing.T) {
+	// serial: waitExited: waits on the wall clock (load-sensitive)
 	withTools(t, config.ToolEntry{Name: "shortlived", Command: "sh", Args: []string{"-c", "exit 3"}})
 	m := sizedWith(t, registry.Global(), 100, 40)
 	out, _ := m.Update(ToolOpenMsg{Name: "shortlived"})
@@ -151,6 +158,7 @@ func TestToolPaneClosesAfterExit(t *testing.T) {
 // (#2192) — the pane title spells it out with the exit code, the tab segment
 // carries the compact glyph, which is all a popup-layer box shows.
 func TestExitedTerminalChromeMarker(t *testing.T) {
+	// serial: deadTermTab: waits on the wall clock (load-sensitive)
 	m := openTestPopup(t)
 	inst := m.popup.inst
 	deadTermTab(t, m, inst, "popuprun")

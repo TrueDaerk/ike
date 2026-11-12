@@ -15,6 +15,7 @@ import (
 // under "file", degrading to the root when no file is open.
 
 func TestPopupCwdDefaultIsProjectRoot(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	if dir := m.popupShellDir(); dir != "." {
 		t.Fatalf("default popup shell dir = %q, want %q (project root)", dir, ".")
@@ -22,6 +23,7 @@ func TestPopupCwdDefaultIsProjectRoot(t *testing.T) {
 }
 
 func TestPopupCwdFileModeUsesFocusedFileDir(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	sub := filepath.Join(t.TempDir(), "pkg")
 	if err := os.MkdirAll(sub, 0o755); err != nil {
@@ -47,6 +49,7 @@ func TestPopupCwdFileModeUsesFocusedFileDir(t *testing.T) {
 }
 
 func TestPopupCwdFileModeWithoutFileFallsBackToRoot(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	m.host.SetConfig(host.MapConfig{"terminal.popup_cwd": "file"})
 	if dir := m.popupShellDir(); dir != "." {

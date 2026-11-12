@@ -19,7 +19,6 @@ import (
 
 func problemsApp(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.New(), host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return out.(Model)
@@ -30,6 +29,7 @@ func testDiag(line int, sev int, msg string) ilsp.Diagnostic {
 }
 
 func TestProblemsToggleLifecycle(t *testing.T) {
+	t.Parallel()
 	m := problemsApp(t)
 	before := m.activeWS().Panes.Focused()
 
@@ -55,6 +55,7 @@ func TestProblemsToggleLifecycle(t *testing.T) {
 }
 
 func TestProblemsStoreAggregatesUnopenedFiles(t *testing.T) {
+	t.Parallel()
 	m := problemsApp(t)
 
 	// A publish for a file no editor has open still lands in the store.
@@ -76,6 +77,7 @@ func TestProblemsStoreAggregatesUnopenedFiles(t *testing.T) {
 }
 
 func TestProblemsPanelLiveUpdatesAndNavigates(t *testing.T) {
+	t.Parallel()
 	m := problemsApp(t)
 	dir := t.TempDir()
 	target := filepath.Join(dir, "a.go")
@@ -116,6 +118,8 @@ func TestProblemsPanelLiveUpdatesAndNavigates(t *testing.T) {
 }
 
 func TestProblemsPanePersists(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := problemsApp(t)
 	out, _ := m.Update(ProblemsToggleMsg{})
 	m = out.(Model)
@@ -138,6 +142,8 @@ var _ = problems.OpenLocationMsg{}
 // the Problems pane restores it (empty) instead of silently falling back to
 // the default layout — the restoreLayout pre-filter was missing "problems".
 func TestRestoreLayoutAcceptsProblemsLeaf(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := problemsApp(t)
 	out, _ := m.Update(ProblemsToggleMsg{})
 	m = out.(Model)

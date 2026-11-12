@@ -25,6 +25,7 @@ func focusPane(t *testing.T, m Model, key string) Model {
 func slash() tea.KeyPressMsg { return tea.KeyPressMsg{Code: '/', Text: "/"} }
 
 func TestPasteReachesIssuesFilter(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	panes := m.activeWS().Panes
 	k := panes.AddIssues()
@@ -42,6 +43,7 @@ func TestPasteReachesIssuesFilter(t *testing.T) {
 }
 
 func TestPasteReachesDOMSelector(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	panes := m.activeWS().Panes
 	k := panes.AddDOM()
@@ -60,6 +62,7 @@ func TestPasteReachesDOMSelector(t *testing.T) {
 
 // A closed input drops the paste instead of letting it leak elsewhere.
 func TestPasteDroppedByClosedPaneInput(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	panes := m.activeWS().Panes
 	k := panes.AddDOM()

@@ -16,13 +16,13 @@ import (
 
 func usagesApp(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.New(), host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return out.(Model)
 }
 
 func TestUsagesToggleLifecycle(t *testing.T) {
+	t.Parallel()
 	m := usagesApp(t)
 	before := m.activeWS().Panes.Focused()
 
@@ -48,6 +48,7 @@ func TestUsagesToggleLifecycle(t *testing.T) {
 }
 
 func TestUsagesMsgOpensFillsAndNavigates(t *testing.T) {
+	t.Parallel()
 	m := usagesApp(t)
 	dir := t.TempDir()
 	target := filepath.Join(dir, "a.go")
@@ -94,6 +95,7 @@ func TestUsagesMsgOpensFillsAndNavigates(t *testing.T) {
 }
 
 func TestUsagesRefreshKeyRunsCarriedContinuation(t *testing.T) {
+	t.Parallel()
 	m := usagesApp(t)
 	type refreshed struct{}
 	out, _ := m.Update(ilsp.UsagesMsg{
@@ -114,6 +116,8 @@ func TestUsagesRefreshKeyRunsCarriedContinuation(t *testing.T) {
 }
 
 func TestUsagesPanePersistsAndRestoresEmpty(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := usagesApp(t)
 	out, _ := m.Update(UsagesToggleMsg{})
 	m = out.(Model)
@@ -145,6 +149,7 @@ func TestUsagesPanePersistsAndRestoresEmpty(t *testing.T) {
 // TestEditorContextMenuOffersUsagesPanel guards the #1020 menu list: the
 // panel variant sits alongside the quick palette entry.
 func TestEditorContextMenuOffersUsagesPanel(t *testing.T) {
+	t.Parallel()
 	var palette, panel bool
 	for _, it := range editorContextItems(false) {
 		switch it.Command {

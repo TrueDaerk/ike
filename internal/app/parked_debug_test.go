@@ -20,6 +20,7 @@ func outputEvent(category, text string) dap.Event {
 // active workspace's session state — output lands in the parked workspace's
 // capped buffer, state events are consumed without effect.
 func TestParkedDebugEventRouting(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	m := NewWith(registry.New(), host.MapConfig{})
 
@@ -72,6 +73,7 @@ func TestParkedDebugEventRouting(t *testing.T) {
 // TestParkedOutputCapped guards the bound (#1523): a firehose from a parked
 // debuggee stays at maxPendingOut chunks, oldest dropped.
 func TestParkedOutputCapped(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	m := NewWith(registry.New(), host.MapConfig{})
 	parkedSess := &dap.Session{}
@@ -96,6 +98,7 @@ func TestParkedOutputCapped(t *testing.T) {
 // activity guards stop reporting a phantom session) instead of the dead
 // session parking forever.
 func TestParkedDebuggeeExitFinishesSession(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	m := NewWith(registry.New(), host.MapConfig{})
 
@@ -130,6 +133,7 @@ func TestParkedDebuggeeExitFinishesSession(t *testing.T) {
 // TestParkedDebuggeeTerminatedFinishesSession is the terminated-event variant
 // of #1544 (adapters emit either or both).
 func TestParkedDebuggeeTerminatedFinishesSession(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	m := NewWith(registry.New(), host.MapConfig{})
 

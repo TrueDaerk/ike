@@ -29,6 +29,7 @@ func popupTabX(t *testing.T, m Model, idx int) (x, y int) {
 // TestPopupTabMiddleClickCloses: a middle press on a non-active tab segment
 // closes that tab and leaves the rest of the layer alone.
 func TestPopupTabMiddleClickCloses(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	out, _ := m.Update(tea.KeyPressMsg{Code: 't', Mod: tea.ModSuper})
 	m = out.(Model)
@@ -51,6 +52,7 @@ func TestPopupTabMiddleClickCloses(t *testing.T) {
 // TestPopupTabMiddleClickOffSegmentIsInert: a middle press on the title row
 // that misses every segment neither closes a tab nor starts a move drag.
 func TestPopupTabMiddleClickOffSegmentIsInert(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	out, _ := m.Update(tea.KeyPressMsg{Code: 't', Mod: tea.ModSuper})
 	m = out.(Model)

@@ -80,6 +80,8 @@ func hideSelected(t *testing.T, m Model) Model {
 }
 
 func TestComplexityHideFunctionReachesEverySurfaceAndUnhides(t *testing.T) {
+	// serial: baselineApp: t.Setenv
+	withStore(t)
 	m, proj := baselineApp(t)
 	path := complexity.BaselinePath(proj)
 	m = baselineGen(t, m)
@@ -166,6 +168,8 @@ func TestComplexityHideFunctionReachesEverySurfaceAndUnhides(t *testing.T) {
 }
 
 func TestComplexityHideFileWritesExcludeAndRewalks(t *testing.T) {
+	// serial: baselineApp: t.Setenv
+	withStore(t)
 	m, proj := baselineApp(t)
 	m = baselineGen(t, m)
 	out, _ := m.Update(ComplexityToggleMsg{})
@@ -218,6 +222,7 @@ func TestComplexityHideFileWritesExcludeAndRewalks(t *testing.T) {
 }
 
 func TestComplexityHelpGroupsLeadWhileFocused(t *testing.T) {
+	// serial: baselineApp: t.Setenv
 	m, _ := baselineApp(t)
 	if g := m.complexityHelpGroups(); g != nil {
 		t.Fatalf("an unfocused window contributes nothing: %+v", g)

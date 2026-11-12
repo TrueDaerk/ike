@@ -44,6 +44,7 @@ func openMergeView(t *testing.T, m Model) (Model, string) {
 // TestMergeStagesOpenPane guards the entry wiring (#1478): the fetched
 // stages open a focused merge view seeded with the auto-merge.
 func TestMergeStagesOpenPane(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m, key := openMergeView(t, m)
 	if m.activeWS().Panes.Focused() != key {
@@ -61,6 +62,7 @@ func TestMergeStagesOpenPane(t *testing.T) {
 // TestMergeAcceptResolves drives the palette accept through the ActionMsg
 // routing: next-conflict + accept-ours resolves the block.
 func TestMergeAcceptResolves(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m, key := openMergeView(t, m)
 	tm, _ := m.Update(editor.ActionMsg{Action: "merge_next_conflict"})
@@ -80,6 +82,7 @@ func TestMergeAcceptResolves(t *testing.T) {
 // TestMergeApplyBlockedUnresolved refuses to save/stage while conflicts
 // remain.
 func TestMergeApplyBlockedUnresolved(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m, key := openMergeView(t, m)
 	tm, _ := m.Update(MergeApplyMsg{})
@@ -101,6 +104,7 @@ func TestMergeApplyBlockedUnresolved(t *testing.T) {
 // TestMergeApplySavesAndCloses writes the resolved result to the file and
 // closes the view.
 func TestMergeApplySavesAndCloses(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m, key := openMergeView(t, m)
 	path := m.activeWS().Panes.Get(key).Merge().Path()
@@ -125,6 +129,7 @@ func TestMergeApplySavesAndCloses(t *testing.T) {
 // TestMergeCloseGuard warns before closing a view with unresolved conflicts;
 // d discards, esc keeps it open.
 func TestMergeCloseGuard(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m, key := openMergeView(t, m)
 	tm, _ := m.Update(ClosePaneMsg{})

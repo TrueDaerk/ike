@@ -41,6 +41,7 @@ var (
 // --- symbol rename prompt ------------------------------------------------
 
 func TestLSPRenamePromptSharedEditing(t *testing.T) {
+	t.Parallel()
 	m, _ := openRenamePrompt(t, "old name here")
 	m = promptKeys(m, keyAltBack)
 	if m.lspRename.input.Text != "old name " {
@@ -65,6 +66,7 @@ func TestLSPRenamePromptSharedEditing(t *testing.T) {
 }
 
 func TestLSPRenamePromptCtrlUStillClears(t *testing.T) {
+	t.Parallel()
 	m, _ := openRenamePrompt(t, "Greet")
 	m = promptKeys(m, tea.KeyPressMsg{Code: 'u', Mod: tea.ModCtrl})
 	if m.lspRename.input.Text != "" || m.lspRename.input.Cur != 0 {
@@ -73,6 +75,7 @@ func TestLSPRenamePromptCtrlUStillClears(t *testing.T) {
 }
 
 func TestLSPRenamePromptEditsMidWord(t *testing.T) {
+	t.Parallel()
 	m, applied := openRenamePrompt(t, "Greet")
 	m = promptKeys(m, tea.KeyPressMsg{Code: tea.KeyHome})
 	m = promptType(m, "My")
@@ -98,6 +101,7 @@ func openFileRename(t *testing.T) Model {
 }
 
 func TestRenamePromptSharedEditing(t *testing.T) {
+	t.Parallel()
 	m := openFileRename(t) // prefilled "a.txt", cursor at the end
 	m = promptKeys(m, keyAltBack)
 	if m.renameInput.Text != "a." {
@@ -122,6 +126,7 @@ func TestRenamePromptSharedEditing(t *testing.T) {
 }
 
 func TestRenamePromptPasteStillLandsAtCursor(t *testing.T) {
+	t.Parallel()
 	m := openFileRename(t)
 	m = promptKeys(m, keyCmdLeft)
 	if !m.pasteRenamePrompt("x-") {
@@ -145,6 +150,7 @@ func openJBImport(t *testing.T) Model {
 }
 
 func TestJBImportPromptSharedEditing(t *testing.T) {
+	t.Parallel()
 	m := openJBImport(t)
 	m = promptKeys(m, keyCmdBack) // drop the "~/" prefill
 	m = promptType(m, "/tmp/one two")
@@ -177,6 +183,7 @@ func openAPIImport(t *testing.T) Model {
 }
 
 func TestOpenAPIImportPromptSharedEditing(t *testing.T) {
+	t.Parallel()
 	m := openAPIImport(t)
 	m = promptKeys(m, keyCmdBack) // drop the "~/" prefill
 	m = promptType(m, "/tmp/spec one.yaml")

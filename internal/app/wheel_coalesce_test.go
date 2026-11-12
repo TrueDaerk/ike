@@ -34,6 +34,7 @@ func raw(t *testing.T, m Model, msg tea.Msg) (Model, tea.Cmd) {
 }
 
 func TestWheelBurstCoalescesIntoOneFlush(t *testing.T) {
+	t.Parallel()
 	m, x, y := wheelApp(t)
 	ed := m.activeWS().Panes.FocusedInstance().Editor()
 
@@ -64,6 +65,7 @@ func TestWheelBurstCoalescesIntoOneFlush(t *testing.T) {
 }
 
 func TestWheelDirectionChangeKeepsOrder(t *testing.T) {
+	t.Parallel()
 	m, x, y := wheelApp(t)
 	ed := m.activeWS().Panes.FocusedInstance().Editor()
 
@@ -81,6 +83,7 @@ func TestWheelDirectionChangeKeepsOrder(t *testing.T) {
 }
 
 func TestNonWheelEventFlushesPendingWheel(t *testing.T) {
+	t.Parallel()
 	m, x, y := wheelApp(t)
 	ed := m.activeWS().Panes.FocusedInstance().Editor()
 

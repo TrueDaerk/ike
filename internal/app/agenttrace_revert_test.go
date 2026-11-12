@@ -38,6 +38,7 @@ func runTraceRevert(t *testing.T, m Model, key string) Model {
 }
 
 func TestTraceRevertFromTranscript(t *testing.T) {
+	// serial: traceApp: t.Setenv
 	m, dir := traceApp(t)
 	if m.onboardingOpen() {
 		m = m.closeOnboarding().(Model)
@@ -123,6 +124,7 @@ func TestTraceRevertFromTranscript(t *testing.T) {
 // TestTraceRevertFileGone: a change whose file was deleted has no snapshot
 // to revert to.
 func TestTraceRevertFileGone(t *testing.T) {
+	// serial: traceApp: t.Setenv
 	m, dir := traceApp(t)
 	if m.onboardingOpen() {
 		m = m.closeOnboarding().(Model)

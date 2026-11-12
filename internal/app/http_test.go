@@ -25,7 +25,6 @@ import (
 
 func httpApp(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.New(), host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return out.(Model)
@@ -42,6 +41,7 @@ func sampleResponse(key string) *httpclient.Response {
 }
 
 func TestHTTPResponseOpensAndReusesViewer(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	if m.activeWS().Panes.Has(pane.HTTPKey) {
 		t.Fatal("viewer must not exist initially")
@@ -74,6 +74,7 @@ func TestHTTPResponseOpensAndReusesViewer(t *testing.T) {
 }
 
 func TestHTTPRunDispatchesRequestUnderCursor(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"path":"` + r.URL.Path + `"}`))
@@ -118,6 +119,7 @@ func TestHTTPRunDispatchesRequestUnderCursor(t *testing.T) {
 }
 
 func TestHTTPRunGatesOnFileType(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "main.go")
@@ -141,6 +143,7 @@ func TestHTTPRunGatesOnFileType(t *testing.T) {
 }
 
 func TestHTTPErrorNotifies(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseMsg{Request: "x", Err: os.ErrDeadlineExceeded})
 	m = out.(Model)
@@ -150,6 +153,8 @@ func TestHTTPErrorNotifies(t *testing.T) {
 }
 
 func TestHTTPPanePersistsAsEmptySingleton(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
 	m = out.(Model)
@@ -167,6 +172,8 @@ func TestHTTPPanePersistsAsEmptySingleton(t *testing.T) {
 }
 
 func TestHTTPResponsePersistsHistory(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := httpApp(t)
 	for i := 0; i < 7; i++ {
 		resp := sampleResponse("one")
@@ -192,6 +199,8 @@ func TestHTTPResponsePersistsHistory(t *testing.T) {
 }
 
 func TestHTTPResponseReopensViewerAfterClose(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
 	m = out.(Model)
@@ -227,6 +236,7 @@ func leafHas(root layout.Node, key string) bool {
 }
 
 func TestHTTPResponseReattachesAfterHideAllTools(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
 	m = out.(Model)
@@ -255,6 +265,7 @@ func TestHTTPResponseReattachesAfterHideAllTools(t *testing.T) {
 // response viewer focused, "/" and the pattern reach the pane instead of
 // being swallowed by a keymap binding or a global handler.
 func TestHTTPPaneReceivesSearchKeys(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
 	m = out.(Model)
@@ -277,6 +288,7 @@ func TestHTTPPaneReceivesSearchKeys(t *testing.T) {
 // bracketed paste while the response pane's search prompt is open must reach
 // the query, exactly like the terminal scrollback search's #1882 fix.
 func TestHTTPPanePasteRoutesIntoSearchPrompt(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
 	m = out.(Model)
@@ -302,6 +314,7 @@ func TestHTTPPanePasteRoutesIntoSearchPrompt(t *testing.T) {
 // editable field, so the paste must be a silent no-op, not fall through to
 // some other surface.
 func TestHTTPPanePasteClosedPromptIsNoop(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
 	m = out.(Model)
@@ -319,6 +332,7 @@ func TestHTTPPanePasteClosedPromptIsNoop(t *testing.T) {
 // motion and release over the response pane select text, and "y" hands it to
 // the clipboard through the pane's CopyMsg.
 func TestHTTPPaneMouseSelectionCopies(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
 	m = out.(Model)
@@ -379,6 +393,7 @@ func TestHTTPPaneMouseSelectionCopies(t *testing.T) {
 // response pane it must land on the system clipboard through the full app
 // dispatch (keymap fall-through, pane handleKey, CopyMsg, clipboardWrite).
 func TestHTTPPaneCmdCCopiesSelection(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
 	m = out.(Model)
@@ -435,6 +450,7 @@ func TestHTTPPaneCmdCCopiesSelection(t *testing.T) {
 
 // TestHTTPCopyBodyCommand covers the palette entry (#1266).
 func TestHTTPCopyBodyCommand(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
 	m = out.(Model)
@@ -464,6 +480,7 @@ func TestHTTPCopyBodyCommand(t *testing.T) {
 // TestHTTPCopyWithoutPaneNotifies: the palette command is reachable with no
 // pane open; it must say so instead of emitting an empty clipboard write.
 func TestHTTPCopyWithoutPaneNotifies(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	if _, cmd := m.Update(HTTPCopyBodyMsg{}); cmd != nil {
 		if _, ok := cmd().(httppane.CopyMsg); ok {
@@ -475,6 +492,8 @@ func TestHTTPCopyWithoutPaneNotifies(t *testing.T) {
 // TestHTTPResponseHistoryCommand covers http.responseHistory (#1267): it
 // focuses the viewer and reports the stored count.
 func TestHTTPResponseHistoryCommand(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := httpApp(t)
 	for i := 0; i < 3; i++ {
 		resp := sampleResponse("one")
@@ -499,6 +518,8 @@ func TestHTTPResponseHistoryCommand(t *testing.T) {
 // with the cursor on a request that was dispatched before, the command loads
 // its stored responses into the viewer without dispatching anything.
 func TestHTTPShowResponseLoadsStoredHistory(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := httpApp(t)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "req.http")
@@ -547,6 +568,8 @@ func TestHTTPShowResponseLoadsStoredHistory(t *testing.T) {
 // part of the layout yet — stored responses are viewable right after a
 // restart, before any dispatch (#1492).
 func TestHTTPShowResponseOpensViewer(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := httpApp(t)
 	path := filepath.Join(t.TempDir(), "req.http")
 	if err := os.WriteFile(path, []byte("### one\nGET http://localhost/a\n"), 0o644); err != nil {
@@ -572,6 +595,8 @@ func TestHTTPShowResponseOpensViewer(t *testing.T) {
 // context on a focused .http file must invoke http.showResponse and open the
 // viewer with the stored history, without dispatching anything.
 func TestHTTPShowResponseKeybinding(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := sizedWith(t, registry.Global(), 120, 40)
 	path := filepath.Join(t.TempDir(), "req.http")
 	if err := os.WriteFile(path, []byte("### one\nGET http://localhost/a\n"), 0o644); err != nil {
@@ -602,6 +627,7 @@ func TestHTTPShowResponseKeybinding(t *testing.T) {
 // TestHTTPShowResponseWithoutHistoryNotifies: no stored responses means a
 // notice, not a dispatch and not an empty pane (#1492).
 func TestHTTPShowResponseWithoutHistoryNotifies(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	path := filepath.Join(t.TempDir(), "req.http")
 	if err := os.WriteFile(path, []byte("### one\nGET http://localhost/a\n"), 0o644); err != nil {
@@ -618,6 +644,7 @@ func TestHTTPShowResponseWithoutHistoryNotifies(t *testing.T) {
 
 // TestHTTPShowResponseGatesOnFileType mirrors http.run's gate (#1492).
 func TestHTTPShowResponseGatesOnFileType(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	path := filepath.Join(t.TempDir(), "main.go")
 	if err := os.WriteFile(path, []byte("package main\n"), 0o644); err != nil {
@@ -634,6 +661,7 @@ func TestHTTPShowResponseGatesOnFileType(t *testing.T) {
 
 // TestHTTPResponseHistoryWithoutPane must not panic or open anything.
 func TestHTTPResponseHistoryWithoutPane(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseHistoryMsg{})
 	m = out.(Model)
@@ -646,6 +674,7 @@ func TestHTTPResponseHistoryWithoutPane(t *testing.T) {
 // (#1267) — they belong to no registry command, so nothing else documents
 // that history browsing exists.
 func TestHTTPPaneKeysInHelp(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: sampleResponse("one")})
 	m = out.(Model)
@@ -675,6 +704,7 @@ func TestHTTPPaneKeysInHelp(t *testing.T) {
 // TestHTTPFooterAlwaysShowsHistory: the hint is there from the first
 // response, not only once a second one exists (#1267).
 func TestHTTPFooterAlwaysShowsHistory(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseMsg{Source: "/p/req.http", Request: "one", Resp: sampleResponse("one")})
 	m = out.(Model)
@@ -717,6 +747,7 @@ func httpFileApp(t *testing.T, url string) Model {
 // statusline shows it, the pane marks the pending request, and both clear
 // when the response lands.
 func TestHTTPInFlightIndicator(t *testing.T) {
+	t.Parallel()
 	release := make(chan struct{})
 	srv := slowServer(t, release)
 	m := httpFileApp(t, srv.URL)
@@ -775,6 +806,7 @@ func drainHTTPResponse(t *testing.T, cmd tea.Cmd) HTTPResponseMsg {
 // TestHTTPDuplicateDispatchRejected: the same request may not fire twice in
 // parallel (#1272).
 func TestHTTPDuplicateDispatchRejected(t *testing.T) {
+	t.Parallel()
 	release := make(chan struct{})
 	defer close(release)
 	srv := slowServer(t, release)
@@ -800,6 +832,7 @@ func TestHTTPDuplicateDispatchRejected(t *testing.T) {
 // TestHTTPCancelAbortsDispatch: http.cancel aborts through the dispatch
 // context and the abort reads as a confirmation, not an error (#1272).
 func TestHTTPCancelAbortsDispatch(t *testing.T) {
+	t.Parallel()
 	release := make(chan struct{})
 	defer close(release)
 	srv := slowServer(t, release)
@@ -832,6 +865,7 @@ func TestHTTPCancelAbortsDispatch(t *testing.T) {
 // TestHTTPCancelWithoutFlightIsQuiet: the palette command is always
 // reachable; with nothing running it just says so.
 func TestHTTPCancelWithoutFlightIsQuiet(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	out, _ := m.Update(HTTPCancelMsg{})
 	m = out.(Model)
@@ -843,6 +877,7 @@ func TestHTTPCancelWithoutFlightIsQuiet(t *testing.T) {
 // TestHTTPPaneCancelKeyRoutes: "x" in the focused pane reaches the host's
 // cancel path (#1272).
 func TestHTTPPaneCancelKeyRoutes(t *testing.T) {
+	t.Parallel()
 	release := make(chan struct{})
 	defer close(release)
 	srv := slowServer(t, release)
@@ -904,6 +939,8 @@ func flightMarkAt(t *testing.T, m Model, line int) string {
 // its own request line, with the elapsed time, and the marker clears when the
 // response lands.
 func TestHTTPInlineFlightMarker(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	release := make(chan struct{})
 	srv := slowServer(t, release)
 	m := httpFileApp(t, srv.URL)
@@ -943,6 +980,7 @@ func TestHTTPInlineFlightMarker(t *testing.T) {
 // TestHTTPInlineFlightMarkerClearsOnCancel: http.cancel removes the inline
 // marker just like a response does (#1746).
 func TestHTTPInlineFlightMarkerClearsOnCancel(t *testing.T) {
+	t.Parallel()
 	release := make(chan struct{})
 	defer close(release)
 	srv := slowServer(t, release)
@@ -966,6 +1004,7 @@ func TestHTTPInlineFlightMarkerClearsOnCancel(t *testing.T) {
 // running at once are marked separately, and one finishing leaves the other's
 // marker in place (#1746).
 func TestHTTPInlineFlightMarkersAreIndependent(t *testing.T) {
+	t.Parallel()
 	release := make(chan struct{})
 	srv := slowServer(t, release)
 	m := httpFlightFileApp(t, srv.URL)
@@ -1005,6 +1044,7 @@ func TestHTTPInlineFlightMarkersAreIndependent(t *testing.T) {
 // buffer's current text, so an insertion above the request moves it with the
 // request line instead of leaving it behind (#1746).
 func TestHTTPInlineFlightMarkerFollowsEdits(t *testing.T) {
+	t.Parallel()
 	release := make(chan struct{})
 	defer close(release)
 	srv := slowServer(t, release)
@@ -1061,6 +1101,7 @@ func paneShows(m Model, s string) bool {
 // lines in the viewer while the connection is still open, and finalizes into
 // a normal response once it ends.
 func TestHTTPStreamRendersIncrementally(t *testing.T) {
+	// serial: next: measures the wall clock (load-sensitive)
 	gate := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/event-stream")

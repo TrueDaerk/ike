@@ -97,6 +97,7 @@ func netDirtyFixture(t *testing.T) (m Model, aRoot, bRoot, dirtyPath string) {
 // like project.close — the MRU parked workspace resumes — and the notice
 // names the client.
 func TestNetCloseIdleResumesBackground(t *testing.T) {
+	// serial: twoCleanProjects: t.Chdir (process working directory)
 	m, a, b := twoCleanProjects(t)
 	m, r := netClose(t, m, netlink.CloseRequest{})
 	if r.Outcome != netlink.CloseClosed || r.Project != "b" || !sameDir(t, r.Root, b) {
@@ -117,6 +118,7 @@ func TestNetCloseIdleResumesBackground(t *testing.T) {
 // among the open workspaces; a name that is not open is unknown, and so is
 // a project from the history that is not open.
 func TestNetCloseByNameAndUnknown(t *testing.T) {
+	// serial: twoCleanProjects: t.Chdir (process working directory)
 	m, a, _ := twoCleanProjects(t)
 	_, r := netClose(t, m, netlink.CloseRequest{Project: "nope"})
 	if r.Outcome != netlink.CloseUnknown {
@@ -140,6 +142,7 @@ func TestNetCloseByNameAndUnknown(t *testing.T) {
 // TestNetCloseBusyBlockedNoPopup: a dirty active project is blocked with
 // the guard's own summary lines; nothing changes and no prompt opens.
 func TestNetCloseBusyBlockedNoPopup(t *testing.T) {
+	// serial: netDirtyFixture: t.Chdir (process working directory)
 	m, a, _, dirtyPath := netDirtyFixture(t)
 	m, r := netClose(t, m, netlink.CloseRequest{})
 	if r.Outcome != netlink.CloseBlocked || r.Project != "a" || !sameDir(t, r.Root, a) {
@@ -164,6 +167,7 @@ func TestNetCloseBusyBlockedNoPopup(t *testing.T) {
 // runs the guard's discard branch — nothing is written, the parked project
 // resumes — and the notice says what was discarded.
 func TestNetCloseForceDiscards(t *testing.T) {
+	// serial: netDirtyFixture: t.Chdir (process working directory)
 	m, a, bRoot, dirtyPath := netDirtyFixture(t)
 	grant := netlink.ForceGrant{Root: m.activeWS().Root, Project: "a", Reasons: []string{"unsaved: f.txt"}}
 	m, r := netClose(t, m, netlink.CloseRequest{Project: "a", Force: true, Grant: grant})
@@ -185,6 +189,7 @@ func TestNetCloseForceDiscards(t *testing.T) {
 // TestNetCloseForceStale: a grant for other reasons — or another root — is
 // stale: nothing closes, and the next plain close is blocked afresh.
 func TestNetCloseForceStale(t *testing.T) {
+	// serial: netDirtyFixture: t.Chdir (process working directory)
 	m, a, _, _ := netDirtyFixture(t)
 	root := m.activeWS().Root
 	for _, grant := range []netlink.ForceGrant{
@@ -211,6 +216,7 @@ func TestNetCloseForceStale(t *testing.T) {
 // TestNetCloseWhileGuardAsks: a UI close guard already asking the user owns
 // the decision — the network verdict is unavailable and the prompt stays.
 func TestNetCloseWhileGuardAsks(t *testing.T) {
+	// serial: netDirtyFixture: t.Chdir (process working directory)
 	m, _, _, _ := netDirtyFixture(t)
 	out, _ := m.Update(project.CloseProjectMsg{})
 	m = out.(Model)
@@ -230,6 +236,7 @@ func TestNetCloseWhileGuardAsks(t *testing.T) {
 // tears the project down and reopens it fresh — the dirty edit is gone, the
 // file untouched, the IDE still standing in the same root.
 func TestNetCloseLastProjectNeverQuits(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	dir := t.TempDir()
 	file := filepath.Join(dir, "f.txt")
 	if err := os.WriteFile(file, []byte("one\n"), 0o644); err != nil {
@@ -276,6 +283,7 @@ func TestNetCloseLastProjectNeverQuits(t *testing.T) {
 // TestNetCloseIdleLastProjectNeverQuits: the plain (unforced) close of the
 // last, idle project reopens it fresh rather than quitting the IDE.
 func TestNetCloseIdleLastProjectNeverQuits(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	dir := t.TempDir()
 	chdir(t, dir)
 	m := dismissOnboarding(switchModel(t))
@@ -295,6 +303,7 @@ func TestNetCloseIdleLastProjectNeverQuits(t *testing.T) {
 // TestNetCloseNotice: the wording — who asked, what a force discarded and
 // stopped, and a client without a name falls back to its address.
 func TestNetCloseNotice(t *testing.T) {
+	t.Parallel()
 	phone := netlink.Client{Name: "phone", Addr: "10.0.0.2:5000"}
 	act := wsActivity{dirty: []string{"a.go", "b.go"}, running: []string{"tool sql"}}
 	if got := netCloseNotice("ike", phone, act, false); got != "closed ike via network (phone)" {
@@ -313,6 +322,7 @@ func TestNetCloseNotice(t *testing.T) {
 // reaches the Update loop through host.Send as a netCloseMsg, and the
 // verdict the handler posts is what the client reads back.
 func TestNetCloseOverTheWire(t *testing.T) {
+	// serial: t.Setenv
 	m, a, _ := twoCleanProjects(t)
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	msgs := make(chan tea.Msg, 8)

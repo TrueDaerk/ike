@@ -15,6 +15,8 @@ import (
 // context flips it back (and saves the layout at once), and the state
 // survives a layout save / restore.
 func TestComplexityHistogram(t *testing.T) {
+	// serial: timeApp: t.Setenv
+	withStore(t)
 	m, _ := timeApp(t)
 	m = dismissOnboarding(m)
 	out, _ := m.Update(ComplexityHistogramMsg{})

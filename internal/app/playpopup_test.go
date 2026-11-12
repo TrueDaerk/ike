@@ -77,16 +77,19 @@ func helpThenEscEsc(t *testing.T, m Model) {
 }
 
 func TestPlaygroundEscClosesHelpOverlayFirst(t *testing.T) {
+	t.Parallel()
 	helpThenEscEsc(t, openPlayWithProgram(t))
 }
 
 func TestPlaygroundEscClosesHelpOverlayFirstFromResultBuffer(t *testing.T) {
+	t.Parallel()
 	m := openPlayWithProgram(t)
 	m.play.setBufFocus(true)
 	helpThenEscEsc(t, m)
 }
 
 func TestPlaygroundEscClosesHelpOverlayFirstFromDetachedResult(t *testing.T) {
+	t.Parallel()
 	m := splitJQ(t, `{"foo":[1,2,3]}`, ".foo[]")
 	m.activeWS().Panes.SetFocused(m.play.resultKey)
 	m.play.setBufFocus(true)
@@ -100,6 +103,7 @@ func TestPlaygroundEscClosesHelpOverlayFirstFromDetachedResult(t *testing.T) {
 // filter typing, q and ? as filter letters, backspace, scrolling — stays in
 // the overlay; the query line is byte-identical afterwards.
 func TestPlaygroundHelpOverlayKeysDoNotLeak(t *testing.T) {
+	t.Parallel()
 	m := openPlayWithProgram(t)
 	before := snapPlay(m)
 	m = playPopupKey(t, m, f1Key())
@@ -139,6 +143,7 @@ func TestPlaygroundHelpOverlayKeysDoNotLeak(t *testing.T) {
 // TestPlaygroundUnfilteredHelpQClosesOverlayOnly: q and ? dismiss an
 // unfiltered overlay — and only it.
 func TestPlaygroundUnfilteredHelpQClosesOverlayOnly(t *testing.T) {
+	t.Parallel()
 	for _, k := range []tea.KeyPressMsg{runeKey('q'), runeKey('?'), f1Key()} {
 		m := openPlayWithProgram(t)
 		before := snapPlay(m)
@@ -157,6 +162,8 @@ func TestPlaygroundUnfilteredHelpQClosesOverlayOnly(t *testing.T) {
 // saved-filter picker are locked palette modes, which already precede the
 // playground — pinned here so the order stays.
 func TestPlaygroundEscClosesPalettePickersFirst(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	open := map[string]func(m *Model){
 		"cheatsheet": func(m *Model) { m.openPlayCheatsheet(m.play.dialect, "") },
 		"filters": func(m *Model) {

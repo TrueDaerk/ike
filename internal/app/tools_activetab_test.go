@@ -81,6 +81,7 @@ func activeToolTab(inst *pane.Instance) string {
 // TestActiveToolTabRestoresFromLayout: a saved ActiveTool selects that tool's
 // tab on restore instead of leaving the last restored tool active.
 func TestActiveToolTabRestoresFromLayout(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	conf, dir := t.TempDir(), t.TempDir()
 	chdir(t, dir)
 	toolLayout(t, conf, paneIdentity{Kind: "editor", Tools: []string{"alpha", "beta"}, ActiveTool: 1})
@@ -100,6 +101,7 @@ func TestActiveToolTabRestoresFromLayout(t *testing.T) {
 // so the next start comes back on it — and a pane mixing a file tab with tool
 // tabs keeps the distinction between "a file is active" and "a tool is".
 func TestActiveToolTabRoundTripsThroughSave(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	conf, dir := t.TempDir(), t.TempDir()
 	file := writeTemp(t, dir, "a.txt", "aaa\n")
 	chdir(t, dir)
@@ -138,6 +140,7 @@ func TestActiveToolTabRoundTripsThroughSave(t *testing.T) {
 // restores (unconfigured since the save) leaves the pane on a live tab
 // instead of pointing at nothing.
 func TestActiveToolTabFallbackWhenToolMissing(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	conf, dir := t.TempDir(), t.TempDir()
 	chdir(t, dir)
 	toolLayout(t, conf, paneIdentity{Kind: "editor", Tools: []string{"alpha", "gone"}, ActiveTool: 2})
@@ -188,6 +191,7 @@ func assertActiveTool(t *testing.T, m Model, name, ctx string) {
 // tabs in both projects; each project keeps the tab the user selected in it
 // across repeated back-and-forth switches (#1906).
 func TestActiveToolTabStickyPerProject(t *testing.T) {
+	// serial: globalToolModelWith: t.Setenv
 	_, b := twoRoots(t)
 	m := globalToolModelWith(t, slotGlobalSettings)
 
@@ -213,6 +217,7 @@ func TestActiveToolTabStickyPerProject(t *testing.T) {
 // (#1903) joins the slot pane as a tab but must not steal the selection the
 // target project had — only the project that had the tool active gets it back.
 func TestGlobalToolAttachKeepsActiveTab(t *testing.T) {
+	// serial: globalToolModelWith: t.Setenv
 	_, b := twoRoots(t)
 	m := globalToolModelWith(t, slotGlobalSettings)
 
@@ -241,6 +246,8 @@ func TestGlobalToolAttachKeepsActiveTab(t *testing.T) {
 // everywhere (#1903) while another project is in front; switching back must
 // fall back to a live tab instead of panicking or blanking the pane.
 func TestActiveToolTabSurvivesClosedTool(t *testing.T) {
+	// serial: globalToolModelWith: t.Setenv
+	withStore(t)
 	_, b := twoRoots(t)
 	m := globalToolModelWith(t, slotGlobalSettings)
 

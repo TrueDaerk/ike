@@ -16,6 +16,7 @@ import (
 // instead of travelling through the loop as an editor.SyncMsg of its own.
 
 func TestEditorSyncQueueFoldsAndDrainsInOrder(t *testing.T) {
+	t.Parallel()
 	var q editorSyncQueue
 	q.push(editor.SyncMsg{Path: "/a", FromKey: "1"})
 	q.push(editor.SyncMsg{Path: "/b", FromKey: "1"})
@@ -34,6 +35,8 @@ func TestEditorSyncQueueFoldsAndDrainsInOrder(t *testing.T) {
 // crash-recovery debounce during the key's Update — no SyncMsg is fed back
 // through the loop, and nothing is left queued.
 func TestKeystrokeSyncAppliesInTheSamePass(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
+	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {})
 	file := filepath.Join(os.Getenv("IKE_CONFIG_DIR"), "work.txt")
 	if err := os.WriteFile(file, []byte("on disk\n"), 0o644); err != nil {
@@ -64,6 +67,8 @@ func TestKeystrokeSyncAppliesInTheSamePass(t *testing.T) {
 // TestSyncMsgThroughTheLoopStillApplies: a sync fed as a message (a bare
 // emitter, a test) takes the same handler.
 func TestSyncMsgThroughTheLoopStillApplies(t *testing.T) {
+	// serial: recoverySeed: t.Setenv
+	withStore(t)
 	m := recoverySeed(t, func(svc *backup.Service, dir string) {})
 	file := filepath.Join(os.Getenv("IKE_CONFIG_DIR"), "work.txt")
 	if err := os.WriteFile(file, []byte("on disk\n"), 0o644); err != nil {

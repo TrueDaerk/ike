@@ -19,6 +19,7 @@ import (
 )
 
 func TestComplexityHintsForBuilder(t *testing.T) {
+	t.Parallel()
 	fns := []complexity.Function{
 		{Name: "low", Line: 2, CCN: 3, Cognitive: 2},
 		{Name: "ccnOnly", Line: 10, CCN: 40, Cognitive: 4},
@@ -47,6 +48,7 @@ func TestComplexityHintsForBuilder(t *testing.T) {
 // TestComplexityHintsCommentDensity: " · cmt 55%" joins the hint only at or
 // above complexity.comment_density_warn (#2934) and warns; 0 never shows it.
 func TestComplexityHintsCommentDensity(t *testing.T) {
+	t.Parallel()
 	fns := []complexity.Function{
 		{Name: "chatty", Line: 2, CCN: 3, Cognitive: 2, NLOC: 9, CommentLines: 11, CommentDensity: 0.55},
 		{Name: "edge", Line: 10, CCN: 1, Cognitive: 0, NLOC: 3, CommentLines: 2, CommentDensity: 0.4},
@@ -100,6 +102,7 @@ func settleHints(t *testing.T, m Model, cmds ...tea.Cmd) Model {
 }
 
 func TestComplexityHintsWiring(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	m, src := complexityApp(t)
 	out, cmd := m.openPathAt(src, 0, 0)
 	m = out.(Model)
@@ -184,6 +187,7 @@ func TestComplexityHintsWiring(t *testing.T) {
 // TestComplexityHintsWarnOnly: warn mode (#2966) keeps only the hints at or
 // above a threshold; all keeps both.
 func TestComplexityHintsWarnOnly(t *testing.T) {
+	t.Parallel()
 	fns := []complexity.Function{
 		{Name: "under", Line: 2, CCN: 3, Cognitive: 2},
 		{Name: "over", Line: 10, CCN: 40, Cognitive: 4},
@@ -200,6 +204,7 @@ func TestComplexityHintsWarnOnly(t *testing.T) {
 // TestComplexityHintsModeWiring: editor.marks.complexity is part of the key
 // (#2966): warn repaints with only the over-threshold hints, off clears.
 func TestComplexityHintsModeWiring(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	m, src := complexityApp(t)
 	out, cmd := m.openPathAt(src, 0, 0)
 	m = out.(Model)

@@ -26,6 +26,7 @@ func explorerOpen(t *testing.T, m Model, path string, newPane bool) Model {
 // the explorer nests the viewer as a tab in the editor the user last worked in
 // — no new leaf appears.
 func TestExplorerOpenViewerAsTabInRecentEditor(t *testing.T) {
+	t.Parallel()
 	for _, tc := range viewerFiles {
 		t.Run(tc.name, func(t *testing.T) {
 			m := newSized()
@@ -57,6 +58,7 @@ func TestExplorerOpenViewerAsTabInRecentEditor(t *testing.T) {
 // TestExplorerOpenTextFileStaysInEditor (#1851 unchanged): a plain file keeps
 // landing as an editor tab in the same pane.
 func TestExplorerOpenTextFileStaysInEditor(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	editorKey := m.fileEditorKey()
 	m.setFocus(editorKey)
@@ -78,6 +80,7 @@ func TestExplorerOpenTextFileStaysInEditor(t *testing.T) {
 // TestExplorerSplitOpenStillSplits (#1851): the explicit "open in split" action
 // (explorer o) keeps creating a pane beside the editor, for every file kind.
 func TestExplorerSplitOpenStillSplits(t *testing.T) {
+	t.Parallel()
 	for _, tc := range viewerFiles {
 		t.Run(tc.name, func(t *testing.T) {
 			m := newSized()
@@ -104,6 +107,7 @@ func TestExplorerSplitOpenStillSplits(t *testing.T) {
 // TestExplorerOpenViewerRefocusesExisting (#1851): a viewer already showing the
 // file is refocused, never duplicated as a tab.
 func TestExplorerOpenViewerRefocusesExisting(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	editorKey := m.fileEditorKey()
 	m.setFocus(editorKey)
@@ -130,6 +134,7 @@ func TestExplorerOpenViewerRefocusesExisting(t *testing.T) {
 // explorer left, the open creates the editor pane it needs and puts the viewer
 // in it rather than crashing or dropping the file.
 func TestExplorerOpenViewerWithoutEditorSpawnsOne(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	for _, key := range m.leafOrder() {
 		if key != pane.ExplorerKey {

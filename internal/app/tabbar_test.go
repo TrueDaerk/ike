@@ -22,6 +22,7 @@ import (
 func stripped(m Model) string { return ansi.Strip(m.render()) }
 
 func TestSingleTabShowsPlainTitle(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "aaa.txt", "aaa\n")
 	m := openApp(t, a)
@@ -50,6 +51,7 @@ func TestSingleTabShowsPlainTitle(t *testing.T) {
 }
 
 func TestTwoTabsRenderTabBar(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "aaa.txt", "aaa\n")
 	b := writeTemp(t, dir, "bbb.txt", "bbb\n")
@@ -60,6 +62,7 @@ func TestTwoTabsRenderTabBar(t *testing.T) {
 }
 
 func TestTabBarAlwaysShowConfig(t *testing.T) {
+	// serial: t.Setenv
 	confDir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", confDir)
 	if err := os.WriteFile(filepath.Join(confDir, "settings.toml"),
@@ -82,6 +85,7 @@ func TestTabBarAlwaysShowConfig(t *testing.T) {
 }
 
 func TestTabLabelsDirtyAndDisambiguation(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "one"), 0o755); err != nil {
 		t.Fatal(err)
@@ -115,6 +119,7 @@ func TestTabLabelsDirtyAndDisambiguation(t *testing.T) {
 }
 
 func TestRenderTabBarFitsAndSeparates(t *testing.T) {
+	t.Parallel()
 	pal := theme.DefaultPalette()
 	bar := renderTabBar([]string{"a.go", "b.go", "c.go"}, 1, 60, pal)
 	plain := ansi.Strip(bar)
@@ -130,6 +135,7 @@ func TestRenderTabBarFitsAndSeparates(t *testing.T) {
 }
 
 func TestRenderTabBarOverflowsAroundActive(t *testing.T) {
+	t.Parallel()
 	pal := theme.DefaultPalette()
 	labels := []string{"first.go", "second.go", "third.go", "fourth.go", "fifth.go"}
 	bar := renderTabBar(labels, 4, 24, pal)
@@ -152,6 +158,7 @@ func TestRenderTabBarOverflowsAroundActive(t *testing.T) {
 // middle of a long list, both ends carry a "+N" counting exactly the tabs
 // hidden there, and the row still fits.
 func TestTabOverflowIndicatorCountsBothEnds(t *testing.T) {
+	t.Parallel()
 	pal := theme.DefaultPalette()
 	labels := make([]string, 12)
 	for i := range labels {
@@ -182,6 +189,7 @@ func TestTabOverflowIndicatorCountsBothEnds(t *testing.T) {
 // or the active index, the window contains the active tab and the rendered row
 // fits — the overflow contract the tab strip promises.
 func TestTabWindowKeepsActiveVisible(t *testing.T) {
+	t.Parallel()
 	pal := theme.DefaultPalette()
 	labels := make([]string, 40)
 	for i := range labels {
@@ -208,6 +216,7 @@ func TestTabWindowKeepsActiveVisible(t *testing.T) {
 // one tab cannot crowd out every neighbour, and the hit geometry agrees with
 // what was drawn.
 func TestTabLabelsEllipsizeAtCap(t *testing.T) {
+	t.Parallel()
 	pal := theme.DefaultPalette()
 	long := "a-really-long-generated-file-name-v2.go"
 	labels := []string{"a.go", long, "b.go"}
@@ -233,6 +242,7 @@ func TestTabLabelsEllipsizeAtCap(t *testing.T) {
 }
 
 func TestRenderTabBarTruncatesLoneOversizedTab(t *testing.T) {
+	t.Parallel()
 	pal := theme.DefaultPalette()
 	labels := []string{"short.go", "a-very-long-file-name-that-overflows.go"}
 	bar := renderTabBar(labels, 1, 16, pal)
@@ -246,6 +256,7 @@ func TestRenderTabBarTruncatesLoneOversizedTab(t *testing.T) {
 }
 
 func TestStaleTabCarriesMarker(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := writeTemp(t, dir, "aaa.txt", "aaa\n")
 	b := writeTemp(t, dir, "bbb.txt", "bbb\n")

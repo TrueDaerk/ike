@@ -70,6 +70,7 @@ func timeApp(t *testing.T) (Model, string) {
 }
 
 func TestTimeToggleLifecycle(t *testing.T) {
+	// serial: timeApp: t.Setenv
 	m, _ := timeApp(t)
 	before := m.activeWS().Panes.Focused()
 
@@ -93,6 +94,8 @@ func TestTimeToggleLifecycle(t *testing.T) {
 }
 
 func TestTimeReadFillsPanelWithResolvedName(t *testing.T) {
+	// serial: timeApp: t.Setenv
+	withStore(t)
 	m, cfgDir := timeApp(t)
 	wd, err := os.Getwd()
 	if err != nil {
@@ -133,6 +136,7 @@ func TestTimeReadFillsPanelWithResolvedName(t *testing.T) {
 }
 
 func TestTimeExportWritesCSVScratch(t *testing.T) {
+	// serial: timeApp: t.Setenv
 	m, _ := timeApp(t)
 	out, _ := m.Update(timepanel.ExportMsg{Label: "Today", CSV: "range,project\nToday,ike\n"})
 	m = out.(Model)
@@ -178,6 +182,8 @@ func segmentApp(t *testing.T, toml string) (Model, string) {
 }
 
 func TestProjectTimeSegmentOffByDefault(t *testing.T) {
+	// serial: segmentApp: t.Setenv
+	withStore(t)
 	m, cfgDir := segmentApp(t, "")
 	wd, err := os.Getwd()
 	if err != nil {
@@ -202,6 +208,7 @@ func TestProjectTimeSegmentOffByDefault(t *testing.T) {
 }
 
 func TestProjectTimeSegmentOnShowsToday(t *testing.T) {
+	// serial: segmentApp: t.Setenv
 	m, cfgDir := segmentApp(t, "[statusline]\nproject_time = \"on\"\n")
 	wd, err := os.Getwd()
 	if err != nil {
@@ -224,6 +231,7 @@ func TestProjectTimeSegmentOnShowsToday(t *testing.T) {
 }
 
 func TestProjectTimeSegmentSilentWithoutData(t *testing.T) {
+	// serial: segmentApp: t.Setenv
 	m, _ := segmentApp(t, "[statusline]\nproject_time = \"on\"\n")
 	msg := m.timeReadCmd()().(timeReportMsg)
 	out, _ := m.Update(msg)

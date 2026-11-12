@@ -36,6 +36,7 @@ func idleModel(t *testing.T) Model {
 }
 
 func TestCoalescerMotionWithoutHoverChangeNeverRenders(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	m := idleModel(t)
 	c := NewMouseCoalescer()
 	send, snapshot := collectSender()
@@ -75,6 +76,7 @@ func TestCoalescerMotionWithoutHoverChangeNeverRenders(t *testing.T) {
 }
 
 func TestVCSTickReusesFrame(t *testing.T) {
+	// serial: pass: diag.MessageCounts (process-wide counters)
 	m := idleModel(t)
 	m.vcs.tickArmed = true
 	m, composed := pass(t, m, vcsTickMsg{})
@@ -87,6 +89,7 @@ func TestVCSTickReusesFrame(t *testing.T) {
 }
 
 func TestVCSSnapshotUnchangedReusesFrame(t *testing.T) {
+	// serial: pass: diag.MessageCounts (process-wide counters)
 	m := idleModel(t)
 	first := vcs.NewSnapshot("/r", map[string]vcs.FileStatus{"a.go": vcs.StatusModified})
 	m, composed := pass(t, m, vcs.SnapshotMsg{Snap: first})
@@ -113,6 +116,7 @@ func TestVCSSnapshotUnchangedReusesFrame(t *testing.T) {
 }
 
 func TestForgePollTickReusesFrame(t *testing.T) {
+	// serial: pass: diag.MessageCounts (process-wide counters)
 	m := dismissOnboarding(pollApp(t, host.MapConfig{}))
 	m.View()
 	root := m.forgeRoot()
@@ -130,6 +134,7 @@ func TestForgePollTickReusesFrame(t *testing.T) {
 }
 
 func TestChangeFeedCaptureBehindClosedPickerReusesFrame(t *testing.T) {
+	// serial: pass: diag.MessageCounts (process-wide counters)
 	m := idleModel(t)
 	entry := func(name string) changefeed.Entry {
 		return changefeed.Entry{Path: filepath.Join(t.TempDir(), name), Time: time.Now(), Kind: changefeed.Changed}
@@ -157,6 +162,8 @@ func TestChangeFeedCaptureBehindClosedPickerReusesFrame(t *testing.T) {
 }
 
 func TestWatchBatchOverUnviewedPathsReusesFrame(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	dir := t.TempDir()
 	a := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(a, []byte("one\n"), 0o644); err != nil {
@@ -192,6 +199,7 @@ func TestWatchBatchOverUnviewedPathsReusesFrame(t *testing.T) {
 }
 
 func TestExplorerRescanUnchangedReusesFrame(t *testing.T) {
+	// serial: pass: diag.MessageCounts (process-wide counters)
 	m := idleModel(t)
 	exp := m.explorer()
 	root := exp.Root()
@@ -222,6 +230,7 @@ func TestExplorerRescanUnchangedReusesFrame(t *testing.T) {
 }
 
 func TestNotificationDuringQuietPassRenders(t *testing.T) {
+	// serial: pass: diag.MessageCounts (process-wide counters)
 	m := idleModel(t)
 	m.vcs.tickArmed = true
 	// Something queued a toast during the pass (a hook, a consumer): the

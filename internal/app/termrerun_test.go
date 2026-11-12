@@ -10,6 +10,7 @@ import (
 // lands in, that the keyboard stays put, and the prompt gate.
 
 func TestRerunLastCommandRegisteredAndBound(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if _, ok := m.reg.Command("terminal.rerunLast"); !ok {
 		t.Fatal("terminal.rerunLast must be registered")
@@ -23,6 +24,7 @@ func TestRerunLastCommandRegisteredAndBound(t *testing.T) {
 // command is used from) its focused tab is the target, and the re-run leaves
 // the keyboard in the editor.
 func TestRerunLastTargetsOpenPopup(t *testing.T) {
+	t.Parallel()
 	m := openTestPopupWith(t, sendApp(t, "echo hello\n"))
 	m.blurPopupLayer()
 
@@ -48,6 +50,7 @@ func TestRerunLastTargetsOpenPopup(t *testing.T) {
 // TestRerunLastTargetsFocusedTerminalPane: no popup, a focused terminal pane
 // — the re-run goes there instead of opening an overlay over it.
 func TestRerunLastTargetsFocusedTerminalPane(t *testing.T) {
+	t.Parallel()
 	m := sendApp(t, "echo hello\n")
 	m = dispatch(t, m, TerminalToggleMsg{})
 	inst := m.activeWS().Panes.FocusedInstance()
@@ -70,6 +73,7 @@ func TestRerunLastTargetsFocusedTerminalPane(t *testing.T) {
 // showing the layer, and the statusbar activity indicator (#2309) is armed so
 // the command leaves a trace.
 func TestRerunLastUsesHiddenPopupAndArmsIndicator(t *testing.T) {
+	t.Parallel()
 	m := openTestPopupWith(t, sendApp(t, "echo hello\n"))
 	want := m.popup.inst.ActiveTerminal()
 	m = dispatch(t, m, TerminalPopupMsg{}) // hide, shells retained
@@ -99,6 +103,7 @@ func TestRerunLastUsesHiddenPopupAndArmsIndicator(t *testing.T) {
 // TestRerunLastOpensPopupAsLastResort: no shell anywhere — the popup is
 // opened for the purpose.
 func TestRerunLastOpensPopupAsLastResort(t *testing.T) {
+	t.Parallel()
 	m := sendApp(t, "echo hello\n")
 	if m.popup.open || m.popup.inst != nil {
 		t.Fatal("setup: the popup should start absent")
@@ -117,6 +122,7 @@ func TestRerunLastOpensPopupAsLastResort(t *testing.T) {
 // running a program is not typed into — Up + Enter would land in the
 // program — and the caller is told the shell is busy.
 func TestRerunLastRefusesBusyShell(t *testing.T) {
+	t.Parallel()
 	m := sendApp(t, "echo hello\n")
 	m = dispatch(t, m, TerminalToggleMsg{})
 	inst := m.activeWS().Panes.FocusedInstance()
@@ -142,6 +148,7 @@ func TestRerunLastRefusesBusyShell(t *testing.T) {
 // is not the user's shell, so the re-run opens the popup rather than typing
 // into the tool.
 func TestRerunLastIgnoresToolPanes(t *testing.T) {
+	t.Parallel()
 	m := sendApp(t, "echo hello\n")
 	m = dispatch(t, m, TerminalToggleMsg{})
 	inst := m.activeWS().Panes.FocusedInstance()

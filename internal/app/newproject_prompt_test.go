@@ -53,6 +53,7 @@ func openNewProject(t *testing.T, m Model, sc *wizardScaffolder) Model {
 // TestNewProjectCommandOpensWizard drives the real command path (palette /
 // menu → registry → host dispatch).
 func TestNewProjectCommandOpensWizard(t *testing.T) {
+	// serial: cloneProjectsDir: config.Set (process-wide configuration)
 	registerTestLang(t, lang.Language{ID: "wizlang", Toolchain: &wizardScaffolder{
 		opts: []lang.ProjectOption{{ID: "basic", Label: "Basic", Available: true}},
 	}})
@@ -70,6 +71,7 @@ func TestNewProjectCommandOpensWizard(t *testing.T) {
 // TestNewProjectWizardEndToEnd walks type → toolchain → name, runs the
 // scaffold command and checks the finished project re-roots the IDE.
 func TestNewProjectWizardEndToEnd(t *testing.T) {
+	// serial: cloneProjectsDir: config.Set (process-wide configuration)
 	base := newSized()
 	dir := cloneProjectsDir(t)
 	sc := &wizardScaffolder{opts: []lang.ProjectOption{{ID: "basic", Label: "Basic setup", Available: true}}}
@@ -122,6 +124,7 @@ func TestNewProjectWizardEndToEnd(t *testing.T) {
 // first row, enter goes straight to the name step, and the create only makes
 // the directory before the IDE re-roots into it.
 func TestNewProjectPlainSkipsToolchain(t *testing.T) {
+	// serial: cloneProjectsDir: config.Set (process-wide configuration)
 	m := newSized()
 	dir := cloneProjectsDir(t)
 	tm, cmd := m.Update(project.OpenNewProjectMsg{})
@@ -176,6 +179,7 @@ func TestNewProjectPlainSkipsToolchain(t *testing.T) {
 // TestNewProjectPlainEscFromNameReturnsToTypes guards the skipped step on the
 // way back: esc from the name step must not land on the toolchain step.
 func TestNewProjectPlainEscFromNameReturnsToTypes(t *testing.T) {
+	// serial: cloneProjectsDir: config.Set (process-wide configuration)
 	m := newSized()
 	cloneProjectsDir(t)
 	tm, cmd := m.Update(project.OpenNewProjectMsg{})
@@ -192,6 +196,7 @@ func TestNewProjectPlainEscFromNameReturnsToTypes(t *testing.T) {
 
 // TestNewProjectRejectsBadNames keeps validation failures in the dialog.
 func TestNewProjectRejectsBadNames(t *testing.T) {
+	// serial: cloneProjectsDir: config.Set (process-wide configuration)
 	base := newSized()
 	cloneProjectsDir(t)
 	sc := &wizardScaffolder{opts: []lang.ProjectOption{{ID: "basic", Label: "Basic", Available: true}}}
@@ -216,6 +221,7 @@ func TestNewProjectRejectsBadNames(t *testing.T) {
 // TestNewProjectUnavailableOptionBlocked keeps a disabled toolchain option
 // selectable but not acceptable — the reason shows instead.
 func TestNewProjectUnavailableOptionBlocked(t *testing.T) {
+	// serial: cloneProjectsDir: config.Set (process-wide configuration)
 	base := newSized()
 	cloneProjectsDir(t)
 	sc := &wizardScaffolder{opts: []lang.ProjectOption{
@@ -237,6 +243,7 @@ func TestNewProjectUnavailableOptionBlocked(t *testing.T) {
 // TestNewProjectScaffoldFailureCleansUpAndStays keeps a failed scaffold in
 // the dialog and removes the partial directory so the name can be reused.
 func TestNewProjectScaffoldFailureCleansUpAndStays(t *testing.T) {
+	// serial: cloneProjectsDir: config.Set (process-wide configuration)
 	base := newSized()
 	dir := cloneProjectsDir(t)
 	sc := &wizardScaffolder{
@@ -271,6 +278,7 @@ func TestNewProjectScaffoldFailureCleansUpAndStays(t *testing.T) {
 // TestNewProjectEscWalksBack guards the esc semantics: one step back, close
 // from the first step.
 func TestNewProjectEscWalksBack(t *testing.T) {
+	// serial: cloneProjectsDir: config.Set (process-wide configuration)
 	base := newSized()
 	cloneProjectsDir(t)
 	sc := &wizardScaffolder{opts: []lang.ProjectOption{{ID: "basic", Label: "Basic", Available: true}}}

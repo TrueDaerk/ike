@@ -15,6 +15,7 @@ import (
 // the open search line it is query text.
 
 func TestAtInHexViewNormalModeOpensFinderIntoItsPane(t *testing.T) {
+	t.Parallel()
 	m, binPath := hexEditOpen(t, false)
 	key := m.activeWS().Panes.Focused()
 	m = pfAt(m)
@@ -51,6 +52,7 @@ func TestAtInHexViewNormalModeOpensFinderIntoItsPane(t *testing.T) {
 }
 
 func TestAtInHexViewEditModeWritesByte(t *testing.T) {
+	t.Parallel()
 	m, _ := hexEditOpen(t, false)
 	m = hexEditType(m, "i")
 	hv := m.focusedContent().Hex()
@@ -78,6 +80,7 @@ func TestAtInHexViewEditModeWritesByte(t *testing.T) {
 }
 
 func TestAtInHexViewSearchLineIsQueryText(t *testing.T) {
+	t.Parallel()
 	m, _ := hexEditOpen(t, true)
 	m = hexEditType(m, "/")
 	if !m.focusedContent().Hex().Searching() {

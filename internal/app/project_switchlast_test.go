@@ -16,6 +16,7 @@ import (
 // Both hops are full switches, so the workspaces resume instead of being
 // rebuilt.
 func TestSwitchLastPicksMRUBackground(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	a, b := twoProjects(t)
 	m := switchModel(t)
 
@@ -50,6 +51,7 @@ func TestSwitchLastPicksMRUBackground(t *testing.T) {
 // TestSwitchLastRecordsHistory guards that the hop is a normal switch, not a
 // peek (#2136): the resumed project lands at the head of project.history.
 func TestSwitchLastRecordsHistory(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	a, b := twoProjects(t)
 	m := switchModel(t)
 
@@ -71,6 +73,7 @@ func TestSwitchLastRecordsHistory(t *testing.T) {
 // TestSwitchLastWithoutBackgroundNotifies guards the empty case: nothing
 // changes and the user is told why.
 func TestSwitchLastWithoutBackgroundNotifies(t *testing.T) {
+	// serial: switchModel: t.Setenv
 	a, _ := twoProjects(t)
 	m := switchModel(t)
 	if len(m.ws.Background()) != 0 {

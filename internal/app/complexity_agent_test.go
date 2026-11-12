@@ -121,6 +121,7 @@ func cxAgentResult(cmd tea.Cmd) *cxAgentDoneMsg {
 }
 
 func TestComplexityAskAgentRunsFreshSessionAndAppliesDiff(t *testing.T) {
+	// serial: cxAgentApp: t.Setenv
 	m, file, req := cxAgentApp(t)
 	answer := `Extracted the loop into a helper.\n\n--- a/a.go\n+++ b/a.go\n@@ -3,4 +3,4 @@\n-\tif a > 0 {\n+\tif a > 0 { // simpler\n\nThat keeps the signature.`
 	argsFile, cwdFile := fakeCxClaude(t, `{"type":"result","subtype":"success","is_error":false,"result":"`+answer+`","session_id":"fresh-1","num_turns":1}`, "", 0)
@@ -303,6 +304,7 @@ func cxAgentDone(t *testing.T, m Model, req complexitypanel.AskAgentMsg) (Model,
 }
 
 func TestComplexityAgentHunkMismatchAppliesNothing(t *testing.T) {
+	// serial: cxAgentApp: t.Setenv
 	m, file, req := cxAgentApp(t)
 	diff := "```diff\n@@ -3 +3 @@\n-\tif a > 0 {\n+\tif a >= 1 {\n@@ -9 +9 @@\n-\treturn b\n+\treturn 0\n```\nWhy."
 	useFakeCxRunner(t, &fakeCxRunner{answers: []agentask.Result{{Answer: diff, ForkID: "s1"}}})
@@ -326,6 +328,7 @@ func TestComplexityAgentHunkMismatchAppliesNothing(t *testing.T) {
 // when that one is elided too, the apply misses and the scratch's note
 // names the left-out lines, not an edited file.
 func TestComplexityAgentElidedDiffRetriesThenNotesIt(t *testing.T) {
+	// serial: cxAgentApp: t.Setenv
 	m, file, req := cxAgentApp(t)
 	elided := "```diff\n@@ -1,40 +1,40 @@\n \tif a > 0 {\n \t\t... (rest unchanged)\n-\treturn b\n+\treturn 0\n```\nWhy."
 	f := &fakeCxRunner{answers: []agentask.Result{{Answer: elided, ForkID: "s1"}, {Answer: elided, ForkID: "s1"}}}
@@ -352,6 +355,7 @@ func TestComplexityAgentElidedDiffRetriesThenNotesIt(t *testing.T) {
 }
 
 func TestComplexityAgentNoDiffRetriesOnceThenScratch(t *testing.T) {
+	// serial: cxAgentApp: t.Setenv
 	m, file, req := cxAgentApp(t)
 	f := &fakeCxRunner{answers: []agentask.Result{
 		{Answer: `<invoke name="Read"><parameter name="file_path">a.go</parameter></invoke>`, ForkID: "s1"},
@@ -374,6 +378,7 @@ func TestComplexityAgentNoDiffRetriesOnceThenScratch(t *testing.T) {
 }
 
 func TestComplexityAgentRetryFindsDiff(t *testing.T) {
+	// serial: cxAgentApp: t.Setenv
 	m, file, req := cxAgentApp(t)
 	f := &fakeCxRunner{answers: []agentask.Result{
 		{Answer: "Let me read the file first.", ForkID: "s1"},
@@ -387,6 +392,7 @@ func TestComplexityAgentRetryFindsDiff(t *testing.T) {
 }
 
 func TestComplexityAgentApplyOffOpensScratchOnly(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	m, file, req := cxAgentApp(t)
 	prev := config.Get()
 	cfg := *prev
@@ -407,6 +413,7 @@ func TestComplexityAgentApplyOffOpensScratchOnly(t *testing.T) {
 }
 
 func TestComplexityAgentCancel(t *testing.T) {
+	// serial: useFakeCxRunner: sets package variable cxAgentRunner
 	m, _, req := cxAgentApp(t)
 	f := &fakeCxRunner{block: true}
 	useFakeCxRunner(t, f)
@@ -465,6 +472,7 @@ func TestComplexityAgentCancel(t *testing.T) {
 }
 
 func TestComplexityAgentSegment(t *testing.T) {
+	// serial: timeApp: t.Setenv
 	m, _ := timeApp(t)
 	if m.complexityAgentSegment() != "" {
 		t.Fatal("no run, no segment")
@@ -495,6 +503,7 @@ func TestComplexityAgentSegment(t *testing.T) {
 }
 
 func TestComplexityAgentTickRearmsWhileRunning(t *testing.T) {
+	// serial: timeApp: t.Setenv
 	m, _ := timeApp(t)
 	m.cxAgent = &complexityAgentState{running: map[string]*cxAgentRun{"a": {id: 1}}}
 	if m.armComplexityAgentTick() == nil || m.armComplexityAgentTick() != nil {
@@ -513,6 +522,7 @@ func TestComplexityAgentTickRearmsWhileRunning(t *testing.T) {
 }
 
 func TestCxAgentHunksRefusesOtherFile(t *testing.T) {
+	t.Parallel()
 	d, _ := agentask.ParseAnswerDiff("```diff\n--- a/a.go\n+++ b/a.go\n@@\n-x\n+y\n--- a/b.go\n+++ b/b.go\n@@\n-x\n+y\n```")
 	if _, why := cxAgentFileHunks([]string{"/p/a.go"}, d); why != "also changes b.go" {
 		t.Fatalf("why = %q", why)
@@ -532,6 +542,7 @@ func TestCxAgentHunksRefusesOtherFile(t *testing.T) {
 // land on the group's files in diff order (repeated sections merged); a
 // foreign file, an unnamed section and an ambiguous suffix refuse.
 func TestCxAgentFileHunksSortsMultiFileDiff(t *testing.T) {
+	t.Parallel()
 	paths := []string{"/p/x/a.go", "/p/y/b.go"}
 	d, _ := agentask.ParseAnswerDiff("```diff\n--- a/y/b.go\n+++ b/y/b.go\n@@\n-x\n+y\n--- a/x/a.go\n+++ b/x/a.go\n@@\n-x\n+y\n--- a/y/b.go\n+++ b/y/b.go\n@@\n-z\n+w\n```")
 	edits, why := cxAgentFileHunks(paths, d)
@@ -553,6 +564,7 @@ func TestCxAgentFileHunksSortsMultiFileDiff(t *testing.T) {
 }
 
 func TestExcessDelta(t *testing.T) {
+	t.Parallel()
 	for d, want := range map[int]string{-3: "−3", 2: "+2", 0: "±0"} {
 		if got := excessDelta(d); got != want {
 			t.Errorf("excessDelta(%d) = %q, want %q", d, got, want)
@@ -561,6 +573,7 @@ func TestExcessDelta(t *testing.T) {
 }
 
 func TestComplexityAskAgentMissingClaude(t *testing.T) {
+	// serial: t.Setenv
 	m, _, req := cxAgentApp(t)
 	t.Setenv("PATH", t.TempDir())
 	m, run := startCxAgent(t, m, req)
@@ -579,6 +592,7 @@ func TestComplexityAskAgentMissingClaude(t *testing.T) {
 }
 
 func TestComplexityAskAgentFailureNotifiesStderr(t *testing.T) {
+	// serial: fakeCxClaude: t.Setenv
 	m, _, req := cxAgentApp(t)
 	fakeCxClaude(t, "", "quota exceeded for today", 2)
 	m, run := startCxAgent(t, m, req)
@@ -594,6 +608,7 @@ func TestComplexityAskAgentFailureNotifiesStderr(t *testing.T) {
 }
 
 func TestComplexityAskAgentCommandNeedsRow(t *testing.T) {
+	// serial: timeApp: t.Setenv
 	m, _ := timeApp(t)
 	m = dismissOnboarding(m)
 	tm, cmd := m.Update(ComplexityAskAgentMsg{})
@@ -604,6 +619,7 @@ func TestComplexityAskAgentCommandNeedsRow(t *testing.T) {
 }
 
 func TestFenceDiff(t *testing.T) {
+	t.Parallel()
 	cases := map[string]string{
 		"```diff\n--- a\n+++ b\n```": "```diff\n--- a\n+++ b\n```",
 		"no diff here":               "no diff here",

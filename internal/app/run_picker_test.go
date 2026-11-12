@@ -12,6 +12,7 @@ import (
 // entries render with their kind/target detail, and the import names its
 // source file.
 func TestRunConfigsModeResults(t *testing.T) {
+	t.Parallel()
 	mode := newRunConfigsMode()
 	mode.entries = []runConfigEntry{
 		{cfg: run.Config{Name: "prog", Kind: run.KindRun, Lang: "go", File: "cmd/main.go"}, stored: true},
@@ -42,6 +43,7 @@ func TestRunConfigsModeResults(t *testing.T) {
 // TestRunPickedConfigLaunchesRun verifies a run-kind pick rides the ordinary
 // launch funnel into the Run tool, like run.file.
 func TestRunPickedConfigLaunchesRun(t *testing.T) {
+	t.Parallel()
 	m := runModel(t, "bottom")
 	store := run.Load()
 	cfg, _, ok := store.EnsureFor(projectRoot(), m.activeEditor().Path())

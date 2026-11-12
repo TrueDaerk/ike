@@ -39,6 +39,7 @@ func openJQOverFloatingTerminal(t *testing.T) Model {
 // guard: the playground must not swallow a paste that belongs to the focused
 // floating terminal panel.
 func TestPasteWithFloatingTerminalFocusedSkipsPlayground(t *testing.T) {
+	t.Parallel()
 	m := openJQOverFloatingTerminal(t)
 	program := m.play.program.Text
 
@@ -56,6 +57,7 @@ func TestPasteWithFloatingTerminalFocusedSkipsPlayground(t *testing.T) {
 // TestPasteWithPopupBoxOpenSkipsPlayground covers the popup box half of the
 // layer, and that closing it hands the paste straight back to the playground.
 func TestPasteWithPopupBoxOpenSkipsPlayground(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"foo":[1,2,3]}`))
 	m.play.program.Clear()
 	m = openTestPopupWith(t, m)
@@ -80,6 +82,7 @@ func TestPasteWithPopupBoxOpenSkipsPlayground(t *testing.T) {
 // one pane and the focus in another editor pane, the paste is an ordinary
 // editor insert.
 func TestPasteWithOtherPaneFocusedSkipsPlayground(t *testing.T) {
+	t.Parallel()
 	m := playApp(t, `{"foo":[1,2,3]}`)
 	playKey := m.activeWS().Panes.Focused()
 	m.SplitFocused(layout.ZoneRight)
@@ -106,6 +109,7 @@ func TestPasteWithOtherPaneFocusedSkipsPlayground(t *testing.T) {
 // TestPasteWithToolPaneFocusedSkipsPlayground: the same for a tool window with
 // a text input of its own (#2002) — the issues filter.
 func TestPasteWithToolPaneFocusedSkipsPlayground(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"foo":[1,2,3]}`))
 	program := m.play.program.Text
 

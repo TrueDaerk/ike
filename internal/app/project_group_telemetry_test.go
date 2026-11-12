@@ -70,6 +70,7 @@ func opPhases(evs []telemetry.Event) []string {
 // carrying the member count, no skips, the landing member's project token and
 // the chain's total ms — while every hop still records its own project.switch.
 func TestGroupOpenRecordsOp(t *testing.T) {
+	// serial: peekFixture: t.Chdir (process working directory)
 	roots := peekFixture(t, "origin", "api", "ui", "www")
 	storeGroup(t, "web", roots[1:])
 	m := switchModel(t)
@@ -102,6 +103,8 @@ func TestGroupOpenRecordsOp(t *testing.T) {
 // TestGroupOpenOpCountsSkippedMember: a member that is gone is one skipped hop
 // in the payload, and the members count stays the present ones the chain ran.
 func TestGroupOpenOpCountsSkippedMember(t *testing.T) {
+	// serial: storeGroup: t.Setenv
+	withStore(t)
 	if os.Geteuid() == 0 {
 		t.Skip("root can enter any directory")
 	}
@@ -130,6 +133,7 @@ func TestGroupOpenOpCountsSkippedMember(t *testing.T) {
 // TestGroupCloseRecordsOp: the close op carries the number of member
 // workspaces that were torn down, the switched-away one included.
 func TestGroupCloseRecordsOp(t *testing.T) {
+	// serial: driveGroupOpen: waits on the wall clock (load-sensitive)
 	roots := peekFixture(t, "origin", "api", "ui")
 	storeGroup(t, "web", roots[1:])
 	m := switchModel(t)
@@ -154,6 +158,7 @@ func TestGroupCloseRecordsOp(t *testing.T) {
 // TestGroupOpsSilentWhenTelemetryOff: with telemetry.enabled = false the chain
 // runs and records nothing at all — no file, no op.
 func TestGroupOpsSilentWhenTelemetryOff(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	roots := peekFixture(t, "origin", "api", "ui")
 	storeGroup(t, "web", roots[1:])
 	// The setting is read live off the global config, which the hops reload

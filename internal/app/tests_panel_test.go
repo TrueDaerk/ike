@@ -54,13 +54,13 @@ func init() {
 
 func testsApp(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.New(), host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return out.(Model)
 }
 
 func TestTestsToggleLifecycle(t *testing.T) {
+	t.Parallel()
 	m := testsApp(t)
 	before := m.activeWS().Panes.Focused()
 
@@ -82,6 +82,8 @@ func TestTestsToggleLifecycle(t *testing.T) {
 }
 
 func TestTestsPanePersists(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := testsApp(t)
 	out, _ := m.Update(TestsToggleMsg{})
 	m = out.(Model)
@@ -124,6 +126,7 @@ func runFakeTests(t *testing.T, m Model) Model {
 }
 
 func TestCapturedRunFillsPanel(t *testing.T) {
+	t.Parallel()
 	m := testsApp(t)
 	m = runFakeTests(t, m)
 	p := m.testsPanel()
@@ -167,6 +170,7 @@ func drain(t *testing.T, m Model, cmd tea.Cmd) Model {
 }
 
 func TestRerunFailedRunsOnlyFailed(t *testing.T) {
+	t.Parallel()
 	m := testsApp(t)
 	m = runFakeTests(t, m)
 	out, cmd := m.Update(testresults.RerunMsg{Failed: true})
@@ -184,6 +188,7 @@ func TestRerunFailedRunsOnlyFailed(t *testing.T) {
 }
 
 func TestStaleRunResultDropped(t *testing.T) {
+	t.Parallel()
 	m := testsApp(t)
 	m = runFakeTests(t, m)
 	rows := m.testsPanel().Rows()
@@ -195,6 +200,7 @@ func TestStaleRunResultDropped(t *testing.T) {
 }
 
 func TestNoParserKeepsRunTerminalPath(t *testing.T) {
+	// serial: registerTestLang: lang.Register (process-wide language registry)
 	m := testsApp(t)
 	// The runtst-style language without ParseOutput: launchTestRun must
 	// decline so launchRun falls through to the terminal path.

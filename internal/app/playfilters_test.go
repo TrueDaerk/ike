@@ -63,6 +63,8 @@ func saveFilter(t *testing.T, m Model, name string, global bool) Model {
 // saved from the playground is on disk in the scope it was saved to, and a
 // fresh read — what a restarted IDE does — finds it there.
 func TestJQFilterSavePersistsPerScope(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openJQ(t, playApp(t, `{"hits":{"hits":[{"_source":{"a":1}}]}}`))
 	m = setProgram(m, ".hits.hits[] | ._source")
 	m = saveFilter(t, m, "es hits", false)
@@ -91,6 +93,7 @@ func TestJQFilterSavePersistsPerScope(t *testing.T) {
 // TestJQFilterSaveRefusesEmptyProgram: the identity program is the
 // playground's default, not something worth a name.
 func TestJQFilterSaveRefusesEmptyProgram(t *testing.T) {
+	t.Parallel()
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = setProgram(m, ".")
 	tm, _ := m.Update(tea.KeyPressMsg{Code: 's', Mod: tea.ModCtrl})
@@ -107,6 +110,8 @@ func TestJQFilterSaveRefusesEmptyProgram(t *testing.T) {
 // replaces a saved filter — and the second enter is how an edited filter is
 // written back under the same name.
 func TestJQFilterSaveOverwriteNeedsSecondEnter(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = setProgram(m, ".a")
 	m = saveFilter(t, m, "mine", false)
@@ -137,6 +142,8 @@ func TestJQFilterSaveOverwriteNeedsSecondEnter(t *testing.T) {
 // fuzzy-matched over the *name*, the program rides along as the detail
 // preview, and project and global entries carry different badges.
 func TestJQFilterPickerFiltersAndBadgesScope(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := newSized()
 	proj := loadPlayFilters(jqplay.DialectJQ, jqplay.ScopeProject)
 	if err := proj.Set("es hits", ".hits.hits[] | ._source"); err != nil {
@@ -183,6 +190,8 @@ func TestJQFilterPickerFiltersAndBadgesScope(t *testing.T) {
 // TestJQFilterInsertPutsProgramOnQueryLine: picking a filter replaces the
 // query line and evaluates it.
 func TestJQFilterInsertPutsProgramOnQueryLine(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openJQ(t, playApp(t, `{"foo":[{"bar":1},{"bar":4}]}`))
 	m = setProgram(m, ".foo")
 	m = saveFilter(t, m, "big bars", false)
@@ -204,6 +213,8 @@ func TestJQFilterInsertPutsProgramOnQueryLine(t *testing.T) {
 // TestJQFilterInsertOpensPlaygroundWhenClosed: the picker is reachable from
 // the palette with no playground up, so picking one has to open it.
 func TestJQFilterInsertOpensPlaygroundWhenClosed(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := playApp(t, `{"foo":1}`)
 	lib := loadPlayFilters(jqplay.DialectJQ, jqplay.ScopeGlobal)
 	if err := lib.Set("foo", ".foo"); err != nil {
@@ -228,6 +239,8 @@ func TestJQFilterInsertOpensPlaygroundWhenClosed(t *testing.T) {
 // TestJQFilterRenameFromPicker walks the picker's rename spelling: the entry's
 // row opens the prompt prefilled, and the new name is what the store holds.
 func TestJQFilterRenameFromPicker(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = setProgram(m, ".a")
 	m = saveFilter(t, m, "old name", false)
@@ -258,6 +271,8 @@ func TestJQFilterRenameFromPicker(t *testing.T) {
 // TestJQFilterRenameRefusesTakenName: a rename must never swallow another
 // filter — only the deliberate, confirmed save overwrite may replace one.
 func TestJQFilterRenameRefusesTakenName(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = setProgram(m, ".a")
 	m = saveFilter(t, m, "one", false)
@@ -286,6 +301,8 @@ func TestJQFilterRenameRefusesTakenName(t *testing.T) {
 // TestJQFilterDeleteFromPicker: the picker's aux action removes the entry from
 // its scope's store, for good.
 func TestJQFilterDeleteFromPicker(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = setProgram(m, ".a")
 	m = saveFilter(t, m, "gone soon", false)
@@ -306,6 +323,7 @@ func TestJQFilterDeleteFromPicker(t *testing.T) {
 // TestJQFilterPickerEmptyExplains: with nothing saved the command says where
 // filters come from instead of opening an empty list.
 func TestJQFilterPickerEmptyExplains(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	tm, _ := m.Update(ShowFiltersMsg{})
 	m = asModel(tm)
@@ -351,6 +369,8 @@ func pickerGlyphs(t *testing.T, m Model) (Model, map[string]string) {
 // TestJQFilterSampleRoundTrip: a save with the sample step writes the input
 // and the expectation next to the program, and a fresh read finds them.
 func TestJQFilterSampleRoundTrip(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	body := `{"items":[{"id":1},{"id":2}]}`
 	m := openJQ(t, playApp(t, body))
 	m = setProgram(m, ".items[].id")
@@ -371,6 +391,8 @@ func TestJQFilterSampleRoundTrip(t *testing.T) {
 // TestJQFilterSampleOldStoreLoads: a store written before #2792 — no sample
 // fields at all — loads as filters without one, and the picker marks them –.
 func TestJQFilterSampleOldStoreLoads(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	path := playFilterFile(jqplay.DialectJQ, jqplay.ScopeProject)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -394,6 +416,8 @@ func TestJQFilterSampleOldStoreLoads(t *testing.T) {
 // still prints the expectation over its sample, ✗ once it does not, – without
 // a sample — the verdicts arriving through commands, not on the open itself.
 func TestJQFilterCheckStates(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openJQ(t, playApp(t, `{"a":{"b":3}}`))
 	m = setProgram(m, ".a.b")
 	m = saveFilterWithSample(t, m, "good")
@@ -440,6 +464,8 @@ func TestJQFilterCheckStates(t *testing.T) {
 // TestJQFilterCheckAllCommand: playground.checkFilters drops the cache and
 // re-runs every self-test, recording the rotted filter's ✗.
 func TestJQFilterCheckAllCommand(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openJQ(t, playApp(t, `{"a":1}`))
 	m = setProgram(m, ".a")
 	m = saveFilterWithSample(t, m, "one")
@@ -465,6 +491,7 @@ func TestJQFilterCheckAllCommand(t *testing.T) {
 // TestJQFilterSampleBudget: an input over jqplay.MaxSampleBytes is refused at
 // capture — the prompt says why and ctrl+t attaches nothing.
 func TestJQFilterSampleBudget(t *testing.T) {
+	t.Parallel()
 	big := `{"pad":"` + strings.Repeat("x", jqplay.MaxSampleBytes) + `","a":1}`
 	m := openJQ(t, playApp(t, big))
 	m = setProgram(m, ".a")

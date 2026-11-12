@@ -47,6 +47,7 @@ func writeGzipFixture(t *testing.T, dir, name, header string, content []byte) st
 // TestOpenInBrowserViewable guards #1429: a browser-viewable focused file is
 // handed to the platform opener.
 func TestOpenInBrowserViewable(t *testing.T) {
+	// serial: sets package variable browserOpen
 	var opened string
 	orig := browserOpen
 	browserOpen = func(path string) error { opened = path; return nil }
@@ -71,6 +72,7 @@ func TestOpenInBrowserViewable(t *testing.T) {
 // TestOpenInBrowserNonViewable guards #1429: non-viewable types toast and do
 // not reach the opener.
 func TestOpenInBrowserNonViewable(t *testing.T) {
+	// serial: sets package variable browserOpen
 	var opened string
 	orig := browserOpen
 	browserOpen = func(path string) error { opened = path; return nil }
@@ -95,6 +97,7 @@ func TestOpenInBrowserNonViewable(t *testing.T) {
 // TestBrowserViewable guards the extension gate: markup, images and PDF are
 // viewable; source, markdown and extension-less files are not.
 func TestBrowserViewable(t *testing.T) {
+	t.Parallel()
 	yes := []string{"a.html", "b.HTM", "c.svg", "d.png", "e.jpeg", "f.pdf", "g.webp"}
 	for _, p := range yes {
 		if !browserViewable(p) {
@@ -113,6 +116,7 @@ func TestBrowserViewable(t *testing.T) {
 // (report.html.gz) is unpacked into ike's own scratch directory and the
 // unpacked copy — not the .gz — is handed to the opener.
 func TestOpenInBrowserGzipViewable(t *testing.T) {
+	// serial: sets package variable browserOpen
 	tmpDir := withOpenInBrowserTempDir(t)
 	var opened string
 	orig := browserOpen
@@ -158,6 +162,7 @@ func TestOpenInBrowserGzipViewable(t *testing.T) {
 // is not browser-viewable (app.log.gz) still declines the action, and never
 // reaches the opener or the scratch directory.
 func TestOpenInBrowserGzipNonHTML(t *testing.T) {
+	// serial: sets package variable browserOpen
 	withOpenInBrowserTempDir(t)
 	var opened string
 	orig := browserOpen
@@ -181,6 +186,7 @@ func TestOpenInBrowserGzipNonHTML(t *testing.T) {
 // belonging to the archive viewer, never the unpack-and-open path, even when
 // it is named like an .html.gz.
 func TestOpenInBrowserGzipTarExcluded(t *testing.T) {
+	// serial: sets package variable browserOpen
 	withOpenInBrowserTempDir(t)
 	var opened string
 	orig := browserOpen
@@ -204,6 +210,7 @@ func TestOpenInBrowserGzipTarExcluded(t *testing.T) {
 // large-file limit is refused with a clear notice instead of being opened
 // partially — the gzip-bomb guard gzfile.Read already enforces.
 func TestOpenInBrowserGzipLimit(t *testing.T) {
+	// serial: sets package variable browserOpen
 	withOpenInBrowserTempDir(t)
 	var opened string
 	orig := browserOpen
@@ -227,6 +234,7 @@ func TestOpenInBrowserGzipLimit(t *testing.T) {
 // resolved from the gzip header's original-name field when the archive's own
 // name carries no usable extension (report.gz, header names report.html).
 func TestOpenInBrowserGzipHeaderFallback(t *testing.T) {
+	// serial: sets package variable browserOpen
 	tmpDir := withOpenInBrowserTempDir(t)
 	var opened string
 	orig := browserOpen

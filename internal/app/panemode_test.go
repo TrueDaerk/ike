@@ -37,6 +37,8 @@ func focusedEditorPane(t *testing.T, m Model) (Model, string, string) {
 // the mode leaves Normal, so insert mode is visible from across the screen.
 // Normal mode keeps BorderFocus — the resting look is unchanged.
 func TestPaneBorderTracksEditorMode(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := sizedWith(t, registry.Global(), 100, 40)
 	m, _, box := focusedEditorPane(t, m)
 	if !strings.Contains(box, fgSGR(m.pal().BorderFocus)) {
@@ -66,6 +68,7 @@ func TestPaneBorderTracksEditorMode(t *testing.T) {
 // about where the user is typing: an unfocused pane keeps the plain border even
 // when its editor sits in insert mode.
 func TestUnfocusedPaneIgnoresEditorMode(t *testing.T) {
+	t.Parallel()
 	m := sizedWith(t, registry.Global(), 100, 40)
 	m, key, _ := focusedEditorPane(t, m)
 	m = drainKey(m, tea.KeyPressMsg{Code: 'i', Text: "i"})
@@ -82,6 +85,7 @@ func TestUnfocusedPaneIgnoresEditorMode(t *testing.T) {
 // TestPaneEditorMode covers the resolver: only an editor pane showing an actual
 // editor reports a mode, so terminal and tool panes keep their plain chrome.
 func TestPaneEditorMode(t *testing.T) {
+	t.Parallel()
 	m := sizedWith(t, registry.Global(), 100, 40)
 	m, key, _ := focusedEditorPane(t, m)
 	if md, ok := paneEditorMode(m.activeWS().Panes.Get(key)); !ok || md != editor.Normal {
@@ -99,6 +103,8 @@ func TestPaneEditorMode(t *testing.T) {
 // while a pane is being dragged its source colour wins over the mode colour, so
 // the drag stays readable no matter which mode the editor is in.
 func TestDragColourOutranksModeColour(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := sizedWith(t, registry.Global(), 100, 40)
 	m, key, _ := focusedEditorPane(t, m)
 	m = drainKey(m, tea.KeyPressMsg{Code: 'i', Text: "i"})

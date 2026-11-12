@@ -14,6 +14,7 @@ import (
 // TestVCSPanelRestores guards the slimmed #750 panel: quitting with the panel
 // open restores it in its slot, and the first status snapshot re-feeds it.
 func TestVCSPanelRestores(t *testing.T) {
+	// serial: t.Setenv
 	store := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", store)
 

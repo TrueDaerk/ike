@@ -51,6 +51,7 @@ func panelView(p *testresults.Model) string {
 // A 200 whose assertions failed is a failed run for the off-screen notice:
 // it announces itself with the summary, and a passing run stays quiet.
 func TestHTTPNotifiesFailedAssertions(t *testing.T) {
+	// serial: httpNotifyApp: config.Set (process-wide configuration)
 	m := httpNotifyApp(t, 0)
 	m = landHTTPResponse(t, m, "GET /things", assertResponse("one",
 		passedAssertion(2, "status", "==", "200"),
@@ -73,6 +74,7 @@ func TestHTTPNotifiesFailedAssertions(t *testing.T) {
 // with one row per directive under the request; the window never takes the
 // focus.
 func TestHTTPAssertionsFillTestResults(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	if m.testsPanel() != nil {
 		t.Fatal("no tests panel yet")
@@ -111,6 +113,7 @@ func TestHTTPAssertionsFillTestResults(t *testing.T) {
 // A passing run does not push a second tool window onto the screen — the
 // response pane already says so — but it fills the window when it is open.
 func TestHTTPAssertionsPassingRunOnlyFillsOpenWindow(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	m = landHTTPResponse(t, m, "GET /things", assertResponse("things", passedAssertion(2, "status", "==", "200")))
 	if m.testsPanel() != nil {
@@ -130,6 +133,7 @@ func TestHTTPAssertionsPassingRunOnlyFillsOpenWindow(t *testing.T) {
 
 // A response without directives leaves the window's last run alone.
 func TestHTTPResponseWithoutAssertionsKeepsWindow(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	m = landHTTPResponse(t, m, "GET /things", assertResponse("things", failedAssertion(2, "status", "==", "201", "got 200")))
 	rows := m.testsPanel().Rows()
@@ -160,6 +164,7 @@ func assertServer(t *testing.T, body string) (*httptest.Server, *atomic.Int32) {
 // Results window lists it with the file location, and the window's re-run
 // dispatches the request again.
 func TestHTTPAssertionsFromFileMarkAndRerun(t *testing.T) {
+	t.Parallel()
 	srv, hits := assertServer(t, `{"items":[{"id":41}]}`)
 	m := httpApp(t)
 	src := "### things\n" +

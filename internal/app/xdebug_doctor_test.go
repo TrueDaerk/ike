@@ -34,6 +34,7 @@ func doctorView(t *testing.T, m Model) string {
 // TestDoctorToggle guards the debug.doctor state machine: open at the
 // adaptive placement, focus when unfocused, return focus when focused.
 func TestDoctorToggle(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	out, _ := m.Update(DebugDoctorMsg{})
 	m = out.(Model)
@@ -57,6 +58,8 @@ func TestDoctorToggle(t *testing.T) {
 // active" half: doctor events land in the log even when no debug session
 // owns them (e.g. the trailing stopped event after a disconnect).
 func TestDoctorTracksEventsWithoutSession(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := sized(t, 120, 40)
 	out, _ := m.Update(DebugDoctorMsg{})
 	m = out.(Model)
@@ -107,6 +110,7 @@ func TestDoctorTracksEventsWithoutSession(t *testing.T) {
 // TestDoctorClear guards the clear action: 'c' in the focused pane empties
 // the trace but keeps the listener status.
 func TestDoctorClear(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 120, 40)
 	out, _ := m.Update(DebugDoctorMsg{})
 	m = out.(Model)
@@ -132,6 +136,7 @@ func TestDoctorClear(t *testing.T) {
 // the listen session and toggling it off marks the doctor's listener state
 // stopped even when the bridge's own stopped event is lost in the teardown.
 func TestDoctorListenToggleMarksStopped(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	// The registry is global and registerEnvTestPython (terminal_test.go)
 	// strips toolchains; re-register the debug-capable php stub, as the
 	// convention there prescribes.

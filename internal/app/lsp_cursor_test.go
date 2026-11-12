@@ -40,6 +40,7 @@ func (r *recordingEmitter) assertAt(t *testing.T, path string, line, col int) {
 }
 
 func TestProgrammaticJumpEmitsCursorMove(t *testing.T) {
+	t.Parallel()
 	_, files := navProject(t)
 	m := newSized()
 	tm, _ := m.openPath(files[0], false)

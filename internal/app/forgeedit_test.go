@@ -40,6 +40,8 @@ func openEdit(t *testing.T, m Model, target forge.TextTarget, base string) (Mode
 }
 
 func TestForgeEditOpensPrefilledMarkdownBuffer(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, path := openEdit(t, newSized(), commentTarget, "the current comment")
 
 	if !strings.HasSuffix(path, ".md") {
@@ -64,6 +66,8 @@ func TestForgeEditOpensPrefilledMarkdownBuffer(t *testing.T) {
 }
 
 func TestForgeEditReusesAnAlreadyOpenBuffer(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, path := openEdit(t, newSized(), commentTarget, "text")
 	out, _ := m.Update(ghissues.EditTextRequestMsg{Target: commentTarget, Base: "text"})
 	m = out.(Model)
@@ -76,6 +80,8 @@ func TestForgeEditReusesAnAlreadyOpenBuffer(t *testing.T) {
 }
 
 func TestSavingABoundBufferPushesItsFileContent(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, path := openEdit(t, newSized(), commentTarget, "before")
 	if err := os.WriteFile(path, []byte("after the edit\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -92,6 +98,8 @@ func TestSavingABoundBufferPushesItsFileContent(t *testing.T) {
 }
 
 func TestEmptyNewCommentIsNotPosted(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	target := forge.TextTarget{Kind: forge.TextNewComment, Issue: 12}
 	m, path := openEdit(t, newSized(), target, "")
 	if _, cmd := m.Update(forgeEditSavedMsg{path: path}); cmd != nil {
@@ -103,6 +111,8 @@ func TestEmptyNewCommentIsNotPosted(t *testing.T) {
 }
 
 func TestSuccessfulPushClosesTheBufferAndRefreshes(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, path := openEdit(t, newSized(), commentTarget, "before")
 
 	out, _ := m.Update(forge.SaveTextMsg{Target: commentTarget, Path: path, Body: "after"})
@@ -123,6 +133,8 @@ func TestSuccessfulPushClosesTheBufferAndRefreshes(t *testing.T) {
 }
 
 func TestFailedPushKeepsTheBufferAndRetries(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, path := openEdit(t, newSized(), commentTarget, "before")
 	if err := os.WriteFile(path, []byte("my precious text\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -163,6 +175,8 @@ func TestFailedPushKeepsTheBufferAndRetries(t *testing.T) {
 }
 
 func TestStaleBaseWarnsAndOffersOverwriteOrReload(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, path := openEdit(t, newSized(), commentTarget, "what I opened")
 	if err := os.WriteFile(path, []byte("my version\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -198,6 +212,8 @@ func TestStaleBaseWarnsAndOffersOverwriteOrReload(t *testing.T) {
 }
 
 func TestStaleBaseReloadReplacesTheBufferAndRebases(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, path := openEdit(t, newSized(), commentTarget, "what I opened")
 	if err := os.WriteFile(path, []byte("my version\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -230,6 +246,8 @@ func TestStaleBaseReloadReplacesTheBufferAndRebases(t *testing.T) {
 }
 
 func TestStaleDialogCancelKeepsEverything(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, path := openEdit(t, newSized(), commentTarget, "what I opened")
 	out, _ := m.Update(forge.SaveTextMsg{
 		Target: commentTarget, Path: path, Body: "mine", Stale: true, Current: "theirs",
@@ -249,6 +267,8 @@ func TestStaleDialogCancelKeepsEverything(t *testing.T) {
 }
 
 func TestPushOutcomeNeverStealsAnOpenOverlay(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, path := openEdit(t, newSized(), commentTarget, "before")
 	// Something else owns the floating shell — a prompt, the help view.
 	m.shell.SetContent(ui.ModelContent{Heading: "busy", Body: func() string { return "" }})

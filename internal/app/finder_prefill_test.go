@@ -36,6 +36,7 @@ func selectWord(m Model) Model {
 // of #2165: an editor visual selection prefills Find in Path, and typing
 // replaces it without any extra keys.
 func TestFindInPathPrefillsEditorSelection(t *testing.T) {
+	t.Parallel()
 	m := prefillApp(t, "needle one\ntwo\n")
 	m = selectWord(m)
 	if sel := m.activeSelectionText(); sel != "needle" {
@@ -60,6 +61,7 @@ func TestFindInPathPrefillsEditorSelection(t *testing.T) {
 
 // TestReplaceInPathPrefillsEditorSelection: replace-in-path shares the seam.
 func TestReplaceInPathPrefillsEditorSelection(t *testing.T) {
+	t.Parallel()
 	m := prefillApp(t, "needle one\n")
 	m = selectWord(m)
 	out, _ := m.Update(OpenReplaceInPathMsg{})
@@ -72,6 +74,7 @@ func TestReplaceInPathPrefillsEditorSelection(t *testing.T) {
 // TestFindInPathWithoutSelectionKeepsQuery: with nothing selected the overlay
 // opens exactly as before — the remembered query survives.
 func TestFindInPathWithoutSelectionKeepsQuery(t *testing.T) {
+	t.Parallel()
 	m := prefillApp(t, "needle one\n")
 	out, _ := m.Update(OpenFindInPathMsg{})
 	m = out.(Model)
@@ -93,6 +96,7 @@ func TestFindInPathWithoutSelectionKeepsQuery(t *testing.T) {
 // TestFindInPathMultiLineSelectionKeepsQuery: a line-spanning selection
 // prefills nothing (the documented rule, matching the editor's "/" search).
 func TestFindInPathMultiLineSelectionKeepsQuery(t *testing.T) {
+	t.Parallel()
 	m := prefillApp(t, "needle one\ntwo three\n")
 	out, _ := m.Update(OpenFindInPathMsg{})
 	m = out.(Model)
@@ -119,6 +123,7 @@ func TestFindInPathMultiLineSelectionKeepsQuery(t *testing.T) {
 // from the audit: the HTTP response viewer's mouse selection reaches the same
 // seam, so Find in Path prefills from it too.
 func TestSelectionSourceHTTPResponseViewer(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	key := m.activeWS().Panes.AddHTTP()
 	hp := m.activeWS().Panes.Get(key).HTTP()

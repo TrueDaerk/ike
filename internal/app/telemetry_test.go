@@ -74,7 +74,7 @@ func eventsOf(evs []telemetry.Event, typ string) []telemetry.Event {
 // telemetryModel builds an isolated model with one bindable test command.
 func telemetryModel(t *testing.T, cfg host.MapConfig) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t) // the events land in the store, one per model
 	reg := registry.New()
 	reg.Add(fakePlugin{id: "tm", caps: plugin.Capabilities{Commands: []plugin.Command{{
 		ID: "tm.fire", Title: "Fire", Scope: plugin.GlobalScope(),
@@ -103,6 +103,8 @@ func telemetryModel(t *testing.T, cfg host.MapConfig) Model {
 // TestTelemetryKeybindRecordsCommandAndKey drives a bound chord and expects
 // both a key "resolved" event and a command event sourced "keybind".
 func TestTelemetryKeybindRecordsCommandAndKey(t *testing.T) {
+	// serial: telemetryModel: waits on the wall clock (load-sensitive)
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{"keymap.bindings.ctrl+y": "tm.fire"})
 	tm, _ := m.Update(tea.KeyPressMsg{Code: 'y', Mod: tea.ModCtrl})
 	m = tm.(Model)
@@ -122,6 +124,8 @@ func TestTelemetryKeybindRecordsCommandAndKey(t *testing.T) {
 // TestTelemetryPaletteAndMenuSources checks the invocation source survives the
 // palette and menu dispatch paths.
 func TestTelemetryPaletteAndMenuSources(t *testing.T) {
+	// serial: telemetryModel: waits on the wall clock (load-sensitive)
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	tm, _ := m.Update(palette.RunCommandMsg{ID: "tm.fire"})
 	m = tm.(Model)
@@ -143,6 +147,8 @@ func TestTelemetryPaletteAndMenuSources(t *testing.T) {
 // TestTelemetryUnboundChordRecorded expects a modified chord without a binding
 // to land as an "unbound" key event — the missing-keybind signal.
 func TestTelemetryUnboundChordRecorded(t *testing.T) {
+	// serial: telemetryModel: waits on the wall clock (load-sensitive)
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	// ctrl+alt+0 is bound to nothing in any preset.
 	tm, _ := m.Update(tea.KeyPressMsg{Code: '0', Mod: tea.ModCtrl | tea.ModAlt})
@@ -163,6 +169,8 @@ func TestTelemetryUnboundChordRecorded(t *testing.T) {
 // TestTelemetryPlainTypingNeverRecorded is the privacy line: unmodified (and
 // shift-only) presses must never appear in the log, bound or not.
 func TestTelemetryPlainTypingNeverRecorded(t *testing.T) {
+	// serial: telemetryModel: waits on the wall clock (load-sensitive)
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	m.cycleFocus() // focus the editor: plain keys are typing
 	for _, r := range "secret" {
@@ -187,6 +195,8 @@ func TestTelemetryPlainTypingNeverRecorded(t *testing.T) {
 // a launch whose only telemetry is a pane focus change — what the session
 // restore emits on startup — must leave no file behind at all.
 func TestTelemetryStartAndQuitLeavesNoFile(t *testing.T) {
+	// serial: telemetryModel: waits on the wall clock (load-sensitive)
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	m.cycleFocus()
 	m.quit()
@@ -204,6 +214,8 @@ func TestTelemetryStartAndQuitLeavesNoFile(t *testing.T) {
 // TestTelemetryLayoutEvents checks the structural layout hooks: split, pane
 // focus and resize land as layout events with structural payloads only.
 func TestTelemetryLayoutEvents(t *testing.T) {
+	// serial: telemetryModel: waits on the wall clock (load-sensitive)
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	m.cycleFocus()
 	m.SplitFocused(layout.ZoneRight)
@@ -234,6 +246,8 @@ func TestTelemetryLayoutEvents(t *testing.T) {
 // TestTelemetryDisabledWritesNothing flips the setting off and expects no
 // telemetry file at all.
 func TestTelemetryDisabledWritesNothing(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
+	withStore(t)
 	prev := config.Get()
 	off := *prev
 	off.Telemetry.Enabled = false
@@ -256,6 +270,8 @@ func TestTelemetryDisabledWritesNothing(t *testing.T) {
 // TestTelemetryNoClearTextPaths opens a real file, exercises hooks, and scans
 // every written line for the file's path segments — none may appear.
 func TestTelemetryNoClearTextPaths(t *testing.T) {
+	// serial: telemetryModel: waits on the wall clock (load-sensitive)
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	dir := t.TempDir()
 	path := filepath.Join(dir, "very-secret-name.txt")
@@ -291,6 +307,8 @@ func TestTelemetryNoClearTextPaths(t *testing.T) {
 // session marker (#2348) ahead of it — version, OS and a hashed project token,
 // never the clear-text working directory.
 func TestTelemetrySessionMarker(t *testing.T) {
+	// serial: telemetryModel: waits on the wall clock (load-sensitive)
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{"keymap.bindings.ctrl+y": "tm.fire"})
 	tm, _ := m.Update(tea.KeyPressMsg{Code: 'y', Mod: tea.ModCtrl})
 	m = tm.(Model)
@@ -324,6 +342,8 @@ func TestTelemetrySessionMarker(t *testing.T) {
 // before the exchange departs, #2348) and its answer leaves the matching end
 // op with duration, status class and streaming flag — no URL, key or label.
 func TestTelemetryHTTPFlightLifecycle(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	send := func(ctx context.Context, source, key string, cb httpclient.WSCallbacks) (*httpclient.Response, error) {
 		return nil, nil // never executed: the returned tea.Cmd is not run
@@ -395,6 +415,8 @@ func TestTelemetryHTTPFlightLifecycle(t *testing.T) {
 // TestTelemetryHTTPFlightCancelAndError: a user abort records "canceled", a
 // transport failure "error" — and a stream marks its flag.
 func TestTelemetryHTTPFlightCancelAndError(t *testing.T) {
+	// serial: telemetryModel: waits on the wall clock (load-sensitive)
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	send := func(ctx context.Context, source, key string, cb httpclient.WSCallbacks) (*httpclient.Response, error) {
 		return nil, nil
@@ -475,6 +497,8 @@ func eventsOfNoFlush(t *testing.T) []telemetry.Event {
 // TestTraceLogFollowsSetting: off by default nothing is written; on, every
 // processed message leaves one structural line in trace.log (#2348).
 func TestTraceLogFollowsSetting(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	tm, _ := m.Update(tea.KeyPressMsg{Code: 'x', Text: "x"})
 	m = tm.(Model)
@@ -507,6 +531,7 @@ func TestTraceLogFollowsSetting(t *testing.T) {
 // TestTelemetryRecorderRidesProjectSwitch: the recorder is session state; the
 // rebuilt model must carry the same one (same session id, one file per run).
 func TestTelemetryRecorderRidesProjectSwitch(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	chdir(t, t.TempDir()) // performSwitch chdirs into the target; restore after
 	m := telemetryModel(t, host.MapConfig{})
 	m.usage.Command("before.switch", telemetry.SourceInternal)
@@ -537,6 +562,7 @@ func TestTelemetryRecorderRidesProjectSwitch(t *testing.T) {
 // cur minus prev, keeps the n loudest, orders ties by name, and reports a
 // dead-quiet interval as empty rather than as "everything:0".
 func TestTopMessageDelta(t *testing.T) {
+	t.Parallel()
 	prev := map[string]uint64{"a.tick": 10, "b.key": 5}
 	cur := map[string]uint64{"a.tick": 14, "b.key": 5, "c.out": 9, "d.msg": 4}
 	if got, want := topMessageDelta(prev, cur, 3), "c.out:9,a.tick:4,d.msg:4"; got != want {
@@ -554,6 +580,7 @@ func TestTopMessageDelta(t *testing.T) {
 // at the old 10s cadence the beats were 61% of a two-day export, drowning the
 // usage data they were supposed to accompany; a minute puts them near 20%.
 func TestTelemetryHeartbeatIntervalIsAMinute(t *testing.T) {
+	t.Parallel()
 	if telemetryHeartbeatInterval != 60*time.Second {
 		t.Fatalf("telemetryHeartbeatInterval = %v, want 60s", telemetryHeartbeatInterval)
 	}
@@ -564,6 +591,8 @@ func TestTelemetryHeartbeatIntervalIsAMinute(t *testing.T) {
 // an invocation of an unregistered id — the dispatch funnel's one failure
 // mode — is recorded with ok=false instead of vanishing.
 func TestTelemetryCommandOutcome(t *testing.T) {
+	// serial: telemetryModel: waits on the wall clock (load-sensitive)
+	withStore(t)
 	m := telemetryModel(t, host.MapConfig{})
 	tm, _ := m.Update(palette.RunCommandMsg{ID: "tm.fire"})
 	m = tm.(Model)
@@ -605,6 +634,7 @@ func TestTelemetryCommandOutcome(t *testing.T) {
 // reports focus lets a project sitting in a background window stop counting;
 // a repeated focus report must not restart a running span (#2408).
 func TestProjectClockPausesWhileBlurred(t *testing.T) {
+	t.Parallel()
 	now := time.Unix(1_700_000_000, 0)
 	c := &projectClock{now: func() time.Time { return now }}
 	c.focus()
@@ -629,6 +659,7 @@ func TestProjectClockPausesWhileBlurred(t *testing.T) {
 // switch closes the departing project's budget, the quit closes the last one's,
 // and both carry the hashed token — never a path.
 func TestTelemetryProjectLeaveEvents(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	chdir(t, t.TempDir()) // performSwitch chdirs into the target; restore after (#2997)
 	m := telemetryModel(t, host.MapConfig{})
 	m.usage.Command("before.switch", telemetry.SourceInternal) // open the session file
@@ -669,6 +700,8 @@ func TestTelemetryProjectLeaveEvents(t *testing.T) {
 // can tell "typed a command name that does not exist" (a typed query with zero
 // results) from "found it, changed my mind".
 func TestPaletteDismissRecordsResultCount(t *testing.T) {
+	// serial: telemetryModel: waits on the wall clock (load-sensitive)
+	withStore(t)
 	// A query nothing matches: the event reports zero rows on a typed query.
 	m := telemetryModel(t, host.MapConfig{})
 	m.palette.SetSize(100, 40)

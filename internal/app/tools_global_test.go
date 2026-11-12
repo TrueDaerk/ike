@@ -129,6 +129,7 @@ func toolTerminal(m Model, name string) *terminal.Model {
 // back and forth stays stable: one pane per view, no duplicate process, no
 // drift.
 func TestGlobalToolFollowsSwitch(t *testing.T) {
+	// serial: twoRoots: t.Chdir (process working directory)
 	_, b := twoRoots(t)
 	m := globalToolModel(t)
 
@@ -170,6 +171,7 @@ func TestGlobalToolFollowsSwitch(t *testing.T) {
 // TestGlobalToolSwitchKeepsFocus: the auto-attach on switch-in must not
 // steal focus — the switch decides focus, the tool just becomes visible.
 func TestGlobalToolSwitchKeepsFocus(t *testing.T) {
+	// serial: twoRoots: t.Chdir (process working directory)
 	_, b := twoRoots(t)
 	m := globalToolModel(t)
 	m = step(m, ToolOpenMsg{Name: "sqlx"})
@@ -190,6 +192,8 @@ func TestGlobalToolSwitchKeepsFocus(t *testing.T) {
 // tool was opened in (the eviction / close-from-list path) does not end the
 // session — it followed the switch out of that workspace already.
 func TestGlobalToolSurvivesWorkspaceTeardown(t *testing.T) {
+	// serial: globalToolModel: t.Setenv
+	withStore(t)
 	_, b := twoRoots(t)
 	m := globalToolModel(t)
 	out, _ := m.Update(ToolOpenMsg{Name: "sqlx"})
@@ -214,6 +218,8 @@ func TestGlobalToolSurvivesWorkspaceTeardown(t *testing.T) {
 // the saved slot instead of spawning a duplicate — the restore seam and the
 // switch-in auto-attach (#1903) never double up.
 func TestGlobalToolRestoreAdoptsParkedSession(t *testing.T) {
+	// serial: globalToolModel: t.Setenv
+	withStore(t)
 	_, b := twoRoots(t)
 	m := globalToolModel(t)
 	out, _ := m.Update(ToolOpenMsg{Name: "sqlx"})
@@ -249,6 +255,8 @@ func TestGlobalToolRestoreAdoptsParkedSession(t *testing.T) {
 // neither prompts (the tool survives, so it gates no guard) nor ends the
 // session; the tool follows into the resumed project (#1903).
 func TestCloseProjectKeepsGlobalTool(t *testing.T) {
+	// serial: twoRoots: t.Chdir (process working directory)
+	withStore(t)
 	_, b := twoRoots(t)
 	m := globalToolModel(t)
 	out, _ := m.Update(project.SwitchProjectMsg{Root: b}) // A parks in background
@@ -279,6 +287,7 @@ func TestCloseProjectKeepsGlobalTool(t *testing.T) {
 // TestQuitClosesGlobalToolSessions: quit ends a detached (parked) global
 // tool session — no process outlives IKE.
 func TestQuitClosesGlobalToolSessions(t *testing.T) {
+	// serial: globalToolModel: t.Setenv
 	twoRoots(t)
 	m := globalToolModel(t)
 	out, _ := m.Update(ToolOpenMsg{Name: "sqlx"})
@@ -304,6 +313,7 @@ func TestQuitClosesGlobalToolSessions(t *testing.T) {
 // TestQuitClosesAttachedGlobalTool: quit ends an attached global tool with
 // the active workspace's terminals.
 func TestQuitClosesAttachedGlobalTool(t *testing.T) {
+	// serial: globalToolModel: t.Setenv
 	twoRoots(t)
 	m := globalToolModel(t)
 	out, _ := m.Update(ToolOpenMsg{Name: "sqlx"})
@@ -323,6 +333,8 @@ func TestQuitClosesAttachedGlobalTool(t *testing.T) {
 // a resumed workspace shows no pane and the process never resurrects, until
 // tool.<name> deliberately reopens it (#1903).
 func TestGlobalToolCloseEverywhere(t *testing.T) {
+	// serial: twoRoots: t.Chdir (process working directory)
+	withStore(t)
 	_, b := twoRoots(t)
 	m := globalToolModel(t)
 	m = step(m, ToolOpenMsg{Name: "sqlx"})
@@ -371,6 +383,8 @@ func TestGlobalToolCloseEverywhere(t *testing.T) {
 // another project, restoring that stale layout (the evicted-workspace
 // revisit) must not resurrect the tool (#1903).
 func TestGlobalToolCloseBeatsStaleLayout(t *testing.T) {
+	// serial: globalToolModel: t.Setenv
+	withStore(t)
 	_, b := twoRoots(t)
 	m := globalToolModel(t)
 	m = step(m, ToolOpenMsg{Name: "sqlx"})
@@ -403,6 +417,8 @@ func TestGlobalToolCloseBeatsStaleLayout(t *testing.T) {
 // follows into the target workspace, landing dedicated in its then-free
 // slot. The live session never restarts.
 func TestGlobalToolSlotTabDetachFollows(t *testing.T) {
+	// serial: globalToolModelWith: t.Setenv
+	withStore(t)
 	_, b := twoRoots(t)
 	m := globalToolModelWith(t, slotGlobalSettings)
 
@@ -452,6 +468,7 @@ func TestGlobalToolSlotTabDetachFollows(t *testing.T) {
 // occupied at switch-in, the following global tool arrives as a tab there —
 // the #1901 tab-in-slot rule applied by the auto-attach (#1903).
 func TestGlobalToolArrivesAsSlotTab(t *testing.T) {
+	// serial: globalToolModelWith: t.Setenv
 	_, b := twoRoots(t)
 	m := globalToolModelWith(t, slotGlobalSettings)
 	m = step(m, ToolOpenMsg{Name: "sqlx"})
@@ -502,6 +519,7 @@ func TestGlobalToolArrivesAsSlotTab(t *testing.T) {
 // parked tree like a dedicated pane's — and both follow into the target,
 // sharing its slot again.
 func TestGlobalOnlyTabHostDetachesWhole(t *testing.T) {
+	// serial: globalToolModelWith: t.Setenv
 	_, b := twoRoots(t)
 	m := globalToolModelWith(t, slotGlobalSettings)
 	leavesBefore := len(layout.Leaves(m.activeWS().Tree))
@@ -540,6 +558,8 @@ func TestGlobalOnlyTabHostDetachesWhole(t *testing.T) {
 // the session as that tab instead of spawning a duplicate — and the
 // switch-in auto-attach adds no second instance.
 func TestGlobalToolSlotTabRestoreAdoptsParked(t *testing.T) {
+	// serial: globalToolModelWith: t.Setenv
+	withStore(t)
 	_, b := twoRoots(t)
 	m := globalToolModelWith(t, slotGlobalSettings)
 	m = step(m, ToolOpenMsg{Name: "mate"})
@@ -581,6 +601,8 @@ func TestGlobalToolSlotTabRestoreAdoptsParked(t *testing.T) {
 // switch-in materializes the pane with the #810 exited state, and Restart
 // reruns the command in place as a running global session again.
 func TestGlobalToolExitedWhileParkedShowsOverlay(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
+	withStore(t)
 	_, b := twoRoots(t)
 	m := globalToolModelWith(t, quickGlobalSettings)
 	m = step(m, ToolOpenMsg{Name: "quick"})
@@ -639,6 +661,7 @@ func TestGlobalToolExitedWhileParkedShowsOverlay(t *testing.T) {
 // tool.sqlx toggles like any single-instance tool, and New (a stale .new
 // binding) never spawns a second instance.
 func TestGlobalToolSingleInstanceToggle(t *testing.T) {
+	// serial: globalToolModel: t.Setenv
 	twoRoots(t)
 	m := globalToolModel(t)
 	out, _ := m.Update(ToolOpenMsg{Name: "sqlx"})

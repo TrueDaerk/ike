@@ -60,6 +60,7 @@ func editorText(m Model) string { return ansi.Strip(m.activeEditor().View()) }
 // JetBrains navigation keys fire from insert mode, dispatch their command, and
 // insert nothing into the buffer.
 func TestInsertModeNonTypingChordsResolve(t *testing.T) {
+	// serial: sets keymap.GOOS
 	oldGOOS := keymap.GOOS
 	keymap.GOOS = "darwin"
 	defer func() { keymap.GOOS = oldGOOS }()
@@ -101,6 +102,7 @@ func TestInsertModeNonTypingChordsResolve(t *testing.T) {
 // keys the editor needs for text entry keep reaching the buffer, and esc still
 // leaves insert mode.
 func TestInsertModeTypingKeysUnchanged(t *testing.T) {
+	// serial: insertEditor: t.Setenv
 	m, _ := insertEditor(t, "alpha\n")
 	// Printable keys insert.
 	for _, k := range []tea.KeyPressMsg{
@@ -133,6 +135,7 @@ func TestInsertModeTypingKeysUnchanged(t *testing.T) {
 // has no Editor binding for — ctrl+w, the vim-native word kill (#246) — still
 // reaches the editor rather than being eaten by the keymap layer.
 func TestInsertModeEditorChordStillReachesEditor(t *testing.T) {
+	// serial: insertEditor: t.Setenv
 	m, _ := insertEditor(t, "alpha beta\n")
 	// Move to the line end and type a word, then kill it with ctrl+w.
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyRight})
@@ -156,6 +159,7 @@ func TestInsertModeEditorChordStillReachesEditor(t *testing.T) {
 // moves the selection and tab accepts the item under it — none of the popup's
 // keys is a function key, so the keymap layer must stay out of its way.
 func TestInsertModeCompletionNavigationKeepsWorking(t *testing.T) {
+	// serial: insertEditor: t.Setenv
 	// The completion MRU (shared across the package's models) decides which
 	// item the popup opens on, so the test compares accepting straight away
 	// against accepting after one "down" instead of naming an item: the two

@@ -41,6 +41,7 @@ func openHTMLPreviewIn(t *testing.T, doc string, extra map[string]string) (Model
 // TestHTMLLinkPathClassifies guards the resolver's split between local and
 // remote destinations.
 func TestHTMLLinkPathClassifies(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		target, path, frag string
 		local              bool
@@ -67,6 +68,7 @@ func TestHTMLLinkPathClassifies(t *testing.T) {
 // the page in an editor with a preview of its own, landing on the fragment —
 // its tab's Preview view (#2766), since HTML files open rendered.
 func TestHTMLPreviewRelativeHTMLLinkOpensWithPreview(t *testing.T) {
+	t.Parallel()
 	var other strings.Builder
 	other.WriteString("<p>top</p>\n")
 	for range 60 {
@@ -97,6 +99,7 @@ func TestHTMLPreviewRelativeHTMLLinkOpensWithPreview(t *testing.T) {
 // preview.html_open_mode = source the followed page opens in Source view and
 // gets a split preview beside it, as before #2766.
 func TestHTMLPreviewRelativeHTMLLinkSourceModeSplits(t *testing.T) {
+	// serial: withHTMLOpenMode: config.Set (process-wide configuration)
 	m, key, path := openHTMLPreviewIn(t, `<p><a href="other.html">other</a></p>`,
 		map[string]string{"other.html": "<p>other page</p>\n"})
 	withHTMLOpenMode(t, "source")
@@ -113,6 +116,7 @@ func TestHTMLPreviewRelativeHTMLLinkSourceModeSplits(t *testing.T) {
 // TestHTMLPreviewRelativeOtherLinkOpensEditor: a non-HTML target opens by its
 // normal opener, without a preview.
 func TestHTMLPreviewRelativeOtherLinkOpensEditor(t *testing.T) {
+	t.Parallel()
 	m, key, path := openHTMLPreviewIn(t, `<p><a href="notes.txt">notes</a></p>`,
 		map[string]string{"notes.txt": "hello\n"})
 	target := filepath.Join(filepath.Dir(path), "notes.txt")
@@ -129,6 +133,7 @@ func TestHTMLPreviewRelativeOtherLinkOpensEditor(t *testing.T) {
 // preview focused, tab (claimed from the focus cycle) selects the first link
 // and enter follows it.
 func TestHTMLPreviewLinkKeysFollowSelection(t *testing.T) {
+	t.Parallel()
 	m, key, path := openHTMLPreviewIn(t, `<p>See <a href="notes.txt">the notes</a>.</p>`,
 		map[string]string{"notes.txt": "hello\n"})
 	m.setFocus(key)
@@ -152,6 +157,7 @@ func TestHTMLPreviewLinkKeysFollowSelection(t *testing.T) {
 // TestHTMLPreviewTabWithoutLinksCyclesFocus: a link-free page keeps tab's
 // global focus-cycling meaning.
 func TestHTMLPreviewTabWithoutLinksCyclesFocus(t *testing.T) {
+	t.Parallel()
 	m, key, _ := openHTMLPreviewIn(t, `<p>no links here</p>`, nil)
 	m.setFocus(key)
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyTab})
@@ -163,6 +169,8 @@ func TestHTMLPreviewTabWithoutLinksCyclesFocus(t *testing.T) {
 // TestHTMLPreviewAnchorLinkScrolls: "#anchor" scrolls the preview itself; an
 // unknown one toasts.
 func TestHTMLPreviewAnchorLinkScrolls(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	var b strings.Builder
 	b.WriteString("<p><a href=\"#end\">down</a></p>\n")
 	for range 80 {
@@ -187,6 +195,7 @@ func TestHTMLPreviewAnchorLinkScrolls(t *testing.T) {
 // TestHTMLPreviewExternalLinkUsesBrowser: http(s) and mailto reach the
 // open-in-browser opener, only on the explicit action.
 func TestHTMLPreviewExternalLinkUsesBrowser(t *testing.T) {
+	// serial: sets package variable browserOpen
 	var opened []string
 	orig := browserOpen
 	browserOpen = func(u string) error { opened = append(opened, u); return nil }
@@ -206,6 +215,7 @@ func TestHTMLPreviewExternalLinkUsesBrowser(t *testing.T) {
 
 // TestHTMLPreviewMissingTargetToasts: a link to an absent file says so.
 func TestHTMLPreviewMissingTargetToasts(t *testing.T) {
+	t.Parallel()
 	m, key, path := openHTMLPreviewIn(t, `<p><a href="gone.html">gone</a></p>`, nil)
 	m = step(m, htmlpreview.LinkMsg{Key: key, Path: path, Target: "gone.html"})
 	if len(m.toasts) == 0 || !strings.Contains(m.toasts[0].text, "link target not found") {
@@ -215,6 +225,7 @@ func TestHTMLPreviewMissingTargetToasts(t *testing.T) {
 
 // TestHTMLPreviewLinkCopy: y's copy puts the raw destination on the clipboard.
 func TestHTMLPreviewLinkCopy(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	var copied string
 	orig := clipboardWrite
 	clipboardWrite = func(text string) { copied = text }
@@ -229,6 +240,7 @@ func TestHTMLPreviewLinkCopy(t *testing.T) {
 // TestHTMLPreviewClickFollowsLink: a left click on a link label follows it; a
 // click on plain text only focuses the pane.
 func TestHTMLPreviewClickFollowsLink(t *testing.T) {
+	// serial: sets package variable browserOpen
 	var opened string
 	orig := browserOpen
 	browserOpen = func(u string) error { opened = u; return nil }
@@ -267,6 +279,7 @@ func TestHTMLPreviewClickFollowsLink(t *testing.T) {
 // caret to the source line of the rendered line at the sync row, and focuses
 // the editor.
 func TestHTMLPreviewReverseSync(t *testing.T) {
+	t.Parallel()
 	m, key, path := openHTMLPreviewIn(t, paragraphs(120), nil)
 	editorKey := m.editorKeyForPath(path)
 	pv := m.activeWS().Panes.Get(key).HTMLPreview()

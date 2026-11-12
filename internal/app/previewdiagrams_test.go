@@ -16,6 +16,7 @@ const diagramDoc = "# Diagram\n\n```mermaid\ngraph TD\n  A-->B\n```\n"
 // TestMissingRendererHintOncePerSession: however many fences, panes and
 // renders report an uninstalled renderer, the user is told exactly once.
 func TestMissingRendererHintOncePerSession(t *testing.T) {
+	t.Parallel()
 	m, _ := openMarkdownFile(t, diagramDoc)
 	tm, _ := m.Update(preview.DiagramMsg{Missing: true, Tool: "mermaid-ascii", Lang: "mermaid"})
 	m = tm.(Model)
@@ -33,6 +34,7 @@ func TestMissingRendererHintOncePerSession(t *testing.T) {
 // TestRerenderDiagramsClearsOpenPreviews: the command reaches the open
 // preview, and says so when there is none.
 func TestRerenderDiagramsClearsOpenPreviews(t *testing.T) {
+	t.Parallel()
 	m, path := openMarkdownFile(t, diagramDoc)
 	tm, _ := m.Update(RerenderDiagramsMsg{})
 	m = tm.(Model)

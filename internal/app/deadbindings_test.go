@@ -17,7 +17,6 @@ import (
 // rebind writes into the test's own user config.
 func deadBindingsApp(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.New(), host.MapConfig{})
 	out, _ := m.Update(tea.WindowSizeMsg{Width: 120, Height: 40})
 	return out.(Model)
@@ -27,6 +26,7 @@ func deadBindingsApp(t *testing.T) Model {
 // binding table — the JetBrains default set always has cmd chords, which are
 // at best at risk in a plain terminal.
 func TestDeadBindingsReportOpens(t *testing.T) {
+	t.Parallel()
 	m := deadBindingsApp(t)
 	out, _ := m.Update(KeymapDeadBindingsMsg{})
 	m = out.(Model)
@@ -47,6 +47,8 @@ func TestDeadBindingsReportOpens(t *testing.T) {
 // override at user scope — the new chord binds the command, the old one
 // unbinds — and the reload it triggers re-audits the open report.
 func TestDeadBindingsRebindPersists(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
+	withStore(t)
 	m := deadBindingsApp(t)
 	out, _ := m.Update(KeymapDeadBindingsMsg{})
 	m = out.(Model)

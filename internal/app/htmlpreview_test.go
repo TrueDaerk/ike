@@ -108,6 +108,7 @@ func paragraphs(n int) string {
 // TestHTMLPreviewOpensSplit: html.preview splits the active editor with a
 // rendered preview bound to its buffer and keeps focus on the editor.
 func TestHTMLPreviewOpensSplit(t *testing.T) {
+	t.Parallel()
 	m, path := openHTMLFile(t, "<html><head><title>T</title></head><body><h1>Hello Rendered</h1><p>body <b>text</b></p></body></html>\n")
 	editorKey := m.activeWS().Panes.Focused()
 	m = stepHTML(m, HTMLPreviewMsg{})
@@ -132,6 +133,7 @@ func TestHTMLPreviewOpensSplit(t *testing.T) {
 
 // TestHTMLPreviewNeedsHTMLBuffer: a non-HTML buffer opens nothing and toasts.
 func TestHTMLPreviewNeedsHTMLBuffer(t *testing.T) {
+	t.Parallel()
 	m, _ := openMarkdownFile(t, "# not html\n")
 	m = stepHTML(m, HTMLPreviewMsg{})
 	if countHTMLPreviews(m) != 0 {
@@ -145,6 +147,7 @@ func TestHTMLPreviewNeedsHTMLBuffer(t *testing.T) {
 // TestHTMLPreviewSecondPressFocuses: the second invocation focuses the open
 // preview instead of splitting again — the markdown preview's rule.
 func TestHTMLPreviewSecondPressFocuses(t *testing.T) {
+	t.Parallel()
 	m, path := openHTMLFile(t, "<p>once</p>\n")
 	m = stepHTML(m, HTMLPreviewMsg{})
 	first := htmlPreviewKeyFor(m, path)
@@ -165,6 +168,7 @@ func TestHTMLPreviewSecondPressFocuses(t *testing.T) {
 // TestHTMLPreviewLiveUpdate: an edit's SyncMsg arms the debounce, and the
 // resulting tick re-renders the preview with the new buffer text.
 func TestHTMLPreviewLiveUpdate(t *testing.T) {
+	t.Parallel()
 	m, path := openHTMLFile(t, "<p>draft</p>\n")
 	editorKey := m.activeWS().Panes.Focused()
 	m = stepHTML(m, HTMLPreviewMsg{})
@@ -192,6 +196,7 @@ func TestHTMLPreviewLiveUpdate(t *testing.T) {
 // TestHTMLPreviewStaleTickDropped: a tick for an older sequence renders
 // nothing through the root model's route either.
 func TestHTMLPreviewStaleTickDropped(t *testing.T) {
+	t.Parallel()
 	m, path := openHTMLFile(t, "<p>first</p>\n")
 	m = stepHTML(m, HTMLPreviewMsg{})
 	key := htmlPreviewKeyFor(m, path)
@@ -206,6 +211,7 @@ func TestHTMLPreviewStaleTickDropped(t *testing.T) {
 // TestHTMLPreviewCursorSync: the caret's source line scrolls the preview to
 // the paragraph on that line — line-accurate through the source map.
 func TestHTMLPreviewCursorSync(t *testing.T) {
+	t.Parallel()
 	m, path := openHTMLFile(t, paragraphs(120))
 	m = stepHTML(m, HTMLPreviewMsg{})
 	key := htmlPreviewKeyFor(m, path)
@@ -225,6 +231,8 @@ func TestHTMLPreviewCursorSync(t *testing.T) {
 // TestHTMLPreviewGzBuffer: an .html.gz opens through the gz viewer as its
 // decompressed page and previews like a plain .html.
 func TestHTMLPreviewGzBuffer(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	p := writeGzFile(t, "site.html.gz", []byte("<html><body><h1>Compressed Page</h1><p>inside the gz</p></body></html>\n"))
 	m := newSized()
 	m = step(m, OpenGzipMsg{Path: p})
@@ -256,6 +264,8 @@ func TestHTMLPreviewGzBuffer(t *testing.T) {
 // TestHTMLPreviewPersistsAndRestores: a saved preview leaf restores as a
 // preview of the same file, re-read from disk (session restore).
 func TestHTMLPreviewPersistsAndRestores(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, path := openHTMLFile(t, "<h2>Persisted Page</h2>\n")
 	m = stepHTML(m, HTMLPreviewMsg{})
 	saveLayout(m.activeWS().Tree, m.activeWS().Panes)
@@ -276,6 +286,8 @@ func TestHTMLPreviewPersistsAndRestores(t *testing.T) {
 // TestHTMLPreviewTabPersistsAndRestores: a preview merged into the editor's
 // tab strip survives the session as a content tab.
 func TestHTMLPreviewTabPersistsAndRestores(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m, path := openHTMLFile(t, "<p>Tabbed Page</p>\n")
 	edKey := m.activeWS().Panes.Focused()
 	m = stepHTML(m, HTMLPreviewMsg{})
@@ -308,6 +320,7 @@ func TestHTMLPreviewTabPersistsAndRestores(t *testing.T) {
 // TestHTMLPreviewNamedLayout: a saved named layout takes the preview as an
 // anonymous content slot, and applying it keeps the live preview pane.
 func TestHTMLPreviewNamedLayout(t *testing.T) {
+	t.Parallel()
 	m, path := openHTMLFile(t, "<p>layout</p>\n")
 	m = stepHTML(m, HTMLPreviewMsg{})
 	key := htmlPreviewKeyFor(m, path)
@@ -339,6 +352,7 @@ func TestHTMLPreviewNamedLayout(t *testing.T) {
 // TestHTMLPreviewTabMenuEntry: the tab context menu offers html.preview on an
 // HTML tab only.
 func TestHTMLPreviewTabMenuEntry(t *testing.T) {
+	t.Parallel()
 	has := func(path string) bool {
 		for _, it := range withHTMLPreviewItem(tabContextItems(false), path) {
 			if it.Command == "html.preview" {

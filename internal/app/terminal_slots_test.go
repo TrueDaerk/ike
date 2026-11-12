@@ -17,6 +17,7 @@ import (
 // neighbor slots are closed), and a second terminal.new joins it as a
 // focused tab instead of splitting.
 func TestSlotTerminalOpensAtSlot(t *testing.T) {
+	// serial: issueLayout: config.Set (process-wide configuration)
 	issueLayout(t, []string{"T=terminal"})
 	m := sized(t, 100, 40)
 
@@ -61,6 +62,7 @@ func TestSlotTerminalOpensAtSlot(t *testing.T) {
 // TestSlotTerminalUnassignedKeepsAdaptive: without a terminal assignment the
 // pre-#1946 adaptive split stays untouched.
 func TestSlotTerminalUnassignedKeepsAdaptive(t *testing.T) {
+	// serial: issueLayout: config.Set (process-wide configuration)
 	issueLayout(t, []string{"X=explorer"})
 	m := sized(t, 100, 40)
 	m = step(m, TerminalNewMsg{})
@@ -78,6 +80,7 @@ func TestSlotTerminalUnassignedKeepsAdaptive(t *testing.T) {
 // TestSlotRunAndDebugSeparate: run and debug are independently assignable —
 // the Run tool lands in its slot, the debug panel in another.
 func TestSlotRunAndDebugSeparate(t *testing.T) {
+	// serial: issueLayout: config.Set (process-wide configuration)
 	issueLayout(t, []string{"Z=run", "T=debug"})
 	m := runModel(t, "bottom")
 	tm, _ := m.Update(RunFileMsg{})

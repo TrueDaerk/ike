@@ -82,6 +82,8 @@ func openGraphQLFile(t *testing.T, m Model, url string) Model {
 }
 
 func TestGraphQLIntrospectCachesTheSchema(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	srv, seen := graphQLServer(t)
 	m := httpApp(t)
 	m = openGraphQLFile(t, m, srv.URL+"/graphql")
@@ -115,6 +117,7 @@ func TestGraphQLIntrospectCachesTheSchema(t *testing.T) {
 }
 
 func TestGraphQLIntrospectRejectsNonGraphQLBlocks(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	path := filepath.Join(t.TempDir(), "req.http")
 	if err := os.WriteFile(path, []byte("GET https://example.com/things\n"), 0o644); err != nil {
@@ -159,6 +162,8 @@ func findGraphQLSchema(cmd tea.Cmd) (httpGraphQLSchemaMsg, bool) {
 }
 
 func TestGraphQLSchemaOpensSDLScratch(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	srv, _ := graphQLServer(t)
 	m := httpApp(t)
 	m = openGraphQLFile(t, m, srv.URL+"/graphql")
@@ -193,6 +198,7 @@ func TestGraphQLSchemaOpensSDLScratch(t *testing.T) {
 // A GraphQL operation that failed answers with HTTP 200 (#2423): the viewer
 // must still show it as a failure, and the completion notice must say so.
 func TestGraphQLErrorsSurfaceInTheViewer(t *testing.T) {
+	t.Parallel()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		io.WriteString(w, `{"data":null,"errors":[{"message":"Unknown argument \"episode\"."}]}`)
@@ -232,6 +238,7 @@ func TestGraphQLErrorsSurfaceInTheViewer(t *testing.T) {
 
 // The palette must reach both commands, since neither carries a chord.
 func TestGraphQLCommandsAreRegistered(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	for _, id := range []string{"http.graphqlIntrospect", "http.graphqlSchema"} {
 		if _, ok := m.reg.Command(id); !ok {

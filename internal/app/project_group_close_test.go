@@ -71,6 +71,7 @@ func activeGroupOnDisk(t *testing.T) string {
 // every member is torn down (sessions persisted first), the IDE lands on the
 // MRU non-member, the marker clears in memory and on disk.
 func TestGroupCloseCleanTearsDownAndLandsOnNonMember(t *testing.T) {
+	// serial: peekFixture: t.Chdir (process working directory)
 	roots := peekFixture(t, "origin", "api", "ui")
 	storeGroup(t, "web", roots[1:])
 	m := switchModel(t)
@@ -112,6 +113,7 @@ func TestGroupCloseCleanTearsDownAndLandsOnNonMember(t *testing.T) {
 // while the group is active, the close needs no switch — the parked members
 // go, the current project stays.
 func TestGroupCloseActiveNonMemberDropsParkedMembers(t *testing.T) {
+	// serial: storeGroup: t.Setenv
 	roots := peekFixture(t, "origin", "api", "ui")
 	storeGroup(t, "web", roots[1:])
 	m := switchModel(t)
@@ -132,6 +134,8 @@ func TestGroupCloseActiveNonMemberDropsParkedMembers(t *testing.T) {
 // close degrades to the quit — clean state, no guard — and the marker clears
 // on disk before the process ends.
 func TestGroupCloseNoNonMemberQuits(t *testing.T) {
+	// serial: storeGroup: t.Setenv
+	withStore(t)
 	roots := peekFixture(t, "api", "ui")
 	storeGroup(t, "web", roots)
 	m := switchModel(t)
@@ -159,6 +163,7 @@ func TestGroupCloseNoNonMemberQuits(t *testing.T) {
 // #287/#821 quit guard; esc keeps the group (marker included), d quits and
 // clears the marker.
 func TestGroupCloseNoNonMemberDirtyRunsQuitGuard(t *testing.T) {
+	// serial: peekFixture: t.Chdir (process working directory)
 	roots := peekFixture(t, "api", "ui")
 	storeGroup(t, "web", roots)
 	file := filepath.Join(roots[0], "f.txt")
@@ -240,6 +245,7 @@ func busyGroupFixture(t *testing.T) (m Model, roots []string, dirtyPath string, 
 // members — the dirty parked one and the active one with the shell — and
 // esc leaves everything open.
 func TestGroupCloseBusyPromptNamesMembersAndCancels(t *testing.T) {
+	// serial: busyGroupFixture: t.Setenv
 	m, roots, _, term := busyGroupFixture(t)
 	t.Cleanup(func() { term.Terminal().Close() })
 
@@ -282,6 +288,7 @@ func TestGroupCloseBusyPromptNamesMembersAndCancels(t *testing.T) {
 // TestGroupCloseBusyDiscardCloses: d closes every member — the shell stops,
 // the dirty buffer is dropped unwritten — and lands on the non-member.
 func TestGroupCloseBusyDiscardCloses(t *testing.T) {
+	// serial: busyGroupFixture: t.Setenv
 	m, roots, dirtyPath, _ := busyGroupFixture(t)
 
 	out, _ := m.Update(project.CloseGroupMsg{})
@@ -301,6 +308,7 @@ func TestGroupCloseBusyDiscardCloses(t *testing.T) {
 // TestGroupCloseBusySaveThenCloses: s writes the parked member's dirty buffer
 // (enter stands in for it, the primary) and then closes the group.
 func TestGroupCloseBusySaveThenCloses(t *testing.T) {
+	// serial: busyGroupFixture: t.Setenv
 	m, roots, dirtyPath, _ := busyGroupFixture(t)
 
 	out, _ := m.Update(project.CloseGroupMsg{})
@@ -324,6 +332,7 @@ func TestGroupCloseBusySaveThenCloses(t *testing.T) {
 // TestGroupCloseSaveFailureKeepsGroupOpen: a member whose dirty buffer cannot
 // be written stays open and nothing else closes.
 func TestGroupCloseSaveFailureKeepsGroupOpen(t *testing.T) {
+	// serial: storeGroup: t.Setenv
 	if os.Geteuid() == 0 {
 		t.Skip("root writes anywhere")
 	}
@@ -370,6 +379,8 @@ func TestGroupCloseSaveFailureKeepsGroupOpen(t *testing.T) {
 // order with wrap, a member missing on disk is skipped, and an unparked
 // member is a cold first visit.
 func TestGroupCycleNextPrevWrapSkipMissingColdVisit(t *testing.T) {
+	// serial: peekFixture: t.Chdir (process working directory)
+	withStore(t)
 	roots := peekFixture(t, "origin", "api", "ui", "gone", "www")
 	storeGroup(t, "web", roots[1:])
 	if err := os.RemoveAll(roots[3]); err != nil {
@@ -420,6 +431,7 @@ func TestGroupCycleNextPrevWrapSkipMissingColdVisit(t *testing.T) {
 // TestGroupCycleFromNonMemberAndSingle: from a non-member next goes to member
 // 1 and prev to the last member; a single-member group only notifies.
 func TestGroupCycleFromNonMemberAndSingle(t *testing.T) {
+	// serial: peekFixture: t.Chdir (process working directory)
 	roots := peekFixture(t, "origin", "api", "ui")
 	storeGroup(t, "web", roots[1:])
 	m := switchModel(t)
@@ -448,6 +460,7 @@ func TestGroupCycleFromNonMemberAndSingle(t *testing.T) {
 // TestGroupCycleAndWarmWithoutGroupNotify: without an active group the
 // commands are no-ops with a notification.
 func TestGroupCycleAndWarmWithoutGroupNotify(t *testing.T) {
+	// serial: peekFixture: t.Chdir (process working directory)
 	roots := peekFixture(t, "origin")
 	m := switchModel(t)
 	active := m.activeWS()
@@ -467,6 +480,7 @@ func TestGroupCycleAndWarmWithoutGroupNotify(t *testing.T) {
 // dropped out of the background set and returns to the current member; a
 // warm group is a no-op with a notification.
 func TestGroupWarmReparksMissingAndReturns(t *testing.T) {
+	// serial: storeGroup: t.Setenv
 	roots := peekFixture(t, "origin", "api", "ui", "www")
 	storeGroup(t, "web", roots[1:])
 	m := switchModel(t)
@@ -511,6 +525,7 @@ func TestGroupWarmReparksMissingAndReturns(t *testing.T) {
 // TestGroupWarmSegment: the status slot reads "warming" while a warm chain
 // runs.
 func TestGroupWarmSegment(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m.groupOpening = &groupOpen{name: "web", total: 2, warm: true}
 	if got := m.groupSegment(); got != "warming web 1/2" {
@@ -522,6 +537,7 @@ func TestGroupWarmSegment(t *testing.T) {
 // their titles, chords, the terminal allowlist keeps close/next/prev
 // reachable and the File menu lists the close.
 func TestGroupCloseCommandsRegistered(t *testing.T) {
+	t.Parallel()
 	reg := registry.New()
 	reg.Add(appCommands{})
 	for id, title := range map[string]string{

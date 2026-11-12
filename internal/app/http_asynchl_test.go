@@ -59,6 +59,7 @@ func drainHighlighted(t *testing.T, cmd tea.Cmd) httppane.HighlightedMsg {
 // and returns the syntax pass as a command; pumping the command's message
 // back in paints the rows (#2353).
 func TestHTTPResponseHighlightOffLoop(t *testing.T) {
+	// serial: measures the wall clock (load-sensitive)
 	if !highlight.FencedSupported("json") {
 		t.Skip("no JSON grammar in this build")
 	}
@@ -100,6 +101,7 @@ func TestHTTPResponseHighlightOffLoop(t *testing.T) {
 // TestHTTPResponseHighlightCapNotice: a body past http.highlight_limit_kb
 // composes plain, schedules nothing, and the pane says why (#2353).
 func TestHTTPResponseHighlightCapNotice(t *testing.T) {
+	// serial: httppane.SetHighlightLimit (process-wide state of package httppane)
 	if !highlight.FencedSupported("json") {
 		t.Skip("no JSON grammar in this build")
 	}

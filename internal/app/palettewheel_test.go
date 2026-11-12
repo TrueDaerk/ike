@@ -19,6 +19,7 @@ import (
 // box and expects its rendered list to scroll; a wheel outside the box leaves
 // it untouched.
 func TestPaletteWheelScrollsTheOpenPalette(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 120, 40)
 	dir := t.TempDir()
 	for i := 0; i < 20; i++ {

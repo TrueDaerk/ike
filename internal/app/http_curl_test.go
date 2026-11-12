@@ -45,6 +45,7 @@ func stubClipboard(t *testing.T, read string) *string {
 // TestImportCurlPromptAppendsBlock: the devtools spelling imports into a
 // correct request block appended to the open file.
 func TestImportCurlPromptAppendsBlock(t *testing.T) {
+	// serial: stubClipboard: sets package variable clipboardRead
 	m, _ := curlApp(t, "### existing\nGET https://example.com/a\n")
 	stubClipboard(t, "")
 
@@ -93,6 +94,7 @@ func TestImportCurlPromptAppendsBlock(t *testing.T) {
 // clipboard is offered as the prompt's content, wrapped lines folded onto the
 // single input line.
 func TestImportCurlPrefillsFromClipboard(t *testing.T) {
+	// serial: stubClipboard: sets package variable clipboardRead
 	m, _ := curlApp(t, "")
 	stubClipboard(t, "curl 'https://example.com/x' \\\n  -H 'a: b'\n")
 
@@ -111,6 +113,7 @@ func TestImportCurlPrefillsFromClipboard(t *testing.T) {
 
 // TestImportCurlIgnoredFlagsNotice: unsupported flags are named in a notice.
 func TestImportCurlIgnoredFlagsNotice(t *testing.T) {
+	// serial: stubClipboard: sets package variable clipboardRead
 	m, _ := curlApp(t, "")
 	stubClipboard(t, "")
 	out, _ := m.Update(ImportCurlMsg{})
@@ -128,6 +131,7 @@ func TestImportCurlIgnoredFlagsNotice(t *testing.T) {
 
 // TestImportCurlRejectsNonCurl keeps a bad command out of the buffer.
 func TestImportCurlRejectsNonCurl(t *testing.T) {
+	// serial: stubClipboard: sets package variable clipboardRead
 	m, _ := curlApp(t, "### a\nGET https://example.com/a\n")
 	stubClipboard(t, "")
 	before := m.activeEditor().Text()
@@ -147,6 +151,7 @@ func TestImportCurlRejectsNonCurl(t *testing.T) {
 
 // TestImportCurlGatesOnFileType: the prompt never opens over a non-.http file.
 func TestImportCurlGatesOnFileType(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	path := filepath.Join(t.TempDir(), "main.go")
 	if err := os.WriteFile(path, []byte("package main\n"), 0o644); err != nil {
@@ -164,6 +169,7 @@ func TestImportCurlGatesOnFileType(t *testing.T) {
 // TestImportCurlGatesOnEditorMode: the block is spliced through the editor's
 // paste path, which would replace a visual selection instead of appending.
 func TestImportCurlGatesOnEditorMode(t *testing.T) {
+	// serial: stubClipboard: sets package variable clipboardRead
 	m, _ := curlApp(t, "### a\nGET https://example.com/a\n")
 	stubClipboard(t, "")
 	m = drainKey(m, tea.KeyPressMsg{Code: 'v', Text: "v"}) // visual mode
@@ -183,6 +189,7 @@ func TestImportCurlGatesOnEditorMode(t *testing.T) {
 // TestCopyRequestAsCurlSubstitutesVariables covers the acceptance criterion
 // that an exported command carries the substituted values.
 func TestCopyRequestAsCurlSubstitutesVariables(t *testing.T) {
+	// serial: t.Setenv
 	src := "@host = api.example.com\n\n### thing\nPOST https://{{host}}/things\n" +
 		"Content-Type: application/json\nAuthorization: Bearer {{$env IKE_TEST_TOKEN}}\n\n{\"a\":1}\n"
 	m, _ := curlApp(t, src)
@@ -207,6 +214,7 @@ func TestCopyRequestAsCurlSubstitutesVariables(t *testing.T) {
 // TestCopyRequestAsCurlReportsUnresolved: a missing variable fails loudly and
 // leaves the clipboard alone.
 func TestCopyRequestAsCurlReportsUnresolved(t *testing.T) {
+	// serial: stubClipboard: sets package variable clipboardRead
 	m, _ := curlApp(t, "### thing\nGET https://{{nowhere}}/things\n")
 	written := stubClipboard(t, "")
 	out, _ := m.Update(HTTPCopyAsCurlMsg{})
@@ -222,6 +230,7 @@ func TestCopyRequestAsCurlReportsUnresolved(t *testing.T) {
 // TestCopyRequestAsCurlExternalBody rebases the external body onto the .http
 // file's directory, so the command runs from anywhere.
 func TestCopyRequestAsCurlExternalBody(t *testing.T) {
+	// serial: stubClipboard: sets package variable clipboardRead
 	m, path := curlApp(t, "### up\nPOST https://example.com/up\n\n< ./payload.json\n")
 	written := stubClipboard(t, "")
 	out, _ := m.Update(HTTPCopyAsCurlMsg{})
@@ -237,6 +246,7 @@ func TestCopyRequestAsCurlExternalBody(t *testing.T) {
 // acceptance criterion at the app level: an imported multipart + basic auth
 // command comes back out of "Copy as curl" unchanged.
 func TestCopyRequestAsCurlRoundTripsMultipartAndAuth(t *testing.T) {
+	// serial: stubClipboard: sets package variable clipboardRead
 	m, _ := curlApp(t, "")
 	written := stubClipboard(t, "")
 	cmd := `curl https://example.com/upload -F 'field=value' -F 'photo=@/tmp/a.png;type=image/png' -u alice:secret`
@@ -274,6 +284,7 @@ func TestCopyRequestAsCurlRoundTripsMultipartAndAuth(t *testing.T) {
 // TestCopyRequestAsCurlSubstitutesVariables (#2384): the same block, the same
 // variable chain, the other format.
 func TestCopyRequestAsHttpieSubstitutesVariables(t *testing.T) {
+	// serial: t.Setenv
 	src := "@host = api.example.com\n\n### thing\nPOST https://{{host}}/things\n" +
 		"Content-Type: application/json\nAuthorization: Bearer {{$env IKE_TEST_TOKEN}}\n\n{\"a\":1}\n"
 	m, _ := curlApp(t, src)
@@ -297,6 +308,7 @@ func TestCopyRequestAsHttpieSubstitutesVariables(t *testing.T) {
 // TestCopyRequestAsHttpieReportsUnresolved: the shared export path names the
 // format it failed in, and leaves the clipboard alone.
 func TestCopyRequestAsHttpieReportsUnresolved(t *testing.T) {
+	// serial: stubClipboard: sets package variable clipboardRead
 	m, _ := curlApp(t, "### thing\nGET https://{{nowhere}}/things\n")
 	written := stubClipboard(t, "")
 	out, _ := m.Update(HTTPCopyAsHttpieMsg{})
@@ -313,6 +325,7 @@ func TestCopyRequestAsHttpieReportsUnresolved(t *testing.T) {
 // TestCopyRequestAsHttpieExternalBody rebases the external body the same way
 // the curl export does — httpie reads it off stdin.
 func TestCopyRequestAsHttpieExternalBody(t *testing.T) {
+	// serial: stubClipboard: sets package variable clipboardRead
 	m, path := curlApp(t, "### up\nPOST https://example.com/up\n\n< ./payload.json\n")
 	written := stubClipboard(t, "")
 	out, _ := m.Update(HTTPCopyAsHttpieMsg{})

@@ -63,6 +63,7 @@ func nextBodyEvent(t *testing.T, events <-chan tea.Msg) tea.Msg {
 }
 
 func TestHTTPStreamDirectiveShowsHeadEarly(t *testing.T) {
+	// serial: waits on the wall clock (load-sensitive)
 	release := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
@@ -130,6 +131,7 @@ func TestHTTPStreamDirectiveShowsHeadEarly(t *testing.T) {
 }
 
 func TestHTTPMaxBodyDirectiveMarksPane(t *testing.T) {
+	// serial: nextBodyEvent: waits on the wall clock (load-sensitive)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		_, _ = w.Write([]byte(strings.Repeat("x", 10<<10)))

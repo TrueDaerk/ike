@@ -42,6 +42,7 @@ func typePath(t *testing.T, m Model, path string) Model {
 // TestHTTPSaveResponseWritesRawBody: the file holds the bytes as they
 // arrived, not the pretty-printed view (#2059).
 func TestHTTPSaveResponseWritesRawBody(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	raw := []byte(`{"b":2,"a":1}`) // the viewer shows this re-indented
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: savableResponse("https://api.test/things", "application/json", raw)})
@@ -76,6 +77,8 @@ func TestHTTPSaveResponseWritesRawBody(t *testing.T) {
 // TestHTTPSaveResponseWritesBinaryBody: a body the viewer cannot even render
 // still lands on disk byte for byte.
 func TestHTTPSaveResponseWritesBinaryBody(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := httpApp(t)
 	raw := []byte{0x89, 'P', 'N', 'G', 0x00, 0x1a}
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: savableResponse("https://api.test/logo.png", "image/png", raw)})
@@ -118,6 +121,7 @@ func TestHTTPSaveResponseWritesBinaryBody(t *testing.T) {
 // TestHTTPSaveResponseIntoDirectory: a directory target receives the proposed
 // file name instead of failing the write.
 func TestHTTPSaveResponseIntoDirectory(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: savableResponse("https://api.test/things/42", "application/json", []byte(`{}`))})
 	m = out.(Model)
@@ -136,6 +140,7 @@ func TestHTTPSaveResponseIntoDirectory(t *testing.T) {
 // TestHTTPSaveResponseRefusesWithoutBody: no pane, no response, no body —
 // each says why instead of opening a prompt for nothing.
 func TestHTTPSaveResponseRefusesWithoutBody(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	out, _ := m.Update(HTTPSaveResponseMsg{})
 	m = out.(Model)
@@ -155,6 +160,7 @@ func TestHTTPSaveResponseRefusesWithoutBody(t *testing.T) {
 
 // TestHTTPSavePromptEscapeKeepsFile: esc cancels without writing anything.
 func TestHTTPSavePromptEscapeKeepsFile(t *testing.T) {
+	t.Parallel()
 	m := httpApp(t)
 	out, _ := m.Update(HTTPResponseMsg{Request: "one", Resp: savableResponse("https://api.test/things", "application/json", []byte(`{}`))})
 	m = out.(Model)
@@ -177,6 +183,7 @@ func TestHTTPSavePromptEscapeKeepsFile(t *testing.T) {
 // TestHTTPCopyShownAsCurl: the palette command and the pane's "C" both put
 // the shown response's as-sent request on the clipboard (#2059).
 func TestHTTPCopyShownAsCurl(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	var copied string
 	orig := clipboardWrite
 	clipboardWrite = func(s string) { copied = s }
@@ -221,6 +228,7 @@ func TestHTTPCopyShownAsCurl(t *testing.T) {
 // TestHTTPCopyShownAsCurlWithoutSnapshot: a history entry stored before the
 // snapshot existed cannot be exported — the clipboard stays untouched.
 func TestHTTPCopyShownAsCurlWithoutSnapshot(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	var copied string
 	orig := clipboardWrite
 	clipboardWrite = func(s string) { copied = s }
@@ -242,6 +250,7 @@ func TestHTTPCopyShownAsCurlWithoutSnapshot(t *testing.T) {
 // TestHTTPCopyShownAsHttpie: the palette command and the pane's "H" both put
 // the shown response's as-sent request on the clipboard as httpie (#2384).
 func TestHTTPCopyShownAsHttpie(t *testing.T) {
+	// serial: sets package variable clipboardWrite
 	var copied string
 	orig := clipboardWrite
 	clipboardWrite = func(s string) { copied = s }
@@ -286,6 +295,7 @@ func TestHTTPCopyShownAsHttpie(t *testing.T) {
 // TestHTTPResponseFileNameProposals covers the default-name derivation from
 // URL and Content-Type (#2059).
 func TestHTTPResponseFileNameProposals(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		name, url, ct, want string
 	}{
@@ -318,6 +328,7 @@ func TestHTTPResponseFileNameProposals(t *testing.T) {
 // TestHTTPResponseFileNameWithoutSnapshot: a legacy entry has no URL to name
 // the file after.
 func TestHTTPResponseFileNameWithoutSnapshot(t *testing.T) {
+	t.Parallel()
 	resp := sampleResponse("one")
 	if got := httpResponseFileName(resp); got != "response.json" {
 		t.Errorf("httpResponseFileName() = %q, want response.json", got)
@@ -326,6 +337,7 @@ func TestHTTPResponseFileNameWithoutSnapshot(t *testing.T) {
 
 // TestByteCountLabel: the notification reads in the unit that fits.
 func TestByteCountLabel(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		n    int64
 		want string

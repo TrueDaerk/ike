@@ -29,6 +29,7 @@ func openDirty(t *testing.T, m Model, path string) Model {
 // (tab cycles focus through setFocus, like every other navigation path) writes
 // the buffer, and undo still works after returning.
 func TestFocusSwitchAutosavesDirtyEditor(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
 	if err := os.WriteFile(path, []byte("one\n"), 0o644); err != nil {
@@ -59,6 +60,7 @@ func TestFocusSwitchAutosavesDirtyEditor(t *testing.T) {
 // TestOpenReplacingDocumentAutosaves guards the second trigger: opening
 // another file into the active editor saves the document it replaces.
 func TestOpenReplacingDocumentAutosaves(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	a := filepath.Join(dir, "a.txt")
 	b := filepath.Join(dir, "b.txt")
@@ -83,6 +85,7 @@ func TestOpenReplacingDocumentAutosaves(t *testing.T) {
 // TestAutosaveOffKeepsFileUntouched verifies editor.auto_save = "off" disables
 // both triggers.
 func TestAutosaveOffKeepsFileUntouched(t *testing.T) {
+	// serial: t.Setenv
 	if testStoreRoot == "" {
 		t.Skip("no isolated config dir")
 	}
@@ -93,7 +96,7 @@ func TestAutosaveOffKeepsFileUntouched(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(cfgDir, "settings.toml"), []byte("[editor]\nauto_save = \"off\"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	os.Setenv("IKE_CONFIG_DIR", cfgDir)
+	t.Setenv("IKE_CONFIG_DIR", cfgDir)
 	m := New()
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m = tm.(Model)

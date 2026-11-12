@@ -114,3 +114,23 @@ func TestResolveNotFoundKeepsLookPathError(t *testing.T) {
 		t.Fatalf("the LookPath error must be returned unchanged, got %v", err)
 	}
 }
+
+// TestNoToolchainProbesRunsNothing guards the seam for model-building test
+// binaries (#3135): with the probes off, FallbackDirs never asks `go env` or
+// `npm prefix`, so a missing server costs no process launch.
+func TestNoToolchainProbesRunsNothing(t *testing.T) {
+	old := envOutput
+	t.Cleanup(func() { envOutput = old })
+	NoToolchainProbes()
+	if out, err := envOutput("go", "env", "GOBIN"); err == nil || out != "" {
+		t.Fatalf("a disabled probe answered %q, %v", out, err)
+	}
+	if _, err := exec.LookPath("go"); err == nil {
+		if dirs := FallbackDirs(); len(dirs) != 0 {
+			t.Fatalf("with go on PATH and the probes off there is nothing to add, got %v", dirs)
+		}
+	}
+	if _, err := Resolve("definitely-not-a-binary-3135"); err == nil {
+		t.Fatal("an unresolvable command must still fail")
+	}
+}

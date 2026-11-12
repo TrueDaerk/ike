@@ -9,6 +9,7 @@ import (
 // TestJoinHMatchesLipgloss verifies the measurement-free horizontal stitch equals
 // lipgloss.JoinHorizontal for equal-height, exact-width columns (#612).
 func TestJoinHMatchesLipgloss(t *testing.T) {
+	t.Parallel()
 	a := "AA\nAA"
 	div := "|\n|"
 	b := "BBB\nBBB"
@@ -25,6 +26,7 @@ func TestJoinHMatchesLipgloss(t *testing.T) {
 // TestJoinHFallsBackOnMismatch verifies an unexpected line count falls back to
 // lipgloss (defensive; should not happen with exact-size boxes).
 func TestJoinHFallsBackOnMismatch(t *testing.T) {
+	t.Parallel()
 	a := "A\nA\nA" // 3 lines
 	b := "B\nB"    // 2 lines
 	// rows says 2 but a has 3 → fall back; must not panic and must equal lipgloss.
@@ -37,6 +39,7 @@ func TestJoinHFallsBackOnMismatch(t *testing.T) {
 
 // TestJoinVStacks verifies vertical stacking is a plain newline join.
 func TestJoinVStacks(t *testing.T) {
+	t.Parallel()
 	if got := joinV("X\nY", "----", "Z"); got != "X\nY\n----\nZ" {
 		t.Fatalf("joinV = %q", got)
 	}
@@ -46,6 +49,7 @@ func TestJoinVStacks(t *testing.T) {
 // per input and separates different content (a collision would reuse a stale
 // box, so distinctness matters for the common cases).
 func TestHashStringDeterministicAndDistinct(t *testing.T) {
+	t.Parallel()
 	if hashString("hello world") != hashString("hello world") {
 		t.Fatal("hashString not deterministic")
 	}

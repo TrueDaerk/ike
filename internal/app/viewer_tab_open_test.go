@@ -58,6 +58,7 @@ func writeTestBinary(t *testing.T, name string) string {
 // other viewer file) in the palette while an editor pane holds the focus nests
 // the viewer as a tab in that pane — no new leaf appears.
 func TestPaletteOpenViewerAsTabInFocusedPane(t *testing.T) {
+	t.Parallel()
 	for _, tc := range viewerFiles {
 		t.Run(tc.name, func(t *testing.T) {
 			m := newSized()
@@ -89,6 +90,7 @@ func TestPaletteOpenViewerAsTabInFocusedPane(t *testing.T) {
 // of a fresh editor pane gives way to the viewer, like a plain file open
 // (#156) — the pane ends up with the viewer as its only tab.
 func TestPaletteOpenViewerReplacesScratchTab(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	editorKey := m.fileEditorKey()
 	m.setFocus(editorKey)
@@ -110,6 +112,7 @@ func TestPaletteOpenViewerReplacesScratchTab(t *testing.T) {
 // TestPaletteOpenViewerLoadsInTab (#1825/#1795): the tab-nested data viewer
 // runs its background open like a dedicated pane — the tables are there.
 func TestPaletteOpenViewerLoadsInTab(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m.setFocus(m.fileEditorKey())
 
@@ -130,6 +133,7 @@ func TestPaletteOpenViewerLoadsInTab(t *testing.T) {
 // TestPaletteOpenViewerRefocusesExistingPane (#1825): a viewer already showing
 // the file is refocused, never duplicated as a tab.
 func TestPaletteOpenViewerRefocusesExistingPane(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	editorKey := m.fileEditorKey()
 	m.setFocus(editorKey)
@@ -156,6 +160,7 @@ func TestPaletteOpenViewerRefocusesExistingPane(t *testing.T) {
 // that cannot host tabs focused — the explorer — the palette pick falls back
 // to the split beside the pane the user worked in.
 func TestPaletteOpenViewerFromExplorerStillSplits(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	editorKey := m.fileEditorKey()
 	m.setFocus(editorKey)
@@ -176,6 +181,7 @@ func TestPaletteOpenViewerFromExplorerStillSplits(t *testing.T) {
 // TestTabRequestDoesNotLeak (#1825): the pending tab request belongs to the one
 // open that set it — a following explicit split open still splits.
 func TestTabRequestDoesNotLeak(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	editorKey := m.fileEditorKey()
 	m.setFocus(editorKey)

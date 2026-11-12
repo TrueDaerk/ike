@@ -14,6 +14,7 @@ import (
 // open the locked picker with the direction-specific placeholder; an empty
 // message (never sent by the bridge) is inert.
 func TestImplementationsMsgRouting(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 
 	// Defensive: an empty message neither toasts nor opens anything.
@@ -62,6 +63,7 @@ func TestImplementationsMsgRouting(t *testing.T) {
 
 // TestEditorContextMenuHasInheritanceEntries pins the right-click entries.
 func TestEditorContextMenuHasInheritanceEntries(t *testing.T) {
+	t.Parallel()
 	var super, impls bool
 	for _, it := range editorContextItems(false) {
 		switch it.Command {

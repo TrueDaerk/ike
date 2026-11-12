@@ -29,7 +29,6 @@ func onboardLang(t *testing.T, id string) {
 // onboardSeed builds a sized app on a fresh (empty) config dir — a first start.
 func onboardSeed(t *testing.T) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := New()
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	return tm.(Model)
@@ -60,6 +59,7 @@ func userSettings(t *testing.T) string {
 }
 
 func TestOnboardingShownOnFirstStart(t *testing.T) {
+	// serial: onboardLang: sets package variable onboardingAutoOpen
 	onboardLang(t, "obgo")
 	m := onboardSeed(t)
 	if !m.onboardingOpen() {
@@ -72,6 +72,7 @@ func TestOnboardingShownOnFirstStart(t *testing.T) {
 }
 
 func TestOnboardingGatesOnOnboardedFlagNotFileExistence(t *testing.T) {
+	// serial: t.Setenv
 	// #658: the gate is lsp.onboarded alone, not the settings file's
 	// existence — the welcome tour creates the file when it opens, and a
 	// mid-tour quit must not suppress this dialog on the next launch.
@@ -103,6 +104,7 @@ func TestOnboardingGatesOnOnboardedFlagNotFileExistence(t *testing.T) {
 }
 
 func TestOnboardingNotShownWithoutRecipes(t *testing.T) {
+	t.Parallel()
 	m := onboardSeed(t)
 	if m.onboardingOpen() {
 		t.Fatal("no server with an install recipe ⇒ no dialog")
@@ -110,6 +112,7 @@ func TestOnboardingNotShownWithoutRecipes(t *testing.T) {
 }
 
 func TestOnboardingRespectsAutoInstallOff(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	onboardLang(t, "obgo")
 	// auto_install=false can only come from the project layer on a first
 	// start; that must mean "ask me nothing, install nothing".
@@ -128,6 +131,8 @@ func TestOnboardingRespectsAutoInstallOff(t *testing.T) {
 }
 
 func TestOnboardingEscSkipsAndPersists(t *testing.T) {
+	// serial: onboardLang: sets package variable onboardingAutoOpen
+	withStore(t)
 	onboardLang(t, "obgo")
 	m := onboardSeed(t)
 	tm, cmd := m.updateOnboarding(tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -151,6 +156,8 @@ func TestOnboardingEscSkipsAndPersists(t *testing.T) {
 }
 
 func TestOnboardingUncheckedServersDisabled(t *testing.T) {
+	// serial: onboardLang: sets package variable onboardingAutoOpen
+	withStore(t)
 	onboardLang(t, "obgo")
 	onboardLang(t, "obpy")
 	m := onboardSeed(t)
@@ -175,6 +182,7 @@ func TestOnboardingUncheckedServersDisabled(t *testing.T) {
 }
 
 func TestOnboardingToggleAndCursor(t *testing.T) {
+	// serial: onboardLang: sets package variable onboardingAutoOpen
 	onboardLang(t, "obgo")
 	onboardLang(t, "obpy")
 	m := onboardSeed(t)

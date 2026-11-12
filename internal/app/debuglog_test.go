@@ -14,6 +14,7 @@ import (
 // TestSlowUpdateLogsEntry guards #125: a slow Update pass leaves a
 // timestamped entry naming the message type and duration in the state log.
 func TestSlowUpdateLogsEntry(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
 	logSlowUpdate(tea.KeyPressMsg{}, 350*time.Millisecond)
@@ -32,10 +33,10 @@ func TestSlowUpdateLogsEntry(t *testing.T) {
 
 // TestFastUpdateDoesNotLog: a normal Update pass writes nothing.
 func TestFastUpdateDoesNotLog(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
-	m := newSized() // rotates IKE_CONFIG_DIR itself; re-pin for the assertion
-	t.Setenv("IKE_CONFIG_DIR", dir)
+	m := newSized()
 	tm, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	_ = tm
 	if _, err := os.Stat(filepath.Join(dir, "debug.log")); !os.IsNotExist(err) {
@@ -47,6 +48,7 @@ func TestFastUpdateDoesNotLog(t *testing.T) {
 // debug-session.log with stderr chunks prefixed (#624) and ANSI escapes
 // stripped (#637).
 func TestDebugSessionLog(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
 	logDebugOutput(false, "hello world\n")
@@ -65,6 +67,7 @@ func TestDebugSessionLog(t *testing.T) {
 // TestDebugSessionLogDelimiter: a session start writes a delimiter line naming
 // the configuration, so consecutive sessions stay distinguishable (#637).
 func TestDebugSessionLogDelimiter(t *testing.T) {
+	// serial: t.Setenv
 	dir := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", dir)
 	logDebugSessionStart("main.py")
@@ -84,6 +87,7 @@ func TestDebugSessionLogDelimiter(t *testing.T) {
 // TestAppendPendingOutCapped: the pre-panel output buffer drops its oldest
 // chunks past maxPendingOut (#637).
 func TestAppendPendingOutCapped(t *testing.T) {
+	t.Parallel()
 	var buf []debugOut
 	for i := 0; i < maxPendingOut+10; i++ {
 		buf = appendPendingOut(buf, debugOut{text: strconv.Itoa(i)})

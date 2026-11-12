@@ -12,6 +12,7 @@ import (
 // organize-imports edits, then the format edits with Amend — undoing once must
 // take the buffer back to the pre-save text.
 func TestFormatEditsMsgAmendIsOneUndoUnit(t *testing.T) {
+	t.Parallel()
 	m := sized(t, 100, 40)
 	dir := t.TempDir()
 	file := filepath.Join(dir, "main.go")

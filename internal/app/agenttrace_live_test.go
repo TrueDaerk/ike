@@ -139,6 +139,7 @@ func fakeAgent(t *testing.T, path, cwd string, from, last int) func() {
 // the newest row and that row is on screen — the pane used to grow below
 // the fold with the cursor parked on the oldest turn, which looked frozen.
 func TestAgentTraceFollowsGrowingTranscriptWithEditorFocused(t *testing.T) {
+	// serial: liveTrace: t.Setenv
 	m, l, path := liveTrace(t)
 	cwd := m.toolPane("watcher").Terminal().Cwd()
 	m.setFocus(m.activeEditorKey())
@@ -179,6 +180,7 @@ func TestAgentTraceFollowsGrowingTranscriptWithEditorFocused(t *testing.T) {
 // the keyboard; appended turns still arrive without a key press and leave
 // the selection and the fold alone.
 func TestAgentTraceGrowsKeepingSelectionWithTerminalFocused(t *testing.T) {
+	// serial: liveTrace: t.Setenv
 	m, l, path := liveTrace(t)
 	cwd := m.toolPane("watcher").Terminal().Cwd()
 	appendTraceTurn(t, path, cwd, 2)
@@ -217,6 +219,7 @@ func TestAgentTraceGrowsKeepingSelectionWithTerminalFocused(t *testing.T) {
 // before the next tick. The push carries a stale ike_pid (the terminal was
 // started under an earlier IKE process), so it binds by cwd.
 func TestAgentTraceHookPushReadsAtOnce(t *testing.T) {
+	// serial: liveTrace: t.Setenv
 	m, l, path := liveTrace(t)
 	cwd := m.toolPane("watcher").Terminal().Cwd()
 	key := m.toolPane("watcher").Terminal().SessionKey()
@@ -246,6 +249,8 @@ func TestAgentTraceHookPushReadsAtOnce(t *testing.T) {
 // (hook push, 'r') starts is applied when it lands — its events are consumed
 // either way — and a read asked for meanwhile runs right after it.
 func TestAgentTraceReadSurvivesRelocation(t *testing.T) {
+	// serial: liveTrace: t.Setenv
+	withStore(t)
 	m, _, path := liveTrace(t)
 	cwd := m.toolPane("watcher").Terminal().Cwd()
 	appendTraceTurn(t, path, cwd, 2)
@@ -274,6 +279,8 @@ func TestAgentTraceReadSurvivesRelocation(t *testing.T) {
 // is restarted by the next relocation, and a read that never reported
 // stops blocking after agentTraceReadLost.
 func TestAgentTraceRevivesLostChainAndRead(t *testing.T) {
+	// serial: liveTrace: t.Setenv
+	withStore(t)
 	m, _, _ := liveTrace(t)
 	gen := m.traceTickGen
 	out, _ := m.Update(tracepanel.RefreshMsg{})

@@ -13,6 +13,7 @@ import (
 // cmd+shift+r both open their overlay now, with an empty prefill.
 
 func TestFindInPathFromViewerTabDoesNotPanic(t *testing.T) {
+	t.Parallel()
 	for _, tc := range viewerFiles {
 		t.Run(tc.name, func(t *testing.T) {
 			m := newSized()

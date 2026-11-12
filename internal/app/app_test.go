@@ -21,6 +21,7 @@ import (
 	"ike/internal/keymap"
 	"ike/internal/layout"
 	ilsp "ike/internal/lsp"
+	"ike/internal/lsp/transport"
 	"ike/internal/menu"
 	"ike/internal/palette"
 	"ike/internal/pane"
@@ -33,9 +34,9 @@ import (
 // home directory to a throwaway tree: several tests persist state (saveLayout
 // on file opens, splits and drags; saveSession on quit) and New() restores it,
 // so without isolation one test's artifacts leak into the next run — and into
-// the developer's real .ike. newSized additionally rotates to a fresh
-// subdirectory per model, so tests never see each other's persisted state
-// either. Redirecting $HOME as well is what makes the isolation complete
+// the developer's real .ike. The store itself is unwritable by default (see
+// below), so tests never see each other's persisted state either; a test of
+// persistence takes its own with withStore. Redirecting $HOME as well is what makes the isolation complete
 // (#1288): IKE_CONFIG_DIR is only the first lookup, and the tests that clear
 // it on purpose fall through to $HOME/.ike.
 var testStoreRoot string
@@ -61,6 +62,9 @@ func TestMain(m *testing.M) {
 	// where gopls is missing would otherwise run `go install …gopls@latest` in
 	// the background of the whole suite.
 	lspplugin.NoInstalls()
+	// Nor does a missing server send `go env` and `npm prefix -g` looking
+	// for it (#3135): two toolchain launches per file a model opens.
+	transport.NoToolchainProbes()
 	// The per-buffer debounce wakes (backup, idle autosave, .http vars) arm
 	// on every keystroke into a dirty buffer since #2541, and drainCmd runs a
 	// key's commands synchronously: a real tea.Tick would sleep its 2s
@@ -71,6 +75,13 @@ func TestMain(m *testing.M) {
 	debounceTick = func(time.Duration, func(time.Time) tea.Msg) tea.Cmd {
 		return func() tea.Msg { return nil }
 	}
+	// The human-scale delays are short for every test (#3135), so a test
+	// drives a dialog without sleeping and without swapping a package
+	// variable — which would keep it from running in parallel. A test of
+	// the delay itself sets its own value and stays serial.
+	playDebounce, playDimDelay, playSpinDelay, playHintIdle = 0, 0, 0, 0
+	askSpinInterval = time.Millisecond
+	tdPreviewDebounce = time.Millisecond
 	// The terminal tests spawn $SHELL and wait for its prompt. A developer's
 	// login shell brings its rc files, plugins and prompt along — and in a
 	// sandbox may never reach a prompt at all — so every test shell is the
@@ -82,7 +93,18 @@ func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "ike-app-test")
 	if err == nil {
 		testStoreRoot = dir
-		os.Setenv("IKE_CONFIG_DIR", dir)
+		// By default a test model has NO state store (#3135): IKE_CONFIG_DIR
+		// points below a regular file, so every read finds nothing and every
+		// write fails, on any platform and for any user. Nothing a model
+		// persists can therefore reach another model, which is what lets the
+		// tests run in parallel without a per-model directory — the variable
+		// is process-wide, so rotating it per model (as newSized once did)
+		// only works one test at a time. A test that asserts persistence
+		// takes a real store with withStore(t) and thereby stays serial.
+		blocker := filepath.Join(dir, "nostore")
+		if os.WriteFile(blocker, nil, 0o444) == nil {
+			os.Setenv("IKE_CONFIG_DIR", filepath.Join(blocker, "state"))
+		}
 		// A temp HOME too. IKE_CONFIG_DIR is only the *first* lookup: with it
 		// unset — which the project-switch tests do deliberately, so the
 		// per-project .ike under cwd is used — the user-level stores fall back
@@ -119,6 +141,7 @@ func (f fakePlugin) Capabilities() plugin.Capabilities { return f.caps }
 // TestOpenRoutesThroughHandlerAndHooks verifies a claiming handler intercepts an
 // open and that EventFileOpened hooks fire regardless.
 func TestOpenRoutesThroughHandlerAndHooks(t *testing.T) {
+	t.Parallel()
 	reg := registry.New()
 	reg.Add(fakePlugin{id: "p", caps: plugin.Capabilities{
 		FileHandlers: []plugin.FileHandler{{
@@ -152,6 +175,7 @@ func TestOpenRoutesThroughHandlerAndHooks(t *testing.T) {
 // bypassing openPath, so Init must announce them via EventFileOpened (the LSP
 // didOpen trigger) — once per file even when it is shared across tabs (#142).
 func TestInitFiresFileOpenedForRestoredFiles(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "restored.go")
 	if err := os.WriteFile(path, []byte("package main\n"), 0o644); err != nil {
@@ -187,6 +211,7 @@ func TestInitFiresFileOpenedForRestoredFiles(t *testing.T) {
 // TestPluginKeymapOverridesCore checks a high-priority plugin binding wins over
 // a core key.
 func TestPluginKeymapOverridesCore(t *testing.T) {
+	t.Parallel()
 	reg := registry.New()
 	reg.Add(fakePlugin{id: "p", caps: plugin.Capabilities{Keymaps: []plugin.Keymap{{
 		Keys: "q", Scope: plugin.GlobalScope(), Priority: plugin.CorePriority + 1,
@@ -202,6 +227,7 @@ func TestPluginKeymapOverridesCore(t *testing.T) {
 
 // TestPluginConfigDisable verifies "plugins.<id>.enabled=false" hides a plugin.
 func TestPluginConfigDisable(t *testing.T) {
+	t.Parallel()
 	reg := registry.New()
 	reg.Add(fakePlugin{id: "p", caps: plugin.Capabilities{Keymaps: []plugin.Keymap{{
 		Keys: "ctrl+e", Scope: plugin.GlobalScope(), Priority: plugin.CorePriority + 1,
@@ -217,6 +243,7 @@ func TestPluginConfigDisable(t *testing.T) {
 // opens the menu, an open menu owns the keys, and menu.RunMsg routes into
 // RunCommand. ui.menu_bar=false hides the bar and disables the toggle.
 func TestMenuBarToggleAndDispatch(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	tm, _ := m.Update(ToggleMenuMsg{})
 	m = tm.(Model)
@@ -260,9 +287,10 @@ func TestMenuBarToggleAndDispatch(t *testing.T) {
 // TestSplitFocusedCommands guards #114: pane.splitDown/up split the focused
 // editor leaf with a fresh empty editor and move focus onto it.
 func TestSplitFocusedCommands(t *testing.T) {
+	// serial: withStore: t.Setenv
 	// SplitFocused persists the layout; redirect the store so the multi-pane
 	// tree never leaks into later tests (which restore it at New()).
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	m := newSized()
 	tm, _ := m.Update(ToggleExplorerFocusMsg{}) // focus the editor
 	m = tm.(Model)
@@ -314,6 +342,7 @@ func TestSplitFocusedCommands(t *testing.T) {
 // open floating overlay closes it, a press inside keeps it open (and never
 // falls through to the panes below).
 func TestClickOutsideDismissesOverlays(t *testing.T) {
+	t.Parallel()
 	press := func(x, y int) tea.MouseClickMsg {
 		return tea.MouseClickMsg{X: x, Y: y, Button: tea.MouseLeft}
 	}
@@ -356,6 +385,7 @@ func TestClickOutsideDismissesOverlays(t *testing.T) {
 
 // TestRunCommand drives the command-palette seam.
 func TestRunCommand(t *testing.T) {
+	t.Parallel()
 	reg := registry.New()
 	reg.Add(fakePlugin{id: "p", caps: plugin.Capabilities{Commands: []plugin.Command{{
 		ID: "p.go", Scope: plugin.GlobalScope(),
@@ -370,25 +400,33 @@ func TestRunCommand(t *testing.T) {
 
 var testStoreSeq atomic.Int64
 
-// testStoreDir returns a fresh state directory under the temp store for a
-// model a test builds by hand: the test name keeps it readable, the sequence
-// number keeps it unique — a directory keyed on the name alone made a repeated
-// run (-count=2) load what the first pass persisted (#3056).
-func testStoreDir(t *testing.T, prefix string, extra ...string) string {
+// withStore gives one test a real, empty state store of its own and returns
+// its directory: the test asserts something that is persisted or restored
+// (layout, session, settings, bookmarks, telemetry, …), which the store-less
+// default of TestMain swallows. It sets IKE_CONFIG_DIR for the process, so the
+// test cannot run in parallel — t.Setenv enforces that.
+//
+// The directory lives under the suite's temp root, which TestMain removes at
+// exit, rather than in t.TempDir: a model writes some state off the loop
+// (backups, local history), and a write landing after the test ended fails
+// t.TempDir's own removal with "directory not empty".
+func withStore(t *testing.T) string {
 	t.Helper()
-	name := prefix + "-" + t.Name()
-	for _, e := range extra {
-		name += "-" + e
+	dir := t.TempDir()
+	if testStoreRoot != "" {
+		dir = filepath.Join(testStoreRoot, "store-"+strconv.FormatInt(testStoreSeq.Add(1), 10))
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
 	}
-	return filepath.Join(testStoreRoot, name+"-"+strconv.FormatInt(testStoreSeq.Add(1), 10))
+	t.Setenv("IKE_CONFIG_DIR", dir)
+	return dir
 }
 
-// newSized builds a freshly isolated, sized model: each call rotates the state
-// store to an empty directory so persisted layouts/sessions never couple tests.
+// newSized builds a sized model. It has no state store unless the test took
+// one (see TestMain and withStore), so persisted layouts/sessions never couple
+// tests.
 func newSized() Model {
-	if testStoreRoot != "" {
-		os.Setenv("IKE_CONFIG_DIR", filepath.Join(testStoreRoot, strconv.FormatInt(testStoreSeq.Add(1), 10)))
-	}
 	m := New()
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	return tm.(Model)
@@ -429,6 +467,7 @@ func cmdMsgs(cmd tea.Cmd) []tea.Msg {
 // undeliverable in a macOS terminal) must resolve through the keymap layer to
 // editor.undo and revert the last edit.
 func TestCtrlZUndoesInEditor(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "x.txt")
 	if err := os.WriteFile(path, []byte("hello\n"), 0o644); err != nil {
@@ -456,6 +495,7 @@ func TestCtrlZUndoesInEditor(t *testing.T) {
 // editor.write and persist the buffer — from insert mode too, since modifier
 // chords stay eligible for the keymap layer while the editor captures text.
 func TestCtrlSSavesInEditor(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "x.txt")
 	if err := os.WriteFile(path, []byte("hello\n"), 0o644); err != nil {
@@ -485,6 +525,7 @@ func TestCtrlSSavesInEditor(t *testing.T) {
 // hardcoded ctrl+w. GOOS is pinned to darwin so the table keeps the meta chord
 // the test feeds, regardless of the build platform.
 func TestCmdWClosesTabThroughKeymap(t *testing.T) {
+	// serial: sets keymap.GOOS
 	oldGOOS := keymap.GOOS
 	keymap.GOOS = "darwin"
 	defer func() { keymap.GOOS = oldGOOS }()
@@ -512,6 +553,7 @@ func TestCmdWClosesTabThroughKeymap(t *testing.T) {
 // through the keymap layer to the registered app-level command and open the
 // help overlay (the hardcoded "?" shares the same helper).
 func TestF1OpensCheatsheetThroughKeymap(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyF1})
 	if !m.shell.IsOpen() {
@@ -523,6 +565,7 @@ func TestF1OpensCheatsheetThroughKeymap(t *testing.T) {
 // resolve through the keymap layer to the registered app-level command and
 // cycle pane focus, like the hardcoded tab.
 func TestCtrlTabCyclesFocusThroughKeymap(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "x.txt")
 	if err := os.WriteFile(path, []byte("hi\n"), 0o644); err != nil {
@@ -544,6 +587,7 @@ func TestCtrlTabCyclesFocusThroughKeymap(t *testing.T) {
 // open the centered palette locked to the fuzzy file mode from any context
 // (here: the explorer, where the "@" editor key is unavailable).
 func TestGoToFileOpensLockedFilePalette(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	tm, _ := m.Update(GoToFileMsg{})
 	m = tm.(Model)
@@ -558,6 +602,7 @@ func TestGoToFileOpensLockedFilePalette(t *testing.T) {
 // TestSaveAllWritesDirtyEditors guards editor.saveAll: SaveAllMsg must write
 // every dirty editor pane to disk.
 func TestSaveAllWritesDirtyEditors(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "a.txt")
@@ -588,6 +633,7 @@ func TestSaveAllWritesDirtyEditors(t *testing.T) {
 // TestToggleExplorerFocus guards explorer.toggle: focus flips from the
 // explorer to the active editor and back.
 func TestToggleExplorerFocus(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if m.activeWS().Panes.Focused() != pane.ExplorerKey {
 		t.Fatalf("precondition: explorer focused, got %q", m.activeWS().Panes.Focused())
@@ -608,6 +654,7 @@ func TestToggleExplorerFocus(t *testing.T) {
 // project files render relative to the working directory, outside files
 // render absolute.
 func TestDisplayPathRelativeInsideProject(t *testing.T) {
+	t.Parallel()
 	cwd, _ := os.Getwd()
 	if got := displayPath(filepath.Join(cwd, "internal", "app", "app.go")); got != filepath.Join("internal", "app", "app.go") {
 		t.Fatalf("inside project: got %q", got)
@@ -622,6 +669,7 @@ func TestDisplayPathRelativeInsideProject(t *testing.T) {
 // (delete, or undo of a create) closes any editor still showing it, rather than
 // leaving a stale pane open on a gone file.
 func TestDeletingFileClosesItsEditor(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "gone.txt")
 	if err := os.WriteFile(path, []byte("x\n"), 0o644); err != nil {
@@ -644,6 +692,7 @@ func TestDeletingFileClosesItsEditor(t *testing.T) {
 }
 
 func TestTabSwitchesFocus(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	if m.activeWS().Panes.FocusedInstance().Kind() != pane.KindExplorer {
 		t.Fatal("should start focused on explorer")
@@ -656,6 +705,7 @@ func TestTabSwitchesFocus(t *testing.T) {
 }
 
 func TestOpenFileRoutesToEditor(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "x.txt")
 	if err := os.WriteFile(path, []byte("hi\n"), 0o644); err != nil {
@@ -673,6 +723,7 @@ func TestOpenFileRoutesToEditor(t *testing.T) {
 }
 
 func TestCloseMsgResetsToExplorer(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "x.txt")
 	if err := os.WriteFile(path, []byte("hi\n"), 0o644); err != nil {
@@ -694,6 +745,7 @@ func TestCloseMsgResetsToExplorer(t *testing.T) {
 }
 
 func TestQuitFromExplorer(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	_, cmd := m.Update(tea.KeyPressMsg{Text: "q", Code: 'q'})
 	if cmd == nil {
@@ -707,6 +759,7 @@ func TestQuitFromExplorer(t *testing.T) {
 // TestSessionPersistsAndRestores verifies quitting writes session.json and a
 // fresh model reopens the same file, cursor, focus, and explorer state.
 func TestSessionPersistsAndRestores(t *testing.T) {
+	// serial: t.Setenv
 	proj := t.TempDir()
 	state := t.TempDir()
 	t.Setenv("IKE_CONFIG_DIR", state)
@@ -757,8 +810,9 @@ func TestSessionPersistsAndRestores(t *testing.T) {
 // file left scrolled with the cursor mid-screen must reopen framed identically —
 // otherwise on-screen rows map to the wrong lines and mouse clicks miss.
 func TestSessionRestoresViewportFraming(t *testing.T) {
+	// serial: chdir: t.Chdir (process working directory)
 	proj := t.TempDir()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	withStore(t)
 	chdir(t, proj)
 
 	var b strings.Builder
@@ -799,6 +853,7 @@ func TestSessionRestoresViewportFraming(t *testing.T) {
 // When the editor is focused in normal mode, "q" quits the app like it does
 // from the explorer.
 func TestQuitFromEditorNormalMode(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "x.txt")
 	if err := os.WriteFile(path, []byte("\n"), 0o644); err != nil {
@@ -822,6 +877,7 @@ func TestQuitFromEditorNormalMode(t *testing.T) {
 // When the editor is in insert mode, a literal "q" must reach the buffer rather
 // than quitting the app.
 func TestQNotQuitWhileTyping(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "x.txt")
 	if err := os.WriteFile(path, []byte("\n"), 0o644); err != nil {
@@ -843,6 +899,7 @@ func TestQNotQuitWhileTyping(t *testing.T) {
 // TestHelpOverlayToggle verifies "?" opens the help overlay, that while open it
 // swallows keys (tab does not switch focus), and that "esc" dismisses it.
 func TestHelpOverlayToggle(t *testing.T) {
+	t.Parallel()
 	reg := registry.New()
 	reg.Add(fakePlugin{id: "p", caps: plugin.Capabilities{Commands: []plugin.Command{
 		{ID: "p.hello", Title: "Hello", Scope: plugin.GlobalScope()},
@@ -886,6 +943,7 @@ func TestHelpOverlayToggle(t *testing.T) {
 // dispatching host.OpenModalRequest hosts arbitrary content in the floating
 // shell, composited centered over the base layout.
 func TestOpenModalRequestFloatsPluginContent(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	tm, _ := m.Update(host.OpenModalRequest{
 		Title: "PLUGIN MODAL",
@@ -916,6 +974,7 @@ func TestOpenModalRequestFloatsPluginContent(t *testing.T) {
 // overlaid region carries the rounded border, while base content survives at the
 // edges (the pane does not cover the whole screen).
 func TestHelpOverlayFloatsCentered(t *testing.T) {
+	t.Parallel()
 	reg := registry.New()
 	reg.Add(fakePlugin{id: "p", caps: plugin.Capabilities{Commands: []plugin.Command{
 		{ID: "p.hello", Title: "Hello", Scope: plugin.GlobalScope()},
@@ -953,6 +1012,7 @@ func TestHelpOverlayFloatsCentered(t *testing.T) {
 // TestApplyPluginConfigSymmetric guards #133: a reload re-enables a plugin
 // whose toggle flipped back, not just disables.
 func TestApplyPluginConfigSymmetric(t *testing.T) {
+	t.Parallel()
 	reg := registry.New()
 	reg.Add(togglePlugin{})
 	applyPluginConfig(reg, host.MapConfig{"plugins.toggle.enabled": "false"})
@@ -978,6 +1038,7 @@ func (togglePlugin) Capabilities() plugin.Capabilities { return plugin.Capabilit
 // table and shows blocked bindings with their
 // dependency instead of hiding them.
 func TestCheatsheetLiveAndBlocked(t *testing.T) {
+	// serial: keymap.StubBlockedForTest (process-wide ledger)
 	// The real blocked ledger emptied with 0320 (#466): stub one entry so the
 	// sheet's blocked group stays covered.
 	defer keymap.StubBlockedForTest("vcs.revertFile", "unit-test dependency")()
@@ -1002,6 +1063,7 @@ var ansiStripRe = regexp.MustCompile("\x1b\\[[0-9;]*m")
 // (#268): focused tree hides (leaf gone, editors reflow), the next toggle
 // brings it back at the remembered ratio with focus on it.
 func TestExplorerToggleHidesAndRestores(t *testing.T) {
+	// serial: t.Setenv
 	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := newSized()
 	if !m.explorerVisible() || m.activeWS().Panes.Focused() != pane.ExplorerKey {
@@ -1044,17 +1106,16 @@ func TestExplorerToggleHidesAndRestores(t *testing.T) {
 // explorer leaf (hidden via toggle) restores as saved instead of falling back
 // to the default layout (#268).
 func TestRestoreLayoutAcceptsHiddenExplorer(t *testing.T) {
-	m := newSized() // rotates IKE_CONFIG_DIR to a fresh store
-	dir := os.Getenv("IKE_CONFIG_DIR")
+	// serial: withStore: t.Setenv
+	withStore(t)
+	m := newSized()
 	tm, _ := m.Update(ToggleExplorerFocusMsg{}) // hide (persists the layout)
 	m = tm.(Model)
 	if m.explorerVisible() {
 		t.Fatal("setup: explorer should be hidden")
 	}
 
-	// A fresh model over the same store restores the persisted layout
-	// (newSized would rotate the store dir away, so pin it and call New).
-	t.Setenv("IKE_CONFIG_DIR", dir)
+	// A fresh model over the same store restores the persisted layout.
 	tm, _ = New().Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m2 := tm.(Model)
 	if m2.explorerVisible() {
@@ -1074,6 +1135,7 @@ func TestRestoreLayoutAcceptsHiddenExplorer(t *testing.T) {
 // picker (#279): several candidates open the palette list (with the
 // definitions placeholder) instead of guessing the first location.
 func TestDefinitionCandidatesOpenPicker(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	tm, _ := m.Update(ilsp.DefinitionCandidatesMsg{Refs: []ilsp.Reference{
 		{Path: "a.go", Line: 1, Preview: "func A()"},
@@ -1103,6 +1165,8 @@ func TestDefinitionCandidatesOpenPicker(t *testing.T) {
 // cache into rows (stale queries dropped) and refresh the open palette;
 // no-provider stays an honest toast.
 func TestSymbolLiveMode(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := newSized()
 	var applied []string
 	tm, _ := m.Update(ilsp.SymbolPromptMsg{Apply: func(q string) tea.Cmd {
@@ -1159,6 +1223,7 @@ func TestSymbolLiveMode(t *testing.T) {
 // seat: the first ShowSearchEverywhereMsg silently primes the bridge
 // continuation via project.goToClass without opening the symbol palette.
 func TestSearchEverywherePrimesSymbolHook(t *testing.T) {
+	// serial: adds to the model's plugin registry, the process-wide one unless the model was built on its own
 	m := newSized()
 	prompt := func(host.API) tea.Cmd {
 		return func() tea.Msg {
@@ -1191,6 +1256,7 @@ func TestSearchEverywherePrimesSymbolHook(t *testing.T) {
 // tests silently run against someone's personal pane set (terminals included,
 // which makes workspaces look busy and eviction prompt).
 func TestDefaultPanesAreNotUserConfigured(t *testing.T) {
+	// serial: t.Setenv
 	t.Setenv("IKE_CONFIG_DIR", "") // the project-switch tests' setup
 	chdir(t, t.TempDir())
 	m := NewWith(registry.New(), host.MapConfig{})
@@ -1218,6 +1284,7 @@ func TestDefaultPanesAreNotUserConfigured(t *testing.T) {
 // TestHomeIsIsolated states the invariant directly: no test in this package
 // may resolve to the real home directory (#1288).
 func TestHomeIsIsolated(t *testing.T) {
+	t.Parallel()
 	home, err := os.UserHomeDir()
 	if err != nil {
 		t.Skip("no home directory resolvable")
@@ -1235,6 +1302,7 @@ func TestHomeIsIsolated(t *testing.T) {
 // bridge uses to shut its servers down through the spec's handshake instead
 // of a dropped pipe.
 func TestQuitFiresAppQuitHooks(t *testing.T) {
+	t.Parallel()
 	reg := registry.New()
 	ran := false
 	reg.Add(fakePlugin{id: "p", caps: plugin.Capabilities{

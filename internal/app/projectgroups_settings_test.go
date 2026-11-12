@@ -25,6 +25,7 @@ func groupOpsConfig(t *testing.T, dir string) {
 // (#2573): a bare name is a project inside the project directory, "~" expands,
 // and a missing directory is refused with a message the form can show.
 func TestProjectGroupOpsResolveRoot(t *testing.T) {
+	// serial: groupOpsConfig: config.Set (process-wide configuration)
 	dir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(dir, "api"), 0o755); err != nil {
 		t.Fatal(err)
@@ -49,6 +50,7 @@ func TestProjectGroupOpsResolveRoot(t *testing.T) {
 // TestProjectGroupOpsWriteAndRemove: the page's write path persists the whole
 // list at user scope and the remove path drops one entry.
 func TestProjectGroupOpsWriteAndRemove(t *testing.T) {
+	// serial: config.Set (process-wide configuration)
 	dir := t.TempDir()
 	groupOpsConfig(t, dir)
 	opts := config.Options{

@@ -30,6 +30,7 @@ func lspDoctorView(t *testing.T, m Model) string {
 // panel focused, stores the server set, and starts a check run whose results
 // render with diagnosis and fix.
 func TestLSPDoctorOpensAndRuns(t *testing.T) {
+	// serial: t.Setenv
 	// A bare PATH keeps the real probes off the machine's toolchains and
 	// makes the fake server resolve to "missing" fast.
 	t.Setenv("PATH", t.TempDir())
@@ -83,6 +84,7 @@ func TestLSPDoctorOpensAndRuns(t *testing.T) {
 // healthy setup marks the previous failure resolved instead of repeating the
 // hint.
 func TestLSPDoctorRerunVerifies(t *testing.T) {
+	// serial: t.Setenv
 	m := sized(t, 120, 40)
 	m.lspDoctorReport.SetServers([]lspdoctor.Server{{Lang: "toml", Command: "taplo"}})
 	out, _ := m.Update(lspdoctor.ResultsMsg{Results: []lspdoctor.Result{{

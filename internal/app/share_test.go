@@ -41,6 +41,7 @@ func sharedApp(t *testing.T) (*Model, string, [2]string) {
 func edOf(m *Model, key string) *editor.Model { return m.activeWS().Panes.Get(key).Editor() }
 
 func TestOpenSameFileTwiceSharesDocument(t *testing.T) {
+	t.Parallel()
 	m, _, keys := sharedApp(t)
 	if !edOf(m, keys[0]).SharesBufferWith(edOf(m, keys[1])) {
 		t.Fatal("two panes on one file must share the document")
@@ -48,6 +49,7 @@ func TestOpenSameFileTwiceSharesDocument(t *testing.T) {
 }
 
 func TestEditInOnePaneMirrorsToOther(t *testing.T) {
+	t.Parallel()
 	m, path, keys := sharedApp(t)
 	for _, k := range []tea.KeyPressMsg{
 		{Code: 'i', Text: "i"},
@@ -70,6 +72,7 @@ func TestEditInOnePaneMirrorsToOther(t *testing.T) {
 }
 
 func TestSaveInOnePaneCleansBoth(t *testing.T) {
+	t.Parallel()
 	m, path, keys := sharedApp(t)
 	for _, k := range []tea.KeyPressMsg{
 		{Code: 'i', Text: "i"},
@@ -93,6 +96,7 @@ func TestSaveInOnePaneCleansBoth(t *testing.T) {
 }
 
 func TestClosingOnePaneKeepsDocumentAlive(t *testing.T) {
+	t.Parallel()
 	m, path, _ := sharedApp(t)
 	m.CloseFocused()
 	keys := m.editorKeysForPath(path)
@@ -105,6 +109,7 @@ func TestClosingOnePaneKeepsDocumentAlive(t *testing.T) {
 }
 
 func TestRestoreLayoutSharesDuplicatePaths(t *testing.T) {
+	// serial: t.Setenv
 	// Pin the state store so the second New() restores the first one's layout
 	// (newSized would rotate it away).
 	t.Setenv("IKE_CONFIG_DIR", filepath.Join(t.TempDir(), "store"))

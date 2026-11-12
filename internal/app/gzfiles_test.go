@@ -44,6 +44,7 @@ func writeGzInto(t *testing.T, p string, body []byte) string {
 // TestOpenPathRoutesPlainGzipToHandler: a .gz never lands in a raw text
 // buffer — the handler claims it and dispatches OpenGzipMsg.
 func TestOpenPathRoutesPlainGzipToHandler(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeGzFile(t, "app.log.gz", []byte("2026-08-10 boot ok\n"))
 	_, cmd := m.openPath(p, false)
@@ -58,6 +59,7 @@ func TestOpenPathRoutesPlainGzipToHandler(t *testing.T) {
 // TestOpenPathRoutesTarGzToTheArchiveViewer is the other half of the routing
 // contract (#1762/#1763): the gz handler must not steal a tarball.
 func TestOpenPathRoutesTarGzToTheArchiveViewer(t *testing.T) {
+	t.Parallel()
 	for _, name := range []string{"src.tar.gz", "src.tgz"} {
 		t.Run(name, func(t *testing.T) {
 			m := newSized()
@@ -76,6 +78,7 @@ func TestOpenPathRoutesTarGzToTheArchiveViewer(t *testing.T) {
 // edits, names the archive in its title, and resolves its language from the
 // *inner* file name so a .log.gz gets log mode.
 func TestOpenGzipFileReadOnly(t *testing.T) {
+	// serial: registerTestLang: lang.Register (process-wide language registry)
 	m := newSized()
 	body := "2026-08-10 boot ok\n2026-08-10 ready\n"
 	p := writeGzFile(t, "app.log.gz", []byte(body))
@@ -149,7 +152,6 @@ func countTabsForPath(m Model, vpath string) int {
 // newCapped builds a model whose large-file byte threshold is kb kilobytes.
 func newCapped(t *testing.T, kb int) Model {
 	t.Helper()
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
 	m := NewWith(registry.New(), host.MapConfig{"files.large_file_kb": strconv.Itoa(kb)})
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	return tm.(Model)
@@ -158,6 +160,7 @@ func newCapped(t *testing.T, kb int) Model {
 // TestOpenGzipTruncatesAtTheLargeFileCap is the decompression-bomb guard: the
 // ceiling counts decompressed bytes, so a tiny .gz cannot blow up the buffer.
 func TestOpenGzipTruncatesAtTheLargeFileCap(t *testing.T) {
+	t.Parallel()
 	m := newCapped(t, 1) // 1 KB of output
 	p := writeGzFile(t, "big.txt.gz", bytes.Repeat([]byte("a"), 1<<20))
 	if got := m.largeFileLimit(); got != 1024 {
@@ -179,7 +182,8 @@ func TestOpenGzipTruncatesAtTheLargeFileCap(t *testing.T) {
 // TestOpenGzipTruncatesAtTheLineCap: the other large-file threshold. A log
 // compresses far below the byte cap and can still be unusably long.
 func TestOpenGzipTruncatesAtTheLineCap(t *testing.T) {
-	t.Setenv("IKE_CONFIG_DIR", t.TempDir())
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := NewWith(registry.New(), host.MapConfig{"files.large_file_lines": "10"})
 	tm, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m = tm.(Model)
@@ -200,6 +204,7 @@ func TestOpenGzipTruncatesAtTheLineCap(t *testing.T) {
 // TestOpenGzipBinaryShowsMetadata: binary content degrades to a description
 // of the archive instead of a buffer full of mojibake.
 func TestOpenGzipBinaryShowsMetadata(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := writeGzFile(t, "blob.bin.gz", []byte("\x00\x01\x02binary\x00payload"))
 
@@ -225,6 +230,7 @@ func TestOpenGzipBinaryShowsMetadata(t *testing.T) {
 // the archive, so the editor's own reload never fires — the root model
 // re-decompresses on the watcher event instead.
 func TestGzipBufferRefreshesOnDiskChange(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	p := filepath.Join(t.TempDir(), "app.log.gz")
 	writeGzInto(t, p, []byte("first\n"))
@@ -256,6 +262,7 @@ func TestGzipBufferRefreshesOnDiskChange(t *testing.T) {
 // TestRefreshGzipBuffersIgnoresOtherFiles: an unrelated write must not touch
 // a gz preview, and a non-gzip path must not be decompressed at all.
 func TestRefreshGzipBuffersIgnoresOtherFiles(t *testing.T) {
+	t.Parallel()
 	m := newSized()
 	dir := t.TempDir()
 	p := writeGzInto(t, filepath.Join(dir, "app.log.gz"), []byte("first\n"))
@@ -278,6 +285,7 @@ func TestRefreshGzipBuffersIgnoresOtherFiles(t *testing.T) {
 // TestTruncateLines pins the line cap's edges: a text landing exactly on the
 // cap keeps its trailing newline instead of being reported as truncated.
 func TestTruncateLines(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		in      string
 		max     int

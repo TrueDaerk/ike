@@ -52,6 +52,7 @@ func editorTop(t *testing.T, m Model) int {
 // layer focused, visible and unblurred, because scrolling is a reading gesture
 // and not a focus gesture.
 func TestPopupWheelOutsideScrollsPaneBelow(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	m, ex, ey := longFileEditor(t, m)
 	if m.popupLayerHit(ex, ey) {
@@ -94,6 +95,7 @@ func TestPopupWheelOutsideScrollsPaneBelow(t *testing.T) {
 // layer box the wheel is unchanged — it pages that box's scrollback and never
 // reaches the pane below.
 func TestPopupWheelOverBoxScrollsScrollback(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	m, _, _ = longFileEditor(t, m)
 	px, py, pw, ph := m.popupTermRect()
@@ -117,6 +119,7 @@ func TestPopupWheelOverBoxScrollsScrollback(t *testing.T) {
 // other shape: a torn-out floating panel (#1793) passes the wheel through
 // outside its box just like the popup box does.
 func TestFloatPanelWheelOutsideScrollsPaneBelow(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	m, f := tearOutFirstTab(t, m)
 	m.setFloatFocus(f)
@@ -145,6 +148,7 @@ func TestFloatPanelWheelOutsideScrollsPaneBelow(t *testing.T) {
 // TestPopupClickOutsideStillBlurs guards that #2343's wheel exception is
 // wheel-only: a press outside the boxes keeps blurring the layer (#2309).
 func TestPopupClickOutsideStillBlurs(t *testing.T) {
+	t.Parallel()
 	m := openTestPopup(t)
 	m, ex, ey := longFileEditor(t, m)
 	m = step(m, press(ex, ey))

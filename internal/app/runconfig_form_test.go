@@ -40,6 +40,8 @@ func addEnvRow(m Model, key, value string) Model {
 // as rows in the form are persisted into the store and reach a spawned
 // process as KEY=VALUE pairs.
 func TestRunConfigFormEnvRoundTrip(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openEnvForm(t, runModel(t, "bottom"))
 	m = addEnvRow(m, "API_KEY", "secret")
 	m = addEnvRow(m, "MODE", "dev")
@@ -71,6 +73,8 @@ func TestRunConfigFormEnvRoundTrip(t *testing.T) {
 // TestRunConfigFormRejectsBadKeys: an empty key and a duplicate key are
 // refused with a message and leave the row list unchanged.
 func TestRunConfigFormRejectsBadKeys(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openEnvForm(t, runModel(t, "bottom"))
 	m = addEnvRow(m, "A", "1")
 
@@ -105,6 +109,8 @@ func TestRunConfigFormRejectsBadKeys(t *testing.T) {
 // TestRunConfigFormRemoveRow: d drops the selected row, and the save writes
 // the shortened set (an emptied list clears the overlay).
 func TestRunConfigFormRemoveRow(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openEnvForm(t, runModel(t, "bottom"))
 	m = addEnvRow(m, "A", "1")
 	m = addEnvRow(m, "B", "2")
@@ -122,6 +128,8 @@ func TestRunConfigFormRemoveRow(t *testing.T) {
 // TestRunConfigFormCancelDiscards: esc closes the form without touching the
 // store — the edits only exist in the dialog until ctrl+s.
 func TestRunConfigFormCancelDiscards(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := openEnvForm(t, runModel(t, "bottom"))
 	m = addEnvRow(m, "A", "1")
 	m = drainKey(m, tea.KeyPressMsg{Code: tea.KeyEscape})
@@ -137,6 +145,8 @@ func TestRunConfigFormCancelDiscards(t *testing.T) {
 // debugger reruns under the debugger — the chord does not silently downgrade
 // it to a plain run.
 func TestRerunLastRepeatsDebugKind(t *testing.T) {
+	// serial: withStore: t.Setenv
+	withStore(t)
 	m := runModel(t, "bottom")
 	store := run.Load()
 	cfg, _, ok := store.EnsureFor(projectRoot(), m.activeEditor().Path())
@@ -174,6 +184,7 @@ func TestRerunLastRepeatsDebugKind(t *testing.T) {
 // TestRerunLastNothingYet: the chord toasts instead of doing nothing when no
 // configuration has ever run.
 func TestRerunLastNothingYet(t *testing.T) {
+	t.Parallel()
 	m := runModel(t, "bottom")
 	base := len(m.history)
 	tm, _ := m.Update(RunRerunMsg{})

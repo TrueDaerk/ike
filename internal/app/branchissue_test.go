@@ -49,6 +49,7 @@ func branchIssueApp(t *testing.T, branch, pattern string, on bool) Model {
 // pattern reads issue/<n>, a custom one reads whatever it captures, and
 // everything else resolves to nothing rather than to a guess.
 func TestBranchIssuePatternMatch(t *testing.T) {
+	t.Parallel()
 	cases := []struct {
 		branch, pattern string
 		want            int
@@ -79,6 +80,7 @@ func TestBranchIssuePatternMatch(t *testing.T) {
 // TestBranchIssueSegmentOptIn guards the opt-in: nothing renders while the
 // setting is off, and nothing renders on a branch the pattern misses.
 func TestBranchIssueSegmentOptIn(t *testing.T) {
+	// serial: branchIssueApp: config.Set (process-wide configuration)
 	m := branchIssueApp(t, "issue/2544", "", false)
 	if s := m.branchIssueSegment(); s != "" {
 		t.Fatalf("segment off must render nothing, got %q", s)
@@ -93,6 +95,7 @@ func TestBranchIssueSegmentOptIn(t *testing.T) {
 // carries renders the bare number — the honest answer — and the title appears
 // as soon as a listing lands.
 func TestBranchIssueSegmentCacheMiss(t *testing.T) {
+	// serial: branchIssueApp: config.Set (process-wide configuration)
 	m := branchIssueApp(t, "issue/2544-status-line", "", true)
 	if got := m.branchIssueSegment(); got != "#2544" {
 		t.Fatalf("cache miss must render the bare number, got %q", got)
@@ -112,6 +115,7 @@ func TestBranchIssueSegmentCacheMiss(t *testing.T) {
 // titles come out of the listings the app already routes, poll and cached
 // snapshot alike.
 func TestBranchIssueTitlesFromListing(t *testing.T) {
+	// serial: branchIssueApp: config.Set (process-wide configuration)
 	m := branchIssueApp(t, "issue/2544", "", true)
 	out, _ := m.Update(forge.IssuesMsg{Poll: true, Issues: []forge.Issue{{Number: 2544, Title: "from the poll"}}})
 	m = out.(Model)
@@ -129,6 +133,7 @@ func TestBranchIssueTitlesFromListing(t *testing.T) {
 // press on the segment dispatches issues.openCurrentBranch, whose handler
 // opens the Issues window on the branch's issue.
 func TestBranchIssueClickOpensIssue(t *testing.T) {
+	// serial: branchIssueApp: config.Set (process-wide configuration)
 	m := branchIssueApp(t, "issue/2544", "", true)
 	m.rememberIssueTitles([]forge.Issue{{Number: 2544, Title: "status line"}})
 	x := -1
@@ -165,6 +170,7 @@ func TestBranchIssueClickOpensIssue(t *testing.T) {
 // TestBranchIssueCommandOffBranch guards the no-match path of the command:
 // it says why nothing opened instead of opening an arbitrary issue.
 func TestBranchIssueCommandOffBranch(t *testing.T) {
+	// serial: branchIssueApp: config.Set (process-wide configuration)
 	m := branchIssueApp(t, "main", "", true)
 	out, _ := m.Update(IssuesOpenCurrentBranchMsg{})
 	m = out.(Model)
