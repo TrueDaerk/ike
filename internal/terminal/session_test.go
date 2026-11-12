@@ -40,14 +40,7 @@ func (c *collector) has(pred func(tea.Msg) bool) bool {
 func waitFor(t *testing.T, what string, cond func() bool) {
 	t.Helper()
 	requirePTY(t)
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if cond() {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	t.Fatalf("timed out waiting for %s", what)
+	waitUntil(t, 5*time.Second, what, cond)
 }
 
 // startSh spawns a plain /bin/sh session for grid assertions.
@@ -58,6 +51,11 @@ func startSh(t *testing.T, c *collector) *Session {
 		t.Fatal(err)
 	}
 	t.Cleanup(s.Close)
+	// Type nothing before the shell is at its prompt (as startNarrowSh):
+	// keys sent earlier are echoed by the kernel and then redrawn by the
+	// line editor, so the echo alone satisfies an "input + output" count
+	// and the test reads the grid before the output landed (#3136).
+	waitPrompt(t, s)
 	return s
 }
 
@@ -73,7 +71,10 @@ func TestSessionEchoRendersOnGrid(t *testing.T) {
 	waitFor(t, "echo output", func() bool {
 		return strings.Count(plainView(s), "hello-grid") >= 2 // echoed input + output
 	})
-	if !c.has(func(m tea.Msg) bool { _, ok := m.(OutputMsg); return ok }) {
+	// The notification trails the grid write by notifyQuiet.
+	if !pollUntil(2*time.Second, func() bool {
+		return c.has(func(m tea.Msg) bool { _, ok := m.(OutputMsg); return ok })
+	}) {
 		t.Fatal("output should raise coalesced OutputMsg notifications")
 	}
 }
@@ -225,21 +226,7 @@ func TestMouseSelection(t *testing.T) {
 	for _, r := range "echo alpha-beta gamma\r" {
 		s.SendKey(keyFor(r))
 	}
-	waitFor(t, "echo output", func() bool {
-		return strings.Count(plainView(s), "alpha-beta gamma") >= 2
-	})
-	// Locate the output line (the non-echoed one, without "echo ").
-	rows := strings.Split(plainView(s), "\n")
-	rowIdx, colIdx := -1, -1
-	for i, r := range rows {
-		if idx := strings.Index(r, "alpha-beta gamma"); idx >= 0 && !strings.Contains(r, "echo ") {
-			rowIdx, colIdx = i, idx
-			break
-		}
-	}
-	if rowIdx < 0 {
-		t.Fatalf("output row not found in:\n%s", plainView(s))
-	}
+	rowIdx, colIdx := waitOutputRow(t, s, "alpha-beta gamma")
 
 	// Drag across "alpha-beta" (10 cells, exclusive head).
 	m.MousePress(colIdx, rowIdx)
@@ -280,17 +267,19 @@ func TestMouseSelectionMultiline(t *testing.T) {
 	for _, r := range "printf 'one-mark\\ntwo-mark\\nthree-mark\\n'\r" {
 		s.SendKey(keyFor(r))
 	}
-	waitFor(t, "printf output", func() bool {
-		return strings.Contains(plainView(s), "three-mark")
-	})
-	rows := strings.Split(plainView(s), "\n")
+	// Wait on the output rows themselves: the echoed command line contains
+	// every marker too, so a substring wait can end before the output lands.
 	first := -1
-	for i, r := range rows {
-		if strings.HasPrefix(r, "one-mark") {
-			first = i
-			break
+	waitFor(t, "printf output", func() bool {
+		rows := strings.Split(plainView(s), "\n")
+		for i := 0; i+2 < len(rows); i++ {
+			if strings.HasPrefix(rows[i], "one-mark") && strings.HasPrefix(rows[i+2], "three-mark") {
+				first = i
+				return true
+			}
 		}
-	}
+		return false
+	})
 	if first < 0 {
 		t.Fatalf("output rows not found in:\n%s", plainView(s))
 	}
@@ -503,6 +492,8 @@ func TestShiftArrowsReachTheChild(t *testing.T) {
 		m.Update(press{Code: r, Text: string(r)})
 	}
 	m.Update(press{Code: tea.KeyEnter})
+	// The chords are for cat, not for the shell's line editor.
+	waitFor(t, "cat owns the foreground", func() bool { return s.Busy() })
 	m.Update(press{Code: tea.KeyUp, Mod: tea.ModShift})
 	m.Update(press{Code: tea.KeyLeft, Mod: tea.ModShift})
 	waitFor(t, "shift+arrows echoed by cat -v", func() bool {
@@ -586,7 +577,9 @@ func BenchmarkSessionView(b *testing.B) {
 	for _, r := range "seq 1000\r" {
 		s.SendKey(keyFor(r))
 	}
-	time.Sleep(500 * time.Millisecond) // let the grid fill
+	// The grid is full once seq's last rows are output rows (the echoed
+	// command line holds "1000" too, but never "999\n1000").
+	waitUntil(b, 5*time.Second, "seq output", func() bool { return strings.Contains(plainView(s), "999\n1000") })
 
 	b.Run("cached", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
@@ -622,8 +615,12 @@ func TestSessionResizeDebounce(t *testing.T) {
 	}
 	waitFor(t, "trailing resize", func() bool { return s.em.Width() == 88 })
 
-	// A lone height-only resize after the quiet window is immediate.
-	time.Sleep(resizeQuiet + 20*time.Millisecond)
+	// A lone height-only resize after the quiet window is immediate. The
+	// window is passed by backdating the last apply rather than sleeping
+	// through it (#3136).
+	s.mu.Lock()
+	s.lastResize = time.Now().Add(-resizeQuiet)
+	s.mu.Unlock()
 	s.Resize(88, 24)
 	if h := s.em.Height(); h != 24 {
 		t.Fatalf("post-quiet height resize must apply immediately, height = %d", h)
@@ -643,7 +640,7 @@ func BenchmarkSessionResizeApply(b *testing.B) {
 	for _, r := range "seq 500\r" {
 		s.SendKey(keyFor(r))
 	}
-	time.Sleep(300 * time.Millisecond)
+	waitUntil(b, 5*time.Second, "seq output", func() bool { return strings.Contains(plainView(s), "499\n500") })
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		w := 199 + i%2 // alternate so every call is a real change
@@ -1017,12 +1014,13 @@ func TestWidthReflowWithWiderReserve(t *testing.T) {
 	s.FeedBytes([]byte(strings.Repeat("x", 40) + "\r\n" + strings.Repeat("y", 40) + "\r\nz"))
 	waitFor(t, "rows fed", func() bool { return strings.Contains(s.View(), "yyyy") })
 
+	setResizeQuiet(s, 5*time.Millisecond)
 	s.Resize(40, 20) // height shrink: snapshots the 40-wide reserve
-	time.Sleep(150 * time.Millisecond)
+	waitResized(t, s, 40, 20)
 	s.FeedBytes([]byte("\x1b[?1049h")) // alt screen on
 	waitFor(t, "alt screen", s.AltScreen)
 	s.Resize(30, 20) // width change on alt: grid narrows, reserve stays 40 wide
-	time.Sleep(150 * time.Millisecond)
+	waitResized(t, s, 30, 20)
 	s.FeedBytes([]byte("\x1b[?1049l")) // back to the primary screen
 	waitFor(t, "primary screen", func() bool { return !s.AltScreen() })
 

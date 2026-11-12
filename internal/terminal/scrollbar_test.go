@@ -13,12 +13,8 @@ import (
 // holds; the pipe feed path is asynchronous.
 func waitCond(t *testing.T, what string, cond func() bool) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if cond() {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
+	if pollUntil(3*time.Second, cond) {
+		return
 	}
 	t.Fatalf("fixture: %s never held", what)
 }

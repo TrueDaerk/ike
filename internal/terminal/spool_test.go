@@ -22,11 +22,13 @@ func TestSpoolNoByteLossWithStalledConsumer(t *testing.T) {
 
 	var got bytes.Buffer
 	var wg sync.WaitGroup
+	resume := make(chan struct{})
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		// Stall like a suspended render loop, then drain everything.
-		time.Sleep(50 * time.Millisecond)
+		// Stall like a suspended render loop until the producer has
+		// buffered a backlog, then drain everything.
+		<-resume
 		for {
 			chunk, ok := sp.take()
 			if !ok {
@@ -35,7 +37,15 @@ func TestSpoolNoByteLossWithStalledConsumer(t *testing.T) {
 			got.Write(chunk)
 		}
 	}()
+	// The first half lands while the consumer is stalled; the second half
+	// races the resumed consumer.
+	half := len(produced) / 2
+	resumed := false
 	for off := 0; off < len(produced); off += 100 {
+		if off >= half && !resumed {
+			close(resume)
+			resumed = true
+		}
 		end := min(off+100, len(produced))
 		sp.put(produced[off:end])
 	}
@@ -90,10 +100,11 @@ func TestSpoolCapBackpressure(t *testing.T) {
 		sp.put([]byte("x")) // must block until room frees up
 		close(unblocked)
 	}()
+	waitPutBlocked(t, sp)
 	select {
 	case <-unblocked:
 		t.Fatal("put above the cap must block")
-	case <-time.After(20 * time.Millisecond):
+	default:
 	}
 	if _, ok := sp.take(); !ok {
 		t.Fatal("take must return the buffered chunk")
@@ -136,7 +147,7 @@ func TestSpoolDiscardUnblocksBlockedPut(t *testing.T) {
 		sp.put([]byte("after"))
 		close(released)
 	}()
-	time.Sleep(10 * time.Millisecond)
+	waitPutBlocked(t, sp)
 	sp.discard()
 	select {
 	case <-released:
@@ -160,7 +171,7 @@ func TestSpoolCloseUnblocksBlockedPut(t *testing.T) {
 		sp.put([]byte("x"))
 		close(released)
 	}()
-	time.Sleep(10 * time.Millisecond)
+	waitPutBlocked(t, sp)
 	sp.close()
 	select {
 	case <-released:

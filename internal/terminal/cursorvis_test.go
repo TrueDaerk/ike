@@ -10,12 +10,8 @@ import (
 // emulator on the session's async feed loop.
 func waitCursorHidden(t *testing.T, m *Model, want bool) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if m.sess.CursorHidden() == want {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
+	if pollUntil(3*time.Second, func() bool { return m.sess.CursorHidden() == want }) {
+		return
 	}
 	t.Fatalf("cursor hidden state never became %v", want)
 }

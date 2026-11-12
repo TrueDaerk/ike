@@ -70,6 +70,11 @@ type Session struct {
 	pendW, pendH  int
 	resizePending bool
 	resizeTimer   *time.Timer // armed trailing apply; cancelled on Close (#1001)
+	// quietOverride, when non-zero, replaces resizeQuiet for this session:
+	// the test seam that lets a debounce test run its trailing apply in
+	// milliseconds instead of sleeping through the production window
+	// (#3136). Production never sets it.
+	quietOverride time.Duration
 	// Resize reserve (#807): the fullest known content per screen row. The
 	// upstream emulator hard-truncates the grid on shrink, so before every
 	// applied resize the visible screen is snapshotted here, and after a grow
@@ -674,15 +679,25 @@ func (s *Session) Resize(w, h int) {
 		s.mu.Unlock()
 		return
 	}
-	if w == s.w && time.Since(s.lastResize) >= resizeQuiet {
+	quiet := s.resizeQuietLocked()
+	if w == s.w && time.Since(s.lastResize) >= quiet {
 		s.applyResizeLocked(w, h) // height-only leading edge: cheap
 		s.mu.Unlock()
 		return
 	}
 	s.pendW, s.pendH = w, h
 	s.resizePending = true
-	s.resizeTimer = time.AfterFunc(resizeQuiet, s.flushResize)
+	s.resizeTimer = time.AfterFunc(quiet, s.flushResize)
 	s.mu.Unlock()
+}
+
+// resizeQuietLocked is the debounce window in effect: resizeQuiet unless a
+// test shortened it through quietOverride (#3136); s.mu held.
+func (s *Session) resizeQuietLocked() time.Duration {
+	if s.quietOverride > 0 {
+		return s.quietOverride
+	}
+	return resizeQuiet
 }
 
 // applyResizeLocked performs the actual PTY + emulator resize; s.mu held.

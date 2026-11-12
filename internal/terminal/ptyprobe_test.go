@@ -40,12 +40,9 @@ func requirePTY(t *testing.T) {
 		}
 		defer s.Close()
 		deadline := time.Now().Add(ptyProbeDeadline)
-		for !strings.Contains(plainView(s), "$") {
-			if !time.Now().Before(deadline) {
-				ptyProbeErr = fmt.Errorf("no shell prompt on the pty within %s", ptyProbeDeadline)
-				return
-			}
-			time.Sleep(10 * time.Millisecond)
+		if !pollUntil(time.Until(deadline), func() bool { return strings.Contains(plainView(s), "$") }) {
+			ptyProbeErr = fmt.Errorf("no shell prompt on the pty within %s", ptyProbeDeadline)
+			return
 		}
 		// Second half: a command that prints and exits at once. The hosted
 		// macOS CI VM delivers the interactive prompt but loses the output of
@@ -57,12 +54,11 @@ func requirePTY(t *testing.T) {
 			return
 		}
 		defer cs.Close()
-		for !strings.Contains(plainView(cs), "probe-ok") && !strings.Contains(ansi.Strip(cs.HistoryLine(0)), "probe-ok") {
-			if !time.Now().Before(deadline) {
-				ptyProbeErr = fmt.Errorf("a fast-exiting command's output never reached the grid within %s", ptyProbeDeadline)
-				return
-			}
-			time.Sleep(10 * time.Millisecond)
+		if !pollUntil(time.Until(deadline), func() bool {
+			return strings.Contains(plainView(cs), "probe-ok") || strings.Contains(ansi.Strip(cs.HistoryLine(0)), "probe-ok")
+		}) {
+			ptyProbeErr = fmt.Errorf("a fast-exiting command's output never reached the grid within %s", ptyProbeDeadline)
+			return
 		}
 	})
 	if ptyProbeErr != nil {

@@ -12,12 +12,8 @@ import (
 // the session's async feed loop.
 func waitView(t *testing.T, m *Model, want string) {
 	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		if strings.Contains(m.View(), want) {
-			return
-		}
-		time.Sleep(5 * time.Millisecond)
+	if pollUntil(3*time.Second, func() bool { return strings.Contains(m.View(), want) }) {
+		return
 	}
 	t.Fatalf("view never showed %q:\n%s", want, m.View())
 }
@@ -125,11 +121,8 @@ func TestParkedSessionSuppressesOutputMsgs(t *testing.T) {
 	m.SetParked(true)
 	m.FeedText("quiet ingest\n")
 	waitView(t, &m, "quiet ingest") // the grid still ingests while parked
-	select {
-	case msg := <-msgs:
-		t.Fatalf("parked session sent %T", msg)
-	case <-time.After(60 * time.Millisecond):
-	}
+	waitFeedIdle(t, m.sess)
+	assertNoRepaint(t, m.sess, msgs, "parked session")
 	m.SetParked(false)
 	select {
 	case msg := <-msgs:
@@ -149,9 +142,5 @@ func TestParkedWithoutOutputOwesNoRepaint(t *testing.T) {
 	t.Cleanup(m.Close)
 	m.SetParked(true)
 	m.SetParked(false)
-	select {
-	case msg := <-msgs:
-		t.Fatalf("idle un-park sent %T", msg)
-	case <-time.After(60 * time.Millisecond):
-	}
+	assertNoRepaint(t, m.sess, msgs, "idle un-park")
 }
