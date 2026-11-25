@@ -109,7 +109,10 @@ across the epic's four slices: PTY + VT core (#95), workspace integration
   into the PTY. The emulator drops non-special keys that still carry a
   modifier, so the pane normalizes text-producing presses whose only
   modifiers are shift/caps-lock/num-lock (`toVTKeys` in `model.go`) —
-  uppercase letters reach the shell as their produced text (#224).
+  uppercase letters reach the shell as their produced text (#224). Lock
+  modifiers (caps-lock/num-lock) are ignored for every text-less press
+  (`stripLockMods`), so arrows, F-keys and chords like ctrl+c encode — and
+  ctrl+c discards the backlog — exactly as without a lock active.
 - **Batching**: output notifications are coalesced per session (`OutputMsg`,
   one per 8ms quiet interval), and the app's input coalescer (#602) folds
   concurrent OutputMsgs **across sessions** into one batch per adaptive flush

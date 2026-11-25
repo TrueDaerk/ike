@@ -536,6 +536,7 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	if m.sess == nil {
 		return nil
 	}
+	msg = stripLockMods(msg)
 	// Copy mode (#2162) owns the keyboard completely while open: every key
 	// is consumed by the mode — nothing can leak into the shell.
 	if m.copy != nil {
@@ -1193,6 +1194,18 @@ func (m *Model) PasteText(text string) {
 // a key carrying nothing beyond these is plain typed input, not a chord.
 const textMods = tea.ModShift | tea.ModCapsLock | tea.ModNumLock
 
+// lockMods are the lock-state modifiers, which never change a key's meaning.
+const lockMods = tea.ModCapsLock | tea.ModNumLock
+
+// stripLockMods drops the lock modifiers from a press that produces no text;
+// text-producing presses keep them so toVTKeys replays their text.
+func stripLockMods(k tea.KeyPressMsg) tea.KeyPressMsg {
+	if k.Text == "" {
+		k.Mod &^= lockMods
+	}
+	return k
+}
+
 // toVTKeys converts a bubbletea key press into the emulator's key events; the
 // two structs share the same shape (code, shifted code, modifiers, text).
 // The emulator's encoder writes a plain key only when no modifier is set, so
@@ -1209,7 +1222,7 @@ func toVTKeys(k tea.KeyPressMsg) []vt.KeyPressEvent {
 	return []vt.KeyPressEvent{{
 		Code:        k.Code,
 		ShiftedCode: k.ShiftedCode,
-		Mod:         vt.KeyMod(k.Mod),
+		Mod:         vt.KeyMod(stripLockMods(k).Mod),
 		Text:        k.Text,
 	}}
 }
