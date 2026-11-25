@@ -994,7 +994,7 @@ func (s *Session) SendKey(k vt.KeyPressEvent) {
 	if s.closed.Load() {
 		return
 	}
-	if k.Code == 'c' && k.Mod == vt.ModCtrl {
+	if k.Code == 'c' && k.Mod&^(vt.KeyMod(lockMods)) == vt.ModCtrl {
 		// ctrl+c interrupts the foreground process, so the spooled backlog is
 		// output from before the abort — drop it instead of replaying it, or
 		// a fast producer (yes, find /) keeps "running" on screen long after
