@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"ike/internal/diag"
+	"ike/internal/terminal"
 )
 
 // renderreuse.go makes passes that change nothing on screen cheap (#2626,
@@ -119,4 +120,39 @@ func (m Model) storeView(v tea.View) {
 	if c := m.frame; c != nil {
 		c.view, c.valid, c.viewPass = v, true, c.pass
 	}
+}
+
+// keyPassQuiet reports whether the bookkeeping every key press runs ahead of
+// its routing leaves the frame alone: no mouse-idle hover to cancel, no
+// error toast an esc would dismiss, no chord in progress whose which-key
+// popup the key would close, no tour to page or resume. It must be read
+// before that bookkeeping runs.
+func (m Model) keyPassQuiet(msg tea.KeyPressMsg) bool {
+	if m.hoverIdle.pending || m.hoverIdle.fired {
+		return false
+	}
+	if msg.Code == tea.KeyEscape && len(m.toasts) > 0 {
+		return false
+	}
+	if m.keys.Pending() || len(m.whichKey) > 0 {
+		return false
+	}
+	return m.tour == nil
+}
+
+// noteForwardedKey is the reuse verdict of a key press routed to terminals:
+// when the pass was quiet, the route returned no command and every receiving
+// terminal forwarded the key without touching its own view, the screen only
+// changes with the child's answer, so the frame of the previous pass is
+// handed out again and the output pass composes the next one.
+func (m Model) noteForwardedKey(quiet bool, cmd tea.Cmd, terms ...*terminal.Model) {
+	if !quiet || cmd != nil || len(terms) == 0 {
+		return
+	}
+	for _, t := range terms {
+		if t == nil || !t.KeyInert() {
+			return
+		}
+	}
+	m.markFrameReusable()
 }

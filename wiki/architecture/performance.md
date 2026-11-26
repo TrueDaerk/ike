@@ -214,6 +214,37 @@ frame reusable when nothing they touch would draw differently, so an idle
 pane counts `view/reuse` for its poll and renders only on new events, a
 follow change or the stale flip.
 
+**A key forwarded to a terminal child composes no frame of its own**
+(#3147, telemetry 0.7.49–0.7.71): 975,835 of ~1.5M composed frames were
+attributed to `app.coalescedInputMsg` against 304,676 for
+`tea.KeyPressMsg`, and in typing minutes both rose almost 1:1
+(`app.coalescedInputMsg:332,tea.KeyPressMsg:317`) — one frame for the key,
+a second a few milliseconds later for the child's echo. The first showed
+nothing new: the terminal grid only changes once the child answers. The key
+pass now marks the frame reusable when all of the following hold, and
+renders in every other case:
+
+- the key reached the raw PTY route of every receiving terminal and reset
+  nothing there — `terminal.Model.KeyInert`: the view was live (no
+  scrollback offset), no selection or drag existed, the completion popup
+  was closed. Copy mode, the scrollback search, link hints, paging, a
+  finished session and a key the completion popup consumed all report
+  false;
+- the app-side bookkeeping every key runs had nothing to change —
+  `keyPassQuiet`: no mouse-idle hover to cancel, no toast an esc would
+  dismiss, no chord prefix or which-key popup, no tour;
+- the route returned no command, and no notification was queued during the
+  pass (the settled pass withdraws the verdict, as for every reuse).
+
+Reserved keys, global chords, focus moves and everything else the IDE
+handles return before the verdict and keep rendering at once. The echo
+frame is untouched: it still arrives through the coalescer at its normal
+cadence, so no latency is added. A child that answers nothing leaves the
+previous frame on screen, which is exact by the conditions above. Guard:
+the `tea.KeyPressMsg` entry of `diag.RenderTriggers` does not grow over
+forwarded keys in a pane tab, the popup and a floating panel
+(`termkey_render_test.go`).
+
 **Terminal output is a wake without a frame when its session is hidden,
 and a ~10 fps wake when it is not** (#3078, telemetry 0.7.27): 70 minutes
 of heartbeats reported ~1185 composed frames a minute attributed to
