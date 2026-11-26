@@ -655,6 +655,23 @@ so a **pipe session past `FinishPipe`** — the DAP console, whose emulator
 stays open for trailing output — counts as finished like every other exited
 session; otherwise the finished debug area would swallow its own close chord.
 
+### A forwarded key renders with its echo (#3147)
+
+A key that goes raw to the child changes nothing on screen until the child
+answers, so its pass reuses the previous frame and the output pass composes
+the only frame of the pair (the rule and its telemetry:
+[performance.md](performance.md)). `Model.Update` records the verdict per
+key — `Model.KeyInert()` is true only when the key took the raw route and
+had nothing to reset: the view was live, no selection or drag existed and
+the completion popup was closed. The app asks it after forwarding
+(`noteForwardedKey`, for the focused pane terminal, the popup's focused
+side, both sides under broadcast, and a floating panel) and marks the frame
+reusable only when its own per-key bookkeeping was a no-op as well
+(`keyPassQuiet`). A key the pane consumes itself — copy mode, the scrollback
+search, paging, the completion popup, a finished session's view — and a key
+that snaps a scrolled view back to live or drops a selection render at once,
+as does every reserved key and global chord, which never reach the route.
+
 ### Unbound chords belong to the shell (#2701)
 
 A chord the terminal context has **no** binding for is not a missing keybind —

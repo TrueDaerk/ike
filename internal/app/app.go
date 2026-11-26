@@ -9789,6 +9789,9 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyPressMsg:
+		// Whether the bookkeeping below can alter the frame, read before it
+		// runs; the terminal forwarding routes need it for their reuse verdict.
+		quiet := m.keyPassQuiet(msg)
 		// Any key cancels a pending or open mouse-idle hover (#1129) — also
 		// for keys the app consumes before the editor's own dismissHover
 		// would see them.
@@ -10149,10 +10152,15 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			// Broadcast (#1427) is a box affair: a focused floating panel
 			// (#1793) always receives alone.
+			targets := m.popupInputTerminals()
+			var cmd tea.Cmd
 			if m.floatFocused() == nil && m.popup.broadcast && m.popup.split != nil {
-				return m, tea.Batch(m.popup.inst.Update(msg), m.popup.split.Update(msg))
+				cmd = tea.Batch(m.popup.inst.Update(msg), m.popup.split.Update(msg))
+			} else {
+				cmd = m.popupFocused().Update(msg)
 			}
-			return m, m.popupFocused().Update(msg)
+			m.noteForwardedKey(quiet, cmd, targets...)
+			return m, cmd
 		}
 		// A focused terminal whose run has finished (#1951) is a read-only
 		// view of the output: the copy chord copies the mouse selection, the
@@ -10225,7 +10233,10 @@ func (m Model) updateMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if handled, cmd := m.terminalContextChord(msg); handled {
 				return m, cmd
 			}
-			return m.routeKey(msg)
+			term := m.activeWS().Panes.FocusedInstance().ActiveTerminal()
+			tm, cmd := m.routeKey(msg)
+			m.noteForwardedKey(quiet, cmd, term)
+			return tm, cmd
 		}
 		// The rename prompt (#175) owns the keyboard the same way: typed
 		// characters build the new name, enter applies, esc cancels.

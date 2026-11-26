@@ -35,6 +35,9 @@ type Model struct {
 	// occupied marks that the user sent input (keys or a paste) to the
 	// session — the routing marker key handling and paste share.
 	occupied bool
+	// keyInert records the last Update's verdict: the key went to the child
+	// and left everything the pane draws untouched. See KeyInert.
+	keyInert bool
 	// label is a caller-set display name (the run configuration's name,
 	// #576); it wins over the OSC title in tab labels.
 	label string
@@ -533,6 +536,7 @@ func (m *Model) Close() {
 // reserved set the root model never forwards is documented there
 // (terminalReservedKeys in internal/app).
 func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
+	m.keyInert = false
 	if m.sess == nil {
 		return nil
 	}
@@ -579,6 +583,9 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	m.occupied = true // input reached the session
+	// Nothing the key is about to reset is set: the view is live, no
+	// selection or drag exists and the completion popup is closed.
+	inert := m.scroll == 0 && !m.selOn && !m.dragging && m.autoDir == 0 && !m.comp.open
 	m.scroll = 0
 	// The completion popup (#740) intercepts its own keys (navigation,
 	// accept, dismiss, ctrl+space) before the raw route.
@@ -586,6 +593,7 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	}
 	m.ClearSelection()
+	m.keyInert = inert
 	if ev, ok := motionKey(msg); ok {
 		m.completionTyped(msg.String(), "")
 		m.sess.SendKey(ev)
@@ -602,6 +610,15 @@ func (m *Model) Update(msg tea.KeyPressMsg) tea.Cmd {
 	m.completionTyped(msg.String(), msg.Text)
 	return nil
 }
+
+// KeyInert reports whether the last Update forwarded its key to the child
+// without changing anything the pane draws: the view was live, nothing was
+// selected and the completion popup was closed. The screen then only moves
+// once the child answers, which arrives as output. False for every key the
+// pane consumed itself (copy mode, search, paging, the completion popup, a
+// finished session) and for one that snapped the view back or dropped a
+// selection.
+func (m Model) KeyInert() bool { return m.keyInert }
 
 // deadKey handles one key of the finished session's read-only view (#1951):
 // the live terminal's paging chords (shift+pgup/pgdn are handled ahead of it,
