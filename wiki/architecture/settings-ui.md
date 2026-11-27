@@ -246,8 +246,9 @@ any entry whose key the typed schema does not expose (no dead keys).
   [Command Palette](./command-palette.md#learnable-shortcuts-the-keybind-hint-after-a-pick-2549)).
 - **Search Ranking** (#3156) — `search.match_order`, the order in which a
   search lists its match classes (exact, prefix, contains, initials,
-  directory, fuzzy), an Order entry moved with shift+↑/↓; the file finder
-  and the symbol search (`$`, search everywhere, class view) read it (see
+  directory, fuzzy), an Order entry moved with shift+↑/↓; the file finder,
+  the command mode (`:`) and the symbol search (`$`, search everywhere,
+  class view) read it (see
   [Command Palette](./command-palette.md) § "Match classes and
   `search.match_order`").
 - **Keymap Hints** (#1909) — the which-key popup: `keymap.which_key` on/off and

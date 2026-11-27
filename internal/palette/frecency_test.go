@@ -71,8 +71,9 @@ func TestCommandModeLongQueryFuzzyDominatesFrecency(t *testing.T) {
 	c := NewCommandMode(frecSource{}, nil, false)
 	c.SetFrecency(f)
 
-	// One rune: the fuzzy scores tie, so history decides.
-	if got := titles(c.Results("g", Context{})); got[0] != "Regenerate Gamma" {
+	// One rune, both titles in the same match class: the scores nearly tie, so
+	// history decides.
+	if got := titles(c.Results("m", Context{})); got[0] != "Regenerate Gamma" {
 		t.Fatalf("short query should follow history: %+v", got)
 	}
 	// Five runes: the far better match wins despite ten recent executions.

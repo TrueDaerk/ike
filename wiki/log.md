@@ -1,5 +1,16 @@
 # Log
 
+## 2026-11-27 (Command palette ranks by match class, #3160)
+
+- [Command Palette](/architecture/command-palette.md): the command mode (`:`)
+  ranks the command title by match class in the order of
+  `search.match_order` inside each context tier; frecency, usage and title
+  only order one class. An id-only match counts as `fuzzy`; the "did you
+  mean" tier is unchanged.
+- [Settings UI](/architecture/settings-ui.md),
+  [Configuration](/architecture/config.md): `search.match_order` names the
+  command palette as a reader.
+
 ## 2026-11-27 (Symbol search ranks by match class, #3159)
 
 - [Command Palette](/architecture/command-palette.md): the symbol search (`$`,
