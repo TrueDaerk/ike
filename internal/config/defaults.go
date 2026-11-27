@@ -5,6 +5,7 @@ import (
 	"sync"
 
 	"ike/internal/changefeed"
+	"ike/internal/fuzzy"
 	"ike/internal/largefile"
 )
 
@@ -413,6 +414,7 @@ func defaults() *Config {
 			DefaultSort: "relevance",
 		},
 		Completion: Completion{CaseSensitivity: "first_letter"}, // IntelliJ's rule (#2650)
+		Search:     Search{MatchOrder: fuzzy.ClassNames()},
 		// agent.ask (#2845) answers on the cheaper model in one turn and shows
 		// the node context it injected.
 		Agent: Agent{Ask: AgentAsk{Model: "sonnet", MaxTurns: 1, ShowContext: true}, Trace: AgentTrace{View: "graph", HistoryMaxSessions: 50}}, // graph view by default (#2858); 50 stored sessions (#2860)

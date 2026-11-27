@@ -1,10 +1,10 @@
 ---
 type: concept
 title: Command Palette
-description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked and frecency-boosted with a "did you mean" fallback over aliases, keybind labels and menu paths, "@" finds files with the hump matcher, ranked by tier, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself; a pick of a bound command toasts its chord, a third pick of an unbound one offers a key.
+description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked and frecency-boosted with a "did you mean" fallback over aliases, keybind labels and menu paths, "@" finds files with the hump matcher, ranked by match class in the configurable search.match_order, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself; a pick of a bound command toasts its chord, a third pick of an unbound one offers a key.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
-timestamp: 2026-10-28T12:00:00Z
+timestamp: 2026-11-27T12:00:00Z
 ---
 
 # Command Palette
@@ -29,12 +29,12 @@ key as a scroll key).
 ## Structure
 
 ```
-internal/fuzzy/            reusable matcher: optimal-alignment score + matched rune spans for highlighting
+internal/fuzzy/            reusable matcher: optimal-alignment score + matched rune spans for highlighting; match classes (class.go)
 internal/palette/
   palette.go               overlay tea-model: open/close, input line, ranked list, key nav, esc-dismiss, render
   mode.go                  Mode interface (Prefix/Placeholder/Results) + Item + activation msgs
   command_mode.go          ":" mode — snapshot registry, fuzzy-filter, context-first ranking
-  file_mode.go             "@" mode — hump-matched file finder over the project tree (cached walk), tiered
+  file_mode.go             "@" mode — hump-matched file finder over the project tree (cached walk), ranked by match class
   recent_mode.go           locked recent-files mode — injected MRU list, active file excluded
   search_mode.go           locked search-everywhere mode — composes command + class + file + symbol modes, per-kind cap
   context.go               Context captured at open (focused pane context id + project root + active file + buffer language, #2483)
@@ -310,47 +310,65 @@ a lowercase rune matches either case while an uppercase one only matches an
 uppercase one, so `GAB` is the acronym of `GoogleAppBlizzard.php`; `none`
 folds everything, `all` compares exactly.
 
-**Ranking tiers (#2686).** The survivors are graded by *how* they matched, and
-the tiers never mix (the rule the popup's ranking follows, #2651) — a file
-whose name one typed can never be pushed below a hit that borrowed a directory
-segment:
+**Match classes and `search.match_order` (#3156).** The survivors are graded
+by the *kind* of match, and the classes never mix: every file of an earlier
+class lists above every file of a later one, whatever its score or frecency.
+The classifier is shared (`fuzzy.Classify`, see [Fuzzy matching](#fuzzy-matching)
+below); the finder adds the directory class:
 
-1. the **basename**, with or without its extension, equals the query
-   (case-insensitively, and ignoring separators since #3079 — `filemode` is
-   `file_mode.go`)
-2. the basename **starts with** the query (`Result.Prefix`, under the case rule)
-3. a hump match **inside the basename**
-4. a hump match **inside one directory segment** (#2887), scored on that
-   segment alone — the deepest segment that matches, the best score among them
-5. a hump match over the **whole relative path** (what makes `@app/app` work)
+| class | a file belongs to it when … | example |
+| --- | --- | --- |
+| `exact` | the basename, with or without its extension, equals the query — case-insensitively and ignoring separators | `filemode` → `file_mode.go` |
+| `prefix` | the basename starts with the query as one contiguous run (under the case rule) | `file_m` → `file_mode.go` |
+| `contains` | the basename holds the query as one contiguous run that is not at its start | `mode` → `file_mode.go` |
+| `initials` | every matched run starts at a word start of the basename and the match is not contiguous | `fimo` → `file_mode.go` |
+| `directory` | the basename does not match, the directory part does: first a hump match inside **one directory segment** (#2887, scored on that segment alone — the deepest segment that matches, the best score among them), below those a hump match **spanning segments** over the whole relative path (what makes `appapp` find `internal/app/app.go`) | `palette` → `internal/palette/live.go` |
+| `fuzzy` | anything else: the scattered characters of the permissive fallback | `flmd` → `file_mode.go` |
+
+When several classes apply the first one in the table wins. The order the
+classes list in is the user setting **`search.match_order`** — a list holding
+each of the six names exactly once, default
+`["exact", "prefix", "contains", "initials", "directory", "fuzzy"]` — read live
+from `config.Get()` on every query (`matchOrder`), so a change in the Settings
+UI reorders an open finder without a restart. One setting is meant to govern
+every search; the file finder is the first to read it. A list the config
+validator would reject never reaches the finder; if it did, the default order
+applies.
+
+Before the classes, a contiguous hit ("the name contains the text"), an
+initials hit and every other in-name hump match shared one tier, ordered by
+fuzzy score plus the frecency boost — up to 60 points for a twelve-character
+query — so a frequently opened file with a split match could outrank the file
+whose name holds the query verbatim (telemetry: 12-character queries with the
+pick at rank 13–14 of 16).
 
 A query with a **`/`** names a directory and a file (#3079, `matchDirName`):
-it is split at its last `/`, the name part is graded against the basename
-exactly like a bare name query and takes tiers 1–3 (no basename or segment can
-hold a `/`, so those tiers are free for it), and the directory part must
+it is split at its last `/`, the name part is classed against the basename
+exactly like a bare name query (`exact` … `initials`; no basename or segment
+can hold a `/`, so those classes are free for it), and the directory part must
 hump-match the trailing directory segments, deepest start first, scored on
-those segments alone. `app/recents` is therefore tier 1 for
-`internal/app/recents.go`, tier 2 for `recents_test.go`, tier 3 for
+those segments alone. `app/recents` is therefore `exact` for
+`internal/app/recents.go`, `prefix` for `recents_test.go`, `initials` for
 `recent_sel.go`; the directory part spelled whole (`app` for `internal/app/`,
 not `a/apps/`) adds one word-boundary bonus (`dirSpelledBonus`). A query that
 fails the split — `app/` alone, or a name part that matches no basename —
-stays in tier 5.
+is a spanning `directory` match.
 
-Within one tier the blend of three signals — fuzzy score, **frecency** (#2155)
+Within one class the blend of three signals — fuzzy score, **frecency** (#2155)
 and the **most-used** counter (#1419) — applies unchanged, and the blend order
 depends on how much the user has typed:
 
 | Query length | Order |
 | --- | --- |
-| 0–2 characters (`shortQueryLen`) | frecency, then tier, then fuzzy score, then usage, then path length, then path — capped at `maxEmptyRows` (50) when nothing is typed |
-| 3+ characters | tier, then fuzzy score **plus a frecency boost**, then frecency, then usage, then path length, then path |
+| 0–2 characters (`shortQueryLen`) | frecency, then class, then fuzzy score, then usage, then path length, then path — capped at `maxEmptyRows` (50) when nothing is typed |
+| 3+ characters | class (inside `directory`: one segment before spanning), then fuzzy score **plus a frecency boost**, then frecency, then usage, then path length, then path |
 
 The rationale is that one or two characters barely discriminate — the score
 differences are noise — so the files one is actually working on belong on top
 (the hump filter only decides *which* files survive there); from the third
 character the typed text is a real signal and match quality leads again.
 
-**The directory-segment tier and the tie-break (#2887).** A query that is a
+**The single-segment directory match and the tie-break (#2887).** A query that is a
 directory name — `ghissues` for the 34 files under `internal/ghissues/` — used
 to be scored over the whole path, and the scorer, which rewards a word
 boundary more than a consecutive rune, preferred to split the query: `ghissue`
@@ -368,38 +386,46 @@ before `qualifier_conformance_test.go`), never the walk order.
 starts a word (16) twice what one continuing the run earns (8), so its optimal
 alignment *splits* the query wherever the next word begins with the right
 letter: `app/recents` preferred the `s` of `recent_sel.go` to the one
-completing `recents.go`, and with every candidate in tier 5 the file whose name
+completing `recents.go`, and with every candidate a whole-path match the file whose name
 one typed in full sat at rank 10 of 31 — the telemetry had 10–12 character
 queries with the pick at rank 12–44 of 15–49, the list inverted. Three rules
 keep a longer query from ranking its file lower than a prefix of it did
 (`TestFileModeLongerQueryNeverRanksLower`):
 
-- **Prefix matches score contiguously.** Within tier 2 every candidate starts
-  with the query, so the match is re-scored on the prefix alone; all score
-  alike and frecency, usage and the shorter path decide (`tools.go` before
-  `toolhost_layout_test.go` for `tool`). The highlight shows the prefix.
+- **Prefix and contains matches score contiguously.** Within `prefix` every
+  candidate starts with the query, so the match is scored on the prefix alone;
+  all score alike and frecency, usage and the shorter path decide (`tools.go`
+  before `toolhost_layout_test.go` for `tool`). A `contains` match is scored on
+  its run where it stands, so a run at a word start beats one mid-word. The
+  highlight shows the run.
 - **Every extra run of a name match costs `fragmentPenalty` (9)** — one more
   than the boundary-over-consecutive difference — so a split is worth less
-  than the contiguous run. It matters where name grades share a tier — the
-  path tier below, where `apprecents` now lists `recents_test.go` (the name
-  as a prefix) above `recent_sel.go` (the name split at `sel`).
-- **Tier 5 re-scores at the best implicit split** (`splitDirName`): a whole-path
+  than the contiguous run. It matters where name grades share a class — inside
+  `initials` and `exact`, and among the spanning directory matches below, where
+  `apprecents` lists `recents_test.go` (the name as a prefix) above
+  `recent_sel.go` (the name split at `sel`).
+- **A spanning directory match re-scores at the best implicit split** (`splitDirName`): a whole-path
   match of a query typed without the `/` (`filterbarfilt`) is scored as the
   directory part plus the name part, the way `matchDirName` scores one typed
   with it, so `filterbar.go` is not out-scored by `filterbar_test.go`'s `_test`
-  boundary. Only the score changes — the file stays in tier 5, where the
-  frecency boost still lifts a file one works on over a cluster of near-equal
-  path matches (#2636). Concatenations are deliberately *not* promoted above
-  the directory-segment tier: `ghissues` keeps listing `internal/ghissues/`
-  above `gh/issues.go` (#2887).
+  boundary. Only the score changes — the file stays a spanning directory match,
+  where the frecency boost still lifts a file one works on over a cluster of
+  near-equal path matches (#2636). Concatenations are deliberately *not*
+  promoted above the single-segment matches: `ghissues` keeps listing
+  `internal/ghissues/` above `gh/issues.go` (#2887).
 
 **Fallback (#2686).** When *nothing* hump-matches — a typo, or a query whose
 letters merely occur somewhere — the whole list falls back to the permissive
-`fuzzy.Match` over the path, in one tier and with the pre-#2686 ranking, so the
-finder shows something rather than an empty box. The fallback is not marked in
-any way; it is a last resort, so a single hump match suppresses it entirely.
+`fuzzy.Match` over the path, so the finder shows something rather than an
+empty box. The fallback rows are classed too (`matchLoose`): a basename that
+holds the query as one run mid-word (`ilter_test` → `savedfilter_test.go`) is
+`contains` and one that equals it despite the case rule is `exact`, both
+scored on the name; everything else is `fuzzy` with the path score. The
+fallback is not marked in any way; it is a last resort, so a single hump match
+suppresses it entirely. The hump filter itself is unchanged: a mid-word run is
+only listed through the fallback.
 
-The tiers live in `FileMode` (`matchFile`), so every host of the mode gets
+The classes live in `FileMode` (`matchFile`), so every host of the mode gets
 them: the palette's `@`, the editor's anchored `@` finder and the file source
 of Search Everywhere. Path queries (`/`, `~/`, `./`), the pasted-path row and
 the scratch rows keep their own matching; command mode (`:`), dir mode and the
@@ -872,12 +898,28 @@ previous match or starts a word segment (`isBoundary` — index 0, after a
 non-alphanumeric separator such as `/`, `_`, `-` or `.`, a camelCase hump,
 the last capital of an acronym run, a letter↔digit change), under the case
 rule `completion.case_sensitivity` names (`fuzzy.ParseCase`). `Result.Prefix`
-reports whether the text starts with the pattern under that rule, so a
-ranking tier "prefix beats hump" needs no second pass.
+reports whether the text starts with the pattern under that rule.
+
+**Match classes (`class.go`, #3156).** `Classify(pattern, name, ClassOptions)`
+assigns an accepted match to exactly one `Class` — `ClassExact`,
+`ClassPrefix`, `ClassContains`, `ClassInitials` or `ClassFuzzy`, the first
+that applies — and returns the match aligned to that class: a prefix or
+contains match is the contiguous run (found by a plain scan, since the
+scorer's optimal alignment may prefer to split it), scored with the matcher's
+own weights. `ClassOptions.Case` is the case rule (exact is always
+case-insensitive), `Extension` lets a file name count as exact without its
+extension, and `Permissive` chooses the filter: without it `Classify` accepts
+exactly what `MatchHumpsCase` accepts (so the classes are exact, prefix,
+contains and initials), with it also a run that starts mid-word and scattered
+characters (`ClassFuzzy`). `ClassDirectory` is declared here but assigned by
+a search over paths — the classifier knows nothing of directories.
+`ParseClassOrder` turns a `search.match_order` list into a `ClassOrder`
+(`Rank(class)`), rejecting unknown, repeated and missing names; the config
+validator and the Settings UI both use it.
 
 **Who uses which.** The completion popup (see
 [completion.md](completion.md) § "Unified ranking") and the **file finder**
-(`@`, #2686 — tiers above) filter with `MatchHumpsCase`; command mode (`:`),
+(`@`, #2686 — classes above) filter with `MatchHumpsCase`; command mode (`:`),
 dir mode, the scratch rows, Search Everywhere's own merge and the settings
 search keep the permissive `Match`, and the finder falls back to it when
 nothing hump-matches at all.

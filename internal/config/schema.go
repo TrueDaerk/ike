@@ -61,6 +61,8 @@ type Config struct {
 	Debug Debug `toml:"debug"`
 	// Completion holds the completion popup's filter behaviour (#2650).
 	Completion Completion `toml:"completion"`
+	// Search holds the ranking settings every search of the IDE shares.
+	Search Search `toml:"search"`
 	// Agent holds the coding-agent integration settings (epic 0540): today the
 	// agent.ask fork question (#2845).
 	Agent Agent `toml:"agent"`
@@ -493,6 +495,15 @@ type AgentAsk struct {
 // "all" compares every rune exactly.
 type Completion struct {
 	CaseSensitivity string `toml:"case_sensitivity"`
+}
+
+// Search holds the ranking settings shared by the searches. MatchOrder lists
+// the match classes (fuzzy.Class: "exact", "prefix", "contains", "initials",
+// "directory", "fuzzy") each exactly once; a search lists its candidates class
+// by class in that order and the classes never mix. A search without a
+// directory part ignores "directory".
+type Search struct {
+	MatchOrder []string `toml:"match_order"`
 }
 
 // PHP holds the PHP trait-consumer intelligence settings (Epic 0520,

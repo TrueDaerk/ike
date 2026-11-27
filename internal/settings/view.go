@@ -818,7 +818,7 @@ func affordanceValue(e Entry, val string) string {
 		} else {
 			val = "off"
 		}
-	case List, IntList:
+	case List, IntList, Order:
 		val = strings.Join(splitList(val), ", ")
 	case Chord:
 		if val != "" {

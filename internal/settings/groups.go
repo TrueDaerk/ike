@@ -32,7 +32,8 @@ var pageGroups = []pageGroup{
 		"Diagnostics", "Diff Viewer", "Markdown Preview", "Notebook Viewer",
 	}},
 	{"Interface", []string{
-		"Appearance", "Notifications", "Command Palette", "Keymap Hints",
+		"Appearance", "Notifications", "Command Palette", "Search Ranking",
+		"Keymap Hints",
 		"Tool Layout", "Performance HUD", "Usage Telemetry",
 	}},
 	{"Keymap", []string{"Keymap"}},

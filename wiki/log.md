@@ -1,5 +1,21 @@
 # Log
 
+## 2026-11-27 (Search ranking: match classes and `search.match_order`, #3156)
+
+- [Command Palette](/architecture/command-palette.md): the file finder (`@`)
+  ranks by match class — exact, prefix, contains, initials, directory, fuzzy —
+  instead of its fixed tiers. The classes never mix and list in the order of
+  the new setting `search.match_order`; within a class the score, frecency
+  boost and tie-breaks are unchanged. A name that holds the query as one run
+  (`contains`) no longer shares a tier with a split match (`initials`), so a
+  frequently opened file cannot outrank it. The shared classifier is
+  `fuzzy.Classify`; the permissive fallback is classed too.
+- [Settings UI](/architecture/settings-ui.md): new entry type **Order** (a
+  fixed set of members reordered with shift+↑/↓) and the **Search Ranking**
+  page holding `search.match_order`.
+- [Configuration](/architecture/config.md): `[search] match_order`, validated
+  as a permutation of the six class names.
+
 ## 2026-11-12 (Complexity agent: no scratch on a successful apply, #3137)
 
 - [Complexity](/architecture/complexity.md): the simplify / extract agent

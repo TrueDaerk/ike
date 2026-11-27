@@ -5,6 +5,8 @@ import (
 	"path"
 	"strings"
 	"testing"
+
+	"ike/internal/fuzzy"
 )
 
 // longFixture is the tree behind #3079's telemetry: 10–12 character queries
@@ -115,9 +117,9 @@ func TestFileModeDirNameSpans(t *testing.T) {
 // recent_sel.go above recent_sel_test.go and every looser hump match.
 func TestFileModeSeparatorlessNameIsExact(t *testing.T) {
 	setCase(t, "first_letter")
-	tier, _, ok := matchFile("recentsel", "internal/app/recent_sel.go", 0)
-	if !ok || tier != tierFileExact {
-		t.Fatalf("recentsel on recent_sel.go = tier %d (ok %v), want tierFileExact", tier, ok)
+	class, _, ok := matchFile("recentsel", "internal/app/recent_sel.go", 0)
+	if !ok || class.class != fuzzy.ClassExact {
+		t.Fatalf("recentsel on recent_sel.go = class %s (ok %v), want exact", class.class, ok)
 	}
 	got := titles(fileMode(longFixture()...).Results("recentsel", Context{Root: "/proj"}))
 	if len(got) == 0 || got[0] != "internal/app/recent_sel.go" {

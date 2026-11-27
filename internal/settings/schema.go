@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"ike/internal/config"
+	"ike/internal/fuzzy"
 	"ike/internal/issuefilter"
 	"ike/internal/theme"
 )
@@ -45,6 +46,10 @@ const (
 	// same indexed multi-value editor, but every element must parse as a
 	// number and the commit writes a TOML integer array.
 	IntList
+	// Order renders a list whose members are fixed (Options) and only
+	// reordered: each option is held exactly once, the rows move up and down,
+	// and the commit writes a TOML string array.
+	Order
 )
 
 // Entry describes one setting.
@@ -96,6 +101,9 @@ type Entry struct {
 	// filter expression, not arbitrary text, so a typo has to be caught in
 	// the form instead of silently ignored when the pane opens.
 	ValidateString func(v string) string
+	// ValidateList rejects a committed Order value as a whole with a message
+	// naming what is wrong; "" accepts.
+	ValidateList func(items []string) string
 }
 
 // Page is one category: a titled list of entries, or — when Custom is set — a
@@ -131,6 +139,8 @@ func typeName(t EntryType) string {
 		return "list"
 	case IntList:
 		return "int list"
+	case Order:
+		return "order"
 	default:
 		return "string"
 	}
@@ -145,6 +155,14 @@ func typeName(t EntryType) string {
 func marker(t EntryType) string {
 	if t == Enum {
 		return " ▾"
+	}
+	return ""
+}
+
+// matchOrderValidate is the loader's own check of search.match_order.
+func matchOrderValidate(items []string) string {
+	if _, err := fuzzy.ParseClassOrder(items); err != nil {
+		return err.Error()
 	}
 	return ""
 }
@@ -361,6 +379,9 @@ func BasePages(themes, lightThemes, darkThemes []string, extraThemes ...theme.Th
 			{Key: "palette.off_context", Type: Enum, Title: "Off-context commands", Description: "How command mode treats commands scoped to a pane other than the focused one: rank them last, or hide them", Scope: config.UserScope, Options: []string{"rank", "hide"}},
 			{Key: "palette.recent.ranking", Type: Enum, Title: "Recent files ranking", Description: "How the recent-files dialog (cmd+e) orders its files and projects: \"recency\" (the default) lists them newest first, \"frecency\" blends in how often each was opened", Scope: config.UserScope, Options: []string{"recency", "frecency"}},
 			{Key: "palette.hint_keybind", Type: Bool, Title: "Keybind hint after a pick", Description: "After running a command from the palette, toast the chord it is bound to in the focused pane (\"also: cmd+shift+a\"); once the same unbound command was picked three times in a session, offer Bind a Key for the Last Palette Command instead", Scope: config.UserScope},
+		}},
+		{Title: "Search Ranking", Description: "How searches order their results: every candidate belongs to one match class, and the classes list in the order set here.", Entries: []Entry{
+			{Key: "search.match_order", Type: Order, Title: "Match class order", Description: "Order in which a search lists the kinds of match. Classes never mix: every result of an earlier class lists above every result of a later one, and score, recency and usage only order results inside one class. exact: the name equals the query, case and separators aside; prefix: it starts with the query; contains: it holds the query as one run; initials: the query is split over word starts (\"fimo\" for file_mode.go); directory: only the directories of the path match; fuzzy: scattered characters. Used by the file finder (@). Move an entry with shift+↑/↓", Scope: config.UserScope, Options: fuzzy.ClassNames(), ValidateList: matchOrderValidate},
 		}},
 		{Title: "Keymap Hints", Description: "The which-key popup: while a multi-step chord waits for its next key, a small panel above the status line lists every continuation valid in the focused pane. The bindings themselves are edited on the Keymap page.", Entries: []Entry{
 			{Key: "keymap.which_key", Type: Bool, Title: "Which-key hints", Description: "Show the continuation popup while a chord prefix is pending (cmd+k …); off leaves multi-step sequences unannounced", Scope: config.UserScope},

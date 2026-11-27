@@ -381,6 +381,7 @@ func (c *Config) Flat() map[string]string {
 	put("forge.notify.pr_checks_failing", c.Forge.Notify.PRChecksFailing)
 
 	put("completion.case_sensitivity", c.Completion.CaseSensitivity)
+	put("search.match_order", strings.Join(c.Search.MatchOrder, ","))
 
 	// PHP trait-consumer intelligence (0520, #2667).
 	put("php.trait_index", c.PHP.TraitIndex)

@@ -4,7 +4,7 @@ title: Configuration System
 description: Single typed configuration package — TOML files merged across defaults < user < project, clamp-and-warn validation, an extension hook for downstream sections, and a flat read-only view backing the plugin host API.
 resource: internal/config/config.go
 tags: [architecture, config, toml, merge, precedence, validation, plugins]
-timestamp: 2026-09-23T12:00:00Z
+timestamp: 2026-11-27T12:00:00Z
 ---
 
 # Configuration System
@@ -100,6 +100,12 @@ Sections and their default-bearing slots (`schema.go`):
 - `[completion]` — `case_sensitivity` (`none` / `first_letter` default /
   `all`, #2650): the case rule of the completion popup's hump filter, shared
   by the word and symbol sources.
+- `[search]` — `match_order` (#3156): the six match classes (`exact`,
+  `prefix`, `contains`, `initials`, `directory`, `fuzzy`) each exactly once,
+  in ranking order; the default is that order. A list with an unknown name, a
+  repeat or a missing class is replaced by the default with a diagnostic
+  naming the offender (`fuzzy.ParseClassOrder`). Read live by the file finder
+  (see [command palette](./command-palette.md)).
 - `[theme]` — `name`, `auto`, `light`, `dark` (the selector and the auto
   light/dark pair, #1480; palettes owned by Roadmap 0110).
 - `[project]` — recent-projects history as `[[project.history]]` entries

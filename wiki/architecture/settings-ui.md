@@ -4,7 +4,7 @@ title: Settings UI & Menu Bar
 description: Roadmap 0160 — the menu bar over the command registry; the settings panel (pages, schema-driven forms) lands in later sub-issues.
 resource: internal/menu
 tags: [architecture, menu, settings, ui, commands]
-timestamp: 2026-11-09T00:00:00Z
+timestamp: 2026-11-27T00:00:00Z
 ---
 
 # Settings UI & Menu Bar
@@ -52,7 +52,7 @@ box capped at ~110×32 cells above the workspace, laid out as the
 
 - **Schema-driven.** A `Page` is a titled list of `Entry` descriptors — config
   key, control type
-  (`Bool`/`Int`/`String`/`Enum`/`Path`/`Chord`/`List`/`IntList`), write scope,
+  (`Bool`/`Int`/`String`/`Enum`/`Path`/`Chord`/`List`/`IntList`/`Order`), write scope,
   title, description, enum options, int bounds. The form renders from the
   descriptor; there are no hand-built page UIs.
 - **Apply-on-change, single source of truth.** The panel never caches values:
@@ -68,7 +68,18 @@ box capped at ~110×32 cells above the workspace, laid out as the
   string slice and a raw comma string would fail the decode; **IntList**
   (#1663, `editor.rulers`) is the same editor over a `[]int` field — an element
   that does not parse as a number is refused in the row (`✗ not a number`,
-  nothing staged) and the commit writes a TOML integer array. A List entry may
+  nothing staged) and the commit writes a TOML integer array. **Order**
+  (#3156, `search.match_order`) is a list whose members are fixed by the
+  schema (`Options`) and only reordered (`orderEditor`,
+  `internal/settings/order_editor.go`): one row per member, **shift+↑/↓** (or
+  `K`/`J`) moves the selected row and stages the new order at once; there is
+  no add, edit or remove, so the value always holds every option exactly
+  once. A stored value that does not (a hand-edited file) opens repaired —
+  unknown names and repeats dropped, missing options appended in schema
+  order — and `ValidateList` runs the loader's own check on the list before
+  it is staged, showing the message in the editor when it refuses. The
+  settings column lists the order comma-joined; the commit writes a TOML
+  string array. A List entry may
   also declare **value help** in the schema (#1946): `EntryHints` renders
   candidate values under the input while an element is typed, re-narrowed per
   keystroke (`tools.layout.assign` lists the effective template's slot letters
@@ -233,6 +244,12 @@ any entry whose key the typed schema does not expose (no dead keys).
   `palette.off_context`), the recent-files ranking (`palette.recent.ranking`)
   and the post-pick keybind hint (`palette.hint_keybind`, #2549 — see
   [Command Palette](./command-palette.md#learnable-shortcuts-the-keybind-hint-after-a-pick-2549)).
+- **Search Ranking** (#3156) — `search.match_order`, the order in which a
+  search lists its match classes (exact, prefix, contains, initials,
+  directory, fuzzy), an Order entry moved with shift+↑/↓; today the file
+  finder reads it (see
+  [Command Palette](./command-palette.md) § "Match classes and
+  `search.match_order`").
 - **Keymap Hints** (#1909) — the which-key popup: `keymap.which_key` on/off and
   `keymap.which_key_delay_ms`, the pending time before it opens (see
   [keybindings](./keybindings.md)). The bindings themselves stay on the custom

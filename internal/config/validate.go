@@ -14,6 +14,7 @@ import (
 
 	"ike/internal/ansiblevault"
 	"ike/internal/concealfilter"
+	"ike/internal/fuzzy"
 	"ike/internal/issuefilter"
 	"ike/internal/layout"
 	"ike/internal/matcher"
@@ -1021,6 +1022,11 @@ func validate(c *Config) []Diagnostic {
 	default:
 		diags = append(diags, Diagnostic{Field: "completion.case_sensitivity", Message: fmt.Sprintf("unknown case_sensitivity %q, using \"first_letter\"", c.Completion.CaseSensitivity)})
 		c.Completion.CaseSensitivity = "first_letter"
+	}
+
+	if _, err := fuzzy.ParseClassOrder(c.Search.MatchOrder); err != nil {
+		diags = append(diags, Diagnostic{Field: "search.match_order", Message: fmt.Sprintf("%v, using the default order", err)})
+		c.Search.MatchOrder = fuzzy.ClassNames()
 	}
 
 	if !logLevels[c.LSP.LogLevel] {

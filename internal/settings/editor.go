@@ -71,6 +71,8 @@ func newEditor(m *Model, e Entry) Editor {
 		return &chordEditor{m: m, e: e}
 	case List, IntList:
 		return newListEditor(m, e)
+	case Order:
+		return newOrderEditor(m, e)
 	case Path:
 		ed := &pathEditor{m: m, e: e, tf: newTextField(m.value(e.Key))}
 		ed.suggest.dirs = e.Dirs

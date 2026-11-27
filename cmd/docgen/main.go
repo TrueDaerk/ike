@@ -480,6 +480,12 @@ func entryType(e settings.Entry) string {
 		return "list"
 	case settings.IntList:
 		return "list of integers"
+	case settings.Order:
+		quoted := make([]string, len(e.Options))
+		for i, o := range e.Options {
+			quoted[i] = "`" + o + "`"
+		}
+		return "ordered list of " + strings.Join(quoted, ", ")
 	}
 	return "unknown"
 }

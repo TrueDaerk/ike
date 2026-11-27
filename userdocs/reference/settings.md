@@ -181,6 +181,12 @@ secrets — are documented together, with screenshots, in
 | Recent files ranking | `palette.recent.ranking` | enum: `recency`, `frecency` | `recency` | user | How the recent-files dialog (cmd+e) orders its files and projects: "recency" (the default) lists them newest first, "frecency" blends in how often each was opened |
 | Keybind hint after a pick | `palette.hint_keybind` | boolean | `true` | user | After running a command from the palette, toast the chord it is bound to in the focused pane ("also: cmd+shift+a"); once the same unbound command was picked three times in a session, offer Bind a Key for the Last Palette Command instead |
 
+### Search Ranking
+
+| Setting | Key | Type | Default | Scope | Description |
+|---|---|---|---|---|---|
+| Match class order | `search.match_order` | ordered list of `exact`, `prefix`, `contains`, `initials`, `directory`, `fuzzy` | `exact,prefix,contains,initials,directory,fuzzy` | user | Order in which a search lists the kinds of match. Classes never mix: every result of an earlier class lists above every result of a later one, and score, recency and usage only order results inside one class. exact: the name equals the query, case and separators aside; prefix: it starts with the query; contains: it holds the query as one run; initials: the query is split over word starts ("fimo" for file_mode.go); directory: only the directories of the path match; fuzzy: scattered characters. Used by the file finder (@). Move an entry with shift+↑/↓ |
+
 ### Keymap Hints
 
 | Setting | Key | Type | Default | Scope | Description |
