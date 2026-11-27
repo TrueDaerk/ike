@@ -68,6 +68,7 @@ func (editorPlugin) Capabilities() plugin.Capabilities {
 			action("editor.moveLineUp", "Move Line Up", "move_line_up", ""),
 			action("editor.moveLineDown", "Move Line Down", "move_line_down", ""),
 			action("editor.deleteLine", "Delete Line", "delete_line", "dd"),
+			action("editor.deleteToLineEnd", "Delete to Line End", "delete_to_line_end", "D"),
 			action("editor.deleteWordBackward", "Delete Word Backward", "delete_word_backward", "db"),
 			action("editor.docStart", "Go to Document Start", "doc_start", "gg"),
 			action("editor.docEnd", "Go to Document End", "doc_end", "G"),

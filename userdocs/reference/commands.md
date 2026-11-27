@@ -435,6 +435,7 @@ bring their own.
 | Decode JWT at Caret | `editor.decodeJWT` | — | — | `editor` pane |
 | Decrement Number | `editor.decrement` | — | `ctrl+x` | `editor` pane |
 | Delete Line | `editor.deleteLine` | `cmd+backspace` | `dd` | `editor` pane |
+| Delete to Line End | `editor.deleteToLineEnd` | `cmd+delete` | `D` | `editor` pane |
 | Delete Word Backward | `editor.deleteWordBackward` | `alt+backspace` | `db` | `editor` pane |
 | Go to Document End | `editor.docEnd` | `cmd+end` | `G` | `editor` pane |
 | Go to Document Start | `editor.docStart` | `cmd+up` | `gg` | `editor` pane |

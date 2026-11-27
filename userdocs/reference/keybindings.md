@@ -237,6 +237,7 @@ Active when an editor pane has focus.
 | Cycle case (camel/snake/kebab) | `alt+shift+u` | `alt+shift+u` | `editor.case.cycle` |
 | Debug test at cursor | `alt+shift+f9` | `alt+shift+f9` | `debug.testAtCursor` |
 | Delete line | `cmd+backspace` | `ctrl+backspace` | `editor.deleteLine` |
+| Delete to line end | `cmd+delete` | — | `editor.deleteToLineEnd` |
 | Delete word backward | `alt+backspace` | `alt+backspace` | `editor.deleteWordBackward` |
 | Diagnostic under caret | `cmd+f1` | `ctrl+f1` | `lsp.diagnosticInfo` |
 | Diagnostic under caret | `ctrl+f1` | `ctrl+f1` | `lsp.diagnosticInfo` |

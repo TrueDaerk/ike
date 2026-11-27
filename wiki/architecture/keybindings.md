@@ -1628,6 +1628,7 @@ JetBrains is:
 | `editor.copyDocPath` | `cmd+alt+shift+c` | fragile | `palette` | live via palette |
 | `editor.cut` | `cmd+x` | fragile | `vim d` | live via vim d |
 | `editor.deleteLine` | `cmd+backspace` | fragile | `vim dd` | live via vim dd |
+| `editor.deleteToLineEnd` | `cmd+delete` | fragile | `vim D` | live via vim D |
 | `editor.deleteWordBackward` | `alt+backspace` | fragile | `vim db` | live via vim db |
 | `editor.docEnd` | `cmd+end` | fragile | `ctrl+end` | live via ctrl+end |
 | `editor.docStart` | `cmd+up` | fragile | `ctrl+home` | live via ctrl+home |

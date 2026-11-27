@@ -138,6 +138,7 @@ var actionMap = map[string]string{
 	"MoveStatementDown":            "editor.moveLineDown",
 	"EditorDeleteLine":             "editor.deleteLine",
 	"EditorDeleteToWordStart":      "editor.deleteWordBackward",
+	"EditorDeleteToLineEnd":        "editor.deleteToLineEnd",
 	"EditorTextStart":              "editor.docStart",
 	"EditorTextEnd":                "editor.docEnd",
 	"EditorLineStartWithSelection": "editor.selectLineStart",

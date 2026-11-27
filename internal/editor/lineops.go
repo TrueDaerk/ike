@@ -110,6 +110,52 @@ func (m *Model) deleteLines() {
 	m.scroll()
 }
 
+// deleteToLineEnd deletes from every caret to the end of its line, keeping the
+// line break; a caret already at the end of its line joins the next line
+// instead (macOS cmd+delete, JetBrains' Delete to Line End). Mid-insert the
+// deletion joins the open undo unit; otherwise all carets form one undo step.
+func (m *Model) deleteToLineEnd() {
+	if m.refuseRO() {
+		return
+	}
+	if m.insert.active {
+		m.insertKillForward(m.lineEndKillTarget)
+		m.scroll()
+		return
+	}
+	if m.blockDep() {
+		m.stashDep(func(mm *Model) { mm.deleteToLineEnd() })
+		return
+	}
+	if m.mode.IsVisual() {
+		m.mode = Normal
+		m.shiftSelect = false
+	}
+	m.pending.Reset()
+	m.fanMutate(func(rec *history.Recorder, pos, _ buffer.Position) buffer.Position {
+		if end := m.lineEndKillTarget(pos); pos.Before(end) {
+			rec.Apply(buffer.Delete(buffer.Range{Start: pos, End: end}))
+		}
+		return pos
+	})
+	m.clampCarets()
+	m.dot = &dotCommand{run: func(mm *Model) { mm.deleteToLineEnd() }}
+	m.emit(EventCursorMove)
+	m.scroll()
+}
+
+// lineEndKillTarget is where a delete-to-line-end from pos stops: the end of
+// pos's line, or the start of the next line when pos already sits at the end.
+func (m *Model) lineEndKillTarget(pos buffer.Position) buffer.Position {
+	if n := m.buf.RuneLen(pos.Line); pos.Col < n {
+		return buffer.Position{Line: pos.Line, Col: n}
+	}
+	if pos.Line < m.buf.LineCount()-1 {
+		return buffer.Position{Line: pos.Line + 1, Col: 0}
+	}
+	return pos
+}
+
 // deleteWordBackward deletes the word before the cursor — the everywhere
 // convention on alt+backspace (#246), here as a bound command so it works
 // outside insert mode too. Mid-insert it runs the session's own kill, so the

@@ -844,6 +844,15 @@ deletion still joins the running undo segment; the motions commit the insert
 first, like every other command that leaves the caret elsewhere. See
 [keybindings](./keybindings.md#the-line-editing-family-and-the-pane-chords-2400).
 
+`editor.deleteToLineEnd` ("Delete to Line End", macOS `cmd+delete`, JetBrains'
+`EditorDeleteToLineEnd`; vim `D` is the chord-free path) deletes from every caret
+to the end of its line and keeps the line break; a caret already at the line end
+joins the next line instead, and at the end of the last line it does nothing. It
+works in Normal and Insert mode — mid-insert the deletion joins the running undo
+segment, otherwise all carets form one undo step — and a read-only buffer refuses
+it. The chord is macOS-only: the Cmd→Ctrl fold would land it on `ctrl+delete`,
+the forward word kill.
+
 **Undo granularity inside an insert** (#1818/#2189, `insertundo.go`). A long
 insert used to commit as *one* change, so a single undo threw away everything
 typed since entering insert mode. The session now closes the running recorder
