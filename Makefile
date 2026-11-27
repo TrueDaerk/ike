@@ -11,7 +11,9 @@
 #   make docs      # regenerate userdocs/reference from the source
 #   make shots     # regenerate the feature screenshots in docs/screenshots
 #   make docs-deploy  # build + publish the docs site to the gh-pages branch
-#   make version   # print the version the next build will carry
+#   make version   # raise the patch version, commit it and push the current branch
+#   make version VERSION=x.y.z  # set the version instead, commit and push
+#   make show-version  # print the version the next build will carry
 #   make install-desktop  # desktop launcher: Ike.app (macOS) / ike.desktop (Linux)
 #   make icons     # regenerate deploy/icon from the Go source (macOS tools)
 #   make release-archive  # build + package this platform's release archives into dist/
@@ -29,7 +31,7 @@ DIRTY   := $(shell git diff --quiet 2>/dev/null || echo true)
 VERPKG  := ike/internal/version
 LDFLAGS := -X $(VERPKG).Commit=$(COMMIT) -X $(VERPKG).Dirty=$(DIRTY)
 
-.PHONY: all build install build-complexity install-complexity uninstall clean test docs shots docs-deploy version install-desktop icons release-archive
+.PHONY: all build install build-complexity install-complexity uninstall clean test docs shots docs-deploy version show-version install-desktop icons release-archive
 
 all: build
 
@@ -93,8 +95,30 @@ docs-deploy:
 	mkdocs gh-deploy --strict --force
 
 # Print what `ike --version` will report for a build from this tree.
-version: build
+show-version: build
 	./$(BINARY) --version
+
+# Bump the release version, commit it on its own and push the current branch.
+# Without VERSION the patch component is raised by one; VERSION=x.y.z sets it
+# outright. Only the version file goes into the commit, so other uncommitted
+# work stays untouched; staged changes to other files abort the run instead.
+VERFILE := internal/version/version.go
+
+version:
+	@set -e; \
+	cur=$$(sed -n 's/^var Version = "\(.*\)"$$/\1/p' $(VERFILE)); \
+	[ -n "$$cur" ] || { echo "version: no Version found in $(VERFILE)" >&2; exit 1; }; \
+	new="$(VERSION)"; \
+	[ -n "$$new" ] || new=$$(echo "$$cur" | awk -F. '{ printf "%d.%d.%d", $$1, $$2, $$3 + 1 }'); \
+	echo "$$new" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$' || { echo "version: '$$new' is not of the form x.y.z" >&2; exit 1; }; \
+	[ "$$new" != "$$cur" ] || { echo "version: already at $$cur" >&2; exit 1; }; \
+	git diff --quiet -- $(VERFILE) || { echo "version: $(VERFILE) has uncommitted changes" >&2; exit 1; }; \
+	git diff --cached --quiet || { echo "version: staged changes present, commit or unstage them first" >&2; exit 1; }; \
+	sed -i.bak "s/^var Version = \".*\"$$/var Version = \"$$new\"/" $(VERFILE); \
+	rm -f $(VERFILE).bak; \
+	git commit -q -m "chore(version): $$new" -- $(VERFILE); \
+	echo "version: $$cur -> $$new"; \
+	git push -u origin HEAD
 
 # Install the desktop launcher (#1567): dedicated Ghostty config + ike-gui,
 # plus Ike.app (macOS) or ike.desktop with hicolor icons (Linux). Ghostty is

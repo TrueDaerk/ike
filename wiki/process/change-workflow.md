@@ -17,7 +17,8 @@ Every change — feature, fix, docs — goes through the same loop. No direct co
    up-to-date `main`. Reference the issue in commits where useful.
 3. **When done, bump the patch version.** Raise the last component of `Version` in
    `internal/version/version.go` (e.g. `0.1.6` → `0.1.7`) as part of the branch, in its own
-   `chore(version)` commit.
+   `chore(version)` commit. `make version` does exactly that and pushes the branch;
+   `make version VERSION=x.y.z` sets a specific number instead.
 4. **Open a PR on GitHub.** Body says `Closes #<number>` so the issue auto-closes on merge.
 5. **Merge into `main`.** Merging closes the issue and finishes the task — don't leave PRs
    open or issues dangling.

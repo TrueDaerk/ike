@@ -95,7 +95,9 @@ it is not obvious.
 make                 # build ./ike
 make install         # install to ~/.local/bin/ike
 go test ./...        # the full test suite
-make version         # build, then print what `ike --version` reports
+make show-version    # build, then print what `ike --version` reports
+make version         # raise the patch version, commit it and push the current branch
+make version VERSION=x.y.z   # set the version instead
 ```
 
 ### The test suite

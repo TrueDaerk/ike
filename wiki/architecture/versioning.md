@@ -57,7 +57,7 @@ LDFLAGS := -X ike/internal/version.Commit=$(COMMIT) -X ike/internal/version.Dirt
 
 Both `git` calls are failure-tolerant: a build from an exported tarball with
 no `.git` yields empty strings and a banner without the parenthesised part,
-rather than a build error. `make version` builds and prints the banner.
+rather than a build error. `make show-version` builds and prints the banner.
 
 ## What SemVer means here
 
