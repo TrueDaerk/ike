@@ -9,6 +9,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"ike/internal/config"
 	"ike/internal/fuzzy"
 	ilsp "ike/internal/lsp"
 	"ike/internal/palette"
@@ -27,14 +28,17 @@ const symbolsPrefix = '$'
 
 // Ranking tiers (#377). Servers like gopls return dependency and stdlib
 // symbols alongside the project's own, and pure fuzzy score let
-// `internal/abi` internals bury a project-local exact match. The tier
-// offsets dominate any achievable fuzzy score (a few hundred at most):
-// an exact name match beats every fuzzy-only match within its tier, and a
-// non-project symbol can never outrank a project one. The adjusted score
-// is stored on the palette item, so search everywhere (#236) sinks
-// stdlib noise below commands and files too.
+// `internal/abi` internals bury a project-local match. So a non-project symbol
+// never outranks a project one, and inside that the match class of the symbol
+// name (fuzzy.Class) leads in the order search.match_order configures, the
+// classes never mixing; the fuzzy score only orders one class. Both are offsets
+// on the score that dominate any achievable fuzzy score (a few hundred at
+// most): each later class costs symbolClassStep, and the non-project malus
+// outweighs every class step together. The adjusted score is stored on the
+// palette item, so search everywhere (#236) sinks stdlib noise below commands
+// and files too.
 const (
-	symbolExactBonus      = 1 << 12
+	symbolClassStep       = 1 << 12
 	symbolNonProjectMalus = 1 << 16
 )
 
@@ -148,8 +152,10 @@ func (s *symbolMode) Placeholder() string { return "Go to symbol — type to sea
 // name (falling back to the location detail), like the references rows. The
 // server already filtered for the settled query; the local match keeps the
 // rows responsive between debounce ticks and supplies highlight spans. The
-// fuzzy score is tier-adjusted (#377): an exact name match earns a bonus and
-// any symbol outside the project root sinks below every project one.
+// fuzzy score is tier-adjusted (#377): any symbol outside the project root
+// sinks below every project one, and within that the name's match class ranks
+// in the order of search.match_order. A row whose name does not match but its
+// location detail does is a fuzzy match — the container is no directory.
 func (s *symbolMode) Results(query string, cx palette.Context) []palette.Item {
 	return s.results(query, nil)
 }
@@ -158,24 +164,26 @@ func (s *symbolMode) Results(query string, cx palette.Context) []palette.Item {
 // accepts — the seam the class view (#1849) and the class-free symbol seat of
 // search everywhere share, so both read one cache and one ranking.
 func (s *symbolMode) results(query string, keep func(kind int) bool) []palette.Item {
+	order := config.Get().Search.ClassOrder()
+	opts := fuzzy.ClassOptions{Case: fuzzy.CaseNone, Permissive: true}
 	var out []palette.Item
 	for _, si := range s.items {
 		if keep != nil && !keep(si.kind) {
 			continue
 		}
 		it := si.item
-		if m, ok := fuzzy.Match(query, it.Title); ok {
+		class := fuzzy.ClassFuzzy
+		if c, m, ok := fuzzy.Classify(query, it.Title, opts); ok {
+			class = c
 			it.Spans = m.Positions
 			it.Score = m.Score
-			if strings.EqualFold(query, it.Title) {
-				it.Score += symbolExactBonus
-			}
 		} else if m, ok := fuzzy.Match(query, it.Detail); ok {
 			it.Spans = nil
 			it.Score = m.Score
 		} else {
 			continue
 		}
+		it.Score -= order.Rank(class) * symbolClassStep
 		if !si.project {
 			it.Score -= symbolNonProjectMalus
 		}

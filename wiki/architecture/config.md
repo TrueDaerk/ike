@@ -105,7 +105,7 @@ Sections and their default-bearing slots (`schema.go`):
   in ranking order; the default is that order. A list with an unknown name, a
   repeat or a missing class is replaced by the default with a diagnostic
   naming the offender (`fuzzy.ParseClassOrder`). Read live by the file finder
-  (see [command palette](./command-palette.md)).
+  and the symbol search (see [command palette](./command-palette.md)).
 - `[theme]` — `name`, `auto`, `light`, `dark` (the selector and the auto
   light/dark pair, #1480; palettes owned by Roadmap 0110).
 - `[project]` — recent-projects history as `[[project.history]]` entries

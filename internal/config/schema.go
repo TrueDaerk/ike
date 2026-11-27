@@ -5,7 +5,11 @@ package config
 // LSP.Servers) are intentionally empty here — downstream roadmaps fill their
 // concrete entries through extend.go, never by editing these structs.
 
-import "fmt"
+import (
+	"fmt"
+
+	"ike/internal/fuzzy"
+)
 
 // Config is the root configuration document. It is the only type the rest of
 // IKE reads; no TOML types leak past this package.
@@ -504,6 +508,15 @@ type Completion struct {
 // directory part ignores "directory".
 type Search struct {
 	MatchOrder []string `toml:"match_order"`
+}
+
+// ClassOrder reads MatchOrder; a list the validator would reject ranks in the
+// default order.
+func (s Search) ClassOrder() fuzzy.ClassOrder {
+	if o, err := fuzzy.ParseClassOrder(s.MatchOrder); err == nil {
+		return o
+	}
+	return fuzzy.DefaultClassOrder()
 }
 
 // PHP holds the PHP trait-consumer intelligence settings (Epic 0520,
