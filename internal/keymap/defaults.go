@@ -1152,6 +1152,10 @@ var darwinRows = []row{
 	// jumps own everywhere else (keys_normal.go).
 	{"cmd+up", "editor.docStart", "Go to document start", Editor, "Editor (#2699)"},
 	{"cmd+down", "editor.docEnd", "Go to document end", Editor, "Editor (#2699)"},
+	// macOS' delete-to-line-end chord, JetBrains' Delete to Line End. macOS
+	// only — the Cmd→Ctrl fold would land it on ctrl+delete, the editor's
+	// forward word kill; vim D is the chord-free path everywhere.
+	{"cmd+delete", "editor.deleteToLineEnd", "Delete to line end", Editor, "Editor (#3157)"},
 	// The JetBrains macOS alias of the diff's Jump to Source (#3081). macOS
 	// only for the same fold reason: off macOS it would land on ctrl+down,
 	// the paragraph jump of the diff's edit-mode editor; f4 is the

@@ -667,6 +667,8 @@ func (m Model) runAction(action string) (Model, tea.Cmd) {
 		m.moveLines(1)
 	case "delete_line":
 		m.deleteLines()
+	case "delete_to_line_end":
+		m.deleteToLineEnd()
 	case "delete_word_backward":
 		m.deleteWordBackward()
 	case "doc_start":

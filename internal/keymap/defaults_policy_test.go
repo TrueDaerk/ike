@@ -609,3 +609,27 @@ func TestAudit2698KeepsPaneKeys(t *testing.T) {
 		}
 	}
 }
+
+// TestCmdDeleteDeletesToLineEnd: on macOS cmd+delete is the editor's
+// delete-to-line-end while the recent-projects palette keeps it as
+// project.removeFromList; off macOS the folded ctrl+delete stays the
+// editor's forward word kill.
+func TestCmdDeleteDeletesToLineEnd(t *testing.T) {
+	c := NormalizeChord(MustParseChord("cmd+delete"), "darwin")
+	table := BuildTable(DefaultsFor(PresetJetBrains, "darwin"), nil, "darwin")
+	if b, ok := table.Lookup(c, Editor); !ok || b.Command != "editor.deleteToLineEnd" {
+		t.Errorf("darwin cmd+delete in the editor = %+v ok=%v, want editor.deleteToLineEnd", b, ok)
+	}
+	if b, ok := table.Lookup(c, Palette); !ok || b.Command != "project.removeFromList" {
+		t.Errorf("darwin cmd+delete in the palette = %+v ok=%v, want project.removeFromList", b, ok)
+	}
+	if reachableAlternatives["editor.deleteToLineEnd"] == "" {
+		t.Error("editor.deleteToLineEnd has no reachableAlternatives entry")
+	}
+
+	linux := BuildTable(DefaultsFor(PresetJetBrains, "linux"), nil, "linux")
+	lc := NormalizeChord(MustParseChord("cmd+delete"), "linux")
+	if b, ok := linux.Lookup(lc, Editor); ok && b.Command == "editor.deleteToLineEnd" {
+		t.Errorf("linux cmd+delete folds onto ctrl+delete and must stay off %s", b.Command)
+	}
+}

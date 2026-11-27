@@ -75,6 +75,7 @@ var reachableAlternatives = map[string]string{
 	"editor.lineEnd":            "vim $",
 	"editor.deleteLine":         "vim dd",
 	"editor.deleteWordBackward": "vim db",
+	"editor.deleteToLineEnd":    "vim D",
 	"editor.find":               "vim /",
 	"search.open":               "vim / (every pane binds it, #2409)",
 	"editor.replace":            "palette",
