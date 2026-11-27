@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strings"
 
+	"ike/internal/config"
 	"ike/internal/fuzzy"
 	"ike/internal/registry"
 )
@@ -100,19 +101,22 @@ func (c *CommandMode) Prefix() rune { return c.prefix }
 func (c *CommandMode) Placeholder() string { return "Run a command…" }
 
 // rankedCommand is a command with its computed tier and match for sorting.
-// key is the sort score: the fuzzy match score plus the query-length-damped
+// class is the rank of the title's match class in search.match_order. key is
+// the sort score: the fuzzy match score plus the query-length-damped
 // frecency boost (#2153), so history orders the empty-query listing and fades
 // to a tiebreaker as the query grows.
 type rankedCommand struct {
 	item  Item
 	tier  int
+	class int
 	key   float64
 	usage int
 }
 
 // Results implements Mode. It snapshots all registered commands, keeps those
 // whose Title (or id) fuzzy-matches the query, and orders them by (tier,
-// score+frecency boost, usage, title). An empty query lists every command in
+// match class of the Title in search.match_order, score+frecency boost, usage,
+// title); an id-only match is a fuzzy match. An empty query lists every command in
 // tier order, most-recently/often-executed first.
 //
 // When that primary tier comes up short (#2548 — fewer than DidYouMeanBelow
@@ -150,13 +154,15 @@ func (c *CommandMode) PrimaryResults(query string, cx Context) []Item {
 func (c *CommandMode) primary(query string, cx Context, cmds []registry.OwnedCommand) ([]Item, map[string]bool) {
 	listed := make(map[string]bool, len(cmds))
 	qlen := len([]rune(query))
+	order := config.Get().Search.ClassOrder()
+	opts := fuzzy.ClassOptions{Case: fuzzy.CaseNone, Permissive: true}
 	ranked := make([]rankedCommand, 0, len(cmds))
 	for _, cmd := range cmds {
 		tier := c.tier(cmd, cx)
 		if tier == tierOff && c.hideOff {
 			continue
 		}
-		m, ok := fuzzy.Match(query, cmd.Title)
+		class, m, ok := fuzzy.Classify(query, cmd.Title, opts)
 		if !ok {
 			// Fall back to matching the id so ":hello" finds "example.hello"; its
 			// spans index the id, not the Title, so they are dropped (no highlight).
@@ -165,10 +171,12 @@ func (c *CommandMode) primary(query string, cx Context, cmds []registry.OwnedCom
 				continue
 			}
 			m = fuzzy.Result{Score: im.Score} // id match: score only, no Title spans
+			class = fuzzy.ClassFuzzy
 		}
 		listed[cmd.ID] = true
 		ranked = append(ranked, rankedCommand{
 			tier:  tier,
+			class: order.Rank(class),
 			key:   float64(m.Score) + frecencyBoost(c.frec.Score(cmd.ID), qlen),
 			usage: c.usage.Count(cmd.ID),
 			item: Item{
@@ -183,6 +191,9 @@ func (c *CommandMode) primary(query string, cx Context, cmds []registry.OwnedCom
 	sort.SliceStable(ranked, func(i, j int) bool {
 		if ranked[i].tier != ranked[j].tier {
 			return ranked[i].tier < ranked[j].tier
+		}
+		if ranked[i].class != ranked[j].class {
+			return ranked[i].class < ranked[j].class
 		}
 		if ranked[i].key != ranked[j].key {
 			return ranked[i].key > ranked[j].key

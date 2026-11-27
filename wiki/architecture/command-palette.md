@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Command Palette
-description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked and frecency-boosted with a "did you mean" fallback over aliases, keybind labels and menu paths, "@" finds files with the hump matcher and "$" workspace symbols, both ranked by match class in the configurable search.match_order, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself; a pick of a bound command toasts its chord, a third pick of an unbound one offers a key.
+description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked, by match class in search.match_order and frecency-boosted with a "did you mean" fallback over aliases, keybind labels and menu paths, "@" finds files with the hump matcher and "$" workspace symbols, both ranked by match class in the configurable search.match_order, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself; a pick of a bound command toasts its chord, a third pick of an unbound one offers a key.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
 timestamp: 2026-11-27T12:00:00Z
@@ -157,8 +157,16 @@ model's `focusLang()`: the focused HTTP pane's body type, else the focused
 editor's buffer language) is listed in its gate — the same applicability the
 [help overlay](./help-overlay.md) shows.
 
-Within a tier, the sort key is the fuzzy score **plus a frecency boost**
-(#2153), then **most-used** (#773), then title.
+Within a tier, the **match class** of the title (`fuzzy.Classify`,
+case-insensitive and permissive — exact, prefix, contains, initials such as
+`gtl` for "Go To Line", fuzzy) leads in the order of `search.match_order`
+(#3160), read live per query; classes never mix, and a command found only by
+its id counts as `fuzzy`. The setting's `directory` position plays no role
+here. Within one class the sort key is the fuzzy score **plus a frecency
+boost** (#2153), then **most-used** (#773), then title — so history and usage
+never lift a weaker class over a stronger one. The context tiers stay the
+outer rule: an off-context exact match still lists below every in-context and
+global command.
 
 The usage counter (`usage.go`, persisted per project in `.ike/cmdusage.json`,
 `IKE_CONFIG_DIR`-redirectable) counts only selections confirmed **from the
@@ -331,7 +339,8 @@ each of the six names exactly once, default
 `["exact", "prefix", "contains", "initials", "directory", "fuzzy"]` — read live
 from `config.Get()` on every query (`config.Search.ClassOrder`), so a change in
 the Settings UI reorders an open finder without a restart. One setting is meant
-to govern every search; the file finder and the symbol search (see
+to govern every search; the file finder, the command mode (see
+[Command mode](#command-mode-)) and the symbol search (see
 [Symbol ranking](#search-everywhere-mode-cmdshifta--double-shift-roadmap-0230))
 read it. A list the config
 validator would reject never reaches the finder; if it did, the default order
