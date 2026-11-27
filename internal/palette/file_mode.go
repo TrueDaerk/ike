@@ -213,7 +213,7 @@ func (f *FileMode) Results(query string, cx Context) []Item {
 	// the popup's own completion.case_sensitivity, read live once per query.
 	cfg := config.Get()
 	mode := fuzzy.ParseCase(cfg.Completion.CaseSensitivity)
-	order := matchOrder(cfg)
+	order := cfg.Search.ClassOrder()
 	for _, p := range files {
 		class, m, ok := matchFile(query, p, mode)
 		if !ok {
@@ -322,15 +322,6 @@ func fileFrecencyBoost(score float64, queryLen int) float64 {
 type fileClass struct {
 	class    fuzzy.Class
 	spanning bool
-}
-
-// matchOrder reads search.match_order; a list the validator would reject
-// ranks in the default order.
-func matchOrder(c *config.Config) fuzzy.ClassOrder {
-	if o, err := fuzzy.ParseClassOrder(c.Search.MatchOrder); err == nil {
-		return o
-	}
-	return fuzzy.DefaultClassOrder()
 }
 
 // matchFile applies the hump filter to one root-relative path (#2686) and

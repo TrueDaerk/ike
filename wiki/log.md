@@ -1,5 +1,16 @@
 # Log
 
+## 2026-11-27 (Symbol search ranks by match class, #3159)
+
+- [Command Palette](/architecture/command-palette.md): the symbol search (`$`,
+  search everywhere, class view) ranks the symbol name by match class in the
+  order of `search.match_order`, inside the unchanged rule that project
+  symbols list above non-project ones; the class order replaces the former
+  exact-match bonus. A detail-only match counts as `fuzzy`.
+- [Settings UI](/architecture/settings-ui.md),
+  [Configuration](/architecture/config.md): `search.match_order` names the
+  symbol search as a reader.
+
 ## 2026-11-27 (Search ranking: match classes and `search.match_order`, #3156)
 
 - [Command Palette](/architecture/command-palette.md): the file finder (`@`)

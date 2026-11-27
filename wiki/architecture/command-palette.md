@@ -1,7 +1,7 @@
 ---
 type: concept
 title: Command Palette
-description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked and frecency-boosted with a "did you mean" fallback over aliases, keybind labels and menu paths, "@" finds files with the hump matcher, ranked by match class in the configurable search.match_order, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself; a pick of a bound command toasts its chord, a third pick of an unbound one offers a key.
+description: Centered floating overlay fronting every action — a prefix-dispatched mode system (":" runs registry commands context-ranked and frecency-boosted with a "did you mean" fallback over aliases, keybind labels and menu paths, "@" finds files with the hump matcher and "$" workspace symbols, both ranked by match class in the configurable search.match_order, locked recent-files and search-everywhere modes behind cmd+e / cmd+shift+a), pure presentation that dispatches tea.Msgs and executes nothing itself; a pick of a bound command toasts its chord, a third pick of an unbound one offers a key.
 resource: internal/palette/palette.go
 tags: [architecture, palette, overlay, fuzzy, modes, bubbletea]
 timestamp: 2026-11-27T12:00:00Z
@@ -39,7 +39,7 @@ internal/palette/
   search_mode.go           locked search-everywhere mode — composes command + class + file + symbol modes, per-kind cap
   context.go               Context captured at open (focused pane context id + project root + active file + buffer language, #2483)
 internal/app/              root model hosts the palette, toggles it, forwards keys, renders on top
-  symbols.go               "$" live workspace-symbol mode — cache, kind badges, project/exact ranking tiers
+  symbols.go               "$" live workspace-symbol mode — cache, kind badges, project tier + match-class ranking
   classes.go               "/" class category — kind-filtered views (symbolView) onto that one cache (#1849)
 ```
 
@@ -329,9 +329,11 @@ When several classes apply the first one in the table wins. The order the
 classes list in is the user setting **`search.match_order`** — a list holding
 each of the six names exactly once, default
 `["exact", "prefix", "contains", "initials", "directory", "fuzzy"]` — read live
-from `config.Get()` on every query (`matchOrder`), so a change in the Settings
-UI reorders an open finder without a restart. One setting is meant to govern
-every search; the file finder is the first to read it. A list the config
+from `config.Get()` on every query (`config.Search.ClassOrder`), so a change in
+the Settings UI reorders an open finder without a restart. One setting is meant
+to govern every search; the file finder and the symbol search (see
+[Symbol ranking](#search-everywhere-mode-cmdshifta--double-shift-roadmap-0230))
+read it. A list the config
 validator would reject never reaches the finder; if it did, the default order
 applies.
 
@@ -807,11 +809,28 @@ equivalent) and the search-everywhere symbol seat (`$`, everything else), so no
 symbol is listed twice in the composed list. The class seat sits at tier 2
 (command > class > file > symbol) and has its own `searchAllPerKind` budget, so
 a matching class can no longer be crowded out by a swarm of functions; the
-shared tier ranking (#377) still puts an exactly-matched project class above
-every stdlib/dependency hit. Every symbol row — in both views and in the
+shared ranking (below) still puts every project class above every
+stdlib/dependency hit. Every symbol row — in both views and in the
 standalone `$` mode, which keeps all kinds — carries its **kind as a dim badge**
 ("class", "struct", "func", …) after the title, so a class is tellable from a
 function at a glance.
+
+**Symbol ranking (#377, #3159).** `symbolMode.results` — shared by the `$`
+mode, the class view and the search-everywhere symbol seat — ranks in two
+tiers that never mix. The outer one: a symbol outside the project root (the
+working directory) never outranks a project symbol, since servers like gopls
+return stdlib and dependency symbols alongside the project's own. Inside each,
+the **match class of the symbol name** (`fuzzy.Classify`, case-insensitive,
+permissive) leads in the order of `search.match_order`, read live per query:
+with the default order `mcc` lists the symbol `mcc` (exact), then `MccReader`
+(prefix), `ReadMcc` (contains), `MyCoolClass` (initials), `Mxcxc` (fuzzy).
+Within one class the fuzzy score orders. A row whose name does not match but
+whose location detail does counts as `fuzzy` — the container or package is
+no directory, and `directory` never occurs here, so its position in the
+setting is ignored. Both tiers are offsets on the item's score
+(`symbolClassStep` per later class, `symbolNonProjectMalus` for non-project),
+so the score stored on the item carries the ranking and search everywhere's
+banded merge keeps sinking non-project symbols below commands and files.
 
 **Prefix scoping (#1417).** Search everywhere is locked, so the palette core
 never strips a prefix here — but a query whose **leading rune is one composed
@@ -919,7 +938,8 @@ validator and the Settings UI both use it.
 
 **Who uses which.** The completion popup (see
 [completion.md](completion.md) § "Unified ranking") and the **file finder**
-(`@`, #2686 — classes above) filter with `MatchHumpsCase`; command mode (`:`),
+(`@`, #2686 — classes above) filter with `MatchHumpsCase`; the symbol search
+(`$`) classes with the permissive `Classify`; command mode (`:`),
 dir mode, the scratch rows, Search Everywhere's own merge and the settings
 search keep the permissive `Match`, and the finder falls back to it when
 nothing hump-matches at all.
